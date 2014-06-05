@@ -18,6 +18,8 @@
 #define RVL2DREGION_FLAG_MARKED2		0x00200000
 #define RVL2DREGION_FLAG_MARKED3		0x00400000
 #define RVL2DREGION_FLAG_THICK			0x00800000
+#define RVL2DREGION_FLAG_LINE			0x01000000
+#define RVL2DREGION_FLAG_INVISIBLE		0x02000000
 
 #define RVL2DREGION_DISPLAY_FLAG_BOUNDARY	0x08
 
@@ -115,6 +117,9 @@ public:
 	int m_N[3];
 	int m_lenN;
 	int m_d;
+	double m_fN[3];
+	double m_rho;
+	int m_X0[3];
 	void *m_vpQueueEntry;
 	int m_Size;
 	DWORD m_Label;

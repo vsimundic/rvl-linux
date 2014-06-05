@@ -102,6 +102,7 @@ void RVLSaveSegmentation(FILE *fp,
 	}
 }
 
+//#define RVLUPDATECONVEXHULL_DEBUG
 
 BOOL RVLUpdateConvexHull(CRVLMPtrChain *pTriangleList,
 						 CRVLClass *pTriangleSet,
@@ -109,7 +110,8 @@ BOOL RVLUpdateConvexHull(CRVLMPtrChain *pTriangleList,
 						 RVL3DPOINT2 **Point3DMap,
 						 RVLMESH_LINK *pLinkNewPt,
 						 int maxDist,
-						 CRVLMem *pMem)
+						 CRVLMem *pMem,
+						 bool bmm)
 {
 	int iPixNew = pLinkNewPt->iPix0;
 
@@ -127,6 +129,10 @@ BOOL RVLUpdateConvexHull(CRVLMPtrChain *pTriangleList,
 	//if(vNew < 120)
 	//	int tmp1 = 0;
 
+#ifdef RVLUPDATECONVEXHULL_DEBUG
+	FILE *fpLog = fopen("Debug\\RVLUpdateConvexHull.log", "w");
+#endif
+
 	// Classify all triangles and links to those which belong to the new convex hull
 	// and those which don't.
 
@@ -141,12 +147,23 @@ BOOL RVLUpdateConvexHull(CRVLMPtrChain *pTriangleList,
 
 	int minDist = maxDist;
 
+	int64 minDist64 = (int64)maxDist;
+
+	double minfDist = (double)maxDist;
+
 	CRVL2DRegion2 *pClosestTriangle = NULL;
 	
 	CRVL2DRegion2 *pTriangle, *pAdjacentTriangle;
 	RVLMESH_LINK *pLink0, *pLink, *pLinkPrev, *pLinkNext;
 	int *N;
+	//double *fN;
 	int dist;
+	int64 dist64;
+	//double fdist;
+	//double *XNew;
+	int dX[3];
+	int *XNew;
+	int *X0;
 
 	pTriangleList->Start();
 
@@ -157,50 +174,164 @@ BOOL RVLUpdateConvexHull(CRVLMPtrChain *pTriangleList,
 		if(pTriangle->m_Flags & RVLOBJ2_FLAG_REJECTED)
 			continue;
 
-		N = pTriangle->m_N;
-
-		dist = pTriangle->m_d - (N[0] * pPixNew->u + N[1] * pPixNew->v + N[2] * pPixNew->d);
-
-		if(dist < 0)
+		if(bmm)
 		{
-			pLink = pLink0 = (RVLMESH_LINK *)(pTriangle->m_PtArray);
+//			fN = pTriangle->m_fN;
+//
+//			XNew = pPixNew->XYZ;
+//
+//			fdist = pTriangle->m_rho - RVLDOTPRODUCT3(fN, XNew);
+//
+//			if(fdist < 0.0)
+//			{
+//				pLink = pLink0 = (RVLMESH_LINK *)(pTriangle->m_PtArray);
+//
+//				do
+//				{
+//					pAdjacentTriangle = (CRVL2DRegion2 *)(pLink->pOpposite->vp2DRegion);
+//
+//					fN = pAdjacentTriangle->m_fN;
+//
+//					if(RVLDOTPRODUCT3(fN, XNew) <= pAdjacentTriangle->m_rho)
+//					{
+//						if(pFirstBoundaryLink == NULL)
+//							pFirstBoundaryLink = pLink;
+//
+//						nNewTriangles++;
+//
+//						pLink->Flags |= RVLMESH_LINK_FLAG_BOUNDARY;
+//
+//#ifdef RVLUPDATECONVEXHULL_DEBUG 
+//						RVL3DPOINT2 *p3DPtDebug1 = Point3DMap[pLink->iPix0];
+//						RVL3DPOINT2 *p3DPtDebug2 = Point3DMap[pLink->pOpposite->iPix0];
+//
+//						fprintf(fpLog, "%d\t%d\t%d\t%d\n", p3DPtDebug1->u, p3DPtDebug1->v, p3DPtDebug2->u, p3DPtDebug2->v);
+//#endif
+//					}
+//
+//					pLink = pLink->pNext->pOpposite;
+//				}
+//				while(pLink != pLink0);
+//
+//				*(pRejectedTriangle++) = pTriangle;
+//
+//				nPtsToReassign += pTriangle->m_n3DPts;
+//			}
+//			else if(pTriangle->m_rho < 0.0) 
+//			{
+//				if(fdist <= minfDist)
+//				{
+//					minfDist = fdist;
+//
+//					pClosestTriangle = pTriangle;
+//				}
+//			}
 
-			do
+			N = pTriangle->m_N;
+
+			X0 = pTriangle->m_X0;
+
+			XNew = pPixNew->iX;
+
+			RVLDIF3VECTORS(X0, XNew, dX);
+
+			dist64 = RVLDOTPRODUCT3_64(N, dX);
+
+			if(dist64 < 0)
 			{
-				pAdjacentTriangle = (CRVL2DRegion2 *)(pLink->pOpposite->vp2DRegion);
+				pLink = pLink0 = (RVLMESH_LINK *)(pTriangle->m_PtArray);
 
-				N = pAdjacentTriangle->m_N;
-
-				if(N[0] * pPixNew->u + N[1] * pPixNew->v + N[2] * pPixNew->d <= pAdjacentTriangle->m_d)
+				do
 				{
-					if(pFirstBoundaryLink == NULL)
-						pFirstBoundaryLink = pLink;
+					pAdjacentTriangle = (CRVL2DRegion2 *)(pLink->pOpposite->vp2DRegion);
 
-					nNewTriangles++;
+					N = pAdjacentTriangle->m_N;
 
-					pLink->Flags |= RVLMESH_LINK_FLAG_BOUNDARY;
+					X0 = pAdjacentTriangle->m_X0;
+
+					RVLDIF3VECTORS(XNew, X0, dX);
+
+					if(RVLDOTPRODUCT3_64(N, dX) <= 0)
+					{
+						if(pFirstBoundaryLink == NULL)
+							pFirstBoundaryLink = pLink;
+
+						nNewTriangles++;
+
+						pLink->Flags |= RVLMESH_LINK_FLAG_BOUNDARY;
+					}
+
+					pLink = pLink->pNext->pOpposite;
 				}
+				while(pLink != pLink0);
 
-				pLink = pLink->pNext->pOpposite;
+				*(pRejectedTriangle++) = pTriangle;
+
+				nPtsToReassign += pTriangle->m_n3DPts;
 			}
-			while(pLink != pLink0);
-
-			*(pRejectedTriangle++) = pTriangle;
-
-			nPtsToReassign += pTriangle->m_n3DPts;
-		}
-		else if(N[2] < 0) 
-		{
-			dist /= pTriangle->m_lenN;
-
-			if(dist <= minDist)
+			else if((pTriangle->m_Flags & RVL2DREGION_FLAG_INVISIBLE) == 0) 
 			{
-				minDist = dist;
+				dist64 /= (int64)(pTriangle->m_lenN);
 
-				pClosestTriangle = pTriangle;
+				if(dist64 <= minDist64)
+				{
+					minDist64 = dist64;
+
+					pClosestTriangle = pTriangle;
+				}
 			}
-		}
-	}
+		}	// if(bmm)
+		else
+		{
+			N = pTriangle->m_N;
+
+			dist = pTriangle->m_d - (N[0] * pPixNew->u + N[1] * pPixNew->v + N[2] * pPixNew->d);
+
+			if(dist < 0)
+			{
+				pLink = pLink0 = (RVLMESH_LINK *)(pTriangle->m_PtArray);
+
+				do
+				{
+					pAdjacentTriangle = (CRVL2DRegion2 *)(pLink->pOpposite->vp2DRegion);
+
+					N = pAdjacentTriangle->m_N;
+
+					if(N[0] * pPixNew->u + N[1] * pPixNew->v + N[2] * pPixNew->d <= pAdjacentTriangle->m_d)
+					{
+						if(pFirstBoundaryLink == NULL)
+							pFirstBoundaryLink = pLink;
+
+						nNewTriangles++;
+
+						pLink->Flags |= RVLMESH_LINK_FLAG_BOUNDARY;
+					}
+
+					pLink = pLink->pNext->pOpposite;
+				}
+				while(pLink != pLink0);
+
+				*(pRejectedTriangle++) = pTriangle;
+
+				nPtsToReassign += pTriangle->m_n3DPts;
+			}
+			else if(N[2] < 0) 
+			{
+				dist /= pTriangle->m_lenN;
+
+				if(dist <= minDist)
+				{
+					minDist = dist;
+
+					pClosestTriangle = pTriangle;
+				}
+			}
+		}	// if(!bmm)
+	}	// for every triangle in pTriangleList
+
+#ifdef RVLUPDATECONVEXHULL_DEBUG
+	fclose(fpLog);
+#endif
 
 	RVLMESH_LINK **PtMem;
 
@@ -246,7 +377,11 @@ BOOL RVLUpdateConvexHull(CRVLMPtrChain *pTriangleList,
 	int dd1, dd2;
 	RVL3DPOINT2 *p3DPt0, *p3DPt1, *p3DPt2;
 	int u, v, du, dv;
-	double fN[3];
+	double fN_[3];
+	int *X1, *X2;
+	int dX1[3], dX2[3];
+	double fTmp;
+	int *X0_;
 
 	do
 	{
@@ -258,31 +393,70 @@ BOOL RVLUpdateConvexHull(CRVLMPtrChain *pTriangleList,
 
 		p3DPt2 = Point3DMap[pLink->pOpposite->iPix0];
 
-		u = p3DPt0->u;
-		v = p3DPt0->v;
+		if(bmm)
+		{
+			//X0 = p3DPt0->XYZ;
+			//X1 = p3DPt1->XYZ;
+			//X2 = p3DPt2->XYZ;
 
-		du = uNew - u;
-		dv = vNew - v;
+			//RVLDIF3VECTORS(X1, X0, dX1)
+			//RVLDIF3VECTORS(X2, X0, dX2)
 
-		dd1 = p3DPt1->d - p3DPt0->d;
-		dd2 = p3DPt2->d - p3DPt0->d;
+			//fN = pTriangle->m_fN;
 
-		N = pTriangle->m_N;
+			//RVLCROSSPRODUCT3(dX1, dX2, fN)
 
-		N[0] = dv * dd2 - dd1 * pLink->dv;
-		N[1] = dd1 * pLink->du - du * dd2;
-		N[2] = -dv * pLink->du + du * pLink->dv;
+			//RVLNORM3(fN, fTmp)
 
-		//if(N[0] == -144 && N[1] == 0 && N[2] == 0)
-		//	int debug = 0;
+			//pTriangle->m_rho = RVLDOTPRODUCT3(X0, fN);
 
-		fN[0] = (double)N[0];
-		fN[1] = (double)N[1];
-		fN[2] = (double)N[2];
+			X0 = p3DPt0->iX;
+			X1 = p3DPt1->iX;
+			X2 = p3DPt2->iX;
 
-		pTriangle->m_lenN = DOUBLE2INT(sqrt(fN[0] * fN[0] + fN[1] * fN[1] + fN[2] * fN[2]));
+			RVLDIF3VECTORS(X1, X0, dX1)
+			RVLDIF3VECTORS(X2, X0, dX2)
 
-		pTriangle->m_d = N[0] * u + N[1] * v + N[2] * p3DPt0->d;
+			N = pTriangle->m_N;
+
+			RVLCROSSPRODUCT3(dX1, dX2, N)
+
+			pTriangle->m_lenN = DOUBLE2INT(sqrt((double)(N[0]) * (double)(N[0]) + (double)(N[1]) * (double)(N[1]) + (double)(N[2]) * (double)(N[2])));
+
+			X0_ = pTriangle->m_X0;
+
+			RVLCOPY3VECTOR(X0, X0_)
+
+			pTriangle->m_Flags = (RVLDOTPRODUCT3_64(N, X0) < 0 ? 0x00000000 : RVL2DREGION_FLAG_INVISIBLE);
+		}
+		else
+		{
+			u = p3DPt0->u;
+			v = p3DPt0->v;
+
+			du = uNew - u;
+			dv = vNew - v;
+
+			dd1 = p3DPt1->d - p3DPt0->d;
+			dd2 = p3DPt2->d - p3DPt0->d;
+
+			N = pTriangle->m_N;
+
+			N[0] = dv * dd2 - dd1 * pLink->dv;
+			N[1] = dd1 * pLink->du - du * dd2;
+			N[2] = -dv * pLink->du + du * pLink->dv;
+
+			//if(N[0] == -144 && N[1] == 0 && N[2] == 0)
+			//	int debug = 0;
+
+			fN_[0] = (double)N[0];
+			fN_[1] = (double)N[1];
+			fN_[2] = (double)N[2];
+
+			pTriangle->m_lenN = DOUBLE2INT(sqrt(fN_[0] * fN_[0] + fN_[1] * fN_[1] + fN_[2] * fN_[2]));
+
+			pTriangle->m_d = N[0] * u + N[1] * v + N[2] * p3DPt0->d;
+		}
 
 		pTriangle->m_n3DPts = 0;
 
@@ -372,22 +546,67 @@ BOOL RVLUpdateConvexHull(CRVLMPtrChain *pTriangleList,
 
 			minDist = maxDist;
 
+			//minfDist = (double)maxDist;
+
+			minDist64 = (int64)maxDist;
+
 			pClosestTriangle = NULL;
 
 			for(pNewTriangle = NewTriangleArray; pNewTriangle < pNewTriangleArrayEnd; pNewTriangle++)
 			{
-				N = pNewTriangle->m_N;
-
-				if(N[2] >= 0)
-					continue;
-
-				dist = (pNewTriangle->m_d - (N[0] * p3DPt0->u + N[1] * p3DPt0->v + N[2] * p3DPt0->d)) / pNewTriangle->m_lenN;
-
-				if(dist <= minDist)
+				if(bmm)
 				{
-					minDist = dist;
+					//fN = pNewTriangle->m_fN;
 
-					pClosestTriangle = pNewTriangle;
+					//if(pNewTriangle->m_rho >= 0)
+					//	continue;
+
+					//X0 = p3DPt0->XYZ;
+
+					//fdist = pNewTriangle->m_rho - RVLDOTPRODUCT3(fN, X0);
+
+					//if(fdist <= minfDist)
+					//{
+					//	minfDist = fdist;
+
+					//	pClosestTriangle = pNewTriangle;
+					//}
+
+					if(pNewTriangle->m_Flags & RVL2DREGION_FLAG_INVISIBLE)
+						continue;
+
+					N = pNewTriangle->m_N;
+
+					X0 = p3DPt0->iX;
+
+					X0_ = pNewTriangle->m_X0;
+
+					RVLDIF3VECTORS(X0_, X0, dX);
+
+					dist64 = RVLDOTPRODUCT3_64(N, dX) / (int64)(pNewTriangle->m_lenN);
+
+					if(dist64 <= minDist64)
+					{
+						minDist64 = dist64;
+
+						pClosestTriangle = pNewTriangle;
+					}
+				}
+				else
+				{
+					N = pNewTriangle->m_N;
+
+					if(N[2] >= 0)
+						continue;
+
+					dist = (pNewTriangle->m_d - (N[0] * p3DPt0->u + N[1] * p3DPt0->v + N[2] * p3DPt0->d)) / pNewTriangle->m_lenN;
+
+					if(dist <= minDist)
+					{
+						minDist = dist;
+
+						pClosestTriangle = pNewTriangle;
+					}
 				}
 			}
 
@@ -482,11 +701,28 @@ BOOL RVLUpdateConvexHull(CRVLMPtrChain *pTriangleList,
 		//if((int)pTriangle == 0x03852988)
 		//	int debug = 0;
 
-		RVLCOPY3VECTOR(pNewTriangle->m_N, pTriangle->m_N);
+		if(bmm)
+		{
+			//RVLCOPY3VECTOR(pNewTriangle->m_fN, pTriangle->m_fN);
 
-		pTriangle->m_lenN = pNewTriangle->m_lenN;
+			//pTriangle->m_rho = pNewTriangle->m_rho;
 
-		pTriangle->m_d = pNewTriangle->m_d;
+			RVLCOPY3VECTOR(pNewTriangle->m_N, pTriangle->m_N);
+
+			RVLCOPY3VECTOR(pNewTriangle->m_X0, pTriangle->m_X0);
+
+			pTriangle->m_lenN = pNewTriangle->m_lenN;
+
+			pTriangle->m_Flags = pNewTriangle->m_Flags;
+		}
+		else
+		{
+			RVLCOPY3VECTOR(pNewTriangle->m_N, pTriangle->m_N);
+
+			pTriangle->m_lenN = pNewTriangle->m_lenN;
+
+			pTriangle->m_d = pNewTriangle->m_d;
+		}
 
 		pTriangle->m_n3DPts = pNewTriangle->m_n3DPts;
 
@@ -569,7 +805,8 @@ void RVLInitConvexHull(	CRVL2DRegion2 *pTriangleSrc,
 						CRVLClass *pTriangleSet,
 						int ImageWidth,
 						RVL3DPOINT2 **Point3DMap,
-						CRVLMem *pMem)
+						CRVLMem *pMem,
+						bool bmm)
 {
 	CRVL2DRegion2 *pTriangle = (CRVL2DRegion2 *)(RVL2DRegionTemplate.Create3(pTriangleSet));
 	CRVL2DRegion2 *pTriangle2 = (CRVL2DRegion2 *)(RVL2DRegionTemplate.Create3(pTriangleSet));
@@ -634,49 +871,147 @@ void RVLInitConvexHull(	CRVL2DRegion2 *pTriangleSrc,
 	}
 	while(pLinkSrc != pLink0);
 
-	int dd1, dd2;
 	RVL3DPOINT2 *p3DPt0, *p3DPt1, *p3DPt2;
+	//double dX1[3], dX2[3];
+	int dX1[3], dX2[3];
 
-	int *N = pTriangle->m_N;
+	if(bmm)
+	{		
+		//double *fN = pTriangle->m_fN;
 
-	pLink = LinkArray;
-	pLink2 = pLink->pNext;
+		//pLink = LinkArray;
+		//pLink2 = pLink->pNext;
 
-	p3DPt0 = Point3DMap[pLink->iPix0];
+		//p3DPt0 = Point3DMap[pLink->iPix0];
 
-	p3DPt1 = Point3DMap[pLink2->pOpposite->iPix0];
+		//p3DPt1 = Point3DMap[pLink2->pOpposite->iPix0];
 
-	p3DPt2 = Point3DMap[pLink->pOpposite->iPix0];
+		//p3DPt2 = Point3DMap[pLink->pOpposite->iPix0];
 
-	dd1 = p3DPt1->d - p3DPt0->d;
-	dd2 = p3DPt2->d - p3DPt0->d;
+		//double *X0 = p3DPt0->XYZ;
+		//double *X1 = p3DPt1->XYZ;
+		//double *X2 = p3DPt2->XYZ;
 
-	N[0] = pLink2->dv * dd2 - dd1 * pLink->dv;
-	N[1] = dd1 * pLink->du - pLink2->du * dd2;
-	N[2] = -pLink2->dv * pLink->du + pLink2->du * pLink->dv;
+		//RVLDIF3VECTORS(X1, X0, dX1)
+		//RVLDIF3VECTORS(X2, X0, dX2)
 
-	pTriangle->m_d = N[0] * p3DPt0->u + N[1] * p3DPt0->v + N[2] * p3DPt0->d;
+		//RVLCROSSPRODUCT3(dX1, dX2, fN)
 
-	double fN[3];
+		//double fTmp;
 
-	fN[0] = (double)N[0];
-	fN[1] = (double)N[1];
-	fN[2] = (double)N[2];
+		//RVLNORM3(fN, fTmp)
 
-	pTriangle->m_lenN = DOUBLE2INT(sqrt(fN[0] * fN[0] + fN[1] * fN[1] + fN[2] * fN[2]));
+		//pTriangle->m_rho = RVLDOTPRODUCT3(X0, fN);
 
-	int *N2 = pTriangle2->m_N;
+		//double *fN2 = pTriangle2->m_fN;
 
-	N2[0] = -N[0];
-	N2[1] = -N[1];
-	N2[2] = -N[2];
+		//fN2[0] = -fN[0];
+		//fN2[1] = -fN[1];
+		//fN2[2] = -fN[2];
 
-	pTriangle2->m_d = -pTriangle->m_d;
+		//pTriangle2->m_rho = -pTriangle->m_rho;
 
-	pTriangle2->m_lenN = pTriangle->m_lenN;
+		//if(pTriangle2->m_rho < 0.0)
+		//	pTriangle = pTriangle2;
 
-	if(N2[2] < 0)
-		pTriangle = pTriangle2;
+		int *N = pTriangle->m_N;
+
+		pLink = LinkArray;
+		pLink2 = pLink->pNext;
+
+		p3DPt0 = Point3DMap[pLink->iPix0];
+
+		p3DPt1 = Point3DMap[pLink2->pOpposite->iPix0];
+
+		p3DPt2 = Point3DMap[pLink->pOpposite->iPix0];
+
+		int *X0 = p3DPt0->iX;
+		int *X1 = p3DPt1->iX;
+		int *X2 = p3DPt2->iX;
+
+		RVLDIF3VECTORS(X1, X0, dX1)
+		RVLDIF3VECTORS(X2, X0, dX2)
+
+		RVLCROSSPRODUCT3(dX1, dX2, N)
+
+		pTriangle->m_lenN = DOUBLE2INT(sqrt((double)(N[0]) * (double)(N[0]) + (double)(N[1]) * (double)(N[1]) + (double)(N[2]) * (double)(N[2])));
+
+		int *X0_ = pTriangle->m_X0;
+
+		RVLCOPY3VECTOR(X0, X0_)
+
+		int *N2 = pTriangle2->m_N;
+
+		N2[0] = -N[0];
+		N2[1] = -N[1];
+		N2[2] = -N[2];
+
+		int *X0_2 = pTriangle2->m_X0;
+
+		pTriangle2->m_lenN = pTriangle->m_lenN;
+
+		RVLCOPY3VECTOR(X0_, X0_2)
+
+		if(RVLDOTPRODUCT3_64(N, X0) < 0)
+		{
+			pTriangle->m_Flags = 0x00000000;
+
+			pTriangle2->m_Flags = RVL2DREGION_FLAG_INVISIBLE;
+		}
+		else
+		{
+			pTriangle2->m_Flags = 0x00000000;
+
+			pTriangle->m_Flags = RVL2DREGION_FLAG_INVISIBLE;
+
+			pTriangle = pTriangle2;
+		}
+	}
+	else
+	{
+		int dd1, dd2;
+
+		int *N = pTriangle->m_N;
+
+		pLink = LinkArray;
+		pLink2 = pLink->pNext;
+
+		p3DPt0 = Point3DMap[pLink->iPix0];
+
+		p3DPt1 = Point3DMap[pLink2->pOpposite->iPix0];
+
+		p3DPt2 = Point3DMap[pLink->pOpposite->iPix0];
+
+		dd1 = p3DPt1->d - p3DPt0->d;
+		dd2 = p3DPt2->d - p3DPt0->d;
+
+		N[0] = pLink2->dv * dd2 - dd1 * pLink->dv;
+		N[1] = dd1 * pLink->du - pLink2->du * dd2;
+		N[2] = -pLink2->dv * pLink->du + pLink2->du * pLink->dv;
+
+		pTriangle->m_d = N[0] * p3DPt0->u + N[1] * p3DPt0->v + N[2] * p3DPt0->d;
+
+		double fN[3];
+
+		fN[0] = (double)N[0];
+		fN[1] = (double)N[1];
+		fN[2] = (double)N[2];
+
+		pTriangle->m_lenN = DOUBLE2INT(sqrt(fN[0] * fN[0] + fN[1] * fN[1] + fN[2] * fN[2]));
+
+		int *N2 = pTriangle2->m_N;
+
+		N2[0] = -N[0];
+		N2[1] = -N[1];
+		N2[2] = -N[2];
+
+		pTriangle2->m_d = -pTriangle->m_d;
+
+		pTriangle2->m_lenN = pTriangle->m_lenN;
+
+		if(N2[2] < 0)
+			pTriangle = pTriangle2;
+	}
 
 	pTriangle->m_n3DPts = 3;
 
@@ -729,10 +1064,18 @@ int RVLGetConvexHull(	CRVL2DRegion2 *pTriangleSrc,
 						RVL3DPOINT2 **Point3DMap,
 						CRVLMem *pMem,
 						RVLQLIST_PTR_ENTRY *LinkQueueEntryMem,
-						CRVL3DMeshObject *childMO)
+						CRVL3DMeshObject *childMO,
+						bool bmm)
 						//CRVLPlanarSurfaceDetector *pPSD)
 {
-	RVLInitConvexHull(pTriangleSrc, pTriangleSet, ImageWidth, Point3DMap, pMem);
+	// Form a initial (flat) convex hull consisting of two triangles: pTriangleSrc and the opposite side of the same triangle
+
+	RVLInitConvexHull(pTriangleSrc, pTriangleSet, ImageWidth, Point3DMap, pMem, bmm);
+
+	//if(!RVL3DMeshIsConvex(&(pTriangleSet->m_ObjectList), Point3DMap))
+	//	int debug = 0;
+
+	// From LinkQueue containing all links of pTriangleSrc
 	
 	RVLMESH_LINK *pLink = (RVLMESH_LINK *)(pTriangleSrc->m_PtArray);
 
@@ -764,6 +1107,8 @@ int RVLGetConvexHull(	CRVL2DRegion2 *pTriangleSrc,
 
 	//int debugConunter = 0;
 
+	// Determine the new approximatelly convex set (ACS) by applying an incremental region growing procedure starting from pTriangleSrc.
+
 	CRVL2DRegion2 *pTriangle, *pTriangle2, *pTriangle3;
 	int *N, *N2;
 	double cosAngle, maxCosAngle;
@@ -771,9 +1116,18 @@ int RVLGetConvexHull(	CRVL2DRegion2 *pTriangleSrc,
 	//double fN[3];
 	RVLQLIST_PTR_ENTRY *pLinkPtr2;
 	BOOL bConvex;
+	double *fN, *fN2;
 
 	while(TRUE)
 	{
+		// Among all links in LinkQueue which are on the boundary of the ACS 
+		// find the one which connects two triangles with the smallest angle between their normals.
+		// This link is referred to in the following as expansion link.
+		// The triangle outside the ACS connected to the ACS by the expansion link
+		// is the candidate for growing of the ACS.
+		// This triangle is referred to in the following as an expansion candidate.
+		// The ptr. to the ptr. to the expansion link is stored in ppBestLinkPtr.
+
 		maxCosAngle = -2.0;
 
 		ppLinkPtr = &(LinkQueue.pFirst);
@@ -788,43 +1142,82 @@ int RVLGetConvexHull(	CRVL2DRegion2 *pTriangleSrc,
 
 			pTriangle = (CRVL2DRegion2 *)(pLink->vp2DRegion);
 
-			N = pTriangle->m_N;
-
-			//if(pTriangle->m_lenN == 0)
-			//{
-			//	fN[0] = (double)N[0];
-			//	fN[1] = (double)N[1];
-			//	fN[2] = (double)N[2];
-
-			//	pTriangle->m_lenN = DOUBLE2INT(sqrt(fN[0] * fN[0] + fN[1] * fN[1] + fN[2] * fN[2]));					
-			//}
-
 			pTriangle2 = (CRVL2DRegion2 *)(pLink->pOpposite->vp2DRegion);
 
-			if(pTriangle2)
-				if(pTriangle2->m_Label == 0xffffffff)
-				{
-					N2 = pTriangle2->m_N;
-
-					//if(pTriangle2->m_lenN == 0)
-					//{
-					//	fN[0] = (double)N2[0];
-					//	fN[1] = (double)N2[1];
-					//	fN[2] = (double)N2[2];
-
-					//	pTriangle2->m_lenN = DOUBLE2INT(sqrt(fN[0] * fN[0] + fN[1] * fN[1] + fN[2] * fN[2]));					
-					//}
-
-					cosAngle = ((double)(N[0]) * (double)(N2[0]) + (double)(N[1]) * (double)(N2[1]) + (double)(N[2]) * (double)(N2[2])) /
-						((double)(pTriangle->m_lenN) * (double)(pTriangle2->m_lenN));
-
-					if(cosAngle > maxCosAngle)
+			if(bmm)
+			{
+				fN = pTriangle->m_fN;
+				
+				if(pTriangle2)
+					if(pTriangle2->m_Label == 0xffffffff)
 					{
-						maxCosAngle = cosAngle;
+						fN2 = pTriangle2->m_fN;
 
-						ppBestLinkPtr = ppLinkPtr;
+						cosAngle = RVLDOTPRODUCT3(fN, fN2);
+
+						if(cosAngle > maxCosAngle)
+						{
+							maxCosAngle = cosAngle;
+
+							ppBestLinkPtr = ppLinkPtr;
+						}
 					}
-				}
+
+				//N = pTriangle->m_N;
+				//
+				//if(pTriangle2)
+				//	if(pTriangle2->m_Label == 0xffffffff)
+				//	{
+				//		N2 = pTriangle2->m_N;
+
+				//		cosAngle = (double)(RVLDOTPRODUCT3_64(N, N2)) / ((double)(pTriangle->m_lenN) * (double)(pTriangle2->m_lenN));
+
+				//		if(cosAngle > maxCosAngle)
+				//		{
+				//			maxCosAngle = cosAngle;
+
+				//			ppBestLinkPtr = ppLinkPtr;
+				//		}
+				//	}
+			}
+			else
+			{
+				N = pTriangle->m_N;
+
+				//if(pTriangle->m_lenN == 0)
+				//{
+				//	fN[0] = (double)N[0];
+				//	fN[1] = (double)N[1];
+				//	fN[2] = (double)N[2];
+
+				//	pTriangle->m_lenN = DOUBLE2INT(sqrt(fN[0] * fN[0] + fN[1] * fN[1] + fN[2] * fN[2]));					
+				//}
+
+				if(pTriangle2)
+					if(pTriangle2->m_Label == 0xffffffff)
+					{
+						N2 = pTriangle2->m_N;
+
+						//if(pTriangle2->m_lenN == 0)
+						//{
+						//	fN[0] = (double)N2[0];
+						//	fN[1] = (double)N2[1];
+						//	fN[2] = (double)N2[2];
+
+						//	pTriangle2->m_lenN = DOUBLE2INT(sqrt(fN[0] * fN[0] + fN[1] * fN[1] + fN[2] * fN[2]));					
+						//}
+
+						cosAngle = ((double)(N[0]) * (double)(N2[0]) + (double)(N[1]) * (double)(N2[1]) + (double)(N[2]) * (double)(N2[2])) /
+							((double)(pTriangle->m_lenN) * (double)(pTriangle2->m_lenN));
+
+						if(cosAngle > maxCosAngle)
+						{
+							maxCosAngle = cosAngle;
+
+							ppBestLinkPtr = ppLinkPtr;
+						}
+					}
+			}
 
 			ppLinkPtr = &(pLinkPtr2->pNext);
 
@@ -834,16 +1227,30 @@ int RVLGetConvexHull(	CRVL2DRegion2 *pTriangleSrc,
 		if(ppBestLinkPtr == NULL)
 			break;
 
+		// pLinkPtr2 <- ptr. to the expansion link
+
 		pLinkPtr2 = (RVLQLIST_PTR_ENTRY *)(*ppBestLinkPtr);
+
+		// remove the expansion link from LinkQueue
 
 		if(pLinkPtr2->pNext == NULL)
 			LinkQueue.ppNext = ppBestLinkPtr;
 
 		*ppBestLinkPtr = pLinkPtr2->pNext;
 
+		// pLink <- expansion link
+
 		pLink = (RVLMESH_LINK *)(pLinkPtr2->Ptr);
 
+		// pTriangle <- expansion candidate
+
 		pTriangle = (CRVL2DRegion2 *)(pLink->pPrev->vp2DRegion);
+
+		// If two or all three triangles adjacent to the expansion candidate are already in the ACS,
+		// then this expansion candidate is automatically appended to the ACS without updating its convex hull.
+		// Otherwise, RVLUpdateConvexHull() function is applied to determine whether the union of the ACS 
+		// and the expansion candidate is an approximatelly convex set or not. 
+		// If this is the case, then the expansion candidate is appended to the ACS and its convex hull is updated.
 
 		bConvex = FALSE;
 
@@ -863,13 +1270,26 @@ int RVLGetConvexHull(	CRVL2DRegion2 *pTriangleSrc,
 				if(pTriangle3 != NULL)
 					if((pTriangle3->m_Flags & RVLOBJ2_FLAG_REJECTED) == 0)
 						if(pTriangle3->m_Label == Label)
-							bConvex = TRUE;
+							bConvex = TRUE;				
 
 				if(!bConvex)
 					bConvex = RVLUpdateConvexHull(pTriangleList, pTriangleSet, ImageWidth, Point3DMap, 
-						pLink->pPrev->pOpposite->pPrev, maxDist, pMem);
+						pLink->pPrev->pOpposite->pPrev, maxDist, pMem, bmm);
+
+				// only for debugging purpose !!!
+
+				//if(!RVL3DMeshIsConvex(pTriangleList, Point3DMap))
+				//	int debug = 0;
+
+				//if(pTriangleList->m_nElements == 137)
+				//	int debug = 0;
+
+				/////
 			}
 		}
+
+		// If the expansion candidate is appended to the ACS, then it is assigned the label of the ACS 
+		// and its links which are at the boundary of the new ACS are inserted into LinkQueue.
 
 		if(bConvex)
 		{
@@ -979,7 +1399,8 @@ int RVLSegmentToConvex( CRVLClass *pTriangleSetSrc,
 						CRVLMem *pMem,
 						//CRVLPlanarSurfaceDetector *pPSD,
 						int *SizeArray,
-						CRVL3DMeshObject *rootMO)
+						CRVL3DMeshObject *rootMO,
+						bool bmm)
 {
 	//Stvaraju se nove prazne datoteke u koje ce su upisivati podaci o generiranom convex hull-u
 	/*FILE *fpPts, *fpIdx, *fpSizes, *fpCurvs, *fpDirs;
@@ -1103,6 +1524,9 @@ int RVLSegmentToConvex( CRVLClass *pTriangleSetSrc,
 				//	((RVLMESH_LINK *)(pTriangle->m_PtArray))->pNext->pOpposite->iPix0 == 114 + 135*320 ||
 				//	((RVLMESH_LINK *)(pTriangle->m_PtArray))->pNext->pOpposite->pNext->pOpposite->iPix0 == 114 + 135*320)
 				//	int debug = 0;
+
+				//if(Label == 91)
+				//	int debug = 0;
 				
 				pTriangleSetTgt->Clear();
 				
@@ -1126,7 +1550,7 @@ int RVLSegmentToConvex( CRVLClass *pTriangleSetSrc,
 					childMO->m_noVertices = childMO->m_noFaces + 2;
 
 					SizeArray[Label] = RVLGetConvexHull(pTriangle, Label, &(pTriangleSetTgt->m_ObjectList), pTriangleSetTgt, 
-						maxDist, ImageWidth, Point3DMap, pMem, LinkQueueEntryMem, childMO);
+						maxDist, ImageWidth, Point3DMap, pMem, LinkQueueEntryMem, childMO, bmm);
 
 					//We update rootMO values
 					rootMO->m_noFaces += childMO->m_noFaces;
@@ -1134,20 +1558,31 @@ int RVLSegmentToConvex( CRVLClass *pTriangleSetSrc,
 				}
 				else if(SizeArray)
 					SizeArray[Label] = RVLGetConvexHull(pTriangle, Label, &(pTriangleSetTgt->m_ObjectList), pTriangleSetTgt, 
-						maxDist, ImageWidth, Point3DMap, pMem, LinkQueueEntryMem);
+						maxDist, ImageWidth, Point3DMap, pMem, LinkQueueEntryMem, NULL, bmm);
 				else
 					RVLGetConvexHull(pTriangle, Label, &(pTriangleSetTgt->m_ObjectList), pTriangleSetTgt, 
-						maxDist, ImageWidth, Point3DMap, pMem, LinkQueueEntryMem);
-				
-				//if(Label == 9)
-				//	int debug = 0;
+						maxDist, ImageWidth, Point3DMap, pMem, LinkQueueEntryMem, NULL, bmm);			
 
 				//SaveMeshCH(pTriangleSetTgt, Point3DMap, IdxMap, ImageWidth * ImageHeight);
 				Label++;
+
+				//if(Label == 90)
+				//{
+				//	int debug = 0;
+
+				//	break;
+				//}
 			}
 
 			pTriangleQueueEntry = (RVLQLIST_PTR_ENTRY *)(pTriangleQueueEntry->pNext);
 		}
+
+		//if(Label == 90)
+		//{
+		//	int debug = 0;
+
+		//	break;
+		//}
 	}
 
 	//delete[] IdxMap;
@@ -4829,6 +5264,73 @@ void RVLGetMomentsOf2DRegions(	CRVLMPtrChain *p2DRegionList,
 		pMoments->S2[1] = C[1];
 		pMoments->S2[3] = C[3];
 	}
+}
+
+bool RVL3DMeshIsConvex(CRVLMPtrChain *pTriangleList,
+					   RVL3DPOINT2 **Point3DMap)
+{
+	RVLPTRCHAIN_ELEMENT *pNext;	
+	CRVL2DRegion2 *pTriangle2;
+	RVLMESH_LINK *pLink, *pLink0;
+	//double *X, *N;
+	//double rho, e;
+	int *X, *N, *X0;
+	int dX[3];
+	int64 e;
+
+	pTriangleList->Start();
+
+	while(pTriangleList->m_pNext)
+	{
+		CRVL2DRegion2 *pTriangle = (CRVL2DRegion2 *)(pTriangleList->GetNext());
+
+		if(pTriangle->m_Flags & RVLOBJ2_FLAG_REJECTED)
+			continue;
+
+		pNext = pTriangleList->m_pNext;
+
+		//N = pTriangle->m_fN;
+
+		N = pTriangle->m_N;
+
+		//rho = pTriangle->m_rho;
+
+		X0 = pTriangle->m_X0;
+
+		pTriangleList->Start();
+
+		while(pTriangleList->m_pNext)
+		{
+			CRVL2DRegion2 *pTriangle2 = (CRVL2DRegion2 *)(pTriangleList->GetNext());
+
+			if(pTriangle2->m_Flags & RVLOBJ2_FLAG_REJECTED)
+				continue;
+
+			pLink = pLink0 = (RVLMESH_LINK *)(pTriangle2->m_PtArray);
+
+			do
+			{
+				//X = Point3DMap[pLink->iPix0]->XYZ;
+				X = Point3DMap[pLink->iPix0]->iX;
+
+				//e = RVLDOTPRODUCT3(X, N) - rho;
+
+				RVLDIF3VECTORS(X, X0, dX)
+
+				e = RVLDOTPRODUCT3_64(N, dX);
+
+				if(e > 0)
+					return false;
+
+				pLink = pLink->pNext->pOpposite;
+			}
+			while(pLink != pLink0);
+		}
+
+		pTriangleList->m_pNext = pNext;
+	}
+
+	return true;
 }
 
 #ifdef RVLVTK

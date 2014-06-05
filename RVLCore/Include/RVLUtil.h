@@ -133,6 +133,7 @@
 }
 // x(3x1)'*y(3x1)
 #define RVLDOTPRODUCT3(x, y)	(x[0]*y[0]+x[1]*y[1]+x[2]*y[2])
+#define RVLDOTPRODUCT3_64(x, y)	((int64)(x[0])*(int64)(y[0])+(int64)(x[1])*(int64)(y[1])+(int64)(x[2])*(int64)(y[2]))
 // z = x(3x1) x y(3x1)
 #define RVLCROSSPRODUCT3(x, y, z)		z[0] = x[1] * y[2] - x[2] * y[1];z[1] = x[2] * y[0] - x[0] * y[2];z[2] = x[0] * y[1] - x[1] * y[0];
 // normalize vector x(3x1)

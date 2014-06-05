@@ -177,7 +177,8 @@ int main(int argc, char* argv[])
 			// segment to convex sets
 		
 			nObjects = RVLSegmentToConvex(&(VS.m_AImage.m_C2DRegion), NULL, &(VS.m_AImage.m_C2DRegion2),
-				VS.m_ConvexSegmentThr, w, h, VS.m_PSD.m_Point3DMap, &(VS.m_Mem));
+				VS.m_ConvexSegmentThr, w, h, VS.m_PSD.m_Point3DMap, &(VS.m_Mem), NULL, NULL,
+				(VS.m_PSD.m_Flags & RVLPSD_FLAG_MM) != 0);
 
 			t = clock() - t;			
 

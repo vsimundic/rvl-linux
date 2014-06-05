@@ -83,6 +83,7 @@ CRVLPlanarSurfaceDetector::CRVLPlanarSurfaceDetector()
 	m_nCCDilationIterations = 5;
 	m_uNrm = 8;
 	m_uvdTol = 4; //4
+	m_MeshTol = 2;
 	m_uvTol = 2;  //2
 	m_RuvdTol = 1.0;
 	m_RuvTol = 1.0;
@@ -2120,6 +2121,7 @@ void CRVLPlanarSurfaceDetector::GetPointsWithDisparity(RVLDISPARITYMAP *pDispari
 
 	RVL3DPOINT2 *pPoint3D = m_Point3DArray;
 	double *X;
+	int *iX;
 
 	int iPix = 0;
 
@@ -2137,9 +2139,6 @@ void CRVLPlanarSurfaceDetector::GetPointsWithDisparity(RVLDISPARITYMAP *pDispari
 				pPoint3D->v = v;
 				pPoint3D->d = d;
 				pPoint3D->iPix = iPix;
-				pPoint3D->x = (double)u;
-				pPoint3D->y = (double)v;
-				pPoint3D->z = (double)d;
 				pPoint3D->segmentNumber = -1;
 				pPoint3D->refSegmentNumber = -1;
 				pPoint3D->iCell = -1;
@@ -2149,6 +2148,25 @@ void CRVLPlanarSurfaceDetector::GetPointsWithDisparity(RVLDISPARITYMAP *pDispari
 				X[2] = m_pStereoVision->m_KinectParams.pZProjLT[d];
 				X[0] = (u - m_pStereoVision->m_KinectParams.depthUc) * (X[2]/m_pStereoVision->m_KinectParams.depthFu);
 				X[1] = (v - m_pStereoVision->m_KinectParams.depthVc) * (X[2]/m_pStereoVision->m_KinectParams.depthFv);
+
+				iX = pPoint3D->iX;
+
+				iX[0] = DOUBLE2INT(X[0]);
+				iX[1] = DOUBLE2INT(X[1]);
+				iX[2] = DOUBLE2INT(X[2]);
+
+				if(m_Flags & RVLPSD_FLAG_MM)
+				{
+					pPoint3D->x = X[0];
+					pPoint3D->y = X[1];
+					pPoint3D->z = X[2];
+				}
+				else
+				{
+					pPoint3D->x = (double)u;
+					pPoint3D->y = (double)v;
+					pPoint3D->z = (double)d;
+				}
 
 				*ppP3DMap = pPoint3D;
 
@@ -5128,9 +5146,12 @@ void CRVLPlanarSurfaceDetector::Init()
 
 	m_bEdgeBasedSegments = false;
 
-	m_QueueMem = new RVLPSD_STRM_QUEUE_ENTRY[ImageSize];	
+	m_QueueMem = new RVLPSD_STRM_QUEUE_ENTRY[ImageSize];
 
-	m_Queue.m_Size = m_pStereoVision->m_nDisp;
+	if(m_Flags & RVLPSD_FLAG_MM)
+		m_Queue.m_Size = 800;
+	else
+		m_Queue.m_Size = m_pStereoVision->m_nDisp;
 
 	m_Queue.Init();
 
@@ -10358,7 +10379,7 @@ void CRVLPlanarSurfaceDetector::SegmentSTRM(CRVLC2D *p2DRegionSet,
 		pCornerPt->segmentNumber = m_Point3DMap[iPix]->segmentNumber;
 		pCornerPt->refSegmentNumber = m_Point3DMap[iPix]->refSegmentNumber;
 		pCornerPt->iCell = m_Point3DMap[iPix]->iCell;
-		pCornerPt->x = (double)(pCornerPt->u);
+		pCornerPt->x = (double)(pCornerPt->u);		// 140526
 		pCornerPt->y = (double)(pCornerPt->v);
 		pCornerPt->z = (double)(pCornerPt->d);
 
@@ -10609,6 +10630,9 @@ void CRVLPlanarSurfaceDetector::SegmentSTRM(CRVLC2D *p2DRegionSet,
 		{
 			//if(pEntry - m_QueueMem == 171)
 			//	int tmp1 = 0;
+
+			if(fabs(m_Point3DMap[127 + 227 * 320]->XYZ[2]) < 100.0)
+				int debug = 0;
 
 			pTriangle = pEntry->pRegion;
 
@@ -11457,7 +11481,6 @@ void CRVLPlanarSurfaceDetector::SegmentSTRM(CRVLC2D *p2DRegionSet,
 	RVLQLIST_PTR_ENTRY *pVertex = m_pDelaunay->m_VertexListData = 
 		(RVLQLIST_PTR_ENTRY *)(m_pMem->Alloc(m_pDelaunay->m_nVertices * sizeof(RVLQLIST_PTR_ENTRY)));
 
-	double fN[3];
 	int *N;
 
 	p2DRegionList->Start();
@@ -11504,20 +11527,45 @@ void CRVLPlanarSurfaceDetector::SegmentSTRM(CRVLC2D *p2DRegionSet,
 			p2DRegion->m_Flags = RVLOBJ2_FLAG_REJECTED;
 		else
 		{
-			N = p2DRegion->m_N;
+			if(m_Flags & RVLPSD_FLAG_MM)
+			{
+				if(p2DRegion->m_Flags & RVL2DREGION_FLAG_LINE)
+					p2DRegion->m_Flags = RVLOBJ2_FLAG_REJECTED;
+				else
+				{
+					double *fN = p2DRegion->m_fN;
 
-			fN[0] = (double)N[0];
-			fN[1] = (double)N[1];
-			fN[2] = (double)N[2];
+					double *X0 = m_Point3DMap[pLink->iPix0]->XYZ;
 
-			p2DRegion->m_lenN = DOUBLE2INT(sqrt(fN[0] * fN[0] + fN[1] * fN[1] + fN[2] * fN[2]));					
-			
-			if(p2DRegion->m_lenN == 0)
-				p2DRegion->m_Flags = RVLOBJ2_FLAG_REJECTED;
-			else if(1000 * p2DRegion->m_N[2] / p2DRegion->m_lenN < 100)
-				p2DRegion->m_Flags = RVLOBJ2_FLAG_REJECTED;
+					double fTmp = sqrt(RVLDOTPRODUCT3(X0, X0));
+
+					double V3Tmp[3];
+
+					RVLSCALE3VECTOR2(X0, fTmp, V3Tmp);
+
+					if(RVLDOTPRODUCT3(fN, V3Tmp) < 0.1)
+						p2DRegion->m_Flags = RVLOBJ2_FLAG_REJECTED;
+				}
+			}
 			else
-				p2DRegion->m_Flags = 0x00000000;
+			{
+				N = p2DRegion->m_N;
+
+				double fN[3];
+
+				fN[0] = (double)N[0];
+				fN[1] = (double)N[1];
+				fN[2] = (double)N[2];
+
+				p2DRegion->m_lenN = DOUBLE2INT(sqrt(fN[0] * fN[0] + fN[1] * fN[1] + fN[2] * fN[2]));					
+				
+				if(p2DRegion->m_lenN == 0)
+					p2DRegion->m_Flags = RVLOBJ2_FLAG_REJECTED;
+				else if(1000 * p2DRegion->m_N[2] / p2DRegion->m_lenN < 100)
+					p2DRegion->m_Flags = RVLOBJ2_FLAG_REJECTED;
+				else
+					p2DRegion->m_Flags = 0x00000000;
+			}
 		}
 	}
 
@@ -11751,11 +11799,13 @@ void CRVLPlanarSurfaceDetector::UpdateSTRMQueue(CRVL2DRegion2 **TriangleArray,
 
 	RVLMESH_LINK *pLink, *pLink2;
 	RVL3DPOINT2 *p3DPt0, *p3DPt1, *p3DPt2;
-	int eMax, iPixeMax;
+	int eMax, eThr, iPixeMax;
 	CRVL2DRegion2 *pTriangle;
 	CRVL2DRegion2 **ppTriangle;
 	int dd1, dd2;
 	int *N;
+	double *fN;
+	double dX1[3], dX2[3];
 	//int nPts, n3DPts;
 	//double fTmp;
 	//double fN[3];
@@ -11781,10 +11831,53 @@ void CRVLPlanarSurfaceDetector::UpdateSTRMQueue(CRVL2DRegion2 **TriangleArray,
 
 		p3DPt2 = m_Point3DMap[pLink2->pOpposite->iPix0];
 
-		dd1 = p3DPt1->d - p3DPt0->d;
-		dd2 = p3DPt2->d - p3DPt0->d;
+		if(m_Flags & RVLPSD_FLAG_MM)
+		{
+			double *X0 = p3DPt0->XYZ;
+			double *X1 = p3DPt1->XYZ;
+			double *X2 = p3DPt2->XYZ;
 
-		N = pTriangle->m_N;		
+			RVLDIF3VECTORS(X1, X0, dX1)
+			RVLDIF3VECTORS(X2, X0, dX2)
+
+			fN = pTriangle->m_fN;
+
+			RVLCROSSPRODUCT3(dX1, dX2, fN)
+
+			double fTmp = sqrt(RVLDOTPRODUCT3(fN, fN)); 
+			
+			if(fTmp <= APPROX_ZERO && fTmp >= -APPROX_ZERO)
+			{
+				pTriangle->m_Flags |= RVL2DREGION_FLAG_LINE;
+
+				eMax = 0;
+			}
+			else
+			{
+				RVLSCALE3VECTOR2(fN, fTmp, fN)
+
+				pTriangle->m_rho = RVLDOTPRODUCT3(X0, fN);
+
+				if(pTriangle->m_rho < 0.0)
+				{
+					fN[0] = -fN[0];
+					fN[1] = -fN[1];
+					fN[2] = -fN[2];
+
+					pTriangle->m_rho = -pTriangle->m_rho;
+				}
+
+				GetMaxDeviation(pTriangle, eMax, iPixeMax, true);
+			}
+
+			eThr = m_MeshTol;
+		}
+		else
+		{
+			dd1 = p3DPt1->d - p3DPt0->d;
+			dd2 = p3DPt2->d - p3DPt0->d;
+
+			N = pTriangle->m_N;		
 
 #ifdef NEVER
 		fN[0] = (double)(pLink->dv * dd2 - dd1 * pLink2->dv);
@@ -11800,34 +11893,37 @@ void CRVLPlanarSurfaceDetector::UpdateSTRMQueue(CRVL2DRegion2 **TriangleArray,
 		pTriangle->m_d = N[0] * p3DPt0->u + N[1] * p3DPt0->v + N[2] * p3DPt0->d;
 #endif
 
-		N[0] = pLink->dv * dd2 - dd1 * pLink2->dv;
-		N[1] = dd1 * pLink2->du - pLink->du * dd2;
-		N[2] = -pLink->dv * pLink2->du + pLink->du * pLink2->dv;
+			N[0] = pLink->dv * dd2 - dd1 * pLink2->dv;
+			N[1] = dd1 * pLink2->du - pLink->du * dd2;
+			N[2] = -pLink->dv * pLink2->du + pLink->du * pLink2->dv;
 
-		//pTriangle->m_d = N[0] * p3DPt0->u + N[1] * p3DPt0->v + N[2] * p3DPt0->d;
+			//pTriangle->m_d = N[0] * p3DPt0->u + N[1] * p3DPt0->v + N[2] * p3DPt0->d;
 
-		if(N[2] < 0)
-		{
-			N[0] = -N[0];
-			N[1] = -N[1];
-			N[2] = -N[2];
+			if(N[2] < 0)
+			{
+				N[0] = -N[0];
+				N[1] = -N[1];
+				N[2] = -N[2];
+			}
+
+			if(N[2] > 0)
+			{
+				// for each point inside the triangle determine whether it lies in the triangle plane within a given tolerance or not
+				// for the greatest deviation, create a queue entry
+
+				GetMaxDeviation(pTriangle, eMax, iPixeMax);			
+			}
+			else
+				eMax = 0;
+
+			eThr = N[2] * m_uvdTol;
 		}
-
-		if(N[2] > 0)
-		{
-			// for each point inside the triangle determine whether it lies in the triangle plane within a given tolerance or not
-			// for the greatest deviation, create a queue entry
-
-			GetMaxDeviation(pTriangle, eMax, iPixeMax);			
-		}
-		else
-			eMax = 0;
 
 		//if(eMax <= 10000 * m_uvdTol)
 
 		if(eMax == 0)
 			continue;
-		else if(eMax <= N[2] * m_uvdTol)
+		else if(eMax <= eThr)
 		{
 		//	pTriangle->m_Flags |= RVLOBJ2_FLAG_MARKED;
 
@@ -11838,7 +11934,16 @@ void CRVLPlanarSurfaceDetector::UpdateSTRMQueue(CRVL2DRegion2 **TriangleArray,
 				continue;
 		}
 
-		eMax /= (16 * N[2]);
+		if(m_Flags & RVLPSD_FLAG_MM)
+		{
+			if(eMax > 100)
+				eMax = DOUBLE2INT(log((double)eMax / 100.0)/log(1.01))+100;
+
+			if(eMax > 799)
+				eMax = 799;
+		}
+		else
+			eMax /= (16 * N[2]);
 
 		//eMax /= 160000;
 		
@@ -11870,7 +11975,8 @@ void CRVLPlanarSurfaceDetector::UpdateSTRMQueue(CRVL2DRegion2 **TriangleArray,
 
 void CRVLPlanarSurfaceDetector::GetMaxDeviation(CRVL2DRegion2 *pPolygon,
 												int &eMax,
-												int &iPixeMax)
+												int &iPixeMax,
+												bool bFloat)
 {
 	RVLMESH_LINK *pLink = (RVLMESH_LINK *)(pPolygon->m_PtArray);
 
@@ -11884,23 +11990,35 @@ void CRVLPlanarSurfaceDetector::GetMaxDeviation(CRVL2DRegion2 *pPolygon,
 
 	int v0 = iPix0 / m_Width;
 
-	int d0 = m_Point3DMap[iPix0]->d;
-
 	int iPix = m_iScanLineStart[iFirstScanLine];
 
 	int u = iPix % m_Width;
 
 	int v = iPix / m_Width;
 
-	int *N = pPolygon->m_N;
-
 	//int k0 = N[1] * v - pPolygon->m_d;
 
 	//int k0 = DOUBLE2INT(10000.0 * (pPolygon->m_a * (double)u0 + pPolygon->m_b * (double)v0 + pPolygon->m_c));
 
-	int k0 = N[1] * (v - v0) - N[2] * d0;
+	double feMax;
+	int k0, d0;
+	double rho;
+	int *N;
+	double *fN;
 
-	eMax = 0;	
+	if(bFloat)
+	{
+		feMax = 0.0;
+		fN = pPolygon->m_fN;
+		rho = pPolygon->m_rho;
+	}
+	else
+	{
+		eMax = 0;	
+		d0 = m_Point3DMap[iPix0]->d;
+		N = pPolygon->m_N;
+		k0 = N[1] * (v - v0) - N[2] * d0;
+	}
 
 	int nPts = 0;
 
@@ -11910,6 +12028,8 @@ void CRVLPlanarSurfaceDetector::GetMaxDeviation(CRVL2DRegion2 *pPolygon,
 	int iScanLine;	
 	int e;
 	int d;
+	double fe;
+	double *X;
 
 	for(iScanLine = iFirstScanLine; iScanLine <= iLastScanLine; iScanLine++, k0 += N[1])
 	{
@@ -11930,22 +12050,41 @@ void CRVLPlanarSurfaceDetector::GetMaxDeviation(CRVL2DRegion2 *pPolygon,
 
 			if(m_bCorner[iPix])
 				continue;
-				
-			d = m_Point3DMap[iPix]->d;
 
-			e = k + N[2] * d;
-
-			//if(e != (N[0]*(iPix % m_Width)+N[1]*(iPix/m_Width)+N[2]*m_Point3DMap[iPix]->d-pTriangle->m_d))
-			//	int tmp1 = 0;
-
-			if(e < 0)
-				e = -e;
-
-			if(e > eMax)
+			if(bFloat)
 			{
-				eMax = e;
+				X = m_Point3DMap[iPix]->XYZ;
 
-				iPixeMax = iPix;
+				fe = RVLDOTPRODUCT3(fN, X) - rho;
+
+				if(fe < 0.0)
+					fe = -fe;
+
+				if(fe > feMax)
+				{
+					feMax = fe;
+
+					iPixeMax = iPix;
+				}
+			}
+			else
+			{				
+				d = m_Point3DMap[iPix]->d;
+
+				e = k + N[2] * d;
+
+				//if(e != (N[0]*(iPix % m_Width)+N[1]*(iPix/m_Width)+N[2]*m_Point3DMap[iPix]->d-pTriangle->m_d))
+				//	int tmp1 = 0;
+
+				if(e < 0)
+					e = -e;
+
+				if(e > eMax)
+				{
+					eMax = e;
+
+					iPixeMax = iPix;
+				}
 			}
 		}
 	}	
@@ -11953,6 +12092,9 @@ void CRVLPlanarSurfaceDetector::GetMaxDeviation(CRVL2DRegion2 *pPolygon,
 	pPolygon->m_nPts = nPts;
 
 	pPolygon->m_n3DPts = n3DPts;
+
+	if(bFloat)
+		eMax = DOUBLE2INT(feMax);
 }
 
 void CRVLPlanarSurfaceDetector::GetMaxDeviation(CRVLC2D * p2DRegionSet,
@@ -13343,10 +13485,15 @@ void CRVLPlanarSurfaceDetector::CreateParamList(CRVLMem *pMem)
 	pParamData = m_ParamList.AddParam("PSD.Configuration", RVLPARAM_TYPE_FLAG, &m_Flags);
 	m_ParamList.AddID(pParamData, "INTERNAL_FLAGS", RVLPSD_FLAG_INTERNAL);
 
+	pParamData = m_ParamList.AddParam("PSD.Space", RVLPARAM_TYPE_FLAG, &m_Flags);
+	m_ParamList.AddID(pParamData, "MM", RVLPSD_FLAG_MM);
+
 	pParamData = m_ParamList.AddParam("PSD.GroundPlaneDetection", RVLPARAM_TYPE_FLAG, &m_Flags);
 	m_ParamList.AddID(pParamData, "1", RVLPSD_FLAG_GROUND);
 
 	pParamData = m_ParamList.AddParam("PSD.STRM.uvdTol", RVLPARAM_TYPE_INT, &m_uvdTol);
+
+	pParamData = m_ParamList.AddParam("PSD.STRM.MeshTol", RVLPARAM_TYPE_INT, &m_MeshTol);
 
 	pParamData = m_ParamList.AddParam("PSD.STRM.MinTriangleFillPerc", RVLPARAM_TYPE_INT, &m_fillPerc);
 

@@ -56,6 +56,7 @@ struct RVL3DPOINT2
 	double pod;
 	double weight;
 	double e;
+	int iX[3];
 	int index;
 	int segmentNumber;
 	int refSegmentNumber;

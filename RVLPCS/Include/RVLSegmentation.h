@@ -77,12 +77,14 @@ BOOL RVLUpdateConvexHull(CRVLMPtrChain *pTriangleList,
 						 RVL3DPOINT2 **Point3DMap,
 						 RVLMESH_LINK *pLinkNewPt,
 						 int maxDist,
-						 CRVLMem *pMem);
+						 CRVLMem *pMem,
+						 bool bmm = false);
 void RVLInitConvexHull(	CRVL2DRegion2 *pTriangleSrc,
 						CRVLClass *pTriangleSet,
 						int ImageWidth,
 						RVL3DPOINT2 **Point3DMap,
-						CRVLMem *pMem);
+						CRVLMem *pMem,
+						bool bmm = false);
 int RVLGetConvexHull(	CRVL2DRegion2 *pTriangleSrc,
 						DWORD Label,
 						CRVLMPtrChain *pTriangleList,
@@ -93,7 +95,8 @@ int RVLGetConvexHull(	CRVL2DRegion2 *pTriangleSrc,
 						CRVLMem *pMem,
 						RVLQLIST_PTR_ENTRY *LinkQueueEntryMem,
 						//CRVLPlanarSurfaceDetector *pPSD
-						CRVL3DMeshObject *childMO = NULL
+						CRVL3DMeshObject *childMO = NULL,
+						bool bmm = false
 						);
 int RVLSegmentToConvex( CRVLClass *pTriangleSetSrc,
 						CRVL2DRegion2 *pSelectedTriangle,
@@ -102,10 +105,11 @@ int RVLSegmentToConvex( CRVLClass *pTriangleSetSrc,
 						int ImageWidth,
 						int ImageHeight,
 						RVL3DPOINT2 **Point3DMap,
-						CRVLMem *pMem,
+						CRVLMem *pMem,						
 						//CRVLPlanarSurfaceDetector *pPSD,
 						int *SizeArray = NULL,
-						CRVL3DMeshObject *rootMO = NULL
+						CRVL3DMeshObject *rootMO = NULL,
+						bool bmm = false
 						);
 BOOL RVLIsVertex(	int iPix,
 					CRVLMPtrChain *pTriangleList);
@@ -223,6 +227,8 @@ void RVLDisplaySegmentationToConvex(CRVLMPtrChain *p2DRegionList,
 void RVLGetMomentsOf2DRegions(	CRVLMPtrChain *p2DRegionList,
 								RVLAPIX_2DREGION_PTR *Region2DMap,
 								int ImageWidth, int ImageHeight);
+bool RVL3DMeshIsConvex(CRVLMPtrChain *pTriangleList,
+					   RVL3DPOINT2 **Point3DMap);
 #ifdef RVLVTK
 void RVLDisplaySegmentedMesh3D(CRVLVTKRenderer *pRenderer,
 							   CRVLMPtrChain *pTriangleList,						
