@@ -138,6 +138,14 @@ struct RVLPSD_2DREGION_SAMPLE
 	void *pNext;
 };
 
+struct RVLPSD_CHVERTEX
+{
+	int u;
+	int v;
+	int du;
+	int dv;
+};
+
 void RVLPSDDisplay(RVLDISPARITYMAP *pDisparityMap, 
 				   CRVL2DRegion2 *pPlane,
 				   double Tol,

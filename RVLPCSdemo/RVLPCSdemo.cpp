@@ -29,6 +29,10 @@ int main(int argc, char* argv[])
 	GUI.m_pMem0 = &(VS.m_Mem0);
 	GUI.m_pMem = &(VS.m_Mem);
 
+#ifdef RVLPSD_SEGMENT_STRM_DEBUG
+	VS.m_PSD.m_DebugData.pGUI = &GUI;
+#endif
+
 	GUI.Init();
 
 #ifdef RVLOPENNI
