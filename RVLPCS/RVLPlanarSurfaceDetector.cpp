@@ -19,6 +19,7 @@
 #include "highgui.h"
 #include "RVLCore.h"
 #include "RVLPCS.h"
+#include "Include\RVLPlanarSurfaceDetector.h"
 
 
 #ifdef RVLPSDLAD_GRBIC
@@ -92,6 +93,8 @@ CRVLPlanarSurfaceDetector::CRVLPlanarSurfaceDetector()
 	m_MinConvexSegmentSize = 5;
 	m_maxSampleSize = 7;
 	m_minSampleSize = 4;
+	m_MeshPlanarSegWERThr1 = 3;
+	m_MeshPlanarSegWERThr2 = 10;
 
 	// the default values of the follwing parameters are adjusted according to wang_TPAMI04
 
@@ -104,6 +107,7 @@ CRVLPlanarSurfaceDetector::CRVLPlanarSurfaceDetector()
 	m_AngleThr = 45.0 * DEG2RAD;
 
 	m_MeshSegmentWERMaxCost = 1000;
+	m_MeshSegmentWERk = 10.0;
 
 	/////
 	
@@ -10301,12 +10305,10 @@ void CRVLPlanarSurfaceDetector::SegmentSTRM(CRVLC2D *p2DRegionSet,
 
 	int ImageSize = m_Width * m_Height;
 
-	if(m_n3DPoints == 0)
-	{
-		memset(m_2DRegionMap, 0, ImageSize * sizeof(CRVL2DRegion2 *));
+	memset(m_2DRegionMap, 0, ImageSize * sizeof(CRVL2DRegion2 *));
 
+	if(m_n3DPoints == 0)
 		return;
-	}
 
 	int err = 0;
 
@@ -12005,14 +12007,22 @@ void CRVLPlanarSurfaceDetector::SegmentSTRM(CRVLC2D *p2DRegionSet,
 	{
 		StartTime = m_pTimer->GetTime();
 
-		MeshSegmentWER(	p2DRegionSet,
-						RVLMeshSegmentSWEROnCreateNewNode,
-						RVLMeshSegmentSWERUpdateLink,
-						RVLMeshSegmentWERGetCost);
+		if(m_Flags & RVLPSD_FLAG_MM)
+			MeshSegmentWER(	p2DRegionSet,
+							RVLMeshSegmentSWEROnCreateNewNode,
+							RVLMeshSegmentSWERUpdateLink,
+							RVLMeshSegmentWERGetCostLog);
+		else
+			MeshSegmentWER(	p2DRegionSet,
+							RVLMeshSegmentSWEROnCreateNewNode,
+							RVLMeshSegmentSWERUpdateLink,
+							RVLMeshSegmentWERGetCost);			
 
 		ExecutionTime = m_pTimer->GetTime() - StartTime;
 
 		int nLevel3Segs = GenRelListFromWER(p2DRegionSet, p2DRegionSet3);
+
+		int debug = 0;
 
 	}
 	else
@@ -12427,10 +12437,11 @@ void CRVLPlanarSurfaceDetector::GetMaxDeviation(CRVL2DRegion2 *pPolygon,
 
 	//int k0 = DOUBLE2INT(10000.0 * (pPolygon->m_a * (double)u0 + pPolygon->m_b * (double)v0 + pPolygon->m_c));
 
+	int *N = pPolygon->m_N;
+
 	double feMax;
 	int k0, d0;
 	double rho;
-	int *N;
 	double *fN;
 
 	if(bFloat)
@@ -12438,6 +12449,7 @@ void CRVLPlanarSurfaceDetector::GetMaxDeviation(CRVL2DRegion2 *pPolygon,
 		feMax = 0.0;
 		fN = pPolygon->m_fN;
 		rho = pPolygon->m_rho;
+		N[0] = N[1] = N[2] = 0;
 	}
 	else
 	{
@@ -12458,16 +12470,15 @@ void CRVLPlanarSurfaceDetector::GetMaxDeviation(CRVL2DRegion2 *pPolygon,
 	double fe;
 	double *X;
 
-	for(iScanLine = iFirstScanLine; iScanLine <= iLastScanLine; iScanLine++)
+	for(iScanLine = iFirstScanLine; iScanLine <= iLastScanLine; iScanLine++, k0 += N[1])
 	{
 		iPix = m_iScanLineStart[iScanLine];
 
 		u = iPix % m_Width;
 
-		if(!bFloat)
-			k = k0 + N[0] * (u - u0);
+		k = k0 + N[0] * (u - u0);
 
-		for(; iPix <= m_iScanLineEnd[iScanLine]; iPix++)
+		for(; iPix <= m_iScanLineEnd[iScanLine]; iPix++, k += N[0])
 		{
 			nPts++;
 
@@ -12514,13 +12525,7 @@ void CRVLPlanarSurfaceDetector::GetMaxDeviation(CRVL2DRegion2 *pPolygon,
 					iPixeMax = iPix;
 				}
 			}
-
-			if(!bFloat)
-				k += N[0];
 		}	// for each pixel within a scan line
-
-		if(!bFloat)
-			k0 += N[1];
 	}	// for each scan line
 
 	pPolygon->m_nPts = nPts;
@@ -13937,6 +13942,10 @@ void CRVLPlanarSurfaceDetector::CreateParamList(CRVLMem *pMem)
 
 	pParamData = m_ParamList.AddParam("PSD.Sample.maxSampleSize", RVLPARAM_TYPE_INT, &m_maxSampleSize);
 
+	pParamData = m_ParamList.AddParam("PSD.MeshPlanarSegWERThr1", RVLPARAM_TYPE_INT, &m_MeshPlanarSegWERThr1);
+
+	pParamData = m_ParamList.AddParam("PSD.MeshPlanarSegWERThr2", RVLPARAM_TYPE_INT, &m_MeshPlanarSegWERThr2);
+
 	pParamData = m_ParamList.AddParam("PSD.ConvexMesh", RVLPARAM_TYPE_FLAG, &m_Flags);
 	m_ParamList.AddID(pParamData, "yes", RVLPSD_MESH_CONVEX);
 }
@@ -14002,7 +14011,8 @@ void CRVLPlanarSurfaceDetector::MeshSegmentWER(	CRVLC2D *p2DRegionSet,
 																		RVLSWER_NODE *pNode2,
 																		RVLSWER_LINK *pLink),
 												int RVLSWERGetCost(	BYTE *pData,
-																	int maxCost)
+																	int maxCost,
+																	double k)
 )
 {
 #ifdef RVLPSD_MESH_SEGMENT_WER_LOG_FILE
@@ -14066,7 +14076,8 @@ void CRVLPlanarSurfaceDetector::MeshSegmentWER(	CRVLC2D *p2DRegionSet,
 	RVL3DPOINT2 *pPt;
 	double fu, fv, fd;
 	double Su, Sv, Sd, Suu, Suv, Sud, Svv, Svd, Sdd;
-	double *S;
+	double *S, *S2;
+	double *X;
 
 	pTriangleList->Start();
 
@@ -14089,50 +14100,81 @@ void CRVLPlanarSurfaceDetector::MeshSegmentWER(	CRVLC2D *p2DRegionSet,
 
 		pNodeData->n = pTriangle->m_n3DPts;
 
-		Su = Sv = Sd = Suu = Suv = Sud = Svv = Svd = Sdd = 0.0;
-
-		for(ppPt = pTriangle->m_pPoint3DArray; ppPt < pPtArrayEnd; ppPt++)
+		if(m_Flags & RVLPSD_FLAG_MM)
 		{
-			pPt = *ppPt;
+			S = pNodeData->S;
 
-			fu = (double)(pPt->u);
-			fv = (double)(pPt->v);
-			fd = (double)(pPt->d);
+			RVLNULL3VECTOR(S)
 
-			Su += fu;
-			Sv += fv;
-			Sd += fd;
-			Suu += (fu * fu);
-			Suv += (fu * fv);
-			Sud += (fu * fd);
-			Svv += (fv * fv);
-			Svd += (fv * fd);
-			Sdd += (fd * fd);
+			S2 = pNodeData->S2;
+
+			RVLNULLMX3X3(S2)
+
+			for(ppPt = pTriangle->m_pPoint3DArray; ppPt < pPtArrayEnd; ppPt++)
+			{
+				pPt = *ppPt;
+
+				X = pPt->XYZ;
+
+				RVLSUM3VECTORS(S, X, S)
+
+				RVLMXEL(S2, 3, 0, 0) += (X[0] * X[0]);
+				RVLMXEL(S2, 3, 0, 1) += (X[0] * X[1]);
+				RVLMXEL(S2, 3, 0, 2) += (X[0] * X[2]);
+				RVLMXEL(S2, 3, 1, 1) += (X[1] * X[1]);
+				RVLMXEL(S2, 3, 1, 2) += (X[1] * X[2]);
+				RVLMXEL(S2, 3, 2, 2) += (X[2] * X[2]);
+			}
+
+			RVLCOMPLETESIMMX3(S2)
 		}
+		else
+		{
+			Su = Sv = Sd = Suu = Suv = Sud = Svv = Svd = Sdd = 0.0;
 
-		S = pNodeData->S;
+			for(ppPt = pTriangle->m_pPoint3DArray; ppPt < pPtArrayEnd; ppPt++)
+			{
+				pPt = *ppPt;
 
-		S[0] = Su;
-		S[1] = Sv;
-		S[2] = Sd;
+				fu = (double)(pPt->u);
+				fv = (double)(pPt->v);
+				fd = (double)(pPt->d);
 
-		S = pNodeData->S2;
+				Su += fu;
+				Sv += fv;
+				Sd += fd;
+				Suu += (fu * fu);
+				Suv += (fu * fv);
+				Sud += (fu * fd);
+				Svv += (fv * fv);
+				Svd += (fv * fd);
+				Sdd += (fd * fd);
+			}
 
-		S[0] = Suu;
-		S[1] = Suv;
-		S[2] = Sud;
-		S[3] = Suv;
-		S[4] = Svv;
-		S[5] = Svd;
-		S[6] = Sud;
-		S[7] = Svd;
-		S[8] = Sdd;
+			S = pNodeData->S;
 
-		//if(S[8] - pNode->Moments.S[2] * pNode->Moments.S[2] / (double)(pNode->Moments.n) < 0.0)
-		//	int debug = 0;
+			S[0] = Su;
+			S[1] = Sv;
+			S[2] = Sd;
 
-		//if((int)pNode == 0x036a2954)
-		//	int debug = 0;
+			S = pNodeData->S2;
+
+			S[0] = Suu;
+			S[1] = Suv;
+			S[2] = Sud;
+			S[3] = Suv;
+			S[4] = Svv;
+			S[5] = Svd;
+			S[6] = Sud;
+			S[7] = Svd;
+			S[8] = Sdd;
+
+			//if(S[8] - pNode->Moments.S[2] * pNode->Moments.S[2] / (double)(pNode->Moments.n) < 0.0)
+			//	int debug = 0;
+
+			//if((int)pNode == 0x036a2954)
+			//	int debug = 0;
+		}
 
 		pNode->pChild[0] = (RVLSWER_NODE *)pTriangle;
 
@@ -14140,7 +14182,7 @@ void CRVLPlanarSurfaceDetector::MeshSegmentWER(	CRVLC2D *p2DRegionSet,
 
 		pNode->pParent = NULL;
 
-		pNode->Cost = RVLMeshSegmentWERGetCost(pNode->pData, m_MeshSegmentWERMaxCost);
+		pNode->Cost = RVLSWERGetCost(pNode->pData, m_MeshSegmentWERMaxCost, m_MeshSegmentWERk);
 
 		pLinkPtrList = &(pNode->LinkPtrList);
 
@@ -14205,7 +14247,7 @@ void CRVLPlanarSurfaceDetector::MeshSegmentWER(	CRVLC2D *p2DRegionSet,
 
 						pLink->pData = (BYTE *)pLinkData;
 
-						RVLSWERUpdateQueue(pLink, NULL, m_MeshSegmentWERMaxCost, 
+						RVLSWERUpdateQueue(pLink, NULL, m_MeshSegmentWERMaxCost, m_MeshSegmentWERk,
 							RVLMeshSegmentSWERUpdateLink, RVLSWERGetCost, QueueListArray, Cost);
 
 						pLink++;
@@ -14260,7 +14302,8 @@ void CRVLPlanarSurfaceDetector::MeshSegmentWER(	CRVLC2D *p2DRegionSet,
 		QueueListArray,
 		maxnLinks,
 		minCost,
-		m_MeshSegmentWERMaxCost);
+		m_MeshSegmentWERMaxCost,
+		m_MeshSegmentWERk);
 
 	// only for debugging purposes !!!
 
@@ -14292,7 +14335,7 @@ void CRVLPlanarSurfaceDetector::MeshSegmentWER(	CRVLC2D *p2DRegionSet,
 	for(pNode = m_MeshSegmentWERNodeArray; pNode < pNodeArrayEnd; pNode++)
 		if(pNode->pParent)
 		{
-			if(pNode->pParent->Cost - pNode->Cost >= 3 && pNode->pParent->Cost > 10)
+			if(pNode->pParent->Cost - pNode->Cost >= m_MeshPlanarSegWERThr1 && pNode->pParent->Cost > m_MeshPlanarSegWERThr2)
 			{
 				pNode->Flags |= RVLSWER_NODE_FLAG_OBJECT;
 
@@ -16954,6 +16997,156 @@ void CRVLPlanarSurfaceDetector::GetRegionBoundaries()
 	delete[] bVisited;
 }
 
+void CRVLPlanarSurfaceDetector::GetOrgPC(double * PC, int n)
+{
+	memset(m_Point3DMap, 0, m_Width * m_Height * sizeof(RVL3DPOINT2 *));
+
+	RVL3DPOINT2 *pPoint3D = m_Point3DArray;
+	
+	double uc = 0.5 * (double)m_Width; 
+	double vc = (double)m_Height / 3.0; 
+	double f = uc / sqrt(3.0);
+
+	double *pPCEnd = PC + 3 * n;
+
+	int iPix;
+	double *X;
+	int *iX;
+	double *X_;
+	int u, v;
+	double U[2];
+	double r;
+	RVL3DPOINT2 *p3DPt;
+
+	for(X_ = PC; X_ < pPCEnd; X_ += 3)
+	{
+		if(X_[0] < 1.0)
+			continue;
+
+		U[0] = -f * X_[1] / X_[0] + uc;
+		U[1] = -f * X_[2] / X_[0] + vc;
+
+		u = DOUBLE2INT(U[0]);
+		v = DOUBLE2INT(U[1]);
+
+		if(u < 0)
+			continue;
+
+		if(u >= m_Width)
+			continue;
+
+		if(v < 0)
+			continue;
+
+		if(v >= m_Height)
+			continue;
+
+		iPix = u + v * m_Width;
+
+		p3DPt = m_Point3DMap[iPix];
+
+		r = RVLDOTPRODUCT3(X_, X_);
+
+		if(p3DPt)
+		{
+			if(r >= p3DPt->r)
+				continue;
+		}
+		else
+		{
+			p3DPt = pPoint3D;
+
+			p3DPt->u = u;
+			p3DPt->v = v;
+			p3DPt->iPix = iPix;
+			p3DPt->segmentNumber = -1;
+			p3DPt->iCell = -1;
+			p3DPt->regionList = NULL;
+
+			m_Point3DMap[iPix] = pPoint3D;
+
+			pPoint3D++;
+		}
+
+		X = p3DPt->XYZ;
+		RVLCOPY3VECTOR(X_, X)
+		p3DPt->r = r;
+		iX = p3DPt->iX;
+		iX[0] = DOUBLE2INT(X[0]);
+		iX[1] = DOUBLE2INT(X[1]);
+		iX[2] = DOUBLE2INT(X[2]);
+		p3DPt->x = X[0];
+		p3DPt->y = X[1];
+		p3DPt->z = X[2];
+	}
+
+	m_n3DPoints = pPoint3D - m_Point3DArray;
+}
+
+void CRVLPlanarSurfaceDetector::DisplayPC(IplImage *pDisplay)
+{
+	unsigned char *pPix = (unsigned char *)(pDisplay->imageData);
+
+	int ImageSize = m_Width * m_Height;
+
+	// determine min and max range
+
+	double minr = 10000.0;
+	double maxr = 0.0;
+
+	RVL3DPOINT2 *p3DPtListEnd = m_Point3DArray + m_n3DPoints;
+
+	RVL3DPOINT2 *p3DPt;
+
+	for(p3DPt = m_Point3DArray; p3DPt < p3DPtListEnd; p3DPt++)
+	{
+		if(p3DPt->r < minr)
+			minr = p3DPt->r;
+
+		if(p3DPt->r > maxr)
+			maxr = p3DPt->r;
+	}
+
+	if(minr >= maxr)
+	{
+		memset(pPix, 0, 3 * ImageSize);
+
+		return;
+	}
+
+	// display projected 3D points with range represented by pixel intensity in logaritmic scale
+
+	unsigned char offset = 64;
+
+	double k = (255.0 - (double)offset) / log(maxr / minr);
+
+	RVL3DPOINT2 **pPt3DMapEnd = m_Point3DMap + ImageSize;
+
+	RVL3DPOINT2 **pp3DPt;
+	unsigned char I;
+	
+	for(pp3DPt = m_Point3DMap; pp3DPt < pPt3DMapEnd; pp3DPt++)
+	{
+		p3DPt = *pp3DPt;
+
+		if(p3DPt)
+		{
+			I = offset + DOUBLE2INT(k * log(p3DPt->r / minr));
+
+			*(pPix++) = I;
+			*(pPix++) = I;
+			*(pPix++) = I;
+		}
+		else
+		{
+			*(pPix++) = 0;
+			*(pPix++) = 0;
+			*(pPix++) = 0;
+		}
+	}	
+}
+
+
 ///////////////////////////////////// 
 //
 //     Global Functions
@@ -16970,7 +17163,8 @@ void RVLMeshSegmentSWEROnCreateNewNode(	RVLSWER_NODE *pNode,
 }
 
 int RVLMeshSegmentWERGetCost(	BYTE *pData,
-								int maxCost)
+								int maxCost,
+								double k)
 {
 	RVL3DMOMENTS *pMoments = (RVL3DMOMENTS *)pData;
 
@@ -16993,13 +17187,47 @@ int RVLMeshSegmentWERGetCost(	BYTE *pData,
 
 	//return DOUBLE2INT((double)maxCost * sqrt(eig[0] / eig[2]));
 
-	int Cost = DOUBLE2INT(10.0 * sqrt(eig[0]));
+	int Cost = DOUBLE2INT(k * sqrt(eig[0]));
 
 	if(Cost > maxCost)
 		Cost = maxCost;
 
 	return Cost;
 }
+
+int RVLMeshSegmentWERGetCostLog(	BYTE *pData,
+									int maxCost,
+									double k)
+{
+	RVL3DMOMENTS *pMoments = (RVL3DMOMENTS *)pData;
+
+	BOOL bReal[3];
+	double eig[3];
+	double C[3 * 3];
+	double M[3];
+
+	RVLGetCovMatrix3(pMoments, C, M);
+
+	RVLEig3(C, eig, bReal);
+	
+	Sort3(eig);
+
+	if(eig[0] < 0.0)
+		return 0;
+	
+	double std = sqrt(eig[0]);
+
+	if(std <= 100.0)
+		return DOUBLE2INT(std);
+
+	int Cost = DOUBLE2INT(log(std / 100.0)/log(1.01))+100;
+
+	if(Cost > maxCost)
+		Cost = maxCost;
+
+	return Cost;
+}
+
 
 void RVLMeshSegmentSWERUpdateLink(	RVLSWER_NODE *pNode1,
 									RVLSWER_NODE *pNode2,
@@ -18341,6 +18569,47 @@ void CRVLPlanarSurfaceDetector::Gen3DMeshObjectHierarchy(CRVL3DMeshObject *pRoot
 	}
 }
 
+void CRVLPlanarSurfaceDetector::AssignLabels(CRVLC2D *pTriangleSetLevel1, CRVLC2D *pTriangleSetLevel3)
+{
+	CRVLMPtrChain *pSegmentList = &(pTriangleSetLevel3->m_ObjectList);
+
+	CRVL2DRegion2 *pSegment;
+
+	int Label = 0;
+
+	pSegmentList->Start();
+
+	while(pSegmentList->m_pNext)
+	{
+		pSegment = (CRVL2DRegion2 *)(pSegmentList->GetNext());
+
+		pSegment->m_Label = (Label++);
+	}
+
+	int nSegments = Label;
+
+	CRVLMPtrChain *pTriangleList = &(pTriangleSetLevel1->m_ObjectList);
+
+	CRVL2DRegion2 *pTriangle;
+
+	pTriangleList->Start();
+
+	while(pTriangleList->m_pNext)
+	{
+		pTriangle = (CRVL2DRegion2 *)(pTriangleList->GetNext());
+
+		if(pTriangle->m_Flags & RVLOBJ2_FLAG_REJECTED)
+			continue;
+
+		pSegment = *((CRVL2DRegion2 **)(pTriangle->m_pData + pTriangleSetLevel1->m_iDataGrandParentPtr));
+
+		if(pSegment)
+			pTriangle->m_Label = pSegment->m_Label;
+		else
+			pTriangle->m_Label = nSegments;
+	}
+}
+
 int CRVLPlanarSurfaceDetector::GenRelListFromWER(CRVLC2D *pTriangleSetLevel1, CRVLC2D *pTriangleSetLevel3)
 {
 	if (!m_MeshSegmentWERNodeArray)
@@ -18622,5 +18891,3 @@ void RVLDisplayDistanceTransformMap(int *DTMap,
 		}
 	}	
 }
-
-

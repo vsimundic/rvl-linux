@@ -60,7 +60,9 @@ int main(int argc, char* argv[])
 	//	y__ = ((double)v - VS.m_Kinect.m_vc) / VS.m_Kinect.m_fv * (double)z_;
 	//}
 
-	if(!bKinect)
+	if(bKinect)
+		VS.m_Flags &= ~RVLSYS_FLAGS_PC;
+	else
 		GUI.Message("Kinect is not available.", 400, 100, cvScalar(0, 128, 255));
 #else
 	bool bKinect = false;
@@ -68,10 +70,26 @@ int main(int argc, char* argv[])
 
 	// get the pointer to the depth image
 
-	RVLDISPARITYMAP *pDepthImage = &(VS.m_StereoVision.m_DisparityMap);
+	RVLDISPARITYMAP *pDepthImage;
+	int w;
+	int h;
+	double *PC;
+	int nPC;
 
-	int w = pDepthImage->Width;
-	int h = pDepthImage->Height;
+	if(VS.m_Flags & RVLSYS_FLAGS_PC)
+	{
+		w = VS.m_PSD.m_Width;
+		h = VS.m_PSD.m_Height;
+
+		PC = new double[3 * w * h];
+	}
+	else
+	{
+		pDepthImage = &(VS.m_StereoVision.m_DisparityMap);
+
+		w = pDepthImage->Width;
+		h = pDepthImage->Height;
+	}
 
 #ifdef RVLVTK
 	// create VTK renderer
@@ -109,7 +127,7 @@ int main(int argc, char* argv[])
 
 	// main loop
 
-	bool bDisplayMesh = false;
+	bool bDisplayMesh = true;
 	bool bDisplayConvexSets = true;
 	//bool bContinuous = bKinect;
 	bool bContinuous = false;
@@ -125,7 +143,7 @@ int main(int argc, char* argv[])
 	
 	int key;
 	//int iSample;
-	int nObjects;
+	int nObjects = 1;
 	bool bRefresh;
 	bool bNextImage;
 	clock_t t;
@@ -151,16 +169,49 @@ int main(int argc, char* argv[])
 #endif
 		// import depth image
 
-		RVLImportDisparityImage(VS.m_ImageFileName, pDepthImage, VS.m_Kinect.m_zToDepthLookupTable);
+		if(VS.m_Flags & RVLSYS_FLAGS_PC)
+		{
+			if(!RVLPCImport(VS.m_ImageFileName, PC, nPC))
+			{
+				char message[] = "Can not open file ";
+
+				char *str = new char[strlen(VS.m_ImageFileName) + strlen(message) + 2];
+
+				strcpy(str, message);
+
+				strcat(str, VS.m_ImageFileName);
+
+				str[strlen(VS.m_ImageFileName) + strlen(message)] = '!';
+
+				GUI.Message(str, 400, 100, cvScalar(0, 128, 255));
+
+				delete[] str;
+			}
+		}
+		else
+			RVLImportDisparityImage(VS.m_ImageFileName, pDepthImage, VS.m_Kinect.m_zToDepthLookupTable);
 
 		if(bRecord)
 		{
-			RVLSaveDepthImage(pDepthImage->Disparity, w, h, VS.m_ImageFileName, RVLKINECT_DEPTH_IMAGE_FORMAT_1MM, 
-				RVLKINECT_DEPTH_IMAGE_FORMAT_1MM);
+			if(VS.m_Flags & RVLSYS_FLAGS_PC)
+			{
+				int iSample = RVLGetFileNumber(VS.m_ImageFileName, "00000-PC.pcd");
 
-			int iSample = RVLGetFileNumber(VS.m_ImageFileName, "00000-D.txt");
-		
-			RVLSetFileNumber(VS.m_ImageFileName, "00000-D.txt", iSample + 1);
+				char *PCFileName = RVLCreateFileName(VS.m_ImageFileName, "-PC.pcd", iSample, "-PC.obj");
+
+				RVLPCSaveToObj(PC, nPC, PCFileName);
+
+				delete[] PCFileName;
+			}
+			else
+			{
+				RVLSaveDepthImage(pDepthImage->Disparity, w, h, VS.m_ImageFileName, RVLKINECT_DEPTH_IMAGE_FORMAT_1MM, 
+					RVLKINECT_DEPTH_IMAGE_FORMAT_1MM);
+
+				int iSample = RVLGetFileNumber(VS.m_ImageFileName, "00000-D.txt");
+			
+				RVLSetFileNumber(VS.m_ImageFileName, "00000-D.txt", iSample + 1);
+			}
 		}
 		else
 		{
@@ -172,17 +223,28 @@ int main(int argc, char* argv[])
 
 			// compute a 3D point cloud from depth data
 
-			VS.m_PSD.GetPointsWithDisparity(pDepthImage);
+			if(VS.m_Flags & RVLSYS_FLAGS_PC)
+				VS.m_PSD.GetOrgPC(PC, nPC);
+			else
+				VS.m_PSD.GetPointsWithDisparity(pDepthImage);
 
 			// create a triangular mesh from the point cloud
 
 			VS.m_PSD.Segment(&(VS.m_AImage.m_C2DRegion),&(VS.m_AImage.m_C2DRegion2),&(VS.m_AImage.m_C2DRegion3),&(VS.m_Mem));
 
+			if(VS.m_PSD.m_Flags & RVLPSD_MESH_SEGMENT_PLANAR)
+			{
+				nObjects = VS.m_AImage.m_C2DRegion3.m_ObjectList.m_nElements + 1;
+
+				VS.m_PSD.AssignLabels(&(VS.m_AImage.m_C2DRegion), &(VS.m_AImage.m_C2DRegion3));
+			}
+
 			// segment to convex sets
 		
-			nObjects = RVLSegmentToConvex(&(VS.m_AImage.m_C2DRegion), NULL, &(VS.m_AImage.m_C2DRegion2),
-				VS.m_ConvexSegmentThr, w, h, VS.m_PSD.m_Point3DMap, &(VS.m_Mem), NULL, NULL,
-				(VS.m_PSD.m_Flags & RVLPSD_FLAG_MM) != 0);
+			if(VS.m_Flags & RVLSYS_FLAGS_SEGMENT_TO_CONVEX_SETS)
+				nObjects = RVLSegmentToConvex(&(VS.m_AImage.m_C2DRegion), NULL, &(VS.m_AImage.m_C2DRegion2),
+					VS.m_ConvexSegmentThr, w, h, VS.m_PSD.m_Point3DMap, &(VS.m_Mem), NULL, NULL,
+					(VS.m_PSD.m_Flags & RVLPSD_FLAG_MM) != 0);
 
 			t = clock() - t;			
 
@@ -201,23 +263,28 @@ int main(int argc, char* argv[])
 
 			// select bitmap to display
 
-			switch(DisplayBitmap){
-			case 0:
-				// display the depth image on the display image
+			if(VS.m_Flags & RVLSYS_FLAGS_PC)
+				VS.m_PSD.DisplayPC(pInputImage);
+			else
+			{
+				switch(DisplayBitmap){
+				case 0:
+					// display the depth image on the display image
 
-				RVLDisplayDisparityMapColor(pDepthImage, 0, FALSE, pInputImage, DepthMapFormat);
+					RVLDisplayDisparityMapColor(pDepthImage, 0, FALSE, pInputImage, DepthMapFormat);
 
-				break;
-			case 1:
-				// display RGB image on the display image
+					break;
+				case 1:
+					// display RGB image on the display image
 
-				cvCopy(pRGBImage, pInputImage);
+					cvCopy(pRGBImage, pInputImage);
 
-				break;
-			case 2:
-				// display grayscale image on the display image
+					break;
+				case 2:
+					// display grayscale image on the display image
 
-				cvCvtColor(pGSImage, pInputImage, CV_GRAY2RGB);
+					cvCvtColor(pGSImage, pInputImage, CV_GRAY2RGB);
+				}
 			}
 
 			RVLZoom(pInputImage, pZoomedInputImage, 2);
@@ -243,7 +310,7 @@ int main(int argc, char* argv[])
 
 				cvPutText(pFig->m_pImage, str, cvPoint(0, (++iTextLine) * pFig->m_FontSize), &pFig->m_Font,  cvScalar(255, 0, 0));
 
-				sprintf(str, "TT = %d", VS.m_PSD.m_uvdTol);
+				sprintf(str, "TT = %d", (VS.m_Flags & RVLSYS_FLAGS_PC ? VS.m_PSD.m_MeshTol : VS.m_PSD.m_uvdTol));
 
 				cvPutText(pFig->m_pImage, str, cvPoint(0, (++iTextLine) * pFig->m_FontSize), &pFig->m_Font,  cvScalar(255, 0, 0));
 
@@ -348,14 +415,25 @@ int main(int argc, char* argv[])
 				break;
 #endif
 			case 0x00260000:
-				VS.m_PSD.m_uvdTol++;
+				if(VS.m_Flags & RVLSYS_FLAGS_PC)
+					VS.m_PSD.m_MeshTol++;
+				else
+					VS.m_PSD.m_uvdTol++;
 
 				bNextImage = false;
 
 				break;
 			case 0x00280000:
-				if(VS.m_PSD.m_uvdTol > 1)
-					VS.m_PSD.m_uvdTol--;
+				if(VS.m_Flags & RVLSYS_FLAGS_PC)
+				{
+					if(VS.m_PSD.m_MeshTol > 1)
+						VS.m_PSD.m_MeshTol--;
+				}
+				else
+				{
+					if(VS.m_PSD.m_uvdTol > 1)
+						VS.m_PSD.m_uvdTol--;
+				}
 
 				bNextImage = false;
 

@@ -3928,11 +3928,13 @@ void RVLSaveSegmentation(FILE *fp,
 void RVLSWERUpdateQueue(RVLSWER_LINK *pLink,
 						RVLSWER_LINK *pLink0,
 						int maxCost,
+						double k,
 						void RVLSWERUpdateLink(	RVLSWER_NODE *pNode1,
 												RVLSWER_NODE *pNode2,
 												RVLSWER_LINK *pLink),
 						int RVLSWERGetCost(	BYTE *pData,
-											int maxCost),
+											int maxCost,
+											double k),
 						RVLQLIST *QueueListArray,
 						int &Cost)
 {
@@ -3941,7 +3943,7 @@ void RVLSWERUpdateQueue(RVLSWER_LINK *pLink,
 
 	RVLSWERUpdateLink(pNode1, pNode2, pLink);
 
-	int NewCost = RVLSWERGetCost(pLink->pData, maxCost);
+	int NewCost = RVLSWERGetCost(pLink->pData, maxCost, k);
 
 	if(pLink->Cost >= 0)
 	{
@@ -3977,14 +3979,16 @@ int RVLSegmentationWER(	void RVLSWEROnCreateNewNode(RVLSWER_NODE *pNode,
 												RVLSWER_NODE *pNode2,
 												RVLSWER_LINK *pLink),
 						int RVLSWERGetCost(	BYTE *pData,
-											int maxCost),
+											int maxCost,
+											double k),
 						RVLSWER_NODE *pNewNode,
 						BYTE *pNodeData,
 						int NodeDataSize,
 						RVLQLIST *QueueListArray,
 						int maxnNodes,
 						int minCost,
-						int maxCost)
+						int maxCost,
+						double k)
 {
 	// build tree by a WER procedure
 
@@ -4126,7 +4130,7 @@ int RVLSegmentationWER(	void RVLSWEROnCreateNewNode(RVLSWER_NODE *pNode,
 #ifdef RVLPSD_MESH_SEGMENT_WER_LOG_FILE
 						iTmp = pLink2->Cost;
 #endif
-						RVLSWERUpdateQueue(pLink2, pLink, maxCost, 
+						RVLSWERUpdateQueue(pLink2, pLink, maxCost, k,
 							RVLSWERUpdateLink, RVLSWERGetCost, QueueListArray, Cost);
 
 #ifdef RVLPSD_MESH_SEGMENT_WER_LOG_FILE
@@ -4231,7 +4235,7 @@ int RVLSegmentationWER(	void RVLSWEROnCreateNewNode(RVLSWER_NODE *pNode,
 #ifdef RVLPSD_MESH_SEGMENT_WER_LOG_FILE
 							iTmp = pLink2->Cost;
 #endif
-							RVLSWERUpdateQueue(pLink2, pLink, maxCost,
+							RVLSWERUpdateQueue(pLink2, pLink, maxCost, k,
 								RVLSWERUpdateLink, RVLSWERGetCost, QueueListArray, Cost);
 
 #ifdef RVLPSD_MESH_SEGMENT_WER_LOG_FILE

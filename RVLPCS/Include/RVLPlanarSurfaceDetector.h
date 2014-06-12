@@ -210,7 +210,12 @@ void RVLUpdate2DPolygonMoments(double xi,
 							   double &XYmoment);
 
 int RVLMeshSegmentWERGetCost(	BYTE *pData,
-								int maxCost);
+								int maxCost,
+								double k);
+
+int RVLMeshSegmentWERGetCostLog(	BYTE *pData,
+									int maxCost,
+									double k);
 
 void RVLMeshSegmentSWERUpdateLink(	RVLSWER_NODE *pNode1,
 									RVLSWER_NODE *pNode2,
@@ -312,6 +317,8 @@ public:
 	double m_RuvdTol;
 	double m_RuvTol;
 	int m_fillPerc;
+	int m_MeshPlanarSegWERThr1;
+	int m_MeshPlanarSegWERThr2;
 	//int m_maxDis;
 	CRVLParameterList m_ParamList;
 	RVL3DPOINT2 m_CornerPtArray[4];
@@ -319,6 +326,7 @@ public:
 	int m_nMeshSegmentWERNodes;
 	int m_nMeshSegmentWERLevels;
 	int m_MeshSegmentWERMaxCost;
+	double m_MeshSegmentWERk;
 	CRVL2DRegion2 **m_2DRegionMap;
 	CRVL3DSurface2 **m_3DSurfaceMap;
 	RVLPSD_DEBUG_DATA m_DebugData;
@@ -605,7 +613,8 @@ public:
 													RVLSWER_NODE *pNode2,
 													RVLSWER_LINK *pLink),
 							int RVLSWERGetCost(	BYTE *pData,
-												int maxCost)
+												int maxCost,
+												double k)
 							);
 	void MeshSegmentWERSetLabels(CRVLMPtrChain *pTriangleList,
 									int Level);
@@ -623,6 +632,10 @@ public:
 	void Display2DRegionMap(PIX_ARRAY *pOutPixArray);
 	CRVLPlanarSurfaceDetector();
 	virtual ~CRVLPlanarSurfaceDetector();
+	void GetRegionBoundaries(void);
+	void GetOrgPC(double * PC, int n);
+	void DisplayPC(IplImage *pDisplay);
+	void AssignLabels(CRVLC2D *pTriangleSetLevel1, CRVLC2D *pTriangleSetLevel3);
 
 private:
 /*	RVLPSDLAD_THREE_POINTS_ITER_AB ThreePointsModified_searchb(
@@ -775,8 +788,6 @@ private:
 		DataWeights[index2]	= tmp2;
 		Indeksi[index2]		= tmp3;
 	};
-public:
-	void GetRegionBoundaries(void);
 };
 
 #endif // !defined(AFX_RVLPLANARSURFACEDETECTOR_H__1DCCB796_4F94_4476_9777_2D5D6B292431__INCLUDED_)

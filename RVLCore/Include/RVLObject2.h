@@ -53,6 +53,7 @@ struct RVL3DPOINT2
 	int iPixRGB;
 	double x, y, z;
 	double XYZ[3];
+	double r;
 	double pod;
 	double weight;
 	double e;
