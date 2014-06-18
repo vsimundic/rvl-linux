@@ -2563,6 +2563,8 @@ BOOL RVLGetNextFileName(char *FileName, char *Extension, int maxiSample)
 {
 	int iSample = RVLGetFileNumber(FileName, Extension);
 
+	int iSampleBack = iSample;
+
 	FILE *fp;
 
 	do
@@ -2570,7 +2572,13 @@ BOOL RVLGetNextFileName(char *FileName, char *Extension, int maxiSample)
 		iSample++;
 
 		if(iSample > maxiSample)
+		{
+			iSample = iSampleBack;
+
+			RVLSetFileNumber(FileName, Extension, iSample);
+
 			return FALSE;
+		}
 
 		RVLSetFileNumber(FileName, Extension, iSample);
 

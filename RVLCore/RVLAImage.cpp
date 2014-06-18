@@ -89,6 +89,24 @@ void CRVLAImage::CreateBorder()
 		pAI->Flags |= RVLAPIX_FLAG_BORDER;
 }
 
+void CRVLAImage::Create()
+{
+	Clear();
+
+	RVLAPIX *pAPix = m_pPix;
+
+	int u, v;
+
+	for(v = 0; v < m_Height; v++)
+		for(u = 0; u < m_Width; u++, pAPix++)
+		{
+			pAPix->u = (u << 1) + 1;
+			pAPix->v = (v << 1) + 1;
+		}
+
+	CreateBorder();	
+}
+
 void CRVLAImage::Create(unsigned char *PixArray)
 {
 	Clear();

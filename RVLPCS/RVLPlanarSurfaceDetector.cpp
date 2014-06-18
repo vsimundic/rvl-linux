@@ -15310,7 +15310,7 @@ void CRVLPlanarSurfaceDetector::Get3DSurfaceAndContours2(CRVL2DRegion2 *p2DRegio
 	return;  //REMOVE THIS AFTER SYROCO12
 
 
-
+#ifdef NEVER
 	//if(Flags & RVLPSD_MESH_CONVEX) //MODIFY THE FOLLOWING USING THIS FLAG
 	//{
 	//}
@@ -15768,7 +15768,7 @@ void CRVLPlanarSurfaceDetector::Get3DSurfaceAndContours2(CRVL2DRegion2 *p2DRegio
 	} 
 
 	nConvexSegments = nRegions;
-	
+#endif	
 }
 
 

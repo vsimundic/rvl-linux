@@ -2,9 +2,9 @@
 <VisualStudioProject
 	ProjectType="Visual C++"
 	Version="9.00"
-	Name="RVLPCS"
-	ProjectGUID="{736AADF1-0519-469C-A860-07573EF1ED97}"
-	RootNamespace="RVLPCS"
+	Name="RVLPSuLM"
+	ProjectGUID="{04B03A26-8DE7-45F6-AA0B-B50797B5BDD5}"
+	RootNamespace="RVLPSuLM"
 	Keyword="ManagedCProj"
 	TargetFrameworkVersion="196613"
 	>
@@ -18,12 +18,11 @@
 	<Configurations>
 		<Configuration
 			Name="Debug|Win32"
-			OutputDirectory=".\Debug\Lib"
-			IntermediateDirectory=".\Debug"
+			OutputDirectory=".\$(ConfigurationName)\lib"
+			IntermediateDirectory="$(ConfigurationName)"
 			ConfigurationType="4"
 			CharacterSet="1"
 			ManagedExtensions="0"
-			WholeProgramOptimization="0"
 			>
 			<Tool
 				Name="VCPreBuildEventTool"
@@ -43,8 +42,7 @@
 			<Tool
 				Name="VCCLCompilerTool"
 				Optimization="0"
-				InlineFunctionExpansion="0"
-				AdditionalIncludeDirectories="&quot;$(OPENCV20)\include&quot;;.\Include;..\RVLCore\Include;&quot;$(VTK_PATH)\Debug\Include\vtk-5.10&quot;;$(NOINHERIT)"
+				AdditionalIncludeDirectories="&quot;$(OPENCV20)\include&quot;;.\Include;..\RVLCore\Include;..\RVLPCS\Include;..\RapidXML\Include;&quot;$(VTK_PATH)\Debug\Include\vtk-5.10&quot;;$(NOINHERIT)"
 				PreprocessorDefinitions="WIN32;_DEBUG"
 				RuntimeLibrary="1"
 				UsePrecompiledHeader="0"
@@ -81,12 +79,12 @@
 		</Configuration>
 		<Configuration
 			Name="Release|Win32"
-			OutputDirectory=".\Release\Lib"
-			IntermediateDirectory=".\Release"
-			ConfigurationType="4"
+			OutputDirectory=".\$(ConfigurationName)\lib"
+			IntermediateDirectory="$(ConfigurationName)"
+			ConfigurationType="2"
 			CharacterSet="1"
-			ManagedExtensions="0"
-			WholeProgramOptimization="0"
+			ManagedExtensions="1"
+			WholeProgramOptimization="1"
 			>
 			<Tool
 				Name="VCPreBuildEventTool"
@@ -105,12 +103,9 @@
 			/>
 			<Tool
 				Name="VCCLCompilerTool"
-				Optimization="2"
-				InlineFunctionExpansion="2"
-				AdditionalIncludeDirectories="&quot;$(OPENCV20)\include&quot;;.\Include;..\RVLCore\Include;&quot;$(VTK_PATH)\Debug\Include\vtk-5.10&quot;;$(NOINHERIT)"
 				PreprocessorDefinitions="WIN32;NDEBUG"
-				RuntimeLibrary="0"
-				UsePrecompiledHeader="0"
+				RuntimeLibrary="2"
+				UsePrecompiledHeader="2"
 				WarningLevel="3"
 				DebugInformationFormat="3"
 			/>
@@ -124,10 +119,17 @@
 				Name="VCPreLinkEventTool"
 			/>
 			<Tool
-				Name="VCLibrarianTool"
+				Name="VCLinkerTool"
+				AdditionalDependencies="$(NoInherit)"
+				LinkIncremental="1"
+				GenerateDebugInformation="true"
+				TargetMachine="1"
 			/>
 			<Tool
 				Name="VCALinkTool"
+			/>
+			<Tool
+				Name="VCManifestTool"
 			/>
 			<Tool
 				Name="VCXDCMakeTool"
@@ -137,6 +139,9 @@
 			/>
 			<Tool
 				Name="VCFxCopTool"
+			/>
+			<Tool
+				Name="VCAppVerifierTool"
 			/>
 			<Tool
 				Name="VCPostBuildEventTool"
@@ -162,28 +167,46 @@
 	</References>
 	<Files>
 		<Filter
+			Name="Source Files"
+			Filter="cpp;c;cc;cxx;def;odl;idl;hpj;bat;asm;asmx"
+			UniqueIdentifier="{4FC737F1-C7A5-4376-A066-2A32D752A2FF}"
+			>
+			<File
+				RelativePath=".\RVLPSuLM.cpp"
+				>
+			</File>
+			<File
+				RelativePath=".\RVLPSuLMBuilder.cpp"
+				>
+			</File>
+			<File
+				RelativePath=".\RVLPSuLMVS.cpp"
+				>
+			</File>
+			<File
+				RelativePath=".\RVLRLM.cpp"
+				>
+			</File>
+		</Filter>
+		<Filter
 			Name="Header Files"
 			Filter="h;hpp;hxx;hm;inl;inc;xsd"
 			UniqueIdentifier="{93995380-89BD-4b04-88EB-625FBE52EBFB}"
 			>
 			<File
-				RelativePath=".\Include\RVLPC.h"
+				RelativePath=".\Include\RVLPSuLM.h"
 				>
 			</File>
 			<File
-				RelativePath=".\Include\RVLPCS.h"
+				RelativePath=".\Include\RVLPSuLMBuilder.h"
 				>
 			</File>
 			<File
-				RelativePath=".\Include\RVLPCSVS.h"
+				RelativePath=".\Include\RVLPSuLMVS.h"
 				>
 			</File>
 			<File
-				RelativePath=".\Include\RVLPlanarSurfaceDetector.h"
-				>
-			</File>
-			<File
-				RelativePath=".\Include\RVLSegmentation.h"
+				RelativePath=".\Include\RVLRLM.h"
 				>
 			</File>
 		</Filter>
@@ -200,28 +223,6 @@
 				RelativePath=".\app.rc"
 				>
 			</File>
-			<Filter
-				Name="Source Files"
-				Filter="cpp;c;cc;cxx;def;odl;idl;hpj;bat;asm;asmx"
-				UniqueIdentifier="{4FC737F1-C7A5-4376-A066-2A32D752A2FF}"
-				>
-				<File
-					RelativePath=".\RVLPC.cpp"
-					>
-				</File>
-				<File
-					RelativePath=".\RVLPCSVS.cpp"
-					>
-				</File>
-				<File
-					RelativePath=".\RVLPlanarSurfaceDetector.cpp"
-					>
-				</File>
-				<File
-					RelativePath=".\RVLSegmentation.cpp"
-					>
-				</File>
-			</Filter>
 		</Filter>
 		<File
 			RelativePath=".\ReadMe.txt"

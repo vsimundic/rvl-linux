@@ -175,6 +175,10 @@
 				>
 			</File>
 			<File
+				RelativePath=".\RVL2DLine2.cpp"
+				>
+			</File>
+			<File
 				RelativePath=".\RVL2DLine3.cpp"
 				>
 			</File>
@@ -354,6 +358,10 @@
 			</File>
 			<File
 				RelativePath=".\Include\RVL2DContour.h"
+				>
+			</File>
+			<File
+				RelativePath=".\Include\RVL2DLine2.h"
 				>
 			</File>
 			<File

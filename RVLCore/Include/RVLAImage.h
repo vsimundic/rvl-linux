@@ -33,6 +33,7 @@ private:
 public:
 	void Init();
 	void Clear();
+	void Create();
 	void Create(unsigned char *PixArray);
 	void CreateBorder();
 	CRVLAImage();

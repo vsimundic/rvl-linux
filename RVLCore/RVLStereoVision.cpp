@@ -2114,7 +2114,7 @@ BOOL RVLImportDisparityImage(char *FileName,
 
 	int Width, Height;
 	int Size;
-	DWORD Format;
+	unsigned char Format;
 
 	if(fp)
 	{
@@ -2157,6 +2157,7 @@ BOOL RVLImportDisparityImage(char *FileName,
 
 		pDisparityImage->Width = Width;
 		pDisparityImage->Height = Height;
+		pDisparityImage->Format = Format;
 
 		BOOL bOK = TRUE;
 

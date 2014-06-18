@@ -4,6 +4,7 @@
 #include "RVLC2DContour.h"
 #include "RVL2DObject.h"
 #include "RVL2DContour.h"
+#include "RVL2DLine2.h"	
 #include "RVL2DLine3.h"
 #include "RVL2DRegion2.h"
 #include "RVL3DLine2.h"

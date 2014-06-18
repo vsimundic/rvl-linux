@@ -37,6 +37,7 @@ struct RVLDISPARITYMAP
 	int Width, Height;
 	int u0, v0;
 	int DisparityOffset;
+	unsigned int Format;
 };
 
 struct RVLSTEREOPOINT

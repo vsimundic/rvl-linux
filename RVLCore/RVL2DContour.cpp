@@ -1008,6 +1008,7 @@ BOOL RVLIsInsideContour(CvPoint *PtArray,
 
 void RVLDetectDepthDiscontinuityContours(short *Depth,
 										 int w, int h,
+										 unsigned int Format,
 										 short DepthDiscontinuityThr,
 										 int minSize,
 										 CRVLMem *pMem,
@@ -1015,6 +1016,8 @@ void RVLDetectDepthDiscontinuityContours(short *Depth,
 										 RVLQLIST *pContourList,
 										 BYTE *ContourMap)
 {
+	short InvalidDepth = (Format == RVLKINECT_DEPTH_IMAGE_FORMAT_DISPARITY ? 2047 : 0);
+
 	int ImageSize = w * h;
 
 	CRVLAImage *pAImage = (CRVLAImage *)vpAImage;
@@ -1042,8 +1045,7 @@ void RVLDetectDepthDiscontinuityContours(short *Depth,
 	{
 		d = *pDepth;
 
-		//if(d == 2047)
-		if(d == 0)
+		if(d == InvalidDepth)
 			continue;
 
 		u = iPix % w;
@@ -1074,8 +1076,7 @@ void RVLDetectDepthDiscontinuityContours(short *Depth,
 
 			d2 = Depth[iPix2];
 
-			//if(d2 == 2047)
-			if(d2 == 0)
+			if(d2 == InvalidDepth)
 				ContourMap[4 * iPix + iNeighbor] |= (RVL2DCONTOUR_EDGE | RVL2DCONTOUR_VOID);
 			else if(d2 - d >= DepthDiscontinuityThr)
 				ContourMap[4 * iPix + iNeighbor] |= RVL2DCONTOUR_EDGE;
@@ -1131,8 +1132,8 @@ void RVLDetectDepthDiscontinuityContours(short *Depth,
 
 	for(iPix = 0; iPix < ImageSize; iPix++)
 	{
-		if(iPix == 319 + 239 * 320)
-			int debug = 0;
+		//if(iPix == 319 + 239 * 320)
+		//	int debug = 0;
 
 		for(iNeighbor0 = 0; iNeighbor0 <= 3; iNeighbor0++)
 		{

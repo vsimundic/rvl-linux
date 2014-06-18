@@ -144,6 +144,7 @@ BOOL RVLIsInsideContour(CvPoint *PtArray,
 						int u, int v);
 void RVLDetectDepthDiscontinuityContours(short *Depth,
 										 int w, int h,
+										 unsigned int Format,
 										 short DepthDiscontinuityThr,
 										 int minSize,
 										 CRVLMem *pMem,
