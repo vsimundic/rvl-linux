@@ -876,11 +876,12 @@ void CRVLPSuLM::Display(CRVLFigure * pFig,
 				delete[] PtArray;
 			}
 
-			Display3DSurfaceSamples(pFig, pSurf, A, tCM, Flags | 
-				RVLPSULM_DISPLAY_SAMPLE_REGIONS | 
-				RVLPSULM_DISPLAY_SAMPLE_TYPES | 
-				RVLPSULM_DISPLAY_COLOR
-				);
+			if(Flags & RVLPSULM_DISPLAY_SAMPLES)
+				Display3DSurfaceSamples(pFig, pSurf, A, tCM, Flags | 
+					RVLPSULM_DISPLAY_SAMPLE_REGIONS | 
+					RVLPSULM_DISPLAY_SAMPLE_TYPES | 
+					RVLPSULM_DISPLAY_COLOR
+					);
 		}
 #endif
 	}

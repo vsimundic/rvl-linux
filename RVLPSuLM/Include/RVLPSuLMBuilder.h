@@ -561,7 +561,10 @@ public:
 	int Ransac(RVLPSULM_MSMATCH_DATA *pMatchList, int N, CRVL3DPose *pPoseS0Init, CRVLPSuLM *pMPSuLM);
 	void DisplayHypothesis(	CRVLGUI *pGUI, 
 							CRVLFigure *pFig, 
+							CRVLFigure *pFig2, 
 							CRVLPSuLM *pPSULM, 
+							DWORD Flags,
+							IplImage *pImage,
 							int iHypothesis = 0);
 	void DisplayHypothesisData(	CRVLFigure *pFig, 
 								int iHypothesis = 0,

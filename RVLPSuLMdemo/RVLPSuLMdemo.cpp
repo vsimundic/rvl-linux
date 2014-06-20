@@ -18,9 +18,14 @@ struct RVLPSULMDEMO_MOUSE_CALLBACK_DATA
 	int u, v;
 	bool bSelection;
 	int w;
+	CRVLGUI *pGUI;
 	CRVLFigure *pFig;
+	CRVLFigure *pFig2;
 	CRVLPSuLMVS *pVS;
 	int ZoomFactor;
+	DWORD mDisplayPSuLMFlags;
+	int iHypothesis;
+	IplImage *pImage;
 };
 
 void MessageCanNotOpenFile(CRVLGUI *pGUI, char *FileName);
@@ -105,14 +110,23 @@ int main(int argc, char* argv[])
 
 	IplImage *pGSImage = cvCreateImage(cvSize(w, h), IPL_DEPTH_8U, 1);
 
-	// create a display image
-
-	CRVLFigure *pFig = GUI.OpenFigure("RVLPSuLMdemo");
+	// create input image
 
 	IplImage *pInputImage = cvCreateImage(cvSize(w, h), IPL_DEPTH_8U, 3);
+
+	// create zoomed image
+
 	IplImage *pZoomedInputImage = cvCreateImage(cvSize(2 * w, 2 * h), IPL_DEPTH_8U, 3);
 
-	pFig->m_pImage = pInputImage;
+	// create auxiliary image
+
+	//IplImage *pAuxImage = cvCreateImage(cvSize(w, h), IPL_DEPTH_8U, 3);
+
+	// create main display image
+
+	CRVLFigure *pFig = GUI.OpenFigure("Scene");
+
+	pFig->m_Flags |= (RVLPSULM_DISPLAY_SCENE | RVLFIG_FLAG_DATA);
 
 	pFig->m_FontSize = 16;
 	cvInitFont(&(pFig->m_Font), CV_FONT_HERSHEY_SIMPLEX, 0.5, 0.5, 0, 2);
@@ -122,8 +136,35 @@ int main(int argc, char* argv[])
 	RVLPSULMDEMO_MOUSE_CALLBACK_DATA MouseCallbackData;	
 
 	MouseCallbackData.w = w;
+	MouseCallbackData.pGUI = &GUI;
 	MouseCallbackData.pFig = pFig;
 	MouseCallbackData.pVS = &VS;
+	MouseCallbackData.pImage = pInputImage;
+
+	// create auxiliary display image
+
+	CRVLFigure *pFig2 = GUI.OpenFigure("Model");
+
+	pFig2->m_Flags |= (RVLPSULM_DISPLAY_MODEL | RVLFIG_FLAG_DATA);
+
+	pFig2->m_pImage = cvCreateImage(cvSize(w, h), IPL_DEPTH_8U, 3);
+
+	pFig2->m_FontSize = 16;
+	cvInitFont(&(pFig2->m_Font), CV_FONT_HERSHEY_SIMPLEX, 0.5, 0.5, 0, 2);
+
+	pFig2->m_PoseC0.Reset();
+
+	MouseCallbackData.pFig2 = pFig2;
+
+	RVLPSULMDEMO_MOUSE_CALLBACK_DATA MouseCallbackData2;	
+
+	MouseCallbackData2.w = w;
+	MouseCallbackData2.pGUI = &GUI;
+	MouseCallbackData2.pFig = pFig2;
+	MouseCallbackData2.pFig2 = pFig;
+	MouseCallbackData2.pVS = &VS;
+	MouseCallbackData2.ZoomFactor = 1;
+	MouseCallbackData2.pImage = pInputImage;
 
 	// allocate memory
 
@@ -143,6 +184,8 @@ int main(int argc, char* argv[])
 	//bool bContinuous = bKinect;
 	bool bContinuous = false;
 	bool bRecord = false;
+	DWORD mDisplayPSuLMFlags = (RVLPSULM_DISPLAY_SURFACES | RVLPSULM_DISPLAY_VECTORS | RVLPSULM_DISPLAY_SAMPLES);
+	//RVLPSULM_DISPLAY_SURFACES | RVLPSULM_DISPLAY_ELLIPSES | RVLPSULM_DISPLAY_LINES | RVLPSULM_DISPLAY_VECTORS
 	int DisplayBitmap = 0;
 	int ZoomFactor = 1;
 	bool bVTKRendererActive = false;
@@ -269,6 +312,8 @@ int main(int argc, char* argv[])
 
 			pFig->Clear();
 
+			pFig2->Clear();
+
 			// select bitmap to display
 
 			if(VS.m_Flags & RVLSYS_FLAGS_PC)
@@ -308,17 +353,17 @@ int main(int argc, char* argv[])
 
 			if(bDisplayHypothesis)
 			{
-				VS.m_PSuLMBuilder.DisplayHypothesis(&GUI, pFig, VS.m_pPSuLM);
+				VS.m_PSuLMBuilder.DisplayHypothesis(&GUI, pFig, pFig2, VS.m_pPSuLM, mDisplayPSuLMFlags, pInputImage);
 
 				VS.m_PSuLMBuilder.DisplayHypothesisData(pFig);
 			}
 
 			if(bDisplayPSuLM)
-				VS.m_pPSuLM->Display(pFig, &NullPose, cvScalar(0, 255, 0), 
-					RVLPSULM_DISPLAY_SURFACES | RVLPSULM_DISPLAY_ELLIPSES | RVLPSULM_DISPLAY_LINES | RVLPSULM_DISPLAY_VECTORS);
-					//RVLPSULM_DISPLAY_SURFACES | RVLPSULM_DISPLAY_VECTORS);
+				VS.m_pPSuLM->Display(pFig, &NullPose, cvScalar(0, 255, 0), mDisplayPSuLMFlags);
 
 			GUI.DisplayVectors(pFig, 0, 0, (double)ZoomFactor);
+
+			GUI.DisplayVectors(pFig2, 0, 0, 1.0);
 
 			if(!bRecord)
 			{
@@ -342,10 +387,19 @@ int main(int argc, char* argv[])
 			// show the display image
 
 			MouseCallbackData.ZoomFactor = ZoomFactor;
+			MouseCallbackData.mDisplayPSuLMFlags = mDisplayPSuLMFlags;
+			MouseCallbackData.iHypothesis = 0;
 
 			GUI.ShowFigure(pFig);	
 
-			cvSetMouseCallback("RVLPSuLMdemo", MouseCallback, &MouseCallbackData);
+			cvSetMouseCallback("Scene", MouseCallback, &MouseCallbackData);
+							
+			MouseCallbackData2.mDisplayPSuLMFlags = mDisplayPSuLMFlags;
+			MouseCallbackData2.iHypothesis = 0;
+
+			GUI.ShowFigure(pFig2);	
+
+			cvSetMouseCallback("Model", MouseCallback, &MouseCallbackData2);
 
 			//cvSaveImage("C:\\RVL\\ExpRez\\RVLDisplay.bmp", pDisplay);
 
@@ -386,6 +440,18 @@ int main(int argc, char* argv[])
 
 				bRefresh = true;
 
+				break;
+			case 'e':
+				mDisplayPSuLMFlags ^= (RVLPSULM_DISPLAY_ELLIPSES | RVLPSULM_DISPLAY_LINES);
+			
+				bRefresh = true;				
+	
+				break;
+			case 'a':
+				mDisplayPSuLMFlags ^= RVLPSULM_DISPLAY_SAMPLES;
+			
+				bRefresh = true;				
+	
 				break;
 			case 'z':
 				if(ZoomFactor == 1)
@@ -512,6 +578,7 @@ int main(int argc, char* argv[])
 	cvReleaseImage(&pRGBImage);
 	cvReleaseImage(&pGSImage);
 	cvReleaseImage(&pZoomedInputImage);
+	//cvReleaseImage(&pAuxImage);
 
 	return 0;
 }
@@ -535,18 +602,31 @@ void MessageCanNotOpenFile(CRVLGUI *pGUI, char *FileName)
 
 void MouseCallback(int event, int x, int y, int flags, void* vpData)
 {
+	CRVL3DPose NullPose;
+
+	RVLNULL3VECTOR(NullPose.m_X);
+	RVLUNITMX3(NullPose.m_Rot);
+
 	RVLPSULMDEMO_MOUSE_CALLBACK_DATA *pData = (RVLPSULMDEMO_MOUSE_CALLBACK_DATA *)vpData;
 
 	CRVL3DSurface2 *pSelectedSurf = NULL;
 	CRVL3DLine2 *pSelectedLine = NULL;
 
+	CRVLGUI *pGUI = pData->pGUI;
 	CRVLFigure *pFig = pData->pFig;
+	CRVLFigure *pFig2 = pData->pFig2;
+	CRVLPSuLM *pPSuLM, *pPSuLM2;
+
+	CRVLFigure *pSFig, *pMFig;
 
 	CRVLPSuLMVS *pVS = pData->pVS;
+
+	RVLPSULM_HYPOTHESIS *pHypothesis = pVS->m_PSuLMBuilder.m_HypothesisArray[pData->iHypothesis];
 
 	int w = pData->w;
 	
 	int iPix;
+	int a, b;
 
 	switch( event )
 	{
@@ -561,7 +641,80 @@ void MouseCallback(int event, int x, int y, int flags, void* vpData)
 
 				iPix = x / pData->ZoomFactor + y / pData->ZoomFactor * w;
 
-				pVS->m_pPSuLM->Project(&(pFig->m_PoseC0), FALSE, iPix, &pSelectedSurf, &pSelectedLine);
+				if(pFig->m_Flags & RVLPSULM_DISPLAY_SCENE)
+				{
+					pSFig = pFig;
+					pMFig = pFig2;
+					pPSuLM = pVS->m_pPSuLM;
+					pPSuLM2 = pHypothesis->pMPSuLM;
+					a = pPSuLM2->m_n3DSurfacesTotal;
+					b = 1;
+				}
+				else if(pFig->m_Flags & RVLPSULM_DISPLAY_MODEL)
+				{
+					pSFig = pFig2;
+					pMFig = pFig;
+					pPSuLM2 = pVS->m_pPSuLM;
+					pPSuLM = pHypothesis->pMPSuLM;
+					a = 1;
+					b = pPSuLM->m_n3DSurfacesTotal;
+				}
+
+				pPSuLM->Project(&(pFig->m_PoseC0), FALSE, iPix, &pSelectedSurf, &pSelectedLine);
+
+				pFig->Clear();
+
+				pFig2->Clear();
+
+				pVS->m_PSuLMBuilder.DisplayHypothesis(pGUI, pSFig, pMFig, pVS->m_pPSuLM, pData->mDisplayPSuLMFlags, 
+					pData->pImage);
+
+				if(pSelectedSurf)
+				{
+					pPSuLM->Display3DSurface(pFig, pSelectedSurf, &NullPose, cvScalar(255, 255, 0), 2,
+						RVLPSULM_DISPLAY_VECTORS);
+
+					BOOL bCorrespondent;
+					CRVL3DSurface2 *pSurf2;
+
+					for(int iMatch = 0; iMatch < pPSuLM2->m_n3DSurfacesTotal; iMatch++)
+					{
+						bCorrespondent = FALSE;
+
+						if((pVS->m_PSuLMBuilder.m_Flags & RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD) == 
+							RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD_SSM)
+						{
+							if(pVS->m_PSuLMBuilder.m_MatchMatrix[a * pSelectedSurf->m_Index + b * iMatch] >= 
+								pVS->m_PSuLMBuilder.m_minSurfaceSamplesForMatch)
+								bCorrespondent = TRUE;
+						}
+						else
+						{
+#ifdef RVLPSULMBUILDER_DISPLAY_MATCH_OVERLAP
+							if(pVS->m_PSuLMBuilder.m_MatchMatrix[a * pSelectedSurf->m_Index +  b * iMatch] == 2)
+#else
+							if(m_pPSuLMBuilder->m_MatchMatrix[pSelectedSurf->m_Index +  nMSurfaces * iMatch] > 0)
+#endif
+								bCorrespondent = TRUE;
+						}
+
+						if(bCorrespondent)
+						{
+							pSurf2 = pPSuLM2->m_3DSurfaceArray[iMatch];
+
+							pPSuLM2->Display3DSurface(pFig2, pSurf2, &NullPose, cvScalar(255, 0, 0), 2,
+								RVLPSULM_DISPLAY_VECTORS);
+						}
+					}
+				}
+
+				pGUI->DisplayVectors(pSFig, 0, 0, (double)(pData->ZoomFactor));
+
+				pGUI->DisplayVectors(pMFig, 0, 0, 1.0);	
+
+				pGUI->ShowFigure(pFig);
+
+				pGUI->ShowFigure(pFig2);
 
 				pVS->m_PSuLMBuilder.DisplayHypothesisData(pFig, 0, pSelectedSurf);
 			}

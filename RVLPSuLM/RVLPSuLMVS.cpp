@@ -327,15 +327,15 @@ void CRVLPSuLMVS::PSuLMBasedRLMUpdate(DWORD Flags)
 	}	//If material descriptor 
 #endif
 
-	int ImageFileNameLen = strlen(m_ImageFileName);
+	//int ImageFileNameLen = strlen(m_ImageFileName);
 
-	RVLMEM_ALLOC_STRUCT_ARRAY(m_PSuLMBuilder.m_pMCMem, char, ImageFileNameLen + 7, m_pPSuLM->m_FileName);
+	//RVLMEM_ALLOC_STRUCT_ARRAY(m_PSuLMBuilder.m_pMCMem, char, ImageFileNameLen + 7, m_pPSuLM->m_FileName);
 
-	strcpy(m_pPSuLM->m_FileName, m_ImageFileName);
+	//strcpy(m_pPSuLM->m_FileName, m_ImageFileName);
 
-	char extension[] = "LW.bmp";
+	//char extension[] = "LW.bmp";
 
-	strcpy(m_pPSuLM->m_FileName + ImageFileNameLen, extension);
+	//strcpy(m_pPSuLM->m_FileName + ImageFileNameLen, extension);
 
 	if(m_pTimer)
 	{
