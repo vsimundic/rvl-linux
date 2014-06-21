@@ -1,3 +1,21 @@
+class CRVLPSuLMVS;
+
+struct RVLPSULMDISPLAY_MOUSE_CALLBACK_DATA
+{
+	int u, v;
+	bool bSelection;
+	int w;
+	CRVLGUI *pGUI;
+	CRVLFigure *pFig;
+	CRVLFigure *pFig2;
+	CRVLPSuLMVS *pVS;
+	int ZoomFactor;
+	DWORD mDisplayPSuLMFlags;
+	int iHypothesis;
+	IplImage *pImage;
+};
+
+void RVLPSuLMDisplayMouseCallback2(int event, int x, int y, int flags, void* pData);
 
 class CRVLPSuLMVS :
 	public CRVLPCSVS

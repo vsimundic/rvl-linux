@@ -481,3 +481,124 @@ void CRVLPSuLMVS::PSuLMBasedRLMUpdate(DWORD Flags)
 #endif
 	}
 }
+
+void RVLPSuLMDisplayMouseCallback2(int event, int x, int y, int flags, void* vpData)
+{
+	CRVL3DPose NullPose;
+
+	RVLNULL3VECTOR(NullPose.m_X);
+	RVLUNITMX3(NullPose.m_Rot);
+
+	RVLPSULMDISPLAY_MOUSE_CALLBACK_DATA *pData = (RVLPSULMDISPLAY_MOUSE_CALLBACK_DATA *)vpData;
+
+	CRVL3DSurface2 *pSelectedSurf = NULL;
+	CRVL3DLine2 *pSelectedLine = NULL;
+
+	CRVLGUI *pGUI = pData->pGUI;
+	CRVLFigure *pFig = pData->pFig;
+	CRVLFigure *pFig2 = pData->pFig2;
+	CRVLPSuLM *pPSuLM, *pPSuLM2;
+
+	CRVLFigure *pSFig, *pMFig;
+
+	CRVLPSuLMVS *pVS = pData->pVS;
+
+	RVLPSULM_HYPOTHESIS *pHypothesis = pVS->m_PSuLMBuilder.m_HypothesisArray[pData->iHypothesis];
+
+	int w = pData->w;
+	
+	int iPix;
+	int a, b;
+
+	switch( event )
+	{
+		case CV_EVENT_LBUTTONDOWN:
+			//if(!pData->bSelection)
+			{
+				pData->u = x;
+
+				pData->v = y;
+
+				pData->bSelection = true;
+
+				iPix = x / pData->ZoomFactor + y / pData->ZoomFactor * w;
+
+				if(pFig->m_Flags & RVLPSULM_DISPLAY_SCENE)
+				{
+					pSFig = pFig;
+					pMFig = pFig2;
+					pPSuLM = pVS->m_pPSuLM;
+					pPSuLM2 = pHypothesis->pMPSuLM;
+					a = pPSuLM2->m_n3DSurfacesTotal;
+					b = 1;
+				}
+				else if(pFig->m_Flags & RVLPSULM_DISPLAY_MODEL)
+				{
+					pSFig = pFig2;
+					pMFig = pFig;
+					pPSuLM2 = pVS->m_pPSuLM;
+					pPSuLM = pHypothesis->pMPSuLM;
+					a = 1;
+					b = pPSuLM->m_n3DSurfacesTotal;
+				}
+
+				pPSuLM->Project(&(pFig->m_PoseC0), FALSE, iPix, &pSelectedSurf, &pSelectedLine);
+
+				pFig->Clear();
+
+				pFig2->Clear();
+
+				pVS->m_PSuLMBuilder.DisplayHypothesis(pGUI, pSFig, pMFig, pVS->m_pPSuLM, pData->mDisplayPSuLMFlags, 
+					pData->pImage);
+
+				if(pSelectedSurf)
+				{
+					pPSuLM->Display3DSurface(pFig, pSelectedSurf, &NullPose, cvScalar(255, 255, 0), 2,
+						RVLPSULM_DISPLAY_VECTORS);
+
+					BOOL bCorrespondent;
+					CRVL3DSurface2 *pSurf2;
+
+					for(int iMatch = 0; iMatch < pPSuLM2->m_n3DSurfacesTotal; iMatch++)
+					{
+						bCorrespondent = FALSE;
+
+						if((pVS->m_PSuLMBuilder.m_Flags & RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD) == 
+							RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD_SSM)
+						{
+							if(pVS->m_PSuLMBuilder.m_MatchMatrix[a * pSelectedSurf->m_Index + b * iMatch] >= 
+								pVS->m_PSuLMBuilder.m_minSurfaceSamplesForMatch)
+								bCorrespondent = TRUE;
+						}
+						else
+						{
+#ifdef RVLPSULMBUILDER_DISPLAY_MATCH_OVERLAP
+							if(pVS->m_PSuLMBuilder.m_MatchMatrix[a * pSelectedSurf->m_Index +  b * iMatch] == 2)
+#else
+							if(m_pPSuLMBuilder->m_MatchMatrix[pSelectedSurf->m_Index +  nMSurfaces * iMatch] > 0)
+#endif
+								bCorrespondent = TRUE;
+						}
+
+						if(bCorrespondent)
+						{
+							pSurf2 = pPSuLM2->m_3DSurfaceArray[iMatch];
+
+							pPSuLM2->Display3DSurface(pFig2, pSurf2, &NullPose, cvScalar(255, 0, 0), 2,
+								RVLPSULM_DISPLAY_VECTORS);
+						}
+					}
+				}
+
+				pGUI->DisplayVectors(pSFig, 0, 0, (double)(pData->ZoomFactor));
+
+				pGUI->DisplayVectors(pMFig, 0, 0, 1.0);	
+
+				pGUI->ShowFigure(pFig);
+
+				pGUI->ShowFigure(pFig2);
+
+				pVS->m_PSuLMBuilder.DisplayHypothesisData(pFig, 0, pSelectedSurf);
+			}
+	}
+}
