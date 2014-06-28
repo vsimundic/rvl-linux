@@ -50,7 +50,8 @@ void RVLDisplay2DRegion(CRVLFigure *pFig,
 						int LineWidth = 1,
 						DWORD mMask1 = 0x00000000, DWORD mMask2 = 0x00000000, 
 						BOOL bMask = FALSE,
-						BYTE BoundaryFlags = 0x00);
+						BYTE BoundaryFlags = 0x00,
+						bool bAvoidDoubleEdges = true);
 BOOL RVLFlipDiagonal(RVLMESH_LINK *pLink,
 					 RVLMESH_LINK **LinkArray = NULL);
 

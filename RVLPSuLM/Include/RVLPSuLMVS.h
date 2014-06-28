@@ -13,6 +13,7 @@ struct RVLPSULMDISPLAY_MOUSE_CALLBACK_DATA
 	DWORD mDisplayPSuLMFlags;
 	int iHypothesis;
 	IplImage *pImage;
+	//CRVL3DPose *pPoseCM;
 };
 
 void RVLPSuLMDisplayMouseCallback2(int event, int x, int y, int flags, void* pData);

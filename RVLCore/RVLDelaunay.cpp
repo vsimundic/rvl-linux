@@ -1248,7 +1248,8 @@ void RVLDisplay2DRegion(	CRVLFigure *pFig,
 							int LineWidth,
 							DWORD mMask1, DWORD mMask2, 
 							BOOL bBoundary,
-							BYTE BoundaryFlags)
+							BYTE BoundaryFlags,
+							bool bAvoidDoubleEdges)
 {
 
 	CRVLDisplayVector Vector(pFig->m_pMem);
@@ -1292,11 +1293,11 @@ void RVLDisplay2DRegion(	CRVLFigure *pFig,
 
 		p2DRegion = (CRVL2DRegion2 *)(pDelaunayLinkOut->vp2DRegion);
 
-		if(p2DRegion)
-			if((p2DRegion->m_Flags & RVLOBJ2_FLAG_REJECTED) == 0)
-				if(pDelaunayLinkIn->iPix0 > pDelaunayLinkOut->iPix0)
-					continue;
-
+		if(bAvoidDoubleEdges)
+			if(p2DRegion)
+				if((p2DRegion->m_Flags & RVLOBJ2_FLAG_REJECTED) == 0)
+					if(pDelaunayLinkIn->iPix0 > pDelaunayLinkOut->iPix0)
+						continue;
 
 		if((pDelaunayLinkIn->Flags & mMask1) == mMask2)
 		{

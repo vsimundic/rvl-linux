@@ -4,6 +4,7 @@
 
 #include "RVLTimer.h"
 #include <math.h>
+#include <time.h>
 
 //////////////////////////////////////////////////////////////////////
 // Construction/Destruction
@@ -21,5 +22,5 @@ CRVLTimer::~CRVLTimer()
 
 double CRVLTimer::GetTime()
 {
-	return 0.0;
+	return ((float)clock())/CLOCKS_PER_SEC;
 }

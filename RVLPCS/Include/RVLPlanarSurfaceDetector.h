@@ -634,6 +634,7 @@ public:
 	virtual ~CRVLPlanarSurfaceDetector();
 	void GetRegionBoundaries(void);
 	void GetOrgPC(double * PC, int n);
+	void GetOrgPCProjectionParams(double &f, double &uc, double &vc);
 	void DisplayPC(IplImage *pDisplay);
 	void AssignLabels(CRVLC2D *pTriangleSetLevel1, CRVLC2D *pTriangleSetLevel3);
 

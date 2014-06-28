@@ -60,6 +60,9 @@ void CRVLPSuLMVS::Init(char * CfgFile2Name)
 
 	m_PSuLMBuilder.Init();
 
+	if(m_Flags & RVLSYS_FLAGS_PC)
+		m_PSuLMBuilder.m_Flags |= RVLPSULMBUILDER_FLAG_PC;
+
 	m_PSuLMBuilder.RobotCameraPose();
 
 	m_PSuLMBuilder.m_pPSD = &m_PSD;
@@ -503,7 +506,11 @@ void RVLPSuLMDisplayMouseCallback2(int event, int x, int y, int flags, void* vpD
 
 	CRVLPSuLMVS *pVS = pData->pVS;
 
-	RVLPSULM_HYPOTHESIS *pHypothesis = pVS->m_PSuLMBuilder.m_HypothesisArray[pData->iHypothesis];
+	RVLPSULM_HYPOTHESIS *pHypothesis = NULL;
+
+	if(pVS->m_PSuLMBuilder.m_HypothesisList.m_nElements > 0 && pData->iHypothesis >= 0 && 
+		pData->iHypothesis < pVS->m_PSuLMBuilder.m_HypothesisList.m_nElements)
+		pHypothesis = pVS->m_PSuLMBuilder.m_HypothesisArray[pData->iHypothesis];
 
 	int w = pData->w;
 	
@@ -526,11 +533,14 @@ void RVLPSuLMDisplayMouseCallback2(int event, int x, int y, int flags, void* vpD
 				if(pFig->m_Flags & RVLPSULM_DISPLAY_SCENE)
 				{
 					pSFig = pFig;
-					pMFig = pFig2;
 					pPSuLM = pVS->m_pPSuLM;
-					pPSuLM2 = pHypothesis->pMPSuLM;
-					a = pPSuLM2->m_n3DSurfacesTotal;
-					b = 1;
+					if(pHypothesis)
+					{
+						pMFig = pFig2;
+						pPSuLM2 = pHypothesis->pMPSuLM;
+						a = pPSuLM2->m_n3DSurfacesTotal;
+						b = 1;
+					}
 				}
 				else if(pFig->m_Flags & RVLPSULM_DISPLAY_MODEL)
 				{
@@ -546,57 +556,72 @@ void RVLPSuLMDisplayMouseCallback2(int event, int x, int y, int flags, void* vpD
 
 				pFig->Clear();
 
-				pFig2->Clear();
+				if(pHypothesis)
+				{
+					pFig2->Clear();
 
-				pVS->m_PSuLMBuilder.DisplayHypothesis(pGUI, pSFig, pMFig, pVS->m_pPSuLM, pData->mDisplayPSuLMFlags, 
-					pData->pImage);
+					pVS->m_PSuLMBuilder.DisplayHypothesis(pGUI, pSFig, pMFig, pVS->m_pPSuLM, pData->mDisplayPSuLMFlags, 
+						pData->pImage);
+				}
+				else
+				{
+					pFig->m_pImage = cvCloneImage(pData->pImage);
+
+					pVS->m_pPSuLM->Display(pFig, &NullPose, cvScalar(0, 255, 0), pData->mDisplayPSuLMFlags);
+				}
 
 				if(pSelectedSurf)
 				{
 					pPSuLM->Display3DSurface(pFig, pSelectedSurf, &NullPose, cvScalar(255, 255, 0), 2,
 						RVLPSULM_DISPLAY_VECTORS);
 
-					BOOL bCorrespondent;
-					CRVL3DSurface2 *pSurf2;
-
-					for(int iMatch = 0; iMatch < pPSuLM2->m_n3DSurfacesTotal; iMatch++)
+					if(pHypothesis)
 					{
-						bCorrespondent = FALSE;
+						BOOL bCorrespondent;
+						CRVL3DSurface2 *pSurf2;
 
-						if((pVS->m_PSuLMBuilder.m_Flags & RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD) == 
-							RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD_SSM)
+						for(int iMatch = 0; iMatch < pPSuLM2->m_n3DSurfacesTotal; iMatch++)
 						{
-							if(pVS->m_PSuLMBuilder.m_MatchMatrix[a * pSelectedSurf->m_Index + b * iMatch] >= 
-								pVS->m_PSuLMBuilder.m_minSurfaceSamplesForMatch)
-								bCorrespondent = TRUE;
-						}
-						else
-						{
+							bCorrespondent = FALSE;
+
+							if((pVS->m_PSuLMBuilder.m_Flags & RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD) == 
+								RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD_SSM)
+							{
+								if(pVS->m_PSuLMBuilder.m_MatchMatrix[a * pSelectedSurf->m_Index + b * iMatch] >= 
+									pVS->m_PSuLMBuilder.m_minSurfaceSamplesForMatch)
+									bCorrespondent = TRUE;
+							}
+							else
+							{
 #ifdef RVLPSULMBUILDER_DISPLAY_MATCH_OVERLAP
-							if(pVS->m_PSuLMBuilder.m_MatchMatrix[a * pSelectedSurf->m_Index +  b * iMatch] == 2)
+								if(pVS->m_PSuLMBuilder.m_MatchMatrix[a * pSelectedSurf->m_Index +  b * iMatch] == 2)
 #else
-							if(m_pPSuLMBuilder->m_MatchMatrix[pSelectedSurf->m_Index +  nMSurfaces * iMatch] > 0)
+								if(m_pPSuLMBuilder->m_MatchMatrix[pSelectedSurf->m_Index +  nMSurfaces * iMatch] > 0)
 #endif
-								bCorrespondent = TRUE;
-						}
+									bCorrespondent = TRUE;
+							}
 
-						if(bCorrespondent)
-						{
-							pSurf2 = pPSuLM2->m_3DSurfaceArray[iMatch];
+							if(bCorrespondent)
+							{
+								pSurf2 = pPSuLM2->m_3DSurfaceArray[iMatch];
 
-							pPSuLM2->Display3DSurface(pFig2, pSurf2, &NullPose, cvScalar(255, 0, 0), 2,
-								RVLPSULM_DISPLAY_VECTORS);
+								pPSuLM2->Display3DSurface(pFig2, pSurf2, &NullPose, cvScalar(255, 0, 0), 2,
+									RVLPSULM_DISPLAY_VECTORS);
+							}
 						}
 					}
 				}
 
 				pGUI->DisplayVectors(pSFig, 0, 0, (double)(pData->ZoomFactor));
 
-				pGUI->DisplayVectors(pMFig, 0, 0, 1.0);	
+				pGUI->ShowFigure(pSFig);
 
-				pGUI->ShowFigure(pFig);
+				if(pHypothesis)
+				{
+					pGUI->DisplayVectors(pMFig, 0, 0, 1.0);	
 
-				pGUI->ShowFigure(pFig2);
+					pGUI->ShowFigure(pMFig);
+				}
 
 				pVS->m_PSuLMBuilder.DisplayHypothesisData(pFig, 0, pSelectedSurf);
 			}

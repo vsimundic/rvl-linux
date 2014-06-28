@@ -176,6 +176,8 @@ void CRVLPSuLM::Project(CRVL3DPose *pPoseC0,
 		int HistRGBBaseSquareLog2 = (HistRGBBaseLog2 << 1);
 		ushort mask = ((1 << HistRGBBaseLog2) - 1);
 
+		CRVL3DSurface2 **ppSurfArrayEnd = m_3DSurfaceArray + m_n3DSurfacesTotal;
+
 		CRVL3DSurface2 *pConvexSegment;
 		CRVL3DSurface2 **ppConvexSegment, **pConvexSegmentArrayEnd;
 		RVLPTRCHAIN_ELEMENT *pLast;
@@ -194,12 +196,14 @@ void CRVLPSuLM::Project(CRVL3DPose *pPoseC0,
 		RVLCOLOR Color;
 		RVLQLIST_HIST_ENTRY_SHORT *pHistRGBEntry;
 		ushort HistRGBBin;
+		CRVL3DSurface2 **ppSurf;
 
-		m_SurfaceList.Start();
-
-		while(m_SurfaceList.m_pNext)
+		for(ppSurf = m_3DSurfaceArray; ppSurf < ppSurfArrayEnd; ppSurf++)
 		{
-			pSurf = (CRVL3DSurface2 *)(m_SurfaceList.GetNext());
+			pSurf = *ppSurf;
+
+			if(pSurf->m_Index == 116)
+				int debug = 0;
 
 			//pHistRGBEntry = (RVLQLIST_HIST_ENTRY_SHORT *)(pSurf->m_histRGB->pFirst);
 
@@ -312,13 +316,16 @@ void CRVLPSuLM::Project(CRVL3DPose *pPoseC0,
 
 				CvPoint *PtArray;
 
-				RVLDisplay3DEllipse(pSurf->m_EigenValues[0], pSurf->m_EigenValues[1], 20.0, &PoseFC, 
+				RVLDisplay3DEllipse(pSurf->m_EigenValues[0], pSurf->m_EigenValues[1], 1.0, &PoseFC, 
 					pBuilder->m_pCamera, &PtArray, nPts);
 				
-				if(RVLIsInsideContour(PtArray, nPts, u, v))
-					*ppSelectedSurf = pSurf;
+				if(nPts > 0)
+				{
+					if(RVLIsInsideContour(PtArray, nPts, u, v))
+						*ppSelectedSurf = pSurf;
 
-				delete[] PtArray;
+					delete[] PtArray;
+				}
 			}
 
 #endif
@@ -840,40 +847,43 @@ void CRVLPSuLM::Display(CRVLFigure * pFig,
 
 				RVLCombineTransform3D(PoseMC.m_Rot, PoseMC.m_X, pSurf->m_Pose.m_Rot, pSurf->m_Pose.m_X, RFC, tFC);
 
-				RVLDisplay3DEllipse(pSurf->m_EigenValues[0], pSurf->m_EigenValues[1], 20.0, &PoseFC, pPSuLMBuilder->m_pCamera,
+				RVLDisplay3DEllipse(pSurf->m_EigenValues[0], pSurf->m_EigenValues[1], 1.0, &PoseFC, pPSuLMBuilder->m_pCamera,
 					&PtArray, nPts);
-				
-				pContourEnd = PtArray + nPts;
 
-				if(Flags & RVLPSULM_DISPLAY_VECTORS)
+				if(nPts > 0)
 				{
-					pVector = pFig->AddVector(&Vector);
+					pContourEnd = PtArray + nPts;
 
-					pVector->m_PointType = RVLGUI_POINT_DISPLAY_TYPE_NONE;
-					pVector->m_bClosed = TRUE;
-
-					if(pSurf->m_Flags & RVLOBJ2_FLAG_MARKED)
+					if(Flags & RVLPSULM_DISPLAY_VECTORS)
 					{
-						pVector->m_rL = ColorMarked.r;
-						pVector->m_gL = ColorMarked.g;
-						pVector->m_bL = ColorMarked.b;
+						pVector = pFig->AddVector(&Vector);
+
+						pVector->m_PointType = RVLGUI_POINT_DISPLAY_TYPE_NONE;
+						pVector->m_bClosed = TRUE;
+
+						if(pSurf->m_Flags & RVLOBJ2_FLAG_MARKED)
+						{
+							pVector->m_rL = ColorMarked.r;
+							pVector->m_gL = ColorMarked.g;
+							pVector->m_bL = ColorMarked.b;
+						}
+
+						for(pPt = PtArray; pPt < pContourEnd; pPt++)
+							pVector->Point(pPt->x, pPt->y);
+					}
+					else
+					{
+						for(pPt = PtArray; pPt < pContourEnd; pPt++)
+						{
+							pPt->x /= 2;
+							pPt->y /= 2;
+						}
+
+						cvPolyLine(pFig->m_pImage, &PtArray, &nPts, 1, 1, Color);
 					}
 
-					for(pPt = PtArray; pPt < pContourEnd; pPt++)
-						pVector->Point(pPt->x, pPt->y);
+					delete[] PtArray;
 				}
-				else
-				{
-					for(pPt = PtArray; pPt < pContourEnd; pPt++)
-					{
-						pPt->x /= 2;
-						pPt->y /= 2;
-					}
-
-					cvPolyLine(pFig->m_pImage, &PtArray, &nPts, 1, 1, Color);
-				}
-
-				delete[] PtArray;
 			}
 
 			if(Flags & RVLPSULM_DISPLAY_SAMPLES)
@@ -1143,9 +1153,11 @@ void CRVLPSuLM::Display3DSurface(	CRVLFigure * pFig,
 
 	RVLCombineTransform3D(PoseMC.m_Rot, PoseMC.m_X, pSurf->m_Pose.m_Rot, pSurf->m_Pose.m_X, PoseFC.m_Rot, PoseFC.m_X);
 
-	RVLDisplay3DEllipse(pSurf->m_EigenValues[0], pSurf->m_EigenValues[1], 20.0, &PoseFC, pPSuLMBuilder->m_pCamera,
+	RVLDisplay3DEllipse(pSurf->m_EigenValues[0], pSurf->m_EigenValues[1], 1.0, &PoseFC, pPSuLMBuilder->m_pCamera,
 		&PtArray, nPts);
 #endif
+	if(nPts > 0)
+	{
 		pContourEnd = PtArray + nPts;
 
 		if(Flags & RVLPSULM_DISPLAY_VECTORS)
@@ -1170,8 +1182,10 @@ void CRVLPSuLM::Display3DSurface(	CRVLFigure * pFig,
 
 #ifdef RVLPSULM_CONVEX_SEGMENTS
 	}
+	}
 #else
-	delete[] PtArray;
+		delete[] PtArray;
+	}
 #endif
 }
 

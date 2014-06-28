@@ -114,6 +114,7 @@ public:
 	RVL3DPOINT2 **m_pPoint3DArray;
 	void *m_vp3DSurface;
 	double m_Tol;
+	double m_std;
 	int m_N[3];
 	int m_lenN;
 	int m_d;

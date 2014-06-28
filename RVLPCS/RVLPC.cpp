@@ -19,9 +19,9 @@ bool RVLPCImport(char *FileName, double *X, int &n)
 	{
 		fscanf(fp, "%lf %lf %lf\n", X__, X__ + 1, X__ + 2);
 
-		X_[0] = 1000.0 * X__[0];
-		X_[1] = 1000.0 * X__[1];
-		X_[2] = 1000.0 * X__[2];
+		X_[0] = -1000.0 * X__[1];
+		X_[1] = -1000.0 * X__[2];
+		X_[2] = 1000.0 * X__[0];
 	}
 
 	fclose(fp);

@@ -15165,137 +15165,157 @@ void CRVLPlanarSurfaceDetector::Get3DSurfaceAndContours2(CRVL2DRegion2 *p2DRegio
 	double VNrm[3 * 3];
 	double V[3 * 3];
 	double lV[3];
+	double fTmp;
+	double rho;
+	double *pV;
+	double Y[3];
 
-#ifdef RVLPSD_GET3DSURFACES_UVD
-	double q[3];
-
-	RVLGetCovMatrix3(&Moments, C, q);
-
-	RVLGetAxesOfCov3D(C, eig, VNrm, V, lV);
-
-	if(VNrm[2] < 0.0)
+	if(m_Flags & RVLPSD_FLAG_MM)
 	{
-		VNrm[0] = -VNrm[0];
-		VNrm[1] = -VNrm[1];
-		VNrm[2] = -VNrm[2];
-	}
+		RVLGetCovMatrix3(&Moments, C, t);
 
-	N[0] = VNrm[0] * fu;
-	N[1] = VNrm[1] * fv;
-	N[2] = VNrm[0] * (uc - q[0]) + VNrm[1] * (vc - q[1]) + VNrm[2] * (d0 - q[2]);
-	double fTmp = sqrt(RVLDOTPRODUCT3(N, N));
-	RVLSCALE3VECTOR2(N, fTmp, N)
+		RVLGetAxesOfCov3D(C, eig, VNrm, V, lV);
 
-	double rho = p3DSurfaceLevel3->m_d = VNrm[2] * k_ / fTmp;
-	
-	RVLNULL3VECTOR(S)
-	RVLNULLMX3X3(S2)
+		fTmp = sqrt(RVLDOTPRODUCT3(VNrm, VNrm));
+		RVLSCALE3VECTOR2(VNrm, fTmp, N)
 
-	for(ppTriangle = (CRVL2DRegion2 **)(pRelList->pFirst); ppTriangle < ppTriangleArrayEnd; ppTriangle++)
-	{
-		pTriangle = *ppTriangle;
+		rho = RVLDOTPRODUCT3(t, N);
 
-		pp3DPt = (RVL3DPOINT2 **)(pTriangle->m_pPoint3DArray);
-		
-		p3DPtArrayEnd = pp3DPt + pTriangle->m_n3DPts;
-
-		for(; pp3DPt < p3DPtArrayEnd; pp3DPt++)
+		if(rho < 0.0)
 		{
-			p3DPt = *pp3DPt;
+			N[0] = -N[0];
+			N[1] = -N[1];
+			N[2] = -N[2];
 
-			X = p3DPt->XYZ;
-
-			fTmp = RVLDOTPRODUCT3(N, X);
-
-			x = X[0] - fTmp * N[0];
-			y = X[1] - fTmp * N[1];
-			z = X[2] - fTmp * N[2];
-			
-			S[0] += x;
-			S[1] += y;
-			S[2] += z;
-			S2[0] += x * x;
-			S2[1] += x * y;
-			S2[2] += x * z;
-			S2[4] += y * y;
-			S2[5] += y * z;
-			S2[8] += z * z;
+			rho = -rho;
 		}
-	}	
 
-	RVLGetCovMatrix3(&Moments, C, t);
+		p3DSurfaceLevel3->m_d = rho;
 
-	t[0] += (rho * N[0]);
-	t[1] += (rho * N[1]);
-	t[2] += (rho * N[2]);
-#else
-	RVLGetCovMatrix3(&Moments, C, t);
-#endif
+		RVLCOPYTOCOL3(N, 2, R);
 
-	RVLGetAxesOfCov3D(C, eig, VNrm, V, lV);
+		X = VNrm + 6;
 
-	double *pV = VNrm;
+		RVLNORM3(X, fTmp)		
 
-	RVLCOPYTOCOL3(pV, 2, R)
+		RVLCOPYTOCOL3(X, 0, R);
 
-	pV += 3;
+		RVLCROSSPRODUCT3(N, X, Y);
 
-	RVLCOPYTOCOL3(pV, 1, R)
+		RVLCOPYTOCOL3(Y, 1, R);
+	}
+	else
+	{		
+		double q[3];
 
-	pV += 3;
+		RVLGetCovMatrix3(&Moments, C, q);
 
-	RVLCOPYTOCOL3(pV, 0, R)
+		RVLGetAxesOfCov3D(C, eig, VNrm, V, lV);
 
+		if(VNrm[2] < 0.0)
+		{
+			VNrm[0] = -VNrm[0];
+			VNrm[1] = -VNrm[1];
+			VNrm[2] = -VNrm[2];
+		}
+
+		N[0] = VNrm[0] * fu;
+		N[1] = VNrm[1] * fv;
+		N[2] = VNrm[0] * (uc - q[0]) + VNrm[1] * (vc - q[1]) + VNrm[2] * (d0 - q[2]);
+		fTmp = sqrt(RVLDOTPRODUCT3(N, N));
+		RVLSCALE3VECTOR2(N, fTmp, N)
+
+		rho = p3DSurfaceLevel3->m_d = VNrm[2] * k_ / fTmp;
+		
+		RVLNULL3VECTOR(S)
+		RVLNULLMX3X3(S2)
+
+		for(ppTriangle = (CRVL2DRegion2 **)(pRelList->pFirst); ppTriangle < ppTriangleArrayEnd; ppTriangle++)
+		{
+			pTriangle = *ppTriangle;
+
+			pp3DPt = (RVL3DPOINT2 **)(pTriangle->m_pPoint3DArray);
+			
+			p3DPtArrayEnd = pp3DPt + pTriangle->m_n3DPts;
+
+			for(; pp3DPt < p3DPtArrayEnd; pp3DPt++)
+			{
+				p3DPt = *pp3DPt;
+
+				X = p3DPt->XYZ;
+
+				fTmp = RVLDOTPRODUCT3(N, X);
+
+				x = X[0] - fTmp * N[0];
+				y = X[1] - fTmp * N[1];
+				z = X[2] - fTmp * N[2];
+				
+				S[0] += x;
+				S[1] += y;
+				S[2] += z;
+				S2[0] += x * x;
+				S2[1] += x * y;
+				S2[2] += x * z;
+				S2[4] += y * y;
+				S2[5] += y * z;
+				S2[8] += z * z;
+			}
+		}	
+
+		RVLGetCovMatrix3(&Moments, C, t);
+
+		t[0] += (rho * N[0]);
+		t[1] += (rho * N[1]);
+		t[2] += (rho * N[2]);
+
+		RVLGetAxesOfCov3D(C, eig, VNrm, V, lV);
+
+		pV = VNrm;
+
+		RVLCOPYTOCOL3(pV, 2, R)
+
+		pV += 3;
+
+		RVLCOPYTOCOL3(pV, 1, R)
+
+		pV += 3;
+
+		RVLCOPYTOCOL3(pV, 0, R)
+
+		if(RVLDOTPRODUCT3(VNrm,N) < 0.0)
+		{
+			R[0] = -R[0];
+			R[2] = -R[2];
+			R[3] = -R[3];
+			R[5] = -R[5];
+			R[6] = -R[6];
+			R[8] = -R[8];
+		}
+	}
+	
 	r1 = sqrt(eig[2]);
 	r2 = sqrt(eig[1]);
 
 	p3DSurfaceLevel3->m_EigenValues[0] = r1;
 	p3DSurfaceLevel3->m_EigenValues[1] = r2;
 
-#ifdef RVLPSD_GET3DSURFACES_UVD
-	if(RVLDOTPRODUCT3(VNrm,N) < 0.0)
-	{
-		R[0] = -R[0];
-		R[2] = -R[2];
-		R[3] = -R[3];
-		R[5] = -R[5];
-		R[6] = -R[6];
-		R[8] = -R[8];
-	}
-#else
-	RVLCOPYCOLMX3X3(R, 2, N);
+	double sigmaR;
 
-	double rho = RVLDOTPRODUCT3(t, N);
-
-	if(rho >= 0)
-		p3DSurfaceLevel3->m_d = rho;
+	if(m_Flags & RVLPSD_FLAG_MM)
+		sigmaR = p2DRegionLevel3->m_std * p2DRegionLevel3->m_std;
 	else
 	{
-		N[0] = -N[0];
-		N[1] = -N[1];
-		N[2] = -N[2];
+		CRVLCamera *pCamera = m_pStereoVision->m_pCameraL;
 
-		R[0] = -R[0];
-		R[2] = -R[2];
-		R[3] = -R[3];
-		R[5] = -R[5];
-		R[6] = -R[6];
-		R[8] = -R[8];
+		int U[3];
 
-		p3DSurfaceLevel3->m_d = -rho;
+		RVLGetKinect2DData(U, t, m_pStereoVision->m_KinectParams);
+
+		pCamera->KinectReconWithUncert(	(double)(U[0]), (double)(U[1]), (double)(U[2]), d0, k_, uc, vc, fu, fv, 
+			m_RuvTol*m_RuvTol, m_RuvdTol*m_RuvdTol, C);	
+
+		sigmaR = RVLCOV3DTRANSFTO1D(C, N);
 	}
-#endif
-
-	CRVLCamera *pCamera = m_pStereoVision->m_pCameraL;
-
-	int U[3];
-
-	RVLGetKinect2DData(U, t, m_pStereoVision->m_KinectParams);
-
-	pCamera->KinectReconWithUncert(	(double)(U[0]), (double)(U[1]), (double)(U[2]), d0, k_, uc, vc, fu, fv, 
-		m_RuvTol*m_RuvTol, m_RuvdTol*m_RuvdTol, C);	
-
-	double sigmaR = RVLCOV3DTRANSFTO1D(C, N);
 
 	p3DSurfaceLevel3->m_sigmaR = sigmaR;
 
@@ -15306,9 +15326,6 @@ void CRVLPlanarSurfaceDetector::Get3DSurfaceAndContours2(CRVL2DRegion2 *p2DRegio
 	p3DSurfaceLevel3->m_varq[2] =  sigmaR;
 
 	nSupportPts = n3DPts;
-
-	return;  //REMOVE THIS AFTER SYROCO12
-
 
 #ifdef NEVER
 	//if(Flags & RVLPSD_MESH_CONVEX) //MODIFY THE FOLLOWING USING THIS FLAG
@@ -16997,15 +17014,22 @@ void CRVLPlanarSurfaceDetector::GetRegionBoundaries()
 	delete[] bVisited;
 }
 
+void CRVLPlanarSurfaceDetector::GetOrgPCProjectionParams(double &f, double &uc, double &vc)
+{
+	uc = 0.5 * (double)m_Width; 
+	vc = (double)m_Height / 3.0; 
+	f = uc / sqrt(3.0);
+}
+
 void CRVLPlanarSurfaceDetector::GetOrgPC(double * PC, int n)
 {
 	memset(m_Point3DMap, 0, m_Width * m_Height * sizeof(RVL3DPOINT2 *));
 
 	RVL3DPOINT2 *pPoint3D = m_Point3DArray;
 	
-	double uc = 0.5 * (double)m_Width; 
-	double vc = (double)m_Height / 3.0; 
-	double f = uc / sqrt(3.0);
+	double f, uc, vc;
+
+	GetOrgPCProjectionParams(f, uc, vc);
 
 	double *pPCEnd = PC + 3 * n;
 
@@ -17014,20 +17038,16 @@ void CRVLPlanarSurfaceDetector::GetOrgPC(double * PC, int n)
 	int *iX;
 	double *X_;
 	int u, v;
-	double U[2];
 	double r;
 	RVL3DPOINT2 *p3DPt;
 
 	for(X_ = PC; X_ < pPCEnd; X_ += 3)
 	{
-		if(X_[0] < 1.0)
+		if(X_[2] < 1.0)
 			continue;
 
-		U[0] = -f * X_[1] / X_[0] + uc;
-		U[1] = -f * X_[2] / X_[0] + vc;
-
-		u = DOUBLE2INT(U[0]);
-		v = DOUBLE2INT(U[1]);
+		u = DOUBLE2INT(f * X_[0] / X_[2] + uc);
+		v = DOUBLE2INT(f * X_[1] / X_[2] + vc);
 
 		if(u < 0)
 			continue;
@@ -17220,7 +17240,7 @@ int RVLMeshSegmentWERGetCostLog(	BYTE *pData,
 	if(std <= 100.0)
 		return DOUBLE2INT(std);
 
-	int Cost = DOUBLE2INT(log(std / 100.0)/log(1.01))+100;
+	int Cost = DOUBLE2INT(log(std / 100.0)/RVLLN1p01)+100;
 
 	if(Cost > maxCost)
 		Cost = maxCost;
@@ -18819,6 +18839,9 @@ int CRVLPlanarSurfaceDetector::GenRelListFromWER(CRVLC2D *pTriangleSetLevel1, CR
 		{
 			if (noTriangles > 0)
 			{
+				if(m_Flags & RVLPSD_FLAG_MM)
+					p2DSegmentLevel3->m_std =(pWerNode->Cost <= 100 ? (double)(pWerNode->Cost) : 
+						100.0 * exp(RVLLN1p01 * (double)(pWerNode->Cost - 100)));
 				pPrevObjPtr = pTriangleSetLevel3->m_ObjectList.m_pLast;
 				p2DSegmentLevel3 = (CRVL2DRegion2 *)(RVL2DRegionTemplate.Create3(pTriangleSetLevel3));
 				RVLQLIST *pSamples = &(p2DSegmentLevel3->m_Samples);
@@ -18838,6 +18861,9 @@ int CRVLPlanarSurfaceDetector::GenRelListFromWER(CRVLC2D *pTriangleSetLevel1, CR
 
 	if(p2DSegmentLevel3->m_n3DPts == 0)
 		pTriangleSetLevel3->m_ObjectList.RemoveAt(pPrevObjPtr);
+	else if(m_Flags & RVLPSD_FLAG_MM)
+		p2DSegmentLevel3->m_std =(pWerNode->Cost <= 100 ? (double)(pWerNode->Cost) : 
+			100.0 * exp(RVLLN1p01 * (double)(pWerNode->Cost - 100)));
 
 	return noObjects;
 }

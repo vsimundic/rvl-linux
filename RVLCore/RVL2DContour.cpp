@@ -927,6 +927,7 @@ BOOL RVLIsInsideContour(CRVLMPtrChain *pContourList,
 	return FALSE;
 }
 
+
 BOOL RVLIsInsideContour(CvPoint *PtArray,
 						int nPts,
 						int u, int v)
@@ -997,7 +998,7 @@ BOOL RVLIsInsideContour(CvPoint *PtArray,
 	}
 
 	if(pPt2->x > u)
-		if(sign * sign0 < 0)
+		if(signPrev * sign0 < 0)
 			nCrosses++;
 	
 	if(nCrosses & 1)

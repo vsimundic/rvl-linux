@@ -17,6 +17,31 @@ void MessageCanNotOpenFile(CRVLGUI *pGUI, char *FileName);
 
 int main(int argc, char* argv[])
 {
+	CRVL3DPose NullPose;
+
+	RVLNULL3VECTOR(NullPose.m_X);
+	RVLUNITMX3(NullPose.m_Rot);
+
+	//CRVL3DPose PoseLC;
+
+	//RVLNULL3VECTOR(PoseLC.m_X);
+
+	//RVLMXEL(PoseLC.m_Rot, 3, 0, 0) = 0.0;
+	//RVLMXEL(PoseLC.m_Rot, 3, 1, 0) = 0.0;
+	//RVLMXEL(PoseLC.m_Rot, 3, 2, 0) = 1.0;
+
+	//RVLMXEL(PoseLC.m_Rot, 3, 0, 1) = -1.0;
+	//RVLMXEL(PoseLC.m_Rot, 3, 1, 1) = 0.0;
+	//RVLMXEL(PoseLC.m_Rot, 3, 2, 1) = 0.0;
+
+	//RVLMXEL(PoseLC.m_Rot, 3, 0, 2) = 0.0;
+	//RVLMXEL(PoseLC.m_Rot, 3, 1, 2) = -1.0;
+	//RVLMXEL(PoseLC.m_Rot, 3, 2, 2) = 0.0;
+
+	//CRVL3DPose PoseCL;
+
+	//RVLINVTRANSF3D(PoseLC.m_Rot, PoseLC.m_X, PoseCL.m_Rot, PoseCL.m_X)
+
 	// create vision system
 
 	CRVLPSuLMVS VS;
@@ -115,15 +140,24 @@ int main(int argc, char* argv[])
 	pFig->m_FontSize = 16;
 	cvInitFont(&(pFig->m_Font), CV_FONT_HERSHEY_SIMPLEX, 0.5, 0.5, 0, 2);
 
-	pFig->m_PoseC0.Reset();
+	//if(VS.m_Flags & RVLSYS_FLAGS_PC)
+	//{
+	//	RVLCOPYMX3X3(PoseCL.m_Rot, pFig->m_PoseC0.m_Rot)
+	//	RVLCOPY3VECTOR(PoseCL.m_X, pFig->m_PoseC0.m_X)
+	//}
+	//else
+		pFig->m_PoseC0.Reset();
 
 	RVLPSULMDISPLAY_MOUSE_CALLBACK_DATA MouseCallbackData;	
+
+	IplImage *pInputImage_ = pInputImage;
 
 	MouseCallbackData.w = w;
 	MouseCallbackData.pGUI = &GUI;
 	MouseCallbackData.pFig = pFig;
 	MouseCallbackData.pVS = &VS;
-	MouseCallbackData.pImage = pInputImage;
+	MouseCallbackData.pImage = pInputImage_;
+	//MouseCallbackData.pPoseCM = (VS.m_Flags & RVLSYS_FLAGS_PC ? &PoseCL : &NullPose);
 
 	// create auxiliary display image
 
@@ -131,7 +165,7 @@ int main(int argc, char* argv[])
 
 	pFig2->m_Flags |= (RVLPSULM_DISPLAY_MODEL | RVLFIG_FLAG_DATA);
 
-	pFig2->m_pImage = cvCreateImage(cvSize(w, h), IPL_DEPTH_8U, 3);
+	pFig2->EmptyBitmap(cvSize(w, h), cvScalar(0, 0, 0));
 
 	pFig2->m_FontSize = 16;
 	cvInitFont(&(pFig2->m_Font), CV_FONT_HERSHEY_SIMPLEX, 0.5, 0.5, 0, 2);
@@ -149,6 +183,7 @@ int main(int argc, char* argv[])
 	MouseCallbackData2.pVS = &VS;
 	MouseCallbackData2.ZoomFactor = 1;
 	MouseCallbackData2.pImage = pInputImage;
+	//MouseCallbackData2.pPoseCM = (VS.m_Flags & RVLSYS_FLAGS_PC ? &PoseCL : &NullPose);
 
 	// allocate memory
 
@@ -156,20 +191,15 @@ int main(int argc, char* argv[])
 
 	// main loop
 
-	CRVL3DPose NullPose;
-
-	RVLNULL3VECTOR(NullPose.m_X);
-	RVLUNITMX3(NullPose.m_Rot);
-
 	bool bDisplayMesh = false;
-	bool bDisplayConvexSets = false;
+	bool bDisplayConvexSets = ((VS.m_Flags & RVLSYS_FLAGS_PC) != 0);
 	bool bDisplayHypothesis = true;
 	bool bDisplayPSuLM = false;
 	//bool bContinuous = bKinect;
 	bool bContinuous = false;
 	bool bRecord = false;
-	DWORD mDisplayPSuLMFlags = (RVLPSULM_DISPLAY_SURFACES | RVLPSULM_DISPLAY_VECTORS | RVLPSULM_DISPLAY_SAMPLES);
-	//RVLPSULM_DISPLAY_SURFACES | RVLPSULM_DISPLAY_ELLIPSES | RVLPSULM_DISPLAY_LINES | RVLPSULM_DISPLAY_VECTORS
+	//DWORD mDisplayPSuLMFlags = (RVLPSULM_DISPLAY_SURFACES | RVLPSULM_DISPLAY_VECTORS | RVLPSULM_DISPLAY_SAMPLES);
+	DWORD mDisplayPSuLMFlags = (RVLPSULM_DISPLAY_SURFACES | RVLPSULM_DISPLAY_ELLIPSES | RVLPSULM_DISPLAY_VECTORS);
 	int DisplayBitmap = 0;
 	int ZoomFactor = 1;
 	bool bVTKRendererActive = false;
@@ -270,11 +300,11 @@ int main(int argc, char* argv[])
 
 			/////
 
-			VS.m_PSuLMBuilder.m_Flags |= RVLPSULMBUILDER_FLAG_KIDNAPPED;
+			//VS.m_PSuLMBuilder.m_Flags |= RVLPSULMBUILDER_FLAG_KIDNAPPED;
 
 			VS.Update();
 
-			t = clock() - t;			
+			t = clock() - t;	
 
 			// mark segment edges
 
@@ -337,13 +367,20 @@ int main(int argc, char* argv[])
 
 			if(bDisplayHypothesis)
 			{
-				VS.m_PSuLMBuilder.DisplayHypothesis(&GUI, pFig, pFig2, VS.m_pPSuLM, mDisplayPSuLMFlags, pInputImage);
+				VS.m_PSuLMBuilder.DisplayHypothesis(&GUI, pFig, pFig2, VS.m_pPSuLM, mDisplayPSuLMFlags, pInputImage_);
 
 				VS.m_PSuLMBuilder.DisplayHypothesisData(pFig);
 			}
 
 			if(bDisplayPSuLM)
-				VS.m_pPSuLM->Display(pFig, &NullPose, cvScalar(0, 255, 0), mDisplayPSuLMFlags);
+			{
+				pFig->m_pImage = cvCloneImage(pInputImage_);
+
+				//if(VS.m_Flags & RVLSYS_FLAGS_PC)
+				//	VS.m_pPSuLM->Display(pFig, &PoseLC, cvScalar(0, 255, 0), mDisplayPSuLMFlags);
+				//else
+					VS.m_pPSuLM->Display(pFig, &NullPose, cvScalar(0, 255, 0), mDisplayPSuLMFlags);
+			}
 
 			GUI.DisplayVectors(pFig, 0, 0, (double)ZoomFactor);
 
@@ -372,14 +409,15 @@ int main(int argc, char* argv[])
 
 			MouseCallbackData.ZoomFactor = ZoomFactor;
 			MouseCallbackData.mDisplayPSuLMFlags = mDisplayPSuLMFlags;
-			MouseCallbackData.iHypothesis = 0;
+			MouseCallbackData.iHypothesis = (VS.m_PSuLMBuilder.m_nHypotheses > 0 ? 0 : -1);
+			MouseCallbackData.pImage = pInputImage_;
 
 			GUI.ShowFigure(pFig);	
 
 			cvSetMouseCallback("Scene", RVLPSuLMDisplayMouseCallback2, &MouseCallbackData);
 							
 			MouseCallbackData2.mDisplayPSuLMFlags = mDisplayPSuLMFlags;
-			MouseCallbackData2.iHypothesis = 0;
+			MouseCallbackData2.iHypothesis = (VS.m_PSuLMBuilder.m_nHypotheses > 0 ? 0 : -1);
 
 			GUI.ShowFigure(pFig2);	
 
@@ -441,12 +479,12 @@ int main(int argc, char* argv[])
 				if(ZoomFactor == 1)
 				{
 					ZoomFactor = 2;
-					pFig->m_pImage = pZoomedInputImage;
+					pInputImage_ = pZoomedInputImage;
 				}
 				else
 				{
 					ZoomFactor = 1;
-					pFig->m_pImage = pInputImage;
+					pInputImage_ = pInputImage;
 				}
 
 				bRefresh = true;
