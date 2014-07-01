@@ -5150,7 +5150,7 @@ void CRVLPlanarSurfaceDetector::Init()
 
 	m_bEdgeBasedSegments = false;
 
-	m_QueueMem = new RVLPSD_STRM_QUEUE_ENTRY[ImageSize];
+	m_QueueMem = new RVLPSD_STRM_QUEUE_ENTRY[2 * ImageSize];
 
 	if(m_Flags & RVLPSD_FLAG_MM)
 		m_Queue.m_Size = 800;

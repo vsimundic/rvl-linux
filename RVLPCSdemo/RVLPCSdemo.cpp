@@ -127,8 +127,8 @@ int main(int argc, char* argv[])
 
 	// main loop
 
-	bool bDisplayMesh = false;
-	bool bDisplayConvexSets = false;
+	bool bDisplayMesh = true;
+	bool bDisplayConvexSets = true;
 	//bool bContinuous = bKinect;
 	bool bContinuous = false;
 	bool bRecord = false;
