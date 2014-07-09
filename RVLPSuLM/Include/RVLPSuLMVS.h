@@ -25,7 +25,7 @@ public:
 	CRVLPSuLMVS(void);
 	virtual ~CRVLPSuLMVS(void);
 	void Init(char * CfgFile2Name = NULL);
-	void Update(void);
+	void Update(DWORD Flags = 0x00000000);
 	void PSuLMBasedRLMUpdate(DWORD Flags);
 	void CreateParamList();
 

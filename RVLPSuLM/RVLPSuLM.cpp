@@ -4,6 +4,10 @@
 #include "RVL2DLine2.h"		// move to RVLCoreObjectLib.h
 #include "RVLPCS.h"
 #include "RVLRLM.h"
+#include <string>
+#include <sstream>
+#include <iostream>
+#include <fstream>
 #include "RVLPSuLMBuilder.h"
 //#include "RVLCommon2.h"
 //#include "RVLObjectLib.h"

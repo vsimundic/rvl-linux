@@ -177,20 +177,12 @@
 				RelativePath=".\RVLPSuLMdemo.cpp"
 				>
 			</File>
-			<File
-				RelativePath=".\stdafx.cpp"
-				>
-			</File>
 		</Filter>
 		<Filter
 			Name="Header Files"
 			Filter="h;hpp;hxx;hm;inl;inc;xsd"
 			UniqueIdentifier="{93995380-89BD-4b04-88EB-625FBE52EBFB}"
 			>
-			<File
-				RelativePath=".\stdafx.h"
-				>
-			</File>
 			<File
 				RelativePath=".\targetver.h"
 				>
