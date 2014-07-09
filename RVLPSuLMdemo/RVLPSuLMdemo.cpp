@@ -235,37 +235,48 @@ int main(int argc, char* argv[])
 		}
 		else
 #endif
+		if(VS.m_Flags & RVLSYS_FLAGS_PC)
+		{
+			if(!RVLPCImport(VS.m_ImageFileName, PC, nPC))
+			{
+				MessageCanNotOpenFile(&GUI, VS.m_ImageFileName);
+
+				cvWaitKey();
+
+				return 0;
+			}
+		}
+		else
+		{
+			if(!RVLImportDisparityImage(VS.m_ImageFileName, pDepthImage, VS.m_Kinect.m_zToDepthLookupTable))
+				MessageCanNotOpenFile(&GUI, VS.m_ImageFileName);
+			{
+				cvWaitKey();
+
+				return 0;
+			}
+		}
 
 		if(bRecord)
 		{
 			if(VS.m_Flags & RVLSYS_FLAGS_PC)
 			{
-				if(!RVLPCImport(VS.m_ImageFileName, PC, nPC))
-					MessageCanNotOpenFile(&GUI, VS.m_ImageFileName);
-				else
-				{
-					int iSample = RVLGetFileNumber(VS.m_ImageFileName, "00000-PC.pcd");
+				int iSample = RVLGetFileNumber(VS.m_ImageFileName, "00000-PC.pcd");
 
-					char *PCFileName = RVLCreateFileName(VS.m_ImageFileName, "-PC.pcd", iSample, "-PC.obj");
+				char *PCFileName = RVLCreateFileName(VS.m_ImageFileName, "-PC.pcd", iSample, "-PC.obj");
 
-					RVLPCSaveToObj(PC, nPC, PCFileName);
+				RVLPCSaveToObj(PC, nPC, PCFileName);
 
-					delete[] PCFileName;
-				}
+				delete[] PCFileName;
 			}
 			else
 			{
-				if(!RVLImportDisparityImage(VS.m_ImageFileName, pDepthImage, VS.m_Kinect.m_zToDepthLookupTable))
-					MessageCanNotOpenFile(&GUI, VS.m_ImageFileName);
-				else
-				{
-					RVLSaveDepthImage(pDepthImage->Disparity, w, h, VS.m_ImageFileName, RVLKINECT_DEPTH_IMAGE_FORMAT_1MM, 
-						RVLKINECT_DEPTH_IMAGE_FORMAT_1MM);
+				RVLSaveDepthImage(pDepthImage->Disparity, w, h, VS.m_ImageFileName, RVLKINECT_DEPTH_IMAGE_FORMAT_1MM, 
+					RVLKINECT_DEPTH_IMAGE_FORMAT_1MM);
 
-					int iSample = RVLGetFileNumber(VS.m_ImageFileName, "00000-D.txt");
-				
-					RVLSetFileNumber(VS.m_ImageFileName, "00000-D.txt", iSample + 1);
-				}
+				int iSample = RVLGetFileNumber(VS.m_ImageFileName, "00000-D.txt");
+			
+				RVLSetFileNumber(VS.m_ImageFileName, "00000-D.txt", iSample + 1);
 			}
 		}
 		else
@@ -302,7 +313,7 @@ int main(int argc, char* argv[])
 
 			//VS.m_PSuLMBuilder.m_Flags |= RVLPSULMBUILDER_FLAG_KIDNAPPED;
 
-			VS.Update();
+			VS.Update(bKinect ? 0x00000000 : RVLPSULMBUILDER_CREATEMODEL_IMAGE_FROM_FILE);
 
 			t = clock() - t;	
 

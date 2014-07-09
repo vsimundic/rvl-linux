@@ -91,7 +91,7 @@ void CRVLPSuLMVS::Init(char * CfgFile2Name)
 
 }
 
-void CRVLPSuLMVS::Update()
+void CRVLPSuLMVS::Update(DWORD Flags)
 {
 	//m_Mem.Clear();
 
@@ -99,7 +99,7 @@ void CRVLPSuLMVS::Update()
 
 	m_MCMem[m_iMCMem].Clear();
 
-	PSuLMBasedRLMUpdate(RVLPSULMBUILDER_CREATEMODEL_FROM_IMAGE);
+	PSuLMBasedRLMUpdate(RVLPSULMBUILDER_CREATEMODEL_FROM_IMAGE | Flags);
 }
 
 void CRVLPSuLMVS::PSuLMBasedRLMUpdate(DWORD Flags)
