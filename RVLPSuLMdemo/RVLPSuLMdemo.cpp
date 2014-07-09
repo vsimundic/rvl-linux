@@ -235,51 +235,52 @@ int main(int argc, char* argv[])
 		}
 		else
 #endif
-		if(VS.m_Flags & RVLSYS_FLAGS_PC)
-		{
-			if(!RVLPCImport(VS.m_ImageFileName, PC, nPC))
-			{
-				MessageCanNotOpenFile(&GUI, VS.m_ImageFileName);
-
-				cvWaitKey();
-
-				return 0;
-			}
-		}
-		else
-		{
-			if(!RVLImportDisparityImage(VS.m_ImageFileName, pDepthImage, VS.m_Kinect.m_zToDepthLookupTable))
-				MessageCanNotOpenFile(&GUI, VS.m_ImageFileName);
-			{
-				cvWaitKey();
-
-				return 0;
-			}
-		}
-
 		if(bRecord)
 		{
 			if(VS.m_Flags & RVLSYS_FLAGS_PC)
 			{
-				int iSample = RVLGetFileNumber(VS.m_ImageFileName, "00000-PC.pcd");
+				if(!RVLPCImport(VS.m_ImageFileName, PC, nPC))
+				{
+					MessageCanNotOpenFile(&GUI, VS.m_ImageFileName);
 
-				char *PCFileName = RVLCreateFileName(VS.m_ImageFileName, "-PC.pcd", iSample, "-PC.obj");
+					cvWaitKey();
 
-				RVLPCSaveToObj(PC, nPC, PCFileName);
+					return 0;
+				}
+				else
+				{
+					int iSample = RVLGetFileNumber(VS.m_ImageFileName, "00000-PC.pcd");
 
-				delete[] PCFileName;
+					char *PCFileName = RVLCreateFileName(VS.m_ImageFileName, "-PC.pcd", iSample, "-PC.obj");
+
+					RVLPCSaveToObj(PC, nPC, PCFileName);
+
+					delete[] PCFileName;
+				}
 			}
 			else
 			{
-				RVLSaveDepthImage(pDepthImage->Disparity, w, h, VS.m_ImageFileName, RVLKINECT_DEPTH_IMAGE_FORMAT_1MM, 
-					RVLKINECT_DEPTH_IMAGE_FORMAT_1MM);
+				if(!RVLImportDisparityImage(VS.m_ImageFileName, pDepthImage, VS.m_Kinect.m_zToDepthLookupTable))
+				{
+					MessageCanNotOpenFile(&GUI, VS.m_ImageFileName);
+				
+					cvWaitKey();
 
-				int iSample = RVLGetFileNumber(VS.m_ImageFileName, "00000-D.txt");
-			
-				RVLSetFileNumber(VS.m_ImageFileName, "00000-D.txt", iSample + 1);
+					return 0;
+				}
+				else
+				{
+					RVLSaveDepthImage(pDepthImage->Disparity, w, h, VS.m_ImageFileName, RVLKINECT_DEPTH_IMAGE_FORMAT_1MM, 
+						RVLKINECT_DEPTH_IMAGE_FORMAT_1MM);
+
+					int iSample = RVLGetFileNumber(VS.m_ImageFileName, "00000-D.txt");
+				
+					RVLSetFileNumber(VS.m_ImageFileName, "00000-D.txt", iSample + 1);
+				}
 			}
 		}
-		else
+
+		if(!bRecord)
 		{
 			t = clock();			
 
