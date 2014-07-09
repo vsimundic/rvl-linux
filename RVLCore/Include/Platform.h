@@ -3,13 +3,13 @@
 //#define new new(_NORMAL_BLOCK, __FILE__, __LINE__)
 
 //OR
-#define _CRTDBG_MAP_ALLOC
-#include <stdlib.h>
-#include <crtdbg.h>
+//#define _CRTDBG_MAP_ALLOC
+//#include <stdlib.h>
+//#include <crtdbg.h>
 
 
 
-#define RVLWIN
+//#define RVLWIN
 #define RVLOPENNI
 #define RVLVTK
 //#define RVL3DOBJ2

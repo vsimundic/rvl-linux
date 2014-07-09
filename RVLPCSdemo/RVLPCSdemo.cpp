@@ -1,7 +1,7 @@
 // RVLPCSdemo.cpp : Defines the entry point for the console application.
 //
 
-#include "highgui.h"
+//#include "highgui.h"
 #include <stdio.h>
 #include <time.h>
 #include "RVLCore.h"

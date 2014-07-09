@@ -2,7 +2,7 @@
 //
 //////////////////////////////////////////////////////////////////////
 
-#include <highgui.h>
+//#include <highgui.h>
 #include "RVLCore.h"
 //#include "RVLObjectLib.h"
 #include "RVLDisplayVector.h"

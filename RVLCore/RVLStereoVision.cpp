@@ -11,7 +11,7 @@
 #include "svsclass.h"
 #endif
 
-#include <highgui.h>
+//#include <highgui.h>
 #include "RVLCore.h"
 
 #ifdef RVLSTEREO_CORRESPONDENCE_SAD_ARRAY

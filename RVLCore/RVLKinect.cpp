@@ -1,6 +1,7 @@
 #include "Platform.h"
 
-#include "cv.h"
+//#include "cv.h"
+#include "opencv2\opencv.hpp"
 #ifdef RVLOPENNI
 #include "OpenNI.h"
 #endif

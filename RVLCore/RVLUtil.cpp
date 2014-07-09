@@ -11,7 +11,8 @@
 #include <math.h>
 #include "RVLConst.h"
 #include "RVLWChain.h"
-#include "cv.h"
+//#include "cv.h"
+#include "opencv2\opencv.hpp"
 #include "RVLMem.h"
 #include "RVLPtrChain.h"
 #include "RVLMPtrChain.h"

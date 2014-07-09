@@ -16,7 +16,7 @@
 
 //#include "Platform.h"
 
-#include "highgui.h"
+//#include "highgui.h"
 #include "RVLCore.h"
 #include "RVLPCS.h"
 #include "Include\RVLPlanarSurfaceDetector.h"
@@ -1012,6 +1012,9 @@ void CRVLPlanarSurfaceDetector::LSPlane(RVL3DPOINT2 **Point3DPtrArray,
 										int n,
 										double &a, double &b, double &c)
 #else
+// When moving to the new version of OpenCV function cvReleaseMatHeader became unknown.
+// Hence, I commented it out in this function.
+// If this function is ever to be used, cvReleaseMatHeader must be substituted by some other appropriate function.
 void CRVLPlanarSurfaceDetector::LSPlane(RVL3DPOINT2 **Point3DPtrArray,		// Input: set A of 3D points
 										int n,								// Input: num. of pts. in A
 										CRVL2DRegion2 *pPlane,				// Output: Best LS-plane
@@ -1095,9 +1098,9 @@ void CRVLPlanarSurfaceDetector::LSPlane(RVL3DPOINT2 **Point3DPtrArray,		// Input
 	pPlane->m_c = p[2];
 #endif
 
-	cvReleaseMatHeader(&A_);
-	cvReleaseMatHeader(&v_);
-	cvReleaseMatHeader(&p_);
+	//cvReleaseMatHeader(&A_);
+	//cvReleaseMatHeader(&v_);
+	//cvReleaseMatHeader(&p_);
 }
 
 //	RANSAC-based detection of dominant planar surface in a set A of stereo points
@@ -1508,6 +1511,9 @@ int CRVLPlanarSurfaceDetector::RANSAC(CRVL2DRegion2 *pPlane,						//	Output:	dom
 //	of pPlane.
 //	Details are given in RVMath.doc, Section 1
 	
+// NOTE: When moving to the new version of OpenCV function cvReleaseMatHeader became unknown.
+// Hence, I commented it out in this function.
+// If this function is ever to be used, cvReleaseMatHeader must be substituted by some other appropriate function.
 
 #ifdef RVLPSDLAD_GRBIC
 BOOL CRVLPlanarSurfaceDetector::Plane(RVL3DPOINT2 *pPoint3D0, 
@@ -1561,17 +1567,17 @@ BOOL CRVLPlanarSurfaceDetector::Plane(RVL3DPOINT2 *pPoint3D0,
 		pPlane->m_b = p[1];
 		pPlane->m_c = p[2];	
 #endif
-		cvReleaseMatHeader(&A_);
-		cvReleaseMatHeader(&Z_);
-		cvReleaseMatHeader(&p_);
+		//cvReleaseMatHeader(&A_);
+		//cvReleaseMatHeader(&Z_);
+		//cvReleaseMatHeader(&p_);
 
 		return TRUE;
 	}
 	else
 	{
-		cvReleaseMatHeader(&A_);
-		cvReleaseMatHeader(&Z_);
-		cvReleaseMatHeader(&p_);
+		//cvReleaseMatHeader(&A_);
+		//cvReleaseMatHeader(&Z_);
+		//cvReleaseMatHeader(&p_);
 
 		return FALSE;
 	}
