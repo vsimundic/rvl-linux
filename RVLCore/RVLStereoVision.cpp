@@ -2075,6 +2075,8 @@ void CRVLStereoVision::CreateParamList(CRVLMem *pMem)
 	pParamData = m_ParamList.AddParam("StereoVision.Kinect.uc", RVLPARAM_TYPE_DOUBLE, &(m_KinectParams.depthUc0));
 	pParamData = m_ParamList.AddParam("StereoVision.Kinect.vc", RVLPARAM_TYPE_DOUBLE, &(m_KinectParams.depthVc0));
 
+	pParamData = m_ParamList.AddParam("StereoVision.maxz", RVLPARAM_TYPE_DOUBLE, &m_maxz);
+
 }
 
 void CRVLStereoVision::Get3DKinect(int u, int v, int d, double *X)

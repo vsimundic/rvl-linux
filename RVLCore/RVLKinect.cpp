@@ -12,6 +12,7 @@ CRVLKinect::CRVLKinect(void)
 	m_Flags = 0x00000000;
 
 	m_scale = 2;
+	m_RGBscale = 1;
 
 #ifdef RVLOPENNI
 	m_vpDevice = new openni::Device;
@@ -61,7 +62,7 @@ CRVLKinect::~CRVLKinect(void)
 // This licence should be read before distribution of the file containing this function
 // and all conditions required by this licence should be met.
 
-bool CRVLKinect::Init(void)
+bool CRVLKinect::Init(char *ONIFileName)
 {
 	openni::Device *pDevice = (openni::Device *)m_vpDevice;
 	openni::VideoStream *pDepthStream = (openni::VideoStream *)m_vpDepthStream;
@@ -69,7 +70,17 @@ bool CRVLKinect::Init(void)
 
 	openni::Status rc = openni::STATUS_OK;
 
-	const char* deviceURI = openni::ANY_DEVICE;
+	const char* deviceURI;
+	
+	if(ONIFileName)
+	{
+		deviceURI = ONIFileName;
+		m_Flags |= RVLKINECT_FLAG_ONI_FILE;
+	}
+	else if(m_Flags & RVLKINECT_FLAG_ONI_FILE)	
+		deviceURI = m_ONIFileName;
+	else
+		deviceURI = openni::ANY_DEVICE;
 
 	rc = openni::OpenNI::initialize();
 
@@ -96,7 +107,7 @@ bool CRVLKinect::Init(void)
 		openni::VideoMode dmod = openni::VideoMode();
 		dmod.setFps(30);
 		dmod.setResolution(640, 480);
-		dmod.setPixelFormat(openni::PixelFormat::PIXEL_FORMAT_DEPTH_1_MM);
+		dmod.setPixelFormat(openni::PixelFormat::PIXEL_FORMAT_DEPTH_100_UM);
 		pDepthStream->setVideoMode(dmod);
 		rc = pDepthStream->start();
 		if (rc != openni::STATUS_OK)
@@ -115,8 +126,9 @@ bool CRVLKinect::Init(void)
 	{
 		openni::VideoMode cmod = openni::VideoMode();
 		cmod.setFps(30);
-		cmod.setResolution(640, 480);
+		cmod.setResolution(320, 240);
 		cmod.setPixelFormat(openni::PixelFormat::PIXEL_FORMAT_RGB888);
+		//cmod.setPixelFormat(openni::PixelFormat::PIXEL_FORMAT_YUV422);
 		pColorStream->setVideoMode(cmod);
 		rc = pColorStream->start();
 		if (rc != openni::STATUS_OK)
@@ -142,6 +154,8 @@ bool CRVLKinect::Init(void)
 	//if(pDevice->isImageRegistrationModeSupported(openni::IMAGE_REGISTRATION_DEPTH_TO_COLOR))
 	//	rc = pDevice->setImageRegistrationMode(openni::IMAGE_REGISTRATION_DEPTH_TO_COLOR);
 
+	m_vpPlaybackControl = pDevice->getPlaybackControl();
+
 	return TRUE;
 }
 
@@ -154,12 +168,14 @@ bool CRVLKinect::GetImages(	short *pDepth,
 							IplImage *pImageRGB,						
 							IplImage *pImageDepth, 
 							IplImage *pImageGS,
-							unsigned int Format)
+							unsigned int Format,
+							int frameIdx)
 {
 	openni::Device *pDevice = (openni::Device *)m_vpDevice;
 	openni::VideoStream *pDepthStream = (openni::VideoStream *)m_vpDepthStream;
 	openni::VideoStream *pColorStream = (openni::VideoStream *)m_vpColorStream;
 	openni::VideoStream **pStreams = (openni::VideoStream **)m_vpStream;
+	openni::PlaybackControl *pPlaybackControl = (openni::PlaybackControl *)m_vpPlaybackControl;
 
 	openni::VideoFrameRef DepthFrame;
 	openni::VideoFrameRef ColorFrame;
@@ -189,6 +205,13 @@ bool CRVLKinect::GetImages(	short *pDepth,
 
 		if(rc != openni::STATUS_OK)
 			return false;
+
+		if(m_Flags & RVLKINECT_FLAG_ONI_FILE)
+		{
+			pPlaybackControl->seek(*pDepthStream, frameIdx);
+
+			pPlaybackControl->seek(*pColorStream, frameIdx);
+		}
 
 		switch(changedIndex){
 		case 0:
@@ -293,8 +316,8 @@ bool CRVLKinect::GetImages(	short *pDepth,
 
 			bColor = true;
 
-			width = ColorFrame.getWidth() / m_scale;
-			height = ColorFrame.getHeight() / m_scale;
+			width = ColorFrame.getWidth() / m_RGBscale;
+			height = ColorFrame.getHeight() / m_RGBscale;
 
 			if(pImageRGB)
 			{		
@@ -310,14 +333,14 @@ bool CRVLKinect::GetImages(	short *pDepth,
 				{
 					pPix = pRGBRow + m_scale * (width - 1);
 
-					for (u = 0; u < width; u++, pPix -= m_scale)
+					for (u = 0; u < width; u++, pPix -= m_RGBscale)
 					{
 						*(pPixRGB++) = pPix->b;
 						*(pPixRGB++) = pPix->g;
 						*(pPixRGB++) = pPix->r;
 					}
 
-					pRGBRow += (m_scale * rowSizeRGB);
+					pRGBRow += (m_RGBscale * rowSizeRGB);
 				}	
 
 				if(pImageGS)
@@ -397,6 +420,21 @@ void CRVLKinect::ConvertDepthToColor(int u, int v, int z, int *puRGB, int *pvRGB
 
 	*puRGB = uRGB / m_scale;
 	*pvRGB = vRGB / m_scale;
+}
+
+int CRVLKinect::GetNoONIFrames(void)
+{
+	openni::VideoStream *pDepthStream = (openni::VideoStream *)m_vpDepthStream;
+	openni::PlaybackControl *pPlaybackControl = (openni::PlaybackControl *)(m_vpPlaybackControl);
+
+	return pPlaybackControl->getNumberOfFrames(*pDepthStream);
+}
+
+void CRVLKinect::SetPlaybeckSpeed(float speed)
+{
+	openni::PlaybackControl *pPlaybackControl = (openni::PlaybackControl *)(m_vpPlaybackControl);
+
+	pPlaybackControl->setSpeed(speed);
 }
 
 #endif	//RVLOPENNI

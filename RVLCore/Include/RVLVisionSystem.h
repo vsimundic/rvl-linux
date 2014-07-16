@@ -24,7 +24,7 @@ public:
 	RVLRECT m_ROI;
 	CRVLStereoVision m_StereoVision;
 	CRVLTimer *m_pTimer;
-	char *m_ImageFileName;
+	char *m_ImageFileName;	
 	CRVLKinect m_Kinect;
 	int m_Mem0Size;
 	int m_MemSize;

@@ -68,7 +68,8 @@ int main(int argc, char* argv[])
 #ifdef RVLOPENNI
 	// initialize kinect
 
-	bool bKinect = VS.m_Kinect.Init();
+	//bool bKinect = VS.m_Kinect.Init();
+	bool bKinect = VS.m_Kinect.Init("C:\\RVL\\Experiments\\Kinect\\Exp140715");
 
 	if(bKinect)
 		VS.m_Flags &= ~RVLSYS_FLAGS_PC;

@@ -141,11 +141,15 @@ int main(int argc, char* argv[])
 	char VTKMessageConst[] = "3D model in PLY-format saved in ";
 	char *VTKMessage = new char[strlen(VTKMessageConst) + strlen(VTK3DModelFileName) + 1];
 	
+	int iONISample = 0;
+	int ONISpeed = 1;
+
 	int key;
 	//int iSample;
 	int nObjects = 1;
 	bool bRefresh;
-	bool bNextImage;
+	bool bNextImage = true;
+	bool bNextImageSelected;
 	clock_t t;
 	char str[200];
 	int iTextLine;
@@ -153,7 +157,7 @@ int main(int argc, char* argv[])
 
 	do
 	{
-		DepthMapFormat = RVLKINECT_DEPTH_IMAGE_FORMAT_DISPARITY;
+		DepthMapFormat = (VS.m_PSD.m_Flags & RVLPSD_FLAG_MM ? RVLKINECT_DEPTH_IMAGE_FORMAT_1MM : RVLKINECT_DEPTH_IMAGE_FORMAT_DISPARITY);
 
 #ifdef RVLOPENNI
 		if(bKinect)
@@ -163,7 +167,8 @@ int main(int argc, char* argv[])
 			if(bRecord)
 				DepthMapFormat = RVLKINECT_DEPTH_IMAGE_FORMAT_1MM;
 
-			VS.m_Kinect.GetImages(pDepthImage->Disparity, pRGBImage, NULL, pGSImage, DepthMapFormat);
+			if(bNextImage)
+				VS.m_Kinect.GetImages(pDepthImage->Disparity, pRGBImage, NULL, pGSImage, DepthMapFormat, iONISample);
 		}
 		else
 #endif
@@ -306,11 +311,28 @@ int main(int argc, char* argv[])
 
 				iTextLine = 0;
 
+				if(bKinect)
+				{
+					if(VS.m_Kinect.m_Flags & RVLKINECT_FLAG_ONI_FILE)
+					{
+						sprintf(str, "Sample %d", iONISample);
+
+						cvPutText(pFig->m_pImage, str, cvPoint(0, (++iTextLine) * pFig->m_FontSize), &pFig->m_Font,  cvScalar(255, 0, 0));
+					}
+				}
+				else
+					cvPutText(pFig->m_pImage, VS.m_ImageFileName, cvPoint(0, (++iTextLine) * pFig->m_FontSize), &pFig->m_Font,  cvScalar(255, 0, 0));
+
 				sprintf(str, "Exec. Time = %4.0f ms", 1000.0f * ((float)t)/CLOCKS_PER_SEC);
 
 				cvPutText(pFig->m_pImage, str, cvPoint(0, (++iTextLine) * pFig->m_FontSize), &pFig->m_Font,  cvScalar(255, 0, 0));
 
-				sprintf(str, "TT = %d", (VS.m_Flags & RVLSYS_FLAGS_PC ? VS.m_PSD.m_MeshTol : VS.m_PSD.m_uvdTol));
+				sprintf(str, "Exec. Time = %4.0f ms", 1000.0f * ((float)t)/CLOCKS_PER_SEC);
+
+				cvPutText(pFig->m_pImage, str, cvPoint(0, (++iTextLine) * pFig->m_FontSize), &pFig->m_Font,  cvScalar(255, 0, 0));
+
+				sprintf(str, "TT = %d", ((VS.m_Flags & RVLSYS_FLAGS_PC) || (VS.m_PSD.m_Flags & RVLPSD_FLAG_MM) ? 
+					VS.m_PSD.m_MeshTol : VS.m_PSD.m_uvdTol));
 
 				cvPutText(pFig->m_pImage, str, cvPoint(0, (++iTextLine) * pFig->m_FontSize), &pFig->m_Font,  cvScalar(255, 0, 0));
 
@@ -333,6 +355,7 @@ int main(int argc, char* argv[])
 
 			bNextImage = true;
 			bRefresh = false;
+			bNextImageSelected = false;
 
 			switch(key){
 			case 'm':
@@ -373,6 +396,8 @@ int main(int argc, char* argv[])
 
 				VS.m_Kinect.RegisterDepthToColor((DisplayBitmap != 0));
 
+				bRefresh = true;
+
 				break;
 #endif
 			case 'r':
@@ -402,7 +427,7 @@ int main(int argc, char* argv[])
 
 					Renderer.Save2PLY(VTK3DModelFileName);
 
-					iVTK3DModel++;
+					//iVTK3DModel++;
 
 					strcpy(VTKMessage, VTKMessageConst);
 					strcat(VTKMessage, VTK3DModelFileName);
@@ -414,8 +439,64 @@ int main(int argc, char* argv[])
 
 				break;
 #endif
+			case 0x00000008:	// Backspace
+				iONISample -= ONISpeed;
+
+				bNextImageSelected = true;
+
+				break;
+			case 0x00210000:	// PgUp
+				if(bKinect && (VS.m_Kinect.m_Flags & RVLKINECT_FLAG_ONI_FILE))
+				{
+					if(ONISpeed < 100)
+						ONISpeed *= 10;
+				}
+
+				bRefresh = true;
+
+				break;
+			case 0x00220000:	// PgDn
+				if(bKinect && (VS.m_Kinect.m_Flags & RVLKINECT_FLAG_ONI_FILE))
+				{
+					if(ONISpeed > 1)
+					{
+						ONISpeed /= 10;
+
+						if(ONISpeed < 1)
+							ONISpeed = 1;
+					}
+				}
+
+				bRefresh = true;
+
+				break;
+			case 0x00230000:	// End
+				if(bKinect && (VS.m_Kinect.m_Flags & RVLKINECT_FLAG_ONI_FILE))
+				{
+					iONISample = VS.m_Kinect.GetNoONIFrames() - 1;
+
+					bNextImageSelected = true;
+				}
+
+				break;
+			case 0x00240000:	// Home
+				if(bKinect && (VS.m_Kinect.m_Flags & RVLKINECT_FLAG_ONI_FILE))
+				{
+					iONISample = 0;
+
+					bNextImageSelected = true;
+				}
+
+				break;
+			case 0x00250000:
+				if(VS.m_ConvexSegmentThr > 0)
+					VS.m_ConvexSegmentThr--;
+
+				bNextImage = false;
+
+				break;
 			case 0x00260000:
-				if(VS.m_Flags & RVLSYS_FLAGS_PC)
+				if((VS.m_Flags & RVLSYS_FLAGS_PC) || (VS.m_PSD.m_Flags & RVLPSD_FLAG_MM))
 					VS.m_PSD.m_MeshTol++;
 				else
 					VS.m_PSD.m_uvdTol++;
@@ -423,8 +504,14 @@ int main(int argc, char* argv[])
 				bNextImage = false;
 
 				break;
+			case 0x00270000:
+				VS.m_ConvexSegmentThr++;
+
+				bNextImage = false;
+
+				break;
 			case 0x00280000:
-				if(VS.m_Flags & RVLSYS_FLAGS_PC)
+				if((VS.m_Flags & RVLSYS_FLAGS_PC) || (VS.m_PSD.m_Flags & RVLPSD_FLAG_MM))
 				{
 					if(VS.m_PSD.m_MeshTol > 1)
 						VS.m_PSD.m_MeshTol--;
@@ -436,25 +523,20 @@ int main(int argc, char* argv[])
 				}
 
 				bNextImage = false;
-
-				break;
-			case 0x00270000:
-				VS.m_ConvexSegmentThr++;
-
-				bNextImage = false;
-
-				break;
-			case 0x00250000:
-				if(VS.m_ConvexSegmentThr > 0)
-					VS.m_ConvexSegmentThr--;
-
-				bNextImage = false;
 			}
 		}
 		while(bRefresh && !bContinuous);
 
-		if(!bKinect && bNextImage)
-			RVLGetNextFileName(VS.m_ImageFileName, "00000-D.txt", 10000);
+		if(bNextImage)
+		{
+			if(bKinect)
+			{
+				if((VS.m_Kinect.m_Flags & RVLKINECT_FLAG_ONI_FILE) && !bNextImageSelected)
+					iONISample += ONISpeed;
+			}
+			else
+				RVLGetNextFileName(VS.m_ImageFileName, "00000-D.txt", 10000);
+		}
 
 		if(!bRecord)
 			VS.m_Mem.Clear();

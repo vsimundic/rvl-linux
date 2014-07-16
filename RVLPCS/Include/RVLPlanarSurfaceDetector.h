@@ -629,6 +629,7 @@ public:
 														DWORD Flags = 0x00000000);
 	void Gen3DMeshObjectHierarchy(CRVL3DMeshObject *pRootMO);
 	int GenRelListFromWER(CRVLC2D *pTriangleSetLevel1,CRVLC2D *pTriangleSetLevel3);
+	void GetNeighbors(CRVLC2D *pSegmentSet);
 	void Display2DRegionMap(PIX_ARRAY *pOutPixArray);
 	CRVLPlanarSurfaceDetector();
 	virtual ~CRVLPlanarSurfaceDetector();

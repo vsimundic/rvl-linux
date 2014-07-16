@@ -15,8 +15,8 @@
 #define RVLSUMMX3X3(X, Y, Z)	Z[0] = X[0] + Y[0]; Z[1] = X[1] + Y[1]; Z[2] = X[2] + Y[2]; Z[3] = X[3] + Y[3]; Z[4] = X[4] + Y[4]; Z[5] = X[5] + Y[5]; Z[6] = X[6] + Y[6]; Z[7] = X[7] + Y[7]; Z[8] = X[8] + Y[8]; 
 // Z = X(3x3) - Y(3x3)
 #define RVLDIFMX3X3(X, Y, Z)	Z[0] = X[0] - Y[0]; Z[1] = X[1] - Y[1]; Z[2] = X[2] - Y[2]; Z[3] = X[3] - Y[3]; Z[4] = X[4] - Y[4]; Z[5] = X[5] - Y[5]; Z[6] = X[6] - Y[6]; Z[7] = X[7] - Y[7]; Z[8] = X[8] - Y[8]; 
-// Z = X(3x3) + X(3x3)' (only diagonal + upper triangle are computed)
-#define RVLSUMMX3X3T2UT(X, Y, Z)	Z[0] = X[0] + X[0]; Z[1] = X[1] + X[3]; Z[2] = X[2] + Y[6]; Z[4] = X[4] + Y[4]; Z[5] = X[5] + Y[7]; Z[8] = X[8] + Y[8]; 
+// Z = X(3x3) + Y(3x3)' (only diagonal + upper triangle are computed)
+#define RVLSUMMX3X3T2UT(X, Y, Z)	Z[0] = X[0] + Y[0]; Z[1] = X[1] + Y[3]; Z[2] = X[2] + Y[6]; Z[4] = X[4] + Y[4]; Z[5] = X[5] + Y[7]; Z[8] = X[8] + Y[8]; 
 // Z = X(3x3) + Y(3x3) (only diagonal + upper triangle are computed)
 #define RVLSUMMX3X3UT(X, Y, Z)	Z[0] = X[0] + Y[0]; Z[1] = X[1] + Y[1]; Z[2] = X[2] + Y[2]; Z[4] = X[4] + Y[4]; Z[5] = X[5] + Y[5]; Z[8] = X[8] + Y[8]; 
 // X = 0(3x1)
@@ -138,6 +138,18 @@
 #define RVLCROSSPRODUCT3(x, y, z)		z[0] = x[1] * y[2] - x[2] * y[1];z[1] = x[2] * y[0] - x[0] * y[2];z[2] = x[0] * y[1] - x[1] * y[0];
 // normalize vector x(3x1)
 #define RVLNORM3(x, len)	{len = sqrt(RVLDOTPRODUCT3(x, x)); RVLSCALE3VECTOR2(x, len, x);}
+#define RVLSKEW(x, A)\
+{\
+	A[0 * 3 + 0] = 0.0;\
+	A[0 * 3 + 1] = -x[2];\
+	A[0 * 3 + 2] = x[1];\
+	A[1 * 3 + 0] = x[2];\
+	A[1 * 3 + 1] = 0.0;\
+	A[1 * 3 + 2] = -x[0];\
+	A[2 * 3 + 0] = -x[1];\
+	A[2 * 3 + 1] = x[0];\
+	A[2 * 3 + 2] = 0.0;\
+}
 // A = x(3x1) * y(3x1)'
 #define RVLMULVECT3VECT3T(x, y, A)\
 {\
@@ -496,10 +508,19 @@ void RVLSetFileNumber(char *FileName, char *Extension, int n);
 int RVLGetFileNumber(char *FileName, char *Extension);
 BOOL RVLGetNextFileName(char *FileName, char *Extension, int maxiSample);
 void RVL3x3x3BlockMxTo6x6(double *PSrc, double *PTgt);
+void RVL6DOFCovTransf(double *C,
+					  double *Jqq,
+					  double *Jqt,
+					  double *Jtt,
+					  double *COut);
 void RVL3DOFInvTransfUncert(double csalphaAB, 
 							double snalphaAB,
 							double txBA,
 							double tyBA,
+							double *C,
+							double *invC);
+void RVL6DOFInvTransfUncert(double *R,
+							double *t,
 							double *C,
 							double *invC);
 void RVLZoom(IplImage *pSrcImage, IplImage *pTgtImage, int ZoomFactor);

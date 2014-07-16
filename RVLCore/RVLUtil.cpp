@@ -2638,6 +2638,87 @@ void RVL3x3x3BlockMxTo6x6(double *PSrc, double *PTgt)
 	PTgt[5*6+5] = PSrc[2*9+2*3+2];
 }
 
+// Given 6DOF transformation, represented by rotation matrix R and translation vector t, and its covariance matrix C, 
+// the following function computes the covariance matirx invC of the inverse transformation 
+// The mathematics for this function is given in RVLMath.doc, chapter "Pose Uncertainty Propagation"
+
+void RVL6DOFInvTransfUncert(double *R,
+							double *t,
+							double *C,
+							double *invC)
+{
+	double Jqq[3*3];
+
+	RVLMXEL(Jqq, 3, 0, 0) = -RVLMXEL(R, 3, 0, 0);
+	RVLMXEL(Jqq, 3, 0, 1) = -RVLMXEL(R, 3, 1, 0);
+	RVLMXEL(Jqq, 3, 0, 2) = -RVLMXEL(R, 3, 2, 0);
+	RVLMXEL(Jqq, 3, 1, 0) = -RVLMXEL(R, 3, 0, 1);
+	RVLMXEL(Jqq, 3, 1, 1) = -RVLMXEL(R, 3, 1, 1);
+	RVLMXEL(Jqq, 3, 1, 2) = -RVLMXEL(R, 3, 2, 1);
+	RVLMXEL(Jqq, 3, 2, 0) = -RVLMXEL(R, 3, 0, 2);
+	RVLMXEL(Jqq, 3, 2, 1) = -RVLMXEL(R, 3, 1, 2);
+	RVLMXEL(Jqq, 3, 2, 2) = -RVLMXEL(R, 3, 2, 2);
+
+	double Jqt[3*3];
+
+	RVLSKEW(t, Jqt)
+
+	double Jtt[3*3];
+
+	RVLMXEL(Jtt, 3, 0, 0) = -RVLMXEL(R, 3, 0, 0);
+	RVLMXEL(Jtt, 3, 0, 1) = -RVLMXEL(R, 3, 0, 1);
+	RVLMXEL(Jtt, 3, 0, 2) = -RVLMXEL(R, 3, 0, 2);
+	RVLMXEL(Jtt, 3, 1, 0) = -RVLMXEL(R, 3, 1, 0);
+	RVLMXEL(Jtt, 3, 1, 1) = -RVLMXEL(R, 3, 1, 1);
+	RVLMXEL(Jtt, 3, 1, 2) = -RVLMXEL(R, 3, 1, 2);
+	RVLMXEL(Jtt, 3, 2, 0) = -RVLMXEL(R, 3, 2, 0);
+	RVLMXEL(Jtt, 3, 2, 1) = -RVLMXEL(R, 3, 2, 1);
+	RVLMXEL(Jtt, 3, 2, 2) = -RVLMXEL(R, 3, 2, 2);
+
+	RVL6DOFCovTransf(C, Jqq, Jqt, Jtt, invC);
+}
+
+// COut = J * C * J', where COut and C are 6x6 covarance matrices and J a 6x6 matrix both represented by 3x3x3 blocks
+// C = [Cqq  Cqt]   J = [Jqq 0  ]
+//     [Cqt' Ctt]       [Jqt Jtt]
+// Cout = [Jqq*Cqq*Jqq'                Jqq*Cqq*Jqt'+ Jqq*Cqt*Jtt'                        ]
+//        [Jqt*Cqq*Jqq'+Jtt*Cqt'*Jqq'  Jqt*Cqq*Jqt'+Jtt*Cqt'*Jqt'+Jqt*Cqt*Jtt'+Jtt*Ctt*Jtt']
+// The mathematics for this function is given in RVLMath.doc, chapter "Pose Uncertainty Propagation"
+// NOTE: The funciton uses RVLMatrixA33, RVLMatrixB33 and RVLMatrixC33
+
+void RVL6DOFCovTransf(double *C,
+					  double *Jqq,
+					  double *Jqt,
+					  double *Jtt,
+					  double *COut)
+{
+	double *Cqq = C;
+	double *Cqt = C + 3 * 3;
+	double *Ctt = Cqt + 3 * 3;
+	double *CqqOut = COut;
+	double *CqtOut = COut + 3 * 3;
+	double *CttOut = CqtOut + 3 * 3;
+
+	// CqqOut = Jqq*Cqq*Jqq'
+	RVLCOV3DTRANSF(Cqq, Jqq, CqqOut, RVLMatrixA33)
+
+	// CqtOut = Jqq*Cqq*Jqt'+ Jqq*Cqt*Jtt'
+	RVLMULCOV3MX3X3T(Cqq, Jqt, RVLMatrixA33)				// RVLMatrixA33 = Cqq*Jqt'
+	RVLCOMPLETESIMMX3(Cqq)
+	RVLMXMUL3X3T2(Cqt, Jtt, RVLMatrixB33)					// RVLMatrixB33 = Cqt*Jtt'
+	RVLSUMMX3X3(RVLMatrixA33, RVLMatrixB33, RVLMatrixA33)	// RVLMatrixA33 = Cqq*Jqt'+Cqt*Jtt'
+	RVLMXMUL3X3(Jqq, RVLMatrixA33, CqtOut)
+
+	// CttOut = Jqt*Cqq*Jqt'+Jtt*Cqt'*Jqt'+Jqt*Cqt*Jtt'+Jtt*Ctt*Jtt'	
+	RVLMULMX3X3UT(Jqt, RVLMatrixA33, CttOut)				// CttOut = Jqt*(Cqq*Jqt'+Cqt*Jtt')
+	RVLCOV3DTRANSF(Ctt, Jtt, RVLMatrixA33, RVLMatrixB33)	// RVLMatrixA33 = Jtt*Ctt*Jtt'
+	RVLCOMPLETESIMMX3(RVLMatrixA33)
+	RVLSUMMX3X3(CttOut, RVLMatrixA33, CttOut)				// CttOut = Jqt*Cqq*Jqt'+Jqt*Cqt*Jtt'+Jtt*Ctt*Jtt'
+	RVLMXMUL3X3(Jqt, Cqt, RVLMatrixA33)						// RVLMatrixA33 = Jqt*Cqt
+	RVLMXMUL3X3T2(Jtt, RVLMatrixA33, RVLMatrixB33)			// RVLMatrixB33 = Jtt*(Jqt*Cqt)'
+	RVLSUMMX3X3(CttOut, RVLMatrixB33, CttOut)
+}
+
 // Given 3DOF transformation represented by the orientation angle alphaAB and translation vector [txAB tyAB]' and its 
 // covariance matrix C, the following function computes the covariance matirx invC of the inverse transformation 
 // represented by the orientation angle alphaBA and translation vector [txBA tyBA]'.

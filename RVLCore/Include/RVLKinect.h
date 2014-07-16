@@ -1,6 +1,7 @@
 #pragma once
 
 #define RVLKINECT_FLAG_DEVICE	0x00000001
+#define RVLKINECT_FLAG_ONI_FILE	0x00000002
 
 #define RVLKINECT_DEPTH_IMAGE_FORMAT_DISPARITY	0
 #define RVLKINECT_DEPTH_IMAGE_FORMAT_1MM		1
@@ -14,16 +15,19 @@ public:
 	CRVLKinect(void);
 	virtual ~CRVLKinect(void);
 #ifdef RVLOPENNI
-	bool Init(void);
+	bool Init(char *ONIFileName = NULL);
 	bool GetImages(	short *pDepth,
 					IplImage *pImageRGB = NULL,						
 					IplImage *pImageDepth = NULL, 
 					IplImage *pImageGS = NULL,
-					unsigned int Format = RVLKINECT_DEPTH_IMAGE_FORMAT_DISPARITY);
+					unsigned int Format = RVLKINECT_DEPTH_IMAGE_FORMAT_DISPARITY,
+					int frameIdx = 0);
 	void RegisterDepthToColor(bool bRegister);
 	void GetParams();
 	void ConvertDepthToWorld(int u, int v, int z, float *px, float *py, float *pz);
 	void ConvertDepthToColor(int u, int v, int z, int *puRGB, int *pvRGB);
+	int GetNoONIFrames(void);
+	void SetPlaybeckSpeed(float speed);
 #endif
 
 public:
@@ -31,6 +35,7 @@ public:
 	void *m_vpDevice;
 	void *m_vpDepthStream;
 	void *m_vpColorStream;
+	void *m_vpPlaybackControl;
 	void *m_vpCoordinateConverter;
 	void *m_vpStream[2];
 	short *m_zToDepthLookupTable;
@@ -39,4 +44,6 @@ public:
 	double m_uc;
 	double m_vc;
 	int m_scale;
+	int m_RGBscale;
+	char *m_ONIFileName;
 };
