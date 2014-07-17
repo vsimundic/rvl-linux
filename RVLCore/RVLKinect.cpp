@@ -107,7 +107,8 @@ bool CRVLKinect::Init(char *ONIFileName)
 		openni::VideoMode dmod = openni::VideoMode();
 		dmod.setFps(30);
 		dmod.setResolution(640, 480);
-		dmod.setPixelFormat(openni::PixelFormat::PIXEL_FORMAT_DEPTH_100_UM);
+		dmod.setPixelFormat(m_Flags & RVLKINECT_FLAG_100UM ? openni::PixelFormat::PIXEL_FORMAT_DEPTH_100_UM :
+			openni::PixelFormat::PIXEL_FORMAT_DEPTH_1_MM);
 		pDepthStream->setVideoMode(dmod);
 		rc = pDepthStream->start();
 		if (rc != openni::STATUS_OK)
@@ -183,7 +184,7 @@ bool CRVLKinect::GetImages(	short *pDepth,
 	bool bDepth = false;
 	bool bColor = (pImageRGB == NULL);
 
-	int changedIndex;
+	int changedIndex = -1;
 	int width, height;
 	short *pDepth_;
 	const openni::DepthPixel* pDepthRow;
@@ -201,21 +202,33 @@ bool CRVLKinect::GetImages(	short *pDepth,
 
 	while(!bDepth || !bColor)
 	{
-		openni::Status rc = openni::OpenNI::waitForAnyStream(pStreams, 2, &changedIndex);
-
-		if(rc != openni::STATUS_OK)
-			return false;
-
 		if(m_Flags & RVLKINECT_FLAG_ONI_FILE)
+			changedIndex++;
+		else
 		{
-			pPlaybackControl->seek(*pDepthStream, frameIdx);
+			openni::Status rc = openni::OpenNI::waitForAnyStream(pStreams, 2, &changedIndex);
 
-			pPlaybackControl->seek(*pColorStream, frameIdx);
+			if(rc != openni::STATUS_OK)
+				return false;
 		}
 
 		switch(changedIndex){
 		case 0:
+			if(m_Flags & RVLKINECT_FLAG_ONI_FILE)
+				pPlaybackControl->seek(*pDepthStream, frameIdx);
+
 			pDepthStream->readFrame(&DepthFrame);
+
+			if(m_Flags & RVLKINECT_FLAG_ONI_FILE)
+			{
+				//pPlaybackControl->seek(*pColorStream, DepthFrame.getFrameIndex() - 3);
+
+				pColorStream->readFrame(&ColorFrame);
+
+				//pPlaybackControl->seek(*pColorStream, ColorFrame.getFrameIndex() - 1);
+
+				//pColorStream->readFrame(&ColorFrame);
+			}
 
 			if(!DepthFrame.isValid())
 				continue;
@@ -309,10 +322,13 @@ bool CRVLKinect::GetImages(	short *pDepth,
 			
 			break;
 		case 1:
-			pColorStream->readFrame(&ColorFrame);
+			if((m_Flags & RVLKINECT_FLAG_ONI_FILE) == 0)
+			{
+				pColorStream->readFrame(&ColorFrame);
 
-			if(!ColorFrame.isValid())
-				continue;	
+				if(!ColorFrame.isValid())
+					continue;	
+			}
 
 			bColor = true;
 
@@ -331,7 +347,7 @@ bool CRVLKinect::GetImages(	short *pDepth,
 
 				for (v = 0; v < height; v++)
 				{
-					pPix = pRGBRow + m_scale * (width - 1);
+					pPix = pRGBRow + m_RGBscale * (width - 1);
 
 					for (u = 0; u < width; u++, pPix -= m_RGBscale)
 					{

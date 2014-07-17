@@ -95,6 +95,7 @@ void RVLDisplayDisparityMapColor(RVLDISPARITYMAP *pDisparityMap,
 								 unsigned int Format = RVLKINECT_DEPTH_IMAGE_FORMAT_DISPARITY);
 BOOL RVLImportDisparityImage(char *FileName, 
 	 					     RVLDISPARITYMAP *pDisparityImage,
+							 unsigned int &DepthFormat,
 							 short *zToDepthLookupTable = NULL);
 void RVLSaveStereoPts(FILE *fp,
 					  RVL3DPOINT2 *PtArray,

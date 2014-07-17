@@ -10,6 +10,193 @@
 #include "RVLVTK.h"
 #endif
 
+CRVL3DMeshObject* GenMeshObjects(CRVLMPtrChain *pTriangleList, IplImage* pImg, int nObjects, CRVLClass *pClass)
+
+{
+
+      CRVL3DMeshObject* objects;// = new CRVL3DMeshObject[nObjects];
+
+      RVLMEM_ALLOC_STRUCT_ARRAY(pClass->m_pMem2, CRVL3DMeshObject, nObjects, objects);
+
+      //initializing objects
+
+      CRVL3DMeshObject* parent = new CRVL3DMeshObject();
+
+      parent->m_pClass = pClass;
+
+      parent->InitParent();
+
+      for (int i = 0; i < nObjects; i++)
+
+      {
+
+            objects[i].m_pClass = pClass;
+
+            objects[i].Init();
+
+            objects[i].InitChild();
+
+            objects[i].rootMeshObject = parent;
+
+            objects[i].parentMeshObject = parent;
+
+      }
+
+ 
+
+      //Iterating through triangles
+
+      RVL3DPOINT2 **ppPt, **pPtArrayEnd; //needed for setting iPixRGB
+
+      CRVL2DRegion2 *pTriangle;
+
+      pTriangleList->Start();
+
+      while(pTriangleList->m_pNext)
+
+      {
+
+            pTriangle = (CRVL2DRegion2 *)(pTriangleList->GetNext());
+
+            // pTriangle is a pointer to an instance of the class
+
+            // CRVL2DRegion2 representing a mesh triangle. 
+
+            // Now you can do whatever you want with the triangle.
+
+            if(pTriangle->m_Flags & RVLOBJ2_FLAG_REJECTED)
+
+                  continue;
+
+            RVLQLIST_PTR_ENTRY *pEntry;
+
+            RVLMEM_ALLOC_STRUCT(pClass->m_pMem, RVLQLIST_PTR_ENTRY, pEntry);
+
+            pEntry->Ptr = pTriangle;
+
+            RVLQLIST_ADD_ENTRY(objects[pTriangle->m_Label].m_FaceList, pEntry);
+
+            objects[pTriangle->m_Label].m_noFaces++;
+
+ 
+
+            //Running through all points (because of registration, depth and RGB pixels have same adress)
+
+            pPtArrayEnd = pTriangle->m_pPoint3DArray + pTriangle->m_n3DPts;
+
+            for(ppPt = pTriangle->m_pPoint3DArray; ppPt < pPtArrayEnd; ppPt++)
+
+                  (*ppPt)->iPixRGB = (*ppPt)->iPix;                    
+
+      }
+
+ 
+
+      //Generating Histograms
+
+      float histBase[] = {8.0, 8.0, 0.0}; //bins per dimension of color histogram
+
+      for (int i = 0; i < nObjects; i++)
+
+      {
+
+            objects[i].RVLCalculateHSVHist(pImg, histBase, false);
+
+      }
+
+ 
+
+      //returning objects
+
+      return objects;
+
+}
+
+ 
+
+void PruneTrianglesFromObjects(CRVL3DMeshObject* objects, int nObjects)
+
+{
+
+      CRVL2DRegion2 *pTriangle;
+
+      RVLQLIST_PTR_ENTRY *pElement;
+	  float intersectVal = 0.0;
+	  float *intersectionHelperArray = new float[32*32];
+
+      //iterating through objects
+
+      for (int i = 0; i < nObjects; i++)
+
+      {
+		  float nMatchedPoints = 0.0;
+		  float nSaturatedPoints = 0.0;
+		  int hue, sat;
+		  int base = (int)(objects[i].m_histRGB_base[0]);
+			RVLQLIST_HIST_ENTRY *pHistEntry;
+			pHistEntry = (RVLQLIST_HIST_ENTRY*)(objects[i].m_histRGB->pFirst);
+			while(pHistEntry)
+			{
+				hue = pHistEntry->adr / base;
+				sat = pHistEntry->adr - hue * base;
+				if(sat >= 1)
+				{
+					nSaturatedPoints += pHistEntry->value;
+
+					//if(hue == 0 || hue == 6 || hue == 7)
+					//if(hue >= 1 && hue <= 4)
+					if(hue == 4 || hue == 5)
+						nMatchedPoints += pHistEntry->value;
+				}
+				pHistEntry = (RVLQLIST_HIST_ENTRY*)pHistEntry->pNext;
+			}
+
+			if(nMatchedPoints / nSaturatedPoints < 0.8)
+			{
+				pElement = (RVLQLIST_PTR_ENTRY*)objects[i].m_FaceList->pFirst;   //first element
+
+				while(pElement)
+				{
+					  pTriangle = (CRVL2DRegion2 *)(pElement->Ptr);
+
+					  pTriangle->m_Flags |= RVLOBJ2_FLAG_REJECTED;
+					  pTriangle->m_Label = -1;
+
+					  pElement = (RVLQLIST_PTR_ENTRY*)pElement->pNext;
+				}
+			}
+
+      //      pElement = (RVLQLIST_PTR_ENTRY*)objects[i].m_FaceList->pFirst;   //first element
+
+      //      while(pElement)
+
+      //      {
+
+      //            pTriangle = (CRVL2DRegion2 *)(pElement->Ptr);
+
+				  //intersectVal = CRVL3DMeshObject::RVLIntersectHistograms(pTriangle->m_histRGB, objects[i].m_histRGB, pTriangle->m_n3DPts, objects[i].m_noUsedColorPts, objects[i].m_histRGB_base[0]*objects[i].m_histRGB_base[1], objects[i].m_pClass->m_pMem2, 2, intersectionHelperArray);
+				  ////intersectVal = CRVL3DMeshObject::RVLIntersectHistograms(objects[i].m_histRGB, pTriangle->m_histRGB, objects[i].m_noUsedColorPts, pTriangle->m_n3DPts, objects[i].m_histRGB_base[0]*objects[i].m_histRGB_base[1], objects[i].m_pClass->m_pMem2, 2, intersectionHelperArray);
+      //            //next element
+
+			   //   if(intersectVal < 0.15)
+				  //{
+					 // pTriangle->m_Flags |= RVLOBJ2_FLAG_REJECTED;
+					 // pTriangle->m_Label = -1;
+				  //}
+
+      //            pElement = (RVLQLIST_PTR_ENTRY*)pElement->pNext;
+
+					
+      //      }
+
+      }
+	  delete [] intersectionHelperArray;
+
+ 
+
+}
+
+
 int main(int argc, char* argv[])
 {
 	// create vision system
@@ -125,6 +312,22 @@ int main(int argc, char* argv[])
 
 	int *SizeArray = new int[2 * w * h];
 
+	// filko
+
+    CRVL3DMeshObject *objects;
+
+    IplImage *pHSVImage = cvCreateImage(cvSize(w, h), IPL_DEPTH_8U, 3);
+
+    //Class
+
+    CRVLClass pClass;
+
+    pClass.m_pMem = &VS.m_Mem;
+
+    pClass.m_pMem0 = &VS.m_Mem0;
+
+    pClass.m_pMem2 = &VS.m_Mem2;
+
 	// main loop
 
 	bool bDisplayMesh = true;
@@ -157,7 +360,9 @@ int main(int argc, char* argv[])
 
 	do
 	{
-		DepthMapFormat = (VS.m_PSD.m_Flags & RVLPSD_FLAG_MM ? RVLKINECT_DEPTH_IMAGE_FORMAT_1MM : RVLKINECT_DEPTH_IMAGE_FORMAT_DISPARITY);
+		DepthMapFormat = (VS.m_PSD.m_Flags & RVLPSD_FLAG_MM ? 
+			(VS.m_PSD.m_Flags & RVLPSD_FLAG_100UM ? RVLKINECT_DEPTH_IMAGE_FORMAT_100UM : RVLKINECT_DEPTH_IMAGE_FORMAT_1MM) : 
+			RVLKINECT_DEPTH_IMAGE_FORMAT_DISPARITY);
 
 #ifdef RVLOPENNI
 		if(bKinect)
@@ -194,7 +399,8 @@ int main(int argc, char* argv[])
 			}
 		}
 		else
-			RVLImportDisparityImage(VS.m_ImageFileName, pDepthImage, VS.m_Kinect.m_zToDepthLookupTable);
+			RVLImportDisparityImage(VS.m_ImageFileName, pDepthImage, DepthMapFormat, 
+				VS.m_Kinect.m_zToDepthLookupTable);
 
 		if(bRecord)
 		{
@@ -210,12 +416,18 @@ int main(int argc, char* argv[])
 			}
 			else
 			{
-				RVLSaveDepthImage(pDepthImage->Disparity, w, h, VS.m_ImageFileName, RVLKINECT_DEPTH_IMAGE_FORMAT_1MM, 
+				RVLSaveDepthImage(pDepthImage->Disparity, w, h, VS.m_ImageFileName, DepthMapFormat, 
 					RVLKINECT_DEPTH_IMAGE_FORMAT_1MM);
 
 				int iSample = RVLGetFileNumber(VS.m_ImageFileName, "00000-D.txt");
 			
 				RVLSetFileNumber(VS.m_ImageFileName, "00000-D.txt", iSample + 1);
+
+				char *RGBFileName = RVLCreateFileName(VS.m_ImageFileName, "-D.txt", iSample + 1, "-LW.bmp");
+
+				cvSaveImage(RGBFileName, pRGBImage);
+
+				delete[] RGBFileName;
 			}
 		}
 		else
@@ -251,7 +463,21 @@ int main(int argc, char* argv[])
 					VS.m_ConvexSegmentThr, w, h, VS.m_PSD.m_Point3DMap, &(VS.m_Mem), NULL, NULL,
 					(VS.m_PSD.m_Flags & RVLPSD_FLAG_MM) != 0);
 
-			t = clock() - t;			
+			t = clock() - t;	
+
+			// filko
+
+			cvCvtColor(pRGBImage, pHSVImage, CV_BGR2HSV);
+
+			pHSVImage->channelSeq[0] = 'H';
+
+			pHSVImage->channelSeq[1] = 'S';
+
+			pHSVImage->channelSeq[2] = 'V';
+
+			//objects = GenMeshObjects(&(VS.m_AImage.m_C2DRegion.m_ObjectList), pHSVImage, nObjects, &pClass);
+
+			//PruneTrianglesFromObjects(objects, nObjects);
 
 			// mark segment edges
 
@@ -401,15 +627,34 @@ int main(int argc, char* argv[])
 				break;
 #endif
 			case 'r':
-				bRecord = (!bRecord && bKinect);
+				if(VS.m_Kinect.m_Flags & RVLKINECT_FLAG_ONI_FILE)
+				{
+					RVLSaveDepthImage(pDepthImage->Disparity, w, h, VS.m_ImageFileName, DepthMapFormat, DepthMapFormat);
 
-				bContinuous = false;
+					int iSample = RVLGetFileNumber(VS.m_ImageFileName, "00000-D.txt");
+				
+					RVLSetFileNumber(VS.m_ImageFileName, "00000-D.txt", iSample + 1);
 
-				DisplayBitmap = 0;
+					char *RGBFileName = RVLCreateFileName(VS.m_ImageFileName, "-D.txt", iSample + 1, "-LW.bmp");
 
-				bDisplayMesh = false;
+					cvSaveImage(RGBFileName, pRGBImage);
 
-				bDisplayConvexSets = false;
+					delete[] RGBFileName;
+
+					bRefresh = true;
+				}
+				else
+				{
+					bRecord = (!bRecord && bKinect);
+
+					bContinuous = false;
+
+					DisplayBitmap = 0;
+
+					bDisplayMesh = false;
+
+					bDisplayConvexSets = false;
+				}
 
 				break;
 #ifdef RVLVTK

@@ -44,7 +44,7 @@
 #define RVLPSD_MESH_SEGMENT_WER						0x01000000		//Segmentation into planar surface segments using WER approach
 #define RVLPSD_MESH_CONVEX							0x02000000
 #define RVLPSD_FLAG_MM								0x04000000		// segmentation is performed in mm-space (instead of uvd-space)
-
+#define RVLPSD_FLAG_100UM							0x08000000		// segmentation is performed in mm-space with 100um precision
 #define RVLPSD_SAVE_MESH_FLAG_HULL					0x00000001
 
 

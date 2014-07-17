@@ -43,9 +43,11 @@ void CRVLVisionSystem::CreateParamList()
 	pParamData = m_ParamList.AddParam("VS.Mem2Size", RVLPARAM_TYPE_INT, &m_Mem2Size);
 	pParamData = m_ParamList.AddParam("VS.MCMemSize", RVLPARAM_TYPE_INT, &m_MCMemSize);
 	pParamData = m_ParamList.AddParam("VS.ImageFileName", RVLPARAM_TYPE_STRING, &m_ImageFileName);
-	pParamData = m_ParamList.AddParam("VS.ONIFileName", RVLPARAM_TYPE_STRING, &(m_Kinect.m_ONIFileName));
-	pParamData = m_ParamList.AddParam("VS.ONIFile", RVLPARAM_TYPE_FLAG, &(m_Kinect.m_Flags));
+	pParamData = m_ParamList.AddParam("VS.Kinect.ONIFileName", RVLPARAM_TYPE_STRING, &(m_Kinect.m_ONIFileName));
+	pParamData = m_ParamList.AddParam("VS.Kinect.ONIFile", RVLPARAM_TYPE_FLAG, &(m_Kinect.m_Flags));
 	m_ParamList.AddID(pParamData, "yes", RVLKINECT_FLAG_ONI_FILE);
+	pParamData = m_ParamList.AddParam("VS.Kinect.100UM", RVLPARAM_TYPE_FLAG, &(m_Kinect.m_Flags));
+	m_ParamList.AddID(pParamData, "yes", RVLKINECT_FLAG_100UM);
 }
 
 DWORD CRVLVisionSystem::Init(char *CfgFile2Name)

@@ -261,7 +261,7 @@ int main(int argc, char* argv[])
 			}
 			else
 			{
-				if(!RVLImportDisparityImage(VS.m_ImageFileName, pDepthImage, VS.m_Kinect.m_zToDepthLookupTable))
+				if(!RVLImportDisparityImage(VS.m_ImageFileName, pDepthImage, DepthMapFormat, VS.m_Kinect.m_zToDepthLookupTable))
 				{
 					MessageCanNotOpenFile(&GUI, VS.m_ImageFileName);
 				
