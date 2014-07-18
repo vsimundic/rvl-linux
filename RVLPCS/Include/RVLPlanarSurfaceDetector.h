@@ -239,6 +239,7 @@ void RVLDisplayDistanceTransformMap(int *DTMap,
 									int ImageSize,
 									int minDist,
 									unsigned char *PixArray);
+void RVLResetFlags(CRVLMPtrChain *pObjectList, BYTE Flags);
 
 
 class CRVLPlanarSurfaceDetector  

@@ -17,3 +17,5 @@
 #include "vtkIdList.h"
 #include "vtkPLYWriter.h"
 #include "vtkActorCollection.h"
+#include "vtkImageData.h"
+#include "vtkTexture.h"

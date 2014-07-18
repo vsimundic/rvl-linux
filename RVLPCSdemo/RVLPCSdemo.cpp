@@ -10,13 +10,15 @@
 #include "RVLVTK.h"
 #endif
 
-CRVL3DMeshObject* GenMeshObjects(CRVLMPtrChain *pTriangleList, IplImage* pImg, int nObjects, CRVLClass *pClass)
+CRVL3DMeshObject* GenMeshObjects(CRVLMPtrChain *pTriangleList, IplImage*
+pImg, int nObjects, CRVLClass *pClass)
 
 {
 
       CRVL3DMeshObject* objects;// = new CRVL3DMeshObject[nObjects];
 
-      RVLMEM_ALLOC_STRUCT_ARRAY(pClass->m_pMem2, CRVL3DMeshObject, nObjects, objects);
+      RVLMEM_ALLOC_STRUCT_ARRAY(pClass->m_pMem2, CRVL3DMeshObject, nObjects,
+objects);
 
       //initializing objects
 
@@ -25,6 +27,8 @@ CRVL3DMeshObject* GenMeshObjects(CRVLMPtrChain *pTriangleList, IplImage* pImg, i
       parent->m_pClass = pClass;
 
       parent->InitParent();
+
+      RVLQLIST_PTR_ENTRY *pElement;
 
       for (int i = 0; i < nObjects; i++)
 
@@ -39,6 +43,13 @@ CRVL3DMeshObject* GenMeshObjects(CRVLMPtrChain *pTriangleList, IplImage* pImg, i
             objects[i].rootMeshObject = parent;
 
             objects[i].parentMeshObject = parent;
+
+            RVLMEM_ALLOC_STRUCT(pClass->m_pMem2, RVLQLIST_PTR_ENTRY,
+pElement);
+
+            pElement->Ptr = &objects[i];
+
+            RVLQLIST_ADD_ENTRY(parent->m_ChildMeshObjects, pElement);
 
       }
 
@@ -94,13 +105,15 @@ CRVL3DMeshObject* GenMeshObjects(CRVLMPtrChain *pTriangleList, IplImage* pImg, i
 
       //Generating Histograms
 
-      float histBase[] = {8.0, 8.0, 0.0}; //bins per dimension of color histogram
+      float histBase[] = {16.0, 16.0, 16.0}; //bins per dimension of color histogram
 
       for (int i = 0; i < nObjects; i++)
 
       {
 
-            objects[i].RVLCalculateHSVHist(pImg, histBase, false);
+            //objects[i].RVLCalculateHSVHist(pImg, histBase, false);
+
+            objects[i].RVLCalculateRGBHist(pImg, histBase, false);
 
       }
 
@@ -108,10 +121,11 @@ CRVL3DMeshObject* GenMeshObjects(CRVLMPtrChain *pTriangleList, IplImage* pImg, i
 
       //returning objects
 
-      return objects;
+      //return objects;
+
+      return parent;
 
 }
-
  
 
 void PruneTrianglesFromObjects(CRVL3DMeshObject* objects, int nObjects)
@@ -151,7 +165,7 @@ void PruneTrianglesFromObjects(CRVL3DMeshObject* objects, int nObjects)
 				pHistEntry = (RVLQLIST_HIST_ENTRY*)pHistEntry->pNext;
 			}
 
-			if(nMatchedPoints / nSaturatedPoints < 0.8)
+			if(nMatchedPoints / nSaturatedPoints >= 0.8)
 			{
 				pElement = (RVLQLIST_PTR_ENTRY*)objects[i].m_FaceList->pFirst;   //first element
 
@@ -159,8 +173,8 @@ void PruneTrianglesFromObjects(CRVL3DMeshObject* objects, int nObjects)
 				{
 					  pTriangle = (CRVL2DRegion2 *)(pElement->Ptr);
 
-					  pTriangle->m_Flags |= RVLOBJ2_FLAG_REJECTED;
-					  pTriangle->m_Label = -1;
+					  pTriangle->m_Flags |= RVLOBJ2_FLAG_MARKED;
+					  //pTriangle->m_Label = -1;
 
 					  pElement = (RVLQLIST_PTR_ENTRY*)pElement->pNext;
 				}
@@ -328,10 +342,23 @@ int main(int argc, char* argv[])
 
     pClass.m_pMem2 = &VS.m_Mem2;
 
+	// Initialize display
+
+	VS.m_Display.m_pGUI = &GUI;
+	VS.m_Display.m_pFig = pFig;
+	VS.m_Display.m_pInputImage = pInputImage;
+	VS.m_Display.m_pDepthImage = pDepthImage;	
+	VS.m_Display.m_pRGBImage = pRGBImage;
+	VS.m_Display.m_pGSImage = pGSImage;
+	VS.m_Display.m_pZoomedInputImage = pZoomedInputImage;
+	VS.m_Display.m_ImageWidth = w;
+	VS.m_Display.m_bKinect = bKinect;
+
 	// main loop
 
 	bool bDisplayMesh = true;
 	bool bDisplayConvexSets = true;
+	bool bDisplaySelectedObjects = true;
 	//bool bContinuous = bKinect;
 	bool bContinuous = false;
 	bool bRecord = false;
@@ -340,9 +367,13 @@ int main(int argc, char* argv[])
 	bool bVTKRendererActive = false;
 	int iVTK3DModel = 0;
 
-	char VTK3DModelFileName[] = "VTK3DModel_00000.ply";
-	char VTKMessageConst[] = "3D model in PLY-format saved in ";
+	//char VTK3DModelFileName[] = "VTK3DModel_00000.ply";
+	//char VTKMessageConst[] = "3D model in PLY-format saved in ";
+	char VTK3DModelFileName[] = "VTK3DModel_00000.obj";
+	char VTKMessageConst[] = "3D model in OBJ-format saved in ";
 	char *VTKMessage = new char[strlen(VTKMessageConst) + strlen(VTK3DModelFileName) + 1];
+	char *VTKTextureFileName;
+	int VTKTexture = 0;
 	
 	int iONISample = 0;
 	int ONISpeed = 1;
@@ -467,27 +498,42 @@ int main(int argc, char* argv[])
 
 			// filko
 
-			cvCvtColor(pRGBImage, pHSVImage, CV_BGR2HSV);
+			//cvCvtColor(pRGBImage, pHSVImage, CV_BGR2HSV);
 
-			pHSVImage->channelSeq[0] = 'H';
+			//pHSVImage->channelSeq[0] = 'H';
 
-			pHSVImage->channelSeq[1] = 'S';
+			//pHSVImage->channelSeq[1] = 'S';
 
-			pHSVImage->channelSeq[2] = 'V';
+			//pHSVImage->channelSeq[2] = 'V';
+		
+			cvCvtColor(pRGBImage, pHSVImage, CV_BGR2RGB);
 
-			//objects = GenMeshObjects(&(VS.m_AImage.m_C2DRegion.m_ObjectList), pHSVImage, nObjects, &pClass);
+			  pHSVImage->channelSeq[0] = 'R';
+
+			  pHSVImage->channelSeq[1] = 'G';
+
+			  pHSVImage->channelSeq[2] = 'B';
+
+			objects = GenMeshObjects(&(VS.m_AImage.m_C2DRegion.m_ObjectList), pHSVImage, nObjects, &pClass);
 
 			//PruneTrianglesFromObjects(objects, nObjects);
-
-			// mark segment edges
-
-			RVLSegmentationEdgesFromLabels(&(VS.m_AImage.m_C2DRegion));
 		}
 
 		// display the results
 
 		do
 		{
+			VS.m_Display.m_bDisplayMesh = bDisplayMesh;
+			VS.m_Display.m_bDisplayConvexSets = bDisplayConvexSets;
+			VS.m_Display.m_bDisplaySelectedObjects = bDisplaySelectedObjects;
+			VS.m_Display.m_bRecord = bRecord;
+			VS.m_Display.m_iONISample = iONISample;
+			VS.m_Display.m_ExecTime = 1000.0f * ((float)t)/CLOCKS_PER_SEC;
+			VS.m_Display.m_ZoomFactor = ZoomFactor;
+			VS.m_Display.m_DisplayBitmap = DisplayBitmap;
+			VS.m_Display.m_DepthMapFormat = DepthMapFormat;
+
+#ifdef NEVER
 			// clear display
 
 			pFig->Clear();
@@ -526,8 +572,22 @@ int main(int argc, char* argv[])
 				RVLDisplay2DRegions(pFig, &(VS.m_AImage.m_C2DRegion.m_ObjectList), VS.m_CameraL.Width, RVLColor(0, 255, 0));
 
 			if(bDisplayConvexSets)
+			{
+				RVLSegmentationEdgesFromLabels(&(VS.m_AImage.m_C2DRegion));
+
 				RVLDisplay2DRegions(pFig, &(VS.m_AImage.m_C2DRegion.m_ObjectList), VS.m_CameraL.Width, 
 					RVLColor(255, 0, 255), 2, RVLMESH_LINK_FLAG_EDGE, RVLMESH_LINK_FLAG_EDGE);
+			}
+
+			if(bDisplaySelectedObjects)
+			{
+				RVLResetFlags(&(VS.m_AImage.m_C2DRegion.m_ObjectList), RVLMESH_LINK_FLAG_EDGE);
+
+				RVLSegmentationEdgesFromLabels(&(VS.m_AImage.m_C2DRegion), RVLOBJ2_FLAG_MARKED, RVLOBJ2_FLAG_MARKED);
+
+				RVLDisplay2DRegions(pFig, &(VS.m_AImage.m_C2DRegion.m_ObjectList), VS.m_CameraL.Width, 
+					RVLColor(255, 255, 0), 2, RVLMESH_LINK_FLAG_EDGE, RVLMESH_LINK_FLAG_EDGE);
+			}			
 
 			GUI.DisplayVectors(pFig, 0, 0, (double)ZoomFactor);
 
@@ -570,6 +630,10 @@ int main(int argc, char* argv[])
 			// show the display image
 
 			GUI.ShowFigure(pFig);	
+#endif
+			VS.Display();
+
+			cvSetMouseCallback(pFig->m_ImageName, RVLPCSDisplayMouseCallback, &VS);
 
 			//cvSaveImage("C:\\RVL\\ExpRez\\RVLDisplay.bmp", pDisplay);
 
@@ -659,31 +723,71 @@ int main(int argc, char* argv[])
 				break;
 #ifdef RVLVTK
 			case 'v':
-				RVLDisplaySegmentedMesh3D(&Renderer, &(VS.m_AImage.m_C2DRegion.m_ObjectList), nObjects, w, h, pointmap, VS.m_PSD.m_Point3DMap);
+				RVLDisplaySegmentedMesh3D(&Renderer, &(VS.m_AImage.m_C2DRegion.m_ObjectList), nObjects, w, h, pointmap,
+					VS.m_PSD.m_Point3DMap, VTKTexture, pHSVImage);
 
 				bRefresh = true;
 				bVTKRendererActive = true;
 
 				break;
-			case 'p':
-				if (bVTKRendererActive)
-				{
-					RVLSetFileNumber(VTK3DModelFileName, "00000.ply", iVTK3DModel);
-
-					Renderer.Save2PLY(VTK3DModelFileName);
-
-					//iVTK3DModel++;
-
-					strcpy(VTKMessage, VTKMessageConst);
-					strcat(VTKMessage, VTK3DModelFileName);
-
-					GUI.Message(VTKMessage, 600, 100, cvScalar(0, 128, 255));
-				}
+#endif
+			case 't':
+#ifdef RVLVTK
+				VTKTexture = (VTKTexture + 1) % 3;
+ 
+				if(bVTKRendererActive)
+					RVLDisplaySegmentedMesh3D(&Renderer, &(VS.m_AImage.m_C2DRegion.m_ObjectList), nObjects, w, h, pointmap,
+						VS.m_PSD.m_Point3DMap, VTKTexture, pHSVImage);
+				else
+#endif
+				GUI.Message("VTK Texture mode changed.", 600, 100, cvScalar(0, 128, 255));
 
 				bRefresh = true;
 
 				break;
-#endif
+
+			case 'p':
+				//if (bVTKRendererActive)
+				//{
+				//	RVLSetFileNumber(VTK3DModelFileName, "00000.ply", iVTK3DModel);
+
+				//	Renderer.Save2PLY(VTK3DModelFileName);
+
+				//	//iVTK3DModel++;
+
+				//}
+
+				FILE *dat, *mtldat;
+				
+				dat = fopen(VTK3DModelFileName, "w");
+
+				VTKTextureFileName = RVLCreateFileName(VTK3DModelFileName, ".obj", 0, ".obj.mtl");
+				
+				mtldat = fopen(VTKTextureFileName, "w");
+
+				cvSaveImage("Texture.bmp", pRGBImage);
+				
+				objects->SaveMeshObject2OBJ(dat, mtldat, VTKTextureFileName, VS.m_PSD.m_Point3DMap, (3 - VTKTexture) % 3,
+					"Texture.bmp");  //po dominantnom binu
+
+				delete[] VTKTextureFileName;
+				
+				fclose(dat);
+				
+				fclose(mtldat);
+				
+				//primjer za teksture
+				
+				//pRootMeshObject->SaveMeshObject2OBJ(objf, mtlf, "test.obj.mtl", m_PSD.m_Point3DMap, 2, "sl-00000-LW.bmp");
+
+				strcpy(VTKMessage, VTKMessageConst);
+				strcat(VTKMessage, VTK3DModelFileName);
+
+				GUI.Message(VTKMessage, 600, 100, cvScalar(0, 128, 255));
+
+				bRefresh = true;
+
+				break;
 			case 0x00000008:	// Backspace
 				iONISample -= ONISpeed;
 

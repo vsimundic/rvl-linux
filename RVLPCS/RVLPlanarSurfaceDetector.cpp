@@ -18961,3 +18961,18 @@ void RVLDisplayDistanceTransformMap(int *DTMap,
 		}
 	}	
 }
+
+void RVLResetFlags(CRVLMPtrChain *pObjectList, BYTE Flags)
+{
+	CRVL2DRegion2 *pObject;
+
+	pObjectList->Start();
+
+	while(pObjectList->m_pNext)
+	{
+		pObject = (CRVL2DRegion2 *)(pObjectList->GetNext());
+
+		RVLResetFlags((RVLMESH_LINK *)(pObject->m_PtArray), Flags);
+	}
+}
+
