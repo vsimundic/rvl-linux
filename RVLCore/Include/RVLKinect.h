@@ -11,6 +11,10 @@
 #define RVLKINECTZTODEPTH(z)	(2842.5 * (atan(z/123.6) - 1.1863))
 #define RVLKINECTDEPTHTOZ(d)	(123.6*tan((double)d / 2842.5 + 1.1863))
 
+char * RVLKinectCreateONISampleFileName(char *ONIFileName, 
+										int iSample, 
+										char *Extension);
+
 class CRVLKinect
 {
 public:

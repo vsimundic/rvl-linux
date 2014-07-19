@@ -388,6 +388,7 @@ int main(int argc, char* argv[])
 	char str[200];
 	int iTextLine;
 	unsigned int DepthMapFormat;
+	int iPrevONISample;
 
 	do
 	{
@@ -496,6 +497,57 @@ int main(int argc, char* argv[])
 
 			t = clock() - t;	
 
+			// load information about selected segments 
+
+			bool *bSegmentSelected = new bool[nObjects];
+
+			memset(bSegmentSelected, 0, nObjects * sizeof(bool));
+
+			if(VS.m_Kinect.m_Flags & RVLKINECT_FLAG_ONI_FILE)
+			{
+				char *SelectedSegmentsFileName = RVLKinectCreateONISampleFileName(VS.m_Kinect.m_ONIFileName, iONISample, "-SS.txt");
+
+				FILE *fp = fopen(SelectedSegmentsFileName, "r");
+
+				if(fp)
+				{
+					int iTmp1, iTmp2;
+
+					for(int iSegment = 0; iSegment < nObjects; iSegment++)
+					{
+						fscanf(fp, "%d\t%d\n", &iTmp1, &iTmp2);
+
+						bSegmentSelected[iSegment] = (iTmp2 > 0);
+					}
+
+					fclose(fp);
+				}
+
+				delete[] SelectedSegmentsFileName;
+			}
+
+			CRVLMPtrChain *pTriangleList = &(VS.m_AImage.m_C2DRegion.m_ObjectList);
+
+			CRVL2DRegion2 *pTriangle;
+
+			pTriangleList->Start();
+
+			while(pTriangleList->m_pNext)
+			{
+				pTriangle = (CRVL2DRegion2 *)(pTriangleList->GetNext());
+
+				if(pTriangle->m_Flags & RVLOBJ2_FLAG_REJECTED)
+					continue;
+
+				if(pTriangle->m_Label < 0 || pTriangle->m_Label >= nObjects)
+					continue;
+
+				if(bSegmentSelected[pTriangle->m_Label])
+					pTriangle->m_Flags |= RVLOBJ2_FLAG_MARKED;					
+			}
+
+			delete[] bSegmentSelected;
+
 			// filko
 
 			//cvCvtColor(pRGBImage, pHSVImage, CV_BGR2HSV);
@@ -517,7 +569,7 @@ int main(int argc, char* argv[])
 			objects = GenMeshObjects(&(VS.m_AImage.m_C2DRegion.m_ObjectList), pHSVImage, nObjects, &pClass);
 
 			//PruneTrianglesFromObjects(objects, nObjects);
-		}
+		}	// if(!bRecord)
 
 		// display the results
 
@@ -642,6 +694,8 @@ int main(int argc, char* argv[])
 			key = (bContinuous ? cvWaitKey(1) : cvWaitKey());
 
 			// change the display according to the key pressed
+
+			iPrevONISample = iONISample;
 
 			bNextImage = true;
 			bRefresh = false;
@@ -878,6 +932,56 @@ int main(int argc, char* argv[])
 
 		if(bNextImage)
 		{
+			// save information about selected segments
+
+			bool *bSegmentSelected = new bool[nObjects];
+
+			memset(bSegmentSelected, 0, nObjects * sizeof(bool));
+
+			CRVLMPtrChain *pTriangleList = &(VS.m_AImage.m_C2DRegion.m_ObjectList);
+
+			bool bSelectedSegments = false;
+
+			CRVL2DRegion2 *pTriangle;
+
+			pTriangleList->Start();
+
+			while(pTriangleList->m_pNext)
+			{
+				pTriangle = (CRVL2DRegion2 *)(pTriangleList->GetNext());
+
+				if(pTriangle->m_Flags & RVLOBJ2_FLAG_REJECTED)
+					continue;
+
+				if(pTriangle->m_Label < 0 || pTriangle->m_Label >= nObjects)
+					continue;
+
+				if(pTriangle->m_Flags & RVLOBJ2_FLAG_MARKED)
+				{
+					bSelectedSegments = true;
+
+					bSegmentSelected[pTriangle->m_Label] = true;
+				}
+			}
+
+			if((VS.m_Kinect.m_Flags & RVLKINECT_FLAG_ONI_FILE) && bSelectedSegments)
+			{
+				char *SelectedSegmentsFileName = RVLKinectCreateONISampleFileName(VS.m_Kinect.m_ONIFileName, iPrevONISample, "-SS.txt");
+
+				FILE *fp = fopen(SelectedSegmentsFileName, "w");
+
+				for(int iSegment = 0; iSegment < nObjects; iSegment++)
+					fprintf(fp, "%d\t%d\n", iSegment, bSegmentSelected[iSegment]);
+
+				fclose(fp);
+
+				delete[] SelectedSegmentsFileName;
+			}
+
+			delete[] bSegmentSelected;
+
+			// get new sample name/ID
+
 			if(bKinect)
 			{
 				if((VS.m_Kinect.m_Flags & RVLKINECT_FLAG_ONI_FILE) && !bNextImageSelected)

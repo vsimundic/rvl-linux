@@ -10653,7 +10653,8 @@ void CRVLPlanarSurfaceDetector::SegmentSTRM(CRVLC2D *p2DRegionSet,
 	int uStart = 0;
 	int uEnd = m_Width;
 
-	int vBottom;
+	int vBottom = vTop;
+
 	int du, dv, len;
 
 	while(Direction == 1 || v >= vTop)

@@ -454,3 +454,21 @@ void CRVLKinect::SetPlaybeckSpeed(float speed)
 }
 
 #endif	//RVLOPENNI
+
+char * RVLKinectCreateONISampleFileName(char *ONIFileName, 
+										int iSample, 
+										char *Extension)
+{
+	int ONIFileNameLen = strlen(ONIFileName);
+	int ExtensionLen = strlen(Extension);
+
+	char *SampleFileName = new char[ONIFileNameLen - 4 + ExtensionLen + 7];
+
+	strcpy(SampleFileName, ONIFileName);
+
+	sprintf(SampleFileName + ONIFileNameLen - 4, "-%05d", iSample);
+
+	strcpy(SampleFileName + ONIFileNameLen - 4 + 6, Extension);
+	
+	return SampleFileName;
+}
