@@ -11941,6 +11941,8 @@ void CRVLPlanarSurfaceDetector::SegmentSTRM(CRVLC2D *p2DRegionSet,
 
 	int *N;
 
+	iTriangle = 0;
+
 	p2DRegionList->Start();
 
 	while(p2DRegionList->m_pNext)
@@ -11978,6 +11980,8 @@ void CRVLPlanarSurfaceDetector::SegmentSTRM(CRVLC2D *p2DRegionSet,
 			pLink = pLink->pNext->pOpposite;
 		}
 		while(pLink != pLink0);		
+
+		p2DRegion->m_Index = (iTriangle++);
 
 		if(p2DRegion->m_nPts == 0)
 			p2DRegion->m_Flags = RVLOBJ2_FLAG_REJECTED;

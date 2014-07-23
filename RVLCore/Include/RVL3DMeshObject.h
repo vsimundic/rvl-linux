@@ -20,6 +20,13 @@
 
 //#define RVL_MESH_INTERSECT_COLOR_HISTOGRAM_DEBUG_LOG	
 
+class CRVL3DMeshObject;
+
+CRVL3DMeshObject* GenMeshObjects(CRVLMPtrChain *pTriangleList, 
+								 IplImage *pImg, 
+								 int nObjects, 
+								 CRVLClass *pClass);
+
 
 class CRVL3DMeshObject : public CRVL3DObject
 {

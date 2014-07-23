@@ -10,207 +10,6 @@
 #include "RVLVTK.h"
 #endif
 
-CRVL3DMeshObject* GenMeshObjects(CRVLMPtrChain *pTriangleList, IplImage*
-pImg, int nObjects, CRVLClass *pClass)
-
-{
-
-      CRVL3DMeshObject* objects;// = new CRVL3DMeshObject[nObjects];
-
-      RVLMEM_ALLOC_STRUCT_ARRAY(pClass->m_pMem2, CRVL3DMeshObject, nObjects,
-objects);
-
-      //initializing objects
-
-      CRVL3DMeshObject* parent = new CRVL3DMeshObject();
-
-      parent->m_pClass = pClass;
-
-      parent->InitParent();
-
-      RVLQLIST_PTR_ENTRY *pElement;
-
-      for (int i = 0; i < nObjects; i++)
-
-      {
-
-            objects[i].m_pClass = pClass;
-
-            objects[i].Init();
-
-            objects[i].InitChild();
-
-            objects[i].rootMeshObject = parent;
-
-            objects[i].parentMeshObject = parent;
-
-            RVLMEM_ALLOC_STRUCT(pClass->m_pMem2, RVLQLIST_PTR_ENTRY,
-pElement);
-
-            pElement->Ptr = &objects[i];
-
-            RVLQLIST_ADD_ENTRY(parent->m_ChildMeshObjects, pElement);
-
-      }
-
- 
-
-      //Iterating through triangles
-
-      RVL3DPOINT2 **ppPt, **pPtArrayEnd; //needed for setting iPixRGB
-
-      CRVL2DRegion2 *pTriangle;
-
-      pTriangleList->Start();
-
-      while(pTriangleList->m_pNext)
-
-      {
-
-            pTriangle = (CRVL2DRegion2 *)(pTriangleList->GetNext());
-
-            // pTriangle is a pointer to an instance of the class
-
-            // CRVL2DRegion2 representing a mesh triangle. 
-
-            // Now you can do whatever you want with the triangle.
-
-            if(pTriangle->m_Flags & RVLOBJ2_FLAG_REJECTED)
-
-                  continue;
-
-            RVLQLIST_PTR_ENTRY *pEntry;
-
-            RVLMEM_ALLOC_STRUCT(pClass->m_pMem, RVLQLIST_PTR_ENTRY, pEntry);
-
-            pEntry->Ptr = pTriangle;
-
-            RVLQLIST_ADD_ENTRY(objects[pTriangle->m_Label].m_FaceList, pEntry);
-
-            objects[pTriangle->m_Label].m_noFaces++;
-
- 
-
-            //Running through all points (because of registration, depth and RGB pixels have same adress)
-
-            pPtArrayEnd = pTriangle->m_pPoint3DArray + pTriangle->m_n3DPts;
-
-            for(ppPt = pTriangle->m_pPoint3DArray; ppPt < pPtArrayEnd; ppPt++)
-
-                  (*ppPt)->iPixRGB = (*ppPt)->iPix;                    
-
-      }
-
- 
-
-      //Generating Histograms
-
-      float histBase[] = {16.0, 16.0, 16.0}; //bins per dimension of color histogram
-
-      for (int i = 0; i < nObjects; i++)
-
-      {
-
-            //objects[i].RVLCalculateHSVHist(pImg, histBase, false);
-
-            objects[i].RVLCalculateRGBHist(pImg, histBase, false);
-
-      }
-
- 
-
-      //returning objects
-
-      //return objects;
-
-      return parent;
-
-}
- 
-
-void PruneTrianglesFromObjects(CRVL3DMeshObject* objects, int nObjects)
-
-{
-
-      CRVL2DRegion2 *pTriangle;
-
-      RVLQLIST_PTR_ENTRY *pElement;
-	  float intersectVal = 0.0;
-	  float *intersectionHelperArray = new float[32*32];
-
-      //iterating through objects
-
-      for (int i = 0; i < nObjects; i++)
-
-      {
-		  float nMatchedPoints = 0.0;
-		  float nSaturatedPoints = 0.0;
-		  int hue, sat;
-		  int base = (int)(objects[i].m_histRGB_base[0]);
-			RVLQLIST_HIST_ENTRY *pHistEntry;
-			pHistEntry = (RVLQLIST_HIST_ENTRY*)(objects[i].m_histRGB->pFirst);
-			while(pHistEntry)
-			{
-				hue = pHistEntry->adr / base;
-				sat = pHistEntry->adr - hue * base;
-				if(sat >= 1)
-				{
-					nSaturatedPoints += pHistEntry->value;
-
-					//if(hue == 0 || hue == 6 || hue == 7)
-					//if(hue >= 1 && hue <= 4)
-					if(hue == 4 || hue == 5)
-						nMatchedPoints += pHistEntry->value;
-				}
-				pHistEntry = (RVLQLIST_HIST_ENTRY*)pHistEntry->pNext;
-			}
-
-			if(nMatchedPoints / nSaturatedPoints >= 0.8)
-			{
-				pElement = (RVLQLIST_PTR_ENTRY*)objects[i].m_FaceList->pFirst;   //first element
-
-				while(pElement)
-				{
-					  pTriangle = (CRVL2DRegion2 *)(pElement->Ptr);
-
-					  pTriangle->m_Flags |= RVLOBJ2_FLAG_MARKED;
-					  //pTriangle->m_Label = -1;
-
-					  pElement = (RVLQLIST_PTR_ENTRY*)pElement->pNext;
-				}
-			}
-
-      //      pElement = (RVLQLIST_PTR_ENTRY*)objects[i].m_FaceList->pFirst;   //first element
-
-      //      while(pElement)
-
-      //      {
-
-      //            pTriangle = (CRVL2DRegion2 *)(pElement->Ptr);
-
-				  //intersectVal = CRVL3DMeshObject::RVLIntersectHistograms(pTriangle->m_histRGB, objects[i].m_histRGB, pTriangle->m_n3DPts, objects[i].m_noUsedColorPts, objects[i].m_histRGB_base[0]*objects[i].m_histRGB_base[1], objects[i].m_pClass->m_pMem2, 2, intersectionHelperArray);
-				  ////intersectVal = CRVL3DMeshObject::RVLIntersectHistograms(objects[i].m_histRGB, pTriangle->m_histRGB, objects[i].m_noUsedColorPts, pTriangle->m_n3DPts, objects[i].m_histRGB_base[0]*objects[i].m_histRGB_base[1], objects[i].m_pClass->m_pMem2, 2, intersectionHelperArray);
-      //            //next element
-
-			   //   if(intersectVal < 0.15)
-				  //{
-					 // pTriangle->m_Flags |= RVLOBJ2_FLAG_REJECTED;
-					 // pTriangle->m_Label = -1;
-				  //}
-
-      //            pElement = (RVLQLIST_PTR_ENTRY*)pElement->pNext;
-
-					
-      //      }
-
-      }
-	  delete [] intersectionHelperArray;
-
- 
-
-}
-
-
 int main(int argc, char* argv[])
 {
 	// create vision system
@@ -378,6 +177,10 @@ int main(int argc, char* argv[])
 	int iONISample = 0;
 	int ONISpeed = 1;
 
+	FILE *fpExecTime = fopen("ExecTime.txt", "a");
+
+	fprintf(fpExecTime, "=======\n");
+
 	int key;
 	//int iSample;
 	int nObjects = 1;
@@ -431,8 +234,13 @@ int main(int argc, char* argv[])
 			}
 		}
 		else
+		{
 			RVLImportDisparityImage(VS.m_ImageFileName, pDepthImage, DepthMapFormat, 
 				VS.m_Kinect.m_zToDepthLookupTable);
+
+			if(DepthMapFormat == RVLKINECT_DEPTH_IMAGE_FORMAT_100UM)
+				VS.m_PSD.m_Flags |= RVLPSD_FLAG_100UM;
+		}
 
 		if(bRecord)
 		{
@@ -496,6 +304,12 @@ int main(int argc, char* argv[])
 					(VS.m_PSD.m_Flags & RVLPSD_FLAG_MM) != 0);
 
 			t = clock() - t;	
+
+			VS.m_Display.m_ExecTime = 1000.0f * ((float)t)/CLOCKS_PER_SEC;
+
+			fprintf(fpExecTime, "%d\t%lf\n", iONISample, VS.m_Display.m_ExecTime);
+
+			fflush(fpExecTime);
 
 			// load information about selected segments 
 
@@ -579,12 +393,11 @@ int main(int argc, char* argv[])
 			VS.m_Display.m_bDisplayConvexSets = bDisplayConvexSets;
 			VS.m_Display.m_bDisplaySelectedObjects = bDisplaySelectedObjects;
 			VS.m_Display.m_bRecord = bRecord;
-			VS.m_Display.m_iONISample = iONISample;
-			VS.m_Display.m_ExecTime = 1000.0f * ((float)t)/CLOCKS_PER_SEC;
+			VS.m_Display.m_iONISample = iONISample;			
 			VS.m_Display.m_ZoomFactor = ZoomFactor;
 			VS.m_Display.m_DisplayBitmap = DisplayBitmap;
 			VS.m_Display.m_DepthMapFormat = DepthMapFormat;
-
+	
 #ifdef NEVER
 			// clear display
 
@@ -700,6 +513,7 @@ int main(int argc, char* argv[])
 			bNextImage = true;
 			bRefresh = false;
 			bNextImageSelected = false;
+			int VTKTexture_[] = {0, 2, 1, 0};
 
 			switch(key){
 			case 'm':
@@ -787,7 +601,7 @@ int main(int argc, char* argv[])
 #endif
 			case 't':
 #ifdef RVLVTK
-				VTKTexture = (VTKTexture + 1) % 3;
+				VTKTexture = (VTKTexture + 1) % 4;
  
 				if(bVTKRendererActive)
 					RVLDisplaySegmentedMesh3D(&Renderer, &(VS.m_AImage.m_C2DRegion.m_ObjectList), nObjects, w, h, pointmap,
@@ -819,9 +633,9 @@ int main(int argc, char* argv[])
 				
 				mtldat = fopen(VTKTextureFileName, "w");
 
-				cvSaveImage("Texture.bmp", pRGBImage);
+				cvSaveImage("Texture.bmp", pRGBImage);				
 				
-				objects->SaveMeshObject2OBJ(dat, mtldat, VTKTextureFileName, VS.m_PSD.m_Point3DMap, (3 - VTKTexture) % 3,
+				objects->SaveMeshObject2OBJ(dat, mtldat, VTKTextureFileName, VS.m_PSD.m_Point3DMap, VTKTexture_[VTKTexture],
 					"Texture.bmp");  //po dominantnom binu
 
 				delete[] VTKTextureFileName;
@@ -997,6 +811,8 @@ int main(int argc, char* argv[])
 	while(key != 27);
 
 	// free memory
+
+	fclose(fpExecTime);
 
 	delete[] SizeArray;
 	delete[] VTKMessage;

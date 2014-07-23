@@ -192,34 +192,37 @@ void RVLPCSDisplayMouseCallback(int event, int x, int y, int flags, void* vpData
 
 	RVLPCS_DISPLAY *pDisplay = &(pVS->m_Display);
 
-	int iPix = x / pDisplay->m_ZoomFactor + y / pDisplay->m_ZoomFactor * pDisplay->m_ImageWidth;
-
-	CRVL2DRegion2 *pSelectedTriangle = pVS->m_PSD.m_2DRegionMap[iPix];
-
 	bool bDraw = false;
 
 	switch( event ){
 	case CV_EVENT_LBUTTONDOWN:
-		CRVLMPtrChain *pTriangleList = &(pVS->m_AImage.m_C2DRegion.m_ObjectList);
+		int iPix = x / pDisplay->m_ZoomFactor + y / pDisplay->m_ZoomFactor * pDisplay->m_ImageWidth;
 
-		//RVLResetFlags<CRVL2DRegion2>(pTriangleList, RVLOBJ2_FLAG_MARKED);
+		CRVL2DRegion2 *pSelectedTriangle = pVS->m_PSD.m_2DRegionMap[iPix];
 
-		CRVL2DRegion2 *pTriangle;
-
-		pTriangleList->Start();
-
-		while(pTriangleList->m_pNext)
+		if(pSelectedTriangle)
 		{
-			pTriangle = (CRVL2DRegion2 *)(pTriangleList->GetNext());
+			CRVLMPtrChain *pTriangleList = &(pVS->m_AImage.m_C2DRegion.m_ObjectList);
 
-			if(pTriangle->m_Flags & RVLOBJ2_FLAG_REJECTED)
-				continue;
+			//RVLResetFlags<CRVL2DRegion2>(pTriangleList, RVLOBJ2_FLAG_MARKED);
 
-			if(pTriangle->m_Label == pSelectedTriangle->m_Label)
-				pTriangle->m_Flags ^= RVLOBJ2_FLAG_MARKED;
+			CRVL2DRegion2 *pTriangle;
+
+			pTriangleList->Start();
+
+			while(pTriangleList->m_pNext)
+			{
+				pTriangle = (CRVL2DRegion2 *)(pTriangleList->GetNext());
+
+				if(pTriangle->m_Flags & RVLOBJ2_FLAG_REJECTED)
+					continue;
+
+				if(pTriangle->m_Label == pSelectedTriangle->m_Label)
+					pTriangle->m_Flags ^= RVLOBJ2_FLAG_MARKED;
+			}
+
+			bDraw = true;		
 		}
-
-		bDraw = true;		
 	}
 
 	if(bDraw)
