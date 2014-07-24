@@ -2137,7 +2137,7 @@ void CRVLPlanarSurfaceDetector::GetPointsWithDisparity(RVLDISPARITYMAP *pDispari
 
 	short maxDepth = (short)(m_pStereoVision->m_maxz);
 
-	double k = (m_Flags & RVLPSD_FLAG_100UM ? 0.1 : 1.0);
+	//double k = (m_Flags & RVLPSD_FLAG_100UM ? 0.1 : 1.0);
 
 	int u, v;
 	short int d;
@@ -2158,7 +2158,7 @@ void CRVLPlanarSurfaceDetector::GetPointsWithDisparity(RVLDISPARITYMAP *pDispari
 					continue;
 				}
 
-				X[2] = (double)d * k;
+				X[2] = (double)d;
 			}
 			else
 			{

@@ -380,7 +380,7 @@ int main(int argc, char* argv[])
 
 			  pHSVImage->channelSeq[2] = 'B';
 
-			objects = GenMeshObjects(&(VS.m_AImage.m_C2DRegion.m_ObjectList), pHSVImage, nObjects, &pClass);
+			//objects = GenMeshObjects(&(VS.m_AImage.m_C2DRegion.m_ObjectList), pHSVImage, nObjects, &pClass);
 
 			//PruneTrianglesFromObjects(objects, nObjects);
 		}	// if(!bRecord)
