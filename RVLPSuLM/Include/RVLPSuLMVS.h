@@ -13,6 +13,7 @@ struct RVLPSULMDISPLAY_MOUSE_CALLBACK_DATA
 	DWORD mDisplayPSuLMFlags;
 	int iHypothesis;
 	IplImage *pImage;
+	IplImage *pImage2;
 	//CRVL3DPose *pPoseCM;
 };
 
@@ -33,4 +34,5 @@ public:
 	CRVLPSuLMBuilder m_PSuLMBuilder;
 	CRVLPSuLM *m_pPSuLM, *m_pPrevPSuLM;
 	CRVL3DPose m_PoseLA, m_PoseA0;
+	IplImage *m_pRGBImage;
 };

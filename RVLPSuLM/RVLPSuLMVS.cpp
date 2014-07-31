@@ -395,12 +395,41 @@ void CRVLPSuLMVS::PSuLMBasedRLMUpdate(DWORD Flags)
 		m_PSuLMBuilder.m_Flags |= RVLPSULMBUILDER_FLAG_KIDNAPPED;
 	}
 
+	if(m_PSuLMBuilder.m_Flags & RVLPSULMBUILDER_FLAG_KIDNAPPED)
+	{
+		double *R = m_PoseA0.m_Rot;
+		double *t = m_PoseA0.m_X;
+		RVLUNITMX3(R)
+		RVLNULL3VECTOR(t)
+		m_PoseA0.m_Alpha = m_PoseA0.m_Beta = m_PoseA0.m_Theta = 0.0;
+	}
+
 	if((m_PSuLMBuilder.m_Flags & RVLPSULMBUILDER_FLAG_MODE) == RVLPSULMBUILDER_FLAG_MODE_TRACKING)
+	{
 		if(m_pPrevPSuLM)
 			m_PSuLMBuilder.Localization(m_pPSuLM, &m_PoseA0, m_pPrevPSuLM);
+	}
 
 	if((m_PSuLMBuilder.m_Flags & RVLPSULMBUILDER_FLAG_MODE) == RVLPSULMBUILDER_FLAG_MODE_LOCALIZATION)
 		m_PSuLMBuilder.Localization(m_pPSuLM, &m_PoseA0);
+
+	if(m_PSuLMBuilder.m_Flags & RVLPSULMBUILDER_FLAG_MAPBUILDING)
+	{
+		RVLCopyString(m_ImageFileName, &(m_pPSuLM->m_FileName));
+
+		RVLSetFileNumber(m_pPSuLM->m_FileName, "00000-LW.bmp", m_PSuLMBuilder.m_maxPSuLMIndex + 1);
+
+		if(m_PSuLMBuilder.MapBuilding(m_pPSuLM) && ((Flags & RVLPSULMBUILDER_CREATEMODEL_IMAGE_FROM_FILE) == 0))
+		{
+			cvSaveImage(m_pPSuLM->m_FileName, m_pRGBImage);		
+
+			char *DepthImageFileName = RVLCreateFileName(m_ImageFileName, "-LW.bmp", m_PSuLMBuilder.m_maxPSuLMIndex, "-D.txt");
+
+			RVLSaveDepthImage(m_StereoVision.m_DisparityMap.Disparity, m_StereoVision.m_DisparityMap.Width, 
+				m_StereoVision.m_DisparityMap.Height, DepthImageFileName, m_StereoVision.m_DisparityMap.Format, 
+				m_StereoVision.m_DisparityMap.Format);		
+		}
+	}
 
 	////FILKO
 	////Creating match matrix via color and saving both match matrices to file(EXP 1.)
@@ -561,13 +590,13 @@ void RVLPSuLMDisplayMouseCallback2(int event, int x, int y, int flags, void* vpD
 					pFig2->Clear();
 
 					pVS->m_PSuLMBuilder.DisplayHypothesis(pGUI, pSFig, pMFig, pVS->m_pPSuLM, pData->mDisplayPSuLMFlags, 
-						pData->pImage);
+						pData->pImage, pData->pImage2);
 				}
 				else
 				{
-					pFig->m_pImage = cvCloneImage(pData->pImage);
+					pSFig->m_pImage = cvCloneImage(pData->pImage);
 
-					pVS->m_pPSuLM->Display(pFig, &NullPose, cvScalar(0, 255, 0), pData->mDisplayPSuLMFlags);
+					pVS->m_pPSuLM->Display(pSFig, &NullPose, cvScalar(0, 255, 0), pData->mDisplayPSuLMFlags);
 				}
 
 				if(pSelectedSurf)

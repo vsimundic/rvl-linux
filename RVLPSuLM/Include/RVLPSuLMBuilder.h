@@ -42,6 +42,7 @@
 //#define RVLPSULMBUILDER_HYPOTHESES_EVAL3_DYNAMIC_SURF_REJECT_METHOD1
 #define RVLPSULMBUILDER_HYPOTHESES_PREEVAL
 #define RVLPSULMBUILDER_HYPOTHESES_EVAL3_ORIENT_MATCH
+#define RVLPSULMBUILDER_MAPBUILDING_SEQUENCE
 
 #define RVLPSULMBUILDER_FLAG_SURFACES							0x00000001
 #define RVLPSULMBUILDER_FLAG_LINES								0x00000002
@@ -385,7 +386,7 @@ public:
 	int m_PlausibilityThr;
 	int m_minSurfaceSamplesForMatch;
 	double m_LocalMapRadius;
-	FILE *m_fpDebug;
+	FILE *m_fpDebug;	
 	
 //#ifdef PYTHON_DEBUG
 //	PyObject *m_pyModuleName;
@@ -472,6 +473,7 @@ public:
 	void Localization(	CRVLPSuLM * pSPSuLM,
 						CRVL3DPose *pPoseS0,
 						CRVLPSuLM * pPrevSPSuLM = NULL);
+	bool MapBuilding(CRVLPSuLM *pSPSuLM);
 	int EvaluateHypothesis(	CRVLPSuLM * pSPSuLM,
 							RVLPSULM_HYPOTHESIS *pHypothesis);
 	int EvaluateHypothesis2( CRVLPSuLM * pSPSuLM,
@@ -567,6 +569,7 @@ public:
 							CRVLPSuLM *pPSULM, 
 							DWORD Flags,
 							IplImage *pImage,
+							IplImage *pImage2,
 							int iHypothesis = 0);
 	void DisplayHypothesisData(	CRVLFigure *pFig, 
 								int iHypothesis = 0,

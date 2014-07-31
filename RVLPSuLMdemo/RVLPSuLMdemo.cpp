@@ -68,8 +68,7 @@ int main(int argc, char* argv[])
 #ifdef RVLOPENNI
 	// initialize kinect
 
-	//bool bKinect = VS.m_Kinect.Init();
-	bool bKinect = VS.m_Kinect.Init("C:\\RVL\\Experiments\\Kinect\\Exp140715");
+	bool bKinect = VS.m_Kinect.Init();
 
 	if(bKinect)
 		VS.m_Flags &= ~RVLSYS_FLAGS_PC;
@@ -116,6 +115,8 @@ int main(int argc, char* argv[])
 
 	IplImage *pRGBImage = cvCreateImage(cvSize(w, h), IPL_DEPTH_8U, 3);
 
+	VS.m_pRGBImage = pRGBImage;
+
 	// create grayscale image
 
 	IplImage *pGSImage = cvCreateImage(cvSize(w, h), IPL_DEPTH_8U, 1);
@@ -131,6 +132,10 @@ int main(int argc, char* argv[])
 	// create auxiliary image
 
 	//IplImage *pAuxImage = cvCreateImage(cvSize(w, h), IPL_DEPTH_8U, 3);
+
+	// create previous RGB image
+
+	IplImage *pPrevRGBImage = cvCreateImage(cvSize(w, h), IPL_DEPTH_8U, 3);
 
 	// create main display image
 
@@ -158,6 +163,7 @@ int main(int argc, char* argv[])
 	MouseCallbackData.pFig = pFig;
 	MouseCallbackData.pVS = &VS;
 	MouseCallbackData.pImage = pInputImage_;
+	MouseCallbackData.pImage2 = pPrevRGBImage;
 	//MouseCallbackData.pPoseCM = (VS.m_Flags & RVLSYS_FLAGS_PC ? &PoseCL : &NullPose);
 
 	// create auxiliary display image
@@ -182,8 +188,9 @@ int main(int argc, char* argv[])
 	MouseCallbackData2.pFig = pFig2;
 	MouseCallbackData2.pFig2 = pFig;
 	MouseCallbackData2.pVS = &VS;
-	MouseCallbackData2.ZoomFactor = 1;
-	MouseCallbackData2.pImage = pInputImage;
+	MouseCallbackData2.ZoomFactor = 1;	
+	MouseCallbackData2.pImage = pInputImage_;
+	MouseCallbackData2.pImage2 = pPrevRGBImage;
 	//MouseCallbackData2.pPoseCM = (VS.m_Flags & RVLSYS_FLAGS_PC ? &PoseCL : &NullPose);
 
 	// allocate memory
@@ -200,7 +207,7 @@ int main(int argc, char* argv[])
 	bool bContinuous = false;
 	bool bRecord = false;
 	//DWORD mDisplayPSuLMFlags = (RVLPSULM_DISPLAY_SURFACES | RVLPSULM_DISPLAY_VECTORS | RVLPSULM_DISPLAY_SAMPLES);
-	DWORD mDisplayPSuLMFlags = (RVLPSULM_DISPLAY_SURFACES | RVLPSULM_DISPLAY_ELLIPSES | RVLPSULM_DISPLAY_VECTORS);
+	DWORD mDisplayPSuLMFlags = (RVLPSULM_DISPLAY_SURFACES | RVLPSULM_DISPLAY_ELLIPSES | RVLPSULM_DISPLAY_LINES | RVLPSULM_DISPLAY_VECTORS);
 	int DisplayBitmap = 0;
 	int ZoomFactor = 1;
 	bool bVTKRendererActive = false;
@@ -219,10 +226,15 @@ int main(int argc, char* argv[])
 	char str[200];
 	int iTextLine;
 	unsigned int DepthMapFormat;
+	CRVLMPtrChain *pPSuLMList;
+	CRVLMem *pMem;
+	RVLQLIST *pMap;
 
 	do
 	{
 		DepthMapFormat = RVLKINECT_DEPTH_IMAGE_FORMAT_DISPARITY;
+
+		memcpy(pPrevRGBImage->imageData, pRGBImage->imageData, pRGBImage->imageSize);
 
 #ifdef RVLOPENNI
 		if(bKinect)
@@ -283,6 +295,9 @@ int main(int argc, char* argv[])
 
 		if(!bRecord)
 		{
+			if(!bKinect)
+				pRGBImage = cvLoadImage(VS.m_ImageFileName);
+
 			t = clock();			
 
 			//// clear image features
@@ -380,7 +395,8 @@ int main(int argc, char* argv[])
 
 			if(bDisplayHypothesis)
 			{
-				VS.m_PSuLMBuilder.DisplayHypothesis(&GUI, pFig, pFig2, VS.m_pPSuLM, mDisplayPSuLMFlags, pInputImage_);
+				VS.m_PSuLMBuilder.DisplayHypothesis(&GUI, pFig, pFig2, VS.m_pPSuLM, mDisplayPSuLMFlags, pInputImage_,
+					pPrevRGBImage);
 
 				VS.m_PSuLMBuilder.DisplayHypothesisData(pFig);
 			}
@@ -448,64 +464,11 @@ int main(int argc, char* argv[])
 			bRefresh = false;
 
 			switch(key){
-			case 'm':
-				bDisplayMesh = (!bDisplayMesh && !bRecord);
-
-				bRefresh = true;
-
-				break;
-			case 's':
-				bDisplayConvexSets = (!bDisplayConvexSets && !bRecord);
-
-				bRefresh = true;
-
-				break;
-			case 'h':
-				bDisplayHypothesis = (!bDisplayHypothesis && !bRecord);
-
-				bDisplayPSuLM = (bDisplayPSuLM & !bDisplayHypothesis);
-
-				bRefresh = true;
-
-				break;
-			case 'u':
-				bDisplayPSuLM = (!bDisplayPSuLM && !bRecord);
-
-				bDisplayHypothesis = (bDisplayHypothesis & !bDisplayPSuLM);
-
-				bRefresh = true;
-
-				break;
-			case 'e':
-				mDisplayPSuLMFlags ^= (RVLPSULM_DISPLAY_ELLIPSES | RVLPSULM_DISPLAY_LINES);
-			
-				bRefresh = true;				
-	
-				break;
 			case 'a':
 				mDisplayPSuLMFlags ^= RVLPSULM_DISPLAY_SAMPLES;
 			
 				bRefresh = true;				
 	
-				break;
-			case 'z':
-				if(ZoomFactor == 1)
-				{
-					ZoomFactor = 2;
-					pInputImage_ = pZoomedInputImage;
-				}
-				else
-				{
-					ZoomFactor = 1;
-					pInputImage_ = pInputImage;
-				}
-
-				bRefresh = true;
-
-				break;
-			case 'c':
-				bContinuous = !bContinuous;
-
 				break;
 #ifdef RVLOPENNI
 			case 'b':
@@ -516,26 +479,31 @@ int main(int argc, char* argv[])
 
 				break;
 #endif
-			case 'r':
-				bRecord = (!bRecord && bKinect);
+			case 'c':
+				bContinuous = !bContinuous;
 
-				bContinuous = false;
+				break;
+			case 'e':
+				mDisplayPSuLMFlags ^= (RVLPSULM_DISPLAY_ELLIPSES | RVLPSULM_DISPLAY_LINES);
+			
+				bRefresh = true;				
+	
+				break;
+			case 'h':
+				bDisplayHypothesis = (!bDisplayHypothesis && !bRecord);
 
-				DisplayBitmap = 0;
+				bDisplayPSuLM = (bDisplayPSuLM & !bDisplayHypothesis);
 
-				bDisplayMesh = false;
+				bRefresh = true;
 
-				bDisplayConvexSets = false;
+				break;
+			case 'm':
+				bDisplayMesh = (!bDisplayMesh && !bRecord);
+
+				bRefresh = true;
 
 				break;
 #ifdef RVLVTK
-			case 'v':
-				RVLDisplaySegmentedMesh3D(&Renderer, &(VS.m_AImage.m_C2DRegion.m_ObjectList), nObjects, w, h, pointmap, VS.m_PSD.m_Point3DMap);
-
-				bRefresh = true;
-				bVTKRendererActive = true;
-
-				break;
 			case 'p':
 				if (bVTKRendererActive)
 				{
@@ -555,6 +523,68 @@ int main(int argc, char* argv[])
 
 				break;
 #endif
+			case 'r':
+				bRecord = (!bRecord && bKinect);
+
+				bContinuous = false;
+
+				DisplayBitmap = 0;
+
+				bDisplayMesh = false;
+
+				bDisplayConvexSets = false;
+
+				break;
+			case 's':
+				bDisplayConvexSets = (!bDisplayConvexSets && !bRecord);
+
+				bRefresh = true;
+
+				break;
+			case 'u':
+				bDisplayPSuLM = (!bDisplayPSuLM && !bRecord);
+
+				bDisplayHypothesis = (bDisplayHypothesis & !bDisplayPSuLM);
+
+				bRefresh = true;
+
+				break;
+#ifdef RVLVTK
+			case 'v':
+				RVLDisplaySegmentedMesh3D(&Renderer, &(VS.m_AImage.m_C2DRegion.m_ObjectList), nObjects, w, h, pointmap, VS.m_PSD.m_Point3DMap);
+
+				bRefresh = true;
+				bVTKRendererActive = true;
+
+				break;
+#endif
+			case 'x':
+				pPSuLMList = &(VS.m_PSuLMBuilder.m_PSuLMList);
+
+				pMem = VS.m_PSuLMBuilder.m_pMem;
+
+				pMap = VS.m_PSuLMBuilder.ConvertPtrChain2QLIST(pPSuLMList, pMem);
+
+				VS.m_PSuLMBuilder.SaveXMLMap(VS.m_PSuLMBuilder.m_ModelMapPath, pMap);
+
+				GUI.Message("Map saved.", 600, 100, cvScalar(0, 128, 255));
+
+				break;
+			case 'z':
+				if(ZoomFactor == 1)
+				{
+					ZoomFactor = 2;
+					pInputImage_ = pZoomedInputImage;
+				}
+				else
+				{
+					ZoomFactor = 1;
+					pInputImage_ = pInputImage;
+				}
+
+				bRefresh = true;
+
+				break;
 			case 0x00260000:
 				if(VS.m_Flags & RVLSYS_FLAGS_PC)
 					VS.m_PSD.m_MeshTol++;
@@ -614,6 +644,7 @@ int main(int argc, char* argv[])
 	cvReleaseImage(&pGSImage);
 	cvReleaseImage(&pZoomedInputImage);
 	//cvReleaseImage(&pAuxImage);
+	cvReleaseImage(&pPrevRGBImage);
 
 	return 0;
 }
