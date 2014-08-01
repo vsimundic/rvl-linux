@@ -11,7 +11,7 @@
 #include "svsclass.h"
 #endif
 
-#include <highgui.h>
+//#include <highgui.h>
 #include "RVLCore.h"
 
 #ifdef RVLSTEREO_CORRESPONDENCE_SAD_ARRAY
@@ -2075,6 +2075,8 @@ void CRVLStereoVision::CreateParamList(CRVLMem *pMem)
 	pParamData = m_ParamList.AddParam("StereoVision.Kinect.uc", RVLPARAM_TYPE_DOUBLE, &(m_KinectParams.depthUc0));
 	pParamData = m_ParamList.AddParam("StereoVision.Kinect.vc", RVLPARAM_TYPE_DOUBLE, &(m_KinectParams.depthVc0));
 
+	pParamData = m_ParamList.AddParam("StereoVision.maxz", RVLPARAM_TYPE_DOUBLE, &m_maxz);
+
 }
 
 void CRVLStereoVision::Get3DKinect(int u, int v, int d, double *X)
@@ -2106,6 +2108,7 @@ void CRVLStereoVision::GetKinectProjectionMatrix(double *P)
 
 BOOL RVLImportDisparityImage(char *FileName, 
 						     RVLDISPARITYMAP *pDisparityImage,
+							 unsigned int &Format,
 							 short *zToDepthLookupTable)
 {
 	FILE *fp;
@@ -2114,7 +2117,6 @@ BOOL RVLImportDisparityImage(char *FileName,
 
 	int Width, Height;
 	int Size;
-	unsigned char Format;
 
 	if(fp)
 	{
@@ -2133,6 +2135,8 @@ BOOL RVLImportDisparityImage(char *FileName,
 
 		if(strcmp(line, "1mm\n") == 0)
 			Format = RVLKINECT_DEPTH_IMAGE_FORMAT_1MM;
+		else if(strcmp(line, "100um\n") == 0)
+			Format = RVLKINECT_DEPTH_IMAGE_FORMAT_100UM;
 		else
 		{
 			Format = RVLKINECT_DEPTH_IMAGE_FORMAT_DISPARITY;
@@ -2311,7 +2315,8 @@ void RVLDisplayDisparityMapColor(RVLDISPARITYMAP *pDisparityMap,
 		Disparity = (int)(*pDisparity);
 
 		if((Format == RVLKINECT_DEPTH_IMAGE_FORMAT_DISPARITY && Disparity >= 0 && Disparity < 2047) ||
-			(Format == RVLKINECT_DEPTH_IMAGE_FORMAT_1MM && Disparity > 0))
+			((Format == RVLKINECT_DEPTH_IMAGE_FORMAT_1MM || Format == RVLKINECT_DEPTH_IMAGE_FORMAT_100UM) 
+			&& Disparity > 0))
 		{
 			if(Disparity > maxDisparity)
 				maxDisparity = Disparity;
@@ -2354,7 +2359,8 @@ void RVLDisplayDisparityMapColor(RVLDISPARITYMAP *pDisparityMap,
 			Disparity = (int)(*pDisparity);
 
 		    if((Format == RVLKINECT_DEPTH_IMAGE_FORMAT_DISPARITY && Disparity >= 0 && Disparity < 2047) ||
-				(Format == RVLKINECT_DEPTH_IMAGE_FORMAT_1MM && Disparity > 0))
+				((Format == RVLKINECT_DEPTH_IMAGE_FORMAT_1MM || Format == RVLKINECT_DEPTH_IMAGE_FORMAT_100UM) 
+				&& Disparity > 0))
 			{
 				I = 64 + (unsigned char)((Disparity - minDisparity) * (255 - 64) / DisparityRange);
 
@@ -2552,6 +2558,8 @@ void RVLSaveDepthImage(short *iDepth, int w, int h, char *DepthFileName, DWORD S
 
 	if(TgtFormat == RVLKINECT_DEPTH_IMAGE_FORMAT_1MM)
 		fprintf(fpDepth, "1mm\n");
+	else if(TgtFormat == RVLKINECT_DEPTH_IMAGE_FORMAT_100UM)
+		fprintf(fpDepth, "100um\n");
 	else
 		fprintf(fpDepth, "\n");
 

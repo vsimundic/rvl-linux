@@ -2,12 +2,12 @@
 //
 //////////////////////////////////////////////////////////////////////
 
-#if !defined(AFX_RVLGUI_H__67C03517_A5D9_4A71_914C_608ADB97A9C6__INCLUDED_)
-#define AFX_RVLGUI_H__67C03517_A5D9_4A71_914C_608ADB97A9C6__INCLUDED_
-
-#if _MSC_VER > 1000
-#pragma once
-#endif // _MSC_VER > 1000
+//#if !defined(AFX_RVLGUI_H__67C03517_A5D9_4A71_914C_608ADB97A9C6__INCLUDED_)
+//#define AFX_RVLGUI_H__67C03517_A5D9_4A71_914C_608ADB97A9C6__INCLUDED_
+//
+//#if _MSC_VER > 1000
+//#pragma once
+//#endif // _MSC_VER > 1000
 
 #include "RVLDisplayVector.h"
 #include "RVLFigure.h"
@@ -157,4 +157,4 @@ public:
 					bool bWaitForKey = true);
 };
 
-#endif // !defined(AFX_RVLGUI_H__67C03517_A5D9_4A71_914C_608ADB97A9C6__INCLUDED_)
+//#endif // !defined(AFX_RVLGUI_H__67C03517_A5D9_4A71_914C_608ADB97A9C6__INCLUDED_)

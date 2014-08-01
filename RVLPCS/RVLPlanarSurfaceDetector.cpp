@@ -16,7 +16,7 @@
 
 //#include "Platform.h"
 
-#include "highgui.h"
+//#include "highgui.h"
 #include "RVLCore.h"
 #include "RVLPCS.h"
 #include "Include\RVLPlanarSurfaceDetector.h"
@@ -1012,6 +1012,9 @@ void CRVLPlanarSurfaceDetector::LSPlane(RVL3DPOINT2 **Point3DPtrArray,
 										int n,
 										double &a, double &b, double &c)
 #else
+// When moving to the new version of OpenCV function cvReleaseMatHeader became unknown.
+// Hence, I commented it out in this function.
+// If this function is ever to be used, cvReleaseMatHeader must be substituted by some other appropriate function.
 void CRVLPlanarSurfaceDetector::LSPlane(RVL3DPOINT2 **Point3DPtrArray,		// Input: set A of 3D points
 										int n,								// Input: num. of pts. in A
 										CRVL2DRegion2 *pPlane,				// Output: Best LS-plane
@@ -1095,9 +1098,9 @@ void CRVLPlanarSurfaceDetector::LSPlane(RVL3DPOINT2 **Point3DPtrArray,		// Input
 	pPlane->m_c = p[2];
 #endif
 
-	cvReleaseMatHeader(&A_);
-	cvReleaseMatHeader(&v_);
-	cvReleaseMatHeader(&p_);
+	//cvReleaseMatHeader(&A_);
+	//cvReleaseMatHeader(&v_);
+	//cvReleaseMatHeader(&p_);
 }
 
 //	RANSAC-based detection of dominant planar surface in a set A of stereo points
@@ -1508,6 +1511,9 @@ int CRVLPlanarSurfaceDetector::RANSAC(CRVL2DRegion2 *pPlane,						//	Output:	dom
 //	of pPlane.
 //	Details are given in RVMath.doc, Section 1
 	
+// NOTE: When moving to the new version of OpenCV function cvReleaseMatHeader became unknown.
+// Hence, I commented it out in this function.
+// If this function is ever to be used, cvReleaseMatHeader must be substituted by some other appropriate function.
 
 #ifdef RVLPSDLAD_GRBIC
 BOOL CRVLPlanarSurfaceDetector::Plane(RVL3DPOINT2 *pPoint3D0, 
@@ -1561,17 +1567,17 @@ BOOL CRVLPlanarSurfaceDetector::Plane(RVL3DPOINT2 *pPoint3D0,
 		pPlane->m_b = p[1];
 		pPlane->m_c = p[2];	
 #endif
-		cvReleaseMatHeader(&A_);
-		cvReleaseMatHeader(&Z_);
-		cvReleaseMatHeader(&p_);
+		//cvReleaseMatHeader(&A_);
+		//cvReleaseMatHeader(&Z_);
+		//cvReleaseMatHeader(&p_);
 
 		return TRUE;
 	}
 	else
 	{
-		cvReleaseMatHeader(&A_);
-		cvReleaseMatHeader(&Z_);
-		cvReleaseMatHeader(&p_);
+		//cvReleaseMatHeader(&A_);
+		//cvReleaseMatHeader(&Z_);
+		//cvReleaseMatHeader(&p_);
 
 		return FALSE;
 	}
@@ -2129,55 +2135,77 @@ void CRVLPlanarSurfaceDetector::GetPointsWithDisparity(RVLDISPARITYMAP *pDispari
 
 	int iPix = 0;
 
+	short maxDepth = (short)(m_pStereoVision->m_maxz);
+
+	//double k = (m_Flags & RVLPSD_FLAG_100UM ? 0.1 : 1.0);
+
 	int u, v;
 	short int d;
 
 	for(v = 0; v < m_Height; v++)
 		for(u = 0; u < m_Width; u++, pd++, ppP3DMap++, iPix++)
 		{
+			X = pPoint3D->XYZ;
+
 			d = *pd;
 
-			if(d < 2047)
+			if(m_Flags & RVLPSD_FLAG_MM)
 			{
-				pPoint3D->u = u;
-				pPoint3D->v = v;
-				pPoint3D->d = d;
-				pPoint3D->iPix = iPix;
-				pPoint3D->segmentNumber = -1;
-				pPoint3D->refSegmentNumber = -1;
-				pPoint3D->iCell = -1;
-				pPoint3D->regionList = NULL;
-				X = pPoint3D->XYZ;
-
-				X[2] = m_pStereoVision->m_KinectParams.pZProjLT[d];
-				X[0] = (u - m_pStereoVision->m_KinectParams.depthUc) * (X[2]/m_pStereoVision->m_KinectParams.depthFu);
-				X[1] = (v - m_pStereoVision->m_KinectParams.depthVc) * (X[2]/m_pStereoVision->m_KinectParams.depthFv);
-
-				iX = pPoint3D->iX;
-
-				iX[0] = DOUBLE2INT(X[0]);
-				iX[1] = DOUBLE2INT(X[1]);
-				iX[2] = DOUBLE2INT(X[2]);
-
-				if(m_Flags & RVLPSD_FLAG_MM)
+				if(d == 0 || d > maxDepth)
 				{
-					pPoint3D->x = X[0];
-					pPoint3D->y = X[1];
-					pPoint3D->z = X[2];
-				}
-				else
-				{
-					pPoint3D->x = (double)u;
-					pPoint3D->y = (double)v;
-					pPoint3D->z = (double)d;
+					*ppP3DMap = NULL;
+
+					continue;
 				}
 
-				*ppP3DMap = pPoint3D;
-
-				pPoint3D++;
+				X[2] = (double)d;
 			}
 			else
-				*ppP3DMap = NULL;
+			{
+				if(d == 2047)
+				{
+					*ppP3DMap = NULL;
+
+					continue;
+				}
+
+				X[2] = m_pStereoVision->m_KinectParams.pZProjLT[d];
+			}
+
+			pPoint3D->u = u;
+			pPoint3D->v = v;
+			pPoint3D->d = d;
+			pPoint3D->iPix = iPix;
+			pPoint3D->segmentNumber = -1;
+			pPoint3D->refSegmentNumber = -1;
+			pPoint3D->iCell = -1;
+			pPoint3D->regionList = NULL;
+			
+			X[0] = (u - m_pStereoVision->m_KinectParams.depthUc) * (X[2]/m_pStereoVision->m_KinectParams.depthFu);
+			X[1] = (v - m_pStereoVision->m_KinectParams.depthVc) * (X[2]/m_pStereoVision->m_KinectParams.depthFv);
+
+			iX = pPoint3D->iX;
+
+			iX[0] = DOUBLE2INT(X[0]);
+			iX[1] = DOUBLE2INT(X[1]);
+			iX[2] = DOUBLE2INT(X[2]);
+
+			if(m_Flags & RVLPSD_FLAG_MM)
+			{
+				pPoint3D->x = X[0];
+				pPoint3D->y = X[1];
+				pPoint3D->z = X[2];
+			}
+			else
+			{
+				pPoint3D->x = (double)u;
+				pPoint3D->y = (double)v;
+				pPoint3D->z = (double)d;
+			}
+
+			*ppP3DMap = pPoint3D;
+
+			pPoint3D++;
 		}
 
 	m_n3DPoints = pPoint3D - m_Point3DArray;
@@ -10316,283 +10344,6 @@ void CRVLPlanarSurfaceDetector::SegmentSTRM(CRVLC2D *p2DRegionSet,
 	int iLink;
 	BOOL bErrCorrection;
 
-//#pragma region	ensure that the corners of the disparity image have assigned a disparity value
-//
-//	memset(m_CornerPtArray, 0, 4 * sizeof(RVL3DPOINT2));
-//
-//	int maxs = (m_Height < m_Width ? m_Height : m_Width);
-//
-//	int dus = 1;
-//	int dvs = 0;
-//	int dut = -1;
-//	int dvt = 1;
-//
-//	int iPixsArray[4];
-//
-//	iPixsArray[0] = 0;
-//	iPixsArray[1] = (m_Height - 1) * m_Width;
-//	iPixsArray[2] = m_Width * m_Height - 1;
-//	iPixsArray[3] = m_Width - 1;
-//
-//	RVL3DPOINT2 *pCornerPt;
-//	int iCorner;
-//	int s, t;
-//	int iPixs;
-//	int diPixs, diPixt;
-//	BOOL bDisparity;
-//	int iTmp;
-//	int iPix;
-//
-//	for(iCorner = 0; iCorner < 4; iCorner++)
-//	{
-//		iPixs = iPixsArray[iCorner];
-//
-//		diPixs = dus + dvs * m_Width;
-//		diPixt = dut + dvt * m_Width;
-//
-//		bDisparity = FALSE;
-//
-//		for(s = 0; s < maxs && !bDisparity; s++)
-//		{
-//			iPix = iPixs;
-//
-//			for(t = 0; t <= s; t++)
-//			{
-//				if(m_Point3DMap[iPix])
-//				{
-//					bDisparity = TRUE;
-//
-//					break;
-//				}
-//
-//				iPix += diPixt;
-//			}
-//
-//			iPixs += diPixs;
-//		}
-//
-//		if(!bDisparity)
-//			return;
-//
-//		iPixs = iPixsArray[iCorner];
-//
-//		pCornerPt = m_CornerPtArray + iCorner;
-//		pCornerPt->iPix = iPixs;
-//		pCornerPt->u = iPixs % m_Width;
-//		pCornerPt->v = iPixs / m_Width;
-//		pCornerPt->d = m_Point3DMap[iPix]->d;
-//		m_pStereoVision->Get3DKinect(pCornerPt->u, pCornerPt->v, pCornerPt->d, pCornerPt->XYZ);
-//
-//		//added this since m_Point3DMap has been initialized with such values
-//		pCornerPt->iPixRGB = m_Point3DMap[iPix]->iPixRGB;
-//		pCornerPt->segmentNumber = m_Point3DMap[iPix]->segmentNumber;
-//		pCornerPt->refSegmentNumber = m_Point3DMap[iPix]->refSegmentNumber;
-//		pCornerPt->iCell = m_Point3DMap[iPix]->iCell;
-//		pCornerPt->x = (double)(pCornerPt->u);		// 140526
-//		pCornerPt->y = (double)(pCornerPt->v);
-//		pCornerPt->z = (double)(pCornerPt->d);
-//
-//
-//		m_Point3DMap[iPixs] = pCornerPt;
-//
-//		iTmp = dus;
-//		dus = dvs;
-//		dvs = -iTmp;
-//
-//		iTmp = dut;
-//		dut = dvt;
-//		dvt = -iTmp;
-//	}
-//#pragma endregion
-//
-//	//*** initialize LinkList
-//
-//	RVLQLIST *LinkList = &(m_pDelaunay->m_LinkList);
-//
-//	RVLQLIST_INIT(LinkList);
-//
-//	RVLQLIST_PTR_ENTRY *pLinkPtr;
-//
-//	memset(m_bCorner, 0, ImageSize * sizeof(BYTE));
-//
-//	//*** initialize queue
-//
-//	RVLPSD_STRM_QUEUE_ENTRY *pNewEntry = m_QueueMem;
-//
-//	m_Queue.Reset();
-//
-//	RVLQLIST *ListArray = m_Queue.m_ListArray;
-//
-//#pragma region Initial Triangulation
-//
-//	CRVL2DRegion2 **TriangleBuff = new CRVL2DRegion2 *[2 * ImageSize];
-//
-//	CRVL2DRegion2 **ppTriangle = TriangleBuff;
-//
-//	RVLMESH_LINK *NewLinkArray;
-//	RVLMESH_LINK *pLink, *pLink2;
-//
-//	RVLMEM_ALLOC_STRUCT_ARRAY(m_pMem, RVLMESH_LINK, 10, NewLinkArray);
-//
-//	RVLMEM_ALLOC_STRUCT_ARRAY(m_pMem, RVLQLIST_PTR_ENTRY, 10, pLinkPtr);
-//
-//	RVLMESH_LINK *pLinkArrayEnd = NewLinkArray + 10;
-//
-//	for(pLink = NewLinkArray; pLink < pLinkArrayEnd; pLink++, pLinkPtr++)
-//	{
-//		RVLQLIST_ADD_ENTRY(LinkList, pLinkPtr);
-//
-//		pLinkPtr->Ptr = pLink;
-//	}
-//
-//
-//	CRVL2DRegion2 *pTriangle = (CRVL2DRegion2 *)(RVL2DRegionTemplate.Create3(p2DRegionSet));
-//
-//	*(ppTriangle++) = pTriangle;
-//
-//	pTriangle->m_PtArray = NewLinkArray;
-//	pTriangle->m_vpQueueEntry = NULL;
-//
-//	CRVL2DRegion2 *pTriangle2 = (CRVL2DRegion2 *)(RVL2DRegionTemplate.Create3(p2DRegionSet));
-//
-//	*(ppTriangle++) = pTriangle2;
-//
-//	pTriangle2->m_PtArray = NewLinkArray + 8;
-//	pTriangle2->m_vpQueueEntry = NULL;
-//
-//	pLink = NewLinkArray;
-//	pLink2 = NewLinkArray + 4;
-//
-//	RVLRECT *pROI;
-//	RVLRECT ROI;
-//
-//	if(m_pDelaunay->m_pROI)
-//		pROI = m_pDelaunay->m_pROI;
-//	else
-//	{
-//		ROI.left = 0;
-//		ROI.right = m_Width - 1;
-//		ROI.top = 0;
-//		ROI.bottom = m_Height - 1;
-//
-//		pROI = &ROI;
-//	}	
-//
-//	int uArray[4], vArray[4];
-//
-//	uArray[0] = pROI->left;
-//	vArray[0] = pROI->top;
-//
-//	uArray[1] = pROI->right;
-//	vArray[1] = pROI->top;
-//
-//	uArray[2] = pROI->right;
-//	vArray[2] = pROI->bottom;
-//
-//	uArray[3] = pROI->left;
-//	vArray[3] = pROI->bottom;
-//
-//	int du, dv;
-//	int iLinkNext;
-//
-//	for(iLink = 0; iLink < 4; iLink++, pLink++, pLink2++)
-//	{
-//		iLinkNext = (iLink + 1) % 4;
-//
-//		pLink->Flags = 0x00; 
-//		pLink->iPix0 = uArray[iLink] + vArray[iLink] * m_Width;
-//		du = uArray[iLinkNext] - uArray[iLink];
-//		dv = vArray[iLinkNext] - vArray[iLink];
-//		pLink->du = du;
-//		pLink->dv = dv;
-//		pLink->len = DOUBLE2INT(sqrt((double)(du * du + dv * dv)));
-//		pLink->pOpposite = pLink2;
-//
-//		m_bCorner[pLink->iPix0] = 1;
-//
-//		pLink2->Flags = 0x00; 
-//		pLink2->iPix0 = uArray[iLinkNext] + vArray[iLinkNext] * m_Width;
-//		pLink2->du = -pLink->du;
-//		pLink2->dv = -pLink->dv;
-//		pLink2->len = pLink->len;
-//		pLink2->pOpposite = pLink;
-//	}
-//
-//	NewLinkArray[0].pNext = NewLinkArray + 8;
-//	NewLinkArray[0].pPrev = NewLinkArray + 7;
-//	NewLinkArray[0].vp2DRegion = pTriangle;
-//
-//	NewLinkArray[1].pNext = NewLinkArray + 4;
-//	NewLinkArray[1].pPrev = NewLinkArray + 4;
-//	NewLinkArray[1].vp2DRegion = pTriangle;
-//
-//	NewLinkArray[2].pNext = NewLinkArray + 9;
-//	NewLinkArray[2].pPrev = NewLinkArray + 5;
-//	NewLinkArray[2].vp2DRegion = pTriangle2;
-//
-//	NewLinkArray[3].pNext = NewLinkArray + 6;
-//	NewLinkArray[3].pPrev = NewLinkArray + 6;
-//	NewLinkArray[3].vp2DRegion = pTriangle2;
-//
-//	NewLinkArray[4].pNext = NewLinkArray + 1;
-//	NewLinkArray[4].pPrev = NewLinkArray + 1;
-//	NewLinkArray[4].vp2DRegion = NULL;
-//
-//	NewLinkArray[5].pNext = NewLinkArray + 2;
-//	NewLinkArray[5].pPrev = NewLinkArray + 9;
-//	NewLinkArray[5].vp2DRegion = NULL;
-//
-//	NewLinkArray[6].pNext = NewLinkArray + 3;
-//	NewLinkArray[6].pPrev = NewLinkArray + 3;
-//	NewLinkArray[6].vp2DRegion = NULL;
-//
-//	NewLinkArray[7].pNext = NewLinkArray + 0;
-//	NewLinkArray[7].pPrev = NewLinkArray + 8;
-//	NewLinkArray[7].vp2DRegion = NULL;
-//
-//	pLink = pLink2;
-//
-//	pLink->Flags = 0x00;
-//	pLink->iPix0 = NewLinkArray[0].iPix0;
-//	du = uArray[2] - uArray[0];
-//	dv = vArray[2] - vArray[0];
-//	pLink->du = du;
-//	pLink->dv = dv;
-//	pLink->len = DOUBLE2INT(sqrt((double)(du * du + dv * dv)));
-//	pLink->pNext = NewLinkArray + 7;
-//	pLink->pPrev = NewLinkArray;
-//	pLink->pOpposite = NewLinkArray + 9;
-//	pLink->vp2DRegion = pTriangle2;
-//
-//	pLink2 = pLink;
-//
-//	pLink++;
-//
-//	pLink->Flags = 0x00;
-//	pLink->iPix0 = NewLinkArray[2].iPix0;
-//	pLink->du = -NewLinkArray[8].du;
-//	pLink->dv = -NewLinkArray[8].dv;
-//	pLink->len = NewLinkArray[8].len;
-//	pLink->pNext = NewLinkArray + 5;
-//	pLink->pPrev = NewLinkArray + 2;
-//	pLink->pOpposite = pLink2;
-//	pLink->vp2DRegion = pTriangle;
-//
-//	m_pDelaunay->m_nVertices = 4;
-//
-////#ifdef RVLPSD_SEGMENT_STRM_LOG_FILE
-////	FILE *fp;
-////
-////	fopen_s(&fp, "C:\\RVL\\ExpRez\\delaunay.dat", "w");
-////
-////	RVLSaveSegmentation(fp, p2DRegionSet, m_Width);
-////
-////	fclose(fp);
-////#endif
-//
-//	UpdateSTRMQueue(TriangleBuff, ppTriangle, err, bErrCorrection, &pNewEntry);
-//#pragma endregion
-
 #pragma region Convex Hull of the Points with Disparity
 
 	RVL3DPOINT2 **p3DPtMapEnd = m_Point3DMap + ImageSize;
@@ -10625,7 +10376,8 @@ void CRVLPlanarSurfaceDetector::SegmentSTRM(CRVLC2D *p2DRegionSet,
 	int uStart = 0;
 	int uEnd = m_Width;
 
-	int vBottom;
+	int vBottom = vTop;
+
 	int du, dv, len;
 
 	while(Direction == 1 || v >= vTop)
@@ -11912,6 +11664,8 @@ void CRVLPlanarSurfaceDetector::SegmentSTRM(CRVLC2D *p2DRegionSet,
 
 	int *N;
 
+	iTriangle = 0;
+
 	p2DRegionList->Start();
 
 	while(p2DRegionList->m_pNext)
@@ -11950,6 +11704,8 @@ void CRVLPlanarSurfaceDetector::SegmentSTRM(CRVLC2D *p2DRegionSet,
 		}
 		while(pLink != pLink0);		
 
+		p2DRegion->m_Index = (iTriangle++);
+
 		if(p2DRegion->m_nPts == 0)
 			p2DRegion->m_Flags = RVLOBJ2_FLAG_REJECTED;
 		else if(100 * p2DRegion->m_n3DPts / p2DRegion->m_nPts < m_fillPerc)
@@ -11972,7 +11728,7 @@ void CRVLPlanarSurfaceDetector::SegmentSTRM(CRVLC2D *p2DRegionSet,
 
 					RVLSCALE3VECTOR2(X0, fTmp, V3Tmp);
 
-					if(RVLDOTPRODUCT3(fN, V3Tmp) < 0.1)
+					if(RVLDOTPRODUCT3(fN, V3Tmp) < 0.3)
 						p2DRegion->m_Flags = RVLOBJ2_FLAG_REJECTED;
 				}
 			}
@@ -18630,6 +18386,22 @@ void CRVLPlanarSurfaceDetector::AssignLabels(CRVLC2D *pTriangleSetLevel1, CRVLC2
 	}
 }
 
+void CRVLPlanarSurfaceDetector::GetNeighbors(CRVLC2D *pSegmentSet)
+{
+	CRVLMPtrChain *pSegmentList = &(pSegmentSet->m_ObjectList);
+
+	CRVL2DRegion2 *pSegment;
+
+	pSegmentList->Start();
+
+	while(pSegmentList->m_pNext)
+	{
+		pSegment = (CRVL2DRegion2 *)(pSegmentList->GetNext());
+
+
+	}	// for each segment
+}
+
 int CRVLPlanarSurfaceDetector::GenRelListFromWER(CRVLC2D *pTriangleSetLevel1, CRVLC2D *pTriangleSetLevel3)
 {
 	if (!m_MeshSegmentWERNodeArray)
@@ -18917,3 +18689,18 @@ void RVLDisplayDistanceTransformMap(int *DTMap,
 		}
 	}	
 }
+
+void RVLResetFlags(CRVLMPtrChain *pObjectList, BYTE Flags)
+{
+	CRVL2DRegion2 *pObject;
+
+	pObjectList->Start();
+
+	while(pObjectList->m_pNext)
+	{
+		pObject = (CRVL2DRegion2 *)(pObjectList->GetNext());
+
+		RVLResetFlags((RVLMESH_LINK *)(pObject->m_PtArray), Flags);
+	}
+}
+

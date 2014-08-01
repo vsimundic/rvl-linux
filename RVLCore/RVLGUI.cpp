@@ -2,13 +2,12 @@
 //
 //////////////////////////////////////////////////////////////////////
 
-#include "highgui.h"
-#include "RVLCore.h"
-//#include "RVLObjectLib.h"
-#include "Include\RVLGUI.h"
+#include "Platform.h"
 #ifdef RVLOPENNI
 #include "OpenNI.h"
 #endif
+#include "RVLCore.h"
+
 
 //////////////////////////////////////////////////////////////////////
 // Construction/Destruction
@@ -244,9 +243,9 @@ void CRVLGUI::DisplayVector(	CRVLDisplayVector *pVector,
 	if(pVector->m_PointArray.m_pNext == NULL)
 		return;
 
-	COLORREF ColorL;
+	//COLORREF ColorL;
 
-	ColorL = RGB(pVector->m_rL, pVector->m_gL, pVector->m_bL);
+	//ColorL = RGB(pVector->m_rL, pVector->m_gL, pVector->m_bL);
 
 	RVLGUI_POINT *pP2;
 

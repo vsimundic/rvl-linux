@@ -44,7 +44,7 @@
 #define RVLPSD_MESH_SEGMENT_WER						0x01000000		//Segmentation into planar surface segments using WER approach
 #define RVLPSD_MESH_CONVEX							0x02000000
 #define RVLPSD_FLAG_MM								0x04000000		// segmentation is performed in mm-space (instead of uvd-space)
-
+#define RVLPSD_FLAG_100UM							0x08000000		// segmentation is performed in mm-space with 100um precision
 #define RVLPSD_SAVE_MESH_FLAG_HULL					0x00000001
 
 
@@ -239,6 +239,7 @@ void RVLDisplayDistanceTransformMap(int *DTMap,
 									int ImageSize,
 									int minDist,
 									unsigned char *PixArray);
+void RVLResetFlags(CRVLMPtrChain *pObjectList, BYTE Flags);
 
 
 class CRVLPlanarSurfaceDetector  
@@ -629,6 +630,7 @@ public:
 														DWORD Flags = 0x00000000);
 	void Gen3DMeshObjectHierarchy(CRVL3DMeshObject *pRootMO);
 	int GenRelListFromWER(CRVLC2D *pTriangleSetLevel1,CRVLC2D *pTriangleSetLevel3);
+	void GetNeighbors(CRVLC2D *pSegmentSet);
 	void Display2DRegionMap(PIX_ARRAY *pOutPixArray);
 	CRVLPlanarSurfaceDetector();
 	virtual ~CRVLPlanarSurfaceDetector();

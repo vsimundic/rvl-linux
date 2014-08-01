@@ -279,6 +279,7 @@ void CRVLAImage::Init()
 
 	m_C2DRegion3.m_iRelListComponents = m_C2DRegion3.m_nRelLists++;
 	m_C2DRegion3.m_iRelListElements = m_C2DRegion3.m_nRelLists++;
+	m_C2DRegion3.m_iRelListNeighbors = m_C2DRegion3.m_nRelLists++;
 
 	RVLCreateC2D(&m_C2DRegion3);
 

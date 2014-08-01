@@ -18,7 +18,8 @@
 #include <stdio.h>
 #include <math.h>
 #include <string.h>
-#include "cv.h"
+//#include "cv.h"
+#include "opencv2\opencv.hpp"
 #include "RVLConst.h"
 #include "RVLBuffer.h"
 #include "RVLMem.h"

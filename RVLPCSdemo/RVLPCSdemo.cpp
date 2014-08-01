@@ -1,7 +1,7 @@
 // RVLPCSdemo.cpp : Defines the entry point for the console application.
 //
 
-#include "highgui.h"
+//#include "highgui.h"
 #include <stdio.h>
 #include <time.h>
 #include "RVLCore.h"
@@ -125,10 +125,39 @@ int main(int argc, char* argv[])
 
 	int *SizeArray = new int[2 * w * h];
 
+	// filko
+
+    CRVL3DMeshObject *objects;
+
+    IplImage *pHSVImage = cvCreateImage(cvSize(w, h), IPL_DEPTH_8U, 3);
+
+    //Class
+
+    CRVLClass pClass;
+
+    pClass.m_pMem = &VS.m_Mem;
+
+    pClass.m_pMem0 = &VS.m_Mem0;
+
+    pClass.m_pMem2 = &VS.m_Mem2;
+
+	// Initialize display
+
+	VS.m_Display.m_pGUI = &GUI;
+	VS.m_Display.m_pFig = pFig;
+	VS.m_Display.m_pInputImage = pInputImage;
+	VS.m_Display.m_pDepthImage = pDepthImage;	
+	VS.m_Display.m_pRGBImage = pRGBImage;
+	VS.m_Display.m_pGSImage = pGSImage;
+	VS.m_Display.m_pZoomedInputImage = pZoomedInputImage;
+	VS.m_Display.m_ImageWidth = w;
+	VS.m_Display.m_bKinect = bKinect;
+
 	// main loop
 
 	bool bDisplayMesh = true;
 	bool bDisplayConvexSets = true;
+	bool bDisplaySelectedObjects = true;
 	//bool bContinuous = bKinect;
 	bool bContinuous = false;
 	bool bRecord = false;
@@ -137,23 +166,38 @@ int main(int argc, char* argv[])
 	bool bVTKRendererActive = false;
 	int iVTK3DModel = 0;
 
-	char VTK3DModelFileName[] = "VTK3DModel_00000.ply";
-	char VTKMessageConst[] = "3D model in PLY-format saved in ";
+	//char VTK3DModelFileName[] = "VTK3DModel_00000.ply";
+	//char VTKMessageConst[] = "3D model in PLY-format saved in ";
+	char VTK3DModelFileName[] = "VTK3DModel_00000.obj";
+	char VTKMessageConst[] = "3D model in OBJ-format saved in ";
 	char *VTKMessage = new char[strlen(VTKMessageConst) + strlen(VTK3DModelFileName) + 1];
+	char *VTKTextureFileName;
+	int VTKTexture = 0;
 	
+	int iONISample = 0;
+	int ONISpeed = 1;
+
+	FILE *fpExecTime = fopen("ExecTime.txt", "a");
+
+	fprintf(fpExecTime, "=======\n");
+
 	int key;
 	//int iSample;
 	int nObjects = 1;
 	bool bRefresh;
-	bool bNextImage;
+	bool bNextImage = true;
+	bool bNextImageSelected;
 	clock_t t;
 	char str[200];
 	int iTextLine;
 	unsigned int DepthMapFormat;
+	int iPrevONISample;
 
 	do
 	{
-		DepthMapFormat = RVLKINECT_DEPTH_IMAGE_FORMAT_DISPARITY;
+		DepthMapFormat = (VS.m_PSD.m_Flags & RVLPSD_FLAG_MM ? 
+			(VS.m_PSD.m_Flags & RVLPSD_FLAG_100UM ? RVLKINECT_DEPTH_IMAGE_FORMAT_100UM : RVLKINECT_DEPTH_IMAGE_FORMAT_1MM) : 
+			RVLKINECT_DEPTH_IMAGE_FORMAT_DISPARITY);
 
 #ifdef RVLOPENNI
 		if(bKinect)
@@ -163,7 +207,8 @@ int main(int argc, char* argv[])
 			if(bRecord)
 				DepthMapFormat = RVLKINECT_DEPTH_IMAGE_FORMAT_1MM;
 
-			VS.m_Kinect.GetImages(pDepthImage->Disparity, pRGBImage, NULL, pGSImage, DepthMapFormat);
+			if(bNextImage)
+				VS.m_Kinect.GetImages(pDepthImage->Disparity, pRGBImage, NULL, pGSImage, DepthMapFormat, iONISample);
 		}
 		else
 #endif
@@ -189,7 +234,13 @@ int main(int argc, char* argv[])
 			}
 		}
 		else
-			RVLImportDisparityImage(VS.m_ImageFileName, pDepthImage, VS.m_Kinect.m_zToDepthLookupTable);
+		{
+			RVLImportDisparityImage(VS.m_ImageFileName, pDepthImage, DepthMapFormat, 
+				VS.m_Kinect.m_zToDepthLookupTable);
+
+			if(DepthMapFormat == RVLKINECT_DEPTH_IMAGE_FORMAT_100UM)
+				VS.m_PSD.m_Flags |= RVLPSD_FLAG_100UM;
+		}
 
 		if(bRecord)
 		{
@@ -205,12 +256,18 @@ int main(int argc, char* argv[])
 			}
 			else
 			{
-				RVLSaveDepthImage(pDepthImage->Disparity, w, h, VS.m_ImageFileName, RVLKINECT_DEPTH_IMAGE_FORMAT_1MM, 
+				RVLSaveDepthImage(pDepthImage->Disparity, w, h, VS.m_ImageFileName, DepthMapFormat, 
 					RVLKINECT_DEPTH_IMAGE_FORMAT_1MM);
 
 				int iSample = RVLGetFileNumber(VS.m_ImageFileName, "00000-D.txt");
 			
 				RVLSetFileNumber(VS.m_ImageFileName, "00000-D.txt", iSample + 1);
+
+				char *RGBFileName = RVLCreateFileName(VS.m_ImageFileName, "-D.txt", iSample + 1, "-LW.bmp");
+
+				cvSaveImage(RGBFileName, pRGBImage);
+
+				delete[] RGBFileName;
 			}
 		}
 		else
@@ -246,17 +303,102 @@ int main(int argc, char* argv[])
 					VS.m_ConvexSegmentThr, w, h, VS.m_PSD.m_Point3DMap, &(VS.m_Mem), NULL, NULL,
 					(VS.m_PSD.m_Flags & RVLPSD_FLAG_MM) != 0);
 
-			t = clock() - t;			
+			t = clock() - t;	
 
-			// mark segment edges
+			VS.m_Display.m_ExecTime = 1000.0f * ((float)t)/CLOCKS_PER_SEC;
 
-			RVLSegmentationEdgesFromLabels(&(VS.m_AImage.m_C2DRegion));
-		}
+			fprintf(fpExecTime, "%d\t%lf\n", iONISample, VS.m_Display.m_ExecTime);
+
+			fflush(fpExecTime);
+
+			// load information about selected segments 
+
+			bool *bSegmentSelected = new bool[nObjects];
+
+			memset(bSegmentSelected, 0, nObjects * sizeof(bool));
+
+			if(VS.m_Kinect.m_Flags & RVLKINECT_FLAG_ONI_FILE)
+			{
+				char *SelectedSegmentsFileName = RVLKinectCreateONISampleFileName(VS.m_Kinect.m_ONIFileName, iONISample, "-SS.txt");
+
+				FILE *fp = fopen(SelectedSegmentsFileName, "r");
+
+				if(fp)
+				{
+					int iTmp1, iTmp2;
+
+					for(int iSegment = 0; iSegment < nObjects; iSegment++)
+					{
+						fscanf(fp, "%d\t%d\n", &iTmp1, &iTmp2);
+
+						bSegmentSelected[iSegment] = (iTmp2 > 0);
+					}
+
+					fclose(fp);
+				}
+
+				delete[] SelectedSegmentsFileName;
+			}
+
+			CRVLMPtrChain *pTriangleList = &(VS.m_AImage.m_C2DRegion.m_ObjectList);
+
+			CRVL2DRegion2 *pTriangle;
+
+			pTriangleList->Start();
+
+			while(pTriangleList->m_pNext)
+			{
+				pTriangle = (CRVL2DRegion2 *)(pTriangleList->GetNext());
+
+				if(pTriangle->m_Flags & RVLOBJ2_FLAG_REJECTED)
+					continue;
+
+				if(pTriangle->m_Label < 0 || pTriangle->m_Label >= nObjects)
+					continue;
+
+				if(bSegmentSelected[pTriangle->m_Label])
+					pTriangle->m_Flags |= RVLOBJ2_FLAG_MARKED;					
+			}
+
+			delete[] bSegmentSelected;
+
+			// filko
+
+			//cvCvtColor(pRGBImage, pHSVImage, CV_BGR2HSV);
+
+			//pHSVImage->channelSeq[0] = 'H';
+
+			//pHSVImage->channelSeq[1] = 'S';
+
+			//pHSVImage->channelSeq[2] = 'V';
+		
+			cvCvtColor(pRGBImage, pHSVImage, CV_BGR2RGB);
+
+			  pHSVImage->channelSeq[0] = 'R';
+
+			  pHSVImage->channelSeq[1] = 'G';
+
+			  pHSVImage->channelSeq[2] = 'B';
+
+			//objects = GenMeshObjects(&(VS.m_AImage.m_C2DRegion.m_ObjectList), pHSVImage, nObjects, &pClass);
+
+			//PruneTrianglesFromObjects(objects, nObjects);
+		}	// if(!bRecord)
 
 		// display the results
 
 		do
 		{
+			VS.m_Display.m_bDisplayMesh = bDisplayMesh;
+			VS.m_Display.m_bDisplayConvexSets = bDisplayConvexSets;
+			VS.m_Display.m_bDisplaySelectedObjects = bDisplaySelectedObjects;
+			VS.m_Display.m_bRecord = bRecord;
+			VS.m_Display.m_iONISample = iONISample;			
+			VS.m_Display.m_ZoomFactor = ZoomFactor;
+			VS.m_Display.m_DisplayBitmap = DisplayBitmap;
+			VS.m_Display.m_DepthMapFormat = DepthMapFormat;
+	
+#ifdef NEVER
 			// clear display
 
 			pFig->Clear();
@@ -295,8 +437,22 @@ int main(int argc, char* argv[])
 				RVLDisplay2DRegions(pFig, &(VS.m_AImage.m_C2DRegion.m_ObjectList), VS.m_CameraL.Width, RVLColor(0, 255, 0));
 
 			if(bDisplayConvexSets)
+			{
+				RVLSegmentationEdgesFromLabels(&(VS.m_AImage.m_C2DRegion));
+
 				RVLDisplay2DRegions(pFig, &(VS.m_AImage.m_C2DRegion.m_ObjectList), VS.m_CameraL.Width, 
 					RVLColor(255, 0, 255), 2, RVLMESH_LINK_FLAG_EDGE, RVLMESH_LINK_FLAG_EDGE);
+			}
+
+			if(bDisplaySelectedObjects)
+			{
+				RVLResetFlags(&(VS.m_AImage.m_C2DRegion.m_ObjectList), RVLMESH_LINK_FLAG_EDGE);
+
+				RVLSegmentationEdgesFromLabels(&(VS.m_AImage.m_C2DRegion), RVLOBJ2_FLAG_MARKED, RVLOBJ2_FLAG_MARKED);
+
+				RVLDisplay2DRegions(pFig, &(VS.m_AImage.m_C2DRegion.m_ObjectList), VS.m_CameraL.Width, 
+					RVLColor(255, 255, 0), 2, RVLMESH_LINK_FLAG_EDGE, RVLMESH_LINK_FLAG_EDGE);
+			}			
 
 			GUI.DisplayVectors(pFig, 0, 0, (double)ZoomFactor);
 
@@ -306,11 +462,28 @@ int main(int argc, char* argv[])
 
 				iTextLine = 0;
 
+				if(bKinect)
+				{
+					if(VS.m_Kinect.m_Flags & RVLKINECT_FLAG_ONI_FILE)
+					{
+						sprintf(str, "Sample %d", iONISample);
+
+						cvPutText(pFig->m_pImage, str, cvPoint(0, (++iTextLine) * pFig->m_FontSize), &pFig->m_Font,  cvScalar(255, 0, 0));
+					}
+				}
+				else
+					cvPutText(pFig->m_pImage, VS.m_ImageFileName, cvPoint(0, (++iTextLine) * pFig->m_FontSize), &pFig->m_Font,  cvScalar(255, 0, 0));
+
 				sprintf(str, "Exec. Time = %4.0f ms", 1000.0f * ((float)t)/CLOCKS_PER_SEC);
 
 				cvPutText(pFig->m_pImage, str, cvPoint(0, (++iTextLine) * pFig->m_FontSize), &pFig->m_Font,  cvScalar(255, 0, 0));
 
-				sprintf(str, "TT = %d", (VS.m_Flags & RVLSYS_FLAGS_PC ? VS.m_PSD.m_MeshTol : VS.m_PSD.m_uvdTol));
+				sprintf(str, "Exec. Time = %4.0f ms", 1000.0f * ((float)t)/CLOCKS_PER_SEC);
+
+				cvPutText(pFig->m_pImage, str, cvPoint(0, (++iTextLine) * pFig->m_FontSize), &pFig->m_Font,  cvScalar(255, 0, 0));
+
+				sprintf(str, "TT = %d", ((VS.m_Flags & RVLSYS_FLAGS_PC) || (VS.m_PSD.m_Flags & RVLPSD_FLAG_MM) ? 
+					VS.m_PSD.m_MeshTol : VS.m_PSD.m_uvdTol));
 
 				cvPutText(pFig->m_pImage, str, cvPoint(0, (++iTextLine) * pFig->m_FontSize), &pFig->m_Font,  cvScalar(255, 0, 0));
 
@@ -322,6 +495,10 @@ int main(int argc, char* argv[])
 			// show the display image
 
 			GUI.ShowFigure(pFig);	
+#endif
+			VS.Display();
+
+			cvSetMouseCallback(pFig->m_ImageName, RVLPCSDisplayMouseCallback, &VS);
 
 			//cvSaveImage("C:\\RVL\\ExpRez\\RVLDisplay.bmp", pDisplay);
 
@@ -331,8 +508,12 @@ int main(int argc, char* argv[])
 
 			// change the display according to the key pressed
 
+			iPrevONISample = iONISample;
+
 			bNextImage = true;
 			bRefresh = false;
+			bNextImageSelected = false;
+			int VTKTexture_[] = {0, 2, 1, 0};
 
 			switch(key){
 			case 'm':
@@ -373,49 +554,166 @@ int main(int argc, char* argv[])
 
 				VS.m_Kinect.RegisterDepthToColor((DisplayBitmap != 0));
 
+				bRefresh = true;
+
 				break;
 #endif
 			case 'r':
-				bRecord = (!bRecord && bKinect);
+				if(VS.m_Kinect.m_Flags & RVLKINECT_FLAG_ONI_FILE)
+				{
+					RVLSaveDepthImage(pDepthImage->Disparity, w, h, VS.m_ImageFileName, DepthMapFormat, DepthMapFormat);
 
-				bContinuous = false;
+					int iSample = RVLGetFileNumber(VS.m_ImageFileName, "00000-D.txt");
+				
+					RVLSetFileNumber(VS.m_ImageFileName, "00000-D.txt", iSample + 1);
 
-				DisplayBitmap = 0;
+					char *RGBFileName = RVLCreateFileName(VS.m_ImageFileName, "-D.txt", iSample + 1, "-LW.bmp");
 
-				bDisplayMesh = false;
+					cvSaveImage(RGBFileName, pRGBImage);
 
-				bDisplayConvexSets = false;
+					delete[] RGBFileName;
+
+					bRefresh = true;
+				}
+				else
+				{
+					bRecord = (!bRecord && bKinect);
+
+					bContinuous = false;
+
+					DisplayBitmap = 0;
+
+					bDisplayMesh = false;
+
+					bDisplayConvexSets = false;
+				}
 
 				break;
 #ifdef RVLVTK
 			case 'v':
-				RVLDisplaySegmentedMesh3D(&Renderer, &(VS.m_AImage.m_C2DRegion.m_ObjectList), nObjects, w, h, pointmap, VS.m_PSD.m_Point3DMap);
+				RVLDisplaySegmentedMesh3D(&Renderer, &(VS.m_AImage.m_C2DRegion.m_ObjectList), nObjects, w, h, pointmap,
+					VS.m_PSD.m_Point3DMap, VTKTexture, pHSVImage);
 
 				bRefresh = true;
 				bVTKRendererActive = true;
 
 				break;
+#endif
+			case 't':
+#ifdef RVLVTK
+				VTKTexture = (VTKTexture + 1) % 4;
+ 
+				if(bVTKRendererActive)
+					RVLDisplaySegmentedMesh3D(&Renderer, &(VS.m_AImage.m_C2DRegion.m_ObjectList), nObjects, w, h, pointmap,
+						VS.m_PSD.m_Point3DMap, VTKTexture, pHSVImage);
+				else
+#endif
+				GUI.Message("VTK Texture mode changed.", 600, 100, cvScalar(0, 128, 255));
+
+				bRefresh = true;
+
+				break;
+
 			case 'p':
-				if (bVTKRendererActive)
+				//if (bVTKRendererActive)
+				//{
+				//	RVLSetFileNumber(VTK3DModelFileName, "00000.ply", iVTK3DModel);
+
+				//	Renderer.Save2PLY(VTK3DModelFileName);
+
+				//	//iVTK3DModel++;
+
+				//}
+
+				FILE *dat, *mtldat;
+				
+				dat = fopen(VTK3DModelFileName, "w");
+
+				VTKTextureFileName = RVLCreateFileName(VTK3DModelFileName, ".obj", 0, ".obj.mtl");
+				
+				mtldat = fopen(VTKTextureFileName, "w");
+
+				cvSaveImage("Texture.bmp", pRGBImage);				
+				
+				objects->SaveMeshObject2OBJ(dat, mtldat, VTKTextureFileName, VS.m_PSD.m_Point3DMap, VTKTexture_[VTKTexture],
+					"Texture.bmp");  //po dominantnom binu
+
+				delete[] VTKTextureFileName;
+				
+				fclose(dat);
+				
+				fclose(mtldat);
+				
+				//primjer za teksture
+				
+				//pRootMeshObject->SaveMeshObject2OBJ(objf, mtlf, "test.obj.mtl", m_PSD.m_Point3DMap, 2, "sl-00000-LW.bmp");
+
+				strcpy(VTKMessage, VTKMessageConst);
+				strcat(VTKMessage, VTK3DModelFileName);
+
+				GUI.Message(VTKMessage, 600, 100, cvScalar(0, 128, 255));
+
+				bRefresh = true;
+
+				break;
+			case 0x00000008:	// Backspace
+				iONISample -= ONISpeed;
+
+				bNextImageSelected = true;
+
+				break;
+			case 0x00210000:	// PgUp
+				if(bKinect && (VS.m_Kinect.m_Flags & RVLKINECT_FLAG_ONI_FILE))
 				{
-					RVLSetFileNumber(VTK3DModelFileName, "00000.ply", iVTK3DModel);
-
-					Renderer.Save2PLY(VTK3DModelFileName);
-
-					iVTK3DModel++;
-
-					strcpy(VTKMessage, VTKMessageConst);
-					strcat(VTKMessage, VTK3DModelFileName);
-
-					GUI.Message(VTKMessage, 600, 100, cvScalar(0, 128, 255));
+					if(ONISpeed < 100)
+						ONISpeed *= 10;
 				}
 
 				bRefresh = true;
 
 				break;
-#endif
+			case 0x00220000:	// PgDn
+				if(bKinect && (VS.m_Kinect.m_Flags & RVLKINECT_FLAG_ONI_FILE))
+				{
+					if(ONISpeed > 1)
+					{
+						ONISpeed /= 10;
+
+						if(ONISpeed < 1)
+							ONISpeed = 1;
+					}
+				}
+
+				bRefresh = true;
+
+				break;
+			case 0x00230000:	// End
+				if(bKinect && (VS.m_Kinect.m_Flags & RVLKINECT_FLAG_ONI_FILE))
+				{
+					iONISample = VS.m_Kinect.GetNoONIFrames() - 1;
+
+					bNextImageSelected = true;
+				}
+
+				break;
+			case 0x00240000:	// Home
+				if(bKinect && (VS.m_Kinect.m_Flags & RVLKINECT_FLAG_ONI_FILE))
+				{
+					iONISample = 0;
+
+					bNextImageSelected = true;
+				}
+
+				break;
+			case 0x00250000:
+				if(VS.m_ConvexSegmentThr > 0)
+					VS.m_ConvexSegmentThr--;
+
+				bNextImage = false;
+
+				break;
 			case 0x00260000:
-				if(VS.m_Flags & RVLSYS_FLAGS_PC)
+				if((VS.m_Flags & RVLSYS_FLAGS_PC) || (VS.m_PSD.m_Flags & RVLPSD_FLAG_MM))
 					VS.m_PSD.m_MeshTol++;
 				else
 					VS.m_PSD.m_uvdTol++;
@@ -423,8 +721,14 @@ int main(int argc, char* argv[])
 				bNextImage = false;
 
 				break;
+			case 0x00270000:
+				VS.m_ConvexSegmentThr++;
+
+				bNextImage = false;
+
+				break;
 			case 0x00280000:
-				if(VS.m_Flags & RVLSYS_FLAGS_PC)
+				if((VS.m_Flags & RVLSYS_FLAGS_PC) || (VS.m_PSD.m_Flags & RVLPSD_FLAG_MM))
 				{
 					if(VS.m_PSD.m_MeshTol > 1)
 						VS.m_PSD.m_MeshTol--;
@@ -436,25 +740,70 @@ int main(int argc, char* argv[])
 				}
 
 				bNextImage = false;
-
-				break;
-			case 0x00270000:
-				VS.m_ConvexSegmentThr++;
-
-				bNextImage = false;
-
-				break;
-			case 0x00250000:
-				if(VS.m_ConvexSegmentThr > 0)
-					VS.m_ConvexSegmentThr--;
-
-				bNextImage = false;
 			}
 		}
 		while(bRefresh && !bContinuous);
 
-		if(!bKinect && bNextImage)
-			RVLGetNextFileName(VS.m_ImageFileName, "00000-D.txt", 10000);
+		if(bNextImage)
+		{
+			// save information about selected segments
+
+			bool *bSegmentSelected = new bool[nObjects];
+
+			memset(bSegmentSelected, 0, nObjects * sizeof(bool));
+
+			CRVLMPtrChain *pTriangleList = &(VS.m_AImage.m_C2DRegion.m_ObjectList);
+
+			bool bSelectedSegments = false;
+
+			CRVL2DRegion2 *pTriangle;
+
+			pTriangleList->Start();
+
+			while(pTriangleList->m_pNext)
+			{
+				pTriangle = (CRVL2DRegion2 *)(pTriangleList->GetNext());
+
+				if(pTriangle->m_Flags & RVLOBJ2_FLAG_REJECTED)
+					continue;
+
+				if(pTriangle->m_Label < 0 || pTriangle->m_Label >= nObjects)
+					continue;
+
+				if(pTriangle->m_Flags & RVLOBJ2_FLAG_MARKED)
+				{
+					bSelectedSegments = true;
+
+					bSegmentSelected[pTriangle->m_Label] = true;
+				}
+			}
+
+			if((VS.m_Kinect.m_Flags & RVLKINECT_FLAG_ONI_FILE) && bSelectedSegments)
+			{
+				char *SelectedSegmentsFileName = RVLKinectCreateONISampleFileName(VS.m_Kinect.m_ONIFileName, iPrevONISample, "-SS.txt");
+
+				FILE *fp = fopen(SelectedSegmentsFileName, "w");
+
+				for(int iSegment = 0; iSegment < nObjects; iSegment++)
+					fprintf(fp, "%d\t%d\n", iSegment, bSegmentSelected[iSegment]);
+
+				fclose(fp);
+
+				delete[] SelectedSegmentsFileName;
+			}
+
+			delete[] bSegmentSelected;
+
+			// get new sample name/ID
+
+			if(bKinect)
+			{
+				if((VS.m_Kinect.m_Flags & RVLKINECT_FLAG_ONI_FILE) && !bNextImageSelected)
+					iONISample += ONISpeed;
+			}
+			else
+				RVLGetNextFileName(VS.m_ImageFileName, "00000-D.txt", 10000);
+		}
 
 		if(!bRecord)
 			VS.m_Mem.Clear();
@@ -462,6 +811,8 @@ int main(int argc, char* argv[])
 	while(key != 27);
 
 	// free memory
+
+	fclose(fpExecTime);
 
 	delete[] SizeArray;
 	delete[] VTKMessage;

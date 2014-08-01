@@ -138,7 +138,7 @@ void CalculatePrincipialCurvature2(int noVertices,
 //funkcija koja generira komplementarnu bazu
 void GenerateComplementBasis(double *v1, double *v2, double *v3);
 void RVLRemoveInternalVertices(CRVLDelaunay *m_pDelaunay);
-void RVLSegmentationEdgesFromLabels(CRVLClass *pTriangleSet);
+void RVLSegmentationEdgesFromLabels(CRVLClass *pTriangleSet, DWORD Mask = 0x00000000, DWORD refMask = 0x00000000);
 void RVLSegmentationGTFromMesh(	FILE *fpSrc,
 								CRVLDelaunay *pDelaunay,
 								FILE *fpTgt);
@@ -235,12 +235,14 @@ bool RVL3DMeshIsConvex(CRVLMPtrChain *pTriangleList,
 					   RVL3DPOINT2 **Point3DMap);
 #ifdef RVLVTK
 void RVLDisplaySegmentedMesh3D(CRVLVTKRenderer *pRenderer,
-							   CRVLMPtrChain *pTriangleList,						
-							   int nObjects,
-							   int w, 
-							   int h,
-							   int *pointmap,
-							   RVL3DPOINT2 **Point3DMap);
+                                CRVLMPtrChain *pTriangleList,
+                                int nObjects,
+                                int w, 
+                                int h,
+                                int *pointmap,
+                                RVL3DPOINT2 **Point3DMap,
+                                int colortype = 0,
+                                IplImage* pTexImg = NULL);
 #endif
 
 class CRVLSegmentation  

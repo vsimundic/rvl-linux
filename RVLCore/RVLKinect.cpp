@@ -1,6 +1,7 @@
 #include "Platform.h"
 
-#include "cv.h"
+//#include "cv.h"
+#include "opencv2\opencv.hpp"
 #ifdef RVLOPENNI
 #include "OpenNI.h"
 #endif
@@ -11,6 +12,7 @@ CRVLKinect::CRVLKinect(void)
 	m_Flags = 0x00000000;
 
 	m_scale = 2;
+	m_RGBscale = 1;
 
 #ifdef RVLOPENNI
 	m_vpDevice = new openni::Device;
@@ -60,7 +62,7 @@ CRVLKinect::~CRVLKinect(void)
 // This licence should be read before distribution of the file containing this function
 // and all conditions required by this licence should be met.
 
-bool CRVLKinect::Init(void)
+bool CRVLKinect::Init(char *ONIFileName)
 {
 	openni::Device *pDevice = (openni::Device *)m_vpDevice;
 	openni::VideoStream *pDepthStream = (openni::VideoStream *)m_vpDepthStream;
@@ -68,7 +70,17 @@ bool CRVLKinect::Init(void)
 
 	openni::Status rc = openni::STATUS_OK;
 
-	const char* deviceURI = openni::ANY_DEVICE;
+	const char* deviceURI;
+	
+	if(ONIFileName)
+	{
+		deviceURI = ONIFileName;
+		m_Flags |= RVLKINECT_FLAG_ONI_FILE;
+	}
+	else if(m_Flags & RVLKINECT_FLAG_ONI_FILE)	
+		deviceURI = m_ONIFileName;
+	else
+		deviceURI = openni::ANY_DEVICE;
 
 	rc = openni::OpenNI::initialize();
 
@@ -95,7 +107,8 @@ bool CRVLKinect::Init(void)
 		openni::VideoMode dmod = openni::VideoMode();
 		dmod.setFps(30);
 		dmod.setResolution(640, 480);
-		dmod.setPixelFormat(openni::PixelFormat::PIXEL_FORMAT_DEPTH_1_MM);
+		dmod.setPixelFormat(m_Flags & RVLKINECT_FLAG_100UM ? openni::PixelFormat::PIXEL_FORMAT_DEPTH_100_UM :
+			openni::PixelFormat::PIXEL_FORMAT_DEPTH_1_MM);
 		pDepthStream->setVideoMode(dmod);
 		rc = pDepthStream->start();
 		if (rc != openni::STATUS_OK)
@@ -114,8 +127,9 @@ bool CRVLKinect::Init(void)
 	{
 		openni::VideoMode cmod = openni::VideoMode();
 		cmod.setFps(30);
-		cmod.setResolution(640, 480);
+		cmod.setResolution(320, 240);
 		cmod.setPixelFormat(openni::PixelFormat::PIXEL_FORMAT_RGB888);
+		//cmod.setPixelFormat(openni::PixelFormat::PIXEL_FORMAT_YUV422);
 		pColorStream->setVideoMode(cmod);
 		rc = pColorStream->start();
 		if (rc != openni::STATUS_OK)
@@ -141,6 +155,8 @@ bool CRVLKinect::Init(void)
 	//if(pDevice->isImageRegistrationModeSupported(openni::IMAGE_REGISTRATION_DEPTH_TO_COLOR))
 	//	rc = pDevice->setImageRegistrationMode(openni::IMAGE_REGISTRATION_DEPTH_TO_COLOR);
 
+	m_vpPlaybackControl = pDevice->getPlaybackControl();
+
 	return TRUE;
 }
 
@@ -153,12 +169,14 @@ bool CRVLKinect::GetImages(	short *pDepth,
 							IplImage *pImageRGB,						
 							IplImage *pImageDepth, 
 							IplImage *pImageGS,
-							unsigned int Format)
+							unsigned int Format,
+							int frameIdx)
 {
 	openni::Device *pDevice = (openni::Device *)m_vpDevice;
 	openni::VideoStream *pDepthStream = (openni::VideoStream *)m_vpDepthStream;
 	openni::VideoStream *pColorStream = (openni::VideoStream *)m_vpColorStream;
 	openni::VideoStream **pStreams = (openni::VideoStream **)m_vpStream;
+	openni::PlaybackControl *pPlaybackControl = (openni::PlaybackControl *)m_vpPlaybackControl;
 
 	openni::VideoFrameRef DepthFrame;
 	openni::VideoFrameRef ColorFrame;
@@ -166,7 +184,7 @@ bool CRVLKinect::GetImages(	short *pDepth,
 	bool bDepth = false;
 	bool bColor = (pImageRGB == NULL);
 
-	int changedIndex;
+	int changedIndex = -1;
 	int width, height;
 	short *pDepth_;
 	const openni::DepthPixel* pDepthRow;
@@ -184,14 +202,33 @@ bool CRVLKinect::GetImages(	short *pDepth,
 
 	while(!bDepth || !bColor)
 	{
-		openni::Status rc = openni::OpenNI::waitForAnyStream(pStreams, 2, &changedIndex);
+		if(m_Flags & RVLKINECT_FLAG_ONI_FILE)
+			changedIndex++;
+		else
+		{
+			openni::Status rc = openni::OpenNI::waitForAnyStream(pStreams, 2, &changedIndex);
 
-		if(rc != openni::STATUS_OK)
-			return false;
+			if(rc != openni::STATUS_OK)
+				return false;
+		}
 
 		switch(changedIndex){
 		case 0:
+			if(m_Flags & RVLKINECT_FLAG_ONI_FILE)
+				pPlaybackControl->seek(*pDepthStream, frameIdx);
+
 			pDepthStream->readFrame(&DepthFrame);
+
+			if(m_Flags & RVLKINECT_FLAG_ONI_FILE)
+			{
+				//pPlaybackControl->seek(*pColorStream, DepthFrame.getFrameIndex() - 3);
+
+				pColorStream->readFrame(&ColorFrame);
+
+				//pPlaybackControl->seek(*pColorStream, ColorFrame.getFrameIndex() - 1);
+
+				//pColorStream->readFrame(&ColorFrame);
+			}
 
 			if(!DepthFrame.isValid())
 				continue;
@@ -285,15 +322,18 @@ bool CRVLKinect::GetImages(	short *pDepth,
 			
 			break;
 		case 1:
-			pColorStream->readFrame(&ColorFrame);
+			if((m_Flags & RVLKINECT_FLAG_ONI_FILE) == 0)
+			{
+				pColorStream->readFrame(&ColorFrame);
 
-			if(!ColorFrame.isValid())
-				continue;	
+				if(!ColorFrame.isValid())
+					continue;	
+			}
 
 			bColor = true;
 
-			width = ColorFrame.getWidth() / m_scale;
-			height = ColorFrame.getHeight() / m_scale;
+			width = ColorFrame.getWidth() / m_RGBscale;
+			height = ColorFrame.getHeight() / m_RGBscale;
 
 			if(pImageRGB)
 			{		
@@ -307,16 +347,16 @@ bool CRVLKinect::GetImages(	short *pDepth,
 
 				for (v = 0; v < height; v++)
 				{
-					pPix = pRGBRow + m_scale * (width - 1);
+					pPix = pRGBRow + m_RGBscale * (width - 1);
 
-					for (u = 0; u < width; u++, pPix -= m_scale)
+					for (u = 0; u < width; u++, pPix -= m_RGBscale)
 					{
 						*(pPixRGB++) = pPix->b;
 						*(pPixRGB++) = pPix->g;
 						*(pPixRGB++) = pPix->r;
 					}
 
-					pRGBRow += (m_scale * rowSizeRGB);
+					pRGBRow += (m_RGBscale * rowSizeRGB);
 				}	
 
 				if(pImageGS)
@@ -398,4 +438,37 @@ void CRVLKinect::ConvertDepthToColor(int u, int v, int z, int *puRGB, int *pvRGB
 	*pvRGB = vRGB / m_scale;
 }
 
+int CRVLKinect::GetNoONIFrames(void)
+{
+	openni::VideoStream *pDepthStream = (openni::VideoStream *)m_vpDepthStream;
+	openni::PlaybackControl *pPlaybackControl = (openni::PlaybackControl *)(m_vpPlaybackControl);
+
+	return pPlaybackControl->getNumberOfFrames(*pDepthStream);
+}
+
+void CRVLKinect::SetPlaybeckSpeed(float speed)
+{
+	openni::PlaybackControl *pPlaybackControl = (openni::PlaybackControl *)(m_vpPlaybackControl);
+
+	pPlaybackControl->setSpeed(speed);
+}
+
 #endif	//RVLOPENNI
+
+char * RVLKinectCreateONISampleFileName(char *ONIFileName, 
+										int iSample, 
+										char *Extension)
+{
+	int ONIFileNameLen = strlen(ONIFileName);
+	int ExtensionLen = strlen(Extension);
+
+	char *SampleFileName = new char[ONIFileNameLen - 4 + ExtensionLen + 7];
+
+	strcpy(SampleFileName, ONIFileName);
+
+	sprintf(SampleFileName + ONIFileNameLen - 4, "-%05d", iSample);
+
+	strcpy(SampleFileName + ONIFileNameLen - 4 + 6, Extension);
+	
+	return SampleFileName;
+}

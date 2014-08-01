@@ -1,5 +1,5 @@
 //#include "stdafx.h"		// remove after moving CRVLPSuLM to RVL2
-#include <highgui.h>
+//#include <highgui.h>
 #include "RVLCore.h"
 #include "RVL2DLine2.h"		// move to RVLCoreObjectLib.h
 #include "RVLPCS.h"
