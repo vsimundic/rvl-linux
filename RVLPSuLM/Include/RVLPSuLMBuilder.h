@@ -330,7 +330,8 @@ public:
 	CRVL3DPose *m_pPrevRobotPoseSM;			//current robot pose -> scene wrt to model (obtained in the previous step)
 	CRVL3DPose *m_pModelAbsPose;			//absolute pose of previous Model PSuLM
 	CRVLPSuLM  *m_pNearestModelPSuLM;       //nearest Model PSuLM;
-	CRVLPSuLM  *m_pPrevModelPSuLM;			//previous Model PSuLM;			
+	CRVLPSuLM  *m_pPrevModelPSuLM;			//previous Model PSuLM;		
+	CRVLPSuLM  *m_pLoopStartPSuLM;			//PSuLM at the beginning of a loop
 	double m_MinHybridLocalizationDist;		//min distance between models used for hybrid localization
 	double m_MinHybridLocalizationAngle;	//min angle between models used for hybrid localization 
 	CRVL3DPose *m_pPoseSp0;

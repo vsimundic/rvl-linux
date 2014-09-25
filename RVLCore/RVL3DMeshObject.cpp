@@ -2305,6 +2305,228 @@ void CRVL3DMeshObject::SaveMeshObject2OBJ(FILE *fpOBJ,
 		delete[] verticesTex;
 }
 
+void CRVL3DMeshObject::AppendMeshObject2OBJ(int &iPt, 
+											int &br, 
+											CRVL3DPose *pPose, 
+											FILE *fpOBJ,
+											FILE *fpMTL,
+											char* mtlFileName,
+											RVL3DPOINT2 **Point3DMap,
+											int colorType,
+											char* texFileName,
+											DWORD Flags,
+											int min3DPtsPerc,
+											DWORD Mask)	
+{
+	char* vertices = new char[500000];
+	memset(vertices, 0, 500000 * sizeof(char));
+	char* indices = new char[500000];
+	memset(indices, 0, 500000 * sizeof(char));
+	char* mtllib = new char[50000];
+	memset(mtllib, 0, 50000 * sizeof(char));
+	char* verticesTex;
+	if (colorType == 2)
+	{
+		verticesTex = new char[500000];
+		memset(verticesTex, 0, 500000 * sizeof(char));
+	}
+	//char* normals = new char[500000];
+	//memset(normals, 0, 500000 * sizeof(char));
+	char* temp = new char[200];
+	memset(temp, 0, 200 * sizeof(char));
+	int noV = 0;
+	int noI = 0;
+	float matR = 0.0, matG = 0.0, matB = 0.0;
+
+	RVLQLIST *pMeshObjList;
+	RVLQLIST_PTR_ENTRY *pElement;
+	RVLQLIST_PTR_ENTRY *pObject;
+	CRVL3DMeshObject *tempObj;
+	if (this->m_FaceList)
+	{
+		pMeshObjList = new RVLQLIST[1];
+		RVLQLIST_INIT(pMeshObjList);
+		RVLQLIST_PTR_ENTRY *pObj = new RVLQLIST_PTR_ENTRY[1];
+		pObj->Ptr = this;
+		RVLQLIST_ADD_ENTRY(pMeshObjList, pObj);
+	}
+	else if (this->m_ChildMeshObjects)
+	{
+		pMeshObjList = this->m_ChildMeshObjects;
+	}
+
+	int ImageSize = 320 * 240;	//HARDCODED?
+
+	int *IdxMap = new int[ImageSize];
+	memset(IdxMap, 0, ImageSize * sizeof(int));
+
+	
+
+	CRVL2DRegion2 *pPolygon;
+	CRVL2DRegion2 *pHullTriangle;
+
+	RVLMESH_LINK *pLink0, *pLink;
+	int iPix;
+	RVL3DPOINT2 *pPt;
+	double k;
+	int *N;
+	double lenN2;
+	double fN[3];
+	
+	int r,g,b;
+	int rgb_x = 0, rgb_y = 0;
+
+	pObject = (RVLQLIST_PTR_ENTRY*)pMeshObjList->pFirst;
+	//int br = 0;
+	RVLQLIST_HIST_ENTRY *pHistEntry;
+	RVLMEM_ALLOC_STRUCT(this->m_pClass->m_pMem2, RVLQLIST_HIST_ENTRY, pHistEntry);
+	while (pObject)
+	{
+		tempObj = (CRVL3DMeshObject*)pObject->Ptr;
+
+		pElement = (RVLQLIST_PTR_ENTRY*)tempObj->m_FaceList->pFirst;
+		sprintf(temp, "g object%d\nusemtl material_%d\n", br, br);
+		strcat(indices, temp);
+		//generiranje novog materijala
+		if (colorType == 0)
+		{
+			matR = RVLRandom(0.0, 1.0);
+			matG = RVLRandom(0.0, 1.0);
+			matB = RVLRandom(0.0, 1.0);
+
+			sprintf(temp, "newmtl material_%d\nKd %.5f %.5f %.5f\nillum 0\n\n", br, matR, matG, matB);
+			strcat(mtllib, temp);
+		}
+		else if((colorType == 1) && tempObj->m_histRGB)
+		{
+			pHistEntry = (RVLQLIST_HIST_ENTRY *)(tempObj->m_histRGB->pFirst);
+			if (pHistEntry && (tempObj->m_ColorSystem == RVL_MESH_COLOR_RGB))
+			{
+				r = floor(pHistEntry->adr / (tempObj->m_histRGB_base[1] * tempObj->m_histRGB_base[2]));
+				matR = (float)((r * (256.0 / tempObj->m_histRGB_base[0])) + (tempObj->m_histRGB_base[0]/2)) /255.0;
+				g = floor((pHistEntry->adr / (tempObj->m_histRGB_base[1] * tempObj->m_histRGB_base[2]) - r) * tempObj->m_histRGB_base[1]);
+				matG = (float)((g * (256.0 / tempObj->m_histRGB_base[1])) + (tempObj->m_histRGB_base[1]/2)) /255.0;
+				b = floor(((pHistEntry->adr / (tempObj->m_histRGB_base[1] * tempObj->m_histRGB_base[2]) - r) * tempObj->m_histRGB_base[1] - g) * tempObj->m_histRGB_base[2]);
+				matB = (float)((b * (256.0 / tempObj->m_histRGB_base[2])) + (tempObj->m_histRGB_base[2]/2)) /255.0;
+			}
+			else
+			{
+				matR = 1.0;
+				matG = 1.0;
+				matB = 1.0;
+			}
+
+			sprintf(temp, "newmtl material_%d\nKd %.5f %.5f %.5f\nillum 0\n\n", br, matR, matG, matB);
+			strcat(mtllib, temp);
+		}
+		else if (colorType == 2)
+		{
+			sprintf(temp, "newmtl material_%d\nKa 1.0 1.0 1.0\nKd 1.0 1.0 1.0\nKs 0.0 0.0 0.0\nTr 1.0\nillum 1\nNs 0.0\nmap_Kd %s\n\n", br, texFileName);
+			strcat(mtllib, temp);			
+		}
+		
+		while(pElement)
+		{
+			pPolygon = (CRVL2DRegion2 *)(pElement->Ptr);
+
+			if(pPolygon->m_Flags & RVLOBJ2_FLAG_REJECTED)
+				continue;
+
+			if((pPolygon->m_Flags & Mask) != Mask)
+				continue;
+
+			if((100 * pPolygon->m_n3DPts < min3DPtsPerc * pPolygon->m_nPts))
+				continue;
+
+			pLink = pLink0 = (RVLMESH_LINK *)(pPolygon->m_PtArray);
+			
+			sprintf(temp, "f ");
+			strcat(indices, temp);
+			do
+			{
+				iPix = pLink->iPix0;
+
+				if(IdxMap[iPix] == 0)
+				{
+					pPt = Point3DMap[iPix];
+
+					//Lubina
+					double pPtMatrix [3] = {pPt->XYZ[0], pPt->XYZ[1], pPt->XYZ[2]};
+					double RotMult [3];
+					double newpPt [3];
+					RVLMULMX3X3VECT(pPose->m_Rot, pPtMatrix, RotMult)
+					RVLSUM3VECTORS(pPose->m_X, RotMult, newpPt)
+
+					//END Lubina
+
+					if(Flags & RVLPSD_SAVE_MESH_FLAG_HULL)
+					{
+						pHullTriangle = (CRVL2DRegion2 *)(pLink->pData);
+						sprintf(temp, "v %.4f %.4f %.4f\n", newpPt[0], newpPt[1], newpPt[2]);
+						strcat(vertices, temp);
+						noV++;
+					}
+					else
+					{
+						sprintf(temp, "v %.4f %.4f %.4f\n", newpPt[0], newpPt[1], newpPt[2]);
+						strcat(vertices, temp);
+						noV++;
+					}
+
+					if (colorType == 2)
+					{
+						//hardcoded dimensions???
+						rgb_y = pPt->iPixRGB / 320;
+						rgb_x = pPt->iPixRGB - rgb_y * 320;
+						if (rgb_y != 0)
+							rgb_x --;
+						rgb_y = 240 - rgb_y;
+
+						sprintf(temp, "vt %.4f %.4f\n", (float)(rgb_x / 320.0), (float)(rgb_y / 240.0));
+						strcat(verticesTex, temp);
+					}
+
+					IdxMap[iPix] = iPt + 1;
+
+					iPt++;
+				}
+
+				sprintf(temp, "%d/%d ", IdxMap[iPix], IdxMap[iPix]);
+				strcat(indices, temp);
+
+				pLink = pLink->pNext->pOpposite;
+			}
+			while(pLink != pLink0);
+
+			sprintf(temp, "\n");
+			strcat(indices, temp);
+			noI++;
+			//pHullTriangle = (CRVL2DRegion2 *)(pLink0->pData);
+			//sprintf(temp, "%.4f\t%.4f\t%.4f\n", pHullTriangle->m_N[0], pHullTriangle->m_N[1], pHullTriangle->m_N[2]);
+			//strcat(normals, temp);
+			pElement = (RVLQLIST_PTR_ENTRY*)pElement->pNext;
+		}
+		pObject = (RVLQLIST_PTR_ENTRY*)pObject->pNext;
+		br++;
+	}
+	fprintf(fpOBJ, "mtllib ./%s\n", mtlFileName);
+	fprintf(fpOBJ, "o scene1\n");
+	fprintf(fpOBJ, "#vertices=%d faces=%d\n", noV, noI);
+	fprintf(fpOBJ, "%s", vertices);
+	if (colorType == 2)
+		fprintf(fpOBJ, "%s", verticesTex);
+	fprintf(fpOBJ, "%s", indices);
+	fprintf(fpMTL, "%s", mtllib);
+
+	delete[] IdxMap;
+	delete[] vertices;
+	delete[] indices;
+	delete[] mtllib;
+	delete[] temp;
+	if (colorType == 2)
+		delete[] verticesTex;
+}
+
 //OLD BUT GOOD
 //float CRVL3DMeshObject::RVLIntersectColorHistogram(CRVL3DMeshObject *model, int usedBins, bool hard, float *helperArray)
 //{

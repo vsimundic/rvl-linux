@@ -7,10 +7,12 @@
 
 CRVLPSuLMVS::CRVLPSuLMVS(void)
 {
+	m_pMeshFile = NULL;
 }
 
 CRVLPSuLMVS::~CRVLPSuLMVS(void)
 {
+	DeleteMeshFile();
 }
 
 void CRVLPSuLMVS::CreateParamList()
@@ -25,6 +27,8 @@ void CRVLPSuLMVS::CreateParamList()
 	pParamData = m_ParamList.AddParam("VS.PoseLA.x[mm]", RVLPARAM_TYPE_DOUBLE, m_PoseLA.m_X);
 	pParamData = m_ParamList.AddParam("VS.PoseLA.y[mm]", RVLPARAM_TYPE_DOUBLE, m_PoseLA.m_X + 1);
 	pParamData = m_ParamList.AddParam("VS.PoseLA.z[mm]", RVLPARAM_TYPE_DOUBLE, m_PoseLA.m_X + 2);
+	pParamData = m_ParamList.AddParam("VS.CreateGlobalMesh", RVLPARAM_TYPE_FLAG, &m_Flags);
+	m_ParamList.AddID(pParamData, "yes", RVLSYS_FLAGS_CREATE_GLOBAL_MESH);
 }
 
 void CRVLPSuLMVS::Init(char * CfgFile2Name)
@@ -419,15 +423,27 @@ void CRVLPSuLMVS::PSuLMBasedRLMUpdate(DWORD Flags)
 
 		RVLSetFileNumber(m_pPSuLM->m_FileName, "00000-LW.bmp", m_PSuLMBuilder.m_maxPSuLMIndex + 1);
 
-		if(m_PSuLMBuilder.MapBuilding(m_pPSuLM) && ((Flags & RVLPSULMBUILDER_CREATEMODEL_IMAGE_FROM_FILE) == 0))
+		if(m_PSuLMBuilder.MapBuilding(m_pPSuLM))
 		{
-			cvSaveImage(m_pPSuLM->m_FileName, m_pRGBImage);		
+			if((Flags & RVLPSULMBUILDER_CREATEMODEL_IMAGE_FROM_FILE) == 0)
+			{
+				cvSaveImage(m_pPSuLM->m_FileName, m_pRGBImage);		
 
-			char *DepthImageFileName = RVLCreateFileName(m_ImageFileName, "-LW.bmp", m_PSuLMBuilder.m_maxPSuLMIndex, "-D.txt");
+				char *DepthImageFileName = RVLCreateFileName(m_ImageFileName, "-LW.bmp", m_PSuLMBuilder.m_maxPSuLMIndex, "-D.txt");
 
-			RVLSaveDepthImage(m_StereoVision.m_DisparityMap.Disparity, m_StereoVision.m_DisparityMap.Width, 
-				m_StereoVision.m_DisparityMap.Height, DepthImageFileName, m_StereoVision.m_DisparityMap.Format, 
-				m_StereoVision.m_DisparityMap.Format);		
+				RVLSaveDepthImage(m_StereoVision.m_DisparityMap.Disparity, m_StereoVision.m_DisparityMap.Width, 
+					m_StereoVision.m_DisparityMap.Height, DepthImageFileName, m_StereoVision.m_DisparityMap.Format, 
+					m_StereoVision.m_DisparityMap.Format);
+			}
+
+			if(m_Flags & RVLSYS_FLAGS_CREATE_GLOBAL_MESH)
+			{
+				// append local 3D mesh to global 3D mesh
+
+				CRVL3DPose *pPoseSM = (m_PSuLMBuilder.m_nPlausibleHypotheses > 0 ? &(m_PSuLMBuilder.m_HypothesisArray[0]->PoseSM) : NULL);
+
+				AppendToMeshFile(pPoseSM);
+			}
 		}
 	}
 
@@ -513,6 +529,95 @@ void CRVLPSuLMVS::PSuLMBasedRLMUpdate(DWORD Flags)
 #endif
 	}
 }
+
+void CRVLPSuLMVS::CreateMeshFile(char *MeshFileName)
+{
+	m_pMeshFile = new RVL3DMESHFILE;
+
+	m_pMeshFile->Class.m_pMem = &m_Mem;
+
+    m_pMeshFile->Class.m_pMem0 = &m_Mem0;
+
+    m_pMeshFile->Class.m_pMem2 = &m_Mem2;
+
+	m_pMeshFile->Name = RVLCreateString(MeshFileName);
+
+	m_pMeshFile->nLocalMeshes = 0;
+
+	m_pMeshFile->TextureType = 2;
+}
+
+void CRVLPSuLMVS::DeleteMeshFile()
+{
+	if(m_pMeshFile == NULL)
+		return;
+
+	delete[] m_pMeshFile->Name;
+
+	delete m_pMeshFile;
+}
+
+void CRVLPSuLMVS::AppendToMeshFile(CRVL3DPose *pRelPose)
+{
+	IplImage *pHSVImage = cvCreateImage(cvSize(m_pRGBImage->width, m_pRGBImage->height), IPL_DEPTH_8U, 3);
+
+	cvCvtColor(m_pRGBImage, pHSVImage, CV_BGR2RGB);
+
+	int nSegments = m_AImage.m_C2DRegion3.m_ObjectList.m_nElements + 1;
+
+	m_PSD.AssignLabels(&(m_AImage.m_C2DRegion), &(m_AImage.m_C2DRegion3));
+
+	CRVL3DMeshObject *Mesh = GenMeshObjects(&(m_AImage.m_C2DRegion.m_ObjectList), pHSVImage, nSegments, &(m_pMeshFile->Class));
+
+	char textureFileName[200] = "Texture";
+	sprintf(textureFileName + strlen(textureFileName), "%d.bmp", m_pMeshFile->nLocalMeshes);
+	FILE *dat, *mtldat;
+	char *GlobalMeshTextureFileName = RVLCreateFileName(m_pMeshFile->Name, ".obj", 0, ".obj.mtl");
+
+	double *RRel = pRelPose->m_Rot;
+	double *tRel = pRelPose->m_X;
+	double *RAbs = m_pMeshFile->LastLocalMeshPose.m_Rot;
+	double *tAbs = m_pMeshFile->LastLocalMeshPose.m_X;
+
+	double R[3 * 3];
+	double t[3 * 3];
+
+	if(m_pMeshFile->nLocalMeshes == 0)
+	{
+		dat = fopen(m_pMeshFile->Name, "w");
+		fclose(dat);
+		mtldat = fopen(GlobalMeshTextureFileName, "w");
+		fclose(mtldat);
+
+		RVLUNITMX3(RAbs);
+		RVLNULL3VECTOR(tAbs);
+
+		m_pMeshFile->iPt = 0;
+		m_pMeshFile->iSegment = 0;
+	}
+	else
+	{
+		RVLCOMPTRANSF3D(RAbs, tAbs, RRel, tRel, R, t)
+
+		RVLCOPYMX3X3(R, RAbs)
+		RVLCOPY3VECTOR(t, tAbs)
+	}
+	
+	dat = fopen(m_pMeshFile->Name, "a");
+		
+	mtldat = fopen(GlobalMeshTextureFileName, "a");
+
+	cvSaveImage(textureFileName, m_pRGBImage);	
+		
+	Mesh->AppendMeshObject2OBJ(m_pMeshFile->iPt, m_pMeshFile->iSegment, &(m_pMeshFile->LastLocalMeshPose), dat, mtldat, 
+		GlobalMeshTextureFileName, m_PSD.m_Point3DMap, m_pMeshFile->TextureType, textureFileName);
+
+	m_pMeshFile->nLocalMeshes++;
+
+	fclose(dat);
+	fclose(mtldat);
+}
+
 
 void RVLPSuLMDisplayMouseCallback2(int event, int x, int y, int flags, void* vpData)
 {

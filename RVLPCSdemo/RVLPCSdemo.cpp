@@ -601,7 +601,7 @@ int main(int argc, char* argv[])
 #endif
 			case 't':
 #ifdef RVLVTK
-				VTKTexture = (VTKTexture + 1) % 4;
+				VTKTexture = (VTKTexture + 1) % 2;
  
 				if(bVTKRendererActive)
 					RVLDisplaySegmentedMesh3D(&Renderer, &(VS.m_AImage.m_C2DRegion.m_ObjectList), nObjects, w, h, pointmap,
