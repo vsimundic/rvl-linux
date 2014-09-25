@@ -222,7 +222,6 @@ int main(int argc, char* argv[])
 	int ZoomFactor = 1;
 	bool bVTKRendererActive = false;
 	int iVTK3DModel = 0;
-	bool bLoopStart = false;
 
 	char VTK3DModelFileName[] = "VTK3DModel_00000.ply";
 	char VTKMessageConst[] = "3D model in PLY-format saved in ";
@@ -351,23 +350,16 @@ int main(int argc, char* argv[])
 
 			t = clock() - t;	
 
-			// loop start
-
-			if(bLoopStart && VS.m_PSuLMBuilder.m_nPlausibleHypotheses > 0)
-			{
-				VS.m_PSuLMBuilder.m_pLoopStartPSuLM = VS.m_PSuLMBuilder.m_HypothesisArray[0]->pMPSuLM;
-
-				bLoopStart = false;
-			}
-
 			//// mark segment edges
 
 			//if(VS.m_PSD.m_Flags & RVLPSD_MESH_SEGMENT_PLANAR)
-			//{
-			//	nObjects = VS.m_AImage.m_C2DRegion3.m_ObjectList.m_nElements + 1;
+			if((VS.m_Flags & RVLSYS_FLAGS_CREATE_GLOBAL_MESH) == 0 || 
+				(VS.m_PSuLMBuilder.m_Flags & RVLPSULMBUILDER_FLAG_MODE_LOCALIZATION) == 0)
+			{
+				nObjects = VS.m_AImage.m_C2DRegion3.m_ObjectList.m_nElements + 1;
 
-			//	VS.m_PSD.AssignLabels(&(VS.m_AImage.m_C2DRegion), &(VS.m_AImage.m_C2DRegion3));
-			//}
+				VS.m_PSD.AssignLabels(&(VS.m_AImage.m_C2DRegion), &(VS.m_AImage.m_C2DRegion3));
+			}
 
 			RVLSegmentationEdgesFromLabels(&(VS.m_AImage.m_C2DRegion));
 
@@ -509,9 +501,11 @@ int main(int argc, char* argv[])
 #ifdef RVLOPENNI
 			case 'b':
 				if(bKinect)
+				{
 					DisplayBitmap = (DisplayBitmap + 1) % 3;
 
-				VS.m_Kinect.RegisterDepthToColor((DisplayBitmap != 0));
+					VS.m_Kinect.RegisterDepthToColor((DisplayBitmap != 0));
+				}
 
 				break;
 #endif
@@ -549,8 +543,17 @@ int main(int argc, char* argv[])
 				bRefresh = true;
 
 				break;
+			case 'i':
+				if(VS.m_PSuLMBuilder.m_pNearestModelPSuLM)
+				{
+					VS.m_PSuLMBuilder.m_pLoopStartPSuLM = VS.m_PSuLMBuilder.m_pNearestModelPSuLM;
+
+					bRefresh = true;
+				}
+
+				break;
 			case 'l':
-				if(VS.m_PSuLMBuilder.m_Flags & RVLPSULMBUILDER_FLAG_MAPBUILDING)
+				if((VS.m_PSuLMBuilder.m_Flags & RVLPSULMBUILDER_FLAG_MAPBUILDING) && VS.m_PSuLMBuilder.m_pLoopStartPSuLM)
 				{
 					VS.m_PSuLMBuilder.m_Flags |= RVLPSULMBUILDER_FLAG_MANUAL_LOOP_CLOSING;
 
