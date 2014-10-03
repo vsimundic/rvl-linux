@@ -131,6 +131,18 @@ public:
 					  DWORD Flags = 0x00000000,
 					  int min3DPtsPerc = 0,
 					  DWORD Mask = 0x00000000);
+	void AppendMeshObject2OBJ(	int &iPt, 
+								int &br, 
+								CRVL3DPose *pPose,
+								FILE *fpOBJ,
+								FILE *fpMTL,
+								char* mtlFileName,
+								RVL3DPOINT2 **Point3DMap,
+								int colorType,
+								char* texFileName,
+								DWORD Flags = 0x00000000,
+								int min3DPtsPerc = 0,
+								DWORD Mask = 0x00000000);
 	void Save(	FILE *fp,
 				DWORD Flags = 0x00000000);
 	void Load(	FILE *fp,

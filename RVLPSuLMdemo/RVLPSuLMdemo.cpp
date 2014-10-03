@@ -137,6 +137,15 @@ int main(int argc, char* argv[])
 
 	IplImage *pPrevRGBImage = cvCreateImage(cvSize(w, h), IPL_DEPTH_8U, 3);
 
+	// create HSV image
+
+    IplImage *pHSVImage = cvCreateImage(cvSize(w, h), IPL_DEPTH_8U, 3);
+
+	// create mesh file
+
+	if(VS.m_Flags & RVLSYS_FLAGS_CREATE_GLOBAL_MESH)
+		VS.CreateMeshFile("Mesh.obj");
+
 	// create main display image
 
 	CRVLFigure *pFig = GUI.OpenFigure("Scene");
@@ -206,6 +215,7 @@ int main(int argc, char* argv[])
 	//bool bContinuous = bKinect;
 	bool bContinuous = false;
 	bool bRecord = false;
+	bool bFrames = false;
 	//DWORD mDisplayPSuLMFlags = (RVLPSULM_DISPLAY_SURFACES | RVLPSULM_DISPLAY_VECTORS | RVLPSULM_DISPLAY_SAMPLES);
 	DWORD mDisplayPSuLMFlags = (RVLPSULM_DISPLAY_SURFACES | RVLPSULM_DISPLAY_ELLIPSES | RVLPSULM_DISPLAY_LINES | RVLPSULM_DISPLAY_VECTORS);
 	int DisplayBitmap = 0;
@@ -216,10 +226,16 @@ int main(int argc, char* argv[])
 	char VTK3DModelFileName[] = "VTK3DModel_00000.ply";
 	char VTKMessageConst[] = "3D model in PLY-format saved in ";
 	char *VTKMessage = new char[strlen(VTKMessageConst) + strlen(VTK3DModelFileName) + 1];
+
+	char GlobalMeshFileName[] = "Mesh.obj";
+
+	int VTKTexture = 0;
 	
+	int nObjects = 1;
+	int textureFileNumber = 1;
+
 	int key;
 	//int iSample;
-	int nObjects = 1;
 	bool bRefresh;
 	bool bNextImage;
 	clock_t t;
@@ -334,9 +350,11 @@ int main(int argc, char* argv[])
 
 			t = clock() - t;	
 
-			// mark segment edges
+			//// mark segment edges
 
-			if(VS.m_PSD.m_Flags & RVLPSD_MESH_SEGMENT_PLANAR)
+			//if(VS.m_PSD.m_Flags & RVLPSD_MESH_SEGMENT_PLANAR)
+			if((VS.m_Flags & RVLSYS_FLAGS_CREATE_GLOBAL_MESH) == 0 || 
+				(VS.m_PSuLMBuilder.m_Flags & RVLPSULMBUILDER_FLAG_MODE_LOCALIZATION) == 0)
 			{
 				nObjects = VS.m_AImage.m_C2DRegion3.m_ObjectList.m_nElements + 1;
 
@@ -344,6 +362,16 @@ int main(int argc, char* argv[])
 			}
 
 			RVLSegmentationEdgesFromLabels(&(VS.m_AImage.m_C2DRegion));
+
+			// store RGB image
+
+			cvCvtColor(pRGBImage, pHSVImage, CV_BGR2RGB);
+
+			pHSVImage->channelSeq[0] = 'R';
+
+			pHSVImage->channelSeq[1] = 'G';
+
+			pHSVImage->channelSeq[2] = 'B';
 		}
 
 		// display the results
@@ -473,9 +501,11 @@ int main(int argc, char* argv[])
 #ifdef RVLOPENNI
 			case 'b':
 				if(bKinect)
+				{
 					DisplayBitmap = (DisplayBitmap + 1) % 3;
 
-				VS.m_Kinect.RegisterDepthToColor((DisplayBitmap != 0));
+					VS.m_Kinect.RegisterDepthToColor((DisplayBitmap != 0));
+				}
 
 				break;
 #endif
@@ -489,12 +519,46 @@ int main(int argc, char* argv[])
 				bRefresh = true;				
 	
 				break;
+			case 'f':
+				VS.m_PSuLMBuilder.m_Flags ^= RVLPSULMBUILDER_FLAG_MAPBUILDING;
+
+				if(VS.m_PSuLMBuilder.m_Flags & RVLPSULMBUILDER_FLAG_MAPBUILDING)
+				{
+					VS.m_PSuLMBuilder.m_Flags &= ~RVLPSULMBUILDER_FLAG_GLOBAL;
+
+					if(VS.m_PSuLMBuilder.m_nPlausibleHypotheses > 0)
+						VS.m_PSuLMBuilder.m_pNearestModelPSuLM = VS.m_PSuLMBuilder.m_HypothesisArray[0]->pMPSuLM;
+				}
+
+				break;
+			case 'g':
+				VS.m_PSuLMBuilder.m_Flags ^= RVLPSULMBUILDER_FLAG_GLOBAL;
+
+				break;
 			case 'h':
 				bDisplayHypothesis = (!bDisplayHypothesis && !bRecord);
 
 				bDisplayPSuLM = (bDisplayPSuLM & !bDisplayHypothesis);
 
 				bRefresh = true;
+
+				break;
+			case 'i':
+				if(VS.m_PSuLMBuilder.m_pNearestModelPSuLM)
+				{
+					VS.m_PSuLMBuilder.m_pLoopStartPSuLM = VS.m_PSuLMBuilder.m_pNearestModelPSuLM;
+
+					bRefresh = true;
+				}
+
+				break;
+			case 'l':
+				if((VS.m_PSuLMBuilder.m_Flags & RVLPSULMBUILDER_FLAG_MAPBUILDING) && VS.m_PSuLMBuilder.m_pLoopStartPSuLM)
+				{
+					VS.m_PSuLMBuilder.m_Flags |= RVLPSULMBUILDER_FLAG_MANUAL_LOOP_CLOSING;
+
+					VS.m_PSuLMBuilder.m_Flags &= ~RVLPSULMBUILDER_FLAG_GLOBAL;
+				}
 
 				break;
 			case 'm':
@@ -537,6 +601,20 @@ int main(int argc, char* argv[])
 				break;
 			case 's':
 				bDisplayConvexSets = (!bDisplayConvexSets && !bRecord);
+
+				bRefresh = true;
+
+				break;
+			case 't':
+#ifdef RVLVTK
+				VTKTexture = (VTKTexture + 1) % 2;
+ 
+				if(bVTKRendererActive)
+					RVLDisplaySegmentedMesh3D(&Renderer, &(VS.m_AImage.m_C2DRegion.m_ObjectList), nObjects, w, h, pointmap,
+						VS.m_PSD.m_Point3DMap, VTKTexture, pHSVImage);
+				else
+#endif
+				GUI.Message("VTK Texture mode changed.", 600, 100, cvScalar(0, 128, 255));
 
 				bRefresh = true;
 
