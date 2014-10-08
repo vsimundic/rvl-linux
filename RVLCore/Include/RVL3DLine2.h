@@ -82,7 +82,9 @@ class CRVL3DLine2 : public CRVL3DObject
 public:
 	double m_X[2][3];
 	double m_CX[2][9];
+	double m_V[3];
 	int m_nSupport;
+	double m_len;
 	//double m_XL[2][3];
 	//double m_CXL[2][9];
 	//double m_Cs[2][4];
@@ -91,7 +93,11 @@ public:
 	//double m_len;
 
 public:
+	bool Match(	CRVL3DObject *pObject_, 
+				double &MatchQuality);
 	//void TransfLA(CRVL3DPose *pPoseLA);
+	void Transform(	CRVL3DLine2 *pLineSrc,
+					CRVL3DPose *pPose);
 	void Save(	FILE *fp,
 				DWORD Flags);
 	void Load(	FILE *fp,
@@ -101,6 +107,21 @@ public:
 	CRVL3DLine2();
 	virtual ~CRVL3DLine2();
 
+private:
+	void ComputeMatchParams(double w1,
+							double dw,
+							double wo,
+							double *C1,
+							double *C2,
+							double *Co,
+							double &s,
+							double &varzo);
+	bool ComputeOrientUncert(	double *C1o,
+								double *C2o,
+								double varz1o,
+								double varz2o,
+								double dwo,
+								double *Cu);
 };
 
 extern CRVL3DLine2 RVL3DLine2Template;

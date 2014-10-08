@@ -108,6 +108,347 @@ void CRVL3DLine2::Load(	FILE *fp,
 	fread(&m_nSupport, sizeof(int), 1, fp);
 }
 
+void CRVL3DLine2::Transform(CRVL3DLine2 *pLineSrc,
+							CRVL3DPose *pPose)
+{
+	double *R = pPose->m_Rot;
+	double *t = pPose->m_X;
+
+	double *PSrc, *PTgt1, *PTgt2;
+
+	PTgt1 = m_X[0];
+	PSrc = pLineSrc->m_X[0];
+	RVLTRANSF3(PSrc, R, t, PTgt1)
+	PTgt2 = m_X[1];
+	PSrc = pLineSrc->m_X[1];
+	RVLTRANSF3(PSrc, R, t, PTgt2)
+
+	RVLDIF3VECTORS(PTgt2, PTgt1, m_V)
+	double fTmp;
+	RVLNORM3(m_V, fTmp)
+
+	double *CSrc, *CTgt;
+	
+	CTgt = m_CX[0];
+	CSrc = pLineSrc->m_CX[0];
+	RVLMXMUL3X3(R, CSrc, CTgt)
+	CTgt = m_CX[1];
+	CSrc = pLineSrc->m_CX[1];
+	RVLMXMUL3X3(R, CSrc, CTgt)
+}
+
+void CRVL3DLine2::ComputeMatchParams(double w1,
+									 double dw,
+									 double wo,
+									 double *C1,
+									 double *C2,
+									 double *Co,
+									 double &s,
+									 double &varzo)
+{
+	s = (wo - w1) / dw;
+		
+	double fTmp = 1.0 - s;
+	fTmp *= fTmp;
+	double fTmp2 = s * s;
+	Co[0] = fTmp * C1[0] + fTmp2 * C2[0];
+	Co[1] = fTmp * C1[1] + fTmp2 * C2[1];
+	Co[3] = fTmp * C1[3] + fTmp2 * C2[3];
+	varzo = fTmp * C1[8] + fTmp2 * C2[8];
+}
+
+bool CRVL3DLine2::ComputeOrientUncert(double *C1o,
+									  double *C2o,
+									  double varz1o,
+									  double varz2o,
+									  double dwo,
+									  double *Cu)
+{
+	double fTmp = dwo - 3.0 * sqrt(varz1o);
+
+	if(fTmp / dwo < 0.1)
+		return false;
+
+	fTmp *= fTmp;
+
+	double fTmp2 = dwo - 3.0 * sqrt(varz2o);
+
+	if(fTmp2 / dwo < 0.1)
+		return false;
+
+	fTmp2 *= fTmp2;
+
+	Cu[0] = C1o[0] / fTmp + C2o[0] / fTmp2;
+	Cu[1] = C1o[1] / fTmp + C2o[1] / fTmp2;
+	Cu[3] = C1o[3] / fTmp + C2o[3] / fTmp2;
+
+	return true;
+}
+
+bool CRVL3DLine2::Match(	CRVL3DObject *pObject_, 
+							double &MatchQuality)
+{
+	double *P1C = m_X[0];
+	double *P2C = m_X[1];
+
+	CRVL3DLine2 *pLine_ = (CRVL3DLine2 *)pObject_;
+
+	double *P1C_ = pLine_->m_X[0];
+	double *P2C_ = pLine_->m_X[1];
+
+	double fTmp;
+
+	double *V_ = pLine_->m_V;
+
+	double RCL[3*3];
+	double tCL[3];
+	double tLC[3];
+
+	double *XLC = RCL;
+	double *YLC = RCL + 3;
+	double *ZLC = RCL + 6;
+
+	if(RVLDOTPRODUCT3(m_V, V_) < COS45)
+		return false;
+
+	RVLSUM3VECTORS(m_V, V_, ZLC)
+	RVLNORM3(ZLC, fTmp)
+	
+	double w1 = RVLDOTPRODUCT3(P1C, ZLC);
+	double w2 = RVLDOTPRODUCT3(P2C, ZLC);
+	double w1_ = RVLDOTPRODUCT3(P1C_, ZLC);
+	double w2_ = RVLDOTPRODUCT3(P2C_, ZLC);
+
+	double w1o = RVLMAX(w1, w1_);
+	double w2o = RVLMIN(w2, w2_);
+
+	double dwo = w2o - w1o;
+
+	double rOverlap = dwo / m_len;
+
+	if(rOverlap < 0.4)
+		return false;
+
+	double rOverlap_ = dwo / pLine_->m_len;
+
+	if(rOverlap_ < 0.4)
+		return false;
+
+	double w0 = 0.5 * (w1o + w2o);
+
+	RVLSCALE3VECTOR(ZLC, w0, tLC)	
+
+	RVLMULMX3X3VECT(RCL, tLC, tCL)
+
+	RVLNEGVECT3(tCL, tCL)
+
+	RVLCROSSPRODUCT3(m_V, V_, XLC)
+
+	fTmp = RVLDOTPRODUCT3(XLC, XLC);
+
+	if(fTmp <= APPROX_ZERO)
+	{
+		double absZ[3];
+		absZ[0] = RVLABS(ZLC[0]);
+		absZ[1] = RVLABS(ZLC[1]);
+		absZ[2] = RVLABS(ZLC[2]);
+
+		int i = (absZ[0] > absZ[1] ? 0 : 1);
+		
+		if(absZ[2] > absZ[i])
+			i = 2;
+
+		int j = (i + 1) % 3;
+		int k = (i + 2) % 3;
+
+		XLC[i] = 0.0;
+		XLC[j] = -ZLC[k];
+		XLC[k] = ZLC[j];
+
+		fTmp = sqrt(XLC[j] * XLC[j] + XLC[k] * XLC[k]);
+
+		RVLSCALE3VECTOR2(XLC, fTmp, XLC)
+	}
+	else
+	{
+		fTmp = sqrt(fTmp);
+
+		RVLSCALE3VECTOR2(XLC, fTmp, XLC)
+	}
+
+	RVLCROSSPRODUCT3(ZLC, XLC, YLC);
+
+	double P1[3], P2[3], P1_[3], P2_[3];
+
+	RVLTRANSF3(P1C, RCL, tCL, P1)
+	RVLTRANSF3(P2C, RCL, tCL, P2)
+	RVLTRANSF3(P1C_, RCL, tCL, P1_)
+	RVLTRANSF3(P2C_, RCL, tCL, P2_)
+
+	double C1[3*3], C2[3*3], C1_[3*3], C2_[3*3];
+	double *CC;
+	double Mx3x3Tmp[3*3];	
+
+	CC = m_CX[0];
+	RVLCOV3DTRANSF(CC, RCL, C1, Mx3x3Tmp)
+
+	CC = m_CX[1];
+	RVLCOV3DTRANSF(CC, RCL, C2, Mx3x3Tmp)
+
+	CC = pLine_->m_CX[0];
+	RVLCOV3DTRANSF(CC, RCL, C1_, Mx3x3Tmp)
+
+	CC = pLine_->m_CX[1];
+	RVLCOV3DTRANSF(CC, RCL, C2_, Mx3x3Tmp)
+
+	double dw = w2 - w1;
+	double dw_ = w2_ - w1_;
+
+	double P0[2], P0_[2];
+	double C0[2*2], C0_[2*2];
+	double s;
+
+	ComputeMatchParams(w1, dw, w0, C1, C2, C0, s, fTmp);
+
+	P0[0] = P1[0] + s * (P2[0] - P1[0]);
+	P0[1] = P1[1] + s * (P2[1] - P1[1]);
+
+	ComputeMatchParams(w1_, dw_, w0, C1, C2, C0_, s, fTmp);
+
+	P0_[0] = P1_[0] + s * (P2_[0] - P1_[0]);
+	P0_[1] = P1_[1] + s * (P2_[1] - P1_[1]);
+
+	double E[2];
+
+	E[0] = P0_[0] - P0[0];
+	E[1] = P0_[1] - P0[1];
+
+	double C[2 * 2];
+
+	C[0] = C0[0] + C0_[0]; C[1] = C0[1] + C0_[1]; C[3] = C0[3] + C0_[3]; 
+
+	double detC = RVLDET2(C);
+
+	double e = RVLMAHDIST2(E, C, detC);
+
+	if(e > 9.21)
+		return false;
+
+	double C1o[2*2], C2o[2*2], C1o_[2*2], C2o_[2*2];
+	double varz1o, varz2o, varz1o_, varz2o_;
+
+	ComputeMatchParams(w1, dw, w1o, C1, C2, C1o, s, varz1o);
+	ComputeMatchParams(w1, dw, w2o, C1, C2, C2o, s, varz2o);
+	ComputeMatchParams(w1_, dw_, w1o, C1_, C2_, C1o_, s, varz1o_);
+	ComputeMatchParams(w1_, dw_, w2o, C1_, C2_, C2o_, s, varz2o_);
+
+	double Cu[2*2], Cu_[2*2];
+	double eu;
+	double V2x1Tmp1[2], V2x1Tmp2[2];
+	double Mx2x2Tmp[2*2];
+
+	if(!ComputeOrientUncert(C1o, C2o, varz1o, varz2o, dwo, Cu))
+		eu = 0.0;
+	else if(!ComputeOrientUncert(C1o_, C2o_, varz1o_, varz2o_, dwo, Cu_))
+		eu = 0.0;
+	else
+	{
+		double CuS[2*2];
+
+		CuS[0] = Cu[0] + Cu_[0];
+		CuS[1] = Cu[1] + Cu_[1];
+		CuS[3] = Cu[3] + Cu_[3];
+
+		double detCuS = RVLDET2(CuS);
+
+		if(detCuS > 4.0)
+			eu = 0.0;
+		else
+		{
+			double detCu = RVLDET2(Cu);
+			double invCu[2*2];
+			RVLINVCOV2(Cu, invCu, detCu)
+
+			double detCu_ = RVLDET2(Cu_);
+			double invCu_[2*2];
+			RVLINVCOV2(Cu_, invCu_, detCu_)		
+	
+			double uy = RVLDOTPRODUCT3(m_V, YLC);
+
+			V2x1Tmp1[0] = (invCu[1] - invCu_[1]) * uy;
+			V2x1Tmp1[1] = (invCu[3] - invCu_[3]) * uy;
+
+			double invCuS[2*2];
+
+			invCuS[0] = invCu[0] + invCu_[0]; invCuS[1] = invCu[1] + invCu_[1]; invCuS[3] = invCu[3] + invCu_[3];
+
+			fTmp = RVLDET2(invCuS);
+			RVLINVCOV2(invCuS, Mx2x2Tmp, fTmp)
+
+			double um[2];
+			
+			RVLMULCOV2VECT(Mx2x2Tmp, V2x1Tmp1, um)
+
+			E[0] = -um[0];
+			E[1] = uy - um[1];
+
+			eu = RVLMAHDIST2(E, Cu, detCu);
+
+			E[1] = -uy - um[1];
+
+			eu += RVLMAHDIST2(E, Cu_, detCu_);
+
+			eu = RVLLN4PI - 0.5*(log(detCuS)+eu+RVLLN2PI);
+
+			if(eu < 0.0)
+				eu = 0.0;
+		}
+	}
+
+	double detC0 = RVLDET2(C0);
+	double invC0[2*2];
+	RVLINVCOV2(C0, invC0, detC0)
+
+	double detC0_ = RVLDET2(C0_);
+	double invC0_[2*2];
+	RVLINVCOV2(C0_, invC0_, detC0_)
+
+	double P0m[2];
+
+	RVLMULCOV2VECT(invC0, P0, V2x1Tmp1)
+	RVLMULCOV2VECT(invC0_, P0_, V2x1Tmp2)
+	V2x1Tmp1[0] += V2x1Tmp2[0];
+	V2x1Tmp1[1] += V2x1Tmp2[1];
+
+	double invC0S[2*2];
+
+	invC0S[0] = invC0[0] + invC0_[0]; invC0S[1] = invC0[1] + invC0_[1]; invC0S[3] = invC0[3] + invC0_[3];
+
+	fTmp = RVLDET2(invC0S);
+	RVLINVCOV2(invC0S, Mx2x2Tmp, fTmp)
+	
+	RVLMULCOV2VECT(Mx2x2Tmp, V2x1Tmp1, P0m)
+
+	E[0] = P0[0] - P0m[0];
+	E[1] = P0[1] - P0m[1];
+
+	double ep = RVLMAHDIST2(E, C0, detC0);
+
+	E[0] = P0_[0] - P0m[0];
+	E[1] = P0_[1] - P0m[1];
+
+	ep += RVLMAHDIST2(E, C0_, detC0_);
+
+	ep = 11.512925464970228420089957273422 - 0.5*(log(detC)+ep+RVLLN2PI);	
+
+	if(ep < 0.0)
+		ep = 0.0;
+
+	MatchQuality = eu + ep;
+
+	return true;
+}
+
 //void CRVL3DLine2::TransfLA(CRVL3DPose *pPoseLA)
 //{
 //	if(m_ParamFlags & RVL3DLINE_PARAM_FLAG_XL)
