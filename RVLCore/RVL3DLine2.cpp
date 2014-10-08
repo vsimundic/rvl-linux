@@ -153,7 +153,7 @@ void CRVL3DLine2::ComputeMatchParams(double w1,
 	double fTmp2 = s * s;
 	Co[0] = fTmp * C1[0] + fTmp2 * C2[0];
 	Co[1] = fTmp * C1[1] + fTmp2 * C2[1];
-	Co[3] = fTmp * C1[3] + fTmp2 * C2[3];
+	Co[3] = fTmp * C1[4] + fTmp2 * C2[4];
 	varzo = fTmp * C1[8] + fTmp2 * C2[8];
 }
 
@@ -188,17 +188,24 @@ bool CRVL3DLine2::ComputeOrientUncert(double *C1o,
 bool CRVL3DLine2::Match(	CRVL3DObject *pObject_, 
 							double &MatchQuality)
 {
-	double *P1C = m_X[0];
-	double *P2C = m_X[1];
+	// coarse orientation matching
 
 	CRVL3DLine2 *pLine_ = (CRVL3DLine2 *)pObject_;
+
+	double *V_ = pLine_->m_V;
+
+	if(RVLDOTPRODUCT3(m_V, V_) < COS45)
+		return false;
+
+	// overlapping
+
+	double *P1C = m_X[0];
+	double *P2C = m_X[1];
 
 	double *P1C_ = pLine_->m_X[0];
 	double *P2C_ = pLine_->m_X[1];
 
 	double fTmp;
-
-	double *V_ = pLine_->m_V;
 
 	double RCL[3*3];
 	double tCL[3];
@@ -207,9 +214,6 @@ bool CRVL3DLine2::Match(	CRVL3DObject *pObject_,
 	double *XLC = RCL;
 	double *YLC = RCL + 3;
 	double *ZLC = RCL + 6;
-
-	if(RVLDOTPRODUCT3(m_V, V_) < COS45)
-		return false;
 
 	RVLSUM3VECTORS(m_V, V_, ZLC)
 	RVLNORM3(ZLC, fTmp)
@@ -234,7 +238,11 @@ bool CRVL3DLine2::Match(	CRVL3DObject *pObject_,
 	if(rOverlap_ < 0.4)
 		return false;
 
+	// central point of overlapping segment
+
 	double w0 = 0.5 * (w1o + w2o);
+
+	// match reference frame
 
 	RVLSCALE3VECTOR(ZLC, w0, tLC)	
 
@@ -278,6 +286,8 @@ bool CRVL3DLine2::Match(	CRVL3DObject *pObject_,
 
 	RVLCROSSPRODUCT3(ZLC, XLC, YLC);
 
+	// transform lines into the match reference frame
+
 	double P1[3], P2[3], P1_[3], P2_[3];
 
 	RVLTRANSF3(P1C, RCL, tCL, P1)
@@ -300,6 +310,8 @@ bool CRVL3DLine2::Match(	CRVL3DObject *pObject_,
 
 	CC = pLine_->m_CX[1];
 	RVLCOV3DTRANSF(CC, RCL, C2_, Mx3x3Tmp)
+
+	// matching of the central points of the overlapping segments
 
 	double dw = w2 - w1;
 	double dw_ = w2_ - w1_;
@@ -334,22 +346,72 @@ bool CRVL3DLine2::Match(	CRVL3DObject *pObject_,
 	if(e > 9.21)
 		return false;
 
+	// position probability
+
+	double detC0 = RVLDET2(C0);
+	double invC0[2*2];
+	RVLINVCOV2(C0, invC0, detC0)
+
+	double detC0_ = RVLDET2(C0_);
+	double invC0_[2*2];
+	RVLINVCOV2(C0_, invC0_, detC0_)
+
+	double V2x1Tmp1[2], V2x1Tmp2[2];
+	double Mx2x2Tmp[2*2];
+	double P0m[2];
+
+	RVLMULCOV2VECT(invC0, P0, V2x1Tmp1)
+	RVLMULCOV2VECT(invC0_, P0_, V2x1Tmp2)
+	V2x1Tmp1[0] += V2x1Tmp2[0];
+	V2x1Tmp1[1] += V2x1Tmp2[1];
+
+	double invC0S[2*2];
+
+	invC0S[0] = invC0[0] + invC0_[0]; invC0S[1] = invC0[1] + invC0_[1]; invC0S[3] = invC0[3] + invC0_[3];
+
+	fTmp = RVLDET2(invC0S);
+	RVLINVCOV2(invC0S, Mx2x2Tmp, fTmp)
+	
+	RVLMULCOV2VECT(Mx2x2Tmp, V2x1Tmp1, P0m)
+
+	E[0] = P0[0] - P0m[0];
+	E[1] = P0[1] - P0m[1];
+
+	double ep = RVLMAHDIST2(E, C0, detC0);
+
+	E[0] = P0_[0] - P0m[0];
+	E[1] = P0_[1] - P0m[1];
+
+	ep += RVLMAHDIST2(E, C0_, detC0_);
+
+	ep = 11.512925464970228420089957273422 - 0.5*(log(detC)+ep+RVLLN2PI);	
+
+	if(ep < 0.0)
+		ep = 0.0;
+
+	// orientation probability
+
 	double C1o[2*2], C2o[2*2], C1o_[2*2], C2o_[2*2];
 	double varz1o, varz2o, varz1o_, varz2o_;
 
-	ComputeMatchParams(w1, dw, w1o, C1, C2, C1o, s, varz1o);
-	ComputeMatchParams(w1, dw, w2o, C1, C2, C2o, s, varz2o);
-	ComputeMatchParams(w1_, dw_, w1o, C1_, C2_, C1o_, s, varz1o_);
-	ComputeMatchParams(w1_, dw_, w2o, C1_, C2_, C2o_, s, varz2o_);
+	//ComputeMatchParams(w1, dw, w1o, C1, C2, C1o, s, varz1o);
+	//ComputeMatchParams(w1, dw, w20, C1, C2, C2o, s, varz2o);
+	//ComputeMatchParams(w1_, dw_, w1o, C1_, C2_, C1o_, s, varz1o_);
+	//ComputeMatchParams(w1_, dw_, w2o, C1_, C2_, C2o_, s, varz2o_);
+
+	ComputeMatchParams(w1, dw, w1, C1, C2, C1o, s, varz1o);
+	ComputeMatchParams(w1, dw, w2, C1, C2, C2o, s, varz2o);
+	ComputeMatchParams(w1_, dw_, w1_, C1_, C2_, C1o_, s, varz1o_);
+	ComputeMatchParams(w1_, dw_, w2_, C1_, C2_, C2o_, s, varz2o_);
 
 	double Cu[2*2], Cu_[2*2];
 	double eu;
-	double V2x1Tmp1[2], V2x1Tmp2[2];
-	double Mx2x2Tmp[2*2];
 
-	if(!ComputeOrientUncert(C1o, C2o, varz1o, varz2o, dwo, Cu))
+	//if(!ComputeOrientUncert(C1o, C2o, varz1o, varz2o, dwo, Cu))
+	if(!ComputeOrientUncert(C1o, C2o, varz1o, varz2o, m_len, Cu))
 		eu = 0.0;
-	else if(!ComputeOrientUncert(C1o_, C2o_, varz1o_, varz2o_, dwo, Cu_))
+	//else if(!ComputeOrientUncert(C1o_, C2o_, varz1o_, varz2o_, dwo, Cu_))
+	else if(!ComputeOrientUncert(C1o_, C2o_, varz1o_, varz2o_, pLine_->m_len, Cu_))
 		eu = 0.0;
 	else
 	{
@@ -405,44 +467,7 @@ bool CRVL3DLine2::Match(	CRVL3DObject *pObject_,
 		}
 	}
 
-	double detC0 = RVLDET2(C0);
-	double invC0[2*2];
-	RVLINVCOV2(C0, invC0, detC0)
-
-	double detC0_ = RVLDET2(C0_);
-	double invC0_[2*2];
-	RVLINVCOV2(C0_, invC0_, detC0_)
-
-	double P0m[2];
-
-	RVLMULCOV2VECT(invC0, P0, V2x1Tmp1)
-	RVLMULCOV2VECT(invC0_, P0_, V2x1Tmp2)
-	V2x1Tmp1[0] += V2x1Tmp2[0];
-	V2x1Tmp1[1] += V2x1Tmp2[1];
-
-	double invC0S[2*2];
-
-	invC0S[0] = invC0[0] + invC0_[0]; invC0S[1] = invC0[1] + invC0_[1]; invC0S[3] = invC0[3] + invC0_[3];
-
-	fTmp = RVLDET2(invC0S);
-	RVLINVCOV2(invC0S, Mx2x2Tmp, fTmp)
-	
-	RVLMULCOV2VECT(Mx2x2Tmp, V2x1Tmp1, P0m)
-
-	E[0] = P0[0] - P0m[0];
-	E[1] = P0[1] - P0m[1];
-
-	double ep = RVLMAHDIST2(E, C0, detC0);
-
-	E[0] = P0_[0] - P0m[0];
-	E[1] = P0_[1] - P0m[1];
-
-	ep += RVLMAHDIST2(E, C0_, detC0_);
-
-	ep = 11.512925464970228420089957273422 - 0.5*(log(detC)+ep+RVLLN2PI);	
-
-	if(ep < 0.0)
-		ep = 0.0;
+	// total probability
 
 	MatchQuality = eu + ep;
 
