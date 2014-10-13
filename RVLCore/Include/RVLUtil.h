@@ -41,6 +41,8 @@
 #define RVLSCALE3VECTOR(Src, a, Tgt)	Tgt[0] = a * Src[0]; Tgt[1] = a * Src[1]; Tgt[2] = a * Src[2]; 
 // Tgt = Src(3x1) / a
 #define RVLSCALE3VECTOR2(Src, a, Tgt)	Tgt[0] = Src[0] / a; Tgt[1] = Src[1] / a; Tgt[2] = Src[2] / a; 
+// TgtCol = a * SrcCol, where SrcCol and TgtCol are the i-th column of 3x3 matrices Src and Tgt respectively
+#define RVLSCALECOL3(Src, i, a, Tgt)	Tgt[i] = a * Src[i]; Tgt[i+3] = a * Src[i+3]; Tgt[i+6] = a * Src[i+6];
 // dot product of i-th row of A(3x3) and j-th column of B(3x3)
 #define RVLMULROWCOL3(A,B,i,j)	(A[3*i+0]*B[3*0+j] + A[3*i+1]*B[3*1+j] + A[3*i+2]*B[3*2+j])
 // dot product of i-th row of A(3x3) and j-th row of B(3x3)
@@ -282,6 +284,23 @@
 	tTgt[0] = - RSrc[0]*tSrc[0] - RSrc[3]*tSrc[1];\
 	tTgt[1] = RSrc[3]*tSrc[0] - RSrc[0]*tSrc[1];\
 	tTgt[2] = 0.0;\
+}
+// Compute vector Y orthogonal to X
+#define RVLORTHOGONAL3(X, Y, i, j, k, tmp3x1, fTmp)\
+{\
+	tmp3x1[0] = RVLABS(X[0]);\
+	tmp3x1[1] = RVLABS(X[1]);\
+	tmp3x1[2] = RVLABS(X[2]);\
+	i = (tmp3x1[0] > tmp3x1[1] ? 0 : 1);\
+	if(tmp3x1[2] > tmp3x1[i])\
+		i = 2;\
+	j = (i + 1) % 3;\
+	k = (i + 2) % 3;\
+	Y[i] = -X[j];\
+	Y[j] = X[i];\
+	Y[k] = 0.0;\
+	fTmp = sqrt(Y[j] * Y[j] + Y[i] * Y[i]);\
+	RVLSCALE3VECTOR2(Y, fTmp, Y)\
 }
 // Tgt = Src(2x2)
 #define RVLCOPYMX2X2(Src, Tgt)	Tgt[0] = Src[0]; Tgt[1] = Src[1]; Tgt[2] = Src[2]; Tgt[3] = Src[3];

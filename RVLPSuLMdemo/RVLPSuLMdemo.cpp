@@ -233,6 +233,7 @@ int main(int argc, char* argv[])
 	
 	int nObjects = 1;
 	int textureFileNumber = 1;
+	int iHypothesis = 0;
 
 	int key;
 	//int iSample;
@@ -424,9 +425,9 @@ int main(int argc, char* argv[])
 			if(bDisplayHypothesis)
 			{
 				VS.m_PSuLMBuilder.DisplayHypothesis(&GUI, pFig, pFig2, VS.m_pPSuLM, mDisplayPSuLMFlags, pInputImage_,
-					pPrevRGBImage);
+					pPrevRGBImage, iHypothesis);
 
-				VS.m_PSuLMBuilder.DisplayHypothesisData(pFig);
+				VS.m_PSuLMBuilder.DisplayHypothesisData(pFig, iHypothesis);
 			}
 
 			if(bDisplayPSuLM)
@@ -466,7 +467,7 @@ int main(int argc, char* argv[])
 
 			MouseCallbackData.ZoomFactor = ZoomFactor;
 			MouseCallbackData.mDisplayPSuLMFlags = mDisplayPSuLMFlags;
-			MouseCallbackData.iHypothesis = (VS.m_PSuLMBuilder.m_nHypotheses > 0 ? 0 : -1);
+			MouseCallbackData.iHypothesis = (VS.m_PSuLMBuilder.m_nHypotheses > 0 ? iHypothesis : -1);
 			MouseCallbackData.pImage = pInputImage_;
 
 			GUI.ShowFigure(pFig);	
@@ -474,7 +475,7 @@ int main(int argc, char* argv[])
 			cvSetMouseCallback("Scene", RVLPSuLMDisplayMouseCallback2, &MouseCallbackData);
 							
 			MouseCallbackData2.mDisplayPSuLMFlags = mDisplayPSuLMFlags;
-			MouseCallbackData2.iHypothesis = (VS.m_PSuLMBuilder.m_nHypotheses > 0 ? 0 : -1);
+			MouseCallbackData2.iHypothesis = (VS.m_PSuLMBuilder.m_nHypotheses > 0 ? iHypothesis : -1);
 
 			GUI.ShowFigure(pFig2);	
 
@@ -663,41 +664,65 @@ int main(int argc, char* argv[])
 				bRefresh = true;
 
 				break;
-			case 0x00260000:
-				if(VS.m_Flags & RVLSYS_FLAGS_PC)
-					VS.m_PSD.m_MeshTol++;
-				else
-					VS.m_PSD.m_uvdTol++;
-
-				bNextImage = false;
-
-				break;
-			case 0x00280000:
-				if(VS.m_Flags & RVLSYS_FLAGS_PC)
+			case 0x00240000:	// Home
+				if(VS.m_PSuLMBuilder.m_nHypotheses > 0)
 				{
-					if(VS.m_PSD.m_MeshTol > 1)
-						VS.m_PSD.m_MeshTol--;
-				}
-				else
-				{
-					if(VS.m_PSD.m_uvdTol > 1)
-						VS.m_PSD.m_uvdTol--;
+					iHypothesis = 0;
+
+					bRefresh = true;
 				}
 
-				bNextImage = false;
+				break;
+			case 0x00260000:	// Up
+				if(VS.m_PSuLMBuilder.m_nHypotheses > 0)
+				{
+					if(iHypothesis > 0)
+						iHypothesis--;
+
+					bRefresh = true;
+				}
+			//	if(VS.m_Flags & RVLSYS_FLAGS_PC)
+			//		VS.m_PSD.m_MeshTol++;
+			//	else
+			//		VS.m_PSD.m_uvdTol++;
+
+			//	bNextImage = false;
 
 				break;
-			case 0x00270000:
-				VS.m_ConvexSegmentThr++;
+			case 0x00280000:	// Down
+				if(VS.m_PSuLMBuilder.m_nHypotheses > 0)
+				{
+					if(iHypothesis < VS.m_PSuLMBuilder.m_nHypotheses - 1)
+						iHypothesis++;
 
-				bNextImage = false;
+					bRefresh = true;
+				}
+
+			//	if(VS.m_Flags & RVLSYS_FLAGS_PC)
+			//	{
+			//		if(VS.m_PSD.m_MeshTol > 1)
+			//			VS.m_PSD.m_MeshTol--;
+			//	}
+			//	else
+			//	{
+			//		if(VS.m_PSD.m_uvdTol > 1)
+			//			VS.m_PSD.m_uvdTol--;
+			//	}
+
+			//	bNextImage = false;
 
 				break;
-			case 0x00250000:
-				if(VS.m_ConvexSegmentThr > 0)
-					VS.m_ConvexSegmentThr--;
+			//case 0x00270000:
+			//	VS.m_ConvexSegmentThr++;
 
-				bNextImage = false;
+			//	bNextImage = false;
+
+			//	break;
+			//case 0x00250000:
+			//	if(VS.m_ConvexSegmentThr > 0)
+			//		VS.m_ConvexSegmentThr--;
+
+			//	bNextImage = false;
 			}
 		}
 		while(bRefresh && !bContinuous);

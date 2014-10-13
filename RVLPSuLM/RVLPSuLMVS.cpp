@@ -646,10 +646,35 @@ void RVLPSuLMDisplayMouseCallback2(int event, int x, int y, int flags, void* vpD
 		pData->iHypothesis < pVS->m_PSuLMBuilder.m_HypothesisList.m_nElements)
 		pHypothesis = pVS->m_PSuLMBuilder.m_HypothesisArray[pData->iHypothesis];
 
+	DWORD HypEvalMethod = (pVS->m_PSuLMBuilder.m_Flags & RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD);
+
+	int nMatchMatrixCols;
+	int nSSurfaces, nMSurfaces;
+	int nMLines;
+
+	if(pHypothesis)
+	{
+		if(HypEvalMethod == RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD_P)
+		{
+			nSSurfaces = pVS->m_pPSuLM->m_n3DSurfaces;
+			nMSurfaces = pHypothesis->pMPSuLM->m_n3DSurfaces;
+			nMLines =  pHypothesis->pMPSuLM->m_n3DLines;
+			nMatchMatrixCols = nMSurfaces + nMLines;
+		}
+		else
+		{
+			nSSurfaces = pVS->m_pPSuLM->m_n3DSurfacesTotal;
+			nMSurfaces = pHypothesis->pMPSuLM->m_n3DSurfacesTotal;
+			nMLines =  pHypothesis->pMPSuLM->m_n3DLines;
+			nMatchMatrixCols = nMSurfaces;
+		}
+	}
+
 	int w = pData->w;
 	
 	int iPix;
 	int a, b;
+	int nSurfaces2;
 
 	switch( event )
 	{
@@ -672,8 +697,9 @@ void RVLPSuLMDisplayMouseCallback2(int event, int x, int y, int flags, void* vpD
 					{
 						pMFig = pFig2;
 						pPSuLM2 = pHypothesis->pMPSuLM;
-						a = pPSuLM2->m_n3DSurfacesTotal;
+						a = nMatchMatrixCols;
 						b = 1;
+						nSurfaces2 = nMSurfaces;
 					}
 				}
 				else if(pFig->m_Flags & RVLPSULM_DISPLAY_MODEL)
@@ -683,7 +709,8 @@ void RVLPSuLMDisplayMouseCallback2(int event, int x, int y, int flags, void* vpD
 					pPSuLM2 = pVS->m_pPSuLM;
 					pPSuLM = pHypothesis->pMPSuLM;
 					a = 1;
-					b = pPSuLM->m_n3DSurfacesTotal;
+					b = nMatchMatrixCols;
+					nSurfaces2 = nSSurfaces;
 				}
 
 				pPSuLM->Project(&(pFig->m_PoseC0), FALSE, iPix, &pSelectedSurf, &pSelectedLine);
@@ -695,7 +722,7 @@ void RVLPSuLMDisplayMouseCallback2(int event, int x, int y, int flags, void* vpD
 					pFig2->Clear();
 
 					pVS->m_PSuLMBuilder.DisplayHypothesis(pGUI, pSFig, pMFig, pVS->m_pPSuLM, pData->mDisplayPSuLMFlags, 
-						pData->pImage, pData->pImage2);
+						pData->pImage, pData->pImage2, pData->iHypothesis);
 				}
 				else
 				{
@@ -714,24 +741,28 @@ void RVLPSuLMDisplayMouseCallback2(int event, int x, int y, int flags, void* vpD
 						BOOL bCorrespondent;
 						CRVL3DSurface2 *pSurf2;
 
-						for(int iMatch = 0; iMatch < pPSuLM2->m_n3DSurfacesTotal; iMatch++)
+						for(int iMatch = 0; iMatch < nSurfaces2; iMatch++)
 						{
 							bCorrespondent = FALSE;
 
-							if((pVS->m_PSuLMBuilder.m_Flags & RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD) == 
-								RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD_SSM)
+							if(HypEvalMethod == RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD_SSM)
 							{
 								if(pVS->m_PSuLMBuilder.m_MatchMatrix[a * pSelectedSurf->m_Index + b * iMatch] >= 
 									pVS->m_PSuLMBuilder.m_minSurfaceSamplesForMatch)
 									bCorrespondent = TRUE;
 							}
+							else if(HypEvalMethod == RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD_P)
+							{
+								if(pVS->m_PSuLMBuilder.m_MatchMatrix[a * pSelectedSurf->m_Index + b * iMatch] == 1)
+									bCorrespondent = TRUE;
+							}
 							else
 							{
-#ifdef RVLPSULMBUILDER_DISPLAY_MATCH_OVERLAP
-								if(pVS->m_PSuLMBuilder.m_MatchMatrix[a * pSelectedSurf->m_Index +  b * iMatch] == 2)
-#else
+	#ifdef RVLPSULMBUILDER_DISPLAY_MATCH_OVERLAP
+								if(pVS->m_PSuLMBuilder.m_MatchMatrix[a * pSelectedSurf->m_Index + b * iMatch] == 2)
+	#else
 								if(m_pPSuLMBuilder->m_MatchMatrix[pSelectedSurf->m_Index +  nMSurfaces * iMatch] > 0)
-#endif
+	#endif
 									bCorrespondent = TRUE;
 							}
 
@@ -741,6 +772,35 @@ void RVLPSuLMDisplayMouseCallback2(int event, int x, int y, int flags, void* vpD
 
 								pPSuLM2->Display3DSurface(pFig2, pSurf2, &NullPose, cvScalar(255, 0, 0), 2,
 									RVLPSULM_DISPLAY_VECTORS);
+							}
+						}
+					}
+				}
+
+				if(pSelectedLine)
+				{
+					pPSuLM->Display3DLine(pFig, pSelectedLine, &NullPose, cvScalar(255, 255, 0), 2, RVLPSULM_DISPLAY_VECTORS);
+
+					if(HypEvalMethod == RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD_P)
+					{
+						if(pHypothesis)
+						{
+							BOOL bCorrespondent;
+							CRVL3DLine2 *pLine2;
+
+							for(int iMatch = 0; iMatch < pPSuLM2->m_n3DLines; iMatch++)
+							{
+								bCorrespondent = FALSE;
+
+								if(pVS->m_PSuLMBuilder.m_MatchMatrix[a * (pSelectedLine->m_Index) + b * iMatch + nMSurfaces] > 0)
+									bCorrespondent = TRUE;
+
+								if(bCorrespondent)
+								{
+									pLine2 = pPSuLM2->m_3DLineArray[iMatch];
+
+									pPSuLM2->Display3DLine(pFig2, pLine2, &NullPose, cvScalar(255, 0, 0), 2, RVLPSULM_DISPLAY_VECTORS);
+								}
 							}
 						}
 					}
@@ -757,7 +817,7 @@ void RVLPSuLMDisplayMouseCallback2(int event, int x, int y, int flags, void* vpD
 					pGUI->ShowFigure(pMFig);
 				}
 
-				pVS->m_PSuLMBuilder.DisplayHypothesisData(pFig, 0, pSelectedSurf);
+				pVS->m_PSuLMBuilder.DisplayHypothesisData(pFig, pData->iHypothesis, pSelectedSurf, pSelectedLine);
 			}
-	}
+	}	//	switch( event )
 }

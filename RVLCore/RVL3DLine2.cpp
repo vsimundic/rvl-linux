@@ -114,6 +114,8 @@ void CRVL3DLine2::Transform(CRVL3DLine2 *pLineSrc,
 	double *R = pPose->m_Rot;
 	double *t = pPose->m_X;
 
+	RVL3DLINE_EXTENDED_DATA *pData = (RVL3DLINE_EXTENDED_DATA *)m_pData;
+
 	double *PSrc, *PTgt1, *PTgt2;
 
 	PTgt1 = m_X[0];
@@ -123,9 +125,13 @@ void CRVL3DLine2::Transform(CRVL3DLine2 *pLineSrc,
 	PSrc = pLineSrc->m_X[1];
 	RVLTRANSF3(PSrc, R, t, PTgt2)
 
-	RVLDIF3VECTORS(PTgt2, PTgt1, m_V)
-	double fTmp;
-	RVLNORM3(m_V, fTmp)
+	double *dX = pData->dX;
+	double *V = pData->V;
+
+	RVLDIF3VECTORS(PTgt2, PTgt1, dX)
+	double len = sqrt(RVLDOTPRODUCT3(dX, dX));
+	RVLSCALE3VECTOR2(dX, len, V)
+	pData->len = len;
 
 	double *CSrc, *CTgt;
 	
@@ -188,13 +194,18 @@ bool CRVL3DLine2::ComputeOrientUncert(double *C1o,
 bool CRVL3DLine2::Match(	CRVL3DObject *pObject_, 
 							double &MatchQuality)
 {
+	RVL3DLINE_EXTENDED_DATA *pData = (RVL3DLINE_EXTENDED_DATA *)m_pData;
+
 	// coarse orientation matching
 
 	CRVL3DLine2 *pLine_ = (CRVL3DLine2 *)pObject_;
 
-	double *V_ = pLine_->m_V;
+	RVL3DLINE_EXTENDED_DATA *pData_ = (RVL3DLINE_EXTENDED_DATA *)(pLine_->m_pData);
 
-	if(RVLDOTPRODUCT3(m_V, V_) < COS45)
+	double *V = pData->V;
+	double *V_ = pData_->V;
+
+	if(RVLDOTPRODUCT3(V, V_) < COS45)
 		return false;
 
 	// overlapping
@@ -215,7 +226,7 @@ bool CRVL3DLine2::Match(	CRVL3DObject *pObject_,
 	double *YLC = RCL + 3;
 	double *ZLC = RCL + 6;
 
-	RVLSUM3VECTORS(m_V, V_, ZLC)
+	RVLSUM3VECTORS(V, V_, ZLC)
 	RVLNORM3(ZLC, fTmp)
 	
 	double w1 = RVLDOTPRODUCT3(P1C, ZLC);
@@ -228,12 +239,12 @@ bool CRVL3DLine2::Match(	CRVL3DObject *pObject_,
 
 	double dwo = w2o - w1o;
 
-	double rOverlap = dwo / m_len;
+	double rOverlap = dwo / pData->len;
 
 	if(rOverlap < 0.4)
 		return false;
 
-	double rOverlap_ = dwo / pLine_->m_len;
+	double rOverlap_ = dwo / pData_->len;
 
 	if(rOverlap_ < 0.4)
 		return false;
@@ -250,32 +261,15 @@ bool CRVL3DLine2::Match(	CRVL3DObject *pObject_,
 
 	RVLNEGVECT3(tCL, tCL)
 
-	RVLCROSSPRODUCT3(m_V, V_, XLC)
+	RVLCROSSPRODUCT3(V, V_, XLC)
 
 	fTmp = RVLDOTPRODUCT3(XLC, XLC);
 
 	if(fTmp <= APPROX_ZERO)
 	{
 		double absZ[3];
-		absZ[0] = RVLABS(ZLC[0]);
-		absZ[1] = RVLABS(ZLC[1]);
-		absZ[2] = RVLABS(ZLC[2]);
-
-		int i = (absZ[0] > absZ[1] ? 0 : 1);
-		
-		if(absZ[2] > absZ[i])
-			i = 2;
-
-		int j = (i + 1) % 3;
-		int k = (i + 2) % 3;
-
-		XLC[i] = 0.0;
-		XLC[j] = -ZLC[k];
-		XLC[k] = ZLC[j];
-
-		fTmp = sqrt(XLC[j] * XLC[j] + XLC[k] * XLC[k]);
-
-		RVLSCALE3VECTOR2(XLC, fTmp, XLC)
+		int i, j, k;
+		RVLORTHOGONAL3(ZLC, XLC, i, j, k, absZ, fTmp)
 	}
 	else
 	{
@@ -408,10 +402,10 @@ bool CRVL3DLine2::Match(	CRVL3DObject *pObject_,
 	double eu;
 
 	//if(!ComputeOrientUncert(C1o, C2o, varz1o, varz2o, dwo, Cu))
-	if(!ComputeOrientUncert(C1o, C2o, varz1o, varz2o, m_len, Cu))
+	if(!ComputeOrientUncert(C1o, C2o, varz1o, varz2o, pData->len, Cu))
 		eu = 0.0;
 	//else if(!ComputeOrientUncert(C1o_, C2o_, varz1o_, varz2o_, dwo, Cu_))
-	else if(!ComputeOrientUncert(C1o_, C2o_, varz1o_, varz2o_, pLine_->m_len, Cu_))
+	else if(!ComputeOrientUncert(C1o_, C2o_, varz1o_, varz2o_, pData_->len, Cu_))
 		eu = 0.0;
 	else
 	{
@@ -435,7 +429,7 @@ bool CRVL3DLine2::Match(	CRVL3DObject *pObject_,
 			double invCu_[2*2];
 			RVLINVCOV2(Cu_, invCu_, detCu_)		
 	
-			double uy = RVLDOTPRODUCT3(m_V, YLC);
+			double uy = RVLDOTPRODUCT3(V, YLC);
 
 			V2x1Tmp1[0] = (invCu[1] - invCu_[1]) * uy;
 			V2x1Tmp1[1] = (invCu[3] - invCu_[3]) * uy;

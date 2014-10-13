@@ -62,6 +62,14 @@ struct RVL3DSURFACE_SAMPLE
 	BYTE Flags;
 };
 
+struct RVL3DSURFACE2_MATCH_DATA
+{
+	double *Cp;
+	double *Cp_;
+	double *invCp;
+	double *invCp_;
+};
+
 void RVL3DSurfacesRotate(CRVLMPtrChain *p3DSurfaceList,
 						 double *Rot);
 
@@ -89,7 +97,7 @@ BOOL RVL3DPlanarSurfaceEKFUpdate(	CRVL3DSurface2 *pSSurf,
 									CRVL3DPose *pInitPose,
 									CRVL3DPose *pFinalPose,
 									RVLSURFACE_MATCH_ARRAY *pMatchData);
-																			
+																		
 
 class CRVL3DSurface2 : public CRVL3DMeshObject //CRVL3DObject2  
 {
@@ -140,7 +148,16 @@ public:
 	BOOL Match3(CRVL3DObject *pMObject, 
 				CRVL3DPose *pPose,
 				double &MatchQuality, void *vpMatchData = NULL);
+	bool Match4(CRVL3DObject *pObject_, 
+				RVL3DSURFACE2_MATCH_DATA *pData,
+				double &MatchQuality);
 	void GetPoseContribution(void);
+
+private:
+	void TransfToMatchRefFrame(	double *RFT,
+								double *RPT,
+								double *tP,
+								double *CP);
 };
 
 extern CRVL3DSurface2 RVL3DSurfaceTemplate;

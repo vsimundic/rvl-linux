@@ -1193,6 +1193,83 @@ void CRVLPSuLM::Display3DSurface(	CRVLFigure * pFig,
 #endif
 }
 
+void CRVLPSuLM::Display3DLine(	CRVLFigure * pFig,
+								CRVL3DLine2 *pLine,
+								CRVL3DPose *pPoseM0,
+								CvScalar Color,
+								int LineWidth,
+								DWORD Flags)
+{
+	CRVLPSuLMBuilder *pPSuLMBuilder = (CRVLPSuLMBuilder *)m_vpBuilder;
+
+	CRVLDisplayVector Vector;
+	
+	if(Flags & RVLPSULM_DISPLAY_VECTORS)
+	{
+		Vector.m_bClosed = FALSE;
+		Vector.m_PointType = RVLGUI_POINT_DISPLAY_TYPE_SQUARE;
+		Vector.m_rL = (BYTE)DOUBLE2INT(Color.val[0]);
+		Vector.m_gL = (BYTE)DOUBLE2INT(Color.val[1]);
+		Vector.m_bL = (BYTE)DOUBLE2INT(Color.val[2]);
+		Vector.m_rP = (BYTE)DOUBLE2INT(Color.val[0]);
+		Vector.m_gP = (BYTE)DOUBLE2INT(Color.val[1]);
+		Vector.m_bP = (BYTE)DOUBLE2INT(Color.val[2]);
+		Vector.m_LineWidth = LineWidth;
+
+		Vector.m_PointArray.Create(pFig->m_pMem, sizeof(RVLGUI_POINT));
+	}
+
+	CRVLDisplayVector *pVector;
+
+	CRVL3DPose Pose0M;
+
+	InverseTransform3D(Pose0M.m_Rot, Pose0M.m_X, pPoseM0->m_Rot, pPoseM0->m_X);
+
+	CRVL3DPose PoseCM;
+
+	RVLCombineTransform3D(Pose0M.m_Rot, Pose0M.m_X, pFig->m_PoseC0.m_Rot, pFig->m_PoseC0.m_X, PoseCM.m_Rot, PoseCM.m_X);
+
+	double *RCM = PoseCM.m_Rot;
+	double *tCM = PoseCM.m_X;
+
+	double P[3 * 3];
+
+	pPSuLMBuilder->m_pStereoVision->GetKinectProjectionMatrix(P);
+
+	double A[3 * 3];
+
+	RVLMXMUL3X3T2(P, RCM, A);
+
+	BYTE bOut;
+	int iU1[2], iU2[2];
+	CvPoint Pt1, Pt2;
+	BYTE CropSide;
+	double X1[3], X2[3];
+
+	bOut = RVLCrop3DLine(pLine->m_X[0], pLine->m_X[1], A, tCM, &(pPSuLMBuilder->m_ROI),
+		pPSuLMBuilder->m_CropLTs.minz, pPSuLMBuilder->m_CropLTs.minr, pPSuLMBuilder->m_CropLTs.bOutLT, 
+		iU1, iU2, &Pt1, &Pt2, CropSide);
+
+	if(bOut & 0x04)
+		return;
+
+	if(Flags & RVLPSULM_DISPLAY_VECTORS)
+	{
+		pVector = pFig->AddVector(&Vector);
+
+		pVector->Line(Pt1.x, Pt1.y, Pt2.x, Pt2.y);
+	}
+	else
+	{
+		Pt1.x /= 2;
+		Pt1.y /= 2;
+		Pt2.x /= 2;
+		Pt2.y /= 2;
+
+		cvLine(pFig->m_pImage, Pt1, Pt2, Color, 2);
+	}	
+}
+
 void CRVLPSuLM::Display(CRVLGUI * pGUI,
 						CRVL3DPose *pPoseS0,
 						char *FigName,
@@ -1614,7 +1691,7 @@ void CRVLPSuLM::Save(FILE * fp, DWORD Flags)
 
 			p3DLine->Save(fp, 0x00000000);
 
-			fwrite(p3DLine->m_pData, sizeof(RVLPSULM_3DLINE_DATA), 1, fp);
+			fwrite(p3DLine->m_pData, sizeof(RVL3DLINE_EXTENDED_DATA), 1, fp);
 		}
 	}
 #endif
@@ -1850,7 +1927,7 @@ void CRVLPSuLM::Load(FILE * fp, DWORD Flags)
 
 	//CRVL2DLine2 *p2DLine;
 	CRVL3DLine2 *p3DLine;
-	RVLPSULM_3DLINE_DATA *p3DLineData;
+	RVL3DLINE_EXTENDED_DATA *p3DLineData;
 
 	for(i = 0; i < m_n3DLines; i++)
 	{
@@ -1874,9 +1951,9 @@ void CRVLPSuLM::Load(FILE * fp, DWORD Flags)
 
 		p3DLine->Load(fp, 0x00000000);
 
-		RVLMEM_ALLOC_STRUCT(pBuilder->m_pMem0, RVLPSULM_3DLINE_DATA, p3DLineData)
+		RVLMEM_ALLOC_STRUCT(pBuilder->m_pMem0, RVL3DLINE_EXTENDED_DATA, p3DLineData)
 
-		fread(p3DLineData, sizeof(RVLPSULM_3DLINE_DATA), 1, fp);
+		fread(p3DLineData, sizeof(RVL3DLINE_EXTENDED_DATA), 1, fp);
 
 		p3DLine->m_pData = (BYTE *)p3DLineData;
 

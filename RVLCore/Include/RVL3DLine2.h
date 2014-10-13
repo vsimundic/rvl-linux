@@ -31,6 +31,13 @@ struct RVL3DLINE_CLOSEST_POINTS_DATA
 	double Sc;
 };
 
+struct RVL3DLINE_EXTENDED_DATA
+{
+	double dX[3];
+	double V[3];
+	double len;
+};
+
 void RVLCreateC3DLine(CRVLClass *pClass);
 //void RVL3DLinesTransfLA(CRVLMPtrChain *p3DLineList, 
 //						  CRVL3DPose *pPoseLA);
@@ -82,9 +89,7 @@ class CRVL3DLine2 : public CRVL3DObject
 public:
 	double m_X[2][3];
 	double m_CX[2][9];
-	double m_V[3];
 	int m_nSupport;
-	double m_len;
 	//double m_XL[2][3];
 	//double m_CXL[2][9];
 	//double m_Cs[2][4];
