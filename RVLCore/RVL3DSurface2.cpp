@@ -1359,6 +1359,21 @@ bool CRVL3DSurface2::Match4(CRVL3DObject *pObject_,
 
 	RVLSUMMX3X3UT(Cp, Cp_, Mx3x3Tmp)
 
+	// debug
+
+	//if(m_Index == 9 && pSurf_->m_Index == 7)
+	//{
+	//	FILE *fpDebug = fopen("C:\\RVL\\Debug\\Mx.dat", "w");
+
+	//	RVLCOMPLETESIMMX3(Mx3x3Tmp)
+
+	//	RVLPrintMatrix(fpDebug, Mx3x3Tmp, 3, 3);
+
+	//	fclose(fpDebug);
+	//}
+
+	/////
+
 	double *tF = m_Pose.m_X;
 	double *tF_ = pSurf_->m_Pose.m_X;
 
@@ -1425,9 +1440,11 @@ bool CRVL3DSurface2::Match4(CRVL3DObject *pObject_,
 
 	double er = r - r_;
 
-	e = er * er / (m_varq[2] + pSurf_->m_varq[2]);
+	double varqS = pSurf_->m_varq[2] + m_varq[2] + pData->varPositionUncert;
 
-	if(e > 6.635)
+	double ep = er * er / varqS;
+
+	if(ep > 6.635)
 		return false;
 
 	// compute the x and y-axes of the match reference frame
@@ -1457,7 +1474,7 @@ bool CRVL3DSurface2::Match4(CRVL3DObject *pObject_,
 	TransfToMatchRefFrame(RFT, RPT, tP, Cn);
 
 	double Cn_[2*2];
-	TransfToMatchRefFrame(RFT_, RPT, tP, Cn_);
+	pSurf_->TransfToMatchRefFrame(RFT_, RPT, tP, Cn_);
 
 	// orientation probability
 
@@ -1469,71 +1486,30 @@ bool CRVL3DSurface2::Match4(CRVL3DObject *pObject_,
 
 	double detCnS = RVLDET2(CnS);
 
-	double en;
-	double Vect2Tmp[2], Mx2x2Tmp[2*2];
+	double en, Pn;
 
 	if(detCnS > 4.0)
-		en = 0.0;
+		Pn = 0.0;
 	else
 	{
-		double detCn = RVLDET2(Cn);
-		double invCn[2*2];
-		RVLINVCOV2(Cn, invCn, detCn)
+		en = 4.0 * sy * sy / detCnS;
 
-		double detCn_ = RVLDET2(Cn_);
-		double invCn_[2*2];
-		RVLINVCOV2(Cn_, invCn_, detCn_)		
+		Pn = RVLLN4PI - 0.5*(log(detCnS)+en+RVLLN2PI);
 
-		Vect2Tmp[0] = (invCn[1] - invCn_[1]) * sy;
-		Vect2Tmp[1] = (invCn[3] - invCn_[3]) * sy;
-
-		double invCnS[2*2];
-
-		invCnS[0] = invCn[0] + invCn_[0]; invCnS[1] = invCn[1] + invCn_[1]; invCnS[3] = invCn[3] + invCn_[3];
-
-		fTmp = RVLDET2(invCnS);
-		RVLINVCOV2(invCnS, Mx2x2Tmp, fTmp)
-
-		double sm[2];
-		
-		RVLMULCOV2VECT(Mx2x2Tmp, Vect2Tmp, sm)
-
-		double E[2];
-
-		E[0] = -sm[0];
-		E[1] = sy - sm[1];
-
-		en = RVLMAHDIST2(E, Cn, detCn);
-
-		E[1] = -sy - sm[1];
-
-		en += RVLMAHDIST2(E, Cn_, detCn_);
-
-		en = RVLLN4PI - 0.5*(log(detCnS)+en+RVLLN2PI);
-
-		if(en < 0.0)
-			en = 0.0;
+		if(Pn < 0.0)
+			Pn = 0.0;
 	}	
 
 	// position probability
 
-	double varqS = pSurf_->m_varq[2] + m_varq[2];
+	double Pp = 9.2103403719761827360719658187375 - 0.5*(log(varqS)+ep+RVLLN2PI);
 
-	double rm = (r * pSurf_->m_varq[2] + r_ *  m_varq[2]) / varqS;
-
-	e = r - rm;
-
-	double ep = e * e / m_varq[2];
-
-	e = r_ - rm;
-
-	ep += (e * e / pSurf_->m_varq[2]);
-
-	ep = 9.2103403719761827360719658187375 - 0.5*(log(varqS)+ep+RVLLN2PI);
+	if(Pp < 0.0)
+		Pp = 0.0;
 
 	// total probability
 
-	MatchQuality = en + ep;
+	MatchQuality = Pn + Pp;
 
 	return true;	
 }

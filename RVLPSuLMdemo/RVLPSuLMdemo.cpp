@@ -427,7 +427,7 @@ int main(int argc, char* argv[])
 				VS.m_PSuLMBuilder.DisplayHypothesis(&GUI, pFig, pFig2, VS.m_pPSuLM, mDisplayPSuLMFlags, pInputImage_,
 					pPrevRGBImage, iHypothesis);
 
-				VS.m_PSuLMBuilder.DisplayHypothesisData(pFig, iHypothesis);
+				VS.m_PSuLMBuilder.DisplayHypothesisData(pFig, VS.m_pPSuLM, iHypothesis);
 			}
 
 			if(bDisplayPSuLM)

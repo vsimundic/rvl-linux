@@ -932,12 +932,24 @@ void CRVLPSuLM::Display(CRVLFigure * pFig,
 				pVector->m_bClosed = FALSE;
 				pVector->m_LineWidth = 2;
 
-				pVector->m_rP = 255;
-				pVector->m_gP = 0;
-				pVector->m_bP = 255;
-				pVector->m_rL = 255;
-				pVector->m_gL = 0;
-				pVector->m_bL = 255;
+				if(pLine->m_Flags & RVLOBJ2_FLAG_MARKED)
+				{
+					pVector->m_rP = 255;
+					pVector->m_gP = 192;
+					pVector->m_bP = 255;
+					pVector->m_rL = 255;
+					pVector->m_gL = 192;
+					pVector->m_bL = 255;
+				}
+				else
+				{
+					pVector->m_rP = 255;
+					pVector->m_gP = 0;
+					pVector->m_bP = 255;
+					pVector->m_rL = 255;
+					pVector->m_gL = 0;
+					pVector->m_bL = 255;
+				}
 
 				pVector->Line(Pt1.x, Pt1.y, Pt2.x, Pt2.y);
 			}

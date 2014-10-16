@@ -674,7 +674,7 @@ void RVLPSuLMDisplayMouseCallback2(int event, int x, int y, int flags, void* vpD
 	
 	int iPix;
 	int a, b;
-	int nSurfaces2;
+	int nSurfaces, nSurfaces2;
 
 	switch( event )
 	{
@@ -699,6 +699,7 @@ void RVLPSuLMDisplayMouseCallback2(int event, int x, int y, int flags, void* vpD
 						pPSuLM2 = pHypothesis->pMPSuLM;
 						a = nMatchMatrixCols;
 						b = 1;
+						nSurfaces = nSSurfaces;
 						nSurfaces2 = nMSurfaces;
 					}
 				}
@@ -710,6 +711,7 @@ void RVLPSuLMDisplayMouseCallback2(int event, int x, int y, int flags, void* vpD
 					pPSuLM = pHypothesis->pMPSuLM;
 					a = 1;
 					b = nMatchMatrixCols;
+					nSurfaces = nMSurfaces;
 					nSurfaces2 = nSSurfaces;
 				}
 
@@ -736,7 +738,7 @@ void RVLPSuLMDisplayMouseCallback2(int event, int x, int y, int flags, void* vpD
 					pPSuLM->Display3DSurface(pFig, pSelectedSurf, &NullPose, cvScalar(255, 255, 0), 2,
 						RVLPSULM_DISPLAY_VECTORS);
 
-					if(pHypothesis)
+					if(pHypothesis != NULL && pSelectedSurf->m_Index < nSurfaces)
 					{
 						BOOL bCorrespondent;
 						CRVL3DSurface2 *pSurf2;
@@ -817,7 +819,7 @@ void RVLPSuLMDisplayMouseCallback2(int event, int x, int y, int flags, void* vpD
 					pGUI->ShowFigure(pMFig);
 				}
 
-				pVS->m_PSuLMBuilder.DisplayHypothesisData(pFig, pData->iHypothesis, pSelectedSurf, pSelectedLine);
+				pVS->m_PSuLMBuilder.DisplayHypothesisData(pFig, pVS->m_pPSuLM, pData->iHypothesis, pSelectedSurf, pSelectedLine);
 			}
 	}	//	switch( event )
 }

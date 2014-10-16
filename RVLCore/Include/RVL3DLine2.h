@@ -38,6 +38,12 @@ struct RVL3DLINE_EXTENDED_DATA
 	double len;
 };
 
+struct RVL3DLINE2_MATCH_DATA
+{
+	double varPositionUncert;
+	double varOrientationUncert;
+};
+
 void RVLCreateC3DLine(CRVLClass *pClass);
 //void RVL3DLinesTransfLA(CRVLMPtrChain *p3DLineList, 
 //						  CRVL3DPose *pPoseLA);
@@ -99,6 +105,7 @@ public:
 
 public:
 	bool Match(	CRVL3DObject *pObject_, 
+				RVL3DLINE2_MATCH_DATA *pData,
 				double &MatchQuality);
 	//void TransfLA(CRVL3DPose *pPoseLA);
 	void Transform(	CRVL3DLine2 *pLineSrc,

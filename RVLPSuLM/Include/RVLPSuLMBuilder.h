@@ -393,6 +393,7 @@ public:
 	CRVL3DSurface2 *m_SurfaceMSArray;
 	CRVL3DLine2 *m_LineMSArray;
 	RVL3DSURFACE2_MATCH_DATA m_SurfaceMatchData;
+	RVL3DLINE2_MATCH_DATA m_LineMatchData;
 	
 //#ifdef PYTHON_DEBUG
 //	PyObject *m_pyModuleName;
@@ -581,6 +582,7 @@ public:
 							IplImage *pImage2,
 							int iHypothesis = 0);
 	void DisplayHypothesisData(	CRVLFigure *pFig, 
+								CRVLPSuLM *pSPSuLM, 
 								int iHypothesis = 0,
 								CRVL3DSurface2 *pSelectedSurface = NULL,
 								CRVL3DLine2 *pSelectedLine = NULL);
