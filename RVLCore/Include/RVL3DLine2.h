@@ -42,6 +42,8 @@ struct RVL3DLINE2_MATCH_DATA
 {
 	double varPositionUncert;
 	double varOrientationUncert;
+	double PPriorPosition;
+	double POrientMatch;
 };
 
 void RVLCreateC3DLine(CRVLClass *pClass);

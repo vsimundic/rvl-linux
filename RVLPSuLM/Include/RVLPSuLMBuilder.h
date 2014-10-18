@@ -22,7 +22,7 @@
 #define RVLHIDEDETAILS
 //#define PYTHON_DEBUG
 //#define RVLPSULMBUILDER_HYPOTHESES_DEBUG
-//#define RVLPSULMBUILDER_HYPOTHESES_DEBUG_LOG
+#define RVLPSULMBUILDER_HYPOTHESES_DEBUG_LOG
 //#define RVLPSULMBUILDER_HYPOTHESES_LAST_DOF_ACCU_DEBUG_LOG
 //#define RVLPSULMBUILDER_HYPOTHESES_EVAL_LOG
 //#define RVLPSULMBUILDER_HYPOTHESES_EVAL_DEBUG
@@ -291,6 +291,9 @@ public:
 	char *m_SequenceScenePath;
 	RVLPSULM_HYPOTHESIS **m_HypothesisArray;
 	int m_nHypotheses;
+	RVLQLIST_PTR_ENTRY *m_RepresentativeHypothesisMem;
+	RVLQLIST m_RepresentativeHypothesisList;
+	//int m_nRepresentativeHypotheses;
 	RVLPSULM_PARTICLE *m_ParticleArray;
 	int m_nParticles;
 	int m_refnParticles;
@@ -358,6 +361,7 @@ public:
 	//Hypothesis evaluation
 	double *m_MatrixSMCost;
 	int *m_MatrixSMCounter;
+	RVLPSULM_SMATCH_DATA *m_SMatchArray;
 	
 	RVLPSULM_CELL2 *m_CellArray2;
 	RVLPSULM_CELL2 *m_EmptyCellArray2;
@@ -389,6 +393,8 @@ public:
 	int m_minSurfaceSamplesForMatch;
 	double m_LocalMapRadius;
 	FILE *m_fpDebug;	
+	double m_BestHypothesisProbability;
+	double m_BestHypothesisProbability5DOF;
 
 	CRVL3DSurface2 *m_SurfaceMSArray;
 	CRVL3DLine2 *m_LineMSArray;
@@ -586,7 +592,8 @@ public:
 								int iHypothesis = 0,
 								CRVL3DSurface2 *pSelectedSurface = NULL,
 								CRVL3DLine2 *pSelectedLine = NULL);
-	CRVLPSuLM *GetPSuLM(int index);						
+	CRVLPSuLM *GetPSuLM(int index);		
+	void BestHypothesisProbability(CRVLPSuLM *pSPSuLM);
 
 private:
 	RVLPSULM_MSMATCH_DATA *HypothesesGetNextNode(	RVLPSULM_HG_NODE* pNode,

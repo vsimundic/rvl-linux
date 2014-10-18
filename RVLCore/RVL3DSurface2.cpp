@@ -1492,7 +1492,7 @@ bool CRVL3DSurface2::Match4(CRVL3DObject *pObject_,
 		Pn = 0.0;
 	else
 	{
-		en = 4.0 * sy * sy / detCnS;
+		en = CnS[0] * 4.0 * sy * sy / detCnS;
 
 		Pn = RVLLN4PI - 0.5*(log(detCnS)+en+RVLLN2PI);
 
@@ -1500,9 +1500,11 @@ bool CRVL3DSurface2::Match4(CRVL3DObject *pObject_,
 			Pn = 0.0;
 	}	
 
+	pData->POrientMatch = Pn;
+
 	// position probability
 
-	double Pp = 9.2103403719761827360719658187375 - 0.5*(log(varqS)+ep+RVLLN2PI);
+	double Pp = pData->PPriorPosition - 0.5*(log(varqS)+ep+RVLLN2PI);
 
 	if(Pp < 0.0)
 		Pp = 0.0;

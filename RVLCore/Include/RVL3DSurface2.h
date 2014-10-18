@@ -69,6 +69,8 @@ struct RVL3DSURFACE2_MATCH_DATA
 	double *invCp;
 	double *invCp_;
 	double varPositionUncert;
+	double PPriorPosition;
+	double POrientMatch;
 };
 
 void RVL3DSurfacesRotate(CRVLMPtrChain *p3DSurfaceList,

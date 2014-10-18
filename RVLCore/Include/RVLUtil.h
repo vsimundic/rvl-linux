@@ -41,6 +41,13 @@
 #define RVLSCALE3VECTOR(Src, a, Tgt)	Tgt[0] = a * Src[0]; Tgt[1] = a * Src[1]; Tgt[2] = a * Src[2]; 
 // Tgt = Src(3x1) / a
 #define RVLSCALE3VECTOR2(Src, a, Tgt)	Tgt[0] = Src[0] / a; Tgt[1] = Src[1] / a; Tgt[2] = Src[2] / a; 
+// Tgt = Src(3x3) * a
+#define RVLSCALEMX3X3(Src, a, Tgt)\
+{\
+	Tgt[0] = a * Src[0]; Tgt[1] = a * Src[1]; Tgt[2] = a * Src[2]; \
+	Tgt[3] = a * Src[3]; Tgt[4] = a * Src[4]; Tgt[5] = a * Src[5]; \
+	Tgt[6] = a * Src[6]; Tgt[7] = a * Src[7]; Tgt[8] = a * Src[8]; \
+}
 // TgtCol = a * SrcCol, where SrcCol and TgtCol are the i-th column of 3x3 matrices Src and Tgt respectively
 #define RVLSCALECOL3(Src, i, a, Tgt)	Tgt[i] = a * Src[i]; Tgt[i+3] = a * Src[i+3]; Tgt[i+6] = a * Src[i+6];
 // dot product of i-th row of A(3x3) and j-th column of B(3x3)

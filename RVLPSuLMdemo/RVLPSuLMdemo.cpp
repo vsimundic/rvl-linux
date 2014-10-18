@@ -233,7 +233,7 @@ int main(int argc, char* argv[])
 	
 	int nObjects = 1;
 	int textureFileNumber = 1;
-	int iHypothesis = 0;
+	int iHypothesis;
 
 	int key;
 	//int iSample;
@@ -308,7 +308,7 @@ int main(int argc, char* argv[])
 					RVLSetFileNumber(VS.m_ImageFileName, "00000-D.txt", iSample + 1);
 				}
 			}
-		}
+		}	// if(bRecord)
 
 		if(!bRecord)
 		{
@@ -373,9 +373,11 @@ int main(int argc, char* argv[])
 			pHSVImage->channelSeq[1] = 'G';
 
 			pHSVImage->channelSeq[2] = 'B';
-		}
+		}	// if(!bRecord)
 
 		// display the results
+
+		iHypothesis = 0;
 
 		do
 		{

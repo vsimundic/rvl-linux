@@ -376,7 +376,7 @@ bool CRVL3DLine2::Match(	CRVL3DObject *pObject_,
 
 	// position probability
 
-	double Pp = 11.512925464970228420089957273422 - 0.5*(log(detC)+ep+RVLLN2PI);	
+	double Pp = pMatchData->PPriorPosition - 0.5*(log(detC)+ep+RVLLN2PI);	
 
 	if(Pp < 0.0)
 		Pp = 0.0;
@@ -409,9 +409,9 @@ bool CRVL3DLine2::Match(	CRVL3DObject *pObject_,
 	{
 		double CuS[2*2];
 
-		CuS[0] = Cu[0] + Cu_[0];
+		CuS[0] = Cu[0] + Cu_[0] + pMatchData->varOrientationUncert;
 		CuS[1] = Cu[1] + Cu_[1];
-		CuS[3] = Cu[3] + Cu_[3];
+		CuS[3] = Cu[3] + Cu_[3] + pMatchData->varOrientationUncert;
 
 		double detCuS = RVLDET2(CuS);
 
@@ -429,6 +429,8 @@ bool CRVL3DLine2::Match(	CRVL3DObject *pObject_,
 				Pu = 0.0;
 		}
 	}
+
+	pMatchData->POrientMatch = Pu;
 
 	// total probability
 

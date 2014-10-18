@@ -102,6 +102,13 @@ struct RVLPSULM_MSMATCH_DATA
 	BYTE Flags;
 };
 
+struct RVLPSULM_SMATCH_DATA
+{
+	double P;
+	double POrientMatch;
+	int iMFeature;
+};
+
 struct RVLPSULM_DISPLAY_MOUSE_CALLBACK_DATA
 {
 	CRVLPSuLM *pSPSuLM, *pMPSuLM;
@@ -170,6 +177,7 @@ struct RVLPSULM_HYPOTHESIS
 	void *pNext;
 	RVLPSULM_PARTICLE *pParticle;
 	double Probability;
+	DWORD iRepresentative;
 };
 
 struct RVLPSULM_PATH_PLANNING_NEIGHBOR
