@@ -376,7 +376,7 @@ bool CRVL3DLine2::Match(	CRVL3DObject *pObject_,
 
 	// position probability
 
-	double Pp = pMatchData->PPriorPosition - 0.5*(log(detC)+ep+RVLLN2PI);	
+	double Pp = pMatchData->PPriorPosition - 0.5*(log(detC)+ep) - RVLLN2PI;	
 
 	if(Pp < 0.0)
 		Pp = 0.0;
@@ -391,10 +391,15 @@ bool CRVL3DLine2::Match(	CRVL3DObject *pObject_,
 	//ComputeMatchParams(w1_, dw_, w1o, C1_, C2_, C1o_, s, varz1o_);
 	//ComputeMatchParams(w1_, dw_, w2o, C1_, C2_, C2o_, s, varz2o_);
 
-	ComputeMatchParams(w1, dw, w1, C1, C2, C1o, s, varz1o);
-	ComputeMatchParams(w1, dw, w2, C1, C2, C2o, s, varz2o);
-	ComputeMatchParams(w1_, dw_, w1_, C1_, C2_, C1o_, s, varz1o_);
-	ComputeMatchParams(w1_, dw_, w2_, C1_, C2_, C2o_, s, varz2o_);
+	//ComputeMatchParams(w1, dw, w1, C1, C2, C1o, s, varz1o);
+	//ComputeMatchParams(w1, dw, w2, C1, C2, C2o, s, varz2o);
+	//ComputeMatchParams(w1_, dw_, w1_, C1_, C2_, C1o_, s, varz1o_);
+	//ComputeMatchParams(w1_, dw_, w2_, C1_, C2_, C2o_, s, varz2o_);
+
+	C1o[0] = C1[0]; C1o[1] = C1[1];	C1o[3] = C1[4]; varz1o = C1[8];
+	C2o[0] = C2[0]; C2o[1] = C2[1];	C2o[3] = C2[4]; varz2o = C2[8];
+	C1o_[0] = C1_[0]; C1o_[1] = C1_[1];	C1o_[3] = C1_[4]; varz1o_ = C1_[8];
+	C2o_[0] = C2_[0]; C2o_[1] = C2_[1];	C2o_[3] = C2_[4]; varz2o_ = C2_[8];
 
 	double Cu[2*2], Cu_[2*2];
 	double eu, Pu;
@@ -423,7 +428,7 @@ bool CRVL3DLine2::Match(	CRVL3DObject *pObject_,
 
 			eu = CuS[0] * 4.0 * uy * uy / detCuS;
 
-			Pu = RVLLN4PI - 0.5*(log(detCuS)+eu+RVLLN2PI);
+			Pu = RVLLN4PI - 0.5*(log(detCuS)+eu) - RVLLN2PI;
 
 			if(Pu < 0.0)
 				Pu = 0.0;

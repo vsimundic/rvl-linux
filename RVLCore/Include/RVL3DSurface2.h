@@ -24,6 +24,8 @@
 #define RVL3DSURFACE_SAMPLE_FLAG_OCLUDED				0x02
 #define RVL3DSURFACE_SAMPLE_FLAG_MATCHED				0x03
 
+#define RVL3DSURFACE_MATCH4_FLAG_ORIENT_ONLY			0x00000001
+
 //#define RVL3DSURFACE_MATCH_CONVEX_SEGMENTS
 //#define RVL3DSURFACE_MODEL_2
 
@@ -153,13 +155,11 @@ public:
 				double &MatchQuality, void *vpMatchData = NULL);
 	bool Match4(CRVL3DObject *pObject_, 
 				RVL3DSURFACE2_MATCH_DATA *pData,
-				double &MatchQuality);
+				double &MatchQuality,
+				DWORD Flags = 0x00000000);
 	void GetPoseContribution(void);
-
-private:
 	void TransfToMatchRefFrame(	double *RFT,
 								double *RPT,
-								double *tP,
 								double *CP);
 };
 

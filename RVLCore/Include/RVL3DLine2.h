@@ -43,6 +43,7 @@ struct RVL3DLINE2_MATCH_DATA
 	double varPositionUncert;
 	double varOrientationUncert;
 	double PPriorPosition;
+	double PPriorPosition1DOF;
 	double POrientMatch;
 };
 
@@ -106,6 +107,12 @@ public:
 	//double m_len;
 
 public:
+	bool ComputeOrientUncert(	double *C1o,
+								double *C2o,
+								double varz1o,
+								double varz2o,
+								double dwo,
+								double *Cu);
 	bool Match(	CRVL3DObject *pObject_, 
 				RVL3DLINE2_MATCH_DATA *pData,
 				double &MatchQuality);
@@ -130,12 +137,6 @@ private:
 							double *Co,
 							double &s,
 							double &varzo);
-	bool ComputeOrientUncert(	double *C1o,
-								double *C2o,
-								double varz1o,
-								double varz2o,
-								double dwo,
-								double *Cu);
 };
 
 extern CRVL3DLine2 RVL3DLine2Template;

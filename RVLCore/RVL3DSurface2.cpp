@@ -1311,7 +1311,6 @@ BOOL CRVL3DSurface2::Match3(	CRVL3DObject *pMObject,
 
 void CRVL3DSurface2::TransfToMatchRefFrame(double *RFT,
 										   double *RPT,
-										   double *tP,
 										   double *CP)
 {
 	double *XF = RFT;
@@ -1339,7 +1338,8 @@ void CRVL3DSurface2::TransfToMatchRefFrame(double *RFT,
 
 bool CRVL3DSurface2::Match4(CRVL3DObject *pObject_, 
 							RVL3DSURFACE2_MATCH_DATA *pData,
-							double &MatchQuality)
+							double &MatchQuality,
+							DWORD Flags)
 {
 	CRVL3DSurface2 *pSurf_ = (CRVL3DSurface2 *)pObject_;
 
@@ -1471,10 +1471,10 @@ bool CRVL3DSurface2::Match4(CRVL3DObject *pObject_,
 	double sy = RVLDOTPRODUCT3(ZF, YP);
 
 	double Cn[2*2];
-	TransfToMatchRefFrame(RFT, RPT, tP, Cn);
+	TransfToMatchRefFrame(RFT, RPT, Cn);
 
 	double Cn_[2*2];
-	pSurf_->TransfToMatchRefFrame(RFT_, RPT, tP, Cn_);
+	pSurf_->TransfToMatchRefFrame(RFT_, RPT, Cn_);
 
 	// orientation probability
 
@@ -1494,7 +1494,7 @@ bool CRVL3DSurface2::Match4(CRVL3DObject *pObject_,
 	{
 		en = CnS[0] * 4.0 * sy * sy / detCnS;
 
-		Pn = RVLLN4PI - 0.5*(log(detCnS)+en+RVLLN2PI);
+		Pn = RVLLN4PI - 0.5*(log(detCnS)+en) - RVLLN2PI;
 
 		if(Pn < 0.0)
 			Pn = 0.0;
