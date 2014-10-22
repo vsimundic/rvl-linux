@@ -108,6 +108,342 @@ void CRVL3DLine2::Load(	FILE *fp,
 	fread(&m_nSupport, sizeof(int), 1, fp);
 }
 
+void CRVL3DLine2::Transform(CRVL3DLine2 *pLineSrc,
+							CRVL3DPose *pPose)
+{
+	double *R = pPose->m_Rot;
+	double *t = pPose->m_X;
+
+	RVL3DLINE_EXTENDED_DATA *pData = (RVL3DLINE_EXTENDED_DATA *)m_pData;
+
+	double *PSrc, *PTgt1, *PTgt2;
+
+	PTgt1 = m_X[0];
+	PSrc = pLineSrc->m_X[0];
+	RVLTRANSF3(PSrc, R, t, PTgt1)
+	PTgt2 = m_X[1];
+	PSrc = pLineSrc->m_X[1];
+	RVLTRANSF3(PSrc, R, t, PTgt2)
+
+	double *dX = pData->dX;
+	double *V = pData->V;
+
+	RVLDIF3VECTORS(PTgt2, PTgt1, dX)
+	double len = sqrt(RVLDOTPRODUCT3(dX, dX));
+	RVLSCALE3VECTOR2(dX, len, V)
+	pData->len = len;
+
+	double *CSrc, *CTgt;
+	
+	CTgt = m_CX[0];
+	CSrc = pLineSrc->m_CX[0];
+	RVLMXMUL3X3(R, CSrc, CTgt)
+	CTgt = m_CX[1];
+	CSrc = pLineSrc->m_CX[1];
+	RVLMXMUL3X3(R, CSrc, CTgt)
+}
+
+void CRVL3DLine2::ComputeMatchParams(double w1,
+									 double dw,
+									 double wo,
+									 double *C1,
+									 double *C2,
+									 double *Co,
+									 double &s,
+									 double &varzo)
+{
+	s = (wo - w1) / dw;
+		
+	double fTmp = 1.0 - s;
+	fTmp *= fTmp;
+	double fTmp2 = s * s;
+	Co[0] = fTmp * C1[0] + fTmp2 * C2[0];
+	Co[1] = fTmp * C1[1] + fTmp2 * C2[1];
+	Co[3] = fTmp * C1[4] + fTmp2 * C2[4];
+	varzo = fTmp * C1[8] + fTmp2 * C2[8];
+}
+
+bool CRVL3DLine2::ComputeOrientUncert(double *C1o,
+									  double *C2o,
+									  double varz1o,
+									  double varz2o,
+									  double dwo,
+									  double *Cu)
+{
+	double fTmp = dwo - 3.0 * sqrt(varz1o);
+
+	if(fTmp / dwo < 0.1)
+		return false;
+
+	fTmp *= fTmp;
+
+	double fTmp2 = dwo - 3.0 * sqrt(varz2o);
+
+	if(fTmp2 / dwo < 0.1)
+		return false;
+
+	fTmp2 *= fTmp2;
+
+	Cu[0] = C1o[0] / fTmp + C2o[0] / fTmp2;
+	Cu[1] = C1o[1] / fTmp + C2o[1] / fTmp2;
+	Cu[3] = C1o[3] / fTmp + C2o[3] / fTmp2;
+
+	return true;
+}
+
+bool CRVL3DLine2::Match(	CRVL3DObject *pObject_, 
+							RVL3DLINE2_MATCH_DATA *pMatchData,
+							double &MatchQuality)
+{
+	RVL3DLINE_EXTENDED_DATA *pData = (RVL3DLINE_EXTENDED_DATA *)m_pData;
+
+	// coarse orientation matching
+
+	CRVL3DLine2 *pLine_ = (CRVL3DLine2 *)pObject_;
+
+	RVL3DLINE_EXTENDED_DATA *pData_ = (RVL3DLINE_EXTENDED_DATA *)(pLine_->m_pData);
+
+	double *V = pData->V;
+	double *V_ = pData_->V;
+
+	if(RVLDOTPRODUCT3(V, V_) < COS45)
+		return false;
+
+	// overlapping
+
+	double *P1C = m_X[0];
+	double *P2C = m_X[1];
+
+	double *P1C_ = pLine_->m_X[0];
+	double *P2C_ = pLine_->m_X[1];
+
+	double fTmp;
+
+	double RCL[3*3];
+	double tCL[3];
+	double tLC[3];
+
+	double *XLC = RCL;
+	double *YLC = RCL + 3;
+	double *ZLC = RCL + 6;
+
+	RVLSUM3VECTORS(V, V_, ZLC)
+	RVLNORM3(ZLC, fTmp)
+	
+	double w1 = RVLDOTPRODUCT3(P1C, ZLC);
+	double w2 = RVLDOTPRODUCT3(P2C, ZLC);
+	double w1_ = RVLDOTPRODUCT3(P1C_, ZLC);
+	double w2_ = RVLDOTPRODUCT3(P2C_, ZLC);
+
+	double w1o = RVLMAX(w1, w1_);
+	double w2o = RVLMIN(w2, w2_);
+
+	double dwo = w2o - w1o;
+
+	double rOverlap = dwo / pData->len;
+
+	if(rOverlap < 0.4)
+		return false;
+
+	double rOverlap_ = dwo / pData_->len;
+
+	if(rOverlap_ < 0.4)
+		return false;
+
+	// central point of overlapping segment
+
+	double w0 = 0.5 * (w1o + w2o);
+
+	// match reference frame
+
+	RVLSCALE3VECTOR(ZLC, w0, tLC)	
+
+	RVLMULMX3X3VECT(RCL, tLC, tCL)
+
+	RVLNEGVECT3(tCL, tCL)
+
+	RVLCROSSPRODUCT3(V, V_, XLC)
+
+	fTmp = RVLDOTPRODUCT3(XLC, XLC);
+
+	if(fTmp <= APPROX_ZERO)
+	{
+		double absZ[3];
+		int i, j, k;
+		RVLORTHOGONAL3(ZLC, XLC, i, j, k, absZ, fTmp)
+	}
+	else
+	{
+		fTmp = sqrt(fTmp);
+
+		RVLSCALE3VECTOR2(XLC, fTmp, XLC)
+	}
+
+	RVLCROSSPRODUCT3(ZLC, XLC, YLC);
+
+	// transform lines into the match reference frame
+
+	double P1[3], P2[3], P1_[3], P2_[3];
+
+	RVLTRANSF3(P1C, RCL, tCL, P1)
+	RVLTRANSF3(P2C, RCL, tCL, P2)
+	RVLTRANSF3(P1C_, RCL, tCL, P1_)
+	RVLTRANSF3(P2C_, RCL, tCL, P2_)
+
+	double C1[3*3], C2[3*3], C1_[3*3], C2_[3*3];
+	double *CC;
+	double Mx3x3Tmp[3*3];	
+
+	CC = m_CX[0];
+	RVLCOV3DTRANSF(CC, RCL, C1, Mx3x3Tmp)
+
+	CC = m_CX[1];
+	RVLCOV3DTRANSF(CC, RCL, C2, Mx3x3Tmp)
+
+	CC = pLine_->m_CX[0];
+	RVLCOV3DTRANSF(CC, RCL, C1_, Mx3x3Tmp)
+
+	CC = pLine_->m_CX[1];
+	RVLCOV3DTRANSF(CC, RCL, C2_, Mx3x3Tmp)
+
+	// matching of the central points of the overlapping segments
+
+	double dw = w2 - w1;
+	double dw_ = w2_ - w1_;
+
+	double P0[2], P0_[2];
+	double C0[2*2], C0_[2*2];
+	double s;
+
+	ComputeMatchParams(w1, dw, w0, C1, C2, C0, s, fTmp);
+
+	P0[0] = P1[0] + s * (P2[0] - P1[0]);
+	P0[1] = P1[1] + s * (P2[1] - P1[1]);
+
+	ComputeMatchParams(w1_, dw_, w0, C1_, C2_, C0_, s, fTmp);	
+
+	P0_[0] = P1_[0] + s * (P2_[0] - P1_[0]);
+	P0_[1] = P1_[1] + s * (P2_[1] - P1_[1]);
+
+	double P0C[3];
+
+	fTmp = (1.0 - s);
+
+	P0C[0] = fTmp * P1C[0] + s * P2C[0];
+	P0C[1] = fTmp * P1C[1] + s * P2C[1];
+	P0C[2] = fTmp * P1C[2] + s * P2C[2];
+
+	double RC[3];
+
+	double r = sqrt(RVLDOTPRODUCT3(P0C, P0C));
+	RVLSCALE3VECTOR2(P0C, r, RC)
+
+	double RL[2];
+
+	RL[0] = RVLDOTPRODUCT3(XLC, RC);
+	RL[1] = RVLDOTPRODUCT3(YLC, RC);
+
+	double J[2];
+
+	J[0] = RL[1];
+	J[1] = -RL[0];
+
+	double varOrientUncert = r * r * pMatchData->varOrientationUncert;
+
+	double COrientUncert[2*2];
+
+	COrientUncert[0] = varOrientUncert * J[0] * J[0];
+	COrientUncert[1] = varOrientUncert * J[0] * J[1];
+	COrientUncert[3] = varOrientUncert * J[1] * J[1];
+
+	double E[2];
+
+	E[0] = P0_[0] - P0[0];
+	E[1] = P0_[1] - P0[1];
+
+	double C[2 * 2];
+
+	C[0] = C0[0] + C0_[0] + COrientUncert[0] + pMatchData->varPositionUncert; 
+	C[1] = C0[1] + C0_[1] + COrientUncert[1]; 
+	C[3] = C0[3] + C0_[3] + COrientUncert[3] + pMatchData->varPositionUncert; 
+
+	double detC = RVLDET2(C);
+
+	double ep = RVLMAHDIST2(E, C, detC);
+
+	if(ep > 9.21)
+		return false;
+
+	// position probability
+
+	double Pp = pMatchData->PPriorPosition - 0.5*(log(detC)+ep) - RVLLN2PI;	
+
+	if(Pp < 0.0)
+		Pp = 0.0;
+
+	// orientation probability
+
+	double C1o[2*2], C2o[2*2], C1o_[2*2], C2o_[2*2];
+	double varz1o, varz2o, varz1o_, varz2o_;
+
+	//ComputeMatchParams(w1, dw, w1o, C1, C2, C1o, s, varz1o);
+	//ComputeMatchParams(w1, dw, w20, C1, C2, C2o, s, varz2o);
+	//ComputeMatchParams(w1_, dw_, w1o, C1_, C2_, C1o_, s, varz1o_);
+	//ComputeMatchParams(w1_, dw_, w2o, C1_, C2_, C2o_, s, varz2o_);
+
+	//ComputeMatchParams(w1, dw, w1, C1, C2, C1o, s, varz1o);
+	//ComputeMatchParams(w1, dw, w2, C1, C2, C2o, s, varz2o);
+	//ComputeMatchParams(w1_, dw_, w1_, C1_, C2_, C1o_, s, varz1o_);
+	//ComputeMatchParams(w1_, dw_, w2_, C1_, C2_, C2o_, s, varz2o_);
+
+	C1o[0] = C1[0]; C1o[1] = C1[1];	C1o[3] = C1[4]; varz1o = C1[8];
+	C2o[0] = C2[0]; C2o[1] = C2[1];	C2o[3] = C2[4]; varz2o = C2[8];
+	C1o_[0] = C1_[0]; C1o_[1] = C1_[1];	C1o_[3] = C1_[4]; varz1o_ = C1_[8];
+	C2o_[0] = C2_[0]; C2o_[1] = C2_[1];	C2o_[3] = C2_[4]; varz2o_ = C2_[8];
+
+	double Cu[2*2], Cu_[2*2];
+	double eu, Pu;
+
+	//if(!ComputeOrientUncert(C1o, C2o, varz1o, varz2o, dwo, Cu))
+	if(!ComputeOrientUncert(C1o, C2o, varz1o, varz2o, pData->len, Cu))
+		Pu = 0.0;
+	//else if(!ComputeOrientUncert(C1o_, C2o_, varz1o_, varz2o_, dwo, Cu_))
+	else if(!ComputeOrientUncert(C1o_, C2o_, varz1o_, varz2o_, pData_->len, Cu_))
+		Pu = 0.0;
+	else
+	{
+		double CuS[2*2];
+
+		CuS[0] = Cu[0] + Cu_[0] + pMatchData->varOrientationUncert;
+		CuS[1] = Cu[1] + Cu_[1];
+		CuS[3] = Cu[3] + Cu_[3] + pMatchData->varOrientationUncert;
+
+		double detCuS = RVLDET2(CuS);
+
+		if(detCuS > 4.0)
+			Pu = 0.0;
+		else
+		{	
+			double uy = RVLDOTPRODUCT3(V, YLC);
+
+			eu = CuS[0] * 4.0 * uy * uy / detCuS;
+
+			Pu = RVLLN4PI - 0.5*(log(detCuS)+eu) - RVLLN2PI;
+
+			if(Pu < 0.0)
+				Pu = 0.0;
+		}
+	}
+
+	pMatchData->POrientMatch = Pu;
+
+	// total probability
+
+	MatchQuality = Pu + Pp;
+
+	return true;
+}
+
 //void CRVL3DLine2::TransfLA(CRVL3DPose *pPoseLA)
 //{
 //	if(m_ParamFlags & RVL3DLINE_PARAM_FLAG_XL)

@@ -113,6 +113,13 @@ struct RVLQLIST_PTR_ENTRY
 	void *pNext;
 };
 
+struct RVLQLIST_PTR_ENTRY2
+{
+	void *Ptr;
+	void *pNext;
+	void **pPtrToThis;
+};
+
 struct RVLQLIST_3DPT_ENTRY
 {
 	double X[3];

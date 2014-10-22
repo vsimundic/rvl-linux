@@ -1309,8 +1309,212 @@ BOOL CRVL3DSurface2::Match3(	CRVL3DObject *pMObject,
 	return bMatch;	
 }
 
+void CRVL3DSurface2::TransfToMatchRefFrame(double *RFT,
+										   double *RPT,
+										   double *CP)
+{
+	double *XF = RFT;
+	double *YF = RFT + 3;
+	double *ZF = RFT + 6;
 
+	double *XP = RPT;
+	double *YP = RPT + 3;
+	double *ZP = RPT + 6;
 
+	double J[2*2];
+
+	J[0] = RVLDOTPRODUCT3(XP, XF);
+	J[1] = RVLDOTPRODUCT3(XP, YF);
+	J[2] = RVLDOTPRODUCT3(YP, XF);
+	J[3] = RVLDOTPRODUCT3(YP, YF);
+
+	double varx = m_varq[0];
+	double vary = m_varq[1];
+
+	CP[0] = varx*J[0]*J[0] + vary*J[1]*J[1];
+	CP[1] = varx*J[2]*J[0] + vary*J[3]*J[1];
+	CP[3] = varx*J[2]*J[2] + vary*J[3]*J[3];
+}
+
+bool CRVL3DSurface2::Match4(CRVL3DObject *pObject_, 
+							RVL3DSURFACE2_MATCH_DATA *pData,
+							double &MatchQuality,
+							DWORD Flags)
+{
+	CRVL3DSurface2 *pSurf_ = (CRVL3DSurface2 *)pObject_;
+
+	// coarse normal orientation match
+
+	double *N_ = pSurf_->m_N;
+
+	if(RVLDOTPRODUCT3(m_N, N_) < COS45)
+		return false;
+
+	// coarse overlap match
+
+	double *Cp = pData->Cp + 3 * 3 * m_Index;
+	double *Cp_ = pData->Cp_ + 3 * 3 * pSurf_->m_Index;
+
+	double Mx3x3Tmp[3*3];
+
+	RVLSUMMX3X3UT(Cp, Cp_, Mx3x3Tmp)
+
+	// debug
+
+	//if(m_Index == 9 && pSurf_->m_Index == 7)
+	//{
+	//	FILE *fpDebug = fopen("C:\\RVL\\Debug\\Mx.dat", "w");
+
+	//	RVLCOMPLETESIMMX3(Mx3x3Tmp)
+
+	//	RVLPrintMatrix(fpDebug, Mx3x3Tmp, 3, 3);
+
+	//	fclose(fpDebug);
+	//}
+
+	/////
+
+	double *tF = m_Pose.m_X;
+	double *tF_ = pSurf_->m_Pose.m_X;
+
+	double Et[3];
+
+	RVLDIF3VECTORS(tF, tF_, Et)
+
+	double Mx3x3Tmp2[3*3];
+	double fTmp;
+
+	RVLINVCOV3(Mx3x3Tmp, Mx3x3Tmp2, fTmp)
+
+	double e = RVLCOV3DTRANSFTO1D(Mx3x3Tmp2, Et);
+
+	if(e > 11.34)
+		return false;
+	
+	// compute the origin of the match reference frame
+
+	double *invCp = pData->invCp + 3 * 3 * m_Index;
+	double *invCp_ = pData->invCp_ + 3 * 3 * pSurf_->m_Index;
+
+	RVLSUMMX3X3UT(invCp, invCp_, Mx3x3Tmp)
+
+	RVLINVCOV3(Mx3x3Tmp, Mx3x3Tmp2, fTmp)
+
+	double Vect3Tmp[3], Vect3Tmp2[3];
+
+	RVLMULCOV3VECT(invCp, tF, Vect3Tmp)
+	RVLMULCOV3VECT(invCp_, tF_, Vect3Tmp2)
+	RVLSUM3VECTORS(Vect3Tmp, Vect3Tmp2, Vect3Tmp)
+
+	double tP[3];
+
+	RVLMULCOV3VECT(Mx3x3Tmp2, Vect3Tmp, tP)
+
+	// compute the z-axis of the match reference frame
+
+	double RPT[3*3];
+	double *XP = RPT;
+	double *YP = RPT + 3;
+	double *ZP = RPT + 6;
+
+	double *RF = m_Pose.m_Rot;
+	double RFT[3*3];
+	double *ZF = RFT + 6;
+	RVLCOPYMX3X3T(RF, RFT)
+
+	double *RF_ = pSurf_->m_Pose.m_Rot;
+	double RFT_[3*3];
+	double *ZF_ = RFT_ + 6;
+	RVLCOPYMX3X3T(RF_, RFT_)
+
+	RVLSUM3VECTORS(ZF, ZF_, ZP)
+	RVLNORM3(ZP, fTmp)
+
+	// proximity match
+
+	RVLDIF3VECTORS(tF, tP, Vect3Tmp)
+	double r = RVLDOTPRODUCT3(ZF, Vect3Tmp) / RVLDOTPRODUCT3(ZF, ZP);
+
+	RVLDIF3VECTORS(tF_, tP, Vect3Tmp)
+	double r_ = RVLDOTPRODUCT3(ZF_, Vect3Tmp) / RVLDOTPRODUCT3(ZF_, ZP);
+
+	double er = r - r_;
+
+	double varqS = pSurf_->m_varq[2] + m_varq[2] + pData->varPositionUncert;
+
+	double ep = er * er / varqS;
+
+	if(ep > 6.635)
+		return false;
+
+	// compute the x and y-axes of the match reference frame
+
+	RVLCROSSPRODUCT3(ZF, ZF_, XP)
+
+	fTmp = RVLDOTPRODUCT3(XP, XP);
+
+	int i, j, k;
+
+	if(fTmp <= APPROX_ZERO)		
+		RVLORTHOGONAL3(ZP, XP, i, j, k, Vect3Tmp, fTmp)
+	else
+	{
+		fTmp = sqrt(fTmp);
+
+		RVLSCALE3VECTOR2(XP, fTmp, XP)
+	}
+
+	RVLCROSSPRODUCT3(ZP, XP, YP);
+
+	// transform the matched surfaces into the match reference frame
+
+	double sy = RVLDOTPRODUCT3(ZF, YP);
+
+	double Cn[2*2];
+	TransfToMatchRefFrame(RFT, RPT, Cn);
+
+	double Cn_[2*2];
+	pSurf_->TransfToMatchRefFrame(RFT_, RPT, Cn_);
+
+	// orientation probability
+
+	double CnS[2*2];
+
+	CnS[0] = Cn[0] + Cn_[0];
+	CnS[1] = Cn[1] + Cn_[1];
+	CnS[3] = Cn[3] + Cn_[3];
+
+	double detCnS = RVLDET2(CnS);
+
+	double en, Pn;
+
+	if(detCnS > 4.0)
+		Pn = 0.0;
+	else
+	{
+		en = CnS[0] * 4.0 * sy * sy / detCnS;
+
+		Pn = RVLLN4PI - 0.5*(log(detCnS)+en) - RVLLN2PI;
+
+		if(Pn < 0.0)
+			Pn = 0.0;
+	}	
+
+	pData->POrientMatch = Pn;
+
+	// position probability
+
+	double Pp = pData->PPriorPosition - 0.5*(log(varqS)+ep+RVLLN2PI);
+
+	if(Pp < 0.0)
+		Pp = 0.0;
+
+	// total probability
+
+	MatchQuality = Pn + Pp;
+
+	return true;	
+}
 
 void CRVL3DSurface2::GetPoseContribution(void)
 {
@@ -1504,3 +1708,4 @@ BOOL RVL3DPlanarSurfaceEKFUpdate(	CRVL3DSurface2 *pSSurf,
 
 	return TRUE;
 }
+

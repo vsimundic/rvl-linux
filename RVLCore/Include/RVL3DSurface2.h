@@ -24,6 +24,8 @@
 #define RVL3DSURFACE_SAMPLE_FLAG_OCLUDED				0x02
 #define RVL3DSURFACE_SAMPLE_FLAG_MATCHED				0x03
 
+#define RVL3DSURFACE_MATCH4_FLAG_ORIENT_ONLY			0x00000001
+
 //#define RVL3DSURFACE_MATCH_CONVEX_SEGMENTS
 //#define RVL3DSURFACE_MODEL_2
 
@@ -62,6 +64,17 @@ struct RVL3DSURFACE_SAMPLE
 	BYTE Flags;
 };
 
+struct RVL3DSURFACE2_MATCH_DATA
+{
+	double *Cp;
+	double *Cp_;
+	double *invCp;
+	double *invCp_;
+	double varPositionUncert;
+	double PPriorPosition;
+	double POrientMatch;
+};
+
 void RVL3DSurfacesRotate(CRVLMPtrChain *p3DSurfaceList,
 						 double *Rot);
 
@@ -89,7 +102,7 @@ BOOL RVL3DPlanarSurfaceEKFUpdate(	CRVL3DSurface2 *pSSurf,
 									CRVL3DPose *pInitPose,
 									CRVL3DPose *pFinalPose,
 									RVLSURFACE_MATCH_ARRAY *pMatchData);
-																			
+																		
 
 class CRVL3DSurface2 : public CRVL3DMeshObject //CRVL3DObject2  
 {
@@ -140,7 +153,14 @@ public:
 	BOOL Match3(CRVL3DObject *pMObject, 
 				CRVL3DPose *pPose,
 				double &MatchQuality, void *vpMatchData = NULL);
+	bool Match4(CRVL3DObject *pObject_, 
+				RVL3DSURFACE2_MATCH_DATA *pData,
+				double &MatchQuality,
+				DWORD Flags = 0x00000000);
 	void GetPoseContribution(void);
+	void TransfToMatchRefFrame(	double *RFT,
+								double *RPT,
+								double *CP);
 };
 
 extern CRVL3DSurface2 RVL3DSurfaceTemplate;

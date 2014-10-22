@@ -102,6 +102,13 @@ struct RVLPSULM_MSMATCH_DATA
 	BYTE Flags;
 };
 
+struct RVLPSULM_SMATCH_DATA
+{
+	double P;
+	double POrientMatch;
+	int iMFeature;
+};
+
 struct RVLPSULM_DISPLAY_MOUSE_CALLBACK_DATA
 {
 	CRVLPSuLM *pSPSuLM, *pMPSuLM;
@@ -169,6 +176,8 @@ struct RVLPSULM_HYPOTHESIS
 	int nMatches;
 	void *pNext;
 	RVLPSULM_PARTICLE *pParticle;
+	double Probability;
+	DWORD iRepresentative;
 };
 
 struct RVLPSULM_PATH_PLANNING_NEIGHBOR
@@ -184,13 +193,6 @@ struct RVLPSULM_MESH_FILE_GROUP_DATA
 	DWORD Mask;
 	DWORD Value;
 	int MaterialID;
-};
-
-struct RVLPSULM_3DLINE_DATA
-{
-	double dX[3];
-	double V[3];
-	double len;
 };
 
 void RVLPSuLMDisplayMouseCallback(int event, int x, int y, int flags, void* vpFig);
@@ -235,6 +237,12 @@ public:
 							CvScalar Color,
 							int LineWidth = 1,
 							DWORD Flags = 0x00000000);
+	void Display3DLine(	CRVLFigure * pFig,
+						CRVL3DLine2 *pLine,
+						CRVL3DPose *pPoseM0,
+						CvScalar Color,
+						int LineWidth = 2,
+						DWORD Flags = 0x00000000);
 	void GetCenter(double *XCenter);
 	void Display2DLines(CRVLFigure *pFig);
 	void Display3DLines(CRVLFigure *pFig,

@@ -31,6 +31,22 @@ struct RVL3DLINE_CLOSEST_POINTS_DATA
 	double Sc;
 };
 
+struct RVL3DLINE_EXTENDED_DATA
+{
+	double dX[3];
+	double V[3];
+	double len;
+};
+
+struct RVL3DLINE2_MATCH_DATA
+{
+	double varPositionUncert;
+	double varOrientationUncert;
+	double PPriorPosition;
+	double PPriorPosition1DOF;
+	double POrientMatch;
+};
+
 void RVLCreateC3DLine(CRVLClass *pClass);
 //void RVL3DLinesTransfLA(CRVLMPtrChain *p3DLineList, 
 //						  CRVL3DPose *pPoseLA);
@@ -91,7 +107,18 @@ public:
 	//double m_len;
 
 public:
+	bool ComputeOrientUncert(	double *C1o,
+								double *C2o,
+								double varz1o,
+								double varz2o,
+								double dwo,
+								double *Cu);
+	bool Match(	CRVL3DObject *pObject_, 
+				RVL3DLINE2_MATCH_DATA *pData,
+				double &MatchQuality);
 	//void TransfLA(CRVL3DPose *pPoseLA);
+	void Transform(	CRVL3DLine2 *pLineSrc,
+					CRVL3DPose *pPose);
 	void Save(	FILE *fp,
 				DWORD Flags);
 	void Load(	FILE *fp,
@@ -101,6 +128,15 @@ public:
 	CRVL3DLine2();
 	virtual ~CRVL3DLine2();
 
+private:
+	void ComputeMatchParams(double w1,
+							double dw,
+							double wo,
+							double *C1,
+							double *C2,
+							double *Co,
+							double &s,
+							double &varzo);
 };
 
 extern CRVL3DLine2 RVL3DLine2Template;
