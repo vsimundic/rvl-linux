@@ -24,7 +24,7 @@
 #define RVL3DSURFACE_SAMPLE_FLAG_OCLUDED				0x02
 #define RVL3DSURFACE_SAMPLE_FLAG_MATCHED				0x03
 
-#define RVL3DSURFACE_MATCH4_FLAG_ORIENT_ONLY			0x00000001
+#define RVL3DSURFACE_MATCH4_FLAG_OVERLAP				0x00000001
 
 //#define RVL3DSURFACE_MATCH_CONVEX_SEGMENTS
 //#define RVL3DSURFACE_MODEL_2
@@ -156,7 +156,7 @@ public:
 	bool Match4(CRVL3DObject *pObject_, 
 				RVL3DSURFACE2_MATCH_DATA *pData,
 				double &MatchQuality,
-				DWORD Flags = 0x00000000);
+				DWORD Flags = RVL3DSURFACE_MATCH4_FLAG_OVERLAP);
 	void GetPoseContribution(void);
 	void TransfToMatchRefFrame(	double *RFT,
 								double *RPT,

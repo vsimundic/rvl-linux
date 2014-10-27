@@ -193,7 +193,8 @@ bool CRVL3DLine2::ComputeOrientUncert(double *C1o,
 
 bool CRVL3DLine2::Match(	CRVL3DObject *pObject_, 
 							RVL3DLINE2_MATCH_DATA *pMatchData,
-							double &MatchQuality)
+							double &MatchQuality,
+							DWORD Flags)
 {
 	RVL3DLINE_EXTENDED_DATA *pData = (RVL3DLINE_EXTENDED_DATA *)m_pData;
 
@@ -209,13 +210,18 @@ bool CRVL3DLine2::Match(	CRVL3DObject *pObject_,
 	if(RVLDOTPRODUCT3(V, V_) < COS45)
 		return false;
 
-	// overlapping
+	// endpoints
 
 	double *P1C = m_X[0];
 	double *P2C = m_X[1];
 
 	double *P1C_ = pLine_->m_X[0];
 	double *P2C_ = pLine_->m_X[1];
+
+	// z-axis of the match reference frame
+
+	double *dP = pData->dX;
+	double *dP_ = pData_->dX;
 
 	double fTmp;
 
@@ -227,40 +233,49 @@ bool CRVL3DLine2::Match(	CRVL3DObject *pObject_,
 	double *YLC = RCL + 3;
 	double *ZLC = RCL + 6;
 
-	RVLSUM3VECTORS(V, V_, ZLC)
+	RVLSUM3VECTORS(dP, dP_, ZLC)
 	RVLNORM3(ZLC, fTmp)
-	
+
+	// overlapping
+
 	double w1 = RVLDOTPRODUCT3(P1C, ZLC);
 	double w2 = RVLDOTPRODUCT3(P2C, ZLC);
 	double w1_ = RVLDOTPRODUCT3(P1C_, ZLC);
 	double w2_ = RVLDOTPRODUCT3(P2C_, ZLC);
 
-	double w1o = RVLMAX(w1, w1_);
-	double w2o = RVLMIN(w2, w2_);
+	double w0;
 
-	double dwo = w2o - w1o;
+	if(Flags & RVL3DLINE_MATCH_FLAGS_OVERLAP)
+	{		
+		double w1o = RVLMAX(w1, w1_);
+		double w2o = RVLMIN(w2, w2_);
 
-	double rOverlap = dwo / pData->len;
+		double dwo = w2o - w1o;
 
-	if(rOverlap < 0.4)
-		return false;
+		double rOverlap = dwo / pData->len;
 
-	double rOverlap_ = dwo / pData_->len;
+		if(rOverlap < 0.4)
+			return false;
 
-	if(rOverlap_ < 0.4)
-		return false;
+		double rOverlap_ = dwo / pData_->len;
 
-	// central point of overlapping segment
+		if(rOverlap_ < 0.4)
+			return false;
 
-	double w0 = 0.5 * (w1o + w2o);
+		// central point of overlapping segment
 
-	// match reference frame
+		w0 = 0.5 * (w1o + w2o);
 
-	RVLSCALE3VECTOR(ZLC, w0, tLC)	
+		// origin of the match reference frame
 
-	RVLMULMX3X3VECT(RCL, tLC, tCL)
+		RVLSCALE3VECTOR(ZLC, w0, tLC)	
 
-	RVLNEGVECT3(tCL, tCL)
+		RVLMULMX3X3VECT(RCL, tLC, tCL)
+
+		RVLNEGVECT3(tCL, tCL)
+	}
+
+	// x and y-axis of the match reference frame
 
 	RVLCROSSPRODUCT3(V, V_, XLC)
 
@@ -306,24 +321,35 @@ bool CRVL3DLine2::Match(	CRVL3DObject *pObject_,
 	CC = pLine_->m_CX[1];
 	RVLCOV3DTRANSF(CC, RCL, C2_, Mx3x3Tmp)
 
-	// matching of the central points of the overlapping segments
+	// matching of the central points
 
 	double dw = w2 - w1;
 	double dw_ = w2_ - w1_;
 
-	double P0[2], P0_[2];
+	double s, s_;
 	double C0[2*2], C0_[2*2];
-	double s;
 
-	ComputeMatchParams(w1, dw, w0, C1, C2, C0, s, fTmp);
+	if(Flags & RVL3DLINE_MATCH_FLAGS_OVERLAP)
+	{
+		// central points of the overlapping segments
+
+		ComputeMatchParams(w1, dw, w0, C1, C2, C0, s, fTmp);
+		ComputeMatchParams(w1_, dw_, w0, C1_, C2_, C0_, s_, fTmp);	
+	}
+	else
+	{
+		// central points of the matched lines
+
+		ComputeMatchParams(w1, dw, 0.5 * (w1 + w2), C1, C2, C0, s, fTmp);
+		ComputeMatchParams(w1_, dw_, 0.5 * (w1_ + w2_), C1_, C2_, C0_, s_, fTmp);			
+	}
+
+	double P0[2], P0_[2];
 
 	P0[0] = P1[0] + s * (P2[0] - P1[0]);
 	P0[1] = P1[1] + s * (P2[1] - P1[1]);
-
-	ComputeMatchParams(w1_, dw_, w0, C1_, C2_, C0_, s, fTmp);	
-
-	P0_[0] = P1_[0] + s * (P2_[0] - P1_[0]);
-	P0_[1] = P1_[1] + s * (P2_[1] - P1_[1]);
+	P0_[0] = P1_[0] + s_ * (P2_[0] - P1_[0]);
+	P0_[1] = P1_[1] + s_ * (P2_[1] - P1_[1]);
 
 	double P0C[3];
 

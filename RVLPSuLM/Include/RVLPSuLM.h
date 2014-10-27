@@ -107,6 +107,7 @@ struct RVLPSULM_SMATCH_DATA
 	double P;
 	double POrientMatch;
 	int iMFeature;
+	bool b;
 };
 
 struct RVLPSULM_DISPLAY_MOUSE_CALLBACK_DATA

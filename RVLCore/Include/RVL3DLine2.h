@@ -21,6 +21,8 @@
 #define RVL3DLINE_PARAM_FLAG_HORIZONTAL		0x01000000
 #define RVL3DLINE_PARAM_FLAG_VERTICAL		0x02000000
 
+#define RVL3DLINE_MATCH_FLAGS_OVERLAP		0x00000001
+
 #define RVLRELLIST_INDEX_3DLINE_3D2DLINE	3
 
 struct RVL3DLINE_CLOSEST_POINTS_DATA
@@ -115,7 +117,8 @@ public:
 								double *Cu);
 	bool Match(	CRVL3DObject *pObject_, 
 				RVL3DLINE2_MATCH_DATA *pData,
-				double &MatchQuality);
+				double &MatchQuality,
+				DWORD Flags = RVL3DLINE_MATCH_FLAGS_OVERLAP);
 	//void TransfLA(CRVL3DPose *pPoseLA);
 	void Transform(	CRVL3DLine2 *pLineSrc,
 					CRVL3DPose *pPose);

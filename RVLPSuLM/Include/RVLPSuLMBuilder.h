@@ -23,12 +23,13 @@
 //#define PYTHON_DEBUG
 //#define RVLPSULMBUILDER_HYPOTHESES_DEBUG
 #define RVLPSULMBUILDER_HYPOTHESES_DEBUG_LOG
-//#define RVLPSULMBUILDER_HYPOTHESES_LAST_DOF_ACCU_DEBUG_LOG
+#define RVLPSULMBUILDER_HYPOTHESES_LAST_DOF_ACCU_DEBUG_LOG
 //#define RVLPSULMBUILDER_HYPOTHESES_EVAL_LOG
 //#define RVLPSULMBUILDER_HYPOTHESES_EVAL_DEBUG
 //#define RVLPSULMBUILDER_HYPOTHESES_EVAL_DEBUG_LOG
 //#define RVLPSULM_CREATE_DEBUG_LOG
 //#define RVLPSULMBUILDER_MAP_DEBUG_LOG
+#define RVLPSULMBUILDER_CONDITIONAL_PROBABILITY_TREE_DEBUG_LOG
 //#define RVLPSULMBUILDER_HYPOTHESES_COMPLETE_QUEUE_SEARCH
 #define RVLPSULMBUILDER_HYPOTHESES_LAST_DOF_BY_EVIDENCE_ACCU
 #define RVLPSULMBUILDER_HYPOTHESES_LAST_DOF_PROBABILISTIC
@@ -82,6 +83,10 @@
 #define RVLPSULM_MSMATCH_FLAG_INIT_GEOM_CONSTR_TESTED			0x01
 #define RVLPSULM_MSMATCH_FLAG_INIT_GEOM_CONSTR_NOT_SATISFIED	0x02
 #define RVLPSULM_MSMATCH_FLAG_GEOM_CONSTR_NOT_SATISFIED			0x04
+
+#define RVLPSULM_MATCH_TYPE_SURFACE								0x00
+#define RVLPSULM_MATCH_TYPE_LINE								0x01
+#define RVLPSULM_MATCH_TYPE_AUTO								0x02
 
 #define RVLPSULMBUILDER_DEBUG_FLAG_GET_LOCAL_MODELS_LOG			0x00000001
 
@@ -152,6 +157,15 @@ struct RVLPSULM_MATCH
 	void *vpMObject;
 	int cost;
 };
+
+struct RVLPSULM_MATCH2
+{
+	void *vpSObject;
+	void *vpMObject;
+	double cost;
+	BYTE Type;
+};
+
 
 //struct RVLPSULM_MATCH
 //{
@@ -361,8 +375,11 @@ public:
 
 	//Hypothesis evaluation
 	double *m_MatrixSMCost;
+	double *m_AutoMatchMatrix;
 	int *m_MatrixSMCounter;
 	RVLPSULM_SMATCH_DATA *m_SMatchArray;
+	RVLPSULM_MATCH2 **m_AutoMatchArray;
+	int m_nAutoMatches;
 	
 	RVLPSULM_CELL2 *m_CellArray2;
 	RVLPSULM_CELL2 *m_EmptyCellArray2;
@@ -419,6 +436,7 @@ private:
 	double m_maxvarRotHyp, m_maxvartHyp;
 	double m_csLastDOFSeparationAngle;
 	double m_csLastDOFSurfNrmAngle, m_csLastDOFLineNrmAngle;
+	RVLPSULM_MATCH2 *m_AutoMatchMem;
 
 	void PythonDisplayScene(RVLSURFACE_MATCH_ARRAY *MatchArray, CRVLMPtrChain *pM3DSurfaceList, CRVL3DSurface2 **MatrixSceneModel, int n3DSceneSurfaces);
 	//void GetMaxProbabilityMatch(int iS3DSurface,
@@ -506,6 +524,7 @@ public:
 							CRVL3DPose *pPoseSM,
 							double OverlapCoeff,
 							CRVL3DSurface2 **MatchedMSurfArray = NULL);
+	void CreateAutoMatchMatrix(CRVLPSuLM *pSPSuLM);
 	int GenMatchListViaDescriptors(CRVLPSuLM * pPSuLM_S,
 									CRVLPSuLM * pPSuLM_M,
 									RVLQLIST *matchList,
@@ -595,6 +614,8 @@ public:
 								CRVL3DLine2 *pSelectedLine = NULL);
 	CRVLPSuLM *GetPSuLM(int index);		
 	void BestHypothesisProbability(CRVLPSuLM *pSPSuLM);
+	double ConditionalProbabilityTree(	CRVLPSuLM *pSPSuLM, 
+										CRVLPSuLM *pMPSuLM);
 
 private:
 	RVLPSULM_MSMATCH_DATA *HypothesesGetNextNode(	RVLPSULM_HG_NODE* pNode,

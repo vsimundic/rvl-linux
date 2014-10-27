@@ -229,6 +229,31 @@
 	RVLMXEL(C, 3, 2, 1) = A[2] * B[1];\
 	RVLMXEL(C, 3, 2, 2) = A[2] * B[2];\
 }
+// C(3x3) = x(3x1)*x(3x1)'		(only diagonal + upper triangle are computed)
+#define RVLVECTCOV3(x, C)\
+{\
+	C[0] = (x[0] * x[0]);\
+	C[1] = (x[0] * x[1]);\
+	C[2] = (x[0] * x[2]);\
+	C[4] = (x[1] * x[1]);\
+	C[5] = (x[1] * x[2]);\
+	C[8] = (x[2] * x[2]);\
+}
+// C(3x3) = C(3x3) + x(3x1)*x(3x1)'		(only diagonal + upper triangle are computed)
+// M(3x1) = M(3x1) + x(3x1)
+#define RVLMOMENTS3UPDATE(x, M, C, n)\
+{\
+	n++;\
+	M[0] += x[0];\
+	M[1] += x[1];\
+	M[2] += x[2];\
+	C[0] += (x[0] * x[0]);\
+	C[1] += (x[0] * x[1]);\
+	C[2] += (x[0] * x[2]);\
+	C[4] += (x[1] * x[1]);\
+	C[5] += (x[1] * x[2]);\
+	C[8] += (x[2] * x[2]);\
+}
 // pTgt = R * pSrc + t
 #define RVLTRANSF3(pSrc, R, t, pTgt)\
 {\

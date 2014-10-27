@@ -1352,63 +1352,64 @@ bool CRVL3DSurface2::Match4(CRVL3DObject *pObject_,
 
 	// coarse overlap match
 
-	double *Cp = pData->Cp + 3 * 3 * m_Index;
-	double *Cp_ = pData->Cp_ + 3 * 3 * pSurf_->m_Index;
-
-	double Mx3x3Tmp[3*3];
-
-	RVLSUMMX3X3UT(Cp, Cp_, Mx3x3Tmp)
-
-	// debug
-
-	//if(m_Index == 9 && pSurf_->m_Index == 7)
-	//{
-	//	FILE *fpDebug = fopen("C:\\RVL\\Debug\\Mx.dat", "w");
-
-	//	RVLCOMPLETESIMMX3(Mx3x3Tmp)
-
-	//	RVLPrintMatrix(fpDebug, Mx3x3Tmp, 3, 3);
-
-	//	fclose(fpDebug);
-	//}
-
-	/////
-
 	double *tF = m_Pose.m_X;
 	double *tF_ = pSurf_->m_Pose.m_X;
 
-	double Et[3];
-
-	RVLDIF3VECTORS(tF, tF_, Et)
-
-	double Mx3x3Tmp2[3*3];
+	double *Cp, *Cp_;
+	double Mx3x3Tmp[3*3], Mx3x3Tmp2[3*3], Vect3Tmp[3];
+	double tP[3];
 	double fTmp;
 
-	RVLINVCOV3(Mx3x3Tmp, Mx3x3Tmp2, fTmp)
+	if(Flags & RVL3DSURFACE_MATCH4_FLAG_OVERLAP)
+	{
+		Cp = pData->Cp + 3 * 3 * m_Index;
+		Cp_ = pData->Cp_ + 3 * 3 * pSurf_->m_Index;
 
-	double e = RVLCOV3DTRANSFTO1D(Mx3x3Tmp2, Et);
+		RVLSUMMX3X3UT(Cp, Cp_, Mx3x3Tmp)
 
-	if(e > 11.34)
-		return false;
-	
-	// compute the origin of the match reference frame
+		// debug
 
-	double *invCp = pData->invCp + 3 * 3 * m_Index;
-	double *invCp_ = pData->invCp_ + 3 * 3 * pSurf_->m_Index;
+		//if(m_Index == 9 && pSurf_->m_Index == 7)
+		//{
+		//	FILE *fpDebug = fopen("C:\\RVL\\Debug\\Mx.dat", "w");
 
-	RVLSUMMX3X3UT(invCp, invCp_, Mx3x3Tmp)
+		//	RVLCOMPLETESIMMX3(Mx3x3Tmp)
 
-	RVLINVCOV3(Mx3x3Tmp, Mx3x3Tmp2, fTmp)
+		//	RVLPrintMatrix(fpDebug, Mx3x3Tmp, 3, 3);
 
-	double Vect3Tmp[3], Vect3Tmp2[3];
+		//	fclose(fpDebug);
+		//}
 
-	RVLMULCOV3VECT(invCp, tF, Vect3Tmp)
-	RVLMULCOV3VECT(invCp_, tF_, Vect3Tmp2)
-	RVLSUM3VECTORS(Vect3Tmp, Vect3Tmp2, Vect3Tmp)
+		/////
 
-	double tP[3];
+		double Et[3];
 
-	RVLMULCOV3VECT(Mx3x3Tmp2, Vect3Tmp, tP)
+		RVLDIF3VECTORS(tF, tF_, Et)
+
+		RVLINVCOV3(Mx3x3Tmp, Mx3x3Tmp2, fTmp)
+
+		double e = RVLCOV3DTRANSFTO1D(Mx3x3Tmp2, Et);
+
+		if(e > 11.34)
+			return false;
+		
+		// compute the origin of the match reference frame
+
+		double *invCp = pData->invCp + 3 * 3 * m_Index;
+		double *invCp_ = pData->invCp_ + 3 * 3 * pSurf_->m_Index;
+
+		RVLSUMMX3X3UT(invCp, invCp_, Mx3x3Tmp)
+
+		RVLINVCOV3(Mx3x3Tmp, Mx3x3Tmp2, fTmp)
+
+		double Vect3Tmp2[3];
+
+		RVLMULCOV3VECT(invCp, tF, Vect3Tmp)
+		RVLMULCOV3VECT(invCp_, tF_, Vect3Tmp2)
+		RVLSUM3VECTORS(Vect3Tmp, Vect3Tmp2, Vect3Tmp)
+
+		RVLMULCOV3VECT(Mx3x3Tmp2, Vect3Tmp, tP)
+	}
 
 	// compute the z-axis of the match reference frame
 
@@ -1430,22 +1431,66 @@ bool CRVL3DSurface2::Match4(CRVL3DObject *pObject_,
 	RVLSUM3VECTORS(ZF, ZF_, ZP)
 	RVLNORM3(ZP, fTmp)
 
-	// proximity match
-
-	RVLDIF3VECTORS(tF, tP, Vect3Tmp)
-	double r = RVLDOTPRODUCT3(ZF, Vect3Tmp) / RVLDOTPRODUCT3(ZF, ZP);
-
-	RVLDIF3VECTORS(tF_, tP, Vect3Tmp)
-	double r_ = RVLDOTPRODUCT3(ZF_, Vect3Tmp) / RVLDOTPRODUCT3(ZF_, ZP);
-
-	double er = r - r_;
-
 	double varqS = pSurf_->m_varq[2] + m_varq[2] + pData->varPositionUncert;
 
-	double ep = er * er / varqS;
+	double er, ep;
 
-	if(ep > 6.635)
-		return false;
+	if(Flags & RVL3DSURFACE_MATCH4_FLAG_OVERLAP)
+	{
+		// proximity match
+
+		RVLDIF3VECTORS(tF, tP, Vect3Tmp)
+		double r = RVLDOTPRODUCT3(ZF, Vect3Tmp) / RVLDOTPRODUCT3(ZF, ZP);
+
+		RVLDIF3VECTORS(tF_, tP, Vect3Tmp)
+		double r_ = RVLDOTPRODUCT3(ZF_, Vect3Tmp) / RVLDOTPRODUCT3(ZF_, ZP);	
+
+		er = r - r_;
+
+		ep = er * er / varqS;
+
+		if(ep > 6.635)
+			return false;
+	}
+	//else
+	//{
+	//	// ZM <- eigenvector corresponding to the smallest eigenvalue of the covariance matrix
+	//	//       of the union of the endpoints of the ellipses representing the two matched surface segments
+
+	//	double *XF = RFT;
+	//	double *YF = RFT + 3;
+
+	//	fTmp = m_EigenValues[0] * m_EigenValues[0];
+	//	RVLVECTCOV3(XF, Mx3x3Tmp)
+	//	RVLSCALEMX3X3(Mx3x3Tmp, fTmp, Mx3x3Tmp2)
+
+	//	fTmp = m_EigenValues[1] * m_EigenValues[1];
+	//	RVLVECTCOV3(YF, Mx3x3Tmp)
+	//	RVLSCALEMX3X3(Mx3x3Tmp, fTmp, Mx3x3Tmp)
+	//	RVLSUMMX3X3(Mx3x3Tmp2, Mx3x3Tmp, Mx3x3Tmp2) 
+
+	//	XF = RFT_;
+	//	YF = RFT_ + 3;
+
+	//	fTmp = pSurf_->m_EigenValues[0] * pSurf_->m_EigenValues[0];
+	//	RVLVECTCOV3(XF, Mx3x3Tmp)
+	//	RVLSCALEMX3X3(Mx3x3Tmp, fTmp, Mx3x3Tmp)
+	//	RVLSUMMX3X3(Mx3x3Tmp2, Mx3x3Tmp, Mx3x3Tmp2) 
+
+	//	fTmp = pSurf_->m_EigenValues[1] * pSurf_->m_EigenValues[1];
+	//	RVLVECTCOV3(YF, Mx3x3Tmp)
+	//	RVLSCALEMX3X3(Mx3x3Tmp, fTmp, Mx3x3Tmp)
+	//	RVLSUMMX3X3(Mx3x3Tmp2, Mx3x3Tmp, Mx3x3Tmp2) 
+
+	//	RVLDIF3VECTORS(tF_, tF, Vect3Tmp)
+	//	RVLVECTCOV3(Vect3Tmp, Mx3x3Tmp)
+	//	RVLSUMMX3X3(Mx3x3Tmp2, Mx3x3Tmp, Mx3x3Tmp2) 
+
+	//	bool bReal[3];
+	//	double ZM[3];
+	//	
+	//	RVLGetMinEigVector3(Mx3x3Tmp2, Vect3Tmp, bReal, ZM);
+	//}
 
 	// compute the x and y-axes of the match reference frame
 
@@ -1494,6 +1539,10 @@ bool CRVL3DSurface2::Match4(CRVL3DObject *pObject_,
 	{
 		en = CnS[0] * 4.0 * sy * sy / detCnS;
 
+		if(!(Flags & RVL3DSURFACE_MATCH4_FLAG_OVERLAP))
+			if(en > 9.21)
+				return false;
+
 		Pn = RVLLN4PI - 0.5*(log(detCnS)+en) - RVLLN2PI;
 
 		if(Pn < 0.0)
@@ -1503,6 +1552,45 @@ bool CRVL3DSurface2::Match4(CRVL3DObject *pObject_,
 	pData->POrientMatch = Pn;
 
 	// position probability
+
+	if(!(Flags & RVL3DSURFACE_MATCH4_FLAG_OVERLAP))
+	{
+		// ZM <- mean surface orientation
+
+		double Vect2Tmp[2], Vect2Tmp2[2], SM[2];
+
+		fTmp = sy / detCnS;
+
+		Vect2Tmp[0] = -CnS[1] * fTmp;
+		Vect2Tmp[1] = CnS[0] * fTmp;
+
+		RVLMULCOV2VECT(Cn_, Vect2Tmp, Vect2Tmp2)
+
+		Vect2Tmp[0] = CnS[1] * fTmp;
+		Vect2Tmp[1] = -CnS[0] * fTmp;
+
+		RVLMULCOV2VECT(Cn, Vect2Tmp, SM)
+
+		SM[0] += Vect2Tmp2[0];
+		SM[1] += Vect2Tmp2[1];
+
+		double ZM[3];
+
+		ZM[0] = SM[0] * XP[0] + SM[1] * YP[0] + ZP[0];
+		ZM[1] = SM[0] * XP[1] + SM[1] * YP[1] + ZP[1];
+		ZM[2] = SM[0] * XP[2] + SM[1] * YP[2] + ZP[2];
+
+		RVLNORM3(ZM, fTmp)
+
+		RVLDIF3VECTORS(tF_, tF, Vect3Tmp)
+
+		er = RVLDOTPRODUCT3(Vect3Tmp, ZM);
+
+		ep = er * er / varqS;
+
+		if(ep > 6.635)
+			return false;
+	}
 
 	double Pp = pData->PPriorPosition - 0.5*(log(varqS)+ep+RVLLN2PI);
 
