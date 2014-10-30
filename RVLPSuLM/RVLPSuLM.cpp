@@ -1860,7 +1860,7 @@ void CRVLPSuLM::Load(FILE * fp, DWORD Flags)
 	
 		
 		//Load 3D surface (m_N and m_d)
-		p3DSurface->Load(fp, Flags);
+		p3DSurface->Load(fp);
 
 		//add to chain and array in PSuLM
 		m_SurfaceList.Add(p3DSurface);

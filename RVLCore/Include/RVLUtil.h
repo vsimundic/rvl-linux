@@ -576,6 +576,7 @@ int* RVLWhereAbove(double *x, int n, double l, int &j);
 void RVLSetFileNumber(char *FileName, char *Extension, int n);
 int RVLGetFileNumber(char *FileName, char *Extension);
 BOOL RVLGetNextFileName(char *FileName, char *Extension, int maxiSample);
+BOOL RVLGetFirstValidFileName(char *FileName, char *Extension, int maxiSample, int iSample_ = -1);
 void RVL3x3x3BlockMxTo6x6(double *PSrc, double *PTgt);
 void RVL6DOFCovTransf(double *C,
 					  double *Jqq,

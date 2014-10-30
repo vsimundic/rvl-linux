@@ -53,4 +53,5 @@ public:
 	CRVL3DPose m_PoseLA, m_PoseA0;
 	IplImage *m_pRGBImage;
 	RVL3DMESHFILE *m_pMeshFile;
+	int m_iSample;
 };

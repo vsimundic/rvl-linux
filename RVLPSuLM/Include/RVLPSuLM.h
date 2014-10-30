@@ -342,5 +342,8 @@ public:
 	int m_nSurfaceSamples;
 	RVLPSULM_PARTICLE2 *m_ParticleArray;
 	int m_nParticles;
+	double m_PriorProbabilityLocal;
+	double m_PosteriorProbabilityLocal5DOF;
+	double m_PosteriorProbabilityLocal;
 };
 

@@ -220,6 +220,10 @@ int main(int argc, char* argv[])
 	DWORD mDisplayPSuLMFlags = (RVLPSULM_DISPLAY_SURFACES | RVLPSULM_DISPLAY_ELLIPSES | RVLPSULM_DISPLAY_LINES | RVLPSULM_DISPLAY_VECTORS);
 	int DisplayBitmap = 0;
 	int ZoomFactor = 1;
+
+	if(!bKinect)
+		RVLGetFirstValidFileName(VS.m_ImageFileName, "00000-sl.bmp", 10000);
+
 	bool bVTKRendererActive = false;
 	int iVTK3DModel = 0;
 
@@ -522,19 +526,23 @@ int main(int argc, char* argv[])
 				bRefresh = true;				
 	
 				break;
-			case 'f':
+			case 'f':	// Map building on/off
 				VS.m_PSuLMBuilder.m_Flags ^= RVLPSULMBUILDER_FLAG_MAPBUILDING;
 
 				if(VS.m_PSuLMBuilder.m_Flags & RVLPSULMBUILDER_FLAG_MAPBUILDING)
 				{
 					VS.m_PSuLMBuilder.m_Flags &= ~RVLPSULMBUILDER_FLAG_GLOBAL;
 
-					if(VS.m_PSuLMBuilder.m_nPlausibleHypotheses > 0)
-						VS.m_PSuLMBuilder.m_pNearestModelPSuLM = VS.m_PSuLMBuilder.m_HypothesisArray[0]->pMPSuLM;
+					//if(VS.m_PSuLMBuilder.m_nPlausibleHypotheses > 0)
+					//	VS.m_PSuLMBuilder.m_pNearestModelPSuLM = VS.m_PSuLMBuilder.m_HypothesisArray[0]->pMPSuLM;
+
+					if(VS.m_PSuLMBuilder.m_nHypotheses > 0)
+						if(VS.m_PSuLMBuilder.m_HypothesisArray[0]->pMPSuLM->m_PosteriorProbabilityLocal >= 0.999)
+							VS.m_PSuLMBuilder.m_pNearestModelPSuLM = VS.m_PSuLMBuilder.m_HypothesisArray[0]->pMPSuLM;
 				}
 
 				break;
-			case 'g':
+			case 'g':	// global localization on/off
 				VS.m_PSuLMBuilder.m_Flags ^= RVLPSULMBUILDER_FLAG_GLOBAL;
 
 				break;
@@ -546,7 +554,7 @@ int main(int argc, char* argv[])
 				bRefresh = true;
 
 				break;
-			case 'i':
+			case 'i':	// loop start <- last MPSuLM
 				if(VS.m_PSuLMBuilder.m_pNearestModelPSuLM)
 				{
 					VS.m_PSuLMBuilder.m_pLoopStartPSuLM = VS.m_PSuLMBuilder.m_pNearestModelPSuLM;
@@ -555,7 +563,7 @@ int main(int argc, char* argv[])
 				}
 
 				break;
-			case 'l':
+			case 'l':	// loop closing 
 				if((VS.m_PSuLMBuilder.m_Flags & RVLPSULMBUILDER_FLAG_MAPBUILDING) && VS.m_PSuLMBuilder.m_pLoopStartPSuLM)
 				{
 					VS.m_PSuLMBuilder.m_Flags |= RVLPSULMBUILDER_FLAG_MANUAL_LOOP_CLOSING;
@@ -729,8 +737,18 @@ int main(int argc, char* argv[])
 		}
 		while(bRefresh && !bContinuous);
 
-		if(!bKinect && bNextImage)
-			RVLGetNextFileName(VS.m_ImageFileName, "00000-LW.bmp", 10000);
+		//if(!bKinect && bNextImage)
+		if(bNextImage)
+		{
+			if(bKinect)
+			{
+				int iSample = RVLGetFileNumber(VS.m_ImageFileName, "00000-LW.bmp");
+
+				RVLSetFileNumber(VS.m_ImageFileName, "00000-LW.bmp", iSample + 1);
+			}
+			else
+				RVLGetNextFileName(VS.m_ImageFileName, "00000-LW.bmp", 10000);
+		}
 
 		if(!bRecord)
 			VS.m_Mem.Clear();

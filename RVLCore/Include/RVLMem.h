@@ -12,6 +12,16 @@
 #define RVLMEM_ALLOC(pMem, Size, pAllocatedMem)	{pAllocatedMem = pMem->m_pFreeMem; pMem->m_pFreeMem += Size; if(pMem->m_pFreeMem >= pMem->m_pEndBlock) pAllocatedMem = pMem->AllocInNextBlock(Size);}
 #define RVLMEM_ALLOC_STRUCT(pMem, Type, pAllocatedMem)	{pAllocatedMem = (Type *)(pMem->m_pFreeMem); pMem->m_pFreeMem += sizeof(Type); if(pMem->m_pFreeMem >= pMem->m_pEndBlock) pAllocatedMem = (Type *)(pMem->AllocInNextBlock(sizeof(Type)));}
 #define RVLMEM_ALLOC_STRUCT_ARRAY(pMem, Type, n, pAllocatedMem)	{pAllocatedMem = (Type *)(pMem->m_pFreeMem); pMem->m_pFreeMem += (n * sizeof(Type)); if(pMem->m_pFreeMem >= pMem->m_pEndBlock) pAllocatedMem = (Type *)(pMem->AllocInNextBlock(sizeof(Type)));}
+#define RVLMEM_ALLOC_LOCAL_INIT(pMem)	BYTE *pFreeMem = pMem->m_pFreeMem; BYTE *pStartBlock = pMem->m_pStartBlock;
+#define RVLMEM_ALLOC_LOCAL_UPDATE(pMem)\
+{\
+	if(pMem->m_pStartBlock != pStartBlock)\
+	{\
+		pStartBlock = pMem->m_pStartBlock;\
+		pFreeMem = pStartBlock + sizeof(BYTE *);\
+	}\
+}
+#define RVLMEM_ALLOC_LOCAL_FREE(pMem)	{pMem->m_pFreeMem = pFreeMem;}
 
 class CRVLMem  
 {

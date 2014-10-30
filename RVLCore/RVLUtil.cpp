@@ -2560,18 +2560,16 @@ int RVLGetFileNumber(char *FileName, char *Extension)
 	return atoi(FileName + strlen(FileName) - strlen(Extension));
 }
 
-BOOL RVLGetNextFileName(char *FileName, char *Extension, int maxiSample)
+BOOL RVLGetFirstValidFileName(char *FileName, char *Extension, int maxiSample, int iSample_)
 {
-	int iSample = RVLGetFileNumber(FileName, Extension);
-
+	int iSample = (iSample_ >= 0 ? iSample_ : RVLGetFileNumber(FileName, Extension));
+	
 	int iSampleBack = iSample;
 
 	FILE *fp;
 
 	do
 	{
-		iSample++;
-
 		if(iSample > maxiSample)
 		{
 			iSample = iSampleBack;
@@ -2584,12 +2582,28 @@ BOOL RVLGetNextFileName(char *FileName, char *Extension, int maxiSample)
 		RVLSetFileNumber(FileName, Extension, iSample);
 
 		fp = fopen(FileName, "r");
+
+		iSample++;
 	}
 	while(fp == NULL);
 
 	fclose(fp);
 
-	return TRUE;
+	return TRUE;	
+}
+
+BOOL RVLGetNextFileName(char *FileName, char *Extension, int maxiSample)
+{
+	int iSample = RVLGetFileNumber(FileName, Extension);
+
+	if(!RVLGetFirstValidFileName(FileName, Extension, maxiSample, iSample + 1))
+	{
+		RVLSetFileNumber(FileName, Extension, iSample);
+
+		return FALSE;
+	}
+	else
+		return TRUE;
 }
 
 // Converts block matrix 3x3x3 to 6x6 matrix

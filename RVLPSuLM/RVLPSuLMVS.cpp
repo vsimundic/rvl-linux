@@ -93,6 +93,7 @@ void CRVLPSuLMVS::Init(char * CfgFile2Name)
 	//}
 	m_pPSuLM = NULL;
 
+	m_iSample = 0;
 }
 
 void CRVLPSuLMVS::Update(DWORD Flags)
@@ -417,25 +418,25 @@ void CRVLPSuLMVS::PSuLMBasedRLMUpdate(DWORD Flags)
 	if((m_PSuLMBuilder.m_Flags & RVLPSULMBUILDER_FLAG_MODE) == RVLPSULMBUILDER_FLAG_MODE_LOCALIZATION)
 		m_PSuLMBuilder.Localization(m_pPSuLM, &m_PoseA0);
 
+	char *DepthImageFileName = RVLCreateFileName(m_ImageFileName, "-LW.bmp", -1, "-D.txt");
+
+	if((Flags & RVLPSULMBUILDER_CREATEMODEL_IMAGE_FROM_FILE) == 0)
+	{
+		cvSaveImage(m_ImageFileName, m_pRGBImage);		
+
+		RVLSaveDepthImage(m_StereoVision.m_DisparityMap.Disparity, m_StereoVision.m_DisparityMap.Width, 
+			m_StereoVision.m_DisparityMap.Height, DepthImageFileName, m_StereoVision.m_DisparityMap.Format, 
+			m_StereoVision.m_DisparityMap.Format);
+	}
+
+	delete[] DepthImageFileName;
+
 	if(m_PSuLMBuilder.m_Flags & RVLPSULMBUILDER_FLAG_MAPBUILDING)
 	{
 		RVLCopyString(m_ImageFileName, &(m_pPSuLM->m_FileName));
 
-		RVLSetFileNumber(m_pPSuLM->m_FileName, "00000-LW.bmp", m_PSuLMBuilder.m_maxPSuLMIndex + 1);
-
 		if(m_PSuLMBuilder.MapBuilding(m_pPSuLM))
 		{
-			if((Flags & RVLPSULMBUILDER_CREATEMODEL_IMAGE_FROM_FILE) == 0)
-			{
-				cvSaveImage(m_pPSuLM->m_FileName, m_pRGBImage);		
-
-				char *DepthImageFileName = RVLCreateFileName(m_ImageFileName, "-LW.bmp", m_PSuLMBuilder.m_maxPSuLMIndex, "-D.txt");
-
-				RVLSaveDepthImage(m_StereoVision.m_DisparityMap.Disparity, m_StereoVision.m_DisparityMap.Width, 
-					m_StereoVision.m_DisparityMap.Height, DepthImageFileName, m_StereoVision.m_DisparityMap.Format, 
-					m_StereoVision.m_DisparityMap.Format);
-			}
-
 			if(m_Flags & RVLSYS_FLAGS_CREATE_GLOBAL_MESH)
 			{
 				// append local 3D mesh to global 3D mesh

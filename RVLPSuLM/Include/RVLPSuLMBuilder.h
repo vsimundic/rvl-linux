@@ -32,10 +32,10 @@
 //#define RVLPSULMBUILDER_MAP_DEBUG_LOG
 //#define RVLPSULMBUILDER_GET_LOCAL_MODELS_DEBUG_LOG
 //#define RVLPSULMBUILDER_PARTICLE_FILTER_DEBUG
-//#define RVLPSULMBUILDER_HYPOTHESES_DEBUG_LOG
-//#define RVLPSULMBUILDER_HYPOTHESES_LAST_DOF_ACCU_DEBUG_LOG
-//#define RVLPSULMBUILDER_CONDITIONAL_PROBABILITY_TREE_DEBUG_LOG
-//#define RVLPSULMBUILDER_BEST_HYPOTHESIS_PROBABILITY_DEBUG_LOG
+#define RVLPSULMBUILDER_HYPOTHESES_DEBUG_LOG
+#define RVLPSULMBUILDER_HYPOTHESES_LAST_DOF_ACCU_DEBUG_LOG
+#define RVLPSULMBUILDER_CONDITIONAL_PROBABILITY_TREE_DEBUG_LOG
+#define RVLPSULMBUILDER_BEST_HYPOTHESIS_PROBABILITY_DEBUG_LOG
 
 // Configuration
 
@@ -419,8 +419,8 @@ public:
 	int m_minSurfaceSamplesForMatch;
 	double m_LocalMapRadius;
 	FILE *m_fpDebug;	
-	double m_BestHypothesisProbability;
-	double m_BestHypothesisProbability5DOF;
+	//double m_BestHypothesisProbability;
+	//double m_BestHypothesisProbability5DOF;
 
 	CRVL3DSurface2 *m_SurfaceMSArray;
 	CRVL3DLine2 *m_LineMSArray;
@@ -621,7 +621,8 @@ public:
 								CRVL3DSurface2 *pSelectedSurface = NULL,
 								CRVL3DLine2 *pSelectedLine = NULL);
 	CRVLPSuLM *GetPSuLM(int index);		
-	void PoseConstraintProbability(CRVLPSuLM *pSPSuLM);
+	void PoseConstraintProbability(	CRVLPSuLM *pSPSuLM, 
+									CRVLPSuLM *pMPSuLM);
 	double ConditionalProbabilityTree(	CRVLPSuLM *pSPSuLM, 
 										CRVLPSuLM *pMPSuLM);
 
