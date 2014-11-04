@@ -1763,13 +1763,15 @@ BOOL RVL3DPlanarSurfaceEKFUpdate(	CRVL3DSurface2 *pSSurf,
 									CRVL3DSurface2 *pMSurf,
 									CRVL3DPose *pInitPose,
 									CRVL3DPose *pFinalPose,
-									RVLSURFACE_MATCH_ARRAY *pMatchData)
+									RVLSURFACE_MATCH_ARRAY *pMatchData,
+									bool bCheckConsistency)
 {
 	double MatchQuality;
 	double detQ;
 
 	if(!pSSurf->Match2(pMSurf, pInitPose, MatchQuality, detQ, pMatchData))
-		return FALSE;
+		if(bCheckConsistency)
+			return FALSE;
 
 	double *e = pMatchData->m_e;
 	double *C = pMatchData->m_C;
@@ -1787,7 +1789,8 @@ BOOL RVL3DPlanarSurfaceEKFUpdate(	CRVL3DSurface2 *pSSurf,
 		memcpy(pFinalPose->m_C, pInitPose->m_C, 3 * 3 * 3 * sizeof(double));
 
 		if(!pSSurf->Match2(pMSurf, pFinalPose, MatchQuality, detQ, pMatchData))
-			return FALSE;
+			if(bCheckConsistency)
+				return FALSE;
 
 		pFinalPose->PlanarSurfaceEKFUpdate2(C, Q, e);
 

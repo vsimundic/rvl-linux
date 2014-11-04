@@ -101,7 +101,8 @@ BOOL RVL3DPlanarSurfaceEKFUpdate(	CRVL3DSurface2 *pSSurf,
 									CRVL3DSurface2 *pMSurf,
 									CRVL3DPose *pInitPose,
 									CRVL3DPose *pFinalPose,
-									RVLSURFACE_MATCH_ARRAY *pMatchData);
+									RVLSURFACE_MATCH_ARRAY *pMatchData,
+									bool bCheckConsistency = true);
 																		
 
 class CRVL3DSurface2 : public CRVL3DMeshObject //CRVL3DObject2  
