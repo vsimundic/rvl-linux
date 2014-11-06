@@ -13,6 +13,8 @@
 #include "RVLVTK.h"
 #endif
 
+#define RVLPSULMDEMO_DISPLAY_ONLY_BEST_LOCAL_MODEL_HYPOTHESES
+
 void MessageCanNotOpenFile(CRVLGUI *pGUI, char *FileName);
 
 int main(int argc, char* argv[])
@@ -250,6 +252,10 @@ int main(int argc, char* argv[])
 	CRVLMPtrChain *pPSuLMList;
 	CRVLMem *pMem;
 	RVLQLIST *pMap;
+#ifdef RVLPSULMDEMO_DISPLAY_ONLY_BEST_LOCAL_MODEL_HYPOTHESES
+	int iHypothesis_;
+	RVLPSULM_HYPOTHESIS *pHypothesis;
+#endif
 
 	do
 	{
@@ -381,7 +387,27 @@ int main(int argc, char* argv[])
 
 		// display the results
 
+#ifdef RVLPSULMDEMO_DISPLAY_ONLY_BEST_LOCAL_MODEL_HYPOTHESES
 		iHypothesis = 0;
+
+		if(VS.m_PSuLMBuilder.m_nHypotheses > 0)
+		{
+			while(iHypothesis < VS.m_PSuLMBuilder.m_nHypotheses)
+			{
+				pHypothesis = VS.m_PSuLMBuilder.m_HypothesisArray[iHypothesis];
+
+				if(pHypothesis == pHypothesis->pMPSuLM->m_pHypothesis)
+					break;
+
+				iHypothesis++;
+			}
+
+			if(iHypothesis >= VS.m_PSuLMBuilder.m_nHypotheses)
+				iHypothesis = 0;
+		}
+#else
+		iHypothesis = 0;
+#endif
 
 		do
 		{
@@ -536,9 +562,11 @@ int main(int argc, char* argv[])
 					//if(VS.m_PSuLMBuilder.m_nPlausibleHypotheses > 0)
 					//	VS.m_PSuLMBuilder.m_pNearestModelPSuLM = VS.m_PSuLMBuilder.m_HypothesisArray[0]->pMPSuLM;
 
+#ifdef RVLPSULMBUILDER_MAPBUILDING_SEQUENCE
 					if(VS.m_PSuLMBuilder.m_nHypotheses > 0)
 						if(VS.m_PSuLMBuilder.m_HypothesisArray[0]->pMPSuLM->m_PosteriorProbabilityLocal >= 0.999)
 							VS.m_PSuLMBuilder.m_pNearestModelPSuLM = VS.m_PSuLMBuilder.m_HypothesisArray[0]->pMPSuLM;
+#endif
 				}
 
 				break;
@@ -686,8 +714,27 @@ int main(int argc, char* argv[])
 			case 0x00260000:	// Up
 				if(VS.m_PSuLMBuilder.m_nHypotheses > 0)
 				{
+#ifdef RVLPSULMDEMO_DISPLAY_ONLY_BEST_LOCAL_MODEL_HYPOTHESES
+					iHypothesis_ = iHypothesis;
+
+					iHypothesis--;
+
+					while(iHypothesis >= 0)
+					{
+						pHypothesis = VS.m_PSuLMBuilder.m_HypothesisArray[iHypothesis];
+
+						if(pHypothesis == pHypothesis->pMPSuLM->m_pHypothesis)
+							break;
+
+						iHypothesis--;						
+					}
+
+					if(iHypothesis < 0)
+						iHypothesis = iHypothesis_;
+#else
 					if(iHypothesis > 0)
 						iHypothesis--;
+#endif
 
 					bRefresh = true;
 				}
@@ -702,8 +749,27 @@ int main(int argc, char* argv[])
 			case 0x00280000:	// Down
 				if(VS.m_PSuLMBuilder.m_nHypotheses > 0)
 				{
+#ifdef RVLPSULMDEMO_DISPLAY_ONLY_BEST_LOCAL_MODEL_HYPOTHESES
+					iHypothesis_ = iHypothesis;
+
+					iHypothesis++;
+
+					while(iHypothesis < VS.m_PSuLMBuilder.m_nHypotheses)
+					{
+						pHypothesis = VS.m_PSuLMBuilder.m_HypothesisArray[iHypothesis];
+
+						if(pHypothesis == pHypothesis->pMPSuLM->m_pHypothesis)
+							break;
+
+						iHypothesis++;						
+					}
+
+					if(iHypothesis >= VS.m_PSuLMBuilder.m_nHypotheses)
+						iHypothesis = iHypothesis_;
+#else
 					if(iHypothesis < VS.m_PSuLMBuilder.m_nHypotheses - 1)
 						iHypothesis++;
+#endif
 
 					bRefresh = true;
 				}
