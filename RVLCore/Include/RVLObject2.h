@@ -87,6 +87,7 @@ public:
 	DWORD m_Flags;
 	DWORD m_ParamFlags;
 	RVLARRAY *m_RelList;	// [VAR c0 - ff] (See CRVLClass)
+	int cost;
 public:
 	virtual void Clear();
 #ifdef RVL_DEBUG

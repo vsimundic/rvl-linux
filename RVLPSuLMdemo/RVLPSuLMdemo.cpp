@@ -533,12 +533,11 @@ int main(int argc, char* argv[])
 				break;
 #ifdef RVLOPENNI
 			case 'b':
-				if(bKinect)
-				{
-					DisplayBitmap = (DisplayBitmap + 1) % 3;
+				//DisplayBitmap = (DisplayBitmap + 1) % 3;
+				DisplayBitmap = (DisplayBitmap + 1) % 2;
 
+				if(bKinect)
 					VS.m_Kinect.RegisterDepthToColor((DisplayBitmap != 0));
-				}
 
 				break;
 #endif

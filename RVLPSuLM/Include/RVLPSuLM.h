@@ -303,7 +303,7 @@ public:
 	CRVLMPtrChain m_SurfaceList;
 	CRVLMPtrChain m_3DLineList;
 	CRVL3DLine2 **m_3DLineArray;
-	int m_n3DLines;
+	int m_n3DLines, m_n3DLinesTotal;
 	CRVLMPtrChain m_2DLineList;
 	double m_X1[3], m_X2[3];		// only for testing purpose!!!
 	RVLPSULM_CELL *m_CellArray;

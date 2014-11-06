@@ -36,7 +36,7 @@
 //#define RVLPSULMBUILDER_HYPOTHESES_DEBUG_LOG
 //#define RVLPSULMBUILDER_HYPOTHESES_LAST_DOF_ACCU_DEBUG_LOG
 //#define RVLPSULMBUILDER_CONDITIONAL_PROBABILITY_TREE_DEBUG_LOG
-//#define RVLPSULMBUILDER_BEST_HYPOTHESIS_PROBABILITY_DEBUG_LOG
+//#define RVLPSULMBUILDER_POSE_CONSTRAINT_PROBABILITY_DEBUG_LOG
 //#define RVLPSULMBUILDER_AUTO_MATCH_MATRIX_DEBUG_LOG
 
 // Configuration
@@ -333,6 +333,7 @@ public:
 	int m_maxnHypothesesPerModel;
 	BYTE *m_MatchMatrix;
 	int m_maxnDominant3DSurfaces;
+	int m_maxnDominant3DLines;
 	int m_maxnExpandedNodes;
 	double m_RotHypTol, m_tHypTol;
 	int m_refnHypotheses;
@@ -527,7 +528,8 @@ public:
 	int EvaluateHypothesis3( CRVLPSuLM * pSPSuLM,
 							 RVLPSULM_HYPOTHESIS *pHypothesis);
 	double EvaluateHypothesis4( CRVLPSuLM * pSPSuLM,
-								RVLPSULM_HYPOTHESIS *pHypothesis);
+								RVLPSULM_HYPOTHESIS *pHypothesis,
+								bool bFirstOrderDependencyTree = true);
 	void InitHypothesisEvaluation4(CRVLPSuLM * pSPSuLM);
 	void Load(char * FileName, int maxIndex);
 	void LoadMap();

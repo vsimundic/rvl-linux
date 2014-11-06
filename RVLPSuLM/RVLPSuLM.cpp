@@ -1674,12 +1674,11 @@ void CRVLPSuLM::Save(FILE * fp, DWORD Flags)
 
 	}
 	
-#ifdef RVLPSULM_LINES
 	// save lines
 
-	fwrite(&m_n3DLines, sizeof(int), 1, fp);
+	fwrite(&m_n3DLinesTotal, sizeof(int), 1, fp);
 
-	if(m_n3DLines > 0)
+	if(m_n3DLinesTotal > 0)
 	{
 		CRVL3DLine2 *p3DLine = m_3DLineArray[0];
 
@@ -1706,7 +1705,6 @@ void CRVLPSuLM::Save(FILE * fp, DWORD Flags)
 			fwrite(p3DLine->m_pData, sizeof(RVL3DLINE_EXTENDED_DATA), 1, fp);
 		}
 	}
-#endif
 
 #ifdef NEVER
 	// save ref. view params.
@@ -1927,9 +1925,11 @@ void CRVLPSuLM::Load(FILE * fp, DWORD Flags)
 	//CRVLClass *p2DLineSet = &(pBuilder->m_M2DLineSet);
 	CRVLClass *p3DLineSet = &(pBuilder->m_M3DLineSet);
 	
-	fread(&m_n3DLines, sizeof(int), 1, fp);
+	fread(&m_n3DLinesTotal, sizeof(int), 1, fp);
 
-	m_3DLineArray = (CRVL3DLine2 **)(pBuilder->m_pMem0->Alloc(m_n3DLines * sizeof(CRVL3DLine2 *)));
+	m_n3DLines = (m_n3DLinesTotal > pBuilder->m_maxnDominant3DLines ? pBuilder->m_maxnDominant3DLines : m_n3DLinesTotal);
+
+	m_3DLineArray = (CRVL3DLine2 **)(pBuilder->m_pMem0->Alloc(m_n3DLinesTotal * sizeof(CRVL3DLine2 *)));
 
 	CRVL3DLine2 **pp3DLine = m_3DLineArray;
 
@@ -1941,7 +1941,7 @@ void CRVLPSuLM::Load(FILE * fp, DWORD Flags)
 	CRVL3DLine2 *p3DLine;
 	RVL3DLINE_EXTENDED_DATA *p3DLineData;
 
-	for(i = 0; i < m_n3DLines; i++)
+	for(i = 0; i < m_n3DLinesTotal; i++)
 	{
 		//p2DLine = (CRVL2DLine2 *)(RVL2DLine2Template.Create3(p2DLineSet));
 
