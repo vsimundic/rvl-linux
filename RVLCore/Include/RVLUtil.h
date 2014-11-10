@@ -836,27 +836,15 @@ inline CvSize RVLGetPixArraySize(PIX_ARRAY *pPixArray)
 // adapted for general case by Robert Cupec
 
 template <class Type>
-void RVLBubbleSort(CRVLMPtrChain *pInList,
-				   Type **OutArray,				
+void RVLBubbleSort(Type **OutArray,
+				   int n,
 				   BOOL descending = FALSE)
 {
-	//creating array for sorting purposes
-	int n = pInList->m_nElements;
-	if(OutArray == NULL)
-		OutArray = new Type*[n];
-	Type **ppElement = OutArray;
-	Type *pElement;
-	int i;
-
-	pInList->Start();
-	for(i = 0; i < n; i++)
-	{
-		pElement = (Type *)(pInList->GetNext());
-		*(ppElement++) = pElement;
-	}
-	//Sortiranje - bubble sort
 	Type* tempVoid;
 	bool chg = true;
+
+	int i;
+
 	while(chg)
 	{
 		chg = false;
@@ -888,6 +876,52 @@ void RVLBubbleSort(CRVLMPtrChain *pInList,
 			}
 		}
 	}
+}
+
+template <class Type>
+void RVLBubbleSort(CRVLMPtrChain *pInList,
+				   Type **OutArray,				
+				   BOOL descending = FALSE)
+{
+	//creating array for sorting purposes
+	int n = pInList->m_nElements;
+	if(OutArray == NULL)
+		OutArray = new Type*[n];
+	Type **ppElement = OutArray;
+	Type *pElement;
+	int i;
+
+	pInList->Start();
+	for(i = 0; i < n; i++)
+	{
+		pElement = (Type *)(pInList->GetNext());
+		*(ppElement++) = pElement;
+	}
+
+	RVLBubbleSort<Type>(OutArray, n, descending);
+}
+
+template <class Type>
+void RVLBubbleSort(RVLQLIST *pInList,
+				   int n,
+				   Type **OutArray,				
+				   BOOL descending = FALSE)
+{
+	//creating array for sorting purposes
+	if(OutArray == NULL)
+		OutArray = new Type*[n];
+	Type **ppElement = OutArray;
+	Type *pElement;
+
+	RVLQLIST_PTR_ENTRY *pEntry = (RVLQLIST_PTR_ENTRY *)(pInList->pFirst);
+
+	while(pEntry)
+	{
+		*(ppElement++) = (Type *)(pEntry->Ptr);
+		pEntry = (RVLQLIST_PTR_ENTRY *)(pEntry->pNext);
+	}
+
+	RVLBubbleSort<Type>(OutArray, n, descending);
 }
 
 template <class Type>

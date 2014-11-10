@@ -345,5 +345,6 @@ public:
 	double m_PriorProbabilityLocal;
 	double m_PosteriorProbabilityLocal5DOF;
 	double m_PosteriorProbabilityLocal;
+	double m_PosteriorProbabilityGlobal;
 };
 

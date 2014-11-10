@@ -16,6 +16,7 @@
 #include "RVLMem.h"
 #include "RVLPtrChain.h"
 #include "RVLMPtrChain.h"
+#include "RVLQListArray.h"
 #include "RVLUtil.h"
 
 ///////////////////////////////////////////////////////////

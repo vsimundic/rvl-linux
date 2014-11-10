@@ -13,6 +13,7 @@
 #include "RVLVTK.h"
 #endif
 
+#define RVLPSULMDEMO_DISPLAY_ONLY_REPRESENTATIVE_HYPOTHESES
 #define RVLPSULMDEMO_DISPLAY_ONLY_BEST_LOCAL_MODEL_HYPOTHESES
 
 void MessageCanNotOpenFile(CRVLGUI *pGUI, char *FileName);
@@ -252,7 +253,7 @@ int main(int argc, char* argv[])
 	CRVLMPtrChain *pPSuLMList;
 	CRVLMem *pMem;
 	RVLQLIST *pMap;
-#ifdef RVLPSULMDEMO_DISPLAY_ONLY_BEST_LOCAL_MODEL_HYPOTHESES
+#ifdef RVLPSULMDEMO_DISPLAY_ONLY_REPRESENTATIVE_HYPOTHESES
 	int iHypothesis_;
 	RVLPSULM_HYPOTHESIS *pHypothesis;
 #endif
@@ -387,7 +388,7 @@ int main(int argc, char* argv[])
 
 		// display the results
 
-#ifdef RVLPSULMDEMO_DISPLAY_ONLY_BEST_LOCAL_MODEL_HYPOTHESES
+#ifdef RVLPSULMDEMO_DISPLAY_ONLY_REPRESENTATIVE_HYPOTHESES
 		iHypothesis = 0;
 
 		if(VS.m_PSuLMBuilder.m_nHypotheses > 0)
@@ -396,8 +397,13 @@ int main(int argc, char* argv[])
 			{
 				pHypothesis = VS.m_PSuLMBuilder.m_HypothesisArray[iHypothesis];
 
+#ifdef RVLPSULMDEMO_DISPLAY_ONLY_BEST_LOCAL_MODEL_HYPOTHESES
 				if(pHypothesis == pHypothesis->pMPSuLM->m_pHypothesis)
 					break;
+#else
+				if(pHypothesis->iRepresentative == 0xffffffff)
+					break;
+#endif
 
 				iHypothesis++;
 			}
@@ -531,16 +537,17 @@ int main(int argc, char* argv[])
 				bRefresh = true;				
 	
 				break;
-#ifdef RVLOPENNI
 			case 'b':
 				//DisplayBitmap = (DisplayBitmap + 1) % 3;
 				DisplayBitmap = (DisplayBitmap + 1) % 2;
 
+#ifdef RVLOPENNI
 				if(bKinect)
 					VS.m_Kinect.RegisterDepthToColor((DisplayBitmap != 0));
+#endif
+				bRefresh = true;
 
 				break;
-#endif
 			case 'c':
 				bContinuous = !bContinuous;
 
@@ -713,7 +720,7 @@ int main(int argc, char* argv[])
 			case 0x00260000:	// Up
 				if(VS.m_PSuLMBuilder.m_nHypotheses > 0)
 				{
-#ifdef RVLPSULMDEMO_DISPLAY_ONLY_BEST_LOCAL_MODEL_HYPOTHESES
+#ifdef RVLPSULMDEMO_DISPLAY_ONLY_REPRESENTATIVE_HYPOTHESES
 					iHypothesis_ = iHypothesis;
 
 					iHypothesis--;
@@ -722,8 +729,13 @@ int main(int argc, char* argv[])
 					{
 						pHypothesis = VS.m_PSuLMBuilder.m_HypothesisArray[iHypothesis];
 
+#ifdef RVLPSULMDEMO_DISPLAY_ONLY_BEST_LOCAL_MODEL_HYPOTHESES
 						if(pHypothesis == pHypothesis->pMPSuLM->m_pHypothesis)
 							break;
+#else
+						if(pHypothesis->iRepresentative == 0xffffffff)
+							break;
+#endif
 
 						iHypothesis--;						
 					}
@@ -748,7 +760,7 @@ int main(int argc, char* argv[])
 			case 0x00280000:	// Down
 				if(VS.m_PSuLMBuilder.m_nHypotheses > 0)
 				{
-#ifdef RVLPSULMDEMO_DISPLAY_ONLY_BEST_LOCAL_MODEL_HYPOTHESES
+#ifdef RVLPSULMDEMO_DISPLAY_ONLY_REPRESENTATIVE_HYPOTHESES
 					iHypothesis_ = iHypothesis;
 
 					iHypothesis++;
@@ -757,8 +769,13 @@ int main(int argc, char* argv[])
 					{
 						pHypothesis = VS.m_PSuLMBuilder.m_HypothesisArray[iHypothesis];
 
+#ifdef RVLPSULMDEMO_DISPLAY_ONLY_BEST_LOCAL_MODEL_HYPOTHESES
 						if(pHypothesis == pHypothesis->pMPSuLM->m_pHypothesis)
 							break;
+#else
+						if(pHypothesis->iRepresentative == 0xffffffff)
+							break;
+#endif
 
 						iHypothesis++;						
 					}
