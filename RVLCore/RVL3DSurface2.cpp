@@ -1525,9 +1525,9 @@ bool CRVL3DSurface2::Match4(CRVL3DObject *pObject_,
 
 	double CnS[2*2];
 
-	CnS[0] = Cn[0] + Cn_[0];
+	CnS[0] = Cn[0] + Cn_[0] + pData->varOrientationUncert;
 	CnS[1] = Cn[1] + Cn_[1];
-	CnS[3] = Cn[3] + Cn_[3];
+	CnS[3] = Cn[3] + Cn_[3] + pData->varOrientationUncert;
 
 	double detCnS = RVLDET2(CnS);
 

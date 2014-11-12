@@ -14,7 +14,7 @@
 #endif
 
 #define RVLPSULMDEMO_DISPLAY_ONLY_REPRESENTATIVE_HYPOTHESES
-#define RVLPSULMDEMO_DISPLAY_ONLY_BEST_LOCAL_MODEL_HYPOTHESES
+//#define RVLPSULMDEMO_DISPLAY_ONLY_BEST_LOCAL_MODEL_HYPOTHESES
 
 void MessageCanNotOpenFile(CRVLGUI *pGUI, char *FileName);
 
@@ -575,6 +575,8 @@ int main(int argc, char* argv[])
 #endif
 				}
 
+				bNextImage = false;
+
 				break;
 			case 'g':	// global localization on/off
 				VS.m_PSuLMBuilder.m_Flags ^= RVLPSULMBUILDER_FLAG_GLOBAL;
@@ -613,6 +615,10 @@ int main(int argc, char* argv[])
 
 				break;
 #ifdef RVLVTK
+			case 'o':
+				bNextImage = false;
+
+				break;
 			case 'p':
 				if (bVTKRendererActive)
 				{

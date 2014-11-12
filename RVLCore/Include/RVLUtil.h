@@ -911,7 +911,6 @@ void RVLBubbleSort(RVLQLIST *pInList,
 	if(OutArray == NULL)
 		OutArray = new Type*[n];
 	Type **ppElement = OutArray;
-	Type *pElement;
 
 	RVLQLIST_PTR_ENTRY *pEntry = (RVLQLIST_PTR_ENTRY *)(pInList->pFirst);
 

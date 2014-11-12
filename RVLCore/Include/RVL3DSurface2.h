@@ -71,6 +71,7 @@ struct RVL3DSURFACE2_MATCH_DATA
 	double *invCp;
 	double *invCp_;
 	double varPositionUncert;
+	double varOrientationUncert;
 	double PPriorPosition;
 	double POrientMatch;
 };
