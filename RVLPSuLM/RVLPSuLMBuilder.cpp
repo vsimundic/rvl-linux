@@ -12504,7 +12504,9 @@ void CRVLPSuLMBuilder::Hypotheses3(	CRVLPSuLM *pSPSuLM,
 						double Cn_[2*2];
 						pM3DSurface->TransfToMatchRefFrame(RFT_, RPT, Cn_);
 
-						// orientation probability
+						// orientation probability 
+
+						// comment for merging purpose
 
 						double CnS[2*2];
 
