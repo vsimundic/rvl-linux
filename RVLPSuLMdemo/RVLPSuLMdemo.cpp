@@ -68,18 +68,42 @@ int main(int argc, char* argv[])
 
 	GUI.Init();
 
-#ifdef RVLOPENNI
+	/////
+
+	int iMPSuLM = 0;
+
+	if(VS.m_Flags & RVLSYS_FLAGS_EDIT_MAP)
+	{
+		while(iMPSuLM <= VS.m_PSuLMBuilder.m_maxPSuLMIndex && VS.m_PSuLMBuilder.m_PSuLMArray[iMPSuLM] == NULL)
+			iMPSuLM++;
+
+		if(VS.m_PSuLMBuilder.m_PSuLMArray[iMPSuLM] == NULL)
+		{
+			GUI.Message("Map is empty.", 400, 100, cvScalar(0, 128, 255));
+
+			return 0;
+		}
+	}
+
 	// initialize kinect
 
-	bool bKinect = VS.m_Kinect.Init();
+	bool bKinect;
 
-	if(bKinect)
-		VS.m_Flags &= ~RVLSYS_FLAGS_PC;
+	if(VS.m_Flags & RVLSYS_FLAGS_EDIT_MAP)
+		bKinect = false;
 	else
-		GUI.Message("Kinect is not available.", 400, 100, cvScalar(0, 128, 255));
+	{
+#ifdef RVLOPENNI
+		bool bKinect = VS.m_Kinect.Init();
+
+		if(bKinect)
+			VS.m_Flags &= ~RVLSYS_FLAGS_PC;
+		else
+			GUI.Message("Kinect is not available.", 400, 100, cvScalar(0, 128, 255));
 #else
-	bool bKinect = false;
+		bKinect = false;
 #endif
+	}
 
 	// get the pointer to the depth image
 
@@ -240,12 +264,17 @@ int main(int argc, char* argv[])
 	
 	int nObjects = 1;
 	int textureFileNumber = 1;
-	int iHypothesis;
 
+	RVLPSULM_HYPOTHESIS *HypothesisMem = NULL;
+
+	DWORD HypEvalMethod = (VS.m_PSuLMBuilder.m_Flags & RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD);
+
+	int iHypothesis;
 	int key;
 	//int iSample;
 	bool bRefresh;
 	bool bNextImage;
+	bool bBackwards;
 	clock_t t;
 	char str[200];
 	int iTextLine;
@@ -253,10 +282,12 @@ int main(int argc, char* argv[])
 	CRVLMPtrChain *pPSuLMList;
 	CRVLMem *pMem;
 	RVLQLIST *pMap;
+	RVLPSULM_HYPOTHESIS *pHypothesis;
+	CRVLPSuLM *pPSuLM;
+	int iMPSuLM_;
 #ifdef RVLPSULMDEMO_DISPLAY_ONLY_REPRESENTATIVE_HYPOTHESES
 	int iHypothesis_;
-	RVLPSULM_HYPOTHESIS *pHypothesis;
-#endif
+#endif	
 
 	do
 	{
@@ -323,6 +354,16 @@ int main(int argc, char* argv[])
 
 		if(!bRecord)
 		{
+			if(VS.m_Flags & RVLSYS_FLAGS_EDIT_MAP)
+			{			
+				pPSuLM = VS.m_PSuLMBuilder.m_PSuLMArray[iMPSuLM];
+
+				RVLCopyString(pPSuLM->m_FileName, &(VS.m_ImageFileName));
+
+				if(HypEvalMethod == RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD_P)
+					VS.m_PSuLMBuilder.InitHypothesisEvaluation4(pPSuLM);
+			}
+				
 			if(!bKinect)
 				pRGBImage = cvLoadImage(VS.m_ImageFileName);
 
@@ -388,32 +429,109 @@ int main(int argc, char* argv[])
 
 		// display the results
 
-#ifdef RVLPSULMDEMO_DISPLAY_ONLY_REPRESENTATIVE_HYPOTHESES
-		iHypothesis = 0;
-
-		if(VS.m_PSuLMBuilder.m_nHypotheses > 0)
+		if(VS.m_Flags & RVLSYS_FLAGS_EDIT_MAP)
 		{
-			while(iHypothesis < VS.m_PSuLMBuilder.m_nHypotheses)
+			RVLQLIST_PTR_ENTRY *pNeighborPtr = (RVLQLIST_PTR_ENTRY *)(pPSuLM->m_NeighbourList->pFirst);
+
+			VS.m_PSuLMBuilder.m_nHypotheses = 0;
+
+			while(pNeighborPtr)
 			{
-				pHypothesis = VS.m_PSuLMBuilder.m_HypothesisArray[iHypothesis];
+				pNeighborPtr = (RVLQLIST_PTR_ENTRY *)(pNeighborPtr->pNext);	
 
-#ifdef RVLPSULMDEMO_DISPLAY_ONLY_BEST_LOCAL_MODEL_HYPOTHESES
-				if(pHypothesis == pHypothesis->pMPSuLM->m_pHypothesis)
-					break;
-#else
-				if(pHypothesis->iRepresentative == 0xffffffff)
-					break;
-#endif
-
-				iHypothesis++;
+				VS.m_PSuLMBuilder.m_nHypotheses++;
 			}
 
-			if(iHypothesis >= VS.m_PSuLMBuilder.m_nHypotheses)
-				iHypothesis = 0;
+			if(HypothesisMem)
+				delete[] HypothesisMem;
+
+			HypothesisMem = new RVLPSULM_HYPOTHESIS[VS.m_PSuLMBuilder.m_nHypotheses];
+
+			VS.m_PSuLMBuilder.m_HypothesisList.m_nElements = VS.m_PSuLMBuilder.m_nHypotheses;
+
+			if(VS.m_PSuLMBuilder.m_HypothesisArray)
+				delete[] VS.m_PSuLMBuilder.m_HypothesisArray;
+
+			VS.m_PSuLMBuilder.m_HypothesisArray = new RVLPSULM_HYPOTHESIS *[VS.m_PSuLMBuilder.m_nHypotheses];
+
+			pHypothesis = HypothesisMem;
+
+			pNeighborPtr = (RVLQLIST_PTR_ENTRY *)(pPSuLM->m_NeighbourList->pFirst);
+
+			iHypothesis = 0;
+
+			RVLPSULM_NEIGHBOUR *pNeighborRel;
+
+			while(pNeighborPtr)
+			{
+				pNeighborRel = (RVLPSULM_NEIGHBOUR *)(pNeighborPtr->Ptr);
+
+				pHypothesis->pMPSuLM = pNeighborRel->pPSuLM;
+
+				double *RMS = pNeighborRel->pPoseRel->m_Rot;
+				double *tMS = pNeighborRel->pPoseRel->m_X;
+				double *RSM = pHypothesis->PoseSM.m_Rot;
+				double *tSM = pHypothesis->PoseSM.m_X;
+
+				RVLINVTRANSF3D(RMS, tMS, RSM, tSM)
+
+				pHypothesis->PoseSM.UpdatePTRLL();
+
+				pHypothesis->Index = iHypothesis;
+
+				pHypothesis->cost = 0;
+
+				pHypothesis->iRepresentative = 0xffffffff;
+
+				pHypothesis->pMPSuLM->m_pHypothesis = pHypothesis;
+
+				pHypothesis->Probability = 0.0;
+
+				pHypothesis->pMPSuLM->m_PosteriorProbabilityLocal = pHypothesis->pMPSuLM->m_PosteriorProbabilityGlobal = 0.0;
+
+				pHypothesis->pMPSuLM->m_PosteriorProbabilityLocal5DOF = 0.0;
+
+				VS.m_PSuLMBuilder.m_HypothesisArray[iHypothesis++] = pHypothesis;
+
+				pHypothesis++;
+
+				pNeighborPtr = (RVLQLIST_PTR_ENTRY *)(pNeighborPtr->pNext);	
+			}
+
+			iHypothesis = 0;
+
+			VS.m_pPSuLM->m_Index = pPSuLM->m_Index;
 		}
+		else
+		{
+#ifdef RVLPSULMDEMO_DISPLAY_ONLY_REPRESENTATIVE_HYPOTHESES
+			iHypothesis = 0;
+
+			if(VS.m_PSuLMBuilder.m_nHypotheses > 0)
+			{
+				while(iHypothesis < VS.m_PSuLMBuilder.m_nHypotheses)
+				{
+					pHypothesis = VS.m_PSuLMBuilder.m_HypothesisArray[iHypothesis];
+
+#ifdef RVLPSULMDEMO_DISPLAY_ONLY_BEST_LOCAL_MODEL_HYPOTHESES
+					if(pHypothesis == pHypothesis->pMPSuLM->m_pHypothesis)
+						break;
 #else
-		iHypothesis = 0;
+					if(pHypothesis->iRepresentative == 0xffffffff)
+						break;
 #endif
+
+					iHypothesis++;
+				}
+
+				if(iHypothesis >= VS.m_PSuLMBuilder.m_nHypotheses)
+					iHypothesis = 0;
+			}
+#else
+			iHypothesis = 0;
+#endif
+			VS.m_pPSuLM->m_Index = 0xffffffff;
+		}
 
 		do
 		{
@@ -529,6 +647,7 @@ int main(int argc, char* argv[])
 
 			bNextImage = true;
 			bRefresh = false;
+			bBackwards = false;
 
 			switch(key){
 			case 'a':
@@ -714,6 +833,10 @@ int main(int argc, char* argv[])
 				bRefresh = true;
 
 				break;
+			case 0x00000008:
+				bBackwards = true;
+
+				break;
 			case 0x00240000:	// Home
 				if(VS.m_PSuLMBuilder.m_nHypotheses > 0)
 				{
@@ -834,6 +957,31 @@ int main(int argc, char* argv[])
 
 				RVLSetFileNumber(VS.m_ImageFileName, "00000-LW.bmp", iSample + 1);
 			}
+			else if(VS.m_Flags & RVLSYS_FLAGS_EDIT_MAP)
+			{
+				iMPSuLM_ = iMPSuLM;
+
+				if(bBackwards)
+				{
+					iMPSuLM--;
+
+					while(iMPSuLM >= 0 && VS.m_PSuLMBuilder.m_PSuLMArray[iMPSuLM] == NULL)
+						iMPSuLM--;
+
+					if(iMPSuLM < 0)
+						iMPSuLM = iMPSuLM_;
+				}
+				else
+				{
+					iMPSuLM++;
+
+					while(iMPSuLM <= VS.m_PSuLMBuilder.m_maxPSuLMIndex && VS.m_PSuLMBuilder.m_PSuLMArray[iMPSuLM] == NULL)
+						iMPSuLM++;
+
+					if(iMPSuLM > VS.m_PSuLMBuilder.m_maxPSuLMIndex)
+						iMPSuLM = iMPSuLM_;
+				}
+			}	
 			else
 				RVLGetNextFileName(VS.m_ImageFileName, "00000-LW.bmp", 10000);
 		}
@@ -844,6 +992,9 @@ int main(int argc, char* argv[])
 	while(key != 27);
 
 	// free memory
+
+	if(HypothesisMem)
+		delete[] HypothesisMem;
 
 	delete[] SizeArray;
 	delete[] VTKMessage;
