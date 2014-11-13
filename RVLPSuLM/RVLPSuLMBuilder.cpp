@@ -12506,8 +12506,6 @@ void CRVLPSuLMBuilder::Hypotheses3(	CRVLPSuLM *pSPSuLM,
 
 						// orientation probability 
 
-						// comment for merging purpose
-
 						double CnS[2*2];
 
 						CnS[0] = Cn[0] + Cn_[0] + m_SurfaceMatchData.varOrientationUncert;
