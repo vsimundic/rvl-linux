@@ -8,6 +8,7 @@
 #include "RVLPCS.h"
 #include "RVLRLM.h"
 #include "RVLPSuLMBuilder.h"
+#include "RVLPSuLMGroundTruth.h"
 #include "RVLPSuLMVS.h"
 #ifdef RVLVTK
 #include "RVLVTK.h"
@@ -531,6 +532,13 @@ int main(int argc, char* argv[])
 			bRefresh = false;
 
 			switch(key){
+			case '0':
+				if(pHypothesis)
+					VS.m_GroundTruth.Add(RVLGetFileNumber(VS.m_ImageFileName, "00000-LW.bmp"), pHypothesis->pMPSuLM->m_Index, &(pHypothesis->PoseSM));
+
+				bRefresh = true;
+
+				break;
 			case 'a':
 				mDisplayPSuLMFlags ^= RVLPSULM_DISPLAY_SAMPLES;
 			

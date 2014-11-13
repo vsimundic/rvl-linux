@@ -180,6 +180,10 @@
 				>
 			</File>
 			<File
+				RelativePath=".\RVLPSuLMGroundTruth.cpp"
+				>
+			</File>
+			<File
 				RelativePath=".\RVLPSuLMVS.cpp"
 				>
 			</File>
@@ -199,6 +203,10 @@
 			</File>
 			<File
 				RelativePath=".\Include\RVLPSuLMBuilder.h"
+				>
+			</File>
+			<File
+				RelativePath=".\Include\RVLPSuLMGroundTruth.h"
 				>
 			</File>
 			<File

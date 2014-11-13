@@ -54,4 +54,5 @@ public:
 	IplImage *m_pRGBImage;
 	RVL3DMESHFILE *m_pMeshFile;
 	int m_iSample;
+	CRVLPSuLMGroundTruth m_GroundTruth;
 };

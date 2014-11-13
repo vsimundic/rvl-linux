@@ -3,6 +3,7 @@
 #include "RVLPCS.h"
 #include "RVLRLM.h"
 #include "RVLPSuLMBuilder.h"
+#include "RVLPSuLMGroundTruth.h"
 #include "RVLPSuLMVS.h"
 
 CRVLPSuLMVS::CRVLPSuLMVS(void)
@@ -12,6 +13,9 @@ CRVLPSuLMVS::CRVLPSuLMVS(void)
 
 CRVLPSuLMVS::~CRVLPSuLMVS(void)
 {
+	if(m_GroundTruth.m_nMatches > 0)
+		m_GroundTruth.Save();
+
 	DeleteMeshFile();
 }
 
@@ -29,6 +33,7 @@ void CRVLPSuLMVS::CreateParamList()
 	pParamData = m_ParamList.AddParam("VS.PoseLA.z[mm]", RVLPARAM_TYPE_DOUBLE, m_PoseLA.m_X + 2);
 	pParamData = m_ParamList.AddParam("VS.CreateGlobalMesh", RVLPARAM_TYPE_FLAG, &m_Flags);
 	m_ParamList.AddID(pParamData, "yes", RVLSYS_FLAGS_CREATE_GLOBAL_MESH);
+	pParamData = m_ParamList.AddParam("VS.GroundTruthFileName", RVLPARAM_TYPE_STRING, &(m_GroundTruth.m_FileName));
 }
 
 void CRVLPSuLMVS::Init(char * CfgFile2Name)
@@ -56,11 +61,7 @@ void CRVLPSuLMVS::Init(char * CfgFile2Name)
 	m_PSuLMBuilder.CreateParamList(&m_Mem0);
 
 	if(CfgFile2Name)
-	{
 		m_PSuLMBuilder.m_ParamList.LoadParams(CfgFile2Name);
-
-
-	}
 
 	m_PSuLMBuilder.Init();
 
@@ -91,6 +92,11 @@ void CRVLPSuLMVS::Init(char * CfgFile2Name)
 
 	//	fclose(fp);
 	//}
+
+	m_GroundTruth.Init();
+
+	m_GroundTruth.Load();
+
 	m_pPSuLM = NULL;
 
 	m_iSample = 0;
