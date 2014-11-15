@@ -19604,6 +19604,41 @@ void CRVLPSuLMBuilder::Connect(CRVLPSuLM * pMPSuLM1,
 	RVLQLIST_ADD_ENTRY(pMPSuLM2->m_NeighbourList, pNeighbourEntry);							
 }
 
+void CRVLPSuLMBuilder::DeleteConnection_(	CRVLPSuLM *pPSuLM1,
+											CRVLPSuLM *pPSuLM2)
+{
+	RVLQLIST *pNeighborList = pPSuLM1->m_NeighbourList;
+
+	RVLQLIST_PTR_ENTRY *pNeighborPtr = (RVLQLIST_PTR_ENTRY *)(pNeighborList->pFirst);
+
+	void **pvpNeighborListEntry = &(pNeighborList->pFirst);
+
+	RVLPSULM_NEIGHBOUR *pNeighborRel;
+
+	while(pNeighborPtr)
+	{
+		pNeighborRel = (RVLPSULM_NEIGHBOUR *)(pNeighborPtr->Ptr);
+
+		if(pNeighborRel->pPSuLM == pPSuLM2)
+		{
+			RVLQLIST_REMOVE_ENTRY(pNeighborList, pNeighborPtr, pvpNeighborListEntry)
+
+			return;
+		}
+
+		pvpNeighborListEntry = &(pNeighborPtr->pNext);
+
+		pNeighborPtr = (RVLQLIST_PTR_ENTRY *)(pNeighborPtr->pNext);	
+	}
+}
+
+void CRVLPSuLMBuilder::DeleteConnection(CRVLPSuLM *pPSuLM1,
+										CRVLPSuLM *pPSuLM2)
+{
+	DeleteConnection_(pPSuLM1, pPSuLM2);
+	DeleteConnection_(pPSuLM2, pPSuLM1);
+}
+
 void CRVLPSuLMBuilder::CreateLocalMap(CRVLPSuLM * pPSuLM,
 									  BYTE Flags)
 {

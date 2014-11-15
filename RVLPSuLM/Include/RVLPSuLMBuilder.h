@@ -639,6 +639,10 @@ public:
 										int nSMLineMatches = 0,
 										RVLPSULM_MATCH2 **AutoMatchArray_ = NULL,
 										int nAutoMatches_ = 0);
+	void DeleteConnection(	CRVLPSuLM *pPSuLM1,
+							CRVLPSuLM *pPSuLM2);
+	void DeleteConnection_(	CRVLPSuLM *pPSuLM1,
+							CRVLPSuLM *pPSuLM2);
 
 private:
 	RVLPSULM_MSMATCH_DATA *HypothesesGetNextNode(	RVLPSULM_HG_NODE* pNode,

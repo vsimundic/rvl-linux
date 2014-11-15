@@ -442,65 +442,70 @@ int main(int argc, char* argv[])
 				VS.m_PSuLMBuilder.m_nHypotheses++;
 			}
 
-			if(HypothesisMem)
-				delete[] HypothesisMem;
-
-			HypothesisMem = new RVLPSULM_HYPOTHESIS[VS.m_PSuLMBuilder.m_nHypotheses];
-
-			VS.m_PSuLMBuilder.m_HypothesisList.m_nElements = VS.m_PSuLMBuilder.m_nHypotheses;
-
-			if(VS.m_PSuLMBuilder.m_HypothesisArray)
-				delete[] VS.m_PSuLMBuilder.m_HypothesisArray;
-
-			VS.m_PSuLMBuilder.m_HypothesisArray = new RVLPSULM_HYPOTHESIS *[VS.m_PSuLMBuilder.m_nHypotheses];
-
-			pHypothesis = HypothesisMem;
-
-			pNeighborPtr = (RVLQLIST_PTR_ENTRY *)(pPSuLM->m_NeighbourList->pFirst);
-
-			iHypothesis = 0;
-
-			RVLPSULM_NEIGHBOUR *pNeighborRel;
-
-			while(pNeighborPtr)
+			if(VS.m_PSuLMBuilder.m_nHypotheses > 0)
 			{
-				pNeighborRel = (RVLPSULM_NEIGHBOUR *)(pNeighborPtr->Ptr);
+				if(HypothesisMem)
+					delete[] HypothesisMem;
 
-				pHypothesis->pMPSuLM = pNeighborRel->pPSuLM;
+				HypothesisMem = new RVLPSULM_HYPOTHESIS[VS.m_PSuLMBuilder.m_nHypotheses];
 
-				double *RMS = pNeighborRel->pPoseRel->m_Rot;
-				double *tMS = pNeighborRel->pPoseRel->m_X;
-				double *RSM = pHypothesis->PoseSM.m_Rot;
-				double *tSM = pHypothesis->PoseSM.m_X;
+				VS.m_PSuLMBuilder.m_HypothesisList.m_nElements = VS.m_PSuLMBuilder.m_nHypotheses;
 
-				RVLINVTRANSF3D(RMS, tMS, RSM, tSM)
+				if(VS.m_PSuLMBuilder.m_HypothesisArray)
+					delete[] VS.m_PSuLMBuilder.m_HypothesisArray;
 
-				pHypothesis->PoseSM.UpdatePTRLL();
+				VS.m_PSuLMBuilder.m_HypothesisArray = new RVLPSULM_HYPOTHESIS *[VS.m_PSuLMBuilder.m_nHypotheses];
+			
+				pHypothesis = HypothesisMem;
 
-				pHypothesis->Index = iHypothesis;
+				pNeighborPtr = (RVLQLIST_PTR_ENTRY *)(pPSuLM->m_NeighbourList->pFirst);
 
-				pHypothesis->cost = 0;
+				iHypothesis = 0;
 
-				pHypothesis->iRepresentative = 0xffffffff;
+				RVLPSULM_NEIGHBOUR *pNeighborRel;
 
-				pHypothesis->pMPSuLM->m_pHypothesis = pHypothesis;
+				while(pNeighborPtr)
+				{
+					pNeighborRel = (RVLPSULM_NEIGHBOUR *)(pNeighborPtr->Ptr);
 
-				pHypothesis->Probability = 0.0;
+					pHypothesis->pMPSuLM = pNeighborRel->pPSuLM;
 
-				pHypothesis->pMPSuLM->m_PosteriorProbabilityLocal = pHypothesis->pMPSuLM->m_PosteriorProbabilityGlobal = 0.0;
+					double *RMS = pNeighborRel->pPoseRel->m_Rot;
+					double *tMS = pNeighborRel->pPoseRel->m_X;
+					double *RSM = pHypothesis->PoseSM.m_Rot;
+					double *tSM = pHypothesis->PoseSM.m_X;
 
-				pHypothesis->pMPSuLM->m_PosteriorProbabilityLocal5DOF = 0.0;
+					RVLINVTRANSF3D(RMS, tMS, RSM, tSM)
 
-				VS.m_PSuLMBuilder.m_HypothesisArray[iHypothesis++] = pHypothesis;
+					pHypothesis->PoseSM.UpdatePTRLL();
 
-				pHypothesis++;
+					pHypothesis->Index = iHypothesis;
 
-				pNeighborPtr = (RVLQLIST_PTR_ENTRY *)(pNeighborPtr->pNext);	
+					pHypothesis->cost = 0;
+
+					pHypothesis->iRepresentative = 0xffffffff;
+
+					pHypothesis->pMPSuLM->m_pHypothesis = pHypothesis;
+
+					pHypothesis->Probability = 0.0;
+
+					pHypothesis->pMPSuLM->m_PosteriorProbabilityLocal = pHypothesis->pMPSuLM->m_PosteriorProbabilityGlobal = 0.0;
+
+					pHypothesis->pMPSuLM->m_PosteriorProbabilityLocal5DOF = 0.0;
+
+					VS.m_PSuLMBuilder.m_HypothesisArray[iHypothesis] = pHypothesis;
+
+					iHypothesis++;
+				
+					pHypothesis++;
+
+					pNeighborPtr = (RVLQLIST_PTR_ENTRY *)(pNeighborPtr->pNext);	
+				}
+
+				iHypothesis = 0;
+
+				VS.m_pPSuLM->m_Index = pPSuLM->m_Index;
 			}
-
-			iHypothesis = 0;
-
-			VS.m_pPSuLM->m_Index = pPSuLM->m_Index;
 		}
 		else
 		{
@@ -817,6 +822,8 @@ int main(int argc, char* argv[])
 
 				GUI.Message("Map saved.", 600, 100, cvScalar(0, 128, 255));
 
+				bRefresh = true;
+
 				break;
 			case 'z':
 				if(ZoomFactor == 1)
@@ -833,7 +840,7 @@ int main(int argc, char* argv[])
 				bRefresh = true;
 
 				break;
-			case 0x00000008:
+			case 0x00000008:	// backspace
 				bBackwards = true;
 
 				break;
@@ -944,6 +951,33 @@ int main(int argc, char* argv[])
 			//		VS.m_ConvexSegmentThr--;
 
 			//	bNextImage = false;
+			case 0x002e0000:	// delete
+				if(VS.m_PSuLMBuilder.m_nHypotheses > 0)
+				{
+					int key_ = GUI.Message("Do you really want to delete this connection? (If yes, press 'y')", 600, 100, cvScalar(0, 128, 255));
+
+					if(key_ == 'y')
+					{
+						pHypothesis = VS.m_PSuLMBuilder.m_HypothesisArray[iHypothesis];
+
+						VS.m_PSuLMBuilder.DeleteConnection(pPSuLM, pHypothesis->pMPSuLM);
+	
+						int n = VS.m_PSuLMBuilder.m_nHypotheses - iHypothesis - 1;
+
+						if(n > 0)
+							memmove(VS.m_PSuLMBuilder.m_HypothesisArray + iHypothesis, VS.m_PSuLMBuilder.m_HypothesisArray + iHypothesis + 1, 
+								n * sizeof(RVLPSULM_HYPOTHESIS *));
+
+						VS.m_PSuLMBuilder.m_nHypotheses--;
+
+						VS.m_PSuLMBuilder.m_HypothesisList.m_nElements--;
+
+						if(iHypothesis > VS.m_PSuLMBuilder.m_nHypotheses - 1)
+							iHypothesis = VS.m_PSuLMBuilder.m_nHypotheses - 1;
+					}
+
+					bRefresh = true;
+				}
 			}
 		}
 		while(bRefresh && !bContinuous);

@@ -111,6 +111,9 @@ void CRVLMPtrChain::RemoveAt(RVLPTRCHAIN_ELEMENT *pCurrent)
 	{
 		if(pCurrent->pNext != NULL)
 			pCurrent->pNext = pCurrent->pNext->pNext;
+
+		if(pCurrent->pNext == NULL)
+			m_pLast = pCurrent;
 	}
 	else if(m_pFirst != NULL)
 		m_pFirst = m_pFirst->pNext;
