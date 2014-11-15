@@ -151,7 +151,7 @@ public:
 	DWORD Init();
 	DWORD Init(char *CfgFileName);
 	void CloseFigure(char * ImageName);
-	void Message(	char *str,
+	int Message(	char *str,
 					int w, int h,
 					CvScalar color,
 					bool bWaitForKey = true);

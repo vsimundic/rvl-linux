@@ -19604,6 +19604,41 @@ void CRVLPSuLMBuilder::Connect(CRVLPSuLM * pMPSuLM1,
 	RVLQLIST_ADD_ENTRY(pMPSuLM2->m_NeighbourList, pNeighbourEntry);							
 }
 
+void CRVLPSuLMBuilder::DeleteConnection_(	CRVLPSuLM *pPSuLM1,
+											CRVLPSuLM *pPSuLM2)
+{
+	RVLQLIST *pNeighborList = pPSuLM1->m_NeighbourList;
+
+	RVLQLIST_PTR_ENTRY *pNeighborPtr = (RVLQLIST_PTR_ENTRY *)(pNeighborList->pFirst);
+
+	void **pvpNeighborListEntry = &(pNeighborList->pFirst);
+
+	RVLPSULM_NEIGHBOUR *pNeighborRel;
+
+	while(pNeighborPtr)
+	{
+		pNeighborRel = (RVLPSULM_NEIGHBOUR *)(pNeighborPtr->Ptr);
+
+		if(pNeighborRel->pPSuLM == pPSuLM2)
+		{
+			RVLQLIST_REMOVE_ENTRY(pNeighborList, pNeighborPtr, pvpNeighborListEntry)
+
+			return;
+		}
+
+		pvpNeighborListEntry = &(pNeighborPtr->pNext);
+
+		pNeighborPtr = (RVLQLIST_PTR_ENTRY *)(pNeighborPtr->pNext);	
+	}
+}
+
+void CRVLPSuLMBuilder::DeleteConnection(CRVLPSuLM *pPSuLM1,
+										CRVLPSuLM *pPSuLM2)
+{
+	DeleteConnection_(pPSuLM1, pPSuLM2);
+	DeleteConnection_(pPSuLM2, pPSuLM1);
+}
+
 void CRVLPSuLMBuilder::CreateLocalMap(CRVLPSuLM * pPSuLM,
 									  BYTE Flags)
 {
@@ -21285,10 +21320,10 @@ void CRVLPSuLMBuilder::DisplayHypothesis(CRVLGUI *pGUI,
 		
 		if(m_Flags & RVLPSULMBUILDER_FLAG_PC)
 			pFig2->EmptyBitmap(cvSize(m_pPSD->m_Width, m_pPSD->m_Height), cvScalar(0, 0, 0));
-		else if((m_Flags & RVLPSULMBUILDER_FLAG_MODE) == RVLPSULMBUILDER_FLAG_MODE_LOCALIZATION)
-			pFig2->m_pImage = cvLoadImage(pMPSuLM->m_FileName);
-		else
+		else if((m_Flags & RVLPSULMBUILDER_FLAG_MODE) == RVLPSULMBUILDER_FLAG_MODE_TRACKING)
 			pFig2->m_pImage = cvCloneImage(pImage2);
+		else
+			pFig2->m_pImage = cvLoadImage(pMPSuLM->m_FileName);
 	
 		pMPSuLM->Display(pFig2, &NullPose, cvScalar(0, 255, 0), 
 			RVLPSULM_DISPLAY_SURFACES | RVLPSULM_DISPLAY_ELLIPSES | RVLPSULM_DISPLAY_LINES | RVLPSULM_DISPLAY_VECTORS);
@@ -21365,7 +21400,14 @@ void CRVLPSuLMBuilder::DisplayHypothesisData(	CRVLFigure *pFig,
 
 		cvPutText(pDataDisplay, m_ImageFileName, cvPoint(0, (++iTextLine) * pFig->m_FontSize), &pFig->m_Font,  cvScalar(0, 0, 0));
 
-		if(m_Flags & RVLPSULMBUILDER_FLAG_MODE_LOCALIZATION)
+		if(pSPSuLM->m_Index != 0xffffffff)
+		{
+			sprintf(str, "Model %d", pSPSuLM->m_Index);
+
+			cvPutText(pDataDisplay, str, cvPoint(0, (++iTextLine) * pFig->m_FontSize), &pFig->m_Font,  cvScalar(0, 0, 0));
+		}
+
+		if(m_PSuLMList.m_nElements > 0)
 		{
 			sprintf(str, "no. of local models=%d", m_PSuLMList.m_nElements);
 

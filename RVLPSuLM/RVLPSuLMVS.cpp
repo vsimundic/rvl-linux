@@ -29,6 +29,8 @@ void CRVLPSuLMVS::CreateParamList()
 	pParamData = m_ParamList.AddParam("VS.PoseLA.z[mm]", RVLPARAM_TYPE_DOUBLE, m_PoseLA.m_X + 2);
 	pParamData = m_ParamList.AddParam("VS.CreateGlobalMesh", RVLPARAM_TYPE_FLAG, &m_Flags);
 	m_ParamList.AddID(pParamData, "yes", RVLSYS_FLAGS_CREATE_GLOBAL_MESH);
+	pParamData = m_ParamList.AddParam("VS.EditMap", RVLPARAM_TYPE_FLAG, &m_Flags);
+	m_ParamList.AddID(pParamData, "yes", RVLSYS_FLAGS_EDIT_MAP);
 }
 
 void CRVLPSuLMVS::Init(char * CfgFile2Name)
@@ -56,11 +58,7 @@ void CRVLPSuLMVS::Init(char * CfgFile2Name)
 	m_PSuLMBuilder.CreateParamList(&m_Mem0);
 
 	if(CfgFile2Name)
-	{
 		m_PSuLMBuilder.m_ParamList.LoadParams(CfgFile2Name);
-
-
-	}
 
 	m_PSuLMBuilder.Init();
 
@@ -91,6 +89,10 @@ void CRVLPSuLMVS::Init(char * CfgFile2Name)
 
 	//	fclose(fp);
 	//}
+
+	if(m_Flags & RVLSYS_FLAGS_EDIT_MAP)
+		m_PSuLMBuilder.m_Flags &= ~(RVLPSULMBUILDER_FLAG_MODE | RVLPSULMBUILDER_FLAG_MAPBUILDING);
+
 	m_pPSuLM = NULL;
 
 	m_iSample = 0;

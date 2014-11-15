@@ -309,10 +309,10 @@ void CRVLGUI::CloseFigure(char * ImageName)
 	}
 }
 
-void CRVLGUI::Message(char *str,
-					  int w, int h,
-					  CvScalar color,
-					  bool bWaitForKey)
+int CRVLGUI::Message(	char *str,
+						int w, int h,
+						CvScalar color,
+						bool bWaitForKey)
 {
 	CRVLFigure *pFig = OpenFigure("Message");
 
@@ -329,10 +329,16 @@ void CRVLGUI::Message(char *str,
 
 	ShowFigure(pFig);
 
+	int key;
+
 	if(bWaitForKey)
-		cvWaitKey();
+		key = cvWaitKey();
+	else
+		key = 0;
 
 	CRVLGUI::CloseFigure("Message");
+
+	return key;
 }
 
 //*****************************************************
