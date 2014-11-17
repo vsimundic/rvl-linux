@@ -330,7 +330,7 @@ public:
 	char *m_ModelFilePath;	//Path to model file
 	CRVL3DPose m_PoseRTAs;
 	CRVL3DPose m_PoseCsInit;
-	double m_CRTAs[3 * 3];
+	double m_CRTAs[3 * 3 * 3];
 	double m_CCsInit[3 * 3 * 3];	
 	double m_minInfo;
 	BOOL m_minPlaneExists;

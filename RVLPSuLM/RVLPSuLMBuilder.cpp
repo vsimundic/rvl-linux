@@ -16440,6 +16440,8 @@ void CRVLPSuLMBuilder::DetermineUncertainty6DOFTo3DOF(double *Uncert3DOF, double
 //Save XML map file
 void CRVLPSuLMBuilder::SaveXMLMap(char* filepath, RVLQLIST *pMap)
 {
+	int sizeC = (m_Flags & RVLPSULMBUILDER_HYPOTHESES_UNCERTAINTY_3DOF ? 3 * 3 : 3 * 3 * 3);
+
 	xml_document<> doc;
 	doc.name("Map");
 	RVLQLIST_PTR_ENTRY* pEntry;
@@ -16525,7 +16527,7 @@ void CRVLPSuLMBuilder::SaveXMLMap(char* filepath, RVLQLIST *pMap)
 				{
 					ss << "," << pNeigh->pPoseRel->m_Rot[i];
 				}
-				for (int i = 0; i < 3*3*3; i++)
+				for (int i = 0; i < sizeC; i++)
 				{
 					ss << "," << pNeigh->pPoseRel->m_C[i];
 				}
@@ -16564,6 +16566,8 @@ void CRVLPSuLMBuilder::SaveXMLMap(char* filepath, RVLQLIST *pMap)
 //Load XML map file
 RVLQLIST* CRVLPSuLMBuilder::LoadXMLMap(char* filepath, CRVLMem * pMem)
 {
+	int sizeC = (m_Flags & RVLPSULMBUILDER_HYPOTHESES_UNCERTAINTY_3DOF ? 3 * 3 : 3 * 3 * 3);
+
 	RVLQLIST *pMap;
 	RVLMEM_ALLOC_STRUCT(pMem, RVLQLIST, pMap);
 	RVLQLIST_INIT(pMap);
@@ -16668,7 +16672,7 @@ RVLQLIST* CRVLPSuLMBuilder::LoadXMLMap(char* filepath, CRVLMem * pMem)
 					RVLMEM_ALLOC_STRUCT(pMem, RVLPSULM_NEIGHBOUR, pNeigh);
 					pNeighbourEntry->Ptr = pNeigh;
 					RVLMEM_ALLOC_STRUCT(pMem, CRVL3DPose, pNeigh->pPoseRel);
-					RVLMEM_ALLOC_STRUCT_ARRAY(pMem, double, 3 * 3, pNeigh->pPoseRel->m_C);
+					RVLMEM_ALLOC_STRUCT_ARRAY(pMem, double, sizeC, pNeigh->pPoseRel->m_C);
 					//Anlyzing each neighbour info
 					subnode3 = subnode2->first_node();
 					while(subnode3)
@@ -16705,7 +16709,7 @@ RVLQLIST* CRVLPSuLMBuilder::LoadXMLMap(char* filepath, CRVLMem * pMem)
 								ss >> pNeigh->pPoseRel->m_Rot[i];
 							}
 
-							for (int i = 0; i < 9; i++)
+							for (int i = 0; i < sizeC; i++)
 							{
 								ss >> pNeigh->pPoseRel->m_C[i];
 							}
@@ -17952,7 +17956,8 @@ void** CRVLPSuLMBuilder::LoadColorMapDBXML(char* filepath, CRVLMem * pMem)
 	return colorMapDB;
 }
 
-// uses m_pMem2
+// Computes 
+// The function uses m_pMem2
 
 void CRVLPSuLMBuilder::GetModelPoses( CRVL3DPose *pPoseAsAm0,
 									  CRVLPSuLM *pMPSuLM0,
@@ -17971,7 +17976,10 @@ void CRVLPSuLMBuilder::GetModelPoses( CRVL3DPose *pPoseAsAm0,
 
 	double *CAm0As = pMPSuLM0->m_PoseRTAs.m_C;
 
-	RVL3DOFInvTransfUncert(RAsAm0[0], RAsAm0[3], tAm0As[0], tAm0As[1], pPoseAsAm0->m_C, CAm0As);	
+	if(m_Flags & RVLPSULMBUILDER_HYPOTHESES_UNCERTAINTY_3DOF)
+		RVL3DOFInvTransfUncert(RAsAm0[0], RAsAm0[3], tAm0As[0], tAm0As[1], pPoseAsAm0->m_C, CAm0As);
+	else
+		RVL6DOFInvTransfUncert(RAsAm0, tAsAm0, pPoseAsAm0->m_C, CAm0As);
 
 	//// TAs0 <- TAm00 * TAsAm0
 
@@ -18019,16 +18027,29 @@ void CRVLPSuLMBuilder::GetModelPoses( CRVL3DPose *pPoseAsAm0,
 
 	pPSuLMListEntry->pPSuLM = pMPSuLM0;
 
-	double C[4], eig[2];
+	double C[9], eig[3];
 
-	C[0] = CAm0As[4];
-	C[1] = CAm0As[5];
-	C[2] = CAm0As[7];
-	C[3] = CAm0As[8];
+	if(m_Flags & RVLPSULMBUILDER_HYPOTHESES_UNCERTAINTY_3DOF)
+	{
+		C[0] = CAm0As[4];
+		C[1] = CAm0As[5];
+		C[2] = CAm0As[7];
+		C[3] = CAm0As[8];
 
-	RVLEig2(C, eig);
+		RVLEig2(C, eig);
 
-	pPSuLMListEntry->uncert = RVLMAX(eig[0], eig[1]);
+		pPSuLMListEntry->uncert = RVLMAX(eig[0], eig[1]);
+	}
+	else
+	{
+		BOOL bReal[3];
+
+		RVLEig3(C + 2 * 9, eig, bReal);
+
+		double fTmp = RVLMAX(eig[0], eig[1]);
+
+		pPSuLMListEntry->uncert = RVLMAX(fTmp, eig[2]);
+	}
 
 	RVLQLIST_ADD_ENTRY(pPSuLMList, pPSuLMListEntry);
 
@@ -18116,8 +18137,6 @@ void CRVLPSuLMBuilder::GetModelPoses( CRVL3DPose *pPoseAsAm0,
 
 			pPSuLM2 = pNeighbor->pPSuLM;
 
-			// ToDo: Create neighbor relation from the new PSuLM to the previous PSuLM in SaveCurrentData
-
 			// check if pPSuLM2 is already visited
 
 			if(pPSuLM2->m_Flags & RVLPSULM_FLAG_VISITED)
@@ -18142,8 +18161,12 @@ void CRVLPSuLMBuilder::GetModelPoses( CRVL3DPose *pPoseAsAm0,
 
 			//DetermineOdometryUncertainty(pNeighbor->pPoseRel->m_C, pNeighbor->pPoseRel);	// remove after debugging !!!
 
-			UncertaintyEKFPrediction3DOF(pPSuLM2->m_PoseRTAs.m_C, pNeighbor->pPoseRel->m_C, pPSuLM->m_PoseRTAs.m_C, 
-				pNeighbor->pPoseRel, &(pPSuLM->m_PoseRTAs));
+			if(m_Flags & RVLPSULMBUILDER_HYPOTHESES_UNCERTAINTY_3DOF)
+				UncertaintyEKFPrediction3DOF(pPSuLM2->m_PoseRTAs.m_C, pNeighbor->pPoseRel->m_C, pPSuLM->m_PoseRTAs.m_C, 
+					pNeighbor->pPoseRel, &(pPSuLM->m_PoseRTAs));
+			else
+				UncertaintyEKFPrediction6DOF(pPSuLM2->m_PoseRTAs.m_C, pNeighbor->pPoseRel->m_C, pPSuLM->m_PoseRTAs.m_C,
+					pNeighbor->pPoseRel, &(pPSuLM->m_PoseRTAs));
 
 #ifdef RVLPSULMBUILDER_GET_LOCAL_MODELS_DEBUG_LOG
 			if(m_DebugFlags & RVLPSULMBUILDER_DEBUG_FLAG_GET_LOCAL_MODELS_LOG)
@@ -18159,14 +18182,27 @@ void CRVLPSuLMBuilder::GetModelPoses( CRVL3DPose *pPoseAsAm0,
 
 			CAmAs = pPSuLM2->m_PoseRTAs.m_C;
 
-			C[0] = CAmAs[4];
-			C[1] = CAmAs[5];
-			C[2] = CAmAs[7];
-			C[3] = CAmAs[8];
+			if(m_Flags & RVLPSULMBUILDER_HYPOTHESES_UNCERTAINTY_3DOF)
+			{
+				C[0] = CAmAs[4];
+				C[1] = CAmAs[5];
+				C[2] = CAmAs[7];
+				C[3] = CAmAs[8];
 
-			RVLEig2(C, eig);
+				RVLEig2(C, eig);
 
-			uncert = RVLMAX(eig[0], eig[1]);
+				uncert = RVLMAX(eig[0], eig[1]);
+			}
+			else
+			{
+				BOOL bReal[3];
+
+				RVLEig3(C + 2 * 9, eig, bReal);
+
+				double fTmp = RVLMAX(eig[0], eig[1]);
+
+				uncert = RVLMAX(fTmp, eig[2]);
+			}
 
 			pPSuLMListEntry->uncert = uncert;
 

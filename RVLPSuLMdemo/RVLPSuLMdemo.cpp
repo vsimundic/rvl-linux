@@ -952,31 +952,78 @@ int main(int argc, char* argv[])
 
 			//	bNextImage = false;
 			case 0x002e0000:	// delete
-				if(VS.m_PSuLMBuilder.m_nHypotheses > 0)
+				if(VS.m_Flags & RVLSYS_FLAGS_EDIT_MAP)
 				{
-					int key_ = GUI.Message("Do you really want to delete this connection? (If yes, press 'y')", 600, 100, cvScalar(0, 128, 255));
+					int key_;
 
-					if(key_ == 'y')
+					if(VS.m_PSuLMBuilder.m_nHypotheses > 0)
 					{
-						pHypothesis = VS.m_PSuLMBuilder.m_HypothesisArray[iHypothesis];
+						key_ = GUI.Message("Do you really want to delete this connection? (If yes, press 'y')", 600, 100, cvScalar(0, 128, 255));
 
-						VS.m_PSuLMBuilder.DeleteConnection(pPSuLM, pHypothesis->pMPSuLM);
-	
-						int n = VS.m_PSuLMBuilder.m_nHypotheses - iHypothesis - 1;
+						if(key_ == 'y')
+						{
+							pHypothesis = VS.m_PSuLMBuilder.m_HypothesisArray[iHypothesis];
 
-						if(n > 0)
-							memmove(VS.m_PSuLMBuilder.m_HypothesisArray + iHypothesis, VS.m_PSuLMBuilder.m_HypothesisArray + iHypothesis + 1, 
-								n * sizeof(RVLPSULM_HYPOTHESIS *));
+							VS.m_PSuLMBuilder.DeleteConnection(pPSuLM, pHypothesis->pMPSuLM);
+		
+							int n = VS.m_PSuLMBuilder.m_nHypotheses - iHypothesis - 1;
 
-						VS.m_PSuLMBuilder.m_nHypotheses--;
+							if(n > 0)
+								memmove(VS.m_PSuLMBuilder.m_HypothesisArray + iHypothesis, VS.m_PSuLMBuilder.m_HypothesisArray + iHypothesis + 1, 
+									n * sizeof(RVLPSULM_HYPOTHESIS *));
 
-						VS.m_PSuLMBuilder.m_HypothesisList.m_nElements--;
+							VS.m_PSuLMBuilder.m_nHypotheses--;
 
-						if(iHypothesis > VS.m_PSuLMBuilder.m_nHypotheses - 1)
-							iHypothesis = VS.m_PSuLMBuilder.m_nHypotheses - 1;
+							VS.m_PSuLMBuilder.m_HypothesisList.m_nElements--;
+
+							if(iHypothesis > VS.m_PSuLMBuilder.m_nHypotheses - 1)
+								iHypothesis = VS.m_PSuLMBuilder.m_nHypotheses - 1;
+						}
+
+						bRefresh = true;
 					}
+					else
+					{
+						key_ = GUI.Message("Do you really want to delete this PSuLM? (If yes, press 'y')", 600, 100, cvScalar(0, 0, 255));
 
-					bRefresh = true;
+						if(key_ == 'y')
+						{
+							VS.m_PSuLMBuilder.m_PSuLMList.Start();
+
+							RVLPTRCHAIN_ELEMENT *pCurrent;
+							CRVLPSuLM *pPSuLM_;
+
+							while(VS.m_PSuLMBuilder.m_PSuLMList.m_pNext)
+							{
+								pCurrent = VS.m_PSuLMBuilder.m_PSuLMList.m_pCurrent;
+
+								pPSuLM_ = (CRVLPSuLM *)(VS.m_PSuLMBuilder.m_PSuLMList.GetNext());
+
+								if(pPSuLM_ == pPSuLM)
+								{
+									VS.m_PSuLMBuilder.m_PSuLMList.RemoveAt(pCurrent);
+
+									VS.m_PSuLMBuilder.m_PSuLMArray[iMPSuLM] = NULL;
+
+									if(VS.m_PSuLMBuilder.m_PSuLMList.m_nElements > 0)
+									{
+										while(iMPSuLM <= VS.m_PSuLMBuilder.m_maxPSuLMIndex && VS.m_PSuLMBuilder.m_PSuLMArray[iMPSuLM] == NULL)
+											iMPSuLM++;
+
+										if(iMPSuLM > VS.m_PSuLMBuilder.m_maxPSuLMIndex)
+											iMPSuLM = 0;
+
+										while(iMPSuLM <= VS.m_PSuLMBuilder.m_maxPSuLMIndex && VS.m_PSuLMBuilder.m_PSuLMArray[iMPSuLM] == NULL)
+											iMPSuLM++;
+									}
+									else
+										iMPSuLM = 0;
+
+									break;
+								}
+							}
+						}
+					}
 				}
 			}
 		}
