@@ -1009,6 +1009,27 @@ void CRVL3DPose::SetPMatrix(double *P)
 //	Rot[3 * 2 + 2] = 0.1;
 //}
 
+void CRVL3DPose::Diff(CRVL3DPose * pPose, double & dist, double & angle)
+{
+	double *R = pPose->m_Rot;
+	double *t = pPose->m_X;
+
+	CRVL3DPose dPose;
+
+	double *dR = dPose.m_Rot;
+	double *dt = dPose.m_X;
+
+	double V3x1Tmp[3];
+
+	RVLCOMPTRANSF3DWITHINV(m_Rot, m_X, R, t, dR, dt, V3x1Tmp)
+
+	dist = sqrt(RVLDOTPRODUCT3(dt, dt));
+
+	double V[3];
+
+	dPose.GetAngleAxis(V, angle);
+}
+
 ///////////////////////////////////// 
 //
 //     Global Functions

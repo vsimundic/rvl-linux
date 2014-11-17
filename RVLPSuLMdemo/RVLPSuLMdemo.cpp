@@ -288,6 +288,7 @@ int main(int argc, char* argv[])
 #ifdef RVLPSULMDEMO_DISPLAY_ONLY_REPRESENTATIVE_HYPOTHESES
 	int iHypothesis_;
 #endif	
+	int key_;
 
 	do
 	{
@@ -840,6 +841,19 @@ int main(int argc, char* argv[])
 				bRefresh = true;
 
 				break;
+			case '*':
+				key_ = GUI.Message("Run UpdateRelativePoseUncertainties()?", 600, 100, cvScalar(0, 128, 255));
+
+				if(key_ == 'y')
+				{
+					VS.m_PSuLMBuilder.UpdateRelativePoseUncertainties();
+
+					GUI.Message("UpdateRelativePoseUncertainties() completed.", 600, 100, cvScalar(0, 128, 255));
+				}
+
+				bRefresh = true;
+
+				break;
 			case 0x00000008:	// backspace
 				bBackwards = true;
 
@@ -954,8 +968,6 @@ int main(int argc, char* argv[])
 			case 0x002e0000:	// delete
 				if(VS.m_Flags & RVLSYS_FLAGS_EDIT_MAP)
 				{
-					int key_;
-
 					if(VS.m_PSuLMBuilder.m_nHypotheses > 0)
 					{
 						key_ = GUI.Message("Do you really want to delete this connection? (If yes, press 'y')", 600, 100, cvScalar(0, 128, 255));

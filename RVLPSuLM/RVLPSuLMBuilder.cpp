@@ -13369,7 +13369,7 @@ void CRVLPSuLMBuilder::Hypotheses3(	CRVLPSuLM *pSPSuLM,
 
 							int nLastDOFBins_ = nLastDOFBins - 1;
 
-							TraveledDist = -m_LastDOFResolution * TraveledDistOffset;
+							TraveledDist = m_LastDOFResolution * (1.0 - TraveledDistOffset);
 
 							int nPeak;
 							double SPeak;
@@ -17956,8 +17956,9 @@ void** CRVLPSuLMBuilder::LoadColorMapDBXML(char* filepath, CRVLMem * pMem)
 	return colorMapDB;
 }
 
-// Computes 
-// The function uses m_pMem2
+// Computes m_PoseRTAs for all PSuLMs for which a path to pMPSuLM0 exists.
+// m_PoseRTAs computed for each PSuLM represents its pose relative to pMPSuLM0.
+// The function uses m_pMem2.
 
 void CRVLPSuLMBuilder::GetModelPoses( CRVL3DPose *pPoseAsAm0,
 									  CRVLPSuLM *pMPSuLM0,
@@ -18266,7 +18267,7 @@ void CRVLPSuLMBuilder::GetLocalModels(CRVL3DPose *pPoseAsAsp,
 
 	CRVL3DPose PoseAsAmp;
 
-	double CAsAmp[3 * 3];
+	double CAsAmp[3 * 3 * 3];
 
 	PoseAsAmp.m_C = CAsAmp;
 
@@ -18283,7 +18284,10 @@ void CRVLPSuLMBuilder::GetLocalModels(CRVL3DPose *pPoseAsAsp,
 
 		RVLCOMPTRANSF3D(RAspAmp, tAspAmp, RAsAsp, tAsAsp, RAsAmp, tAsAmp)
 
-		UncertaintyEKFPrediction3DOF(CAsAmp, pPoseAsAsp->m_C, pPoseAspAmp->m_C, pPoseAsAsp, pPoseAspAmp);
+		if(m_Flags & RVLPSULMBUILDER_HYPOTHESES_UNCERTAINTY_3DOF)
+			UncertaintyEKFPrediction3DOF(CAsAmp, pPoseAsAsp->m_C, pPoseAspAmp->m_C, pPoseAsAsp, pPoseAspAmp);
+		else
+			UncertaintyEKFPrediction6DOF(CAsAmp, pPoseAsAsp->m_C, pPoseAspAmp->m_C, pPoseAsAsp, pPoseAspAmp);
 	}
 	else
 		PoseAsAmp.Copy(pPoseAspAmp);
@@ -18301,7 +18305,7 @@ void CRVLPSuLMBuilder::GetLocalModels(CRVL3DPose *pPoseAsAsp,
 	double phi = 3.0 * m_MinHybridLocalizationAngle * DEG2RAD;
 	
 	CRVL3DPose PoseAsAm;
-	double CAsAm[3 * 3];
+	double CAsAm[3 * 3 * 3];
 
 	PoseAsAm.m_C = CAsAm;
 
@@ -18310,10 +18314,10 @@ void CRVLPSuLMBuilder::GetLocalModels(CRVL3DPose *pPoseAsAsp,
 	double AlphaAmcAs, eAlpha;
 	CRVL3DPose *pPoseAmAs;
 	double detC, k;
-	double eX[2];
+	double eX[3];
 	double dist2;
 	//double *R, *t, *R2, *t2;
-	double C[2 * 2];
+	double C[9];
 	double *CAmAs;
 
 	CRVLPSuLM **pModelListEnd = ModelList + nModels;
@@ -18361,7 +18365,7 @@ void CRVLPSuLMBuilder::GetLocalModels(CRVL3DPose *pPoseAsAsp,
 			}
 		}
 
-		dist2 = pPoseAmAs->m_X[0] * pPoseAmAs->m_X[0] + pPoseAmAs->m_X[1] * pPoseAmAs->m_X[1];
+		dist2 = pPoseAmAs->m_X[0] * pPoseAmAs->m_X[0] + pPoseAmAs->m_X[1] * pPoseAmAs->m_X[1] + pPoseAmAs->m_X[2] * pPoseAmAs->m_X[2];
 
 		if(dist2 > r2)
 		{
@@ -22064,6 +22068,76 @@ void CRVLPSuLMBuilder::PoseConstraintProbability(CRVLPSuLM *pSPSuLM,
 
 	pMPSuLM->m_PosteriorProbabilityLocal = 1.0 / (pMPSuLM->m_PriorProbabilityLocal + 
 		10.0 * exp(ConditionalProbabilityTree(pSPSuLM, pHypothesis->pMPSuLM) - pHypothesis->Probability));
+}
+
+void CRVLPSuLMBuilder::UpdateRelativePoseUncertainties()
+{
+	CRVL3DPose Pose;
+
+	FILE *fp = fopen("C:\\RVL\\Debug\\UpdateRelativePoseUncertainties.log", "w");
+
+	DWORD OldFlags = m_Flags;
+
+	m_Flags &= ~RVLPSULMBUILDER_FLAG_MODE;
+
+	m_Flags |= (RVLPSULMBUILDER_FLAG_MODE_TRACKING | RVLPSULMBUILDER_FLAG_KIDNAPPED);
+
+	int i;
+	CRVLPSuLM *pPSuLM, *pPSuLM_;
+	RVLQLIST_PTR_ENTRY *pNeighborPtr;
+	RVLPSULM_NEIGHBOUR *pNeighborRel;
+	RVLPSULM_HYPOTHESIS *pHypothesis;
+	double dist, angle;
+
+	for(i = 0; i < m_maxPSuLMIndex; i++)
+	{
+		pPSuLM = m_PSuLMArray[i];
+
+		if(pPSuLM == NULL)
+			continue;
+		
+		pNeighborPtr = (RVLQLIST_PTR_ENTRY *)(pPSuLM->m_NeighbourList->pFirst);	
+
+		while(pNeighborPtr)
+		{
+			pNeighborRel = (RVLPSULM_NEIGHBOUR *)(pNeighborPtr->Ptr);
+
+			pPSuLM_ = pNeighborRel->pPSuLM;
+
+			fprintf(fp, "%d-%d: ", pPSuLM->m_Index, pPSuLM_->m_Index);
+
+			m_pMem->Clear();
+
+			if(pPSuLM->m_Index == 31 && pPSuLM_->m_Index == 9)
+				int debug = 0;
+
+			Localization(pPSuLM_, &Pose, pPSuLM);
+
+			if(m_nHypotheses > 0)
+			{
+				pHypothesis = m_HypothesisArray[0];
+
+				pNeighborRel->pPoseRel->Diff(&(pHypothesis->PoseSM), dist, angle);
+				
+				if(dist <= 200.0 && RVLABS(angle) <= 5.0 * DEG2RAD)
+				{
+					fprintf(fp, "OK.\n");
+
+					memcpy(pNeighborRel->pPoseRel->m_C, pHypothesis->PoseSM.m_C, 3*3*3*sizeof(double));
+				}
+				else
+					fprintf(fp, "ERROR: dist=%lf, angle=%lf\n", dist, angle * RAD2DEG);
+			}
+			else
+				fprintf(fp, "ERROR: No hypotheses.\n");
+
+			pNeighborPtr = (RVLQLIST_PTR_ENTRY *)(pNeighborPtr->pNext);	
+		}
+	}
+
+	fclose(fp);
+
+	m_Flags = OldFlags;
 }
 
 ///////////////////////////////////// 
