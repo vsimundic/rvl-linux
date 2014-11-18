@@ -289,6 +289,7 @@ int main(int argc, char* argv[])
 	int iHypothesis_;
 #endif	
 	int key_;
+	int SampleStep;
 
 	do
 	{
@@ -357,7 +358,7 @@ int main(int argc, char* argv[])
 		{
 			if(VS.m_Flags & RVLSYS_FLAGS_EDIT_MAP)
 			{			
-				pPSuLM = VS.m_PSuLMBuilder.m_PSuLMArray[iMPSuLM];
+				pPSuLM = VS.m_PSuLMBuilder.m_PSuLMArray[iMPSuLM];				
 
 				RVLCopyString(pPSuLM->m_FileName, &(VS.m_ImageFileName));
 
@@ -432,6 +433,8 @@ int main(int argc, char* argv[])
 
 		if(VS.m_Flags & RVLSYS_FLAGS_EDIT_MAP)
 		{
+			VS.m_pPSuLM->m_Index = pPSuLM->m_Index;
+
 			RVLQLIST_PTR_ENTRY *pNeighborPtr = (RVLQLIST_PTR_ENTRY *)(pPSuLM->m_NeighbourList->pFirst);
 
 			VS.m_PSuLMBuilder.m_nHypotheses = 0;
@@ -443,14 +446,14 @@ int main(int argc, char* argv[])
 				VS.m_PSuLMBuilder.m_nHypotheses++;
 			}
 
+			VS.m_PSuLMBuilder.m_HypothesisList.m_nElements = VS.m_PSuLMBuilder.m_nHypotheses;
+
 			if(VS.m_PSuLMBuilder.m_nHypotheses > 0)
 			{
 				if(HypothesisMem)
 					delete[] HypothesisMem;
 
-				HypothesisMem = new RVLPSULM_HYPOTHESIS[VS.m_PSuLMBuilder.m_nHypotheses];
-
-				VS.m_PSuLMBuilder.m_HypothesisList.m_nElements = VS.m_PSuLMBuilder.m_nHypotheses;
+				HypothesisMem = new RVLPSULM_HYPOTHESIS[VS.m_PSuLMBuilder.m_nHypotheses];				
 
 				if(VS.m_PSuLMBuilder.m_HypothesisArray)
 					delete[] VS.m_PSuLMBuilder.m_HypothesisArray;
@@ -504,10 +507,8 @@ int main(int argc, char* argv[])
 				}
 
 				iHypothesis = 0;
-
-				VS.m_pPSuLM->m_Index = pPSuLM->m_Index;
 			}
-		}
+		}	// if(VS.m_Flags & RVLSYS_FLAGS_EDIT_MAP)
 		else
 		{
 #ifdef RVLPSULMDEMO_DISPLAY_ONLY_REPRESENTATIVE_HYPOTHESES
@@ -654,6 +655,7 @@ int main(int argc, char* argv[])
 			bNextImage = true;
 			bRefresh = false;
 			bBackwards = false;
+			SampleStep = 1;
 
 			switch(key){
 			case 'a':
@@ -842,13 +844,25 @@ int main(int argc, char* argv[])
 
 				break;
 			case '*':
-				key_ = GUI.Message("Run UpdateRelativePoseUncertainties()?", 600, 100, cvScalar(0, 128, 255));
+				//key_ = GUI.Message("Run UpdateRelativePoseUncertainties()?", 600, 100, cvScalar(0, 128, 255));
 
-				if(key_ == 'y')
+				//if(key_ == 'y')
+				//{
+				//	VS.m_PSuLMBuilder.UpdateRelativePoseUncertainties();
+
+				//	GUI.Message("UpdateRelativePoseUncertainties() completed.", 600, 100, cvScalar(0, 128, 255));
+				//}
+
+				if(VS.m_Flags & RVLSYS_FLAGS_EDIT_MAP)
 				{
-					VS.m_PSuLMBuilder.UpdateRelativePoseUncertainties();
+					key_ = GUI.Message("Run CreateLocal3DMesh()?", 600, 100, cvScalar(0, 128, 255));
 
-					GUI.Message("UpdateRelativePoseUncertainties() completed.", 600, 100, cvScalar(0, 128, 255));
+					if(key_ == 'y')
+					{
+						VS.CreateLocal3DMesh(pPSuLM);
+
+						GUI.Message("CreateLocal3DMesh() completed.", 600, 100, cvScalar(0, 128, 255));
+					}
 				}
 
 				bRefresh = true;
@@ -856,6 +870,16 @@ int main(int argc, char* argv[])
 				break;
 			case 0x00000008:	// backspace
 				bBackwards = true;
+
+				break;
+			case 0x00210000:	// PgUp
+				bBackwards = true;
+
+				SampleStep = 10;
+
+				break;
+			case 0x00220000:	// PgDn
+				SampleStep = 10;
 
 				break;
 			case 0x00240000:	// Home
@@ -1041,6 +1065,8 @@ int main(int argc, char* argv[])
 		}
 		while(bRefresh && !bContinuous);
 
+		// next image/model
+
 		//if(!bKinect && bNextImage)
 		if(bNextImage)
 		{
@@ -1056,7 +1082,7 @@ int main(int argc, char* argv[])
 
 				if(bBackwards)
 				{
-					iMPSuLM--;
+					iMPSuLM -= SampleStep;
 
 					while(iMPSuLM >= 0 && VS.m_PSuLMBuilder.m_PSuLMArray[iMPSuLM] == NULL)
 						iMPSuLM--;
@@ -1066,7 +1092,7 @@ int main(int argc, char* argv[])
 				}
 				else
 				{
-					iMPSuLM++;
+					iMPSuLM += SampleStep;
 
 					while(iMPSuLM <= VS.m_PSuLMBuilder.m_maxPSuLMIndex && VS.m_PSuLMBuilder.m_PSuLMArray[iMPSuLM] == NULL)
 						iMPSuLM++;

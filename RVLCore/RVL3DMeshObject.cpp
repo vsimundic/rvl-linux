@@ -6438,9 +6438,7 @@ CRVL3DMeshObject* GenMeshObjects(CRVLMPtrChain *pTriangleList,
             RVLQLIST_ADD_ENTRY(parent->m_ChildMeshObjects, pElement);
 
       }
-
- 
-
+	
       //Iterating through triangles
 
       RVL3DPOINT2 **ppPt, **pPtArrayEnd; //needed for setting iPixRGB

@@ -33,7 +33,7 @@
 //#define RVLPSULMBUILDER_GET_LOCAL_MODELS_DEBUG_LOG
 //#define RVLPSULMBUILDER_PARTICLE_FILTER_DEBUG
 
-#define RVLPSULMBUILDER_HYPOTHESES_DEBUG_LOG
+//#define RVLPSULMBUILDER_HYPOTHESES_DEBUG_LOG
 //#define RVLPSULMBUILDER_HYPOTHESES_LAST_DOF_ACCU_DEBUG_LOG
 //#define RVLPSULMBUILDER_CONDITIONAL_PROBABILITY_TREE_DEBUG_LOG
 //#define RVLPSULMBUILDER_POSE_CONSTRAINT_PROBABILITY_DEBUG_LOG
@@ -643,7 +643,7 @@ public:
 							CRVLPSuLM *pPSuLM2);
 	void DeleteConnection_(	CRVLPSuLM *pPSuLM1,
 							CRVLPSuLM *pPSuLM2);
-	void UpdateRelativePoseUncertainties();
+	void UpdateRelativePoseUncertainties();	
 
 private:
 	RVLPSULM_MSMATCH_DATA *HypothesesGetNextNode(	RVLPSULM_HG_NODE* pNode,
@@ -657,5 +657,5 @@ private:
 							RVLPSULM_MSMATCH_DATA *MatchList);
 	void PrintHypothesis(	FILE *fp, 
 							RVLPSULM_HG_NODE *pNode,
-							RVLPSULM_MSMATCH_DATA *MatchList);
+							RVLPSULM_MSMATCH_DATA *MatchList);	
 };

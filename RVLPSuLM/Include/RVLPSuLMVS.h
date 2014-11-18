@@ -47,6 +47,7 @@ public:
 	void CreateMeshFile(char *MeshFileName);
 	void DeleteMeshFile();
 	void AppendToMeshFile(CRVL3DPose *pRelPose);
+	void CreateLocal3DMesh(CRVLPSuLM *pPSuLM0);
 
 public:
 	CRVLPSuLMBuilder m_PSuLMBuilder;

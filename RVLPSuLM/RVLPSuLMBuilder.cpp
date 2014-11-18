@@ -7425,38 +7425,41 @@ void CRVLPSuLMBuilder::Localization(CRVLPSuLM * pSPSuLM,
 			RSM_ = pHypothesis_->PoseSM.m_Rot;
 			tSM_ = pHypothesis_->PoseSM.m_X;
 
-			if(pMPSuLM_ != pMPSuLM)
+			if(!(m_Flags & RVLPSULMBUILDER_FLAG_MAPBUILDING))
 			{
-				pNeighborPtr = (RVLQLIST_PTR_ENTRY *)(pMPSuLM->m_NeighbourList->pFirst);
-
-				while(pNeighborPtr)
+				if(pMPSuLM_ != pMPSuLM)
 				{
-					pNeighborRel = (RVLPSULM_NEIGHBOUR *)(pNeighborPtr->Ptr);
+					pNeighborPtr = (RVLQLIST_PTR_ENTRY *)(pMPSuLM->m_NeighbourList->pFirst);
 
-					pMPSuLM__ = pNeighborRel->pPSuLM;
+					while(pNeighborPtr)
+					{
+						pNeighborRel = (RVLPSULM_NEIGHBOUR *)(pNeighborPtr->Ptr);
 
-					if(pMPSuLM_ == pMPSuLM__)
-						break;
+						pMPSuLM__ = pNeighborRel->pPSuLM;
 
-					pNeighborPtr = (RVLQLIST_PTR_ENTRY *)(pNeighborPtr->pNext);
+						if(pMPSuLM_ == pMPSuLM__)
+							break;
+
+						pNeighborPtr = (RVLQLIST_PTR_ENTRY *)(pNeighborPtr->pNext);
+					}
+
+					if(pNeighborPtr == NULL)
+					{
+						ppHypothesisPtr = &(pHypothesisPtr->pNext);
+
+						pHypothesisPtr = (RVLQLIST_PTR_ENTRY *)(pHypothesisPtr->pNext);
+
+						continue;
+					}
+
+					RM_M = pNeighborRel->pPoseRel->m_Rot;
+					tM_M = pNeighborRel->pPoseRel->m_X;
+
+					RVLCOMPTRANSF3D(RM_M, tM_M, RSM_, tSM_, RSM2, tSM2)
+
+					RSM_ = RSM2;
+					tSM_ = tSM2;
 				}
-
-				if(pNeighborPtr == NULL)
-				{
-					ppHypothesisPtr = &(pHypothesisPtr->pNext);
-
-					pHypothesisPtr = (RVLQLIST_PTR_ENTRY *)(pHypothesisPtr->pNext);
-
-					continue;
-				}
-
-				RM_M = pNeighborRel->pPoseRel->m_Rot;
-				tM_M = pNeighborRel->pPoseRel->m_X;
-
-				RVLCOMPTRANSF3D(RM_M, tM_M, RSM_, tSM_, RSM2, tSM2)
-
-				RSM_ = RSM2;
-				tSM_ = tSM2;
 			}
 			
 			RVLDIF3VECTORS(tSM, tSM_, dtSM)
@@ -11711,8 +11714,8 @@ void CRVLPSuLMBuilder::Hypotheses3(	CRVLPSuLM *pSPSuLM,
 			RVLMULMX3X3TVECT(R, t, invtInit);
 		}
 
-		//if(pMPSuLM->m_Index != 13)	// debug
-		//	continue;
+		if(pMPSuLM->m_Index == 22)	// debug
+			int debug = 0;
 
 		MSurfArray = pMPSuLM->m_3DSurfaceArray;
 
@@ -18156,18 +18159,24 @@ void CRVLPSuLMBuilder::GetModelPoses( CRVL3DPose *pPoseAsAm0,
 			RAmcAmp = pNeighbor->pPoseRel->m_Rot;
 			tAmcAmp = pNeighbor->pPoseRel->m_X;
 
-			RVLCOMPTRANSF3D3DOF(R, t, RAmcAmp, tAmcAmp, R2, t2)		
-
-			// pPSuLM2->m_PoseRTAs.m_C <- EKF Prediction from pNeighbor->pPoseRel and pPSuLM->m_PoseRTAs
-
-			//DetermineOdometryUncertainty(pNeighbor->pPoseRel->m_C, pNeighbor->pPoseRel);	// remove after debugging !!!
-
 			if(m_Flags & RVLPSULMBUILDER_HYPOTHESES_UNCERTAINTY_3DOF)
+			{
+				RVLCOMPTRANSF3D3DOF(R, t, RAmcAmp, tAmcAmp, R2, t2)		
+
+				// pPSuLM2->m_PoseRTAs.m_C <- EKF Prediction from pNeighbor->pPoseRel and pPSuLM->m_PoseRTAs
+
+				//DetermineOdometryUncertainty(pNeighbor->pPoseRel->m_C, pNeighbor->pPoseRel);	// remove after debugging !!!
+
 				UncertaintyEKFPrediction3DOF(pPSuLM2->m_PoseRTAs.m_C, pNeighbor->pPoseRel->m_C, pPSuLM->m_PoseRTAs.m_C, 
 					pNeighbor->pPoseRel, &(pPSuLM->m_PoseRTAs));
+			}
 			else
+			{
+				RVLCOMPTRANSF3D(R, t, RAmcAmp, tAmcAmp, R2, t2)	
+
 				UncertaintyEKFPrediction6DOF(pPSuLM2->m_PoseRTAs.m_C, pNeighbor->pPoseRel->m_C, pPSuLM->m_PoseRTAs.m_C,
 					pNeighbor->pPoseRel, &(pPSuLM->m_PoseRTAs));
+			}
 
 #ifdef RVLPSULMBUILDER_GET_LOCAL_MODELS_DEBUG_LOG
 			if(m_DebugFlags & RVLPSULMBUILDER_DEBUG_FLAG_GET_LOCAL_MODELS_LOG)
@@ -21437,27 +21446,32 @@ void CRVLPSuLMBuilder::DisplayHypothesisData(	CRVLFigure *pFig,
 			else
 				cvSet(pDataDisplay, cvScalar(0, 255, 0));
 		}
+	}	//if(pHypothesis)
+	else
+		cvSet(pDataDisplay, cvScalar(204, 204, 204));
 
-		cvPutText(pDataDisplay, m_ImageFileName, cvPoint(0, (++iTextLine) * pFig->m_FontSize), &pFig->m_Font,  cvScalar(0, 0, 0));
+	cvPutText(pDataDisplay, m_ImageFileName, cvPoint(0, (++iTextLine) * pFig->m_FontSize), &pFig->m_Font,  cvScalar(0, 0, 0));
 
-		if(pSPSuLM->m_Index != 0xffffffff)
-		{
-			sprintf(str, "Model %d", pSPSuLM->m_Index);
-
-			cvPutText(pDataDisplay, str, cvPoint(0, (++iTextLine) * pFig->m_FontSize), &pFig->m_Font,  cvScalar(0, 0, 0));
-		}
-
-		if(m_PSuLMList.m_nElements > 0)
-		{
-			sprintf(str, "no. of local models=%d", m_PSuLMList.m_nElements);
-
-			cvPutText(pDataDisplay, str, cvPoint(0, (++iTextLine) * pFig->m_FontSize), &pFig->m_Font,  cvScalar(0, 0, 0));
-		}
-
-		sprintf(str, "no. of hypotheses=%d", m_HypothesisList.m_nElements);
+	if(pSPSuLM->m_Index != 0xffffffff)
+	{
+		sprintf(str, "Model %d", pSPSuLM->m_Index);
 
 		cvPutText(pDataDisplay, str, cvPoint(0, (++iTextLine) * pFig->m_FontSize), &pFig->m_Font,  cvScalar(0, 0, 0));
+	}
 
+	if(m_PSuLMList.m_nElements > 0)
+	{
+		sprintf(str, "no. of local models=%d", m_PSuLMList.m_nElements);
+
+		cvPutText(pDataDisplay, str, cvPoint(0, (++iTextLine) * pFig->m_FontSize), &pFig->m_Font,  cvScalar(0, 0, 0));
+	}
+
+	sprintf(str, "no. of hypotheses=%d", m_HypothesisList.m_nElements);
+
+	cvPutText(pDataDisplay, str, cvPoint(0, (++iTextLine) * pFig->m_FontSize), &pFig->m_Font,  cvScalar(0, 0, 0));
+
+	if(pHypothesis)
+	{
 		sprintf(str, "Hypothesis %d", pHypothesis->Index);
 
 		cvPutText(pDataDisplay, str, cvPoint(0, (++iTextLine) * pFig->m_FontSize), &pFig->m_Font,  cvScalar(0, 0, 0));
@@ -21528,8 +21542,6 @@ void CRVLPSuLMBuilder::DisplayHypothesisData(	CRVLFigure *pFig,
 
 		cvPutText(pDataDisplay, str, cvPoint(0, (++iTextLine) * pFig->m_FontSize), &pFig->m_Font,  cvScalar(0, 0, 0));
 	}
-	else
-		cvSet(pDataDisplay, cvScalar(0, 0, 255));
 
 	if(pSelectedSurface)
 	{
@@ -22080,7 +22092,12 @@ void CRVLPSuLMBuilder::UpdateRelativePoseUncertainties()
 
 	m_Flags &= ~RVLPSULMBUILDER_FLAG_MODE;
 
-	m_Flags |= (RVLPSULMBUILDER_FLAG_MODE_TRACKING | RVLPSULMBUILDER_FLAG_KIDNAPPED);
+	m_Flags |= (RVLPSULMBUILDER_FLAG_MODE_TRACKING | RVLPSULMBUILDER_FLAG_KIDNAPPED | RVLPSULMBUILDER_FLAG_MAPBUILDING);
+
+	CRVL3DPose PoseMS;
+
+	double *R_ = PoseMS.m_Rot;
+	double *t_ = PoseMS.m_X;
 
 	int i;
 	CRVLPSuLM *pPSuLM, *pPSuLM_;
@@ -22088,6 +22105,9 @@ void CRVLPSuLMBuilder::UpdateRelativePoseUncertainties()
 	RVLPSULM_NEIGHBOUR *pNeighborRel;
 	RVLPSULM_HYPOTHESIS *pHypothesis;
 	double dist, angle;
+	BYTE result;	// 0 - OK; 1 - large error; 2 - no hypotheses
+	double invR[9], invt[3];
+	double *R, *t;
 
 	for(i = 0; i < m_maxPSuLMIndex; i++)
 	{
@@ -22108,10 +22128,10 @@ void CRVLPSuLMBuilder::UpdateRelativePoseUncertainties()
 
 			m_pMem->Clear();
 
-			if(pPSuLM->m_Index == 31 && pPSuLM_->m_Index == 9)
-				int debug = 0;
+			//if(pPSuLM->m_Index == 0 && pPSuLM_->m_Index == 22)
+			//	int debug = 0;
 
-			Localization(pPSuLM_, &Pose, pPSuLM);
+			Localization(pPSuLM_, &Pose, pPSuLM);	
 
 			if(m_nHypotheses > 0)
 			{
@@ -22119,17 +22139,60 @@ void CRVLPSuLMBuilder::UpdateRelativePoseUncertainties()
 
 				pNeighborRel->pPoseRel->Diff(&(pHypothesis->PoseSM), dist, angle);
 				
-				if(dist <= 200.0 && RVLABS(angle) <= 5.0 * DEG2RAD)
+				if(dist <= 200.0 && RVLABS(angle) <= 6.0 * DEG2RAD)
 				{
+					result = 0;
+
 					fprintf(fp, "OK.\n");
 
 					memcpy(pNeighborRel->pPoseRel->m_C, pHypothesis->PoseSM.m_C, 3*3*3*sizeof(double));
 				}
 				else
-					fprintf(fp, "ERROR: dist=%lf, angle=%lf\n", dist, angle * RAD2DEG);
+				{
+					fprintf(fp, "ERROR: dist=%lf, angle=%lf (Hypothesis %d). Computing opposite... ", dist, angle * RAD2DEG, pHypothesis->Index);
+
+					result = 1;
+				}
 			}
 			else
-				fprintf(fp, "ERROR: No hypotheses.\n");
+			{
+				fprintf(fp, "ERROR: No hypotheses. Computing opposite... ");
+
+				result = 2;
+			}
+
+			if(result != 0)
+			{
+				m_pMem->Clear();
+
+				Localization(pPSuLM, &Pose, pPSuLM_);
+
+				if(m_nHypotheses > 0)
+				{
+					pHypothesis = m_HypothesisArray[0];
+
+					R = pHypothesis->PoseSM.m_Rot;
+					t = pHypothesis->PoseSM.m_X;
+
+					RVLINVTRANSF3D(R, t, R_, t_);
+
+					pNeighborRel->pPoseRel->Diff(&PoseMS, dist, angle);
+					
+					if(dist <= 200.0 && RVLABS(angle) <= 5.0 * DEG2RAD)
+					{
+						result = 0;
+
+						fprintf(fp, "OK.\n");
+
+						RVL6DOFInvTransfUncert(R, t, pHypothesis->PoseSM.m_C, pNeighborRel->pPoseRel->m_C);
+					}
+					else
+						fprintf(fp, "ERROR: dist=%lf, angle=%lf (Hypothesis %d)\n", dist, angle * RAD2DEG, pHypothesis->Index);
+				}
+				else
+					fprintf(fp, "ERROR: No hypotheses.\n");
+
+			}
 
 			pNeighborPtr = (RVLQLIST_PTR_ENTRY *)(pNeighborPtr->pNext);	
 		}
@@ -22490,8 +22553,6 @@ int RansacRoundsNeeded(int maxNoRounds, int m, double logeta0, int n, int In)
 }
 
 
-
-
 // Eqn 7 and 8 of Chum
 int NonRandomness(int m, int n)
 {
@@ -22560,3 +22621,4 @@ void RandPerm(int n, int perm[])
 //    }
 //    return Nmax;
 //}
+
