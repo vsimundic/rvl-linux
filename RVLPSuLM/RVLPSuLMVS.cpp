@@ -699,6 +699,25 @@ void CRVLPSuLMVS::CreateLocal3DMesh(CRVLPSuLM *pPSuLM0)
 	fclose(fp);
 }
 
+void CRVLPSuLMVS::Validate(void)
+{
+	m_GroundTruth.
+
+	FILE *fp = fopen("C:\\RVL\\ExpRez\\Validation.log");
+
+	int iSample = RVLGetFileNumber(m_ImageFileName, "00000-LW.bmp");
+
+	int i;
+	RVLPSULM_HYPOTHESIS *pHypothesis;
+
+	for(i = 0; i < m_PSuLMBuilder.m_nHypotheses; i++)
+	{
+		pHypothesis = m_PSuLMBuilder.m_HypothesisArray[i];
+
+
+	}	
+}
+
 void RVLPSuLMDisplayMouseCallback2(int event, int x, int y, int flags, void* vpData)
 {
 	CRVL3DPose NullPose;

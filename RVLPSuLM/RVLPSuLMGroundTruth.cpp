@@ -135,3 +135,10 @@ bool CRVLPSuLMGroundTruth::Load()
 
 	return true;
 }
+
+void CRVLPSuLMGroundTruth::Get(	int iSample,, 
+								RVLPSULM_GROUND_TRUTH_MATCH *Match, 
+								int nMatches)
+{
+
+}

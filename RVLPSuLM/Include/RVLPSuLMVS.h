@@ -57,4 +57,5 @@ public:
 	RVL3DMESHFILE *m_pMeshFile;
 	int m_iSample;
 	CRVLPSuLMGroundTruth m_GroundTruth;
+	void Validate(void);
 };

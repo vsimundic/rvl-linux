@@ -13,6 +13,9 @@ public:
 	virtual ~CRVLPSuLMGroundTruth(void);
 	void Init(void);
 	void Clear(void);
+	void Get(	int iSample, 
+				RVLPSULM_GROUND_TRUTH_MATCH *Match, 
+				int nMatches);
 	void Add(	int iScene,
 				int iModel,
 				CRVL3DPose *pPose);
@@ -23,5 +26,5 @@ public:
 	CRVLMem m_Mem;
 	RVLQLIST m_MatchList;
 	int m_nMatches;
-	char *m_FileName;
+	char *m_FileName;	
 };
