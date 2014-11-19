@@ -35,6 +35,8 @@ void CRVLPSuLMVS::CreateParamList()
 	m_ParamList.AddID(pParamData, "yes", RVLSYS_FLAGS_CREATE_GLOBAL_MESH);
 	pParamData = m_ParamList.AddParam("VS.EditMap", RVLPARAM_TYPE_FLAG, &m_Flags);
 	m_ParamList.AddID(pParamData, "yes", RVLSYS_FLAGS_EDIT_MAP);
+	pParamData = m_ParamList.AddParam("VS.Validation", RVLPARAM_TYPE_FLAG, &m_Flags);
+	m_ParamList.AddID(pParamData, "yes", RVLSYS_FLAGS_VALIDATION);
 	pParamData = m_ParamList.AddParam("VS.GroundTruthFileName", RVLPARAM_TYPE_STRING, &(m_GroundTruth.m_FileName));
 }
 
@@ -592,9 +594,6 @@ void CRVLPSuLMVS::AppendToMeshFile(CRVL3DPose *pRelPose)
 	double *RAbs = m_pMeshFile->LastLocalMeshPose.m_Rot;
 	double *tAbs = m_pMeshFile->LastLocalMeshPose.m_X;
 
-	double R[3 * 3];
-	double t[3 * 3];
-
 	if(m_pMeshFile->nLocalMeshes == 0)
 	{
 		dat = fopen(m_pMeshFile->Name, "w");
@@ -699,23 +698,120 @@ void CRVLPSuLMVS::CreateLocal3DMesh(CRVLPSuLM *pPSuLM0)
 	fclose(fp);
 }
 
-void CRVLPSuLMVS::Validate(void)
+void CRVLPSuLMVS::Validate()
 {
-	m_GroundTruth.
+	RVLPSULM_GROUND_TRUTH_MATCH **GTMatch = new RVLPSULM_GROUND_TRUTH_MATCH *[m_PSuLMBuilder.m_PSuLMList.m_nElements];
 
-	FILE *fp = fopen("C:\\RVL\\ExpRez\\Validation.log");
+	FILE *fp = fopen("C:\\RVL\\ExpRez\\Validation.log", "a");
 
 	int iSample = RVLGetFileNumber(m_ImageFileName, "00000-LW.bmp");
 
-	int i;
+	int nGTMatches;
+
+	m_GroundTruth.Get(iSample, GTMatch, nGTMatches);
+
+	CRVL3DPose ePose;
+	CRVL3DPose PoseSMr;
+
+	double *RSMr = PoseSMr.m_Rot;
+	double *tSMr = PoseSMr.m_X;
+
+	int i, j;
 	RVLPSULM_HYPOTHESIS *pHypothesis;
+	RVLPSULM_GROUND_TRUTH_MATCH *pGTMatch;
+	double *RSM, *tSM;
+	CRVLPSuLM *pPSuLMr;
+	RVLPSULM_NEIGHBOR2 *pNeighbor;
+	double *RMMr, *tMMr;
+	bool bConnected;
+	double P, dist, angle;
 
 	for(i = 0; i < m_PSuLMBuilder.m_nHypotheses; i++)
 	{
 		pHypothesis = m_PSuLMBuilder.m_HypothesisArray[i];
 
+		if(pHypothesis->iRepresentative != 0xffffffff)
+			continue;
 
-	}	
+		P = exp(pHypothesis->Probability - pHypothesis->pMPSuLM->m_pHypothesis->Probability) / pHypothesis->pMPSuLM->m_PriorProbabilityLocal;
+
+		fprintf(fp, "%d\t%d\t%lf\t", iSample, pHypothesis->Index, P);
+
+		pHypothesis->validation = -1;
+
+		RSM = pHypothesis->PoseSM.m_Rot;
+		tSM = pHypothesis->PoseSM.m_X;
+
+		for(j = 0; j < nGTMatches; j++)
+		{
+			pGTMatch = GTMatch[j];
+
+			if(pGTMatch->iModel == pHypothesis->pMPSuLM->m_Index)
+			{
+				RVLCOPYMX3X3(RSM, RSMr)
+				RVLCOPY3VECTOR(tSM, tSMr)
+
+				bConnected = true;
+			}
+			else
+			{
+				pPSuLMr = m_PSuLMBuilder.m_PSuLMArray[pGTMatch->iModel];
+
+				pNeighbor = (RVLPSULM_NEIGHBOR2 *)(pPSuLMr->m_LocalMap.pFirst);
+
+				while(pNeighbor)
+				{
+					if(pNeighbor->pMPSuLM == pHypothesis->pMPSuLM)
+						break;
+
+					pNeighbor = (RVLPSULM_NEIGHBOR2 *)(pNeighbor->pNext);
+				}
+
+				if(pNeighbor)
+				{
+					RMMr = pNeighbor->PoseRel.m_Rot;
+					tMMr = pNeighbor->PoseRel.m_X;
+
+					RVLCOMPTRANSF3D(RMMr, tMMr, RSM, tSM, RSMr, tSMr)
+
+					bConnected = true;
+				}
+				else
+					bConnected = false;
+			}
+
+			if(bConnected)
+			{
+				pGTMatch->PoseSM.Diff(&PoseSMr, dist, angle);
+
+				if(dist <= 200.0 && angle <= 15.0 * DEG2RAD)
+				{
+					pHypothesis->validation = 1;
+
+					break;
+				}
+				else if(dist <= 500.0 && angle <= 45.0 * DEG2RAD)
+					pHypothesis->validation = 0;
+			}
+		}	// for each GT match
+
+		switch(pHypothesis->validation){
+		case 1:
+			fprintf(fp, "+\n");
+
+			break;
+		case 0:
+			fprintf(fp, "?\n");
+
+			break;
+		case -1:
+			fprintf(fp, "-\n");
+		}
+	}	// for each hypothesis
+
+	fclose(fp);
+
+	delete[] GTMatch;
 }
 
 void RVLPSuLMDisplayMouseCallback2(int event, int x, int y, int flags, void* vpData)
@@ -918,7 +1014,7 @@ void RVLPSuLMDisplayMouseCallback2(int event, int x, int y, int flags, void* vpD
 					pGUI->ShowFigure(pMFig);
 				}
 
-				pVS->m_PSuLMBuilder.DisplayHypothesisData(pFig, pVS->m_pPSuLM, pData->iHypothesis, pSelectedSurf, pSelectedLine);
+				pVS->m_PSuLMBuilder.DisplayHypothesisData(pFig, pVS->m_pPSuLM, pData->mDisplayPSuLMFlags, pData->iHypothesis, pSelectedSurf, pSelectedLine);
 			}
 	}	//	switch( event )
 }

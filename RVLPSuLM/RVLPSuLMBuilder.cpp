@@ -19692,16 +19692,25 @@ void CRVLPSuLMBuilder::CreateLocalMap(CRVLPSuLM * pPSuLM,
 									  BYTE Flags)
 {
 	CRVL3DPose NullPose;
-	double C[3 * 3];
+	double C[3 * 3 * 3];
+	double *C_, *C2_;
 
 	RVLNULLMX3X3(C)
+
+	if(!(m_Flags & RVLPSULMBUILDER_HYPOTHESES_UNCERTAINTY_3DOF))
+	{
+		C_ = C + 9;
+		RVLNULLMX3X3(C_)
+		C_ += 9;
+		RVLNULLMX3X3(C_)
+	}
 
 	NullPose.Reset();
 
 	NullPose.m_C = C;
 
-	NullPose.m_ParamFlags = RVL3DPOSE_PARAM_FLAGS_COV_3D;
-
+	NullPose.m_ParamFlags = (m_Flags & RVLPSULMBUILDER_HYPOTHESES_UNCERTAINTY_3DOF ? RVL3DPOSE_PARAM_FLAGS_COV_3D : RVL3DPOSE_PARAM_FLAGS_COV_6D);
+ 
 	RVLQLIST *pListArray = m_LocalMapHT.m_ListArray;
 
 	CRVLPSuLM *pPSuLM2;
@@ -19740,12 +19749,21 @@ void CRVLPSuLMBuilder::CreateLocalMap(CRVLPSuLM * pPSuLM,
 
 		pNeighbor->PoseRel.m_X[0] = dX[0];
 		pNeighbor->PoseRel.m_X[1] = dX[1];
-		pNeighbor->PoseRel.m_X[2] = 0.0;
+		pNeighbor->PoseRel.m_X[2] = dX[2];
 		R2 = pNeighbor->PoseRel.m_Rot;
 		RVLCOPYMX3X3(R, R2)
 		CAmAs2 = pNeighbor->C;
 		pNeighbor->PoseRel.m_C = CAmAs2;
 		RVLCOPYMX3X3(CAmAs, CAmAs2)
+		if(!(m_Flags & RVLPSULMBUILDER_HYPOTHESES_UNCERTAINTY_3DOF))
+		{
+			C_ = CAmAs + 9;
+			C2_ = CAmAs2 + 9;
+			RVLCOPYMX3X3(C_, C2_)
+			C_ += 9;
+			C2_ += 9;
+			RVLCOPYMX3X3(C_, C2_)
+		}
 
 		RVLMEM_ALLOC_STRUCT(m_pMem0, RVLQLISTHT_PTR_ENTRY, pLocalMapHTEntry)
 
@@ -19766,13 +19784,21 @@ void CRVLPSuLMBuilder::CreateLocalMap(CRVLPSuLM * pPSuLM,
 
 			R2 = pNeighbor2->PoseRel.m_Rot;
 			dX2 = pNeighbor2->PoseRel.m_X;
-
-			RVLINVTRANSF3D3DOF(R, dX, R2, dX2)
-
 			CAmAs2 = pNeighbor2->C;
 			pNeighbor2->PoseRel.m_C = CAmAs2;
-			
-			RVL3DOFInvTransfUncert(R[0], R[3], dX2[0], dX2[1], CAmAs, CAmAs2);
+
+			if(m_Flags & RVLPSULMBUILDER_HYPOTHESES_UNCERTAINTY_3DOF)
+			{
+				RVLINVTRANSF3D3DOF(R, dX, R2, dX2)
+				
+				RVL3DOFInvTransfUncert(R[0], R[3], dX2[0], dX2[1], CAmAs, CAmAs2);
+			}
+			else
+			{
+				RVLINVTRANSF3D(R, dX, R2, dX2)
+				
+				RVL6DOFInvTransfUncert(R, dX2, CAmAs, CAmAs2);
+			}
 
 			RVLMEM_ALLOC_STRUCT(m_pMem0, RVLQLISTHT_PTR_ENTRY, pLocalMapHTEntry)
 
@@ -21383,6 +21409,7 @@ void CRVLPSuLMBuilder::DisplayHypothesis(CRVLGUI *pGUI,
 
 void CRVLPSuLMBuilder::DisplayHypothesisData(	CRVLFigure *pFig, 
 												CRVLPSuLM *pSPSuLM,
+												DWORD Flags,
 												int iHypothesis,
 												CRVL3DSurface2 *pSelectedSurface,
 												CRVL3DLine2 *pSelectedLine)
@@ -21495,7 +21522,33 @@ void CRVLPSuLMBuilder::DisplayHypothesisData(	CRVLFigure *pFig,
 			sprintf(str, "Representative=%d", pHypothesis_->Index);
 		}
 		else
-			sprintf(str, "REPRESENTATIVE", pHypothesis->Index);
+		{
+			if(Flags & RVLPSULM_DISPLAY_VALIDATION)
+			{
+				char validation;
+
+				switch(pHypothesis->validation){
+				case 1:
+					validation = '+';
+
+					break;
+				case 0:
+					validation = '?';
+
+					break;
+				case -1:
+					validation = '-';
+
+					break;
+				default:
+					validation = ' ';
+				}
+
+				sprintf(str, "REPRESENTATIVE (%c)", validation);
+			}
+			else
+				sprintf(str, "REPRESENTATIVE");
+		}
 
 		cvPutText(pDataDisplay, str, cvPoint(0, (++iTextLine) * pFig->m_FontSize), &pFig->m_Font,  cvScalar(0, 0, 0));
 

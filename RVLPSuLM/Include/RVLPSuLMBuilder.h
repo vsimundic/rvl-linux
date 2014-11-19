@@ -625,7 +625,8 @@ public:
 							IplImage *pImage2,
 							int iHypothesis = 0);
 	void DisplayHypothesisData(	CRVLFigure *pFig, 
-								CRVLPSuLM *pSPSuLM, 
+								CRVLPSuLM *pSPSuLM, 								
+								DWORD Flags = 0x00000000,
 								int iHypothesis = 0,
 								CRVL3DSurface2 *pSelectedSurface = NULL,
 								CRVL3DLine2 *pSelectedLine = NULL);

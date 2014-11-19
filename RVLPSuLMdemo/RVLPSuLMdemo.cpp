@@ -246,6 +246,8 @@ int main(int argc, char* argv[])
 	bool bFrames = false;
 	//DWORD mDisplayPSuLMFlags = (RVLPSULM_DISPLAY_SURFACES | RVLPSULM_DISPLAY_VECTORS | RVLPSULM_DISPLAY_SAMPLES);
 	DWORD mDisplayPSuLMFlags = (RVLPSULM_DISPLAY_SURFACES | RVLPSULM_DISPLAY_ELLIPSES | RVLPSULM_DISPLAY_LINES | RVLPSULM_DISPLAY_VECTORS);
+	if(VS.m_Flags & RVLSYS_FLAGS_VALIDATION)
+		mDisplayPSuLMFlags |= RVLPSULM_DISPLAY_VALIDATION;
 	int DisplayBitmap = 0;
 	int ZoomFactor = 1;
 
@@ -428,6 +430,9 @@ int main(int argc, char* argv[])
 			pHSVImage->channelSeq[1] = 'G';
 
 			pHSVImage->channelSeq[2] = 'B';
+
+			if(VS.m_Flags & RVLSYS_FLAGS_VALIDATION)
+				VS.Validate();
 		}	// if(!bRecord)
 
 		// display the results
@@ -591,7 +596,7 @@ int main(int argc, char* argv[])
 				VS.m_PSuLMBuilder.DisplayHypothesis(&GUI, pFig, pFig2, VS.m_pPSuLM, mDisplayPSuLMFlags, pInputImage_,
 					pPrevRGBImage, iHypothesis);
 
-				VS.m_PSuLMBuilder.DisplayHypothesisData(pFig, VS.m_pPSuLM, iHypothesis);
+				VS.m_PSuLMBuilder.DisplayHypothesisData(pFig, VS.m_pPSuLM, mDisplayPSuLMFlags, iHypothesis);
 			}
 
 			if(bDisplayPSuLM)

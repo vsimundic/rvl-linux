@@ -13,9 +13,9 @@ public:
 	virtual ~CRVLPSuLMGroundTruth(void);
 	void Init(void);
 	void Clear(void);
-	void Get(	int iSample, 
-				RVLPSULM_GROUND_TRUTH_MATCH *Match, 
-				int nMatches);
+	void Get(	int iScene, 
+				RVLPSULM_GROUND_TRUTH_MATCH **Match, 
+				int &nMatches);
 	void Add(	int iScene,
 				int iModel,
 				CRVL3DPose *pPose);

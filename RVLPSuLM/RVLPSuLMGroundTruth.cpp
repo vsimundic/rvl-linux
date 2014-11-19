@@ -136,9 +136,25 @@ bool CRVLPSuLMGroundTruth::Load()
 	return true;
 }
 
-void CRVLPSuLMGroundTruth::Get(	int iSample,, 
-								RVLPSULM_GROUND_TRUTH_MATCH *Match, 
-								int nMatches)
+void CRVLPSuLMGroundTruth::Get(	int iScene,
+								RVLPSULM_GROUND_TRUTH_MATCH **Match, 
+								int &nMatches)
 {
+	nMatches = 0;
 
+	RVLPSULM_GROUND_TRUTH_MATCH **ppMatch_ = Match;
+
+	RVLPSULM_GROUND_TRUTH_MATCH *pMatch = (RVLPSULM_GROUND_TRUTH_MATCH *)(m_MatchList.pFirst);
+
+	while(pMatch)
+	{
+		if(pMatch->iScene == iScene)
+		{
+			*(ppMatch_++) = pMatch;
+
+			nMatches++;
+		}
+
+		pMatch = (RVLPSULM_GROUND_TRUTH_MATCH *)(pMatch->pNext);
+	}
 }
