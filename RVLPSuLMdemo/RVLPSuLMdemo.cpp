@@ -94,7 +94,7 @@ int main(int argc, char* argv[])
 	else
 	{
 #ifdef RVLOPENNI
-		bool bKinect = VS.m_Kinect.Init();
+		bKinect = VS.m_Kinect.Init();
 
 		if(bKinect)
 			VS.m_Flags &= ~RVLSYS_FLAGS_PC;
