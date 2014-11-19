@@ -33,6 +33,8 @@ void CRVLPSuLMVS::CreateParamList()
 	pParamData = m_ParamList.AddParam("VS.PoseLA.z[mm]", RVLPARAM_TYPE_DOUBLE, m_PoseLA.m_X + 2);
 	pParamData = m_ParamList.AddParam("VS.CreateGlobalMesh", RVLPARAM_TYPE_FLAG, &m_Flags);
 	m_ParamList.AddID(pParamData, "yes", RVLSYS_FLAGS_CREATE_GLOBAL_MESH);
+	pParamData = m_ParamList.AddParam("VS.EditMap", RVLPARAM_TYPE_FLAG, &m_Flags);
+	m_ParamList.AddID(pParamData, "yes", RVLSYS_FLAGS_EDIT_MAP);
 	pParamData = m_ParamList.AddParam("VS.GroundTruthFileName", RVLPARAM_TYPE_STRING, &(m_GroundTruth.m_FileName));
 }
 
@@ -96,6 +98,10 @@ void CRVLPSuLMVS::Init(char * CfgFile2Name)
 	m_GroundTruth.Init();
 
 	m_GroundTruth.Load();
+
+
+	if(m_Flags & RVLSYS_FLAGS_EDIT_MAP)
+		m_PSuLMBuilder.m_Flags &= ~(RVLPSULMBUILDER_FLAG_MODE | RVLPSULMBUILDER_FLAG_MAPBUILDING);
 
 	m_pPSuLM = NULL;
 
@@ -604,10 +610,17 @@ void CRVLPSuLMVS::AppendToMeshFile(CRVL3DPose *pRelPose)
 	}
 	else
 	{
-		RVLCOMPTRANSF3D(RAbs, tAbs, RRel, tRel, R, t)
+		//if pRelPose is the pose of the current PSuLM relative to the previous, then the following code should be used.
 
-		RVLCOPYMX3X3(R, RAbs)
-		RVLCOPY3VECTOR(t, tAbs)
+		//RVLCOMPTRANSF3D(RAbs, tAbs, RRel, tRel, R, t)
+
+		//RVLCOPYMX3X3(R, RAbs)
+		//RVLCOPY3VECTOR(t, tAbs)
+
+		//if pRelPose is the absolute pose of the current PSuLM relative to a global reference frame, then the following code should be used.
+
+		RVLCOPYMX3X3(RRel, RAbs)
+		RVLCOPY3VECTOR(tRel, tAbs)
 	}
 	
 	dat = fopen(m_pMeshFile->Name, "a");
@@ -621,10 +634,70 @@ void CRVLPSuLMVS::AppendToMeshFile(CRVL3DPose *pRelPose)
 
 	m_pMeshFile->nLocalMeshes++;
 
+	delete Mesh;
+
 	fclose(dat);
 	fclose(mtldat);
 }
 
+void CRVLPSuLMVS::CreateLocal3DMesh(CRVLPSuLM *pPSuLM0)
+{
+	CRVL3DPose NullPose;
+	double C[3 * 3];
+
+	RVLNULLMX3X3(C)
+
+	NullPose.Reset();
+
+	NullPose.m_C = C;
+
+	NullPose.m_ParamFlags = RVL3DPOSE_PARAM_FLAGS_COV_3D;
+
+	CRVLMem Mem;
+
+	Mem.Create(m_PSuLMBuilder.m_PSuLMList.m_nElements * sizeof(RVLPTRCHAIN_ELEMENT));
+
+	CRVLMem *pMemOld = m_PSuLMBuilder.m_PSuLMSubList.m_pMem;
+
+	m_PSuLMBuilder.m_PSuLMSubList.m_pMem = &Mem;
+
+	m_PSuLMBuilder.m_PSuLMSubList.RemoveAll();
+
+	m_PSuLMBuilder.GetLocalModels(NULL, &NullPose, pPSuLM0, m_PSuLMBuilder.m_LocalMapRadius / m_PSuLMBuilder.m_MinHybridLocalizationDist);
+
+	CreateMeshFile("Mesh-00000.obj");
+
+	FILE *fp = fopen("C:\\RVL\\Debug\\Local3DMesh.log", "w");
+
+	CRVLPSuLM *pPSuLM;
+
+	m_PSuLMBuilder.m_PSuLMSubList.Start();
+
+	while(m_PSuLMBuilder.m_PSuLMSubList.m_pNext)
+	{
+		pPSuLM = (CRVLPSuLM *)(m_PSuLMBuilder.m_PSuLMSubList.GetNext());
+
+		fprintf(fp, "%d\n", pPSuLM->m_Index);
+
+		m_iMCMem = (m_iMCMem + 1) % RVLSYS_MCMEMSIZE;
+
+		m_MCMem[m_iMCMem].Clear();		
+
+		m_PSuLMBuilder.m_pMCMem = m_MCMem + m_iMCMem;
+
+		m_PSuLMBuilder.m_ImageFileName = pPSuLM->m_FileName; 
+
+		m_pPSuLM = m_PSuLMBuilder.Create(RVLPSULMBUILDER_CREATEMODEL_FROM_IMAGE | RVLPSULMBUILDER_CREATEMODEL_IMAGE_FROM_FILE);
+
+		m_pRGBImage = cvLoadImage(pPSuLM->m_FileName);
+
+		AppendToMeshFile(&(pPSuLM->m_PoseRTAs));
+	}
+
+	m_PSuLMBuilder.m_PSuLMSubList.m_pMem = pMemOld;
+
+	fclose(fp);
+}
 
 void RVLPSuLMDisplayMouseCallback2(int event, int x, int y, int flags, void* vpData)
 {

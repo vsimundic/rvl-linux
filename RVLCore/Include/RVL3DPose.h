@@ -169,6 +169,7 @@ public:
 		InvLinearTransform3D(m_Rot, m_X, XSrc, XTgt);
 	}
 	void Reset(void);
+	void Diff(CRVL3DPose * pPose, double & dist, double & angle);
 };
 
 #endif // !defined(AFX_RVL3DPOSE_H__43E7FA49_799B_4BFA_8AE5_9D354E2FCB75__INCLUDED_)

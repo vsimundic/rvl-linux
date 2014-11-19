@@ -1,4 +1,5 @@
 #define RVLSYS_FLAGS_CREATE_GLOBAL_MESH		0x00010000
+#define RVLSYS_FLAGS_EDIT_MAP				0x00020000
 
 class CRVLPSuLMVS;
 
@@ -46,6 +47,7 @@ public:
 	void CreateMeshFile(char *MeshFileName);
 	void DeleteMeshFile();
 	void AppendToMeshFile(CRVL3DPose *pRelPose);
+	void CreateLocal3DMesh(CRVLPSuLM *pPSuLM0);
 
 public:
 	CRVLPSuLMBuilder m_PSuLMBuilder;

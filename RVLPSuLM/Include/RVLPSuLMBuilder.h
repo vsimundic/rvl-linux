@@ -639,6 +639,11 @@ public:
 										int nSMLineMatches = 0,
 										RVLPSULM_MATCH2 **AutoMatchArray_ = NULL,
 										int nAutoMatches_ = 0);
+	void DeleteConnection(	CRVLPSuLM *pPSuLM1,
+							CRVLPSuLM *pPSuLM2);
+	void DeleteConnection_(	CRVLPSuLM *pPSuLM1,
+							CRVLPSuLM *pPSuLM2);
+	void UpdateRelativePoseUncertainties();	
 
 private:
 	RVLPSULM_MSMATCH_DATA *HypothesesGetNextNode(	RVLPSULM_HG_NODE* pNode,
@@ -652,5 +657,5 @@ private:
 							RVLPSULM_MSMATCH_DATA *MatchList);
 	void PrintHypothesis(	FILE *fp, 
 							RVLPSULM_HG_NODE *pNode,
-							RVLPSULM_MSMATCH_DATA *MatchList);
+							RVLPSULM_MSMATCH_DATA *MatchList);	
 };
