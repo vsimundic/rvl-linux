@@ -49,6 +49,8 @@ public:
 	void DeleteMeshFile();
 	void AppendToMeshFile(CRVL3DPose *pRelPose);
 	void CreateLocal3DMesh(CRVLPSuLM *pPSuLM0);
+	void Validate();
+	void SaveValidation();
 
 public:
 	CRVLPSuLMBuilder m_PSuLMBuilder;
@@ -58,5 +60,4 @@ public:
 	RVL3DMESHFILE *m_pMeshFile;
 	int m_iSample;
 	CRVLPSuLMGroundTruth m_GroundTruth;
-	void Validate(void);
 };

@@ -19,6 +19,54 @@
 
 void MessageCanNotOpenFile(CRVLGUI *pGUI, char *FileName);
 
+void RVLPSuLMdemoGetNextHypothesis(CRVLPSuLMVS *pVS,
+								   int &iHypothesis,
+								   int diHypothesis,
+								   bool bFilterHypotheses,
+								   bool bFirst = false)
+{
+	int iHypothesis_ = iHypothesis;
+
+#ifdef RVLPSULMDEMO_DISPLAY_ONLY_REPRESENTATIVE_HYPOTHESES
+	if(!bFirst)
+		iHypothesis += diHypothesis;
+
+	RVLPSULM_HYPOTHESIS *pHypothesis;
+
+	int iHypothesisOutOfRange = (diHypothesis > 0 ? pVS->m_PSuLMBuilder.m_nHypotheses : -1);
+
+	while(iHypothesis != iHypothesisOutOfRange)
+	{
+		pHypothesis = pVS->m_PSuLMBuilder.m_HypothesisArray[iHypothesis];
+
+		if((pVS->m_Flags & RVLSYS_FLAGS_VALIDATION) && bFilterHypotheses)
+		{
+			if(pHypothesis->iRepresentative == 0xffffffff && pHypothesis->validation != -1)
+				break;
+		}
+		else
+		{
+#ifdef RVLPSULMDEMO_DISPLAY_ONLY_BEST_LOCAL_MODEL_HYPOTHESES
+			if(pHypothesis == pHypothesis->pMPSuLM->m_pHypothesis)
+				break;
+#else
+			if(pHypothesis->iRepresentative == 0xffffffff)
+				break;
+#endif
+		}
+
+		iHypothesis += diHypothesis;						
+	}
+
+#else
+	if(iHypothesis != iHypothesisOutOfRange)
+		iHypothesis += diHypothesis;
+#endif
+
+	if(iHypothesis == iHypothesisOutOfRange)
+		iHypothesis = iHypothesis_;
+}
+
 int main(int argc, char* argv[])
 {
 	CRVL3DPose NullPose;
@@ -244,6 +292,7 @@ int main(int argc, char* argv[])
 	bool bContinuous = false;
 	bool bRecord = false;
 	bool bFrames = false;
+	bool bFilterHypotheses = true;
 	//DWORD mDisplayPSuLMFlags = (RVLPSULM_DISPLAY_SURFACES | RVLPSULM_DISPLAY_VECTORS | RVLPSULM_DISPLAY_SAMPLES);
 	DWORD mDisplayPSuLMFlags = (RVLPSULM_DISPLAY_SURFACES | RVLPSULM_DISPLAY_ELLIPSES | RVLPSULM_DISPLAY_LINES | RVLPSULM_DISPLAY_VECTORS);
 	if(VS.m_Flags & RVLSYS_FLAGS_VALIDATION)
@@ -517,32 +566,10 @@ int main(int argc, char* argv[])
 		}	// if(VS.m_Flags & RVLSYS_FLAGS_EDIT_MAP)
 		else
 		{
-#ifdef RVLPSULMDEMO_DISPLAY_ONLY_REPRESENTATIVE_HYPOTHESES
 			iHypothesis = 0;
 
-			if(VS.m_PSuLMBuilder.m_nHypotheses > 0)
-			{
-				while(iHypothesis < VS.m_PSuLMBuilder.m_nHypotheses)
-				{
-					pHypothesis = VS.m_PSuLMBuilder.m_HypothesisArray[iHypothesis];
+			RVLPSuLMdemoGetNextHypothesis(&VS, iHypothesis, 1, bFilterHypotheses, true);
 
-#ifdef RVLPSULMDEMO_DISPLAY_ONLY_BEST_LOCAL_MODEL_HYPOTHESES
-					if(pHypothesis == pHypothesis->pMPSuLM->m_pHypothesis)
-						break;
-#else
-					if(pHypothesis->iRepresentative == 0xffffffff)
-						break;
-#endif
-
-					iHypothesis++;
-				}
-
-				if(iHypothesis >= VS.m_PSuLMBuilder.m_nHypotheses)
-					iHypothesis = 0;
-			}
-#else
-			iHypothesis = 0;
-#endif
 			VS.m_pPSuLM->m_Index = 0xffffffff;
 		}
 
@@ -718,6 +745,11 @@ int main(int argc, char* argv[])
 				bNextImage = false;
 
 				break;
+			case 'F':
+				if(VS.m_Flags & RVLSYS_FLAGS_VALIDATION)
+					bFilterHypotheses = !bFilterHypotheses;
+
+				break;
 			case 'g':	// global localization on/off
 				VS.m_PSuLMBuilder.m_Flags ^= RVLPSULMBUILDER_FLAG_GLOBAL;
 
@@ -754,11 +786,36 @@ int main(int argc, char* argv[])
 				bRefresh = true;
 
 				break;
-#ifdef RVLVTK
+			case 'M':
+				//key_ = GUI.Message("Run UpdateRelativePoseUncertainties()?", 600, 100, cvScalar(0, 128, 255));
+
+				//if(key_ == 'y')
+				//{
+				//	VS.m_PSuLMBuilder.UpdateRelativePoseUncertainties();
+
+				//	GUI.Message("UpdateRelativePoseUncertainties() completed.", 600, 100, cvScalar(0, 128, 255));
+				//}
+
+				if(VS.m_Flags & RVLSYS_FLAGS_EDIT_MAP)
+				{
+					key_ = GUI.Message("Run CreateLocal3DMesh()?", 600, 100, cvScalar(0, 128, 255));
+
+					if(key_ == 'y')
+					{
+						VS.CreateLocal3DMesh(pPSuLM);
+
+						GUI.Message("CreateLocal3DMesh() completed.", 600, 100, cvScalar(0, 128, 255));
+					}
+				}
+
+				bRefresh = true;
+
+				break;
 			case 'o':
 				bNextImage = false;
 
 				break;
+#ifdef RVLVTK
 			case 'p':
 				if (bVTKRendererActive)
 				{
@@ -856,29 +913,46 @@ int main(int argc, char* argv[])
 				bRefresh = true;
 
 				break;
-			case '*':
-				//key_ = GUI.Message("Run UpdateRelativePoseUncertainties()?", 600, 100, cvScalar(0, 128, 255));
-
-				//if(key_ == 'y')
-				//{
-				//	VS.m_PSuLMBuilder.UpdateRelativePoseUncertainties();
-
-				//	GUI.Message("UpdateRelativePoseUncertainties() completed.", 600, 100, cvScalar(0, 128, 255));
-				//}
-
-				if(VS.m_Flags & RVLSYS_FLAGS_EDIT_MAP)
+			case '+':
+				if(VS.m_Flags & RVLSYS_FLAGS_VALIDATION)
 				{
-					key_ = GUI.Message("Run CreateLocal3DMesh()?", 600, 100, cvScalar(0, 128, 255));
+					pHypothesis = VS.m_PSuLMBuilder.m_HypothesisArray[iHypothesis];
 
-					if(key_ == 'y')
+					if(pHypothesis)
 					{
-						VS.CreateLocal3DMesh(pPSuLM);
-
-						GUI.Message("CreateLocal3DMesh() completed.", 600, 100, cvScalar(0, 128, 255));
+						pHypothesis->validation = 1;
 					}
+
+					bRefresh = true;
 				}
 
-				bRefresh = true;
+				break;
+			case '-':
+				if(VS.m_Flags & RVLSYS_FLAGS_VALIDATION)
+				{
+					pHypothesis = VS.m_PSuLMBuilder.m_HypothesisArray[iHypothesis];
+
+					if(pHypothesis)
+					{
+						pHypothesis->validation = -1;
+					}
+
+					bRefresh = true;
+				}
+
+				break;
+			case '?':
+				if(VS.m_Flags & RVLSYS_FLAGS_VALIDATION)
+				{
+					pHypothesis = VS.m_PSuLMBuilder.m_HypothesisArray[iHypothesis];
+
+					if(pHypothesis)
+					{
+						pHypothesis->validation = 0;
+					}
+
+					bRefresh = true;
+				}
 
 				break;
 			case 0x00000008:	// backspace
@@ -907,32 +981,7 @@ int main(int argc, char* argv[])
 			case 0x00260000:	// Up
 				if(VS.m_PSuLMBuilder.m_nHypotheses > 0)
 				{
-#ifdef RVLPSULMDEMO_DISPLAY_ONLY_REPRESENTATIVE_HYPOTHESES
-					iHypothesis_ = iHypothesis;
-
-					iHypothesis--;
-
-					while(iHypothesis >= 0)
-					{
-						pHypothesis = VS.m_PSuLMBuilder.m_HypothesisArray[iHypothesis];
-
-#ifdef RVLPSULMDEMO_DISPLAY_ONLY_BEST_LOCAL_MODEL_HYPOTHESES
-						if(pHypothesis == pHypothesis->pMPSuLM->m_pHypothesis)
-							break;
-#else
-						if(pHypothesis->iRepresentative == 0xffffffff)
-							break;
-#endif
-
-						iHypothesis--;						
-					}
-
-					if(iHypothesis < 0)
-						iHypothesis = iHypothesis_;
-#else
-					if(iHypothesis > 0)
-						iHypothesis--;
-#endif
+					RVLPSuLMdemoGetNextHypothesis(&VS, iHypothesis, -1, bFilterHypotheses);
 
 					bRefresh = true;
 				}
@@ -947,32 +996,7 @@ int main(int argc, char* argv[])
 			case 0x00280000:	// Down
 				if(VS.m_PSuLMBuilder.m_nHypotheses > 0)
 				{
-#ifdef RVLPSULMDEMO_DISPLAY_ONLY_REPRESENTATIVE_HYPOTHESES
-					iHypothesis_ = iHypothesis;
-
-					iHypothesis++;
-
-					while(iHypothesis < VS.m_PSuLMBuilder.m_nHypotheses)
-					{
-						pHypothesis = VS.m_PSuLMBuilder.m_HypothesisArray[iHypothesis];
-
-#ifdef RVLPSULMDEMO_DISPLAY_ONLY_BEST_LOCAL_MODEL_HYPOTHESES
-						if(pHypothesis == pHypothesis->pMPSuLM->m_pHypothesis)
-							break;
-#else
-						if(pHypothesis->iRepresentative == 0xffffffff)
-							break;
-#endif
-
-						iHypothesis++;						
-					}
-
-					if(iHypothesis >= VS.m_PSuLMBuilder.m_nHypotheses)
-						iHypothesis = iHypothesis_;
-#else
-					if(iHypothesis < VS.m_PSuLMBuilder.m_nHypotheses - 1)
-						iHypothesis++;
-#endif
+					RVLPSuLMdemoGetNextHypothesis(&VS, iHypothesis, 1, bFilterHypotheses);
 
 					bRefresh = true;
 				}
@@ -1116,6 +1140,9 @@ int main(int argc, char* argv[])
 			}	
 			else
 				RVLGetNextFileName(VS.m_ImageFileName, "00000-LW.bmp", 10000);
+
+			if(VS.m_Flags & RVLSYS_FLAGS_VALIDATION)
+				VS.SaveValidation();
 		}
 
 		if(!bRecord)

@@ -702,8 +702,6 @@ void CRVLPSuLMVS::Validate()
 {
 	RVLPSULM_GROUND_TRUTH_MATCH **GTMatch = new RVLPSULM_GROUND_TRUTH_MATCH *[m_PSuLMBuilder.m_PSuLMList.m_nElements];
 
-	FILE *fp = fopen("C:\\RVL\\ExpRez\\Validation.log", "a");
-
 	int iSample = RVLGetFileNumber(m_ImageFileName, "00000-LW.bmp");
 
 	int nGTMatches;
@@ -724,7 +722,7 @@ void CRVLPSuLMVS::Validate()
 	RVLPSULM_NEIGHBOR2 *pNeighbor;
 	double *RMMr, *tMMr;
 	bool bConnected;
-	double P, dist, angle;
+	double dist, angle;
 
 	for(i = 0; i < m_PSuLMBuilder.m_nHypotheses; i++)
 	{
@@ -732,10 +730,6 @@ void CRVLPSuLMVS::Validate()
 
 		if(pHypothesis->iRepresentative != 0xffffffff)
 			continue;
-
-		P = exp(pHypothesis->Probability - pHypothesis->pMPSuLM->m_pHypothesis->Probability) / pHypothesis->pMPSuLM->m_PriorProbabilityLocal;
-
-		fprintf(fp, "%d\t%d\t%lf\t", iSample, pHypothesis->Index, P);
 
 		pHypothesis->validation = -1;
 
@@ -794,6 +788,31 @@ void CRVLPSuLMVS::Validate()
 					pHypothesis->validation = 0;
 			}
 		}	// for each GT match
+	}	// for each hypothesis
+
+	delete[] GTMatch;
+}
+
+void CRVLPSuLMVS::SaveValidation()
+{
+	int iSample = RVLGetFileNumber(m_ImageFileName, "00000-LW.bmp");
+
+	FILE *fp = fopen("C:\\RVL\\ExpRez\\Validation.log", "a");
+
+	int i;
+	RVLPSULM_HYPOTHESIS *pHypothesis;
+	double P;
+
+	for(i = 0; i < m_PSuLMBuilder.m_nHypotheses; i++)
+	{
+		pHypothesis = m_PSuLMBuilder.m_HypothesisArray[i];
+
+		if(pHypothesis->iRepresentative != 0xffffffff)
+			continue;
+
+		P = exp(pHypothesis->Probability - pHypothesis->pMPSuLM->m_pHypothesis->Probability) / pHypothesis->pMPSuLM->m_PriorProbabilityLocal;
+
+		fprintf(fp, "%d\t%d\t%lf\t", iSample, pHypothesis->Index, P);
 
 		switch(pHypothesis->validation){
 		case 1:
@@ -807,11 +826,9 @@ void CRVLPSuLMVS::Validate()
 		case -1:
 			fprintf(fp, "-\n");
 		}
-	}	// for each hypothesis
+	}
 
 	fclose(fp);
-
-	delete[] GTMatch;
 }
 
 void RVLPSuLMDisplayMouseCallback2(int event, int x, int y, int flags, void* vpData)
