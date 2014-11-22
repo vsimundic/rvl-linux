@@ -692,6 +692,8 @@ int main(int argc, char* argv[])
 
 			switch(key){
 			case '0':
+				pHypothesis = VS.m_PSuLMBuilder.m_HypothesisArray[iHypothesis];
+
 				if(pHypothesis)
 					VS.m_GroundTruth.Add(RVLGetFileNumber(VS.m_ImageFileName, "00000-LW.bmp"), pHypothesis->pMPSuLM->m_Index, &(pHypothesis->PoseSM));
 

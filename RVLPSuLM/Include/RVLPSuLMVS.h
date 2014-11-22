@@ -46,7 +46,7 @@ public:
 	void PSuLMBasedRLMUpdate(DWORD Flags);
 	void CreateParamList();
 	void CreateMeshFile(char *MeshFileName);
-	void DeleteMeshFile();
+	void ClearMeshFileData();
 	void AppendToMeshFile(CRVL3DPose *pRelPose);
 	void CreateLocal3DMesh(CRVLPSuLM *pPSuLM0);
 	void Validate();

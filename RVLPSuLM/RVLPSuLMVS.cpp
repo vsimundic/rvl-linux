@@ -16,7 +16,7 @@ CRVLPSuLMVS::~CRVLPSuLMVS(void)
 	if(m_GroundTruth.m_nMatches > 0)
 		m_GroundTruth.Save();
 
-	DeleteMeshFile();
+	ClearMeshFileData();
 }
 
 void CRVLPSuLMVS::CreateParamList()
@@ -562,7 +562,7 @@ void CRVLPSuLMVS::CreateMeshFile(char *MeshFileName)
 	m_pMeshFile->TextureType = 2;
 }
 
-void CRVLPSuLMVS::DeleteMeshFile()
+void CRVLPSuLMVS::ClearMeshFileData()
 {
 	if(m_pMeshFile == NULL)
 		return;

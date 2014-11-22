@@ -21499,7 +21499,7 @@ void CRVLPSuLMBuilder::DisplayHypothesisData(	CRVLFigure *pFig,
 
 	if(pHypothesis)
 	{
-		sprintf(str, "Hypothesis %d", pHypothesis->Index);
+		sprintf(str, "Hypothesis %d (%d\/%d)", pHypothesis->Index, iHypothesis, m_nHypotheses);
 
 		cvPutText(pDataDisplay, str, cvPoint(0, (++iTextLine) * pFig->m_FontSize), &pFig->m_Font,  cvScalar(0, 0, 0));
 
