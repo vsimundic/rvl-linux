@@ -15,13 +15,14 @@
 #endif
 
 #define RVLPSULMDEMO_DISPLAY_ONLY_REPRESENTATIVE_HYPOTHESES
-//#define RVLPSULMDEMO_DISPLAY_ONLY_BEST_LOCAL_MODEL_HYPOTHESES
+#define RVLPSULMDEMO_DISPLAY_ONLY_BEST_LOCAL_MODEL_HYPOTHESES
 
 void MessageCanNotOpenFile(CRVLGUI *pGUI, char *FileName);
 
 void RVLPSuLMdemoGetNextHypothesis(CRVLPSuLMVS *pVS,
 								   int &iHypothesis,
 								   int diHypothesis,
+								   char *MatchMatrixGT,
 								   bool bFilterHypotheses,
 								   bool bFirst = false)
 {
@@ -39,9 +40,11 @@ void RVLPSuLMdemoGetNextHypothesis(CRVLPSuLMVS *pVS,
 	{
 		pHypothesis = pVS->m_PSuLMBuilder.m_HypothesisArray[iHypothesis];
 
-		if((pVS->m_Flags & RVLSYS_FLAGS_VALIDATION) && bFilterHypotheses)
+		if((pVS->m_Flags & RVLSYS_FLAGS_VALIDATION) && bFilterHypotheses && MatchMatrixGT != NULL)
 		{
-			if(pHypothesis->iRepresentative == 0xffffffff && pHypothesis->validation != -1)
+			//if(pHypothesis->iRepresentative == 0xffffffff && pHypothesis->validation != -1)
+			//	break;
+			if(pHypothesis == pHypothesis->pMPSuLM->m_pHypothesis && MatchMatrixGT[pHypothesis->pMPSuLM->m_Index] >= 0)
 				break;
 		}
 		else
@@ -323,7 +326,7 @@ int main(int argc, char* argv[])
 
 	int iHypothesis;
 	int key;
-	//int iSample;
+	int iSample;
 	bool bRefresh;
 	bool bNextImage;
 	bool bBackwards;
@@ -342,6 +345,7 @@ int main(int argc, char* argv[])
 #endif	
 	int key_;
 	int SampleStep;
+	char *MatchMatrixGT;
 
 	do
 	{
@@ -479,12 +483,21 @@ int main(int argc, char* argv[])
 			pHSVImage->channelSeq[1] = 'G';
 
 			pHSVImage->channelSeq[2] = 'B';
-
-			if(VS.m_Flags & RVLSYS_FLAGS_VALIDATION)
-				VS.Validate();
 		}	// if(!bRecord)
 
 		// display the results
+
+		iSample = RVLGetFileNumber(VS.m_ImageFileName, "00000-LW.bmp");
+
+		// computing match matrix for validation of the hypothesis evaluation results
+
+		int MatchMatrixOffset = iSample * (VS.m_PSuLMBuilder.m_maxPSuLMIndex + 1);
+
+		MatchMatrixGT = (iSample >= 0 && iSample < VS.m_nSamples ? VS.m_MatchMatrixGT + MatchMatrixOffset : NULL);
+
+		VS.ComputeMatchMatrix(iSample);
+
+		/////
 
 		if(VS.m_Flags & RVLSYS_FLAGS_EDIT_MAP)
 		{
@@ -568,7 +581,7 @@ int main(int argc, char* argv[])
 		{
 			iHypothesis = 0;
 
-			RVLPSuLMdemoGetNextHypothesis(&VS, iHypothesis, 1, bFilterHypotheses, true);
+			RVLPSuLMdemoGetNextHypothesis(&VS, iHypothesis, 1, MatchMatrixGT, bFilterHypotheses, true);
 
 			VS.m_pPSuLM->m_Index = 0xffffffff;
 		}
@@ -621,9 +634,9 @@ int main(int argc, char* argv[])
 			if(bDisplayHypothesis)
 			{
 				VS.m_PSuLMBuilder.DisplayHypothesis(&GUI, pFig, pFig2, VS.m_pPSuLM, mDisplayPSuLMFlags, pInputImage_,
-					pPrevRGBImage, iHypothesis);
+					pPrevRGBImage, iHypothesis);				
 
-				VS.m_PSuLMBuilder.DisplayHypothesisData(pFig, VS.m_pPSuLM, mDisplayPSuLMFlags, iHypothesis);
+				VS.m_PSuLMBuilder.DisplayHypothesisData(pFig, VS.m_pPSuLM, MatchMatrixGT, mDisplayPSuLMFlags, iHypothesis);
 			}
 
 			if(bDisplayPSuLM)
@@ -665,6 +678,7 @@ int main(int argc, char* argv[])
 			MouseCallbackData.mDisplayPSuLMFlags = mDisplayPSuLMFlags;
 			MouseCallbackData.iHypothesis = (VS.m_PSuLMBuilder.m_nHypotheses > 0 ? iHypothesis : -1);
 			MouseCallbackData.pImage = pInputImage_;
+			MouseCallbackData.MatchMatrixGT = MatchMatrixGT;
 
 			GUI.ShowFigure(pFig);	
 
@@ -672,6 +686,7 @@ int main(int argc, char* argv[])
 							
 			MouseCallbackData2.mDisplayPSuLMFlags = mDisplayPSuLMFlags;
 			MouseCallbackData2.iHypothesis = (VS.m_PSuLMBuilder.m_nHypotheses > 0 ? iHypothesis : -1);
+			MouseCallbackData2.MatchMatrixGT = MatchMatrixGT;
 
 			GUI.ShowFigure(pFig2);	
 
@@ -749,7 +764,11 @@ int main(int argc, char* argv[])
 				break;
 			case 'F':
 				if(VS.m_Flags & RVLSYS_FLAGS_VALIDATION)
+				{
 					bFilterHypotheses = !bFilterHypotheses;
+		
+					bRefresh = true;
+				}
 
 				break;
 			case 'g':	// global localization on/off
@@ -877,8 +896,20 @@ int main(int argc, char* argv[])
 				bRefresh = true;
 
 				break;
-#ifdef RVLVTK
 			case 'v':
+				if(VS.m_Flags & RVLSYS_FLAGS_VALIDATION)
+				{
+					key_ = GUI.Message("Run validation? (If yes, press 'y')", 500, 100, cvScalar(0, 128, 255));
+
+					if(key_ == 'y')
+						VS.Validate();
+
+					bRefresh = true;
+				}
+
+				break;
+#ifdef RVLVTK
+			case 'V':
 				RVLDisplaySegmentedMesh3D(&Renderer, &(VS.m_AImage.m_C2DRegion.m_ObjectList), nObjects, w, h, pointmap, VS.m_PSD.m_Point3DMap);
 
 				bRefresh = true;
@@ -922,7 +953,7 @@ int main(int argc, char* argv[])
 
 					if(pHypothesis)
 					{
-						pHypothesis->validation = 1;
+						MatchMatrixGT[pHypothesis->pMPSuLM->m_Index] = 1;
 					}
 
 					bRefresh = true;
@@ -936,7 +967,7 @@ int main(int argc, char* argv[])
 
 					if(pHypothesis)
 					{
-						pHypothesis->validation = -1;
+						MatchMatrixGT[pHypothesis->pMPSuLM->m_Index] = -1;
 					}
 
 					bRefresh = true;
@@ -950,7 +981,7 @@ int main(int argc, char* argv[])
 
 					if(pHypothesis)
 					{
-						pHypothesis->validation = 0;
+						MatchMatrixGT[pHypothesis->pMPSuLM->m_Index] = 0;
 					}
 
 					bRefresh = true;
@@ -983,7 +1014,7 @@ int main(int argc, char* argv[])
 			case 0x00260000:	// Up
 				if(VS.m_PSuLMBuilder.m_nHypotheses > 0)
 				{
-					RVLPSuLMdemoGetNextHypothesis(&VS, iHypothesis, -1, bFilterHypotheses);
+					RVLPSuLMdemoGetNextHypothesis(&VS, iHypothesis, -1, MatchMatrixGT, bFilterHypotheses);
 
 					bRefresh = true;
 				}
@@ -998,7 +1029,7 @@ int main(int argc, char* argv[])
 			case 0x00280000:	// Down
 				if(VS.m_PSuLMBuilder.m_nHypotheses > 0)
 				{
-					RVLPSuLMdemoGetNextHypothesis(&VS, iHypothesis, 1, bFilterHypotheses);
+					RVLPSuLMdemoGetNextHypothesis(&VS, iHypothesis, 1, MatchMatrixGT, bFilterHypotheses);
 
 					bRefresh = true;
 				}
@@ -1109,6 +1140,15 @@ int main(int argc, char* argv[])
 		//if(!bKinect && bNextImage)
 		if(bNextImage)
 		{
+			//if(VS.m_Flags & RVLSYS_FLAGS_VALIDATION)
+			//{
+			//	key_ = GUI.Message("Do you want to save the validation results for this image? (If yes, press 'y')", 700, 100, cvScalar(0, 128, 255));
+
+			//	if(key_ == 'y')
+			//		VS.SaveValidation();
+			//	VS.StoreHypothesesToMatchMatrix(RVLGetFileNumber(VS.m_ImageFileName, "00000-LW.bmp"));
+			//}
+
 			if(bKinect)
 			{
 				int iSample = RVLGetFileNumber(VS.m_ImageFileName, "00000-LW.bmp");
@@ -1142,15 +1182,20 @@ int main(int argc, char* argv[])
 			}	
 			else
 				RVLGetNextFileName(VS.m_ImageFileName, "00000-LW.bmp", 10000);
-
-			if(VS.m_Flags & RVLSYS_FLAGS_VALIDATION)
-				VS.SaveValidation();
 		}
 
 		if(!bRecord)
 			VS.m_Mem.Clear();
 	}
 	while(key != 27);
+
+	if(VS.m_Flags & RVLSYS_FLAGS_VALIDATION)
+	{
+		key_ = GUI.Message("Do you want to save match matrix? (If yes, press 'y')", 600, 100, cvScalar(0, 128, 255));
+
+		if(key_ == 'y')
+			VS.SaveMatchMatrix();
+	}
 
 	// free memory
 

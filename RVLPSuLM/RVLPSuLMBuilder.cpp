@@ -21409,6 +21409,7 @@ void CRVLPSuLMBuilder::DisplayHypothesis(CRVLGUI *pGUI,
 
 void CRVLPSuLMBuilder::DisplayHypothesisData(	CRVLFigure *pFig, 
 												CRVLPSuLM *pSPSuLM,
+												char *MatchMatrixGT,
 												DWORD Flags,
 												int iHypothesis,
 												CRVL3DSurface2 *pSelectedSurface,
@@ -21499,7 +21500,7 @@ void CRVLPSuLMBuilder::DisplayHypothesisData(	CRVLFigure *pFig,
 
 	if(pHypothesis)
 	{
-		sprintf(str, "Hypothesis %d (%d\/%d)", pHypothesis->Index, iHypothesis, m_nHypotheses);
+		sprintf(str, "Hypothesis %d (%d/%d)", pHypothesis->Index, iHypothesis, m_nHypotheses);
 
 		cvPutText(pDataDisplay, str, cvPoint(0, (++iTextLine) * pFig->m_FontSize), &pFig->m_Font,  cvScalar(0, 0, 0));
 
@@ -21522,33 +21523,7 @@ void CRVLPSuLMBuilder::DisplayHypothesisData(	CRVLFigure *pFig,
 			sprintf(str, "Representative=%d", pHypothesis_->Index);
 		}
 		else
-		{
-			if(Flags & RVLPSULM_DISPLAY_VALIDATION)
-			{
-				char validation;
-
-				switch(pHypothesis->validation){
-				case 1:
-					validation = '+';
-
-					break;
-				case 0:
-					validation = '?';
-
-					break;
-				case -1:
-					validation = '-';
-
-					break;
-				default:
-					validation = ' ';
-				}
-
-				sprintf(str, "REPRESENTATIVE (%c)", validation);
-			}
-			else
-				sprintf(str, "REPRESENTATIVE");
-		}
+			sprintf(str, "REPRESENTATIVE");
 
 		cvPutText(pDataDisplay, str, cvPoint(0, (++iTextLine) * pFig->m_FontSize), &pFig->m_Font,  cvScalar(0, 0, 0));
 
@@ -21565,6 +21540,32 @@ void CRVLPSuLMBuilder::DisplayHypothesisData(	CRVLFigure *pFig,
 
 		if(pHypothesis == pHypothesis->pMPSuLM->m_pHypothesis)
 		{
+			char validation;
+
+			if((Flags & RVLPSULM_DISPLAY_VALIDATION) && MatchMatrixGT != NULL)
+			{
+				switch(MatchMatrixGT[pHypothesis->pMPSuLM->m_Index]){
+				case 1:
+					validation = '+';
+
+					break;
+				case 0:
+					validation = '?';
+
+					break;
+				case -1:
+					validation = '-';
+
+					break;
+				default:
+					validation = ' ';
+				}
+
+				sprintf(str, "Manual validation: %c", validation);
+
+				cvPutText(pDataDisplay, str, cvPoint(0, (++iTextLine) * pFig->m_FontSize), &pFig->m_Font,  cvScalar(0, 0, 0));
+			}
+
 			//sprintf(str, "Probability Local 5DoF = %lf", m_BestHypothesisProbability5DOF);
 			sprintf(str, "Probability Local 5DoF = %lf", pHypothesis->pMPSuLM->m_PosteriorProbabilityLocal5DOF);
 
@@ -22159,7 +22160,7 @@ void CRVLPSuLMBuilder::UpdateRelativePoseUncertainties()
 	RVLPSULM_HYPOTHESIS *pHypothesis;
 	double dist, angle;
 	BYTE result;	// 0 - OK; 1 - large error; 2 - no hypotheses
-	double invR[9], invt[3];
+	//double invR[9], invt[3];
 	double *R, *t;
 
 	for(i = 0; i < m_maxPSuLMIndex; i++)

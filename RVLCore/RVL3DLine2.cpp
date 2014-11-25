@@ -196,6 +196,9 @@ bool CRVL3DLine2::Match(	CRVL3DObject *pObject_,
 							double &MatchQuality,
 							DWORD Flags)
 {
+	double minrOverlap = 0.4;
+	//double minrOverlap = 0.0;
+
 	RVL3DLINE_EXTENDED_DATA *pData = (RVL3DLINE_EXTENDED_DATA *)m_pData;
 
 	// coarse orientation matching
@@ -254,12 +257,12 @@ bool CRVL3DLine2::Match(	CRVL3DObject *pObject_,
 
 		double rOverlap = dwo / pData->len;
 
-		if(rOverlap < 0.4)
+		if(rOverlap < minrOverlap)
 			return false;
 
 		double rOverlap_ = dwo / pData_->len;
 
-		if(rOverlap_ < 0.4)
+		if(rOverlap_ < minrOverlap)
 			return false;
 
 		// central point of overlapping segment
