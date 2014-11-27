@@ -3,16 +3,33 @@
 #include "RVLPCS.h"
 #include "RVLRLM.h"
 #include "RVLPSuLMBuilder.h"
+#include "RVLPSuLMGroundTruth.h"
 #include "RVLPSuLMVS.h"
 
 CRVLPSuLMVS::CRVLPSuLMVS(void)
 {
 	m_pMeshFile = NULL;
+	m_MatchMatrix = NULL;
+	m_MatchMatrixGT = NULL;
+	//m_HypothesisArrayGT = NULL;
+	m_nSamples = 0;
 }
 
 CRVLPSuLMVS::~CRVLPSuLMVS(void)
 {
-	DeleteMeshFile();
+	if(m_GroundTruth.m_nMatches > 0)
+		m_GroundTruth.Save();
+
+	ClearMeshFileData();
+
+	if(m_MatchMatrix)
+		delete[] m_MatchMatrix;
+
+	if(m_MatchMatrixGT)
+		delete[] m_MatchMatrixGT;
+
+	//if(m_HypothesisArrayGT)
+	//	delete[] m_HypothesisArrayGT;
 }
 
 void CRVLPSuLMVS::CreateParamList()
@@ -31,6 +48,9 @@ void CRVLPSuLMVS::CreateParamList()
 	m_ParamList.AddID(pParamData, "yes", RVLSYS_FLAGS_CREATE_GLOBAL_MESH);
 	pParamData = m_ParamList.AddParam("VS.EditMap", RVLPARAM_TYPE_FLAG, &m_Flags);
 	m_ParamList.AddID(pParamData, "yes", RVLSYS_FLAGS_EDIT_MAP);
+	pParamData = m_ParamList.AddParam("VS.Validation", RVLPARAM_TYPE_FLAG, &m_Flags);
+	m_ParamList.AddID(pParamData, "yes", RVLSYS_FLAGS_VALIDATION);
+	pParamData = m_ParamList.AddParam("VS.GroundTruthFileName", RVLPARAM_TYPE_STRING, &(m_GroundTruth.m_FileName));
 }
 
 void CRVLPSuLMVS::Init(char * CfgFile2Name)
@@ -89,6 +109,12 @@ void CRVLPSuLMVS::Init(char * CfgFile2Name)
 
 	//	fclose(fp);
 	//}
+
+	m_GroundTruth.Init();
+
+	m_GroundTruth.Load();
+
+	LoadMatchMatrix();
 
 	if(m_Flags & RVLSYS_FLAGS_EDIT_MAP)
 		m_PSuLMBuilder.m_Flags &= ~(RVLPSULMBUILDER_FLAG_MODE | RVLPSULMBUILDER_FLAG_MAPBUILDING);
@@ -550,7 +576,7 @@ void CRVLPSuLMVS::CreateMeshFile(char *MeshFileName)
 	m_pMeshFile->TextureType = 2;
 }
 
-void CRVLPSuLMVS::DeleteMeshFile()
+void CRVLPSuLMVS::ClearMeshFileData()
 {
 	if(m_pMeshFile == NULL)
 		return;
@@ -581,9 +607,6 @@ void CRVLPSuLMVS::AppendToMeshFile(CRVL3DPose *pRelPose)
 	double *tRel = pRelPose->m_X;
 	double *RAbs = m_pMeshFile->LastLocalMeshPose.m_Rot;
 	double *tAbs = m_pMeshFile->LastLocalMeshPose.m_X;
-
-	double R[3 * 3];
-	double t[3 * 3];
 
 	if(m_pMeshFile->nLocalMeshes == 0)
 	{
@@ -687,6 +710,413 @@ void CRVLPSuLMVS::CreateLocal3DMesh(CRVLPSuLM *pPSuLM0)
 	m_PSuLMBuilder.m_PSuLMSubList.m_pMem = pMemOld;
 
 	fclose(fp);
+}
+
+void CRVLPSuLMVS::Validate()
+{
+	RVLPSULM_GROUND_TRUTH_MATCH **GTMatch = new RVLPSULM_GROUND_TRUTH_MATCH *[m_PSuLMBuilder.m_PSuLMList.m_nElements];
+
+	int iSample = RVLGetFileNumber(m_ImageFileName, "00000-LW.bmp");
+
+	int nGTMatches;
+
+	m_GroundTruth.Get(iSample, GTMatch, nGTMatches);
+
+	CRVL3DPose ePose;
+	CRVL3DPose PoseSMr;
+
+	double *RSMr = PoseSMr.m_Rot;
+	double *tSMr = PoseSMr.m_X;
+
+	int i, j;
+	RVLPSULM_HYPOTHESIS *pHypothesis;
+	RVLPSULM_GROUND_TRUTH_MATCH *pGTMatch;
+	double *RSM, *tSM;
+	CRVLPSuLM *pPSuLMr;
+	RVLPSULM_NEIGHBOR2 *pNeighbor;
+	double *RMMr, *tMMr;
+	bool bConnected;
+	double dist, angle;
+
+	for(i = 0; i < m_PSuLMBuilder.m_nHypotheses; i++)
+	{
+		pHypothesis = m_PSuLMBuilder.m_HypothesisArray[i];
+
+		if(pHypothesis->iRepresentative != 0xffffffff)
+			continue;
+
+		pHypothesis->validation = -1;
+
+		RSM = pHypothesis->PoseSM.m_Rot;
+		tSM = pHypothesis->PoseSM.m_X;
+
+		for(j = 0; j < nGTMatches; j++)
+		{
+			pGTMatch = GTMatch[j];
+
+			if(pGTMatch->iModel == pHypothesis->pMPSuLM->m_Index)
+			{
+				RVLCOPYMX3X3(RSM, RSMr)
+				RVLCOPY3VECTOR(tSM, tSMr)
+
+				bConnected = true;
+			}
+			else
+			{
+				pPSuLMr = m_PSuLMBuilder.m_PSuLMArray[pGTMatch->iModel];
+
+				pNeighbor = (RVLPSULM_NEIGHBOR2 *)(pPSuLMr->m_LocalMap.pFirst);
+
+				while(pNeighbor)
+				{
+					if(pNeighbor->pMPSuLM == pHypothesis->pMPSuLM)
+						break;
+
+					pNeighbor = (RVLPSULM_NEIGHBOR2 *)(pNeighbor->pNext);
+				}
+
+				if(pNeighbor)
+				{
+					RMMr = pNeighbor->PoseRel.m_Rot;
+					tMMr = pNeighbor->PoseRel.m_X;
+
+					RVLCOMPTRANSF3D(RMMr, tMMr, RSM, tSM, RSMr, tSMr)
+
+					bConnected = true;
+				}
+				else
+					bConnected = false;
+			}
+
+			if(bConnected)
+			{
+				pGTMatch->PoseSM.Diff(&PoseSMr, dist, angle);
+
+				if(dist <= 200.0 && angle <= 15.0 * DEG2RAD)
+				{
+					pHypothesis->validation = 1;
+
+					break;
+				}
+				else if(dist <= 1000.0 && angle <= 60.0 * DEG2RAD)
+					pHypothesis->validation = 0;
+			}
+		}	// for each GT match
+	}	// for each hypothesis
+
+	char *MatchMatrixGT = m_MatchMatrixGT + iSample * (m_PSuLMBuilder.m_maxPSuLMIndex + 1);
+
+	CRVLPSuLM *pPSuLM;
+
+	for(i = 0; i <= m_PSuLMBuilder.m_maxPSuLMIndex; i++)
+	{
+		MatchMatrixGT[i] = -2;
+
+		pPSuLM = m_PSuLMBuilder.m_PSuLMArray[i];
+
+		if(pPSuLM)
+			if(pPSuLM->m_pHypothesis)
+				MatchMatrixGT[i] = pPSuLM->m_pHypothesis->validation;
+	}
+
+	delete[] GTMatch;
+}
+
+void CRVLPSuLMVS::LoadMatchMatrix()
+{
+	m_nSamples = 0;
+
+	FILE *fp = fopen("C:\\RVL\\ExpRez\\Validation.log", "r");
+
+	if(fp == NULL)
+		return;
+
+	//m_nMatches = 0;	
+
+	//char line[200];
+	//int iSample;
+
+	//while(!feof(fp))
+	//{
+	//	fgets(line, 200, fp);
+
+	//	m_nMatches++;
+	//}
+
+	//fclose(fp);
+
+	//m_nMatches--;
+
+	//if(m_HypothesisArrayGT)
+	//	delete m_HypothesisArrayGT;
+
+	//m_HypothesisArrayGT = new RVLPSULM_HYPOTHESIS_GT[m_nMatches];
+
+	//fp = fopen("C:\\RVL\\ExpRez\\Validation_141111.log", "r");
+
+	//int iMatch = 0;
+
+	//int validation;
+
+	//while(!feof(fp))
+	//{
+	//	fscanf(fp, "%d\t%d\t%lf\t%d\n", &(m_HypothesisArrayGT[iMatch].iSample), &(m_HypothesisArrayGT[iMatch].iHypothesis), 
+	//		&(m_HypothesisArrayGT[iMatch].P), &validation);
+
+	//	m_HypothesisArrayGT[iMatch].validation = (char)validation;
+
+	//	iMatch++;
+	//}
+
+	//fp = fopen("C:\\RVL\\ExpRez\\Validation_141111.log", "r");
+
+	/////
+
+	char line[200];
+	int iSample;
+
+	while(!feof(fp))
+	{
+		fgets(line, 200, fp);
+
+		sscanf(line, "%d", &iSample);
+
+		if(iSample > m_nSamples)
+			m_nSamples = iSample;
+	}
+
+	fclose(fp);
+
+	m_nSamples++;
+
+	int nPSuLMS = m_PSuLMBuilder.m_maxPSuLMIndex + 1;
+
+	int nMatches = m_nSamples * nPSuLMS;
+
+	if(m_MatchMatrix)
+		delete[] m_MatchMatrix;
+
+	m_MatchMatrix = new double[nMatches];
+
+	memset(m_MatchMatrix, 0, nMatches * sizeof(double));
+
+	if(m_MatchMatrixGT)
+		delete[] m_MatchMatrixGT;
+
+	m_MatchMatrixGT = new char[nMatches];
+
+	memset(m_MatchMatrixGT, 0xfe, nMatches * sizeof(char));
+
+	fp = fopen("C:\\RVL\\ExpRez\\Validation.log", "r");
+
+	int iPSuLM;
+	double P;
+	int validation;
+	int iMatch;
+
+	while(!feof(fp))
+	{
+		fscanf(fp, "%d\t%d\t%lf\t%d\n", &iSample, &iPSuLM, &P, &validation);
+
+		iMatch = iSample * nPSuLMS + iPSuLM;
+
+		m_MatchMatrix[iMatch] = P;
+
+		m_MatchMatrixGT[iMatch] = (char)validation;
+	}
+
+	fclose(fp);
+}
+
+void CRVLPSuLMVS::SaveMatchMatrix()
+{
+	FILE *fp = fopen("C:\\RVL\\ExpRez\\Validation.log", "w");
+
+	if(fp == NULL)
+		return;
+
+	int nPSuLMS = m_PSuLMBuilder.m_maxPSuLMIndex + 1;
+
+	int iMatch = 0;
+
+	int iSample, iPSuLM;
+	//RVLPSULM_HYPOTHESIS *pHypothesis;
+	//double P;
+
+	for(iSample = 0; iSample < m_nSamples; iSample++)
+		for(iPSuLM = 0; iPSuLM < nPSuLMS; iPSuLM++, iMatch++)
+			if(m_MatchMatrixGT[iMatch] != -2)
+				fprintf(fp, "%d\t%d\t%lf\t%d\n", iSample, iPSuLM, m_MatchMatrix[iMatch], m_MatchMatrixGT[iMatch]);
+
+	fclose(fp);
+}
+
+//void CRVLPSuLMVS::StoreHypothesesToMatchMatrix(int iSample)
+//{
+//	int nPSuLMS = m_PSuLMBuilder.m_maxPSuLMIndex + 1;
+//
+//	CRVLPSuLM *pPSuLM;
+//	RVLPSULM_HYPOTHESIS *pHypothesis;
+//	double P, dP;
+//	int iMatch;
+//
+//	m_PSuLMBuilder.m_PSuLMList.Start();
+//
+//	while(m_PSuLMBuilder.m_PSuLMList.m_pNext)
+//	{
+//		pPSuLM = (CRVLPSuLM *)(m_PSuLMBuilder.m_PSuLMList.GetNext());
+//
+//		pHypothesis = pPSuLM->m_pHypothesis;
+//
+//		if(pHypothesis)
+//		{
+//			//if(iSample == 2 && pHypothesis->Index == 724)
+//			//	int debug = 0;
+//
+//			P = exp(pHypothesis->Probability - pHypothesis->pMPSuLM->m_pHypothesis->Probability) / pHypothesis->pMPSuLM->m_PriorProbabilityLocal;
+//
+//			for(int i = 0; i < m_nMatches; i++)
+//				if(m_HypothesisArrayGT[i].iSample == iSample && m_HypothesisArrayGT[i].iHypothesis == pHypothesis->Index)
+//				{
+//					dP = m_HypothesisArrayGT[i].P - P;
+//
+//					if(RVLABS(dP) > 1e-6)
+//						int debug = 0;
+//
+//					iMatch = iSample * nPSuLMS + pPSuLM->m_Index;
+//
+//					m_MatchMatrix[iMatch] = pHypothesis->Probability;
+//					//m_MatchMatrix[iMatch] = P;
+//					m_MatchMatrixGT[iMatch] = m_HypothesisArrayGT[i].validation;
+//				}
+//		}
+//	}
+//}
+
+//void CRVLPSuLMVS::SaveValidation()
+//{
+//	int iSample = RVLGetFileNumber(m_ImageFileName, "00000-LW.bmp");
+//
+//	FILE *fp = fopen("C:\\RVL\\ExpRez\\Validation.log", "a");
+//
+//	RVLPSULM_HYPOTHESIS *pHypothesis;
+//	double P;
+//	CRVLPSuLM *pPSuLM;
+//
+//	m_PSuLMBuilder.m_PSuLMList.Start();
+//
+//	while(m_PSuLMBuilder.m_PSuLMList.m_pNext)
+//	{
+//		pPSuLM = (CRVLPSuLM *)(m_PSuLMBuilder.m_PSuLMList.GetNext());
+//
+//		pHypothesis = pPSuLM->m_pHypothesis;
+//
+//		if(pHypothesis)
+//		{
+//			P = exp(pHypothesis->Probability - pHypothesis->pMPSuLM->m_pHypothesis->Probability) / pHypothesis->pMPSuLM->m_PriorProbabilityLocal;
+//
+//			fprintf(fp, "%d\t%d\t%d\t%lf\t%d\n", iSample, pPSuLM->m_Index, pHypothesis->Index, P, pHypothesis->validation);
+//		}
+//	}
+//
+//	fclose(fp);
+//}
+
+void CRVLPSuLMVS::ComputeMatchMatrix(int iSample)
+{
+	int nPSuLMs = m_PSuLMBuilder.m_maxPSuLMIndex + 1;
+
+	int MatchMatrixOffset = iSample * nPSuLMs;
+
+	double *MatchMatrix = m_MatchMatrix + MatchMatrixOffset;
+	//double *MatchMatrixGT = m_MatchMatrixGT + MatchMatrixOffset;
+
+	DWORD HypothesisEvaluationFlagsOld = m_PSuLMBuilder.m_HypothesisEvaluationFlags;
+	double PPriorSurfacePositionOld = m_PSuLMBuilder.m_SurfaceMatchData.PPriorPosition;
+	double PPriorLinePositionOld = m_PSuLMBuilder.m_LineMatchData.PPriorPosition;
+
+	m_PSuLMBuilder.m_SurfaceMatchData.PPriorPosition = 6.9;		// 1 surface at each 1000 mm
+	m_PSuLMBuilder.m_LineMatchData.PPriorPosition = 13.81;		// 1 line in each 1000 mm^2
+
+	m_PSuLMBuilder.m_HypothesisEvaluationFlags = 0x00000000;
+
+	m_PSuLMBuilder.CreateAutoMatchMatrix(m_pPSuLM);
+
+	//double BestHypothesisProbability = m_PSuLMBuilder.m_HypothesisArray[0]->Probability;
+
+	//if(m_PSuLMBuilder.m_nHypotheses > 0)
+	//{	
+	//	double PriorProbabilityGlobal = 0.0;
+
+	//	double *P = new double[m_PSuLMBuilder.m_HypothesisList.m_nElements];
+
+	//	RVLQLIST_PTR_ENTRY *pHypothesisPtr = (RVLQLIST_PTR_ENTRY *)(m_PSuLMBuilder.m_RepresentativeHypothesisList.pFirst);
+
+	//	RVLPSULM_HYPOTHESIS *pHypothesis;
+
+	//	while(pHypothesisPtr)
+	//	{
+	//		pHypothesis = (RVLPSULM_HYPOTHESIS *)(pHypothesisPtr->Ptr);
+
+	//		//P[pHypothesis->Index] = m_PSuLMBuilder.EvaluateHypothesis4(m_pPSuLM, pHypothesis, false);
+	//		P[pHypothesis->Index] = m_PSuLMBuilder.EvaluateHypothesis4(m_pPSuLM, pHypothesis);
+
+	//		PriorProbabilityGlobal += exp(P[pHypothesis->Index] - BestHypothesisProbability);
+
+	//		pHypothesisPtr = (RVLQLIST_PTR_ENTRY *)(pHypothesisPtr->pNext);
+	//	}
+
+	//	double POffset = BestHypothesisProbability + log(PriorProbabilityGlobal);
+
+	//	int i;
+	//	CRVLPSuLM *pPSuLM;
+
+	//	for(i = 0; i < nPSuLMs; i++)
+	//	{
+	//		MatchMatrix[i] = -1e8;
+
+	//		pPSuLM = m_PSuLMBuilder.m_PSuLMArray[i];
+
+	//		if(pPSuLM)
+	//			if(pPSuLM->m_pHypothesis)
+	//				MatchMatrix[i] = P[pPSuLM->m_pHypothesis->Index] - POffset;
+	//	}
+
+	//	delete[] P;
+	//}	
+
+	int nSFeatures = m_pPSuLM->m_n3DSurfaces + m_pPSuLM->m_n3DLines;
+	
+	int i, j;
+	CRVLPSuLM *pPSuLM;
+	double P, PriorProbabilityWorldModel;
+
+	for(i = 0; i < nPSuLMs; i++)
+	{
+		MatchMatrix[i] = 0.0;
+
+		if(m_PSuLMBuilder.m_nHypotheses == 0)
+			continue;
+
+		pPSuLM = m_PSuLMBuilder.m_PSuLMArray[i];
+
+		if(pPSuLM)
+			if(pPSuLM->m_pHypothesis)
+			{
+				P = m_PSuLMBuilder.EvaluateHypothesis4(m_pPSuLM, pPSuLM->m_pHypothesis);
+
+				for(j = 0; j < nSFeatures; j++)
+					m_PSuLMBuilder.m_SMatchArray[j].b = false;
+
+				PriorProbabilityWorldModel = m_PSuLMBuilder.ConditionalProbabilityTree(m_pPSuLM, pPSuLM);
+
+				MatchMatrix[i] = P - PriorProbabilityWorldModel;
+			}
+	}	
+
+	m_PSuLMBuilder.m_HypothesisEvaluationFlags = HypothesisEvaluationFlagsOld;
+	m_PSuLMBuilder.m_SurfaceMatchData.PPriorPosition = PPriorSurfacePositionOld;	
+	m_PSuLMBuilder.m_LineMatchData.PPriorPosition = PPriorLinePositionOld;			
 }
 
 void RVLPSuLMDisplayMouseCallback2(int event, int x, int y, int flags, void* vpData)
@@ -889,7 +1319,7 @@ void RVLPSuLMDisplayMouseCallback2(int event, int x, int y, int flags, void* vpD
 					pGUI->ShowFigure(pMFig);
 				}
 
-				pVS->m_PSuLMBuilder.DisplayHypothesisData(pFig, pVS->m_pPSuLM, pData->iHypothesis, pSelectedSurf, pSelectedLine);
+				pVS->m_PSuLMBuilder.DisplayHypothesisData(pFig, pVS->m_pPSuLM, pData->MatchMatrixGT, pData->mDisplayPSuLMFlags, pData->iHypothesis, pSelectedSurf, pSelectedLine);
 			}
 	}	//	switch( event )
 }

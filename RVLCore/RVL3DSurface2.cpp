@@ -1588,8 +1588,9 @@ bool CRVL3DSurface2::Match4(CRVL3DObject *pObject_,
 
 		ep = er * er / varqS;
 
-		if(ep > 6.635)
-			return false;
+		if(Flags & RVL3DSURFACE_MATCH4_FLAG_POSITION)
+			if(ep > 6.635)
+				return false;
 	}
 
 	double Pp = pData->PPriorPosition - 0.5*(log(varqS)+ep+RVLLN2PI);

@@ -25,6 +25,7 @@ class CRVLPSuLM;
 #define RVLPSULM_DISPLAY_SCENE			0x00004000
 #define RVLPSULM_DISPLAY_MODEL			0x00008000
 #define RVLPSULM_DISPLAY_SAMPLES		0x00010000
+#define RVLPSULM_DISPLAY_VALIDATION		0x00020000
 
 #define RVLPSULM_CELL_FLAG_MATCHED		0x01
 #define RVLPSULM_CELL_FLAG_ERROR		0x02
@@ -179,6 +180,7 @@ struct RVLPSULM_HYPOTHESIS
 	RVLPSULM_PARTICLE *pParticle;
 	double Probability;
 	DWORD iRepresentative;
+	char validation;				// 1 - correct; 0 - ambiguous; -1 - false
 };
 
 struct RVLPSULM_PATH_PLANNING_NEIGHBOR

@@ -113,6 +113,12 @@ CRVLPSuLMBuilder::CRVLPSuLMBuilder(void)
 	m_HorLineChi2Thr = m_VerLineChi2Thr = 2.5 * 2.5;
 	//m_HypothesisClustering.m_minX = m_HypothesisClustering.m_minY = -m_PositionUncert;
 	//m_HypothesisClustering.m_maxX = m_HypothesisClustering.m_maxY = m_PositionUncert;
+
+#ifdef RVLPSULMBUILDER_GT_141111
+	m_HypothesisEvaluationFlags = (RVLPSULMBUILDER_HYPEVAL_FLAG_SURFACE_POSITION | RVLPSULMBUILDER_HYPEVAL_FLAG_LINE_POSITION);
+#else
+	m_HypothesisEvaluationFlags = 0x00000000;
+#endif
 	
 	// arrays
 
@@ -613,12 +619,21 @@ void CRVLPSuLMBuilder::Init(void)
 		m_SurfaceMatchData.varPositionUncert = m_SampleMatchDistTol * m_SampleMatchDistTol;
 		m_SurfaceMatchData.varOrientationUncert = m_SampleMatchAngleTol * m_SampleMatchAngleTol;
 		//m_SurfaceMatchData.PPriorPosition = 7.4451;			// -log(1/sqrt(2*pi*(30.0^2))*exp(-2.5^2/2))
+		//m_SurfaceMatchData.PPriorPosition = 4.6;				// 1 surface at each 100 mm
+#ifdef RVLPSULMBUILDER_GT_141111
 		m_SurfaceMatchData.PPriorPosition = 4.6;				// 1 surface at each 100 mm
+#else
+		m_SurfaceMatchData.PPriorPosition = 6.9;				// 1 surface at each 1000 mm
+#endif
 		m_LineMatchData.varPositionUncert = m_SurfaceMatchData.varPositionUncert;
 		m_LineMatchData.varOrientationUncert = m_SampleMatchAngleTol * m_SampleMatchAngleTol;
 		//m_LineMatchData.PPriorPosition = 11.7653;			// -log(1/(2*pi*(30.0^2))*exp(-2.5^2/2))
 		//m_LineMatchData.PPriorPosition1DOF = 7.4451;		// -log(1/sqrt(2*pi*(30.0^2))*exp(-2.5^2/2))
+#ifdef RVLPSULMBUILDER_GT_141111
 		m_LineMatchData.PPriorPosition = 9.21;			// 1 line in each 100 mm^2
+#else
+		m_LineMatchData.PPriorPosition = 13.81;			// 1 line in each 1000 mm^2
+#endif
 		m_LineMatchData.PPriorPosition1DOF = 4.6;		// 1 line at each 100 mm
 	}
 
@@ -7647,6 +7662,8 @@ void CRVLPSuLMBuilder::Localization(CRVLPSuLM * pSPSuLM,
 
 	m_PriorProbabilityGlobal = 0.0;
 
+	double PriorProbabilityWorldModel;
+
 	if(m_nHypotheses > 0 && HypEvalMethod == RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD_P)
 	{	
 		RVLMEM_ALLOC_LOCAL_INIT(m_pMem2)
@@ -7715,8 +7732,8 @@ void CRVLPSuLMBuilder::Localization(CRVLPSuLM * pSPSuLM,
 		{
 			pHypothesis = (RVLPSULM_HYPOTHESIS *)(pHypothesisPtr->Ptr);
 
-			if(pHypothesis->iRepresentative != 0xffffffff)
-				int debug = 0;
+			//if(pHypothesis->iRepresentative != 0xffffffff)
+			//	int debug = 0;
 
 			pHypothesis->pMPSuLM->m_PriorProbabilityLocal += exp(pHypothesis->Probability - pHypothesis->pMPSuLM->m_pHypothesis->Probability);
 
@@ -7735,10 +7752,13 @@ void CRVLPSuLMBuilder::Localization(CRVLPSuLM * pSPSuLM,
 
 				for(i = 0; i < nSFeatures; i++)
 					m_SMatchArray[i].b = false;
-			
-				pMPSuLM->m_PriorProbabilityLocal += exp(ConditionalProbabilityTree(pSPSuLM, pMPSuLM) - pMPSuLM->m_pHypothesis->Probability);
 
-				pMPSuLM->m_PosteriorProbabilityLocal5DOF = 1.0 / pMPSuLM->m_PriorProbabilityLocal;
+				PriorProbabilityWorldModel = ConditionalProbabilityTree(pSPSuLM, pMPSuLM);
+			
+				pMPSuLM->m_PriorProbabilityLocal += exp(PriorProbabilityWorldModel - pMPSuLM->m_pHypothesis->Probability);
+
+				//pMPSuLM->m_PosteriorProbabilityLocal5DOF = 1.0 / pMPSuLM->m_PriorProbabilityLocal;
+				pMPSuLM->m_PosteriorProbabilityLocal5DOF = pMPSuLM->m_pHypothesis->Probability - PriorProbabilityWorldModel;
 
 				PoseConstraintProbability(pSPSuLM, pMPSuLM);
 
@@ -10262,6 +10282,16 @@ double CRVLPSuLMBuilder::EvaluateHypothesis4(	CRVLPSuLM * pSPSuLM,
 
 void CRVLPSuLMBuilder::CreateAutoMatchMatrix(CRVLPSuLM *pSPSuLM)
 {
+	DWORD MatchLinesFlags = 0x00000000;
+
+	if(m_HypothesisEvaluationFlags & RVLPSULMBUILDER_HYPEVAL_FLAG_LINE_POSITION)
+		MatchLinesFlags |= RVL3DLINE_MATCH_FLAG_POSITION;
+
+	DWORD MatchSurfaceFlags = 0x00000000;
+
+	if(m_HypothesisEvaluationFlags & RVLPSULMBUILDER_HYPEVAL_FLAG_SURFACE_POSITION)
+		MatchSurfaceFlags |= RVL3DSURFACE_MATCH4_FLAG_POSITION;
+
 	CRVL3DSurface2 **SSurfArray = pSPSuLM->m_3DSurfaceArray;
 	int nSSurfs = pSPSuLM->m_n3DSurfaces;
 
@@ -10319,7 +10349,7 @@ void CRVLPSuLMBuilder::CreateAutoMatchMatrix(CRVLPSuLM *pSPSuLM)
 
 			pSSurf_ = *ppSurf_;
 
-			if(pSSurf->Match4(pSSurf_, &m_SurfaceMatchData, PFeature, 0x00000000))
+			if(pSSurf->Match4(pSSurf_, &m_SurfaceMatchData, PFeature, MatchSurfaceFlags))
 			{
 				RVLMXEL(m_AutoMatchMatrix, nSFeatures, i, j) = PFeature;
 
@@ -10367,7 +10397,7 @@ void CRVLPSuLMBuilder::CreateAutoMatchMatrix(CRVLPSuLM *pSPSuLM)
 
 			j_ = j + nSSurfs;
 
-			if(pSLine->Match(pSLine_, &m_LineMatchData, PFeature, 0x00000000))
+			if(pSLine->Match(pSLine_, &m_LineMatchData, PFeature, MatchLinesFlags))
 			{
 				RVLMXEL(m_AutoMatchMatrix, nSFeatures, i, j_) = PFeature;
 
@@ -19710,18 +19740,24 @@ void CRVLPSuLMBuilder::CreateLocalMap(CRVLPSuLM * pPSuLM,
 {
 	CRVL3DPose NullPose;
 	double C[3 * 3 * 3];
+	double *C_, *C2_;
 
 	RVLNULLMX3X3(C)
+
+	if(!(m_Flags & RVLPSULMBUILDER_HYPOTHESES_UNCERTAINTY_3DOF))
+	{
+		C_ = C + 9;
+		RVLNULLMX3X3(C_)
+		C_ += 9;
+		RVLNULLMX3X3(C_)
+	}
 
 	NullPose.Reset();
 
 	NullPose.m_C = C;
 
-	if(m_Flags & RVLPSULMBUILDER_HYPOTHESES_UNCERTAINTY_3DOF)
-		NullPose.m_ParamFlags = RVL3DPOSE_PARAM_FLAGS_COV_3D;
-	else
-		NullPose.m_ParamFlags = RVL3DPOSE_PARAM_FLAGS_COV_6D;
-
+	NullPose.m_ParamFlags = (m_Flags & RVLPSULMBUILDER_HYPOTHESES_UNCERTAINTY_3DOF ? RVL3DPOSE_PARAM_FLAGS_COV_3D : RVL3DPOSE_PARAM_FLAGS_COV_6D);
+ 
 	RVLQLIST *pListArray = m_LocalMapHT.m_ListArray;
 
 	CRVLPSuLM *pPSuLM2;
@@ -19760,12 +19796,21 @@ void CRVLPSuLMBuilder::CreateLocalMap(CRVLPSuLM * pPSuLM,
 
 		pNeighbor->PoseRel.m_X[0] = dX[0];
 		pNeighbor->PoseRel.m_X[1] = dX[1];
-		pNeighbor->PoseRel.m_X[2] = 0.0;
+		pNeighbor->PoseRel.m_X[2] = dX[2];
 		R2 = pNeighbor->PoseRel.m_Rot;
 		RVLCOPYMX3X3(R, R2)
 		CAmAs2 = pNeighbor->C;
 		pNeighbor->PoseRel.m_C = CAmAs2;
 		RVLCOPYMX3X3(CAmAs, CAmAs2)
+		if(!(m_Flags & RVLPSULMBUILDER_HYPOTHESES_UNCERTAINTY_3DOF))
+		{
+			C_ = CAmAs + 9;
+			C2_ = CAmAs2 + 9;
+			RVLCOPYMX3X3(C_, C2_)
+			C_ += 9;
+			C2_ += 9;
+			RVLCOPYMX3X3(C_, C2_)
+		}
 
 		RVLMEM_ALLOC_STRUCT(m_pMem0, RVLQLISTHT_PTR_ENTRY, pLocalMapHTEntry)
 
@@ -19786,13 +19831,21 @@ void CRVLPSuLMBuilder::CreateLocalMap(CRVLPSuLM * pPSuLM,
 
 			R2 = pNeighbor2->PoseRel.m_Rot;
 			dX2 = pNeighbor2->PoseRel.m_X;
-
-			RVLINVTRANSF3D3DOF(R, dX, R2, dX2)
-
 			CAmAs2 = pNeighbor2->C;
 			pNeighbor2->PoseRel.m_C = CAmAs2;
-			
-			RVL3DOFInvTransfUncert(R[0], R[3], dX2[0], dX2[1], CAmAs, CAmAs2);
+
+			if(m_Flags & RVLPSULMBUILDER_HYPOTHESES_UNCERTAINTY_3DOF)
+			{
+				RVLINVTRANSF3D3DOF(R, dX, R2, dX2)
+				
+				RVL3DOFInvTransfUncert(R[0], R[3], dX2[0], dX2[1], CAmAs, CAmAs2);
+			}
+			else
+			{
+				RVLINVTRANSF3D(R, dX, R2, dX2)
+				
+				RVL6DOFInvTransfUncert(R, dX2, CAmAs, CAmAs2);
+			}
 
 			RVLMEM_ALLOC_STRUCT(m_pMem0, RVLQLISTHT_PTR_ENTRY, pLocalMapHTEntry)
 
@@ -21403,6 +21456,8 @@ void CRVLPSuLMBuilder::DisplayHypothesis(CRVLGUI *pGUI,
 
 void CRVLPSuLMBuilder::DisplayHypothesisData(	CRVLFigure *pFig, 
 												CRVLPSuLM *pSPSuLM,
+												char *MatchMatrixGT,
+												DWORD Flags,
 												int iHypothesis,
 												CRVL3DSurface2 *pSelectedSurface,
 												CRVL3DLine2 *pSelectedLine)
@@ -21492,7 +21547,7 @@ void CRVLPSuLMBuilder::DisplayHypothesisData(	CRVLFigure *pFig,
 
 	if(pHypothesis)
 	{
-		sprintf(str, "Hypothesis %d", pHypothesis->Index);
+		sprintf(str, "Hypothesis %d (%d/%d)", pHypothesis->Index, iHypothesis, m_nHypotheses);
 
 		cvPutText(pDataDisplay, str, cvPoint(0, (++iTextLine) * pFig->m_FontSize), &pFig->m_Font,  cvScalar(0, 0, 0));
 
@@ -21515,7 +21570,7 @@ void CRVLPSuLMBuilder::DisplayHypothesisData(	CRVLFigure *pFig,
 			sprintf(str, "Representative=%d", pHypothesis_->Index);
 		}
 		else
-			sprintf(str, "REPRESENTATIVE", pHypothesis->Index);
+			sprintf(str, "REPRESENTATIVE");
 
 		cvPutText(pDataDisplay, str, cvPoint(0, (++iTextLine) * pFig->m_FontSize), &pFig->m_Font,  cvScalar(0, 0, 0));
 
@@ -21532,6 +21587,32 @@ void CRVLPSuLMBuilder::DisplayHypothesisData(	CRVLFigure *pFig,
 
 		if(pHypothesis == pHypothesis->pMPSuLM->m_pHypothesis)
 		{
+			char validation;
+
+			if((Flags & RVLPSULM_DISPLAY_VALIDATION) && MatchMatrixGT != NULL)
+			{
+				switch(MatchMatrixGT[pHypothesis->pMPSuLM->m_Index]){
+				case 1:
+					validation = '+';
+
+					break;
+				case 0:
+					validation = '?';
+
+					break;
+				case -1:
+					validation = '-';
+
+					break;
+				default:
+					validation = ' ';
+				}
+
+				sprintf(str, "Manual validation: %c", validation);
+
+				cvPutText(pDataDisplay, str, cvPoint(0, (++iTextLine) * pFig->m_FontSize), &pFig->m_Font,  cvScalar(0, 0, 0));
+			}
+
 			//sprintf(str, "Probability Local 5DoF = %lf", m_BestHypothesisProbability5DOF);
 			sprintf(str, "Probability Local 5DoF = %lf", pHypothesis->pMPSuLM->m_PosteriorProbabilityLocal5DOF);
 
@@ -22126,7 +22207,7 @@ void CRVLPSuLMBuilder::UpdateRelativePoseUncertainties()
 	RVLPSULM_HYPOTHESIS *pHypothesis;
 	double dist, angle;
 	BYTE result;	// 0 - OK; 1 - large error; 2 - no hypotheses
-	double invR[9], invt[3];
+	//double invR[9], invt[3];
 	double *R, *t;
 
 	for(i = 0; i < m_maxPSuLMIndex; i++)
