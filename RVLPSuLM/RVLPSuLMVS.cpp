@@ -1031,47 +1031,92 @@ void CRVLPSuLMVS::ComputeMatchMatrix(int iSample)
 	double *MatchMatrix = m_MatchMatrix + MatchMatrixOffset;
 	//double *MatchMatrixGT = m_MatchMatrixGT + MatchMatrixOffset;
 
-	double BestHypothesisProbability = m_PSuLMBuilder.m_HypothesisArray[0]->Probability;
+	DWORD HypothesisEvaluationFlagsOld = m_PSuLMBuilder.m_HypothesisEvaluationFlags;
+	double PPriorSurfacePositionOld = m_PSuLMBuilder.m_SurfaceMatchData.PPriorPosition;
+	double PPriorLinePositionOld = m_PSuLMBuilder.m_LineMatchData.PPriorPosition;
 
-	if(m_PSuLMBuilder.m_nHypotheses > 0)
-	{	
-		double PriorProbabilityGlobal = 0.0;
+	m_PSuLMBuilder.m_SurfaceMatchData.PPriorPosition = 6.9;		// 1 surface at each 1000 mm
+	m_PSuLMBuilder.m_LineMatchData.PPriorPosition = 13.81;		// 1 line in each 1000 mm^2
 
-		double *P = new double[m_PSuLMBuilder.m_HypothesisList.m_nElements];
+	m_PSuLMBuilder.m_HypothesisEvaluationFlags = 0x00000000;
 
-		RVLQLIST_PTR_ENTRY *pHypothesisPtr = (RVLQLIST_PTR_ENTRY *)(m_PSuLMBuilder.m_RepresentativeHypothesisList.pFirst);
+	m_PSuLMBuilder.CreateAutoMatchMatrix(m_pPSuLM);
 
-		RVLPSULM_HYPOTHESIS *pHypothesis;
+	//double BestHypothesisProbability = m_PSuLMBuilder.m_HypothesisArray[0]->Probability;
 
-		while(pHypothesisPtr)
-		{
-			pHypothesis = (RVLPSULM_HYPOTHESIS *)(pHypothesisPtr->Ptr);
+	//if(m_PSuLMBuilder.m_nHypotheses > 0)
+	//{	
+	//	double PriorProbabilityGlobal = 0.0;
 
-			P[pHypothesis->Index] = m_PSuLMBuilder.EvaluateHypothesis4(m_pPSuLM, pHypothesis, false);
+	//	double *P = new double[m_PSuLMBuilder.m_HypothesisList.m_nElements];
 
-			PriorProbabilityGlobal += exp(P[pHypothesis->Index] - BestHypothesisProbability);
+	//	RVLQLIST_PTR_ENTRY *pHypothesisPtr = (RVLQLIST_PTR_ENTRY *)(m_PSuLMBuilder.m_RepresentativeHypothesisList.pFirst);
 
-			pHypothesisPtr = (RVLQLIST_PTR_ENTRY *)(pHypothesisPtr->pNext);
-		}
+	//	RVLPSULM_HYPOTHESIS *pHypothesis;
 
-		double POffset = BestHypothesisProbability + log(PriorProbabilityGlobal);
+	//	while(pHypothesisPtr)
+	//	{
+	//		pHypothesis = (RVLPSULM_HYPOTHESIS *)(pHypothesisPtr->Ptr);
 
-		int i;
-		CRVLPSuLM *pPSuLM;
+	//		//P[pHypothesis->Index] = m_PSuLMBuilder.EvaluateHypothesis4(m_pPSuLM, pHypothesis, false);
+	//		P[pHypothesis->Index] = m_PSuLMBuilder.EvaluateHypothesis4(m_pPSuLM, pHypothesis);
 
-		for(i = 0; i < nPSuLMs; i++)
-		{
-			MatchMatrix[i] = -1e8;
+	//		PriorProbabilityGlobal += exp(P[pHypothesis->Index] - BestHypothesisProbability);
 
-			pPSuLM = m_PSuLMBuilder.m_PSuLMArray[i];
+	//		pHypothesisPtr = (RVLQLIST_PTR_ENTRY *)(pHypothesisPtr->pNext);
+	//	}
 
-			if(pPSuLM)
-				if(pPSuLM->m_pHypothesis)
-					MatchMatrix[i] = P[pPSuLM->m_pHypothesis->Index] - POffset;
-		}
+	//	double POffset = BestHypothesisProbability + log(PriorProbabilityGlobal);
 
-		delete[] P;
-	}
+	//	int i;
+	//	CRVLPSuLM *pPSuLM;
+
+	//	for(i = 0; i < nPSuLMs; i++)
+	//	{
+	//		MatchMatrix[i] = -1e8;
+
+	//		pPSuLM = m_PSuLMBuilder.m_PSuLMArray[i];
+
+	//		if(pPSuLM)
+	//			if(pPSuLM->m_pHypothesis)
+	//				MatchMatrix[i] = P[pPSuLM->m_pHypothesis->Index] - POffset;
+	//	}
+
+	//	delete[] P;
+	//}	
+
+	int nSFeatures = m_pPSuLM->m_n3DSurfaces + m_pPSuLM->m_n3DLines;
+	
+	int i, j;
+	CRVLPSuLM *pPSuLM;
+	double P, PriorProbabilityWorldModel;
+
+	for(i = 0; i < nPSuLMs; i++)
+	{
+		MatchMatrix[i] = 0.0;
+
+		if(m_PSuLMBuilder.m_nHypotheses == 0)
+			continue;
+
+		pPSuLM = m_PSuLMBuilder.m_PSuLMArray[i];
+
+		if(pPSuLM)
+			if(pPSuLM->m_pHypothesis)
+			{
+				P = m_PSuLMBuilder.EvaluateHypothesis4(m_pPSuLM, pPSuLM->m_pHypothesis);
+
+				for(j = 0; j < nSFeatures; j++)
+					m_PSuLMBuilder.m_SMatchArray[j].b = false;
+
+				PriorProbabilityWorldModel = m_PSuLMBuilder.ConditionalProbabilityTree(m_pPSuLM, pPSuLM);
+
+				MatchMatrix[i] = P - PriorProbabilityWorldModel;
+			}
+	}	
+
+	m_PSuLMBuilder.m_HypothesisEvaluationFlags = HypothesisEvaluationFlagsOld;
+	m_PSuLMBuilder.m_SurfaceMatchData.PPriorPosition = PPriorSurfacePositionOld;	
+	m_PSuLMBuilder.m_LineMatchData.PPriorPosition = PPriorLinePositionOld;			
 }
 
 void RVLPSuLMDisplayMouseCallback2(int event, int x, int y, int flags, void* vpData)

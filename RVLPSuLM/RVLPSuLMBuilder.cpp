@@ -112,6 +112,12 @@ CRVLPSuLMBuilder::CRVLPSuLMBuilder(void)
 	m_HorLineChi2Thr = m_VerLineChi2Thr = 2.5 * 2.5;
 	//m_HypothesisClustering.m_minX = m_HypothesisClustering.m_minY = -m_PositionUncert;
 	//m_HypothesisClustering.m_maxX = m_HypothesisClustering.m_maxY = m_PositionUncert;
+
+#ifdef RVLPSULMBUILDER_GT_141111
+	m_HypothesisEvaluationFlags = (RVLPSULMBUILDER_HYPEVAL_FLAG_SURFACE_POSITION | RVLPSULMBUILDER_HYPEVAL_FLAG_LINE_POSITION);
+#else
+	m_HypothesisEvaluationFlags = 0x00000000;
+#endif
 	
 	// arrays
 
@@ -612,12 +618,21 @@ void CRVLPSuLMBuilder::Init(void)
 		m_SurfaceMatchData.varPositionUncert = m_SampleMatchDistTol * m_SampleMatchDistTol;
 		m_SurfaceMatchData.varOrientationUncert = m_SampleMatchAngleTol * m_SampleMatchAngleTol;
 		//m_SurfaceMatchData.PPriorPosition = 7.4451;			// -log(1/sqrt(2*pi*(30.0^2))*exp(-2.5^2/2))
+		//m_SurfaceMatchData.PPriorPosition = 4.6;				// 1 surface at each 100 mm
+#ifdef RVLPSULMBUILDER_GT_141111
 		m_SurfaceMatchData.PPriorPosition = 4.6;				// 1 surface at each 100 mm
+#else
+		m_SurfaceMatchData.PPriorPosition = 6.9;				// 1 surface at each 1000 mm
+#endif
 		m_LineMatchData.varPositionUncert = m_SurfaceMatchData.varPositionUncert;
 		m_LineMatchData.varOrientationUncert = m_SampleMatchAngleTol * m_SampleMatchAngleTol;
 		//m_LineMatchData.PPriorPosition = 11.7653;			// -log(1/(2*pi*(30.0^2))*exp(-2.5^2/2))
 		//m_LineMatchData.PPriorPosition1DOF = 7.4451;		// -log(1/sqrt(2*pi*(30.0^2))*exp(-2.5^2/2))
+#ifdef RVLPSULMBUILDER_GT_141111
 		m_LineMatchData.PPriorPosition = 9.21;			// 1 line in each 100 mm^2
+#else
+		m_LineMatchData.PPriorPosition = 13.81;			// 1 line in each 1000 mm^2
+#endif
 		m_LineMatchData.PPriorPosition1DOF = 4.6;		// 1 line at each 100 mm
 	}
 
@@ -7633,6 +7648,8 @@ void CRVLPSuLMBuilder::Localization(CRVLPSuLM * pSPSuLM,
 
 	m_PriorProbabilityGlobal = 0.0;
 
+	double PriorProbabilityWorldModel;
+
 	if(m_nHypotheses > 0 && HypEvalMethod == RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD_P)
 	{	
 		RVLMEM_ALLOC_LOCAL_INIT(m_pMem2)
@@ -7701,8 +7718,8 @@ void CRVLPSuLMBuilder::Localization(CRVLPSuLM * pSPSuLM,
 		{
 			pHypothesis = (RVLPSULM_HYPOTHESIS *)(pHypothesisPtr->Ptr);
 
-			if(pHypothesis->iRepresentative != 0xffffffff)
-				int debug = 0;
+			//if(pHypothesis->iRepresentative != 0xffffffff)
+			//	int debug = 0;
 
 			pHypothesis->pMPSuLM->m_PriorProbabilityLocal += exp(pHypothesis->Probability - pHypothesis->pMPSuLM->m_pHypothesis->Probability);
 
@@ -7721,10 +7738,13 @@ void CRVLPSuLMBuilder::Localization(CRVLPSuLM * pSPSuLM,
 
 				for(i = 0; i < nSFeatures; i++)
 					m_SMatchArray[i].b = false;
-			
-				pMPSuLM->m_PriorProbabilityLocal += exp(ConditionalProbabilityTree(pSPSuLM, pMPSuLM) - pMPSuLM->m_pHypothesis->Probability);
 
-				pMPSuLM->m_PosteriorProbabilityLocal5DOF = 1.0 / pMPSuLM->m_PriorProbabilityLocal;
+				PriorProbabilityWorldModel = ConditionalProbabilityTree(pSPSuLM, pMPSuLM);
+			
+				pMPSuLM->m_PriorProbabilityLocal += exp(PriorProbabilityWorldModel - pMPSuLM->m_pHypothesis->Probability);
+
+				//pMPSuLM->m_PosteriorProbabilityLocal5DOF = 1.0 / pMPSuLM->m_PriorProbabilityLocal;
+				pMPSuLM->m_PosteriorProbabilityLocal5DOF = pMPSuLM->m_pHypothesis->Probability - PriorProbabilityWorldModel;
 
 				PoseConstraintProbability(pSPSuLM, pMPSuLM);
 
@@ -10248,6 +10268,16 @@ double CRVLPSuLMBuilder::EvaluateHypothesis4(	CRVLPSuLM * pSPSuLM,
 
 void CRVLPSuLMBuilder::CreateAutoMatchMatrix(CRVLPSuLM *pSPSuLM)
 {
+	DWORD MatchLinesFlags = 0x00000000;
+
+	if(m_HypothesisEvaluationFlags & RVLPSULMBUILDER_HYPEVAL_FLAG_LINE_POSITION)
+		MatchLinesFlags |= RVL3DLINE_MATCH_FLAG_POSITION;
+
+	DWORD MatchSurfaceFlags = 0x00000000;
+
+	if(m_HypothesisEvaluationFlags & RVLPSULMBUILDER_HYPEVAL_FLAG_SURFACE_POSITION)
+		MatchSurfaceFlags |= RVL3DSURFACE_MATCH4_FLAG_POSITION;
+
 	CRVL3DSurface2 **SSurfArray = pSPSuLM->m_3DSurfaceArray;
 	int nSSurfs = pSPSuLM->m_n3DSurfaces;
 
@@ -10305,7 +10335,7 @@ void CRVLPSuLMBuilder::CreateAutoMatchMatrix(CRVLPSuLM *pSPSuLM)
 
 			pSSurf_ = *ppSurf_;
 
-			if(pSSurf->Match4(pSSurf_, &m_SurfaceMatchData, PFeature, 0x00000000))
+			if(pSSurf->Match4(pSSurf_, &m_SurfaceMatchData, PFeature, MatchSurfaceFlags))
 			{
 				RVLMXEL(m_AutoMatchMatrix, nSFeatures, i, j) = PFeature;
 
@@ -10353,7 +10383,7 @@ void CRVLPSuLMBuilder::CreateAutoMatchMatrix(CRVLPSuLM *pSPSuLM)
 
 			j_ = j + nSSurfs;
 
-			if(pSLine->Match(pSLine_, &m_LineMatchData, PFeature, 0x00000000))
+			if(pSLine->Match(pSLine_, &m_LineMatchData, PFeature, MatchLinesFlags))
 			{
 				RVLMXEL(m_AutoMatchMatrix, nSFeatures, i, j_) = PFeature;
 
