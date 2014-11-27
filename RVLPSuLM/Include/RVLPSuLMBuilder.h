@@ -35,9 +35,10 @@
 
 //#define RVLPSULMBUILDER_HYPOTHESES_DEBUG_LOG
 //#define RVLPSULMBUILDER_HYPOTHESES_LAST_DOF_ACCU_DEBUG_LOG
-//#define RVLPSULMBUILDER_CONDITIONAL_PROBABILITY_TREE_DEBUG_LOG
+#define RVLPSULMBUILDER_CONDITIONAL_PROBABILITY_TREE_DEBUG_LOG
 //#define RVLPSULMBUILDER_POSE_CONSTRAINT_PROBABILITY_DEBUG_LOG
 //#define RVLPSULMBUILDER_AUTO_MATCH_MATRIX_DEBUG_LOG
+//#define RVLPSULMBUILDER_GT_141111
 
 // Configuration
 
@@ -107,6 +108,8 @@
 #define RVLPSULMBUILDER_HYPOTHESES_PREDICTION_HORIZON	3
 #define RVLPSULMBUILDER_GETLOCALMODELS_FLAG_ORIENT_CONSTR		0x01
 #define RVLPSULMBUILDER_GETLOCALMODELS_FLAG_UNCERT				0x02
+#define RVLPSULMBUILDER_HYPEVAL_FLAG_LINE_POSITION				0x00000001
+#define RVLPSULMBUILDER_HYPEVAL_FLAG_SURFACE_POSITION			0x00000002
 
 #define RVLPSULMBUILDER_MAX_LOCAL_MAP_HT_SIZE					1000
 #define RVLPSULMBUILDER_MAXN_PSULMS								10000
@@ -434,6 +437,7 @@ public:
 	CRVL3DLine2 *m_LineMSArray;
 	RVL3DSURFACE2_MATCH_DATA m_SurfaceMatchData;
 	RVL3DLINE2_MATCH_DATA m_LineMatchData;
+	DWORD m_HypothesisEvaluationFlags;
 	
 //#ifdef PYTHON_DEBUG
 //	PyObject *m_pyModuleName;
@@ -541,7 +545,7 @@ public:
 							CRVL3DPose *pPoseSM,
 							double OverlapCoeff,
 							CRVL3DSurface2 **MatchedMSurfArray = NULL);
-	void CreateAutoMatchMatrix(CRVLPSuLM *pSPSuLM);
+	void CreateAutoMatchMatrix(	CRVLPSuLM *pSPSuLM);
 	int GenMatchListViaDescriptors(CRVLPSuLM * pPSuLM_S,
 									CRVLPSuLM * pPSuLM_M,
 									RVLQLIST *matchList,
@@ -625,7 +629,9 @@ public:
 							IplImage *pImage2,
 							int iHypothesis = 0);
 	void DisplayHypothesisData(	CRVLFigure *pFig, 
-								CRVLPSuLM *pSPSuLM, 
+								CRVLPSuLM *pSPSuLM, 	
+								char *MatchMatrixGT,
+								DWORD Flags = 0x00000000,
 								int iHypothesis = 0,
 								CRVL3DSurface2 *pSelectedSurface = NULL,
 								CRVL3DLine2 *pSelectedLine = NULL);

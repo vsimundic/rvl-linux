@@ -196,6 +196,9 @@ bool CRVL3DLine2::Match(	CRVL3DObject *pObject_,
 							double &MatchQuality,
 							DWORD Flags)
 {
+	double minrOverlap = 0.4;
+	//double minrOverlap = -10.0;
+
 	RVL3DLINE_EXTENDED_DATA *pData = (RVL3DLINE_EXTENDED_DATA *)m_pData;
 
 	// coarse orientation matching
@@ -245,7 +248,7 @@ bool CRVL3DLine2::Match(	CRVL3DObject *pObject_,
 
 	double w0;
 
-	if(Flags & RVL3DLINE_MATCH_FLAGS_OVERLAP)
+	if(Flags & RVL3DLINE_MATCH_FLAG_OVERLAP)
 	{		
 		double w1o = RVLMAX(w1, w1_);
 		double w2o = RVLMIN(w2, w2_);
@@ -254,12 +257,12 @@ bool CRVL3DLine2::Match(	CRVL3DObject *pObject_,
 
 		double rOverlap = dwo / pData->len;
 
-		if(rOverlap < 0.4)
+		if(rOverlap < minrOverlap)
 			return false;
 
 		double rOverlap_ = dwo / pData_->len;
 
-		if(rOverlap_ < 0.4)
+		if(rOverlap_ < minrOverlap)
 			return false;
 
 		// central point of overlapping segment
@@ -300,7 +303,7 @@ bool CRVL3DLine2::Match(	CRVL3DObject *pObject_,
 
 	double P1[3], P2[3], P1_[3], P2_[3];
 
-	if(Flags & RVL3DLINE_MATCH_FLAGS_OVERLAP)
+	if(Flags & RVL3DLINE_MATCH_FLAG_OVERLAP)
 	{
 		RVLTRANSF3(P1C, RCL, tCL, P1)
 		RVLTRANSF3(P2C, RCL, tCL, P2)
@@ -339,7 +342,7 @@ bool CRVL3DLine2::Match(	CRVL3DObject *pObject_,
 	double s, s_;
 	double C0[2*2], C0_[2*2];
 
-	if(Flags & RVL3DLINE_MATCH_FLAGS_OVERLAP)
+	if(Flags & RVL3DLINE_MATCH_FLAG_OVERLAP)
 	{
 		// central points of the overlapping segments
 
@@ -407,8 +410,9 @@ bool CRVL3DLine2::Match(	CRVL3DObject *pObject_,
 
 	double ep = RVLMAHDIST2(E, C, detC);
 
-	if(ep > 9.21)
-		return false;
+	if(Flags & RVL3DLINE_MATCH_FLAG_POSITION)
+		if(ep > 9.21)
+			return false;
 
 	// position probability
 

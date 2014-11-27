@@ -1,5 +1,14 @@
 #define RVLSYS_FLAGS_CREATE_GLOBAL_MESH		0x00010000
 #define RVLSYS_FLAGS_EDIT_MAP				0x00020000
+#define RVLSYS_FLAGS_VALIDATION				0x00040000
+
+//struct RVLPSULM_HYPOTHESIS_GT
+//{
+//	int iSample;
+//	int iHypothesis;
+//	double P;
+//	char validation;
+//};
 
 class CRVLPSuLMVS;
 
@@ -18,6 +27,7 @@ struct RVLPSULMDISPLAY_MOUSE_CALLBACK_DATA
 	IplImage *pImage;
 	IplImage *pImage2;
 	//CRVL3DPose *pPoseCM;
+	char *MatchMatrixGT;
 };
 
 struct RVL3DMESHFILE
@@ -45,9 +55,15 @@ public:
 	void PSuLMBasedRLMUpdate(DWORD Flags);
 	void CreateParamList();
 	void CreateMeshFile(char *MeshFileName);
-	void DeleteMeshFile();
+	void ClearMeshFileData();
 	void AppendToMeshFile(CRVL3DPose *pRelPose);
 	void CreateLocal3DMesh(CRVLPSuLM *pPSuLM0);
+	void Validate();
+	//void SaveValidation();
+	void LoadMatchMatrix();
+	void SaveMatchMatrix();
+	//void StoreHypothesesToMatchMatrix(int iSample);
+	void ComputeMatchMatrix(int iSample);
 
 public:
 	CRVLPSuLMBuilder m_PSuLMBuilder;
@@ -56,4 +72,10 @@ public:
 	IplImage *m_pRGBImage;
 	RVL3DMESHFILE *m_pMeshFile;
 	int m_iSample;
+	CRVLPSuLMGroundTruth m_GroundTruth;
+	double *m_MatchMatrix;
+	char *m_MatchMatrixGT;
+	//RVLPSULM_HYPOTHESIS_GT *m_HypothesisArrayGT;
+	//int m_nMatches;
+	int m_nSamples;
 };
