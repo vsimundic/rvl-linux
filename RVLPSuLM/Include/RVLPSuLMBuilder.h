@@ -90,6 +90,7 @@
 #define RVLPSULMBUILDER_FLAG_LAST_DOF_ESTIMATION_METHOD_MAX_PEAK_ONLY	0x00000000
 #define RVLPSULMBUILDER_FLAG_LAST_DOF_ESTIMATION_METHOD_BEST_PEAK_TREE	0x08000000
 #define RVLPSULMBUILDER_FLAG_LAST_DOF_ESTIMATION_METHOD_ALL_PEAKS		0x10000000
+#define RVLPSULMBUILDER_FLAG_SCENE_FUSION						0x40000000
 #define RVLPSULMBUILDER_CREATEMODEL_FLAG_PERMANENT				0x00000001
 #define RVLPSULMBUILDER_CREATEMODEL_FROM_IMAGE					0x00000002
 #define RVLPSULMBUILDER_CREATEMODEL_IMAGE_FROM_FILE				0x00000004
@@ -180,6 +181,13 @@ struct RVLPSULM_MATCH2
 	BYTE Type;
 };
 
+struct RVLPSULM_SCENE_FUSION
+{
+	CRVLMem m_Mem;
+	RVLPSULM_HYPOTHESIS *m_HypothesisMem;
+	RVLQLIST m_HypothesisList;
+	double m_r;
+};
 
 //struct RVLPSULM_MATCH
 //{
@@ -322,7 +330,7 @@ public:
 	int m_nHypotheses;
 	RVLQLIST_PTR_ENTRY *m_RepresentativeHypothesisMem;
 	RVLQLIST m_RepresentativeHypothesisList;
-	//int m_nRepresentativeHypotheses;
+	int m_nRepresentativeHypotheses;
 	RVLPSULM_PARTICLE *m_ParticleArray;
 	int m_nParticles;
 	int m_refnParticles;
@@ -434,6 +442,7 @@ public:
 	CRVL3DLine2 *m_LineMSArray;
 	RVL3DSURFACE2_MATCH_DATA m_SurfaceMatchData;
 	RVL3DLINE2_MATCH_DATA m_LineMatchData;
+	RVLPSULM_SCENE_FUSION m_SceneFusion;
 	
 //#ifdef PYTHON_DEBUG
 //	PyObject *m_pyModuleName;
@@ -644,6 +653,7 @@ public:
 	void DeleteConnection_(	CRVLPSuLM *pPSuLM1,
 							CRVLPSuLM *pPSuLM2);
 	void UpdateRelativePoseUncertainties();	
+	void SceneFusion();
 
 private:
 	RVLPSULM_MSMATCH_DATA *HypothesesGetNextNode(	RVLPSULM_HG_NODE* pNode,
