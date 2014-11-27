@@ -7633,6 +7633,8 @@ void CRVLPSuLMBuilder::Localization(CRVLPSuLM * pSPSuLM,
 
 	m_PriorProbabilityGlobal = 0.0;
 
+	double PriorProbabilityWorldModel;
+
 	if(m_nHypotheses > 0 && HypEvalMethod == RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD_P)
 	{	
 		RVLMEM_ALLOC_LOCAL_INIT(m_pMem2)
@@ -7721,10 +7723,13 @@ void CRVLPSuLMBuilder::Localization(CRVLPSuLM * pSPSuLM,
 
 				for(i = 0; i < nSFeatures; i++)
 					m_SMatchArray[i].b = false;
-			
-				pMPSuLM->m_PriorProbabilityLocal += exp(ConditionalProbabilityTree(pSPSuLM, pMPSuLM) - pMPSuLM->m_pHypothesis->Probability);
 
-				pMPSuLM->m_PosteriorProbabilityLocal5DOF = 1.0 / pMPSuLM->m_PriorProbabilityLocal;
+				PriorProbabilityWorldModel = ConditionalProbabilityTree(pSPSuLM, pMPSuLM);
+			
+				pMPSuLM->m_PriorProbabilityLocal += exp(PriorProbabilityWorldModel - pMPSuLM->m_pHypothesis->Probability);
+
+				//pMPSuLM->m_PosteriorProbabilityLocal5DOF = 1.0 / pMPSuLM->m_PriorProbabilityLocal;
+				pMPSuLM->m_PosteriorProbabilityLocal5DOF = pMPSuLM->m_pHypothesis->Probability - PriorProbabilityWorldModel;
 
 				PoseConstraintProbability(pSPSuLM, pMPSuLM);
 
@@ -7749,6 +7754,8 @@ void CRVLPSuLMBuilder::Localization(CRVLPSuLM * pSPSuLM,
 
 		RVLBubbleSort<RVLPSULM_HYPOTHESIS>(&m_RepresentativeHypothesisList, m_nHypotheses, m_HypothesisArray, true);
 	}	// if(HypEvalMethod == RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD_P)
+
+
 
 	//*(ppParticle++) = pBestHypothesis;
 
@@ -11019,6 +11026,8 @@ void CRVLPSuLMBuilder::CreateParamList(CRVLMem * pMem)
 	pParamData = m_ParamList.AddParam("PSuLM.Localization.HypothesisEvaluation.minSurfaceSamplesForMatch", RVLPARAM_TYPE_INT, &m_minSurfaceSamplesForMatch);
 	pParamData = m_ParamList.AddParam("PSuLM.Localization.HypothesisEvaluation.SSM.Norm", RVLPARAM_TYPE_FLAG, &m_Flags);
 	m_ParamList.AddID(pParamData, "yes", RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_SSM_NORM);
+	pParamData = m_ParamList.AddParam("PSuLM.Localization.HypothesisEvaluation.ModelFusion", RVLPARAM_TYPE_FLAG, &m_Flags);
+	m_ParamList.AddID(pParamData, "yes", RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_MODEL_FUSION);
 
 	pParamData = m_ParamList.AddParam("PSuLM.Localization.Odometry.Const1", RVLPARAM_TYPE_DOUBLE, m_OdometryUncertConst);
 	pParamData = m_ParamList.AddParam("PSuLM.Localization.Odometry.Const2", RVLPARAM_TYPE_DOUBLE, m_OdometryUncertConst + 1);
