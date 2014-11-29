@@ -28,43 +28,47 @@ void RVLPSuLMdemoGetNextHypothesis(CRVLPSuLMVS *pVS,
 {
 	int iHypothesis_ = iHypothesis;
 
-#ifdef RVLPSULMDEMO_DISPLAY_ONLY_REPRESENTATIVE_HYPOTHESES
 	if(!bFirst)
 		iHypothesis += diHypothesis;
 
-	RVLPSULM_HYPOTHESIS *pHypothesis;
+	int iHypothesisOutOfRange;
 
-	int iHypothesisOutOfRange = (diHypothesis > 0 ? pVS->m_PSuLMBuilder.m_nHypotheses : -1);
-
-	while(iHypothesis != iHypothesisOutOfRange)
+	//if(pVS->m_PSuLMBuilder.m_Flags & RVLPSULMBUILDER_FLAG_SCENE_FUSION)
+	//	iHypothesisOutOfRange = (diHypothesis > 0 ? pVS->m_PSuLMBuilder.m_SceneFusion.m_nHypotheses : -1);
+	//else
 	{
-		pHypothesis = pVS->m_PSuLMBuilder.m_HypothesisArray[iHypothesis];
+		iHypothesisOutOfRange = (diHypothesis > 0 ? pVS->m_PSuLMBuilder.m_nHypotheses : -1);
 
-		if((pVS->m_Flags & RVLSYS_FLAGS_VALIDATION) && bFilterHypotheses && MatchMatrixGT != NULL)
+#ifdef RVLPSULMDEMO_DISPLAY_ONLY_REPRESENTATIVE_HYPOTHESES
+
+		RVLPSULM_HYPOTHESIS *pHypothesis;		
+
+		while(iHypothesis != iHypothesisOutOfRange)
 		{
-			//if(pHypothesis->iRepresentative == 0xffffffff && pHypothesis->validation != -1)
-			//	break;
-			if(pHypothesis == pHypothesis->pMPSuLM->m_pHypothesis && MatchMatrixGT[pHypothesis->pMPSuLM->m_Index] >= 0)
-				break;
-		}
-		else
-		{
+			pHypothesis = pVS->m_PSuLMBuilder.m_HypothesisArray[iHypothesis];
+
+			if((pVS->m_Flags & RVLSYS_FLAGS_VALIDATION) && bFilterHypotheses && MatchMatrixGT != NULL)
+			{
+				//if(pHypothesis->iRepresentative == 0xffffffff && pHypothesis->validation != -1)
+				//	break;
+				if(pHypothesis == pHypothesis->pMPSuLM->m_pHypothesis && MatchMatrixGT[pHypothesis->pMPSuLM->m_Index] >= 0)
+					break;
+			}
+			else
+			{
 #ifdef RVLPSULMDEMO_DISPLAY_ONLY_BEST_LOCAL_MODEL_HYPOTHESES
-			if(pHypothesis == pHypothesis->pMPSuLM->m_pHypothesis)
-				break;
+				if(pHypothesis == pHypothesis->pMPSuLM->m_pHypothesis)
+					break;
 #else
-			if(pHypothesis->iRepresentative == 0xffffffff)
-				break;
+				if(pHypothesis->iRepresentative == 0xffffffff)
+					break;
 #endif
+			}
+
+			iHypothesis += diHypothesis;						
 		}
-
-		iHypothesis += diHypothesis;						
+#endif	// #ifdef RVLPSULMDEMO_DISPLAY_ONLY_REPRESENTATIVE_HYPOTHESES
 	}
-
-#else
-	if(iHypothesis != iHypothesisOutOfRange)
-		iHypothesis += diHypothesis;
-#endif
 
 	if(iHypothesis == iHypothesisOutOfRange)
 		iHypothesis = iHypothesis_;
@@ -495,7 +499,7 @@ int main(int argc, char* argv[])
 
 		MatchMatrixGT = (iSample >= 0 && iSample < VS.m_nSamples ? VS.m_MatchMatrixGT + MatchMatrixOffset : NULL);
 
-		VS.ComputeMatchMatrix(iSample);
+		//VS.ComputeMatchMatrix(iSample);
 
 		/////
 
@@ -579,6 +583,8 @@ int main(int argc, char* argv[])
 		}	// if(VS.m_Flags & RVLSYS_FLAGS_EDIT_MAP)
 		else
 		{
+
+
 			iHypothesis = 0;
 
 			RVLPSuLMdemoGetNextHypothesis(&VS, iHypothesis, 1, MatchMatrixGT, bFilterHypotheses, true);

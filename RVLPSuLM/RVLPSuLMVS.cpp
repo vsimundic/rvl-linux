@@ -117,7 +117,7 @@ void CRVLPSuLMVS::Init(char * CfgFile2Name)
 	LoadMatchMatrix();
 
 	if(m_Flags & RVLSYS_FLAGS_EDIT_MAP)
-		m_PSuLMBuilder.m_Flags &= ~(RVLPSULMBUILDER_FLAG_MODE | RVLPSULMBUILDER_FLAG_MAPBUILDING);
+		m_PSuLMBuilder.m_Flags &= ~(RVLPSULMBUILDER_FLAG_MODE | RVLPSULMBUILDER_FLAG_MAPBUILDING | RVLPSULMBUILDER_FLAG_SCENE_FUSION);
 
 	m_pPSuLM = NULL;
 
@@ -689,6 +689,20 @@ void CRVLPSuLMVS::CreateLocal3DMesh(CRVLPSuLM *pPSuLM0)
 	while(m_PSuLMBuilder.m_PSuLMSubList.m_pNext)
 	{
 		pPSuLM = (CRVLPSuLM *)(m_PSuLMBuilder.m_PSuLMSubList.GetNext());
+
+		//// only for debugging purposes!!!
+
+		//RVLPSULM_NEIGHBOR2 *pNeighbor = (RVLPSULM_NEIGHBOR2 *)(pPSuLM0->m_LocalMap.pFirst);
+	
+		//while(pNeighbor)
+		//{
+		//	if(pNeighbor->pMPSuLM == pPSuLM)
+		//		int debug = 0;
+
+		//	pNeighbor = (RVLPSULM_NEIGHBOR2 *)(pNeighbor->pNext);
+		//}	
+
+		///////
 
 		fprintf(fp, "%d\n", pPSuLM->m_Index);
 
