@@ -663,6 +663,7 @@ public:
 							CRVLPSuLM *pPSuLM2);
 	void UpdateRelativePoseUncertainties();	
 	void SceneFusion();
+	void GetConnectedSubMap(CRVLPSuLM *pPSuLM0);
 
 private:
 	RVLPSULM_MSMATCH_DATA *HypothesesGetNextNode(	RVLPSULM_HG_NODE* pNode,

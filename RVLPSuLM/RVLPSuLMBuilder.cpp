@@ -18040,10 +18040,18 @@ void CRVLPSuLMBuilder::GetModelPoses( CRVL3DPose *pPoseAsAm0,
 
 	double *CAm0As = pMPSuLM0->m_PoseRTAs.m_C;
 
+	double *C2;
+
 	if(m_Flags & RVLPSULMBUILDER_HYPOTHESES_UNCERTAINTY_3DOF)
 		RVL3DOFInvTransfUncert(RAsAm0[0], RAsAm0[3], tAm0As[0], tAm0As[1], pPoseAsAm0->m_C, CAm0As);
 	else
+	{
 		RVL6DOFInvTransfUncert(RAsAm0, tAsAm0, pPoseAsAm0->m_C, CAm0As);
+
+		RVLCOMPLETESIMMX3(CAm0As)
+		C2 = CAm0As + 2 * 9;
+		RVLCOMPLETESIMMX3(C2)
+	}
 
 	//// TAs0 <- TAm00 * TAsAm0
 
@@ -18108,7 +18116,7 @@ void CRVLPSuLMBuilder::GetModelPoses( CRVL3DPose *pPoseAsAm0,
 	{
 		BOOL bReal[3];
 
-		RVLEig3(C + 2 * 9, eig, bReal);
+		RVLEig3(CAm0As + 2 * 9, eig, bReal);
 
 		double fTmp = RVLMAX(eig[0], eig[1]);
 
@@ -18267,11 +18275,18 @@ void CRVLPSuLMBuilder::GetModelPoses( CRVL3DPose *pPoseAsAm0,
 			{
 				BOOL bReal[3];
 
-				RVLEig3(C + 2 * 9, eig, bReal);
+				RVLEig3(CAmAs + 2 * 9, eig, bReal);
 
 				double fTmp = RVLMAX(eig[0], eig[1]);
 
 				uncert = RVLMAX(fTmp, eig[2]);
+			}
+
+			if(uncert > 1000.0 * 1000.0)
+			{
+				pNeighborPtr = (RVLQLIST_PTR_ENTRY *)(pNeighborPtr->pNext);
+
+				continue;
 			}
 
 			pPSuLMListEntry->uncert = uncert;
@@ -19708,6 +19723,10 @@ void CRVLPSuLMBuilder::Connect(CRVLPSuLM * pMPSuLM1,
 		RVLINVTRANSF3D(pPoseCsCm->m_Rot, pPoseCsCm->m_X, pNeigh->pPoseRel->m_Rot, pNeigh->pPoseRel->m_X)
 		RVLMEM_ALLOC_STRUCT_ARRAY(m_pMem0, double, 3 * 3 * 3, pNeigh->pPoseRel->m_C);
 		RVL6DOFInvTransfUncert(pPoseCsCm->m_Rot, pPoseCsCm->m_X, CCsCm_, pNeigh->pPoseRel->m_C);
+		double *C = pNeigh->pPoseRel->m_C;
+		RVLCOMPLETESIMMX3(C)
+		C += 2 * 9;
+		RVLCOMPLETESIMMX3(C)
 	}
 
 	RVLQLIST_ADD_ENTRY(pMPSuLM2->m_NeighbourList, pNeighbourEntry);							
@@ -19794,6 +19813,7 @@ void CRVLPSuLMBuilder::CreateLocalMap(CRVLPSuLM * pPSuLM,
 
 	RVLPSULM_NEIGHBOR2 *pNeighbor2;
 	RVLQLIST *pLocalMap2;
+	double *CTmp;
 
 	m_PSuLMSubList.Start();
 
@@ -19858,6 +19878,9 @@ void CRVLPSuLMBuilder::CreateLocalMap(CRVLPSuLM * pPSuLM,
 				RVLINVTRANSF3D(R, dX, R2, dX2)
 				
 				RVL6DOFInvTransfUncert(R, dX2, CAmAs, CAmAs2);
+				RVLCOMPLETESIMMX3(CAmAs2)
+				CTmp = CAmAs2 + 2 * 9;
+				RVLCOMPLETESIMMX3(CTmp)
 			}
 
 			RVLMEM_ALLOC_STRUCT(m_pMem0, RVLQLISTHT_PTR_ENTRY, pLocalMapHTEntry)
@@ -21924,7 +21947,8 @@ bool CRVLPSuLMBuilder::MapBuilding(CRVLPSuLM *pSPSuLM)
 		if(pMPSuLM->m_pHypothesis == NULL)
 			continue;
 
-		if(pMPSuLM->m_PosteriorProbabilityLocal < 0.999)
+		//if(pMPSuLM->m_PosteriorProbabilityLocal < 0.999)
+		if(pMPSuLM->m_PosteriorProbabilityLocal5DOF < 60.0)
 			continue;
 
 		bTracking = true;
@@ -21963,7 +21987,8 @@ bool CRVLPSuLMBuilder::MapBuilding(CRVLPSuLM *pSPSuLM)
 		if(pMPSuLM->m_pHypothesis == NULL)
 			continue;
 
-		if(pMPSuLM->m_PosteriorProbabilityLocal < 0.999)
+		//if(pMPSuLM->m_PosteriorProbabilityLocal < 0.999)
+		if(pMPSuLM->m_PosteriorProbabilityLocal5DOF < 60.0)
 			continue;
 
 		Connect(pMPSuLM, pNewPSuLM, NULL, &(pMPSuLM->m_pHypothesis->PoseSM));
@@ -22221,9 +22246,9 @@ void CRVLPSuLMBuilder::UpdateRelativePoseUncertainties()
 	double dist, angle;
 	BYTE result;	// 0 - OK; 1 - large error; 2 - no hypotheses
 	//double invR[9], invt[3];
-	double *R, *t;
+	double *R, *t, *C;
 
-	for(i = 0; i < m_maxPSuLMIndex; i++)
+	for(i = 0; i <= m_maxPSuLMIndex; i++)
 	{
 		pPSuLM = m_PSuLMArray[i];
 
@@ -22236,6 +22261,7 @@ void CRVLPSuLMBuilder::UpdateRelativePoseUncertainties()
 		{
 			pNeighborRel = (RVLPSULM_NEIGHBOUR *)(pNeighborPtr->Ptr);
 
+#ifdef NEVER	// Correction 1
 			pPSuLM_ = pNeighborRel->pPSuLM;
 
 			fprintf(fp, "%d-%d: ", pPSuLM->m_Index, pPSuLM_->m_Index);
@@ -22299,6 +22325,10 @@ void CRVLPSuLMBuilder::UpdateRelativePoseUncertainties()
 						fprintf(fp, "OK.\n");
 
 						RVL6DOFInvTransfUncert(R, t, pHypothesis->PoseSM.m_C, pNeighborRel->pPoseRel->m_C);
+						double *C = pNeighborRel->pPoseRel->m_C;
+						RVLCOMPLETESIMMX3(C)
+						C += 2 * 9;
+						RVLCOMPLETESIMMX3(C)
 					}
 					else
 						fprintf(fp, "ERROR: dist=%lf, angle=%lf (Hypothesis %d)\n", dist, angle * RAD2DEG, pHypothesis->Index);
@@ -22307,6 +22337,15 @@ void CRVLPSuLMBuilder::UpdateRelativePoseUncertainties()
 					fprintf(fp, "ERROR: No hypotheses.\n");
 
 			}
+#endif
+			// Correction 2
+
+			C = pNeighborRel->pPoseRel->m_C;
+			RVLCOMPLETESIMMX3(C)
+			C += 18;
+			RVLCOMPLETESIMMX3(C)
+
+			/////
 
 			pNeighborPtr = (RVLQLIST_PTR_ENTRY *)(pNeighborPtr->pNext);	
 		}
@@ -22499,6 +22538,60 @@ void CRVLPSuLMBuilder::SceneFusion()
 	m_SceneFusion.m_HypothesisArray = NULL;	
 
 	RVLBubbleSort2<RVLPSULM_HYPOTHESIS_SCENE_FUSION>(pHypothesisList, m_SceneFusion.m_nHypotheses, &(m_SceneFusion.m_HypothesisArray), true);
+}
+
+void CRVLPSuLMBuilder::GetConnectedSubMap(CRVLPSuLM *pPSuLM0)
+{
+	CRVL3DPose NullPose;
+	double C[3 * 3 * 3];
+	double *C_;
+
+	RVLNULLMX3X3(C)
+
+	if(!(m_Flags & RVLPSULMBUILDER_HYPOTHESES_UNCERTAINTY_3DOF))
+	{
+		C_ = C + 9;
+		RVLNULLMX3X3(C_)
+		C_ += 9;
+		RVLNULLMX3X3(C_)
+	}
+
+	NullPose.Reset();
+
+	NullPose.m_C = C;
+
+	NullPose.m_ParamFlags = (m_Flags & RVLPSULMBUILDER_HYPOTHESES_UNCERTAINTY_3DOF ? RVL3DPOSE_PARAM_FLAGS_COV_3D : RVL3DPOSE_PARAM_FLAGS_COV_6D);
+
+	CRVLMem Mem;
+
+	Mem.Create(m_PSuLMList.m_nElements * sizeof(RVLPTRCHAIN_ELEMENT));
+
+	CRVLMem *pMemOld = m_PSuLMSubList.m_pMem;
+
+	m_PSuLMSubList.m_pMem = &Mem;
+
+	m_PSuLMSubList.RemoveAll();
+
+	GetLocalModels(NULL, &NullPose, pPSuLM0, 1e10);
+
+	FILE *fp = fopen("C:\\RVL\\Debug\\ConnectedMap.log", "w");
+
+	CRVLPSuLM *pPSuLM;
+
+	m_PSuLMSubList.Start();
+
+	while(m_PSuLMSubList.m_pNext)
+	{
+		pPSuLM = (CRVLPSuLM *)(m_PSuLMSubList.GetNext());
+
+		fprintf(fp, "%d\n", pPSuLM->m_Index);
+	}
+
+	RVLResetFlags<CRVLPSuLM>(&m_PSuLMSubList, RVLPSULM_FLAG_CLOSE);
+
+	m_PSuLMSubList.m_pMem = pMemOld;
+
+	fclose(fp);
 }
 
 ///////////////////////////////////// 

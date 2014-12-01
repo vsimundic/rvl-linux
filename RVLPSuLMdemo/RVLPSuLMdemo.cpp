@@ -229,14 +229,19 @@ int main(int argc, char* argv[])
 	if(VS.m_Flags & RVLSYS_FLAGS_CREATE_GLOBAL_MESH)
 		VS.CreateMeshFile("Mesh.obj");
 
+	// bRecord flag
+
+	bool bRecord = ((VS.m_Flags & RVLSYS_FLAGS_RECORD) != 0);
+
 	// create main display image
 
 	CRVLFigure *pFig = GUI.OpenFigure("Scene");
 
-	pFig->m_Flags |= (RVLPSULM_DISPLAY_SCENE | RVLFIG_FLAG_DATA);
+	if(!bRecord)
+		pFig->m_Flags |= (RVLPSULM_DISPLAY_SCENE | RVLFIG_FLAG_DATA);
 
 	pFig->m_FontSize = 16;
-	cvInitFont(&(pFig->m_Font), CV_FONT_HERSHEY_SIMPLEX, 0.5, 0.5, 0, 2);
+	cvInitFont(&(pFig->m_Font), CV_FONT_HERSHEY_SIMPLEX, 0.5, 0.5, 0, 2);	
 
 	//if(VS.m_Flags & RVLSYS_FLAGS_PC)
 	//{
@@ -296,10 +301,12 @@ int main(int argc, char* argv[])
 	bool bDisplayHypothesis = true;
 	bool bDisplayPSuLM = false;
 	//bool bContinuous = bKinect;
-	bool bContinuous = false;
-	bool bRecord = false;
 	bool bFrames = false;
 	bool bFilterHypotheses = true;
+	//bool bManualTrigger = true;
+	bool bManualTrigger = bKinect;
+	bool bLocalize = !bManualTrigger;
+	bool bContinuous = bManualTrigger;
 	//DWORD mDisplayPSuLMFlags = (RVLPSULM_DISPLAY_SURFACES | RVLPSULM_DISPLAY_VECTORS | RVLPSULM_DISPLAY_SAMPLES);
 	DWORD mDisplayPSuLMFlags = (RVLPSULM_DISPLAY_SURFACES | RVLPSULM_DISPLAY_ELLIPSES | RVLPSULM_DISPLAY_LINES | RVLPSULM_DISPLAY_VECTORS);
 	if(VS.m_Flags & RVLSYS_FLAGS_VALIDATION)
@@ -334,6 +341,8 @@ int main(int argc, char* argv[])
 	bool bRefresh;
 	bool bNextImage;
 	bool bBackwards;
+	bool bLast;
+	bool bSaveImage;
 	clock_t t;
 	char str[200];
 	int iTextLine;
@@ -362,8 +371,8 @@ int main(int argc, char* argv[])
 		{
 			// acquire depth image from Kinect
 
-			if(bRecord)
-				DepthMapFormat = RVLKINECT_DEPTH_IMAGE_FORMAT_1MM;
+			//if(bRecord)
+			//	DepthMapFormat = RVLKINECT_DEPTH_IMAGE_FORMAT_1MM;
 
 			VS.m_Kinect.GetImages(pDepthImage->Disparity, pRGBImage, NULL, pGSImage, DepthMapFormat);
 		}
@@ -414,7 +423,7 @@ int main(int argc, char* argv[])
 			}
 		}	// if(bRecord)
 
-		if(!bRecord)
+		if(!bRecord && bLocalize)
 		{
 			if(VS.m_Flags & RVLSYS_FLAGS_EDIT_MAP)
 			{			
@@ -487,7 +496,13 @@ int main(int argc, char* argv[])
 			pHSVImage->channelSeq[1] = 'G';
 
 			pHSVImage->channelSeq[2] = 'B';
-		}	// if(!bRecord)
+
+			if(VS.m_Flags & RVLSYS_FLAGS_EDIT_MAP)
+				VS.m_PSuLMBuilder.GetConnectedSubMap(pPSuLM);
+
+			if(bManualTrigger)
+				bContinuous = false;
+		}	// if(!bRecord && bLocalize)
 
 		// display the results
 
@@ -583,13 +598,12 @@ int main(int argc, char* argv[])
 		}	// if(VS.m_Flags & RVLSYS_FLAGS_EDIT_MAP)
 		else
 		{
-
-
 			iHypothesis = 0;
 
 			RVLPSuLMdemoGetNextHypothesis(&VS, iHypothesis, 1, MatchMatrixGT, bFilterHypotheses, true);
 
-			VS.m_pPSuLM->m_Index = 0xffffffff;
+			if(VS.m_pPSuLM)
+				VS.m_pPSuLM->m_Index = 0xffffffff;
 		}
 
 		do
@@ -628,39 +642,39 @@ int main(int argc, char* argv[])
 
 			RVLZoom(pInputImage, pZoomedInputImage, 2);
 
-			// display the mesh or convex sets
-
-			if(bDisplayMesh)
-				RVLDisplay2DRegions(pFig, &(VS.m_AImage.m_C2DRegion.m_ObjectList), VS.m_CameraL.Width, RVLColor(0, 255, 0));
-
-			if(bDisplayConvexSets)
-				RVLDisplay2DRegions(pFig, &(VS.m_AImage.m_C2DRegion.m_ObjectList), VS.m_CameraL.Width, 
-					RVLColor(255, 0, 255), 1, RVLMESH_LINK_FLAG_EDGE, RVLMESH_LINK_FLAG_EDGE);
-
-			if(bDisplayHypothesis)
+			if(bLocalize)
 			{
-				VS.m_PSuLMBuilder.DisplayHypothesis(&GUI, pFig, pFig2, VS.m_pPSuLM, mDisplayPSuLMFlags, pInputImage_,
-					pPrevRGBImage, iHypothesis);				
+				// display the mesh or convex sets
 
-				VS.m_PSuLMBuilder.DisplayHypothesisData(pFig, VS.m_pPSuLM, MatchMatrixGT, mDisplayPSuLMFlags, iHypothesis);
-			}
+				if(bDisplayMesh)
+					RVLDisplay2DRegions(pFig, &(VS.m_AImage.m_C2DRegion.m_ObjectList), VS.m_CameraL.Width, RVLColor(0, 255, 0));
 
-			if(bDisplayPSuLM)
-			{
-				pFig->m_pImage = cvCloneImage(pInputImage_);
+				if(bDisplayConvexSets)
+					RVLDisplay2DRegions(pFig, &(VS.m_AImage.m_C2DRegion.m_ObjectList), VS.m_CameraL.Width, 
+						RVLColor(255, 0, 255), 1, RVLMESH_LINK_FLAG_EDGE, RVLMESH_LINK_FLAG_EDGE);
 
-				//if(VS.m_Flags & RVLSYS_FLAGS_PC)
-				//	VS.m_pPSuLM->Display(pFig, &PoseLC, cvScalar(0, 255, 0), mDisplayPSuLMFlags);
-				//else
-					VS.m_pPSuLM->Display(pFig, &NullPose, cvScalar(0, 255, 0), mDisplayPSuLMFlags);
-			}
+				if(bDisplayHypothesis)
+				{
+					VS.m_PSuLMBuilder.DisplayHypothesis(&GUI, pFig, pFig2, VS.m_pPSuLM, mDisplayPSuLMFlags, pInputImage_,
+						pPrevRGBImage, iHypothesis);				
 
-			GUI.DisplayVectors(pFig, 0, 0, (double)ZoomFactor);
+					VS.m_PSuLMBuilder.DisplayHypothesisData(pFig, VS.m_pPSuLM, MatchMatrixGT, mDisplayPSuLMFlags, iHypothesis);
+				}
 
-			GUI.DisplayVectors(pFig2, 0, 0, 1.0);
+				if(bDisplayPSuLM)
+				{
+					pFig->m_pImage = cvCloneImage(pInputImage_);
 
-			if(!bRecord)
-			{
+					//if(VS.m_Flags & RVLSYS_FLAGS_PC)
+					//	VS.m_pPSuLM->Display(pFig, &PoseLC, cvScalar(0, 255, 0), mDisplayPSuLMFlags);
+					//else
+						VS.m_pPSuLM->Display(pFig, &NullPose, cvScalar(0, 255, 0), mDisplayPSuLMFlags);
+				}
+
+				GUI.DisplayVectors(pFig, 0, 0, (double)ZoomFactor);
+
+				GUI.DisplayVectors(pFig2, 0, 0, 1.0);
+
 				// display some numerical data
 
 				iTextLine = 0;
@@ -676,29 +690,35 @@ int main(int argc, char* argv[])
 				sprintf(str, "CT = %d", VS.m_ConvexSegmentThr);
 
 				cvPutText(pFig->m_pImage, str, cvPoint(0, (++iTextLine) * pFig->m_FontSize), &pFig->m_Font,  cvScalar(255, 0, 0));
+
+				// show the display image
+
+				MouseCallbackData.ZoomFactor = ZoomFactor;
+				MouseCallbackData.mDisplayPSuLMFlags = mDisplayPSuLMFlags;
+				MouseCallbackData.iHypothesis = (VS.m_PSuLMBuilder.m_nHypotheses > 0 ? iHypothesis : -1);
+				MouseCallbackData.pImage = pInputImage_;
+				MouseCallbackData.MatchMatrixGT = MatchMatrixGT;
+
+				GUI.ShowFigure(pFig);	
+
+				cvSetMouseCallback("Scene", RVLPSuLMDisplayMouseCallback2, &MouseCallbackData);
+								
+				MouseCallbackData2.mDisplayPSuLMFlags = mDisplayPSuLMFlags;
+				MouseCallbackData2.iHypothesis = (VS.m_PSuLMBuilder.m_nHypotheses > 0 ? iHypothesis : -1);
+				MouseCallbackData2.MatchMatrixGT = MatchMatrixGT;
+
+				GUI.ShowFigure(pFig2);	
+
+				cvSetMouseCallback("Model", RVLPSuLMDisplayMouseCallback2, &MouseCallbackData2);
+
+				//cvSaveImage("C:\\RVL\\ExpRez\\RVLDisplay.bmp", pDisplay);
 			}
+			else
+			{
+				pFig->m_pImage = pInputImage_;
 
-			// show the display image
-
-			MouseCallbackData.ZoomFactor = ZoomFactor;
-			MouseCallbackData.mDisplayPSuLMFlags = mDisplayPSuLMFlags;
-			MouseCallbackData.iHypothesis = (VS.m_PSuLMBuilder.m_nHypotheses > 0 ? iHypothesis : -1);
-			MouseCallbackData.pImage = pInputImage_;
-			MouseCallbackData.MatchMatrixGT = MatchMatrixGT;
-
-			GUI.ShowFigure(pFig);	
-
-			cvSetMouseCallback("Scene", RVLPSuLMDisplayMouseCallback2, &MouseCallbackData);
-							
-			MouseCallbackData2.mDisplayPSuLMFlags = mDisplayPSuLMFlags;
-			MouseCallbackData2.iHypothesis = (VS.m_PSuLMBuilder.m_nHypotheses > 0 ? iHypothesis : -1);
-			MouseCallbackData2.MatchMatrixGT = MatchMatrixGT;
-
-			GUI.ShowFigure(pFig2);	
-
-			cvSetMouseCallback("Model", RVLPSuLMDisplayMouseCallback2, &MouseCallbackData2);
-
-			//cvSaveImage("C:\\RVL\\ExpRez\\RVLDisplay.bmp", pDisplay);
+				GUI.ShowFigure(pFig);
+			}
 
 			// wait until a key is pressed
 
@@ -709,6 +729,8 @@ int main(int argc, char* argv[])
 			bNextImage = true;
 			bRefresh = false;
 			bBackwards = false;
+			bLast = false;
+			bSaveImage  = false;
 			SampleStep = 1;
 
 			switch(key){
@@ -741,6 +763,9 @@ int main(int argc, char* argv[])
 			case 'c':
 				bContinuous = !bContinuous;
 
+				if(bContinuous && bManualTrigger)
+					bLocalize = false;
+
 				break;
 			case 'e':
 				mDisplayPSuLMFlags ^= (RVLPSULM_DISPLAY_ELLIPSES | RVLPSULM_DISPLAY_LINES);
@@ -751,6 +776,7 @@ int main(int argc, char* argv[])
 			case 'f':	// Map building on/off
 				VS.m_PSuLMBuilder.m_Flags ^= RVLPSULMBUILDER_FLAG_MAPBUILDING;
 
+#ifdef RVLPSULMBUILDER_MAPBUILDING_SEQUENCE
 				if(VS.m_PSuLMBuilder.m_Flags & RVLPSULMBUILDER_FLAG_MAPBUILDING)
 				{
 					VS.m_PSuLMBuilder.m_Flags &= ~RVLPSULMBUILDER_FLAG_GLOBAL;
@@ -758,14 +784,15 @@ int main(int argc, char* argv[])
 					//if(VS.m_PSuLMBuilder.m_nPlausibleHypotheses > 0)
 					//	VS.m_PSuLMBuilder.m_pNearestModelPSuLM = VS.m_PSuLMBuilder.m_HypothesisArray[0]->pMPSuLM;
 
-#ifdef RVLPSULMBUILDER_MAPBUILDING_SEQUENCE
 					if(VS.m_PSuLMBuilder.m_nHypotheses > 0)
 						if(VS.m_PSuLMBuilder.m_HypothesisArray[0]->pMPSuLM->m_PosteriorProbabilityLocal >= 0.999)
 							VS.m_PSuLMBuilder.m_pNearestModelPSuLM = VS.m_PSuLMBuilder.m_HypothesisArray[0]->pMPSuLM;
-#endif
 				}
+#endif
 
 				bNextImage = false;
+
+				bLocalize = true;
 
 				break;
 			case 'F':
@@ -875,6 +902,21 @@ int main(int argc, char* argv[])
 
 				break;
 			case 's':
+				if(bRecord && bKinect)
+				{
+					cvSaveImage(VS.m_ImageFileName, VS.m_pRGBImage);	
+
+					char *DepthImageFileName = RVLCreateFileName(VS.m_ImageFileName, "-LW.bmp", -1, "-D.txt");
+
+					RVLSaveDepthImage(VS.m_StereoVision.m_DisparityMap.Disparity, VS.m_StereoVision.m_DisparityMap.Width, 
+						VS.m_StereoVision.m_DisparityMap.Height, DepthImageFileName, VS.m_StereoVision.m_DisparityMap.Format, 
+						VS.m_StereoVision.m_DisparityMap.Format);					
+
+					bSaveImage = true;
+				}
+
+				break;
+			case 'S':
 				bDisplayConvexSets = (!bDisplayConvexSets && !bRecord);
 
 				bRefresh = true;
@@ -998,6 +1040,15 @@ int main(int argc, char* argv[])
 				bBackwards = true;
 
 				break;
+			case 0x0000000d:	// Enter
+				if(bManualTrigger)
+				{
+					bLocalize = true;
+
+					bNextImage = false;
+				}
+
+				break;
 			case 0x00210000:	// PgUp
 				bBackwards = true;
 
@@ -1006,6 +1057,11 @@ int main(int argc, char* argv[])
 				break;
 			case 0x00220000:	// PgDn
 				SampleStep = 10;
+
+				break;
+			case 0x00230000:	// End
+				if(VS.m_Flags & RVLSYS_FLAGS_EDIT_MAP)
+					bLast = true;
 
 				break;
 			case 0x00240000:	// Home
@@ -1144,7 +1200,7 @@ int main(int argc, char* argv[])
 		// next image/model
 
 		//if(!bKinect && bNextImage)
-		if(bNextImage)
+		if((!bRecord && !bManualTrigger && bNextImage) || (bRecord && bSaveImage) || (bManualTrigger && bLocalize))
 		{
 			//if(VS.m_Flags & RVLSYS_FLAGS_VALIDATION)
 			//{
@@ -1174,6 +1230,18 @@ int main(int argc, char* argv[])
 
 					if(iMPSuLM < 0)
 						iMPSuLM = iMPSuLM_;
+				}
+				else if(bLast)
+				{
+					while(iMPSuLM <= VS.m_PSuLMBuilder.m_maxPSuLMIndex)
+					{
+						if(VS.m_PSuLMBuilder.m_PSuLMArray[iMPSuLM])
+							iMPSuLM_ = iMPSuLM;
+
+						iMPSuLM++;
+					}
+
+					iMPSuLM = iMPSuLM_;
 				}
 				else
 				{
