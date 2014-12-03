@@ -196,6 +196,7 @@ struct RVLPSULM_HYPOTHESIS_SCENE_FUSION
 	double cost;
 	int iSample;
 	int iHypothesis;
+	double r;
 };
 
 struct RVLPSULM_PATH_PLANNING_NEIGHBOR
