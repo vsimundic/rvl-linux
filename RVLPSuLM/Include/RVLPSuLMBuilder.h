@@ -650,6 +650,7 @@ public:
 	void DeleteConnection_(	CRVLPSuLM *pPSuLM1,
 							CRVLPSuLM *pPSuLM2);
 	void UpdateRelativePoseUncertainties();	
+	void GetProjectionMatrix(double *P);
 
 private:
 	RVLPSULM_MSMATCH_DATA *HypothesesGetNextNode(	RVLPSULM_HG_NODE* pNode,

@@ -83,7 +83,13 @@ void CRVLPSuLMVS::Init(char * CfgFile2Name)
 	m_PSuLMBuilder.Init();
 
 	if(m_Flags & RVLSYS_FLAGS_PC)
+	{
 		m_PSuLMBuilder.m_Flags |= RVLPSULMBUILDER_FLAG_PC;
+
+		m_PSD.GetOrgPCProjectionParams(m_CameraL.fNrm, m_CameraL.CenterXNrm, m_CameraL.CenterYNrm);
+
+		m_CameraL.fvNrm = m_CameraL.fNrm;
+	}
 
 	m_PSuLMBuilder.RobotCameraPose();
 
@@ -872,6 +878,11 @@ void CRVLPSuLMVS::LoadMatchMatrix()
 
 	/////
 
+	int nPSuLMS = m_PSuLMBuilder.m_maxPSuLMIndex + 1;
+
+	if(nPSuLMS == 0)
+		return;
+
 	char line[200];
 	int iSample;
 
@@ -888,8 +899,6 @@ void CRVLPSuLMVS::LoadMatchMatrix()
 	fclose(fp);
 
 	m_nSamples++;
-
-	int nPSuLMS = m_PSuLMBuilder.m_maxPSuLMIndex + 1;
 
 	int nMatches = m_nSamples * nPSuLMS;
 

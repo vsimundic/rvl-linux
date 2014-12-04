@@ -294,6 +294,7 @@ public:
 	int m_minSegmentSize;
 	int m_minnInliers;
 	int m_DiscontinuitiyThr;
+	double m_MeshDiscontinuityThr;
 	int m_minnValids;
 	double m_AngleThr;
 	//int m_maxdepth;

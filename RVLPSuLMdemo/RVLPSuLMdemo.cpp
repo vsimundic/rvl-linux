@@ -365,48 +365,45 @@ int main(int argc, char* argv[])
 		}
 		else
 #endif
-		if(bRecord)
+		if(VS.m_Flags & RVLSYS_FLAGS_PC)
 		{
-			if(VS.m_Flags & RVLSYS_FLAGS_PC)
+			if(!RVLPCImport(VS.m_ImageFileName, PC, nPC))
 			{
-				if(!RVLPCImport(VS.m_ImageFileName, PC, nPC))
-				{
-					MessageCanNotOpenFile(&GUI, VS.m_ImageFileName);
+				MessageCanNotOpenFile(&GUI, VS.m_ImageFileName);
 
-					cvWaitKey();
+				cvWaitKey();
 
-					return 0;
-				}
-				else
-				{
-					int iSample = RVLGetFileNumber(VS.m_ImageFileName, "00000-PC.pcd");
-
-					char *PCFileName = RVLCreateFileName(VS.m_ImageFileName, "-PC.pcd", iSample, "-PC.obj");
-
-					RVLPCSaveToObj(PC, nPC, PCFileName);
-
-					delete[] PCFileName;
-				}
+				return 0;
 			}
 			else
 			{
-				if(!RVLImportDisparityImage(VS.m_ImageFileName, pDepthImage, DepthMapFormat, VS.m_Kinect.m_zToDepthLookupTable))
-				{
-					MessageCanNotOpenFile(&GUI, VS.m_ImageFileName);
-				
-					cvWaitKey();
+				int iSample = RVLGetFileNumber(VS.m_ImageFileName, "00000-PC.pcd");
 
-					return 0;
-				}
-				else
-				{
-					RVLSaveDepthImage(pDepthImage->Disparity, w, h, VS.m_ImageFileName, RVLKINECT_DEPTH_IMAGE_FORMAT_1MM, 
-						RVLKINECT_DEPTH_IMAGE_FORMAT_1MM);
+				char *PCFileName = RVLCreateFileName(VS.m_ImageFileName, "-PC.pcd", iSample, "-PC.obj");
 
-					int iSample = RVLGetFileNumber(VS.m_ImageFileName, "00000-D.txt");
-				
-					RVLSetFileNumber(VS.m_ImageFileName, "00000-D.txt", iSample + 1);
-				}
+				RVLPCSaveToObj(PC, nPC, PCFileName);
+
+				delete[] PCFileName;
+			}
+		}
+		else if(bRecord)
+		{
+			if(!RVLImportDisparityImage(VS.m_ImageFileName, pDepthImage, DepthMapFormat, VS.m_Kinect.m_zToDepthLookupTable))
+			{
+				MessageCanNotOpenFile(&GUI, VS.m_ImageFileName);
+			
+				cvWaitKey();
+
+				return 0;
+			}
+			else
+			{
+				RVLSaveDepthImage(pDepthImage->Disparity, w, h, VS.m_ImageFileName, RVLKINECT_DEPTH_IMAGE_FORMAT_1MM, 
+					RVLKINECT_DEPTH_IMAGE_FORMAT_1MM);
+
+				int iSample = RVLGetFileNumber(VS.m_ImageFileName, "00000-D.txt");
+			
+				RVLSetFileNumber(VS.m_ImageFileName, "00000-D.txt", iSample + 1);
 			}
 		}	// if(bRecord)
 
@@ -422,7 +419,7 @@ int main(int argc, char* argv[])
 					VS.m_PSuLMBuilder.InitHypothesisEvaluation4(pPSuLM);
 			}
 				
-			if(!bKinect)
+			if(!bKinect && !(VS.m_Flags & RVLSYS_FLAGS_PC))
 				pRGBImage = cvLoadImage(VS.m_ImageFileName);
 
 			t = clock();			

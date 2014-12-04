@@ -157,6 +157,7 @@ CRVLPSuLMBuilder::CRVLPSuLMBuilder(void)
 	m_pBestHypothesis = NULL;
 	m_ROI.left = -1;
 	m_nSubMaps = 0;
+	m_maxPSuLMIndex = -1;
 
 	// templates
 
@@ -22285,6 +22286,28 @@ void CRVLPSuLMBuilder::UpdateRelativePoseUncertainties()
 	fclose(fp);
 
 	m_Flags = OldFlags;
+}
+
+void CRVLPSuLMBuilder::GetProjectionMatrix(double *P)
+{
+	if(m_Flags & RVLPSULMBUILDER_FLAG_PC)
+	{
+		double f, uc, vc;
+
+		m_pPSD->GetOrgPCProjectionParams(f, uc, vc);
+
+		P[0] = f;
+		P[1] = 0.0;
+		P[2] = uc;
+		P[3] = 0.0;
+		P[4] = f;
+		P[5] = vc;
+		P[6] = 0.0;
+		P[7] = 0.0;
+		P[8] = 1.0;
+	}
+	else
+		m_pStereoVision->GetKinectProjectionMatrix(P);
 }
 
 ///////////////////////////////////// 

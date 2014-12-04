@@ -93,7 +93,7 @@ void CRVLPSuLM::Project(CRVL3DPose *pPoseC0,
 
 		double P[3 * 3];
 
-		pBuilder->m_pStereoVision->GetKinectProjectionMatrix(P);
+		pBuilder->GetProjectionMatrix(P);
 
 		double A[3 * 3];
 
@@ -761,7 +761,7 @@ void CRVLPSuLM::Display(CRVLFigure * pFig,
 
 	double P[3 * 3];
 
-	pPSuLMBuilder->m_pStereoVision->GetKinectProjectionMatrix(P);
+	pPSuLMBuilder->GetProjectionMatrix(P);
 
 	double A[3 * 3];
 
@@ -1127,7 +1127,7 @@ void CRVLPSuLM::Display3DSurface(	CRVLFigure * pFig,
 
 	double P[3 * 3];
 
-	pPSuLMBuilder->m_pStereoVision->GetKinectProjectionMatrix(P);
+	pPSuLMBuilder->GetProjectionMatrix(P);
 
 	double A[3 * 3];
 
@@ -1246,7 +1246,7 @@ void CRVLPSuLM::Display3DLine(	CRVLFigure * pFig,
 
 	double P[3 * 3];
 
-	pPSuLMBuilder->m_pStereoVision->GetKinectProjectionMatrix(P);
+	pPSuLMBuilder->GetProjectionMatrix(P);
 
 	double A[3 * 3];
 

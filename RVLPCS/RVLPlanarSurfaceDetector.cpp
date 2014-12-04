@@ -95,6 +95,7 @@ CRVLPlanarSurfaceDetector::CRVLPlanarSurfaceDetector()
 	m_minSampleSize = 4;
 	m_MeshPlanarSegWERThr1 = 3;
 	m_MeshPlanarSegWERThr2 = 10;
+	m_MeshDiscontinuityThr = 0.3;
 
 	// the default values of the follwing parameters are adjusted according to wang_TPAMI04
 
@@ -11728,7 +11729,7 @@ void CRVLPlanarSurfaceDetector::SegmentSTRM(CRVLC2D *p2DRegionSet,
 
 					RVLSCALE3VECTOR2(X0, fTmp, V3Tmp);
 
-					if(RVLDOTPRODUCT3(fN, V3Tmp) < 0.3)
+					if(RVLDOTPRODUCT3(fN, V3Tmp) < m_MeshDiscontinuityThr)
 						p2DRegion->m_Flags = RVLOBJ2_FLAG_REJECTED;
 				}
 			}
@@ -13689,6 +13690,8 @@ void CRVLPlanarSurfaceDetector::CreateParamList(CRVLMem *pMem)
 	pParamData = m_ParamList.AddParam("PSD.STRM.uvdTol", RVLPARAM_TYPE_INT, &m_uvdTol);
 
 	pParamData = m_ParamList.AddParam("PSD.STRM.MeshTol", RVLPARAM_TYPE_INT, &m_MeshTol);
+
+	pParamData = m_ParamList.AddParam("PSD.STRM.MeshDiscontinuityThr", RVLPARAM_TYPE_DOUBLE, &m_MeshDiscontinuityThr);
 
 	pParamData = m_ParamList.AddParam("PSD.STRM.MinTriangleFillPerc", RVLPARAM_TYPE_INT, &m_fillPerc);
 
