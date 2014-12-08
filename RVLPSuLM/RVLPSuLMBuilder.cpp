@@ -21984,8 +21984,8 @@ bool CRVLPSuLMBuilder::MapBuilding(CRVLPSuLM *pSPSuLM)
 
 		dist = sqrt(RVLDOTPRODUCT3(t, t));
 
-		if(bCovered =(dist < m_MinHybridLocalizationDist && eAlpha * RAD2DEG < m_MinHybridLocalizationAngle))
-			break;
+		//if(bCovered =(dist < m_MinHybridLocalizationDist && eAlpha * RAD2DEG < m_MinHybridLocalizationAngle))
+		//	break;
 	}
 
 	if(bCovered)
