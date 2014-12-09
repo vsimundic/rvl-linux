@@ -11,10 +11,18 @@
 #define BYTE unsigned char
 #endif
 #ifndef WORD
+#ifdef RVL64BIT
+#define WORD unsigned int
+#else
 #define WORD unsigned short int
 #endif
+#endif
 #ifndef DWORD
+#ifdef RVL64BIT
+#define DWORD unsigned long int
+#else
 #define DWORD unsigned int
+#endif
 #endif
 
 #define PI			3.14159265358979

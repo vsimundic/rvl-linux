@@ -580,7 +580,7 @@ public:
 	void CreateParamList(CRVLMem *pMem);
 	
 #endif
-	RVL3DPOINT2 *CRVLPlanarSurfaceDetector::WeightedMedian(
+	RVL3DPOINT2 *WeightedMedian(
 		//double *DataSort, 
 		//double *DataWeights, 
 		//int *Indeksi, 

@@ -1247,6 +1247,14 @@ void RVLPSuLMDisplayMouseCallback2(int event, int x, int y, int flags, void* vpD
 					pPSuLM->Display3DSurface(pFig, pSelectedSurf, &NullPose, cvScalar(255, 255, 0), 2,
 						RVLPSULM_DISPLAY_VECTORS);
 
+					if(pFig->m_Flags & RVLPSULM_DISPLAY_SCENE)
+					{
+						RVLSegmentationDisplayBoundary(pFig, (CRVL2DRegion2 *)(pSelectedSurf->m_vp2DRegion), pData->w, &(pVS->m_Mem2), 
+							cvScalar(255, 255, 0), 2);
+
+						pVS->m_Mem2.Clear();
+					}
+
 					if(pHypothesis != NULL && pSelectedSurf->m_Index < nSurfaces)
 					{
 						BOOL bCorrespondent;

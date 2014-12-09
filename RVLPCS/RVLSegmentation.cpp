@@ -3204,6 +3204,126 @@ void RVLSegmentationEdgesFromLabels(CRVLClass *pTriangleSet, DWORD Mask, DWORD r
 	}
 }
 
+void RVLSegmentationGetBoundary(CRVL2DRegion2 *pSegment,
+								RVLQLIST *pContourList,								
+								CRVLMem *pMem)
+{
+	RVLARRAY *pRelList = pSegment->m_RelList + pSegment->m_pClass->m_iRelList[RVLRELLIST_ELEMENTS];
+
+	RVLQLIST_INIT(pContourList)
+
+	RVLQLIST_MULTILEVEL *pContour;	
+	CRVL2DRegion2 *pTriangle;
+	CRVL2DRegion2 **ppTriangle;
+	RVLMESH_LINK *pLink, *pLink0, *pLink_, *pLink0_;
+	RVLQLIST_INT_ENTRY *pVertex;
+
+	for(ppTriangle = (CRVL2DRegion2 **)(pRelList->pFirst); ppTriangle < (CRVL2DRegion2 **)(pRelList->pEnd); ppTriangle++)
+	{
+		pTriangle = *ppTriangle;
+
+		if(pTriangle->m_Flags & RVLOBJ2_FLAG_VISITED)
+			continue;
+
+		pTriangle->m_Flags |= RVLOBJ2_FLAG_VISITED;
+
+		pLink = pLink0 = (RVLMESH_LINK *)(pTriangle->m_PtArray);
+
+		do
+		{	
+			if(pLink->Flags & RVLMESH_LINK_FLAG_EDGE)
+			{
+				RVLMEM_ALLOC_STRUCT(pMem, RVLQLIST_MULTILEVEL, pContour)
+
+				RVLQLIST_ADD_ENTRY(pContourList, pContour)
+
+				RVLQLIST_INIT(pContour)
+
+				pLink0_ = pLink_ = pLink;
+
+				do
+				{
+					RVLMEM_ALLOC_STRUCT(pMem, RVLQLIST_INT_ENTRY, pVertex)
+
+					RVLQLIST_ADD_ENTRY(pContour, pVertex)
+
+					pVertex->i = pLink_->iPix0;
+
+					do
+						pLink_ = pLink_->pNext;
+					while(!(pLink_->Flags & RVLMESH_LINK_FLAG_EDGE));
+
+					pLink_ = pLink_->pOpposite;
+				}
+				while(pLink_ != pLink0_);				
+
+				break;
+			}
+
+			pLink = pLink->pNext->pOpposite;
+		}
+		while(pLink != pLink0);		
+	}
+
+	for(ppTriangle = (CRVL2DRegion2 **)(pRelList->pFirst); ppTriangle < (CRVL2DRegion2 **)(pRelList->pEnd); ppTriangle++)
+	{
+		pTriangle = *ppTriangle;
+
+		pTriangle->m_Flags &= ~RVLOBJ2_FLAG_VISITED;
+	}
+}
+
+void RVLSegmentationDisplayBoundary(CRVLFigure *pFig,
+									CRVL2DRegion2 *pSegment,
+									int ImageWidth,
+									CRVLMem *pMem,
+									CvScalar Color,
+									int LineWidth)
+{
+	CRVLDisplayVector Vector(pFig->m_pMem);
+
+	Vector.m_bClosed = TRUE;
+	Vector.m_PointType = RVLGUI_POINT_DISPLAY_TYPE_NONE;
+	Vector.m_rL = (BYTE)DOUBLE2INT(Color.val[0]);
+	Vector.m_gL = (BYTE)DOUBLE2INT(Color.val[1]);
+	Vector.m_bL = (BYTE)DOUBLE2INT(Color.val[2]);
+	Vector.m_LineWidth = LineWidth;
+
+	CRVLDisplayVector *pVector;
+
+	RVLQLIST ContourList;
+
+	RVLSegmentationGetBoundary(pSegment, &ContourList, pMem);
+
+	RVLQLIST_INT_ENTRY *pVertex;
+	int iPix1, iPix2;
+
+	RVLQLIST_MULTILEVEL *pContour = (RVLQLIST_MULTILEVEL *)(ContourList.pFirst);
+
+	while(pContour)
+	{
+		pVertex = (RVLQLIST_INT_ENTRY *)(pContour->pFirst);
+
+		iPix1 = pVertex->i;
+
+		pVertex = (RVLQLIST_INT_ENTRY *)(pVertex->pNext);
+
+		while(pVertex)
+		{
+			iPix2 = pVertex->i;
+
+			pVector = pFig->AddVector(&Vector);
+			
+			pVector->Line(((iPix1 % ImageWidth) << 1), ((iPix1 / ImageWidth) << 1), ((iPix2 % ImageWidth) << 1), ((iPix2 / ImageWidth) << 1));
+
+			iPix1 = iPix2;
+
+			pVertex = (RVLQLIST_INT_ENTRY *)(pVertex->pNext);
+		}
+
+		pContour = (RVLQLIST_MULTILEVEL *)(pContour->pNext);
+	}
+}
 
 void RVLSegmentationMarkSelectedRegion(	CRVLClass *pTriangleSet, 
 										int Label,

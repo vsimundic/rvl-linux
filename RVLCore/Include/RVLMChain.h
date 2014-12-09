@@ -23,7 +23,7 @@ private:
 	int m_ElementSize;
 	
 public:
-	inline void * CRVLMChain::GetLast()
+	inline void * GetLast()
 	{
 		return m_pLast + sizeof(BYTE *);
 	};
