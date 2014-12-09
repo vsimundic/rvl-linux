@@ -901,13 +901,18 @@ void RVLBubbleSort(CRVLMPtrChain *pInList,
 	RVLBubbleSort<Type>(OutArray, n, descending);
 }
 
+// pInList is a list of RVLQLIST_PTR_ENTRY
+
 template <class Type>
 void RVLBubbleSort(RVLQLIST *pInList,
 				   int n,
-				   Type **OutArray,				
+				   Type ***pOutArray,				
 				   BOOL descending = FALSE)
 {
 	//creating array for sorting purposes
+
+	Type **OutArray = *pOutArray;
+
 	if(OutArray == NULL)
 		OutArray = new Type*[n];
 	Type **ppElement = OutArray;
@@ -921,6 +926,37 @@ void RVLBubbleSort(RVLQLIST *pInList,
 	}
 
 	RVLBubbleSort<Type>(OutArray, n, descending);
+
+	*pOutArray = OutArray;
+}
+
+// pInList is a list of Type structures
+
+template <class Type>
+void RVLBubbleSort2(RVLQLIST *pInList,
+				   int n,
+				   Type ***pOutArray,				
+				   BOOL descending = FALSE)
+{
+	//creating array for sorting purposes
+
+	Type **OutArray = *pOutArray;
+
+	if(OutArray == NULL)
+		OutArray = new Type*[n];
+	Type **ppElement = OutArray;
+
+	Type *pEntry = (Type *)(pInList->pFirst);
+
+	while(pEntry)
+	{
+		*(ppElement++) = pEntry;
+		pEntry = (Type *)(pEntry->pNext);
+	}
+
+	RVLBubbleSort<Type>(OutArray, n, descending);
+
+	*pOutArray = OutArray;
 }
 
 template <class Type>

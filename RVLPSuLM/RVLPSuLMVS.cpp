@@ -51,6 +51,8 @@ void CRVLPSuLMVS::CreateParamList()
 	pParamData = m_ParamList.AddParam("VS.Validation", RVLPARAM_TYPE_FLAG, &m_Flags);
 	m_ParamList.AddID(pParamData, "yes", RVLSYS_FLAGS_VALIDATION);
 	pParamData = m_ParamList.AddParam("VS.GroundTruthFileName", RVLPARAM_TYPE_STRING, &(m_GroundTruth.m_FileName));
+	pParamData = m_ParamList.AddParam("VS.Record", RVLPARAM_TYPE_FLAG, &m_Flags);
+	m_ParamList.AddID(pParamData, "yes", RVLSYS_FLAGS_RECORD);
 }
 
 void CRVLPSuLMVS::Init(char * CfgFile2Name)
@@ -123,7 +125,10 @@ void CRVLPSuLMVS::Init(char * CfgFile2Name)
 	LoadMatchMatrix();
 
 	if(m_Flags & RVLSYS_FLAGS_EDIT_MAP)
+	{
 		m_PSuLMBuilder.m_Flags &= ~(RVLPSULMBUILDER_FLAG_MODE | RVLPSULMBUILDER_FLAG_MAPBUILDING);
+		m_PSuLMBuilder.m_Flags2 &= ~RVLPSULMBUILDER_FLAG2_SCENE_FUSION;
+	}
 
 	m_pPSuLM = NULL;
 
@@ -662,15 +667,24 @@ void CRVLPSuLMVS::AppendToMeshFile(CRVL3DPose *pRelPose)
 void CRVLPSuLMVS::CreateLocal3DMesh(CRVLPSuLM *pPSuLM0)
 {
 	CRVL3DPose NullPose;
-	double C[3 * 3];
+	double C[3 * 3 * 3];
+	double *C_;
 
 	RVLNULLMX3X3(C)
+
+	if(!(m_Flags & RVLPSULMBUILDER_HYPOTHESES_UNCERTAINTY_3DOF))
+	{
+		C_ = C + 9;
+		RVLNULLMX3X3(C_)
+		C_ += 9;
+		RVLNULLMX3X3(C_)
+	}
 
 	NullPose.Reset();
 
 	NullPose.m_C = C;
 
-	NullPose.m_ParamFlags = RVL3DPOSE_PARAM_FLAGS_COV_3D;
+	NullPose.m_ParamFlags = (m_PSuLMBuilder.m_Flags & RVLPSULMBUILDER_HYPOTHESES_UNCERTAINTY_3DOF ? RVL3DPOSE_PARAM_FLAGS_COV_3D : RVL3DPOSE_PARAM_FLAGS_COV_6D);
 
 	CRVLMem Mem;
 
@@ -696,6 +710,20 @@ void CRVLPSuLMVS::CreateLocal3DMesh(CRVLPSuLM *pPSuLM0)
 	{
 		pPSuLM = (CRVLPSuLM *)(m_PSuLMBuilder.m_PSuLMSubList.GetNext());
 
+		//// only for debugging purposes!!!
+
+		//RVLPSULM_NEIGHBOR2 *pNeighbor = (RVLPSULM_NEIGHBOR2 *)(pPSuLM0->m_LocalMap.pFirst);
+	
+		//while(pNeighbor)
+		//{
+		//	if(pNeighbor->pMPSuLM == pPSuLM)
+		//		int debug = 0;
+
+		//	pNeighbor = (RVLPSULM_NEIGHBOR2 *)(pNeighbor->pNext);
+		//}	
+
+		///////
+
 		fprintf(fp, "%d\n", pPSuLM->m_Index);
 
 		m_iMCMem = (m_iMCMem + 1) % RVLSYS_MCMEMSIZE;
@@ -712,6 +740,8 @@ void CRVLPSuLMVS::CreateLocal3DMesh(CRVLPSuLM *pPSuLM0)
 
 		AppendToMeshFile(&(pPSuLM->m_PoseRTAs));
 	}
+
+	RVLResetFlags<CRVLPSuLM>(&(m_PSuLMBuilder.m_PSuLMSubList), RVLPSULM_FLAG_CLOSE);
 
 	m_PSuLMBuilder.m_PSuLMSubList.m_pMem = pMemOld;
 

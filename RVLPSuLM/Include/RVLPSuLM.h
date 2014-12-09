@@ -35,8 +35,11 @@ class CRVLPSuLM;
 #define RVLPSULM_MSMATCH_DATA_FLAG_LINES	0x01
 
 #define RVLPSULM_HYPOTHESIS_FLAG_BEST_FOR_ITS_PSULM		0x01
+#define RVLPSULM_HYPOTHESIS_FLAG_MERGED					0x02
 
 #define RVLPSULM_PARTICLE_FLAG_ASSIGNED		0x01
+
+#define RVLPSULM_SCENE_FUSION_N_SCENES		20
 
 //#define RVLPSULM_CONVEX_SEGMENTS
 #define RVLPSULM_LINES
@@ -181,6 +184,19 @@ struct RVLPSULM_HYPOTHESIS
 	double Probability;
 	DWORD iRepresentative;
 	char validation;				// 1 - correct; 0 - ambiguous; -1 - false
+};
+
+struct RVLPSULM_HYPOTHESIS_SCENE_FUSION
+{
+	CRVLPSuLM *pMPSuLM;
+	CRVL3DPose PoseSM;
+	double LogLikelihood;
+	double LogLikelihoodRef;
+	void *pNext;
+	double cost;
+	int iSample;
+	int iHypothesis;
+	double r;
 };
 
 struct RVLPSULM_PATH_PLANNING_NEIGHBOR
