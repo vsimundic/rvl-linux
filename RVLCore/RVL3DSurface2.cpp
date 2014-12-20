@@ -1785,7 +1785,7 @@ BOOL RVL3DPlanarSurfaceEKFUpdate(	CRVL3DSurface2 *pSSurf,
 	double *invt = (double *)(pFinalPose->m_pData);
 	RVLMULMX3X3TVECT(R, t, invt);
 
-	if(e[0] * e[0] + e[1] * e[1] > 0.04)
+	//if(e[0] * e[0] + e[1] * e[1] > 0.04)
 	{
 		memcpy(pFinalPose->m_C, pInitPose->m_C, 3 * 3 * 3 * sizeof(double));
 

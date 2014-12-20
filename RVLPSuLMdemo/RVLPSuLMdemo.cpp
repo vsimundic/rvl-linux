@@ -15,7 +15,7 @@
 #endif
 
 #define RVLPSULMDEMO_DISPLAY_ONLY_REPRESENTATIVE_HYPOTHESES
-#define RVLPSULMDEMO_DISPLAY_ONLY_BEST_LOCAL_MODEL_HYPOTHESES
+//#define RVLPSULMDEMO_DISPLAY_ONLY_BEST_LOCAL_MODEL_HYPOTHESES
 
 void MessageCanNotOpenFile(CRVLGUI *pGUI, char *FileName);
 
@@ -76,6 +76,8 @@ void RVLPSuLMdemoGetNextHypothesis(CRVLPSuLMVS *pVS,
 
 int main(int argc, char* argv[])
 {
+	printf("Initialization...\n");
+
 	CRVL3DPose NullPose;
 
 	RVLNULL3VECTOR(NullPose.m_X);
@@ -308,7 +310,8 @@ int main(int argc, char* argv[])
 	bool bLocalize = !bManualTrigger;
 	bool bContinuous = bManualTrigger;
 	//DWORD mDisplayPSuLMFlags = (RVLPSULM_DISPLAY_SURFACES | RVLPSULM_DISPLAY_VECTORS | RVLPSULM_DISPLAY_SAMPLES);
-	DWORD mDisplayPSuLMFlags = (RVLPSULM_DISPLAY_SURFACES | RVLPSULM_DISPLAY_ELLIPSES | RVLPSULM_DISPLAY_LINES | RVLPSULM_DISPLAY_VECTORS);
+	//DWORD mDisplayPSuLMFlags = (RVLPSULM_DISPLAY_SURFACES | RVLPSULM_DISPLAY_ELLIPSES | RVLPSULM_DISPLAY_LINES | RVLPSULM_DISPLAY_VECTORS);
+	DWORD mDisplayPSuLMFlags = (RVLPSULM_DISPLAY_LINES | RVLPSULM_DISPLAY_VECTORS);
 	if(VS.m_Flags & RVLSYS_FLAGS_VALIDATION)
 		mDisplayPSuLMFlags |= RVLPSULM_DISPLAY_VALIDATION;
 	int DisplayBitmap = 0;
@@ -738,6 +741,22 @@ int main(int argc, char* argv[])
 					VS.m_GroundTruth.Add(RVLGetFileNumber(VS.m_ImageFileName, "00000-LW.bmp"), pHypothesis->pMPSuLM->m_Index, &(pHypothesis->PoseSM));
 
 				bRefresh = true;
+
+				break;
+			case '1':
+				printf("Enter model number: ");
+
+				int iPSuLM;
+
+				scanf("%d", &iPSuLM);
+
+				VS.m_PSuLMBuilder.m_pNearestModelPSuLM = VS.m_PSuLMBuilder.m_PSuLMArray[iPSuLM];
+
+				VS.m_PSuLMBuilder.m_Flags &= ~RVLPSULMBUILDER_FLAG_GLOBAL;
+
+				VS.m_PSuLMBuilder.m_Flags |= RVLPSULMBUILDER_FLAG_KIDNAPPED;
+
+				bNextImage = false;
 
 				break;
 			case 'a':

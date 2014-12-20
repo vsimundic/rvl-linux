@@ -88,7 +88,6 @@ CRVLPSuLMBuilder::CRVLPSuLMBuilder(void)
 	m_LastDOFResolution = 20.0;			// mm
 	m_nLastDOFGaussianSamples = 10;
 	m_maxLastDOFstdTD = 500.0;			// mm
-
 	memset(m_OdometryUncertConst, 0, 4 * sizeof(double));
 	m_FloorUncertConst = 0.0;
 	m_RobotParams[0] = 325; //a mm
@@ -112,6 +111,10 @@ CRVLPSuLMBuilder::CRVLPSuLMBuilder(void)
 	m_minnLineDepthSteps = 10;
 	m_SceneFusion.m_rLookAround = 500.0;	// mm
 	m_SceneFusion.m_rMove = 1200.0;			// mm
+	//m_minRelevantLogLikelihood = 30.0;		
+	m_minRelevantLogLikelihood = 0.0;
+	m_RepresentativeHypDistThr = 500.0;		// mm
+	m_RepresentativeHypOrientThr = 20.0;	// deg
 
 	// constants computed from the parameters
 
@@ -7082,11 +7085,14 @@ void CRVLPSuLMBuilder::Localization(CRVLPSuLM * pSPSuLM,
 	int cost = 0;
 	int minCost;
 	double maxP = 0.0;
+	double PriorProbabilityWorldModel;
 
 	if(HypEvalMethod == RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD_IBM)
 		minCost = 1e8; //Search for min cost
 	else if(HypEvalMethod == RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD_SM || HypEvalMethod == RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD_SSM)
 		minCost = 0; //Search for max cost
+	else if(HypEvalMethod == RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD_P)
+		PriorProbabilityWorldModel = ConditionalProbabilityTree(pSPSuLM);
 
 	RVLPSULM_HYPOTHESIS *pBestHypothesis = NULL;
 
@@ -7366,9 +7372,9 @@ void CRVLPSuLMBuilder::Localization(CRVLPSuLM * pSPSuLM,
 
 		if(HypEvalMethod == RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD_P)
 		{
-			pHypothesis->Probability = P;
+			pHypothesis->Probability = P - PriorProbabilityWorldModel;
 
-			pHypothesis->cost = DOUBLE2INT(1000.0 * P);
+			pHypothesis->cost = DOUBLE2INT(1000.0 * pHypothesis->Probability);
 		}
 		else
 			pHypothesis->cost = cost;
@@ -7405,6 +7411,7 @@ void CRVLPSuLMBuilder::Localization(CRVLPSuLM * pSPSuLM,
 		}
 	}	// for each hypothesis
 
+#ifdef NEVER	// old method for identifying representative hypotheses
 	// identify representative hypotheses
 
 	RVLQLIST *pList = &m_RepresentativeHypothesisList;
@@ -7581,6 +7588,7 @@ void CRVLPSuLMBuilder::Localization(CRVLPSuLM * pSPSuLM,
 	}	// while(m_HypothesisList.m_pNext)
 
 	m_nRepresentativeHypotheses = pNewHypothesisPtr - m_RepresentativeHypothesisMem;
+#endif	// old method for detecting representative hypotheses
 
 	//if(m_Flags & RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_PREEVAL)
 	//{
@@ -7670,138 +7678,180 @@ void CRVLPSuLMBuilder::Localization(CRVLPSuLM * pSPSuLM,
 
 	RVLBubbleSort<RVLPSULM_HYPOTHESIS>(&m_HypothesisList, m_HypothesisArray, HypEvalMethod != RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD_IBM);
 
-	// compute the local and global posterior probability of the best hypothesis for each PSuLM
+#ifdef RVLPSULMBUILDER_HYPOTHESIS_LOG
+	FILE *fpHyp = fopen("C:\\RVL\\Debug\\Hypotheses0.log", "w");
 
-	double BestHypothesisProbability = m_HypothesisArray[0]->Probability;
+	for(i = 0; i < m_nHypotheses; i++)
+	{
+		pHypothesis = m_HypothesisArray[i];
 
-	m_PriorProbabilityGlobal = 0.0;
+		fprintf(fpHyp, "%d: H\t%d\tM\t%d\tP\t%lf\n", i, pHypothesis->Index, pHypothesis->pMPSuLM->m_Index, (double)(pHypothesis->cost) * 1e-3);
+	}
 
-	double PriorProbabilityWorldModel;
+	fclose(fpHyp);
+#endif
 
-	if(m_nHypotheses > 0 && HypEvalMethod == RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD_P)
-	{	
-		RVLMEM_ALLOC_LOCAL_INIT(m_pMem2)
+	if(HypEvalMethod == RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD_P)
+	{
+		// compute the local and global posterior probability of the best hypothesis for each PSuLM
 
-		CRVLMPtrChain MPSuLMList(m_pMem2);
-
-		RVLMEM_ALLOC_LOCAL_UPDATE(m_pMem2);
-
-		CRVLMPtrChain *pMPSuLMList;
-
-		if(m_Flags & RVLPSULMBUILDER_FLAG_MODE_LOCALIZATION)
-		{
-			if(m_PSuLMSubList.m_nElements > 0)
-				pMPSuLMList = &m_PSuLMSubList;
-			else
-				pMPSuLMList = &m_PSuLMList;
-		}
-		else
-		{
-			MPSuLMList.Add(pPrevSPSuLM);
-
-			pMPSuLMList = &MPSuLMList;
-		}
+		double BestHypothesisProbability = m_HypothesisArray[0]->Probability;
 
 		m_PriorProbabilityGlobal = 0.0;
 
-		pMPSuLMList->Start();
+		if(m_nHypotheses > 0)
+		{	
+			RepresentativeHypotheses();			
 
-		while(pMPSuLMList->m_pNext)
-		{
-			pMPSuLM = (CRVLPSuLM *)(pMPSuLMList->GetNext());
+			RVLMEM_ALLOC_LOCAL_INIT(m_pMem2)
 
-			pMPSuLM->m_PriorProbabilityLocal = 0.0;
+			CRVLMPtrChain MPSuLMList(m_pMem2);
 
-			pMPSuLM->m_pHypothesis = NULL;
-		}
+			RVLMEM_ALLOC_LOCAL_UPDATE(m_pMem2);
 
-		m_nHypotheses = 0;
+			CRVLMPtrChain *pMPSuLMList;
 
-		RVLQLIST_PTR_ENTRY *pHypothesisPtr = (RVLQLIST_PTR_ENTRY *)(m_RepresentativeHypothesisList.pFirst);
-
-		while(pHypothesisPtr)
-		{
-			pHypothesis = (RVLPSULM_HYPOTHESIS *)(pHypothesisPtr->Ptr);
-
-			m_PriorProbabilityGlobal += exp(pHypothesis->Probability - BestHypothesisProbability);
-
-			pMPSuLM = pHypothesis->pMPSuLM;
-
-			if(pMPSuLM->m_pHypothesis)
+			if(m_Flags & RVLPSULMBUILDER_FLAG_MODE_LOCALIZATION)
 			{
-				if(pHypothesis->Probability > pMPSuLM->m_pHypothesis->Probability)
+				if(m_PSuLMSubList.m_nElements > 0)
+					pMPSuLMList = &m_PSuLMSubList;
+				else
+					pMPSuLMList = &m_PSuLMList;
+			}
+			else
+			{
+				MPSuLMList.Add(pPrevSPSuLM);
+
+				pMPSuLMList = &MPSuLMList;
+			}
+
+			m_PriorProbabilityGlobal = 0.0;
+
+			pMPSuLMList->Start();
+
+			while(pMPSuLMList->m_pNext)
+			{
+				pMPSuLM = (CRVLPSuLM *)(pMPSuLMList->GetNext());
+
+				pMPSuLM->m_PriorProbabilityLocal = 0.0;
+
+				pMPSuLM->m_pHypothesis = NULL;
+			}
+
+			//m_nHypotheses = 0;
+
+			//FILE *fpDebug = fopen("C:\\RVL\\Debug\\RepresentativeHypotheses.txt", "w");
+
+			RVLQLIST_PTR_ENTRY *pHypothesisPtr = (RVLQLIST_PTR_ENTRY *)(m_RepresentativeHypothesisList.pFirst);
+
+			while(pHypothesisPtr)
+			{
+				pHypothesis = (RVLPSULM_HYPOTHESIS *)(pHypothesisPtr->Ptr);
+
+				//fprintf(fpDebug, "%d\n", pHypothesis->Index);
+
+				m_PriorProbabilityGlobal += exp(pHypothesis->Probability - BestHypothesisProbability);
+
+				pMPSuLM = pHypothesis->pMPSuLM;
+
+				if(pMPSuLM->m_pHypothesis)
+				{
+					if(pHypothesis->Probability > pMPSuLM->m_pHypothesis->Probability)
+						pMPSuLM->m_pHypothesis = pHypothesis;
+				}
+				else
 					pMPSuLM->m_pHypothesis = pHypothesis;
+
+				pHypothesisPtr = (RVLQLIST_PTR_ENTRY *)(pHypothesisPtr->pNext);
+
+				//m_nHypotheses++;
 			}
-			else
-				pMPSuLM->m_pHypothesis = pHypothesis;
 
-			pHypothesisPtr = (RVLQLIST_PTR_ENTRY *)(pHypothesisPtr->pNext);
+			//fclose(fpDebug);
 
-			m_nHypotheses++;
-		}
+			pHypothesisPtr = (RVLQLIST_PTR_ENTRY *)(m_RepresentativeHypothesisList.pFirst);
 
-		pHypothesisPtr = (RVLQLIST_PTR_ENTRY *)(m_RepresentativeHypothesisList.pFirst);
-
-		while(pHypothesisPtr)
-		{
-			pHypothesis = (RVLPSULM_HYPOTHESIS *)(pHypothesisPtr->Ptr);
-
-			//if(pHypothesis->iRepresentative != 0xffffffff)
-			//	int debug = 0;
-
-			pHypothesis->pMPSuLM->m_PriorProbabilityLocal += exp(pHypothesis->Probability - pHypothesis->pMPSuLM->m_pHypothesis->Probability);
-
-			pHypothesisPtr = (RVLQLIST_PTR_ENTRY *)(pHypothesisPtr->pNext);
-		}
-
-		pMPSuLMList->Start();
-
-		while(pMPSuLMList->m_pNext)
-		{
-			pMPSuLM = (CRVLPSuLM *)(pMPSuLMList->GetNext());
-
-			if(pMPSuLM->m_pHypothesis)
+			while(pHypothesisPtr)
 			{
-				int nSFeatures = pSPSuLM->m_n3DSurfaces + pSPSuLM->m_n3DLines;
+				pHypothesis = (RVLPSULM_HYPOTHESIS *)(pHypothesisPtr->Ptr);
 
-				for(i = 0; i < nSFeatures; i++)
-					m_SMatchArray[i].b = false;
+				//if(pHypothesis->iRepresentative != 0xffffffff)
+				//	int debug = 0;
 
-				PriorProbabilityWorldModel = ConditionalProbabilityTree(pSPSuLM, pMPSuLM);
-			
-				pMPSuLM->m_PriorProbabilityLocal += exp(PriorProbabilityWorldModel - pMPSuLM->m_pHypothesis->Probability);
+				pHypothesis->pMPSuLM->m_PriorProbabilityLocal += exp(pHypothesis->Probability - pHypothesis->pMPSuLM->m_pHypothesis->Probability);
 
-				//pMPSuLM->m_PosteriorProbabilityLocal5DOF = 1.0 / pMPSuLM->m_PriorProbabilityLocal;
-				pMPSuLM->m_PosteriorProbabilityLocal5DOF = pMPSuLM->m_pHypothesis->Probability - PriorProbabilityWorldModel;
-
-				PoseConstraintProbability(pSPSuLM, pMPSuLM);
-
-				pMPSuLM->m_PosteriorProbabilityGlobal = exp(pMPSuLM->m_pHypothesis->Probability - BestHypothesisProbability) / m_PriorProbabilityGlobal;
+				pHypothesisPtr = (RVLQLIST_PTR_ENTRY *)(pHypothesisPtr->pNext);
 			}
-			else
-				pMPSuLM->m_PosteriorProbabilityLocal5DOF = pMPSuLM->m_PosteriorProbabilityLocal = pMPSuLM->m_PosteriorProbabilityGlobal = 0.0;
-		}
 
-		RVLMEM_ALLOC_LOCAL_FREE(m_pMem2)		
+			pMPSuLMList->Start();
 
-		pHypothesisPtr = (RVLQLIST_PTR_ENTRY *)(m_RepresentativeHypothesisList.pFirst);
+			while(pMPSuLMList->m_pNext)
+			{
+				pMPSuLM = (CRVLPSuLM *)(pMPSuLMList->GetNext());
 
-		while(pHypothesisPtr)
-		{
-			pHypothesis = (RVLPSULM_HYPOTHESIS *)(pHypothesisPtr->Ptr);
+				if(pMPSuLM->m_pHypothesis)
+				{
+					//int nSFeatures = pSPSuLM->m_n3DSurfaces + pSPSuLM->m_n3DLines;
 
-			pHypothesis->cost = DOUBLE2INT(1e3 * (pHypothesis->Probability - BestHypothesisProbability - log(m_PriorProbabilityGlobal)));
+					//for(i = 0; i < nSFeatures; i++)
+					//	m_SMatchArray[i].b = false;
 
-			pHypothesisPtr = (RVLQLIST_PTR_ENTRY *)(pHypothesisPtr->pNext);
-		}		
+					//PriorProbabilityWorldModel = ConditionalProbabilityTree(pSPSuLM, pMPSuLM);
+				
+					pMPSuLM->m_PriorProbabilityLocal += exp(-pMPSuLM->m_pHypothesis->Probability);
 
-		RVLBubbleSort<RVLPSULM_HYPOTHESIS>(&m_RepresentativeHypothesisList, m_nHypotheses, &m_HypothesisArray, true);
-	}	// if(HypEvalMethod == RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD_P)
+					//pMPSuLM->m_PosteriorProbabilityLocal5DOF = 1.0 / pMPSuLM->m_PriorProbabilityLocal;
+					//pMPSuLM->m_PosteriorProbabilityLocal5DOF = pMPSuLM->m_pHypothesis->Probability - PriorProbabilityWorldModel;
+					pMPSuLM->m_PosteriorProbabilityLocal5DOF = pMPSuLM->m_pHypothesis->Probability;
 
-	// scene fusion
+					PoseConstraintProbability(pSPSuLM, pMPSuLM);
 
-	if(m_Flags2 & RVLPSULMBUILDER_FLAG2_SCENE_FUSION)
-		SceneFusion();
+					pMPSuLM->m_PosteriorProbabilityGlobal = exp(pMPSuLM->m_pHypothesis->Probability - BestHypothesisProbability) / m_PriorProbabilityGlobal;
+				}
+				else
+					pMPSuLM->m_PosteriorProbabilityLocal5DOF = pMPSuLM->m_PosteriorProbabilityLocal = pMPSuLM->m_PosteriorProbabilityGlobal = 0.0;
+			}
+
+			//RVLMEM_ALLOC_LOCAL_FREE(m_pMem2)		
+
+			//pHypothesisPtr = (RVLQLIST_PTR_ENTRY *)(m_RepresentativeHypothesisList.pFirst);
+
+			double fTmp = BestHypothesisProbability + log(m_PriorProbabilityGlobal);
+
+			//while(pHypothesisPtr)
+			for(i = 0; i < m_nHypotheses; i++)
+			{
+				//pHypothesis = (RVLPSULM_HYPOTHESIS *)(pHypothesisPtr->Ptr);
+				pHypothesis = m_HypothesisArray[i];
+
+				pHypothesis->cost = DOUBLE2INT(1e3 * (pHypothesis->Probability - fTmp));
+
+				//pHypothesisPtr = (RVLQLIST_PTR_ENTRY *)(pHypothesisPtr->pNext);
+			}	
+
+			m_nHypotheses = m_nRepresentativeHypotheses;
+
+			RVLBubbleSort<RVLPSULM_HYPOTHESIS>(&m_RepresentativeHypothesisList, m_nHypotheses, &m_HypothesisArray, true);
+
+#ifdef RVLPSULMBUILDER_HYPOTHESIS_LOG
+			fpHyp = fopen("C:\\RVL\\Debug\\Hypotheses.log", "w");
+
+			for(i = 0; i < m_nHypotheses; i++)
+			{
+				pHypothesis = m_HypothesisArray[i];
+
+				fprintf(fpHyp, "%d: H\t%d\tM\t%d\tP\t%lf\n", i, pHypothesis->Index, pHypothesis->pMPSuLM->m_Index, (double)(pHypothesis->cost) * 1e-3);
+			}
+
+			fclose(fpHyp);
+#endif
+		}	// if(m_nHypotheses > 0)
+
+		// scene fusion
+
+		if(m_Flags2 & RVLPSULMBUILDER_FLAG2_SCENE_FUSION)
+			SceneFusion();			
+	}	// if(HypEvalMethod == RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD_P)		
 
 	//*(ppParticle++) = pBestHypothesis;
 
@@ -10472,12 +10522,33 @@ double CRVLPSuLMBuilder::ConditionalProbabilityTree(CRVLPSuLM *pSPSuLM,
 	int nSLines = pSPSuLM->m_n3DLines;
 
 	int nSFeatures = nSSurfs + nSLines;
+
+	CRVL3DSurface2 **MSurfArray;
+	CRVL3DLine2 **MLineArray;
+	int nMSurfs, nMLines;
+	int nSMSurfMatches_, nSMLineMatches_;
 	
-	CRVL3DSurface2 **MSurfArray = pMPSuLM->m_3DSurfaceArray;
-	int nMSurfs = pMPSuLM->m_n3DSurfaces;
-	
-	CRVL3DLine2 **MLineArray = pMPSuLM->m_3DLineArray;
-	int nMLines = pMPSuLM->m_n3DLines;
+	if(pMPSuLM)
+	{
+		MSurfArray = pMPSuLM->m_3DSurfaceArray;
+		nMSurfs = pMPSuLM->m_n3DSurfaces;
+		
+		MLineArray = pMPSuLM->m_3DLineArray;
+		nMLines = pMPSuLM->m_n3DLines;
+
+		if(iSMMatchArray)
+		{
+			nSMSurfMatches_ = nSMSurfMatches;
+			nSMLineMatches_ = nSMLineMatches;
+		}
+		else
+		{
+			nSMSurfMatches_ = nSSurfs;
+			nSMLineMatches_ = nSLines;
+		}
+	}
+	else
+		nMSurfs = nMLines = nSMSurfMatches_ = nSMLineMatches_ = 0;
 
 	// sort scene-model matches
 
@@ -10490,19 +10561,6 @@ double CRVLPSuLMBuilder::ConditionalProbabilityTree(CRVLPSuLM *pSPSuLM,
 	Mem.Create(nSFeatures * sizeof(RVLPTRCHAIN_ELEMENT));
 
 	CRVLMPtrChain SMMatchList(&Mem);
-
-	int nSMSurfMatches_, nSMLineMatches_;
-
-	if(iSMMatchArray)
-	{
-		nSMSurfMatches_ = nSMSurfMatches;
-		nSMLineMatches_ = nSMLineMatches;
-	}
-	else
-	{
-		nSMSurfMatches_ = nSSurfs;
-		nSMLineMatches_ = nSLines;
-	}
 
 	int i, i_;
 
@@ -21706,7 +21764,7 @@ void CRVLPSuLMBuilder::DisplayHypothesisData(	CRVLFigure *pFig,
 
 	if(pSelectedSurface)
 	{
-		sprintf(str, "Selected Surface: %d", pSelectedSurface->m_Index);
+		sprintf(str, "Selected Surface: %d (%d pts.)", pSelectedSurface->m_Index, pSelectedSurface->m_nSupport);
 
 		cvPutText(pDataDisplay, str, cvPoint(0, (++iTextLine) * pFig->m_FontSize), &pFig->m_Font,  cvScalar(0, 0, 0));
 
@@ -22402,6 +22460,80 @@ void CRVLPSuLMBuilder::GetProjectionMatrix(double *P)
 		m_pStereoVision->GetKinectProjectionMatrix(P);
 }
 
+void CRVLPSuLMBuilder::GetNeighborPSuLMs(CRVLPSuLM *pMPSuLM,
+										 CRVL3DPose **PoseM_M)
+{
+	RVLPSULM_NEIGHBOR2 *pNeighbor = (RVLPSULM_NEIGHBOR2 *)(pMPSuLM->m_LocalMap.pFirst);
+
+	while(pNeighbor)
+	{
+		pNeighbor->pMPSuLM->m_Flags |= RVLPSULM_FLAG_CLOSE;
+
+		PoseM_M[pNeighbor->pMPSuLM->m_Index] = &(pNeighbor->PoseRel);
+
+		pNeighbor = (RVLPSULM_NEIGHBOR2 *)(pNeighbor->pNext);
+	}		
+}
+
+// This function requires GetNeighborPSuLMs() to prepare data before it is called
+// and ResetCloseFlags() to reset RVLPSULM_FLAG_CLOSE after the function is completed.
+
+bool CRVLPSuLMBuilder::GetRelativePose(	CRVLPSuLM *pMPSuLM,
+										RVLPSULM_HYPOTHESIS *pHypothesis_,
+										CRVL3DPose **PoseM_M,
+										CRVL3DPose *pPoseS_M,
+										bool bOrientation)
+{
+	if(pHypothesis_->pMPSuLM != pMPSuLM && !(pHypothesis_->pMPSuLM->m_Flags & RVLPSULM_FLAG_CLOSE))
+		return false;
+
+	double *RS_M = pPoseS_M->m_Rot;
+	double *tS_M = pPoseS_M->m_X;
+
+	double *tS_M_ = pHypothesis_->PoseSM.m_X;
+
+	if(pHypothesis_->pMPSuLM == pMPSuLM)
+	{		
+		if(bOrientation)
+		{
+			double *RS_M_ = pHypothesis_->PoseSM.m_Rot;
+			RVLCOPYMX3X3(RS_M_, RS_M)
+		}
+	
+		RVLCOPY3VECTOR(tS_M_, tS_M)
+	}
+	else
+	{
+		CRVL3DPose *pPoseM_M = PoseM_M[pHypothesis_->pMPSuLM->m_Index];
+
+		double *RM_M = pPoseM_M->m_Rot;
+		double *tM_M = pPoseM_M->m_X;
+
+		if(bOrientation)
+		{
+			double *RS_M_ = pHypothesis_->PoseSM.m_Rot;
+
+			RVLCOMPTRANSF3D(RM_M, tM_M, RS_M_, tS_M_, RS_M, tS_M)			
+		}
+		else
+			RVLTRANSF3(tS_M_, RM_M, tM_M, tS_M)
+	}		
+
+	return true;
+}
+
+void CRVLPSuLMBuilder::ResetCloseFlags(CRVLPSuLM *pMPSuLM)
+{
+	RVLPSULM_NEIGHBOR2 *pNeighbor = (RVLPSULM_NEIGHBOR2 *)(pMPSuLM->m_LocalMap.pFirst);
+
+	while(pNeighbor)
+	{
+		pNeighbor->pMPSuLM->m_Flags &= ~RVLPSULM_FLAG_CLOSE;
+
+		pNeighbor = (RVLPSULM_NEIGHBOR2 *)(pNeighbor->pNext);
+	}
+}
+
 void CRVLPSuLMBuilder::SceneFusion()
 {	
 	double LogLikelihoodHiThr = 100.0;
@@ -22421,7 +22553,8 @@ void CRVLPSuLMBuilder::SceneFusion()
 
 	RVLPSULM_HYPOTHESIS_SCENE_FUSION *pHypothesis;
 	RVLPSULM_HYPOTHESIS *pHypothesis_;
-	CRVLPSuLM *pMPSuLM, *pMPSuLM_;
+	CRVLPSuLM *pMPSuLM;
+	//CRVLPSuLM *pMPSuLM_;
 
 	RVLQLIST_PTR_ENTRY *pHypothesisPtr = (RVLQLIST_PTR_ENTRY *)(m_RepresentativeHypothesisList.pFirst);
 
@@ -22448,13 +22581,16 @@ void CRVLPSuLMBuilder::SceneFusion()
 	bool bTracking = false;
 
 	pHypothesis = (RVLPSULM_HYPOTHESIS_SCENE_FUSION *)(m_SceneFusion.m_HypothesisList.pFirst);
+
+	CRVL3DPose PoseS_M;
+	double *tS_M = PoseS_M.m_X;
 	
 	int i;
-	double *RSM, *tSM, *RM_M, *tM_M;
+	double *RSM, *tSM;
 	double *RS_M_, *tS_M_;
-	RVLPSULM_NEIGHBOR2 *pNeighbor;
-	CRVL3DPose *pPoseM_M;
-	double tS_M[3];
+	//double *RM_M, *tM_M;
+	//RVLPSULM_NEIGHBOR2 *pNeighbor;
+	//CRVL3DPose *pPoseM_M;
 	double dtSM[3];
 	RVLPSULM_HYPOTHESIS *pHypothesis__;
 	bool bClose;
@@ -22477,6 +22613,9 @@ void CRVLPSuLMBuilder::SceneFusion()
 		fprintf(fp, "==========\n", pMPSuLM->m_Index);
 #endif
 
+		GetNeighborPSuLMs(pMPSuLM, PoseM_M);
+
+#ifdef NEVER
 		pNeighbor = (RVLPSULM_NEIGHBOR2 *)(pMPSuLM->m_LocalMap.pFirst);
 	
 		while(pNeighbor)
@@ -22487,6 +22626,7 @@ void CRVLPSuLMBuilder::SceneFusion()
 
 			pNeighbor = (RVLPSULM_NEIGHBOR2 *)(pNeighbor->pNext);
 		}	
+#endif
 
 		pHypothesis__ = NULL;
 
@@ -22494,6 +22634,9 @@ void CRVLPSuLMBuilder::SceneFusion()
 		{
 			pHypothesis_ = HypothesisArray[i];
 
+			bClose = GetRelativePose(pHypothesis->pMPSuLM, pHypothesis_, PoseM_M, &PoseS_M, false);
+
+#ifdef NEVER
 			if(pHypothesis_->pMPSuLM == pMPSuLM)
 			{
 				tS_M_ = pHypothesis_->PoseSM.m_X;
@@ -22518,6 +22661,7 @@ void CRVLPSuLMBuilder::SceneFusion()
 			}
 			else
 				bClose = false;
+#endif
 
 			if(bClose)
 			{
@@ -22605,14 +22749,7 @@ void CRVLPSuLMBuilder::SceneFusion()
 				pHypothesis->cost = 0;
 		}
 
-		pNeighbor = (RVLPSULM_NEIGHBOR2 *)(pMPSuLM->m_LocalMap.pFirst);
-	
-		while(pNeighbor)
-		{
-			pNeighbor->pMPSuLM->m_Flags &= ~RVLPSULM_FLAG_CLOSE;
-
-			pNeighbor = (RVLPSULM_NEIGHBOR2 *)(pNeighbor->pNext);
-		}
+		ResetCloseFlags(pMPSuLM);
 
 		pHypothesis = (RVLPSULM_HYPOTHESIS_SCENE_FUSION *)(pHypothesis->pNext);
 	}	// for all hypotheses in m_SceneFusion.m_HypothesisList
@@ -22748,6 +22885,108 @@ void CRVLPSuLMBuilder::GetConnectedSubMap(CRVLPSuLM *pPSuLM0)
 	m_PSuLMSubList.m_pMem = pMemOld;
 
 	fclose(fp);
+}
+
+void CRVLPSuLMBuilder::RepresentativeHypotheses()
+{
+	double r2 = m_RepresentativeHypDistThr * m_RepresentativeHypDistThr;
+	double OrientThr = m_RepresentativeHypOrientThr * DEG2RAD;	
+
+	RVLQLIST *pList = &m_RepresentativeHypothesisList;
+
+	RVLQLIST_INIT(pList)
+
+	if(m_RepresentativeHypothesisMem)
+		delete[] m_RepresentativeHypothesisMem;
+
+	m_RepresentativeHypothesisMem = new RVLQLIST_PTR_ENTRY[m_HypothesisList.m_nElements];
+
+	RVLQLIST_PTR_ENTRY *pRepresentativeHypothesisPtr = m_RepresentativeHypothesisMem;
+
+	CRVL3DPose **PoseM_M = new CRVL3DPose *[m_maxPSuLMIndex + 1];
+
+	CRVL3DPose dPose;
+	double *dR = dPose.m_Rot;
+	double *dt = dPose.m_X;
+
+	int i, j;
+	RVLPSULM_HYPOTHESIS *pHypothesis, *pHypothesis_;
+
+	for(i = 0; i < m_nHypotheses; i++)
+	{
+		pHypothesis = m_HypothesisArray[i];
+
+		pHypothesis->iRepresentative = 0xffffffff;
+	}
+
+	CRVL3DPose PoseS_M;
+	double *RSM, *tSM, *RS_M, *tS_M;
+	double et, eR;
+	double V3Tmp[3];
+
+	for(i = 0; i < m_nHypotheses; i++)
+	{
+		pHypothesis = m_HypothesisArray[i];
+
+		//if(pHypothesis->Index == 148)
+		//	int debug = 0;
+
+		if(pHypothesis->Probability < m_minRelevantLogLikelihood)
+			break;
+
+		if(pHypothesis->iRepresentative != 0xffffffff)
+			continue;
+
+		RVLQLIST_ADD_ENTRY(pList, pRepresentativeHypothesisPtr)
+
+		pRepresentativeHypothesisPtr->Ptr = pHypothesis;
+
+		pRepresentativeHypothesisPtr++;
+
+		GetNeighborPSuLMs(pHypothesis->pMPSuLM, PoseM_M);
+
+		RSM = pHypothesis->PoseSM.m_Rot;
+		tSM = pHypothesis->PoseSM.m_X;
+
+		for(j = i + 1; j < m_nHypotheses; j++)
+		{
+			pHypothesis_ = m_HypothesisArray[j];
+
+			//if(pHypothesis->Index == 591 && pHypothesis_->Index == 871)
+			//	int debug = 0;
+
+			if(pHypothesis_->Probability < m_minRelevantLogLikelihood)
+				break;
+
+			if(!GetRelativePose(pHypothesis->pMPSuLM, pHypothesis_, PoseM_M, &PoseS_M))
+				continue;
+
+			RS_M = PoseS_M.m_Rot;
+			tS_M = PoseS_M.m_X;
+			
+			RVLDIF3VECTORS(tS_M, tSM, dt)
+
+			et = RVLDOTPRODUCT3(dt, dt);
+
+			if(et > r2)
+				continue;
+
+			RVLMXMUL3X3T1(RSM, RS_M, dR)
+
+			dPose.GetAngleAxis(V3Tmp, eR);
+
+			if(RVLABS(eR) > OrientThr)
+				continue;
+
+			pHypothesis_->iRepresentative = pHypothesis->Index;
+		}
+
+		ResetCloseFlags(pHypothesis->pMPSuLM);
+	}
+
+	m_nRepresentativeHypotheses = pRepresentativeHypothesisPtr - m_RepresentativeHypothesisMem;		
+
+	delete[] PoseM_M;
 }
 
 ///////////////////////////////////// 
