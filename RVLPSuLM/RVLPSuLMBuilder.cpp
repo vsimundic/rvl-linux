@@ -11140,6 +11140,8 @@ void CRVLPSuLMBuilder::CreateParamList(CRVLMem * pMem)
 	pParamData = m_ParamList.AddParam("PSuLM.Localization.HypothesisEvaluation.minSurfaceSamplesForMatch", RVLPARAM_TYPE_INT, &m_minSurfaceSamplesForMatch);
 	pParamData = m_ParamList.AddParam("PSuLM.Localization.HypothesisEvaluation.SSM.Norm", RVLPARAM_TYPE_FLAG, &m_Flags);
 	m_ParamList.AddID(pParamData, "yes", RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_SSM_NORM);
+	pParamData = m_ParamList.AddParam("PSuLM.Localization.HypothesisEvaluation.ModelFusion", RVLPARAM_TYPE_FLAG, &m_Flags);
+	m_ParamList.AddID(pParamData, "yes", RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_MODEL_FUSION);
 
 	pParamData = m_ParamList.AddParam("PSuLM.Localization.Odometry.Const1", RVLPARAM_TYPE_DOUBLE, m_OdometryUncertConst);
 	pParamData = m_ParamList.AddParam("PSuLM.Localization.Odometry.Const2", RVLPARAM_TYPE_DOUBLE, m_OdometryUncertConst + 1);
