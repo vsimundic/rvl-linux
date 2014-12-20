@@ -935,10 +935,12 @@ void CRVLPSuLM::Display(CRVLFigure * pFig,
 				if(pLine->m_Flags & RVLOBJ2_FLAG_MARKED)
 				{
 					pVector->m_rP = 255;
-					pVector->m_gP = 192;
+					//pVector->m_gP = 192;
+					pVector->m_gP = 0;
 					pVector->m_bP = 255;
 					pVector->m_rL = 255;
-					pVector->m_gL = 192;
+					//pVector->m_gL = 192;
+					pVector->m_gL = 0;
 					pVector->m_bL = 255;
 				}
 				else

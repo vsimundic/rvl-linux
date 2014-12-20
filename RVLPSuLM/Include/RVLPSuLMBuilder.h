@@ -40,7 +40,8 @@
 //#define RVLPSULMBUILDER_POSE_CONSTRAINT_PROBABILITY_DEBUG_LOG
 //#define RVLPSULMBUILDER_AUTO_MATCH_MATRIX_DEBUG_LOG
 //#define RVLPSULMBUILDER_GT_141111
-#define RVLPSULMBUILDER_SCENE_FUSION_DEBUG_LOG
+//#define RVLPSULMBUILDER_SCENE_FUSION_DEBUG_LOG
+//#define RVLPSULMBUILDER_HYPOTHESIS_LOG
 
 // Configuration
 
@@ -373,7 +374,9 @@ public:
 	int m_minContourSize;
 	int m_minLineDepthStep;
 	int m_minnLineDepthSteps;
-
+	double m_minRelevantLogLikelihood;
+	double m_RepresentativeHypDistThr;
+	double m_RepresentativeHypOrientThr;
 	double m_OdometryUncertConst[4];
 	double m_FloorUncertConst;
 	double m_RobotParams[2];
@@ -656,7 +659,7 @@ public:
 	void PoseConstraintProbability(	CRVLPSuLM *pSPSuLM, 
 									CRVLPSuLM *pMPSuLM);
 	double ConditionalProbabilityTree(	CRVLPSuLM *pSPSuLM, 
-										CRVLPSuLM *pMPSuLM,
+										CRVLPSuLM *pMPSuLM = NULL,
 										int *iSMMatchArray = NULL,
 										int nSMSurfMatches = 0,
 										int nSMLineMatches = 0,
@@ -670,6 +673,15 @@ public:
 	void GetProjectionMatrix(double *P);
 	void SceneFusion();
 	void GetConnectedSubMap(CRVLPSuLM *pPSuLM0);
+	bool GetRelativePose(	CRVLPSuLM *pMPSuLM,
+							RVLPSULM_HYPOTHESIS *pHypothesis_,
+							CRVL3DPose **PoseM_M,
+							CRVL3DPose *pPoseS_M,
+							bool bOrientation = true);
+	void GetNeighborPSuLMs(	CRVLPSuLM *pMPSuLM,
+							CRVL3DPose **PoseM_M);
+	void ResetCloseFlags(CRVLPSuLM *pMPSuLM);
+	void RepresentativeHypotheses();
 
 private:
 	RVLPSULM_MSMATCH_DATA *HypothesesGetNextNode(	RVLPSULM_HG_NODE* pNode,

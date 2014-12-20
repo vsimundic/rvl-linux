@@ -975,6 +975,20 @@ void RVLResetFlags(CRVLMPtrChain *pObjectList,
 	}
 }
 
+template <class Type>
+void RVLResetFlags(RVLQLIST *pObjectList,
+				   DWORD Flag)
+{
+	Type *pObject = (Type *)(pObjectList->pFirst);
+
+	while(pObject)
+	{
+		pObject->m_Flags &= ~Flag;
+
+		pObject = (Type *)(pObject->pNext);
+	}
+}
+
 // Undersampling of image Src.
 // w - width of Src; h - height of Src; both w and h must be multiples of 2
 // The result is stored in Tgt.
