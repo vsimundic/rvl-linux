@@ -354,7 +354,9 @@ public:
 	int m_maxnHypothesesPerModel;
 	BYTE *m_MatchMatrix;
 	int m_maxnDominant3DSurfaces;
+	int m_maxnModel3DSurfaces;
 	int m_maxnDominant3DLines;
+	int m_maxnModel3DLines;
 	int m_maxnExpandedNodes;
 	double m_RotHypTol, m_tHypTol;
 	int m_refnHypotheses;

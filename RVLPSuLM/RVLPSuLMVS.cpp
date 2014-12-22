@@ -1196,8 +1196,10 @@ void RVLPSuLMDisplayMouseCallback2(int event, int x, int y, int flags, void* vpD
 		if(HypEvalMethod == RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD_P)
 		{
 			nSSurfaces = pVS->m_pPSuLM->m_n3DSurfaces;
-			nMSurfaces = pHypothesis->pMPSuLM->m_n3DSurfaces;
-			nMLines =  pHypothesis->pMPSuLM->m_n3DLines;
+			//nMSurfaces = pHypothesis->pMPSuLM->m_n3DSurfaces;
+			//nMLines =  pHypothesis->pMPSuLM->m_n3DLines;
+			nMSurfaces = pHypothesis->pMPSuLM->m_n3DSurfacesTotal;
+			nMLines =  pHypothesis->pMPSuLM->m_n3DLinesTotal;
 			nMatchMatrixCols = nMSurfaces + nMLines;
 		}
 		else

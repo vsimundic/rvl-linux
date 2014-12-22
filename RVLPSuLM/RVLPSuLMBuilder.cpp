@@ -623,12 +623,10 @@ void CRVLPSuLMBuilder::Init(void)
 		m_Flags |= RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_PREEVAL;
 	else if(HypEvalMethod == RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD_P)
 	{
-		m_SurfaceMSArray = new CRVL3DSurface2[m_maxnDominant3DSurfaces];
+		//m_SurfaceMSArray = new CRVL3DSurface2[m_maxnDominant3DSurfaces];
 			 
 		m_SurfaceMatchData.Cp = new double[3 * 3 * m_maxnDominant3DSurfaces];
-		m_SurfaceMatchData.Cp_ = new double[3 * 3 * m_maxnDominant3DSurfaces];
 		m_SurfaceMatchData.invCp = new double[3 * 3 * m_maxnDominant3DSurfaces];
-		m_SurfaceMatchData.invCp_ = new double[3 * 3 * m_maxnDominant3DSurfaces];
 		m_SurfaceMatchData.varPositionUncert = m_SampleMatchDistTol * m_SampleMatchDistTol;
 		m_SurfaceMatchData.varOrientationUncert = m_SampleMatchAngleTol * m_SampleMatchAngleTol;
 		//m_SurfaceMatchData.PPriorPosition = 7.4451;			// -log(1/sqrt(2*pi*(30.0^2))*exp(-2.5^2/2))
@@ -10106,10 +10104,12 @@ double CRVLPSuLMBuilder::EvaluateHypothesis4(	CRVLPSuLM * pSPSuLM,
 	CRVLPSuLM *pMPSuLM = pHypothesis->pMPSuLM;
 	
 	CRVL3DSurface2 **MSurfArray = pMPSuLM->m_3DSurfaceArray;
-	int nMSurfs = pMPSuLM->m_n3DSurfaces;
+	//int nMSurfs = pMPSuLM->m_n3DSurfaces;
+	int nMSurfs = pMPSuLM->m_n3DSurfacesTotal;
 	
 	CRVL3DLine2 **MLineArray = pMPSuLM->m_3DLineArray;
-	int nMLines = pMPSuLM->m_n3DLines;
+	//int nMLines = pMPSuLM->m_n3DLines;
+	int nMLines = pMPSuLM->m_n3DLinesTotal;
 
 	int nMFeatures = nMSurfs + nMLines;
 
@@ -10891,6 +10891,9 @@ void CRVLPSuLMBuilder::LoadMap()
 	//check if file exists	
 	fp = fopen(m_ModelMapPath, "rb");
 
+	m_maxnModel3DLines = 0;
+	m_maxnModel3DSurfaces = 0;
+
 	if(fp)
 	{
 		fclose(fp);
@@ -10968,10 +10971,31 @@ void CRVLPSuLMBuilder::LoadMap()
 			if(pPSuLM->m_n3DLines > m_maxnLines)
 				m_maxnLines = pPSuLM->m_n3DLines;
 
+			if(pPSuLM->m_n3DSurfacesTotal > m_maxnModel3DSurfaces)
+				m_maxnModel3DSurfaces = pPSuLM->m_n3DSurfacesTotal;
+
+			if(pPSuLM->m_n3DLinesTotal > m_maxnModel3DLines)
+				m_maxnModel3DLines = pPSuLM->m_n3DLinesTotal;
+
 			m_PSuLMList.Add(pPSuLM);
 			
 			pEntry = (RVLQLIST_PTR_ENTRY*)pEntry->pNext;
 		}
+
+		if(m_SurfaceMatchData.Cp_)
+			delete[] m_SurfaceMatchData.Cp_;
+
+		m_SurfaceMatchData.Cp_ = new double[3 * 3 * m_maxnModel3DSurfaces];
+
+		if(m_SurfaceMatchData.invCp_)
+			delete[] m_SurfaceMatchData.invCp_;
+
+		m_SurfaceMatchData.invCp_ = new double[3 * 3 * m_maxnModel3DSurfaces];
+
+		if(m_SurfaceMSArray)
+			delete[] m_SurfaceMSArray;
+
+		m_SurfaceMSArray = new CRVL3DSurface2[m_maxnModel3DSurfaces];
 
 		if(m_Flags & RVLPSULMBUILDER_FLAG_GENERATE_MODELS)
 		{
