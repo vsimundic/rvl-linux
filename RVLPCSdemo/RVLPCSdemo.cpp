@@ -216,7 +216,7 @@ int main(int argc, char* argv[])
 
 		if(VS.m_Flags & RVLSYS_FLAGS_PC)
 		{
-			if(!RVLPCImport(VS.m_ImageFileName, PC, nPC))
+			if(!RVLPCImport(VS.m_ImageFileName, &PC, nPC))
 			{
 				char message[] = "Can not open file ";
 

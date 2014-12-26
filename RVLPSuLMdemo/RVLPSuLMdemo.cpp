@@ -162,15 +162,13 @@ int main(int argc, char* argv[])
 	RVLDISPARITYMAP *pDepthImage;
 	int w;
 	int h;
-	double *PC;
+	double *PC = NULL;
 	int nPC;
 
 	if(VS.m_Flags & RVLSYS_FLAGS_PC)
 	{
 		w = VS.m_PSD.m_Width;
 		h = VS.m_PSD.m_Height;
-
-		PC = new double[3 * w * h];
 	}
 	else
 	{
@@ -187,7 +185,7 @@ int main(int argc, char* argv[])
 
 	Renderer.Init(800, 600);
 
-	int *pointmap = new int[w * h];
+	int *pointmap = new int[w * h * (2 * VS.m_PSD.m_nFOVExtensions + 1)];
 #endif
 
 	// create RGB image
@@ -202,11 +200,13 @@ int main(int argc, char* argv[])
 
 	// create input image
 
-	IplImage *pInputImage = cvCreateImage(cvSize(w, h), IPL_DEPTH_8U, 3);
+	int wExt = (2 * VS.m_PSD.m_nFOVExtensions + 1) * w;
+
+	IplImage *pInputImage = cvCreateImage(cvSize(wExt, h), IPL_DEPTH_8U, 3);
 
 	// create zoomed image
 
-	IplImage *pZoomedInputImage = cvCreateImage(cvSize(2 * w, 2 * h), IPL_DEPTH_8U, 3);
+	IplImage *pZoomedInputImage = cvCreateImage(cvSize(2 * wExt, 2 * h), IPL_DEPTH_8U, 3);
 
 	// create auxiliary image
 
@@ -260,7 +260,7 @@ int main(int argc, char* argv[])
 
 	pFig2->m_Flags |= (RVLPSULM_DISPLAY_MODEL | RVLFIG_FLAG_DATA);
 
-	pFig2->EmptyBitmap(cvSize(w, h), cvScalar(0, 0, 0));
+	pFig2->EmptyBitmap(cvSize(wExt, h), cvScalar(0, 0, 0));
 
 	pFig2->m_FontSize = 16;
 	cvInitFont(&(pFig2->m_Font), CV_FONT_HERSHEY_SIMPLEX, 0.5, 0.5, 0, 2);
@@ -288,7 +288,7 @@ int main(int argc, char* argv[])
 	// main loop
 
 	bool bDisplayMesh = false;
-	bool bDisplayConvexSets = ((VS.m_Flags & RVLSYS_FLAGS_PC) != 0);
+	bool bDisplayConvexSets = false;
 	bool bDisplayHypothesis = true;
 	bool bDisplayPSuLM = false;
 	//bool bContinuous = bKinect;
@@ -315,7 +315,7 @@ int main(int argc, char* argv[])
 
 	char GlobalMeshFileName[] = "Mesh.obj";
 
-	int VTKTexture = 0;
+	int VTKTexture = 3;
 	
 	int nObjects = 1;
 	int textureFileNumber = 1;
@@ -367,7 +367,7 @@ int main(int argc, char* argv[])
 #endif
 		if(VS.m_Flags & RVLSYS_FLAGS_PC)
 		{
-			if(!RVLPCImport(VS.m_ImageFileName, PC, nPC))
+			if(!RVLPCImport(VS.m_ImageFileName, &PC, nPC))
 			{
 				MessageCanNotOpenFile(&GUI, VS.m_ImageFileName);
 
@@ -841,7 +841,7 @@ int main(int argc, char* argv[])
 
 					Renderer.Save2PLY(VTK3DModelFileName);
 
-					iVTK3DModel++;
+					//iVTK3DModel++;
 
 					strcpy(VTKMessage, VTKMessageConst);
 					strcat(VTKMessage, VTK3DModelFileName);
@@ -873,7 +873,7 @@ int main(int argc, char* argv[])
 				break;
 			case 't':
 #ifdef RVLVTK
-				VTKTexture = (VTKTexture + 1) % 2;
+				VTKTexture = (VTKTexture + 1) % 4;
  
 				if(bVTKRendererActive)
 					RVLDisplaySegmentedMesh3D(&Renderer, &(VS.m_AImage.m_C2DRegion.m_ObjectList), nObjects, w, h, pointmap,
@@ -907,7 +907,10 @@ int main(int argc, char* argv[])
 				break;
 #ifdef RVLVTK
 			case 'V':
-				RVLDisplaySegmentedMesh3D(&Renderer, &(VS.m_AImage.m_C2DRegion.m_ObjectList), nObjects, w, h, pointmap, VS.m_PSD.m_Point3DMap);
+				RVLDisplaySegmentedMesh3D(&Renderer, &(VS.m_AImage.m_C2DRegion.m_ObjectList), nObjects, w, h, pointmap, VS.m_PSD.m_Point3DMapMem, 
+					VTKTexture);
+
+				Renderer.Save2PLY(VTK3DModelFileName);
 
 				bRefresh = true;
 				bVTKRendererActive = true;
@@ -1198,6 +1201,9 @@ int main(int argc, char* argv[])
 
 	if(HypothesisMem)
 		delete[] HypothesisMem;
+
+	if(PC)
+		delete[] PC;
 
 	delete[] SizeArray;
 	delete[] VTKMessage;

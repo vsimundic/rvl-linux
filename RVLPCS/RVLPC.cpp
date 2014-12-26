@@ -1,7 +1,7 @@
 #include "RVLCore.h"
 #include "RVLPC.h"
 
-bool RVLPCImport(char *FileName, double *X, int &n)
+bool RVLPCImport(char *FileName, double **pX, int &n)
 {
 	FILE *fp = fopen(FileName, "r");
 
@@ -9,6 +9,15 @@ bool RVLPCImport(char *FileName, double *X, int &n)
 		return false;
 
 	fscanf(fp, "%d\n", &n);
+
+	double *X = *pX;
+
+	if(X)
+		delete[] X;
+
+	X = new double[3 * n];
+
+	*pX = X;
 
 	double *X_ = X;
 

@@ -1180,10 +1180,13 @@ void RVLPSuLMDisplayMouseCallback2(int event, int x, int y, int flags, void* vpD
 	}
 
 	int w = pData->w;
+
+	int wExt = (2 * pVS->m_PSD.m_nFOVExtensions + 1) * w;
 	
 	int iPix;
 	int a, b;
 	int nSurfaces, nSurfaces2;
+	int iFOVExtension;
 
 	switch( event )
 	{
@@ -1196,7 +1199,7 @@ void RVLPSuLMDisplayMouseCallback2(int event, int x, int y, int flags, void* vpD
 
 				pData->bSelection = true;
 
-				iPix = x / pData->ZoomFactor + y / pData->ZoomFactor * w;
+				iPix = x / pData->ZoomFactor + y / pData->ZoomFactor * wExt;
 
 				if(pFig->m_Flags & RVLPSULM_DISPLAY_SCENE)
 				{
@@ -1224,7 +1227,7 @@ void RVLPSuLMDisplayMouseCallback2(int event, int x, int y, int flags, void* vpD
 					nSurfaces2 = nSSurfaces;
 				}
 
-				pPSuLM->Project(&(pFig->m_PoseC0), FALSE, iPix, &pSelectedSurf, &pSelectedLine);
+				pPSuLM->Project(&(pFig->m_PoseC0), FALSE, iPix, &pSelectedSurf, &pSelectedLine, &iFOVExtension);
 
 				pFig->Clear();
 
@@ -1242,15 +1245,19 @@ void RVLPSuLMDisplayMouseCallback2(int event, int x, int y, int flags, void* vpD
 					pVS->m_pPSuLM->Display(pSFig, &NullPose, cvScalar(0, 255, 0), pData->mDisplayPSuLMFlags);
 				}
 
+				RVLResetFlags<CRVL2DRegion2>(&(pVS->m_AImage.m_C2DRegion.m_ObjectList), RVLOBJ2_FLAG_MARKED);
+
 				if(pSelectedSurf)
 				{
 					pPSuLM->Display3DSurface(pFig, pSelectedSurf, &NullPose, cvScalar(255, 255, 0), 2,
 						RVLPSULM_DISPLAY_VECTORS);
 
+					CRVL2DRegion2 *p2DRegion = (CRVL2DRegion2 *)(pSelectedSurf->m_vp2DRegion);
+
 					if(pFig->m_Flags & RVLPSULM_DISPLAY_SCENE)
 					{
-						RVLSegmentationDisplayBoundary(pFig, (CRVL2DRegion2 *)(pSelectedSurf->m_vp2DRegion), pData->w, &(pVS->m_Mem2), 
-							cvScalar(255, 255, 0), 2);
+						RVLSegmentationDisplayBoundary(pFig, p2DRegion, pData->w, &(pVS->m_Mem2), cvScalar(255, 255, 0), 1, 
+							(iFOVExtension + pVS->m_PSD.m_nFOVExtensions) * pVS->m_PSD.m_Width);
 
 						pVS->m_Mem2.Clear();
 					}
@@ -1292,9 +1299,22 @@ void RVLPSuLMDisplayMouseCallback2(int event, int x, int y, int flags, void* vpD
 								pPSuLM2->Display3DSurface(pFig2, pSurf2, &NullPose, cvScalar(255, 0, 0), 2,
 									RVLPSULM_DISPLAY_VECTORS);
 							}
-						}
+						}	// for(int iMatch = 0; iMatch < nSurfaces2; iMatch++)
+					}	// if(pHypothesis != NULL && pSelectedSurf->m_Index < nSurfaces)
+
+					RVLARRAY *pRelList = p2DRegion->m_RelList + p2DRegion->m_pClass->m_iRelList[RVLRELLIST_ELEMENTS];
+
+					CRVL2DRegion2 **ppTriangle;
+
+					CRVL2DRegion2 *pTriangle;
+
+					for(ppTriangle = (CRVL2DRegion2 **)(pRelList->pFirst); ppTriangle < (CRVL2DRegion2 **)(pRelList->pEnd); ppTriangle++)
+					{
+						pTriangle = *ppTriangle;
+
+						pTriangle->m_Flags |= RVLOBJ2_FLAG_MARKED;
 					}
-				}
+				}	// if(pSelectedSurf)
 
 				if(pSelectedLine)
 				{

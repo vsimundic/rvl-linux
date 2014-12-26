@@ -3278,7 +3278,8 @@ void RVLSegmentationDisplayBoundary(CRVLFigure *pFig,
 									int ImageWidth,
 									CRVLMem *pMem,
 									CvScalar Color,
-									int LineWidth)
+									int LineWidth,
+									int uOffset)
 {
 	CRVLDisplayVector Vector(pFig->m_pMem);
 
@@ -3314,7 +3315,7 @@ void RVLSegmentationDisplayBoundary(CRVLFigure *pFig,
 
 			pVector = pFig->AddVector(&Vector);
 			
-			pVector->Line(((iPix1 % ImageWidth) << 1), ((iPix1 / ImageWidth) << 1), ((iPix2 % ImageWidth) << 1), ((iPix2 / ImageWidth) << 1));
+			pVector->Line(((iPix1 % ImageWidth + uOffset) << 1), ((iPix1 / ImageWidth) << 1), ((iPix2 % ImageWidth + uOffset) << 1), ((iPix2 / ImageWidth) << 1));
 
 			iPix1 = iPix2;
 
@@ -5507,9 +5508,9 @@ void RVLDisplaySegmentedMesh3D(CRVLVTKRenderer *pRenderer,
 
                                 int h,
 
-                                int *pointmap,
+                                int *pointmap_,
 
-                                RVL3DPOINT2 **Point3DMap,
+                                RVL3DPOINT2 **Point3DMap_,
 
                                 int colortype,
 
@@ -5517,11 +5518,10 @@ void RVLDisplaySegmentedMesh3D(CRVLVTKRenderer *pRenderer,
 
 {
 
- 
+	  RVL3DPOINT2 **Point3DMap;
+	  int *pointmap;
 
       //generating random color (colortype = 0)
-
- 
 
       unsigned char **color;
 
@@ -5575,7 +5575,7 @@ void RVLDisplaySegmentedMesh3D(CRVLVTKRenderer *pRenderer,
 
  
 
-      memset(pointmap, 255, w * h * sizeof(int));
+      memset(pointmap_, 255, 3 * w * h * sizeof(int));
 
  
 
@@ -5690,6 +5690,8 @@ sizeof(char));
       RVLQLIST_HIST_ENTRY *pHistEntry;
 
  
+	  //Monochrome with selection (colortype = 3)
+
 
  
 
@@ -5809,325 +5811,121 @@ vtkSmartPointer<vtkUnsignedCharArray>::New();
 
       CRVL2DRegion2 *pTriangle;
 
- 
-
       pTriangleList->Start();
 
- 
-
       while(pTriangleList->m_pNext)
-
- 
-
       {
-
- 
-
             pTriangle = (CRVL2DRegion2 *)(pTriangleList->GetNext());
 
- 
-
-            // pTriangle is a pointer to an instance of the class
-
- 
-
+			// pTriangle is a pointer to an instance of the class
             // CRVL2DRegion2 representing a mesh triangle. 
-
- 
-
-            // Now you can do whatever you want with the triangle.
-
- 
+            // Now you can do whatever you want with the triangle. 
 
             if(pTriangle->m_Flags & RVLOBJ2_FLAG_REJECTED)
-
- 
-
                   continue;
-
- 
 
             RVLMESH_LINK *pLink = (RVLMESH_LINK *)(pTriangle->m_PtArray);
 
- 
+			Point3DMap = pTriangle->m_pPoint3DMap;
 
+			pointmap = pointmap_ + (Point3DMap - Point3DMap_);
+ 
             RVL3DPOINT2 *point = Point3DMap[pLink->iPix0];
 
- 
-
-            //inserting points/vertices
-
- 
+			//inserting points/vertices
 
             if (pointmap[pLink->iPix0] < 0)
-
- 
-
             {
+                  points->InsertNextPoint(point->XYZ[0], point->XYZ[1],point->XYZ[2]);
 
- 
-
-                  points->InsertNextPoint(point->XYZ[0],
-point->XYZ[1],point->XYZ[2]);
-
- 
-
-                  pointmap[pLink->iPix0] = noPts;
-
- 
+				  pointmap[pLink->iPix0] = noPts;
 
                   vert[0] = noPts;
 
- 
-
                   if (colortype == 1)
-
-                        texCoords->InsertNextTuple2((float)(pLink->iPix0 -
-(int)(pLink->iPix0 / w) * w) / w, (float)((int)(pLink->iPix0 / w))/ h);
+                        texCoords->InsertNextTuple2((float)(pLink->iPix0 - (int)(pLink->iPix0 / w) * w) / w, (float)((int)(pLink->iPix0 / w))/ h);
 
                   noPts++;
-
- 
-
             }
-
- 
-
             else
-
- 
-
                   vert[0] = pointmap[pLink->iPix0];
-
- 
-
- 
 
             pLink = pLink->pNext->pOpposite;
 
- 
-
             point = Point3DMap[pLink->iPix0];
 
- 
-
             if (pointmap[pLink->iPix0] < 0)
-
- 
-
             {
-
- 
-
-                  points->InsertNextPoint(point->XYZ[0], point->XYZ[1],
-
-point->XYZ[2]);
-
- 
+                  points->InsertNextPoint(point->XYZ[0], point->XYZ[1], point->XYZ[2]);
 
                   pointmap[pLink->iPix0] = noPts;
-
- 
 
                   vert[1] = noPts;
 
- 
-
                   if (colortype == 1)
-
- 
-
-                        texCoords->InsertNextTuple2((float)(pLink->iPix0 -
-
-(int)(pLink->iPix0 / w) * w) / w, (float)((int)(pLink->iPix0 / w))/ h);
-
- 
+                        texCoords->InsertNextTuple2((float)(pLink->iPix0 - (int)(pLink->iPix0 / w) * w) / w, (float)((int)(pLink->iPix0 / w))/ h);
 
                   noPts++;
-
- 
-
             }
-
- 
-
             else
-
- 
-
                   vert[1] = pointmap[pLink->iPix0];
-
- 
-
- 
 
             pLink = pLink->pNext->pOpposite;
 
- 
-
             point = Point3DMap[pLink->iPix0];
 
- 
-
             if (pointmap[pLink->iPix0] < 0)
-
- 
-
             {
-
- 
-
-                  points->InsertNextPoint(point->XYZ[0], point->XYZ[1],
-
-point->XYZ[2]);
-
- 
+                  points->InsertNextPoint(point->XYZ[0], point->XYZ[1], point->XYZ[2]);
 
                   pointmap[pLink->iPix0] = noPts;
 
- 
-
                   vert[2] = noPts;
 
- 
-
                   if (colortype == 1)
-
- 
-
-                        texCoords->InsertNextTuple2((float)(pLink->iPix0 -
-
-(int)(pLink->iPix0 / w) * w) / w, (float)((int)(pLink->iPix0 / w))/ h);
-
- 
+                        texCoords->InsertNextTuple2((float)(pLink->iPix0 - (int)(pLink->iPix0 / w) * w) / w, (float)((int)(pLink->iPix0 / w))/ h);
 
                   noPts++;
-
- 
-
             }
-
- 
-
             else
-
- 
-
                   vert[2] = pointmap[pLink->iPix0];
-
- 
-
- 
 
             //inserting triangle
 
- 
-
             indices->Reset();
-
- 
-
             indices->InsertNextId(vert[0]);
-
- 
-
             indices->InsertNextId(vert[1]);
-
- 
-
             indices->InsertNextId(vert[2]);
-
- 
-
             triangles->InsertNextCell(indices);
 
- 
-
             if (colortype == 0)
-
- 
-
                   rgbs->InsertNextTupleValue(color[pTriangle->m_Label]);
-
- 
-
             else if (colortype == 2)
-
- 
-
             {
+                  pHistEntry = (RVLQLIST_HIST_ENTRY*)(pTriangle->m_histRGB->pFirst);
 
- 
+                  r = floor(pHistEntry->adr / (pTriangle->m_histRGB_base[1] * pTriangle->m_histRGB_base[2]));
 
-                  pHistEntry = (RVLQLIST_HIST_ENTRY
+                  matR = (float)((r * (256.0 / pTriangle->m_histRGB_base[0])) + (pTriangle->m_histRGB_base[0]/2));
 
-*)(pTriangle->m_histRGB->pFirst);
+                  g = floor((pHistEntry->adr / (pTriangle->m_histRGB_base[1] * pTriangle->m_histRGB_base[2]) - r) * pTriangle->m_histRGB_base[1]);
 
- 
+                  matG = (float)((g * (256.0 / pTriangle->m_histRGB_base[1])) + (pTriangle->m_histRGB_base[1]/2));
 
-                  r = floor(pHistEntry->adr / (pTriangle->m_histRGB_base[1]
+                  b = floor(((pHistEntry->adr / (pTriangle->m_histRGB_base[1] * pTriangle->m_histRGB_base[2]) - r) * pTriangle->m_histRGB_base[1] - g) * pTriangle->m_histRGB_base[2]);
 
-* pTriangle->m_histRGB_base[2]));
-
- 
-
-                  matR = (float)((r * (256.0 /
-
-pTriangle->m_histRGB_base[0])) + (pTriangle->m_histRGB_base[0]/2));
-
- 
-
-                  g = floor((pHistEntry->adr / (pTriangle->m_histRGB_base[1]
-
-* pTriangle->m_histRGB_base[2]) - r) * pTriangle->m_histRGB_base[1]);
-
- 
-
-                  matG = (float)((g * (256.0 /
-
-pTriangle->m_histRGB_base[1])) + (pTriangle->m_histRGB_base[1]/2));
-
- 
-
-                  b = floor(((pHistEntry->adr /
-
-(pTriangle->m_histRGB_base[1] * pTriangle->m_histRGB_base[2]) - r) *
-
-pTriangle->m_histRGB_base[1] - g) * pTriangle->m_histRGB_base[2]);
-
- 
-
-                  matB = (float)((b * (256.0 /
-
-pTriangle->m_histRGB_base[2])) + (pTriangle->m_histRGB_base[2]/2));
-
- 
+                  matB = (float)((b * (256.0 / pTriangle->m_histRGB_base[2])) + (pTriangle->m_histRGB_base[2]/2));
 
                   rgbs->InsertNextTuple3(matR, matG, matB);
-
- 
-
             }
-
-                  else if (colortype == 3)
-
-                  {
-
-                        if(pTriangle->m_Flags & RVLOBJ2_FLAG_MARKED)
-
-                             rgbs->InsertNextTuple3(255, 0, 0);
-
-                        else
-
-                             rgbs->InsertNextTuple3(0, 255, 0);
-
-                  }
-
- 
-
+            else if (colortype == 3)
+            {
+                if(pTriangle->m_Flags & RVLOBJ2_FLAG_MARKED)
+                     rgbs->InsertNextTuple3(255, 0, 0);
+                else
+                     rgbs->InsertNextTuple3(0, 255, 0);
+            }
       }
-
- 
 
       //generating VTK objects
 

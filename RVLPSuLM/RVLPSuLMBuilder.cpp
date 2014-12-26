@@ -1051,6 +1051,8 @@ BOOL CRVLPSuLMBuilder::Create(CRVLPSuLM *pPSuLM,
 
 	unsigned int DepthFormat;
 
+	DWORD HypEvalMethod = (m_Flags & RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD);
+
 	RVLQLIST *pLocalMap = &(pPSuLM->m_LocalMap);
 	RVLQLIST_INIT(pLocalMap)
 
@@ -1064,7 +1066,7 @@ BOOL CRVLPSuLMBuilder::Create(CRVLPSuLM *pPSuLM,
 
 				int nPC;
 
-				if(!RVLPCImport(pPSuLM->m_FileName, PC, nPC))
+				if(!RVLPCImport(pPSuLM->m_FileName, &PC, nPC))
 					return FALSE;
 
 				ExecTime = m_pTimer->GetTime() - StartTime;
@@ -1079,6 +1081,24 @@ BOOL CRVLPSuLMBuilder::Create(CRVLPSuLM *pPSuLM,
 			m_pMem->Clear();
 
 			m_pAImage->Create();
+
+			m_pPSD->m_Flags &= ~RVLPSD_MESH_SEGMENT_PLANAR;
+
+			int ImageSize = m_pPSD->m_Width * m_pPSD->m_Height;
+
+			RVL3DPOINT2 **Point3DMap = m_pPSD->m_Point3DMapMem;
+
+			int iFOVExtension;
+
+			for(iFOVExtension = -m_pPSD->m_nFOVExtensions; iFOVExtension <= m_pPSD->m_nFOVExtensions; iFOVExtension++, Point3DMap += ImageSize)
+			{
+				m_pPSD->m_Point3DMap = Point3DMap;	
+
+				if(iFOVExtension == m_pPSD->m_nFOVExtensions)
+					m_pPSD->m_Flags |= RVLPSD_MESH_SEGMENT_PLANAR;
+
+				m_pPSD->Segment(&(m_pAImage->m_C2DRegion),&(m_pAImage->m_C2DRegion2),&(m_pAImage->m_C2DRegion3),m_pMem);
+			}
 		}
 		else
 		{
@@ -1095,15 +1115,15 @@ BOOL CRVLPSuLMBuilder::Create(CRVLPSuLM *pPSuLM,
 			m_pAImage->Create();
 			//m_pPSD->GetPointsWithDisparity(&(m_pStereoVision->m_DisparityMap), m_pAImage, m_pMem2, false);
 			m_pPSD->GetPointsWithDisparity(&(m_pStereoVision->m_DisparityMap));
+
+			ExecTime = m_pTimer->GetTime() - StartTime;
+
+			StartTime = m_pTimer->GetTime();
+			//m_pPSD->Segment(&(m_pAImage->m_C2DRegion),&(m_pAImage->m_C2DRegion2),&(m_pAImage->m_C2DRegion3),&(m_pAImage->m_C2DContour),m_pMem);
+			m_pPSD->Segment(&(m_pAImage->m_C2DRegion),&(m_pAImage->m_C2DRegion2),&(m_pAImage->m_C2DRegion3),m_pMem);
+
+			ExecTime = m_pTimer->GetTime() - StartTime;
 		}
-
-		ExecTime = m_pTimer->GetTime() - StartTime;
-
-		StartTime = m_pTimer->GetTime();
-		//m_pPSD->Segment(&(m_pAImage->m_C2DRegion),&(m_pAImage->m_C2DRegion2),&(m_pAImage->m_C2DRegion3),&(m_pAImage->m_C2DContour),m_pMem);
-		m_pPSD->Segment(&(m_pAImage->m_C2DRegion),&(m_pAImage->m_C2DRegion2),&(m_pAImage->m_C2DRegion3),m_pMem);
-
-		ExecTime = m_pTimer->GetTime() - StartTime;
 
 		m_pMem2->Clear();
 	}
@@ -1758,7 +1778,7 @@ BOOL CRVLPSuLMBuilder::Create(CRVLPSuLM *pPSuLM,
 			//	p3DSurface->m_d);
 
 			iSurface++;
-		}
+		}	// for all surfaces in p3DSurfaceList
 
 
 
@@ -1777,34 +1797,36 @@ BOOL CRVLPSuLMBuilder::Create(CRVLPSuLM *pPSuLM,
 		//	//p2DRegion->m_Flags |= RVLOBJ2_FLAG_DOMINANT;
 		//}
 
-
-		//FILL m_pPSD->m_3DSurfaceMap
-		int ImageSize = m_pPSD->m_Width * m_pPSD->m_Height;
-
-		//Reset m_pPSD->m_3DSurfaceMap
-		memset(m_pPSD->m_3DSurfaceMap, 0, ImageSize * sizeof(CRVL3DSurface2 *));
-
-		CRVL3DSurface2 **p3DSurfacePtr = m_pPSD->m_3DSurfaceMap;
-
-		CRVL2DRegion2 **p2DRegionMapEnd = m_pPSD->m_2DRegionMap + ImageSize;
-
-		CRVL2DRegion2 **p2DRegionPtr;
-		
-		for(p2DRegionPtr = m_pPSD->m_2DRegionMap; p2DRegionPtr < p2DRegionMapEnd; p2DRegionPtr++, p3DSurfacePtr++)
+		if(HypEvalMethod == RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD_IBM)
 		{
-			p2DRegion = *p2DRegionPtr;
+			//FILL m_pPSD->m_3DSurfaceMap
+			int ImageSize = m_pPSD->m_Width * m_pPSD->m_Height;
 
-			if(p2DRegion == NULL)
-				continue;
+			//Reset m_pPSD->m_3DSurfaceMap
+			memset(m_pPSD->m_3DSurfaceMap, 0, ImageSize * sizeof(CRVL3DSurface2 *));
 
-			if(p2DRegion->m_Flags & RVLOBJ2_FLAG_REJECTED)
+			CRVL3DSurface2 **p3DSurfacePtr = m_pPSD->m_3DSurfaceMap;
+
+			CRVL2DRegion2 **p2DRegionMapEnd = m_pPSD->m_2DRegionMap + ImageSize;
+
+			CRVL2DRegion2 **p2DRegionPtr;
+			
+			for(p2DRegionPtr = m_pPSD->m_2DRegionMap; p2DRegionPtr < p2DRegionMapEnd; p2DRegionPtr++, p3DSurfacePtr++)
 			{
-				*p3DSurfacePtr = NULL;
+				p2DRegion = *p2DRegionPtr;
 
-				continue;
+				if(p2DRegion == NULL)
+					continue;
+
+				if(p2DRegion->m_Flags & RVLOBJ2_FLAG_REJECTED)
+				{
+					*p3DSurfacePtr = NULL;
+
+					continue;
+				}
+
+				*p3DSurfacePtr = (CRVL3DSurface2 *)(p2DRegion->m_vp3DSurface);		
 			}
-
-			*p3DSurfacePtr = (CRVL3DSurface2 *)(p2DRegion->m_vp3DSurface);		
 		}
 
 		if(m_Flags & RVLPSULMBUILDER_FLAG_LINES)
@@ -2357,7 +2379,7 @@ BOOL CRVLPSuLMBuilder::Create(CRVLPSuLM *pPSuLM,
 
 		// sample 3D surfaces
 
-		if((m_Flags & RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD) == RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD_SSM)
+		if(HypEvalMethod == RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD_SSM)
 			pPSuLM->Get3DSurfaceSamplesFrom2DRegionSamples(m_pPSD->Sample2DRegions());
 
 		//TEST KARLO //GET Min dxn of Info content
@@ -21425,7 +21447,11 @@ void CRVLPSuLMBuilder::DisplayHypothesis(CRVLGUI *pGUI,
 		cvReleaseImage(&(pFig2->m_pImage));
 		
 		if(m_Flags & RVLPSULMBUILDER_FLAG_PC)
-			pFig2->EmptyBitmap(cvSize(m_pPSD->m_Width, m_pPSD->m_Height), cvScalar(0, 0, 0));
+		{
+			int wExt = (2 * m_pPSD->m_nFOVExtensions + 1) * m_pPSD->m_Width;
+
+			pFig2->EmptyBitmap(cvSize(wExt, m_pPSD->m_Height), cvScalar(0, 0, 0));
+		}
 		else if((m_Flags & RVLPSULMBUILDER_FLAG_MODE) == RVLPSULMBUILDER_FLAG_MODE_TRACKING)
 			pFig2->m_pImage = cvCloneImage(pImage2);
 		else
