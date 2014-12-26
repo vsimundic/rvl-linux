@@ -142,6 +142,7 @@ public:
 	BYTE *m_uPixMask;
 	RVLQLIST m_Samples;
 	RVL2DMOMENTS m_Moments;
+	RVL3DPOINT2 **m_pPoint3DMap;
 
 public:
 	void DisplayPt(	int iPix,

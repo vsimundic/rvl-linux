@@ -241,7 +241,8 @@ void RVLSegmentationDisplayBoundary(CRVLFigure *pFig,
 									int ImageWidth,
 									CRVLMem *pMem,
 									CvScalar Color,
-									int LineWidth = 1);
+									int LineWidth = 1,
+									int uOffset = 0);
 #ifdef RVLVTK
 void RVLDisplaySegmentedMesh3D(CRVLVTKRenderer *pRenderer,
                                 CRVLMPtrChain *pTriangleList,

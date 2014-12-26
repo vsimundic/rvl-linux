@@ -59,17 +59,21 @@ void CRVLPSuLM::Project(CRVL3DPose *pPoseC0,
 						BOOL bCells,
 						int iSelectedPix,
 						CRVL3DSurface2 **ppSelectedSurf,
-						CRVL3DLine2 **ppSelectedLine)
+						CRVL3DLine2 **ppSelectedLine,
+						int *piFOVExtension)
 {
 	CRVLPSuLMBuilder *pBuilder = (CRVLPSuLMBuilder *)m_vpBuilder;
+	CRVLPlanarSurfaceDetector *pPSD = pBuilder->m_pPSD;
 
-	int u, v, w;
+	int u, v, w, h, wExt;
 
 	if(iSelectedPix >= 0)
 	{
 		w = pBuilder->m_pCamera->Width;
-		u = ((iSelectedPix % w) << 1) + 1;
-		v = ((iSelectedPix / w) << 1) + 1;
+		h = pBuilder->m_pCamera->Height;
+		wExt = (2 * pPSD->m_nFOVExtensions + 1) * w;
+		u = ((iSelectedPix % wExt) << 1) + 1;
+		v = ((iSelectedPix / wExt) << 1) + 1;
 	}
 
 	//if(pBuilder->m_Flags & RVLPSULM_FLAG_SURFACES)
@@ -201,13 +205,19 @@ void CRVLPSuLM::Project(CRVL3DPose *pPoseC0,
 		RVLQLIST_HIST_ENTRY_SHORT *pHistRGBEntry;
 		ushort HistRGBBin;
 		CRVL3DSurface2 **ppSurf;
+		double U[2];
+		int iU[2];
+		double *RFC_, *tFC_;
+		double RFC[9], tFC[3], RCC_[9];
+		CvPoint *PtArray;
+		int iFOVExtension;
 
 		for(ppSurf = m_3DSurfaceArray; ppSurf < ppSurfArrayEnd; ppSurf++)
 		{
 			pSurf = *ppSurf;
 
-			if(pSurf->m_Index == 116)
-				int debug = 0;
+			//if(pSurf->m_Index == 116)
+			//	int debug = 0;
 
 			//pHistRGBEntry = (RVLQLIST_HIST_ENTRY_SHORT *)(pSurf->m_histRGB->pFirst);
 
@@ -231,7 +241,7 @@ void CRVLPSuLM::Project(CRVL3DPose *pPoseC0,
 			RVL3DSurfaceInvTransf(pSurf->m_N, pSurf->m_d, pPoseC0, N, d);
 
 			if(d * d < pBuilder->m_CropLTs.minr)
-				continue;
+				continue;			
 
 			pStereoVision->GetUVDPlane(N, d, fa, fb, fc);
 
@@ -314,22 +324,35 @@ void CRVLPSuLM::Project(CRVL3DPose *pPoseC0,
 
 				InverseTransform3D(PoseMC.m_Rot, PoseMC.m_X, pPoseC0->m_Rot, pPoseC0->m_X);
 
-				CRVL3DPose PoseFC;
+				CRVL3DPose PoseFC_;
 
-				RVLCombineTransform3D(PoseMC.m_Rot, PoseMC.m_X, pSurf->m_Pose.m_Rot, pSurf->m_Pose.m_X, PoseFC.m_Rot, PoseFC.m_X);
+				RFC_ = PoseFC_.m_Rot;
+				tFC_ = PoseFC_.m_X;
 
-				CvPoint *PtArray;
+				RVLCombineTransform3D(PoseMC.m_Rot, PoseMC.m_X, pSurf->m_Pose.m_Rot, pSurf->m_Pose.m_X, RFC, tFC);
 
-				RVLDisplay3DEllipse(pSurf->m_EigenValues[0], pSurf->m_EigenValues[1], 1.0, &PoseFC, 
-					pBuilder->m_pCamera, &PtArray, nPts);
-				
-				if(nPts > 0)
-				{
-					if(RVLIsInsideContour(PtArray, nPts, u, v))
-						*ppSelectedSurf = pSurf;
+				if(pPSD->ProjectToFOVExtension(tFC, P, RCC_, iFOVExtension))
+				{					
+					RVLMXMUL3X3(RCC_, RFC, RFC_)
+					RVLMULMX3X3VECT(RCC_, tFC, tFC_)
 
-					delete[] PtArray;
+					RVLDisplay3DEllipse(pSurf->m_EigenValues[0], pSurf->m_EigenValues[1], 1.0, &PoseFC_, pBuilder->m_pCamera, &PtArray, nPts,
+						(iFOVExtension + pPSD->m_nFOVExtensions) * w);
+					
+					if(nPts > 0)
+					{
+						if(RVLIsInsideContour(PtArray, nPts, u, v))
+						{
+							*ppSelectedSurf = pSurf;
+
+							*piFOVExtension = iFOVExtension;
+						}
+
+						delete[] PtArray;
+					}
 				}
+				else
+					*piFOVExtension = pPSD->m_nFOVExtensions + 1;
 			}
 
 #endif
@@ -745,8 +768,10 @@ void CRVLPSuLM::Display(CRVLFigure * pFig,
 
 	CRVLPSuLMBuilder *pPSuLMBuilder = (CRVLPSuLMBuilder *)m_vpBuilder;
 
-	int w = pPSuLMBuilder->m_pPSD->m_Width;
-	int h = pPSuLMBuilder->m_pPSD->m_Height;
+	CRVLPlanarSurfaceDetector *pPSD = pPSuLMBuilder->m_pPSD;
+
+	int w = pPSD->m_Width;
+	int h = pPSD->m_Height;
 
 	CRVL3DPose Pose0M;
 
@@ -832,10 +857,12 @@ void CRVLPSuLM::Display(CRVLFigure * pFig,
 
 		CRVL3DSurface2 **ppSurf;
 		CRVL3DSurface2 *pSurf;
-		CRVL3DPose PoseMC, PoseFC;
+		CRVL3DPose PoseMC, PoseFC_;
 		int nPts;
 		RVL3DSURFACE_SAMPLE *pSample;
-		double *RFC, *tFC;
+		double *RFC_, *tFC_;
+		int iFOVExtension;
+		double RFC[9], tFC[3], RCC_[9];
 
 		for(ppSurf = m_3DSurfaceArray; ppSurf < ppSurfArrayEnd; ppSurf++)
 		{
@@ -846,49 +873,55 @@ void CRVLPSuLM::Display(CRVLFigure * pFig,
 			{
 				InverseTransform3D(PoseMC.m_Rot, PoseMC.m_X, PoseCM.m_Rot, PoseCM.m_X);
 
-				RFC = PoseFC.m_Rot;
-				tFC = PoseFC.m_X;
+				RFC_ = PoseFC_.m_Rot;
+				tFC_ = PoseFC_.m_X;
 
 				RVLCombineTransform3D(PoseMC.m_Rot, PoseMC.m_X, pSurf->m_Pose.m_Rot, pSurf->m_Pose.m_X, RFC, tFC);
 
-				RVLDisplay3DEllipse(pSurf->m_EigenValues[0], pSurf->m_EigenValues[1], 1.0, &PoseFC, pPSuLMBuilder->m_pCamera,
-					&PtArray, nPts);
-
-				if(nPts > 0)
+				if(pPSD->ProjectToFOVExtension(tFC, P, RCC_, iFOVExtension))
 				{
-					pContourEnd = PtArray + nPts;
+					RVLMXMUL3X3(RCC_, RFC, RFC_)
+					RVLMULMX3X3VECT(RCC_, tFC, tFC_)
 
-					if(Flags & RVLPSULM_DISPLAY_VECTORS)
+					RVLDisplay3DEllipse(pSurf->m_EigenValues[0], pSurf->m_EigenValues[1], 1.0, &PoseFC_, pPSuLMBuilder->m_pCamera, &PtArray, nPts,
+						(iFOVExtension + pPSD->m_nFOVExtensions) * w);
+
+					if(nPts > 0)
 					{
-						pVector = pFig->AddVector(&Vector);
+						pContourEnd = PtArray + nPts;
 
-						pVector->m_PointType = RVLGUI_POINT_DISPLAY_TYPE_NONE;
-						pVector->m_bClosed = TRUE;
-
-						if(pSurf->m_Flags & RVLOBJ2_FLAG_MARKED)
+						if(Flags & RVLPSULM_DISPLAY_VECTORS)
 						{
-							pVector->m_rL = ColorMarked.r;
-							pVector->m_gL = ColorMarked.g;
-							pVector->m_bL = ColorMarked.b;
+							pVector = pFig->AddVector(&Vector);
+
+							pVector->m_PointType = RVLGUI_POINT_DISPLAY_TYPE_NONE;
+							pVector->m_bClosed = TRUE;
+
+							if(pSurf->m_Flags & RVLOBJ2_FLAG_MARKED)
+							{
+								pVector->m_rL = ColorMarked.r;
+								pVector->m_gL = ColorMarked.g;
+								pVector->m_bL = ColorMarked.b;
+							}
+
+							for(pPt = PtArray; pPt < pContourEnd; pPt++)
+								pVector->Point(pPt->x, pPt->y);
+						}
+						else
+						{
+							for(pPt = PtArray; pPt < pContourEnd; pPt++)
+							{
+								pPt->x /= 2;
+								pPt->y /= 2;
+							}
+
+							cvPolyLine(pFig->m_pImage, &PtArray, &nPts, 1, 1, Color);
 						}
 
-						for(pPt = PtArray; pPt < pContourEnd; pPt++)
-							pVector->Point(pPt->x, pPt->y);
+						delete[] PtArray;
 					}
-					else
-					{
-						for(pPt = PtArray; pPt < pContourEnd; pPt++)
-						{
-							pPt->x /= 2;
-							pPt->y /= 2;
-						}
-
-						cvPolyLine(pFig->m_pImage, &PtArray, &nPts, 1, 1, Color);
-					}
-
-					delete[] PtArray;
-				}
-			}
+				}	// if(pPSD->ProjectToFOVExtension(tFC, P, RCC_, iFOVExtension))
+			}	// if(Flags & RVLPSULM_DISPLAY_ELLIPSES)
 
 			if(Flags & RVLPSULM_DISPLAY_SAMPLES)
 				Display3DSurfaceSamples(pFig, pSurf, A, tCM, Flags | 
@@ -896,9 +929,9 @@ void CRVLPSuLM::Display(CRVLFigure * pFig,
 					RVLPSULM_DISPLAY_SAMPLE_TYPES | 
 					RVLPSULM_DISPLAY_COLOR
 					);
-		}
+		}	// for all surfaces
 #endif
-	}
+	}	// if(Flags & RVLPSULM_DISPLAY_SURFACES)
 
 	// display lines
 
@@ -1098,6 +1131,8 @@ void CRVLPSuLM::Display3DSurface(	CRVLFigure * pFig,
 {
 	CRVLPSuLMBuilder *pPSuLMBuilder = (CRVLPSuLMBuilder *)m_vpBuilder;
 
+	CRVLPlanarSurfaceDetector *pPSD = pPSuLMBuilder->m_pPSD;
+
 	CRVLDisplayVector Vector;
 	
 	if(Flags & RVLPSULM_DISPLAY_VECTORS)
@@ -1137,6 +1172,9 @@ void CRVLPSuLM::Display3DSurface(	CRVLFigure * pFig,
 	CvPoint *pContourEnd;
 	CvPoint *pPt;
 	int nPts;
+	double *RFC_, *tFC_;
+	int iFOVExtension;
+	double RFC[9], tFC[3], RCC_[9];
 
 #ifdef RVLPSULM_CONVEX_SEGMENTS
 	CRVLMPtrChain *p2DContourList = &(pPSuLMBuilder->m_2DContourSet.m_ObjectList);
@@ -1165,42 +1203,50 @@ void CRVLPSuLM::Display3DSurface(	CRVLFigure * pFig,
 
 	InverseTransform3D(PoseMC.m_Rot, PoseMC.m_X, PoseCM.m_Rot, PoseCM.m_X);
 
-	CRVL3DPose PoseFC;
+	CRVL3DPose PoseFC_;
+	RFC_ = PoseFC_.m_Rot;
+	tFC_ = PoseFC_.m_X;
 
-	RVLCombineTransform3D(PoseMC.m_Rot, PoseMC.m_X, pSurf->m_Pose.m_Rot, pSurf->m_Pose.m_X, PoseFC.m_Rot, PoseFC.m_X);
+	RVLCombineTransform3D(PoseMC.m_Rot, PoseMC.m_X, pSurf->m_Pose.m_Rot, pSurf->m_Pose.m_X, RFC, tFC);
 
-	RVLDisplay3DEllipse(pSurf->m_EigenValues[0], pSurf->m_EigenValues[1], 1.0, &PoseFC, pPSuLMBuilder->m_pCamera,
-		&PtArray, nPts);
-#endif
-	if(nPts > 0)
+	if(pPSD->ProjectToFOVExtension(tFC, P, RCC_, iFOVExtension))
 	{
-		pContourEnd = PtArray + nPts;
+		RVLMXMUL3X3(RCC_, RFC, RFC_)
+		RVLMULMX3X3VECT(RCC_, tFC, tFC_)
 
-		if(Flags & RVLPSULM_DISPLAY_VECTORS)
+		RVLDisplay3DEllipse(pSurf->m_EigenValues[0], pSurf->m_EigenValues[1], 1.0, &PoseFC_, pPSuLMBuilder->m_pCamera,
+			&PtArray, nPts, (iFOVExtension + pPSD->m_nFOVExtensions) * pPSD->m_Width);
+#endif
+		if(nPts > 0)
 		{
-			pVector = pFig->AddVector(&Vector);
+			pContourEnd = PtArray + nPts;
 
-			for(pPt = PtArray; pPt < pContourEnd; pPt++)
-				pVector->Point(pPt->x, pPt->y);
-		}
-		else
-		{
-			for(pPt = PtArray; pPt < pContourEnd; pPt++)
+			if(Flags & RVLPSULM_DISPLAY_VECTORS)
 			{
-				pPt->x /= 2;
-				pPt->y /= 2;
+				pVector = pFig->AddVector(&Vector);
+
+				for(pPt = PtArray; pPt < pContourEnd; pPt++)
+					pVector->Point(pPt->x, pPt->y);
+			}
+			else
+			{
+				for(pPt = PtArray; pPt < pContourEnd; pPt++)
+				{
+					pPt->x /= 2;
+					pPt->y /= 2;
+				}
+
+				cvPolyLine(pFig->m_pImage, &PtArray, &nPts, 1, 1, Color);
 			}
 
-			cvPolyLine(pFig->m_pImage, &PtArray, &nPts, 1, 1, Color);
-		}
-
-		Display3DSurfaceSamples(pFig, pSurf, A, tCM, Flags);
+			Display3DSurfaceSamples(pFig, pSurf, A, tCM, Flags);
 
 #ifdef RVLPSULM_CONVEX_SEGMENTS
-	}
-	}
+		}
+		}
 #else
-		delete[] PtArray;
+			delete[] PtArray;
+		}
 	}
 #endif
 }
