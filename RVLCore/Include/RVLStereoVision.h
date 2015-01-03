@@ -153,6 +153,7 @@ public:
 	CRVLParameterList m_ParamList;
 	RVLKINECT_PARAMS m_KinectParams;
 	int m_KinectScale;
+	short *m_zToDepthLookupTable;
 private:
 	IplImage *pDisparityImage;
 
