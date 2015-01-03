@@ -337,6 +337,12 @@ CRVLPSuLMBuilder::~CRVLPSuLMBuilder(void)
 	if(m_SceneFusion.m_HypothesisArray)
 		delete[] m_SceneFusion.m_HypothesisArray;
 
+	if(m_ModelFusion.RM_S)
+		delete[] m_ModelFusion.RM_S;
+
+	if(m_ModelFusion.tM_S)
+		delete[] m_ModelFusion.tM_S;
+
 #ifdef RVLPSULM_LINES
 	if(m_2DContourMap)
 		delete[] m_2DContourMap;
@@ -689,6 +695,9 @@ void CRVLPSuLMBuilder::Init(void)
 
 		m_SceneFusion.m_HypothesisArray = NULL;
 	}
+
+	if(m_Flags & RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_MODEL_FUSION)
+		m_ModelFusion.m_Mem.Create(1000000);
 
 	// Local Map Hash Table
 
@@ -1112,7 +1121,8 @@ BOOL CRVLPSuLMBuilder::Create(CRVLPSuLM *pPSuLM,
 			{
 				char *DisparityImageFileName = RVLCreateFileName(pPSuLM->m_FileName, "-LW.bmp", -1, "-D.txt");
 
-				if(!RVLImportDisparityImage(DisparityImageFileName, &(m_pStereoVision->m_DisparityMap), DepthFormat))
+				if(!RVLImportDisparityImage(DisparityImageFileName, &(m_pStereoVision->m_DisparityMap), 
+					DepthFormat, m_pStereoVision->m_zToDepthLookupTable))
 					return FALSE;
 			}
 
@@ -10089,6 +10099,175 @@ int CRVLPSuLMBuilder::EvaluateHypothesis3(	CRVLPSuLM * pSPSuLM,
 #endif
 }
 
+void CRVLPSuLMBuilder::ModelFusion(RVLPSULM_HYPOTHESIS *pHypothesis)
+{
+	double cszThr = 0.5;	// cos(60.0 deg)
+	double r2Thr = 2.5 / 4.0;
+	r2Thr *= r2Thr;
+
+	CRVLMem *pMem = &(m_ModelFusion.m_Mem);
+
+	CRVLPSuLM *pMPSuLM = pHypothesis->pMPSuLM;
+
+	double *RSM = pHypothesis->PoseSM.m_Rot;
+	double *tSM = pHypothesis->PoseSM.m_X;
+
+	RVLQLIST SurfaceList;
+
+	RVLQLIST *pSurfaceList = &SurfaceList;
+
+	RVLQLIST_INIT(pSurfaceList)
+
+	RVLQLIST LineList;
+
+	RVLQLIST *pLineList = &LineList;
+
+	RVLQLIST_INIT(pLineList)
+
+	double *RM_M, *tM_M;
+	double *RM_S, *tM_S;
+	double csz;
+	int i;
+	CRVLPSuLM *pMPSuLM_;
+	CRVL3DSurface2 *pSurf;
+	CRVL3DLine2 *pLine;
+	double cFS[3];
+	double *cFM_, *X1, *X2;
+	double cLM_[3];
+	double r2;
+	RVLPSULM_MODEL_FUSION_FEATURE *pFeature;
+	double tmpV3x1[3];
+
+	RVLPSULM_NEIGHBOR2 *pNeighbor = (RVLPSULM_NEIGHBOR2 *)(pMPSuLM->m_LocalMap.pFirst);
+
+	while(pNeighbor)
+	{
+		// check if the viewing angle of the neighboring PSuLM is sufficiently close to the viewing angle of the scene		
+
+		RM_M = pNeighbor->PoseRel.m_Rot;
+
+		csz = RVLMULCOLCOL3(RSM, RM_M, 2, 2);
+
+		if(csz < cszThr)
+		{
+			pNeighbor = (RVLPSULM_NEIGHBOR2 *)(pNeighbor->pNext);
+
+			continue;
+		}
+
+		// compute the pose of the neighboring PSuLM relative to the scene
+
+		tM_M = pNeighbor->PoseRel.m_X;
+
+		pMPSuLM_ = pNeighbor->pMPSuLM;
+
+		RM_S = m_ModelFusion.RM_S + 9 * pMPSuLM_->m_Index;
+		tM_S = m_ModelFusion.tM_S + 3 * pMPSuLM_->m_Index;
+
+		RVLCOMPTRANSF3DWITHINV(RSM, tSM, RM_M, tM_M, RM_S, tM_S, tmpV3x1)
+
+		// put all surfaces contained in the FoV into SurfaceList
+		
+		for(i = 0; i < pMPSuLM_->m_n3DSurfacesTotal; i++)
+		{
+			pSurf = pMPSuLM_->m_3DSurfaceArray[i];
+
+			cFM_ = pSurf->m_Pose.m_X;
+
+			RVLTRANSF3(cFM_, RM_S, tM_S, cFS)
+
+			r2 = (cFS[0] * cFS[0] + cFS[1] * cFS[1]) / (cFS[2] * cFS[2]);
+
+			if(r2 > r2Thr)
+				continue;
+
+			RVLMEM_ALLOC_STRUCT(pMem, RVLPSULM_MODEL_FUSION_FEATURE, pFeature)
+
+			RVLQLIST_ADD_ENTRY(pSurfaceList, pFeature)
+
+			pFeature->vpFeature = pSurf;
+			pFeature->pMPSuLM = pMPSuLM_;
+		}
+		
+		// put all lines contained in the FoV into LineList
+		
+		for(i = 0; i < pMPSuLM_->m_n3DLinesTotal; i++)
+		{
+			pLine = pMPSuLM_->m_3DLineArray[i];
+
+			X1 = pLine->m_X[0];
+			X2 = pLine->m_X[1];
+
+			RVLSUM3VECTORS(X1, X2, cLM_)
+
+			RVLSCALE3VECTOR(cLM_, 0.5, cLM_)
+
+			RVLTRANSF3(cLM_, RM_S, tM_S, cFS)
+
+			r2 = (cFS[0] * cFS[0] + cFS[1] * cFS[1]) / (cFS[2] * cFS[2]);
+
+			if(r2 > r2Thr)
+				continue;
+
+			RVLMEM_ALLOC_STRUCT(pMem, RVLPSULM_MODEL_FUSION_FEATURE, pFeature)
+
+			RVLQLIST_ADD_ENTRY(pLineList, pFeature)
+
+			pFeature->vpFeature = pLine;
+			pFeature->pMPSuLM = pMPSuLM_;
+		}
+
+		pNeighbor = (RVLPSULM_NEIGHBOR2 *)(pNeighbor->pNext);
+	}	// for every neighboring PSuLM
+
+	CRVL3DSurface2 **ppSurf = m_ModelFusion.m_SurfaceArray;
+	CRVLPSuLM **ppMPSuLM = m_ModelFusion.m_SurfacePSuLMArray;
+
+	pFeature = (RVLPSULM_MODEL_FUSION_FEATURE *)(SurfaceList.pFirst);
+
+	while(pFeature)
+	{
+		*(ppSurf++) = (CRVL3DSurface2 *)(pFeature->vpFeature);
+		*(ppMPSuLM) = pFeature->pMPSuLM;
+
+		pFeature = (RVLPSULM_MODEL_FUSION_FEATURE *)(pFeature->pNext);
+	}
+
+	m_ModelFusion.m_nSurfaces = ppSurf - m_ModelFusion.m_SurfaceArray;
+
+	CRVL3DLine2 **ppLine = m_ModelFusion.m_LineArray;
+	ppMPSuLM = m_ModelFusion.m_LinePSuLMArray;
+
+	pFeature = (RVLPSULM_MODEL_FUSION_FEATURE *)(LineList.pFirst);
+
+	while(pFeature)
+	{
+		*(ppLine++) = (CRVL3DLine2 *)(pFeature->vpFeature);
+		*(ppMPSuLM) = pFeature->pMPSuLM;
+
+		pFeature = (RVLPSULM_MODEL_FUSION_FEATURE *)(pFeature->pNext);
+	}
+
+	m_ModelFusion.m_nLines = ppLine - m_ModelFusion.m_LineArray;
+
+	m_ModelFusion.m_Mem.Clear();
+
+	if(m_SurfaceMatchData.Cp_)
+		delete[] m_SurfaceMatchData.Cp_;
+
+	m_SurfaceMatchData.Cp_ = new double[3 * 3 * m_ModelFusion.m_nSurfaces];
+
+	if(m_SurfaceMatchData.invCp_)
+		delete[] m_SurfaceMatchData.invCp_;
+
+	m_SurfaceMatchData.invCp_ = new double[3 * 3 * m_ModelFusion.m_nSurfaces];
+
+	if(m_SurfaceMSArray)
+		delete[] m_SurfaceMSArray;
+
+	m_SurfaceMSArray = new CRVL3DSurface2[m_ModelFusion.m_nSurfaces];
+}
+
 double CRVLPSuLMBuilder::EvaluateHypothesis4(	CRVLPSuLM * pSPSuLM,
 												RVLPSULM_HYPOTHESIS *pHypothesis,
 												bool bFirstOrderDependencyTree)
@@ -10103,13 +10282,30 @@ double CRVLPSuLMBuilder::EvaluateHypothesis4(	CRVLPSuLM * pSPSuLM,
 
 	CRVLPSuLM *pMPSuLM = pHypothesis->pMPSuLM;
 	
-	CRVL3DSurface2 **MSurfArray = pMPSuLM->m_3DSurfaceArray;
-	//int nMSurfs = pMPSuLM->m_n3DSurfaces;
-	int nMSurfs = pMPSuLM->m_n3DSurfacesTotal;
-	
-	CRVL3DLine2 **MLineArray = pMPSuLM->m_3DLineArray;
-	//int nMLines = pMPSuLM->m_n3DLines;
-	int nMLines = pMPSuLM->m_n3DLinesTotal;
+	CRVL3DSurface2 **MSurfArray;
+	int nMSurfs;	
+	CRVL3DLine2 **MLineArray;
+	int nMLines;
+
+	if(m_Flags & RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_MODEL_FUSION)
+	{
+		ModelFusion(pHypothesis);
+
+		MSurfArray = m_ModelFusion.m_SurfaceArray;
+		nMSurfs = m_ModelFusion.m_nSurfaces;
+		MLineArray = m_ModelFusion.m_LineArray;
+		nMLines = m_ModelFusion.m_nLines;
+	}
+	else
+	{
+		MSurfArray = pMPSuLM->m_3DSurfaceArray;
+		// nMSurfs = pMPSuLM->m_n3DSurfaces;
+		nMSurfs = pMPSuLM->m_n3DSurfacesTotal;
+
+		MLineArray = pMPSuLM->m_3DLineArray;
+		// nMLines = pMPSuLM->m_n3DLines;
+		nMLines = pMPSuLM->m_n3DLinesTotal;
+	}
 
 	int nMFeatures = nMSurfs + nMLines;
 
@@ -10982,20 +11178,31 @@ void CRVLPSuLMBuilder::LoadMap()
 			pEntry = (RVLQLIST_PTR_ENTRY*)pEntry->pNext;
 		}
 
-		if(m_SurfaceMatchData.Cp_)
-			delete[] m_SurfaceMatchData.Cp_;
+		if(m_Flags & RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_MODEL_FUSION)
+		{
+			m_ModelFusion.RM_S = new double[9 * (m_maxPSuLMIndex + 1)];
+			m_ModelFusion.tM_S = new double[3 * (m_maxPSuLMIndex + 1)];
+		}
+		else
+		{
+			m_ModelFusion.RM_S = NULL;
+			m_ModelFusion.tM_S = NULL;
 
-		m_SurfaceMatchData.Cp_ = new double[3 * 3 * m_maxnModel3DSurfaces];
+			if(m_SurfaceMatchData.Cp_)
+				delete[] m_SurfaceMatchData.Cp_;
 
-		if(m_SurfaceMatchData.invCp_)
-			delete[] m_SurfaceMatchData.invCp_;
+			m_SurfaceMatchData.Cp_ = new double[3 * 3 * m_maxnModel3DSurfaces];
 
-		m_SurfaceMatchData.invCp_ = new double[3 * 3 * m_maxnModel3DSurfaces];
+			if(m_SurfaceMatchData.invCp_)
+				delete[] m_SurfaceMatchData.invCp_;
 
-		if(m_SurfaceMSArray)
-			delete[] m_SurfaceMSArray;
+			m_SurfaceMatchData.invCp_ = new double[3 * 3 * m_maxnModel3DSurfaces];
 
-		m_SurfaceMSArray = new CRVL3DSurface2[m_maxnModel3DSurfaces];
+			if(m_SurfaceMSArray)
+				delete[] m_SurfaceMSArray;
+
+			m_SurfaceMSArray = new CRVL3DSurface2[m_maxnModel3DSurfaces];
+		}
 
 		if(m_Flags & RVLPSULMBUILDER_FLAG_GENERATE_MODELS)
 		{

@@ -113,6 +113,8 @@ DWORD CRVLVisionSystem::Init(char *CfgFile2Name)
 
 	m_StereoVision.Init();
 
+	m_StereoVision.m_zToDepthLookupTable = m_Kinect.m_zToDepthLookupTable;
+
 	m_Kinect.m_scale = m_StereoVision.m_KinectScale;
 
 	// initialize ROI
