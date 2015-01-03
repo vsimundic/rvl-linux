@@ -159,7 +159,7 @@ void CRVLPSuLMVS::PSuLMBasedRLMUpdate(DWORD Flags)
 
 	m_PSuLMBuilder.m_ImageFileName = m_ImageFileName; 
 
-	m_pPSuLM = m_PSuLMBuilder.Create(Flags);
+	m_pPSuLM = m_PSuLMBuilder.Create(Flags, m_pPSuLM);
 
 #ifdef NEVER		// switch on if you want to consider color and texture features
 	////TEXTON TESTING GROUND
