@@ -470,7 +470,11 @@ int main(int argc, char* argv[])
 
 			//VS.m_PSuLMBuilder.m_Flags |= RVLPSULMBUILDER_FLAG_KIDNAPPED;
 
-			VS.Update(bKinect ? 0x00000000 : RVLPSULMBUILDER_CREATEMODEL_IMAGE_FROM_FILE);
+			//VS.Update(bKinect ? 0x00000000 : RVLPSULMBUILDER_CREATEMODEL_IMAGE_FROM_FILE);
+
+			//VS.Create3DMeshFromComplexPSuLM(VS.m_ImageFileName);
+
+			VS.m_PSuLMBuilder.GetComplexPSuLMRGBImage(VS.m_ImageFileName);
 
 			t = clock() - t;	
 
@@ -877,6 +881,8 @@ int main(int argc, char* argv[])
 						GUI.Message("CreateLocal3DMesh() completed.", 600, 100, cvScalar(0, 128, 255));
 					}
 				}
+				//else if(VS.m_PSuLMBuilder.m_Flags2 & RVLPSULMBUILDER_FLAG2_COMPLEX)
+				//	VS.Create3DMeshFromComplexPSuLM(pPSuLM);
 
 				bRefresh = true;
 

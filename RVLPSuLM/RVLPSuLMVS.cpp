@@ -159,7 +159,7 @@ void CRVLPSuLMVS::PSuLMBasedRLMUpdate(DWORD Flags)
 
 	m_PSuLMBuilder.m_ImageFileName = m_ImageFileName; 
 
-	m_pPSuLM = m_PSuLMBuilder.Create(Flags, m_pPSuLM);
+	m_pPSuLM = m_PSuLMBuilder.Create(Flags);
 
 #ifdef NEVER		// switch on if you want to consider color and texture features
 	////TEXTON TESTING GROUND
@@ -626,14 +626,14 @@ void CRVLPSuLMVS::AppendToMeshFile(CRVL3DPose *pRelPose)
 		mtldat = fopen(GlobalMeshTextureFileName, "w");
 		fclose(mtldat);
 
-		RVLUNITMX3(RAbs);
-		RVLNULL3VECTOR(tAbs);
+		//RVLUNITMX3(RAbs);
+		//RVLNULL3VECTOR(tAbs);
 
 		m_pMeshFile->iPt = 0;
 		m_pMeshFile->iSegment = 0;
 	}
-	else
-	{
+	//else
+	//{
 		//if pRelPose is the pose of the current PSuLM relative to the previous, then the following code should be used.
 
 		//RVLCOMPTRANSF3D(RAbs, tAbs, RRel, tRel, R, t)
@@ -645,7 +645,7 @@ void CRVLPSuLMVS::AppendToMeshFile(CRVL3DPose *pRelPose)
 
 		RVLCOPYMX3X3(RRel, RAbs)
 		RVLCOPY3VECTOR(tRel, tAbs)
-	}
+	//}
 	
 	dat = fopen(m_pMeshFile->Name, "a");
 		
@@ -662,6 +662,81 @@ void CRVLPSuLMVS::AppendToMeshFile(CRVL3DPose *pRelPose)
 
 	fclose(dat);
 	fclose(mtldat);
+}
+
+bool CRVLPSuLMVS::Create3DMeshFromComplexPSuLM(char *ImageFileName)
+{
+	DWORD FlagsOld = m_PSuLMBuilder.m_Flags2;
+
+	m_PSuLMBuilder.m_Flags2 &= ~RVLPSULMBUILDER_FLAG2_COMPLEX;
+
+	CreateMeshFile("Mesh-00000.obj");
+
+	m_PSuLMBuilder.m_ImageFileName = RVLCreateString(ImageFileName);
+
+	char *OdometryFileName = RVLCreateFileName(ImageFileName, "-LW.bmp", -1, "-O.txt");
+
+	int iSample = RVLGetFileNumber(ImageFileName, "00000-LW.bmp");
+
+	CRVLPSuLM *pPSuLM_;
+
+	CRVL3DPose PoseM_M;
+
+	double *tM_M = PoseM_M.m_X;
+
+	RVLNULL3VECTOR(tM_M)
+
+	FILE *fpOdometry;
+	unsigned char command;
+	int x, y, z, pan, tilt, roll, iSample0;
+	
+	do
+	{
+		RVLSetFileNumber(OdometryFileName, "00000-O.txt", iSample);
+
+		fpOdometry = fopen(OdometryFileName, "r");
+
+		if(fpOdometry == NULL)
+		{
+			delete[] OdometryFileName;
+
+			m_PSuLMBuilder.m_Flags2 = FlagsOld;
+
+			return false;
+		}
+
+		fscanf(fpOdometry, "%d\t%d\t%d\t%d\t%d\t%d\t%d\t%c\n", &x, &y, &z, &pan, &tilt, &roll, &iSample0, &command);
+
+		fclose(fpOdometry);
+
+		PoseM_M.m_Alpha = (double)pan * DEG2RAD;
+		PoseM_M.m_Beta = (double)tilt * DEG2RAD;
+		PoseM_M.m_Theta = 0.0;
+
+		PoseM_M.UpdateRotLL();		
+
+		m_iMCMem = (m_iMCMem + 1) % RVLSYS_MCMEMSIZE;
+
+		m_MCMem[m_iMCMem].Clear();		
+
+		m_PSuLMBuilder.m_pMCMem = m_MCMem + m_iMCMem;
+
+		RVLSetFileNumber(m_PSuLMBuilder.m_ImageFileName, "00000-LW.bmp", iSample);
+
+		pPSuLM_ = m_PSuLMBuilder.Create(RVLPSULMBUILDER_CREATEMODEL_FROM_IMAGE | RVLPSULMBUILDER_CREATEMODEL_IMAGE_FROM_FILE);
+
+		m_pRGBImage = cvLoadImage(m_PSuLMBuilder.m_ImageFileName);
+
+		AppendToMeshFile(&PoseM_M);
+
+		iSample++;
+	}while(command != 'C');
+
+	delete[] OdometryFileName;
+
+	m_PSuLMBuilder.m_Flags2 = FlagsOld;
+
+	return true;
 }
 
 void CRVLPSuLMVS::CreateLocal3DMesh(CRVLPSuLM *pPSuLM0)

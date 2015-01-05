@@ -528,8 +528,7 @@ public:
 				CRVLMem *pMem,
 				DWORD Flags = 0x00000000,
 				CRVL3DPose *pPoseM_M = NULL);
-	CRVLPSuLM *Create(	DWORD Flags = 0x00000000,
-						CRVLPSuLM *pPSuLM_ = NULL);
+	CRVLPSuLM *Create(	DWORD Flags = 0x00000000);
 	int MatchLine(	CRVL3DLine2 *pLine,
 					CRVLPSuLM *pPSuLM,
 					CRVL3DPose *pPose,
@@ -712,6 +711,7 @@ public:
 	void ResetCloseFlags(CRVLPSuLM *pMPSuLM);
 	void RepresentativeHypotheses();
 	void ModelFusion(RVLPSULM_HYPOTHESIS *pHypothesis);
+	void GetComplexPSuLMRGBImage(char *ImageFileName);
 
 private:
 	RVLPSULM_MSMATCH_DATA *HypothesesGetNextNode(	RVLPSULM_HG_NODE* pNode,

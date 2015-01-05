@@ -1169,7 +1169,7 @@ BOOL CRVLPSuLMBuilder::Create(CRVLPSuLM *pPSuLM,
 	
 	StartTime = m_pTimer->GetTime();
 
-	m_S3DSurfaceSet.m_pMem0 = m_S3DSurfaceSet.m_pMem = pMem;
+	m_S3DSurfaceSet.m_pMem0 = m_S3DSurfaceSet.m_pMem = m_S3DSurfaceSet.m_ObjectList.m_pMem = pMem;	
 	m_S3DConvexSegmentSet.m_pMem0 = m_S3DConvexSegmentSet.m_pMem = pMem;
 	m_S3DContourSet.m_pMem0 = m_S3DContourSet.m_pMem = pMem;
 
@@ -1700,7 +1700,9 @@ BOOL CRVLPSuLMBuilder::Create(CRVLPSuLM *pPSuLM,
 		
 		m_pMem2->m_pFreeMem = pFreeMem;
 
-		CRVL3DSurface2 **SurfaceArray = pPSuLM->m_3DSurfaceArray;
+		pPSuLM->m_n3DSurfacesTotal = nClose3DSurfaces;
+
+		CRVL3DSurface2 **SurfaceArray;
 
 		double InfMx[3 * 3];
 		CRVL3DSurface2 *p3DConvexSegment;
@@ -1742,10 +1744,10 @@ BOOL CRVLPSuLMBuilder::Create(CRVLPSuLM *pPSuLM,
 			pPSuLM->m_SurfaceList.m_pMem = pMem;
 			
 			//Create PSULM sorted Array
-			//pPSuLM->m_n3DSurfacesTotal = n3DSurfaces;
-			pPSuLM->m_n3DSurfacesTotal = nClose3DSurfaces;
+			//pPSuLM->m_n3DSurfacesTotal = n3DSurfaces;			
 			pPSuLM->m_n3DSurfaces = (nClose3DSurfaces >= m_maxnDominant3DSurfaces ? m_maxnDominant3DSurfaces : nClose3DSurfaces);
-			pPSuLM->m_3DSurfaceArray = (CRVL3DSurface2 **)(pMem->Alloc(n3DSurfaces * sizeof(CRVL3DSurface2 *)));			
+			pPSuLM->m_3DSurfaceArray = (CRVL3DSurface2 **)(pMem->Alloc(n3DSurfaces * sizeof(CRVL3DSurface2 *)));
+			SurfaceArray = pPSuLM->m_3DSurfaceArray;
 
 			//go through all level3 surfaces and sort into array		
 
@@ -1917,7 +1919,7 @@ BOOL CRVLPSuLMBuilder::Create(CRVLPSuLM *pPSuLM,
 
 			short *Depth = m_pStereoVision->m_DisparityMap.Disparity;
 
-			m_S3DLineSet.m_pMem0 = m_S3DLineSet.m_pMem = pMem;
+			m_S3DLineSet.m_pMem0 = m_S3DLineSet.m_pMem = m_S3DLineSet.m_ObjectList.m_pMem = pMem;
 			pPSuLM->m_3DLineList.m_pMem = pMem;
 
 			if(!(Flags & RVLPSULMBUILDER_CREATEMODEL_APPEND))
@@ -3174,8 +3176,7 @@ BOOL CRVLPSuLMBuilder::Create(CRVLPSuLM *pPSuLM,
 	
 // uses m_pMem2
 
-CRVLPSuLM *CRVLPSuLMBuilder::Create(DWORD Flags,
-									CRVLPSuLM *pPSuLM_)
+CRVLPSuLM *CRVLPSuLMBuilder::Create(DWORD Flags)
 {
 	// initialize memory and sets
 
@@ -3193,38 +3194,99 @@ CRVLPSuLM *CRVLPSuLMBuilder::Create(DWORD Flags,
 
 	// create new PSuLM
 
-	bool bOpen;
 	CRVL3DPose PoseM_M;
 	unsigned char command;
+	CRVLPSuLM *pPSuLM;
+	bool bComplex;
+	char *OdometryFileName;
+	int x, y, z, pan, tilt, roll, iSample0;
+	FILE *fpOdometry;
 
 	if(m_Flags2 & RVLPSULMBUILDER_FLAG2_COMPLEX)
 	{
-		char *OdometryFileName = RVLCreateFileName(m_ImageFileName, "-LW.bmp", -1, "-O.txt");
+		OdometryFileName = RVLCreateFileName(m_ImageFileName, "-LW.bmp", -1, "-O.txt");
 
-		FILE *fpOdometry = fopen(OdometryFileName, "r");		
+		fpOdometry = fopen(OdometryFileName, "r");					
+		
+		if(fpOdometry)
+		{
+			fscanf(fpOdometry, "%d\t%d\t%d\t%d\t%d\t%d\t%d\t%c\n", &x, &y, &z, &pan, &tilt, &roll, &iSample0, &command);
 
-		delete[] OdometryFileName;
+			fclose(fpOdometry);
 
-		int x, y, z, pan, tilt, roll, iSample0;
-
-		fscanf(fpOdometry, "%d\t%d\t%d\t%d\t%d\t%d\t%d\t%c\n", &x, &y, &z, &pan, &tilt, &roll, &iSample0, &command);
-
-		bOpen = (command == 'O');
-
-		PoseM_M.m_Alpha = -(double)pan * DEG2RAD;
-		PoseM_M.m_Beta = (double)tilt * DEG2RAD;
-		PoseM_M.m_Theta = 0.0;
-
-		PoseM_M.UpdateRotLL();
-
-		fclose(fpOdometry);
+			bComplex = (command == 'O');
+		}
+		else
+			bComplex = false;
 	}
 	else
-		bOpen = true;
+		bComplex = false;
+	
+	if(bComplex)
+	{
+		int iSample = RVLGetFileNumber(m_ImageFileName, "00000-LW.bmp");
 
-	CRVLPSuLM *pPSuLM;
+		while (command != 'C')
+		{
+			RVLSetFileNumber(m_ImageFileName, "00000-LW.bmp", iSample);
 
-	if(bOpen)
+			RVLSetFileNumber(OdometryFileName, "00000-O.txt", iSample);
+
+			fpOdometry = fopen(OdometryFileName, "r");		
+
+			if(fpOdometry)
+			{
+				fscanf(fpOdometry, "%d\t%d\t%d\t%d\t%d\t%d\t%d\t%c\n", &x, &y, &z, &pan, &tilt, &roll, &iSample0, &command);
+
+				fclose(fpOdometry);
+			}
+			else
+			{
+				x = y = z = pan = tilt = roll = 0;
+
+				command = 'C';
+			}
+		
+			PoseM_M.m_Alpha = (double)pan * DEG2RAD;
+			PoseM_M.m_Beta = (double)tilt * DEG2RAD;
+			PoseM_M.m_Theta = 0.0;
+
+			PoseM_M.UpdateRotLL();
+
+			switch(command){
+			case 'O':
+				pPSuLM = (CRVLPSuLM *)(pMem->Alloc(sizeof(CRVLPSuLM)));
+
+				memcpy(pPSuLM, &m_PSuLMTemplate, sizeof(CRVLPSuLM));
+
+				if(m_ImageFileName)
+					RVLCopyString(m_ImageFileName, &(pPSuLM->m_FileName));
+
+				Create(pPSuLM, pMem, Flags, &PoseM_M);
+
+				break;
+			case 'A':	
+				Create(pPSuLM, pMem, Flags | RVLPSULMBUILDER_CREATEMODEL_APPEND, &PoseM_M);
+
+				break;
+			case 'C':
+				Create(pPSuLM, pMem, Flags | RVLPSULMBUILDER_CREATEMODEL_APPEND | RVLPSULMBUILDER_CREATEMODEL_APPEND_LAST, &PoseM_M);
+
+				if(Flags & RVLPSULMBUILDER_CREATEMODEL_FLAG_PERMANENT)
+				{
+					m_PSuLMList.Add(pPSuLM);
+
+					if(pPSuLM->m_nLandmarks > m_maxnLandmarks)
+						m_maxnLandmarks = pPSuLM->m_nLandmarks;
+				}
+			}
+
+			iSample++;
+		}
+
+		delete[] OdometryFileName;
+	}	// if(bComplex)
+	else
 	{
 		pPSuLM = (CRVLPSuLM *)(pMem->Alloc(sizeof(CRVLPSuLM)));
 
@@ -3235,7 +3297,13 @@ CRVLPSuLM *CRVLPSuLMBuilder::Create(DWORD Flags,
 
 		// detect 3D surfaces, 3D lines and landmarks
 
+		DWORD FlagsOld = m_Flags2;
+
+		m_Flags2 &= ~RVLPSULMBUILDER_FLAG2_COMPLEX;
+
 		Create(pPSuLM, pMem, Flags, &PoseM_M);
+
+		m_Flags2 = FlagsOld;
 
 #ifdef NEVER
 		// copy surface ptrs. from Builder's surface list to the PSuLM's surface list
@@ -3774,15 +3842,7 @@ CRVLPSuLM *CRVLPSuLMBuilder::Create(DWORD Flags,
 			if(pPSuLM->m_nLandmarks > m_maxnLandmarks)
 				m_maxnLandmarks = pPSuLM->m_nLandmarks;
 		}
-	}	// if(bOpen)
-	else if(pPSuLM_)
-	{
-		pPSuLM = pPSuLM_;
-
-		DWORD FlagClose = (command == 'C' ? RVLPSULMBUILDER_CREATEMODEL_APPEND_LAST : 0x00000000);
-			
-		Create(pPSuLM, pMem, Flags | RVLPSULMBUILDER_CREATEMODEL_APPEND | FlagClose, &PoseM_M);
-	}
+	}	// if(!bComplex)
 
 	/////
 
@@ -22698,12 +22758,13 @@ void CRVLPSuLMBuilder::UpdateRelativePoseUncertainties()
 	double *t_ = PoseMS.m_X;
 
 	int i;
-	CRVLPSuLM *pPSuLM, *pPSuLM_;
+	CRVLPSuLM *pPSuLM;
+	//CRVLPSuLM *pPSuLM_;
 	RVLQLIST_PTR_ENTRY *pNeighborPtr;
 	RVLPSULM_NEIGHBOUR *pNeighborRel;
 	RVLPSULM_HYPOTHESIS *pHypothesis;
 	double dist, angle;
-	BYTE result;	// 0 - OK; 1 - large error; 2 - no hypotheses
+	//BYTE result;	// 0 - OK; 1 - large error; 2 - no hypotheses
 	//double invR[9], invt[3];
 	double *R, *C;
 	//double *t;
@@ -23365,6 +23426,161 @@ void CRVLPSuLMBuilder::RepresentativeHypotheses()
 	m_nRepresentativeHypotheses = pRepresentativeHypothesisPtr - m_RepresentativeHypothesisMem;		
 
 	delete[] PoseM_M;
+}
+
+void CRVLPSuLMBuilder::GetComplexPSuLMRGBImage(char *ImageFileName)
+{
+	int panRange = 240;		//deg
+	int tiltRange = 125;	//deg
+	int dq = 3;				//pix/deg
+
+	double k = (double)dq * RAD2DEG;
+
+	double fu = m_pStereoVision->m_KinectParams.depthFu;
+	double fv = m_pStereoVision->m_KinectParams.depthFv;
+	double uc = m_pStereoVision->m_KinectParams.depthUc;
+	double vc = m_pStereoVision->m_KinectParams.depthVc;
+
+	char *OdometryFileName = RVLCreateFileName(ImageFileName, "-LW.bmp", -1, "-O.txt");	
+
+	int w = panRange * dq;
+	int h = tiltRange * dq;
+
+	int u0 = w / 2;
+	int v0 = h / 2;
+
+	IplImage *pComplexImage = cvCreateImage(cvSize(w, h), IPL_DEPTH_8U, 3);
+
+	unsigned char *RGB = (unsigned char *)(pComplexImage->imageData);
+
+	int wStep = pComplexImage->widthStep;
+
+	cvSet(pComplexImage, cvScalar(255, 0, 0));
+
+	unsigned char *A = new unsigned char[w * h];
+
+	memset(A, 0, w * h);	
+
+	char *ImageFileName_ = RVLCreateString(ImageFileName);
+
+	int iSample = RVLGetFileNumber(ImageFileName, "00000-LW.bmp");
+
+	CRVL3DPose PoseM_M;
+
+	double *RM_M = PoseM_M.m_Rot;
+
+	//double *tM_M = PoseM_M.m_X;
+
+	//RVLNULL3VECTOR(tM_M)
+
+	FILE *fpOdometry;
+	unsigned char command;
+	int x, y, z, pan, tilt, roll, iSample0;
+	int u, v;
+	double a, b;
+	IplImage *pImage_;
+	unsigned char *pPix, *pPix_, *pPixRow_;
+	int u_, v_, w_, h_, wStep_;
+	double R[3], R_[3];
+	int iPix;
+	int A_, A__;
+	
+	do
+	{
+		RVLSetFileNumber(OdometryFileName, "00000-O.txt", iSample);
+
+		fpOdometry = fopen(OdometryFileName, "r");
+
+		if(fpOdometry == NULL)
+			break;
+
+		fscanf(fpOdometry, "%d\t%d\t%d\t%d\t%d\t%d\t%d\t%c\n", &x, &y, &z, &pan, &tilt, &roll, &iSample0, &command);
+
+		fclose(fpOdometry);
+
+		PoseM_M.m_Alpha = (double)pan * DEG2RAD;
+		PoseM_M.m_Beta = (double)tilt * DEG2RAD;
+		PoseM_M.m_Theta = 0.0;
+
+		PoseM_M.UpdateRotLL();		
+
+		RVLSetFileNumber(ImageFileName_, "00000-LW.bmp", iSample);
+
+		pImage_ = cvLoadImage(ImageFileName_);
+
+		pPixRow_ = (unsigned char *)(pImage_->imageData);
+
+		w_ = pImage_->width;
+		h_ = pImage_->height;
+		wStep_ = pImage_->widthStep;
+
+		for(v_ = 0; v_ < h_; v_++)
+		{
+			pPix_ = pPixRow_;
+
+			for(u_ = 0; u_ < w_; u_++)
+			{
+				R_[0] = ((double)u_ - uc) / fu;
+				R_[1] = ((double)v_ - vc) / fv;
+				R_[2] = 1.0;
+
+				RVLMULMX3X3VECT(RM_M, R_, R)
+
+				a = atan2(R[0], R[2]);
+				b = asin(R[1] / sqrt(R[0] * R[0] + R[2] * R[2]));
+
+				u = DOUBLE2INT(k * a) + u0;
+				v = DOUBLE2INT(k * b) + v0;
+
+				if(u < 0)
+					continue;
+
+				if(u >= w)
+					continue;
+
+				if(v < 0)
+					continue;
+
+				if(v >= h)
+					continue;			
+
+				iPix = u + v * w;
+
+				if(iPix == 229)
+					int debug = 0;
+
+				pPix = RGB + 3 * u + v * wStep;
+
+				A_ = (int)(A[iPix]);
+				A__ = A_ + 1;
+
+				*pPix = (unsigned char)((A_ * (int)(*pPix) + (int)(*(pPix_++))) / A__);
+				pPix++;
+				*pPix = (unsigned char)((A_ * (int)(*pPix) + (int)(*(pPix_++))) / A__);
+				pPix++;
+				*pPix = (unsigned char)((A_ * (int)(*pPix) + (int)(*(pPix_++))) / A__);
+
+				A[iPix] = (unsigned char)A__;
+			}
+
+			pPixRow_ += wStep_;
+		}
+
+		iSample++;
+	}while(command != 'C');
+
+	delete[] ImageFileName_;
+	delete[] OdometryFileName;	
+	delete[] A;
+
+	char *ComplexImageFileName = RVLCreateFileName(ImageFileName, "-LW.bmp", -1, "-C.bmp");
+
+	cvSaveImage(ComplexImageFileName, pComplexImage);
+
+	delete[] ComplexImageFileName;
+
+	cvReleaseImage(&pImage_);
+	cvReleaseImage(&pComplexImage);
 }
 
 ///////////////////////////////////// 
