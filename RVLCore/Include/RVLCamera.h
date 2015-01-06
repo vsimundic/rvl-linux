@@ -16,6 +16,7 @@
 #define RVLCAMERA_INPUT_PGM_RES_ERR_NOT_PGM			2
 #define RVLCAMERA_INPUT_PGM_RES_ERR_FILE_TOO_SHORT	3
 #define RVLCAMERA_FLAG_FV							0x00000001
+#define RVLCAMERA_FLAG_SPHERICAL					0x00000002
 
 BYTE LoadPGM(char *FileName, 
 	PIX_ARRAY *pPixArray);
@@ -70,6 +71,12 @@ public:
 	PIX_ARRAY m_Image;
 	PIX_ARRAY m_nrmImage;
 	IplImage *m_pRGBImage;
+	int m_PanRange;
+	int m_TiltRange;
+	int m_PixPerDeg;
+	double m_kSpherical;
+	int m_wSpherical;
+	int m_hSpherical;
 
 public:	
 	void Homography(double *N,	double d,	
@@ -139,6 +146,15 @@ public:
 					    int *iU,
 					    double *CX = NULL,
 					    double *CU = NULL);
+	void Project3DPoint2(	double *X,
+							double *U,
+							int *iU,
+							double *CX = NULL,
+							double *CU = NULL);
+	void InitSpherical();
+	void Project3DPointToSphere(double *X,
+								double *U,
+								int *iU);
 	void Project3DPointWithNoise(double *X,
 								 double *U,
 								 int *iU,

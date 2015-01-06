@@ -2161,7 +2161,7 @@ BOOL RVLImportDisparityImage(char *FileName,
 
 		pDisparityImage->Width = Width;
 		pDisparityImage->Height = Height;
-		pDisparityImage->Format = Format;
+		pDisparityImage->Format = RVLKINECT_DEPTH_IMAGE_FORMAT_DISPARITY;
 
 		BOOL bOK = TRUE;
 

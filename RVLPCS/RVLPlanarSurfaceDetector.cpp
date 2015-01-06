@@ -11778,9 +11778,6 @@ void CRVLPlanarSurfaceDetector::SegmentSTRM(CRVLC2D *p2DRegionSet,
 		ExecutionTime = m_pTimer->GetTime() - StartTime;
 
 		int nLevel3Segs = GenRelListFromWER(p2DRegionSet, p2DRegionSet3);
-
-		int debug = 0;
-
 	}
 	else
 	{

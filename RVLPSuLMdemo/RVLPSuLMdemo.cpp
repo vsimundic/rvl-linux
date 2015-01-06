@@ -143,11 +143,13 @@ int main(int argc, char* argv[])
 		}
 	}
 
+	bool bComplex = ((VS.m_PSuLMBuilder.m_Flags2 & RVLPSULMBUILDER_FLAG2_COMPLEX) != 0);
+
 	// initialize kinect
 
 	bool bKinect;
 
-	if(VS.m_Flags & RVLSYS_FLAGS_EDIT_MAP)
+	if((VS.m_Flags & RVLSYS_FLAGS_EDIT_MAP) || bComplex)
 		bKinect = false;
 	else
 	{
@@ -226,6 +228,24 @@ int main(int argc, char* argv[])
 
     IplImage *pHSVImage = cvCreateImage(cvSize(w, h), IPL_DEPTH_8U, 3);
 
+	// create complex image
+
+	if(bComplex)
+	{
+		VS.m_CameraL.m_Flags |= RVLCAMERA_FLAG_SPHERICAL;
+
+		VS.m_CameraL.m_PanRange = 240;
+		VS.m_CameraL.m_TiltRange = 125;
+		VS.m_CameraL.m_PixPerDeg = 3;
+
+		VS.m_CameraL.InitSpherical();
+
+		VS.m_PSuLMBuilder.m_ROI.right = 2 * (VS.m_CameraL.m_wSpherical - 1) + 1;		
+		VS.m_PSuLMBuilder.m_ROI.bottom = 2 * (VS.m_CameraL.m_hSpherical - 1) + 1;
+	}
+
+	IplImage *pComplexImage;
+
 	// create mesh file
 
 	if(VS.m_Flags & RVLSYS_FLAGS_CREATE_GLOBAL_MESH)
@@ -257,7 +277,7 @@ int main(int argc, char* argv[])
 
 	IplImage *pInputImage_ = pInputImage;
 
-	MouseCallbackData.w = w;
+	MouseCallbackData.w = (bComplex ? VS.m_CameraL.m_wSpherical : w);
 	MouseCallbackData.pGUI = &GUI;
 	MouseCallbackData.pFig = pFig;
 	MouseCallbackData.pVS = &VS;
@@ -282,7 +302,7 @@ int main(int argc, char* argv[])
 
 	RVLPSULMDISPLAY_MOUSE_CALLBACK_DATA MouseCallbackData2;	
 
-	MouseCallbackData2.w = w;
+	MouseCallbackData2.w = (bComplex ? VS.m_CameraL.m_wSpherical : w);
 	MouseCallbackData2.pGUI = &GUI;
 	MouseCallbackData2.pFig = pFig2;
 	MouseCallbackData2.pFig2 = pFig;
@@ -434,8 +454,14 @@ int main(int argc, char* argv[])
 				if(HypEvalMethod == RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD_P)
 					VS.m_PSuLMBuilder.InitHypothesisEvaluation4(pPSuLM);
 			}
-				
-			if(!bKinect && !(VS.m_Flags & RVLSYS_FLAGS_PC))
+
+			if(bComplex)
+			{
+				pComplexImage = VS.m_PSuLMBuilder.GetComplexPSuLMRGBImage(VS.m_ImageFileName);
+
+				pInputImage_ = pComplexImage;
+			}
+			else if(!bKinect && !(VS.m_Flags & RVLSYS_FLAGS_PC))
 				pRGBImage = cvLoadImage(VS.m_ImageFileName);
 
 			t = clock();			
@@ -470,42 +496,45 @@ int main(int argc, char* argv[])
 
 			//VS.m_PSuLMBuilder.m_Flags |= RVLPSULMBUILDER_FLAG_KIDNAPPED;
 
-			//VS.Update(bKinect ? 0x00000000 : RVLPSULMBUILDER_CREATEMODEL_IMAGE_FROM_FILE);
+			VS.Update(bKinect ? 0x00000000 : RVLPSULMBUILDER_CREATEMODEL_IMAGE_FROM_FILE);
 
 			//VS.Create3DMeshFromComplexPSuLM(VS.m_ImageFileName);
 
-			VS.m_PSuLMBuilder.GetComplexPSuLMRGBImage(VS.m_ImageFileName);
+			//VS.m_PSuLMBuilder.GetComplexPSuLMRGBImage(VS.m_ImageFileName);
 
 			t = clock() - t;	
 
-			//// mark segment edges
-
-			//if(VS.m_PSD.m_Flags & RVLPSD_MESH_SEGMENT_PLANAR)
-			if((VS.m_Flags & RVLSYS_FLAGS_CREATE_GLOBAL_MESH) == 0 || 
-				(VS.m_PSuLMBuilder.m_Flags & RVLPSULMBUILDER_FLAG_MODE_LOCALIZATION) == 0)
+			if(!bComplex)
 			{
-				nObjects = VS.m_AImage.m_C2DRegion3.m_ObjectList.m_nElements + 1;
+				//// mark segment edges
 
-				VS.m_PSD.AssignLabels(&(VS.m_AImage.m_C2DRegion), &(VS.m_AImage.m_C2DRegion3));
-			}
+				//if(VS.m_PSD.m_Flags & RVLPSD_MESH_SEGMENT_PLANAR)
+				if(!(VS.m_Flags & RVLSYS_FLAGS_CREATE_GLOBAL_MESH) || 
+					!(VS.m_PSuLMBuilder.m_Flags & RVLPSULMBUILDER_FLAG_MODE_LOCALIZATION))
+				{
+					nObjects = VS.m_AImage.m_C2DRegion3.m_ObjectList.m_nElements + 1;
 
-			RVLSegmentationEdgesFromLabels(&(VS.m_AImage.m_C2DRegion));
+					VS.m_PSD.AssignLabels(&(VS.m_AImage.m_C2DRegion), &(VS.m_AImage.m_C2DRegion3));
+				}
 
-			// store RGB image
+				RVLSegmentationEdgesFromLabels(&(VS.m_AImage.m_C2DRegion));
 
-			cvCvtColor(pRGBImage, pHSVImage, CV_BGR2RGB);
+				// store RGB image
 
-			pHSVImage->channelSeq[0] = 'R';
+				cvCvtColor(pRGBImage, pHSVImage, CV_BGR2RGB);
 
-			pHSVImage->channelSeq[1] = 'G';
+				pHSVImage->channelSeq[0] = 'R';
 
-			pHSVImage->channelSeq[2] = 'B';
+				pHSVImage->channelSeq[1] = 'G';
 
-			if(VS.m_Flags & RVLSYS_FLAGS_EDIT_MAP)
-				VS.m_PSuLMBuilder.GetConnectedSubMap(pPSuLM);
+				pHSVImage->channelSeq[2] = 'B';
 
-			if(bManualTrigger)
-				bContinuous = false;
+				if(VS.m_Flags & RVLSYS_FLAGS_EDIT_MAP)
+					VS.m_PSuLMBuilder.GetConnectedSubMap(pPSuLM);
+
+				if(bManualTrigger)
+					bContinuous = false;
+			}			
 		}	// if(!bRecord && bLocalize)
 
 		// display the results
@@ -620,42 +649,48 @@ int main(int argc, char* argv[])
 
 			// select bitmap to display
 
-			if(VS.m_Flags & RVLSYS_FLAGS_PC)
-				VS.m_PSD.DisplayPC(pInputImage);
-			else
+			if(!bComplex)
 			{
-				switch(DisplayBitmap){
-				case 0:
-					// display the depth image on the display image
+				if(VS.m_Flags & RVLSYS_FLAGS_PC)
+					VS.m_PSD.DisplayPC(pInputImage);
+				else
+				{
+					switch(DisplayBitmap){
+					case 0:
+						// display the depth image on the display image
 
-					RVLDisplayDisparityMapColor(pDepthImage, 0, FALSE, pInputImage, DepthMapFormat);
+						RVLDisplayDisparityMapColor(pDepthImage, 0, FALSE, pInputImage, DepthMapFormat);
 
-					break;
-				case 1:
-					// display RGB image on the display image
+						break;
+					case 1:
+						// display RGB image on the display image
 
-					cvCopy(pRGBImage, pInputImage);
+						cvCopy(pRGBImage, pInputImage);
 
-					break;
-				case 2:
-					// display grayscale image on the display image
+						break;
+					case 2:
+						// display grayscale image on the display image
 
-					cvCvtColor(pGSImage, pInputImage, CV_GRAY2RGB);
+						cvCvtColor(pGSImage, pInputImage, CV_GRAY2RGB);
+					}
 				}
-			}
 
-			RVLZoom(pInputImage, pZoomedInputImage, 2);
+				RVLZoom(pInputImage, pZoomedInputImage, 2);
+			}
 
 			if(bLocalize)
 			{
-				// display the mesh or convex sets
+				if(!bComplex)
+				{
+					// display the mesh or convex sets
 
-				if(bDisplayMesh)
-					RVLDisplay2DRegions(pFig, &(VS.m_AImage.m_C2DRegion.m_ObjectList), VS.m_CameraL.Width, RVLColor(0, 255, 0));
+					if(bDisplayMesh)
+						RVLDisplay2DRegions(pFig, &(VS.m_AImage.m_C2DRegion.m_ObjectList), VS.m_CameraL.Width, RVLColor(0, 255, 0));
 
-				if(bDisplayConvexSets)
-					RVLDisplay2DRegions(pFig, &(VS.m_AImage.m_C2DRegion.m_ObjectList), VS.m_CameraL.Width, 
-						RVLColor(255, 0, 255), 1, RVLMESH_LINK_FLAG_EDGE, RVLMESH_LINK_FLAG_EDGE);
+					if(bDisplayConvexSets)
+						RVLDisplay2DRegions(pFig, &(VS.m_AImage.m_C2DRegion.m_ObjectList), VS.m_CameraL.Width, 
+							RVLColor(255, 0, 255), 1, RVLMESH_LINK_FLAG_EDGE, RVLMESH_LINK_FLAG_EDGE);
+				}
 
 				if(bDisplayHypothesis)
 				{
@@ -685,15 +720,15 @@ int main(int argc, char* argv[])
 
 				sprintf(str, "Exec. Time = %4.0f ms", 1000.0f * ((float)t)/CLOCKS_PER_SEC);
 
-				cvPutText(pFig->m_pImage, str, cvPoint(0, (++iTextLine) * pFig->m_FontSize), &pFig->m_Font,  cvScalar(255, 0, 0));
+				cvPutText(pFig->m_pImage, str, cvPoint(0, (++iTextLine) * pFig->m_FontSize), &pFig->m_Font,  cvScalar(0, 255, 255));
 
 				sprintf(str, "TT = %d", (VS.m_Flags & RVLSYS_FLAGS_PC ? VS.m_PSD.m_MeshTol : VS.m_PSD.m_uvdTol));
 
-				cvPutText(pFig->m_pImage, str, cvPoint(0, (++iTextLine) * pFig->m_FontSize), &pFig->m_Font,  cvScalar(255, 0, 0));
+				cvPutText(pFig->m_pImage, str, cvPoint(0, (++iTextLine) * pFig->m_FontSize), &pFig->m_Font,  cvScalar(0, 255, 255));
 
 				sprintf(str, "CT = %d", VS.m_ConvexSegmentThr);
 
-				cvPutText(pFig->m_pImage, str, cvPoint(0, (++iTextLine) * pFig->m_FontSize), &pFig->m_Font,  cvScalar(255, 0, 0));
+				cvPutText(pFig->m_pImage, str, cvPoint(0, (++iTextLine) * pFig->m_FontSize), &pFig->m_Font,  cvScalar(0, 255, 255));
 
 				// show the display image
 
@@ -831,7 +866,7 @@ int main(int argc, char* argv[])
 			case 'h':
 				bDisplayHypothesis = (!bDisplayHypothesis && !bRecord);
 
-				bDisplayPSuLM = (bDisplayPSuLM & !bDisplayHypothesis);
+				bDisplayPSuLM = (bDisplayPSuLM && !bDisplayHypothesis);
 
 				bRefresh = true;
 

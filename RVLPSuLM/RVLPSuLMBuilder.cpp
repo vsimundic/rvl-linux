@@ -155,6 +155,8 @@ CRVLPSuLMBuilder::CRVLPSuLMBuilder(void)
 	m_SurfaceMatchData.invCp = NULL;
 	m_SurfaceMatchData.invCp_ = NULL;
 	m_SceneFusion.m_HypothesisArray = NULL;
+	m_ModelFusion.RM_S = NULL;
+	m_ModelFusion.tM_S = NULL;
 
 	// tools
 
@@ -536,8 +538,8 @@ void CRVLPSuLMBuilder::Init(void)
 	if(m_ROI.left < 0)
 	{
 		m_ROI.left = 1;
-		m_ROI.right = 2 * (m_pCamera->Width - 1) + 1;
 		m_ROI.top = 1;
+		m_ROI.right = 2 * (m_pCamera->Width - 1) + 1;		
 		m_ROI.bottom = 2 * (m_pCamera->Height - 1) + 1;
 
 		//m_ROI.left = 2 * m_pStereoVision->m_nDisp + 1;
@@ -2035,10 +2037,10 @@ BOOL CRVLPSuLMBuilder::Create(CRVLPSuLM *pPSuLM,
 							CM = p3DLine->m_CX[1];
 						}
 
-						RVLGetKinect3DData(U2, p3DLine->m_X[1], m_pStereoVision->m_KinectParams);
+						RVLGetKinect3DData(U2, XM, m_pStereoVision->m_KinectParams);
 
 						m_pCamera->KinectReconWithUncert((double)(U2[0]), (double)(U2[1]), (double)(U2[2]), d0, k_, uc, vc, fu, fv, 
-							uvTol2, uvdTol2, p3DLine->m_CX[1]);	
+							uvTol2, uvdTol2, CM);	
 
 						if(m_Flags2 & RVLPSULMBUILDER_FLAG2_COMPLEX)
 						{
@@ -3258,6 +3260,8 @@ CRVLPSuLM *CRVLPSuLMBuilder::Create(DWORD Flags)
 				pPSuLM = (CRVLPSuLM *)(pMem->Alloc(sizeof(CRVLPSuLM)));
 
 				memcpy(pPSuLM, &m_PSuLMTemplate, sizeof(CRVLPSuLM));
+
+				pPSuLM->m_Flags |= RVLPSULM_FLAG_COMPLEX;
 
 				if(m_ImageFileName)
 					RVLCopyString(m_ImageFileName, &(pPSuLM->m_FileName));
@@ -12276,8 +12280,8 @@ void CRVLPSuLMBuilder::Hypotheses3(	CRVLPSuLM *pSPSuLM,
 			RVLMULMX3X3TVECT(R, t, invtInit);
 		}
 
-		if(pMPSuLM->m_Index == 22)	// debug
-			int debug = 0;
+		//if(pMPSuLM->m_Index == 22)	// debug
+		//	int debug = 0;
 
 		MSurfArray = pMPSuLM->m_3DSurfaceArray;
 
@@ -14452,8 +14456,6 @@ void CRVLPSuLMBuilder::Hypotheses3(	CRVLPSuLM *pSPSuLM,
 
 	m_pMem2->Clear();
 
-	int debug = 0;
-
 	// only for debugging purpose
 
 //#ifndef RVLPSULMBUILDER_HYPOTHESES_DEBUG
@@ -15011,8 +15013,6 @@ void CRVLPSuLMBuilder::Hypotheses4(	CRVLPSuLM *pSPSuLM,
 	}	// for each model PSuLM	
 
 	m_pMem2->Clear();
-
-	int debug = 0;
 
 	// only for debugging purpose
 
@@ -15884,8 +15884,6 @@ void CRVLPSuLMBuilder::Hypotheses5(	CRVLPSuLM *pSPSuLM,
 
 					//BestTravelDistScore = 0;
 
-					int debug = 0;
-
 					for(pMSMatch = MatchList + 1; pMSMatch < pMSMatchListEnd; pMSMatch++)
 					{
 						pM3DSurface = (CRVL3DSurface2 *)(pMSMatch->pMData);
@@ -16205,9 +16203,6 @@ void CRVLPSuLMBuilder::Hypotheses5(	CRVLPSuLM *pSPSuLM,
 							fprintf(fpLog, "\n");							
 #endif
 
-							if(HypothesisIndex == 12)
-								int debug = 0;
-
 							//R2 = pPoseSM2->m_Rot;
 							//t2 = pPoseSM2->m_X;
 							//RVLCOPY3VECTOR(t, t2);
@@ -16304,8 +16299,6 @@ void CRVLPSuLMBuilder::Hypotheses5(	CRVLPSuLM *pSPSuLM,
 	//delete[] HypothesisArray;
 
 	m_pMem2->Clear();
-
-	int debug = 0;
 
 	// only for debugging purpose
 
@@ -20968,8 +20961,6 @@ void CRVLPSuLMBuilder::HypothesesPROSAC(CRVLPSuLM *pSPSuLM,
 
 	m_pMem2->Clear();
 
-	int debug = 0;
-
 	// only for debugging purpose
 
 }
@@ -23428,13 +23419,26 @@ void CRVLPSuLMBuilder::RepresentativeHypotheses()
 	delete[] PoseM_M;
 }
 
-void CRVLPSuLMBuilder::GetComplexPSuLMRGBImage(char *ImageFileName)
+IplImage * CRVLPSuLMBuilder::GetComplexPSuLMRGBImage(char *ImageFileName)
 {
-	int panRange = 240;		//deg
-	int tiltRange = 125;	//deg
-	int dq = 3;				//pix/deg
+	int w = m_pCamera->m_wSpherical;
+	int h = m_pCamera->m_hSpherical;
 
-	double k = (double)dq * RAD2DEG;
+	char *ComplexImageFileName = RVLCreateFileName(ImageFileName, "-LW.bmp", -1, "-C.bmp");
+
+	// Try to load the complex image from file.
+
+	IplImage *pComplexImage = cvLoadImage(ComplexImageFileName);
+
+	if(pComplexImage)
+	{
+		if(pComplexImage->width == w && pComplexImage->height == h)
+			return pComplexImage;
+		else
+			cvReleaseImage(&pComplexImage);
+	}
+
+	// If a complex image file is not available, then create one.
 
 	double fu = m_pStereoVision->m_KinectParams.depthFu;
 	double fv = m_pStereoVision->m_KinectParams.depthFv;
@@ -23443,13 +23447,7 @@ void CRVLPSuLMBuilder::GetComplexPSuLMRGBImage(char *ImageFileName)
 
 	char *OdometryFileName = RVLCreateFileName(ImageFileName, "-LW.bmp", -1, "-O.txt");	
 
-	int w = panRange * dq;
-	int h = tiltRange * dq;
-
-	int u0 = w / 2;
-	int v0 = h / 2;
-
-	IplImage *pComplexImage = cvCreateImage(cvSize(w, h), IPL_DEPTH_8U, 3);
+	pComplexImage = cvCreateImage(cvSize(w, h), IPL_DEPTH_8U, 3);
 
 	unsigned char *RGB = (unsigned char *)(pComplexImage->imageData);
 
@@ -23477,13 +23475,14 @@ void CRVLPSuLMBuilder::GetComplexPSuLMRGBImage(char *ImageFileName)
 	unsigned char command;
 	int x, y, z, pan, tilt, roll, iSample0;
 	int u, v;
-	double a, b;
 	IplImage *pImage_;
 	unsigned char *pPix, *pPix_, *pPixRow_;
 	int u_, v_, w_, h_, wStep_;
 	double R[3], R_[3];
 	int iPix;
 	int A_, A__;
+	double U[2];
+	int iU[2];
 	
 	do
 	{
@@ -23526,11 +23525,10 @@ void CRVLPSuLMBuilder::GetComplexPSuLMRGBImage(char *ImageFileName)
 
 				RVLMULMX3X3VECT(RM_M, R_, R)
 
-				a = atan2(R[0], R[2]);
-				b = asin(R[1] / sqrt(R[0] * R[0] + R[2] * R[2]));
+				m_pCamera->Project3DPointToSphere(R, U, iU);
 
-				u = DOUBLE2INT(k * a) + u0;
-				v = DOUBLE2INT(k * b) + v0;
+				u = (iU[0] >> 1);
+				v = (iU[1] >> 1);
 
 				if(u < 0)
 					continue;
@@ -23545,9 +23543,6 @@ void CRVLPSuLMBuilder::GetComplexPSuLMRGBImage(char *ImageFileName)
 					continue;			
 
 				iPix = u + v * w;
-
-				if(iPix == 229)
-					int debug = 0;
 
 				pPix = RGB + 3 * u + v * wStep;
 
@@ -23573,14 +23568,13 @@ void CRVLPSuLMBuilder::GetComplexPSuLMRGBImage(char *ImageFileName)
 	delete[] OdometryFileName;	
 	delete[] A;
 
-	char *ComplexImageFileName = RVLCreateFileName(ImageFileName, "-LW.bmp", -1, "-C.bmp");
-
 	cvSaveImage(ComplexImageFileName, pComplexImage);
 
 	delete[] ComplexImageFileName;
 
 	cvReleaseImage(&pImage_);
-	cvReleaseImage(&pComplexImage);
+
+	return pComplexImage;
 }
 
 ///////////////////////////////////// 

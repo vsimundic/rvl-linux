@@ -711,7 +711,7 @@ public:
 	void ResetCloseFlags(CRVLPSuLM *pMPSuLM);
 	void RepresentativeHypotheses();
 	void ModelFusion(RVLPSULM_HYPOTHESIS *pHypothesis);
-	void GetComplexPSuLMRGBImage(char *ImageFileName);
+	IplImage * GetComplexPSuLMRGBImage(	char *ImageFileName);
 
 private:
 	RVLPSULM_MSMATCH_DATA *HypothesesGetNextNode(	RVLPSULM_HG_NODE* pNode,
