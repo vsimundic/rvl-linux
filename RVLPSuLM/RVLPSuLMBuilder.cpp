@@ -635,8 +635,8 @@ void CRVLPSuLMBuilder::Init(void)
 	{
 		//m_SurfaceMSArray = new CRVL3DSurface2[m_maxnDominant3DSurfaces];
 			 
-		m_SurfaceMatchData.Cp = new double[3 * 3 * m_maxnDominant3DSurfaces];
-		m_SurfaceMatchData.invCp = new double[3 * 3 * m_maxnDominant3DSurfaces];
+		m_SurfaceMatchData.Cp = new double[3 * 3 * m_maxnDominant3DSurfacesComplex];
+		m_SurfaceMatchData.invCp = new double[3 * 3 * m_maxnDominant3DSurfacesComplex];
 		m_SurfaceMatchData.varPositionUncert = m_SampleMatchDistTol * m_SampleMatchDistTol;
 		m_SurfaceMatchData.varOrientationUncert = m_SampleMatchAngleTol * m_SampleMatchAngleTol;
 		//m_SurfaceMatchData.PPriorPosition = 7.4451;			// -log(1/sqrt(2*pi*(30.0^2))*exp(-2.5^2/2))
@@ -1708,8 +1708,6 @@ BOOL CRVLPSuLMBuilder::Create(CRVLPSuLM *pPSuLM,
 		
 		m_pMem2->m_pFreeMem = pFreeMem;
 
-		pPSuLM->m_n3DSurfacesTotal = nClose3DSurfaces;
-
 		CRVL3DSurface2 **SurfaceArray;
 
 		double InfMx[3 * 3];
@@ -1753,14 +1751,11 @@ BOOL CRVLPSuLMBuilder::Create(CRVLPSuLM *pPSuLM,
 			
 			//Create PSULM sorted Array
 			//pPSuLM->m_n3DSurfacesTotal = n3DSurfaces;	
-			int maxnDominant3DSurfaces = (pPSuLM->m_Flags & RVLPSULM_FLAG_COMPLEX ? m_maxnDominant3DSurfacesComplex : 
-				m_maxnDominant3DSurfaces);
-			pPSuLM->m_n3DSurfaces = (nClose3DSurfaces >= maxnDominant3DSurfaces ? maxnDominant3DSurfaces : nClose3DSurfaces);
 			pPSuLM->m_3DSurfaceArray = (CRVL3DSurface2 **)(pMem->Alloc(n3DSurfaces * sizeof(CRVL3DSurface2 *)));
 			SurfaceArray = pPSuLM->m_3DSurfaceArray;
 
 			if(m_Flags2 & RVLPSULMBUILDER_FLAG2_COMPLEX)
-				MergeFeatures(pPSuLM);
+				MergeSurfaces(pPSuLM);
 
 			//go through all level3 surfaces and sort into array		
 
@@ -1868,6 +1863,23 @@ BOOL CRVLPSuLMBuilder::Create(CRVLPSuLM *pPSuLM,
 
 				iSurface++;
 			}
+
+			CRVL3DSurface2 **p3DSurfaceArrayEnd = SurfaceArray + n3DSurfaces;
+
+			CRVL3DSurface2 **pp3DSurface;
+
+			for(pp3DSurface = SurfaceArray; pp3DSurface < p3DSurfaceArrayEnd; pp3DSurface++)
+			{
+				p3DSurface = *pp3DSurface;		
+
+				if(p3DSurface->m_nSupport == 0)
+					break;
+			}
+
+			pPSuLM->m_n3DSurfacesTotal = pp3DSurface - SurfaceArray;
+			int maxnDominant3DSurfaces = (pPSuLM->m_Flags & RVLPSULM_FLAG_COMPLEX ? m_maxnDominant3DSurfacesComplex : 
+				m_maxnDominant3DSurfaces);
+			pPSuLM->m_n3DSurfaces = (pPSuLM->m_n3DSurfacesTotal >= maxnDominant3DSurfaces ? maxnDominant3DSurfaces : pPSuLM->m_n3DSurfacesTotal);
 		}	// if(bClose)
 
 		//fclose(fDebugFile);
@@ -2095,11 +2107,15 @@ BOOL CRVLPSuLMBuilder::Create(CRVLPSuLM *pPSuLM,
 				// create 3DLineArray
 
 				pPSuLM->m_n3DLinesTotal = pPSuLM->m_3DLineList.m_nElements;
-				pPSuLM->m_n3DLines = (pPSuLM->m_n3DLinesTotal > m_maxnDominant3DLines ? m_maxnDominant3DLines : pPSuLM->m_n3DLinesTotal);
 
 				RVLMEM_ALLOC_STRUCT_ARRAY(pMem, CRVL3DLine2 *, pPSuLM->m_n3DLinesTotal, pPSuLM->m_3DLineArray)
 
 				CRVL3DLine2 **p3DLineArrayEnd = pPSuLM->m_3DLineArray + pPSuLM->m_n3DLinesTotal;
+
+				if(m_Flags2 & RVLPSULMBUILDER_FLAG2_COMPLEX)
+					MergeLines(pPSuLM);
+
+				pPSuLM->m_n3DLinesTotal = 0;
 
 				pPSuLM->m_3DLineList.Start();
 
@@ -2108,9 +2124,18 @@ BOOL CRVLPSuLMBuilder::Create(CRVLPSuLM *pPSuLM,
 					p3DLine = (CRVL3DLine2 *)(pPSuLM->m_3DLineList.GetNext());
 
 					p3DLine->cost = p3DLine->m_nSupport;
+
+					if(p3DLine->m_nSupport > 0)
+						pPSuLM->m_n3DLinesTotal++;
 				}
 
 				RVLBubbleSort<CRVL3DLine2>(&(pPSuLM->m_3DLineList), pPSuLM->m_3DLineArray, TRUE);
+
+				int maxnDominant3DLines = (pPSuLM->m_Flags & RVLPSULM_FLAG_COMPLEX ? m_maxnDominant3DLinesComplex : 
+					m_maxnDominant3DLines);
+				pPSuLM->m_n3DLines = (pPSuLM->m_n3DLinesTotal > maxnDominant3DLines ? maxnDominant3DLines : pPSuLM->m_n3DLinesTotal);
+
+				p3DLineArrayEnd = pPSuLM->m_3DLineArray + pPSuLM->m_n3DLinesTotal;
 
 				CRVL3DLine2 **pp3DLine;
 
@@ -23644,13 +23669,11 @@ IplImage * CRVLPSuLMBuilder::GetComplexPSuLMRGBImage(char *ImageFileName)
 	return pComplexImage;
 }
 
-void CRVLPSuLMBuilder::MergeFeatures(CRVLPSuLM *pPSuLM)
+void CRVLPSuLMBuilder::MergeSurfaces(CRVLPSuLM *pPSuLM)
 {
 	double kr = 2.0;
 	double varq = 5.0 * DEG2RAD;
 	varq *= varq;
-
-	//*** Merge surfaces
 
 	CRVL3DSurface2 **SurfaceArray = pPSuLM->m_3DSurfaceArray;
 
@@ -23939,7 +23962,6 @@ void CRVLPSuLMBuilder::MergeFeatures(CRVLPSuLM *pPSuLM)
 			}
 
 			// p3DSurface <- merge p3DSurface and p3DSurface_
-			// p3DSurface_ <- empty set
 
 			//if(p3DSurface->m_Index == 95)
 			//	int debug = 0;
@@ -23992,12 +24014,255 @@ void CRVLPSuLMBuilder::MergeFeatures(CRVLPSuLM *pPSuLM)
 
 			p3DSurface->m_nSupport += p3DSurface_->m_nSupport;
 
+			// p3DSurface_ <- empty set
+
 			p3DSurface_->m_nSupport = 0;
+
+			/////
 
 			if((*pp3DSurface)->m_nSupport == 0)
 				break;
 		}
+	}	// for each surface
+}
+
+void CRVLPSuLMBuilder::MergeLines(CRVLPSuLM *pPSuLM)
+{
+	CRVL3DLine2 **LineArray = pPSuLM->m_3DLineArray;
+
+	CRVL3DLine2 **pp3DLine = LineArray;
+
+	CRVLMPtrChain *p3DLineList = &(m_S3DLineSet.m_ObjectList);
+
+	CRVL3DLine2 *p3DLine;
+
+	p3DLineList->Start();
+
+	while(p3DLineList->m_pNext)
+	{
+		p3DLine = (CRVL3DLine2 *)(p3DLineList->GetNext());
+
+		p3DLine->m_Index = pp3DLine - LineArray;
+
+		*(pp3DLine++) = p3DLine;
 	}
+
+	int n3DLines = pp3DLine - LineArray;
+
+	CRVL3DLine2 **p3DLineArrayEnd = pp3DLine;
+
+	double RCL[3*3];
+	//double tCL[3];
+	//double tLC[3];
+
+	double *XLC = RCL;
+	double *YLC = RCL + 3;
+	double *ZLC = RCL + 6;
+
+	CRVL3DLine2 **pp3DLine_;
+	CRVL3DLine2 *p3DLine_;
+	CRVL3DLine2 *p3DLineTmp;
+	RVL3DLINE_EXTENDED_DATA *pData, *pData_;
+	double *V, *V_, *P1C, *P2C, *P1C_, *P2C_, *dP, *dP_, *dX;
+	double w1, w2, w1_, w2_, w1o, w2o, dwo, w1m, w2m, dwm, rOverlap, rOverlap_, dx, dy, fTmp, eN;
+	double absZ[3];
+	double Pc[2];
+	int i, j, k;
+	double PM[8][2];
+
+	for(pp3DLine = LineArray; pp3DLine < p3DLineArrayEnd; pp3DLine++)
+	{
+		p3DLine = *pp3DLine;		
+
+		if(p3DLine->m_nSupport == 0)
+			continue;
+
+		for(pp3DLine_ = pp3DLine + 1; pp3DLine_ < p3DLineArrayEnd; pp3DLine_++)
+		{
+			p3DLine = *pp3DLine;
+
+			p3DLine_ = *pp3DLine_;
+
+			if(p3DLine_->m_nSupport == 0)
+				continue;
+
+			//if(p3DLine->m_Index == 23 && p3DLine_->m_Index == 42)
+			//	int debug = 0;
+
+			if(p3DLine_->m_nSupport > p3DLine->m_nSupport)
+			{
+				p3DLineTmp = p3DLine;
+				p3DLine = p3DLine_;
+				p3DLine_ = p3DLineTmp;
+			}
+
+			pData = (RVL3DLINE_EXTENDED_DATA *)(p3DLine->m_pData);
+
+			// coarse orientation matching			
+
+			pData_ = (RVL3DLINE_EXTENDED_DATA *)(p3DLine_->m_pData);
+
+			V = pData->V;
+			V_ = pData_->V;
+
+			eN = RVLDOTPRODUCT3(V, V_);
+
+			if(eN < 0.99619469809174553229501040247389)	// cos(5 deg)
+				continue;
+
+			// endpoints
+
+			P1C = p3DLine->m_X[0];
+			P2C = p3DLine->m_X[1];
+
+			P1C_ = p3DLine_->m_X[0];
+			P2C_ = p3DLine_->m_X[1];
+
+			// z-axis of the match reference frame
+
+			dP = pData->dX;
+			dP_ = pData_->dX;
+
+			RVLSUM3VECTORS(dP, dP_, ZLC)
+			RVLNORM3(ZLC, fTmp)
+
+			// overlapping
+
+			w1 = RVLDOTPRODUCT3(P1C, ZLC);
+			w2 = RVLDOTPRODUCT3(P2C, ZLC);
+			w1_ = RVLDOTPRODUCT3(P1C_, ZLC);
+			w2_ = RVLDOTPRODUCT3(P2C_, ZLC);
+
+			if(w1 >= w1_)
+			{
+				w1o = w1;
+				w1m = w1_;
+			}
+			else
+			{
+				w1o = w1_;
+				w1m = w1;
+			}
+
+			if(w2 <= w2_)
+			{
+				w2o = w2;
+				w2m = w2_;
+			}
+			else
+			{
+				w2o = w2_;
+				w2m = w2;
+			}
+
+			dwo = w2o - w1o;
+
+			rOverlap = dwo / pData->len;
+
+			if(rOverlap < 0.0)
+				continue;
+
+			rOverlap_ = dwo / pData_->len;
+
+			if(rOverlap_ < 0.0)
+				continue;
+
+			//// central point of overlapping segment
+
+			//w0 = 0.5 * (w1o + w2o);
+
+			//// origin of the merge reference frame
+
+			//RVLSCALE3VECTOR(ZLC, w0, tLC)	
+
+			//RVLMULMX3X3VECT(RCL, tLC, tCL)
+
+			//RVLNEGVECT3(tCL, tCL)
+
+			// x and y-axis of the merge reference frame
+
+			RVLCROSSPRODUCT3(V, V_, XLC)
+
+			fTmp = RVLDOTPRODUCT3(XLC, XLC);
+
+			if(fTmp <= APPROX_ZERO)
+				RVLORTHOGONAL3(ZLC, XLC, i, j, k, absZ, fTmp)
+			else
+			{
+				fTmp = sqrt(fTmp);
+
+				RVLSCALE3VECTOR2(XLC, fTmp, XLC)
+			}
+
+			RVLCROSSPRODUCT3(ZLC, XLC, YLC);
+
+			// transform lines into the merge reference frame
+
+			RVLMULMX3X3VECT(RCL, P1C, PM[0])
+			RVLMULMX3X3VECT(RCL, P2C, PM[1])
+			RVLMULMX3X3VECT(RCL, P1C_, PM[2])
+			RVLMULMX3X3VECT(RCL, P2C_, PM[3])		
+
+			// compute the centroid of the points P1, P2, P1_ and P2_
+
+			Pc[0] = PM[0][0]; 
+			Pc[1] = PM[0][1];
+
+			for(i = 1; i < 4; i++)
+			{
+				Pc[0] += PM[i][0];
+				Pc[1] += PM[i][1];
+			}
+
+			Pc[0] *= 0.25; 
+			Pc[1] *= 0.25;
+
+			// check the distance of all points from the centroid
+
+			for(i = 0; i < 4; i++)
+			{
+				dx = PM[i][0] - Pc[0];
+				dy = PM[i][1] - Pc[1];
+				fTmp = dx * dx + dy * dy;
+				if(fTmp > 20.0 * 20.0)
+					break;
+			}
+
+			if(i < 4)
+				continue;
+
+			// p3DLine <- merge p3DLine and p3DLine_
+
+			p3DLine->m_X[0][0] = Pc[0] * XLC[0] + Pc[1] * YLC[0] + w1m * ZLC[0];
+			p3DLine->m_X[0][1] = Pc[0] * XLC[1] + Pc[1] * YLC[1] + w1m * ZLC[1];
+			p3DLine->m_X[0][2] = Pc[0] * XLC[2] + Pc[1] * YLC[2] + w1m * ZLC[2];
+
+			p3DLine->m_X[1][0] = Pc[0] * XLC[0] + Pc[1] * YLC[0] + w2m * ZLC[0];
+			p3DLine->m_X[1][1] = Pc[0] * XLC[1] + Pc[1] * YLC[1] + w2m * ZLC[1];
+			p3DLine->m_X[1][2] = Pc[0] * XLC[2] + Pc[1] * YLC[2] + w2m * ZLC[2];
+
+			dX = pData->dX;
+
+			RVLDIF3VECTORS(p3DLine->m_X[1], p3DLine->m_X[0], dX)
+
+			fTmp = sqrt(RVLDOTPRODUCT3(dX, dX));
+			RVLSCALE3VECTOR2(dX, fTmp, pData->V)
+			pData->len = fTmp;
+
+			dwm = w2m - w1m;
+
+			p3DLine->m_nSupport = DOUBLE2INT(dwm / (dwm + dwo) * (double)(p3DLine->m_nSupport + p3DLine_->m_nSupport));
+
+			// p3DSurface_ <- empty set
+
+			p3DLine_->m_nSupport = 0;
+
+			/////
+
+			if((*pp3DLine)->m_nSupport == 0)
+				break;
+		}
+	}	// for each line
 }
 
 ///////////////////////////////////// 

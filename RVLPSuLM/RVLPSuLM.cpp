@@ -1737,7 +1737,7 @@ void CRVLPSuLM::Save(FILE * fp, DWORD Flags)
 
 		//CRVLClass *p2DLineSet = p2DLine->m_pClass;		
 
-		CRVL3DLine2 **p3DLineArrayEnd = m_3DLineArray + m_n3DLines;
+		CRVL3DLine2 **p3DLineArrayEnd = m_3DLineArray + m_n3DLinesTotal;
 
 		CRVL3DLine2 **pp3DLine;
 
@@ -1983,7 +1983,9 @@ void CRVLPSuLM::Load(FILE * fp, DWORD Flags)
 	
 	fread(&m_n3DLinesTotal, sizeof(int), 1, fp);
 
-	m_n3DLines = (m_n3DLinesTotal > pBuilder->m_maxnDominant3DLines ? pBuilder->m_maxnDominant3DLines : m_n3DLinesTotal);
+	int maxnDominant3DLines = (m_Flags & RVLPSULM_FLAG_COMPLEX ? pBuilder->m_maxnDominant3DLinesComplex : 
+		pBuilder->m_maxnDominant3DLines);
+	m_n3DLines = (m_n3DLinesTotal > maxnDominant3DLines ? maxnDominant3DLines : m_n3DLinesTotal);
 
 	m_3DLineArray = (CRVL3DLine2 **)(pBuilder->m_pMem0->Alloc(m_n3DLinesTotal * sizeof(CRVL3DLine2 *)));
 

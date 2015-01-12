@@ -715,7 +715,8 @@ public:
 	void RepresentativeHypotheses();
 	void ModelFusion(RVLPSULM_HYPOTHESIS *pHypothesis);
 	IplImage * GetComplexPSuLMRGBImage(	char *ImageFileName);
-	void MergeFeatures(CRVLPSuLM *pPSuLM);
+	void MergeSurfaces(CRVLPSuLM *pPSuLM);
+	void MergeLines(CRVLPSuLM *pPSuLM);
 
 private:
 	RVLPSULM_MSMATCH_DATA *HypothesesGetNextNode(	RVLPSULM_HG_NODE* pNode,
