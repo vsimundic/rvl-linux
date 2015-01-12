@@ -525,7 +525,10 @@ void RVLDisplay3DEllipse(double r1,
 						 CvPoint **pPtArray,
 						 int &n)
 {
-	double maxErrCoeff = maxErr / (pCamera->fNrm * r1 / pPoseFC->m_X[2]);
+	double *XcC = pPoseFC->m_X;
+	double r = sqrt(RVLDOTPRODUCT3(XcC, XcC));
+
+	double maxErrCoeff = maxErr / (pCamera->fNrm * r1 / r);
 
 	if(maxErrCoeff > 0.5)
 	{

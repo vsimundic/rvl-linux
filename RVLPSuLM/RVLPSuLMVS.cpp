@@ -1301,9 +1301,7 @@ void RVLPSuLMDisplayMouseCallback2(int event, int x, int y, int flags, void* vpD
 
 				pData->v = y;
 
-				pData->bSelection = true;
-
-				iPix = x / pData->ZoomFactor + y / pData->ZoomFactor * w;
+				pData->bSelection = true;				
 
 				if(pFig->m_Flags & RVLPSULM_DISPLAY_SCENE)
 				{
@@ -1322,16 +1320,37 @@ void RVLPSuLMDisplayMouseCallback2(int event, int x, int y, int flags, void* vpD
 				else if(pFig->m_Flags & RVLPSULM_DISPLAY_MODEL)
 				{
 					pSFig = pFig2;
-					pMFig = pFig;
 					pPSuLM2 = pVS->m_pPSuLM;
-					pPSuLM = pHypothesis->pMPSuLM;
-					a = 1;
-					b = nMatchMatrixCols;
-					nSurfaces = nMSurfaces;
-					nSurfaces2 = nSSurfaces;
+					if(pHypothesis)
+					{
+						pMFig = pFig;					
+						pPSuLM = pHypothesis->pMPSuLM;
+						a = 1;
+						b = nMatchMatrixCols;
+						nSurfaces = nMSurfaces;
+						nSurfaces2 = nSSurfaces;
+					}
+					else
+						pPSuLM = NULL;
 				}
 
-				pPSuLM->Project(&(pFig->m_PoseC0), FALSE, iPix, &pSelectedSurf, &pSelectedLine);
+				if(pPSuLM)
+				{
+					DWORD CameraFlagsOld = pVS->m_PSuLMBuilder.m_pCamera->m_Flags;
+
+					if(pPSuLM->m_Flags & RVLPSULM_FLAG_COMPLEX)
+					{
+						pVS->m_PSuLMBuilder.m_pCamera->m_Flags |= RVLCAMERA_FLAG_SPHERICAL;
+
+						w = pVS->m_PSuLMBuilder.m_pCamera->m_wSpherical;
+					}
+
+					iPix = x / pData->ZoomFactor + y / pData->ZoomFactor * w;
+
+					pPSuLM->Project(&(pFig->m_PoseC0), FALSE, iPix, &pSelectedSurf, &pSelectedLine);
+
+					pVS->m_PSuLMBuilder.m_pCamera->m_Flags = CameraFlagsOld;
+				}
 
 				pFig->Clear();
 

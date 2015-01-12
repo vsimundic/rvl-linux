@@ -231,18 +231,16 @@ int main(int argc, char* argv[])
 	// create complex image
 
 	if(bComplex)
-	{
 		VS.m_CameraL.m_Flags |= RVLCAMERA_FLAG_SPHERICAL;
 
-		VS.m_CameraL.m_PanRange = 240;
-		VS.m_CameraL.m_TiltRange = 125;
-		VS.m_CameraL.m_PixPerDeg = 3;
+	VS.m_CameraL.m_PanRange = 240;
+	VS.m_CameraL.m_TiltRange = 125;
+	VS.m_CameraL.m_PixPerDeg = 3;
 
-		VS.m_CameraL.InitSpherical();
+	VS.m_CameraL.InitSpherical();
 
-		VS.m_PSuLMBuilder.m_ROI.right = 2 * (VS.m_CameraL.m_wSpherical - 1) + 1;		
-		VS.m_PSuLMBuilder.m_ROI.bottom = 2 * (VS.m_CameraL.m_hSpherical - 1) + 1;
-	}
+	VS.m_PSuLMBuilder.m_ROI.right = 2 * (VS.m_CameraL.m_wSpherical - 1) + 1;		
+	VS.m_PSuLMBuilder.m_ROI.bottom = 2 * (VS.m_CameraL.m_hSpherical - 1) + 1;
 
 	IplImage *pComplexImage;
 

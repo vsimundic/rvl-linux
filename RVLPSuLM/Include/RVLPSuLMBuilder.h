@@ -33,7 +33,7 @@
 //#define RVLPSULMBUILDER_GET_LOCAL_MODELS_DEBUG_LOG
 //#define RVLPSULMBUILDER_PARTICLE_FILTER_DEBUG
 
-//#define RVLPSULMBUILDER_HYPOTHESES_DEBUG_LOG
+#define RVLPSULMBUILDER_HYPOTHESES_DEBUG_LOG
 //#define RVLPSULMBUILDER_HYPOTHESES_LAST_DOF_ACCU_DEBUG_LOG
 //#define RVLPSULMBUILDER_HYPOTHESES_LAST_DOF_ACCU_DEBUG_LOG
 //#define RVLPSULMBUILDER_CONDITIONAL_PROBABILITY_TREE_DEBUG_LOG
@@ -99,6 +99,7 @@
 #define RVLPSULMBUILDER_FLAG2_SCENE_FUSION_LOOK_AROUND			0x00000001
 #define RVLPSULMBUILDER_FLAG2_SCENE_FUSION_MOVE					0x00000002
 #define RVLPSULMBUILDER_FLAG2_COMPLEX							0x00000004
+#define RVLPSULMBUILDER_FLAG2_FILE_VERSION_2					0x00000008
 #define RVLPSULMBUILDER_CREATEMODEL_FLAG_PERMANENT				0x00000001
 #define RVLPSULMBUILDER_CREATEMODEL_FROM_IMAGE					0x00000002
 #define RVLPSULMBUILDER_CREATEMODEL_IMAGE_FROM_FILE				0x00000004
@@ -377,8 +378,10 @@ public:
 	int m_maxnHypothesesPerModel;
 	BYTE *m_MatchMatrix;
 	int m_maxnDominant3DSurfaces;
+	int m_maxnDominant3DSurfacesComplex;
 	int m_maxnModel3DSurfaces;
 	int m_maxnDominant3DLines;
+	int m_maxnDominant3DLinesComplex;
 	int m_maxnModel3DLines;
 	int m_maxnExpandedNodes;
 	double m_RotHypTol, m_tHypTol;
@@ -712,6 +715,7 @@ public:
 	void RepresentativeHypotheses();
 	void ModelFusion(RVLPSULM_HYPOTHESIS *pHypothesis);
 	IplImage * GetComplexPSuLMRGBImage(	char *ImageFileName);
+	void MergeFeatures(CRVLPSuLM *pPSuLM);
 
 private:
 	RVLPSULM_MSMATCH_DATA *HypothesesGetNextNode(	RVLPSULM_HG_NODE* pNode,

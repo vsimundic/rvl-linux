@@ -779,10 +779,16 @@ void CRVLPSuLM::Display(CRVLFigure * pFig,
 
 	RVLMXMUL3X3T2(P, RCM, A);
 
+	DWORD CameraFlagsOld = pPSuLMBuilder->m_pCamera->m_Flags;
+
 	double RMC[9], tMC[3];
 
 	if(m_Flags & RVLPSULM_FLAG_COMPLEX)
+	{
 		RVLINVTRANSF3D(RCM, tCM, RMC, tMC)
+
+		pPSuLMBuilder->m_pCamera->m_Flags |= RVLCAMERA_FLAG_SPHERICAL;
+	}
 
 	// display surfaces
 
@@ -986,6 +992,8 @@ void CRVLPSuLM::Display(CRVLFigure * pFig,
 			}
 		}
 	}
+
+	pPSuLMBuilder->m_pCamera->m_Flags = CameraFlagsOld;
 }
 
 void CRVLPSuLM::Display3DSurfaceSamples(CRVLFigure * pFig,
@@ -1120,6 +1128,11 @@ void CRVLPSuLM::Display3DSurface(	CRVLFigure * pFig,
 {
 	CRVLPSuLMBuilder *pPSuLMBuilder = (CRVLPSuLMBuilder *)m_vpBuilder;
 
+	DWORD CameraFlagsOld = pPSuLMBuilder->m_pCamera->m_Flags;
+
+	if(m_Flags & RVLPSULM_FLAG_COMPLEX)
+		pPSuLMBuilder->m_pCamera->m_Flags |= RVLCAMERA_FLAG_SPHERICAL;
+
 	CRVLDisplayVector Vector;
 	
 	if(Flags & RVLPSULM_DISPLAY_VECTORS)
@@ -1225,6 +1238,8 @@ void CRVLPSuLM::Display3DSurface(	CRVLFigure * pFig,
 		delete[] PtArray;
 	}
 #endif
+
+	pPSuLMBuilder->m_pCamera->m_Flags = CameraFlagsOld;
 }
 
 void CRVLPSuLM::Display3DLine(	CRVLFigure * pFig,
@@ -1617,6 +1632,9 @@ void CRVLPSuLM::Save(FILE * fp, DWORD Flags)
 
 	int n3DConvexSegments;
 	int i;
+
+	if(pBuilder->m_Flags2 & RVLPSULMBUILDER_FLAG2_FILE_VERSION_2)
+		fwrite(&m_Flags, sizeof(DWORD), 1, fp);
 	
 	//save if min Plane exists
 	fwrite(&m_minPlaneExists, sizeof(BOOL), 1, fp);
@@ -1833,6 +1851,9 @@ void CRVLPSuLM::Load(FILE * fp, DWORD Flags)
 	CRVLClass  *p3DConvexSegmentSet = &(pBuilder->m_M3DConvexSegmentSet);
 	CRVLClass  *p3DContourSet = &(pBuilder->m_M3DContourSet);
 
+	if(Flags & RVLPSULMBUILDER_FLAG2_FILE_VERSION_2)
+		fread(&m_Flags, sizeof(DWORD), 1, fp);
+
 	//get if min Plane exists
 	fread(&m_minPlaneExists, sizeof(BOOL), 1, fp);
 
@@ -1847,6 +1868,10 @@ void CRVLPSuLM::Load(FILE * fp, DWORD Flags)
 
 	//get and store total number of 3D surface
 	fread(&m_n3DSurfacesTotal, sizeof(int), 1, fp);
+
+	int maxnDominant3DSurfaces = (m_Flags & RVLPSULM_FLAG_COMPLEX ? pBuilder->m_maxnDominant3DSurfacesComplex : 
+		pBuilder->m_maxnDominant3DSurfaces);
+	m_n3DSurfaces = (m_n3DSurfacesTotal >= maxnDominant3DSurfaces ? maxnDominant3DSurfaces : m_n3DSurfacesTotal);
 
 	//allocate SurfaceArray
 	m_3DSurfaceArray = (CRVL3DSurface2 **)(pBuilder->m_pMem0->Alloc(m_n3DSurfacesTotal * sizeof(CRVL3DSurface2 *)));

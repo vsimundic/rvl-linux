@@ -187,6 +187,36 @@
 #define RVLMIN(x, y)	(x <= y ? x : y)
 #define RVLMAX(x, y)	(x >= y ? x : y)
 #define RVLABS(x)		(x >= 0.0 ? x : -x)
+// R = [1,  0,   0;
+//		0, cs, -sn;
+//		0, sn,  cs]
+#define RVLROTX(cs, sn, R)\
+{\
+	RVLMXEL(R, 3, 0, 0) = 1.0;\
+	RVLMXEL(R, 3, 0, 1) = 0.0;\
+	RVLMXEL(R, 3, 0, 2) = 0.0;\
+	RVLMXEL(R, 3, 1, 0) = 0.0;\
+	RVLMXEL(R, 3, 1, 1) = cs;\
+	RVLMXEL(R, 3, 1, 2) = -sn;\
+	RVLMXEL(R, 3, 2, 0) = 0.0;\
+	RVLMXEL(R, 3, 2, 1) = sn;\
+	RVLMXEL(R, 3, 2, 2) = cs;\
+}
+// R = [ cs, 0, sn;
+//		  0, 1, 0;
+//		-sn, 0, cs]
+#define RVLROTY(cs, sn, R)\
+{\
+	RVLMXEL(R, 3, 0, 0) = cs;\
+	RVLMXEL(R, 3, 0, 1) = 0.0;\
+	RVLMXEL(R, 3, 0, 2) = sn;\
+	RVLMXEL(R, 3, 1, 0) = 0.0;\
+	RVLMXEL(R, 3, 1, 1) = 1.0;\
+	RVLMXEL(R, 3, 1, 2) = 0.0;\
+	RVLMXEL(R, 3, 2, 0) = -sn;\
+	RVLMXEL(R, 3, 2, 1) = 0.0;\
+	RVLMXEL(R, 3, 2, 2) = cs;\
+}
 // R = [cs, -sn, 0;
 //		sn,  cs, 0;
 //		0,   0,  1]

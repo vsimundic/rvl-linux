@@ -72,7 +72,9 @@ CRVLPSuLMBuilder::CRVLPSuLMBuilder(void)
 	m_ProjDisparityErr = 8; //Disparity dif between projection and original plane
 	m_maxnHypothesesPerModel = 20;
 	m_maxnDominant3DSurfaces = 20;
+	m_maxnDominant3DSurfacesComplex = 50;
 	m_maxnDominant3DLines = 20;
+	m_maxnDominant3DLinesComplex = 50;
 	m_maxnExpandedNodes = 1000;
 	m_RotHypTol = 3.0;	// deg
 	m_tHypTol = 500.0;	// mm
@@ -1464,8 +1466,9 @@ BOOL CRVLPSuLMBuilder::Create(CRVLPSuLM *pPSuLM,
 		RVLQLIST *pSamples;
 		double *Rot, *t, *r;
 		double z1, z2, z3, z4, minz12, minz34, minz;
-		double *RFM, *tFM, *NM;
-		double RFM_[9], tFM_[3], NM_[3];
+		double *RFM, *tFM, *NM, *CM;
+		double RFM_[9], tFM_[3], NM_[3], CM_[9];
+		//double M3x3Tmp[9];
 
 		//Get segment list
 		p2DRegionList = &(p2DRegionSet->m_ObjectList);
@@ -1519,14 +1522,17 @@ BOOL CRVLPSuLMBuilder::Create(CRVLPSuLM *pPSuLM,
 				RFM = p3DSurface->m_Pose.m_Rot;
 				tFM = p3DSurface->m_Pose.m_X;
 				NM = p3DSurface->m_N;
+				//CM = p3DSurface->m_Cp;
 
 				RVLCOPYMX3X3(RFM, RFM_)
 				RVLCOPY3VECTOR(tFM, tFM_)
 				RVLCOPY3VECTOR(NM, NM_)
+				//RVLCOPYMX3X3(CM, CM_)
 
 				RVLMXMUL3X3(RM_M, RFM_, RFM)
 				RVLMULMX3X3VECT(RM_M, tFM_, tFM)
 				RVLMULMX3X3VECT(RM_M, NM_, NM)
+				//RVLCOV3DTRANSF(CM_, RM_M, CM, M3x3Tmp)
 			}
 
 			p3DSurface->m_nSupport = nSupportPts;
@@ -1746,10 +1752,15 @@ BOOL CRVLPSuLMBuilder::Create(CRVLPSuLM *pPSuLM,
 			pPSuLM->m_SurfaceList.m_pMem = pMem;
 			
 			//Create PSULM sorted Array
-			//pPSuLM->m_n3DSurfacesTotal = n3DSurfaces;			
-			pPSuLM->m_n3DSurfaces = (nClose3DSurfaces >= m_maxnDominant3DSurfaces ? m_maxnDominant3DSurfaces : nClose3DSurfaces);
+			//pPSuLM->m_n3DSurfacesTotal = n3DSurfaces;	
+			int maxnDominant3DSurfaces = (pPSuLM->m_Flags & RVLPSULM_FLAG_COMPLEX ? m_maxnDominant3DSurfacesComplex : 
+				m_maxnDominant3DSurfaces);
+			pPSuLM->m_n3DSurfaces = (nClose3DSurfaces >= maxnDominant3DSurfaces ? maxnDominant3DSurfaces : nClose3DSurfaces);
 			pPSuLM->m_3DSurfaceArray = (CRVL3DSurface2 **)(pMem->Alloc(n3DSurfaces * sizeof(CRVL3DSurface2 *)));
 			SurfaceArray = pPSuLM->m_3DSurfaceArray;
+
+			if(m_Flags2 & RVLPSULMBUILDER_FLAG2_COMPLEX)
+				MergeFeatures(pPSuLM);
 
 			//go through all level3 surfaces and sort into array		
 
@@ -3226,7 +3237,9 @@ CRVLPSuLM *CRVLPSuLMBuilder::Create(DWORD Flags)
 	
 	if(bComplex)
 	{
-		int iSample = RVLGetFileNumber(m_ImageFileName, "00000-LW.bmp");
+		int iSample0 = RVLGetFileNumber(m_ImageFileName, "00000-LW.bmp");
+
+		int iSample = iSample0;
 
 		while (command != 'C')
 		{
@@ -3286,9 +3299,11 @@ CRVLPSuLM *CRVLPSuLMBuilder::Create(DWORD Flags)
 			}
 
 			iSample++;
-		}
+		}	// while (command != 'C')
 
 		delete[] OdometryFileName;
+
+		RVLSetFileNumber(m_ImageFileName, "00000-LW.bmp", iSample0);
 	}	// if(bComplex)
 	else
 	{
@@ -3875,7 +3890,7 @@ CRVLPSuLM * CRVLPSuLMBuilder::Load(FILE *fp)
 
 	pPSuLM->m_CellArray = (RVLPSULM_CELL *)(m_pMem0->Alloc(m_nCells * sizeof(RVLPSULM_CELL)));
 
-	pPSuLM->Load(fp, m_Flags);
+	pPSuLM->Load(fp, m_Flags2);
 
 	if(pPSuLM->m_nLandmarks > m_maxnLandmarks)
 		m_maxnLandmarks = pPSuLM->m_nLandmarks;
@@ -6271,7 +6286,8 @@ void CRVLPSuLMBuilder::Localization(CRVLPSuLM * pSPSuLM,
 	PoseS0Init.m_Alpha = 0.0;
 	PoseS0Init.m_Beta = 0.0;
 	PoseS0Init.m_Theta = 0.0;
-	PoseS0Init.UpdateRotA0();
+	//PoseS0Init.m_Alpha = -45.0 * DEG2RAD;	// debug
+	PoseS0Init.UpdateRotLL();
 	PoseS0Init.m_sa = sin(PoseS0Init.m_Alpha);
 	PoseS0Init.m_ca = cos(PoseS0Init.m_Alpha);
 
@@ -6306,7 +6322,9 @@ void CRVLPSuLMBuilder::Localization(CRVLPSuLM * pSPSuLM,
 	uncert6DOFPose.m_Alpha = AngleUnc;
 	uncert6DOFPose.m_Beta = AngleUnc;	
 	uncert6DOFPose.m_Theta = ThetaUnc;
-
+	//uncert6DOFPose.m_Alpha = 40.0;
+	//uncert6DOFPose.m_Beta = 20.0;	
+	//uncert6DOFPose.m_Theta = 10.0;
 
 	//Define default unconstrained EKF uncertainty (6DOF)
 	CRVL3DPose uncertEKFPose;
@@ -11236,6 +11254,8 @@ void CRVLPSuLMBuilder::UpdateMatchMatrixForDisplay(CRVLPSuLM *pSPSuLM,
 
 }
 
+// This function is obsolete! It is not used in RVL.
+
 void CRVLPSuLMBuilder::Load(char * ModelFileNameIn, int maxIndex)
 {
 	char *ModelFileName = RVLCreateString(ModelFileNameIn);
@@ -11365,7 +11385,7 @@ void CRVLPSuLMBuilder::LoadMap()
 				fclose(fp);
 			}
 
-			pPSuLM->Load(m_Flags);
+			pPSuLM->Load(m_Flags2);
 
 			if(pPSuLM->m_nLandmarks > m_maxnLandmarks)
 				m_maxnLandmarks = pPSuLM->m_nLandmarks;
@@ -11539,6 +11559,8 @@ void CRVLPSuLMBuilder::CreateParamList(CRVLMem * pMem)
 	m_ParamList.AddID(pParamData, "LINES", RVLPSULMBUILDER_FLAG_LINES);
 	pParamData = m_ParamList.AddParam("PSuLM.Complex", RVLPARAM_TYPE_FLAG, &m_Flags2);
 	m_ParamList.AddID(pParamData, "yes", RVLPSULMBUILDER_FLAG2_COMPLEX);
+	pParamData = m_ParamList.AddParam("PSuLM.FileVersion", RVLPARAM_TYPE_FLAG, &m_Flags2);
+	m_ParamList.AddID(pParamData, "2", RVLPSULMBUILDER_FLAG2_FILE_VERSION_2);
 	pParamData = m_ParamList.AddParam("PSuLM.Global", RVLPARAM_TYPE_FLAG, &m_Flags);
 	m_ParamList.AddID(pParamData, "yes", RVLPSULMBUILDER_FLAG_GLOBAL);
 	pParamData = m_ParamList.AddParam("PSuLM.Material", RVLPARAM_TYPE_FLAG, &m_Flags);
@@ -12181,7 +12203,17 @@ void CRVLPSuLMBuilder::Hypotheses3(	CRVLPSuLM *pSPSuLM,
 
 	double *e = MatchData.m_e;
 
+	double RSS_[9];
+	
+	RVLUNITMX3(RSS_)
+
+	double RS_M[9];
+
+	RVLCOPYMX3X3(R, RS_M)
+	
 	RVLPSULM_HYPOTHESIS *pHypothesis = NULL;
+
+	int iAlpha = -1;
 
 	int nM3DSurfaces;
 	RVLPSULM_MSMATCH_DATA *pMSMatch;
@@ -12238,6 +12270,7 @@ void CRVLPSuLMBuilder::Hypotheses3(	CRVLPSuLM *pSPSuLM,
 	RVLPSULM_LASTDOF_MATCH_DATA *LastDOFMatchArray;
 	int LastDOFMatchArraySize;
 	double ep1, ep2;
+	double ca, sa, alpha;
 
 	//int debug_nMatchings = 0;
 	//int debug_nQueueSorts = 0;
@@ -12255,7 +12288,6 @@ void CRVLPSuLMBuilder::Hypotheses3(	CRVLPSuLM *pSPSuLM,
 	else
 		pPSuLMList = &m_PSuLMList;
 
-
 	pPSuLMList->Start();
 
 	while(TRUE)
@@ -12266,8 +12298,39 @@ void CRVLPSuLMBuilder::Hypotheses3(	CRVLPSuLM *pSPSuLM,
 
 		if(pPrevSPSuLM)
 			pMPSuLM = pPrevSPSuLM;
-		else if(pPSuLMList->m_pNext)
-			pMPSuLM = (CRVLPSuLM *)(pPSuLMList->GetNext());
+		else if(pPSuLMList->m_pNext || iAlpha > -1)
+		{
+			if(iAlpha == -1)
+				pMPSuLM = (CRVLPSuLM *)(pPSuLMList->GetNext());
+
+			if(pMPSuLM->m_Flags & RVLPSULM_FLAG_COMPLEX)
+			{
+				alpha = (double)iAlpha * 0.25 * PI;
+
+				ca = cos(alpha);
+				sa = sin(alpha);
+
+				RSS_[0] = RSS_[8] = ca;
+				RSS_[2] = sa;
+				RSS_[6] = -sa;
+
+				R = PoseSMInit.m_Rot;
+
+				RVLMXMUL3X3(RS_M, RSS_, R)
+
+				PoseSMInit.UpdatePTRLL();
+
+				PoseSMInit.m_sa = sin(PoseSMInit.m_Alpha);
+				PoseSMInit.m_ca = cos(PoseSMInit.m_Alpha);
+
+				RVLMULMX3X3TVECT(R, t, invtInit);
+
+				iAlpha++;
+
+				if(iAlpha > 1)
+					iAlpha = -1;
+			}
+		}
 		else
 			break;
 
@@ -12356,8 +12419,8 @@ void CRVLPSuLMBuilder::Hypotheses3(	CRVLPSuLM *pSPSuLM,
 
 			for(iMSurf = 0; iMSurf < nM3DSurfaces; iMSurf++)
 			{
-				//if(iSSurf == 1 && iMSurf == 1)
-				//	int debug = 1;
+				if(iSSurf == 1 && iMSurf == 23)
+					int debug = 1;
 
 				pM3DSurface = MSurfArray[iMSurf];	
 
@@ -12435,6 +12498,9 @@ void CRVLPSuLMBuilder::Hypotheses3(	CRVLPSuLM *pSPSuLM,
 #ifdef RVLPSULMBUILDER_HYPOTHESES_DEBUG_LOG
 
 		fprintf(fpLog, "Model %d\n\n", pMPSuLM->m_Index);	// for Nyarko
+
+		if(pMPSuLM->m_Flags & RVLPSULM_FLAG_COMPLEX)
+			fprintf(fpLog, "Initial alpha=%lf\n", PoseSMInit.m_Alpha * RAD2DEG);
 
 		fprintf(fpLog, "Initial Pose Uncertainty\n");	// for Nyarko
 
@@ -17663,7 +17729,7 @@ CRVLPSuLM *CRVLPSuLMBuilder::Clone(CRVLPSuLM *pPSulMOriginal)
 	rewind(fp);
 
 	//Load mem file to new pPSuLM
-	pPSuLM->Load(fp, m_Flags);
+	pPSuLM->Load(fp, m_Flags2);
 
 	//close temp file
 	fclose(fp);
@@ -21978,7 +22044,8 @@ void CRVLPSuLMBuilder::DisplayHypothesis(CRVLGUI *pGUI,
 		else if((m_Flags & RVLPSULMBUILDER_FLAG_MODE) == RVLPSULMBUILDER_FLAG_MODE_TRACKING)
 			pFig2->m_pImage = cvCloneImage(pImage2);
 		else
-			pFig2->m_pImage = cvLoadImage(pMPSuLM->m_FileName);
+			pFig2->m_pImage = ((pMPSuLM->m_Flags & RVLPSULM_FLAG_COMPLEX) ? GetComplexPSuLMRGBImage(pMPSuLM->m_FileName) :
+				cvLoadImage(pMPSuLM->m_FileName));
 	
 		pMPSuLM->Display(pFig2, &NullPose, cvScalar(0, 255, 0), 
 			RVLPSULM_DISPLAY_SURFACES | RVLPSULM_DISPLAY_ELLIPSES | RVLPSULM_DISPLAY_LINES | RVLPSULM_DISPLAY_VECTORS);
@@ -23575,6 +23642,362 @@ IplImage * CRVLPSuLMBuilder::GetComplexPSuLMRGBImage(char *ImageFileName)
 	cvReleaseImage(&pImage_);
 
 	return pComplexImage;
+}
+
+void CRVLPSuLMBuilder::MergeFeatures(CRVLPSuLM *pPSuLM)
+{
+	double kr = 2.0;
+	double varq = 5.0 * DEG2RAD;
+	varq *= varq;
+
+	//*** Merge surfaces
+
+	CRVL3DSurface2 **SurfaceArray = pPSuLM->m_3DSurfaceArray;
+
+	CRVL3DSurface2 **pp3DSurface = SurfaceArray;
+
+	CRVLMPtrChain *p3DSurfaceList = &(m_S3DSurfaceSet.m_ObjectList);
+
+	CRVL3DSurface2 *p3DSurface;
+
+	p3DSurfaceList->Start();
+
+	while(p3DSurfaceList->m_pNext)
+	{
+		p3DSurface = (CRVL3DSurface2 *)(p3DSurfaceList->GetNext());
+
+		if(!(p3DSurface->m_Flags & RVL3DSURFACE_FLAG_CLOSE))
+			continue;
+
+		p3DSurface->m_Index = pp3DSurface - SurfaceArray;
+
+		*(pp3DSurface++) = p3DSurface;
+	}
+
+	//return;
+
+	int n3DSurfaces = pp3DSurface - SurfaceArray;
+
+	CRVL3DSurface2 **p3DSurfaceArrayEnd = pp3DSurface;
+
+	double RCM[9];
+	double *XMC = RCM;
+	double *YMC = RCM + 3;
+	double *ZMC = RCM + 6;
+
+	CRVL3DSurface2 **pp3DSurface_;
+	CRVL3DSurface2 *p3DSurface_;
+	CRVL3DSurface2 *p3DSurfaceTmp;
+	double *RFC, *tFC, *RF_C, *tF_C, *N, *N_, *u, *u_;
+	double dtC[3], A[9], b[3], b_[3], eig[3], RFM[9], RF_M[9], XF__C[3], YF__C[3];
+	double d2, r1, r1_, r2, r2_, d2Thr, eN, eP, n, n_, nm, fTmp;
+	double U[2][3], U_[2][3];
+	double PC[8][3], PM[8][2];
+	int i, j, k;
+	double *P, *P_;
+	double minx, maxx, miny, maxy, minz, maxz, x, y, z, z_, varx, vary;
+	double dtM[2], C[4], C_[4], Q[4], c[2];
+	RVL2DMOMENTS Moments;
+
+	for(pp3DSurface = SurfaceArray; pp3DSurface < p3DSurfaceArrayEnd; pp3DSurface++)
+	{
+		p3DSurface = *pp3DSurface;		
+
+		if(p3DSurface->m_nSupport == 0)
+			continue;
+
+		for(pp3DSurface_ = pp3DSurface + 1; pp3DSurface_ < p3DSurfaceArrayEnd; pp3DSurface_++)
+		{
+			p3DSurface = *pp3DSurface;
+
+			p3DSurface_ = *pp3DSurface_;
+
+			if(p3DSurface_->m_nSupport == 0)
+				continue;
+
+			//if(p3DSurface->m_Index == 23 && p3DSurface_->m_Index == 42)
+			//	int debug = 0;
+
+			if(p3DSurface_->m_nSupport > p3DSurface->m_nSupport)
+			{
+				p3DSurfaceTmp = p3DSurface;
+				p3DSurface = p3DSurface_;
+				p3DSurface_ = p3DSurfaceTmp;
+			}
+
+			tFC = p3DSurface->m_Pose.m_X;
+			tF_C = p3DSurface_->m_Pose.m_X;
+
+			RVLDIF3VECTORS(tFC, tF_C, dtC)
+
+			d2 = RVLDOTPRODUCT3(dtC, dtC);
+
+			r1 = kr * p3DSurface->m_EigenValues[0];
+			r1_ = kr * p3DSurface_->m_EigenValues[0];
+
+			d2Thr = 2.0 * (r1 + r1_);
+			d2Thr *= d2Thr;
+
+			if(d2 > d2Thr)
+				continue;
+
+			N = p3DSurface->m_N;
+			N_ = p3DSurface_->m_N;
+
+			eN = RVLDOTPRODUCT3(N, N_);
+
+			if(eN < 0.99619469809174553229501040247389)	// cos(5 deg)
+			//if(eN < 0.985)
+				continue;
+
+			n = (double)(p3DSurface->m_nSupport);
+			n_ = (double)(p3DSurface_->m_nSupport);
+			
+			nm = n + n_;
+
+			// ZMC <- UNIT((n * N + n_ * N_) / (n + n_))
+
+			RVLSCALE3VECTOR(N, n, b)
+			RVLSCALE3VECTOR(N_, n_, b_)
+			RVLSUM3VECTORS(b, b_, ZMC)
+			RVLSCALE3VECTOR2(ZMC, nm, ZMC)
+			RVLNORM3(ZMC, fTmp)
+
+			RFC = p3DSurface->m_Pose.m_Rot;
+			RF_C = p3DSurface_->m_Pose.m_Rot;
+
+			// PC[i] <- ellipse 'vertices'
+
+			r2 = kr * p3DSurface->m_EigenValues[1];
+			r2_ = kr * p3DSurface_->m_EigenValues[1];
+
+			u = U[0];
+			RVLCOPYCOLMX3X3(RFC, 0, u)
+			RVLSCALE3VECTOR(u, r1, u)
+			u = U[1];
+			RVLCOPYCOLMX3X3(RFC, 1, u)
+			RVLSCALE3VECTOR(u, r2, u)
+			u_ = U_[0];
+			RVLCOPYCOLMX3X3(RF_C, 0, u_)
+			RVLSCALE3VECTOR(u_, r1_, u_)
+			u_ = U_[1];
+			RVLCOPYCOLMX3X3(RF_C, 1, u_)
+			RVLSCALE3VECTOR(u_, r2_, u_)
+
+			for(i = 0; i < 4; i++)
+			{
+				P = PC[i];
+				P_ = PC[i + 4];
+
+				u = U[i & 1];
+				u_ = U_[i & 1];
+
+				if(i & 2)
+				{
+					RVLSUM3VECTORS(tFC, u, P)
+					RVLSUM3VECTORS(tF_C, u_, P_)
+				}
+				else
+				{
+					RVLDIF3VECTORS(tFC, u, P)
+					RVLDIF3VECTORS(tF_C, u_, P_)
+				}
+			}
+
+			/////
+
+			P = PC[0];
+
+			minz = maxz = RVLDOTPRODUCT3(P, ZMC);
+
+			for(i = 1; i < 8; i++)
+			{
+				P = PC[i];
+
+				z = RVLDOTPRODUCT3(P, ZMC);
+
+				if(z < minz)
+					minz = z;
+				else if(z > maxz)
+					maxz = z;
+			}
+
+			//if(maxz - minz > 2.0 * (sqrt(p3DSurface->m_sigmaR) + sqrt(p3DSurface_->m_sigmaR)) + 30.0)
+			//	continue;
+
+			eP = RVLDOTPRODUCT3(dtC, ZMC);
+
+			if(eP < 0.0)
+				eP = -eP;
+
+			if(eP > 2.0 * (sqrt(p3DSurface->m_sigmaR) + sqrt(p3DSurface_->m_sigmaR)) + 30.0)
+				continue;
+
+			// XMC <- unit vector orthogonal to ZMC
+
+			RVLORTHOGONAL3(ZMC, XMC, i, j, k, b, fTmp)
+
+			// YMC <- ZMC x XMC
+
+			RVLCROSSPRODUCT3(ZMC, XMC, YMC)
+
+			// dtM <- [1 0 0] * RCM * dtC
+			//        [0 1 0]
+
+			dtM[0] = RVLDOTPRODUCT3(XMC, dtC);
+			dtM[1] = RVLDOTPRODUCT3(YMC, dtC);
+
+			// C <- upper-left 2x2 block of RFM * [r1^2 0    0] * RFM'
+			//                                    [0    r2^2 0]
+			//                                    [0    0    0]
+
+			RVLMXMUL3X3(RCM, RFC, RFM)
+			RVLMXMUL3X3(RCM, RF_C, RF_M)
+
+			varx = r1 * r1;
+			vary = r2 * r2;
+
+			RVLSCALECOL3(RFM, 0, varx, A)
+			RVLSCALECOL3(RFM, 1, vary, A)
+
+			C[0] = A[0] * RFM[0] + A[1] * RFM[1];
+			C[1] = A[0] * RFM[3] + A[1] * RFM[4];
+			C[3] = A[3] * RFM[3] + A[4] * RFM[4];
+
+			// C_ <- upper-left 2x2 block of RF_M * [r1_^2 0    0] * RF_M'
+			//                                      [0    r2_^2 0]
+			//                                      [0    0     0]
+
+			varx = r1_ * r1_;
+			vary = r2_ * r2_;
+
+			RVLSCALECOL3(RF_M, 0, varx, A)
+			RVLSCALECOL3(RF_M, 1, vary, A)
+
+			C_[0] = A[0] * RF_M[0] + A[1] * RF_M[1];
+			C_[1] = A[0] * RF_M[3] + A[1] * RF_M[4];
+			C_[3] = A[3] * RF_M[3] + A[4] * RF_M[4];
+
+			Q[0] = C[0] + C_[0];
+			Q[1] = C[1] + C_[1];
+			Q[3] = C[3] + C_[3];
+
+			fTmp = RVLDET2(Q);
+			eP = RVLMAHDIST2(dtM, Q, fTmp);
+
+			if(eP > 2.4079)	// Chi squared test 70% for 2 degrees of freedom
+				continue;
+
+			// PM[i] <- [XMC' * PC[i]; YMC' * PC[i]]
+			// compute mean and covariance of points PM
+
+			Moments.S[0] = Moments.S[1] = Moments.S2[0] = Moments.S2[1] = Moments.S2[3] = 0.0;
+
+			for(i = 0; i < 8; i++)
+			{
+				P = PC[i];	
+
+				x = PM[i][0] = RVLDOTPRODUCT3(XMC, P);
+				y = PM[i][1] = RVLDOTPRODUCT3(YMC, P);				
+
+				Moments.S[0] += x;
+				Moments.S[1] += y;
+				Moments.S2[0] += (x * x);
+				Moments.S2[1] += (x * y);
+				Moments.S2[3] += (y * y);
+			}
+	
+			Moments.n = 8;
+
+			RVLGetCovMatrix2(&Moments, Q, c);
+
+			// compute the bounding box of points PM
+
+			RVLGetMaxEigVector2(Q, eig, b);
+
+			P = PM[0];
+
+			minx = maxx =  P[0] * b[0] + P[1] * b[1]; 
+			miny = maxy = -P[0] * b[1] + P[1] * b[0]; 
+
+			for(i = 1; i < 8; i++)
+			{
+				P = PM[i];
+
+				x =  P[0] * b[0] + P[1] * b[1];
+				y = -P[0] * b[1] + P[1] * b[0];
+
+				if(x < minx)
+					minx = x;
+				else if(x > maxx)
+					maxx = x;
+
+				if(y < miny)
+					miny = y;
+				else if(y > maxy)
+					maxy = y;
+			}
+
+			// p3DSurface <- merge p3DSurface and p3DSurface_
+			// p3DSurface_ <- empty set
+
+			//if(p3DSurface->m_Index == 95)
+			//	int debug = 0;
+
+			r1 = p3DSurface->m_EigenValues[0] = 0.25 * (maxx - minx);
+			r2 = p3DSurface->m_EigenValues[1] = 0.25 * (maxy - miny);
+
+			x = b[0];
+			y = b[1];
+
+			RVLSCALE3VECTOR(XMC, x, b)
+			RVLSCALE3VECTOR(YMC, y, b_)
+			RVLSUM3VECTORS(b, b_, XF__C)
+
+			RVLSCALE3VECTOR(XMC, -y, b)
+			RVLSCALE3VECTOR(YMC, x, b_)
+			RVLSUM3VECTORS(b, b_, YF__C)
+
+			RVLCOPYTOCOL3(XF__C, 0, RFC)
+			RVLCOPYTOCOL3(YF__C, 1, RFC)
+			RVLCOPYTOCOL3(ZMC, 2, RFC)
+
+			RVLCOPY3VECTOR(ZMC, N)
+
+			z = RVLDOTPRODUCT3(tFC, ZMC);
+
+			z_ = RVLDOTPRODUCT3(tF_C, ZMC);
+
+			p3DSurface->m_d = (n * z + n_ * z_) / nm;
+
+			fTmp = 0.5 * (minx + maxx);
+
+			RVLSCALE3VECTOR(XF__C, fTmp, tFC)
+
+			fTmp = 0.5 * (miny + maxy);
+
+			RVLSCALE3VECTOR(YF__C, fTmp, b)
+
+			RVLSUM3VECTORS(tFC, b, tFC)
+
+			RVLSCALE3VECTOR(N, p3DSurface->m_d, b)
+
+			RVLSUM3VECTORS(tFC, b, tFC)			
+
+			p3DSurface->m_sigmaR = RVLMAX(p3DSurface->m_sigmaR, p3DSurface_->m_sigmaR);
+
+			p3DSurface->m_varq[0] = p3DSurface->m_sigmaR / (r1 * r1 + p3DSurface->m_sigmaR) + varq;
+			p3DSurface->m_varq[1] = p3DSurface->m_sigmaR / (r2 * r2 + p3DSurface->m_sigmaR) + varq;
+			p3DSurface->m_varq[2] = p3DSurface->m_sigmaR;			
+
+			p3DSurface->m_nSupport += p3DSurface_->m_nSupport;
+
+			p3DSurface_->m_nSupport = 0;
+
+			if((*pp3DSurface)->m_nSupport == 0)
+				break;
+		}
+	}
 }
 
 ///////////////////////////////////// 
