@@ -255,6 +255,11 @@ void RVL2DContourSegment(CvPoint *pPt1,				// transfer to RVL2DContour.cpp
 void RVLPSuLMHypothesisPoseRefinement(RVLPSULM_HYPOTHESIS *pHypothesis,
 									  CRVLPSuLM *pSPSuLM,
 									  CRVL3DSurface2 **MatchedMSurfArray);
+void RVLPSuLMHypothesisPoseRefinement(CRVL3DPose *pPose,
+									  RVLPSULM_HG_NODE *pNode,
+									  RVLPSULM_MSMATCH_DATA *MatchList,
+									  double *PInit,
+									  int nIterations);
 void RVLPSuLMHypothesisGetAbsPose(RVLPSULM_HYPOTHESIS *pHypothesis,
 								  CRVL3DPose *pPoseAC,
 								  CRVL3DPose *pPoseCs0);
@@ -717,6 +722,7 @@ public:
 	IplImage * GetComplexPSuLMRGBImage(	char *ImageFileName);
 	void MergeSurfaces(CRVLPSuLM *pPSuLM);
 	void MergeLines(CRVLPSuLM *pPSuLM);
+	void UpdateBuffers(CRVLPSuLM *pPSuLM);
 
 private:
 	RVLPSULM_MSMATCH_DATA *HypothesesGetNextNode(	RVLPSULM_HG_NODE* pNode,

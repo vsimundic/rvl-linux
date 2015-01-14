@@ -1264,13 +1264,14 @@ void RVLPSuLMDisplayMouseCallback2(int event, int x, int y, int flags, void* vpD
 
 	int nMatchMatrixCols;
 	int nSSurfaces, nMSurfaces;
-	int nMLines;
+	int nSLines, nMLines;
 
 	if(pHypothesis)
 	{
 		if(HypEvalMethod == RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD_P)
 		{
 			nSSurfaces = pVS->m_pPSuLM->m_n3DSurfaces;
+			nSLines = pVS->m_pPSuLM->m_n3DLines;
 			//nMSurfaces = pHypothesis->pMPSuLM->m_n3DSurfaces;
 			//nMLines =  pHypothesis->pMPSuLM->m_n3DLines;
 			nMSurfaces = pHypothesis->pMPSuLM->m_n3DSurfacesTotal;
@@ -1290,7 +1291,7 @@ void RVLPSuLMDisplayMouseCallback2(int event, int x, int y, int flags, void* vpD
 	
 	int iPix;
 	int a, b;
-	int nSurfaces, nSurfaces2;
+	int nSurfaces, nSurfaces2, nLines, nLines2;
 
 	switch( event )
 	{
@@ -1315,6 +1316,8 @@ void RVLPSuLMDisplayMouseCallback2(int event, int x, int y, int flags, void* vpD
 						b = 1;
 						nSurfaces = nSSurfaces;
 						nSurfaces2 = nMSurfaces;
+						nLines = nSLines;
+						nLines2 = nMLines;
 					}
 				}
 				else if(pFig->m_Flags & RVLPSULM_DISPLAY_MODEL)
@@ -1329,6 +1332,8 @@ void RVLPSuLMDisplayMouseCallback2(int event, int x, int y, int flags, void* vpD
 						b = nMatchMatrixCols;
 						nSurfaces = nMSurfaces;
 						nSurfaces2 = nSSurfaces;
+						nLines = nMLines;
+						nLines2 = nSLines;
 					}
 					else
 						pPSuLM = NULL;
@@ -1425,7 +1430,7 @@ void RVLPSuLMDisplayMouseCallback2(int event, int x, int y, int flags, void* vpD
 							BOOL bCorrespondent;
 							CRVL3DLine2 *pLine2;
 
-							for(int iMatch = 0; iMatch < pPSuLM2->m_n3DLines; iMatch++)
+							for(int iMatch = 0; iMatch < nLines2; iMatch++)
 							{
 								bCorrespondent = FALSE;
 

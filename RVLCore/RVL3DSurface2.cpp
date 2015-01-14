@@ -1353,7 +1353,9 @@ bool CRVL3DSurface2::Match4(CRVL3DObject *pObject_,
 
 	double *N_ = pSurf_->m_N;
 
-	if(RVLDOTPRODUCT3(m_N, N_) < COS45)
+	double en = RVLDOTPRODUCT3(m_N, N_);
+
+	if(en < COS45)
 		return false;
 
 	// coarse overlap match
@@ -1537,7 +1539,7 @@ bool CRVL3DSurface2::Match4(CRVL3DObject *pObject_,
 
 	double detCnS = RVLDET2(CnS);
 
-	double en, Pn;
+	double Pn;
 
 	if(detCnS > 4.0)
 		Pn = 0.0;

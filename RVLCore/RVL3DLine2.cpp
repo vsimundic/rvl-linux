@@ -793,16 +793,22 @@ BYTE RVLCrop3DLineSpherical(double *X1Src,
 
 	RVLTRANSF3(X2Src, R, t, X2C)
 
-	double X1C_[3], X2C_[3];
+	//double X1C_[3], X2C_[3];
 
-	BYTE bOut = RVLCrop3DLine(X1C, X2C, minz, X1C_, X2C_);
+	//BYTE bOut = RVLCrop3DLine(X1C, X2C, minz, X1C_, X2C_);
+
+	BYTE bOut = 0x00;
 
 	double U[2];
 	int U1[2], U2[2];
 
-	pCamera->Project3DPointToSphere(X1C_, U, U1);
+	//pCamera->Project3DPointToSphere(X1C_, U, U1);
 
-	pCamera->Project3DPointToSphere(X2C_, U, U2);
+	//pCamera->Project3DPointToSphere(X2C_, U, U2);
+
+	pCamera->Project3DPointToSphere(X1C, U, U1);
+
+	pCamera->Project3DPointToSphere(X2C, U, U2);
 
 	return RVLCrop2DLine(U1[0], U1[1], U2[0], U2[1], pROI, bOutLT, pTgtPt1, pTgtPt2, CropSide) | bOut; 	
 }

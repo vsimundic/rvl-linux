@@ -358,7 +358,7 @@ int main(int argc, char* argv[])
 
 	int iHypothesis;
 	int key;
-	int iSample;
+	int iSample, iSample_;
 	bool bRefresh;
 	bool bNextImage;
 	bool bBackwards;
@@ -739,9 +739,11 @@ int main(int argc, char* argv[])
 				GUI.ShowFigure(pFig);	
 
 				cvSetMouseCallback("Scene", RVLPSuLMDisplayMouseCallback2, &MouseCallbackData);
-								
+			
+				MouseCallbackData2.ZoomFactor = ZoomFactor;
 				MouseCallbackData2.mDisplayPSuLMFlags = mDisplayPSuLMFlags;
 				MouseCallbackData2.iHypothesis = (VS.m_PSuLMBuilder.m_nHypotheses > 0 ? iHypothesis : -1);
+				MouseCallbackData2.pImage = pInputImage_;
 				MouseCallbackData2.MatchMatrixGT = MatchMatrixGT;
 
 				GUI.ShowFigure(pFig2);	
@@ -914,8 +916,12 @@ int main(int argc, char* argv[])
 						GUI.Message("CreateLocal3DMesh() completed.", 600, 100, cvScalar(0, 128, 255));
 					}
 				}
-				//else if(VS.m_PSuLMBuilder.m_Flags2 & RVLPSULMBUILDER_FLAG2_COMPLEX)
-				//	VS.Create3DMeshFromComplexPSuLM(pPSuLM);
+				else if(bComplex)
+				{
+					VS.Create3DMeshFromComplexPSuLM(VS.m_ImageFileName);
+
+					GUI.Message("3D mesh created.", 600, 100, cvScalar(0, 128, 255));
+				}
 
 				bRefresh = true;
 
@@ -1309,6 +1315,43 @@ int main(int argc, char* argv[])
 						iMPSuLM = iMPSuLM_;
 				}
 			}	
+			else if(bComplex)
+			{
+				iSample_ = iSample;
+
+				char *OdometryFileName = RVLCreateFileName(VS.m_ImageFileName, "-LW.bmp", -1, "-O.txt");	
+
+				unsigned char command;
+				int x, y, z, pan, tilt, roll, iSample0;
+				FILE *fpOdometry;
+
+				while(RVLGetNextFileName(VS.m_ImageFileName, "00000-LW.bmp", 10000))
+				{
+					iSample_ = RVLGetFileNumber(VS.m_ImageFileName, "00000-LW.bmp");
+
+					RVLSetFileNumber(OdometryFileName, "00000-O.txt", iSample_);					
+
+					fpOdometry = fopen(OdometryFileName, "r");
+
+					if(fpOdometry == NULL)
+						continue;
+
+					fscanf(fpOdometry, "%d\t%d\t%d\t%d\t%d\t%d\t%d\t%c\n", &x, &y, &z, &pan, &tilt, &roll, &iSample0, &command);
+
+					fclose(fpOdometry);					
+
+					if(command == 'O')
+					{
+						iSample = iSample_;
+
+						break;
+					}
+				}
+
+				RVLSetFileNumber(VS.m_ImageFileName, "00000-LW.bmp", iSample);
+
+				delete[] OdometryFileName;
+			}
 			else
 				RVLGetNextFileName(VS.m_ImageFileName, "00000-LW.bmp", 10000);
 		}
