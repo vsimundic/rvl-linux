@@ -332,11 +332,17 @@ int CRVLGUI::Message(	char *str,
 	int key;
 
 	if(bWaitForKey)
+	{
 		key = cvWaitKey();
-	else
-		key = 0;
 
-	CRVLGUI::CloseFigure("Message");
+		CRVLGUI::CloseFigure("Message");
+	}
+	else
+	{
+		cvWaitKey(1);
+
+		key = 0;
+	}
 
 	return key;
 }

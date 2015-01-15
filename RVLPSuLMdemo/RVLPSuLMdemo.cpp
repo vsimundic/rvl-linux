@@ -918,6 +918,8 @@ int main(int argc, char* argv[])
 				}
 				else if(bComplex)
 				{
+					GUI.Message("Creating 3D mesh...", 600, 100, cvScalar(0, 128, 255), false);
+
 					VS.Create3DMeshFromComplexPSuLM(VS.m_ImageFileName);
 
 					GUI.Message("3D mesh created.", 600, 100, cvScalar(0, 128, 255));

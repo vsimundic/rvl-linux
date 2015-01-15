@@ -670,15 +670,31 @@ bool CRVLPSuLMVS::Create3DMeshFromComplexPSuLM(char *ImageFileName)
 
 	m_PSuLMBuilder.m_Flags2 &= ~RVLPSULMBUILDER_FLAG2_COMPLEX;
 
+	CRVLMem *pPSDMemOld = m_PSD.m_pMem;
+
+	CRVLMem *pAImageMemOld = m_AImage.m_pMem;
+
+	CRVLMem Mem;
+
+	Mem.Create(10000000);
+
+	m_PSD.m_pMem = &Mem;
+
+	m_AImage.m_pMem = &Mem;
+
 	CreateMeshFile("Mesh-00000.obj");
 
 	m_PSuLMBuilder.m_ImageFileName = RVLCreateString(ImageFileName);
 
 	char *OdometryFileName = RVLCreateFileName(ImageFileName, "-LW.bmp", -1, "-O.txt");
 
+	char *DisparityImageFileName = RVLCreateFileName(ImageFileName, "-LW.bmp", -1, "-D.txt");
+
 	int iSample = RVLGetFileNumber(ImageFileName, "00000-LW.bmp");
 
-	CRVLPSuLM *pPSuLM_;
+	int iSample0 = iSample;
+
+	//CRVLPSuLM *pPSuLM_;
 
 	CRVL3DPose PoseM_M;
 
@@ -686,9 +702,12 @@ bool CRVLPSuLMVS::Create3DMeshFromComplexPSuLM(char *ImageFileName)
 
 	RVLNULL3VECTOR(tM_M)
 
+	bool bOK = true;
+
 	FILE *fpOdometry;
 	unsigned char command;
-	int x, y, z, pan, tilt, roll, iSample0;
+	int x, y, z, pan, tilt, roll;
+	unsigned int DepthFormat;
 	
 	do
 	{
@@ -698,11 +717,9 @@ bool CRVLPSuLMVS::Create3DMeshFromComplexPSuLM(char *ImageFileName)
 
 		if(fpOdometry == NULL)
 		{
-			delete[] OdometryFileName;
+			bOK = false;
 
-			m_PSuLMBuilder.m_Flags2 = FlagsOld;
-
-			return false;
+			break;
 		}
 
 		fscanf(fpOdometry, "%d\t%d\t%d\t%d\t%d\t%d\t%d\t%c\n", &x, &y, &z, &pan, &tilt, &roll, &iSample0, &command);
@@ -723,20 +740,46 @@ bool CRVLPSuLMVS::Create3DMeshFromComplexPSuLM(char *ImageFileName)
 
 		RVLSetFileNumber(m_PSuLMBuilder.m_ImageFileName, "00000-LW.bmp", iSample);
 
-		pPSuLM_ = m_PSuLMBuilder.Create(RVLPSULMBUILDER_CREATEMODEL_FROM_IMAGE | RVLPSULMBUILDER_CREATEMODEL_IMAGE_FROM_FILE);
+		//pPSuLM_ = m_PSuLMBuilder.Create(RVLPSULMBUILDER_CREATEMODEL_FROM_IMAGE | RVLPSULMBUILDER_CREATEMODEL_IMAGE_FROM_FILE);
+
+		RVLSetFileNumber(DisparityImageFileName, "00000-D.txt", iSample);
+
+		if(!RVLImportDisparityImage(DisparityImageFileName, &(m_StereoVision.m_DisparityMap), 
+			DepthFormat, m_StereoVision.m_zToDepthLookupTable))
+		{
+			bOK = false;
+
+			break;
+		}
+
+		m_AImage.Create();
+
+		m_PSD.GetPointsWithDisparity(&(m_StereoVision.m_DisparityMap));
+
+		m_PSD.Segment(&(m_AImage.m_C2DRegion),&(m_AImage.m_C2DRegion2),&(m_AImage.m_C2DRegion3),&Mem);
 
 		m_pRGBImage = cvLoadImage(m_PSuLMBuilder.m_ImageFileName);
 
 		AppendToMeshFile(&PoseM_M);
+
+		Mem.Clear();
 
 		iSample++;
 	}while(command != 'C');
 
 	delete[] OdometryFileName;
 
+	delete[] DisparityImageFileName;
+
 	m_PSuLMBuilder.m_Flags2 = FlagsOld;
 
-	return true;
+	m_PSD.m_pMem = pPSDMemOld;
+
+	m_AImage.m_pMem = pAImageMemOld;
+
+	RVLSetFileNumber(m_PSuLMBuilder.m_ImageFileName, "00000-LW.bmp", iSample0);
+
+	return bOK;
 }
 
 void CRVLPSuLMVS::CreateLocal3DMesh(CRVLPSuLM *pPSuLM0)
