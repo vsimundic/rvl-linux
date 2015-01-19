@@ -58,6 +58,7 @@ public:
 	void CreateMeshFile(char *MeshFileName);
 	void ClearMeshFileData();
 	void AppendToMeshFile(CRVL3DPose *pRelPose);
+	bool Create3DMeshFromComplexPSuLM(char *ImageFileName);
 	void CreateLocal3DMesh(CRVLPSuLM *pPSuLM0);
 	void Validate();
 	//void SaveValidation();

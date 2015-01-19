@@ -626,14 +626,14 @@ void CRVLPSuLMVS::AppendToMeshFile(CRVL3DPose *pRelPose)
 		mtldat = fopen(GlobalMeshTextureFileName, "w");
 		fclose(mtldat);
 
-		RVLUNITMX3(RAbs);
-		RVLNULL3VECTOR(tAbs);
+		//RVLUNITMX3(RAbs);
+		//RVLNULL3VECTOR(tAbs);
 
 		m_pMeshFile->iPt = 0;
 		m_pMeshFile->iSegment = 0;
 	}
-	else
-	{
+	//else
+	//{
 		//if pRelPose is the pose of the current PSuLM relative to the previous, then the following code should be used.
 
 		//RVLCOMPTRANSF3D(RAbs, tAbs, RRel, tRel, R, t)
@@ -645,7 +645,7 @@ void CRVLPSuLMVS::AppendToMeshFile(CRVL3DPose *pRelPose)
 
 		RVLCOPYMX3X3(RRel, RAbs)
 		RVLCOPY3VECTOR(tRel, tAbs)
-	}
+	//}
 	
 	dat = fopen(m_pMeshFile->Name, "a");
 		
@@ -662,6 +662,104 @@ void CRVLPSuLMVS::AppendToMeshFile(CRVL3DPose *pRelPose)
 
 	fclose(dat);
 	fclose(mtldat);
+}
+
+bool CRVLPSuLMVS::Create3DMeshFromComplexPSuLM(char *ImageFileName)
+{
+	DWORD FlagsOld = m_PSuLMBuilder.m_Flags2;
+
+	m_PSuLMBuilder.m_Flags2 &= ~RVLPSULMBUILDER_FLAG2_COMPLEX;
+
+	CRVLMem *pPSDMemOld = m_PSD.m_pMem;
+
+	CRVLMem *pAImageMemOld = m_AImage.m_pMem;
+
+	CRVLMem Mem;
+
+	Mem.Create(10000000);
+
+	m_PSD.m_pMem = &Mem;
+
+	m_AImage.m_pMem = &Mem;
+
+	CreateMeshFile("Mesh-00000.obj");
+
+	m_PSuLMBuilder.m_ImageFileName = RVLCreateString(ImageFileName);
+
+	char *DisparityImageFileName = RVLCreateFileName(ImageFileName, "-LW.bmp", -1, "-D.txt");
+
+	int iSample = RVLGetFileNumber(ImageFileName, "00000-LW.bmp");
+
+	int iSample0 = iSample;
+
+	//CRVLPSuLM *pPSuLM_;
+
+	CRVL3DPose PoseM_M;
+
+	double *tM_M = PoseM_M.m_X;
+
+	RVLNULL3VECTOR(tM_M)
+
+	bool bOK = true;
+
+	unsigned char command;
+	unsigned int DepthFormat;
+	
+	do
+	{
+		RVLSetFileNumber(m_PSuLMBuilder.m_ImageFileName, "00000-LW.bmp", iSample);
+
+		if(!m_PSuLMBuilder.GetPanTilt(m_PSuLMBuilder.m_ImageFileName, &PoseM_M, iSample0, command))
+		{
+			bOK = false;
+
+			break;
+		}
+
+		m_iMCMem = (m_iMCMem + 1) % RVLSYS_MCMEMSIZE;
+
+		m_MCMem[m_iMCMem].Clear();		
+
+		m_PSuLMBuilder.m_pMCMem = m_MCMem + m_iMCMem;		
+
+		//pPSuLM_ = m_PSuLMBuilder.Create(RVLPSULMBUILDER_CREATEMODEL_FROM_IMAGE | RVLPSULMBUILDER_CREATEMODEL_IMAGE_FROM_FILE);
+
+		RVLSetFileNumber(DisparityImageFileName, "00000-D.txt", iSample);
+
+		if(!RVLImportDisparityImage(DisparityImageFileName, &(m_StereoVision.m_DisparityMap), 
+			DepthFormat, m_StereoVision.m_zToDepthLookupTable))
+		{
+			bOK = false;
+
+			break;
+		}
+
+		m_AImage.Create();
+
+		m_PSD.GetPointsWithDisparity(&(m_StereoVision.m_DisparityMap));
+
+		m_PSD.Segment(&(m_AImage.m_C2DRegion),&(m_AImage.m_C2DRegion2),&(m_AImage.m_C2DRegion3),&Mem);
+
+		m_pRGBImage = cvLoadImage(m_PSuLMBuilder.m_ImageFileName);
+
+		AppendToMeshFile(&PoseM_M);
+
+		Mem.Clear();
+
+		iSample++;
+	}while(command != 'C');
+
+	delete[] DisparityImageFileName;
+
+	m_PSuLMBuilder.m_Flags2 = FlagsOld;
+
+	m_PSD.m_pMem = pPSDMemOld;
+
+	m_AImage.m_pMem = pAImageMemOld;
+
+	RVLSetFileNumber(m_PSuLMBuilder.m_ImageFileName, "00000-LW.bmp", iSample0);
+
+	return bOK;
 }
 
 void CRVLPSuLMVS::CreateLocal3DMesh(CRVLPSuLM *pPSuLM0)
@@ -1189,13 +1287,14 @@ void RVLPSuLMDisplayMouseCallback2(int event, int x, int y, int flags, void* vpD
 
 	int nMatchMatrixCols;
 	int nSSurfaces, nMSurfaces;
-	int nMLines;
+	int nSLines, nMLines;
 
 	if(pHypothesis)
 	{
 		if(HypEvalMethod == RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD_P)
 		{
 			nSSurfaces = pVS->m_pPSuLM->m_n3DSurfaces;
+			nSLines = pVS->m_pPSuLM->m_n3DLines;
 			//nMSurfaces = pHypothesis->pMPSuLM->m_n3DSurfaces;
 			//nMLines =  pHypothesis->pMPSuLM->m_n3DLines;
 			nMSurfaces = pHypothesis->pMPSuLM->m_n3DSurfacesTotal;
@@ -1215,7 +1314,7 @@ void RVLPSuLMDisplayMouseCallback2(int event, int x, int y, int flags, void* vpD
 	
 	int iPix;
 	int a, b;
-	int nSurfaces, nSurfaces2;
+	int nSurfaces, nSurfaces2, nLines, nLines2;
 
 	switch( event )
 	{
@@ -1226,9 +1325,7 @@ void RVLPSuLMDisplayMouseCallback2(int event, int x, int y, int flags, void* vpD
 
 				pData->v = y;
 
-				pData->bSelection = true;
-
-				iPix = x / pData->ZoomFactor + y / pData->ZoomFactor * w;
+				pData->bSelection = true;				
 
 				if(pFig->m_Flags & RVLPSULM_DISPLAY_SCENE)
 				{
@@ -1242,21 +1339,46 @@ void RVLPSuLMDisplayMouseCallback2(int event, int x, int y, int flags, void* vpD
 						b = 1;
 						nSurfaces = nSSurfaces;
 						nSurfaces2 = nMSurfaces;
+						nLines = nSLines;
+						nLines2 = nMLines;
 					}
 				}
 				else if(pFig->m_Flags & RVLPSULM_DISPLAY_MODEL)
 				{
 					pSFig = pFig2;
-					pMFig = pFig;
 					pPSuLM2 = pVS->m_pPSuLM;
-					pPSuLM = pHypothesis->pMPSuLM;
-					a = 1;
-					b = nMatchMatrixCols;
-					nSurfaces = nMSurfaces;
-					nSurfaces2 = nSSurfaces;
+					if(pHypothesis)
+					{
+						pMFig = pFig;					
+						pPSuLM = pHypothesis->pMPSuLM;
+						a = 1;
+						b = nMatchMatrixCols;
+						nSurfaces = nMSurfaces;
+						nSurfaces2 = nSSurfaces;
+						nLines = nMLines;
+						nLines2 = nSLines;
+					}
+					else
+						pPSuLM = NULL;
 				}
 
-				pPSuLM->Project(&(pFig->m_PoseC0), FALSE, iPix, &pSelectedSurf, &pSelectedLine);
+				if(pPSuLM)
+				{
+					DWORD CameraFlagsOld = pVS->m_PSuLMBuilder.m_pCamera->m_Flags;
+
+					if(pPSuLM->m_Flags & RVLPSULM_FLAG_COMPLEX)
+					{
+						pVS->m_PSuLMBuilder.m_pCamera->m_Flags |= RVLCAMERA_FLAG_SPHERICAL;
+
+						w = pVS->m_PSuLMBuilder.m_pCamera->m_wSpherical;
+					}
+
+					iPix = x / pData->ZoomFactor + y / pData->ZoomFactor * w;
+
+					pPSuLM->Project(&(pFig->m_PoseC0), FALSE, iPix, &pSelectedSurf, &pSelectedLine);
+
+					pVS->m_PSuLMBuilder.m_pCamera->m_Flags = CameraFlagsOld;
+				}
 
 				pFig->Clear();
 
@@ -1331,7 +1453,7 @@ void RVLPSuLMDisplayMouseCallback2(int event, int x, int y, int flags, void* vpD
 							BOOL bCorrespondent;
 							CRVL3DLine2 *pLine2;
 
-							for(int iMatch = 0; iMatch < pPSuLM2->m_n3DLines; iMatch++)
+							for(int iMatch = 0; iMatch < nLines2; iMatch++)
 							{
 								bCorrespondent = FALSE;
 

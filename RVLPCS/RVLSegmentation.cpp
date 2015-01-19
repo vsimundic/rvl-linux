@@ -423,8 +423,8 @@ BOOL RVLUpdateConvexHull(CRVLMPtrChain *pTriangleList,
 
 			pTriangle->m_lenN = DOUBLE2INT(sqrt((double)(N[0]) * (double)(N[0]) + (double)(N[1]) * (double)(N[1]) + (double)(N[2]) * (double)(N[2])));
 
-			if(pTriangle->m_lenN == 0)
-				int debug = 0;
+			//if(pTriangle->m_lenN == 0)
+			//	int debug = 0;
 
 			X0_ = pTriangle->m_X0;
 
@@ -1087,9 +1087,6 @@ int RVLGetConvexHull(	CRVL2DRegion2 *pTriangleSrc,
 						bool bmm)
 						//CRVLPlanarSurfaceDetector *pPSD)
 {
-	if(Label == 110)
-		int debug = 0;
-
 	// Form a initial (flat) convex hull consisting of two triangles: pTriangleSrc and the opposite side of the same triangle
 
 	RVLInitConvexHull(pTriangleSrc, pTriangleSet, ImageWidth, Point3DMap, pMem, bmm);
@@ -1278,9 +1275,6 @@ int RVLGetConvexHull(	CRVL2DRegion2 *pTriangleSrc,
 
 		if(pTriangle)
 		{
-			if(pTriangle->m_Index == 2678)
-				int debug = 0;
-
 			//if((pTriangle->m_Flags & RVLOBJ2_FLAG_REJECTED) == 0)
 			{
 				pTriangle2 = (CRVL2DRegion2 *)(pLink->pPrev->pOpposite->vp2DRegion);
@@ -1459,9 +1453,6 @@ int RVLSegmentToConvex( CRVLClass *pTriangleSetSrc,
 	while(pTriangleList->m_pNext)
 	{
 		pTriangle = (CRVL2DRegion2 *)(pTriangleList->GetNext());
-
-		if(pTriangle->m_Index == 1840)
-			int debug = 0;
 
 		pTriangle->m_Label = 0xffffffff;
 

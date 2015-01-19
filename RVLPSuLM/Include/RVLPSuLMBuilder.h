@@ -98,9 +98,13 @@
 #define RVLPSULMBUILDER_FLAG2_SCENE_FUSION						0x00000003
 #define RVLPSULMBUILDER_FLAG2_SCENE_FUSION_LOOK_AROUND			0x00000001
 #define RVLPSULMBUILDER_FLAG2_SCENE_FUSION_MOVE					0x00000002
+#define RVLPSULMBUILDER_FLAG2_COMPLEX							0x00000004
+#define RVLPSULMBUILDER_FLAG2_FILE_VERSION_2					0x00000008
 #define RVLPSULMBUILDER_CREATEMODEL_FLAG_PERMANENT				0x00000001
 #define RVLPSULMBUILDER_CREATEMODEL_FROM_IMAGE					0x00000002
 #define RVLPSULMBUILDER_CREATEMODEL_IMAGE_FROM_FILE				0x00000004
+#define RVLPSULMBUILDER_CREATEMODEL_APPEND						0x00000008
+#define RVLPSULMBUILDER_CREATEMODEL_APPEND_LAST					0x00000010
 #define RVLPSULMBUILDER_CREATELOCALMAP_FLAG_BIDIRECTIONAL		0x01
 #define RVLPSULM_MSMATCH_FLAG_INIT_GEOM_CONSTR_TESTED			0x01
 #define RVLPSULM_MSMATCH_FLAG_INIT_GEOM_CONSTR_NOT_SATISFIED	0x02
@@ -251,6 +255,11 @@ void RVL2DContourSegment(CvPoint *pPt1,				// transfer to RVL2DContour.cpp
 void RVLPSuLMHypothesisPoseRefinement(RVLPSULM_HYPOTHESIS *pHypothesis,
 									  CRVLPSuLM *pSPSuLM,
 									  CRVL3DSurface2 **MatchedMSurfArray);
+void RVLPSuLMHypothesisPoseRefinement(CRVL3DPose *pPose,
+									  RVLPSULM_HG_NODE *pNode,
+									  RVLPSULM_MSMATCH_DATA *MatchList,
+									  double *PInit,
+									  int nIterations);
 void RVLPSuLMHypothesisGetAbsPose(RVLPSULM_HYPOTHESIS *pHypothesis,
 								  CRVL3DPose *pPoseAC,
 								  CRVL3DPose *pPoseCs0);
@@ -374,8 +383,10 @@ public:
 	int m_maxnHypothesesPerModel;
 	BYTE *m_MatchMatrix;
 	int m_maxnDominant3DSurfaces;
+	int m_maxnDominant3DSurfacesComplex;
 	int m_maxnModel3DSurfaces;
 	int m_maxnDominant3DLines;
+	int m_maxnDominant3DLinesComplex;
 	int m_maxnModel3DLines;
 	int m_maxnExpandedNodes;
 	double m_RotHypTol, m_tHypTol;
@@ -501,6 +512,9 @@ private:
 	double m_csLastDOFSeparationAngle;
 	double m_csLastDOFSurfNrmAngle, m_csLastDOFLineNrmAngle;
 	RVLPSULM_MATCH2 *m_AutoMatchMem;
+	double m_kPan;
+	double m_kTilt;
+	double m_TiltOffset;
 
 	void PythonDisplayScene(RVLSURFACE_MATCH_ARRAY *MatchArray, CRVLMPtrChain *pM3DSurfaceList, CRVL3DSurface2 **MatrixSceneModel, int n3DSceneSurfaces);
 	//void GetMaxProbabilityMatch(int iS3DSurface,
@@ -523,8 +537,9 @@ public:
 							CvScalar Color);
 	BOOL Create(CRVLPSuLM *pPSuLM, 
 				CRVLMem *pMem,
-				DWORD Flags = 0x00000000);
-	CRVLPSuLM *Create(DWORD Flags = 0x00000000);
+				DWORD Flags = 0x00000000,
+				CRVL3DPose *pPoseM_M = NULL);
+	CRVLPSuLM *Create(	DWORD Flags = 0x00000000);
 	int MatchLine(	CRVL3DLine2 *pLine,
 					CRVLPSuLM *pPSuLM,
 					CRVL3DPose *pPose,
@@ -707,6 +722,14 @@ public:
 	void ResetCloseFlags(CRVLPSuLM *pMPSuLM);
 	void RepresentativeHypotheses();
 	void ModelFusion(RVLPSULM_HYPOTHESIS *pHypothesis);
+	IplImage * GetComplexPSuLMRGBImage(	char *ImageFileName);
+	void MergeSurfaces(CRVLPSuLM *pPSuLM);
+	void MergeLines(CRVLPSuLM *pPSuLM);
+	void UpdateBuffers(CRVLPSuLM *pPSuLM);
+	bool CRVLPSuLMBuilder::GetPanTilt(	char *ImageFileName,
+										CRVL3DPose *pPose,
+										int &iSample0,
+										unsigned char &command);
 
 private:
 	RVLPSULM_MSMATCH_DATA *HypothesesGetNextNode(	RVLPSULM_HG_NODE* pNode,

@@ -754,6 +754,12 @@ BOOL CRVL3DSurface2::Match2(	CRVL3DObject *pMObject,
 	RVLMULMXCOL3(R, RA, 1, yAB)
 	RVLMULMX3X3VECT(R, zA, zAB)
 
+	////make sure the angle between normals (ie nb and Rot*na OR zA and zB) is less than 90
+	//constraint0 = RVLDOTPRODUCT3(zAB, zB);
+
+	//if(constraint0 <= 0)
+	//	return FALSE;
+
 	// tF_BA = tA + Rot' * t
 
 	RVLSUM3VECTORS(tA, invt, tF_BA)
@@ -1347,7 +1353,9 @@ bool CRVL3DSurface2::Match4(CRVL3DObject *pObject_,
 
 	double *N_ = pSurf_->m_N;
 
-	if(RVLDOTPRODUCT3(m_N, N_) < COS45)
+	double en = RVLDOTPRODUCT3(m_N, N_);
+
+	if(en < COS45)
 		return false;
 
 	// coarse overlap match
@@ -1531,7 +1539,7 @@ bool CRVL3DSurface2::Match4(CRVL3DObject *pObject_,
 
 	double detCnS = RVLDET2(CnS);
 
-	double en, Pn;
+	double Pn;
 
 	if(detCnS > 4.0)
 		Pn = 0.0;

@@ -582,6 +582,35 @@ void CRVLCamera::Project3DPoint(double *X,
 	}
 }
 
+void CRVLCamera::InitSpherical()
+{
+	m_wSpherical = m_PanRange * m_PixPerDeg;
+	m_hSpherical = m_TiltRange * m_PixPerDeg;
+	m_kSpherical = (double)m_PixPerDeg * RAD2DEG;
+}
+
+void CRVLCamera::Project3DPointToSphere(double *X,
+										double *U,
+										int *iU)
+{
+	U[0] = atan2(X[0], X[2]);
+	U[1] = atan(X[1] / sqrt(X[0] * X[0] + X[2] * X[2]));
+
+	iU[0] = (DOUBLE2INT(m_kSpherical * U[0]) << 1) + m_wSpherical + 1;
+	iU[1] = (DOUBLE2INT(m_kSpherical * U[1]) << 1) + m_hSpherical + 1;
+}
+
+void CRVLCamera::Project3DPoint2(	double *X,
+									double *U,
+									int *iU,
+									double *CX,
+									double *CU)
+{
+	if(m_Flags & RVLCAMERA_FLAG_SPHERICAL)
+		Project3DPointToSphere(X, U, iU);
+	else
+		Project3DPoint(X, U, iU, CX, CU);
+}
 
 void CRVLCamera::Project3DPointWithNoise(double *X,
 										 double *U,

@@ -699,22 +699,15 @@ BYTE RVLCrop3DLine(	double *X1Src, double *X2Src,
 	return RVLCrop2DLine(iU1[0], iU1[1], iU2[0], iU2[1], pROI, bOutLT, pTgtPt1, pTgtPt2, CropSide) | bOut; 
 }
 
-BYTE RVLCrop3DLine(	double *X1Src, double *X2Src,
-					double *A,
-					double *tCM,
-					RVLRECT *pROI,
+BYTE RVLCrop3DLine(	double *X1Src, 
+					double *X2Src,
 					double minz,
-					double minr,
-					BYTE *bOutLT,					
-					int *iU1, int *iU2,
-					CvPoint *pTgtPt1,
-					CvPoint *pTgtPt2,
-					BYTE &CropSide)
+					double *X1Tgt,
+					double *X2Tgt)
 {
 	BYTE bOut = ((BYTE)(X1Src[2] < minz) << 3) | ((BYTE)(X2Src[2] < minz) << 4);
 
-	double XBuff[3];
-	double *X1, *X2;
+	double XBuff[3];	
 
 	if(bOut)
 	{
@@ -729,20 +722,39 @@ BYTE RVLCrop3DLine(	double *X1Src, double *X2Src,
 
 		if(bOut & 0x08)
 		{
-			X1 = XBuff;
-			X2 = X2Src;
+			RVLCOPY3VECTOR(XBuff, X1Tgt)
+			RVLCOPY3VECTOR(X2Src, X2Tgt)
 		}
 		else
 		{
-			X1 = X1Src;
-			X2 = XBuff;
+			RVLCOPY3VECTOR(X1Src, X1Tgt)
+			RVLCOPY3VECTOR(XBuff, X2Tgt)
 		}
 	}
 	else
 	{
-		X1 = X1Src;
-		X2 = X2Src;
+		RVLCOPY3VECTOR(X1Src, X1Tgt)
+		RVLCOPY3VECTOR(X2Src, X2Tgt)
 	}
+
+	return bOut;
+}
+
+BYTE RVLCrop3DLine(	double *X1Src, double *X2Src,
+					double *A,
+					double *tCM,
+					RVLRECT *pROI,
+					double minz,
+					double minr,
+					BYTE *bOutLT,					
+					int *iU1, int *iU2,
+					CvPoint *pTgtPt1,
+					CvPoint *pTgtPt2,
+					BYTE &CropSide)
+{
+	double X1[3], X2[3];
+
+	BYTE bOut = RVLCrop3DLine(X1Src, X2Src, minz, X1, X2);
 
 	int U1[2], U2[2];
 	double tmp3x1[3];
@@ -763,6 +775,43 @@ BYTE RVLCrop3DLine(	double *X1Src, double *X2Src,
 	return RVLCrop2DLine(U1[0], U1[1], U2[0], U2[1], pROI, bOutLT, pTgtPt1, pTgtPt2, CropSide) | bOut; 
 }
 
+BYTE RVLCrop3DLineSpherical(double *X1Src, 
+							double *X2Src,
+							double *R,
+							double *t,
+							CRVLCamera *pCamera,
+							RVLRECT *pROI,
+							double minz,
+							BYTE *bOutLT,					
+							CvPoint *pTgtPt1,
+							CvPoint *pTgtPt2,
+							BYTE &CropSide)
+{
+	double X1C[3], X2C[3];
+
+	RVLTRANSF3(X1Src, R, t, X1C)
+
+	RVLTRANSF3(X2Src, R, t, X2C)
+
+	//double X1C_[3], X2C_[3];
+
+	//BYTE bOut = RVLCrop3DLine(X1C, X2C, minz, X1C_, X2C_);
+
+	BYTE bOut = 0x00;
+
+	double U[2];
+	int U1[2], U2[2];
+
+	//pCamera->Project3DPointToSphere(X1C_, U, U1);
+
+	//pCamera->Project3DPointToSphere(X2C_, U, U2);
+
+	pCamera->Project3DPointToSphere(X1C, U, U1);
+
+	pCamera->Project3DPointToSphere(X2C, U, U2);
+
+	return RVLCrop2DLine(U1[0], U1[1], U2[0], U2[1], pROI, bOutLT, pTgtPt1, pTgtPt2, CropSide) | bOut; 	
+}
 
 // The mathematics for the following function is given in RVMath.doc
 

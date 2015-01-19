@@ -126,6 +126,7 @@ public:
 	double m_PoseInformation;
 	RVLQLIST m_Samples;
 	RVLQLIST m_BoundaryLineList;
+	//double m_Cp[9];
 
 	//double m_Centroid[3];
 	//double m_CN[9];

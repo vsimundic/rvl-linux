@@ -67,7 +67,7 @@ void CRVLPSuLM::Project(CRVL3DPose *pPoseC0,
 
 	if(iSelectedPix >= 0)
 	{
-		w = pBuilder->m_pCamera->Width;
+		w = (m_Flags & RVLPSULM_FLAG_COMPLEX ? pBuilder->m_pCamera->m_wSpherical : pBuilder->m_pCamera->Width);
 		u = ((iSelectedPix % w) << 1) + 1;
 		v = ((iSelectedPix / w) << 1) + 1;
 	}
@@ -98,6 +98,11 @@ void CRVLPSuLM::Project(CRVL3DPose *pPoseC0,
 		double A[3 * 3];
 
 		RVLMXMUL3X3T2(P, RC0, A);
+
+		double R0C[9], t0C[3];
+
+		if(m_Flags & RVLPSULM_FLAG_COMPLEX)
+			RVLINVTRANSF3D(RC0, tC0, R0C, t0C)
 
 		// clear cell array
 
@@ -132,9 +137,13 @@ void CRVLPSuLM::Project(CRVL3DPose *pPoseC0,
 			{
 				pLine = (CRVL3DLine2 *)(m_3DLineList.GetNext());
 
-				bOut = RVLCrop3DLine(pLine->m_X[0], pLine->m_X[1], A, tC0, &(pBuilder->m_ROI),
-					pBuilder->m_CropLTs.minz, pBuilder->m_CropLTs.minr, pBuilder->m_CropLTs.bOutLT, 
-					iU1, iU2, &Pt1, &Pt2, CropSide);
+				if(m_Flags & RVLPSULM_FLAG_COMPLEX)
+					bOut = RVLCrop3DLineSpherical(pLine->m_X[0], pLine->m_X[1], R0C, t0C, pBuilder->m_pCamera,
+						&(pBuilder->m_ROI), pBuilder->m_CropLTs.minz, pBuilder->m_CropLTs.bOutLT, &Pt1, &Pt2, CropSide);
+				else
+					bOut = RVLCrop3DLine(pLine->m_X[0], pLine->m_X[1], A, tC0, &(pBuilder->m_ROI),
+						pBuilder->m_CropLTs.minz, pBuilder->m_CropLTs.minr, pBuilder->m_CropLTs.bOutLT, 
+						iU1, iU2, &Pt1, &Pt2, CropSide);
 
 				Line2D.m_iU[0][0] = Pt1.x;
 				Line2D.m_iU[0][1] = Pt1.y;
@@ -143,13 +152,16 @@ void CRVLPSuLM::Project(CRVL3DPose *pPoseC0,
 
 				Line2D.SetdiU();
 
-				dist = Line2D.Distance(iUSelected);
-
-				if(dist < 4)
+				if(Line2D.m_leniU > 0)
 				{
-					*ppSelectedLine = pLine;
+					dist = Line2D.Distance(iUSelected);
 
-					break;
+					if(dist < 4)
+					{
+						*ppSelectedLine = pLine;
+
+						break;
+					}
 				}
 			}
 		}
@@ -206,8 +218,8 @@ void CRVLPSuLM::Project(CRVL3DPose *pPoseC0,
 		{
 			pSurf = *ppSurf;
 
-			if(pSurf->m_Index == 116)
-				int debug = 0;
+			//if(pSurf->m_Index == 116)
+			//	int debug = 0;
 
 			//pHistRGBEntry = (RVLQLIST_HIST_ENTRY_SHORT *)(pSurf->m_histRGB->pFirst);
 
@@ -767,6 +779,17 @@ void CRVLPSuLM::Display(CRVLFigure * pFig,
 
 	RVLMXMUL3X3T2(P, RCM, A);
 
+	DWORD CameraFlagsOld = pPSuLMBuilder->m_pCamera->m_Flags;
+
+	double RMC[9], tMC[3];
+
+	if(m_Flags & RVLPSULM_FLAG_COMPLEX)
+	{
+		RVLINVTRANSF3D(RCM, tCM, RMC, tMC)
+
+		pPSuLMBuilder->m_pCamera->m_Flags |= RVLCAMERA_FLAG_SPHERICAL;
+	}
+
 	// display surfaces
 
 	if(Flags & RVLPSULM_DISPLAY_SURFACES)
@@ -909,7 +932,7 @@ void CRVLPSuLM::Display(CRVLFigure * pFig,
 		int iU1[2], iU2[2];
 		CvPoint Pt1, Pt2;
 		BYTE CropSide;
-		double X1[3], X2[3];
+		//double X1[3], X2[3];
 
 		m_3DLineList.Start();
 
@@ -917,9 +940,14 @@ void CRVLPSuLM::Display(CRVLFigure * pFig,
 		{
 			pLine = (CRVL3DLine2 *)(m_3DLineList.GetNext());
 
-			bOut = RVLCrop3DLine(pLine->m_X[0], pLine->m_X[1], A, tCM, &(pPSuLMBuilder->m_ROI),
-				pPSuLMBuilder->m_CropLTs.minz, pPSuLMBuilder->m_CropLTs.minr, pPSuLMBuilder->m_CropLTs.bOutLT, 
-				iU1, iU2, &Pt1, &Pt2, CropSide);
+			if(m_Flags & RVLPSULM_FLAG_COMPLEX)
+				bOut = RVLCrop3DLineSpherical(pLine->m_X[0], pLine->m_X[1], RMC, tMC, pPSuLMBuilder->m_pCamera,
+					&(pPSuLMBuilder->m_ROI), pPSuLMBuilder->m_CropLTs.minz, pPSuLMBuilder->m_CropLTs.bOutLT, &Pt1, &Pt2,
+					CropSide);
+			else
+				bOut = RVLCrop3DLine(pLine->m_X[0], pLine->m_X[1], A, tCM, &(pPSuLMBuilder->m_ROI),
+					pPSuLMBuilder->m_CropLTs.minz, pPSuLMBuilder->m_CropLTs.minr, pPSuLMBuilder->m_CropLTs.bOutLT, 
+					iU1, iU2, &Pt1, &Pt2, CropSide);
 
 			if(bOut & 0x04)
 				continue;
@@ -964,6 +992,8 @@ void CRVLPSuLM::Display(CRVLFigure * pFig,
 			}
 		}
 	}
+
+	pPSuLMBuilder->m_pCamera->m_Flags = CameraFlagsOld;
 }
 
 void CRVLPSuLM::Display3DSurfaceSamples(CRVLFigure * pFig,
@@ -1098,6 +1128,11 @@ void CRVLPSuLM::Display3DSurface(	CRVLFigure * pFig,
 {
 	CRVLPSuLMBuilder *pPSuLMBuilder = (CRVLPSuLMBuilder *)m_vpBuilder;
 
+	DWORD CameraFlagsOld = pPSuLMBuilder->m_pCamera->m_Flags;
+
+	if(m_Flags & RVLPSULM_FLAG_COMPLEX)
+		pPSuLMBuilder->m_pCamera->m_Flags |= RVLCAMERA_FLAG_SPHERICAL;
+
 	CRVLDisplayVector Vector;
 	
 	if(Flags & RVLPSULM_DISPLAY_VECTORS)
@@ -1203,6 +1238,8 @@ void CRVLPSuLM::Display3DSurface(	CRVLFigure * pFig,
 		delete[] PtArray;
 	}
 #endif
+
+	pPSuLMBuilder->m_pCamera->m_Flags = CameraFlagsOld;
 }
 
 void CRVLPSuLM::Display3DLine(	CRVLFigure * pFig,
@@ -1252,15 +1289,24 @@ void CRVLPSuLM::Display3DLine(	CRVLFigure * pFig,
 
 	RVLMXMUL3X3T2(P, RCM, A);
 
+	double RMC[9], tMC[3];
+
+	if(m_Flags & RVLPSULM_FLAG_COMPLEX)
+		RVLINVTRANSF3D(RCM, tCM, RMC, tMC)
+
 	BYTE bOut;
 	int iU1[2], iU2[2];
 	CvPoint Pt1, Pt2;
 	BYTE CropSide;
-	double X1[3], X2[3];
+	//double X1[3], X2[3];
 
-	bOut = RVLCrop3DLine(pLine->m_X[0], pLine->m_X[1], A, tCM, &(pPSuLMBuilder->m_ROI),
-		pPSuLMBuilder->m_CropLTs.minz, pPSuLMBuilder->m_CropLTs.minr, pPSuLMBuilder->m_CropLTs.bOutLT, 
-		iU1, iU2, &Pt1, &Pt2, CropSide);
+	if(m_Flags & RVLPSULM_FLAG_COMPLEX)
+		bOut = RVLCrop3DLineSpherical(pLine->m_X[0], pLine->m_X[1], RMC, tMC, pPSuLMBuilder->m_pCamera,
+			&(pPSuLMBuilder->m_ROI), pPSuLMBuilder->m_CropLTs.minz, pPSuLMBuilder->m_CropLTs.bOutLT, &Pt1, &Pt2, CropSide);
+	else
+		bOut = RVLCrop3DLine(pLine->m_X[0], pLine->m_X[1], A, tCM, &(pPSuLMBuilder->m_ROI),
+			pPSuLMBuilder->m_CropLTs.minz, pPSuLMBuilder->m_CropLTs.minr, pPSuLMBuilder->m_CropLTs.bOutLT, 
+			iU1, iU2, &Pt1, &Pt2, CropSide);
 
 	if(bOut & 0x04)
 		return;
@@ -1586,6 +1632,9 @@ void CRVLPSuLM::Save(FILE * fp, DWORD Flags)
 
 	int n3DConvexSegments;
 	int i;
+
+	if(pBuilder->m_Flags2 & RVLPSULMBUILDER_FLAG2_FILE_VERSION_2)
+		fwrite(&m_Flags, sizeof(DWORD), 1, fp);
 	
 	//save if min Plane exists
 	fwrite(&m_minPlaneExists, sizeof(BOOL), 1, fp);
@@ -1688,7 +1737,7 @@ void CRVLPSuLM::Save(FILE * fp, DWORD Flags)
 
 		//CRVLClass *p2DLineSet = p2DLine->m_pClass;		
 
-		CRVL3DLine2 **p3DLineArrayEnd = m_3DLineArray + m_n3DLines;
+		CRVL3DLine2 **p3DLineArrayEnd = m_3DLineArray + m_n3DLinesTotal;
 
 		CRVL3DLine2 **pp3DLine;
 
@@ -1802,6 +1851,9 @@ void CRVLPSuLM::Load(FILE * fp, DWORD Flags)
 	CRVLClass  *p3DConvexSegmentSet = &(pBuilder->m_M3DConvexSegmentSet);
 	CRVLClass  *p3DContourSet = &(pBuilder->m_M3DContourSet);
 
+	if(Flags & RVLPSULMBUILDER_FLAG2_FILE_VERSION_2)
+		fread(&m_Flags, sizeof(DWORD), 1, fp);
+
 	//get if min Plane exists
 	fread(&m_minPlaneExists, sizeof(BOOL), 1, fp);
 
@@ -1816,6 +1868,10 @@ void CRVLPSuLM::Load(FILE * fp, DWORD Flags)
 
 	//get and store total number of 3D surface
 	fread(&m_n3DSurfacesTotal, sizeof(int), 1, fp);
+
+	int maxnDominant3DSurfaces = (m_Flags & RVLPSULM_FLAG_COMPLEX ? pBuilder->m_maxnDominant3DSurfacesComplex : 
+		pBuilder->m_maxnDominant3DSurfaces);
+	m_n3DSurfaces = (m_n3DSurfacesTotal >= maxnDominant3DSurfaces ? maxnDominant3DSurfaces : m_n3DSurfacesTotal);
 
 	//allocate SurfaceArray
 	m_3DSurfaceArray = (CRVL3DSurface2 **)(pBuilder->m_pMem0->Alloc(m_n3DSurfacesTotal * sizeof(CRVL3DSurface2 *)));
@@ -1927,7 +1983,9 @@ void CRVLPSuLM::Load(FILE * fp, DWORD Flags)
 	
 	fread(&m_n3DLinesTotal, sizeof(int), 1, fp);
 
-	m_n3DLines = (m_n3DLinesTotal > pBuilder->m_maxnDominant3DLines ? pBuilder->m_maxnDominant3DLines : m_n3DLinesTotal);
+	int maxnDominant3DLines = (m_Flags & RVLPSULM_FLAG_COMPLEX ? pBuilder->m_maxnDominant3DLinesComplex : 
+		pBuilder->m_maxnDominant3DLines);
+	m_n3DLines = (m_n3DLinesTotal > maxnDominant3DLines ? maxnDominant3DLines : m_n3DLinesTotal);
 
 	m_3DLineArray = (CRVL3DLine2 **)(pBuilder->m_pMem0->Alloc(m_n3DLinesTotal * sizeof(CRVL3DLine2 *)));
 
