@@ -922,7 +922,7 @@ int main(int argc, char* argv[])
 
 					VS.Create3DMeshFromComplexPSuLM(VS.m_ImageFileName);
 
-					GUI.Message("3D mesh created.", 600, 100, cvScalar(0, 128, 255));
+					GUI.Message("3D mesh created.", 600, 100, cvScalar(0, 255, 0));
 				}
 
 				bRefresh = true;

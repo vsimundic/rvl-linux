@@ -33,7 +33,7 @@
 //#define RVLPSULMBUILDER_GET_LOCAL_MODELS_DEBUG_LOG
 //#define RVLPSULMBUILDER_PARTICLE_FILTER_DEBUG
 
-#define RVLPSULMBUILDER_HYPOTHESES_DEBUG_LOG
+//#define RVLPSULMBUILDER_HYPOTHESES_DEBUG_LOG
 //#define RVLPSULMBUILDER_HYPOTHESES_LAST_DOF_ACCU_DEBUG_LOG
 //#define RVLPSULMBUILDER_HYPOTHESES_LAST_DOF_ACCU_DEBUG_LOG
 //#define RVLPSULMBUILDER_CONDITIONAL_PROBABILITY_TREE_DEBUG_LOG
@@ -512,6 +512,9 @@ private:
 	double m_csLastDOFSeparationAngle;
 	double m_csLastDOFSurfNrmAngle, m_csLastDOFLineNrmAngle;
 	RVLPSULM_MATCH2 *m_AutoMatchMem;
+	double m_kPan;
+	double m_kTilt;
+	double m_TiltOffset;
 
 	void PythonDisplayScene(RVLSURFACE_MATCH_ARRAY *MatchArray, CRVLMPtrChain *pM3DSurfaceList, CRVL3DSurface2 **MatrixSceneModel, int n3DSceneSurfaces);
 	//void GetMaxProbabilityMatch(int iS3DSurface,
@@ -723,6 +726,10 @@ public:
 	void MergeSurfaces(CRVLPSuLM *pPSuLM);
 	void MergeLines(CRVLPSuLM *pPSuLM);
 	void UpdateBuffers(CRVLPSuLM *pPSuLM);
+	bool CRVLPSuLMBuilder::GetPanTilt(	char *ImageFileName,
+										CRVL3DPose *pPose,
+										int &iSample0,
+										unsigned char &command);
 
 private:
 	RVLPSULM_MSMATCH_DATA *HypothesesGetNextNode(	RVLPSULM_HG_NODE* pNode,

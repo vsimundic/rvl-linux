@@ -72,9 +72,9 @@ CRVLPSuLMBuilder::CRVLPSuLMBuilder(void)
 	m_ProjDisparityErr = 8; //Disparity dif between projection and original plane
 	m_maxnHypothesesPerModel = 20;
 	m_maxnDominant3DSurfaces = 20;
-	m_maxnDominant3DSurfacesComplex = 50;
+	m_maxnDominant3DSurfacesComplex = 20;
 	m_maxnDominant3DLines = 20;
-	m_maxnDominant3DLinesComplex = 50;
+	m_maxnDominant3DLinesComplex = 20;
 	m_maxnExpandedNodes = 1000;
 	m_RotHypTol = 3.0;	// deg
 	m_tHypTol = 500.0;	// mm
@@ -233,6 +233,9 @@ CRVLPSuLMBuilder::CRVLPSuLMBuilder(void)
 	m_GlobalLocalizationDistTHR = 100.0;	//distance tolerance(threshold) for correct Global localization  100m
 	m_GlobalLocalizationAngleTHR = 2.0;		//angle tolerance(threshold) for correct Global localization	 2°
 
+	m_kPan = 1.0;
+	m_kTilt = 1.0;
+	m_TiltOffset = 0.0;		// deg
 
 
 }
@@ -3210,7 +3213,34 @@ BOOL CRVLPSuLMBuilder::Create(CRVLPSuLM *pPSuLM,
 	return TRUE;
 }
 
+bool CRVLPSuLMBuilder::GetPanTilt(char *ImageFileName,
+								  CRVL3DPose *pPose,
+								  int &iSample0,
+								  unsigned char &command)
+{
+	char *OdometryFileName = RVLCreateFileName(ImageFileName, "-LW.bmp", -1, "-O.txt");
 
+	FILE *fpOdometry = fopen(OdometryFileName, "r");
+
+	delete[] OdometryFileName;
+
+	if(fpOdometry == NULL)
+		return false;
+
+	int x, y, z, pan, tilt, roll;
+
+	fscanf(fpOdometry, "%d\t%d\t%d\t%d\t%d\t%d\t%d\t%c\n", &x, &y, &z, &pan, &tilt, &roll, &iSample0, &command);
+
+	fclose(fpOdometry);
+
+	pPose->m_Alpha = m_kPan * (double)pan * DEG2RAD;
+	pPose->m_Beta = m_kTilt * ((double)tilt + m_TiltOffset) * DEG2RAD;;			 
+	pPose->m_Theta = 0.0;
+
+	pPose->UpdateRotLL();
+
+	return true;
+}
 	
 // uses m_pMem2
 
@@ -3236,24 +3266,12 @@ CRVLPSuLM *CRVLPSuLMBuilder::Create(DWORD Flags)
 	unsigned char command;
 	CRVLPSuLM *pPSuLM;
 	bool bComplex;
-	char *OdometryFileName;
-	int x, y, z, pan, tilt, roll, iSample0;
-	FILE *fpOdometry;
+	int iSample0;
 
 	if(m_Flags2 & RVLPSULMBUILDER_FLAG2_COMPLEX)
 	{
-		OdometryFileName = RVLCreateFileName(m_ImageFileName, "-LW.bmp", -1, "-O.txt");
-
-		fpOdometry = fopen(OdometryFileName, "r");					
-		
-		if(fpOdometry)
-		{
-			fscanf(fpOdometry, "%d\t%d\t%d\t%d\t%d\t%d\t%d\t%c\n", &x, &y, &z, &pan, &tilt, &roll, &iSample0, &command);
-
-			fclose(fpOdometry);
-
+		if(GetPanTilt(m_ImageFileName, &PoseM_M, iSample0, command))
 			bComplex = (command == 'O');
-		}
 		else
 			bComplex = false;
 	}
@@ -3270,29 +3288,13 @@ CRVLPSuLM *CRVLPSuLMBuilder::Create(DWORD Flags)
 		{
 			RVLSetFileNumber(m_ImageFileName, "00000-LW.bmp", iSample);
 
-			RVLSetFileNumber(OdometryFileName, "00000-O.txt", iSample);
-
-			fpOdometry = fopen(OdometryFileName, "r");		
-
-			if(fpOdometry)
+			if(!GetPanTilt(m_ImageFileName, &PoseM_M, iSample0, command))
 			{
-				fscanf(fpOdometry, "%d\t%d\t%d\t%d\t%d\t%d\t%d\t%c\n", &x, &y, &z, &pan, &tilt, &roll, &iSample0, &command);
-
-				fclose(fpOdometry);
-			}
-			else
-			{
-				x = y = z = pan = tilt = roll = 0;
+				PoseM_M.m_Alpha = PoseM_M.m_Beta = PoseM_M.m_Theta = 0.0;
 
 				command = 'C';
 			}
-		
-			PoseM_M.m_Alpha = (double)pan * DEG2RAD;
-			PoseM_M.m_Beta = (double)tilt * DEG2RAD;
-			PoseM_M.m_Theta = 0.0;
-
-			PoseM_M.UpdateRotLL();
-
+						
 			switch(command){
 			case 'O':
 				pPSuLM = (CRVLPSuLM *)(pMem->Alloc(sizeof(CRVLPSuLM)));
@@ -3325,8 +3327,6 @@ CRVLPSuLM *CRVLPSuLMBuilder::Create(DWORD Flags)
 
 			iSample++;
 		}	// while (command != 'C')
-
-		delete[] OdometryFileName;
 
 		RVLSetFileNumber(m_ImageFileName, "00000-LW.bmp", iSample0);
 	}	// if(bComplex)
@@ -11690,7 +11690,11 @@ void CRVLPSuLMBuilder::CreateParamList(CRVLMem * pMem)
 	pParamData = m_ParamList.AddParam("PSuLM.Localization.HypothesisGeneration.minnHypSurfPts", RVLPARAM_TYPE_INT, &m_minnHypSurfPts);
 
 	pParamData = m_ParamList.AddParam("PSuLM.Debug.GetLocalModelsLog", RVLPARAM_TYPE_FLAG, &m_DebugFlags);
-	m_ParamList.AddID(pParamData, "yes", RVLPSULMBUILDER_DEBUG_FLAG_GET_LOCAL_MODELS_LOG); 	
+	m_ParamList.AddID(pParamData, "yes", RVLPSULMBUILDER_DEBUG_FLAG_GET_LOCAL_MODELS_LOG);
+
+	pParamData = m_ParamList.AddParam("PSuLM.kPan", RVLPARAM_TYPE_DOUBLE, &m_kPan);
+	pParamData = m_ParamList.AddParam("PSuLM.kTilt", RVLPARAM_TYPE_DOUBLE, &m_kTilt);
+	pParamData = m_ParamList.AddParam("PSuLM.TiltOffset[deg]", RVLPARAM_TYPE_DOUBLE, &m_TiltOffset);
 }
 
 void CRVLPSuLMBuilder::PythonDisplayScene(RVLSURFACE_MATCH_ARRAY *MatchArray, CRVLMPtrChain *pM3DSurfaceList, CRVL3DSurface2 **MatrixSceneModel, int n3DSceneSurfaces)
@@ -23586,8 +23590,6 @@ IplImage * CRVLPSuLMBuilder::GetComplexPSuLMRGBImage(char *ImageFileName)
 	double uc = m_pStereoVision->m_KinectParams.depthUc;
 	double vc = m_pStereoVision->m_KinectParams.depthVc;
 
-	char *OdometryFileName = RVLCreateFileName(ImageFileName, "-LW.bmp", -1, "-O.txt");	
-
 	pComplexImage = cvCreateImage(cvSize(w, h), IPL_DEPTH_8U, 3);
 
 	unsigned char *RGB = (unsigned char *)(pComplexImage->imageData);
@@ -23612,9 +23614,8 @@ IplImage * CRVLPSuLMBuilder::GetComplexPSuLMRGBImage(char *ImageFileName)
 
 	//RVLNULL3VECTOR(tM_M)
 
-	FILE *fpOdometry;
 	unsigned char command;
-	int x, y, z, pan, tilt, roll, iSample0;
+	int iSample0;
 	int u, v;
 	IplImage *pImage_;
 	unsigned char *pPix, *pPix_, *pPixRow_;
@@ -23627,25 +23628,11 @@ IplImage * CRVLPSuLMBuilder::GetComplexPSuLMRGBImage(char *ImageFileName)
 	
 	do
 	{
-		RVLSetFileNumber(OdometryFileName, "00000-O.txt", iSample);
-
-		fpOdometry = fopen(OdometryFileName, "r");
-
-		if(fpOdometry == NULL)
-			break;
-
-		fscanf(fpOdometry, "%d\t%d\t%d\t%d\t%d\t%d\t%d\t%c\n", &x, &y, &z, &pan, &tilt, &roll, &iSample0, &command);
-
-		fclose(fpOdometry);
-
-		PoseM_M.m_Alpha = (double)pan * DEG2RAD;
-		PoseM_M.m_Beta = (double)tilt * DEG2RAD;
-		PoseM_M.m_Theta = 0.0;
-
-		PoseM_M.UpdateRotLL();		
-
 		RVLSetFileNumber(ImageFileName_, "00000-LW.bmp", iSample);
 
+		if(!GetPanTilt(ImageFileName_, &PoseM_M, iSample0, command))
+			break;
+	
 		pImage_ = cvLoadImage(ImageFileName_);
 
 		pPixRow_ = (unsigned char *)(pImage_->imageData);
@@ -23706,7 +23693,6 @@ IplImage * CRVLPSuLMBuilder::GetComplexPSuLMRGBImage(char *ImageFileName)
 	}while(command != 'C');
 
 	delete[] ImageFileName_;
-	delete[] OdometryFileName;	
 	delete[] A;
 
 	cvSaveImage(ComplexImageFileName, pComplexImage);

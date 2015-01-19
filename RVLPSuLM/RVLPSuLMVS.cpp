@@ -686,8 +686,6 @@ bool CRVLPSuLMVS::Create3DMeshFromComplexPSuLM(char *ImageFileName)
 
 	m_PSuLMBuilder.m_ImageFileName = RVLCreateString(ImageFileName);
 
-	char *OdometryFileName = RVLCreateFileName(ImageFileName, "-LW.bmp", -1, "-O.txt");
-
 	char *DisparityImageFileName = RVLCreateFileName(ImageFileName, "-LW.bmp", -1, "-D.txt");
 
 	int iSample = RVLGetFileNumber(ImageFileName, "00000-LW.bmp");
@@ -704,41 +702,25 @@ bool CRVLPSuLMVS::Create3DMeshFromComplexPSuLM(char *ImageFileName)
 
 	bool bOK = true;
 
-	FILE *fpOdometry;
 	unsigned char command;
-	int x, y, z, pan, tilt, roll;
 	unsigned int DepthFormat;
 	
 	do
 	{
-		RVLSetFileNumber(OdometryFileName, "00000-O.txt", iSample);
+		RVLSetFileNumber(m_PSuLMBuilder.m_ImageFileName, "00000-LW.bmp", iSample);
 
-		fpOdometry = fopen(OdometryFileName, "r");
-
-		if(fpOdometry == NULL)
+		if(!m_PSuLMBuilder.GetPanTilt(m_PSuLMBuilder.m_ImageFileName, &PoseM_M, iSample0, command))
 		{
 			bOK = false;
 
 			break;
 		}
 
-		fscanf(fpOdometry, "%d\t%d\t%d\t%d\t%d\t%d\t%d\t%c\n", &x, &y, &z, &pan, &tilt, &roll, &iSample0, &command);
-
-		fclose(fpOdometry);
-
-		PoseM_M.m_Alpha = (double)pan * DEG2RAD;
-		PoseM_M.m_Beta = (double)tilt * DEG2RAD;
-		PoseM_M.m_Theta = 0.0;
-
-		PoseM_M.UpdateRotLL();		
-
 		m_iMCMem = (m_iMCMem + 1) % RVLSYS_MCMEMSIZE;
 
 		m_MCMem[m_iMCMem].Clear();		
 
-		m_PSuLMBuilder.m_pMCMem = m_MCMem + m_iMCMem;
-
-		RVLSetFileNumber(m_PSuLMBuilder.m_ImageFileName, "00000-LW.bmp", iSample);
+		m_PSuLMBuilder.m_pMCMem = m_MCMem + m_iMCMem;		
 
 		//pPSuLM_ = m_PSuLMBuilder.Create(RVLPSULMBUILDER_CREATEMODEL_FROM_IMAGE | RVLPSULMBUILDER_CREATEMODEL_IMAGE_FROM_FILE);
 
@@ -766,8 +748,6 @@ bool CRVLPSuLMVS::Create3DMeshFromComplexPSuLM(char *ImageFileName)
 
 		iSample++;
 	}while(command != 'C');
-
-	delete[] OdometryFileName;
 
 	delete[] DisparityImageFileName;
 
