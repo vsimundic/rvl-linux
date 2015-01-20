@@ -1446,25 +1446,28 @@ void RVLPSuLMDisplayMouseCallback2(int event, int x, int y, int flags, void* vpD
 				{
 					pPSuLM->Display3DLine(pFig, pSelectedLine, &NullPose, cvScalar(255, 255, 0), 2, RVLPSULM_DISPLAY_VECTORS);
 
-					if(HypEvalMethod == RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD_P)
+					if(pSelectedLine->m_Index < nSLines)
 					{
-						if(pHypothesis)
+						if(HypEvalMethod == RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD_P)
 						{
-							BOOL bCorrespondent;
-							CRVL3DLine2 *pLine2;
-
-							for(int iMatch = 0; iMatch < nLines2; iMatch++)
+							if(pHypothesis)
 							{
-								bCorrespondent = FALSE;
+								BOOL bCorrespondent;
+								CRVL3DLine2 *pLine2;
 
-								if(pVS->m_PSuLMBuilder.m_MatchMatrix[a * (pSelectedLine->m_Index) + b * iMatch + nMSurfaces] > 0)
-									bCorrespondent = TRUE;
-
-								if(bCorrespondent)
+								for(int iMatch = 0; iMatch < nLines2; iMatch++)
 								{
-									pLine2 = pPSuLM2->m_3DLineArray[iMatch];
+									bCorrespondent = FALSE;
 
-									pPSuLM2->Display3DLine(pFig2, pLine2, &NullPose, cvScalar(255, 0, 0), 2, RVLPSULM_DISPLAY_VECTORS);
+									if(pVS->m_PSuLMBuilder.m_MatchMatrix[a * (pSelectedLine->m_Index) + b * iMatch + nMSurfaces] > 0)
+										bCorrespondent = TRUE;
+
+									if(bCorrespondent)
+									{
+										pLine2 = pPSuLM2->m_3DLineArray[iMatch];
+
+										pPSuLM2->Display3DLine(pFig2, pLine2, &NullPose, cvScalar(255, 0, 0), 2, RVLPSULM_DISPLAY_VECTORS);
+									}
 								}
 							}
 						}

@@ -72,9 +72,9 @@ CRVLPSuLMBuilder::CRVLPSuLMBuilder(void)
 	m_ProjDisparityErr = 8; //Disparity dif between projection and original plane
 	m_maxnHypothesesPerModel = 20;
 	m_maxnDominant3DSurfaces = 20;
-	m_maxnDominant3DSurfacesComplex = 20;
+	m_maxnDominant3DSurfacesComplex = 30;
 	m_maxnDominant3DLines = 20;
-	m_maxnDominant3DLinesComplex = 20;
+	m_maxnDominant3DLinesComplex = 30;
 	m_maxnExpandedNodes = 1000;
 	m_RotHypTol = 3.0;	// deg
 	m_tHypTol = 500.0;	// mm
@@ -1816,7 +1816,11 @@ BOOL CRVLPSuLMBuilder::Create(CRVLPSuLM *pPSuLM,
 					//p3DSurface->m_PoseInformation = (double)p3DSurface->m_nSupport / RVLCOV3DTRANSFTO1D(InfMx, N) * 1000.0 / sqrt(p3DSurface->m_sigmaR);
 				}
 				else
+				{
 					p3DSurface->m_PoseInformation = 0.0;
+
+					p3DSurface->m_nSupport = 0;
+				}
 				
 				//add to PSULM
 				pPSuLM->m_SurfaceList.Add(p3DSurface);
@@ -2687,7 +2691,7 @@ BOOL CRVLPSuLMBuilder::Create(CRVLPSuLM *pPSuLM,
 
 	//ADD CODE HERE TO STORE TO FILE AND CHECK USING PYTHON!!
 
-	m_CreateTime = m_pTimer->GetTime() - StartTime;
+	//m_CreateTime = m_pTimer->GetTime() - StartTime;
 
 #ifdef NEVER
 	if(m_Flags & RVLPSULMBUILDER_FLAG_LINES)
@@ -6270,6 +6274,8 @@ void CRVLPSuLMBuilder::Localization(CRVLPSuLM * pSPSuLM,
 
 	double StartTime = m_pTimer->GetTime();
 
+	double StartTimeTotal = StartTime;
+
 	double RAsAmp[3 * 3], tAsAmp[3];
 	double *RAspAmp, *tAspAmp;
 
@@ -6823,7 +6829,7 @@ void CRVLPSuLMBuilder::Localization(CRVLPSuLM * pSPSuLM,
 	}
 
 	//m_LocalizationTime = m_pTimer->GetTime() - StartTime;	
-	double tHypGen = m_pTimer->GetTime() - StartTime;
+	m_HypGenTime = m_pTimer->GetTime() - StartTime;
 
 	//return;
 
@@ -7920,7 +7926,7 @@ void CRVLPSuLMBuilder::Localization(CRVLPSuLM * pSPSuLM,
 
 #pragma endregion
 
-	double tHypEval = m_pTimer->GetTime() - StartTime;
+	m_HypEvalTime = m_pTimer->GetTime() - StartTime;
 
 	//StartTime = m_pTimer->GetTime();
 
@@ -9290,6 +9296,8 @@ void CRVLPSuLMBuilder::Localization(CRVLPSuLM * pSPSuLM,
 			m_minModelPlaneExists = pBestHypothesis->pMPSuLM->m_minPlaneExists;
 		}
 	}
+
+	m_LocalizationTime = m_pTimer->GetTime() - StartTimeTotal;
 }
 
 int CRVLPSuLMBuilder::EvaluateHypothesis(	CRVLPSuLM * pSPSuLM,
@@ -22613,8 +22621,8 @@ bool CRVLPSuLMBuilder::MapBuilding(CRVLPSuLM *pSPSuLM)
 	if(bCovered)
 		return false;
 
-	if(!bTracking)
-		return false;
+	//if(!bTracking)
+	//	return false;
 
 	pNewPSuLM = Clone(pSPSuLM);
 

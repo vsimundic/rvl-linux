@@ -740,25 +740,26 @@ BOOL CRVL3DSurface2::Match2(	CRVL3DObject *pMObject,
 	double *C = pMatchArray->m_C;
 	double *Q = pMatchArray->m_Q;
 
-	//make sure the angle between normals (ie nb and Rot*na OR zA and zB) is less than 90
-	constraint0 = RVLMULCOLCOL3(RA, RB, 2, 2);
+	////make sure the angle between normals (ie nb and na OR zA and zB) is less than 90
+	//constraint0 = RVLMULCOLCOL3(RA, RB, 2, 2);
 
-	if(constraint0 <= 0)
-		return FALSE;
+	//if(constraint0 <= 0)
+	//	return FALSE;
 
 	// RAB = [xAB, yAB, zAB] = Rot * RA
 
 	double xAB[3], yAB[3], zAB[3];
 
-	RVLMULMXCOL3(R, RA, 0, xAB)
-	RVLMULMXCOL3(R, RA, 1, yAB)
 	RVLMULMX3X3VECT(R, zA, zAB)
 
-	////make sure the angle between normals (ie nb and Rot*na OR zA and zB) is less than 90
-	//constraint0 = RVLDOTPRODUCT3(zAB, zB);
+	//make sure the angle between normals (ie nb and Rot*na OR zA and zB) is less than 90
+	constraint0 = RVLDOTPRODUCT3(zAB, zB);
 
-	//if(constraint0 <= 0)
-	//	return FALSE;
+	if(constraint0 <= 0)
+		return FALSE;
+
+	RVLMULMXCOL3(R, RA, 0, xAB)
+	RVLMULMXCOL3(R, RA, 1, yAB)
 
 	// tF_BA = tA + Rot' * t
 

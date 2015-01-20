@@ -107,7 +107,7 @@
 				Name="VCCLCompilerTool"
 				Optimization="2"
 				InlineFunctionExpansion="2"
-				AdditionalIncludeDirectories="&quot;$(OPENCV20)\include&quot;;.\Include;..\RVLCore\Include;&quot;$(VTK_PATH)\Debug\Include\vtk-5.10&quot;;$(NOINHERIT)"
+				AdditionalIncludeDirectories="&quot;$(OPENCV_BUILD)\include&quot;;.\Include;..\RVLCore\Include;&quot;$(VTK_PATH)\Release\Include\vtk-5.10&quot;;$(NOINHERIT)"
 				PreprocessorDefinitions="WIN32;NDEBUG"
 				RuntimeLibrary="0"
 				UsePrecompiledHeader="0"

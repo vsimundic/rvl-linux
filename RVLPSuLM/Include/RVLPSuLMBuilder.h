@@ -33,7 +33,7 @@
 //#define RVLPSULMBUILDER_GET_LOCAL_MODELS_DEBUG_LOG
 //#define RVLPSULMBUILDER_PARTICLE_FILTER_DEBUG
 
-//#define RVLPSULMBUILDER_HYPOTHESES_DEBUG_LOG
+#define RVLPSULMBUILDER_HYPOTHESES_DEBUG_LOG
 //#define RVLPSULMBUILDER_HYPOTHESES_LAST_DOF_ACCU_DEBUG_LOG
 //#define RVLPSULMBUILDER_HYPOTHESES_LAST_DOF_ACCU_DEBUG_LOG
 //#define RVLPSULMBUILDER_CONDITIONAL_PROBABILITY_TREE_DEBUG_LOG
@@ -354,6 +354,8 @@ public:
 	double m_LocalizationTime;
 	double m_DynamicSurfRejectTime;
 	double m_CreateTime;
+	double m_HypGenTime;
+	double m_HypEvalTime;
 	int m_VisibilityThr;
 	int m_minnHypSurfPts;
 	//CRVLSegmentationEB *m_pSegmentation;
