@@ -124,11 +124,11 @@ CRVLPSuLMBuilder::CRVLPSuLMBuilder(void)
 	//m_HypothesisClustering.m_minX = m_HypothesisClustering.m_minY = -m_PositionUncert;
 	//m_HypothesisClustering.m_maxX = m_HypothesisClustering.m_maxY = m_PositionUncert;
 
-#ifdef RVLPSULMBUILDER_GT_141111
+//#ifdef RVLPSULMBUILDER_GT_141111
 	m_HypothesisEvaluationFlags = (RVLPSULMBUILDER_HYPEVAL_FLAG_SURFACE_POSITION | RVLPSULMBUILDER_HYPEVAL_FLAG_LINE_POSITION);
-#else
-	m_HypothesisEvaluationFlags = 0x00000000;
-#endif
+//#else
+//	m_HypothesisEvaluationFlags = 0x00000000;
+//#endif
 	
 	// arrays
 
