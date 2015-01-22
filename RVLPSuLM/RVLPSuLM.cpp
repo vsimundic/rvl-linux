@@ -124,12 +124,13 @@ void CRVLPSuLM::Project(CRVL3DPose *pPoseC0,
 			iUSelected[1] = v;
 
 			CRVL3DLine2 *pLine;
-			CvPoint Pt1, Pt2;
 			BYTE CropSide;
 			CRVL2DLine2 Line2D;
 			int dist;
 			BYTE bOut;
 			int iU1[2], iU2[2];
+			CvPoint *PtArray;
+			int nPts;
 
 			m_3DLineList.Start();
 
@@ -137,32 +138,46 @@ void CRVLPSuLM::Project(CRVL3DPose *pPoseC0,
 			{
 				pLine = (CRVL3DLine2 *)(m_3DLineList.GetNext());
 
+				if(pLine->m_Index == 82)
+					int debug = 0;
+
 				if(m_Flags & RVLPSULM_FLAG_COMPLEX)
-					bOut = RVLCrop3DLineSpherical(pLine->m_X[0], pLine->m_X[1], R0C, t0C, pBuilder->m_pCamera,
-						&(pBuilder->m_ROI), pBuilder->m_CropLTs.minz, pBuilder->m_CropLTs.bOutLT, &Pt1, &Pt2, CropSide);
-				else
+					RVLCrop3DLineSpherical(pLine->m_X[0], pLine->m_X[1], R0C, t0C, pBuilder->m_pCamera,
+						&(pBuilder->m_ROI), pBuilder->m_CropLTs.minz, pBuilder->m_CropLTs.bOutLT, &PtArray, nPts, CropSide);
+				else				
+				{
+					nPts = 2;
+
+					PtArray = new CvPoint[2];
+
 					bOut = RVLCrop3DLine(pLine->m_X[0], pLine->m_X[1], A, tC0, &(pBuilder->m_ROI),
 						pBuilder->m_CropLTs.minz, pBuilder->m_CropLTs.minr, pBuilder->m_CropLTs.bOutLT, 
-						iU1, iU2, &Pt1, &Pt2, CropSide);
+						iU1, iU2, PtArray, PtArray + 1, CropSide);
+				}
 
-				Line2D.m_iU[0][0] = Pt1.x;
-				Line2D.m_iU[0][1] = Pt1.y;
-				Line2D.m_iU[1][0] = Pt2.x;
-				Line2D.m_iU[1][1] = Pt2.y;
-
-				Line2D.SetdiU();
-
-				if(Line2D.m_leniU > 0)
+				for(int i = 1; i < nPts; i++)
 				{
-					dist = Line2D.Distance(iUSelected);
+					Line2D.m_iU[0][0] = PtArray[i - 1].x;
+					Line2D.m_iU[0][1] = PtArray[i - 1].y;
+					Line2D.m_iU[1][0] = PtArray[i].x;
+					Line2D.m_iU[1][1] = PtArray[i].y;
 
-					if(dist < 4)
+					Line2D.SetdiU();
+
+					if(Line2D.m_leniU > 0)
 					{
-						*ppSelectedLine = pLine;
+						dist = Line2D.Distance(iUSelected);
 
-						break;
+						if(dist < 4)
+						{
+							*ppSelectedLine = pLine;
+
+							break;
+						}
 					}
 				}
+
+				delete[] PtArray;
 			}
 		}
 
@@ -930,8 +945,10 @@ void CRVLPSuLM::Display(CRVLFigure * pFig,
 		CRVL3DLine2 *pLine;
 		BYTE bOut;
 		int iU1[2], iU2[2];
-		CvPoint Pt1, Pt2;
 		BYTE CropSide;
+		CvPoint *PtArray;
+		int nPts;
+
 		//double X1[3], X2[3];
 
 		m_3DLineList.Start();
@@ -941,55 +958,72 @@ void CRVLPSuLM::Display(CRVLFigure * pFig,
 			pLine = (CRVL3DLine2 *)(m_3DLineList.GetNext());
 
 			if(m_Flags & RVLPSULM_FLAG_COMPLEX)
-				bOut = RVLCrop3DLineSpherical(pLine->m_X[0], pLine->m_X[1], RMC, tMC, pPSuLMBuilder->m_pCamera,
-					&(pPSuLMBuilder->m_ROI), pPSuLMBuilder->m_CropLTs.minz, pPSuLMBuilder->m_CropLTs.bOutLT, &Pt1, &Pt2,
-					CropSide);
+				RVLCrop3DLineSpherical(pLine->m_X[0], pLine->m_X[1], RMC, tMC, pPSuLMBuilder->m_pCamera,
+					&(pPSuLMBuilder->m_ROI), pPSuLMBuilder->m_CropLTs.minz, pPSuLMBuilder->m_CropLTs.bOutLT, &PtArray, nPts, CropSide);
 			else
+			{
+				nPts = 2;
+
+				PtArray = new CvPoint[2];
+
 				bOut = RVLCrop3DLine(pLine->m_X[0], pLine->m_X[1], A, tCM, &(pPSuLMBuilder->m_ROI),
 					pPSuLMBuilder->m_CropLTs.minz, pPSuLMBuilder->m_CropLTs.minr, pPSuLMBuilder->m_CropLTs.bOutLT, 
-					iU1, iU2, &Pt1, &Pt2, CropSide);
+					iU1, iU2, PtArray, PtArray + 1, CropSide);
 
-			if(bOut & 0x04)
-				continue;
+				if(bOut & 0x04)
+					nPts = 0;
+			}
 
-			if(Flags & RVLPSULM_DISPLAY_VECTORS)
+			if(nPts == 0)
 			{
-				pVector = pFig->AddVector(&Vector);
+				delete[] PtArray;
 
-				pVector->m_PointType = RVLGUI_POINT_DISPLAY_TYPE_SQUARE;
-				pVector->m_bClosed = FALSE;
-				pVector->m_LineWidth = 2;
+				continue;
+			}
 
-				if(pLine->m_Flags & RVLOBJ2_FLAG_MARKED)
+			for(int i = 1; i < nPts; i++)
+			{
+				if(Flags & RVLPSULM_DISPLAY_VECTORS)
 				{
-					pVector->m_rP = 255;
-					pVector->m_gP = 192;
-					pVector->m_bP = 255;
-					pVector->m_rL = 255;
-					pVector->m_gL = 192;
-					pVector->m_bL = 255;
+					pVector = pFig->AddVector(&Vector);
+
+					pVector->m_PointType = RVLGUI_POINT_DISPLAY_TYPE_SQUARE;
+					pVector->m_bClosed = FALSE;
+					pVector->m_LineWidth = 2;
+
+					if(pLine->m_Flags & RVLOBJ2_FLAG_MARKED)
+					{
+						pVector->m_rP = 255;
+						pVector->m_gP = 192;
+						pVector->m_bP = 255;
+						pVector->m_rL = 255;
+						pVector->m_gL = 192;
+						pVector->m_bL = 255;
+					}
+					else
+					{
+						pVector->m_rP = 255;
+						pVector->m_gP = 0;
+						pVector->m_bP = 255;
+						pVector->m_rL = 255;
+						pVector->m_gL = 0;
+						pVector->m_bL = 255;
+					}
+
+					pVector->Line(PtArray[i - 1].x, PtArray[i - 1].y, PtArray[i].x, PtArray[i].y);
 				}
 				else
 				{
-					pVector->m_rP = 255;
-					pVector->m_gP = 0;
-					pVector->m_bP = 255;
-					pVector->m_rL = 255;
-					pVector->m_gL = 0;
-					pVector->m_bL = 255;
+					PtArray[i - 1].x /= 2;
+					PtArray[i - 1].y /= 2;
+					PtArray[i].x /= 2;
+					PtArray[i].y /= 2;
+
+					cvLine(pFig->m_pImage, PtArray[i - 1], PtArray[i], cvScalar(255, 0, 255), 2);
 				}
-
-				pVector->Line(Pt1.x, Pt1.y, Pt2.x, Pt2.y);
 			}
-			else
-			{
-				Pt1.x /= 2;
-				Pt1.y /= 2;
-				Pt2.x /= 2;
-				Pt2.y /= 2;
 
-				cvLine(pFig->m_pImage, Pt1, Pt2, cvScalar(255, 0, 255), 2);
-			}
+			delete[] PtArray;
 		}
 	}
 
@@ -1296,36 +1330,55 @@ void CRVLPSuLM::Display3DLine(	CRVLFigure * pFig,
 
 	BYTE bOut;
 	int iU1[2], iU2[2];
-	CvPoint Pt1, Pt2;
+	CvPoint *PtArray;
+	int nPts;
 	BYTE CropSide;
 	//double X1[3], X2[3];
 
 	if(m_Flags & RVLPSULM_FLAG_COMPLEX)
-		bOut = RVLCrop3DLineSpherical(pLine->m_X[0], pLine->m_X[1], RMC, tMC, pPSuLMBuilder->m_pCamera,
-			&(pPSuLMBuilder->m_ROI), pPSuLMBuilder->m_CropLTs.minz, pPSuLMBuilder->m_CropLTs.bOutLT, &Pt1, &Pt2, CropSide);
+		RVLCrop3DLineSpherical(pLine->m_X[0], pLine->m_X[1], RMC, tMC, pPSuLMBuilder->m_pCamera,
+			&(pPSuLMBuilder->m_ROI), pPSuLMBuilder->m_CropLTs.minz, pPSuLMBuilder->m_CropLTs.bOutLT, &PtArray, nPts, CropSide);
 	else
+	{
+		nPts = 2;
+
+		PtArray = new CvPoint[2];
+
 		bOut = RVLCrop3DLine(pLine->m_X[0], pLine->m_X[1], A, tCM, &(pPSuLMBuilder->m_ROI),
 			pPSuLMBuilder->m_CropLTs.minz, pPSuLMBuilder->m_CropLTs.minr, pPSuLMBuilder->m_CropLTs.bOutLT, 
-			iU1, iU2, &Pt1, &Pt2, CropSide);
+			iU1, iU2, PtArray, PtArray + 1, CropSide);
 
-	if(bOut & 0x04)
-		return;
-
-	if(Flags & RVLPSULM_DISPLAY_VECTORS)
-	{
-		pVector = pFig->AddVector(&Vector);
-
-		pVector->Line(Pt1.x, Pt1.y, Pt2.x, Pt2.y);
+		if(bOut & 0x04)
+			nPts = 0;
 	}
-	else
-	{
-		Pt1.x /= 2;
-		Pt1.y /= 2;
-		Pt2.x /= 2;
-		Pt2.y /= 2;
 
-		cvLine(pFig->m_pImage, Pt1, Pt2, Color, 2);
-	}	
+	if(nPts == 0)
+	{
+		delete[] PtArray;
+
+		return;
+	}
+
+	for(int i = 1; i < nPts; i++)
+	{
+		if(Flags & RVLPSULM_DISPLAY_VECTORS)
+		{
+			pVector = pFig->AddVector(&Vector);
+
+			pVector->Line(PtArray[i - 1].x, PtArray[i - 1].y, PtArray[i].x, PtArray[i].y);
+		}
+		else
+		{
+			PtArray[i - 1].x /= 2;
+			PtArray[i - 1].y /= 2;
+			PtArray[i].x /= 2;
+			PtArray[i].y /= 2;
+
+			cvLine(pFig->m_pImage, PtArray[i - 1], PtArray[i], Color, 2);
+		}
+	}
+
+	delete[] PtArray;
 }
 
 void CRVLPSuLM::Display(CRVLGUI * pGUI,

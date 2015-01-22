@@ -822,6 +822,29 @@ int main(int argc, char* argv[])
 					bLocalize = false;
 
 				break;
+			case 'C':
+				if(VS.m_PSuLMBuilder.m_Flags2 & RVLPSULMBUILDER_FLAG2_MAPBUILDING_MANUAL)
+				{
+					pHypothesis = VS.m_PSuLMBuilder.m_HypothesisArray[iHypothesis];
+
+					if(pHypothesis)
+					{
+						CRVLPSuLM *pPSuLM;
+
+						VS.m_PSuLMBuilder.m_PSuLMList.Start();
+
+						while(VS.m_PSuLMBuilder.m_PSuLMList.m_pNext)
+							pPSuLM = (CRVLPSuLM *)(VS.m_PSuLMBuilder.m_PSuLMList.GetNext());
+
+						VS.m_PSuLMBuilder.Connect(pHypothesis->pMPSuLM, pPSuLM, NULL, &(pHypothesis->PoseSM));
+
+						GUI.Message("PSuLMs connected.", 300, 100, cvScalar(0, 255, 0));
+					}
+				}
+
+				bRefresh = true;
+
+				break;
 			case 'e':
 				mDisplayPSuLMFlags ^= (RVLPSULM_DISPLAY_ELLIPSES | RVLPSULM_DISPLAY_LINES);
 			

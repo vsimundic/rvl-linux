@@ -11673,6 +11673,8 @@ void CRVLPSuLMBuilder::CreateParamList(CRVLMem * pMem)
 
 	pParamData = m_ParamList.AddParam("PSuLM.MapBuilding", RVLPARAM_TYPE_FLAG, &m_Flags);
 	m_ParamList.AddID(pParamData, "yes", RVLPSULMBUILDER_FLAG_MAPBUILDING);
+	pParamData = m_ParamList.AddParam("PSuLM.MapBuilding.Manual", RVLPARAM_TYPE_FLAG, &m_Flags2);
+	m_ParamList.AddID(pParamData, "yes", RVLPSULMBUILDER_FLAG2_MAPBUILDING_MANUAL);
 
 	pParamData = m_ParamList.AddParam("PSuLM.GenerateModels", RVLPARAM_TYPE_FLAG, &m_Flags);
 	m_ParamList.AddID(pParamData, "yes", RVLPSULMBUILDER_FLAG_GENERATE_MODELS);
@@ -22630,23 +22632,26 @@ bool CRVLPSuLMBuilder::MapBuilding(CRVLPSuLM *pSPSuLM)
 
 	m_PSuLMList.Add(pNewPSuLM);
 
-	m_PSuLMList.Start();
-
-	while(m_PSuLMList.m_pNext)
+	if(!(m_Flags2 & RVLPSULMBUILDER_FLAG2_MAPBUILDING_MANUAL))
 	{
-		pMPSuLM = (CRVLPSuLM *)(m_PSuLMList.GetNext());
+		m_PSuLMList.Start();
 
-		if(pMPSuLM == pNewPSuLM)
-			break;
+		while(m_PSuLMList.m_pNext)
+		{
+			pMPSuLM = (CRVLPSuLM *)(m_PSuLMList.GetNext());
 
-		if(pMPSuLM->m_pHypothesis == NULL)
-			continue;
+			if(pMPSuLM == pNewPSuLM)
+				break;
 
-		//if(pMPSuLM->m_PosteriorProbabilityLocal < 0.999)
-		if(pMPSuLM->m_PosteriorProbabilityLocal5DOF < 30.0)
-			continue;
+			if(pMPSuLM->m_pHypothesis == NULL)
+				continue;
 
-		Connect(pMPSuLM, pNewPSuLM, NULL, &(pMPSuLM->m_pHypothesis->PoseSM));
+			//if(pMPSuLM->m_PosteriorProbabilityLocal < 0.999)
+			if(pMPSuLM->m_PosteriorProbabilityLocal5DOF < 30.0)
+				continue;
+
+			Connect(pMPSuLM, pNewPSuLM, NULL, &(pMPSuLM->m_pHypothesis->PoseSM));
+		}
 	}
 	
 #endif	// !RVLPSULMBUILDER_MAPBUILDING_SEQUENCE

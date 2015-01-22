@@ -775,18 +775,20 @@ BYTE RVLCrop3DLine(	double *X1Src, double *X2Src,
 	return RVLCrop2DLine(U1[0], U1[1], U2[0], U2[1], pROI, bOutLT, pTgtPt1, pTgtPt2, CropSide) | bOut; 
 }
 
-BYTE RVLCrop3DLineSpherical(double *X1Src, 
+void RVLCrop3DLineSpherical(double *X1Src, 
 							double *X2Src,
 							double *R,
 							double *t,
 							CRVLCamera *pCamera,
 							RVLRECT *pROI,
 							double minz,
-							BYTE *bOutLT,					
-							CvPoint *pTgtPt1,
-							CvPoint *pTgtPt2,
+							BYTE *bOutLT,
+							CvPoint **pPtArray,
+							int &n,
 							BYTE &CropSide)
 {
+	double imageSegmentLen = 20.0;
+
 	double X1C[3], X2C[3];
 
 	RVLTRANSF3(X1Src, R, t, X1C)
@@ -800,7 +802,7 @@ BYTE RVLCrop3DLineSpherical(double *X1Src,
 	BYTE bOut = 0x00;
 
 	double U[2];
-	int U1[2], U2[2];
+	int U1[2], U2[2], dU[2];
 
 	//pCamera->Project3DPointToSphere(X1C_, U, U1);
 
@@ -810,7 +812,63 @@ BYTE RVLCrop3DLineSpherical(double *X1Src,
 
 	pCamera->Project3DPointToSphere(X2C, U, U2);
 
-	return RVLCrop2DLine(U1[0], U1[1], U2[0], U2[1], pROI, bOutLT, pTgtPt1, pTgtPt2, CropSide) | bOut; 	
+	dU[0] = U2[0] - U1[0];
+	dU[1] = U2[1] - U1[1];
+
+	n = (int)(floor(sqrt((double)(dU[0] * dU[0] + dU[1] * dU[1])) / imageSegmentLen)) + 2;
+
+	double dXC[3];
+
+	RVLDIF3VECTORS(X2C, X1C, dXC);
+
+	double nSegments = (double)(n - 1);
+
+	RVLSCALE3VECTOR2(dXC, nSegments, dXC);
+
+	double XCm1[3], XCm2[3];
+
+	RVLCOPY3VECTOR(X1C, XCm1);
+
+	pCamera->Project3DPointToSphere(XCm1, U, U1);
+
+	bool bFirstPt = false;
+
+	CvPoint *PtArray = new CvPoint[n];
+
+	CvPoint *pPt = PtArray;
+
+	BYTE bOut_;
+	CvPoint TgtPt1, TgtPt2;
+
+	for(int i = 1; i < n; i++)
+	{
+		RVLSUM3VECTORS(XCm1, dXC, XCm2);
+
+		pCamera->Project3DPointToSphere(XCm2, U, U2);
+
+		bOut_ = RVLCrop2DLine(U1[0], U1[1], U2[0], U2[1], pROI, bOutLT, &TgtPt1, &TgtPt2, CropSide) | bOut; 	
+
+		if(bOut_ & 0x04)
+			continue;
+
+		if(!bFirstPt)
+		{
+			bFirstPt = true;
+
+			*(pPt++) = TgtPt1;
+		}
+
+		*(pPt++) = TgtPt2;
+
+		RVLCOPY3VECTOR(XCm2, XCm1)
+
+		U1[0] = U2[0];
+		U1[1] = U2[1];
+	}
+
+	n = pPt - PtArray;
+
+	*pPtArray = PtArray;
 }
 
 // The mathematics for the following function is given in RVMath.doc
