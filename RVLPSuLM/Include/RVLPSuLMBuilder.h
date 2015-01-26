@@ -101,6 +101,7 @@
 #define RVLPSULMBUILDER_FLAG2_COMPLEX							0x00000004
 #define RVLPSULMBUILDER_FLAG2_FILE_VERSION_2					0x00000008
 #define RVLPSULMBUILDER_FLAG2_MAPBUILDING_MANUAL				0x00000010
+#define RVLPSULMBUILDER_FLAG2_HYPOTHESIS_EVALUATION_SAMPLE_MATCHING		0x00000020
 #define RVLPSULMBUILDER_CREATEMODEL_FLAG_PERMANENT				0x00000001
 #define RVLPSULMBUILDER_CREATEMODEL_FROM_IMAGE					0x00000002
 #define RVLPSULMBUILDER_CREATEMODEL_IMAGE_FROM_FILE				0x00000004
@@ -125,6 +126,9 @@
 
 #define RVLPSULMBUILDER_MAX_LOCAL_MAP_HT_SIZE					1000
 #define RVLPSULMBUILDER_MAXN_PSULMS								10000
+
+#define RVLPSULMBUILDER_HYPEVAL4_FLAG_FIRST_ORDER_DEPENDENCY_TREE	0x00000001
+#define RVLPSULMBUILDER_HYPEVAL4_FLAG_DYNAMIC_SURF_DETECT			0x00000002
 
 struct RVLPSULM_CELL_CONST				
 {
@@ -460,6 +464,10 @@ public:
 	int m_nCols2, m_nRows2;
 	int m_nCells2; 
 	int m_CellSize2;
+	//int *m_CellIdxMap;
+	RVLQLIST_PTR_ENTRY *m_CellMem;
+
+	int m_ProjectionCubeResolution;
 	int m_minCellPts;
 
 	double m_ProbabilitySameSurface;	//Probability that F and F' represent the same surface in the scene 
@@ -593,10 +601,11 @@ public:
 	int EvaluateHypothesis2( CRVLPSuLM * pSPSuLM,
 							 RVLPSULM_HYPOTHESIS *pHypothesis);
 	int EvaluateHypothesis3( CRVLPSuLM * pSPSuLM,
-							 RVLPSULM_HYPOTHESIS *pHypothesis);
+							 RVLPSULM_HYPOTHESIS *pHypothesis,
+							 bool bDynamicSurfaceDetection = false);
 	double EvaluateHypothesis4( CRVLPSuLM * pSPSuLM,
 								RVLPSULM_HYPOTHESIS *pHypothesis,
-								bool bFirstOrderDependencyTree = true);
+								DWORD Flags = RVLPSULMBUILDER_HYPEVAL4_FLAG_FIRST_ORDER_DEPENDENCY_TREE);
 	void InitHypothesisEvaluation4(CRVLPSuLM * pSPSuLM);
 	void Load(char * FileName, int maxIndex);
 	void LoadMap();
@@ -733,6 +742,11 @@ public:
 										CRVL3DPose *pPose,
 										int &iSample0,
 										unsigned char &command);
+	void GetCell(
+		double *X,
+		int & i, 
+		int & j);
+	void InitHypothesisEvaluation3(CRVLPSuLM * pPSuLM);
 
 private:
 	RVLPSULM_MSMATCH_DATA *HypothesesGetNextNode(	RVLPSULM_HG_NODE* pNode,
@@ -747,4 +761,12 @@ private:
 	void PrintHypothesis(	FILE *fp, 
 							RVLPSULM_HG_NODE *pNode,
 							RVLPSULM_MSMATCH_DATA *MatchList);	
+public:
+	void ProjectToCube(
+		double * P,
+		double & p,
+		double & q,
+		int & ip,
+		int & iq,
+		int & ir);
 };

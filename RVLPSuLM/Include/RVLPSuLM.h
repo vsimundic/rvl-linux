@@ -248,6 +248,7 @@ public:
 	void Display3DSurfaceSamples(	CRVLFigure * pFig,
 									CRVL3DSurface2 *pSurf,
 									double *A, 
+									double *RCM,
 									double *tCM,
 									DWORD Flags = 0x00000000);
 	
@@ -295,7 +296,10 @@ public:
 									  bool descending = true,
 									  bool search = true);
 	//void Clone(CRVLPSuLM *pPSulMOriginal);
-	void Get3DSurfaceSamplesFrom2DRegionSamples(int nSamples);
+	void Get3DSurfaceSamplesFrom2DRegionSamples(
+		int nSamples,
+		CRVLClass *p3DSurfaceSet,
+		RVLPTRCHAIN_ELEMENT **ppFirstSurface);
 	RVLQLIST* GetCorrectHypothesesViaGT_EvalBench(CRVLMPtrChain* hypothesislist,
 											CRVL3DPose* pPoseAC,
 											double toleranceXYZ,
