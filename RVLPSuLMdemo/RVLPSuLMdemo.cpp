@@ -451,8 +451,11 @@ int main(int argc, char* argv[])
 
 				RVLCopyString(pPSuLM->m_FileName, &(VS.m_ImageFileName));
 
-				if(HypEvalMethod == RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD_P)
+				if (HypEvalMethod == RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD_P)
 					VS.m_PSuLMBuilder.InitHypothesisEvaluation4(pPSuLM);
+
+				if (VS.m_PSuLMBuilder.m_Flags2 & RVLPSULMBUILDER_FLAG2_HYPOTHESIS_EVALUATION_SAMPLE_MATCHING)
+					VS.m_PSuLMBuilder.InitHypothesisEvaluation3(pPSuLM);
 			}
 
 			if(bComplex)
@@ -737,6 +740,7 @@ int main(int argc, char* argv[])
 				MouseCallbackData.iHypothesis = (VS.m_PSuLMBuilder.m_nHypotheses > 0 ? iHypothesis : -1);
 				MouseCallbackData.pImage = pInputImage_;
 				MouseCallbackData.MatchMatrixGT = MatchMatrixGT;
+				MouseCallbackData.pSelectedSurf = NULL;
 
 				GUI.ShowFigure(pFig);	
 
@@ -747,6 +751,7 @@ int main(int argc, char* argv[])
 				MouseCallbackData2.iHypothesis = (VS.m_PSuLMBuilder.m_nHypotheses > 0 ? iHypothesis : -1);
 				MouseCallbackData2.pImage = pInputImage_;
 				MouseCallbackData2.MatchMatrixGT = MatchMatrixGT;
+				MouseCallbackData2.pSelectedSurf = NULL;
 
 				GUI.ShowFigure(pFig2);	
 

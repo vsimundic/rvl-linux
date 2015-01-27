@@ -464,10 +464,10 @@ public:
 	int m_nCols2, m_nRows2;
 	int m_nCells2; 
 	int m_CellSize2;
+	int m_nCellsPer45deg;
 	//int *m_CellIdxMap;
 	RVLQLIST_PTR_ENTRY *m_CellMem;
 
-	int m_ProjectionCubeResolution;
 	int m_minCellPts;
 
 	double m_ProbabilitySameSurface;	//Probability that F and F' represent the same surface in the scene 
@@ -550,7 +550,9 @@ public:
 				CRVLMem *pMem,
 				DWORD Flags = 0x00000000,
 				CRVL3DPose *pPoseM_M = NULL);
-	CRVLPSuLM *Create(	DWORD Flags = 0x00000000);
+	CRVLPSuLM *Create(	
+		DWORD Flags = 0x00000000,
+		CRVLPSuLM *pPSuLM_ = NULL);
 	int MatchLine(	CRVL3DLine2 *pLine,
 					CRVLPSuLM *pPSuLM,
 					CRVL3DPose *pPose,

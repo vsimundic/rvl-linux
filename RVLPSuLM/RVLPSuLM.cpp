@@ -1035,7 +1035,8 @@ void CRVLPSuLM::Display3DSurfaceSamples(CRVLFigure * pFig,
 										double *A, 
 										double *RCM,
 										double *tCM,
-										DWORD Flags)
+										DWORD Flags,
+										RVL3DSURFACE_SAMPLE *pSelectedSample)
 {
 	CRVLPSuLMBuilder *pPSuLMBuilder = (CRVLPSuLMBuilder *)m_vpBuilder;
 
@@ -1057,6 +1058,12 @@ void CRVLPSuLM::Display3DSurfaceSamples(CRVLFigure * pFig,
 		wStep = pFig->m_pImage->widthStep;
 	}
 
+	double fu = pPSuLMBuilder->m_pStereoVision->m_KinectParams.depthFu;
+	double fv = pPSuLMBuilder->m_pStereoVision->m_KinectParams.depthFv;
+	double f = RVLMAX(fu, fv);
+
+	double kSpherical = pPSuLMBuilder->m_pCamera->m_kSpherical / f;
+
 	RVL3DSURFACE_SAMPLE *pSample = (RVL3DSURFACE_SAMPLE *)(pSurf->m_Samples.pFirst);
 
 	double *XM;
@@ -1069,7 +1076,7 @@ void CRVLPSuLM::Display3DSurfaceSamples(CRVLFigure * pFig,
 	CvRect SampleRegion;
 	double U[2];
 	int iU[2];
-	double r, kSpherical;
+	double r;
 
 	while(pSample)
 	{
@@ -1087,12 +1094,6 @@ void CRVLPSuLM::Display3DSurfaceSamples(CRVLFigure * pFig,
 			v = (iU[1] >> 1);
 
 			r = sqrt(RVLDOTPRODUCT3(XC, XC));
-
-			double fu = pPSuLMBuilder->m_pStereoVision->m_KinectParams.depthFu;
-			double fv = pPSuLMBuilder->m_pStereoVision->m_KinectParams.depthFv;
-			double f = RVLMAX(fu, fv);
-
-			kSpherical = pPSuLMBuilder->m_pCamera->m_kSpherical / f;
 		}
 		else
 		{			
@@ -1104,7 +1105,9 @@ void CRVLPSuLM::Display3DSurfaceSamples(CRVLFigure * pFig,
 
 		if(Flags & RVLPSULM_DISPLAY_COLOR)
 		{
-			if(Flags & RVLPSULM_DISPLAY_SAMPLE_TYPES)
+			if (pSample == pSelectedSample)
+				Color = cvScalar(255, 128, 0);
+			else if(Flags & RVLPSULM_DISPLAY_SAMPLE_TYPES)
 			{
 				switch(pSample->Flags){
 				case RVL3DSURFACE_SAMPLE_FLAG_MATCHED:
@@ -1185,7 +1188,8 @@ void CRVLPSuLM::Display3DSurface(	CRVLFigure * pFig,
 									CRVL3DPose *pPoseM0,
 									CvScalar Color,
 									int LineWidth,
-									DWORD Flags)
+									DWORD Flags,
+									RVL3DSURFACE_SAMPLE *pSelectedSample)
 {
 	CRVLPSuLMBuilder *pPSuLMBuilder = (CRVLPSuLMBuilder *)m_vpBuilder;
 
@@ -1293,7 +1297,8 @@ void CRVLPSuLM::Display3DSurface(	CRVLFigure * pFig,
 		Display3DSurfaceSamples(pFig, pSurf, A, RCM, tCM, Flags |
 					RVLPSULM_DISPLAY_SAMPLE_REGIONS | 
 					RVLPSULM_DISPLAY_SAMPLE_TYPES | 
-					RVLPSULM_DISPLAY_COLOR);
+					RVLPSULM_DISPLAY_COLOR,
+					pSelectedSample);
 
 #ifdef RVLPSULM_CONVEX_SEGMENTS
 	}
@@ -2676,9 +2681,6 @@ void CRVLPSuLM::Get3DSurfaceSamplesFrom2DRegionSamples(
 	if(nSamples == 0)
 		return;
 
-	if(m_n3DSurfaces == 0)
-		return;
-
 	CRVLPSuLMBuilder *pBuilder = (CRVLPSuLMBuilder *)m_vpBuilder;
 
 	CRVLCamera *pCamera = pBuilder->m_pCamera;
@@ -3979,3 +3981,84 @@ void RVLDisplayColoredDepthMap(CRVL3DMeshObject *pSceneMesh,
 	}
 }
 
+
+
+RVL3DSURFACE_SAMPLE * CRVLPSuLM::SelectSample(
+	CRVLFigure * pFig, 
+	CRVL3DSurface2 * pSurf, 
+	CRVL3DPose *pPoseCM,
+	int u, int v)
+{
+	CRVLPSuLMBuilder *pPSuLMBuilder = (CRVLPSuLMBuilder *)m_vpBuilder;
+
+	//int w = pPSuLMBuilder->m_pPSD->m_Width;
+	//int h = pPSuLMBuilder->m_pPSD->m_Height;
+	int w = pFig->m_pImage->width;
+	int h = pFig->m_pImage->height;
+
+	double *RCM = pPoseCM->m_Rot;
+	double *tCM = pPoseCM->m_X;
+
+	double P[3 * 3];
+	double A[3 * 3];
+
+	if (!(m_Flags & RVLPSULM_FLAG_COMPLEX))
+	{
+		pPSuLMBuilder->GetProjectionMatrix(P);
+
+		RVLMXMUL3X3T2(P, RCM, A);
+	}
+
+	int minDist2 = 2 * (w * w + h * h);
+
+	RVL3DSURFACE_SAMPLE *pClosestSample = NULL;
+
+	RVL3DSURFACE_SAMPLE *pSample = (RVL3DSURFACE_SAMPLE *)(pSurf->m_Samples.pFirst);
+
+	double *XM;
+	double XC[3], tmp3x1[3];
+	double U[2];
+	int iU[2];
+	int dist2;
+	int us, vs, du, dv;
+
+	while (pSample)
+	{
+		XM = pSample->X;
+
+		RVLDIF3VECTORS(XM, tCM, tmp3x1);
+
+		if (m_Flags & RVLPSULM_FLAG_COMPLEX)
+		{
+			RVLMULMX3X3TVECT(RCM, tmp3x1, XC);
+
+			pPSuLMBuilder->m_pCamera->Project3DPointToSphere(XC, U, iU);
+
+			us = (iU[0] >> 1);
+			vs = (iU[1] >> 1);
+		}
+		else
+		{
+			RVLMULMX3X3VECT(A, tmp3x1, XC);
+
+			us = DOUBLE2INT(XC[0] / XC[2]);
+			vs = DOUBLE2INT(XC[1] / XC[2]);
+		}
+
+		du = u - us;
+		dv = v - vs;
+
+		dist2 = du * du + dv * dv;
+
+		if (dist2 < minDist2)
+		{
+			minDist2 = dist2;
+
+			pClosestSample = pSample;
+		}
+
+		pSample = (RVL3DSURFACE_SAMPLE *)(pSample->pNext);
+	}	// for each sample
+
+	return pClosestSample;
+}

@@ -250,14 +250,16 @@ public:
 									double *A, 
 									double *RCM,
 									double *tCM,
-									DWORD Flags = 0x00000000);
+									DWORD Flags = 0x00000000,
+									RVL3DSURFACE_SAMPLE *pSelectedSample = NULL);
 	
 	void Display3DSurface(	CRVLFigure * pFig,
 							CRVL3DSurface2 *pSurf,
 							CRVL3DPose *pPoseM0,
 							CvScalar Color,
 							int LineWidth = 1,
-							DWORD Flags = 0x00000000);
+							DWORD Flags = 0x00000000,
+							RVL3DSURFACE_SAMPLE *pSelectedSample = NULL);
 	void Display3DLine(	CRVLFigure * pFig,
 						CRVL3DLine2 *pLine,
 						CRVL3DPose *pPoseM0,
@@ -316,7 +318,11 @@ public:
 						double scale,
 						RVLPSULM_MESH_FILE_GROUP_DATA *GroupData,
 						int nGroups);
-   
+	RVL3DSURFACE_SAMPLE * SelectSample(
+		CRVLFigure * pFig,
+		CRVL3DSurface2 * pSurf, 
+		CRVL3DPose *pPoseCM, 
+		int u, int v);
 
 public:
 	WORD m_Index;
@@ -368,6 +374,6 @@ public:
 	double m_PriorProbabilityLocal;
 	double m_PosteriorProbabilityLocal5DOF;
 	double m_PosteriorProbabilityLocal;
-	double m_PosteriorProbabilityGlobal;
+	double m_PosteriorProbabilityGlobal;	
 };
 

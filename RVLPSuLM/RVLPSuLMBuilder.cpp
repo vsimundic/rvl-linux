@@ -47,7 +47,6 @@ CRVLPSuLMBuilder::CRVLPSuLMBuilder(void)
 
 	m_CellSize = 16;				// pix
 	m_uTol = m_CellSize;			// halfpix
-	m_ProjectionCubeResolution = 240;	// pix
 	m_dqTol = 6;					// halfpix
 	m_PhiTol = 30.0 * DEG2RAD;		// rad
 	m_CropLTs.minz = 100.0;			// mm
@@ -216,6 +215,7 @@ CRVLPSuLMBuilder::CRVLPSuLMBuilder(void)
 	//Hypothesis evaluation
 	m_CellSize2 = 20;		// nyarko_diss: 16
 	m_minCellPts = (m_CellSize2 * m_CellSize2 * 20)/100; //20% of m_CellSize2^2
+	m_nCellsPer45deg = 6;
 
 	m_ProbabilitySameSurface = 0.9;
 	m_rhoMax = 6000;	//mm
@@ -682,7 +682,7 @@ void CRVLPSuLMBuilder::Init(void)
 		// Projection cube consists of 5 cell arrays: RIGHT, BOTTOM, FRONT, LEFT, TOP.
 		// These arrays are allocated in the memory in that order.
 
-		m_nRows2 = m_nCols2 = 2 * m_ProjectionCubeResolution / m_CellSize2;
+		m_nRows2 = m_nCols2 = 2 * m_nCellsPer45deg;
 		m_nCells2 = 5 * m_nRows2 * m_nCols2;
 
 		//m_CellIdxMap = new int[(m_nRows2 + 2) * (m_nCols2 + 2) * 5];
@@ -3338,7 +3338,9 @@ bool CRVLPSuLMBuilder::GetPanTilt(char *ImageFileName,
 	
 // uses m_pMem2
 
-CRVLPSuLM *CRVLPSuLMBuilder::Create(DWORD Flags)
+CRVLPSuLM *CRVLPSuLMBuilder::Create(
+	DWORD Flags,
+	CRVLPSuLM *pPSuLM_)
 {
 	// initialize memory and sets
 
@@ -3391,14 +3393,19 @@ CRVLPSuLM *CRVLPSuLMBuilder::Create(DWORD Flags)
 						
 			switch(command){
 			case 'O':
-				pPSuLM = (CRVLPSuLM *)(pMem->Alloc(sizeof(CRVLPSuLM)));
+				if (pPSuLM_)
+					pPSuLM = pPSuLM_;								
+				else
+				{
+					pPSuLM = (CRVLPSuLM *)(pMem->Alloc(sizeof(CRVLPSuLM)));
 
-				memcpy(pPSuLM, &m_PSuLMTemplate, sizeof(CRVLPSuLM));
+					memcpy(pPSuLM, &m_PSuLMTemplate, sizeof(CRVLPSuLM));					
+
+					if (m_ImageFileName)
+						RVLCopyString(m_ImageFileName, &(pPSuLM->m_FileName));
+				}
 
 				pPSuLM->m_Flags |= RVLPSULM_FLAG_COMPLEX;
-
-				if(m_ImageFileName)
-					RVLCopyString(m_ImageFileName, &(pPSuLM->m_FileName));
 
 				Create(pPSuLM, pMem, Flags, &PoseM_M);
 
@@ -3412,10 +3419,13 @@ CRVLPSuLM *CRVLPSuLMBuilder::Create(DWORD Flags)
 
 				if(Flags & RVLPSULMBUILDER_CREATEMODEL_FLAG_PERMANENT)
 				{
-					m_PSuLMList.Add(pPSuLM);
+					if (pPSuLM_ == NULL)
+					{
+						m_PSuLMList.Add(pPSuLM);
 
-					if(pPSuLM->m_nLandmarks > m_maxnLandmarks)
-						m_maxnLandmarks = pPSuLM->m_nLandmarks;
+						if (pPSuLM->m_nLandmarks > m_maxnLandmarks)
+							m_maxnLandmarks = pPSuLM->m_nLandmarks;
+					}
 				}
 			}
 
@@ -3426,12 +3436,17 @@ CRVLPSuLM *CRVLPSuLMBuilder::Create(DWORD Flags)
 	}	// if(bComplex)
 	else
 	{
-		pPSuLM = (CRVLPSuLM *)(pMem->Alloc(sizeof(CRVLPSuLM)));
+		if (pPSuLM_)
+			pPSuLM = pPSuLM_;
+		else
+		{
+			pPSuLM = (CRVLPSuLM *)(pMem->Alloc(sizeof(CRVLPSuLM)));
 
-		memcpy(pPSuLM, &m_PSuLMTemplate, sizeof(CRVLPSuLM));
+			memcpy(pPSuLM, &m_PSuLMTemplate, sizeof(CRVLPSuLM));
 
-		if(m_ImageFileName)
-			RVLCopyString(m_ImageFileName, &(pPSuLM->m_FileName));
+			if (m_ImageFileName)
+				RVLCopyString(m_ImageFileName, &(pPSuLM->m_FileName));
+		}
 
 		// detect 3D surfaces, 3D lines and landmarks
 
@@ -3975,10 +3990,13 @@ CRVLPSuLM *CRVLPSuLMBuilder::Create(DWORD Flags)
 
 		if(Flags & RVLPSULMBUILDER_CREATEMODEL_FLAG_PERMANENT)
 		{
-			m_PSuLMList.Add(pPSuLM);
+			if (pPSuLM_ == NULL)
+			{
+				m_PSuLMList.Add(pPSuLM);
 
-			if(pPSuLM->m_nLandmarks > m_maxnLandmarks)
-				m_maxnLandmarks = pPSuLM->m_nLandmarks;
+				if (pPSuLM->m_nLandmarks > m_maxnLandmarks)
+					m_maxnLandmarks = pPSuLM->m_nLandmarks;
+			}
 		}
 	}	// if(!bComplex)
 
@@ -9693,6 +9711,8 @@ int CRVLPSuLMBuilder::EvaluateHypothesis3(
 	RVLPSULM_HYPOTHESIS *pHypothesis,
 	bool bDynamicSurfaceDetection)
 {
+	double StartTime = m_pTimer->GetTime();
+
 #ifdef RVLPSULMBUILDER_HYPOTHESES_EVAL_DEBUG_LOG
 	fprintf(m_fpDebug, "Hypothesis%d\n", pHypothesis->Index);
 #endif
@@ -9726,7 +9746,7 @@ int CRVLPSuLMBuilder::EvaluateHypothesis3(
 
 	if (pSPSuLM->m_Flags & RVLPSULM_FLAG_COMPLEX)
 	{
-		CellSizeNrm = 1.0 / (double)(m_ProjectionCubeResolution / m_CellSize2);
+		CellSizeNrm = 1.0 / (double)m_nCellsPer45deg;
 		nCubeSideCells = m_nRows2 * m_nCols2;
 	}
 
@@ -9758,49 +9778,6 @@ int CRVLPSuLMBuilder::EvaluateHypothesis3(
 		}
 	}
 
-
-	//Reset CellArray2
-	//memcpy(m_CellArray2, m_EmptyCellArray2, m_nCells2 * sizeof(RVLPSULM_CELL2));
-
-	//RVLQLIST_PTR_ENTRY *CellMem = new RVLQLIST_PTR_ENTRY[pSPSuLM->m_nSurfaceSamples];
-
-	//pSamplePtr = CellMem;
-
-	//fill CellArray2 with ptrs. to SSurface samples
-
-	//RVLQLIST *pSampleList;
-
-	//for (i = 0; i<nSSurfaces; i++)
-	//{
-	//	pS3DSurface = pSPSuLM->m_3DSurfaceArray[i];
-
-	//	pS3DSurface->m_Flags &= ~RVL3DSURFACE_FLAG_REMOVED;
-
-	//	pSampleS = (RVL3DSURFACE_SAMPLE *)(pS3DSurface->m_Samples.pFirst);
-
-	//	while (pSampleS)
-	//	{
-	//		pSampleS->Flags = 0x00;
-
-	//		XS = pSampleS->X;
-
-	//		iCell = (int)((fu * XS[0] / XS[2] + uc) / CellSize);
-	//		jCell = (int)((fv * XS[1] / XS[2] + vc) / CellSize);
-
-	//		pCell = m_CellArray2 + jCell * m_nCols2 + iCell;
-
-	//		pSamplePtr->Ptr = pSampleS;
-
-	//		pSampleList = &(pCell->surfaceList);
-
-	//		RVLQLIST_ADD_ENTRY(pSampleList, pSamplePtr);
-
-	//		pSamplePtr++;
-
-	//		pSampleS = (RVL3DSURFACE_SAMPLE *)(pSampleS->pNext);
-	//	}
-	//}
-
 	// match model samples to scene samples
 
 	int nMatches;
@@ -9825,13 +9802,14 @@ int CRVLPSuLMBuilder::EvaluateHypothesis3(
 
 	//memset(MCoverage, 0, pMPSuLM->m_nSurfaceSamples * sizeof(int));
 
-	int uM, vM, uS, vS;
+	int uM, vM;
+	//int uS, vS;
 	double fuM, fvM;
 	double *XM, *VM, *VS, XMS[3], dPMS[3], tmp3x1[3];
-	int w;
+	//int w;
 	double wM, wS;
-	int firstiCell, lastiCell, firstjCell, lastjCell;
-	int euvTol;
+	//int firstiCell, lastiCell, firstjCell, lastjCell;
+	//int euvTol;
 	double e, d;
 	RVL3DSURFACE_SAMPLE *pSampleM;
 	double ddS, z, rS, rM, s, XYTol;
@@ -9845,7 +9823,7 @@ int CRVLPSuLMBuilder::EvaluateHypothesis3(
 	double pM, qM, pS, qS, csNTol, fTmp;
 	double p, q;
 	int ip, iq, ir;
-	RVLRECT SWindow, MWindow;
+	//RVLRECT SWindow, MWindow;
 	//int CoverageArea;
 	double dP[3];
 	double eP2, ePThr;
@@ -9868,6 +9846,9 @@ int CRVLPSuLMBuilder::EvaluateHypothesis3(
 
 		while (pSampleM)
 		{
+			if (pSampleM->Index == 774)
+				int debug = 0;
+
 			pSampleM->Flags = 0x00;
 
 			XM = pSampleM->X;
@@ -9939,9 +9920,6 @@ int CRVLPSuLMBuilder::EvaluateHypothesis3(
 
 			bNM = (pM >= qM);
 
-#ifdef RVLPSULMBUILDER_HYPOTHESES_EVAL_DEBUG_LOG
-#endif
-
 			RVLSCALE3VECTOR(VM, stdXM, dPM);
 			RVLMULMX3X3TVECT(RSM, dPM, dPMS);
 
@@ -9977,7 +9955,7 @@ int CRVLPSuLMBuilder::EvaluateHypothesis3(
 
 			RVLSCALE3VECTOR2(XMS, rM, RM);
 
-			XYTol = m_SampleMatchAngleTol * rM + m_SampleMatchDistTol;
+			XYTol = 2.0 * (m_SampleMatchAngleTol * rM + m_SampleMatchDistTol);
 
 			wM = (pSampleM->wz / f + XYTol) / rM;
 
@@ -10009,6 +9987,9 @@ int CRVLPSuLMBuilder::EvaluateHypothesis3(
 				while (pSamplePtr)	// for all SSamples in the cell
 				{
 					pSampleS = (RVL3DSURFACE_SAMPLE *)(pSamplePtr->Ptr);
+
+					if (pSampleS->Index == 448)
+						int debug = 0;
 
 					XS = pSampleS->X;
 
@@ -10166,7 +10147,7 @@ int CRVLPSuLMBuilder::EvaluateHypothesis3(
 #ifdef RVLPSULMBUILDER_HYPOTHESES_EVAL_DEBUG_LOG
 									fprintf(m_fpDebug, "; NS");
 #endif
-									csNTol = pM * pS + qM * qS;
+									csNTol = pM * pS - qM * qS;
 
 									if (csNTol >= COS45)
 									{
@@ -10219,6 +10200,9 @@ int CRVLPSuLMBuilder::EvaluateHypothesis3(
 					pSamplePtr = (RVLQLIST_PTR_ENTRY *)(pSamplePtr->pNext);
 				}	// for all SSamples in the cell
 				//}	// for(iCell = firstiCell; iCell <= lastiCell; iCell++)
+
+				if (pSampleM->Flags != RVL3DSURFACE_SAMPLE_FLAG_MATCHED)
+					int debug = 0;
 
 			pSampleM = (RVL3DSURFACE_SAMPLE *)(pSampleM->pNext);
 		}	// while(pSampleM)
@@ -10320,7 +10304,11 @@ int CRVLPSuLMBuilder::EvaluateHypothesis3(
 #endif	// RVLPSULMBUILDER_HYPOTHESES_EVAL3_DYNAMIC_SURF_REJECT
 
 	if (bDynamicSurfaceDetection)
+	{
+		m_HypEvalTime = m_pTimer->GetTime() - StartTime;
+
 		return 0;
+	}
 
 	// Surface matching
 
@@ -12092,7 +12080,7 @@ double CRVLPSuLMBuilder::ConditionalProbabilityTree(CRVLPSuLM *pSPSuLM,
 
 	double P = 0.0;
 
-	int j, j_;
+	int j_;
 	void **pNode, **pNode_;
 
 	while(k < nAutoMatches || k_ < nSMMatches)
@@ -12403,13 +12391,21 @@ void CRVLPSuLMBuilder::LoadMap()
 				else
 					pPSuLM->m_iSubMap = 0;
 
-				Create(pPSuLM, m_pMem, RVLPSULMBUILDER_CREATEMODEL_FROM_IMAGE);
+				m_ImageFileName = RVLCreateString(pPSuLM->m_FileName);
+
+				Create(RVLPSULMBUILDER_CREATEMODEL_FROM_IMAGE | RVLPSULMBUILDER_CREATEMODEL_IMAGE_FROM_FILE, pPSuLM);
+
+				delete[] m_ImageFileName;
+
+				//Create(pPSuLM, m_pMem, RVLPSULMBUILDER_CREATEMODEL_FROM_IMAGE);
 
 				fp = fopen(pPSuLM->m_ModelFilePath, "wb");
 
 				pPSuLM->Save(fp);
 
 				fclose(fp);
+
+				m_pMCMem->Clear();
 			}
 
 			pPSuLM->Load(m_Flags2);
@@ -12621,6 +12617,7 @@ void CRVLPSuLMBuilder::CreateParamList(CRVLMem * pMem)
 	m_ParamList.AddID(pParamData, "ALL_PEAKS", RVLPSULMBUILDER_FLAG_LAST_DOF_ESTIMATION_METHOD_ALL_PEAKS);	
 
 	pParamData = m_ParamList.AddParam("PSuLM.Localization.HypothesisEvaluation.CellSize2", RVLPARAM_TYPE_INT, &m_CellSize2);
+	pParamData = m_ParamList.AddParam("PSuLM.Localization.HypothesisEvaluation.nCellsPer45deg", RVLPARAM_TYPE_INT, &m_nCellsPer45deg);
 	pParamData = m_ParamList.AddParam("PSuLM.Localization.HypothesisEvaluation.SampleMatchAngleStD", RVLPARAM_TYPE_DOUBLE, &m_SampleMatchAngleStD);
 	pParamData = m_ParamList.AddParam("PSuLM.Localization.HypothesisEvaluation.SampleMatchDistStD", RVLPARAM_TYPE_DOUBLE, &m_SampleMatchDistStD);
 	pParamData = m_ParamList.AddParam("PSuLM.Localization.HypothesisEvaluation.SampleMatchUncertCoef", RVLPARAM_TYPE_DOUBLE, &m_SampleMatchUncertCoef);
@@ -24534,7 +24531,7 @@ void CRVLPSuLMBuilder::RepresentativeHypotheses()
 			//if(pHypothesis->Index == 591 && pHypothesis_->Index == 871)
 			//	int debug = 0;
 
-			break;		// debug
+			//break;		// debug
 
 			if(pHypothesis_->Probability < m_minRelevantLogLikelihood)
 				break;
@@ -25078,8 +25075,9 @@ void CRVLPSuLMBuilder::MergeSurfaces(CRVLPSuLM *pPSuLM)
 		}
 	}	// for each surface
 
+	int iSample = 0;
+
 	RVL3DSURFACE_SAMPLE *pSample;
-	int iSample;
 
 	for (pp3DSurface = SurfaceArray; pp3DSurface < p3DSurfaceArrayEnd; pp3DSurface++)
 	{
@@ -25088,9 +25086,7 @@ void CRVLPSuLMBuilder::MergeSurfaces(CRVLPSuLM *pPSuLM)
 		if (p3DSurface->m_nSupport == 0)
 			continue;
 
-		iSample = 0;
-
-		pSample = (RVL3DSURFACE_SAMPLE *)(p3DSurface_->m_Samples.pFirst);
+		pSample = (RVL3DSURFACE_SAMPLE *)(p3DSurface->m_Samples.pFirst);
 
 		while (pSample)
 		{
@@ -25868,7 +25864,7 @@ void CRVLPSuLMBuilder::InitHypothesisEvaluation3(CRVLPSuLM * pPSuLM)
 
 	if (pPSuLM->m_Flags & RVLPSULM_FLAG_COMPLEX)
 	{		
-		CellSizeNrm = 1.0 / (double)(m_ProjectionCubeResolution / m_CellSize2);
+		CellSizeNrm = 1.0 / (double)m_nCellsPer45deg;
 		absdpq = 0.5 * CellSizeNrm;
 		nCubeSideCells = m_nRows2 * m_nCols2;
 	}
@@ -25904,18 +25900,22 @@ void CRVLPSuLMBuilder::InitHypothesisEvaluation3(CRVLPSuLM * pPSuLM)
 
 		while (pSampleS)
 		{
+			if (RVLABS(pSampleS->X[0] - 1263) < 20 && RVLABS(pSampleS->X[1] + 1036) < 20 && RVLABS(pSampleS->X[2] - 1794) < 20)
+				int debug = 0;
+
 			pSampleS->Flags = 0x00;
 
 			XS = pSampleS->X;
 
 			if (pPSuLM->m_Flags & RVLPSULM_FLAG_COMPLEX)
 			{
-				ProjectToCube(XS, p0, q0, ip0, iq0, ir0);
+				ProjectToCube(XS, p0, q0, ip0, iq0, ir0);				
 
-				Q[ir0 % 3] = 1.0;
-
-				if (ir0 > 2)
+				if (ir0 <= 2)
+					Q[ir0] = 1.0;
+				else
 				{
+					Q[ir0 % 3] = -1.0;
 					p0 = -p0;
 					q0 = -q0;
 				}

@@ -68,6 +68,7 @@ void CRVLPSuLMVS::Init(char * CfgFile2Name)
 	m_PSuLMBuilder.m_pMem0 = &m_Mem0;
 	m_PSuLMBuilder.m_pMem = &m_Mem;
 	m_PSuLMBuilder.m_pMem2 = &m_Mem2;
+	m_PSuLMBuilder.m_pMCMem = m_MCMem;
 	//m_PSuLMBuilder.m_pPoseSA = &m_PoseLA;
 	
 	m_PSuLMBuilder.m_pPoseCB = &m_PoseLA;
@@ -1265,8 +1266,9 @@ void RVLPSuLMDisplayMouseCallback2(int event, int x, int y, int flags, void* vpD
 
 	RVLPSULMDISPLAY_MOUSE_CALLBACK_DATA *pData = (RVLPSULMDISPLAY_MOUSE_CALLBACK_DATA *)vpData;
 
-	CRVL3DSurface2 *pSelectedSurf = NULL;
+	CRVL3DSurface2 *pSelectedSurf = pData->pSelectedSurf;
 	CRVL3DLine2 *pSelectedLine = NULL;
+	RVL3DSURFACE_SAMPLE *pSelectedSurfSample = NULL;
 
 	CRVLGUI *pGUI = pData->pGUI;
 	CRVLFigure *pFig = pData->pFig;
@@ -1315,6 +1317,7 @@ void RVLPSuLMDisplayMouseCallback2(int event, int x, int y, int flags, void* vpD
 	int iPix;
 	int a, b;
 	int nSurfaces, nSurfaces2, nLines, nLines2;
+	CRVL3DSurface2 *pSelectedSurf_;
 
 	switch( event )
 	{
@@ -1375,7 +1378,23 @@ void RVLPSuLMDisplayMouseCallback2(int event, int x, int y, int flags, void* vpD
 
 					iPix = x / pData->ZoomFactor + y / pData->ZoomFactor * w;
 
+					pSelectedSurf_ = pSelectedSurf;
+
 					pPSuLM->Project(&(pFig->m_PoseC0), FALSE, iPix, &pSelectedSurf, &pSelectedLine);
+
+					if (pVS->m_PSuLMBuilder.m_Flags2 & RVLPSULMBUILDER_FLAG2_HYPOTHESIS_EVALUATION_SAMPLE_MATCHING)
+					{
+						if (pSelectedSurf)
+							pSelectedSurf_ = pSelectedSurf;
+
+						if (pSelectedSurf_)
+							pSelectedSurfSample = pPSuLM->SelectSample(pFig, pSelectedSurf_, &(pFig->m_PoseC0), x / pData->ZoomFactor, y / pData->ZoomFactor);	
+
+						if (pSelectedSurfSample)
+							pSelectedSurf = pSelectedSurf_;
+					}
+
+					pData->pSelectedSurf = pSelectedSurf;
 
 					pVS->m_PSuLMBuilder.m_pCamera->m_Flags = CameraFlagsOld;
 				}
@@ -1399,7 +1418,7 @@ void RVLPSuLMDisplayMouseCallback2(int event, int x, int y, int flags, void* vpD
 				if(pSelectedSurf)
 				{
 					pPSuLM->Display3DSurface(pFig, pSelectedSurf, &NullPose, cvScalar(255, 255, 0), 2,
-						RVLPSULM_DISPLAY_VECTORS);
+						RVLPSULM_DISPLAY_VECTORS, pSelectedSurfSample);
 
 					if(pHypothesis != NULL && pSelectedSurf->m_Index < nSurfaces)
 					{
@@ -1435,7 +1454,7 @@ void RVLPSuLMDisplayMouseCallback2(int event, int x, int y, int flags, void* vpD
 							{
 								pSurf2 = pPSuLM2->m_3DSurfaceArray[iMatch];
 
-								pPSuLM2->Display3DSurface(pFig2, pSurf2, &NullPose, cvScalar(255, 0, 0), 2,
+								pPSuLM2->Display3DSurface(pFig2, pSurf2, &NullPose, cvScalar(255, 255, 0), 2,
 									RVLPSULM_DISPLAY_VECTORS);
 							}
 						}
@@ -1466,7 +1485,7 @@ void RVLPSuLMDisplayMouseCallback2(int event, int x, int y, int flags, void* vpD
 									{
 										pLine2 = pPSuLM2->m_3DLineArray[iMatch];
 
-										pPSuLM2->Display3DLine(pFig2, pLine2, &NullPose, cvScalar(255, 0, 0), 2, RVLPSULM_DISPLAY_VECTORS);
+										pPSuLM2->Display3DLine(pFig2, pLine2, &NullPose, cvScalar(255, 255, 0), 2, RVLPSULM_DISPLAY_VECTORS);
 									}
 								}
 							}
