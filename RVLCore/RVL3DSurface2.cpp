@@ -264,7 +264,7 @@ void CRVL3DSurface2::Load(	FILE *fp,
 				fread(&(pSample->stdX), sizeof(double), 1, fp);
 				fread(pSample->stdN, sizeof(double), 2, fp);
 #endif
-
+				pSample->pSurface = this;
 				pSample->pNext = pSample + 1;
 			}
 

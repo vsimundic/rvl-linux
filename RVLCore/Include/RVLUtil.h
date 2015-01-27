@@ -184,9 +184,9 @@
 }
 // return J(1x3)*C(3x3)*J(1x3)'
 #define RVLCOV3DTRANSFTO1D(C, J)	(C[0]*J[0]*J[0] + 2*C[1]*J[0]*J[1] + 2*C[2]*J[0]*J[2] + C[4]*J[1]*J[1] + 2*C[5]*J[1]*J[2] + C[8]*J[2]*J[2])
-#define RVLMIN(x, y)	(x <= y ? x : y)
-#define RVLMAX(x, y)	(x >= y ? x : y)
-#define RVLABS(x)		(x >= 0.0 ? x : -x)
+#define RVLMIN(x, y)	(x <= y ? (x) : (y))
+#define RVLMAX(x, y)	(x >= y ? (x) : (y))
+#define RVLABS(x)		(x >= 0.0 ? (x) : -(x))
 // R = [1,  0,   0;
 //		0, cs, -sn;
 //		0, sn,  cs]

@@ -29,6 +29,7 @@ struct RVLPSULMDISPLAY_MOUSE_CALLBACK_DATA
 	IplImage *pImage2;
 	//CRVL3DPose *pPoseCM;
 	char *MatchMatrixGT;
+	CRVL3DSurface2 *pSelectedSurf;
 };
 
 struct RVL3DMESHFILE
