@@ -134,13 +134,14 @@ void CRVL3DLine2::Transform(CRVL3DLine2 *pLineSrc,
 	pData->len = len;
 
 	double *CSrc, *CTgt;
+	double M3x3Tmp[9];
 	
 	CTgt = m_CX[0];
 	CSrc = pLineSrc->m_CX[0];
-	RVLMXMUL3X3(R, CSrc, CTgt)
+	RVLCOV3DTRANSF(CSrc, R, CTgt, M3x3Tmp)
 	CTgt = m_CX[1];
 	CSrc = pLineSrc->m_CX[1];
-	RVLMXMUL3X3(R, CSrc, CTgt)
+	RVLCOV3DTRANSF(CSrc, R, CTgt, M3x3Tmp)
 }
 
 void CRVL3DLine2::ComputeMatchParams(double w1,
@@ -248,8 +249,8 @@ bool CRVL3DLine2::Match(	CRVL3DObject *pObject_,
 
 	double w0;
 
-	if(Flags & RVL3DLINE_MATCH_FLAG_OVERLAP)
-	{		
+	if (Flags & RVL3DLINE_MATCH_FLAG_OVERLAP)
+	{
 		double w1o = RVLMAX(w1, w1_);
 		double w2o = RVLMIN(w2, w2_);
 
@@ -257,25 +258,17 @@ bool CRVL3DLine2::Match(	CRVL3DObject *pObject_,
 
 		double rOverlap = dwo / pData->len;
 
-		if(rOverlap < minrOverlap)
+		if (rOverlap < minrOverlap)
 			return false;
 
 		double rOverlap_ = dwo / pData_->len;
 
-		if(rOverlap_ < minrOverlap)
+		if (rOverlap_ < minrOverlap)
 			return false;
 
 		// central point of overlapping segment
 
 		w0 = 0.5 * (w1o + w2o);
-
-		// origin of the match reference frame
-
-		RVLSCALE3VECTOR(ZLC, w0, tLC)	
-
-		RVLMULMX3X3VECT(RCL, tLC, tCL)
-
-		RVLNEGVECT3(tCL, tCL)
 	}
 
 	// x and y-axis of the match reference frame
@@ -284,11 +277,13 @@ bool CRVL3DLine2::Match(	CRVL3DObject *pObject_,
 
 	fTmp = RVLDOTPRODUCT3(XLC, XLC);
 
-	if(fTmp <= APPROX_ZERO)
+	int i, j, k;
+
+	if (fTmp <= APPROX_ZERO)
 	{
-		double absZ[3];
-		int i, j, k;
-		RVLORTHOGONAL3(ZLC, XLC, i, j, k, absZ, fTmp)
+		//double absZ[3];		
+		//RVLORTHOGONAL3(ZLC, XLC, i, j, k, absZ, fTmp)
+		RVLORTHOGONAL3(ZLC, XLC, i, j, k, fTmp)
 	}
 	else
 	{
@@ -298,6 +293,17 @@ bool CRVL3DLine2::Match(	CRVL3DObject *pObject_,
 	}
 
 	RVLCROSSPRODUCT3(ZLC, XLC, YLC);
+
+	if (Flags & RVL3DLINE_MATCH_FLAG_OVERLAP)
+	{
+		// origin of the match reference frame
+
+		RVLSCALE3VECTOR(ZLC, w0, tLC)	
+
+		RVLMULMX3X3VECT(RCL, tLC, tCL)
+
+		RVLNEGVECT3(tCL, tCL)
+	}
 
 	// transform lines into the match reference frame
 
@@ -334,7 +340,7 @@ bool CRVL3DLine2::Match(	CRVL3DObject *pObject_,
 	CC = pLine_->m_CX[1];
 	RVLCOV3DTRANSF(CC, RCL, C2_, Mx3x3Tmp)
 
-	// matching of the central points
+	// computing the central points
 
 	double dw = w2 - w1;
 	double dw_ = w2_ - w1_;
@@ -364,36 +370,77 @@ bool CRVL3DLine2::Match(	CRVL3DObject *pObject_,
 	P0_[0] = P1_[0] + s_ * (P2_[0] - P1_[0]);
 	P0_[1] = P1_[1] + s_ * (P2_[1] - P1_[1]);
 
+	// computing the uncertainty of the relative position of the central points:
+	//     P0C <- P1C + s * (P2C - P1C)
+	//     ZRC <- P0C / ||P0C||
+	//     XRC <- unit vector orthogonal to ZRC
+	//     YRC <- ZRC x XRC
+	//     RCR <- [XRC'; YRC'; ZRC']
+	//     RRL <- RCL * RCR'
+	//     J <- [1 0 0] * RRL
+	//          [0 1 0]
+	//     varOrientUncert = ||P0C||^2 * pMatchData->varOrientationUncert
+	//     COrientUncert <- varOrientUncert * J * [1 0 0] * J'
+	//                                            [0 1 0]
+	//                                            [0 0 0]
+	//     It can be shown that  J * [1 0 0] * J' = J_ * J_, where J_ = [XLC'; YLC'] * [XRC YRC]
+	//                               [0 1 0]
+	//                               [0 0 0]
+	//     CPositionUncert <- eye(2) * pMatchData->varPositionUncert
+	//     C <- C0 + C0_ + COrientUncert + CPositionUncert
+
 	double P0C[3];
 
-	fTmp = (1.0 - s);
-
-	P0C[0] = fTmp * P1C[0] + s * P2C[0];
-	P0C[1] = fTmp * P1C[1] + s * P2C[1];
-	P0C[2] = fTmp * P1C[2] + s * P2C[2];
-
-	double RC[3];
+	P0C[0] = P1C[0] + s * (P2C[0] - P1C[0]);
+	P0C[1] = P1C[1] + s * (P2C[1] - P1C[1]);
+	P0C[2] = P1C[2] + s * (P2C[2] - P1C[2]);
 
 	double r = sqrt(RVLDOTPRODUCT3(P0C, P0C));
-	RVLSCALE3VECTOR2(P0C, r, RC)
 
-	double RL[2];
+	double RCR[3 * 3];
 
-	RL[0] = RVLDOTPRODUCT3(XLC, RC);
-	RL[1] = RVLDOTPRODUCT3(YLC, RC);
+	double *XRC = RCR;
+	double *YRC = RCR + 3;
+	double *ZRC = RCR + 6;
 
-	double J[2];
+	RVLSCALE3VECTOR2(P0C, r, ZRC);
 
-	J[0] = RL[1];
-	J[1] = -RL[0];
+	RVLORTHOGONAL3(ZRC, XRC, i, j, k, fTmp);
+
+	RVLCROSSPRODUCT3(ZRC, XRC, YRC);
+
+	double J[4];
+
+	J[0] = RVLDOTPRODUCT3(XLC, XRC);
+	J[1] = RVLDOTPRODUCT3(XLC, YRC);
+	J[2] = RVLDOTPRODUCT3(YLC, XRC);
+	J[3] = RVLDOTPRODUCT3(YLC, YRC);
 
 	double varOrientUncert = r * r * pMatchData->varOrientationUncert;
 
-	double COrientUncert[2*2];
+	double COrientUncert[2 * 2];
 
-	COrientUncert[0] = varOrientUncert * J[0] * J[0];
-	COrientUncert[1] = varOrientUncert * J[0] * J[1];
-	COrientUncert[3] = varOrientUncert * J[1] * J[1];
+	COrientUncert[0] = varOrientUncert * (J[0] * J[0] + J[1] * J[1]);
+	COrientUncert[1] = varOrientUncert * (J[0] * J[2] + J[1] * J[3]);
+	COrientUncert[3] = varOrientUncert * (J[2] * J[2] + J[3] * J[3]);
+
+	//double RC[3];
+
+	//RVLSCALE3VECTOR2(P0C, r, RC)
+
+	//double RL[2];
+
+	//RL[0] = RVLDOTPRODUCT3(XLC, RC);
+	//RL[1] = RVLDOTPRODUCT3(YLC, RC);
+
+	//double J[2];
+
+	//J[0] = RL[1];
+	//J[1] = -RL[0];
+
+	//COrientUncert[0] = varOrientUncert * J[0] * J[0];
+	//COrientUncert[1] = varOrientUncert * J[0] * J[1];
+	//COrientUncert[3] = varOrientUncert * J[1] * J[1];
 
 	double E[2];
 
@@ -406,7 +453,12 @@ bool CRVL3DLine2::Match(	CRVL3DObject *pObject_,
 	C[1] = C0[1] + C0_[1] + COrientUncert[1]; 
 	C[3] = C0[3] + C0_[3] + COrientUncert[3] + pMatchData->varPositionUncert; 
 
+	// computing the Mahalanobis distance of the central points
+
 	double detC = RVLDET2(C);
+
+	if (detC < 0.0)
+		int debug = 0;
 
 	double ep = RVLMAHDIST2(E, C, detC);
 

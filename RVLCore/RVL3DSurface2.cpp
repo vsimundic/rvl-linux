@@ -1510,8 +1510,9 @@ bool CRVL3DSurface2::Match4(CRVL3DObject *pObject_,
 
 	int i, j, k;
 
-	if(fTmp <= APPROX_ZERO)		
-		RVLORTHOGONAL3(ZP, XP, i, j, k, Vect3Tmp, fTmp)
+	if (fTmp <= APPROX_ZERO)
+		//RVLORTHOGONAL3(ZP, XP, i, j, k, Vect3Tmp, fTmp)
+		RVLORTHOGONAL3(ZP, XP, i, j, k, fTmp)
 	else
 	{
 		fTmp = sqrt(fTmp);

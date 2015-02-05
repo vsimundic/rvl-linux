@@ -347,21 +347,33 @@
 	tTgt[1] = RSrc[3]*tSrc[0] - RSrc[0]*tSrc[1];\
 	tTgt[2] = 0.0;\
 }
+//// Compute vector Y orthogonal to X
+//#define RVLORTHOGONAL3(X, Y, i, j, k, tmp3x1, fTmp)\
+//{\
+//	tmp3x1[0] = RVLABS(X[0]);\
+//	tmp3x1[1] = RVLABS(X[1]);\
+//	tmp3x1[2] = RVLABS(X[2]);\
+//	i = (tmp3x1[0] > tmp3x1[1] ? 0 : 1);\
+//	if(tmp3x1[2] > tmp3x1[i])\
+//		i = 2;\
+//	j = (i + 1) % 3;\
+//	k = (i + 2) % 3;\
+//	Y[i] = -X[j];\
+//	Y[j] = X[i];\
+//	Y[k] = 0.0;\
+//	fTmp = sqrt(Y[j] * Y[j] + Y[i] * Y[i]);\
+//	RVLSCALE3VECTOR2(Y, fTmp, Y)\
+//}
 // Compute vector Y orthogonal to X
-#define RVLORTHOGONAL3(X, Y, i, j, k, tmp3x1, fTmp)\
+#define RVLORTHOGONAL3(X, Y, i, j, k, fTmp)\
 {\
-	tmp3x1[0] = RVLABS(X[0]);\
-	tmp3x1[1] = RVLABS(X[1]);\
-	tmp3x1[2] = RVLABS(X[2]);\
-	i = (tmp3x1[0] > tmp3x1[1] ? 0 : 1);\
-	if(tmp3x1[2] > tmp3x1[i])\
-		i = 2;\
+	i = (RVLABS(X[0]) <  RVLABS(X[1]) ? 0 : 1);\
 	j = (i + 1) % 3;\
 	k = (i + 2) % 3;\
-	Y[i] = -X[j];\
-	Y[j] = X[i];\
-	Y[k] = 0.0;\
-	fTmp = sqrt(Y[j] * Y[j] + Y[i] * Y[i]);\
+	Y[j] = -X[k];\
+	Y[k] = X[j];\
+	Y[i] = 0.0;\
+	fTmp = sqrt(Y[j] * Y[j] + Y[k] * Y[k]);\
 	RVLSCALE3VECTOR2(Y, fTmp, Y)\
 }
 // Tgt = Src(2x2)

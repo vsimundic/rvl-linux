@@ -239,8 +239,6 @@ CRVLPSuLMBuilder::CRVLPSuLMBuilder(void)
 	m_kPan = 1.0;
 	m_kTilt = 1.0;
 	m_TiltOffset = 0.0;		// deg
-
-
 }
 
 CRVLPSuLMBuilder::~CRVLPSuLMBuilder(void)
@@ -375,7 +373,9 @@ void CRVLPSuLMBuilder::Init(void)
 
 	// Flags
 
-	if ((m_Flags & RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD) == RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD_SSM)
+	DWORD HypEvalMethod = (m_Flags & RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD);
+
+	if (HypEvalMethod == RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD_SSM)
 		m_Flags2 |= RVLPSULMBUILDER_FLAG2_HYPOTHESIS_EVALUATION_SAMPLE_MATCHING;
 
 	// Parameters
@@ -639,9 +639,7 @@ void CRVLPSuLMBuilder::Init(void)
 	RVLMEM_ALLOC_STRUCT_ARRAY(m_pMem0, double, 9, m_pPoseSSp->m_C);
 	memset(m_pPoseSSp->m_C, 0, 9 * sizeof(double));
 
-	//For hypothesis evaluation
-
-	DWORD HypEvalMethod = (m_Flags & RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD);
+	//For hypothesis evaluation	
 
 	if(HypEvalMethod == RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD_IBM)
 	{
@@ -3326,6 +3324,9 @@ bool CRVLPSuLMBuilder::GetPanTilt(char *ImageFileName,
 	fscanf(fpOdometry, "%d\t%d\t%d\t%d\t%d\t%d\t%d\t%c\n", &x, &y, &z, &pan, &tilt, &roll, &iSample0, &command);
 
 	fclose(fpOdometry);
+
+	if (pan == 70)
+		pan += 7;
 
 	pPose->m_Alpha = m_kPan * (double)pan * DEG2RAD;
 	pPose->m_Beta = m_kTilt * ((double)tilt + m_TiltOffset) * DEG2RAD;;			 
@@ -11747,7 +11748,7 @@ double CRVLPSuLMBuilder::EvaluateHypothesis4(	CRVLPSuLM * pSPSuLM,
 		{
 			j_ = j + nMSurfs;
 
-			//if(i == 62 && j == 54)
+			//if(i == 5 && j == 39)
 			//	int debug = 0;
 
 			if(pSLine->Match(pMLine, &m_LineMatchData, PFeature))
@@ -12221,7 +12222,8 @@ void CRVLPSuLMBuilder::InitHypothesisEvaluation4(CRVLPSuLM * pSPSuLM)
 
 		RVLSCALE3VECTOR2(tFS, r, ZRS)
 
-		RVLORTHOGONAL3(ZRS, XRS, i, j, k, Vect3Tmp, fTmp)
+		//RVLORTHOGONAL3(ZRS, XRS, i, j, k, Vect3Tmp, fTmp)
+		RVLORTHOGONAL3(ZRS, XRS, i, j, k, fTmp)
 
 		RVLCROSSPRODUCT3(ZRS, XRS, YRS)
 
@@ -12322,6 +12324,21 @@ void CRVLPSuLMBuilder::Load(char * ModelFileNameIn, int maxIndex)
 
 void CRVLPSuLMBuilder::LoadMap()
 {
+	CRVLGUI *pGUI;
+	CRVLMem GUIMem;
+
+	if (m_Flags & RVLPSULMBUILDER_FLAG_GENERATE_MODELS)
+	{
+		GUIMem.Create(1000000);
+
+		pGUI = new CRVLGUI;
+
+		pGUI->m_pMem0 = &GUIMem;
+		pGUI->m_pMem = &GUIMem;
+
+		pGUI->Init();
+	}
+
 	m_maxPSuLMIndex = -1;
 
 	FILE *fp;
@@ -12378,6 +12395,12 @@ void CRVLPSuLMBuilder::LoadMap()
 		
 			if(m_Flags & RVLPSULMBUILDER_FLAG_GENERATE_MODELS)
 			{
+				char str[200];
+
+				sprintf(str, "Generating model %d", pPSuLM->m_Index);
+
+				pGUI->Message(str, 400, 100, cvScalar(0, 128, 255), false);
+
 				fp = fopen(pPSuLM->m_ModelFilePath, "rb");
 
 				if(fp)
@@ -12425,6 +12448,13 @@ void CRVLPSuLMBuilder::LoadMap()
 			m_PSuLMList.Add(pPSuLM);
 			
 			pEntry = (RVLQLIST_PTR_ENTRY*)pEntry->pNext;
+		}
+
+		if (m_Flags & RVLPSULMBUILDER_FLAG_GENERATE_MODELS)
+		{
+			pGUI->CloseFigure("Message");
+
+			delete pGUI;
 		}
 
 		if(m_Flags & RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_MODEL_FUSION)
@@ -12611,6 +12641,8 @@ void CRVLPSuLMBuilder::CreateParamList(CRVLMem * pMem)
 	pParamData = m_ParamList.AddParam("PSuLM.Localization.HypothesisGeneration.refnHypotheses", RVLPARAM_TYPE_INT, &m_refnHypotheses);
 	pParamData = m_ParamList.AddParam("PSuLM.Localization.HypothesisGeneration.RotHypTol", RVLPARAM_TYPE_DOUBLE, &m_RotHypTol);
 	pParamData = m_ParamList.AddParam("PSuLM.Localization.HypothesisGeneration.tHypTol", RVLPARAM_TYPE_DOUBLE, &m_tHypTol);
+	pParamData = m_ParamList.AddParam("PSuLM.Localization.HypothesisGeneration.InitMatchingConstraints", RVLPARAM_TYPE_FLAG, &m_Flags2);
+	m_ParamList.AddID(pParamData, "yes", RVLPSULMBUILDER_FLAG2_HYPGEN_INIT_MATCHING_CONSTRAINTS);
 	pParamData = m_ParamList.AddParam("PSuLM.Localization.HypothesisGeneration.LastDOFEstimationMethod", RVLPARAM_TYPE_FLAG, &m_Flags);
 	m_ParamList.AddID(pParamData, "MAX_PEAK_ONLY", RVLPSULMBUILDER_FLAG_LAST_DOF_ESTIMATION_METHOD_MAX_PEAK_ONLY);
 	m_ParamList.AddID(pParamData, "BEST_PEAK_TREE", RVLPSULMBUILDER_FLAG_LAST_DOF_ESTIMATION_METHOD_BEST_PEAK_TREE);
@@ -13075,7 +13107,7 @@ void CRVLPSuLMBuilder::Hypotheses3(	CRVLPSuLM *pSPSuLM,
 
 	RVLPSULM_MSMATCH_DATA *MatchList;
 
-	RVLMEM_ALLOC_STRUCT_ARRAY(m_pMem2, RVLPSULM_MSMATCH_DATA, nS3DSurfaces * maxnM3DSurfaces, MatchList);
+	RVLMEM_ALLOC_STRUCT_ARRAY(m_pMem2, RVLPSULM_MSMATCH_DATA, nS3DSurfaces * maxnM3DSurfaces + 1, MatchList);
 
 	RVLPSULM_HG_NODE *NodeMem;
 
@@ -13375,7 +13407,7 @@ void CRVLPSuLMBuilder::Hypotheses3(	CRVLPSuLM *pSPSuLM,
 			RVLMULMX3X3TVECT(R, t, invtInit);
 		}
 
-		//if(pMPSuLM->m_Index == 22)	// debug
+		//if(pMPSuLM->m_Index == 42 && RVLABS(alpha) < APPROX_ZERO)	// debug
 		//	int debug = 0;
 
 		MSurfArray = pMPSuLM->m_3DSurfaceArray;
@@ -13470,8 +13502,9 @@ void CRVLPSuLMBuilder::Hypotheses3(	CRVLPSuLM *pSPSuLM,
 				//		continue;
 				//}
 
-				if(!pS3DSurface->Match2(pM3DSurface, &PoseSMInit, MatchQuality, detQ, &MatchData))
-					continue;
+				if (m_Flags2 & RVLPSULMBUILDER_FLAG2_HYPGEN_INIT_MATCHING_CONSTRAINTS)
+					if(!pS3DSurface->Match2(pM3DSurface, &PoseSMInit, MatchQuality, detQ, &MatchData))
+						continue;
 
 				//Support = DOUBLE2INT(sqrt((double)(SSupport * pM3DSurface->m_nSupport)));
 				//Support = SSupport + pM3DSurface->m_nSupport;
@@ -14155,7 +14188,8 @@ void CRVLPSuLMBuilder::Hypotheses3(	CRVLPSuLM *pSPSuLM,
 						int i, j, k;
 
 						if(fTmp <= APPROX_ZERO)		
-							RVLORTHOGONAL3(ZP, XP, i, j, k, Vect3Tmp, fTmp)
+							//RVLORTHOGONAL3(ZP, XP, i, j, k, Vect3Tmp, fTmp)
+							RVLORTHOGONAL3(ZP, XP, i, j, k, fTmp)
 						else
 						{
 							fTmp = sqrt(fTmp);
@@ -14826,9 +14860,10 @@ void CRVLPSuLMBuilder::Hypotheses3(	CRVLPSuLM *pSPSuLM,
 
 							if(fTmp <= APPROX_ZERO)
 							{
-								double absZ[3];
+								//double absZ[3];
 								int i, j, k;
-								RVLORTHOGONAL3(ZLC, XLC, i, j, k, absZ, fTmp)
+								//RVLORTHOGONAL3(ZLC, XLC, i, j, k, absZ, fTmp)
+								RVLORTHOGONAL3(ZLC, XLC, i, j, k, fTmp)
 							}
 							else
 							{
@@ -23701,7 +23736,8 @@ void CRVLPSuLMBuilder::PoseConstraintProbability(CRVLPSuLM *pSPSuLM,
 
 		V1 = ((RVL3DLINE_EXTENDED_DATA *)(pSPSuLM->m_3DLineArray[i]->m_pData))->V;
 
-		RVLORTHOGONAL3(V1, V2, i_, j_, k_, V3, fTmp)
+		//RVLORTHOGONAL3(V1, V2, i_, j_, k_, V3, fTmp)
+		RVLORTHOGONAL3(V1, V2, i_, j_, k_, fTmp)
 
 		RVLCROSSPRODUCT3(V1, V2, V3);
 
@@ -24531,7 +24567,8 @@ void CRVLPSuLMBuilder::RepresentativeHypotheses()
 			//if(pHypothesis->Index == 591 && pHypothesis_->Index == 871)
 			//	int debug = 0;
 
-			//break;		// debug
+			if (m_Flags2 & RVLPSULMBUILDER_FLAG2_MAPBUILDING_MANUAL)
+				break;
 
 			if(pHypothesis_->Probability < m_minRelevantLogLikelihood)
 				break;
@@ -24900,7 +24937,8 @@ void CRVLPSuLMBuilder::MergeSurfaces(CRVLPSuLM *pPSuLM)
 
 			// XMC <- unit vector orthogonal to ZMC
 
-			RVLORTHOGONAL3(ZMC, XMC, i, j, k, b, fTmp)
+			//RVLORTHOGONAL3(ZMC, XMC, i, j, k, b, fTmp)
+			RVLORTHOGONAL3(ZMC, XMC, i, j, k, fTmp)
 
 			// YMC <- ZMC x XMC
 
@@ -25138,7 +25176,7 @@ void CRVLPSuLMBuilder::MergeLines(CRVLPSuLM *pPSuLM)
 	RVL3DLINE_EXTENDED_DATA *pData, *pData_;
 	double *V, *V_, *P1C, *P2C, *P1C_, *P2C_, *dP, *dP_, *dX;
 	double w1, w2, w1_, w2_, w1o, w2o, dwo, w1m, w2m, dwm, rOverlap, rOverlap_, dx, dy, fTmp, eN;
-	double absZ[3];
+	//double absZ[3];
 	double Pc[2];
 	int i, j, k;
 	double PM[8][2];
@@ -25259,7 +25297,8 @@ void CRVLPSuLMBuilder::MergeLines(CRVLPSuLM *pPSuLM)
 			fTmp = RVLDOTPRODUCT3(XLC, XLC);
 
 			if(fTmp <= APPROX_ZERO)
-				RVLORTHOGONAL3(ZLC, XLC, i, j, k, absZ, fTmp)
+				//RVLORTHOGONAL3(ZLC, XLC, i, j, k, absZ, fTmp)
+				RVLORTHOGONAL3(ZLC, XLC, i, j, k, fTmp)
 			else
 			{
 				fTmp = sqrt(fTmp);
