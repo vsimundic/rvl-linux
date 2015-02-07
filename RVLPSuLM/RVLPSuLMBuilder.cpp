@@ -2085,7 +2085,9 @@ BOOL CRVLPSuLMBuilder::Create(CRVLPSuLM *pPSuLM,
 
 					while(TRUE)
 					{
-						if(((*pContourElement) & RVL2DCONTOUR_VOID) == 0)
+						if (m_Flags2 & RVLPSULMBUILDER_FLAG2_LINES_EDGES_VOID)
+							nDepthSteps++;
+						else if(((*pContourElement) & RVL2DCONTOUR_VOID) == 0)
 							nDepthSteps++;
 
 						if(pContourElement == pContourElement2)
@@ -7571,6 +7573,9 @@ void CRVLPSuLMBuilder::Localization(CRVLPSuLM * pSPSuLM,
 
 		/////
 
+		//if (pHypothesis->Index == 359)
+		//	int debug = 0;
+
 		pMPSuLM = pHypothesis->pMPSuLM;
 
 		pPoseSM = &(pHypothesis->PoseSM);
@@ -8207,6 +8212,52 @@ void CRVLPSuLMBuilder::Localization(CRVLPSuLM * pSPSuLM,
 			m_nHypotheses = m_nRepresentativeHypotheses;
 
 			RVLBubbleSort<RVLPSULM_HYPOTHESIS>(&m_RepresentativeHypothesisList, m_nHypotheses, &m_HypothesisArray, true);
+
+			// recompute the costs of the hypotheses after rejection of dynamic surfaces and reorder the hypotheses
+
+			double StartTime = m_pTimer->GetTime();
+
+			if((m_Flags2 & RVLPSULMBUILDER_FLAG2_HYPOTHESIS_EVALUATION_SAMPLE_MATCHING) && m_nHypotheses > 1)
+			{
+				int iChecked = m_nHypotheses;
+
+				while (iChecked > 0)
+				{
+					pHypothesis = m_HypothesisArray[0];
+
+					P = EvaluateHypothesis4(pSPSuLM, pHypothesis, RVLPSULMBUILDER_HYPEVAL4_FLAG_FIRST_ORDER_DEPENDENCY_TREE | RVLPSULMBUILDER_HYPEVAL4_FLAG_DYNAMIC_SURF_DETECT);
+
+					pHypothesis->Probability = P - PriorProbabilityWorldModel;
+
+					pHypothesis->cost = DOUBLE2INT(1e3 * (pHypothesis->Probability - fTmp));
+
+					for (i = 1; i < m_nHypotheses; i++)
+						if (m_HypothesisArray[i]->cost <= pHypothesis->cost)
+							break;
+
+					if (i == 1)
+						break;
+
+					i--;
+
+					memmove(m_HypothesisArray, m_HypothesisArray + 1, i * sizeof(RVLPSULM_HYPOTHESIS *));
+
+					m_HypothesisArray[i] = pHypothesis;
+
+					if (i < iChecked)
+						iChecked = i;
+					else
+						iChecked--;
+				}
+			}
+
+			double DynSurfRejectionExecutionTime = m_pTimer->GetTime() - StartTime;
+
+			FILE *fp = fopen("C:\\RVL\\Debug\\debug_.txt", "w");
+
+			fprintf(fp, "DynSurfRejectionExecutionTime = %lf\n", DynSurfRejectionExecutionTime);
+
+			fclose(fp);
 
 #ifdef RVLPSULMBUILDER_HYPOTHESIS_LOG
 			fpHyp = fopen("C:\\RVL\\Debug\\Hypotheses.log", "w");
@@ -12452,7 +12503,7 @@ void CRVLPSuLMBuilder::LoadMap()
 
 		if (m_Flags & RVLPSULMBUILDER_FLAG_GENERATE_MODELS)
 		{
-			pGUI->CloseFigure("Message");
+			pGUI->Message("All models generated.", 400, 100, cvScalar(0, 255, 0));
 
 			delete pGUI;
 		}
@@ -12610,6 +12661,8 @@ void CRVLPSuLMBuilder::CreateParamList(CRVLMem * pMem)
 	pParamData = m_ParamList.AddParam("PSuLM.Features", RVLPARAM_TYPE_FLAG, &m_Flags);
 	m_ParamList.AddID(pParamData, "SURFACES", RVLPSULMBUILDER_FLAG_SURFACES);
 	m_ParamList.AddID(pParamData, "LINES", RVLPSULMBUILDER_FLAG_LINES);
+	pParamData = m_ParamList.AddParam("PSuLM.Lines.EdgesVoid", RVLPARAM_TYPE_FLAG, &m_Flags2);
+	m_ParamList.AddID(pParamData, "yes", RVLPSULMBUILDER_FLAG2_LINES_EDGES_VOID);
 	pParamData = m_ParamList.AddParam("PSuLM.Complex", RVLPARAM_TYPE_FLAG, &m_Flags2);
 	m_ParamList.AddID(pParamData, "yes", RVLPSULMBUILDER_FLAG2_COMPLEX);
 	pParamData = m_ParamList.AddParam("PSuLM.FileVersion", RVLPARAM_TYPE_FLAG, &m_Flags2);
@@ -23071,7 +23124,12 @@ void CRVLPSuLMBuilder::DisplayHypothesis(CRVLGUI *pGUI,
 			if(pHypothesis == pMPSuLM->m_pHypothesis)
 				PoseConstraintProbability(pSPSuLM, pMPSuLM);
 
-			EvaluateHypothesis4(pSPSuLM, pHypothesis, RVLPSULMBUILDER_HYPEVAL4_FLAG_FIRST_ORDER_DEPENDENCY_TREE | RVLPSULMBUILDER_HYPEVAL4_FLAG_DYNAMIC_SURF_DETECT);
+			DWORD EvaluateHypothesisFlags = RVLPSULMBUILDER_HYPEVAL4_FLAG_FIRST_ORDER_DEPENDENCY_TREE;
+
+			if (m_Flags2 & RVLPSULMBUILDER_FLAG2_HYPOTHESIS_EVALUATION_SAMPLE_MATCHING)
+				EvaluateHypothesisFlags |= RVLPSULMBUILDER_HYPEVAL4_FLAG_DYNAMIC_SURF_DETECT;
+
+			pHypothesis->Probability = EvaluateHypothesis4(pSPSuLM, pHypothesis, EvaluateHypothesisFlags);
 		}
 		else
 			CreateMatchMatrix(pSPSuLM, pMPSuLM, &(pHypothesis->PoseSM), 1.0);
@@ -23255,12 +23313,12 @@ void CRVLPSuLMBuilder::DisplayHypothesisData(	CRVLFigure *pFig,
 
 		cvPutText(pDataDisplay, str, cvPoint(0, (++iTextLine) * pFig->m_FontSize), &pFig->m_Font,  cvScalar(0, 0, 0));
 
-		//if(HypEvalMethod == RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD_P)
-		//{
-		//	sprintf(str, "Likelihood = %lf", pHypothesis->Probability);
+		if(HypEvalMethod == RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD_P)
+		{
+			sprintf(str, "Likelihood = %lf", pHypothesis->Probability);
 
-		//	cvPutText(pDataDisplay, str, cvPoint(0, (++iTextLine) * pFig->m_FontSize), &pFig->m_Font,  cvScalar(0, 0, 0));
-		//}
+			cvPutText(pDataDisplay, str, cvPoint(0, (++iTextLine) * pFig->m_FontSize), &pFig->m_Font,  cvScalar(0, 0, 0));
+		}
 
 		if(pHypothesis == pHypothesis->pMPSuLM->m_pHypothesis)
 		{
