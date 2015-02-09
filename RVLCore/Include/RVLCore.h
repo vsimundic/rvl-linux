@@ -20,6 +20,9 @@
 #include <string.h>
 //#include "cv.h"
 #include "opencv2\opencv.hpp"
+#include "opencv\cv.h"
+#include "opencv\highgui.h"
+#include "opencv2\calib3d\calib3d_c.h"
 #include "RVLConst.h"
 #include "RVLBuffer.h"
 #include "RVLMem.h"

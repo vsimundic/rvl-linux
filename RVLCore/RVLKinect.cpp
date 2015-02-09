@@ -2,6 +2,7 @@
 
 //#include "cv.h"
 #include "opencv2\opencv.hpp"
+#include "opencv\cv.h"
 #ifdef RVLOPENNI
 #include "OpenNI.h"
 #endif

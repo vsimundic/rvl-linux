@@ -5369,819 +5369,206 @@ bool RVL3DMeshIsConvex(CRVLMPtrChain *pTriangleList,
 
 #ifdef RVLVTK
 void RVLDisplaySegmentedMesh3D(CRVLVTKRenderer *pRenderer,
-
                                 CRVLMPtrChain *pTriangleList,
-
                                 int nObjects,
-
                                 int w, 
-
                                 int h,
-
                                 int *pointmap,
-
                                 RVL3DPOINT2 **Point3DMap,
-
                                 int colortype,
-
                                 IplImage* pTexImg)
-
 {
-
- 
-
       //generating random color (colortype = 0)
-
- 
-
       unsigned char **color;
-
- 
-
       if (colortype == 0)
-
- 
-
       {
-
- 
-
             color = new unsigned char*[nObjects];
-
- 
-
             for (int i = 0; i < nObjects; i++)
-
- 
-
             {
-
- 
-
                   color[i] = new unsigned char[3];
-
- 
-
                   color[i][0] = (unsigned char)(rand() * 255);
-
- 
-
                   color[i][1] = (unsigned char)(rand() * 255);
-
- 
-
                   color[i][2] = (unsigned char)(rand() * 255);
-
- 
-
             }
-
- 
-
       }
-
- 
-
       //points map
-
- 
-
       memset(pointmap, 255, w * h * sizeof(int));
-
- 
-
- 
-
       //Setting texture (colortype = 1)
-
- 
-
       vtkSmartPointer<vtkFloatArray> texCoords;
-
- 
-
       vtkSmartPointer<vtkImageData> texImg;
-
- 
-
       vtkSmartPointer<vtkTexture> texObj;
-
- 
-
       if (colortype == 1)
-
- 
-
       {
-
- 
-
             //Texture coordinates & texture
-
- 
-
             texCoords = vtkSmartPointer<vtkFloatArray>::New();
-
- 
-
             texCoords->SetNumberOfComponents(2);
-
- 
-
             //texCoords->SetNumberOfTuples(w * h);
-
- 
-
-            
-
- 
-
             texImg = vtkSmartPointer<vtkImageData>::New();
-
- 
-
             texImg->SetExtent(0, w - 1, 0, h - 1, 0, 0);
-
- 
-
             texImg->SetOrigin(0, 0, 0);
-
- 
-
-            texImg->SetNumberOfScalarComponents(3);
-
- 
-
-            texImg->SetScalarTypeToUnsignedChar();
-
- 
-
-            texImg->AllocateScalars();
-
- 
-
+            //texImg->SetNumberOfScalarComponents(3, texImg->GetInformation());
+            //texImg->SetScalarTypeToUnsignedChar();
+			//texImg->SetScalarType(VTK_CHAR, texImg->GetInformation());
+			texImg->AllocateScalars(VTK_UNSIGNED_CHAR, 3);
             char *scalarData = (char *)texImg->GetScalarPointer();
-
- 
-
-            memcpy(scalarData, pTexImg->imageData, w * h * 3 *
-
-sizeof(char));
-
- 
-
+            memcpy(scalarData, pTexImg->imageData, w * h * 3 * sizeof(char));
             texObj = vtkSmartPointer<vtkTexture>::New();
-
- 
-
-            texObj->SetInputConnection(texImg->GetProducerPort());
-
- 
-
+			texObj->SetInputData(texImg);// ->SetInputConnection(texImg->GetProducerPort());
             texObj->InterpolateOn();
-
- 
-
       }
-
- 
-
       //color based on histogram (colortype = 2)
-
- 
-
       int r, g, b;
-
- 
-
       float matR, matG, matB;
-
- 
-
       RVLQLIST_HIST_ENTRY *pHistEntry;
 
- 
-
- 
-
-      //Setting up VTK scene
-
- 
-
- 
-
+	  //Setting up VTK scene
       vtkRenderer *ren1 = pRenderer->m_pRenderer;
-
- 
-
       vtkRenderWindow *renWin = pRenderer->m_pWindow;
-
- 
-
       vtkRenderWindowInteractor *iren = pRenderer->m_pInteractor;
-
- 
-
- 
-
       ren1->RemoveAllViewProps();
-
- 
-
       ren1->Clear();
-
- 
-
       renWin->Render();
-
- 
-
- 
 
       //points variable
-
- 
-
       vtkSmartPointer<vtkPoints> points = vtkSmartPointer<vtkPoints>::New();
-
- 
-
       points->SetDataTypeToFloat();
-
- 
-
       points->Reset();
-
- 
-
       //triangles variable
-
- 
-
-      vtkSmartPointer<vtkCellArray> triangles =
-
-vtkSmartPointer<vtkCellArray>::New();
-
- 
-
+      vtkSmartPointer<vtkCellArray> triangles = vtkSmartPointer<vtkCellArray>::New();
       //indices (for triangles)
-
- 
-
-      vtkSmartPointer<vtkIdList> indices =
-
-vtkSmartPointer<vtkIdList>::New();
-
- 
-
+      vtkSmartPointer<vtkIdList> indices = vtkSmartPointer<vtkIdList>::New();
       //colors (for triangles)
-
- 
-
-      vtkSmartPointer<vtkUnsignedCharArray> rgbs =
-
-vtkSmartPointer<vtkUnsignedCharArray>::New();
-
- 
-
+      vtkSmartPointer<vtkUnsignedCharArray> rgbs = vtkSmartPointer<vtkUnsignedCharArray>::New();
       rgbs->Reset();
-
- 
-
       rgbs->SetName("RGB");
-
- 
-
       rgbs->SetNumberOfComponents(3);
-
- 
-
       //number of inserted points
-
- 
-
       int noPts = 0;
-
- 
-
       //vertices
-
- 
-
       int vert[3];
-
- 
-
- 
-
       //
-
- 
-
       CRVL2DRegion2 *pTriangle;
-
- 
-
       pTriangleList->Start();
-
- 
-
       while(pTriangleList->m_pNext)
-
- 
-
       {
-
- 
-
             pTriangle = (CRVL2DRegion2 *)(pTriangleList->GetNext());
-
- 
-
             // pTriangle is a pointer to an instance of the class
-
- 
-
             // CRVL2DRegion2 representing a mesh triangle. 
-
- 
-
             // Now you can do whatever you want with the triangle.
-
- 
-
             if(pTriangle->m_Flags & RVLOBJ2_FLAG_REJECTED)
-
- 
-
                   continue;
-
- 
-
             RVLMESH_LINK *pLink = (RVLMESH_LINK *)(pTriangle->m_PtArray);
-
- 
-
             RVL3DPOINT2 *point = Point3DMap[pLink->iPix0];
-
- 
-
             //inserting points/vertices
-
- 
-
             if (pointmap[pLink->iPix0] < 0)
-
- 
-
             {
-
- 
-
-                  points->InsertNextPoint(point->XYZ[0],
-point->XYZ[1],point->XYZ[2]);
-
- 
-
+                  points->InsertNextPoint(point->XYZ[0], point->XYZ[1],point->XYZ[2]);
                   pointmap[pLink->iPix0] = noPts;
-
- 
-
                   vert[0] = noPts;
-
- 
-
                   if (colortype == 1)
-
-                        texCoords->InsertNextTuple2((float)(pLink->iPix0 -
-(int)(pLink->iPix0 / w) * w) / w, (float)((int)(pLink->iPix0 / w))/ h);
-
+                        texCoords->InsertNextTuple2((float)(pLink->iPix0 - (int)(pLink->iPix0 / w) * w) / w, (float)((int)(pLink->iPix0 / w))/ h);
                   noPts++;
-
- 
-
             }
-
- 
-
             else
-
- 
-
                   vert[0] = pointmap[pLink->iPix0];
 
- 
-
- 
-
             pLink = pLink->pNext->pOpposite;
-
- 
-
             point = Point3DMap[pLink->iPix0];
-
- 
-
             if (pointmap[pLink->iPix0] < 0)
-
- 
-
             {
-
- 
-
-                  points->InsertNextPoint(point->XYZ[0], point->XYZ[1],
-
-point->XYZ[2]);
-
- 
-
+                  points->InsertNextPoint(point->XYZ[0], point->XYZ[1], point->XYZ[2]);
                   pointmap[pLink->iPix0] = noPts;
-
- 
-
                   vert[1] = noPts;
-
- 
-
                   if (colortype == 1)
-
- 
-
-                        texCoords->InsertNextTuple2((float)(pLink->iPix0 -
-
-(int)(pLink->iPix0 / w) * w) / w, (float)((int)(pLink->iPix0 / w))/ h);
-
- 
-
+                        texCoords->InsertNextTuple2((float)(pLink->iPix0 - (int)(pLink->iPix0 / w) * w) / w, (float)((int)(pLink->iPix0 / w))/ h);
                   noPts++;
-
- 
-
             }
-
- 
-
             else
-
- 
-
                   vert[1] = pointmap[pLink->iPix0];
-
- 
-
- 
-
             pLink = pLink->pNext->pOpposite;
-
- 
-
             point = Point3DMap[pLink->iPix0];
-
- 
-
             if (pointmap[pLink->iPix0] < 0)
-
- 
-
             {
-
- 
-
-                  points->InsertNextPoint(point->XYZ[0], point->XYZ[1],
-
-point->XYZ[2]);
-
- 
-
+                  points->InsertNextPoint(point->XYZ[0], point->XYZ[1], point->XYZ[2]);
                   pointmap[pLink->iPix0] = noPts;
-
- 
-
                   vert[2] = noPts;
-
- 
-
                   if (colortype == 1)
-
- 
-
-                        texCoords->InsertNextTuple2((float)(pLink->iPix0 -
-
-(int)(pLink->iPix0 / w) * w) / w, (float)((int)(pLink->iPix0 / w))/ h);
-
- 
-
+                        texCoords->InsertNextTuple2((float)(pLink->iPix0 - (int)(pLink->iPix0 / w) * w) / w, (float)((int)(pLink->iPix0 / w))/ h);
                   noPts++;
-
- 
-
             }
-
- 
-
             else
-
- 
-
                   vert[2] = pointmap[pLink->iPix0];
-
- 
-
- 
-
             //inserting triangle
-
- 
-
             indices->Reset();
-
- 
-
             indices->InsertNextId(vert[0]);
-
- 
-
             indices->InsertNextId(vert[1]);
-
- 
-
             indices->InsertNextId(vert[2]);
-
- 
-
             triangles->InsertNextCell(indices);
-
- 
-
             if (colortype == 0)
-
- 
-
                   rgbs->InsertNextTupleValue(color[pTriangle->m_Label]);
-
- 
-
             else if (colortype == 2)
-
- 
-
             {
-
- 
-
-                  pHistEntry = (RVLQLIST_HIST_ENTRY
-
-*)(pTriangle->m_histRGB->pFirst);
-
- 
-
-                  r = floor(pHistEntry->adr / (pTriangle->m_histRGB_base[1]
-
-* pTriangle->m_histRGB_base[2]));
-
- 
-
-                  matR = (float)((r * (256.0 /
-
-pTriangle->m_histRGB_base[0])) + (pTriangle->m_histRGB_base[0]/2));
-
- 
-
-                  g = floor((pHistEntry->adr / (pTriangle->m_histRGB_base[1]
-
-* pTriangle->m_histRGB_base[2]) - r) * pTriangle->m_histRGB_base[1]);
-
- 
-
-                  matG = (float)((g * (256.0 /
-
-pTriangle->m_histRGB_base[1])) + (pTriangle->m_histRGB_base[1]/2));
-
- 
-
-                  b = floor(((pHistEntry->adr /
-
-(pTriangle->m_histRGB_base[1] * pTriangle->m_histRGB_base[2]) - r) *
-
-pTriangle->m_histRGB_base[1] - g) * pTriangle->m_histRGB_base[2]);
-
- 
-
-                  matB = (float)((b * (256.0 /
-
-pTriangle->m_histRGB_base[2])) + (pTriangle->m_histRGB_base[2]/2));
-
- 
-
+                  pHistEntry = (RVLQLIST_HIST_ENTRY *)(pTriangle->m_histRGB->pFirst);
+                  r = floor(pHistEntry->adr / (pTriangle->m_histRGB_base[1] * pTriangle->m_histRGB_base[2]));
+                  matR = (float)((r * (256.0 / pTriangle->m_histRGB_base[0])) + (pTriangle->m_histRGB_base[0]/2));
+                  g = floor((pHistEntry->adr / (pTriangle->m_histRGB_base[1] * pTriangle->m_histRGB_base[2]) - r) * pTriangle->m_histRGB_base[1]);
+                  matG = (float)((g * (256.0 / pTriangle->m_histRGB_base[1])) + (pTriangle->m_histRGB_base[1]/2));
+                  b = floor(((pHistEntry->adr / (pTriangle->m_histRGB_base[1] * pTriangle->m_histRGB_base[2]) - r) * pTriangle->m_histRGB_base[1] - g) * pTriangle->m_histRGB_base[2]);
+                  matB = (float)((b * (256.0 / pTriangle->m_histRGB_base[2])) + (pTriangle->m_histRGB_base[2]/2));
                   rgbs->InsertNextTuple3(matR, matG, matB);
-
- 
-
             }
-
-                  else if (colortype == 3)
-
-                  {
-
-                        if(pTriangle->m_Flags & RVLOBJ2_FLAG_MARKED)
-
-                             rgbs->InsertNextTuple3(255, 0, 0);
-
-                        else
-
-                             rgbs->InsertNextTuple3(0, 255, 0);
-
-                  }
-
- 
-
+			else if (colortype == 3)
+				{
+					if(pTriangle->m_Flags & RVLOBJ2_FLAG_MARKED)
+						rgbs->InsertNextTuple3(255, 0, 0);
+                    else
+                        rgbs->InsertNextTuple3(0, 255, 0);
+                }
       }
-
- 
 
       //generating VTK objects
-
- 
-
       //polydata
-
- 
-
-      vtkSmartPointer<vtkPolyData> output =
-
-vtkSmartPointer<vtkPolyData>::New();
-
- 
-
+      vtkSmartPointer<vtkPolyData> output = vtkSmartPointer<vtkPolyData>::New();
       output->SetPoints(points);
-
- 
-
       output->SetPolys(triangles);
-
- 
-
       if ((colortype == 0) || (colortype == 2) || (colortype == 3))
-
- 
-
-            output->GetCellData()->SetScalars(rgbs);
-
- 
-
+		  output->GetCellData()->SetScalars(rgbs);
       else if (colortype == 1)
-
- 
-
-            output->GetPointData()->SetTCoords(texCoords);
-
- 
+          output->GetPointData()->SetTCoords(texCoords);
 
       /*////BEZ NORMALA////
-
- 
-
       //mapper
-
- 
-
-      vtkSmartPointer<vtkPolyDataMapper> map =
-
-vtkSmartPointer<vtkPolyDataMapper>::New();
-
- 
-
+      vtkSmartPointer<vtkPolyDataMapper> map = vtkSmartPointer<vtkPolyDataMapper>::New();
       map->SetInputConnection(output->GetProducerPort());
-
- 
-
      ////BEZ NORMALA////*/
 
- 
-
-      
-
- 
-
-      ////SA NORMALAMA////
-
- 
-
+     ////SA NORMALAMA////
       //generate normals filter
-
- 
-
-      vtkSmartPointer<vtkPolyDataNormals> nor =
-
-vtkSmartPointer<vtkPolyDataNormals>::New();
-
- 
-
-      nor->SetInputConnection(output->GetProducerPort());
-
- 
-
+      vtkSmartPointer<vtkPolyDataNormals> nor = vtkSmartPointer<vtkPolyDataNormals>::New();
+	  nor->SetInputData(output);// ->SetInputConnection(output->GetProducerPort());
       nor->SplittingOff();
-
- 
-
       nor->Update();
-
- 
-
       //mapper
-
- 
-
-      vtkSmartPointer<vtkPolyDataMapper> map =
-
-vtkSmartPointer<vtkPolyDataMapper>::New();
-
- 
-
+      vtkSmartPointer<vtkPolyDataMapper> map = vtkSmartPointer<vtkPolyDataMapper>::New();
       map->SetInputConnection(nor->GetOutputPort());
-
- 
-
       ////SA NORMALAMA////
-
- 
-
-      
-
- 
 
       //actor
-
- 
-
       vtkSmartPointer<vtkActor> act = vtkSmartPointer<vtkActor>::New(); 
-
- 
-
       act->SetMapper(map);
-
- 
-
       if (colortype == 1)
-
- 
-
-            act->SetTexture(texObj);
-
- 
-
+		  act->SetTexture(texObj);
       ren1->AddActor(act);                                       
-
- 
-
- 
-
       ren1->ResetCamera();
-
- 
-
       ren1->SetBackground(0.5294, 0.8078, 0.9803);
-
- 
-
       renWin->Render();
-
- 
-
- 
-
       //releasing
-
- 
-
       if (colortype == 0)
-
- 
-
       {
-
- 
-
-            for (int i = 0; i < nObjects; ++i)
-
- 
-
-                  delete [] color[i];
-
- 
-
-            delete [] color;
-
- 
-
+		  for (int i = 0; i < nObjects; ++i)
+			  delete [] color[i];
+          delete [] color;
       }
-
- 
-
- 
-
 }
 
 #endif
