@@ -19,6 +19,8 @@
 #define RVL3DSURFACE_FLAG_CLOSE							0x00080000
 #define RVL3DSURFACE_FLAG_REMOVED						0x00100000
 #define RVL3DSURFACE_FLAG_GROUND						0x00200000
+#define RVL3DSURFACE_FLAG_SAMPLES						0x00400000
+#define RVL3DSURFACE_FLAG_BOUNDARY						0x00800000
 
 #define RVL3DSURFACE_SAMPLE_FLAG_REMOVED				0x01
 #define RVL3DSURFACE_SAMPLE_FLAG_OCLUDED				0x02
@@ -125,7 +127,7 @@ public:
 	void *m_vp2DRegion;
 	double m_PoseInformation;
 	RVLQLIST m_Samples;
-	RVLQLIST m_BoundaryLineList;
+	RVLQLIST m_BoundaryContourList;
 	//double m_Cp[9];
 
 	//double m_Centroid[3];
@@ -165,6 +167,9 @@ public:
 	void TransfToMatchRefFrame(	double *RFT,
 								double *RPT,
 								double *CP);
+	void Transf(
+		CRVL3DPose * pPose,
+		int iView = 0);
 };
 
 extern CRVL3DSurface2 RVL3DSurfaceTemplate;

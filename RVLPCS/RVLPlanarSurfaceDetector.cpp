@@ -18714,3 +18714,27 @@ void RVLResetFlags(CRVLMPtrChain *pObjectList, BYTE Flags)
 	}
 }
 
+void CRVLPlanarSurfaceDetector::Get3DPlanarSurfaceBoundary(CRVL3DSurface2 * pSurf)
+{
+	RVL3DPOINT3 *pPt;
+
+	RVL3DCONTOUR *pContour = (RVL3DCONTOUR *)(pSurf->m_BoundaryContourList.pFirst);
+
+	while (pContour)
+	{
+		pPt = (RVL3DPOINT3 *)(pContour->PtList.pFirst);
+
+		while (pPt)
+		{
+			RVLProject2DPointTo3DPlane(pPt->P2D, pPt->P3D, pSurf,
+				m_pStereoVision->m_KinectParams.depthUc,
+				m_pStereoVision->m_KinectParams.depthVc,
+				m_pStereoVision->m_KinectParams.depthFu,
+				m_pStereoVision->m_KinectParams.depthFv);
+
+			pPt = (RVL3DPOINT3 *)(pPt->pNext);
+		}
+
+		pContour = (RVL3DCONTOUR *)(pContour->pNext);
+	}
+}

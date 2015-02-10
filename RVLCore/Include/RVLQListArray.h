@@ -133,6 +133,13 @@ struct RVLQLISTHT_PTR_ENTRY
 	void *pNext;
 };
 
+struct RVLQLIST_MULTILEVEL
+{
+	void *pFirst;
+	void **ppNext;
+	void *pNext;
+};
+
 //if list contains 'adr' member then adr is TRUE
 template<class T>
 inline RVLQLIST* InsertSortQLISTWithCopy(RVLQLIST *pList, int dir, CRVLMem *pMem, bool adr)
