@@ -792,6 +792,8 @@ private:
 		DataWeights[index2]	= tmp2;
 		Indeksi[index2]		= tmp3;
 	};
+public:
+	void Get3DPlanarSurfaceBoundary(CRVL3DSurface2 * pSurf);
 };
 
 #endif // !defined(AFX_RVLPLANARSURFACEDETECTOR_H__1DCCB796_4F94_4476_9777_2D5D6B292431__INCLUDED_)

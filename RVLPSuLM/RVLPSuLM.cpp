@@ -2739,6 +2739,8 @@ void CRVLPSuLM::Get3DSurfaceSamplesFrom2DRegionSamples(
 		if (!(p3DSurface->m_Flags & RVL3DSURFACE_FLAG_CLOSE))
 			continue;
 
+		p3DSurface->m_Flags |= RVL3DSURFACE_FLAG_SAMPLES;
+
 		N = p3DSurface->m_N;
 
 		p3DSurfaceSamples = &(p3DSurface->m_Samples);
