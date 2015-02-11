@@ -25,6 +25,7 @@
 #define RVLOBJ2_FLAG_MARKED2				0x00000200
 #define RVLOBJ2_FLAG_MARKED3				0x00000400
 #define RVLOBJ2_FLAG_DOMINANT				0x00000800
+#define RVLOBJ2_FLAG_VISITED				0x00001000
 #define RVLOBJ2_NOUNCERT					0x01
 
 void RVLDeselectAllObjects(CRVLClass *pClass);
@@ -68,6 +69,19 @@ struct RVL3DPOINT2
 	DWORD Flags;
 };
 
+struct RVL3DPOINT3
+{
+	double P3D[3];
+	int P2D[2];
+	void *pNext;
+};
+
+struct RVL3DCONTOUR
+{
+	int iView;
+	RVLQLIST PtList;
+	void *pNext;
+};
 
 void RVLAddObject(CRVLObject2 *pObject, 
 				  CRVLClass *pClass);

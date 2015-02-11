@@ -139,6 +139,11 @@ void CalculatePrincipialCurvature2(int noVertices,
 void GenerateComplementBasis(double *v1, double *v2, double *v3);
 void RVLRemoveInternalVertices(CRVLDelaunay *m_pDelaunay);
 void RVLSegmentationEdgesFromLabels(CRVLClass *pTriangleSet, DWORD Mask = 0x00000000, DWORD refMask = 0x00000000);
+void RVLSegmentationGetBoundary(
+	CRVL2DRegion2 *pSegment,
+	int w,
+	RVLQLIST *pContourList,
+	CRVLMem *pMem);
 void RVLSegmentationGTFromMesh(	FILE *fpSrc,
 								CRVLDelaunay *pDelaunay,
 								FILE *fpTgt);

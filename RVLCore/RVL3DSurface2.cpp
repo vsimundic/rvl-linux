@@ -53,6 +53,14 @@ CRVLObject2 * CRVL3DSurface2::Create2(CRVLClass * pClass)
 
 	memcpy(pObject, this, sizeof(CRVL3DSurface2));
 
+	RVLQLIST *pBoundaryContourList = &(pObject->m_BoundaryContourList);
+
+	RVLQLIST_INIT(pBoundaryContourList);
+
+	RVLQLIST *pSamples = &(pObject->m_Samples);
+
+	RVLQLIST_INIT(pSamples);
+
 	pObject->CRVLObject2::Create(pClass);
 
 	pClass->Add(pObject);
@@ -1812,3 +1820,81 @@ BOOL RVL3DPlanarSurfaceEKFUpdate(	CRVL3DSurface2 *pSSurf,
 	return TRUE;
 }
 
+
+
+void CRVL3DSurface2::Transf(
+	CRVL3DPose * pPose,
+	int iView)
+{
+	double *RM_M = pPose->m_Rot;
+	double *tM_M = pPose->m_X;
+
+	double *RFM = m_Pose.m_Rot;
+	double *tFM = m_Pose.m_X;
+	//CM = p3DSurface->m_Cp;
+
+	double NM_[3];
+	double RFM_[9];
+	double tFM_[3];
+
+	RVLCOPYMX3X3(RFM, RFM_);
+	RVLCOPY3VECTOR(tFM, tFM_);
+	RVLCOPY3VECTOR(m_N, NM_);
+	//RVLCOPYMX3X3(CM, CM_)
+
+	RVLMXMUL3X3(RM_M, RFM_, RFM);
+	RVLMULMX3X3VECT(RM_M, tFM_, tFM);
+	RVLMULMX3X3VECT(RM_M, NM_, m_N);
+	//RVLCOV3DTRANSF(CM_, RM_M, CM, M3x3Tmp)
+
+	if (m_Flags & RVL3DSURFACE_FLAG_SAMPLES)
+	{
+		double *XM, *VM;
+		double XM_[3], VM_[3];
+
+		RVL3DSURFACE_SAMPLE *pSample = (RVL3DSURFACE_SAMPLE *)(m_Samples.pFirst);
+
+		while (pSample)
+		{
+			XM = pSample->X;
+			VM = pSample->V;
+
+			RVLCOPY3VECTOR(XM, XM_);
+			RVLCOPY3VECTOR(VM, VM_);
+
+			RVLMULMX3X3VECT(RM_M, XM_, XM);
+			RVLMULMX3X3VECT(RM_M, VM_, VM);
+
+			pSample = (RVL3DSURFACE_SAMPLE *)(pSample->pNext);
+		}
+	}
+
+	if (m_Flags & RVL3DSURFACE_FLAG_BOUNDARY)
+	{
+		double *XM;
+		double XM_[3];
+		RVL3DPOINT3 *pPt;
+
+		RVL3DCONTOUR *pContour = (RVL3DCONTOUR *)(m_BoundaryContourList.pFirst);
+
+		while (pContour)
+		{
+			pContour->iView = iView;
+
+			pPt = (RVL3DPOINT3 *)(pContour->PtList.pFirst);
+
+			while (pPt)
+			{
+				XM = pPt->P3D;
+
+				RVLCOPY3VECTOR(XM, XM_);
+
+				RVLMULMX3X3VECT(RM_M, XM_, XM);
+
+				pPt = (RVL3DPOINT3 *)(pPt->pNext);
+			}
+
+			pContour = (RVL3DCONTOUR *)(pContour->pNext);
+		}
+	}
+}

@@ -1125,7 +1125,8 @@ void CRVLPSuLMBuilder::DisplayCellArray(CRVLFigure *pFig,
 BOOL CRVLPSuLMBuilder::Create(CRVLPSuLM *pPSuLM, 
 							  CRVLMem *pMem,
 							  DWORD Flags,
-							  CRVL3DPose *pPoseM_M)	
+							  CRVL3DPose *pPoseM_M,
+							  int iView)	
 {
 	double StartTime = m_pTimer->GetTime();
 
@@ -1207,6 +1208,9 @@ BOOL CRVLPSuLMBuilder::Create(CRVLPSuLM *pPSuLM,
 		ExecTime = m_pTimer->GetTime() - StartTime;
 
 		m_pMem2->Clear();
+
+		if (m_Flags2 & RVLPSULMBUILDER_FLAG2_SURFACE_BOUNDARY)
+			RVLSegmentationEdgesFromLabels(&(m_pAImage->m_C2DRegion));
 	}
 
 	ExecTime = m_pTimer->GetTime() - StartTime;
@@ -1541,8 +1545,8 @@ BOOL CRVLPSuLMBuilder::Create(CRVLPSuLM *pPSuLM,
 
 			//create corresponding 3D surface
 			p3DSurface = (CRVL3DSurface2 *)(RVL3DSurfaceTemplate.Create3(&(m_S3DSurfaceSet)));
-			pSamples = &(p3DSurface->m_Samples);
-			RVLQLIST_INIT(pSamples)
+			//pSamples = &(p3DSurface->m_Samples);
+			//RVLQLIST_INIT(pSamples)
 			
 			//relate LEVEL3 region with 3D surface and vice versa
 			p2DRegion->m_vp3DSurface = p3DSurface;
@@ -1585,11 +1589,22 @@ BOOL CRVLPSuLMBuilder::Create(CRVLPSuLM *pPSuLM,
 				minz34 = RVLMIN(z3, z4);
 				minz = RVLMIN(minz12, minz34);
 
-				if(minz <= m_maxZ)
+				if (minz <= m_maxZ)
 				{
 					p3DSurface->m_Flags |= RVL3DSURFACE_FLAG_CLOSE;
 
 					nClose3DSurfaces++;
+
+					// get surface boundary
+
+					if (m_Flags2 & RVLPSULMBUILDER_FLAG2_SURFACE_BOUNDARY)
+					{
+						RVLSegmentationGetBoundary(p2DRegion, iWidth, &(p3DSurface->m_BoundaryContourList), m_S3DSurfaceSet.m_pMem0);
+
+						m_pPSD->Get3DPlanarSurfaceBoundary(p3DSurface);
+
+						p3DSurface->m_Flags |= RVL3DSURFACE_FLAG_BOUNDARY;
+					}
 				}
 			}
 			
@@ -1751,50 +1766,13 @@ BOOL CRVLPSuLMBuilder::Create(CRVLPSuLM *pPSuLM,
 
 		if (m_Flags2 & RVLPSULMBUILDER_FLAG2_COMPLEX)
 		{
-			double *RFM, *tFM, *NM, *CM;
-			double *XM, *VM;
-			double RFM_[9], tFM_[3], NM_[3], CM_[9], XM_[3], VM_[3];
-			RVL3DSURFACE_SAMPLE *pSample;
-
 			p3DSurfaceList->m_pNext = *ppFirstSurface;
 
 			while (p3DSurfaceList->m_pNext)
 			{
 				p3DSurface = (CRVL3DSurface2 *)(p3DSurfaceList->GetNext());
 
-				RFM = p3DSurface->m_Pose.m_Rot;
-				tFM = p3DSurface->m_Pose.m_X;
-				NM = p3DSurface->m_N;
-				//CM = p3DSurface->m_Cp;
-
-				RVLCOPYMX3X3(RFM, RFM_)
-				RVLCOPY3VECTOR(tFM, tFM_)
-				RVLCOPY3VECTOR(NM, NM_)
-				//RVLCOPYMX3X3(CM, CM_)
-
-				RVLMXMUL3X3(RM_M, RFM_, RFM)
-				RVLMULMX3X3VECT(RM_M, tFM_, tFM)
-				RVLMULMX3X3VECT(RM_M, NM_, NM)
-				//RVLCOV3DTRANSF(CM_, RM_M, CM, M3x3Tmp)
-
-				if (m_Flags2 & RVLPSULMBUILDER_FLAG2_HYPOTHESIS_EVALUATION_SAMPLE_MATCHING)
-				{
-					pSample = (RVL3DSURFACE_SAMPLE *)(p3DSurface->m_Samples.pFirst);
-
-					while (pSample)
-					{
-						XM = pSample->X;
-						VM = pSample->V;
-
-						RVLCOPY3VECTOR(XM, XM_);
-						RVLCOPY3VECTOR(VM, VM_);
-
-						RVLMULMX3X3VECT(RM_M, XM_, XM);
-						RVLMULMX3X3VECT(RM_M, VM_, VM);
-
-						pSample = (RVL3DSURFACE_SAMPLE *)(pSample->pNext);
-					}
-				}
+				p3DSurface->Transf(pPoseM_M, iView);
 			}
 		}
 
@@ -2085,7 +2063,9 @@ BOOL CRVLPSuLMBuilder::Create(CRVLPSuLM *pPSuLM,
 
 					while(TRUE)
 					{
-						if(((*pContourElement) & RVL2DCONTOUR_VOID) == 0)
+						if (m_Flags2 & RVLPSULMBUILDER_FLAG2_LINES_EDGES_VOID)
+							nDepthSteps++;
+						else if(((*pContourElement) & RVL2DCONTOUR_VOID) == 0)
 							nDepthSteps++;
 
 						if(pContourElement == pContourElement2)
@@ -3408,15 +3388,15 @@ CRVLPSuLM *CRVLPSuLMBuilder::Create(
 
 				pPSuLM->m_Flags |= RVLPSULM_FLAG_COMPLEX;
 
-				Create(pPSuLM, pMem, Flags, &PoseM_M);
+				Create(pPSuLM, pMem, Flags, &PoseM_M, 0);
 
 				break;
 			case 'A':	
-				Create(pPSuLM, pMem, Flags | RVLPSULMBUILDER_CREATEMODEL_APPEND, &PoseM_M);
+				Create(pPSuLM, pMem, Flags | RVLPSULMBUILDER_CREATEMODEL_APPEND, &PoseM_M, iSample - iSample0);
 
 				break;
 			case 'C':
-				Create(pPSuLM, pMem, Flags | RVLPSULMBUILDER_CREATEMODEL_APPEND | RVLPSULMBUILDER_CREATEMODEL_APPEND_LAST, &PoseM_M);
+				Create(pPSuLM, pMem, Flags | RVLPSULMBUILDER_CREATEMODEL_APPEND | RVLPSULMBUILDER_CREATEMODEL_APPEND_LAST, &PoseM_M, iSample - iSample0);
 
 				if(Flags & RVLPSULMBUILDER_CREATEMODEL_FLAG_PERMANENT)
 				{
@@ -7571,6 +7551,9 @@ void CRVLPSuLMBuilder::Localization(CRVLPSuLM * pSPSuLM,
 
 		/////
 
+		//if (pHypothesis->Index == 359)
+		//	int debug = 0;
+
 		pMPSuLM = pHypothesis->pMPSuLM;
 
 		pPoseSM = &(pHypothesis->PoseSM);
@@ -8207,6 +8190,52 @@ void CRVLPSuLMBuilder::Localization(CRVLPSuLM * pSPSuLM,
 			m_nHypotheses = m_nRepresentativeHypotheses;
 
 			RVLBubbleSort<RVLPSULM_HYPOTHESIS>(&m_RepresentativeHypothesisList, m_nHypotheses, &m_HypothesisArray, true);
+
+			// recompute the costs of the hypotheses after rejection of dynamic surfaces and reorder the hypotheses
+
+			double StartTime = m_pTimer->GetTime();
+
+			if((m_Flags2 & RVLPSULMBUILDER_FLAG2_HYPOTHESIS_EVALUATION_SAMPLE_MATCHING) && m_nHypotheses > 1)
+			{
+				int iChecked = m_nHypotheses;
+
+				while (iChecked > 0)
+				{
+					pHypothesis = m_HypothesisArray[0];
+
+					P = EvaluateHypothesis4(pSPSuLM, pHypothesis, RVLPSULMBUILDER_HYPEVAL4_FLAG_FIRST_ORDER_DEPENDENCY_TREE | RVLPSULMBUILDER_HYPEVAL4_FLAG_DYNAMIC_SURF_DETECT);
+
+					pHypothesis->Probability = P - PriorProbabilityWorldModel;
+
+					pHypothesis->cost = DOUBLE2INT(1e3 * (pHypothesis->Probability - fTmp));
+
+					for (i = 1; i < m_nHypotheses; i++)
+						if (m_HypothesisArray[i]->cost <= pHypothesis->cost)
+							break;
+
+					if (i == 1)
+						break;
+
+					i--;
+
+					memmove(m_HypothesisArray, m_HypothesisArray + 1, i * sizeof(RVLPSULM_HYPOTHESIS *));
+
+					m_HypothesisArray[i] = pHypothesis;
+
+					if (i < iChecked)
+						iChecked = i;
+					else
+						iChecked--;
+				}
+			}
+
+			double DynSurfRejectionExecutionTime = m_pTimer->GetTime() - StartTime;
+
+			FILE *fp = fopen("C:\\RVL\\Debug\\debug_.txt", "w");
+
+			fprintf(fp, "DynSurfRejectionExecutionTime = %lf\n", DynSurfRejectionExecutionTime);
+
+			fclose(fp);
 
 #ifdef RVLPSULMBUILDER_HYPOTHESIS_LOG
 			fpHyp = fopen("C:\\RVL\\Debug\\Hypotheses.log", "w");
@@ -12452,7 +12481,7 @@ void CRVLPSuLMBuilder::LoadMap()
 
 		if (m_Flags & RVLPSULMBUILDER_FLAG_GENERATE_MODELS)
 		{
-			pGUI->CloseFigure("Message");
+			pGUI->Message("All models generated.", 400, 100, cvScalar(0, 255, 0));
 
 			delete pGUI;
 		}
@@ -12610,6 +12639,10 @@ void CRVLPSuLMBuilder::CreateParamList(CRVLMem * pMem)
 	pParamData = m_ParamList.AddParam("PSuLM.Features", RVLPARAM_TYPE_FLAG, &m_Flags);
 	m_ParamList.AddID(pParamData, "SURFACES", RVLPSULMBUILDER_FLAG_SURFACES);
 	m_ParamList.AddID(pParamData, "LINES", RVLPSULMBUILDER_FLAG_LINES);
+	pParamData = m_ParamList.AddParam("PSuLM.Surfaces.Boundary", RVLPARAM_TYPE_FLAG, &m_Flags2);
+	m_ParamList.AddID(pParamData, "yes", RVLPSULMBUILDER_FLAG2_SURFACE_BOUNDARY);
+	pParamData = m_ParamList.AddParam("PSuLM.Lines.EdgesVoid", RVLPARAM_TYPE_FLAG, &m_Flags2);
+	m_ParamList.AddID(pParamData, "yes", RVLPSULMBUILDER_FLAG2_LINES_EDGES_VOID);
 	pParamData = m_ParamList.AddParam("PSuLM.Complex", RVLPARAM_TYPE_FLAG, &m_Flags2);
 	m_ParamList.AddID(pParamData, "yes", RVLPSULMBUILDER_FLAG2_COMPLEX);
 	pParamData = m_ParamList.AddParam("PSuLM.FileVersion", RVLPARAM_TYPE_FLAG, &m_Flags2);
@@ -23071,7 +23104,12 @@ void CRVLPSuLMBuilder::DisplayHypothesis(CRVLGUI *pGUI,
 			if(pHypothesis == pMPSuLM->m_pHypothesis)
 				PoseConstraintProbability(pSPSuLM, pMPSuLM);
 
-			EvaluateHypothesis4(pSPSuLM, pHypothesis, RVLPSULMBUILDER_HYPEVAL4_FLAG_FIRST_ORDER_DEPENDENCY_TREE | RVLPSULMBUILDER_HYPEVAL4_FLAG_DYNAMIC_SURF_DETECT);
+			DWORD EvaluateHypothesisFlags = RVLPSULMBUILDER_HYPEVAL4_FLAG_FIRST_ORDER_DEPENDENCY_TREE;
+
+			if (m_Flags2 & RVLPSULMBUILDER_FLAG2_HYPOTHESIS_EVALUATION_SAMPLE_MATCHING)
+				EvaluateHypothesisFlags |= RVLPSULMBUILDER_HYPEVAL4_FLAG_DYNAMIC_SURF_DETECT;
+
+			pHypothesis->Probability = EvaluateHypothesis4(pSPSuLM, pHypothesis, EvaluateHypothesisFlags);
 		}
 		else
 			CreateMatchMatrix(pSPSuLM, pMPSuLM, &(pHypothesis->PoseSM), 1.0);
@@ -23255,12 +23293,12 @@ void CRVLPSuLMBuilder::DisplayHypothesisData(	CRVLFigure *pFig,
 
 		cvPutText(pDataDisplay, str, cvPoint(0, (++iTextLine) * pFig->m_FontSize), &pFig->m_Font,  cvScalar(0, 0, 0));
 
-		//if(HypEvalMethod == RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD_P)
-		//{
-		//	sprintf(str, "Likelihood = %lf", pHypothesis->Probability);
+		if(HypEvalMethod == RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD_P)
+		{
+			sprintf(str, "Likelihood = %lf", pHypothesis->Probability);
 
-		//	cvPutText(pDataDisplay, str, cvPoint(0, (++iTextLine) * pFig->m_FontSize), &pFig->m_Font,  cvScalar(0, 0, 0));
-		//}
+			cvPutText(pDataDisplay, str, cvPoint(0, (++iTextLine) * pFig->m_FontSize), &pFig->m_Font,  cvScalar(0, 0, 0));
+		}
 
 		if(pHypothesis == pHypothesis->pMPSuLM->m_pHypothesis)
 		{
@@ -24800,6 +24838,7 @@ void CRVLPSuLMBuilder::MergeSurfaces(CRVLPSuLM *pPSuLM)
 	double dtM[2], C[4], C_[4], Q[4], c[2];
 	RVL2DMOMENTS Moments;
 	RVLQLIST *pSamples, *pSamples_;
+	RVLQLIST *pBoundaryContourList, *pBoundaryContourList_;
 
 	for(pp3DSurface = SurfaceArray; pp3DSurface < p3DSurfaceArrayEnd; pp3DSurface++)
 	{
@@ -25100,6 +25139,14 @@ void CRVLPSuLMBuilder::MergeSurfaces(CRVLPSuLM *pPSuLM)
 				pSamples_ = &(p3DSurface_->m_Samples);
 
 				RVLQLIST_APPEND(pSamples, pSamples_);
+			}
+
+			if (m_Flags2 & RVLPSULMBUILDER_FLAG2_SURFACE_BOUNDARY)
+			{
+				pBoundaryContourList = &(p3DSurface->m_BoundaryContourList);
+				pBoundaryContourList_ = &(p3DSurface_->m_BoundaryContourList);
+
+				RVLQLIST_APPEND(pBoundaryContourList, pBoundaryContourList_);
 			}
 
 			// p3DSurface_ <- empty set
