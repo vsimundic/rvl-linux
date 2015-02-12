@@ -7,7 +7,6 @@
 //#include <stdlib.h>
 //#include <crtdbg.h>
 
-
 //#define RVL64BIT
 //#define RVLWIN
 #define RVLOPENNI

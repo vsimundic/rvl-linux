@@ -78,6 +78,7 @@ struct RVL3DPOINT3
 
 struct RVL3DCONTOUR
 {
+	bool bHole;
 	int iView;
 	RVLQLIST PtList;
 	void *pNext;
