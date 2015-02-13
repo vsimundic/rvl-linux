@@ -3211,6 +3211,7 @@ void RVLSegmentationGetBoundary(
 	RVLMESH_LINK *pLink, *pLink0, *pLink_, *pLink0_;
 	RVL3DPOINT3 *pVertex;
 	RVLQLIST *pPtList;
+	int Area, u, v;
 
 	for (ppTriangle = (CRVL2DRegion2 **)(pRelList->pFirst); ppTriangle < (CRVL2DRegion2 **)(pRelList->pEnd); ppTriangle++)
 	{
@@ -3227,6 +3228,8 @@ void RVLSegmentationGetBoundary(
 		{
 			if (pLink->Flags & RVLMESH_LINK_FLAG_EDGE)
 			{
+				Area = 0;
+
 				RVLMEM_ALLOC_STRUCT(pMem, RVL3DCONTOUR, pContour);
 
 				RVLQLIST_ADD_ENTRY(pContourList, pContour);
@@ -3243,15 +3246,24 @@ void RVLSegmentationGetBoundary(
 
 					RVLQLIST_ADD_ENTRY(pPtList, pVertex);
 
-					pVertex->P2D[0] = pLink_->iPix0 % w;
-					pVertex->P2D[1] = pLink_->iPix0 / w;
+					u = pLink_->iPix0 % w;
+					v = pLink_->iPix0 / w;
+
+					pVertex->P2D[0] = u;
+					pVertex->P2D[1] = v;
+
+					Area += (pLink_->dv*(2 * u + pLink_->du));
 
 					do
 						pLink_ = pLink_->pNext;
 					while (!(pLink_->Flags & RVLMESH_LINK_FLAG_EDGE));
 
 					pLink_ = pLink_->pOpposite;
+
+					((CRVL2DRegion2 *)(pLink_->vp2DRegion))->m_Flags |= RVLOBJ2_FLAG_VISITED;
 				} while (pLink_ != pLink0_);
+
+				pContour->bHole = (Area <= 0);
 
 				break;
 			}
