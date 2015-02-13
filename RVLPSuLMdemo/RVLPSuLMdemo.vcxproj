@@ -170,6 +170,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="targetver.h" />
+    <ClInclude Include="VTKActorObj.h" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="ReadMe.txt" />

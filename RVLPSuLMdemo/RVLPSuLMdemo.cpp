@@ -2,8 +2,10 @@
 //
 
 //#include "highgui.h"
+//C headers
 #include <stdio.h>
 #include <time.h>
+//RVL headers
 #include "RVLCore.h"
 #include "RVLPCS.h"
 #include "RVLRLM.h"
@@ -11,8 +13,18 @@
 #include "RVLPSuLMGroundTruth.h"
 #include "RVLPSuLMVS.h"
 #ifdef RVLVTK
+//VTK headers
+#include <vtkAutoInit.h>
+VTK_MODULE_INIT(vtkRenderingOpenGL);
+VTK_MODULE_INIT(vtkInteractionStyle);
 #include "RVLVTK.h"
+#include "VTKActorObj.h"
 #endif
+//C++ headers
+#include <iostream>
+#include <map>
+#include <string>
+#include <sstream>
 
 #define RVLPSULMDEMO_DISPLAY_ONLY_REPRESENTATIVE_HYPOTHESES
 //#define RVLPSULMDEMO_DISPLAY_ONLY_BEST_LOCAL_MODEL_HYPOTHESES
@@ -73,6 +85,192 @@ void RVLPSuLMdemoGetNextHypothesis(CRVLPSuLMVS *pVS,
 	if(iHypothesis == iHypothesisOutOfRange)
 		iHypothesis = iHypothesis_;
 }
+
+#ifdef RVLVTK
+//VTK Render window key press callback
+void KeyPressCallback(vtkObject* caller, unsigned long eid, void* clientdata, void *calldata)
+{
+	vtkSmartPointer<vtkRenderWindowInteractor> iren = reinterpret_cast<vtkRenderWindowInteractor *>(caller);
+	std::string keySym = "";
+	keySym = iren->GetKeySym();
+	if (keySym == "m")
+	{
+		std::map<std::string, VTKActorObj*>* actorObjs = (std::map<std::string, VTKActorObj*>*)clientdata;
+	}
+	else if (keySym == "n")
+	{
+	}
+	cout << "MyKeyPressCallbackCommand - Function, Key: " << keySym << endl;
+}
+
+//VTK Render window right mouse button press callback function
+void RightButtonPressCallback(vtkObject* caller, unsigned long eid, void* clientdata, void *calldata)
+{
+	//get location
+	vtkSmartPointer<vtkRenderWindowInteractor> iren = reinterpret_cast<vtkRenderWindowInteractor *>(caller);
+	int* clickPos = iren->GetEventPosition();
+
+	//pick from this location.
+	vtkSmartPointer<vtkPropPicker>  picker = vtkSmartPointer<vtkPropPicker>::New();
+	picker->Pick(clickPos[0], clickPos[1], 0, iren->GetRenderWindow()->GetRenderers()->GetFirstRenderer());
+
+	//get picked actor
+	vtkSmartPointer<vtkActor> pickedActor = picker->GetActor();
+
+	std::map<std::string, VTKActorObj*>* actorObjs = (std::map<std::string, VTKActorObj*>*)clientdata;
+}
+
+//Function for generating PSuLM VTK scene
+void GenAndDispPSuLMScene(CRVLPSuLM *psulm, CRVLVTKRenderer* pRenderer, std::map<std::string, VTKActorObj*>* vtkobjs)
+{
+	//Setting up VTK scene
+	vtkRenderer *ren1 = pRenderer->m_pRenderer;
+	vtkRenderWindow *renWin = pRenderer->m_pWindow;
+	vtkRenderWindowInteractor *iren = pRenderer->m_pInteractor;
+	//Callbacks, keyboard and mouse
+	vtkSmartPointer<vtkCallbackCommand> keypressCallback = vtkSmartPointer<vtkCallbackCommand>::New();
+	keypressCallback->SetCallback(KeyPressCallback);
+	keypressCallback->SetClientData(vtkobjs);
+	vtkSmartPointer<vtkCallbackCommand> mousepressCallback = vtkSmartPointer<vtkCallbackCommand>::New();
+	mousepressCallback->SetCallback(RightButtonPressCallback);
+	mousepressCallback->SetClientData(vtkobjs);
+	iren->AddObserver(vtkCommand::RightButtonPressEvent, mousepressCallback);
+	//Clearnig scene
+	ren1->RemoveAllViewProps();
+	ren1->Clear();
+	renWin->Render();
+
+	//Polygon(surface) objects
+	vtkSmartPointer<vtkPoints> points;
+	vtkSmartPointer<vtkPolygon> polygon;
+	vtkSmartPointer<vtkCellArray> polygons;
+	vtkSmartPointer<vtkPolyData> polygonPolyData;
+	vtkSmartPointer<vtkPolyData> polygonPolyData2;
+	vtkSmartPointer<vtkTriangleFilter> triFilter;// = vtkSmartPointer<vtkTriangleFilter>::New();	//Same for all?
+	//Mapper and actor
+	vtkSmartPointer<vtkPolyDataMapper> mapper;
+	vtkSmartPointer<vtkActor> actor;
+	//Texture objects
+	vtkSmartPointer<vtkFloatArray> texCoords;
+	vtkSmartPointer<vtkImageData> texImg;
+	vtkSmartPointer<vtkTexture> texObj;
+	vtkSmartPointer<vtkBMPReader> bmpR;
+
+	//Actor object
+	VTKActorObj* actorObj;
+
+	//RVL  & other temp objects
+	CRVL3DSurface2* currentS;
+	RVL3DCONTOUR* currentC;
+	RVL3DPOINT3* currentP;
+	int iSampleOrig = RVLGetFileNumber(psulm->m_FileName, "00000-LW.bmp");
+	int iSample = iSampleOrig;
+	char *imageFileName = psulm->m_FileName;
+	int imgDims[3];
+	int noPoints = 0;
+	int noCont = 0;
+	//Actor name
+	std::string actName = "";
+	std::stringstream ss;
+	//For every surface in psulm:
+	for (int i = 0; i < psulm->m_n3DSurfacesTotal; i++)
+	{
+		currentS = psulm->m_3DSurfaceArray[i];
+		//open image/texture for that surface (chack if it is the same as the last one to prevent constant oppening and closing of same images)
+		if ((iSample != (iSampleOrig + ((RVL3DCONTOUR*)currentS->m_BoundaryContourList.pFirst)->iView)) || (!texObj))
+		{
+			iSample = iSampleOrig + ((RVL3DCONTOUR*)currentS->m_BoundaryContourList.pFirst)->iView;
+			RVLSetFileNumber(imageFileName, "00000-LW.bmp", iSample);
+			std::cout << "Imagefile: " << imageFileName << std::endl;
+			bmpR = vtkSmartPointer<vtkBMPReader>::New();
+			bmpR->SetFileName(imageFileName);
+			bmpR->Update();
+		}
+		//
+		texImg = bmpR->GetOutput();
+		texImg->GetDimensions(imgDims);
+		//
+		texObj = vtkSmartPointer<vtkTexture>::New();
+		texObj->SetInputData(texImg);
+		texObj->InterpolateOn();
+		//for every conture in surface:
+		currentC = (RVL3DCONTOUR*)currentS->m_BoundaryContourList.pFirst;
+		noCont = 0;
+		while (currentC)
+		{
+			noCont++;
+			//for every point in conture:
+			points = vtkSmartPointer<vtkPoints>::New();
+			texCoords = vtkSmartPointer<vtkFloatArray>::New();
+			texCoords->SetNumberOfComponents(2);
+			currentP = (RVL3DPOINT3*)currentC->PtList.pFirst;
+			while (currentP)
+			{
+				//insert point in polygon
+				points->InsertNextPoint(currentP->P3D);
+				//insert texture coordinate
+				texCoords->InsertNextTuple2((float)currentP->P2D[0] / (float)imgDims[0], (float)currentP->P2D[1] / (float)imgDims[1]);
+				//next point
+				currentP = (RVL3DPOINT3*)currentP->pNext;
+				//end point
+			}
+			//create index list for polygon
+			polygon = vtkSmartPointer<vtkPolygon>::New();
+			noPoints = points->GetNumberOfPoints();
+			polygon->GetPointIds()->SetNumberOfIds(noPoints);
+			for (int k = 0; k < noPoints; k++)
+				polygon->GetPointIds()->SetId(k, k);
+			//create poligons(cellarray) and polydata
+			polygons = vtkSmartPointer<vtkCellArray>::New();
+			polygons->InsertNextCell(polygon);
+
+			polygonPolyData = vtkSmartPointer<vtkPolyData>::New();
+			polygonPolyData->SetPoints(points);
+			polygonPolyData->SetPolys(polygons);
+			polygonPolyData->GetPointData()->SetTCoords(texCoords);
+			//pass through trinagnulation filter
+			triFilter = vtkSmartPointer<vtkTriangleFilter>::New();
+			triFilter->SetInputData(polygonPolyData);
+			triFilter->PassVertsOn();
+			triFilter->Update();
+			//get new polydata from filter (deep copy?) and add texture coordinates
+			//polygonPolyData = triFilter->GetOutput();
+			//triFilter->GetOutput()->GetPointData()->SetTCoords(texCoords);
+			//crate mapper (and link to texture) and actor
+			mapper = vtkSmartPointer<vtkPolyDataMapper>::New();
+			//mapper->SetInputData(polygonPolyData);
+			mapper->SetInputConnection(triFilter->GetOutputPort());
+			//insert new actor to renderer
+			vtkSmartPointer<vtkActor> actor = vtkSmartPointer<vtkActor>::New();
+			actor->SetMapper(mapper);
+			actor->SetTexture(texObj);
+			//
+			ren1->AddActor(actor);
+			//insert new actor/mapper/polydata to vtkobjs (and create appropriate name)
+			actorObj = new VTKActorObj(actor, polygonPolyData, texObj);
+			ss << "Plane_" << i << "Contour_" << noCont;
+			actName = ss.str();
+			ss.str("");
+			ss.clear();
+			vtkobjs->insert(std::pair<std::string, VTKActorObj*>(actName, actorObj));
+			currentC = NULL;// (RVL3DCONTOUR*)currentC->pNext;
+			//end conture
+		}
+		//end surface
+		std::cout << noCont << std::endl;
+	}
+	//run render()
+	ren1->ResetCamera();
+	ren1->SetBackground(0.5294, 0.8078, 0.9803);
+	renWin->Render();
+}
+
+//Function for adding hypothesis pose to VTK PSuLM scene
+void AddHypothesisToPSuLMScene(CRVLVTKRenderer* rvlrenderer, std::map<std::string, VTKActorObj>* vtkobjs)
+{
+	//
+}
+#endif
 
 int main(int argc, char* argv[])
 {
@@ -194,8 +392,11 @@ int main(int argc, char* argv[])
 	CRVLVTKRenderer Renderer;
 
 	Renderer.Init(800, 600);
+	Renderer.m_pWindow->Render();
 
 	int *pointmap = new int[w * h];
+	//List of actors and related objects, with names
+	std::map<std::string, VTKActorObj*>* actorObjs = new std::map<std::string, VTKActorObj*>();
 #endif
 
 	// create RGB image
@@ -1051,7 +1252,8 @@ int main(int argc, char* argv[])
 				break;
 #ifdef RVLVTK
 			case 'V':
-				RVLDisplaySegmentedMesh3D(&Renderer, &(VS.m_AImage.m_C2DRegion.m_ObjectList), nObjects, w, h, pointmap, VS.m_PSD.m_Point3DMap);
+				//RVLDisplaySegmentedMesh3D(&Renderer, &(VS.m_AImage.m_C2DRegion.m_ObjectList), nObjects, w, h, pointmap, VS.m_PSD.m_Point3DMap);
+				GenAndDispPSuLMScene(VS.m_pPSuLM, &Renderer, actorObjs);
 
 				bRefresh = true;
 				bVTKRendererActive = true;
