@@ -158,11 +158,6 @@ struct RVLPSULM_HG_NODE
 	void **pPtrToThis;
 };
 
-struct RVLPSULM_DEBUG_DATA
-{
-	CRVLGUI *pGUI;
-};
-
 struct RVLPSULM_LASTDOF_MATCH_DATA
 {
 	RVLPSULM_MSMATCH_DATA *pMatch;
@@ -231,6 +226,13 @@ struct RVLPSULM_MODEL_FUSION_FEATURE
 	void *vpFeature;
 	CRVLPSuLM *pMPSuLM;
 	void *pNext;
+};
+
+struct RVLPSULM_DEBUG_DATA
+{
+	CRVLGUI *pGUI;
+	RVLPSULM_MATCH2 *MatchArray;
+	int nMatches;
 };
 
 //struct RVLPSULM_MATCH
@@ -775,4 +777,17 @@ public:
 		int & ip,
 		int & iq,
 		int & ir);
+	void CompareHypotheses(
+		RVLPSULM_MATCH2 * MatchArray1, 
+		int nMatches1, 
+		RVLPSULM_MATCH2 * MatchArray2, 
+		int nMatches2, 
+		char * OutputFileName);
+private:
+	void MatchDiff(
+		RVLPSULM_MATCH2 * MatchArray1,
+		int nMatches1,
+		RVLPSULM_MATCH2 * MatchArray2,
+		int nMatches2,
+		FILE *fp);
 };

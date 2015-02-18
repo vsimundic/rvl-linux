@@ -169,6 +169,7 @@ CRVLPSuLMBuilder::CRVLPSuLMBuilder(void)
 	m_EmptyCellArray2 = NULL;
 	//m_CellIdxMap = NULL;
 	m_CellMem = NULL;
+	m_DebugData.MatchArray = NULL;
 
 	// tools
 
@@ -361,6 +362,10 @@ CRVLPSuLMBuilder::~CRVLPSuLMBuilder(void)
 	if(m_2DContourMap)
 		delete[] m_2DContourMap;
 #endif
+
+	if (m_DebugData.MatchArray)
+		delete[] m_DebugData.MatchArray;
+
 //#ifdef PYTHON_DEBUG
 //	Py_Finalize();
 //#endif
@@ -12072,6 +12077,13 @@ double CRVLPSuLMBuilder::ConditionalProbabilityTree(CRVLPSuLM *pSPSuLM,
 
 #ifdef RVLPSULMBUILDER_CONDITIONAL_PROBABILITY_TREE_DEBUG_LOG
 	FILE *fp = fopen("C:\\RVL\\Debug\\ConditionalProbabilityTree.txt", "w");
+
+	if (m_DebugData.MatchArray)
+		delete[] m_DebugData.MatchArray;
+
+	m_DebugData.MatchArray = new RVLPSULM_MATCH2[nSFeatures];
+
+	RVLPSULM_MATCH2 *pDebugDataMatch = m_DebugData.MatchArray;
 #endif
 
 	int nSMMatches = pMatch - SMMatchMem;
@@ -12162,6 +12174,7 @@ double CRVLPSuLMBuilder::ConditionalProbabilityTree(CRVLPSuLM *pSPSuLM,
 
 #ifdef RVLPSULMBUILDER_CONDITIONAL_PROBABILITY_TREE_DEBUG_LOG
 			char feature;
+			int j;
 
 			if(pMatch->Type & RVLPSULM_MATCH_TYPE_LINE)
 			{
@@ -12179,12 +12192,16 @@ double CRVLPSuLMBuilder::ConditionalProbabilityTree(CRVLPSuLM *pSPSuLM,
 			char source = (pMatch->Type & RVLPSULM_MATCH_TYPE_AUTO ? 'S' : 'M');
 
 			fprintf(fp, "p(S%c%d|%c%c%d)=%lf\n", feature, i, source, feature, j, pMatch->cost);
+
+			*(pDebugDataMatch++) = *pMatch;
 #endif
 		}
 	}
 
 #ifdef RVLPSULMBUILDER_CONDITIONAL_PROBABILITY_TREE_DEBUG_LOG
 	fclose(fp);
+
+	m_DebugData.nMatches = pDebugDataMatch - m_DebugData.MatchArray;
 #endif
 
 	delete[] NodeMem;
@@ -26081,4 +26098,98 @@ void CRVLPSuLMBuilder::ProjectToCube(
 
 	if (P[ir] < 0)
 		ir += 3;
+}
+
+
+void CRVLPSuLMBuilder::CompareHypotheses(
+	RVLPSULM_MATCH2 * MatchArray1, 
+	int nMatches1, 
+	RVLPSULM_MATCH2 * MatchArray2, 
+	int nMatches2, 
+	char * OutputFileName)
+{
+	if (MatchArray1 == NULL)
+		return;
+
+	if (MatchArray2 == NULL)
+		return;
+
+	FILE *fp = fopen(OutputFileName, "w");
+
+	MatchDiff(MatchArray1, nMatches1, MatchArray2, nMatches2, fp);
+
+	fprintf(fp, "\n========================\n\n");
+
+	MatchDiff(MatchArray2, nMatches2, MatchArray1, nMatches1, fp);
+
+	fclose(fp);
+}
+
+
+void CRVLPSuLMBuilder::MatchDiff(
+	RVLPSULM_MATCH2 * MatchArray1,
+	int nMatches1,
+	RVLPSULM_MATCH2 * MatchArray2,
+	int nMatches2, 
+	FILE *fp)
+{
+	int i, j;
+	RVLPSULM_MATCH2 *pMatch1, *pMatch2;
+	bool bDiff;
+	char feature, source;
+	int iS, iM;
+
+	for (i = 0; i < nMatches1; i++)
+	{
+		pMatch1 = MatchArray1 + i;
+
+		if (pMatch1->Type & RVLPSULM_MATCH_TYPE_AUTO)
+		{
+			for (j = 0; j < nMatches2; j++)
+			{
+				pMatch2 = MatchArray2 + j;
+
+				if (!(pMatch2->Type & RVLPSULM_MATCH_TYPE_AUTO))
+					continue;
+
+				if ((pMatch2->Type & RVLPSULM_MATCH_TYPE_LINE) != (pMatch1->Type & RVLPSULM_MATCH_TYPE_LINE))
+					continue;
+
+				if (pMatch1->vpSObject != pMatch2->vpSObject)
+					continue;
+
+				if (pMatch1->vpMObject != pMatch2->vpMObject)
+					continue;
+
+				break;
+			}
+
+			if (bDiff = (j == nMatches2))
+				source = 'S';
+		}
+		else
+		{
+			bDiff = true;
+
+			source = 'M';
+		}
+
+		if (pMatch1->Type & RVLPSULM_MATCH_TYPE_LINE)
+		{
+			feature = 'L';
+			iS = ((CRVL3DLine2 *)(pMatch1->vpSObject))->m_Index;
+			iM = ((CRVL3DLine2 *)(pMatch1->vpMObject))->m_Index;
+		}
+		else
+		{
+			feature = 'S';
+			iS = ((CRVL3DSurface2 *)(pMatch1->vpSObject))->m_Index;
+			iM = ((CRVL3DSurface2 *)(pMatch1->vpMObject))->m_Index;
+		}
+
+		if (bDiff)
+		{
+			fprintf(fp, "p(S%c%d|%c%c%d)=%lf\n", feature, iS, source, feature, iM, pMatch1->cost);
+		}
+	}	// for every mach in MatchArray1
 }

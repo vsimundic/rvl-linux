@@ -314,6 +314,9 @@ int main(int argc, char* argv[])
 
 	int *SizeArray = new int[2 * w * h];
 
+	RVLPSULM_MATCH2 *RefHypMatchArray = NULL;
+	int nRefHypMatches;
+
 	// main loop
 
 	bool bDisplayMesh = false;
@@ -642,6 +645,13 @@ int main(int argc, char* argv[])
 				VS.m_pPSuLM->m_Index = 0xffffffff;
 		}
 
+		if (RefHypMatchArray)
+		{
+			delete[] RefHypMatchArray;
+
+			RefHypMatchArray = NULL;
+		}
+		
 		do
 		{
 			// clear display
@@ -701,6 +711,14 @@ int main(int argc, char* argv[])
 						pPrevRGBImage, iHypothesis);				
 
 					VS.m_PSuLMBuilder.DisplayHypothesisData(pFig, VS.m_pPSuLM, MatchMatrixGT, mDisplayPSuLMFlags, iHypothesis);
+
+#ifdef RVLPSULMBUILDER_CONDITIONAL_PROBABILITY_TREE_DEBUG_LOG
+					if (RefHypMatchArray)
+						VS.m_PSuLMBuilder.CompareHypotheses(RefHypMatchArray, nRefHypMatches, 
+							VS.m_PSuLMBuilder.m_DebugData.MatchArray, VS.m_PSuLMBuilder.m_DebugData.nMatches,
+							"C:\\RVL\\Debug\\HypComparison.txt");
+#endif // RVLPSULMBUILDER_CONDITIONAL_PROBABILITY_TREE_DEBUG_LOG
+
 				}
 
 				if(bDisplayPSuLM)
@@ -992,6 +1010,26 @@ int main(int argc, char* argv[])
 				bDisplayMesh = false;
 
 				bDisplayConvexSets = false;
+
+				break;
+			case 'R':
+				if (VS.m_PSuLMBuilder.m_DebugData.MatchArray)
+				{
+					if (RefHypMatchArray)
+						delete[] RefHypMatchArray;
+
+					nRefHypMatches = VS.m_PSuLMBuilder.m_DebugData.nMatches;
+
+					RefHypMatchArray = new RVLPSULM_MATCH2[nRefHypMatches];
+
+					memcpy(RefHypMatchArray, VS.m_PSuLMBuilder.m_DebugData.MatchArray, nRefHypMatches * sizeof(RVLPSULM_MATCH2));
+
+					GUI.Message("The current hypothesis is set as the reference hypothesis.", 600, 100, cvScalar(0, 255, 128));
+				}
+				else
+					GUI.Message("Cannot set reference hypothesis. No match data is generated.", 600, 100, cvScalar(0, 0, 255));
+
+				bRefresh = true;
 
 				break;
 			case 's':
@@ -1408,6 +1446,9 @@ int main(int argc, char* argv[])
 
 	delete[] SizeArray;
 	delete[] VTKMessage;
+	
+	if (RefHypMatchArray)
+		delete[] RefHypMatchArray;
 
 	GUI.CloseFigure("RVLPCSdemo");
 
