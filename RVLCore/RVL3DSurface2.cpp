@@ -163,6 +163,8 @@ void CRVL3DSurface2::Save(	FILE *fp,
 		if (this->m_histRGB)
 			CRVL3DMeshObject::Save(fp,Flags);
 
+		// save surface samples
+
 		RVLQLIST *pSamples = &m_Samples;
 
 		RVL3DSURFACE_SAMPLE *pSample = (RVL3DSURFACE_SAMPLE *)(m_Samples.pFirst);
@@ -191,6 +193,65 @@ void CRVL3DSurface2::Save(	FILE *fp,
 #endif
 
 			pSample = (RVL3DSURFACE_SAMPLE *)(pSample->pNext);
+		}
+
+		// save surface boundary
+
+		if (m_Flags & RVL3DSURFACE_FLAG_BOUNDARY)
+		{
+			RVLQLIST *pContourList = &m_BoundaryContourList;
+
+			int nContours = 0;
+
+			RVL3DCONTOUR *pContour = (RVL3DCONTOUR *)(pContourList->pFirst);
+
+			while (pContour)
+			{
+				nContours++;
+
+				pContour = (RVL3DCONTOUR *)(pContour->pNext);
+			}
+
+			fwrite(&nContours, sizeof(int), 1, fp);
+
+			int nPts;
+			RVLQLIST *pPtList;
+			RVL3DPOINT3 *pVertex;
+			
+			pContour = (RVL3DCONTOUR *)(pContourList->pFirst);
+
+			while (pContour)
+			{
+				fwrite(&(pContour->bHole), sizeof(bool), 1, fp);
+				fwrite(&(pContour->iView), sizeof(int), 1, fp);
+
+				pPtList = &(pContour->PtList);
+
+				nPts = 0;
+
+				pVertex = (RVL3DPOINT3 *)(pPtList->pFirst);
+
+				while (pVertex)
+				{
+					nPts++;
+
+					pVertex = (RVL3DPOINT3 *)(pVertex->pNext);
+				}
+
+				fwrite(&nPts, sizeof(int), 1, fp);
+
+				pVertex = (RVL3DPOINT3 *)(pPtList->pFirst);
+
+				while (pVertex)
+				{
+					fwrite(pVertex->P2D, sizeof(int), 2, fp);
+					fwrite(pVertex->P3D, sizeof(double), 3, fp);
+
+					pVertex = (RVL3DPOINT3 *)(pVertex->pNext);
+				}
+
+				pContour = (RVL3DCONTOUR *)(pContour->pNext);
+			}
 		}
 	}
 	fwrite(&m_nSupport, sizeof(int), 1, fp);
@@ -235,13 +296,15 @@ void CRVL3DSurface2::Load(	FILE *fp,
 		m_d = RVLDOTPRODUCT3(m_Pose.m_X, m_N);
 		//Added Karlo
 
-
-
 		fread(m_N, sizeof(double), 3, fp);
 		fread(&m_d, sizeof(double), 1, fp);
 		fread(&m_Area, sizeof(double), 1, fp);
 		if (Flags & RVL3DSURFACE_FLAG_MATERIAL)
 			CRVL3DMeshObject::Load(fp,Flags);
+
+		CRVLMem *pMem = m_pClass->m_pMem0;
+
+		// load surface samples
 
 		int nSamples;
 
@@ -252,8 +315,6 @@ void CRVL3DSurface2::Load(	FILE *fp,
 			RVLQLIST *pSamples = &m_Samples;
 
 			RVLQLIST_INIT(pSamples)
-
-			CRVLMem *pMem = m_pClass->m_pMem0;
 
 			RVL3DSURFACE_SAMPLE *pSample;
 
@@ -279,6 +340,54 @@ void CRVL3DSurface2::Load(	FILE *fp,
 			pSample--;
 
 			pSample->pNext = NULL;
+		}
+
+		// load surface boundary contours
+
+		if (m_Flags & RVL3DSURFACE_FLAG_BOUNDARY)
+		{
+			int nContours;
+
+			fread(&nContours, sizeof(int), 1, fp);
+
+			if (nContours > 0)
+			{
+				RVLQLIST *pContourList = &m_BoundaryContourList;
+
+				RVLQLIST_INIT(pContourList);
+
+				int iContour, iPt;
+				RVL3DCONTOUR *pContour;
+				int nPts;
+				RVLQLIST *pPtList;
+				RVL3DPOINT3 *pVertex;
+
+				for (iContour = 0; iContour < nContours; iContour++)
+				{
+					RVLMEM_ALLOC_STRUCT(pMem, RVL3DCONTOUR, pContour);
+
+					RVLQLIST_ADD_ENTRY(pContourList, pContour);
+
+					fread(&(pContour->bHole), sizeof(bool), 1, fp);
+					fread(&(pContour->iView), sizeof(int), 1, fp);
+
+					fread(&nPts, sizeof(int), 1, fp);
+
+					pPtList = &(pContour->PtList);
+
+					RVLQLIST_INIT(pPtList);
+
+					for (iPt = 0; iPt < nPts; iPt++)
+					{
+						RVLMEM_ALLOC_STRUCT(pMem, RVL3DPOINT3, pVertex);
+
+						RVLQLIST_ADD_ENTRY(pPtList, pVertex);
+
+						fread(pVertex->P2D, sizeof(int), 2, fp);
+						fread(pVertex->P3D, sizeof(double), 3, fp);
+					}
+				}
+			}
 		}
 	}
 	fread(&m_nSupport, sizeof(int), 1, fp);

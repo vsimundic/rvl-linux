@@ -3981,6 +3981,9 @@ CRVLPSuLM *CRVLPSuLMBuilder::Create(
 		}
 	}	// if(!bComplex)
 
+	if (m_Flags2 & RVLPSULMBUILDER_FLAG2_SURFACE_BOUNDARY)
+		pPSuLM->m_Flags |= RVLPSULM_FLAG_SURFACE_BOUNDARY;
+
 	/////
 
 	return pPSuLM;
