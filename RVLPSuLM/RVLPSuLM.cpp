@@ -2000,7 +2000,9 @@ void CRVLPSuLM::Load(FILE * fp, DWORD Flags)
 
 		p3DSurface->m_Index = i;
 	
-		
+		if (m_Flags & RVLPSULM_FLAG_SURFACE_BOUNDARY)
+			p3DSurface->m_Flags |= RVL3DSURFACE_FLAG_BOUNDARY;
+
 		//Load 3D surface (m_N and m_d)
 		p3DSurface->Load(fp);
 
