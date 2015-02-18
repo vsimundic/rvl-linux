@@ -17,6 +17,7 @@
 #include <vtkAutoInit.h>
 VTK_MODULE_INIT(vtkRenderingOpenGL);
 VTK_MODULE_INIT(vtkInteractionStyle);
+VTK_MODULE_INIT(vtkRenderingFreeType);//(vtkRenderingFreeTypeOpenGL);
 #include "RVLVTK.h"
 #include "VTKActorObj.h"
 #endif
@@ -86,6 +87,16 @@ void RVLPSuLMdemoGetNextHypothesis(CRVLPSuLMVS *pVS,
 		iHypothesis = iHypothesis_;
 }
 
+//Global variables (flags mostly) for VTK viewer
+#ifdef RVLVTK
+bool textureView = true;
+bool normalsView = false;
+bool helpTextView = true;
+bool rightMouseButtonVisibilityOff = false;
+bool rightMouseButtonSelectMode = false;
+typedef std::map<std::string, VTKActorObj*>::iterator vtk_map_it_type;
+#endif
+
 #ifdef RVLVTK
 //VTK Render window key press callback
 void KeyPressCallback(vtkObject* caller, unsigned long eid, void* clientdata, void *calldata)
@@ -93,14 +104,171 @@ void KeyPressCallback(vtkObject* caller, unsigned long eid, void* clientdata, vo
 	vtkSmartPointer<vtkRenderWindowInteractor> iren = reinterpret_cast<vtkRenderWindowInteractor *>(caller);
 	std::string keySym = "";
 	keySym = iren->GetKeySym();
-	if (keySym == "m")
+	if (keySym == "t") //Texture/color mode on/off
 	{
 		std::map<std::string, VTKActorObj*>* actorObjs = (std::map<std::string, VTKActorObj*>*)clientdata;
+		//Iterating through map of actors
+		vtkSmartPointer<vtkActor> tempActor;
+		for (vtk_map_it_type iterator = actorObjs->begin(); iterator != actorObjs->end(); iterator++)
+		{
+			// iterator->first = key
+			// iterator->second = value
+			//Check if object type is the one we are looking for
+			if (iterator->first.find("Plane") == std::string::npos)
+				continue;
+			//Casting vtkProp to vtkActor
+			tempActor = vtkActor::SafeDownCast(iterator->second->prop);
+			if (textureView)
+			{
+				tempActor->SetTexture(NULL);
+				tempActor->GetMapper()->InterpolateScalarsBeforeMappingOff();
+			}
+			else
+			{
+				tempActor->SetTexture(iterator->second->texture);
+				tempActor->GetMapper()->InterpolateScalarsBeforeMappingOn();
+			}
+		}
+		if (textureView)
+			textureView = false;
+		else
+			textureView = true;
+		iren->GetRenderWindow()->Render();
 	}
-	else if (keySym == "n")
+	else if (keySym == "n")	//Show normal mode on/off
 	{
+		std::map<std::string, VTKActorObj*>* actorObjs = (std::map<std::string, VTKActorObj*>*)clientdata;
+		//Iterating through map of actors
+		vtkSmartPointer<vtkActor> tempActor;
+		for (vtk_map_it_type iterator = actorObjs->begin(); iterator != actorObjs->end(); iterator++)
+		{
+			// iterator->first = key
+			// iterator->second = value
+			//Check if object type is the one we are looking for
+			if (iterator->first.find("Normal") == std::string::npos)
+				continue;
+			//Casting vtkProp to vtkActor
+			tempActor = vtkActor::SafeDownCast(iterator->second->prop);
+			if (normalsView)
+			{
+				tempActor->VisibilityOff();
+				normalsView = false;
+			}
+			else
+			{
+				tempActor->VisibilityOn();
+				normalsView = true;
+			}
+			break;
+		}
+		iren->GetRenderWindow()->Render();
 	}
-	cout << "MyKeyPressCallbackCommand - Function, Key: " << keySym << endl;
+	else if (keySym == "h") //Show help/status
+	{
+		std::map<std::string, VTKActorObj*>* actorObjs = (std::map<std::string, VTKActorObj*>*)clientdata;
+		//Iterating through map of actors
+		vtkSmartPointer<vtkCornerAnnotation> tempActor;
+		for (vtk_map_it_type iterator = actorObjs->begin(); iterator != actorObjs->end(); iterator++)
+		{
+			// iterator->first = key
+			// iterator->second = value
+			//Check if object type is the one we are looking for
+			if (iterator->first.find("HelpText") == std::string::npos)
+				continue;
+			//Casting vtkProp to vtkCornerAnnotation
+			tempActor = vtkCornerAnnotation::SafeDownCast(iterator->second->prop);
+			if (helpTextView)
+			{
+				tempActor->VisibilityOff();
+				helpTextView = false;
+			}
+			else
+			{
+				tempActor->VisibilityOn();
+				helpTextView = true;
+			}
+			break;
+		}
+		//
+		iren->GetRenderWindow()->Render();
+	}
+	else if (keySym == "1") //Toggle right mouse button select mode
+	{
+		std::map<std::string, VTKActorObj*>* actorObjs = (std::map<std::string, VTKActorObj*>*)clientdata;
+		//Iterating through map of actors
+		vtkSmartPointer<vtkCornerAnnotation> tempActor;
+		for (vtk_map_it_type iterator = actorObjs->begin(); iterator != actorObjs->end(); iterator++)
+		{
+			// iterator->first = key
+			// iterator->second = value
+			//Check if object type is the one we are looking for
+			if (iterator->first.find("HelpText") == std::string::npos)
+				continue;
+			//Casting vtkProp to vtkCornerAnnotation
+			tempActor = vtkCornerAnnotation::SafeDownCast(iterator->second->prop);
+			if (rightMouseButtonSelectMode)
+			{
+				tempActor->SetText(3, "Right mouse button mode: None");
+				rightMouseButtonSelectMode = false;
+			}
+			else
+			{
+				tempActor->SetText(3, "Right mouse button mode: Select mode");
+				//Setting other modes off
+				rightMouseButtonVisibilityOff = false;
+				//This one on
+				rightMouseButtonSelectMode = true;
+			}
+			break;
+		}
+		iren->GetRenderWindow()->Render();
+	}
+	else if (keySym == "2") //Toggle right mouse button VisibilityOff mode
+	{
+		std::map<std::string, VTKActorObj*>* actorObjs = (std::map<std::string, VTKActorObj*>*)clientdata;
+		//Iterating through map of actors
+		vtkSmartPointer<vtkCornerAnnotation> tempActor;
+		for (vtk_map_it_type iterator = actorObjs->begin(); iterator != actorObjs->end(); iterator++)
+		{
+			// iterator->first = key
+			// iterator->second = value
+			//Check if object type is the one we are looking for
+			if (iterator->first.find("HelpText") == std::string::npos)
+				continue;
+			//Casting vtkProp to vtkCornerAnnotation
+			tempActor = vtkCornerAnnotation::SafeDownCast(iterator->second->prop);
+			if (rightMouseButtonVisibilityOff)
+			{
+				tempActor->SetText(3, "Right mouse button mode: None");
+				rightMouseButtonVisibilityOff = false;
+			}
+			else
+			{
+				tempActor->SetText(3, "Right mouse button mode: VisibilityOff");
+				//Setting other modes off
+				rightMouseButtonSelectMode = false;
+				//This one on
+				rightMouseButtonVisibilityOff = true;
+			}
+			break;
+		}
+		iren->GetRenderWindow()->Render();
+	}
+	else if (keySym == "s") //Take a screenshot as VTKscreenshot.png in app dir
+	{
+		vtkSmartPointer<vtkWindowToImageFilter> windowToImageFilter = vtkSmartPointer<vtkWindowToImageFilter>::New();
+		windowToImageFilter->SetInput(iren->GetRenderWindow());
+		windowToImageFilter->SetMagnification(3); //set the resolution of the output image (3 times the current resolution of vtk render window)
+		windowToImageFilter->SetInputBufferTypeToRGBA(); //also record the alpha (transparency) channel
+		windowToImageFilter->Update();
+
+		vtkSmartPointer<vtkPNGWriter> writer = vtkSmartPointer<vtkPNGWriter>::New();
+		std::string filename = "VTKscreenshot.png";
+		writer->SetFileName(filename.c_str());
+		writer->SetInputConnection(windowToImageFilter->GetOutputPort());
+		writer->Write();
+	}
+	cout << "VTK - KeyPressCallbackCommand, Key: " << keySym << endl;
 }
 
 //VTK Render window right mouse button press callback function
@@ -118,6 +286,25 @@ void RightButtonPressCallback(vtkObject* caller, unsigned long eid, void* client
 	vtkSmartPointer<vtkActor> pickedActor = picker->GetActor();
 
 	std::map<std::string, VTKActorObj*>* actorObjs = (std::map<std::string, VTKActorObj*>*)clientdata;
+
+	//Iterating through map of actors
+	vtkSmartPointer<vtkActor> tempActor;
+	for (vtk_map_it_type iterator = actorObjs->begin(); iterator != actorObjs->end(); iterator++)
+	{
+		// iterator->first = key
+		// iterator->second = value
+		tempActor = vtkActor::SafeDownCast(iterator->second->prop);
+		if (tempActor == pickedActor)
+		{
+			std::cout << "Selected object: " << iterator->first << std::endl;
+			if (rightMouseButtonVisibilityOff)
+				tempActor->VisibilityOff();
+			break;
+		}
+	}
+	iren->GetRenderWindow()->Render();
+	//
+	std::cout << "Right mouse callback!" << std::endl;
 }
 
 //Function for generating PSuLM VTK scene
@@ -131,6 +318,7 @@ void GenAndDispPSuLMScene(CRVLPSuLM *psulm, CRVLVTKRenderer* pRenderer, std::map
 	vtkSmartPointer<vtkCallbackCommand> keypressCallback = vtkSmartPointer<vtkCallbackCommand>::New();
 	keypressCallback->SetCallback(KeyPressCallback);
 	keypressCallback->SetClientData(vtkobjs);
+	iren->AddObserver(vtkCommand::KeyPressEvent, keypressCallback);
 	vtkSmartPointer<vtkCallbackCommand> mousepressCallback = vtkSmartPointer<vtkCallbackCommand>::New();
 	mousepressCallback->SetCallback(RightButtonPressCallback);
 	mousepressCallback->SetClientData(vtkobjs);
@@ -145,8 +333,7 @@ void GenAndDispPSuLMScene(CRVLPSuLM *psulm, CRVLVTKRenderer* pRenderer, std::map
 	vtkSmartPointer<vtkPolygon> polygon;
 	vtkSmartPointer<vtkCellArray> polygons;
 	vtkSmartPointer<vtkPolyData> polygonPolyData;
-	vtkSmartPointer<vtkPolyData> polygonPolyData2;
-	vtkSmartPointer<vtkTriangleFilter> triFilter;// = vtkSmartPointer<vtkTriangleFilter>::New();	//Same for all?
+	vtkSmartPointer<vtkTriangleFilter> triFilter;
 	//Mapper and actor
 	vtkSmartPointer<vtkPolyDataMapper> mapper;
 	vtkSmartPointer<vtkActor> actor;
@@ -154,9 +341,30 @@ void GenAndDispPSuLMScene(CRVLPSuLM *psulm, CRVLVTKRenderer* pRenderer, std::map
 	vtkSmartPointer<vtkFloatArray> texCoords;
 	vtkSmartPointer<vtkImageData> texImg;
 	vtkSmartPointer<vtkTexture> texObj;
-	vtkSmartPointer<vtkBMPReader> bmpR;
+	vtkSmartPointer<vtkBMPReader> bmpR = vtkSmartPointer<vtkBMPReader>::New();
+	vtkSmartPointer<vtkImageFlip> flipFilter;
+	//Array of pointers for texture objects
+	vtkSmartPointer<vtkTexture> texArray[50];
+	//VTK objects for normals
+	vtkSmartPointer<vtkPolyData> normalPolyData;
+	vtkSmartPointer<vtkPoints> normalPoints = vtkSmartPointer<vtkPoints>::New();
+	normalPoints->SetDataTypeToFloat();
+	normalPoints->Reset();
+	vtkSmartPointer<vtkCellArray> normalVertices = vtkSmartPointer<vtkCellArray>::New();
+	normalVertices->Reset();
+	vtkSmartPointer<vtkFloatArray> normalValues = vtkSmartPointer<vtkFloatArray>::New();
+	normalValues->SetNumberOfComponents(3);
+	normalValues->Reset();
+	vtkSmartPointer<vtkUnsignedCharArray> normalRGB = vtkSmartPointer<vtkUnsignedCharArray>::New();
+	normalRGB->Reset();
+	normalRGB->SetName("RGB");
+	normalRGB->SetNumberOfComponents(3);
+	vtkSmartPointer<vtkGlyph3D> normalGlyph;
+	vtkSmartPointer<vtkArrowSource> normalArrowSource;
+	vtkSmartPointer<vtkPolyDataMapper> normalMapper;
+	vtkSmartPointer<vtkActor> normalActor;
 
-	//Actor object
+	//Actor helper object
 	VTKActorObj* actorObj;
 
 	//RVL  & other temp objects
@@ -169,40 +377,70 @@ void GenAndDispPSuLMScene(CRVLPSuLM *psulm, CRVLVTKRenderer* pRenderer, std::map
 	int imgDims[3];
 	int noPoints = 0;
 	int noCont = 0;
+	float normalLocation[3];
 	//Actor name
 	std::string actName = "";
 	std::stringstream ss;
+
+	//generating random color
+	unsigned char **color = new unsigned char*[psulm->m_n3DSurfacesTotal * 3];	//best guess that there is max 3 contours per surface
+	for (int i = 0; i < psulm->m_n3DSurfacesTotal * 3; i++)
+	{
+		color[i] = new unsigned char[3];
+		color[i][0] = (unsigned char)(rand() * 255);
+		color[i][1] = (unsigned char)(rand() * 255);
+		color[i][2] = (unsigned char)(rand() * 255);
+	}
+
 	//For every surface in psulm:
 	for (int i = 0; i < psulm->m_n3DSurfacesTotal; i++)
 	{
 		currentS = psulm->m_3DSurfaceArray[i];
-		//open image/texture for that surface (chack if it is the same as the last one to prevent constant oppening and closing of same images)
-		if ((iSample != (iSampleOrig + ((RVL3DCONTOUR*)currentS->m_BoundaryContourList.pFirst)->iView)) || (!texObj))
-		{
-			iSample = iSampleOrig + ((RVL3DCONTOUR*)currentS->m_BoundaryContourList.pFirst)->iView;
-			RVLSetFileNumber(imageFileName, "00000-LW.bmp", iSample);
-			std::cout << "Imagefile: " << imageFileName << std::endl;
-			bmpR = vtkSmartPointer<vtkBMPReader>::New();
-			bmpR->SetFileName(imageFileName);
-			bmpR->Update();
-		}
-		//
-		texImg = bmpR->GetOutput();
-		texImg->GetDimensions(imgDims);
-		//
-		texObj = vtkSmartPointer<vtkTexture>::New();
-		texObj->SetInputData(texImg);
-		texObj->InterpolateOn();
 		//for every conture in surface:
 		currentC = (RVL3DCONTOUR*)currentS->m_BoundaryContourList.pFirst;
 		noCont = 0;
 		while (currentC)
 		{
+			//Check if hole conture
+			if (currentC->bHole)
+			{
+				currentC = (RVL3DCONTOUR*)currentC->pNext;
+				continue;
+			}
+			//open image/texture for that conture (chack if it is the same as the last one to prevent constant oppening and closing of same images)
+			if (!texArray[currentC->iView])//((iSample != (iSampleOrig + currentC->iView)) || (!texObj))
+			{
+				iSample = iSampleOrig + currentC->iView;
+				RVLSetFileNumber(imageFileName, "00000-LW.bmp", iSample);
+				std::cout << "Imagefile: " << imageFileName << std::endl;
+				bmpR->SetFileName(imageFileName);
+				bmpR->Update();
+				//
+				flipFilter = vtkSmartPointer<vtkImageFlip>::New();
+				flipFilter->SetFilteredAxis(1); // flip y axis
+				flipFilter->SetInputConnection(bmpR->GetOutputPort());
+				flipFilter->Update();
+				//
+				texImg = flipFilter->GetOutput();
+				texImg->GetDimensions(imgDims);
+				//
+				texObj = vtkSmartPointer<vtkTexture>::New();
+				texObj->SetInputData(texImg);
+				texObj->InterpolateOn();
+				//
+				texArray[currentC->iView] = texObj;
+			}
+			texObj = texArray[currentC->iView];
+			//
 			noCont++;
 			//for every point in conture:
 			points = vtkSmartPointer<vtkPoints>::New();
 			texCoords = vtkSmartPointer<vtkFloatArray>::New();
 			texCoords->SetNumberOfComponents(2);
+			//Resetting normal location
+			normalLocation[0] = 0;
+			normalLocation[1] = 0;
+			normalLocation[2] = 0;
 			currentP = (RVL3DPOINT3*)currentC->PtList.pFirst;
 			while (currentP)
 			{
@@ -210,6 +448,10 @@ void GenAndDispPSuLMScene(CRVLPSuLM *psulm, CRVLVTKRenderer* pRenderer, std::map
 				points->InsertNextPoint(currentP->P3D);
 				//insert texture coordinate
 				texCoords->InsertNextTuple2((float)currentP->P2D[0] / (float)imgDims[0], (float)currentP->P2D[1] / (float)imgDims[1]);
+				//adding to normal location
+				normalLocation[0] += (float)currentP->P3D[0];
+				normalLocation[1] += (float)currentP->P3D[1];
+				normalLocation[2] += (float)currentP->P3D[2];
 				//next point
 				currentP = (RVL3DPOINT3*)currentP->pNext;
 				//end point
@@ -223,7 +465,7 @@ void GenAndDispPSuLMScene(CRVLPSuLM *psulm, CRVLVTKRenderer* pRenderer, std::map
 			//create poligons(cellarray) and polydata
 			polygons = vtkSmartPointer<vtkCellArray>::New();
 			polygons->InsertNextCell(polygon);
-
+			//polydata object
 			polygonPolyData = vtkSmartPointer<vtkPolyData>::New();
 			polygonPolyData->SetPoints(points);
 			polygonPolyData->SetPolys(polygons);
@@ -233,36 +475,93 @@ void GenAndDispPSuLMScene(CRVLPSuLM *psulm, CRVLVTKRenderer* pRenderer, std::map
 			triFilter->SetInputData(polygonPolyData);
 			triFilter->PassVertsOn();
 			triFilter->Update();
-			//get new polydata from filter (deep copy?) and add texture coordinates
-			//polygonPolyData = triFilter->GetOutput();
-			//triFilter->GetOutput()->GetPointData()->SetTCoords(texCoords);
+			//get new polydata from filter (deep copy?) and add texture coordinates (or not)
 			//crate mapper (and link to texture) and actor
 			mapper = vtkSmartPointer<vtkPolyDataMapper>::New();
 			//mapper->SetInputData(polygonPolyData);
 			mapper->SetInputConnection(triFilter->GetOutputPort());
+			mapper->InterpolateScalarsBeforeMappingOn();	//Needed for texture to be on top?
 			//insert new actor to renderer
 			vtkSmartPointer<vtkActor> actor = vtkSmartPointer<vtkActor>::New();
 			actor->SetMapper(mapper);
+			actor->GetProperty()->SetColor((double)color[vtkobjs->size()][0] / 255.0, (double)color[vtkobjs->size()][1] / 255.0, (double)color[vtkobjs->size()][2] / 255.0);
 			actor->SetTexture(texObj);
 			//
 			ren1->AddActor(actor);
 			//insert new actor/mapper/polydata to vtkobjs (and create appropriate name)
-			actorObj = new VTKActorObj(actor, polygonPolyData, texObj);
-			ss << "Plane_" << i << "Contour_" << noCont;
+			actorObj = new VTKActorObj(actor, triFilter->GetOutput(), texObj);
+			ss << "Plane_" << i << "_Contour_" << noCont;
 			actName = ss.str();
 			ss.str("");
 			ss.clear();
 			vtkobjs->insert(std::pair<std::string, VTKActorObj*>(actName, actorObj));
-			currentC = NULL;// (RVL3DCONTOUR*)currentC->pNext;
+
+			//creating normal entry
+			normalLocation[0] /= (float)noPoints;
+			normalLocation[1] /= (float)noPoints;
+			normalLocation[2] /= (float)noPoints;
+			normalPoints->InsertNextPoint(normalLocation);
+			normalValues->InsertNextTuple3((float)currentS->m_N[0], (float)currentS->m_N[1], (float)currentS->m_N[2]);
+			normalVertices->InsertNextCell(1);
+			normalVertices->InsertCellPoint(vtkobjs->size() - 1);
+			normalRGB->InsertNextTupleValue(color[vtkobjs->size() - 1]);
+			//
+			currentC = (RVL3DCONTOUR*)currentC->pNext;
 			//end conture
 		}
 		//end surface
 		std::cout << noCont << std::endl;
 	}
-	//run render()
+
+	//Genereting and inserting other VTK objects
+	//Normals object
+	normalPolyData = vtkSmartPointer<vtkPolyData>::New();
+	normalPolyData->SetPoints(normalPoints);
+	normalPolyData->SetVerts(normalVertices);
+	normalPolyData->GetPointData()->SetNormals(normalValues);
+	normalPolyData->GetPointData()->SetScalars(normalRGB);
+	normalArrowSource = vtkSmartPointer<vtkArrowSource>::New();
+	normalGlyph = vtkSmartPointer<vtkGlyph3D>::New();
+	normalGlyph->SetInputData(normalPolyData);
+	normalGlyph->SetSourceConnection(normalArrowSource->GetOutputPort());
+	normalGlyph->SetVectorModeToUseNormal();
+	normalGlyph->SetColorModeToColorByScalar();
+	normalGlyph->SetScaleModeToDataScalingOff();
+	normalGlyph->SetScaleFactor(300);
+	normalGlyph->Update();
+	normalMapper = vtkSmartPointer<vtkPolyDataMapper>::New();
+	normalMapper->SetInputConnection(normalGlyph->GetOutputPort());
+	normalActor = vtkSmartPointer<vtkActor>::New();
+	normalActor->SetMapper(normalMapper);
+	normalActor->VisibilityOff();
+	//normalActor->GetProperty()->SetColor(1.0, 0.0, 0.0);
+	ren1->AddActor(normalActor);
+	//insert new actor/mapper/polydata to vtkobjs (and create appropriate name)
+	actorObj = new VTKActorObj(normalActor, normalPolyData);
+	actName = "NormalGlyphs3D";
+	vtkobjs->insert(std::pair<std::string, VTKActorObj*>(actName, actorObj));
+
+	//Text help/status object
+	vtkSmartPointer<vtkCornerAnnotation> helpAnnotation =	vtkSmartPointer<vtkCornerAnnotation>::New();
+	helpAnnotation->SetLinearFontScaleFactor(2);
+	helpAnnotation->SetNonlinearFontScaleFactor(1);
+	helpAnnotation->SetMaximumFontSize(15);
+	//helpAnnotation->SetText(0, "lower left");
+	//helpAnnotation->SetText(1, "lower right");
+	helpAnnotation->SetText(2, "Help:\nPress 'h' to toggle this help on/off.\nPress 't' to toggle texture/color representation.\nPress 'n' to toggle normals on/off.\nPress 's' to capture screenshot of current view as file VTKscreenshot.png.");
+	helpAnnotation->SetText(3, "Right mouse button mode: none");
+	helpAnnotation->GetTextProperty()->SetColor(1, 0, 0);
+	//insert new actor/mapper/polydata to vtkobjs (and create appropriate name)
+	ren1->AddViewProp(helpAnnotation);
+	actorObj = new VTKActorObj(helpAnnotation, NULL);
+	actName = "HelpTextAnnotation";
+	vtkobjs->insert(std::pair<std::string, VTKActorObj*>(actName, actorObj));
+
+	//run render
 	ren1->ResetCamera();
 	ren1->SetBackground(0.5294, 0.8078, 0.9803);
 	renWin->Render();
+	//iren->Start();
 }
 
 //Function for adding hypothesis pose to VTK PSuLM scene

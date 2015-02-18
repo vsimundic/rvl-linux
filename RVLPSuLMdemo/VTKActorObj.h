@@ -12,27 +12,27 @@
 class VTKActorObj
 {
 public:
-	vtkSmartPointer<vtkActor> actor;
+	vtkSmartPointer<vtkProp> prop;
 	vtkSmartPointer<vtkPolyData> polydata;
 	vtkSmartPointer<vtkTexture> texture;
 
 	VTKActorObj()
 	{
-		actor = vtkSmartPointer<vtkActor>::New();
+		prop = vtkSmartPointer<vtkActor>::New(); //vtkSmartPointer<vtkProp>::New();	does not pass
 		polydata = vtkSmartPointer<vtkPolyData>::New();
 		texture = vtkSmartPointer<vtkTexture>::New();
 	}
 
-	VTKActorObj(vtkSmartPointer<vtkActor> actor, vtkSmartPointer<vtkPolyData> polydata, vtkSmartPointer<vtkTexture> texture = NULL)
+	VTKActorObj(vtkSmartPointer<vtkProp> prop, vtkSmartPointer<vtkPolyData> polydata = NULL, vtkSmartPointer<vtkTexture> texture = NULL)
 	{
-		this->actor = actor;
+		this->prop = prop;
 		this->polydata = polydata;
 		this->texture = texture;
 	}
 
 	~VTKActorObj()
 	{
-		actor = NULL;
+		prop = NULL;
 		polydata = NULL;
 		texture = NULL;
 	}
