@@ -94,6 +94,8 @@ bool normalsView = false;
 bool helpTextView = true;
 bool rightMouseButtonVisibilityOff = false;
 bool rightMouseButtonSelectMode = false;
+bool cameraCone = true;
+bool hypothesisCone = false;
 std::string g_SelectedObject = "";
 //Definition of iterator type
 typedef std::map<std::string, VTKActorObj*>::iterator vtk_map_it_type;
@@ -177,6 +179,56 @@ void KeyPressCallback(vtkObject* caller, unsigned long eid, void* clientdata, vo
 			tempActor->VisibilityOn();
 			helpTextView = true;
 		}
+		iren->GetRenderWindow()->Render();
+	}
+	else if (keySym == "c")	//Show camera cone on/off
+	{
+		std::map<std::string, VTKActorObj*>* actorObjs = (std::map<std::string, VTKActorObj*>*)clientdata;
+		//Iterating through map of actors
+		vtkSmartPointer<vtkActor> tempActor;
+		for (vtk_map_it_type iterator = actorObjs->begin(); iterator != actorObjs->end(); iterator++)
+		{
+			// iterator->first = key
+			// iterator->second = value
+			//Check if object type is the one we are looking for
+			if (iterator->first.find("Camera") == std::string::npos)
+				continue;
+			//Casting vtkProp to vtkActor
+			tempActor = vtkActor::SafeDownCast(iterator->second->prop);
+			if (cameraCone)
+				tempActor->VisibilityOff();
+			else
+				tempActor->VisibilityOn();
+		}
+		if (cameraCone)
+			cameraCone = false;
+		else
+			cameraCone = true;
+		iren->GetRenderWindow()->Render();
+	}
+	else if (keySym == "y")	//Show hypothesis cone on/off
+	{
+		std::map<std::string, VTKActorObj*>* actorObjs = (std::map<std::string, VTKActorObj*>*)clientdata;
+		//Iterating through map of actors
+		vtkSmartPointer<vtkActor> tempActor;
+		for (vtk_map_it_type iterator = actorObjs->begin(); iterator != actorObjs->end(); iterator++)
+		{
+			// iterator->first = key
+			// iterator->second = value
+			//Check if object type is the one we are looking for
+			if (iterator->first.find("Hypothesis") == std::string::npos)
+				continue;
+			//Casting vtkProp to vtkActor
+			tempActor = vtkActor::SafeDownCast(iterator->second->prop);
+			if (hypothesisCone)
+				tempActor->VisibilityOff();
+			else
+				tempActor->VisibilityOn();
+		}
+		if (hypothesisCone)
+			hypothesisCone = false;
+		else
+			hypothesisCone = true;
 		iren->GetRenderWindow()->Render();
 	}
 	else if (keySym == "1") //Toggle right mouse button select mode
@@ -384,14 +436,15 @@ void GenAndDispPSuLMScene(CRVLPSuLM *psulm, CRVLVTKRenderer* pRenderer, std::map
 	std::stringstream ss;
 
 	//generating random color
-	unsigned char **color = new unsigned char*[psulm->m_n3DSurfacesTotal * 5];	//best guess that there is max 3 contours per surface
-	for (int i = 0; i < psulm->m_n3DSurfacesTotal * 5; i++)
-	{
-		color[i] = new unsigned char[3];
-		color[i][0] = (unsigned char)(rand() * 255);
-		color[i][1] = (unsigned char)(rand() * 255);
-		color[i][2] = (unsigned char)(rand() * 255);
-	}
+	//unsigned char **color = new unsigned char*[psulm->m_n3DSurfacesTotal * 10];	//best guess that there is max 3 contours per surface
+	//for (int i = 0; i < psulm->m_n3DSurfacesTotal * 10; i++)
+	//{
+	//	color[i] = new unsigned char[3];
+	//	color[i][0] = (unsigned char)(rand() * 255);
+	//	color[i][1] = (unsigned char)(rand() * 255);
+	//	color[i][2] = (unsigned char)(rand() * 255);
+	//}
+	std::vector<unsigned char*> color;
 
 	//Setting up transform object if the PSuLM is to be added te previous scene
 	vtkSmartPointer<vtkTransform> transform;
@@ -510,7 +563,13 @@ void GenAndDispPSuLMScene(CRVLPSuLM *psulm, CRVLVTKRenderer* pRenderer, std::map
 			//insert new actor to renderer
 			vtkSmartPointer<vtkActor> actor = vtkSmartPointer<vtkActor>::New();
 			actor->SetMapper(mapper);
-			actor->GetProperty()->SetColor((double)color[vtkobjs->size()][0] / 255.0, (double)color[vtkobjs->size()][1] / 255.0, (double)color[vtkobjs->size()][2] / 255.0);
+			//Setting up random color that can be used later for same object
+			unsigned char colorObj[3];
+			colorObj[0] = (unsigned char)(rand() * 255);
+			colorObj[1] = (unsigned char)(rand() * 255);
+			colorObj[2] = (unsigned char)(rand() * 255);
+			color.push_back(colorObj);
+			actor->GetProperty()->SetColor((double)(colorObj[0] / 255.0), (double)(colorObj[1] / 255.0), (double)(colorObj[2] / 255.0));// ((double)color[vtkobjs->size()][0] / 255.0, (double)color[vtkobjs->size()][1] / 255.0, (double)color[vtkobjs->size()][2] / 255.0);
 			actor->SetTexture(texObj);
 			//If it is added transfor needs to be applied
 			if (add)
@@ -532,8 +591,8 @@ void GenAndDispPSuLMScene(CRVLPSuLM *psulm, CRVLVTKRenderer* pRenderer, std::map
 			normalPoints->InsertNextPoint(normalLocation);
 			normalValues->InsertNextTuple3((float)currentS->m_N[0], (float)currentS->m_N[1], (float)currentS->m_N[2]);
 			normalVertices->InsertNextCell(1);
-			normalVertices->InsertCellPoint(vtkobjs->size() - 1);
-			normalRGB->InsertNextTupleValue(color[vtkobjs->size() - 1]);
+			normalVertices->InsertCellPoint(color.size() - 1);
+			normalRGB->InsertNextTupleValue(color[color.size() - 1]);
 			//
 			currentC = (RVL3DCONTOUR*)currentC->pNext;
 			//end conture
@@ -582,7 +641,7 @@ void GenAndDispPSuLMScene(CRVLPSuLM *psulm, CRVLVTKRenderer* pRenderer, std::map
 	//Camera position objects
 	//cone source
 	coneSource = vtkSmartPointer<vtkConeSource>::New();
-	coneSource->SetResolution(4);
+	coneSource->SetResolution(10);
 	coneSource->SetHeight(200.0);
 	coneSource->SetRadius(100.0);
 	coneSource->SetDirection(0.0, 0.0, 1.0);
@@ -613,7 +672,9 @@ void GenAndDispPSuLMScene(CRVLPSuLM *psulm, CRVLVTKRenderer* pRenderer, std::map
 		helpAnnotation->SetMaximumFontSize(15);
 		//helpAnnotation->SetText(0, "lower left");
 		//helpAnnotation->SetText(1, "lower right");
-		helpAnnotation->SetText(2, "Help:\nPress 'h' to toggle this help on/off.\nPress 't' to toggle texture/color representation.\nPress 'n' to toggle normals on/off.\nPress 'x' to capture screenshot of current view as file VTKscreenshot.png.\nPress '1' for right mouse button 'Select mode' on/off.\nPress '2' for right mouse button 'VisibilityOff mode' on/off.");
+		helpAnnotation->SetText(2, "Help:\nPress 'h' to toggle this help on/off.(default on)\nPress 't' to toggle texture/color representation.(default texture)\nPress 'n' to toggle normals on/off.(default off)\n \
+			Press 'x' to capture screenshot of current view as file VTKscreenshot.png.\nPress '1' for right mouse button 'Select mode' on/off.(default off)\n \
+			Press '2' for right mouse button 'VisibilityOff mode' on/off.(default off)\nPress 'c' to toggle camera postitions on/off.(default on)\nPress 'y' to toggle hypothesis positions on/off.(default off)");
 		helpAnnotation->SetText(3, "Right mouse button mode: None");
 		helpAnnotation->GetTextProperty()->SetColor(1, 0, 0);
 		//insert new actor/mapper/polydata to vtkobjs (and create appropriate name)
@@ -631,9 +692,70 @@ void GenAndDispPSuLMScene(CRVLPSuLM *psulm, CRVLVTKRenderer* pRenderer, std::map
 }
 
 //Function for adding hypothesis pose to VTK PSuLM scene
-void AddHypothesisToPSuLMScene(CRVLVTKRenderer* rvlrenderer, std::map<std::string, VTKActorObj>* vtkobjs)
+void AddHypothesisToPSuLMScene(CRVLVTKRenderer* pRenderer, std::map<std::string, VTKActorObj*>* vtkobjs, CRVL3DPose * hypPose, int hypIdx)
 {
-	//
+	//Setting up VTK scene
+	vtkRenderer *ren1 = pRenderer->m_pRenderer;
+	vtkRenderWindow *renWin = pRenderer->m_pWindow;
+	vtkRenderWindowInteractor *iren = pRenderer->m_pInteractor;
+
+	//VTK objects for cone (camera position) placement
+	vtkSmartPointer<vtkConeSource> coneSource;
+	vtkSmartPointer<vtkPolyDataMapper> coneMapper;
+	vtkSmartPointer<vtkActor> coneActor;
+
+	//Setting up transform object for hypothesis pose
+	vtkSmartPointer<vtkTransform> transform;
+	double transfMat[16];
+	transform = vtkSmartPointer<vtkTransform>::New();
+	transfMat[0] = hypPose->m_Rot[0];
+	transfMat[1] = hypPose->m_Rot[1];
+	transfMat[2] = hypPose->m_Rot[2];
+	transfMat[3] = hypPose->m_X[0];
+	transfMat[4] = hypPose->m_Rot[3];
+	transfMat[5] = hypPose->m_Rot[4];
+	transfMat[6] = hypPose->m_Rot[5];
+	transfMat[7] = hypPose->m_X[1];
+	transfMat[8] = hypPose->m_Rot[6];
+	transfMat[9] = hypPose->m_Rot[7];
+	transfMat[10] = hypPose->m_Rot[8];
+	transfMat[11] = hypPose->m_X[2];
+	transfMat[12] = 0.0;
+	transfMat[13] = 0.0;
+	transfMat[14] = 0.0;
+	transfMat[15] = 1.0;
+	transform->SetMatrix(transfMat);
+
+	//Hypothesis cone position objects
+	//cone source
+	coneSource = vtkSmartPointer<vtkConeSource>::New();
+	coneSource->SetResolution(10);
+	coneSource->SetHeight(200.0);
+	coneSource->SetRadius(100.0);
+	coneSource->SetDirection(0.0, 0.0, 1.0);
+	//cone mapper
+	coneMapper = vtkSmartPointer<vtkPolyDataMapper>::New();
+	coneMapper->SetInputConnection(coneSource->GetOutputPort());
+	//cone actor
+	coneActor = vtkSmartPointer<vtkActor>::New();
+	coneActor->SetMapper(coneMapper);
+	coneActor->GetProperty()->SetColor(0.0, 0.0, 1.0);
+	//transform it
+	coneActor->SetUserTransform(transform);
+	coneActor->VisibilityOff();
+	//add it
+	ren1->AddActor(coneActor);
+	//insert new actor/mapper/polydata to vtkobjs (and create appropriate name)
+	//Actor helper object
+	VTKActorObj* actorObj = new VTKActorObj(coneActor);
+	//Actor name
+	std::string actName = "";
+	std::stringstream ss;
+	ss << "Model_" << hypIdx << "HypothesisCone";
+	actName = ss.str();
+	ss.str("");
+	ss.clear();
+	vtkobjs->insert(std::pair<std::string, VTKActorObj*>(actName, actorObj));
 }
 #endif
 
