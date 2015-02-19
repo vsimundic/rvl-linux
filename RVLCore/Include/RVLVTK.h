@@ -35,3 +35,4 @@
 #include "vtkCornerAnnotation.h"
 #include "vtkWindowToImageFilter.h"
 #include "vtkPNGWriter.h"
+#include "vtkConeSource.h"

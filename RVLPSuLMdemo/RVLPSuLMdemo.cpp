@@ -94,6 +94,8 @@ bool normalsView = false;
 bool helpTextView = true;
 bool rightMouseButtonVisibilityOff = false;
 bool rightMouseButtonSelectMode = false;
+std::string g_SelectedObject = "";
+//Definition of iterator type
 typedef std::map<std::string, VTKActorObj*>::iterator vtk_map_it_type;
 #endif
 
@@ -150,111 +152,83 @@ void KeyPressCallback(vtkObject* caller, unsigned long eid, void* clientdata, vo
 			//Casting vtkProp to vtkActor
 			tempActor = vtkActor::SafeDownCast(iterator->second->prop);
 			if (normalsView)
-			{
 				tempActor->VisibilityOff();
-				normalsView = false;
-			}
 			else
-			{
 				tempActor->VisibilityOn();
-				normalsView = true;
-			}
-			break;
 		}
+		if (normalsView)
+			normalsView = false;
+		else
+			normalsView = true;
 		iren->GetRenderWindow()->Render();
 	}
 	else if (keySym == "h") //Show help/status
 	{
 		std::map<std::string, VTKActorObj*>* actorObjs = (std::map<std::string, VTKActorObj*>*)clientdata;
-		//Iterating through map of actors
-		vtkSmartPointer<vtkCornerAnnotation> tempActor;
-		for (vtk_map_it_type iterator = actorObjs->begin(); iterator != actorObjs->end(); iterator++)
+		//Getting required actor
+		vtkSmartPointer<vtkCornerAnnotation> tempActor = vtkCornerAnnotation::SafeDownCast(actorObjs->at("HelpTextAnnotation")->prop);
+		if (helpTextView)
 		{
-			// iterator->first = key
-			// iterator->second = value
-			//Check if object type is the one we are looking for
-			if (iterator->first.find("HelpText") == std::string::npos)
-				continue;
-			//Casting vtkProp to vtkCornerAnnotation
-			tempActor = vtkCornerAnnotation::SafeDownCast(iterator->second->prop);
-			if (helpTextView)
-			{
-				tempActor->VisibilityOff();
-				helpTextView = false;
-			}
-			else
-			{
-				tempActor->VisibilityOn();
-				helpTextView = true;
-			}
-			break;
+			tempActor->VisibilityOff();
+			helpTextView = false;
 		}
-		//
+		else
+		{
+			tempActor->VisibilityOn();
+			helpTextView = true;
+		}
 		iren->GetRenderWindow()->Render();
 	}
 	else if (keySym == "1") //Toggle right mouse button select mode
 	{
 		std::map<std::string, VTKActorObj*>* actorObjs = (std::map<std::string, VTKActorObj*>*)clientdata;
-		//Iterating through map of actors
-		vtkSmartPointer<vtkCornerAnnotation> tempActor;
-		for (vtk_map_it_type iterator = actorObjs->begin(); iterator != actorObjs->end(); iterator++)
+		//Getting required actor
+		vtkSmartPointer<vtkCornerAnnotation> tempActor = vtkCornerAnnotation::SafeDownCast(actorObjs->at("HelpTextAnnotation")->prop);
+		if (rightMouseButtonSelectMode)
 		{
-			// iterator->first = key
-			// iterator->second = value
-			//Check if object type is the one we are looking for
-			if (iterator->first.find("HelpText") == std::string::npos)
-				continue;
-			//Casting vtkProp to vtkCornerAnnotation
-			tempActor = vtkCornerAnnotation::SafeDownCast(iterator->second->prop);
-			if (rightMouseButtonSelectMode)
-			{
-				tempActor->SetText(3, "Right mouse button mode: None");
-				rightMouseButtonSelectMode = false;
-			}
-			else
-			{
-				tempActor->SetText(3, "Right mouse button mode: Select mode");
-				//Setting other modes off
-				rightMouseButtonVisibilityOff = false;
-				//This one on
-				rightMouseButtonSelectMode = true;
-			}
-			break;
+			tempActor->SetText(3, "Right mouse button mode: None");
+			rightMouseButtonSelectMode = false;
+			//Clearing selected string (only on screen)
+			vtkSmartPointer<vtkCornerAnnotation> tempHelpActor = vtkCornerAnnotation::SafeDownCast(actorObjs->at("HelpTextAnnotation")->prop);
+			tempHelpActor->SetText(1, " ");
+		}
+		else
+		{
+			tempActor->SetText(3, "Right mouse button mode: Select mode");
+			//Setting other modes off
+			rightMouseButtonVisibilityOff = false;
+			//This one on
+			rightMouseButtonSelectMode = true;
 		}
 		iren->GetRenderWindow()->Render();
 	}
 	else if (keySym == "2") //Toggle right mouse button VisibilityOff mode
 	{
 		std::map<std::string, VTKActorObj*>* actorObjs = (std::map<std::string, VTKActorObj*>*)clientdata;
-		//Iterating through map of actors
-		vtkSmartPointer<vtkCornerAnnotation> tempActor;
-		for (vtk_map_it_type iterator = actorObjs->begin(); iterator != actorObjs->end(); iterator++)
+		//Getting required actor
+		vtkSmartPointer<vtkCornerAnnotation> tempActor = vtkCornerAnnotation::SafeDownCast(actorObjs->at("HelpTextAnnotation")->prop);
+		if (rightMouseButtonVisibilityOff)
 		{
-			// iterator->first = key
-			// iterator->second = value
-			//Check if object type is the one we are looking for
-			if (iterator->first.find("HelpText") == std::string::npos)
-				continue;
-			//Casting vtkProp to vtkCornerAnnotation
-			tempActor = vtkCornerAnnotation::SafeDownCast(iterator->second->prop);
-			if (rightMouseButtonVisibilityOff)
+			tempActor->SetText(3, "Right mouse button mode: None");
+			rightMouseButtonVisibilityOff = false;
+		}
+		else
+		{
+			tempActor->SetText(3, "Right mouse button mode: VisibilityOff");
+			//Setting other modes off
+			if (rightMouseButtonSelectMode) //If the switch is from select mode then we have to potentialy empty lower right text in help actor
 			{
-				tempActor->SetText(3, "Right mouse button mode: None");
-				rightMouseButtonVisibilityOff = false;
-			}
-			else
-			{
-				tempActor->SetText(3, "Right mouse button mode: VisibilityOff");
-				//Setting other modes off
 				rightMouseButtonSelectMode = false;
-				//This one on
-				rightMouseButtonVisibilityOff = true;
+				//Clearing selected string (only on screen)
+				vtkSmartPointer<vtkCornerAnnotation> tempHelpActor = vtkCornerAnnotation::SafeDownCast(actorObjs->at("HelpTextAnnotation")->prop);
+				tempHelpActor->SetText(1, " ");
 			}
-			break;
+			//This one on
+			rightMouseButtonVisibilityOff = true;
 		}
 		iren->GetRenderWindow()->Render();
 	}
-	else if (keySym == "s") //Take a screenshot as VTKscreenshot.png in app dir
+	else if (keySym == "x") //Take a screenshot as VTKscreenshot.png in app dir
 	{
 		vtkSmartPointer<vtkWindowToImageFilter> windowToImageFilter = vtkSmartPointer<vtkWindowToImageFilter>::New();
 		windowToImageFilter->SetInput(iren->GetRenderWindow());
@@ -284,6 +258,8 @@ void RightButtonPressCallback(vtkObject* caller, unsigned long eid, void* client
 
 	//get picked actor
 	vtkSmartPointer<vtkActor> pickedActor = picker->GetActor();
+	if (!pickedActor)
+		return;
 
 	std::map<std::string, VTKActorObj*>* actorObjs = (std::map<std::string, VTKActorObj*>*)clientdata;
 
@@ -296,9 +272,24 @@ void RightButtonPressCallback(vtkObject* caller, unsigned long eid, void* client
 		tempActor = vtkActor::SafeDownCast(iterator->second->prop);
 		if (tempActor == pickedActor)
 		{
-			std::cout << "Selected object: " << iterator->first << std::endl;
 			if (rightMouseButtonVisibilityOff)
+			{
 				tempActor->VisibilityOff();
+				std::cout << iterator->first << " set to invisible!" << std::endl;
+			}
+			else if (rightMouseButtonSelectMode)
+			{
+				if (g_SelectedObject != "")
+					vtkActor::SafeDownCast(actorObjs->at(g_SelectedObject)->prop)->GetMapper()->InterpolateScalarsBeforeMappingOn();
+				g_SelectedObject = iterator->first;
+				tempActor->GetMapper()->InterpolateScalarsBeforeMappingOff();
+				//Write on screen the name of the currently selected object
+				//Find the HelpText object
+				vtkSmartPointer<vtkCornerAnnotation> tempHelpActor = vtkCornerAnnotation::SafeDownCast(actorObjs->at("HelpTextAnnotation")->prop);
+				std::string selstr = "Last selected object: ";
+				selstr += g_SelectedObject;
+				tempHelpActor->SetText(1, selstr.c_str());
+			}
 			break;
 		}
 	}
@@ -308,25 +299,29 @@ void RightButtonPressCallback(vtkObject* caller, unsigned long eid, void* client
 }
 
 //Function for generating PSuLM VTK scene
-void GenAndDispPSuLMScene(CRVLPSuLM *psulm, CRVLVTKRenderer* pRenderer, std::map<std::string, VTKActorObj*>* vtkobjs)
+void GenAndDispPSuLMScene(CRVLPSuLM *psulm, CRVLVTKRenderer* pRenderer, std::map<std::string, VTKActorObj*>* vtkobjs, bool add = false, CRVL3DPose * pose = NULL, int modelIdx = 0)
 {
 	//Setting up VTK scene
 	vtkRenderer *ren1 = pRenderer->m_pRenderer;
 	vtkRenderWindow *renWin = pRenderer->m_pWindow;
 	vtkRenderWindowInteractor *iren = pRenderer->m_pInteractor;
-	//Callbacks, keyboard and mouse
-	vtkSmartPointer<vtkCallbackCommand> keypressCallback = vtkSmartPointer<vtkCallbackCommand>::New();
-	keypressCallback->SetCallback(KeyPressCallback);
-	keypressCallback->SetClientData(vtkobjs);
-	iren->AddObserver(vtkCommand::KeyPressEvent, keypressCallback);
-	vtkSmartPointer<vtkCallbackCommand> mousepressCallback = vtkSmartPointer<vtkCallbackCommand>::New();
-	mousepressCallback->SetCallback(RightButtonPressCallback);
-	mousepressCallback->SetClientData(vtkobjs);
-	iren->AddObserver(vtkCommand::RightButtonPressEvent, mousepressCallback);
-	//Clearnig scene
-	ren1->RemoveAllViewProps();
-	ren1->Clear();
-	renWin->Render();
+
+	//Callbacks, keyboard and mouse // ONLY NEEDED THE FIRST TIME
+	if (!add)
+	{
+		vtkSmartPointer<vtkCallbackCommand> keypressCallback = vtkSmartPointer<vtkCallbackCommand>::New();
+		keypressCallback->SetCallback(KeyPressCallback);
+		keypressCallback->SetClientData(vtkobjs);
+		iren->AddObserver(vtkCommand::KeyPressEvent, keypressCallback);
+		vtkSmartPointer<vtkCallbackCommand> mousepressCallback = vtkSmartPointer<vtkCallbackCommand>::New();
+		mousepressCallback->SetCallback(RightButtonPressCallback);
+		mousepressCallback->SetClientData(vtkobjs);
+		iren->AddObserver(vtkCommand::RightButtonPressEvent, mousepressCallback);
+		//Clearnig scene
+		ren1->RemoveAllViewProps();
+		ren1->Clear();
+		renWin->Render();
+	}
 
 	//Polygon(surface) objects
 	vtkSmartPointer<vtkPoints> points;
@@ -345,6 +340,7 @@ void GenAndDispPSuLMScene(CRVLPSuLM *psulm, CRVLVTKRenderer* pRenderer, std::map
 	vtkSmartPointer<vtkImageFlip> flipFilter;
 	//Array of pointers for texture objects
 	vtkSmartPointer<vtkTexture> texArray[50];
+
 	//VTK objects for normals
 	vtkSmartPointer<vtkPolyData> normalPolyData;
 	vtkSmartPointer<vtkPoints> normalPoints = vtkSmartPointer<vtkPoints>::New();
@@ -363,6 +359,11 @@ void GenAndDispPSuLMScene(CRVLPSuLM *psulm, CRVLVTKRenderer* pRenderer, std::map
 	vtkSmartPointer<vtkArrowSource> normalArrowSource;
 	vtkSmartPointer<vtkPolyDataMapper> normalMapper;
 	vtkSmartPointer<vtkActor> normalActor;
+
+	//VTK objects for cone (camera position) placement
+	vtkSmartPointer<vtkConeSource> coneSource;
+	vtkSmartPointer<vtkPolyDataMapper> coneMapper;
+	vtkSmartPointer<vtkActor> coneActor;
 
 	//Actor helper object
 	VTKActorObj* actorObj;
@@ -383,13 +384,38 @@ void GenAndDispPSuLMScene(CRVLPSuLM *psulm, CRVLVTKRenderer* pRenderer, std::map
 	std::stringstream ss;
 
 	//generating random color
-	unsigned char **color = new unsigned char*[psulm->m_n3DSurfacesTotal * 3];	//best guess that there is max 3 contours per surface
-	for (int i = 0; i < psulm->m_n3DSurfacesTotal * 3; i++)
+	unsigned char **color = new unsigned char*[psulm->m_n3DSurfacesTotal * 5];	//best guess that there is max 3 contours per surface
+	for (int i = 0; i < psulm->m_n3DSurfacesTotal * 5; i++)
 	{
 		color[i] = new unsigned char[3];
 		color[i][0] = (unsigned char)(rand() * 255);
 		color[i][1] = (unsigned char)(rand() * 255);
 		color[i][2] = (unsigned char)(rand() * 255);
+	}
+
+	//Setting up transform object if the PSuLM is to be added te previous scene
+	vtkSmartPointer<vtkTransform> transform;
+	double transfMat[16];
+	if (add)
+	{
+		transform = vtkSmartPointer<vtkTransform>::New();
+		transfMat[0] = pose->m_Rot[0];
+		transfMat[1] = pose->m_Rot[1];
+		transfMat[2] = pose->m_Rot[2];
+		transfMat[3] = pose->m_X[0];
+		transfMat[4] = pose->m_Rot[3];
+		transfMat[5] = pose->m_Rot[4];
+		transfMat[6] = pose->m_Rot[5];
+		transfMat[7] = pose->m_X[1];
+		transfMat[8] = pose->m_Rot[6];
+		transfMat[9] = pose->m_Rot[7];
+		transfMat[10] = pose->m_Rot[8];
+		transfMat[11] = pose->m_X[2];
+		transfMat[12] = 0.0;
+		transfMat[13] = 0.0;
+		transfMat[14] = 0.0;
+		transfMat[15] = 1.0;
+		transform->SetMatrix(transfMat);
 	}
 
 	//For every surface in psulm:
@@ -412,7 +438,7 @@ void GenAndDispPSuLMScene(CRVLPSuLM *psulm, CRVLVTKRenderer* pRenderer, std::map
 			{
 				iSample = iSampleOrig + currentC->iView;
 				RVLSetFileNumber(imageFileName, "00000-LW.bmp", iSample);
-				std::cout << "Imagefile: " << imageFileName << std::endl;
+				//std::cout << "Imagefile: " << imageFileName << std::endl;
 				bmpR->SetFileName(imageFileName);
 				bmpR->Update();
 				//
@@ -486,11 +512,14 @@ void GenAndDispPSuLMScene(CRVLPSuLM *psulm, CRVLVTKRenderer* pRenderer, std::map
 			actor->SetMapper(mapper);
 			actor->GetProperty()->SetColor((double)color[vtkobjs->size()][0] / 255.0, (double)color[vtkobjs->size()][1] / 255.0, (double)color[vtkobjs->size()][2] / 255.0);
 			actor->SetTexture(texObj);
+			//If it is added transfor needs to be applied
+			if (add)
+				actor->SetUserTransform(transform);
 			//
 			ren1->AddActor(actor);
 			//insert new actor/mapper/polydata to vtkobjs (and create appropriate name)
 			actorObj = new VTKActorObj(actor, triFilter->GetOutput(), texObj);
-			ss << "Plane_" << i << "_Contour_" << noCont;
+			ss << "Model_" << modelIdx << "_Plane_" << i << "_Contour_" << noCont;
 			actName = ss.str();
 			ss.str("");
 			ss.clear();
@@ -510,16 +539,17 @@ void GenAndDispPSuLMScene(CRVLPSuLM *psulm, CRVLVTKRenderer* pRenderer, std::map
 			//end conture
 		}
 		//end surface
-		std::cout << noCont << std::endl;
+		//std::cout << noCont << std::endl;
 	}
-
 	//Genereting and inserting other VTK objects
 	//Normals object
+	//polydata
 	normalPolyData = vtkSmartPointer<vtkPolyData>::New();
 	normalPolyData->SetPoints(normalPoints);
 	normalPolyData->SetVerts(normalVertices);
 	normalPolyData->GetPointData()->SetNormals(normalValues);
 	normalPolyData->GetPointData()->SetScalars(normalRGB);
+	//Glyphs
 	normalArrowSource = vtkSmartPointer<vtkArrowSource>::New();
 	normalGlyph = vtkSmartPointer<vtkGlyph3D>::New();
 	normalGlyph->SetInputData(normalPolyData);
@@ -529,33 +559,69 @@ void GenAndDispPSuLMScene(CRVLPSuLM *psulm, CRVLVTKRenderer* pRenderer, std::map
 	normalGlyph->SetScaleModeToDataScalingOff();
 	normalGlyph->SetScaleFactor(300);
 	normalGlyph->Update();
+	//mapper
 	normalMapper = vtkSmartPointer<vtkPolyDataMapper>::New();
 	normalMapper->SetInputConnection(normalGlyph->GetOutputPort());
+	//actor
 	normalActor = vtkSmartPointer<vtkActor>::New();
 	normalActor->SetMapper(normalMapper);
 	normalActor->VisibilityOff();
 	//normalActor->GetProperty()->SetColor(1.0, 0.0, 0.0);
+	//If it is added transfor needs to be applied
+	if (add)
+		normalActor->SetUserTransform(transform);
 	ren1->AddActor(normalActor);
 	//insert new actor/mapper/polydata to vtkobjs (and create appropriate name)
 	actorObj = new VTKActorObj(normalActor, normalPolyData);
-	actName = "NormalGlyphs3D";
+	ss << "Model_" << modelIdx << "NormalGlyphs3D";
+	actName = ss.str();
+	ss.str("");
+	ss.clear();
 	vtkobjs->insert(std::pair<std::string, VTKActorObj*>(actName, actorObj));
 
-	//Text help/status object
-	vtkSmartPointer<vtkCornerAnnotation> helpAnnotation =	vtkSmartPointer<vtkCornerAnnotation>::New();
-	helpAnnotation->SetLinearFontScaleFactor(2);
-	helpAnnotation->SetNonlinearFontScaleFactor(1);
-	helpAnnotation->SetMaximumFontSize(15);
-	//helpAnnotation->SetText(0, "lower left");
-	//helpAnnotation->SetText(1, "lower right");
-	helpAnnotation->SetText(2, "Help:\nPress 'h' to toggle this help on/off.\nPress 't' to toggle texture/color representation.\nPress 'n' to toggle normals on/off.\nPress 's' to capture screenshot of current view as file VTKscreenshot.png.");
-	helpAnnotation->SetText(3, "Right mouse button mode: none");
-	helpAnnotation->GetTextProperty()->SetColor(1, 0, 0);
+	//Camera position objects
+	//cone source
+	coneSource = vtkSmartPointer<vtkConeSource>::New();
+	coneSource->SetResolution(4);
+	coneSource->SetHeight(200.0);
+	coneSource->SetRadius(100.0);
+	coneSource->SetDirection(0.0, 0.0, 1.0);
+	//cone mapper
+	coneMapper = vtkSmartPointer<vtkPolyDataMapper>::New();
+	coneMapper->SetInputConnection(coneSource->GetOutputPort());
+	//cone actor
+	coneActor = vtkSmartPointer<vtkActor>::New();
+	coneActor->SetMapper(coneMapper);
+	coneActor->GetProperty()->SetColor(1.0, 0.0, 0.0);
+	if (add)
+		coneActor->SetUserTransform(transform);
+	ren1->AddActor(coneActor);
 	//insert new actor/mapper/polydata to vtkobjs (and create appropriate name)
-	ren1->AddViewProp(helpAnnotation);
-	actorObj = new VTKActorObj(helpAnnotation, NULL);
-	actName = "HelpTextAnnotation";
+	actorObj = new VTKActorObj(coneActor);
+	ss << "Model_" << modelIdx << "CameraCone";
+	actName = ss.str();
+	ss.str("");
+	ss.clear();
 	vtkobjs->insert(std::pair<std::string, VTKActorObj*>(actName, actorObj));
+
+	//Text help/status object // ONLY NEEDED THE FIRST TIME
+	if (!add)
+	{
+		vtkSmartPointer<vtkCornerAnnotation> helpAnnotation = vtkSmartPointer<vtkCornerAnnotation>::New();
+		helpAnnotation->SetLinearFontScaleFactor(2);
+		helpAnnotation->SetNonlinearFontScaleFactor(1);
+		helpAnnotation->SetMaximumFontSize(15);
+		//helpAnnotation->SetText(0, "lower left");
+		//helpAnnotation->SetText(1, "lower right");
+		helpAnnotation->SetText(2, "Help:\nPress 'h' to toggle this help on/off.\nPress 't' to toggle texture/color representation.\nPress 'n' to toggle normals on/off.\nPress 'x' to capture screenshot of current view as file VTKscreenshot.png.\nPress '1' for right mouse button 'Select mode' on/off.\nPress '2' for right mouse button 'VisibilityOff mode' on/off.");
+		helpAnnotation->SetText(3, "Right mouse button mode: None");
+		helpAnnotation->GetTextProperty()->SetColor(1, 0, 0);
+		//insert new actor/mapper/polydata to vtkobjs (and create appropriate name)
+		ren1->AddViewProp(helpAnnotation);
+		actorObj = new VTKActorObj(helpAnnotation, NULL);
+		actName = "HelpTextAnnotation";
+		vtkobjs->insert(std::pair<std::string, VTKActorObj*>(actName, actorObj));
+	}
 
 	//run render
 	ren1->ResetCamera();
@@ -696,6 +762,11 @@ int main(int argc, char* argv[])
 	int *pointmap = new int[w * h];
 	//List of actors and related objects, with names
 	std::map<std::string, VTKActorObj*>* actorObjs = new std::map<std::string, VTKActorObj*>();
+	//Needed for visualization 
+	CRVLPSuLM* vtkModelPSuLM;
+	RVLPSULM_NEIGHBOUR* vtkNeighbourPSuLM;
+	RVLQLIST_PTR_ENTRY* vtkNeighbourPtr;
+	//
 #endif
 
 	// create RGB image
@@ -1552,7 +1623,27 @@ int main(int argc, char* argv[])
 #ifdef RVLVTK
 			case 'V':
 				//RVLDisplaySegmentedMesh3D(&Renderer, &(VS.m_AImage.m_C2DRegion.m_ObjectList), nObjects, w, h, pointmap, VS.m_PSD.m_Point3DMap);
-				GenAndDispPSuLMScene(VS.m_pPSuLM, &Renderer, actorObjs);
+				//GenAndDispPSuLMScene(VS.m_pPSuLM, &Renderer, actorObjs);
+				//Adding first model PSuLM
+				std::cout << "Adding reference model!" << std::endl;
+				GenAndDispPSuLMScene((CRVLPSuLM*)VS.m_PSuLMBuilder.m_PSuLMList.m_pFirst->pData, &Renderer, actorObjs);
+				std::cout << "Added reference model!" << std::endl;
+				//Running through neighbour psulms of first model
+				vtkModelPSuLM = (CRVLPSuLM*)VS.m_PSuLMBuilder.m_PSuLMList.m_pFirst->pData;
+				vtkNeighbourPtr = (RVLQLIST_PTR_ENTRY*)vtkModelPSuLM->m_NeighbourList->pFirst;
+				int modelIdx;
+				modelIdx = 1;
+				while (vtkNeighbourPtr)
+				{
+					vtkNeighbourPSuLM = (RVLPSULM_NEIGHBOUR*)vtkNeighbourPtr->Ptr;
+					//
+					std::cout << "Adding model: " << modelIdx << std::endl;
+					GenAndDispPSuLMScene(vtkNeighbourPSuLM->pPSuLM, &Renderer, actorObjs, true, vtkNeighbourPSuLM->pPoseRel, modelIdx);
+					std::cout << "Added model: " << modelIdx << std::endl;
+					modelIdx++;
+					//
+					vtkNeighbourPtr = (RVLQLIST_PTR_ENTRY*)vtkNeighbourPtr->pNext;
+				}
 
 				bRefresh = true;
 				bVTKRendererActive = true;
