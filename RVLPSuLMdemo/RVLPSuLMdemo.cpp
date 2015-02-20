@@ -1748,10 +1748,10 @@ int main(int argc, char* argv[])
 				//GenAndDispPSuLMScene(VS.m_pPSuLM, &Renderer, actorObjs);
 				//Adding first model PSuLM
 				std::cout << "Adding reference model!" << std::endl;
-				GenAndDispPSuLMScene((CRVLPSuLM*)VS.m_PSuLMBuilder.m_PSuLMList.m_pFirst->pData, &Renderer, actorObjs);
+				vtkModelPSuLM = (CRVLPSuLM*)VS.m_PSuLMBuilder.m_PSuLMList.m_pFirst->pNext->pData;
+				GenAndDispPSuLMScene(vtkModelPSuLM, &Renderer, actorObjs);
 				std::cout << "Added reference model!" << std::endl;
 				//Running through neighbour psulms of first model
-				vtkModelPSuLM = (CRVLPSuLM*)VS.m_PSuLMBuilder.m_PSuLMList.m_pFirst->pData;
 				vtkNeighbourPtr = (RVLQLIST_PTR_ENTRY*)vtkModelPSuLM->m_NeighbourList->pFirst;
 				int modelIdx;
 				modelIdx = 1;
@@ -1761,6 +1761,7 @@ int main(int argc, char* argv[])
 					//
 					std::cout << "Adding model: " << modelIdx << std::endl;
 					GenAndDispPSuLMScene(vtkNeighbourPSuLM->pPSuLM, &Renderer, actorObjs, true, vtkNeighbourPSuLM->pPoseRel, modelIdx);
+					//AddHypothesisToPSuLMScene(&Renderer, actorObjs, vtkNeighbourPSuLM->pPoseRel, modelIdx);
 					std::cout << "Added model: " << modelIdx << std::endl;
 					modelIdx++;
 					//
