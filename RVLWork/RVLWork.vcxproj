@@ -85,7 +85,7 @@
     <ClCompile>
       <Optimization>Disabled</Optimization>
       <InlineFunctionExpansion>Default</InlineFunctionExpansion>
-      <AdditionalIncludeDirectories>$(OPENCV20)\include;.\Include;..\RVLCore\Include;..\RVLPCS\Include;$(VTK_PATH)\Debug\Include\vtk-5.10</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>D:\GDisk\MainGDrive\Research\Program\OpenCV249\include;.\Include;..\RVLCore\Include;..\RVLPCS\Include</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <MinimalRebuild>false</MinimalRebuild>
       <BasicRuntimeChecks>Default</BasicRuntimeChecks>
@@ -95,8 +95,8 @@
       <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>RVLCore.lib;RVLPCS.lib;cv200.lib;cxcore200.lib;highgui200.lib;OpenNI2.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>..\RVLCore\Debug\lib;..\RVLPCS\Debug\lib;$(OPENCV20)\lib;$(OPENNI2_LIB);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>RVLCore.lib;RVLPCS.lib;cv249.lib;opencv_core249.lib;opencv_highgui249.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>..\RVLCore\Debug\lib;..\RVLPCS\Debug\lib;D:\GDisk\MainGDrive\Research\Program\OpenCV249\vc12\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Console</SubSystem>
       <TargetMachine>MachineX86</TargetMachine>

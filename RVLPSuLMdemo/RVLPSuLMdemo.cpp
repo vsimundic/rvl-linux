@@ -2,8 +2,11 @@
 //
 
 //#include "highgui.h"
+//
 #include <stdio.h>
 #include <time.h>
+//#include <stdafx.h>
+#include <atlstr.h>
 #include "RVLCore.h"
 #include "RVLPCS.h"
 #include "RVLRLM.h"
@@ -17,7 +20,22 @@
 #define RVLPSULMDEMO_DISPLAY_ONLY_REPRESENTATIVE_HYPOTHESES
 //#define RVLPSULMDEMO_DISPLAY_ONLY_BEST_LOCAL_MODEL_HYPOTHESES
 
+struct IMAGE_SEQUENCE_DATA
+{
+	std::string ImageFileName; 
+	int StartNo;
+	int EndNo;
+};
+std::vector<IMAGE_SEQUENCE_DATA> g_AllSequences;
+int g_CurrentSequenceNo;
+//int g_TotalSequenceNo;
+int g_CurrentImageNo;
+BOOL GetNextFileName(CRVLPSuLMVS *pVS);
+void GetAllSequenceData(CRVLPSuLMVS *pVS);
+BOOL GetImageInSequence(CRVLPSuLMVS *pVS, bool bInit = false);
+
 void MessageCanNotOpenFile(CRVLGUI *pGUI, char *FileName);
+
 
 void RVLPSuLMdemoGetNextHypothesis(CRVLPSuLMVS *pVS,
 								   int &iHypothesis,
@@ -112,6 +130,7 @@ int main(int argc, char* argv[])
 	VS.CreateParamList();
 
 	VS.Init("RVLPSuLMdemo.cfg");
+	GetAllSequenceData(&VS);
 
 	// create GUI
 
@@ -1385,32 +1404,32 @@ int main(int argc, char* argv[])
 						iMPSuLM = iMPSuLM_;
 				}
 			}	
-			else if(bComplex)
+			else if (bComplex)
 			{
 				iSample_ = iSample;
 
-				char *OdometryFileName = RVLCreateFileName(VS.m_ImageFileName, "-LW.bmp", -1, "-O.txt");	
+				char *OdometryFileName = RVLCreateFileName(VS.m_ImageFileName, "-LW.bmp", -1, "-O.txt");
 
 				unsigned char command;
 				int x, y, z, pan, tilt, roll, iSample0;
 				FILE *fpOdometry;
 
-				while(RVLGetNextFileName(VS.m_ImageFileName, "00000-LW.bmp", 10000))
+				while (GetNextFileName(&VS)) //RVLGetNextFileName(VS.m_ImageFileName, "00000-LW.bmp", 10000))
 				{
 					iSample_ = RVLGetFileNumber(VS.m_ImageFileName, "00000-LW.bmp");
 
-					RVLSetFileNumber(OdometryFileName, "00000-O.txt", iSample_);					
+					RVLSetFileNumber(OdometryFileName, "00000-O.txt", iSample_);
 
 					fpOdometry = fopen(OdometryFileName, "r");
 
-					if(fpOdometry == NULL)
+					if (fpOdometry == NULL)
 						continue;
 
 					fscanf(fpOdometry, "%d\t%d\t%d\t%d\t%d\t%d\t%d\t%c\n", &x, &y, &z, &pan, &tilt, &roll, &iSample0, &command);
 
-					fclose(fpOdometry);					
+					fclose(fpOdometry);
 
-					if(command == 'O')
+					if (command == 'O')
 					{
 						iSample = iSample_;
 
@@ -1423,7 +1442,7 @@ int main(int argc, char* argv[])
 				delete[] OdometryFileName;
 			}
 			else
-				RVLGetNextFileName(VS.m_ImageFileName, "00000-LW.bmp", 10000);
+				GetNextFileName(&VS);// RVLGetNextFileName(VS.m_ImageFileName, "00000-LW.bmp", 10000);
 		}
 
 		if(!bRecord)
@@ -1479,3 +1498,126 @@ void MessageCanNotOpenFile(CRVLGUI *pGUI, char *FileName)
 	delete[] str;
 }
 
+BOOL GetNextFileName(CRVLPSuLMVS *pVS) 
+{
+	if (pVS->m_Flags & RVLSYS_FLAGS_USE_SEQUENCE_FILE)
+	{
+		return GetImageInSequence(pVS);
+	}
+	else
+	{
+		return RVLGetNextFileName(pVS->m_ImageFileName, "00000-LW.bmp", 10000);
+	}
+	
+	
+}
+
+void GetAllSequenceData(CRVLPSuLMVS *pVS)
+{
+	if (pVS->m_Flags & RVLSYS_FLAGS_USE_SEQUENCE_FILE)
+	{
+		//Read sequence data 
+		FILE *seqFile= fopen(pVS->m_SequenceFileName, "r");
+		if (seqFile != NULL)
+		{
+			char sLine[500];
+			int iLeft, iMid, iRight;
+			int iStart, iEnd;
+			CString sFileName, sStartFileName, InputSampleFileName;
+
+			g_CurrentSequenceNo = 0;
+			g_CurrentImageNo = 0;
+
+			while (!feof(seqFile))
+			{
+				fgets(sLine, 500, seqFile);
+
+				IMAGE_SEQUENCE_DATA imageSequenceData;
+
+				sFileName = (CString)sLine;
+				iLeft = sFileName.Find('[', 0);
+				iMid = sFileName.Find(':', iLeft);
+				iRight = sFileName.Find(']', iMid);
+				sscanf(CT2A(sFileName.Mid(iLeft + 1, iMid - iLeft - 1)), "%d", &(imageSequenceData.StartNo));
+				sscanf(CT2A(sFileName.Mid(iMid + 1, iRight - iMid - 1)), "%d", &(imageSequenceData.EndNo));
+				//std::string stemp(CT2CA(sFileName.Mid(0, iLeft - 1).Trim()));
+				
+				imageSequenceData.ImageFileName = CT2CA(sFileName.Mid(0, iLeft).Trim());
+				
+				g_AllSequences.push_back(imageSequenceData);
+				
+
+			}
+
+			fclose(seqFile);
+
+			//Set first image
+			GetImageInSequence(pVS,true);
+		}
+	}
+	
+}
+
+
+BOOL GetImageInSequence(CRVLPSuLMVS *pVS, bool bInit)
+{
+	
+	if (bInit)
+	{
+		//set initial image
+		IMAGE_SEQUENCE_DATA& currentSequenceData = g_AllSequences[g_CurrentSequenceNo];
+		//Copy current file name
+		//strcpy(pVS->m_ImageFileName, currentSequenceData.ImageFileName.c_str());
+		RVLCopyString((char *)(currentSequenceData.ImageFileName.c_str()), &(pVS->m_ImageFileName));
+
+		RVLSetFileNumber(pVS->m_ImageFileName, "00000-LW.bmp", currentSequenceData.StartNo);
+		
+		g_CurrentImageNo = currentSequenceData.StartNo;
+		
+		return TRUE;
+
+	}
+	else
+	{
+		//get subsequent image
+		g_CurrentImageNo = RVLGetFileNumber(pVS->m_ImageFileName, "00000-LW.bmp");
+
+		if ((g_CurrentSequenceNo < g_AllSequences.size()) && (g_CurrentImageNo >= g_AllSequences[g_CurrentSequenceNo].EndNo))
+		{
+			//increase
+			g_CurrentSequenceNo++;
+
+			if (g_CurrentSequenceNo < g_AllSequences.size())
+			{
+				IMAGE_SEQUENCE_DATA& currentSequenceData = g_AllSequences[g_CurrentSequenceNo];
+				//Copy current file name
+				//strcpy(pVS->m_ImageFileName, currentSequenceData.ImageFileName.c_str());
+				RVLCopyString((char *)currentSequenceData.ImageFileName.c_str(), &(pVS->m_ImageFileName));
+
+				RVLSetFileNumber(pVS->m_ImageFileName, "00000-LW.bmp", currentSequenceData.StartNo);
+
+				g_CurrentImageNo = currentSequenceData.StartNo;
+
+				return TRUE;
+
+			}
+			else
+			{
+				return FALSE;
+			}
+		}
+		else
+		{
+			if (g_CurrentSequenceNo < g_AllSequences.size())
+			{
+				IMAGE_SEQUENCE_DATA& currentSequenceData = g_AllSequences[g_CurrentSequenceNo];
+				return RVLGetNextFileName(pVS->m_ImageFileName, "00000-LW.bmp", currentSequenceData.EndNo);
+			}
+			else
+			{
+				return FALSE;
+			}
+		}
+	}
+	
+}
