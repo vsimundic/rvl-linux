@@ -85,7 +85,7 @@
     <ClCompile>
       <Optimization>Disabled</Optimization>
       <InlineFunctionExpansion>Default</InlineFunctionExpansion>
-      <AdditionalIncludeDirectories>$(OPENCV_BUILD)\include;.\Include;..\RVLCore\Include;$(VTK_PATH)\Debug\Include\vtk-5.10</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>D:\GDisk\MainGDrive\Research\Program\OpenCV249\include;.\Include;..\RVLCore\Include</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>WIN32;_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <PrecompiledHeader />

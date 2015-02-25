@@ -3,11 +3,15 @@
 #define RVLVS_ERR_CAMERA		0x01000000
 #define RVLVS_ERR_EDGE_MAP_FILE	0x02000000
 
+
+
 #define RVLSYS_FLAGS_IMAGE						0x00000001
 #define RVLSYS_FLAGS_WARP_IMAGE					0x00000002
 #define RVLSYS_FLAGS_STEREO						0x00000004
+#define RVLSYS_FLAGS_USE_SEQUENCE_FILE			0x00000010
 
 #define RVLSYS_FLAGS2_STEREO_ROI				0x00000001
+
 
 #define RVLSYS_MCMEMSIZE		2
 
@@ -24,7 +28,8 @@ public:
 	RVLRECT m_ROI;
 	CRVLStereoVision m_StereoVision;
 	CRVLTimer *m_pTimer;
-	char *m_ImageFileName;	
+	char *m_ImageFileName;
+	char *m_SequenceFileName;
 	CRVLKinect m_Kinect;
 	int m_Mem0Size;
 	int m_MemSize;
