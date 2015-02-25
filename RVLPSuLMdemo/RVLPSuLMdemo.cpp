@@ -370,6 +370,14 @@ void GenAndDispPSuLMScene(CRVLPSuLM *psulm, CRVLVTKRenderer* pRenderer, std::map
 		mousepressCallback->SetClientData(vtkobjs);
 		iren->AddObserver(vtkCommand::RightButtonPressEvent, mousepressCallback);
 		//Clearnig scene
+		if (vtkobjs->size())
+		{
+			for (vtk_map_it_type iterator = vtkobjs->begin(); iterator != vtkobjs->end(); iterator++)
+			{
+				delete iterator->second;
+			}
+		}
+		vtkobjs->clear();
 		ren1->RemoveAllViewProps();
 		ren1->Clear();
 		renWin->Render();
