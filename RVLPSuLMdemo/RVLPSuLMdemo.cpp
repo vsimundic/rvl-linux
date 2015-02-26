@@ -27,9 +27,15 @@ struct IMAGE_SEQUENCE_DATA
 	int EndNo;
 };
 std::vector<IMAGE_SEQUENCE_DATA> g_AllSequences;
+
 int g_CurrentSequenceNo;
-//int g_TotalSequenceNo;
 int g_CurrentImageNo;
+
+char g_BestSubSetImageFileName[200];
+int g_LastSubSetImageNo;
+int g_BestCost;
+bool g_StartNewSubSet;
+
 BOOL GetNextFileName(CRVLPSuLMVS *pVS);
 void GetAllSequenceData(CRVLPSuLMVS *pVS);
 BOOL GetImageInSequence(CRVLPSuLMVS *pVS, bool bInit = false);
@@ -520,6 +526,43 @@ int main(int argc, char* argv[])
 			/////
 
 			//VS.m_PSuLMBuilder.m_Flags |= RVLPSULMBUILDER_FLAG_KIDNAPPED;
+
+			g_StartNewSubSet = false; //This flag needs to be reset
+			if (VS.m_Flags & RVLSYS_FLAGS_BEST_SUBSET_HYPOTHESIS)
+			{
+				unsigned char command;
+				CRVL3DPose PoseTemp;
+				int iTemp;
+				
+				//initialize
+				command = 'O';
+				g_BestCost = -1000000;
+				//Copy current file name
+				strcpy(g_BestSubSetImageFileName, VS.m_ImageFileName);
+				
+				do
+				{
+					VS.m_PSuLMBuilder.GetPanTilt(VS.m_ImageFileName, &PoseTemp, iTemp, command);
+
+					VS.Update(bKinect ? 0x00000000 : RVLPSULMBUILDER_CREATEMODEL_IMAGE_FROM_FILE);
+					if (VS.m_PSuLMBuilder.m_HypothesisArray[0]->cost > g_BestCost)
+					{
+						g_BestCost = VS.m_PSuLMBuilder.m_HypothesisArray[0]->cost;
+						strcpy(g_BestSubSetImageFileName, VS.m_ImageFileName);
+					}
+					GetNextFileName(&VS);
+
+				} while (command != 'C');
+
+				//Store last image number
+				g_LastSubSetImageNo = RVLGetFileNumber(VS.m_ImageFileName, "00000-LW.bmp");
+				g_StartNewSubSet = true;
+
+				//Reset current image to best subsetimage
+				strcpy(VS.m_ImageFileName, g_BestSubSetImageFileName);
+			}
+
+
 
 			VS.Update(bKinect ? 0x00000000 : RVLPSULMBUILDER_CREATEMODEL_IMAGE_FROM_FILE);
 
@@ -1577,10 +1620,33 @@ BOOL GetImageInSequence(CRVLPSuLMVS *pVS, bool bInit)
 
 	}
 	else
-	{
-		//get subsequent image
-		g_CurrentImageNo = RVLGetFileNumber(pVS->m_ImageFileName, "00000-LW.bmp");
+	{ 
+		//set start image in subset
+		if (g_StartNewSubSet && pVS->m_Flags & RVLSYS_FLAGS_BEST_SUBSET_HYPOTHESIS)
+		{
+			//if (g_CurrentSequenceNo < g_AllSequences.size())
+			//{
+				g_CurrentImageNo = g_LastSubSetImageNo;
+				//RVLSetFileNumber(pVS->m_ImageFileName, "00000-LW.bmp", g_CurrentImageNo);
 
+				IMAGE_SEQUENCE_DATA& currentSequenceData = g_AllSequences[g_CurrentSequenceNo];
+				//Copy current file name
+				strcpy(pVS->m_ImageFileName, currentSequenceData.ImageFileName.c_str());
+
+				RVLSetFileNumber(pVS->m_ImageFileName, "00000-LW.bmp", g_CurrentImageNo);
+
+				g_StartNewSubSet = false;
+				return TRUE;
+			//}
+			//else
+			//	return FALSE;
+		}
+		else 
+		{ 
+			g_CurrentImageNo = RVLGetFileNumber(pVS->m_ImageFileName, "00000-LW.bmp");
+		}
+
+		//Standard search for images in sequence
 		if ((g_CurrentSequenceNo < g_AllSequences.size()) && (g_CurrentImageNo >= g_AllSequences[g_CurrentSequenceNo].EndNo))
 		{
 			//increase
@@ -1616,6 +1682,7 @@ BOOL GetImageInSequence(CRVLPSuLMVS *pVS, bool bInit)
 				return FALSE;
 			}
 		}
+		
 	}
 	
 }

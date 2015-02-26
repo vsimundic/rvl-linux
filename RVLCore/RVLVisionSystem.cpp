@@ -51,6 +51,8 @@ void CRVLVisionSystem::CreateParamList()
 	m_ParamList.AddID(pParamData, "yes", RVLKINECT_FLAG_100UM);
 	pParamData = m_ParamList.AddParam("VS.UseSequence", RVLPARAM_TYPE_FLAG, &m_Flags);
 	m_ParamList.AddID(pParamData, "yes", RVLSYS_FLAGS_USE_SEQUENCE_FILE);
+	pParamData = m_ParamList.AddParam("VS.GetBestHypothesisInSubSet", RVLPARAM_TYPE_FLAG, &m_Flags);
+	m_ParamList.AddID(pParamData, "yes", RVLSYS_FLAGS_BEST_SUBSET_HYPOTHESIS);
 
 }
 
