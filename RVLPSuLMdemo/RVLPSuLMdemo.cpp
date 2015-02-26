@@ -1615,7 +1615,7 @@ BOOL GetImageInSequence(CRVLPSuLMVS *pVS, bool bInit)
 		//set initial image
 		IMAGE_SEQUENCE_DATA& currentSequenceData = g_AllSequences[g_CurrentSequenceNo];
 		//Copy current file name
-		strcpy(pVS->m_ImageFileName, currentSequenceData.ImageFileName.c_str());
+		RVLCopyString((char *)(currentSequenceData.ImageFileName.c_str()), &(pVS->m_ImageFileName));
 
 		RVLSetFileNumber(pVS->m_ImageFileName, "00000-LW.bmp", currentSequenceData.StartNo);
 		
@@ -1636,12 +1636,12 @@ BOOL GetImageInSequence(CRVLPSuLMVS *pVS, bool bInit)
 
 				IMAGE_SEQUENCE_DATA& currentSequenceData = g_AllSequences[g_CurrentSequenceNo];
 				//Copy current file name
-				strcpy(pVS->m_ImageFileName, currentSequenceData.ImageFileName.c_str());
+				RVLCopyString((char *)(currentSequenceData.ImageFileName.c_str()), &(pVS->m_ImageFileName));
 
 				RVLSetFileNumber(pVS->m_ImageFileName, "00000-LW.bmp", g_CurrentImageNo);
 
 				g_StartNewSubSet = false;
-				//return TRUE;
+				return TRUE;
 			//}
 			//else
 			//	return FALSE;
@@ -1661,7 +1661,7 @@ BOOL GetImageInSequence(CRVLPSuLMVS *pVS, bool bInit)
 			{
 				IMAGE_SEQUENCE_DATA& currentSequenceData = g_AllSequences[g_CurrentSequenceNo];
 				//Copy current file name
-				strcpy(pVS->m_ImageFileName, currentSequenceData.ImageFileName.c_str());
+				RVLCopyString((char *)currentSequenceData.ImageFileName.c_str(), &(pVS->m_ImageFileName));
 
 				RVLSetFileNumber(pVS->m_ImageFileName, "00000-LW.bmp", currentSequenceData.StartNo);
 
