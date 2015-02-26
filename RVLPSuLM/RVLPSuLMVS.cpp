@@ -1504,7 +1504,8 @@ void RVLPSuLMDisplayMouseCallback2(int event, int x, int y, int flags, void* vpD
 					pGUI->ShowFigure(pMFig);
 				}
 
-				pVS->m_PSuLMBuilder.DisplayHypothesisData(pFig, pVS->m_pPSuLM, pData->MatchMatrixGT, pData->mDisplayPSuLMFlags, pData->iHypothesis, pSelectedSurf, pSelectedLine);
+				pVS->m_PSuLMBuilder.DisplayHypothesisData(pFig, pVS->m_pPSuLM, pData->MatchMatrixGT, pData->mDisplayPSuLMFlags, pData->iHypothesis, pSelectedSurf, pSelectedLine, 
+					pSelectedSurfSample);
 			}
 	}	//	switch( event )
 }

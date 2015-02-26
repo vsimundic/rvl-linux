@@ -1516,8 +1516,8 @@ bool CRVL3DSurface2::Match4(CRVL3DObject *pObject_,
 
 		double e = RVLCOV3DTRANSFTO1D(Mx3x3Tmp2, Et);
 
-		//if(e > 11.34)
-		if(e > 4.11)
+		if(e > 11.34)		// Surface overlap threshold
+		//if(e > 4.11)
 			return false;
 		
 		// compute the origin of the match reference frame

@@ -117,6 +117,22 @@ CRVLPSuLMBuilder::CRVLPSuLMBuilder(void)
 	m_minRelevantLogLikelihood = 0.0;
 	m_RepresentativeHypDistThr = 500.0;		// mm
 	m_RepresentativeHypOrientThr = 20.0;	// deg
+	//m_SurfaceMatchData.PPriorPosition = 7.4451;			// -log(1/sqrt(2*pi*(30.0^2))*exp(-2.5^2/2))
+	//m_SurfaceMatchData.PPriorPosition = 4.6;				// 1 surface at each 100 mm
+#ifdef RVLPSULMBUILDER_GT_141111
+	m_SurfaceMatchData.PPriorPosition = 4.6;				// 1 surface at each 100 mm
+#else
+	m_SurfaceMatchData.PPriorPosition = 6.9;				// 1 surface at each 1000 mm
+#endif
+	//m_LineMatchData.PPriorPosition = 11.7653;			// -log(1/(2*pi*(30.0^2))*exp(-2.5^2/2))
+	//m_LineMatchData.PPriorPosition1DOF = 7.4451;		// -log(1/sqrt(2*pi*(30.0^2))*exp(-2.5^2/2))
+#ifdef RVLPSULMBUILDER_GT_141111
+	m_LineMatchData.PPriorPosition = 9.21;			// 1 line in each 100 mm^2
+#else
+	m_LineMatchData.PPriorPosition = 13.81;			// 1 line in each 1000 mm^2
+#endif
+	m_LineMatchData.PPriorPosition1DOF = 4.6;		// 1 line at each 100 mm
+
 
 	// constants computed from the parameters
 
@@ -392,8 +408,8 @@ void CRVLPSuLMBuilder::Init(void)
 	m_csLastDOFSurfNrmAngle = cos(m_LastDOFSurfNrmAngle * DEG2RAD);
 	m_csLastDOFLineNrmAngle = sin(m_LastDOFSurfNrmAngle * DEG2RAD);
 
-	m_SampleMatchAngleTol = m_SampleMatchAngleStD * m_SampleMatchUncertCoef * DEG2RAD;
-	m_SampleMatchDistTol = m_SampleMatchDistStD * m_SampleMatchUncertCoef;
+	m_SampleMatchAngleTol = m_SampleMatchAngleStD * DEG2RAD;
+	m_SampleMatchDistTol = m_SampleMatchDistStD;
 
 	// Cell array
 
@@ -661,23 +677,9 @@ void CRVLPSuLMBuilder::Init(void)
 		m_SurfaceMatchData.invCp = new double[3 * 3 * m_maxnDominant3DSurfacesComplex];
 		m_SurfaceMatchData.varPositionUncert = m_SampleMatchDistTol * m_SampleMatchDistTol;
 		m_SurfaceMatchData.varOrientationUncert = m_SampleMatchAngleTol * m_SampleMatchAngleTol;
-		//m_SurfaceMatchData.PPriorPosition = 7.4451;			// -log(1/sqrt(2*pi*(30.0^2))*exp(-2.5^2/2))
-		//m_SurfaceMatchData.PPriorPosition = 4.6;				// 1 surface at each 100 mm
-#ifdef RVLPSULMBUILDER_GT_141111
-		m_SurfaceMatchData.PPriorPosition = 4.6;				// 1 surface at each 100 mm
-#else
-		m_SurfaceMatchData.PPriorPosition = 6.9;				// 1 surface at each 1000 mm
-#endif
+
 		m_LineMatchData.varPositionUncert = m_SurfaceMatchData.varPositionUncert;
 		m_LineMatchData.varOrientationUncert = m_SampleMatchAngleTol * m_SampleMatchAngleTol;
-		//m_LineMatchData.PPriorPosition = 11.7653;			// -log(1/(2*pi*(30.0^2))*exp(-2.5^2/2))
-		//m_LineMatchData.PPriorPosition1DOF = 7.4451;		// -log(1/sqrt(2*pi*(30.0^2))*exp(-2.5^2/2))
-#ifdef RVLPSULMBUILDER_GT_141111
-		m_LineMatchData.PPriorPosition = 9.21;			// 1 line in each 100 mm^2
-#else
-		m_LineMatchData.PPriorPosition = 13.81;			// 1 line in each 1000 mm^2
-#endif
-		m_LineMatchData.PPriorPosition1DOF = 4.6;		// 1 line at each 100 mm
 	}
 
 	if (m_Flags2 & RVLPSULMBUILDER_FLAG2_COMPLEX)
@@ -1766,6 +1768,38 @@ BOOL CRVLPSuLMBuilder::Create(CRVLPSuLM *pPSuLM,
 
 		if (m_Flags2 & RVLPSULMBUILDER_FLAG2_HYPOTHESIS_EVALUATION_SAMPLE_MATCHING)
 			pPSuLM->Get3DSurfaceSamplesFrom2DRegionSamples(m_pPSD->Sample2DRegions(), &m_S3DSurfaceSet, ppFirstSurface);
+
+		//// debug
+
+		//CRVL3DSurface2 **SurfaceArray_ = new CRVL3DSurface2 *[p3DSurfaceList->m_nElements];
+
+		//int i = 0;
+		//int debug = 0;
+
+		//p3DSurfaceList->Start();
+
+		//while (p3DSurfaceList->m_pNext)
+		//{
+		//	p3DSurface = (CRVL3DSurface2 *)(p3DSurfaceList->GetNext());
+
+		//	if (p3DSurface->m_nSupport == 0)
+		//		continue;
+
+		//	SurfaceArray_[i++] = p3DSurface;
+
+		//	RVL3DSURFACE_SAMPLE *pSample = (RVL3DSURFACE_SAMPLE *)(p3DSurface->m_Samples.pFirst);
+
+		//	while (pSample)
+		//	{
+		//		pSample->Index = (debug++);
+
+		//		pSample = (RVL3DSURFACE_SAMPLE *)(pSample->pNext);
+		//	}
+		//}
+
+		//delete[] SurfaceArray_;
+
+		/////
 
 		// transform surfaces to the common model reference frame
 
@@ -7434,12 +7468,12 @@ void CRVLPSuLMBuilder::Localization(CRVLPSuLM * pSPSuLM,
 #endif
 
 #ifdef RVLPSULMBUILDER_HYPOTHESES_EVAL_DEBUG_LOG
-	FILE *fpHypScoreAnalysis;
-
-	fopen_s(&fpHypScoreAnalysis, "C:\\RVL\\Debug\\HypScoreAnalysis.dat", "w");
+	FILE *fpHypScoreAnalysis = fopen("C:\\RVL\\Debug\\HypScoreAnalysis.dat", "w");
 #endif
 
 	StartTime = m_pTimer->GetTime();
+
+	DWORD EvaluateHypothesisFlags = 0x00000000;
 
 	int i;
 	int cost = 0;
@@ -7451,8 +7485,21 @@ void CRVLPSuLMBuilder::Localization(CRVLPSuLM * pSPSuLM,
 		minCost = 1e8; //Search for min cost
 	else if(HypEvalMethod == RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD_SM || HypEvalMethod == RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD_SSM)
 		minCost = 0; //Search for max cost
-	else if(HypEvalMethod == RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD_P)
-		PriorProbabilityWorldModel = ConditionalProbabilityTree(pSPSuLM);
+	else if (HypEvalMethod == RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD_P)
+	{
+		if (m_Flags2 & RVLPSULMBUILDER_FLAG2_FIRST_ORDER_DEPENDENCY_TREE)
+		{
+			PriorProbabilityWorldModel = ConditionalProbabilityTree(pSPSuLM);
+
+			EvaluateHypothesisFlags = RVLPSULMBUILDER_HYPEVAL4_FLAG_FIRST_ORDER_DEPENDENCY_TREE;
+		}
+		else
+		{
+			PriorProbabilityWorldModel = 0.0;
+
+			EvaluateHypothesisFlags = 0x00000000;
+		}
+	}
 
 	if (m_Flags2 & RVLPSULMBUILDER_FLAG2_HYPOTHESIS_EVALUATION_SAMPLE_MATCHING)
 		InitHypothesisEvaluation3(pSPSuLM);
@@ -7509,6 +7556,10 @@ void CRVLPSuLMBuilder::Localization(CRVLPSuLM * pSPSuLM,
 
 		//FILE *fpPreEval = fopen("C:\\RVL\\Debug\\PreEval.dat", "a");
 	}
+
+#ifdef RVLPSULMBUILDER_HYPOTHESES_EVAL_DEBUG_LOG
+	m_fpDebug = fpHypScoreAnalysis;
+#endif 
 
 	m_HypothesisList.Start();
 
@@ -7657,10 +7708,6 @@ void CRVLPSuLMBuilder::Localization(CRVLPSuLM * pSPSuLM,
 
 			break;
 		case RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD_SSM:
-#ifdef RVLPSULMBUILDER_HYPOTHESES_EVAL_DEBUG_LOG
-			m_fpDebug = fpHypScoreAnalysis;
-#endif 
-
 			if(m_Flags & RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_PREEVAL)
 			{
 				if(pHypothesis->cost >= minSignificantScore)
@@ -7677,7 +7724,7 @@ void CRVLPSuLMBuilder::Localization(CRVLPSuLM * pSPSuLM,
 
 			break;
 		case RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD_P:
-			P = EvaluateHypothesis4(pSPSuLM, pHypothesis);
+			P = EvaluateHypothesis4(pSPSuLM, pHypothesis, EvaluateHypothesisFlags);
 		}
 
 		//ADDED BY FILKO - ALI NE TAKO ????
@@ -8209,9 +8256,9 @@ void CRVLPSuLMBuilder::Localization(CRVLPSuLM * pSPSuLM,
 
 				while (iChecked > 0)
 				{
-					pHypothesis = m_HypothesisArray[0];
+					pHypothesis = m_HypothesisArray[0];					
 
-					P = EvaluateHypothesis4(pSPSuLM, pHypothesis, RVLPSULMBUILDER_HYPEVAL4_FLAG_FIRST_ORDER_DEPENDENCY_TREE | RVLPSULMBUILDER_HYPEVAL4_FLAG_DYNAMIC_SURF_DETECT);
+					P = EvaluateHypothesis4(pSPSuLM, pHypothesis, EvaluateHypothesisFlags | RVLPSULMBUILDER_HYPEVAL4_FLAG_DYNAMIC_SURF_DETECT);
 
 					pHypothesis->Probability = P - PriorProbabilityWorldModel;
 
@@ -9328,81 +9375,81 @@ void CRVLPSuLMBuilder::Localization(CRVLPSuLM * pSPSuLM,
 		}	// if(m_Flags & RVLPSULMBUILDER_FLAG_LOCALIZATION_DISPLAY)
 #endif
 
-#ifdef RVLPSULMBUILDER_HYPOTHESES_EVAL_DEBUG_LOG
-		char *HistFileName = new char[strlen(m_ImageFileName) + 9];
-
-		strcpy(HistFileName, m_ImageFileName);
-
-		strcat(HistFileName, "Hist.dat");
-
-		//FILE *fp = fopen(HistFileName, "w");
-		
-		FILE *fp = fopen("C:\\RVL\\ExpRez\\PSuLMHypotheses.dat", "w");
-
-		int cnt = 0;
-		if(fp)
-		{
-			fprintf(fp,"Hypothesis\tModel\tidx\tCost\tX\tY\tZ\tAlpha\tBeta\tTheta\n");
-
-			RVLPSULM_HYPOTHESIS **HypothesisList = new RVLPSULM_HYPOTHESIS *[m_HypothesisList.m_nElements];
-
-			RVLPSULM_HYPOTHESIS **ppHypothesis = HypothesisList;
-
-			m_HypothesisList.Start();
-
-			while(m_HypothesisList.m_pNext)
-				*(ppHypothesis++) = (RVLPSULM_HYPOTHESIS *)(m_HypothesisList.GetNext());
-
-			RVLPSULM_HYPOTHESIS **pHypothesisListEnd = ppHypothesis;
-			RVLPSULM_HYPOTHESIS **ppBestHypothesis;
-
-			while(pHypothesisListEnd > HypothesisList)
-			{
-				minCost = 0;
-
-				for(ppHypothesis = HypothesisList; ppHypothesis < pHypothesisListEnd; ppHypothesis++)
-				{	
-					pHypothesis = *ppHypothesis;
-
-					if(pHypothesis->cost > minCost)
-					{
-						minCost = pHypothesis->cost;
-						ppBestHypothesis = ppHypothesis;
-					}
-				}
-
-				pHypothesis = *ppBestHypothesis;
-
-				pHypothesisListEnd--;
-
-				if(pHypothesisListEnd > ppBestHypothesis)
-					memmove(ppBestHypothesis, ppBestHypothesis + 1, 
-						(pHypothesisListEnd - ppBestHypothesis) * sizeof(RVLPSULM_HYPOTHESIS *));
-
-				
-				fprintf(fp,"%4d\t%4d\t%4d\t%4d\t%6.3lf\t%6.3lf\t%6.3lf\t%6.2lf\t%6.3lf\t%6.3lf\n",
-					cnt,
-					pHypothesis->pMPSuLM->m_Index,
-					pHypothesis->Index,
-					pHypothesis->cost,
-					pHypothesis->PoseSM.m_X[0],
-					pHypothesis->PoseSM.m_X[1],
-					pHypothesis->PoseSM.m_X[2],
-					pHypothesis->PoseSM.m_Alpha* RAD2DEG, 
-					pHypothesis->PoseSM.m_Beta* RAD2DEG, 
-					pHypothesis->PoseSM.m_Theta* RAD2DEG );
-
-				cnt++;
-
-			}
-
-
-			fclose(fp);
-			delete[] HypothesisList;
-			delete[] HistFileName;
-			
-		}
-#endif
+//#ifdef RVLPSULMBUILDER_HYPOTHESES_EVAL_DEBUG_LOG
+//		char *HistFileName = new char[strlen(m_ImageFileName) + 9];
+//
+//		strcpy(HistFileName, m_ImageFileName);
+//
+//		strcat(HistFileName, "Hist.dat");
+//
+//		//FILE *fp = fopen(HistFileName, "w");
+//		
+//		FILE *fp = fopen("C:\\RVL\\ExpRez\\PSuLMHypotheses.dat", "w");
+//
+//		int cnt = 0;
+//		if(fp)
+//		{
+//			fprintf(fp,"Hypothesis\tModel\tidx\tCost\tX\tY\tZ\tAlpha\tBeta\tTheta\n");
+//
+//			RVLPSULM_HYPOTHESIS **HypothesisList = new RVLPSULM_HYPOTHESIS *[m_HypothesisList.m_nElements];
+//
+//			RVLPSULM_HYPOTHESIS **ppHypothesis = HypothesisList;
+//
+//			m_HypothesisList.Start();
+//
+//			while(m_HypothesisList.m_pNext)
+//				*(ppHypothesis++) = (RVLPSULM_HYPOTHESIS *)(m_HypothesisList.GetNext());
+//
+//			RVLPSULM_HYPOTHESIS **pHypothesisListEnd = ppHypothesis;
+//			RVLPSULM_HYPOTHESIS **ppBestHypothesis;
+//
+//			while(pHypothesisListEnd > HypothesisList)
+//			{
+//				minCost = 0;
+//
+//				for(ppHypothesis = HypothesisList; ppHypothesis < pHypothesisListEnd; ppHypothesis++)
+//				{	
+//					pHypothesis = *ppHypothesis;
+//
+//					if(pHypothesis->cost > minCost)
+//					{
+//						minCost = pHypothesis->cost;
+//						ppBestHypothesis = ppHypothesis;
+//					}
+//				}
+//
+//				pHypothesis = *ppBestHypothesis;
+//
+//				pHypothesisListEnd--;
+//
+//				if(pHypothesisListEnd > ppBestHypothesis)
+//					memmove(ppBestHypothesis, ppBestHypothesis + 1, 
+//						(pHypothesisListEnd - ppBestHypothesis) * sizeof(RVLPSULM_HYPOTHESIS *));
+//
+//				
+//				fprintf(fp,"%4d\t%4d\t%4d\t%4d\t%6.3lf\t%6.3lf\t%6.3lf\t%6.2lf\t%6.3lf\t%6.3lf\n",
+//					cnt,
+//					pHypothesis->pMPSuLM->m_Index,
+//					pHypothesis->Index,
+//					pHypothesis->cost,
+//					pHypothesis->PoseSM.m_X[0],
+//					pHypothesis->PoseSM.m_X[1],
+//					pHypothesis->PoseSM.m_X[2],
+//					pHypothesis->PoseSM.m_Alpha* RAD2DEG, 
+//					pHypothesis->PoseSM.m_Beta* RAD2DEG, 
+//					pHypothesis->PoseSM.m_Theta* RAD2DEG );
+//
+//				cnt++;
+//
+//			}
+//
+//
+//			fclose(fp);
+//			delete[] HypothesisList;
+//			delete[] HistFileName;
+//			
+//		}
+//#endif
 
 		if(pBestHypothesis->cost >= m_PlausibilityThr)
 		{
@@ -9749,6 +9796,9 @@ int CRVLPSuLMBuilder::EvaluateHypothesis3(
 	RVLPSULM_HYPOTHESIS *pHypothesis,
 	bool bDynamicSurfaceDetection)
 {
+	if (!(pSPSuLM->m_Flags & RVLPSULM_FLAG_COMPLEX))
+		return EvaluateHypothesis3Simple(pSPSuLM, pHypothesis, bDynamicSurfaceDetection);
+
 	double StartTime = m_pTimer->GetTime();
 
 #ifdef RVLPSULMBUILDER_HYPOTHESES_EVAL_DEBUG_LOG
@@ -9966,7 +10016,7 @@ int CRVLPSuLMBuilder::EvaluateHypothesis3(
 			RVLDIF3VECTORS(XMS, dPMS, PM2);
 
 #ifdef RVLPSULMBUILDER_HYPOTHESES_EVAL_DEBUG_LOG
-				int uMM = DOUBLE2INT(fu * XM[0] / XM[2] + uc);
+			int uMM = DOUBLE2INT(fu * XM[0] / XM[2] + uc);
 			int vMM = DOUBLE2INT(fv * XM[1] / XM[2] + vc);
 
 			fprintf(m_fpDebug, "UM=(%d, %d); UMS=(%d, %d); stdXM=%5.0lf; PM1=(%6.0lf, %6.0lf, %6.0lf); PM2=(%6.0lf, %6.0lf, %6.0lf)",
@@ -10083,6 +10133,9 @@ int CRVLPSuLMBuilder::EvaluateHypothesis3(
 						e = RVLDOTPRODUCT3(NS, PM1) - d;
 
 #ifdef RVLPSULMBUILDER_HYPOTHESES_EVAL_DEBUG_LOG
+						int uS = DOUBLE2INT(fu * XS[0] / XS[2] + uc);
+						int vS = DOUBLE2INT(fv * XS[1] / XS[2] + vc);
+
 						fprintf(m_fpDebug, "\tUS=(%d, %d); S%d; e1=%6.0lf", uS, vS, pS3DSurface->m_Index, e);
 #endif
 
@@ -10589,15 +10642,20 @@ int CRVLPSuLMBuilder::EvaluateHypothesis3(
 }
 
 //EvaluateHypothesis3: version used in IJRR13
-#ifdef NEVER	
 //Evaluates hypothesis for surfaces  
 //NOTE: m_pMem2 is used
-int CRVLPSuLMBuilder::EvaluateHypothesis3(	CRVLPSuLM * pSPSuLM,
-											RVLPSULM_HYPOTHESIS *pHypothesis)
+int CRVLPSuLMBuilder::EvaluateHypothesis3Simple(	
+	CRVLPSuLM * pSPSuLM,
+	RVLPSULM_HYPOTHESIS *pHypothesis,
+	bool bDynamicSurfaceDetection)
 {
 #ifdef RVLPSULMBUILDER_HYPOTHESES_EVAL_DEBUG_LOG
+	m_fpDebug = fopen("C:\\RVL\\Debug\\HypEval.dat", "w");
+
 	fprintf(m_fpDebug, "Hypothesis%d\n", pHypothesis->Index);
 #endif
+
+	double StartTime = m_pTimer->GetTime();
 
 	double CellSize = (double)m_CellSize2;
 
@@ -10620,22 +10678,26 @@ int CRVLPSuLMBuilder::EvaluateHypothesis3(	CRVLPSuLM * pSPSuLM,
 	double uc = m_pStereoVision->m_KinectParams.depthUc;
 	double vc = m_pStereoVision->m_KinectParams.depthVc;
 
+	int i;
+	int iCell, jCell;
+	RVLPSULM_CELL2 *pCell;
+	CRVL3DSurface2 *pM3DSurface, *pS3DSurface; 
+	RVLQLIST_PTR_ENTRY *pSamplePtr;
+	double *XS;
+	RVL3DSURFACE_SAMPLE *pSampleS;
+
+#ifdef NEVER	// filling m_CellArray2 is done in InitHypothesisEvaluation3()
+
 	//Reset CellArray2
 	memcpy(m_CellArray2, m_EmptyCellArray2, m_nCells2 * sizeof(RVLPSULM_CELL2));
 			
-	RVLQLIST_PTR_ENTRY *CellMem = new RVLQLIST_PTR_ENTRY[pSPSuLM->m_nSurfaceSamples];
+	//RVLQLIST_PTR_ENTRY *CellMem = new RVLQLIST_PTR_ENTRY[pSPSuLM->m_nSurfaceSamples];
 
-	RVLQLIST_PTR_ENTRY *pSamplePtr = CellMem;
+	pSamplePtr = CellMem;
 
 	//fill CellArray2 with ptrs. to SSurface samples
 
-	int i;
-	RVL3DSURFACE_SAMPLE *pSampleS;
-	CRVL3DSurface2 *pM3DSurface, *pS3DSurface; 
-	int iCell, jCell;
-	RVLPSULM_CELL2 *pCell;
 	RVLQLIST *pSampleList;
-	double *XS;
 
 	for(i=0;i<nSSurfaces;i++)
 	{
@@ -10667,6 +10729,7 @@ int CRVLPSuLMBuilder::EvaluateHypothesis3(	CRVLPSuLM * pSPSuLM,
 			pSampleS = (RVL3DSURFACE_SAMPLE *)(pSampleS->pNext);
 		}
 	}	
+#endif	// NEVER
 
 	// match model samples to scene samples
 
@@ -10766,8 +10829,8 @@ int CRVLPSuLMBuilder::EvaluateHypothesis3(	CRVLPSuLM * pSPSuLM,
 			int uMM = DOUBLE2INT(fu * XM[0] / XM[2] + uc);
 			int vMM = DOUBLE2INT(fv * XM[1] / XM[2] + vc);
 
-			fprintf(m_fpDebug, "UM=(%d, %d); UMS=(%d, %d); stdXM=%5.0lf; PM1=(%6.0lf, %6.0lf, %6.0lf); PM2=(%6.0lf, %6.0lf, %6.0lf)", 
-				uMM, vMM, uM, vM, stdXM, PM1[0], PM1[1], PM1[2], PM2[0], PM2[1], PM2[2]);
+			fprintf(m_fpDebug, "MW%d: UM=(%d, %d); UMS=(%d, %d); stdXM=%5.0lf; PM1=(%6.0lf, %6.0lf, %6.0lf); PM2=(%6.0lf, %6.0lf, %6.0lf)", 
+				pSampleM->Index, uMM, vMM, uM, vM, stdXM, PM1[0], PM1[1], PM1[2], PM2[0], PM2[1], PM2[2]);
 
 			if(bNM)
 				fprintf(m_fpDebug, "; MN\n");
@@ -10861,7 +10924,7 @@ int CRVLPSuLMBuilder::EvaluateHypothesis3(	CRVLPSuLM * pSPSuLM,
 							e = RVLDOTPRODUCT3(NS, PM1) - d;
 
 #ifdef RVLPSULMBUILDER_HYPOTHESES_EVAL_DEBUG_LOG
-							fprintf(m_fpDebug, "\tUS=(%d, %d); S%d; e1=%6.0lf", uS, vS, pS3DSurface->m_Index, e);
+							fprintf(m_fpDebug, "\tSW%d: US=(%d, %d); S%d; e1=%6.0lf", pSampleS->Index, uS, vS, pS3DSurface->m_Index, e);
 #endif
 
 							if(e < 0)
@@ -10963,7 +11026,7 @@ int CRVLPSuLMBuilder::EvaluateHypothesis3(	CRVLPSuLM * pSPSuLM,
 #ifdef RVLPSULMBUILDER_HYPOTHESES_EVAL_DEBUG_LOG
 										fprintf(m_fpDebug, "; NS");
 #endif
-										csNTol = pM * pS + qM * qS;
+										csNTol = pM * pS - qM * qS;
 
 										if(csNTol >= COS45)
 										{
@@ -11114,6 +11177,19 @@ int CRVLPSuLMBuilder::EvaluateHypothesis3(	CRVLPSuLM * pSPSuLM,
 
 	m_DynamicSurfRejectTime = m_pTimer->GetTime() - dsrTime;
 #endif	// RVLPSULMBUILDER_HYPOTHESES_EVAL3_DYNAMIC_SURF_REJECT
+
+	if (bDynamicSurfaceDetection)
+	{
+		m_HypEvalTime = m_pTimer->GetTime() - StartTime;
+
+#ifdef RVLPSULMBUILDER_HYPOTHESES_EVAL_DEBUG_LOG
+		fclose(m_fpDebug);
+#endif
+
+		return 0;
+	}
+
+	// Surface matching
 
 	int nMatchedSurfaces = 0;
 
@@ -11340,11 +11416,15 @@ int CRVLPSuLMBuilder::EvaluateHypothesis3(	CRVLPSuLM * pSPSuLM,
 
 	delete[] SortedMatchArray;
 	delete[] MatchBuff;
-	delete[] CellMem;
+	delete[] m_CellMem;
 	delete[] SCoverage;
 	delete[] MCoverage;
 
 	/////
+
+#ifdef RVLPSULMBUILDER_HYPOTHESES_EVAL_DEBUG_LOG
+	fclose(m_fpDebug);
+#endif
 
 	//return nMatchedSurfaces;
 #ifdef RVLPSULMBUILDER_HYPOTHESES_EVAL3_MATCH_COUNT
@@ -11353,7 +11433,6 @@ int CRVLPSuLMBuilder::EvaluateHypothesis3(	CRVLPSuLM * pSPSuLM,
 	return DOUBLE2INT(1000.0 * scoreTotal);
 #endif
 }
-#endif
 
 void CRVLPSuLMBuilder::ModelFusion(RVLPSULM_HYPOTHESIS *pHypothesis)
 {
@@ -11726,6 +11805,25 @@ double CRVLPSuLMBuilder::EvaluateHypothesis4(	CRVLPSuLM * pSPSuLM,
 
 		P += maxP;
 	}	
+
+	if (Flags & RVLPSULMBUILDER_HYPEVAL4_FLAG_DYNAMIC_SURF_DETECT)
+	{
+		ppSurf = SSurfArray;
+
+		for (i = 0; i < nSSurfs; i++, ppSurf++)
+		{
+			pSSurf = *ppSurf;
+
+			pSSurf->m_Flags &= ~RVL3DSURFACE_FLAG_REMOVED;
+		}
+
+		for (ppSurf = MSurfArray; ppSurf < pSurfArrayEnd; ppSurf++)
+		{
+			pMSurf = *ppSurf;
+
+			pMSurf->m_Flags &= ~RVL3DSURFACE_FLAG_REMOVED;
+		}
+	}
 
 	//return P;
 
@@ -12701,6 +12799,13 @@ void CRVLPSuLMBuilder::CreateParamList(CRVLMem * pMem)
 	m_ParamList.AddID(pParamData, "BEST_PEAK_TREE", RVLPSULMBUILDER_FLAG_LAST_DOF_ESTIMATION_METHOD_BEST_PEAK_TREE);
 	m_ParamList.AddID(pParamData, "ALL_PEAKS", RVLPSULMBUILDER_FLAG_LAST_DOF_ESTIMATION_METHOD_ALL_PEAKS);	
 
+	pParamData = m_ParamList.AddParam("PSuLM.Localization.HypothesisEvaluation.Method", RVLPARAM_TYPE_FLAG, &m_Flags);
+	m_ParamList.AddID(pParamData, "SM", RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD_SM);
+	m_ParamList.AddID(pParamData, "IBM", RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD_IBM);
+	m_ParamList.AddID(pParamData, "SSM", RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD_SSM);
+	m_ParamList.AddID(pParamData, "P", RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD_P);
+	pParamData = m_ParamList.AddParam("PSuLM.Localization.HypothesisEvaluation.FirstOrderDependencyTree", RVLPARAM_TYPE_FLAG, &m_Flags2);
+	m_ParamList.AddID(pParamData, "yes", RVLPSULMBUILDER_FLAG2_FIRST_ORDER_DEPENDENCY_TREE);
 	pParamData = m_ParamList.AddParam("PSuLM.Localization.HypothesisEvaluation.CellSize2", RVLPARAM_TYPE_INT, &m_CellSize2);
 	pParamData = m_ParamList.AddParam("PSuLM.Localization.HypothesisEvaluation.nCellsPer45deg", RVLPARAM_TYPE_INT, &m_nCellsPer45deg);
 	pParamData = m_ParamList.AddParam("PSuLM.Localization.HypothesisEvaluation.SampleMatchAngleStD", RVLPARAM_TYPE_DOUBLE, &m_SampleMatchAngleStD);
@@ -12714,6 +12819,7 @@ void CRVLPSuLMBuilder::CreateParamList(CRVLMem * pMem)
 	m_ParamList.AddID(pParamData, "yes", RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_MODEL_FUSION);
 	pParamData = m_ParamList.AddParam("PSuLM.Localization.HypothesisEvaluation.SampleMatching", RVLPARAM_TYPE_FLAG, &m_Flags2);
 	m_ParamList.AddID(pParamData, "yes", RVLPSULMBUILDER_FLAG2_HYPOTHESIS_EVALUATION_SAMPLE_MATCHING);
+	pParamData = m_ParamList.AddParam("PSuLM.Localization.HypothesisEvaluation.Line.PDFPriorPosition", RVLPARAM_TYPE_DOUBLE, &(m_LineMatchData.PPriorPosition));
 
 	pParamData = m_ParamList.AddParam("PSuLM.Localization.Odometry.Const1", RVLPARAM_TYPE_DOUBLE, m_OdometryUncertConst);
 	pParamData = m_ParamList.AddParam("PSuLM.Localization.Odometry.Const2", RVLPARAM_TYPE_DOUBLE, m_OdometryUncertConst + 1);
@@ -12736,12 +12842,6 @@ void CRVLPSuLMBuilder::CreateParamList(CRVLMem * pMem)
 
 	pParamData = m_ParamList.AddParam("PSuLM.Hypothesis.EKFConstraint", RVLPARAM_TYPE_FLAG, &m_Flags);
 	m_ParamList.AddID(pParamData, "yes", RVLPSULMBUILDER_HYPOTHESES_EKF_CONSTRAINT);
-
-	pParamData = m_ParamList.AddParam("PSuLM.Localization.HypothesisEvaluation.Method", RVLPARAM_TYPE_FLAG, &m_Flags);
-	m_ParamList.AddID(pParamData, "SM", RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD_SM);
-	m_ParamList.AddID(pParamData, "IBM", RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD_IBM);
-	m_ParamList.AddID(pParamData, "SSM", RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD_SSM);
-	m_ParamList.AddID(pParamData, "P", RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD_P);
 
 	pParamData = m_ParamList.AddParam("PSuLM.MapBuilding", RVLPARAM_TYPE_FLAG, &m_Flags);
 	m_ParamList.AddID(pParamData, "yes", RVLPSULMBUILDER_FLAG_MAPBUILDING);
@@ -13849,7 +13949,7 @@ void CRVLPSuLMBuilder::Hypotheses3(	CRVLPSuLM *pSPSuLM,
 #ifdef RVLPSULMBUILDER_HYPOTHESES_DEBUG
 					//if(HypothesisIndex == 113)
 					//	int debug = 0;
-
+last
 					cvSet(pFig2->m_pImage, cvScalar(255, 255, 255));
 
 					int iTextLine = HypothesisDisplay(pFig2, pNode, cvPoint(8, 0), MatchList);
@@ -14099,14 +14199,17 @@ void CRVLPSuLMBuilder::Hypotheses3(	CRVLPSuLM *pSPSuLM,
 						if(mu + muTol < m_csLastDOFSurfNrmAngle)
 							continue;
 
+						// RFB = RAB * RFA
+
+						RVLMXMUL3X3(R, RFA, RFB);
+
+						if (RVLMULCOLCOL3(RF2B, RFB, 2, 2) < COS45)
+							continue;
+
 						// [xTF2'; yTF2'] = RF2B' * [xTB'; yTB']
 
 						RVLMULMX3X3TVECT(RF2B, xTB, xTF2)
 						RVLMULMX3X3TVECT(RF2B, yTB, yTF2)
-
-						// RFB = RAB * RFA
-
-						RVLMXMUL3X3(R, RFA, RFB)
 					
 						// [xTF'; yTF'] = RFB' * [xTB'; yTB']	
 
@@ -14188,6 +14291,7 @@ void CRVLPSuLMBuilder::Hypotheses3(	CRVLPSuLM *pSPSuLM,
 						//JsTD[0] = RVLMULROWCOL3(Vect3Tmp, RFA, 0, 0);
 						//JsTD[1] = RVLMULROWCOL3(Vect3Tmp, RFA, 0, 1);
 
+						// Computation of varTD is explained in Appendix B of IJRR13, where varTD corresponds to the symbol sigma_l in the last equation in the Appendix B.
 						// varTD = JsTD * Cs * JsTD'
 
 						//varTD = JsTD[0] * JsTD[0] * pS3DSurface->m_varq[0] + 
@@ -14198,6 +14302,7 @@ void CRVLPSuLMBuilder::Hypotheses3(	CRVLPSuLM *pSPSuLM,
 						//if(varTD > 90000.0)
 						//	continue;
 
+						// Computation of TraveledDist is explained in Appendix B of IJRR13, where TraveledDist corresponds to the symbol l with ^.
 						// TraveledDist = k1 * tF2_FA * zFA
 
 						TraveledDist = k1 * RVLMULROWCOL3(tF2_FA, RFA, 0, 2);
@@ -17187,6 +17292,7 @@ void CRVLPSuLMBuilder::Hypotheses5(	CRVLPSuLM *pSPSuLM,
 						JsTD[1] = RVLMULROWCOL3(Vect3Tmp, RFA, 0, 1);
 
 						// varTD = JsTD * Cs * JsTD'
+						// Computation of varTD is explained in Appendix B of IJRR13, where varTD corresponds to the symbol sigma_l in the last equation in the Appendix B.
 
 						//varTD = JsTD[0] * JsTD[0] * pS3DSurface->m_varq[0] + 
 						//	JsTD[1] * JsTD[1] * pS3DSurface->m_varq[1];
@@ -17197,6 +17303,7 @@ void CRVLPSuLMBuilder::Hypotheses5(	CRVLPSuLM *pSPSuLM,
 							continue;
 
 						// TraveledDist = k1 * tF2_FA * zFA
+						// Computation of TraveledDist is explained in Appendix B of IJRR13, where TraveledDist corresponds to the symbol l with cap.
 
 						TraveledDist = k1 * RVLMULROWCOL3(tF2_FA, RFA, 0, 2);
 
@@ -23124,7 +23231,8 @@ void CRVLPSuLMBuilder::DisplayHypothesis(CRVLGUI *pGUI,
 			if(pHypothesis == pMPSuLM->m_pHypothesis)
 				PoseConstraintProbability(pSPSuLM, pMPSuLM);
 
-			DWORD EvaluateHypothesisFlags = RVLPSULMBUILDER_HYPEVAL4_FLAG_FIRST_ORDER_DEPENDENCY_TREE;
+			DWORD EvaluateHypothesisFlags = (m_Flags2 & RVLPSULMBUILDER_FLAG2_FIRST_ORDER_DEPENDENCY_TREE ? 
+				RVLPSULMBUILDER_HYPEVAL4_FLAG_FIRST_ORDER_DEPENDENCY_TREE : 0x00000000);
 
 			if (m_Flags2 & RVLPSULMBUILDER_FLAG2_HYPOTHESIS_EVALUATION_SAMPLE_MATCHING)
 				EvaluateHypothesisFlags |= RVLPSULMBUILDER_HYPEVAL4_FLAG_DYNAMIC_SURF_DETECT;
@@ -23195,7 +23303,8 @@ void CRVLPSuLMBuilder::DisplayHypothesisData(	CRVLFigure *pFig,
 												DWORD Flags,
 												int iHypothesis,
 												CRVL3DSurface2 *pSelectedSurface,
-												CRVL3DLine2 *pSelectedLine)
+												CRVL3DLine2 *pSelectedLine,
+												RVL3DSURFACE_SAMPLE *pSelectedSurfSample)
 {
 	RVLPSULM_HYPOTHESIS *pHypothesis = NULL;
 
@@ -23208,7 +23317,7 @@ void CRVLPSuLMBuilder::DisplayHypothesisData(	CRVLFigure *pFig,
 	int HypScoreMid = (HypScoreLow + HypScoreHigh) / 2;
 	int HypScoreHalfRange = HypScoreMid - HypScoreLow;
 
-	IplImage *pDataDisplay = cvCreateImage(cvSize(800, 250), IPL_DEPTH_8U, 3);	
+	IplImage *pDataDisplay = cvCreateImage(cvSize(800, 300), IPL_DEPTH_8U, 3);	
 
 	// display text
 
@@ -23473,6 +23582,13 @@ void CRVLPSuLMBuilder::DisplayHypothesisData(	CRVLFigure *pFig,
 				}
 			}
 		}
+	}
+
+	if (pSelectedSurfSample)
+	{
+		sprintf(str, "Selected Surface Sample: %d ()", pSelectedSurfSample->Index);
+
+		cvPutText(pDataDisplay, str, cvPoint(0, (++iTextLine) * pFig->m_FontSize), &pFig->m_Font, cvScalar(0, 0, 0));
 	}
 
 	if(m_Flags & RVLPSULMBUILDER_FLAG_MAPBUILDING)
@@ -24598,7 +24714,7 @@ void CRVLPSuLMBuilder::RepresentativeHypotheses()
 	{
 		pHypothesis = m_HypothesisArray[i];
 
-		//if(pHypothesis->Index == 148)
+		//if(pHypothesis->Index == 1966 || pHypothesis->Index == 1940)
 		//	int debug = 0;
 
 		if(pHypothesis->Probability < m_minRelevantLogLikelihood)
@@ -24625,7 +24741,7 @@ void CRVLPSuLMBuilder::RepresentativeHypotheses()
 			//if(pHypothesis->Index == 591 && pHypothesis_->Index == 871)
 			//	int debug = 0;
 
-			if (m_Flags2 & RVLPSULMBUILDER_FLAG2_MAPBUILDING_MANUAL)
+			if ((m_Flags & RVLPSULMBUILDER_FLAG_MAPBUILDING) && (m_Flags2 & RVLPSULMBUILDER_FLAG2_MAPBUILDING_MANUAL))
 				break;
 
 			if(pHypothesis_->Probability < m_minRelevantLogLikelihood)
@@ -24876,9 +24992,6 @@ void CRVLPSuLMBuilder::MergeSurfaces(CRVLPSuLM *pPSuLM)
 			if(p3DSurface_->m_nSupport == 0)
 				continue;
 
-			//if(p3DSurface->m_Index == 23 && p3DSurface_->m_Index == 42)
-			//	int debug = 0;
-
 			if(p3DSurface_->m_nSupport > p3DSurface->m_nSupport)
 			{
 				p3DSurfaceTmp = p3DSurface;
@@ -25050,6 +25163,31 @@ void CRVLPSuLMBuilder::MergeSurfaces(CRVLPSuLM *pPSuLM)
 			if(eP > 2.4079)	// Chi squared test 70% for 2 degrees of freedom
 				continue;
 
+			//if (p3DSurface->m_Index == 29)
+			//{
+			//	int debug = 0;
+
+			//	RVL3DSURFACE_SAMPLE *pSample = (RVL3DSURFACE_SAMPLE *)(p3DSurface->m_Samples.pFirst);
+
+			//	while (pSample)
+			//	{
+			//		pSample->Index = (debug++);
+
+			//		pSample = (RVL3DSURFACE_SAMPLE *)(pSample->pNext);
+			//	}
+
+			//	debug = 0;
+
+			//	pSample = (RVL3DSURFACE_SAMPLE *)(p3DSurface_->m_Samples.pFirst);
+
+			//	while (pSample)
+			//	{
+			//		pSample->Index = (debug++);
+
+			//		pSample = (RVL3DSURFACE_SAMPLE *)(pSample->pNext);
+			//	}
+			//}
+				
 			// PM[i] <- [XMC' * PC[i]; YMC' * PC[i]]
 			// compute mean and covariance of points PM
 
@@ -25158,7 +25296,13 @@ void CRVLPSuLMBuilder::MergeSurfaces(CRVLPSuLM *pPSuLM)
 				pSamples = &(p3DSurface->m_Samples);
 				pSamples_ = &(p3DSurface_->m_Samples);
 
-				RVLQLIST_APPEND(pSamples, pSamples_);
+				if (pSamples->pFirst == NULL)
+				{
+					if (pSamples_->pFirst != NULL)
+						pSamples = pSamples_;
+				}
+				else if (pSamples_->pFirst != NULL)
+					RVLQLIST_APPEND(pSamples, pSamples_);
 			}
 
 			if (m_Flags2 & RVLPSULMBUILDER_FLAG2_SURFACE_BOUNDARY)
