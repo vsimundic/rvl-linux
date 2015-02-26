@@ -410,7 +410,7 @@ int main(int argc, char* argv[])
 	int key_;
 	int SampleStep;
 	char *MatchMatrixGT;
-
+	//int bNextFile = 1;
 	do
 	{
 		DepthMapFormat = RVLKINECT_DEPTH_IMAGE_FORMAT_DISPARITY;
@@ -534,6 +534,7 @@ int main(int argc, char* argv[])
 				CRVL3DPose PoseTemp;
 				int iTemp;
 				
+				
 				//initialize
 				command = 'O';
 				g_BestCost = -1000000;
@@ -554,12 +555,16 @@ int main(int argc, char* argv[])
 
 				} while (command != 'C');
 
+				
 				//Store last image number
 				g_LastSubSetImageNo = RVLGetFileNumber(VS.m_ImageFileName, "00000-LW.bmp");
 				g_StartNewSubSet = true;
 
 				//Reset current image to best subsetimage
 				strcpy(VS.m_ImageFileName, g_BestSubSetImageFileName);
+				pRGBImage = cvLoadImage(VS.m_ImageFileName);
+				
+				
 			}
 
 
@@ -1491,7 +1496,7 @@ int main(int argc, char* argv[])
 		if(!bRecord)
 			VS.m_Mem.Clear();
 	}
-	while(key != 27);
+	while (key != 27);
 
 	if(VS.m_Flags & RVLSYS_FLAGS_VALIDATION)
 	{
@@ -1636,7 +1641,7 @@ BOOL GetImageInSequence(CRVLPSuLMVS *pVS, bool bInit)
 				RVLSetFileNumber(pVS->m_ImageFileName, "00000-LW.bmp", g_CurrentImageNo);
 
 				g_StartNewSubSet = false;
-				return TRUE;
+				//return TRUE;
 			//}
 			//else
 			//	return FALSE;
