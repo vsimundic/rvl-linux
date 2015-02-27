@@ -5,6 +5,8 @@
 //C headers
 #include <stdio.h>
 #include <time.h>
+//#include <stdafx.h>
+#include <atlstr.h>
 //RVL headers
 #include "RVLCore.h"
 #include "RVLPCS.h"
@@ -96,6 +98,7 @@ bool rightMouseButtonVisibilityOff = false;
 bool rightMouseButtonSelectMode = false;
 bool cameraCone = true;
 bool hypothesisCone = false;
+bool blackBackground = false;
 std::string g_SelectedObject = "";
 //Definition of iterator type
 typedef std::map<std::string, VTKActorObj*>::iterator vtk_map_it_type;
@@ -293,6 +296,21 @@ void KeyPressCallback(vtkObject* caller, unsigned long eid, void* clientdata, vo
 		writer->SetFileName(filename.c_str());
 		writer->SetInputConnection(windowToImageFilter->GetOutputPort());
 		writer->Write();
+	}
+	else if (keySym == "b") //Change background black/sky blue
+	{
+		if (blackBackground)
+		{
+			iren->GetRenderWindow()->GetRenderers()->GetFirstRenderer()->SetBackground(0.5294, 0.8078, 0.9803);
+			blackBackground = false;
+		}
+		else
+		{
+			iren->GetRenderWindow()->GetRenderers()->GetFirstRenderer()->SetBackground(0,0,0);
+			blackBackground = true;
+		}
+		//
+		iren->GetRenderWindow()->Render();
 	}
 	cout << "VTK - KeyPressCallbackCommand, Key: " << keySym << endl;
 }
