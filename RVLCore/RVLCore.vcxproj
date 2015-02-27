@@ -84,7 +84,7 @@
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
       <Optimization>Disabled</Optimization>
-      <AdditionalIncludeDirectories>$(OPENCV_BUILD)\include;.\Include;$(OPENNI2_INCLUDE);$(VTK_PATH)\Debug\Include\vtk-5.10</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(OPENCV_BUILD)\include;.\Include;$(OPENNI2_INCLUDE);$(VTK_PATH)\Debug\include\vtk-5.10</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>WIN32;_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <PrecompiledHeader />
@@ -172,6 +172,7 @@
     <ClCompile Include="RVLFigure.cpp" />
     <ClCompile Include="RVLGUI.cpp" />
     <ClCompile Include="RVLHistogram.cpp" />
+    <ClCompile Include="RVLImageFilter.cpp" />
     <ClCompile Include="RVLKinect.cpp" />
     <ClCompile Include="RVLMChain.cpp" />
     <ClCompile Include="RVLMChain2.cpp" />
@@ -223,6 +224,7 @@
     <ClInclude Include="Include\RVLFigure.h" />
     <ClInclude Include="Include\RVLGUI.h" />
     <ClInclude Include="Include\RVLHistogram.h" />
+    <ClInclude Include="Include\RVLImageFilter.h" />
     <ClInclude Include="Include\RVLKinect.h" />
     <ClInclude Include="Include\RVLMChain.h" />
     <ClInclude Include="Include\RVLMChain2.h" />

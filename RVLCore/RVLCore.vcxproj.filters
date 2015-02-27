@@ -144,6 +144,9 @@
     <ClCompile Include="RVLWChain.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="RVLImageFilter.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Include\Platform.h">
@@ -294,6 +297,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Include\RVLWChain.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Include\RVLImageFilter.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

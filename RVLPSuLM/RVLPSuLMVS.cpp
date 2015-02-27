@@ -1227,7 +1227,7 @@ void CRVLPSuLMVS::ComputeMatchMatrix(int iSample)
 	
 	int i, j;
 	CRVLPSuLM *pPSuLM;
-	double P, PriorProbabilityWorldModel;
+	double P;
 
 	for(i = 0; i < nPSuLMs; i++)
 	{
@@ -1246,9 +1246,9 @@ void CRVLPSuLMVS::ComputeMatchMatrix(int iSample)
 				for(j = 0; j < nSFeatures; j++)
 					m_PSuLMBuilder.m_SMatchArray[j].b = false;
 
-				PriorProbabilityWorldModel = m_PSuLMBuilder.ConditionalProbabilityTree(m_pPSuLM, pPSuLM);
+				m_PSuLMBuilder.m_PriorProbabilityWorldModel = m_PSuLMBuilder.ConditionalProbabilityTree(m_pPSuLM, pPSuLM);
 
-				MatchMatrix[i] = P - PriorProbabilityWorldModel;
+				MatchMatrix[i] = P - m_PSuLMBuilder.m_PriorProbabilityWorldModel;
 			}
 	}	
 
@@ -1504,7 +1504,8 @@ void RVLPSuLMDisplayMouseCallback2(int event, int x, int y, int flags, void* vpD
 					pGUI->ShowFigure(pMFig);
 				}
 
-				pVS->m_PSuLMBuilder.DisplayHypothesisData(pFig, pVS->m_pPSuLM, pData->MatchMatrixGT, pData->mDisplayPSuLMFlags, pData->iHypothesis, pSelectedSurf, pSelectedLine);
+				pVS->m_PSuLMBuilder.DisplayHypothesisData(pFig, pVS->m_pPSuLM, pData->MatchMatrixGT, pData->mDisplayPSuLMFlags, pData->iHypothesis, pSelectedSurf, pSelectedLine, 
+					pSelectedSurfSample);
 			}
 	}	//	switch( event )
 }

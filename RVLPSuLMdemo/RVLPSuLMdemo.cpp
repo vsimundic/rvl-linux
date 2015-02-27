@@ -2,12 +2,11 @@
 //
 
 //#include "highgui.h"
-//C headers
+//
 #include <stdio.h>
 #include <time.h>
 //#include <stdafx.h>
 #include <atlstr.h>
-//RVL headers
 #include "RVLCore.h"
 #include "RVLPCS.h"
 #include "RVLRLM.h"
@@ -32,7 +31,28 @@ VTK_MODULE_INIT(vtkRenderingFreeType);//(vtkRenderingFreeTypeOpenGL);
 #define RVLPSULMDEMO_DISPLAY_ONLY_REPRESENTATIVE_HYPOTHESES
 //#define RVLPSULMDEMO_DISPLAY_ONLY_BEST_LOCAL_MODEL_HYPOTHESES
 
+struct IMAGE_SEQUENCE_DATA
+{
+	std::string ImageFileName; 
+	int StartNo;
+	int EndNo;
+};
+std::vector<IMAGE_SEQUENCE_DATA> g_AllSequences;
+
+int g_CurrentSequenceNo;
+int g_CurrentImageNo;
+
+char g_BestSubSetImageFileName[200];
+int g_LastSubSetImageNo;
+int g_BestCost;
+bool g_StartNewSubSet;
+
+BOOL GetNextFileName(CRVLPSuLMVS *pVS);
+void GetAllSequenceData(CRVLPSuLMVS *pVS);
+BOOL GetImageInSequence(CRVLPSuLMVS *pVS, bool bInit = false);
+
 void MessageCanNotOpenFile(CRVLGUI *pGUI, char *FileName);
+
 
 void RVLPSuLMdemoGetNextHypothesis(CRVLPSuLMVS *pVS,
 								   int &iHypothesis,
@@ -831,6 +851,7 @@ int main(int argc, char* argv[])
 	VS.CreateParamList();
 
 	VS.Init("RVLPSuLMdemo.cfg");
+	GetAllSequenceData(&VS);
 
 	// create GUI
 
@@ -1041,6 +1062,9 @@ int main(int argc, char* argv[])
 
 	int *SizeArray = new int[2 * w * h];
 
+	RVLPSULM_MATCH2 *RefHypMatchArray = NULL;
+	int nRefHypMatches;
+
 	// main loop
 
 	bool bDisplayMesh = false;
@@ -1109,7 +1133,7 @@ int main(int argc, char* argv[])
 	int key_;
 	int SampleStep;
 	char *MatchMatrixGT;
-
+	//int bNextFile = 1;
 	do
 	{
 		DepthMapFormat = RVLKINECT_DEPTH_IMAGE_FORMAT_DISPARITY;
@@ -1225,6 +1249,52 @@ int main(int argc, char* argv[])
 			/////
 
 			//VS.m_PSuLMBuilder.m_Flags |= RVLPSULMBUILDER_FLAG_KIDNAPPED;
+
+			g_StartNewSubSet = false; //This flag needs to be reset
+			if (VS.m_Flags & RVLSYS_FLAGS_BEST_SUBSET_HYPOTHESIS)
+			{
+				unsigned char command;
+				CRVL3DPose PoseTemp;
+				int iTemp;
+				
+				
+				//initialize
+				command = 'O';
+				g_BestCost = -1000000;
+				//Copy current file name
+				strcpy(g_BestSubSetImageFileName, VS.m_ImageFileName);
+				
+				do
+				{
+					VS.m_PSuLMBuilder.GetPanTilt(VS.m_ImageFileName, &PoseTemp, iTemp, command);
+
+					VS.Update(bKinect ? 0x00000000 : RVLPSULMBUILDER_CREATEMODEL_IMAGE_FROM_FILE);
+					if (VS.m_PSuLMBuilder.m_nHypotheses > 0)
+					{
+						if (VS.m_PSuLMBuilder.m_HypothesisArray[0]->cost > g_BestCost)
+						{
+							g_BestCost = VS.m_PSuLMBuilder.m_HypothesisArray[0]->cost;
+							strcpy(g_BestSubSetImageFileName, VS.m_ImageFileName);
+						}
+					}
+					GetNextFileName(&VS);
+
+				} while (command != 'C');
+
+				
+				//Store last image number
+				g_LastSubSetImageNo = RVLGetFileNumber(VS.m_ImageFileName, "00000-LW.bmp");
+				g_StartNewSubSet = true;
+
+				//Reset current image to best subsetimage
+				strcpy(VS.m_ImageFileName, g_BestSubSetImageFileName);
+				pRGBImage = cvLoadImage(VS.m_ImageFileName);
+				
+				
+			}
+
+			if (g_BestCost == -1000000)
+				GUI.Message("No hypotheses generated!", 300, 100, cvScalar(0, 0, 255));
 
 			VS.Update(bKinect ? 0x00000000 : RVLPSULMBUILDER_CREATEMODEL_IMAGE_FROM_FILE);
 
@@ -1369,6 +1439,13 @@ int main(int argc, char* argv[])
 				VS.m_pPSuLM->m_Index = 0xffffffff;
 		}
 
+		if (RefHypMatchArray)
+		{
+			delete[] RefHypMatchArray;
+
+			RefHypMatchArray = NULL;
+		}
+		
 		do
 		{
 			// clear display
@@ -1428,6 +1505,14 @@ int main(int argc, char* argv[])
 						pPrevRGBImage, iHypothesis);				
 
 					VS.m_PSuLMBuilder.DisplayHypothesisData(pFig, VS.m_pPSuLM, MatchMatrixGT, mDisplayPSuLMFlags, iHypothesis);
+
+#ifdef RVLPSULMBUILDER_CONDITIONAL_PROBABILITY_TREE_DEBUG_LOG
+					if (RefHypMatchArray)
+						VS.m_PSuLMBuilder.CompareHypotheses(RefHypMatchArray, nRefHypMatches, 
+							VS.m_PSuLMBuilder.m_DebugData.MatchArray, VS.m_PSuLMBuilder.m_DebugData.nMatches,
+							"C:\\RVL\\Debug\\HypComparison.txt");
+#endif // RVLPSULMBUILDER_CONDITIONAL_PROBABILITY_TREE_DEBUG_LOG
+
 				}
 
 				if(bDisplayPSuLM)
@@ -1719,6 +1804,26 @@ int main(int argc, char* argv[])
 				bDisplayMesh = false;
 
 				bDisplayConvexSets = false;
+
+				break;
+			case 'R':
+				if (VS.m_PSuLMBuilder.m_DebugData.MatchArray)
+				{
+					if (RefHypMatchArray)
+						delete[] RefHypMatchArray;
+
+					nRefHypMatches = VS.m_PSuLMBuilder.m_DebugData.nMatches;
+
+					RefHypMatchArray = new RVLPSULM_MATCH2[nRefHypMatches];
+
+					memcpy(RefHypMatchArray, VS.m_PSuLMBuilder.m_DebugData.MatchArray, nRefHypMatches * sizeof(RVLPSULM_MATCH2));
+
+					GUI.Message("The current hypothesis is set as the reference hypothesis.", 600, 100, cvScalar(0, 255, 128));
+				}
+				else
+					GUI.Message("Cannot set reference hypothesis. No match data is generated.", 600, 100, cvScalar(0, 0, 255));
+
+				bRefresh = true;
 
 				break;
 			case 's':
@@ -2096,7 +2201,7 @@ int main(int argc, char* argv[])
 						iMPSuLM = iMPSuLM_;
 				}
 			}	
-			else if(bComplex)
+			else if (bComplex)
 			{
 				iSample_ = iSample;
 
@@ -2106,7 +2211,7 @@ int main(int argc, char* argv[])
 				int x, y, z, pan, tilt, roll, iSample0;
 				FILE *fpOdometry;
 
-				while(RVLGetNextFileName(VS.m_ImageFileName, "00000-LW.bmp", 10000))
+				while (GetNextFileName(&VS)) //RVLGetNextFileName(VS.m_ImageFileName, "00000-LW.bmp", 10000))
 				{
 					iSample_ = RVLGetFileNumber(VS.m_ImageFileName, "00000-LW.bmp");
 
@@ -2114,14 +2219,14 @@ int main(int argc, char* argv[])
 
 					fpOdometry = fopen(OdometryFileName, "r");
 
-					if(fpOdometry == NULL)
+					if (fpOdometry == NULL)
 						continue;
 
 					fscanf(fpOdometry, "%d\t%d\t%d\t%d\t%d\t%d\t%d\t%c\n", &x, &y, &z, &pan, &tilt, &roll, &iSample0, &command);
 
 					fclose(fpOdometry);					
 
-					if(command == 'O')
+					if (command == 'O')
 					{
 						iSample = iSample_;
 
@@ -2134,13 +2239,13 @@ int main(int argc, char* argv[])
 				delete[] OdometryFileName;
 			}
 			else
-				RVLGetNextFileName(VS.m_ImageFileName, "00000-LW.bmp", 10000);
+				GetNextFileName(&VS);// RVLGetNextFileName(VS.m_ImageFileName, "00000-LW.bmp", 10000);
 		}
 
 		if(!bRecord)
 			VS.m_Mem.Clear();
 	}
-	while(key != 27);
+	while (key != 27);
 
 	if(VS.m_Flags & RVLSYS_FLAGS_VALIDATION)
 	{
@@ -2157,6 +2262,9 @@ int main(int argc, char* argv[])
 
 	delete[] SizeArray;
 	delete[] VTKMessage;
+
+	if (RefHypMatchArray)
+		delete[] RefHypMatchArray;
 
 	GUI.CloseFigure("RVLPCSdemo");
 
@@ -2187,3 +2295,148 @@ void MessageCanNotOpenFile(CRVLGUI *pGUI, char *FileName)
 	delete[] str;
 }
 
+BOOL GetNextFileName(CRVLPSuLMVS *pVS) 
+{
+	if (pVS->m_Flags & RVLSYS_FLAGS_USE_SEQUENCE_FILE)
+	{
+		return GetImageInSequence(pVS);
+	}
+	else
+	{
+		return RVLGetNextFileName(pVS->m_ImageFileName, "00000-LW.bmp", 10000);
+	}
+	
+	
+}
+
+void GetAllSequenceData(CRVLPSuLMVS *pVS)
+{
+	if (pVS->m_Flags & RVLSYS_FLAGS_USE_SEQUENCE_FILE)
+	{
+		//Read sequence data 
+		FILE *seqFile= fopen(pVS->m_SequenceFileName, "r");
+		if (seqFile != NULL)
+		{
+			char sLine[500];
+			int iLeft, iMid, iRight;
+			int iStart, iEnd;
+			CString sFileName, sStartFileName, InputSampleFileName;
+
+			g_CurrentSequenceNo = 0;
+			g_CurrentImageNo = 0;
+
+			while (!feof(seqFile))
+			{
+				fgets(sLine, 500, seqFile);
+
+				IMAGE_SEQUENCE_DATA imageSequenceData;
+
+				sFileName = (CString)sLine;
+				iLeft = sFileName.Find('[', 0);
+				iMid = sFileName.Find(':', iLeft);
+				iRight = sFileName.Find(']', iMid);
+				sscanf(CT2A(sFileName.Mid(iLeft + 1, iMid - iLeft - 1)), "%d", &(imageSequenceData.StartNo));
+				sscanf(CT2A(sFileName.Mid(iMid + 1, iRight - iMid - 1)), "%d", &(imageSequenceData.EndNo));
+				//std::string stemp(CT2CA(sFileName.Mid(0, iLeft - 1).Trim()));
+				
+				imageSequenceData.ImageFileName = CT2CA(sFileName.Mid(0, iLeft).Trim());
+				
+				g_AllSequences.push_back(imageSequenceData);
+				
+
+			}
+
+			fclose(seqFile);
+
+			//Set first image
+			GetImageInSequence(pVS,true);
+		}
+	}
+	
+}
+
+
+BOOL GetImageInSequence(CRVLPSuLMVS *pVS, bool bInit)
+{
+	
+	if (bInit)
+	{
+		//set initial image
+		IMAGE_SEQUENCE_DATA& currentSequenceData = g_AllSequences[g_CurrentSequenceNo];
+		//Copy current file name
+		RVLCopyString((char *)(currentSequenceData.ImageFileName.c_str()), &(pVS->m_ImageFileName));
+
+		RVLSetFileNumber(pVS->m_ImageFileName, "00000-LW.bmp", currentSequenceData.StartNo);
+		
+		g_CurrentImageNo = currentSequenceData.StartNo;
+		
+		return TRUE;
+
+	}
+	else
+	{ 
+		//set start image in subset
+		if (g_StartNewSubSet && pVS->m_Flags & RVLSYS_FLAGS_BEST_SUBSET_HYPOTHESIS)
+		{
+			//if (g_CurrentSequenceNo < g_AllSequences.size())
+			//{
+				g_CurrentImageNo = g_LastSubSetImageNo;
+				//RVLSetFileNumber(pVS->m_ImageFileName, "00000-LW.bmp", g_CurrentImageNo);
+
+				IMAGE_SEQUENCE_DATA& currentSequenceData = g_AllSequences[g_CurrentSequenceNo];
+				//Copy current file name
+				RVLCopyString((char *)(currentSequenceData.ImageFileName.c_str()), &(pVS->m_ImageFileName));
+
+				RVLSetFileNumber(pVS->m_ImageFileName, "00000-LW.bmp", g_CurrentImageNo);
+
+				g_StartNewSubSet = false;
+				return TRUE;
+			//}
+			//else
+			//	return FALSE;
+		}
+		else 
+		{ 
+			g_CurrentImageNo = RVLGetFileNumber(pVS->m_ImageFileName, "00000-LW.bmp");
+		}
+
+		//Standard search for images in sequence
+		if ((g_CurrentSequenceNo < g_AllSequences.size()) && (g_CurrentImageNo >= g_AllSequences[g_CurrentSequenceNo].EndNo))
+		{
+			//increase
+			g_CurrentSequenceNo++;
+
+			if (g_CurrentSequenceNo < g_AllSequences.size())
+			{
+				IMAGE_SEQUENCE_DATA& currentSequenceData = g_AllSequences[g_CurrentSequenceNo];
+				//Copy current file name
+				RVLCopyString((char *)currentSequenceData.ImageFileName.c_str(), &(pVS->m_ImageFileName));
+
+				RVLSetFileNumber(pVS->m_ImageFileName, "00000-LW.bmp", currentSequenceData.StartNo);
+
+				g_CurrentImageNo = currentSequenceData.StartNo;
+
+				return TRUE;
+
+			}
+			else
+			{
+				return FALSE;
+			}
+		}
+		else
+		{
+			if (g_CurrentSequenceNo < g_AllSequences.size())
+			{
+				IMAGE_SEQUENCE_DATA& currentSequenceData = g_AllSequences[g_CurrentSequenceNo];
+				return RVLGetNextFileName(pVS->m_ImageFileName, "00000-LW.bmp", currentSequenceData.EndNo);
+			}
+			else
+			{
+				return FALSE;
+			}
+		}
+		
+	}
+	
+}

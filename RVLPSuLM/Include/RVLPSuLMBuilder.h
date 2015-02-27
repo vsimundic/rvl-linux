@@ -27,7 +27,6 @@
 //#define RVLPSULMBUILDER_HYPOTHESES_DEBUG
 //#define RVLPSULMBUILDER_HYPOTHESES_EVAL_LOG
 //#define RVLPSULMBUILDER_HYPOTHESES_EVAL_DEBUG
-//#define RVLPSULMBUILDER_HYPOTHESES_EVAL_DEBUG_LOG
 //#define RVLPSULM_CREATE_DEBUG_LOG
 //#define RVLPSULMBUILDER_MAP_DEBUG_LOG
 //#define RVLPSULMBUILDER_GET_LOCAL_MODELS_DEBUG_LOG
@@ -36,6 +35,7 @@
 //#define RVLPSULMBUILDER_HYPOTHESES_DEBUG_LOG
 //#define RVLPSULMBUILDER_HYPOTHESES_LAST_DOF_ACCU_DEBUG_LOG
 //#define RVLPSULMBUILDER_HYPOTHESES_LAST_DOF_ACCU_DEBUG_LOG
+//#define RVLPSULMBUILDER_HYPOTHESES_EVAL_DEBUG_LOG
 //#define RVLPSULMBUILDER_CONDITIONAL_PROBABILITY_TREE_DEBUG_LOG
 //#define RVLPSULMBUILDER_POSE_CONSTRAINT_PROBABILITY_DEBUG_LOG
 //#define RVLPSULMBUILDER_AUTO_MATCH_MATRIX_DEBUG_LOG
@@ -47,7 +47,7 @@
 
 //#define RVLPSULMBUILDER_HYPOTHESES_COMPLETE_QUEUE_SEARCH
 #define RVLPSULMBUILDER_HYPOTHESES_LAST_DOF_BY_EVIDENCE_ACCU
-#define RVLPSULMBUILDER_HYPOTHESES_LAST_DOF_PROBABILISTIC
+//#define RVLPSULMBUILDER_HYPOTHESES_LAST_DOF_PROBABILISTIC
 #define RVLPSULMBUILDER_GET_LOCAL_MODELS
 //#define RVLPSULMBUILDER_PROB_HYPOTHESES_EVAL
 #define RVLPSULMBUILDER_DISPLAY_MATCH_OVERLAP
@@ -105,6 +105,7 @@
 #define RVLPSULMBUILDER_FLAG2_HYPGEN_INIT_MATCHING_CONSTRAINTS	0x00000040
 #define RVLPSULMBUILDER_FLAG2_LINES_EDGES_VOID					0x00000080	
 #define RVLPSULMBUILDER_FLAG2_SURFACE_BOUNDARY					0x00000100
+#define RVLPSULMBUILDER_FLAG2_FIRST_ORDER_DEPENDENCY_TREE		0x00000200
 #define RVLPSULMBUILDER_CREATEMODEL_FLAG_PERMANENT				0x00000001
 #define RVLPSULMBUILDER_CREATEMODEL_FROM_IMAGE					0x00000002
 #define RVLPSULMBUILDER_CREATEMODEL_IMAGE_FROM_FILE				0x00000004
@@ -156,11 +157,6 @@ struct RVLPSULM_HG_NODE
 	double invt[3];
 	void *pNext;
 	void **pPtrToThis;
-};
-
-struct RVLPSULM_DEBUG_DATA
-{
-	CRVLGUI *pGUI;
 };
 
 struct RVLPSULM_LASTDOF_MATCH_DATA
@@ -231,6 +227,13 @@ struct RVLPSULM_MODEL_FUSION_FEATURE
 	void *vpFeature;
 	CRVLPSuLM *pMPSuLM;
 	void *pNext;
+};
+
+struct RVLPSULM_DEBUG_DATA
+{
+	CRVLGUI *pGUI;
+	RVLPSULM_MATCH2 *MatchArray;
+	int nMatches;
 };
 
 //struct RVLPSULM_MATCH
@@ -499,6 +502,7 @@ public:
 	//double m_BestHypothesisProbability;
 	//double m_BestHypothesisProbability5DOF;
 	double m_PriorProbabilityGlobal;
+	double m_PriorProbabilityWorldModel;
 
 	CRVL3DSurface2 *m_SurfaceMSArray;
 	CRVL3DLine2 *m_LineMSArray;
@@ -609,6 +613,10 @@ public:
 	int EvaluateHypothesis3( CRVLPSuLM * pSPSuLM,
 							 RVLPSULM_HYPOTHESIS *pHypothesis,
 							 bool bDynamicSurfaceDetection = false);
+	int EvaluateHypothesis3Simple(
+		CRVLPSuLM * pSPSuLM,
+		RVLPSULM_HYPOTHESIS *pHypothesis,
+		bool bDynamicSurfaceDetection = false);
 	double EvaluateHypothesis4( CRVLPSuLM * pSPSuLM,
 								RVLPSULM_HYPOTHESIS *pHypothesis,
 								DWORD Flags = RVLPSULMBUILDER_HYPEVAL4_FLAG_FIRST_ORDER_DEPENDENCY_TREE);
@@ -711,7 +719,8 @@ public:
 								DWORD Flags = 0x00000000,
 								int iHypothesis = 0,
 								CRVL3DSurface2 *pSelectedSurface = NULL,
-								CRVL3DLine2 *pSelectedLine = NULL);
+								CRVL3DLine2 *pSelectedLine = NULL,
+								RVL3DSURFACE_SAMPLE *pSelectedSurfSample = NULL);
 	CRVLPSuLM *GetPSuLM(int index);		
 	void PoseConstraintProbability(	CRVLPSuLM *pSPSuLM, 
 									CRVLPSuLM *pMPSuLM);
@@ -775,4 +784,17 @@ public:
 		int & ip,
 		int & iq,
 		int & ir);
+	void CompareHypotheses(
+		RVLPSULM_MATCH2 * MatchArray1, 
+		int nMatches1, 
+		RVLPSULM_MATCH2 * MatchArray2, 
+		int nMatches2, 
+		char * OutputFileName);
+private:
+	void MatchDiff(
+		RVLPSULM_MATCH2 * MatchArray1,
+		int nMatches1,
+		RVLPSULM_MATCH2 * MatchArray2,
+		int nMatches2,
+		FILE *fp);
 };
