@@ -397,7 +397,8 @@ void GenAndDispPSuLMScene(CRVLPSuLM *psulm, CRVLVTKRenderer* pRenderer, std::map
 	vtkSmartPointer<vtkImageData> texImg;
 	vtkSmartPointer<vtkTexture> texObj;
 	vtkSmartPointer<vtkBMPReader> bmpR = vtkSmartPointer<vtkBMPReader>::New();
-	vtkSmartPointer<vtkImageFlip> flipFilter;
+	vtkSmartPointer<vtkImageFlip> flipFilter = vtkSmartPointer<vtkImageFlip>::New();
+	flipFilter->SetFilteredAxis(1); // flip y axis;
 	//Array of pointers for texture objects
 	vtkSmartPointer<vtkTexture> texArray[50];
 
@@ -500,15 +501,18 @@ void GenAndDispPSuLMScene(CRVLPSuLM *psulm, CRVLVTKRenderer* pRenderer, std::map
 				iSample = iSampleOrig + currentC->iView;
 				RVLSetFileNumber(imageFileName, "00000-LW.bmp", iSample);
 				//std::cout << "Imagefile: " << imageFileName << std::endl;
+				//bmpR = vtkSmartPointer<vtkBMPReader>::New();
 				bmpR->SetFileName(imageFileName);
 				bmpR->Update();
 				//
-				flipFilter = vtkSmartPointer<vtkImageFlip>::New();
-				flipFilter->SetFilteredAxis(1); // flip y axis
+				//flipFilter = vtkSmartPointer<vtkImageFlip>::New();
+				//flipFilter->SetFilteredAxis(1); // flip y axis
 				flipFilter->SetInputConnection(bmpR->GetOutputPort());
 				flipFilter->Update();
 				//
-				texImg = flipFilter->GetOutput();
+				//texImg = flipFilter->GetOutput();
+				texImg = vtkSmartPointer<vtkImageData>::New();
+				texImg->DeepCopy(flipFilter->GetOutput());
 				texImg->GetDimensions(imgDims);
 				//
 				texObj = vtkSmartPointer<vtkTexture>::New();
@@ -697,6 +701,10 @@ void GenAndDispPSuLMScene(CRVLPSuLM *psulm, CRVLVTKRenderer* pRenderer, std::map
 	ren1->SetBackground(0.5294, 0.8078, 0.9803);
 	renWin->Render();
 	//iren->Start();
+
+	//releasing teaxtures
+	for (int i = 0; i < 50; i++)
+		texArray[i] = NULL;
 }
 
 //Function for adding hypothesis pose to VTK PSuLM scene
