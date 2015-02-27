@@ -502,6 +502,7 @@ public:
 	//double m_BestHypothesisProbability;
 	//double m_BestHypothesisProbability5DOF;
 	double m_PriorProbabilityGlobal;
+	double m_PriorProbabilityWorldModel;
 
 	CRVL3DSurface2 *m_SurfaceMSArray;
 	CRVL3DLine2 *m_LineMSArray;

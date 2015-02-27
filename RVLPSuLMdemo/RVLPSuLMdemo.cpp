@@ -546,10 +546,13 @@ int main(int argc, char* argv[])
 					VS.m_PSuLMBuilder.GetPanTilt(VS.m_ImageFileName, &PoseTemp, iTemp, command);
 
 					VS.Update(bKinect ? 0x00000000 : RVLPSULMBUILDER_CREATEMODEL_IMAGE_FROM_FILE);
-					if (VS.m_PSuLMBuilder.m_HypothesisArray[0]->cost > g_BestCost)
+					if (VS.m_PSuLMBuilder.m_nHypotheses > 0)
 					{
-						g_BestCost = VS.m_PSuLMBuilder.m_HypothesisArray[0]->cost;
-						strcpy(g_BestSubSetImageFileName, VS.m_ImageFileName);
+						if (VS.m_PSuLMBuilder.m_HypothesisArray[0]->cost > g_BestCost)
+						{
+							g_BestCost = VS.m_PSuLMBuilder.m_HypothesisArray[0]->cost;
+							strcpy(g_BestSubSetImageFileName, VS.m_ImageFileName);
+						}
 					}
 					GetNextFileName(&VS);
 
@@ -567,7 +570,8 @@ int main(int argc, char* argv[])
 				
 			}
 
-
+			if (g_BestCost == -1000000)
+				GUI.Message("No hypotheses generated!", 300, 100, cvScalar(0, 0, 255));
 
 			VS.Update(bKinect ? 0x00000000 : RVLPSULMBUILDER_CREATEMODEL_IMAGE_FROM_FILE);
 

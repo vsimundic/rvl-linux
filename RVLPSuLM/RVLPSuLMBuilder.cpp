@@ -7479,7 +7479,6 @@ void CRVLPSuLMBuilder::Localization(CRVLPSuLM * pSPSuLM,
 	int cost = 0;
 	int minCost;
 	double maxP = 0.0;
-	double PriorProbabilityWorldModel;
 
 	if(HypEvalMethod == RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD_IBM)
 		minCost = 1e8; //Search for min cost
@@ -7489,13 +7488,13 @@ void CRVLPSuLMBuilder::Localization(CRVLPSuLM * pSPSuLM,
 	{
 		if (m_Flags2 & RVLPSULMBUILDER_FLAG2_FIRST_ORDER_DEPENDENCY_TREE)
 		{
-			PriorProbabilityWorldModel = ConditionalProbabilityTree(pSPSuLM);
+			m_PriorProbabilityWorldModel = ConditionalProbabilityTree(pSPSuLM);
 
 			EvaluateHypothesisFlags = RVLPSULMBUILDER_HYPEVAL4_FLAG_FIRST_ORDER_DEPENDENCY_TREE;
 		}
 		else
 		{
-			PriorProbabilityWorldModel = 0.0;
+			m_PriorProbabilityWorldModel = 0.0;
 
 			EvaluateHypothesisFlags = 0x00000000;
 		}
@@ -7785,7 +7784,7 @@ void CRVLPSuLMBuilder::Localization(CRVLPSuLM * pSPSuLM,
 
 		if(HypEvalMethod == RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD_P)
 		{
-			pHypothesis->Probability = P - PriorProbabilityWorldModel;
+			pHypothesis->Probability = P - m_PriorProbabilityWorldModel;
 
 			pHypothesis->cost = DOUBLE2INT(1000.0 * pHypothesis->Probability);
 		}
@@ -8209,12 +8208,12 @@ void CRVLPSuLMBuilder::Localization(CRVLPSuLM * pSPSuLM,
 					//for(i = 0; i < nSFeatures; i++)
 					//	m_SMatchArray[i].b = false;
 
-					//PriorProbabilityWorldModel = ConditionalProbabilityTree(pSPSuLM, pMPSuLM);
+					//m_PriorProbabilityWorldModel = ConditionalProbabilityTree(pSPSuLM, pMPSuLM);
 				
 					pMPSuLM->m_PriorProbabilityLocal += exp(-pMPSuLM->m_pHypothesis->Probability);
 
 					//pMPSuLM->m_PosteriorProbabilityLocal5DOF = 1.0 / pMPSuLM->m_PriorProbabilityLocal;
-					//pMPSuLM->m_PosteriorProbabilityLocal5DOF = pMPSuLM->m_pHypothesis->Probability - PriorProbabilityWorldModel;
+					//pMPSuLM->m_PosteriorProbabilityLocal5DOF = pMPSuLM->m_pHypothesis->Probability - m_PriorProbabilityWorldModel;
 					pMPSuLM->m_PosteriorProbabilityLocal5DOF = pMPSuLM->m_pHypothesis->Probability;
 
 					PoseConstraintProbability(pSPSuLM, pMPSuLM);
@@ -8229,7 +8228,8 @@ void CRVLPSuLMBuilder::Localization(CRVLPSuLM * pSPSuLM,
 
 			//pHypothesisPtr = (RVLQLIST_PTR_ENTRY *)(m_RepresentativeHypothesisList.pFirst);
 
-			double fTmp = BestHypothesisProbability + log(m_PriorProbabilityGlobal);
+			//double fTmp = BestHypothesisProbability + log(m_PriorProbabilityGlobal);
+			double fTmp = 0.0;
 
 			//while(pHypothesisPtr)
 			for(i = 0; i < m_nHypotheses; i++)
@@ -8260,7 +8260,7 @@ void CRVLPSuLMBuilder::Localization(CRVLPSuLM * pSPSuLM,
 
 					P = EvaluateHypothesis4(pSPSuLM, pHypothesis, EvaluateHypothesisFlags | RVLPSULMBUILDER_HYPEVAL4_FLAG_DYNAMIC_SURF_DETECT);
 
-					pHypothesis->Probability = P - PriorProbabilityWorldModel;
+					pHypothesis->Probability = P - m_PriorProbabilityWorldModel;
 
 					pHypothesis->cost = DOUBLE2INT(1e3 * (pHypothesis->Probability - fTmp));
 
@@ -23237,7 +23237,7 @@ void CRVLPSuLMBuilder::DisplayHypothesis(CRVLGUI *pGUI,
 			if (m_Flags2 & RVLPSULMBUILDER_FLAG2_HYPOTHESIS_EVALUATION_SAMPLE_MATCHING)
 				EvaluateHypothesisFlags |= RVLPSULMBUILDER_HYPEVAL4_FLAG_DYNAMIC_SURF_DETECT;
 
-			pHypothesis->Probability = EvaluateHypothesis4(pSPSuLM, pHypothesis, EvaluateHypothesisFlags);
+			pHypothesis->Probability = EvaluateHypothesis4(pSPSuLM, pHypothesis, EvaluateHypothesisFlags) - m_PriorProbabilityWorldModel;
 		}
 		else
 			CreateMatchMatrix(pSPSuLM, pMPSuLM, &(pHypothesis->PoseSM), 1.0);
