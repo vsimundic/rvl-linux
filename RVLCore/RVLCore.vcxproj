@@ -172,6 +172,7 @@
     <ClCompile Include="RVLFigure.cpp" />
     <ClCompile Include="RVLGUI.cpp" />
     <ClCompile Include="RVLHistogram.cpp" />
+    <ClCompile Include="RVLImageFilter.cpp" />
     <ClCompile Include="RVLKinect.cpp" />
     <ClCompile Include="RVLMChain.cpp" />
     <ClCompile Include="RVLMChain2.cpp" />
@@ -223,6 +224,7 @@
     <ClInclude Include="Include\RVLFigure.h" />
     <ClInclude Include="Include\RVLGUI.h" />
     <ClInclude Include="Include\RVLHistogram.h" />
+    <ClInclude Include="Include\RVLImageFilter.h" />
     <ClInclude Include="Include\RVLKinect.h" />
     <ClInclude Include="Include\RVLMChain.h" />
     <ClInclude Include="Include\RVLMChain2.h" />
