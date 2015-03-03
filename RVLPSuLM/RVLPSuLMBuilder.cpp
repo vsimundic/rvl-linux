@@ -73,8 +73,10 @@ CRVLPSuLMBuilder::CRVLPSuLMBuilder(void)
 	m_maxnHypothesesPerModel = 20;
 	m_maxnDominant3DSurfaces = 20;
 	m_maxnDominant3DSurfacesComplex = 30;
+	//m_maxnDominant3DSurfacesComplex = 100;
 	m_maxnDominant3DLines = 20;
 	m_maxnDominant3DLinesComplex = 30;
+	//m_maxnDominant3DLinesComplex = 100;
 	m_maxnExpandedNodes = 1000;
 	m_RotHypTol = 3.0;	// deg
 	m_tHypTol = 500.0;	// mm
@@ -6981,7 +6983,7 @@ void CRVLPSuLMBuilder::Localization(CRVLPSuLM * pSPSuLM,
 #ifdef RVLPSULMBUILDER_MAPBUILDING_6DOF
 	if(m_HypothesisList.m_nElements == 0)
 	{
-		m_LocalizationTime = m_pTimer->GetTime() - StartTime;
+		m_LocalizationTime = m_pTimer->GetTime() - StartTimeTotal;
 
 		m_nHypotheses = m_nPlausibleHypotheses = 0;
 
@@ -9210,6 +9212,7 @@ void CRVLPSuLMBuilder::Localization(CRVLPSuLM * pSPSuLM,
 
 #pragma endregion
 	}
+#ifdef NEVER
 	else	// if((m_Flags & RVLPSULMBUILDER_FLAG_PARTICLE_FILTER) == 0 || 
 			// (m_Flags & RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD) != RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD_SSM)
 	if(m_nHypotheses > 0 && pBestHypothesis != NULL)
@@ -9492,6 +9495,7 @@ void CRVLPSuLMBuilder::Localization(CRVLPSuLM * pSPSuLM,
 			m_minModelPlaneExists = pBestHypothesis->pMPSuLM->m_minPlaneExists;
 		}
 	}
+#endif
 
 	m_LocalizationTime = m_pTimer->GetTime() - StartTimeTotal;
 }
@@ -10685,6 +10689,22 @@ int CRVLPSuLMBuilder::EvaluateHypothesis3Simple(
 	RVLQLIST_PTR_ENTRY *pSamplePtr;
 	double *XS;
 	RVL3DSURFACE_SAMPLE *pSampleS;
+
+	for (i = 0; i < nSSurfaces; i++)
+	{
+		pS3DSurface = pSPSuLM->m_3DSurfaceArray[i];
+
+		pS3DSurface->m_Flags &= ~RVL3DSURFACE_FLAG_REMOVED;
+
+		pSampleS = (RVL3DSURFACE_SAMPLE *)(pS3DSurface->m_Samples.pFirst);
+
+		while (pSampleS)
+		{
+			pSampleS->Flags = 0x00;
+
+			pSampleS = (RVL3DSURFACE_SAMPLE *)(pSampleS->pNext);
+		}
+	}
 
 #ifdef NEVER	// filling m_CellArray2 is done in InitHypothesisEvaluation3()
 
@@ -13157,7 +13177,7 @@ void CRVLPSuLMBuilder::Hypotheses3(	CRVLPSuLM *pSPSuLM,
 									double *PInit,				// Uncertainty for initial matching
 									CRVLPSuLM * pPrevSPSuLM)
 {
-	int nHypotheses = m_maxnHypothesesPerModel;
+	int nHypotheses = m_refnHypotheses;
 
 	int maxnM3DSurfaces = m_maxnDominant3DSurfacesComplex;
 
@@ -14061,8 +14081,6 @@ last
 
 				if(bNewHypothesis)
 				{
-					nFeatures++;
-
 #ifdef RVLPSULMBUILDER_HYPOTHESES_DEBUG_LOG
 					fprintf(fpLog, "Rotation precision is sufficient.\n");
 #endif
@@ -15687,6 +15705,8 @@ last
 #endif
 
 							HypothesisIndex++;
+
+							nFeatures++;
 
 							m_HypothesisList.Add(pHypothesis);	
 

@@ -13,6 +13,7 @@ CRVLPSuLMVS::CRVLPSuLMVS(void)
 	m_MatchMatrixGT = NULL;
 	//m_HypothesisArrayGT = NULL;
 	m_nSamples = 0;
+	m_ResPose.m_ParamFlags = 0x00000000;
 }
 
 CRVLPSuLMVS::~CRVLPSuLMVS(void)
@@ -53,6 +54,8 @@ void CRVLPSuLMVS::CreateParamList()
 	pParamData = m_ParamList.AddParam("VS.GroundTruthFileName", RVLPARAM_TYPE_STRING, &(m_GroundTruth.m_FileName));
 	pParamData = m_ParamList.AddParam("VS.Record", RVLPARAM_TYPE_FLAG, &m_Flags);
 	m_ParamList.AddID(pParamData, "yes", RVLSYS_FLAGS_RECORD);
+	pParamData = m_ParamList.AddParam("VS.ReviewResults", RVLPARAM_TYPE_FLAG, &m_Flags);
+	m_ParamList.AddID(pParamData, "yes", RVLSYS_FLAGS_REVIEW_RESULTS);
 }
 
 void CRVLPSuLMVS::Init(char * CfgFile2Name)
@@ -125,7 +128,7 @@ void CRVLPSuLMVS::Init(char * CfgFile2Name)
 
 	LoadMatchMatrix();
 
-	if(m_Flags & RVLSYS_FLAGS_EDIT_MAP)
+	if(m_Flags & (RVLSYS_FLAGS_EDIT_MAP | RVLSYS_FLAGS_REVIEW_RESULTS))
 	{
 		m_PSuLMBuilder.m_Flags &= ~(RVLPSULMBUILDER_FLAG_MODE | RVLPSULMBUILDER_FLAG_MAPBUILDING);
 		m_PSuLMBuilder.m_Flags2 &= ~RVLPSULMBUILDER_FLAG2_SCENE_FUSION;
@@ -455,8 +458,10 @@ void CRVLPSuLMVS::PSuLMBasedRLMUpdate(DWORD Flags)
 			m_PSuLMBuilder.Localization(m_pPSuLM, &m_PoseA0, m_pPrevPSuLM);
 	}
 
-	if((m_PSuLMBuilder.m_Flags & RVLPSULMBUILDER_FLAG_MODE) == RVLPSULMBUILDER_FLAG_MODE_LOCALIZATION)
+	if ((m_PSuLMBuilder.m_Flags & RVLPSULMBUILDER_FLAG_MODE) == RVLPSULMBUILDER_FLAG_MODE_LOCALIZATION)
 		m_PSuLMBuilder.Localization(m_pPSuLM, &m_PoseA0);
+	else
+		m_PSuLMBuilder.m_PriorProbabilityWorldModel = 0.0;
 
 	char *DepthImageFileName = RVLCreateFileName(m_ImageFileName, "-LW.bmp", -1, "-D.txt");
 

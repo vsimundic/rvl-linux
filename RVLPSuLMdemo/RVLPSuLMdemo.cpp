@@ -102,6 +102,10 @@ int main(int argc, char* argv[])
 {
 	printf("Initialization...\n");
 
+	FILE *fpExecTime = fopen("C:\\RVL\\ExpRez\\ExecTime.txt", "w");
+
+	fclose(fpExecTime);
+
 	CRVL3DPose NullPose;
 
 	RVLNULL3VECTOR(NullPose.m_X);
@@ -136,7 +140,6 @@ int main(int argc, char* argv[])
 	VS.CreateParamList();
 
 	VS.Init("RVLPSuLMdemo.cfg");
-	GetAllSequenceData(&VS);
 
 	// create GUI
 
@@ -150,6 +153,37 @@ int main(int argc, char* argv[])
 #endif
 
 	GUI.Init();
+
+	// initialize result review/sample sequence
+
+	char ResImageFileName[1001];
+
+	if (VS.m_Flags & RVLSYS_FLAGS_REVIEW_RESULTS)
+	{
+		VS.m_fpRes = fopen("C:\\RVL\\ExpRez\\ExpRes.txt", "r");
+
+		if (VS.m_fpRes == NULL)
+		{
+			GUI.Message("Cannot find files with results!", 400, 100, cvScalar(0, 0, 255));
+
+			return 0;
+		}
+
+		fscanf(VS.m_fpRes, "%d\t%lf\t%lf\t%lf\t%lf\t%lf\t%lf\t%s\n", &(VS.m_iResPSuLM), &(VS.m_ResPose.m_Alpha), &(VS.m_ResPose.m_Beta), &(VS.m_ResPose.m_Theta),
+			VS.m_ResPose.m_X, VS.m_ResPose.m_X + 1, VS.m_ResPose.m_X + 2, ResImageFileName);
+
+		VS.m_ResPose.UpdateRotLL();
+
+		VS.m_ImageFileName = RVLCreateString(ResImageFileName);
+	}
+	else
+	{
+		VS.m_fpRes = fopen("C:\\RVL\\ExpRez\\ExpRes.txt", "w");
+
+		fclose(VS.m_fpRes);
+
+		GetAllSequenceData(&VS);
+	}
 
 	/////
 
@@ -473,9 +507,9 @@ int main(int argc, char* argv[])
 
 		if(!bRecord && bLocalize)
 		{
-			if(VS.m_Flags & RVLSYS_FLAGS_EDIT_MAP)
-			{			
-				pPSuLM = VS.m_PSuLMBuilder.m_PSuLMArray[iMPSuLM];				
+			if (VS.m_Flags & RVLSYS_FLAGS_EDIT_MAP)
+			{
+				pPSuLM = VS.m_PSuLMBuilder.m_PSuLMArray[iMPSuLM];
 
 				RVLCopyString(pPSuLM->m_FileName, &(VS.m_ImageFileName));
 
@@ -528,7 +562,7 @@ int main(int argc, char* argv[])
 			//VS.m_PSuLMBuilder.m_Flags |= RVLPSULMBUILDER_FLAG_KIDNAPPED;
 
 			g_StartNewSubSet = false; //This flag needs to be reset
-			if (VS.m_Flags & RVLSYS_FLAGS_BEST_SUBSET_HYPOTHESIS)
+			if ((VS.m_Flags & (RVLSYS_FLAGS_BEST_SUBSET_HYPOTHESIS | RVLSYS_FLAGS_REVIEW_RESULTS)) == RVLSYS_FLAGS_BEST_SUBSET_HYPOTHESIS)
 			{
 				unsigned char command;
 				CRVL3DPose PoseTemp;
@@ -540,6 +574,7 @@ int main(int argc, char* argv[])
 				g_BestCost = -1000000;
 				//Copy current file name
 				strcpy(g_BestSubSetImageFileName, VS.m_ImageFileName);
+				BOOL bFileExists;
 				
 				do
 				{
@@ -554,13 +589,13 @@ int main(int argc, char* argv[])
 							strcpy(g_BestSubSetImageFileName, VS.m_ImageFileName);
 						}
 					}
-					GetNextFileName(&VS);
+					bFileExists = GetNextFileName(&VS);
 
 				} while (command != 'C');
 
 				
 				//Store last image number
-				g_LastSubSetImageNo = RVLGetFileNumber(VS.m_ImageFileName, "00000-LW.bmp");
+				g_LastSubSetImageNo = (bFileExists ? RVLGetFileNumber(VS.m_ImageFileName, "00000-LW.bmp") : -1);
 				g_StartNewSubSet = true;
 
 				//Reset current image to best subsetimage
@@ -574,6 +609,73 @@ int main(int argc, char* argv[])
 				GUI.Message("No hypotheses generated!", 300, 100, cvScalar(0, 0, 255));
 
 			VS.Update(bKinect ? 0x00000000 : RVLPSULMBUILDER_CREATEMODEL_IMAGE_FROM_FILE);
+
+			if (VS.m_Flags & RVLSYS_FLAGS_REVIEW_RESULTS)
+			{
+				if (HypEvalMethod == RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD_P)
+					VS.m_PSuLMBuilder.InitHypothesisEvaluation4(VS.m_pPSuLM);
+
+				if (VS.m_PSuLMBuilder.m_Flags2 & RVLPSULMBUILDER_FLAG2_HYPOTHESIS_EVALUATION_SAMPLE_MATCHING)
+					VS.m_PSuLMBuilder.InitHypothesisEvaluation3(VS.m_pPSuLM);
+
+				if (VS.m_iResPSuLM >= 0)
+				{
+					VS.m_PSuLMBuilder.m_nHypotheses = VS.m_PSuLMBuilder.m_HypothesisList.m_nElements = 1;
+
+					if (HypothesisMem)
+						delete[] HypothesisMem;
+
+					HypothesisMem = new RVLPSULM_HYPOTHESIS[1];
+
+					pHypothesis = HypothesisMem;
+
+					pHypothesis->pMPSuLM = VS.m_PSuLMBuilder.m_PSuLMArray[VS.m_iResPSuLM];
+
+					pHypothesis->PoseSM.Copy(&(VS.m_ResPose));
+
+					pHypothesis->iRepresentative = 0xffffffff;
+
+					pHypothesis->Probability = 0.0;
+
+					pHypothesis->pMPSuLM->m_PosteriorProbabilityLocal = pHypothesis->pMPSuLM->m_PosteriorProbabilityGlobal = 0.0;
+
+					pHypothesis->pMPSuLM->m_PosteriorProbabilityLocal5DOF = 0.0;
+
+					if (VS.m_PSuLMBuilder.m_HypothesisArray)
+						delete[] VS.m_PSuLMBuilder.m_HypothesisArray;
+
+					VS.m_PSuLMBuilder.m_HypothesisArray = new RVLPSULM_HYPOTHESIS *[1];
+
+					VS.m_PSuLMBuilder.m_HypothesisArray[0] = pHypothesis;
+				}
+				else
+					VS.m_PSuLMBuilder.m_nHypotheses = 0;
+			}
+			else
+			{
+				fpExecTime = fopen("C:\\RVL\\ExpRez\\ExecTime.txt", "a");
+
+				fprintf(fpExecTime, "%lf\t%lf\t%s\n", VS.m_PSuLMBuilder.m_CreateTime, VS.m_PSuLMBuilder.m_LocalizationTime, VS.m_ImageFileName);
+
+				fclose(fpExecTime);
+
+				VS.m_fpRes = fopen("C:\\RVL\\ExpRez\\ExpRes.txt", "a");
+
+				if (VS.m_PSuLMBuilder.m_nHypotheses > 0)
+				{
+					pHypothesis = VS.m_PSuLMBuilder.m_HypothesisArray[0];
+
+					fprintf(VS.m_fpRes, "%d\t%lf\t%lf\t%lf\t%lf\t%lf\t%lf\t%s\n",
+						pHypothesis->pMPSuLM->m_Index,
+						pHypothesis->PoseSM.m_Alpha, pHypothesis->PoseSM.m_Beta, pHypothesis->PoseSM.m_Theta,
+						pHypothesis->PoseSM.m_X[0], pHypothesis->PoseSM.m_X[1], pHypothesis->PoseSM.m_X[2],
+						VS.m_ImageFileName);
+				}
+				else
+					fprintf(VS.m_fpRes, "%d\t%lf\t%lf\t%lf\t%lf\t%lf\t%lf\t%s\n", -1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, VS.m_ImageFileName);
+
+				fclose(VS.m_fpRes);
+			}
 
 			//VS.Create3DMeshFromComplexPSuLM(VS.m_ImageFileName);
 
@@ -1413,6 +1515,8 @@ int main(int argc, char* argv[])
 			//	VS.StoreHypothesesToMatchMatrix(RVLGetFileNumber(VS.m_ImageFileName, "00000-LW.bmp"));
 			//}
 
+			BOOL bFileExists = TRUE;
+
 			if(bKinect)
 			{
 				int iSample = RVLGetFileNumber(VS.m_ImageFileName, "00000-LW.bmp");
@@ -1466,7 +1570,7 @@ int main(int argc, char* argv[])
 				int x, y, z, pan, tilt, roll, iSample0;
 				FILE *fpOdometry;
 
-				while (GetNextFileName(&VS)) //RVLGetNextFileName(VS.m_ImageFileName, "00000-LW.bmp", 10000))
+				while (bFileExists = GetNextFileName(&VS)) //RVLGetNextFileName(VS.m_ImageFileName, "00000-LW.bmp", 10000))
 				{
 					iSample_ = RVLGetFileNumber(VS.m_ImageFileName, "00000-LW.bmp");
 
@@ -1487,14 +1591,21 @@ int main(int argc, char* argv[])
 
 						break;
 					}
-				}
+				}				
 
 				RVLSetFileNumber(VS.m_ImageFileName, "00000-LW.bmp", iSample);
 
 				delete[] OdometryFileName;
 			}
 			else
-				GetNextFileName(&VS);// RVLGetNextFileName(VS.m_ImageFileName, "00000-LW.bmp", 10000);
+				bFileExists = GetNextFileName(&VS);// RVLGetNextFileName(VS.m_ImageFileName, "00000-LW.bmp", 10000);
+
+			if (!bFileExists)
+			{
+				GUI.Message("All files are processed.", 500, 100, cvScalar(0, 255, 0));
+
+				break;
+			}
 		}
 
 		if(!bRecord)
@@ -1552,7 +1663,23 @@ void MessageCanNotOpenFile(CRVLGUI *pGUI, char *FileName)
 
 BOOL GetNextFileName(CRVLPSuLMVS *pVS) 
 {
-	if (pVS->m_Flags & RVLSYS_FLAGS_USE_SEQUENCE_FILE)
+	if (pVS->m_Flags & RVLSYS_FLAGS_REVIEW_RESULTS)
+	{
+		char ResImageFileName[1001];
+
+		if (feof(pVS->m_fpRes))
+			return FALSE;
+
+		fscanf(pVS->m_fpRes, "%d\t%lf\t%lf\t%lf\t%lf\t%lf\t%lf\t%s\n", &(pVS->m_iResPSuLM), &(pVS->m_ResPose.m_Alpha), &(pVS->m_ResPose.m_Beta), &(pVS->m_ResPose.m_Theta),
+			pVS->m_ResPose.m_X, pVS->m_ResPose.m_X + 1, pVS->m_ResPose.m_X + 2, ResImageFileName);
+
+		pVS->m_ResPose.UpdateRotLL();
+
+		pVS->m_ImageFileName = RVLCreateString(ResImageFileName);
+
+		return TRUE;
+	}
+	else if (pVS->m_Flags & RVLSYS_FLAGS_USE_SEQUENCE_FILE)
 	{
 		return GetImageInSequence(pVS);
 	}
@@ -1606,8 +1733,7 @@ void GetAllSequenceData(CRVLPSuLMVS *pVS)
 			//Set first image
 			GetImageInSequence(pVS,true);
 		}
-	}
-	
+	}	
 }
 
 
@@ -1635,6 +1761,8 @@ BOOL GetImageInSequence(CRVLPSuLMVS *pVS, bool bInit)
 		{
 			//if (g_CurrentSequenceNo < g_AllSequences.size())
 			//{
+			if (g_LastSubSetImageNo >= 0)
+			{
 				g_CurrentImageNo = g_LastSubSetImageNo;
 				//RVLSetFileNumber(pVS->m_ImageFileName, "00000-LW.bmp", g_CurrentImageNo);
 
@@ -1646,9 +1774,9 @@ BOOL GetImageInSequence(CRVLPSuLMVS *pVS, bool bInit)
 
 				g_StartNewSubSet = false;
 				return TRUE;
-			//}
-			//else
-			//	return FALSE;
+			}
+			else
+				return FALSE;
 		}
 		else 
 		{ 

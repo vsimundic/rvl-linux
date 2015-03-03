@@ -2,6 +2,7 @@
 #define RVLSYS_FLAGS_EDIT_MAP				0x00020000
 #define RVLSYS_FLAGS_VALIDATION				0x00040000
 #define RVLSYS_FLAGS_RECORD					0x00080000
+#define RVLSYS_FLAGS_REVIEW_RESULTS			0x00100000
 
 //struct RVLPSULM_HYPOTHESIS_GT
 //{
@@ -81,4 +82,7 @@ public:
 	//RVLPSULM_HYPOTHESIS_GT *m_HypothesisArrayGT;
 	//int m_nMatches;
 	int m_nSamples;
+	CRVL3DPose m_ResPose;
+	int m_iResPSuLM;
+	FILE *m_fpRes;
 };
