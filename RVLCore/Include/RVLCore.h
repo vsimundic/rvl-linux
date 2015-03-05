@@ -56,6 +56,7 @@
 #include "RVLVTK.h"
 #endif
 #include "RVLVTKRenderer.h"
+#include "RVLImageFilter.h"
 
 extern CvMat *RVLMatrix31;
 extern CvMat *RVLMatrixHeader31;

@@ -2,11 +2,12 @@
 //
 
 //#include "highgui.h"
-//
+//C headers
 #include <stdio.h>
 #include <time.h>
 //#include <stdafx.h>
 #include <atlstr.h>
+//RVL headers
 #include "RVLCore.h"
 #include "RVLPCS.h"
 #include "RVLRLM.h"
@@ -27,6 +28,7 @@ VTK_MODULE_INIT(vtkRenderingFreeType);//(vtkRenderingFreeTypeOpenGL);
 #include <map>
 #include <string>
 #include <sstream>
+
 
 #define RVLPSULMDEMO_DISPLAY_ONLY_REPRESENTATIVE_HYPOTHESES
 //#define RVLPSULMDEMO_DISPLAY_ONLY_BEST_LOCAL_MODEL_HYPOTHESES
@@ -122,6 +124,9 @@ bool blackBackground = false;
 std::string g_SelectedObject = "";
 //Definition of iterator type
 typedef std::map<std::string, VTKActorObj*>::iterator vtk_map_it_type;
+//Reference PSuLM
+CRVLPSuLM* refPSuLM;
+int vtkHypModelIdx = 0;
 #endif
 
 #ifdef RVLVTK
@@ -481,6 +486,11 @@ void GenAndDispPSuLMScene(CRVLPSuLM *psulm, CRVLVTKRenderer* pRenderer, std::map
 	//Actor name
 	std::string actName = "";
 	std::stringstream ss;
+	ss.str("");
+	ss.clear();
+
+	//OpenCV objects
+	IplImage* texCVimg = cvCreateImage(cvSize(320, 240), IPL_DEPTH_8U, 3); //needed for texture work
 
 	//generating random color
 	//unsigned char **color = new unsigned char*[psulm->m_n3DSurfacesTotal * 10];	//best guess that there is max 3 contours per surface
@@ -538,20 +548,22 @@ void GenAndDispPSuLMScene(CRVLPSuLM *psulm, CRVLVTKRenderer* pRenderer, std::map
 			{
 				iSample = iSampleOrig + currentC->iView;
 				RVLSetFileNumber(imageFileName, "00000-LW.bmp", iSample);
-				//std::cout << "Imagefile: " << imageFileName << std::endl;
-				//bmpR = vtkSmartPointer<vtkBMPReader>::New();
+				//
 				bmpR->SetFileName(imageFileName);
 				bmpR->Update();
-				//
-				//flipFilter = vtkSmartPointer<vtkImageFlip>::New();
-				//flipFilter->SetFilteredAxis(1); // flip y axis
+				////
+
 				flipFilter->SetInputConnection(bmpR->GetOutputPort());
 				flipFilter->Update();
 				//
-				//texImg = flipFilter->GetOutput();
 				texImg = vtkSmartPointer<vtkImageData>::New();
 				texImg->DeepCopy(flipFilter->GetOutput());
 				texImg->GetDimensions(imgDims);
+
+				char *scalarData = (char *)texImg->GetScalarPointer();
+				memcpy(texCVimg->imageData, scalarData, texCVimg->width * texCVimg->height * 3 * sizeof(char));
+				texCVimg = CRVLImageFilter::RVLFilterNHS(texCVimg);
+				memcpy(scalarData, texCVimg->imageData, texCVimg->width * texCVimg->height * 3 * sizeof(char));
 				//
 				texObj = vtkSmartPointer<vtkTexture>::New();
 				texObj->SetInputData(texImg);
@@ -619,8 +631,9 @@ void GenAndDispPSuLMScene(CRVLPSuLM *psulm, CRVLVTKRenderer* pRenderer, std::map
 			colorObj[1] = (unsigned char)(rand() * 255);
 			colorObj[2] = (unsigned char)(rand() * 255);
 			color.push_back(colorObj);
-			actor->GetProperty()->SetColor((double)(colorObj[0] / 255.0), (double)(colorObj[1] / 255.0), (double)(colorObj[2] / 255.0));// ((double)color[vtkobjs->size()][0] / 255.0, (double)color[vtkobjs->size()][1] / 255.0, (double)color[vtkobjs->size()][2] / 255.0);
+			//actor->GetProperty()->SetColor((double)(colorObj[0] / 255.0), (double)(colorObj[1] / 255.0), (double)(colorObj[2] / 255.0));// ((double)color[vtkobjs->size()][0] / 255.0, (double)color[vtkobjs->size()][1] / 255.0, (double)color[vtkobjs->size()][2] / 255.0);
 			actor->SetTexture(texObj);
+			actor->GetProperty()->LightingOff();
 			//If it is added transfor needs to be applied
 			if (add)
 				actor->SetUserTransform(transform);
@@ -805,7 +818,7 @@ void AddHypothesisToPSuLMScene(CRVLVTKRenderer* pRenderer, std::map<std::string,
 	//Actor name
 	std::string actName = "";
 	std::stringstream ss;
-	ss << "Model_" << hypIdx << "HypothesisCone";
+	ss << "Model_" << hypIdx << "_HypothesisCone";
 	actName = ss.str();
 	ss.str("");
 	ss.clear();
@@ -941,6 +954,7 @@ int main(int argc, char* argv[])
 	std::map<std::string, VTKActorObj*>* actorObjs = new std::map<std::string, VTKActorObj*>();
 	//Needed for visualization 
 	CRVLPSuLM* vtkModelPSuLM;
+	CRVL3DPose* vtkPose3D = new CRVL3DPose();
 	RVLPSULM_NEIGHBOUR* vtkNeighbourPSuLM;
 	RVLQLIST_PTR_ENTRY* vtkNeighbourPtr;
 	//
@@ -1091,7 +1105,7 @@ int main(int argc, char* argv[])
 	if(!bKinect)
 		RVLGetFirstValidFileName(VS.m_ImageFileName, "00000-sl.bmp", 10000);
 
-	bool bVTKRendererActive = false;
+	bool bVTKRendererActive = true;
 	int iVTK3DModel = 0;
 
 	char VTK3DModelFileName[] = "VTK3DModel_00000.ply";
@@ -1713,6 +1727,50 @@ int main(int argc, char* argv[])
 				bRefresh = true;
 
 				break;
+			case 'H':	//Add hypothesis to current scene
+
+				//Add best hypothesis to scene
+				//AddHypothesisToPSuLMScene(&Renderer, actorObjs, &VS.m_PSuLMBuilder.m_HypothesisArray[iHypothesis]->PoseSM, iHypothesis);
+				vtkModelPSuLM = (CRVLPSuLM*)VS.m_PSuLMBuilder.m_HypothesisArray[0]->pMPSuLM;
+				//check if hypothesis is linked to reference PSuLM
+				if (vtkModelPSuLM == refPSuLM)
+				{
+					AddHypothesisToPSuLMScene(&Renderer, actorObjs, &VS.m_PSuLMBuilder.m_HypothesisArray[0]->PoseSM, vtkHypModelIdx);
+					vtkHypModelIdx++;
+				}
+				vtkNeighbourPtr = (RVLQLIST_PTR_ENTRY*)refPSuLM->m_NeighbourList->pFirst;
+				double *R1;
+				double *t1;
+				double *R2;
+				double *t2;
+				double *R;
+				double *t;
+
+				while (vtkNeighbourPtr)
+				{
+					vtkNeighbourPSuLM = (RVLPSULM_NEIGHBOUR*)vtkNeighbourPtr->Ptr;
+					//check if neighbour is reference PSuLM
+					if (vtkNeighbourPSuLM->pPSuLM == vtkModelPSuLM)
+					{
+						R1 = vtkNeighbourPSuLM->pPoseRel->m_Rot;
+						t1 = vtkNeighbourPSuLM->pPoseRel->m_X;
+						R2 = VS.m_PSuLMBuilder.m_HypothesisArray[0]->PoseSM.m_Rot;
+						t2 = VS.m_PSuLMBuilder.m_HypothesisArray[0]->PoseSM.m_X;
+						R = vtkPose3D->m_Rot;
+						t = vtkPose3D->m_X;
+						// T(R, t) = T(R1, t1) * T(R2, t2)
+						RVLCOMPTRANSF3D(R1, t1, R2, t2, R, t)
+
+						AddHypothesisToPSuLMScene(&Renderer, actorObjs, vtkPose3D, vtkHypModelIdx);
+						vtkHypModelIdx++;
+					}
+					//
+					vtkNeighbourPtr = (RVLQLIST_PTR_ENTRY*)vtkNeighbourPtr->pNext;
+				}
+
+				bRefresh = true;
+
+				break;
 			case 'i':	// loop start <- last MPSuLM
 				if(VS.m_PSuLMBuilder.m_pNearestModelPSuLM)
 				{
@@ -1883,16 +1941,16 @@ int main(int argc, char* argv[])
 				break;
 #ifdef RVLVTK
 			case 'V':
-				//RVLDisplaySegmentedMesh3D(&Renderer, &(VS.m_AImage.m_C2DRegion.m_ObjectList), nObjects, w, h, pointmap, VS.m_PSD.m_Point3DMap);
-				//GenAndDispPSuLMScene(VS.m_pPSuLM, &Renderer, actorObjs);
+				int modelIdx;
+				std::cout << "Please input ID of reference PSuLM: ";
+				std::cin >> modelIdx;
 				//Adding first model PSuLM
 				std::cout << "Adding reference model!" << std::endl;
-				vtkModelPSuLM = (CRVLPSuLM*)VS.m_PSuLMBuilder.m_PSuLMList.m_pFirst->pNext->pData;
-				GenAndDispPSuLMScene(vtkModelPSuLM, &Renderer, actorObjs);
+				refPSuLM = VS.m_PSuLMBuilder.m_PSuLMArray[modelIdx];//(CRVLPSuLM*)VS.m_PSuLMBuilder.m_HypothesisArray[0]->pMPSuLM;// .m_PSuLMList.m_pFirst->pData;// ->pNext->pData;
+				GenAndDispPSuLMScene(refPSuLM, &Renderer, actorObjs);
 				std::cout << "Added reference model!" << std::endl;
 				//Running through neighbour psulms of first model
-				vtkNeighbourPtr = (RVLQLIST_PTR_ENTRY*)vtkModelPSuLM->m_NeighbourList->pFirst;
-				int modelIdx;
+				vtkNeighbourPtr = (RVLQLIST_PTR_ENTRY*)refPSuLM->m_NeighbourList->pFirst;
 				modelIdx = 1;
 				while (vtkNeighbourPtr)
 				{
@@ -1906,6 +1964,9 @@ int main(int argc, char* argv[])
 					//
 					vtkNeighbourPtr = (RVLQLIST_PTR_ENTRY*)vtkNeighbourPtr->pNext;
 				}
+
+				//Add best hypothesis to scene
+				//AddHypothesisToPSuLMScene(&Renderer, actorObjs, &VS.m_PSuLMBuilder.m_HypothesisArray[0]->PoseSM, 0);
 
 				bRefresh = true;
 				bVTKRendererActive = true;
@@ -2311,47 +2372,47 @@ BOOL GetNextFileName(CRVLPSuLMVS *pVS)
 
 void GetAllSequenceData(CRVLPSuLMVS *pVS)
 {
-	if (pVS->m_Flags & RVLSYS_FLAGS_USE_SEQUENCE_FILE)
-	{
-		//Read sequence data 
-		FILE *seqFile= fopen(pVS->m_SequenceFileName, "r");
-		if (seqFile != NULL)
-		{
-			char sLine[500];
-			int iLeft, iMid, iRight;
-			int iStart, iEnd;
-			CString sFileName, sStartFileName, InputSampleFileName;
+	//if (pVS->m_Flags & RVLSYS_FLAGS_USE_SEQUENCE_FILE)
+	//{
+	//	//Read sequence data 
+	//	FILE *seqFile= fopen(pVS->m_SequenceFileName, "r");
+	//	if (seqFile != NULL)
+	//	{
+	//		char sLine[500];
+	//		int iLeft, iMid, iRight;
+	//		int iStart, iEnd;
+	//		CString sFileName, sStartFileName, InputSampleFileName;
 
-			g_CurrentSequenceNo = 0;
-			g_CurrentImageNo = 0;
+	//		g_CurrentSequenceNo = 0;
+	//		g_CurrentImageNo = 0;
 
-			while (!feof(seqFile))
-			{
-				fgets(sLine, 500, seqFile);
+	//		while (!feof(seqFile))
+	//		{
+	//			fgets(sLine, 500, seqFile);
 
-				IMAGE_SEQUENCE_DATA imageSequenceData;
+	//			IMAGE_SEQUENCE_DATA imageSequenceData;
 
-				sFileName = (CString)sLine;
-				iLeft = sFileName.Find('[', 0);
-				iMid = sFileName.Find(':', iLeft);
-				iRight = sFileName.Find(']', iMid);
-				sscanf(CT2A(sFileName.Mid(iLeft + 1, iMid - iLeft - 1)), "%d", &(imageSequenceData.StartNo));
-				sscanf(CT2A(sFileName.Mid(iMid + 1, iRight - iMid - 1)), "%d", &(imageSequenceData.EndNo));
-				//std::string stemp(CT2CA(sFileName.Mid(0, iLeft - 1).Trim()));
-				
-				imageSequenceData.ImageFileName = CT2CA(sFileName.Mid(0, iLeft).Trim());
-				
-				g_AllSequences.push_back(imageSequenceData);
-				
+	//			sFileName = (CString)sLine;
+	//			iLeft = sFileName.Find('[', 0);
+	//			iMid = sFileName.Find(':', iLeft);
+	//			iRight = sFileName.Find(']', iMid);
+	//			sscanf(CT2A(sFileName.Mid(iLeft + 1, iMid - iLeft - 1)), "%d", &(imageSequenceData.StartNo));
+	//			sscanf(CT2A(sFileName.Mid(iMid + 1, iRight - iMid - 1)), "%d", &(imageSequenceData.EndNo));
+	//			//std::string stemp(CT2CA(sFileName.Mid(0, iLeft - 1).Trim()));
+	//			
+	//			imageSequenceData.ImageFileName = CT2CA(sFileName.Mid(0, iLeft).Trim());
+	//			
+	//			g_AllSequences.push_back(imageSequenceData);
+	//			
 
-			}
+	//		}
 
-			fclose(seqFile);
+	//		fclose(seqFile);
 
-			//Set first image
-			GetImageInSequence(pVS,true);
-		}
-	}
+	//		//Set first image
+	//		GetImageInSequence(pVS,true);
+	//	}
+	//}
 	
 }
 
