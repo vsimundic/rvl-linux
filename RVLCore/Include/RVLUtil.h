@@ -184,12 +184,12 @@
 }
 // return J(1x3)*C(3x3)*J(1x3)'
 #define RVLCOV3DTRANSFTO1D(C, J)	(C[0]*J[0]*J[0] + 2*C[1]*J[0]*J[1] + 2*C[2]*J[0]*J[2] + C[4]*J[1]*J[1] + 2*C[5]*J[1]*J[2] + C[8]*J[2]*J[2])
-#define RVLMIN(x, y)	(x <= y ? x : y)
-#define RVLMAX(x, y)	(x >= y ? x : y)
-#define RVLABS(x)		(x >= 0.0 ? x : -x)
-// R = [1,   0,  0;
-//		0,  cs,  -sn;
-//		0,  sn,  cs]
+#define RVLMIN(x, y)	(x <= y ? (x) : (y))
+#define RVLMAX(x, y)	(x >= y ? (x) : (y))
+#define RVLABS(x)		(x >= 0.0 ? (x) : -(x))
+// R = [1,  0,   0;
+//		0, cs, -sn;
+//		0, sn,  cs]
 #define RVLROTX(cs, sn, R)\
 {\
 	RVLMXEL(R, 3, 0, 0) = 1.0;\
@@ -202,9 +202,9 @@
 	RVLMXEL(R, 3, 2, 1) = sn;\
 	RVLMXEL(R, 3, 2, 2) = cs;\
 }
-// R = [cs,  0,  sn;
-//		0,   1,  0;
-//		-sn, 0,  cs]
+// R = [ cs, 0, sn;
+//		  0, 1, 0;
+//		-sn, 0, cs]
 #define RVLROTY(cs, sn, R)\
 {\
 	RVLMXEL(R, 3, 0, 0) = cs;\
@@ -347,21 +347,33 @@
 	tTgt[1] = RSrc[3]*tSrc[0] - RSrc[0]*tSrc[1];\
 	tTgt[2] = 0.0;\
 }
+//// Compute vector Y orthogonal to X
+//#define RVLORTHOGONAL3(X, Y, i, j, k, tmp3x1, fTmp)\
+//{\
+//	tmp3x1[0] = RVLABS(X[0]);\
+//	tmp3x1[1] = RVLABS(X[1]);\
+//	tmp3x1[2] = RVLABS(X[2]);\
+//	i = (tmp3x1[0] > tmp3x1[1] ? 0 : 1);\
+//	if(tmp3x1[2] > tmp3x1[i])\
+//		i = 2;\
+//	j = (i + 1) % 3;\
+//	k = (i + 2) % 3;\
+//	Y[i] = -X[j];\
+//	Y[j] = X[i];\
+//	Y[k] = 0.0;\
+//	fTmp = sqrt(Y[j] * Y[j] + Y[i] * Y[i]);\
+//	RVLSCALE3VECTOR2(Y, fTmp, Y)\
+//}
 // Compute vector Y orthogonal to X
-#define RVLORTHOGONAL3(X, Y, i, j, k, tmp3x1, fTmp)\
+#define RVLORTHOGONAL3(X, Y, i, j, k, fTmp)\
 {\
-	tmp3x1[0] = RVLABS(X[0]);\
-	tmp3x1[1] = RVLABS(X[1]);\
-	tmp3x1[2] = RVLABS(X[2]);\
-	i = (tmp3x1[0] > tmp3x1[1] ? 0 : 1);\
-	if(tmp3x1[2] > tmp3x1[i])\
-		i = 2;\
+	i = (RVLABS(X[0]) <  RVLABS(X[1]) ? 0 : 1);\
 	j = (i + 1) % 3;\
 	k = (i + 2) % 3;\
-	Y[i] = -X[j];\
-	Y[j] = X[i];\
-	Y[k] = 0.0;\
-	fTmp = sqrt(Y[j] * Y[j] + Y[i] * Y[i]);\
+	Y[j] = -X[k];\
+	Y[k] = X[j];\
+	Y[i] = 0.0;\
+	fTmp = sqrt(Y[j] * Y[j] + Y[k] * Y[k]);\
 	RVLSCALE3VECTOR2(Y, fTmp, Y)\
 }
 // Tgt = Src(2x2)
@@ -931,13 +943,18 @@ void RVLBubbleSort(CRVLMPtrChain *pInList,
 	RVLBubbleSort<Type>(OutArray, n, descending);
 }
 
+// pInList is a list of RVLQLIST_PTR_ENTRY
+
 template <class Type>
 void RVLBubbleSort(RVLQLIST *pInList,
 				   int n,
-				   Type **OutArray,				
+				   Type ***pOutArray,				
 				   BOOL descending = FALSE)
 {
 	//creating array for sorting purposes
+
+	Type **OutArray = *pOutArray;
+
 	if(OutArray == NULL)
 		OutArray = new Type*[n];
 	Type **ppElement = OutArray;
@@ -951,6 +968,37 @@ void RVLBubbleSort(RVLQLIST *pInList,
 	}
 
 	RVLBubbleSort<Type>(OutArray, n, descending);
+
+	*pOutArray = OutArray;
+}
+
+// pInList is a list of Type structures
+
+template <class Type>
+void RVLBubbleSort2(RVLQLIST *pInList,
+				   int n,
+				   Type ***pOutArray,				
+				   BOOL descending = FALSE)
+{
+	//creating array for sorting purposes
+
+	Type **OutArray = *pOutArray;
+
+	if(OutArray == NULL)
+		OutArray = new Type*[n];
+	Type **ppElement = OutArray;
+
+	Type *pEntry = (Type *)(pInList->pFirst);
+
+	while(pEntry)
+	{
+		*(ppElement++) = pEntry;
+		pEntry = (Type *)(pEntry->pNext);
+	}
+
+	RVLBubbleSort<Type>(OutArray, n, descending);
+
+	*pOutArray = OutArray;
 }
 
 template <class Type>
@@ -966,6 +1014,20 @@ void RVLResetFlags(CRVLMPtrChain *pObjectList,
 		pObject = (Type *)(pObjectList->GetNext());
 
 		pObject->m_Flags &= ~Flag;
+	}
+}
+
+template <class Type>
+void RVLResetFlags(RVLQLIST *pObjectList,
+				   DWORD Flag)
+{
+	Type *pObject = (Type *)(pObjectList->pFirst);
+
+	while(pObject)
+	{
+		pObject->m_Flags &= ~Flag;
+
+		pObject = (Type *)(pObject->pNext);
 	}
 }
 

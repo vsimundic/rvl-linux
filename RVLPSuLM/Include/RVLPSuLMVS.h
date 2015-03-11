@@ -1,6 +1,8 @@
 #define RVLSYS_FLAGS_CREATE_GLOBAL_MESH		0x00010000
 #define RVLSYS_FLAGS_EDIT_MAP				0x00020000
 #define RVLSYS_FLAGS_VALIDATION				0x00040000
+#define RVLSYS_FLAGS_RECORD					0x00080000
+#define RVLSYS_FLAGS_REVIEW_RESULTS			0x00100000
 
 //struct RVLPSULM_HYPOTHESIS_GT
 //{
@@ -28,6 +30,7 @@ struct RVLPSULMDISPLAY_MOUSE_CALLBACK_DATA
 	IplImage *pImage2;
 	//CRVL3DPose *pPoseCM;
 	char *MatchMatrixGT;
+	CRVL3DSurface2 *pSelectedSurf;
 };
 
 struct RVL3DMESHFILE
@@ -57,6 +60,7 @@ public:
 	void CreateMeshFile(char *MeshFileName);
 	void ClearMeshFileData();
 	void AppendToMeshFile(CRVL3DPose *pRelPose);
+	bool Create3DMeshFromComplexPSuLM(char *ImageFileName);
 	void CreateLocal3DMesh(CRVLPSuLM *pPSuLM0);
 	void Validate();
 	//void SaveValidation();
@@ -78,4 +82,7 @@ public:
 	//RVLPSULM_HYPOTHESIS_GT *m_HypothesisArrayGT;
 	//int m_nMatches;
 	int m_nSamples;
+	CRVL3DPose m_ResPose;
+	int m_iResPSuLM;
+	FILE *m_fpRes;
 };

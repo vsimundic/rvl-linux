@@ -7,11 +7,10 @@
 //#include <stdlib.h>
 //#include <crtdbg.h>
 
-
 //#define RVL64BIT
 //#define RVLWIN
-#define RVLOPENNI
-#define RVLVTK
+//#define RVLOPENNI
+//#define RVLVTK
 //#define RVL3DOBJ2
 //#define RVL_DEBUG   // for debugging purposes 
 //#define RVL_LOG_FILE

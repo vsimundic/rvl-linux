@@ -139,6 +139,11 @@ void CalculatePrincipialCurvature2(int noVertices,
 void GenerateComplementBasis(double *v1, double *v2, double *v3);
 void RVLRemoveInternalVertices(CRVLDelaunay *m_pDelaunay);
 void RVLSegmentationEdgesFromLabels(CRVLClass *pTriangleSet, DWORD Mask = 0x00000000, DWORD refMask = 0x00000000);
+void RVLSegmentationGetBoundary(
+	CRVL2DRegion2 *pSegment,
+	int w,
+	RVLQLIST *pContourList,
+	CRVLMem *pMem);
 void RVLSegmentationGTFromMesh(	FILE *fpSrc,
 								CRVLDelaunay *pDelaunay,
 								FILE *fpTgt);
@@ -233,9 +238,7 @@ void RVLGetMomentsOf2DRegions(	CRVLMPtrChain *p2DRegionList,
 								int ImageWidth, int ImageHeight);
 bool RVL3DMeshIsConvex(CRVLMPtrChain *pTriangleList,
 					   RVL3DPOINT2 **Point3DMap);
-void RVLSegmentationGetBoundary(CRVL2DRegion2 *pSegment,
-								RVLQLIST *pContourList,								
-								CRVLMem *pMem);
+						CRVLMem *pMem);
 void RVLSegmentationDisplayBoundary(CRVLFigure *pFig,
 									CRVL2DRegion2 *pSegment,
 									int ImageWidth,

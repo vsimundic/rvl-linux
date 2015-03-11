@@ -2,8 +2,11 @@
 //
 
 //#include "highgui.h"
+//
 #include <stdio.h>
 #include <time.h>
+//#include <stdafx.h>
+#include <atlstr.h>
 #include "RVLCore.h"
 #include "RVLPCS.h"
 #include "RVLRLM.h"
@@ -15,9 +18,30 @@
 #endif
 
 #define RVLPSULMDEMO_DISPLAY_ONLY_REPRESENTATIVE_HYPOTHESES
-#define RVLPSULMDEMO_DISPLAY_ONLY_BEST_LOCAL_MODEL_HYPOTHESES
+//#define RVLPSULMDEMO_DISPLAY_ONLY_BEST_LOCAL_MODEL_HYPOTHESES
+
+struct IMAGE_SEQUENCE_DATA
+{
+	std::string ImageFileName; 
+	int StartNo;
+	int EndNo;
+};
+std::vector<IMAGE_SEQUENCE_DATA> g_AllSequences;
+
+int g_CurrentSequenceNo;
+int g_CurrentImageNo;
+
+char g_BestSubSetImageFileName[200];
+int g_LastSubSetImageNo;
+int g_BestCost;
+bool g_StartNewSubSet;
+
+BOOL GetNextFileName(CRVLPSuLMVS *pVS);
+void GetAllSequenceData(CRVLPSuLMVS *pVS);
+BOOL GetImageInSequence(CRVLPSuLMVS *pVS, bool bInit = false);
 
 void MessageCanNotOpenFile(CRVLGUI *pGUI, char *FileName);
+
 
 void RVLPSuLMdemoGetNextHypothesis(CRVLPSuLMVS *pVS,
 								   int &iHypothesis,
@@ -28,43 +52,47 @@ void RVLPSuLMdemoGetNextHypothesis(CRVLPSuLMVS *pVS,
 {
 	int iHypothesis_ = iHypothesis;
 
-#ifdef RVLPSULMDEMO_DISPLAY_ONLY_REPRESENTATIVE_HYPOTHESES
 	if(!bFirst)
 		iHypothesis += diHypothesis;
 
-	RVLPSULM_HYPOTHESIS *pHypothesis;
+	int iHypothesisOutOfRange;
 
-	int iHypothesisOutOfRange = (diHypothesis > 0 ? pVS->m_PSuLMBuilder.m_nHypotheses : -1);
-
-	while(iHypothesis != iHypothesisOutOfRange)
+	//if(pVS->m_PSuLMBuilder.m_Flags & RVLPSULMBUILDER_FLAG_SCENE_FUSION)
+	//	iHypothesisOutOfRange = (diHypothesis > 0 ? pVS->m_PSuLMBuilder.m_SceneFusion.m_nHypotheses : -1);
+	//else
 	{
-		pHypothesis = pVS->m_PSuLMBuilder.m_HypothesisArray[iHypothesis];
+		iHypothesisOutOfRange = (diHypothesis > 0 ? pVS->m_PSuLMBuilder.m_nHypotheses : -1);
 
-		if((pVS->m_Flags & RVLSYS_FLAGS_VALIDATION) && bFilterHypotheses && MatchMatrixGT != NULL)
+#ifdef RVLPSULMDEMO_DISPLAY_ONLY_REPRESENTATIVE_HYPOTHESES
+
+		RVLPSULM_HYPOTHESIS *pHypothesis;		
+
+		while(iHypothesis != iHypothesisOutOfRange)
 		{
-			//if(pHypothesis->iRepresentative == 0xffffffff && pHypothesis->validation != -1)
-			//	break;
-			if(pHypothesis == pHypothesis->pMPSuLM->m_pHypothesis && MatchMatrixGT[pHypothesis->pMPSuLM->m_Index] >= 0)
-				break;
-		}
-		else
-		{
+			pHypothesis = pVS->m_PSuLMBuilder.m_HypothesisArray[iHypothesis];
+
+			if((pVS->m_Flags & RVLSYS_FLAGS_VALIDATION) && bFilterHypotheses && MatchMatrixGT != NULL)
+			{
+				//if(pHypothesis->iRepresentative == 0xffffffff && pHypothesis->validation != -1)
+				//	break;
+				if(pHypothesis == pHypothesis->pMPSuLM->m_pHypothesis && MatchMatrixGT[pHypothesis->pMPSuLM->m_Index] >= 0)
+					break;
+			}
+			else
+			{
 #ifdef RVLPSULMDEMO_DISPLAY_ONLY_BEST_LOCAL_MODEL_HYPOTHESES
-			if(pHypothesis == pHypothesis->pMPSuLM->m_pHypothesis)
-				break;
+				if(pHypothesis == pHypothesis->pMPSuLM->m_pHypothesis)
+					break;
 #else
-			if(pHypothesis->iRepresentative == 0xffffffff)
-				break;
+				if(pHypothesis->iRepresentative == 0xffffffff)
+					break;
 #endif
+			}
+
+			iHypothesis += diHypothesis;						
 		}
-
-		iHypothesis += diHypothesis;						
+#endif	// #ifdef RVLPSULMDEMO_DISPLAY_ONLY_REPRESENTATIVE_HYPOTHESES
 	}
-
-#else
-	if(iHypothesis != iHypothesisOutOfRange)
-		iHypothesis += diHypothesis;
-#endif
 
 	if(iHypothesis == iHypothesisOutOfRange)
 		iHypothesis = iHypothesis_;
@@ -72,6 +100,12 @@ void RVLPSuLMdemoGetNextHypothesis(CRVLPSuLMVS *pVS,
 
 int main(int argc, char* argv[])
 {
+	printf("Initialization...\n");
+
+	FILE *fpExecTime = fopen("C:\\RVL\\ExpRez\\ExecTime.txt", "w");
+
+	fclose(fpExecTime);
+
 	CRVL3DPose NullPose;
 
 	RVLNULL3VECTOR(NullPose.m_X);
@@ -120,6 +154,37 @@ int main(int argc, char* argv[])
 
 	GUI.Init();
 
+	// initialize result review/sample sequence
+
+	char ResImageFileName[1001];
+
+	if (VS.m_Flags & RVLSYS_FLAGS_REVIEW_RESULTS)
+	{
+		VS.m_fpRes = fopen("C:\\RVL\\ExpRez\\ExpRes.txt", "r");
+
+		if (VS.m_fpRes == NULL)
+		{
+			GUI.Message("Cannot find files with results!", 400, 100, cvScalar(0, 0, 255));
+
+			return 0;
+		}
+
+		fscanf(VS.m_fpRes, "%d\t%lf\t%lf\t%lf\t%lf\t%lf\t%lf\t%s\n", &(VS.m_iResPSuLM), &(VS.m_ResPose.m_Alpha), &(VS.m_ResPose.m_Beta), &(VS.m_ResPose.m_Theta),
+			VS.m_ResPose.m_X, VS.m_ResPose.m_X + 1, VS.m_ResPose.m_X + 2, ResImageFileName);
+
+		VS.m_ResPose.UpdateRotLL();
+
+		VS.m_ImageFileName = RVLCreateString(ResImageFileName);
+	}
+	else
+	{
+		VS.m_fpRes = fopen("C:\\RVL\\ExpRez\\ExpRes.txt", "w");
+
+		fclose(VS.m_fpRes);
+
+		GetAllSequenceData(&VS);
+	}
+
 	/////
 
 	int iMPSuLM = 0;
@@ -137,11 +202,13 @@ int main(int argc, char* argv[])
 		}
 	}
 
+	bool bComplex = ((VS.m_PSuLMBuilder.m_Flags2 & RVLPSULMBUILDER_FLAG2_COMPLEX) != 0);
+
 	// initialize kinect
 
 	bool bKinect;
 
-	if(VS.m_Flags & RVLSYS_FLAGS_EDIT_MAP)
+	if((VS.m_Flags & RVLSYS_FLAGS_EDIT_MAP) || bComplex)
 		bKinect = false;
 	else
 	{
@@ -220,19 +287,40 @@ int main(int argc, char* argv[])
 
     IplImage *pHSVImage = cvCreateImage(cvSize(w, h), IPL_DEPTH_8U, 3);
 
+	// create complex image
+
+	if(bComplex)
+		VS.m_CameraL.m_Flags |= RVLCAMERA_FLAG_SPHERICAL;
+
+	VS.m_CameraL.m_PanRange = 240;
+	VS.m_CameraL.m_TiltRange = 125;
+	VS.m_CameraL.m_PixPerDeg = 3;
+
+	VS.m_CameraL.InitSpherical();
+
+	VS.m_PSuLMBuilder.m_ROI.right = 2 * (VS.m_CameraL.m_wSpherical - 1) + 1;		
+	VS.m_PSuLMBuilder.m_ROI.bottom = 2 * (VS.m_CameraL.m_hSpherical - 1) + 1;
+
+	IplImage *pComplexImage;
+
 	// create mesh file
 
 	if(VS.m_Flags & RVLSYS_FLAGS_CREATE_GLOBAL_MESH)
 		VS.CreateMeshFile("Mesh.obj");
 
+	// bRecord flag
+
+	bool bRecord = ((VS.m_Flags & RVLSYS_FLAGS_RECORD) != 0);
+
 	// create main display image
 
 	CRVLFigure *pFig = GUI.OpenFigure("Scene");
 
-	pFig->m_Flags |= (RVLPSULM_DISPLAY_SCENE | RVLFIG_FLAG_DATA);
+	if(!bRecord)
+		pFig->m_Flags |= (RVLPSULM_DISPLAY_SCENE | RVLFIG_FLAG_DATA);
 
 	pFig->m_FontSize = 16;
-	cvInitFont(&(pFig->m_Font), CV_FONT_HERSHEY_SIMPLEX, 0.5, 0.5, 0, 2);
+	cvInitFont(&(pFig->m_Font), CV_FONT_HERSHEY_SIMPLEX, 0.5, 0.5, 0, 2);	
 
 	//if(VS.m_Flags & RVLSYS_FLAGS_PC)
 	//{
@@ -246,7 +334,7 @@ int main(int argc, char* argv[])
 
 	IplImage *pInputImage_ = pInputImage;
 
-	MouseCallbackData.w = w;
+	MouseCallbackData.w = (bComplex ? VS.m_CameraL.m_wSpherical : w);
 	MouseCallbackData.pGUI = &GUI;
 	MouseCallbackData.pFig = pFig;
 	MouseCallbackData.pVS = &VS;
@@ -271,7 +359,7 @@ int main(int argc, char* argv[])
 
 	RVLPSULMDISPLAY_MOUSE_CALLBACK_DATA MouseCallbackData2;	
 
-	MouseCallbackData2.w = w;
+	MouseCallbackData2.w = (bComplex ? VS.m_CameraL.m_wSpherical : w);
 	MouseCallbackData2.pGUI = &GUI;
 	MouseCallbackData2.pFig = pFig2;
 	MouseCallbackData2.pFig2 = pFig;
@@ -285,6 +373,9 @@ int main(int argc, char* argv[])
 
 	int *SizeArray = new int[2 * w * h];
 
+	RVLPSULM_MATCH2 *RefHypMatchArray = NULL;
+	int nRefHypMatches;
+
 	// main loop
 
 	bool bDisplayMesh = false;
@@ -292,12 +383,17 @@ int main(int argc, char* argv[])
 	bool bDisplayHypothesis = true;
 	bool bDisplayPSuLM = false;
 	//bool bContinuous = bKinect;
-	bool bContinuous = false;
-	bool bRecord = false;
 	bool bFrames = false;
 	bool bFilterHypotheses = true;
+	//bool bManualTrigger = true;
+	bool bManualTrigger = bKinect;
+	bool bLocalize = !bManualTrigger;
+	bool bContinuous = bManualTrigger;
 	//DWORD mDisplayPSuLMFlags = (RVLPSULM_DISPLAY_SURFACES | RVLPSULM_DISPLAY_VECTORS | RVLPSULM_DISPLAY_SAMPLES);
-	DWORD mDisplayPSuLMFlags = (RVLPSULM_DISPLAY_SURFACES | RVLPSULM_DISPLAY_ELLIPSES | RVLPSULM_DISPLAY_LINES | RVLPSULM_DISPLAY_VECTORS);
+	//DWORD mDisplayPSuLMFlags = (RVLPSULM_DISPLAY_SURFACES | RVLPSULM_DISPLAY_ELLIPSES | RVLPSULM_DISPLAY_LINES | RVLPSULM_DISPLAY_VECTORS);
+	//DWORD mDisplayPSuLMFlags = (RVLPSULM_DISPLAY_LINES | RVLPSULM_DISPLAY_VECTORS);
+	DWORD mDisplayPSuLMFlags = (RVLPSULM_DISPLAY_SURFACES | RVLPSULM_DISPLAY_ELLIPSES | RVLPSULM_DISPLAY_SAMPLES | RVLPSULM_DISPLAY_LINES | RVLPSULM_DISPLAY_VECTORS);
+
 	if(VS.m_Flags & RVLSYS_FLAGS_VALIDATION)
 		mDisplayPSuLMFlags |= RVLPSULM_DISPLAY_VALIDATION;
 	int DisplayBitmap = 0;
@@ -326,10 +422,12 @@ int main(int argc, char* argv[])
 
 	int iHypothesis;
 	int key;
-	int iSample;
+	int iSample, iSample_;
 	bool bRefresh;
 	bool bNextImage;
 	bool bBackwards;
+	bool bLast;
+	bool bSaveImage;
 	clock_t t;
 	char str[200];
 	int iTextLine;
@@ -346,7 +444,7 @@ int main(int argc, char* argv[])
 	int key_;
 	int SampleStep;
 	char *MatchMatrixGT;
-
+	//int bNextFile = 1;
 	do
 	{
 		DepthMapFormat = RVLKINECT_DEPTH_IMAGE_FORMAT_DISPARITY;
@@ -358,8 +456,8 @@ int main(int argc, char* argv[])
 		{
 			// acquire depth image from Kinect
 
-			if(bRecord)
-				DepthMapFormat = RVLKINECT_DEPTH_IMAGE_FORMAT_1MM;
+			//if(bRecord)
+			//	DepthMapFormat = RVLKINECT_DEPTH_IMAGE_FORMAT_1MM;
 
 			VS.m_Kinect.GetImages(pDepthImage->Disparity, pRGBImage, NULL, pGSImage, DepthMapFormat);
 		}
@@ -407,19 +505,28 @@ int main(int argc, char* argv[])
 			}
 		}	// if(bRecord)
 
-		if(!bRecord)
+		if(!bRecord && bLocalize)
 		{
-			if(VS.m_Flags & RVLSYS_FLAGS_EDIT_MAP)
-			{			
-				pPSuLM = VS.m_PSuLMBuilder.m_PSuLMArray[iMPSuLM];				
+			if (VS.m_Flags & RVLSYS_FLAGS_EDIT_MAP)
+			{
+				pPSuLM = VS.m_PSuLMBuilder.m_PSuLMArray[iMPSuLM];
 
 				RVLCopyString(pPSuLM->m_FileName, &(VS.m_ImageFileName));
 
-				if(HypEvalMethod == RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD_P)
+				if (HypEvalMethod == RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD_P)
 					VS.m_PSuLMBuilder.InitHypothesisEvaluation4(pPSuLM);
+
+				if (VS.m_PSuLMBuilder.m_Flags2 & RVLPSULMBUILDER_FLAG2_HYPOTHESIS_EVALUATION_SAMPLE_MATCHING)
+					VS.m_PSuLMBuilder.InitHypothesisEvaluation3(pPSuLM);
 			}
-				
-			if(!bKinect && !(VS.m_Flags & RVLSYS_FLAGS_PC))
+
+			if(bComplex)
+			{
+				pComplexImage = VS.m_PSuLMBuilder.GetComplexPSuLMRGBImage(VS.m_ImageFileName);
+
+				pInputImage_ = pComplexImage;
+			}
+			else if(!bKinect && !(VS.m_Flags & RVLSYS_FLAGS_PC))
 				pRGBImage = cvLoadImage(VS.m_ImageFileName);
 
 			t = clock();			
@@ -454,33 +561,160 @@ int main(int argc, char* argv[])
 
 			//VS.m_PSuLMBuilder.m_Flags |= RVLPSULMBUILDER_FLAG_KIDNAPPED;
 
+			g_StartNewSubSet = false; //This flag needs to be reset
+			if ((VS.m_Flags & (RVLSYS_FLAGS_BEST_SUBSET_HYPOTHESIS | RVLSYS_FLAGS_REVIEW_RESULTS)) == RVLSYS_FLAGS_BEST_SUBSET_HYPOTHESIS)
+			{
+				unsigned char command;
+				CRVL3DPose PoseTemp;
+				int iTemp;
+				
+				
+				//initialize
+				command = 'O';
+				g_BestCost = -1000000;
+				//Copy current file name
+				strcpy(g_BestSubSetImageFileName, VS.m_ImageFileName);
+				BOOL bFileExists;
+				
+				do
+				{
+					VS.m_PSuLMBuilder.GetPanTilt(VS.m_ImageFileName, &PoseTemp, iTemp, command);
+
+					VS.Update(bKinect ? 0x00000000 : RVLPSULMBUILDER_CREATEMODEL_IMAGE_FROM_FILE);
+					if (VS.m_PSuLMBuilder.m_nHypotheses > 0)
+					{
+						if (VS.m_PSuLMBuilder.m_HypothesisArray[0]->cost > g_BestCost)
+						{
+							g_BestCost = VS.m_PSuLMBuilder.m_HypothesisArray[0]->cost;
+							strcpy(g_BestSubSetImageFileName, VS.m_ImageFileName);
+						}
+					}
+					bFileExists = GetNextFileName(&VS);
+
+				} while (command != 'C');
+
+				
+				//Store last image number
+				g_LastSubSetImageNo = (bFileExists ? RVLGetFileNumber(VS.m_ImageFileName, "00000-LW.bmp") : -1);
+				g_StartNewSubSet = true;
+
+				//Reset current image to best subsetimage
+				strcpy(VS.m_ImageFileName, g_BestSubSetImageFileName);
+				pRGBImage = cvLoadImage(VS.m_ImageFileName);
+				
+				
+			}
+
+			if (g_BestCost == -1000000)
+				GUI.Message("No hypotheses generated!", 300, 100, cvScalar(0, 0, 255));
+
 			VS.Update(bKinect ? 0x00000000 : RVLPSULMBUILDER_CREATEMODEL_IMAGE_FROM_FILE);
+
+			if (VS.m_Flags & RVLSYS_FLAGS_REVIEW_RESULTS)
+			{
+				if (HypEvalMethod == RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD_P)
+					VS.m_PSuLMBuilder.InitHypothesisEvaluation4(VS.m_pPSuLM);
+
+				if (VS.m_PSuLMBuilder.m_Flags2 & RVLPSULMBUILDER_FLAG2_HYPOTHESIS_EVALUATION_SAMPLE_MATCHING)
+					VS.m_PSuLMBuilder.InitHypothesisEvaluation3(VS.m_pPSuLM);
+
+				if (VS.m_iResPSuLM >= 0)
+				{
+					VS.m_PSuLMBuilder.m_nHypotheses = VS.m_PSuLMBuilder.m_HypothesisList.m_nElements = 1;
+
+					if (HypothesisMem)
+						delete[] HypothesisMem;
+
+					HypothesisMem = new RVLPSULM_HYPOTHESIS[1];
+
+					pHypothesis = HypothesisMem;
+
+					pHypothesis->pMPSuLM = VS.m_PSuLMBuilder.m_PSuLMArray[VS.m_iResPSuLM];
+
+					pHypothesis->PoseSM.Copy(&(VS.m_ResPose));
+
+					pHypothesis->iRepresentative = 0xffffffff;
+
+					pHypothesis->Probability = 0.0;
+
+					pHypothesis->pMPSuLM->m_PosteriorProbabilityLocal = pHypothesis->pMPSuLM->m_PosteriorProbabilityGlobal = 0.0;
+
+					pHypothesis->pMPSuLM->m_PosteriorProbabilityLocal5DOF = 0.0;
+
+					if (VS.m_PSuLMBuilder.m_HypothesisArray)
+						delete[] VS.m_PSuLMBuilder.m_HypothesisArray;
+
+					VS.m_PSuLMBuilder.m_HypothesisArray = new RVLPSULM_HYPOTHESIS *[1];
+
+					VS.m_PSuLMBuilder.m_HypothesisArray[0] = pHypothesis;
+				}
+				else
+					VS.m_PSuLMBuilder.m_nHypotheses = 0;
+			}
+			else
+			{
+				fpExecTime = fopen("C:\\RVL\\ExpRez\\ExecTime.txt", "a");
+
+				fprintf(fpExecTime, "%lf\t%lf\t%s\n", VS.m_PSuLMBuilder.m_CreateTime, VS.m_PSuLMBuilder.m_LocalizationTime, VS.m_ImageFileName);
+
+				fclose(fpExecTime);
+
+				VS.m_fpRes = fopen("C:\\RVL\\ExpRez\\ExpRes.txt", "a");
+
+				if (VS.m_PSuLMBuilder.m_nHypotheses > 0)
+				{
+					pHypothesis = VS.m_PSuLMBuilder.m_HypothesisArray[0];
+
+					fprintf(VS.m_fpRes, "%d\t%lf\t%lf\t%lf\t%lf\t%lf\t%lf\t%s\n",
+						pHypothesis->pMPSuLM->m_Index,
+						pHypothesis->PoseSM.m_Alpha, pHypothesis->PoseSM.m_Beta, pHypothesis->PoseSM.m_Theta,
+						pHypothesis->PoseSM.m_X[0], pHypothesis->PoseSM.m_X[1], pHypothesis->PoseSM.m_X[2],
+						VS.m_ImageFileName);
+				}
+				else
+					fprintf(VS.m_fpRes, "%d\t%lf\t%lf\t%lf\t%lf\t%lf\t%lf\t%s\n", -1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, VS.m_ImageFileName);
+
+				fclose(VS.m_fpRes);
+			}
+
+			//VS.Create3DMeshFromComplexPSuLM(VS.m_ImageFileName);
+
+			//VS.m_PSuLMBuilder.GetComplexPSuLMRGBImage(VS.m_ImageFileName);
 
 			t = clock() - t;	
 
-			//// mark segment edges
-
-			//if(VS.m_PSD.m_Flags & RVLPSD_MESH_SEGMENT_PLANAR)
-			if((VS.m_Flags & RVLSYS_FLAGS_CREATE_GLOBAL_MESH) == 0 || 
-				(VS.m_PSuLMBuilder.m_Flags & RVLPSULMBUILDER_FLAG_MODE_LOCALIZATION) == 0)
+			if(!bComplex)
 			{
-				nObjects = VS.m_AImage.m_C2DRegion3.m_ObjectList.m_nElements + 1;
+				//// mark segment edges
 
-				VS.m_PSD.AssignLabels(&(VS.m_AImage.m_C2DRegion), &(VS.m_AImage.m_C2DRegion3));
-			}
+				//if(VS.m_PSD.m_Flags & RVLPSD_MESH_SEGMENT_PLANAR)
+				if(!(VS.m_Flags & RVLSYS_FLAGS_CREATE_GLOBAL_MESH) || 
+					!(VS.m_PSuLMBuilder.m_Flags & RVLPSULMBUILDER_FLAG_MODE_LOCALIZATION))
+				{
+					nObjects = VS.m_AImage.m_C2DRegion3.m_ObjectList.m_nElements + 1;
 
-			RVLSegmentationEdgesFromLabels(&(VS.m_AImage.m_C2DRegion));
+					VS.m_PSD.AssignLabels(&(VS.m_AImage.m_C2DRegion), &(VS.m_AImage.m_C2DRegion3));
+				}
 
-			// store RGB image
+				RVLSegmentationEdgesFromLabels(&(VS.m_AImage.m_C2DRegion));
 
-			cvCvtColor(pRGBImage, pHSVImage, CV_BGR2RGB);
+				// store RGB image
 
-			pHSVImage->channelSeq[0] = 'R';
+				cvCvtColor(pRGBImage, pHSVImage, CV_BGR2RGB);
 
-			pHSVImage->channelSeq[1] = 'G';
+				pHSVImage->channelSeq[0] = 'R';
 
-			pHSVImage->channelSeq[2] = 'B';
-		}	// if(!bRecord)
+				pHSVImage->channelSeq[1] = 'G';
+
+				pHSVImage->channelSeq[2] = 'B';
+
+				if(VS.m_Flags & RVLSYS_FLAGS_EDIT_MAP)
+					VS.m_PSuLMBuilder.GetConnectedSubMap(pPSuLM);
+
+				if(bManualTrigger)
+					bContinuous = false;
+			}			
+		}	// if(!bRecord && bLocalize)
 
 		// display the results
 
@@ -492,7 +726,7 @@ int main(int argc, char* argv[])
 
 		MatchMatrixGT = (iSample >= 0 && iSample < VS.m_nSamples ? VS.m_MatchMatrixGT + MatchMatrixOffset : NULL);
 
-		VS.ComputeMatchMatrix(iSample);
+		//VS.ComputeMatchMatrix(iSample);
 
 		/////
 
@@ -580,9 +814,17 @@ int main(int argc, char* argv[])
 
 			RVLPSuLMdemoGetNextHypothesis(&VS, iHypothesis, 1, MatchMatrixGT, bFilterHypotheses, true);
 
-			VS.m_pPSuLM->m_Index = 0xffffffff;
+			if(VS.m_pPSuLM)
+				VS.m_pPSuLM->m_Index = 0xffffffff;
 		}
 
+		if (RefHypMatchArray)
+		{
+			delete[] RefHypMatchArray;
+
+			RefHypMatchArray = NULL;
+		}
+		
 		do
 		{
 			// clear display
@@ -593,103 +835,127 @@ int main(int argc, char* argv[])
 
 			// select bitmap to display
 
-			if(VS.m_Flags & RVLSYS_FLAGS_PC)
-				VS.m_PSD.DisplayPC(pInputImage);
-			else
+			if(!bComplex)
 			{
-				switch(DisplayBitmap){
-				case 0:
-					// display the depth image on the display image
+				if(VS.m_Flags & RVLSYS_FLAGS_PC)
+					VS.m_PSD.DisplayPC(pInputImage);
+				else
+				{
+					switch(DisplayBitmap){
+					case 0:
+						// display the depth image on the display image
 
-					RVLDisplayDisparityMapColor(pDepthImage, 0, FALSE, pInputImage, DepthMapFormat);
+						RVLDisplayDisparityMapColor(pDepthImage, 0, FALSE, pInputImage, DepthMapFormat);
 
-					break;
-				case 1:
-					// display RGB image on the display image
+						break;
+					case 1:
+						// display RGB image on the display image
 
-					cvCopy(pRGBImage, pInputImage);
+						cvCopy(pRGBImage, pInputImage);
 
-					break;
-				case 2:
-					// display grayscale image on the display image
+						break;
+					case 2:
+						// display grayscale image on the display image
 
-					cvCvtColor(pGSImage, pInputImage, CV_GRAY2RGB);
+						cvCvtColor(pGSImage, pInputImage, CV_GRAY2RGB);
+					}
 				}
+
+				RVLZoom(pInputImage, pZoomedInputImage, 2);
 			}
 
-			RVLZoom(pInputImage, pZoomedInputImage, 2);
-
-			// display the mesh or convex sets
-
-			if(bDisplayMesh)
-				RVLDisplay2DRegions(pFig, &(VS.m_AImage.m_C2DRegion.m_ObjectList), VS.m_CameraL.Width, RVLColor(0, 255, 0));
-
-			if(bDisplayConvexSets)
-				RVLDisplay2DRegions(pFig, &(VS.m_AImage.m_C2DRegion.m_ObjectList), VS.m_CameraL.Width, 
-					RVLColor(255, 0, 255), 1, RVLMESH_LINK_FLAG_EDGE, RVLMESH_LINK_FLAG_EDGE);
-
-			if(bDisplayHypothesis)
+			if(bLocalize)
 			{
-				VS.m_PSuLMBuilder.DisplayHypothesis(&GUI, pFig, pFig2, VS.m_pPSuLM, mDisplayPSuLMFlags, pInputImage_,
-					pPrevRGBImage, iHypothesis);				
+				if(!bComplex)
+				{
+					// display the mesh or convex sets
 
-				VS.m_PSuLMBuilder.DisplayHypothesisData(pFig, VS.m_pPSuLM, MatchMatrixGT, mDisplayPSuLMFlags, iHypothesis);
-			}
+					if(bDisplayMesh)
+						RVLDisplay2DRegions(pFig, &(VS.m_AImage.m_C2DRegion.m_ObjectList), VS.m_CameraL.Width, RVLColor(0, 255, 0));
 
-			if(bDisplayPSuLM)
-			{
-				pFig->m_pImage = cvCloneImage(pInputImage_);
+					if(bDisplayConvexSets)
+						RVLDisplay2DRegions(pFig, &(VS.m_AImage.m_C2DRegion.m_ObjectList), VS.m_CameraL.Width, 
+							RVLColor(255, 0, 255), 1, RVLMESH_LINK_FLAG_EDGE, RVLMESH_LINK_FLAG_EDGE);
+				}
 
-				//if(VS.m_Flags & RVLSYS_FLAGS_PC)
-				//	VS.m_pPSuLM->Display(pFig, &PoseLC, cvScalar(0, 255, 0), mDisplayPSuLMFlags);
-				//else
-					VS.m_pPSuLM->Display(pFig, &NullPose, cvScalar(0, 255, 0), mDisplayPSuLMFlags);
-			}
+				if(bDisplayHypothesis)
+				{
+					VS.m_PSuLMBuilder.DisplayHypothesis(&GUI, pFig, pFig2, VS.m_pPSuLM, mDisplayPSuLMFlags, pInputImage_,
+						pPrevRGBImage, iHypothesis);				
 
-			GUI.DisplayVectors(pFig, 0, 0, (double)ZoomFactor);
+					VS.m_PSuLMBuilder.DisplayHypothesisData(pFig, VS.m_pPSuLM, MatchMatrixGT, mDisplayPSuLMFlags, iHypothesis);
 
-			GUI.DisplayVectors(pFig2, 0, 0, 1.0);
+#ifdef RVLPSULMBUILDER_CONDITIONAL_PROBABILITY_TREE_DEBUG_LOG
+					if (RefHypMatchArray)
+						VS.m_PSuLMBuilder.CompareHypotheses(RefHypMatchArray, nRefHypMatches, 
+							VS.m_PSuLMBuilder.m_DebugData.MatchArray, VS.m_PSuLMBuilder.m_DebugData.nMatches,
+							"C:\\RVL\\Debug\\HypComparison.txt");
+#endif // RVLPSULMBUILDER_CONDITIONAL_PROBABILITY_TREE_DEBUG_LOG
 
-			if(!bRecord)
-			{
+				}
+
+				if(bDisplayPSuLM)
+				{
+					pFig->m_pImage = cvCloneImage(pInputImage_);
+
+					//if(VS.m_Flags & RVLSYS_FLAGS_PC)
+					//	VS.m_pPSuLM->Display(pFig, &PoseLC, cvScalar(0, 255, 0), mDisplayPSuLMFlags);
+					//else
+						VS.m_pPSuLM->Display(pFig, &NullPose, cvScalar(0, 255, 0), mDisplayPSuLMFlags);
+				}
+
+				GUI.DisplayVectors(pFig, 0, 0, (double)ZoomFactor);
+
+				GUI.DisplayVectors(pFig2, 0, 0, 1.0);
+
 				// display some numerical data
 
 				iTextLine = 0;
 
 				sprintf(str, "Exec. Time = %4.0f ms", 1000.0f * ((float)t)/CLOCKS_PER_SEC);
 
-				cvPutText(pFig->m_pImage, str, cvPoint(0, (++iTextLine) * pFig->m_FontSize), &pFig->m_Font,  cvScalar(255, 0, 0));
+				cvPutText(pFig->m_pImage, str, cvPoint(0, (++iTextLine) * pFig->m_FontSize), &pFig->m_Font,  cvScalar(0, 255, 255));
 
 				sprintf(str, "TT = %d", (VS.m_Flags & RVLSYS_FLAGS_PC ? VS.m_PSD.m_MeshTol : VS.m_PSD.m_uvdTol));
 
-				cvPutText(pFig->m_pImage, str, cvPoint(0, (++iTextLine) * pFig->m_FontSize), &pFig->m_Font,  cvScalar(255, 0, 0));
+				cvPutText(pFig->m_pImage, str, cvPoint(0, (++iTextLine) * pFig->m_FontSize), &pFig->m_Font,  cvScalar(0, 255, 255));
 
 				sprintf(str, "CT = %d", VS.m_ConvexSegmentThr);
 
-				cvPutText(pFig->m_pImage, str, cvPoint(0, (++iTextLine) * pFig->m_FontSize), &pFig->m_Font,  cvScalar(255, 0, 0));
+				cvPutText(pFig->m_pImage, str, cvPoint(0, (++iTextLine) * pFig->m_FontSize), &pFig->m_Font,  cvScalar(0, 255, 255));
+
+				// show the display image
+
+				MouseCallbackData.ZoomFactor = ZoomFactor;
+				MouseCallbackData.mDisplayPSuLMFlags = mDisplayPSuLMFlags;
+				MouseCallbackData.iHypothesis = (VS.m_PSuLMBuilder.m_nHypotheses > 0 ? iHypothesis : -1);
+				MouseCallbackData.pImage = pInputImage_;
+				MouseCallbackData.MatchMatrixGT = MatchMatrixGT;
+				MouseCallbackData.pSelectedSurf = NULL;
+
+				GUI.ShowFigure(pFig);	
+
+				cvSetMouseCallback("Scene", RVLPSuLMDisplayMouseCallback2, &MouseCallbackData);
+			
+				MouseCallbackData2.ZoomFactor = ZoomFactor;
+				MouseCallbackData2.mDisplayPSuLMFlags = mDisplayPSuLMFlags;
+				MouseCallbackData2.iHypothesis = (VS.m_PSuLMBuilder.m_nHypotheses > 0 ? iHypothesis : -1);
+				MouseCallbackData2.pImage = pInputImage_;
+				MouseCallbackData2.MatchMatrixGT = MatchMatrixGT;
+				MouseCallbackData2.pSelectedSurf = NULL;
+
+				GUI.ShowFigure(pFig2);	
+
+				cvSetMouseCallback("Model", RVLPSuLMDisplayMouseCallback2, &MouseCallbackData2);
+
+				//cvSaveImage("C:\\RVL\\ExpRez\\RVLDisplay.bmp", pDisplay);
 			}
+			else
+			{
+				pFig->m_pImage = pInputImage_;
 
-			// show the display image
-
-			MouseCallbackData.ZoomFactor = ZoomFactor;
-			MouseCallbackData.mDisplayPSuLMFlags = mDisplayPSuLMFlags;
-			MouseCallbackData.iHypothesis = (VS.m_PSuLMBuilder.m_nHypotheses > 0 ? iHypothesis : -1);
-			MouseCallbackData.pImage = pInputImage_;
-			MouseCallbackData.MatchMatrixGT = MatchMatrixGT;
-
-			GUI.ShowFigure(pFig);	
-
-			cvSetMouseCallback("Scene", RVLPSuLMDisplayMouseCallback2, &MouseCallbackData);
-							
-			MouseCallbackData2.mDisplayPSuLMFlags = mDisplayPSuLMFlags;
-			MouseCallbackData2.iHypothesis = (VS.m_PSuLMBuilder.m_nHypotheses > 0 ? iHypothesis : -1);
-			MouseCallbackData2.MatchMatrixGT = MatchMatrixGT;
-
-			GUI.ShowFigure(pFig2);	
-
-			cvSetMouseCallback("Model", RVLPSuLMDisplayMouseCallback2, &MouseCallbackData2);
-
-			//cvSaveImage("C:\\RVL\\ExpRez\\RVLDisplay.bmp", pDisplay);
+				GUI.ShowFigure(pFig);
+			}
 
 			// wait until a key is pressed
 
@@ -700,6 +966,8 @@ int main(int argc, char* argv[])
 			bNextImage = true;
 			bRefresh = false;
 			bBackwards = false;
+			bLast = false;
+			bSaveImage  = false;
 			SampleStep = 1;
 
 			switch(key){
@@ -710,6 +978,22 @@ int main(int argc, char* argv[])
 					VS.m_GroundTruth.Add(RVLGetFileNumber(VS.m_ImageFileName, "00000-LW.bmp"), pHypothesis->pMPSuLM->m_Index, &(pHypothesis->PoseSM));
 
 				bRefresh = true;
+
+				break;
+			case '1':
+				printf("Enter model number: ");
+
+				int iPSuLM;
+
+				scanf("%d", &iPSuLM);
+
+				VS.m_PSuLMBuilder.m_pNearestModelPSuLM = VS.m_PSuLMBuilder.m_PSuLMArray[iPSuLM];
+
+				VS.m_PSuLMBuilder.m_Flags &= ~RVLPSULMBUILDER_FLAG_GLOBAL;
+
+				VS.m_PSuLMBuilder.m_Flags |= RVLPSULMBUILDER_FLAG_KIDNAPPED;
+
+				bNextImage = false;
 
 				break;
 			case 'a':
@@ -732,6 +1016,32 @@ int main(int argc, char* argv[])
 			case 'c':
 				bContinuous = !bContinuous;
 
+				if(bContinuous && bManualTrigger)
+					bLocalize = false;
+
+				break;
+			case 'C':
+				if(VS.m_PSuLMBuilder.m_Flags2 & RVLPSULMBUILDER_FLAG2_MAPBUILDING_MANUAL)
+				{
+					pHypothesis = VS.m_PSuLMBuilder.m_HypothesisArray[iHypothesis];
+
+					if(pHypothesis)
+					{
+						CRVLPSuLM *pPSuLM;
+
+						VS.m_PSuLMBuilder.m_PSuLMList.Start();
+
+						while(VS.m_PSuLMBuilder.m_PSuLMList.m_pNext)
+							pPSuLM = (CRVLPSuLM *)(VS.m_PSuLMBuilder.m_PSuLMList.GetNext());
+
+						VS.m_PSuLMBuilder.Connect(pHypothesis->pMPSuLM, pPSuLM, NULL, &(pHypothesis->PoseSM));
+
+						GUI.Message("PSuLMs connected.", 300, 100, cvScalar(0, 255, 0));
+					}
+				}
+
+				bRefresh = true;
+
 				break;
 			case 'e':
 				mDisplayPSuLMFlags ^= (RVLPSULM_DISPLAY_ELLIPSES | RVLPSULM_DISPLAY_LINES);
@@ -742,6 +1052,7 @@ int main(int argc, char* argv[])
 			case 'f':	// Map building on/off
 				VS.m_PSuLMBuilder.m_Flags ^= RVLPSULMBUILDER_FLAG_MAPBUILDING;
 
+#ifdef RVLPSULMBUILDER_MAPBUILDING_SEQUENCE
 				if(VS.m_PSuLMBuilder.m_Flags & RVLPSULMBUILDER_FLAG_MAPBUILDING)
 				{
 					VS.m_PSuLMBuilder.m_Flags &= ~RVLPSULMBUILDER_FLAG_GLOBAL;
@@ -749,14 +1060,15 @@ int main(int argc, char* argv[])
 					//if(VS.m_PSuLMBuilder.m_nPlausibleHypotheses > 0)
 					//	VS.m_PSuLMBuilder.m_pNearestModelPSuLM = VS.m_PSuLMBuilder.m_HypothesisArray[0]->pMPSuLM;
 
-#ifdef RVLPSULMBUILDER_MAPBUILDING_SEQUENCE
 					if(VS.m_PSuLMBuilder.m_nHypotheses > 0)
 						if(VS.m_PSuLMBuilder.m_HypothesisArray[0]->pMPSuLM->m_PosteriorProbabilityLocal >= 0.999)
 							VS.m_PSuLMBuilder.m_pNearestModelPSuLM = VS.m_PSuLMBuilder.m_HypothesisArray[0]->pMPSuLM;
-#endif
 				}
+#endif
 
 				bNextImage = false;
+
+				bLocalize = true;
 
 				break;
 			case 'F':
@@ -775,7 +1087,7 @@ int main(int argc, char* argv[])
 			case 'h':
 				bDisplayHypothesis = (!bDisplayHypothesis && !bRecord);
 
-				bDisplayPSuLM = (bDisplayPSuLM & !bDisplayHypothesis);
+				bDisplayPSuLM = (bDisplayPSuLM && !bDisplayHypothesis);
 
 				bRefresh = true;
 
@@ -825,6 +1137,14 @@ int main(int argc, char* argv[])
 						GUI.Message("CreateLocal3DMesh() completed.", 600, 100, cvScalar(0, 128, 255));
 					}
 				}
+				else if(bComplex)
+				{
+					GUI.Message("Creating 3D mesh...", 600, 100, cvScalar(0, 128, 255), false);
+
+					VS.Create3DMeshFromComplexPSuLM(VS.m_ImageFileName);
+
+					GUI.Message("3D mesh created.", 600, 100, cvScalar(0, 255, 0));
+				}
 
 				bRefresh = true;
 
@@ -865,7 +1185,42 @@ int main(int argc, char* argv[])
 				bDisplayConvexSets = false;
 
 				break;
+			case 'R':
+				if (VS.m_PSuLMBuilder.m_DebugData.MatchArray)
+				{
+					if (RefHypMatchArray)
+						delete[] RefHypMatchArray;
+
+					nRefHypMatches = VS.m_PSuLMBuilder.m_DebugData.nMatches;
+
+					RefHypMatchArray = new RVLPSULM_MATCH2[nRefHypMatches];
+
+					memcpy(RefHypMatchArray, VS.m_PSuLMBuilder.m_DebugData.MatchArray, nRefHypMatches * sizeof(RVLPSULM_MATCH2));
+
+					GUI.Message("The current hypothesis is set as the reference hypothesis.", 600, 100, cvScalar(0, 255, 128));
+				}
+				else
+					GUI.Message("Cannot set reference hypothesis. No match data is generated.", 600, 100, cvScalar(0, 0, 255));
+
+				bRefresh = true;
+
+				break;
 			case 's':
+				if(bRecord && bKinect)
+				{
+					cvSaveImage(VS.m_ImageFileName, VS.m_pRGBImage);	
+
+					char *DepthImageFileName = RVLCreateFileName(VS.m_ImageFileName, "-LW.bmp", -1, "-D.txt");
+
+					RVLSaveDepthImage(VS.m_StereoVision.m_DisparityMap.Disparity, VS.m_StereoVision.m_DisparityMap.Width, 
+						VS.m_StereoVision.m_DisparityMap.Height, DepthImageFileName, VS.m_StereoVision.m_DisparityMap.Format, 
+						VS.m_StereoVision.m_DisparityMap.Format);					
+
+					bSaveImage = true;
+				}
+
+				break;
+			case 'S':
 				bDisplayConvexSets = (!bDisplayConvexSets && !bRecord);
 
 				bRefresh = true;
@@ -992,6 +1347,15 @@ int main(int argc, char* argv[])
 				bBackwards = true;
 
 				break;
+			case 0x0000000d:	// Enter
+				if(bManualTrigger)
+				{
+					bLocalize = true;
+
+					bNextImage = false;
+				}
+
+				break;
 			case 0x00210000:	// PgUp
 				bBackwards = true;
 
@@ -1000,6 +1364,11 @@ int main(int argc, char* argv[])
 				break;
 			case 0x00220000:	// PgDn
 				SampleStep = 10;
+
+				break;
+			case 0x00230000:	// End
+				if(VS.m_Flags & RVLSYS_FLAGS_EDIT_MAP)
+					bLast = true;
 
 				break;
 			case 0x00240000:	// Home
@@ -1138,7 +1507,7 @@ int main(int argc, char* argv[])
 		// next image/model
 
 		//if(!bKinect && bNextImage)
-		if(bNextImage)
+		if((!bRecord && !bManualTrigger && bNextImage) || (bRecord && bSaveImage) || (bManualTrigger && bLocalize))
 		{
 			//if(VS.m_Flags & RVLSYS_FLAGS_VALIDATION)
 			//{
@@ -1148,6 +1517,8 @@ int main(int argc, char* argv[])
 			//		VS.SaveValidation();
 			//	VS.StoreHypothesesToMatchMatrix(RVLGetFileNumber(VS.m_ImageFileName, "00000-LW.bmp"));
 			//}
+
+			BOOL bFileExists = TRUE;
 
 			if(bKinect)
 			{
@@ -1169,6 +1540,18 @@ int main(int argc, char* argv[])
 					if(iMPSuLM < 0)
 						iMPSuLM = iMPSuLM_;
 				}
+				else if(bLast)
+				{
+					while(iMPSuLM <= VS.m_PSuLMBuilder.m_maxPSuLMIndex)
+					{
+						if(VS.m_PSuLMBuilder.m_PSuLMArray[iMPSuLM])
+							iMPSuLM_ = iMPSuLM;
+
+						iMPSuLM++;
+					}
+
+					iMPSuLM = iMPSuLM_;
+				}
 				else
 				{
 					iMPSuLM += SampleStep;
@@ -1180,14 +1563,58 @@ int main(int argc, char* argv[])
 						iMPSuLM = iMPSuLM_;
 				}
 			}	
+			else if (bComplex)
+			{
+				iSample_ = iSample;
+
+				char *OdometryFileName = RVLCreateFileName(VS.m_ImageFileName, "-LW.bmp", -1, "-O.txt");
+
+				unsigned char command;
+				int x, y, z, pan, tilt, roll, iSample0;
+				FILE *fpOdometry;
+
+				while (bFileExists = GetNextFileName(&VS)) //RVLGetNextFileName(VS.m_ImageFileName, "00000-LW.bmp", 10000))
+				{
+					iSample_ = RVLGetFileNumber(VS.m_ImageFileName, "00000-LW.bmp");
+
+					RVLSetFileNumber(OdometryFileName, "00000-O.txt", iSample_);
+
+					fpOdometry = fopen(OdometryFileName, "r");
+
+					if (fpOdometry == NULL)
+						continue;
+
+					fscanf(fpOdometry, "%d\t%d\t%d\t%d\t%d\t%d\t%d\t%c\n", &x, &y, &z, &pan, &tilt, &roll, &iSample0, &command);
+
+					fclose(fpOdometry);
+
+					if (command == 'O')
+					{
+						iSample = iSample_;
+
+						break;
+					}
+				}				
+
+				RVLSetFileNumber(VS.m_ImageFileName, "00000-LW.bmp", iSample);
+
+				delete[] OdometryFileName;
+			}
 			else
-				RVLGetNextFileName(VS.m_ImageFileName, "00000-LW.bmp", 10000);
+				bFileExists = GetNextFileName(&VS);// RVLGetNextFileName(VS.m_ImageFileName, "00000-LW.bmp", 10000);
+
+			if (!bFileExists)
+			{
+				GUI.Message("All files are processed.", 500, 100, cvScalar(0, 255, 0));
+
+				break;
+			}
 		}
 
 		if(!bRecord)
 			VS.m_Mem.Clear();
 	}
-	while(key != 27);
+	while (key != 27);
 
 	if(VS.m_Flags & RVLSYS_FLAGS_VALIDATION)
 	{
@@ -1207,6 +1634,9 @@ int main(int argc, char* argv[])
 
 	delete[] SizeArray;
 	delete[] VTKMessage;
+	
+	if (RefHypMatchArray)
+		delete[] RefHypMatchArray;
 
 	GUI.CloseFigure("RVLPCSdemo");
 
@@ -1237,3 +1667,165 @@ void MessageCanNotOpenFile(CRVLGUI *pGUI, char *FileName)
 	delete[] str;
 }
 
+BOOL GetNextFileName(CRVLPSuLMVS *pVS) 
+{
+	if (pVS->m_Flags & RVLSYS_FLAGS_REVIEW_RESULTS)
+	{
+		char ResImageFileName[1001];
+
+		if (feof(pVS->m_fpRes))
+			return FALSE;
+
+		fscanf(pVS->m_fpRes, "%d\t%lf\t%lf\t%lf\t%lf\t%lf\t%lf\t%s\n", &(pVS->m_iResPSuLM), &(pVS->m_ResPose.m_Alpha), &(pVS->m_ResPose.m_Beta), &(pVS->m_ResPose.m_Theta),
+			pVS->m_ResPose.m_X, pVS->m_ResPose.m_X + 1, pVS->m_ResPose.m_X + 2, ResImageFileName);
+
+		pVS->m_ResPose.UpdateRotLL();
+
+		pVS->m_ImageFileName = RVLCreateString(ResImageFileName);
+
+		return TRUE;
+	}
+	else if (pVS->m_Flags & RVLSYS_FLAGS_USE_SEQUENCE_FILE)
+	{
+		return GetImageInSequence(pVS);
+	}
+	else
+	{
+		return RVLGetNextFileName(pVS->m_ImageFileName, "00000-LW.bmp", 10000);
+	}
+	
+	
+}
+
+void GetAllSequenceData(CRVLPSuLMVS *pVS)
+{
+	if (pVS->m_Flags & RVLSYS_FLAGS_USE_SEQUENCE_FILE)
+	{
+		//Read sequence data 
+		FILE *seqFile= fopen(pVS->m_SequenceFileName, "r");
+		if (seqFile != NULL)
+		{
+			char sLine[500];
+			int iLeft, iMid, iRight;
+			int iStart, iEnd;
+			CString sFileName, sStartFileName, InputSampleFileName;
+
+			g_CurrentSequenceNo = 0;
+			g_CurrentImageNo = 0;
+
+			while (!feof(seqFile))
+			{
+				fgets(sLine, 500, seqFile);
+
+				IMAGE_SEQUENCE_DATA imageSequenceData;
+
+				sFileName = (CString)sLine;
+				iLeft = sFileName.Find('[', 0);
+				iMid = sFileName.Find(':', iLeft);
+				iRight = sFileName.Find(']', iMid);
+				sscanf(CT2A(sFileName.Mid(iLeft + 1, iMid - iLeft - 1)), "%d", &(imageSequenceData.StartNo));
+				sscanf(CT2A(sFileName.Mid(iMid + 1, iRight - iMid - 1)), "%d", &(imageSequenceData.EndNo));
+				//std::string stemp(CT2CA(sFileName.Mid(0, iLeft - 1).Trim()));
+				
+				imageSequenceData.ImageFileName = CT2CA(sFileName.Mid(0, iLeft).Trim());
+				
+				g_AllSequences.push_back(imageSequenceData);
+				
+
+			}
+
+			fclose(seqFile);
+
+			//Set first image
+			GetImageInSequence(pVS,true);
+		}
+	}	
+}
+
+
+BOOL GetImageInSequence(CRVLPSuLMVS *pVS, bool bInit)
+{
+	
+	if (bInit)
+	{
+		//set initial image
+		IMAGE_SEQUENCE_DATA& currentSequenceData = g_AllSequences[g_CurrentSequenceNo];
+		//Copy current file name
+		RVLCopyString((char *)(currentSequenceData.ImageFileName.c_str()), &(pVS->m_ImageFileName));
+
+		RVLSetFileNumber(pVS->m_ImageFileName, "00000-LW.bmp", currentSequenceData.StartNo);
+		
+		g_CurrentImageNo = currentSequenceData.StartNo;
+		
+		return TRUE;
+
+	}
+	else
+	{ 
+		//set start image in subset
+		if (g_StartNewSubSet && pVS->m_Flags & RVLSYS_FLAGS_BEST_SUBSET_HYPOTHESIS)
+		{
+			//if (g_CurrentSequenceNo < g_AllSequences.size())
+			//{
+			if (g_LastSubSetImageNo >= 0)
+			{
+				g_CurrentImageNo = g_LastSubSetImageNo;
+				//RVLSetFileNumber(pVS->m_ImageFileName, "00000-LW.bmp", g_CurrentImageNo);
+
+				IMAGE_SEQUENCE_DATA& currentSequenceData = g_AllSequences[g_CurrentSequenceNo];
+				//Copy current file name
+				RVLCopyString((char *)(currentSequenceData.ImageFileName.c_str()), &(pVS->m_ImageFileName));
+
+				RVLSetFileNumber(pVS->m_ImageFileName, "00000-LW.bmp", g_CurrentImageNo);
+
+				g_StartNewSubSet = false;
+				return TRUE;
+			}
+			else
+				return FALSE;
+		}
+		else 
+		{ 
+			g_CurrentImageNo = RVLGetFileNumber(pVS->m_ImageFileName, "00000-LW.bmp");
+		}
+
+		//Standard search for images in sequence
+		if ((g_CurrentSequenceNo < g_AllSequences.size()) && (g_CurrentImageNo >= g_AllSequences[g_CurrentSequenceNo].EndNo))
+		{
+			//increase
+			g_CurrentSequenceNo++;
+
+			if (g_CurrentSequenceNo < g_AllSequences.size())
+			{
+				IMAGE_SEQUENCE_DATA& currentSequenceData = g_AllSequences[g_CurrentSequenceNo];
+				//Copy current file name
+				RVLCopyString((char *)currentSequenceData.ImageFileName.c_str(), &(pVS->m_ImageFileName));
+
+				RVLSetFileNumber(pVS->m_ImageFileName, "00000-LW.bmp", currentSequenceData.StartNo);
+
+				g_CurrentImageNo = currentSequenceData.StartNo;
+
+				return TRUE;
+
+			}
+			else
+			{
+				return FALSE;
+			}
+		}
+		else
+		{
+			if (g_CurrentSequenceNo < g_AllSequences.size())
+			{
+				IMAGE_SEQUENCE_DATA& currentSequenceData = g_AllSequences[g_CurrentSequenceNo];
+				return RVLGetNextFileName(pVS->m_ImageFileName, "00000-LW.bmp", currentSequenceData.EndNo);
+			}
+			else
+			{
+				return FALSE;
+			}
+		}
+		
+	}
+	
+}

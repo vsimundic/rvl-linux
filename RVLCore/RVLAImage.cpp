@@ -180,7 +180,7 @@ void CRVLAImage::Init()
 	m_iNeighbor[-m_Width]		= 6;
 	m_iNeighbor[-m_Width + 1]	= 7;
 
-	m_NeighborLimit[0] = m_Width - 1;
+	m_NeighborLimit[0] = m_Width - 5;
 	m_NeighborLimit[1] = m_Height - 1;
 	m_NeighborLimit[2] = 0;
 	m_NeighborLimit[3] = 0;

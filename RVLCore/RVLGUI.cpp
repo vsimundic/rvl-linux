@@ -332,11 +332,17 @@ int CRVLGUI::Message(	char *str,
 	int key;
 
 	if(bWaitForKey)
+	{
 		key = cvWaitKey();
-	else
-		key = 0;
 
-	CRVLGUI::CloseFigure("Message");
+		CRVLGUI::CloseFigure("Message");
+	}
+	else
+	{
+		cvWaitKey(1);
+
+		key = 0;
+	}
 
 	return key;
 }
@@ -526,7 +532,10 @@ void RVLDisplay3DEllipse(double r1,
 						 int &n,
 						 int uOffset)
 {
-	double maxErrCoeff = maxErr / (pCamera->fNrm * r1 / pPoseFC->m_X[2]);
+	double *XcC = pPoseFC->m_X;
+	double r = sqrt(RVLDOTPRODUCT3(XcC, XcC));
+
+	double maxErrCoeff = maxErr / (pCamera->fNrm * r1 / r);
 
 	if(maxErrCoeff > 0.5)
 	{
@@ -535,13 +544,13 @@ void RVLDisplay3DEllipse(double r1,
 		return;
 	}
 
-	n = 2 * DOUBLE2INT(PI / (2 * acos(1.0 - maxErrCoeff))) + 1;
+	int n_ = 2 * DOUBLE2INT(PI / (2 * acos(1.0 - maxErrCoeff))) + 1;
 
-	CvPoint *PtArray = new CvPoint[n];
+	CvPoint *PtArray = new CvPoint[n_];
 
 	*pPtArray = PtArray;
 
-	double dgamma = 2.0 * PI / (double)n;
+	double dgamma = 2.0 * PI / (double)n_;
 
 	double XF[3];
 
@@ -557,7 +566,7 @@ void RVLDisplay3DEllipse(double r1,
 	int i;
 	double gamma;
 
-	for(i = 0; i < n; i++, pPt++)
+	for(i = 0; i < n_; i++)
 	{
 		gamma = (double)i*dgamma;
 		XF[0] = r1 * cos(gamma);
@@ -565,11 +574,16 @@ void RVLDisplay3DEllipse(double r1,
 
 		pPoseFC->Transf(XF, XC);
 
-		pCamera->Project3DPoint(XC, U, iU);
+		pCamera->Project3DPoint2(XC, U, iU);
 
 		pPt->x = iU[0] + uOffset_;
 		pPt->y = iU[1];
-	}	
+
+		pPt++;
+	}
+
+	//n = pPt - PtArray;
+	n = n_;
 }
 
 #ifdef RVLOPENNI

@@ -43,11 +43,17 @@ void CRVLVisionSystem::CreateParamList()
 	pParamData = m_ParamList.AddParam("VS.Mem2Size", RVLPARAM_TYPE_INT, &m_Mem2Size);
 	pParamData = m_ParamList.AddParam("VS.MCMemSize", RVLPARAM_TYPE_INT, &m_MCMemSize);
 	pParamData = m_ParamList.AddParam("VS.ImageFileName", RVLPARAM_TYPE_STRING, &m_ImageFileName);
+	pParamData = m_ParamList.AddParam("VS.SequenceFileName", RVLPARAM_TYPE_STRING, &m_SequenceFileName);
 	pParamData = m_ParamList.AddParam("VS.Kinect.ONIFileName", RVLPARAM_TYPE_STRING, &(m_Kinect.m_ONIFileName));
 	pParamData = m_ParamList.AddParam("VS.Kinect.ONIFile", RVLPARAM_TYPE_FLAG, &(m_Kinect.m_Flags));
 	m_ParamList.AddID(pParamData, "yes", RVLKINECT_FLAG_ONI_FILE);
 	pParamData = m_ParamList.AddParam("VS.Kinect.100UM", RVLPARAM_TYPE_FLAG, &(m_Kinect.m_Flags));
 	m_ParamList.AddID(pParamData, "yes", RVLKINECT_FLAG_100UM);
+	pParamData = m_ParamList.AddParam("VS.UseSequence", RVLPARAM_TYPE_FLAG, &m_Flags);
+	m_ParamList.AddID(pParamData, "yes", RVLSYS_FLAGS_USE_SEQUENCE_FILE);
+	pParamData = m_ParamList.AddParam("VS.GetBestHypothesisInSubSet", RVLPARAM_TYPE_FLAG, &m_Flags);
+	m_ParamList.AddID(pParamData, "yes", RVLSYS_FLAGS_BEST_SUBSET_HYPOTHESIS);
+
 }
 
 DWORD CRVLVisionSystem::Init(char *CfgFile2Name)
@@ -112,6 +118,8 @@ DWORD CRVLVisionSystem::Init(char *CfgFile2Name)
 	//}
 
 	m_StereoVision.Init();
+
+	m_StereoVision.m_zToDepthLookupTable = m_Kinect.m_zToDepthLookupTable;
 
 	m_Kinect.m_scale = m_StereoVision.m_KinectScale;
 

@@ -13,6 +13,7 @@ CRVLPSuLMVS::CRVLPSuLMVS(void)
 	m_MatchMatrixGT = NULL;
 	//m_HypothesisArrayGT = NULL;
 	m_nSamples = 0;
+	m_ResPose.m_ParamFlags = 0x00000000;
 }
 
 CRVLPSuLMVS::~CRVLPSuLMVS(void)
@@ -51,6 +52,10 @@ void CRVLPSuLMVS::CreateParamList()
 	pParamData = m_ParamList.AddParam("VS.Validation", RVLPARAM_TYPE_FLAG, &m_Flags);
 	m_ParamList.AddID(pParamData, "yes", RVLSYS_FLAGS_VALIDATION);
 	pParamData = m_ParamList.AddParam("VS.GroundTruthFileName", RVLPARAM_TYPE_STRING, &(m_GroundTruth.m_FileName));
+	pParamData = m_ParamList.AddParam("VS.Record", RVLPARAM_TYPE_FLAG, &m_Flags);
+	m_ParamList.AddID(pParamData, "yes", RVLSYS_FLAGS_RECORD);
+	pParamData = m_ParamList.AddParam("VS.ReviewResults", RVLPARAM_TYPE_FLAG, &m_Flags);
+	m_ParamList.AddID(pParamData, "yes", RVLSYS_FLAGS_REVIEW_RESULTS);
 }
 
 void CRVLPSuLMVS::Init(char * CfgFile2Name)
@@ -66,6 +71,7 @@ void CRVLPSuLMVS::Init(char * CfgFile2Name)
 	m_PSuLMBuilder.m_pMem0 = &m_Mem0;
 	m_PSuLMBuilder.m_pMem = &m_Mem;
 	m_PSuLMBuilder.m_pMem2 = &m_Mem2;
+	m_PSuLMBuilder.m_pMCMem = m_MCMem;
 	//m_PSuLMBuilder.m_pPoseSA = &m_PoseLA;
 	
 	m_PSuLMBuilder.m_pPoseCB = &m_PoseLA;
@@ -122,8 +128,11 @@ void CRVLPSuLMVS::Init(char * CfgFile2Name)
 
 	LoadMatchMatrix();
 
-	if(m_Flags & RVLSYS_FLAGS_EDIT_MAP)
+	if(m_Flags & (RVLSYS_FLAGS_EDIT_MAP | RVLSYS_FLAGS_REVIEW_RESULTS))
+	{
 		m_PSuLMBuilder.m_Flags &= ~(RVLPSULMBUILDER_FLAG_MODE | RVLPSULMBUILDER_FLAG_MAPBUILDING);
+		m_PSuLMBuilder.m_Flags2 &= ~RVLPSULMBUILDER_FLAG2_SCENE_FUSION;
+	}
 
 	m_pPSuLM = NULL;
 
@@ -449,8 +458,10 @@ void CRVLPSuLMVS::PSuLMBasedRLMUpdate(DWORD Flags)
 			m_PSuLMBuilder.Localization(m_pPSuLM, &m_PoseA0, m_pPrevPSuLM);
 	}
 
-	if((m_PSuLMBuilder.m_Flags & RVLPSULMBUILDER_FLAG_MODE) == RVLPSULMBUILDER_FLAG_MODE_LOCALIZATION)
+	if ((m_PSuLMBuilder.m_Flags & RVLPSULMBUILDER_FLAG_MODE) == RVLPSULMBUILDER_FLAG_MODE_LOCALIZATION)
 		m_PSuLMBuilder.Localization(m_pPSuLM, &m_PoseA0);
+	else
+		m_PSuLMBuilder.m_PriorProbabilityWorldModel = 0.0;
 
 	char *DepthImageFileName = RVLCreateFileName(m_ImageFileName, "-LW.bmp", -1, "-D.txt");
 
@@ -621,14 +632,14 @@ void CRVLPSuLMVS::AppendToMeshFile(CRVL3DPose *pRelPose)
 		mtldat = fopen(GlobalMeshTextureFileName, "w");
 		fclose(mtldat);
 
-		RVLUNITMX3(RAbs);
-		RVLNULL3VECTOR(tAbs);
+		//RVLUNITMX3(RAbs);
+		//RVLNULL3VECTOR(tAbs);
 
 		m_pMeshFile->iPt = 0;
 		m_pMeshFile->iSegment = 0;
 	}
-	else
-	{
+	//else
+	//{
 		//if pRelPose is the pose of the current PSuLM relative to the previous, then the following code should be used.
 
 		//RVLCOMPTRANSF3D(RAbs, tAbs, RRel, tRel, R, t)
@@ -640,7 +651,7 @@ void CRVLPSuLMVS::AppendToMeshFile(CRVL3DPose *pRelPose)
 
 		RVLCOPYMX3X3(RRel, RAbs)
 		RVLCOPY3VECTOR(tRel, tAbs)
-	}
+	//}
 	
 	dat = fopen(m_pMeshFile->Name, "a");
 		
@@ -659,18 +670,125 @@ void CRVLPSuLMVS::AppendToMeshFile(CRVL3DPose *pRelPose)
 	fclose(mtldat);
 }
 
+bool CRVLPSuLMVS::Create3DMeshFromComplexPSuLM(char *ImageFileName)
+{
+	DWORD FlagsOld = m_PSuLMBuilder.m_Flags2;
+
+	m_PSuLMBuilder.m_Flags2 &= ~RVLPSULMBUILDER_FLAG2_COMPLEX;
+
+	CRVLMem *pPSDMemOld = m_PSD.m_pMem;
+
+	CRVLMem *pAImageMemOld = m_AImage.m_pMem;
+
+	CRVLMem Mem;
+
+	Mem.Create(10000000);
+
+	m_PSD.m_pMem = &Mem;
+
+	m_AImage.m_pMem = &Mem;
+
+	CreateMeshFile("Mesh-00000.obj");
+
+	m_PSuLMBuilder.m_ImageFileName = RVLCreateString(ImageFileName);
+
+	char *DisparityImageFileName = RVLCreateFileName(ImageFileName, "-LW.bmp", -1, "-D.txt");
+
+	int iSample = RVLGetFileNumber(ImageFileName, "00000-LW.bmp");
+
+	int iSample0 = iSample;
+
+	//CRVLPSuLM *pPSuLM_;
+
+	CRVL3DPose PoseM_M;
+
+	double *tM_M = PoseM_M.m_X;
+
+	RVLNULL3VECTOR(tM_M)
+
+	bool bOK = true;
+
+	unsigned char command;
+	unsigned int DepthFormat;
+	
+	do
+	{
+		RVLSetFileNumber(m_PSuLMBuilder.m_ImageFileName, "00000-LW.bmp", iSample);
+
+		if(!m_PSuLMBuilder.GetPanTilt(m_PSuLMBuilder.m_ImageFileName, &PoseM_M, iSample0, command))
+		{
+			bOK = false;
+
+			break;
+		}
+
+		m_iMCMem = (m_iMCMem + 1) % RVLSYS_MCMEMSIZE;
+
+		m_MCMem[m_iMCMem].Clear();		
+
+		m_PSuLMBuilder.m_pMCMem = m_MCMem + m_iMCMem;		
+
+		//pPSuLM_ = m_PSuLMBuilder.Create(RVLPSULMBUILDER_CREATEMODEL_FROM_IMAGE | RVLPSULMBUILDER_CREATEMODEL_IMAGE_FROM_FILE);
+
+		RVLSetFileNumber(DisparityImageFileName, "00000-D.txt", iSample);
+
+		if(!RVLImportDisparityImage(DisparityImageFileName, &(m_StereoVision.m_DisparityMap), 
+			DepthFormat, m_StereoVision.m_zToDepthLookupTable))
+		{
+			bOK = false;
+
+			break;
+		}
+
+		m_AImage.Create();
+
+		m_PSD.GetPointsWithDisparity(&(m_StereoVision.m_DisparityMap));
+
+		m_PSD.Segment(&(m_AImage.m_C2DRegion),&(m_AImage.m_C2DRegion2),&(m_AImage.m_C2DRegion3),&Mem);
+
+		m_pRGBImage = cvLoadImage(m_PSuLMBuilder.m_ImageFileName);
+
+		AppendToMeshFile(&PoseM_M);
+
+		Mem.Clear();
+
+		iSample++;
+	}while(command != 'C');
+
+	delete[] DisparityImageFileName;
+
+	m_PSuLMBuilder.m_Flags2 = FlagsOld;
+
+	m_PSD.m_pMem = pPSDMemOld;
+
+	m_AImage.m_pMem = pAImageMemOld;
+
+	RVLSetFileNumber(m_PSuLMBuilder.m_ImageFileName, "00000-LW.bmp", iSample0);
+
+	return bOK;
+}
+
 void CRVLPSuLMVS::CreateLocal3DMesh(CRVLPSuLM *pPSuLM0)
 {
 	CRVL3DPose NullPose;
-	double C[3 * 3];
+	double C[3 * 3 * 3];
+	double *C_;
 
 	RVLNULLMX3X3(C)
+
+	if(!(m_Flags & RVLPSULMBUILDER_HYPOTHESES_UNCERTAINTY_3DOF))
+	{
+		C_ = C + 9;
+		RVLNULLMX3X3(C_)
+		C_ += 9;
+		RVLNULLMX3X3(C_)
+	}
 
 	NullPose.Reset();
 
 	NullPose.m_C = C;
 
-	NullPose.m_ParamFlags = RVL3DPOSE_PARAM_FLAGS_COV_3D;
+	NullPose.m_ParamFlags = (m_PSuLMBuilder.m_Flags & RVLPSULMBUILDER_HYPOTHESES_UNCERTAINTY_3DOF ? RVL3DPOSE_PARAM_FLAGS_COV_3D : RVL3DPOSE_PARAM_FLAGS_COV_6D);
 
 	CRVLMem Mem;
 
@@ -696,6 +814,20 @@ void CRVLPSuLMVS::CreateLocal3DMesh(CRVLPSuLM *pPSuLM0)
 	{
 		pPSuLM = (CRVLPSuLM *)(m_PSuLMBuilder.m_PSuLMSubList.GetNext());
 
+		//// only for debugging purposes!!!
+
+		//RVLPSULM_NEIGHBOR2 *pNeighbor = (RVLPSULM_NEIGHBOR2 *)(pPSuLM0->m_LocalMap.pFirst);
+	
+		//while(pNeighbor)
+		//{
+		//	if(pNeighbor->pMPSuLM == pPSuLM)
+		//		int debug = 0;
+
+		//	pNeighbor = (RVLPSULM_NEIGHBOR2 *)(pNeighbor->pNext);
+		//}	
+
+		///////
+
 		fprintf(fp, "%d\n", pPSuLM->m_Index);
 
 		m_iMCMem = (m_iMCMem + 1) % RVLSYS_MCMEMSIZE;
@@ -712,6 +844,8 @@ void CRVLPSuLMVS::CreateLocal3DMesh(CRVLPSuLM *pPSuLM0)
 
 		AppendToMeshFile(&(pPSuLM->m_PoseRTAs));
 	}
+
+	RVLResetFlags<CRVLPSuLM>(&(m_PSuLMBuilder.m_PSuLMSubList), RVLPSULM_FLAG_CLOSE);
 
 	m_PSuLMBuilder.m_PSuLMSubList.m_pMem = pMemOld;
 
@@ -1098,7 +1232,7 @@ void CRVLPSuLMVS::ComputeMatchMatrix(int iSample)
 	
 	int i, j;
 	CRVLPSuLM *pPSuLM;
-	double P, PriorProbabilityWorldModel;
+	double P;
 
 	for(i = 0; i < nPSuLMs; i++)
 	{
@@ -1117,9 +1251,9 @@ void CRVLPSuLMVS::ComputeMatchMatrix(int iSample)
 				for(j = 0; j < nSFeatures; j++)
 					m_PSuLMBuilder.m_SMatchArray[j].b = false;
 
-				PriorProbabilityWorldModel = m_PSuLMBuilder.ConditionalProbabilityTree(m_pPSuLM, pPSuLM);
+				m_PSuLMBuilder.m_PriorProbabilityWorldModel = m_PSuLMBuilder.ConditionalProbabilityTree(m_pPSuLM, pPSuLM);
 
-				MatchMatrix[i] = P - PriorProbabilityWorldModel;
+				MatchMatrix[i] = P - m_PSuLMBuilder.m_PriorProbabilityWorldModel;
 			}
 	}	
 
@@ -1137,8 +1271,9 @@ void RVLPSuLMDisplayMouseCallback2(int event, int x, int y, int flags, void* vpD
 
 	RVLPSULMDISPLAY_MOUSE_CALLBACK_DATA *pData = (RVLPSULMDISPLAY_MOUSE_CALLBACK_DATA *)vpData;
 
-	CRVL3DSurface2 *pSelectedSurf = NULL;
+	CRVL3DSurface2 *pSelectedSurf = pData->pSelectedSurf;
 	CRVL3DLine2 *pSelectedLine = NULL;
+	RVL3DSURFACE_SAMPLE *pSelectedSurfSample = NULL;
 
 	CRVLGUI *pGUI = pData->pGUI;
 	CRVLFigure *pFig = pData->pFig;
@@ -1159,15 +1294,18 @@ void RVLPSuLMDisplayMouseCallback2(int event, int x, int y, int flags, void* vpD
 
 	int nMatchMatrixCols;
 	int nSSurfaces, nMSurfaces;
-	int nMLines;
+	int nSLines, nMLines;
 
 	if(pHypothesis)
 	{
 		if(HypEvalMethod == RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD_P)
 		{
 			nSSurfaces = pVS->m_pPSuLM->m_n3DSurfaces;
-			nMSurfaces = pHypothesis->pMPSuLM->m_n3DSurfaces;
-			nMLines =  pHypothesis->pMPSuLM->m_n3DLines;
+			nSLines = pVS->m_pPSuLM->m_n3DLines;
+			//nMSurfaces = pHypothesis->pMPSuLM->m_n3DSurfaces;
+			//nMLines =  pHypothesis->pMPSuLM->m_n3DLines;
+			nMSurfaces = pHypothesis->pMPSuLM->m_n3DSurfacesTotal;
+			nMLines =  pHypothesis->pMPSuLM->m_n3DLinesTotal;
 			nMatchMatrixCols = nMSurfaces + nMLines;
 		}
 		else
@@ -1185,7 +1323,8 @@ void RVLPSuLMDisplayMouseCallback2(int event, int x, int y, int flags, void* vpD
 	
 	int iPix;
 	int a, b;
-	int nSurfaces, nSurfaces2;
+	int nSurfaces, nSurfaces2, nLines, nLines2;
+	CRVL3DSurface2 *pSelectedSurf_;
 	int iFOVExtension;
 
 	switch( event )
@@ -1197,7 +1336,7 @@ void RVLPSuLMDisplayMouseCallback2(int event, int x, int y, int flags, void* vpD
 
 				pData->v = y;
 
-				pData->bSelection = true;
+				pData->bSelection = true;				
 
 				iPix = x / pData->ZoomFactor + y / pData->ZoomFactor * wExt;
 
@@ -1213,21 +1352,62 @@ void RVLPSuLMDisplayMouseCallback2(int event, int x, int y, int flags, void* vpD
 						b = 1;
 						nSurfaces = nSSurfaces;
 						nSurfaces2 = nMSurfaces;
+						nLines = nSLines;
+						nLines2 = nMLines;
 					}
 				}
 				else if(pFig->m_Flags & RVLPSULM_DISPLAY_MODEL)
 				{
 					pSFig = pFig2;
-					pMFig = pFig;
 					pPSuLM2 = pVS->m_pPSuLM;
-					pPSuLM = pHypothesis->pMPSuLM;
-					a = 1;
-					b = nMatchMatrixCols;
-					nSurfaces = nMSurfaces;
-					nSurfaces2 = nSSurfaces;
+					if(pHypothesis)
+					{
+						pMFig = pFig;					
+						pPSuLM = pHypothesis->pMPSuLM;
+						a = 1;
+						b = nMatchMatrixCols;
+						nSurfaces = nMSurfaces;
+						nSurfaces2 = nSSurfaces;
+						nLines = nMLines;
+						nLines2 = nSLines;
+					}
+					else
+						pPSuLM = NULL;
 				}
 
-				pPSuLM->Project(&(pFig->m_PoseC0), FALSE, iPix, &pSelectedSurf, &pSelectedLine, &iFOVExtension);
+				if(pPSuLM)
+				{
+					DWORD CameraFlagsOld = pVS->m_PSuLMBuilder.m_pCamera->m_Flags;
+
+					if(pPSuLM->m_Flags & RVLPSULM_FLAG_COMPLEX)
+					{
+						pVS->m_PSuLMBuilder.m_pCamera->m_Flags |= RVLCAMERA_FLAG_SPHERICAL;
+
+						w = pVS->m_PSuLMBuilder.m_pCamera->m_wSpherical;
+					}
+
+					iPix = x / pData->ZoomFactor + y / pData->ZoomFactor * w;
+
+					pSelectedSurf_ = pSelectedSurf;
+
+					pPSuLM->Project(&(pFig->m_PoseC0), FALSE, iPix, &pSelectedSurf, &pSelectedLine, &iFOVExtension);
+
+					if (pVS->m_PSuLMBuilder.m_Flags2 & RVLPSULMBUILDER_FLAG2_HYPOTHESIS_EVALUATION_SAMPLE_MATCHING)
+					{
+						if (pSelectedSurf)
+							pSelectedSurf_ = pSelectedSurf;
+
+						if (pSelectedSurf_)
+							pSelectedSurfSample = pPSuLM->SelectSample(pFig, pSelectedSurf_, &(pFig->m_PoseC0), x / pData->ZoomFactor, y / pData->ZoomFactor);	
+
+						if (pSelectedSurfSample)
+							pSelectedSurf = pSelectedSurf_;
+					}
+
+					pData->pSelectedSurf = pSelectedSurf;
+
+					pVS->m_PSuLMBuilder.m_pCamera->m_Flags = CameraFlagsOld;
+				}
 
 				pFig->Clear();
 
@@ -1250,7 +1430,7 @@ void RVLPSuLMDisplayMouseCallback2(int event, int x, int y, int flags, void* vpD
 				if(pSelectedSurf)
 				{
 					pPSuLM->Display3DSurface(pFig, pSelectedSurf, &NullPose, cvScalar(255, 255, 0), 2,
-						RVLPSULM_DISPLAY_VECTORS);
+						RVLPSULM_DISPLAY_VECTORS, pSelectedSurfSample);
 
 					CRVL2DRegion2 *p2DRegion = (CRVL2DRegion2 *)(pSelectedSurf->m_vp2DRegion);
 
@@ -1296,7 +1476,7 @@ void RVLPSuLMDisplayMouseCallback2(int event, int x, int y, int flags, void* vpD
 							{
 								pSurf2 = pPSuLM2->m_3DSurfaceArray[iMatch];
 
-								pPSuLM2->Display3DSurface(pFig2, pSurf2, &NullPose, cvScalar(255, 0, 0), 2,
+								pPSuLM2->Display3DSurface(pFig2, pSurf2, &NullPose, cvScalar(255, 255, 0), 2,
 									RVLPSULM_DISPLAY_VECTORS);
 							}
 						}	// for(int iMatch = 0; iMatch < nSurfaces2; iMatch++)
@@ -1320,25 +1500,28 @@ void RVLPSuLMDisplayMouseCallback2(int event, int x, int y, int flags, void* vpD
 				{
 					pPSuLM->Display3DLine(pFig, pSelectedLine, &NullPose, cvScalar(255, 255, 0), 2, RVLPSULM_DISPLAY_VECTORS);
 
-					if(HypEvalMethod == RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD_P)
+					if(pSelectedLine->m_Index < nSLines)
 					{
-						if(pHypothesis)
+						if(HypEvalMethod == RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD_P)
 						{
-							BOOL bCorrespondent;
-							CRVL3DLine2 *pLine2;
-
-							for(int iMatch = 0; iMatch < pPSuLM2->m_n3DLines; iMatch++)
+							if(pHypothesis)
 							{
-								bCorrespondent = FALSE;
+								BOOL bCorrespondent;
+								CRVL3DLine2 *pLine2;
 
-								if(pVS->m_PSuLMBuilder.m_MatchMatrix[a * (pSelectedLine->m_Index) + b * iMatch + nMSurfaces] > 0)
-									bCorrespondent = TRUE;
-
-								if(bCorrespondent)
+								for(int iMatch = 0; iMatch < nLines2; iMatch++)
 								{
-									pLine2 = pPSuLM2->m_3DLineArray[iMatch];
+									bCorrespondent = FALSE;
 
-									pPSuLM2->Display3DLine(pFig2, pLine2, &NullPose, cvScalar(255, 0, 0), 2, RVLPSULM_DISPLAY_VECTORS);
+									if(pVS->m_PSuLMBuilder.m_MatchMatrix[a * (pSelectedLine->m_Index) + b * iMatch + nMSurfaces] > 0)
+										bCorrespondent = TRUE;
+
+									if(bCorrespondent)
+									{
+										pLine2 = pPSuLM2->m_3DLineArray[iMatch];
+
+										pPSuLM2->Display3DLine(pFig2, pLine2, &NullPose, cvScalar(255, 255, 0), 2, RVLPSULM_DISPLAY_VECTORS);
+									}
 								}
 							}
 						}
@@ -1356,7 +1539,8 @@ void RVLPSuLMDisplayMouseCallback2(int event, int x, int y, int flags, void* vpD
 					pGUI->ShowFigure(pMFig);
 				}
 
-				pVS->m_PSuLMBuilder.DisplayHypothesisData(pFig, pVS->m_pPSuLM, pData->MatchMatrixGT, pData->mDisplayPSuLMFlags, pData->iHypothesis, pSelectedSurf, pSelectedLine);
+				pVS->m_PSuLMBuilder.DisplayHypothesisData(pFig, pVS->m_pPSuLM, pData->MatchMatrixGT, pData->mDisplayPSuLMFlags, pData->iHypothesis, pSelectedSurf, pSelectedLine, 
+					pSelectedSurfSample);
 			}
 	}	//	switch( event )
 }

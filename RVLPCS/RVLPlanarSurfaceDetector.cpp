@@ -11792,9 +11792,6 @@ void CRVLPlanarSurfaceDetector::SegmentSTRM(CRVLC2D *p2DRegionSet,
 		ExecutionTime = m_pTimer->GetTime() - StartTime;
 
 		int nLevel3Segs = GenRelListFromWER(p2DRegionSet, p2DRegionSet3);
-
-		int debug = 0;
-
 	}
 	else
 	{
@@ -14860,7 +14857,7 @@ void CRVLPlanarSurfaceDetector::Get3DSurfaceAndContours2(CRVL2DRegion2 *p2DRegio
 	int pUVDCenterPt[3], pUVDPt[3], iPlaneWidth, dU, dV;
 	double pXYZPt[3];
 
-	double C[9], Ctemp[3];
+	double Ctemp[3];
 	
 
 	iPlaneWidth = m_MinConvexSegmentSize * m_MinConvexSegmentSize; //width^2
@@ -14933,6 +14930,7 @@ void CRVLPlanarSurfaceDetector::Get3DSurfaceAndContours2(CRVL2DRegion2 *p2DRegio
 	double *R = p3DSurfaceLevel3->m_Pose.m_Rot;
 	double *t = p3DSurfaceLevel3->m_Pose.m_X;
 	double *N = p3DSurfaceLevel3->m_N;
+	//double *C = p3DSurfaceLevel3->m_Cp;
 
 	double eig[3];
 	double VNrm[3 * 3];
@@ -14942,6 +14940,7 @@ void CRVLPlanarSurfaceDetector::Get3DSurfaceAndContours2(CRVL2DRegion2 *p2DRegio
 	double rho;
 	double *pV;
 	double Y[3];
+	double C[9];
 
 	if(m_Flags & RVLPSD_FLAG_MM)
 	{
@@ -15084,10 +15083,18 @@ void CRVLPlanarSurfaceDetector::Get3DSurfaceAndContours2(CRVL2DRegion2 *p2DRegio
 
 		RVLGetKinect2DData(U, t, m_pStereoVision->m_KinectParams);
 
-		pCamera->KinectReconWithUncert(	(double)(U[0]), (double)(U[1]), (double)(U[2]), d0, k_, uc, vc, fu, fv, 
-			m_RuvTol*m_RuvTol, m_RuvdTol*m_RuvdTol, C);	
+		double Cp[9];
 
-		sigmaR = RVLCOV3DTRANSFTO1D(C, N);
+		pCamera->KinectReconWithUncert(	(double)(U[0]), (double)(U[1]), (double)(U[2]), d0, k_, uc, vc, fu, fv, 
+			m_RuvTol*m_RuvTol, m_RuvdTol*m_RuvdTol, Cp);	
+
+		sigmaR = RVLCOV3DTRANSFTO1D(Cp, N);
+
+		//RVLMULVECT3VECT3T(N, N, Cp)
+
+		//RVLSCALEMX3X3(Cp, sigmaR, Cp)
+
+		//RVLSUMMX3X3(C, Cp, C)
 	}
 
 	p3DSurfaceLevel3->m_sigmaR = sigmaR;
@@ -18827,3 +18834,27 @@ void RVLResetFlags(CRVLMPtrChain *pObjectList, BYTE Flags)
 	}
 }
 
+void CRVLPlanarSurfaceDetector::Get3DPlanarSurfaceBoundary(CRVL3DSurface2 * pSurf)
+{
+	RVL3DPOINT3 *pPt;
+
+	RVL3DCONTOUR *pContour = (RVL3DCONTOUR *)(pSurf->m_BoundaryContourList.pFirst);
+
+	while (pContour)
+	{
+		pPt = (RVL3DPOINT3 *)(pContour->PtList.pFirst);
+
+		while (pPt)
+		{
+			RVLProject2DPointTo3DPlane(pPt->P2D, pPt->P3D, pSurf,
+				m_pStereoVision->m_KinectParams.depthUc,
+				m_pStereoVision->m_KinectParams.depthVc,
+				m_pStereoVision->m_KinectParams.depthFu,
+				m_pStereoVision->m_KinectParams.depthFv);
+
+			pPt = (RVL3DPOINT3 *)(pPt->pNext);
+		}
+
+		pContour = (RVL3DCONTOUR *)(pContour->pNext);
+	}
+}

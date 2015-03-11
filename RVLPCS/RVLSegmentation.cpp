@@ -423,8 +423,8 @@ BOOL RVLUpdateConvexHull(CRVLMPtrChain *pTriangleList,
 
 			pTriangle->m_lenN = DOUBLE2INT(sqrt((double)(N[0]) * (double)(N[0]) + (double)(N[1]) * (double)(N[1]) + (double)(N[2]) * (double)(N[2])));
 
-			if(pTriangle->m_lenN == 0)
-				int debug = 0;
+			//if(pTriangle->m_lenN == 0)
+			//	int debug = 0;
 
 			X0_ = pTriangle->m_X0;
 
@@ -1087,9 +1087,6 @@ int RVLGetConvexHull(	CRVL2DRegion2 *pTriangleSrc,
 						bool bmm)
 						//CRVLPlanarSurfaceDetector *pPSD)
 {
-	if(Label == 110)
-		int debug = 0;
-
 	// Form a initial (flat) convex hull consisting of two triangles: pTriangleSrc and the opposite side of the same triangle
 
 	RVLInitConvexHull(pTriangleSrc, pTriangleSet, ImageWidth, Point3DMap, pMem, bmm);
@@ -1278,9 +1275,6 @@ int RVLGetConvexHull(	CRVL2DRegion2 *pTriangleSrc,
 
 		if(pTriangle)
 		{
-			if(pTriangle->m_Index == 2678)
-				int debug = 0;
-
 			//if((pTriangle->m_Flags & RVLOBJ2_FLAG_REJECTED) == 0)
 			{
 				pTriangle2 = (CRVL2DRegion2 *)(pLink->pPrev->pOpposite->vp2DRegion);
@@ -1459,9 +1453,6 @@ int RVLSegmentToConvex( CRVLClass *pTriangleSetSrc,
 	while(pTriangleList->m_pNext)
 	{
 		pTriangle = (CRVL2DRegion2 *)(pTriangleList->GetNext());
-
-		if(pTriangle->m_Index == 1840)
-			int debug = 0;
 
 		pTriangle->m_Label = 0xffffffff;
 
@@ -3204,25 +3195,29 @@ void RVLSegmentationEdgesFromLabels(CRVLClass *pTriangleSet, DWORD Mask, DWORD r
 	}
 }
 
-void RVLSegmentationGetBoundary(CRVL2DRegion2 *pSegment,
-								RVLQLIST *pContourList,								
-								CRVLMem *pMem)
+void RVLSegmentationGetBoundary(
+	CRVL2DRegion2 *pSegment,
+	int w,
+	RVLQLIST *pContourList,
+	CRVLMem *pMem)
 {
 	RVLARRAY *pRelList = pSegment->m_RelList + pSegment->m_pClass->m_iRelList[RVLRELLIST_ELEMENTS];
 
-	RVLQLIST_INIT(pContourList)
+	RVLQLIST_INIT(pContourList);
 
-	RVLQLIST_MULTILEVEL *pContour;	
+	RVL3DCONTOUR *pContour;
 	CRVL2DRegion2 *pTriangle;
 	CRVL2DRegion2 **ppTriangle;
 	RVLMESH_LINK *pLink, *pLink0, *pLink_, *pLink0_;
-	RVLQLIST_INT_ENTRY *pVertex;
+	RVL3DPOINT3 *pVertex;
+	RVLQLIST *pPtList;
+	int Area, u, v;
 
-	for(ppTriangle = (CRVL2DRegion2 **)(pRelList->pFirst); ppTriangle < (CRVL2DRegion2 **)(pRelList->pEnd); ppTriangle++)
+	for (ppTriangle = (CRVL2DRegion2 **)(pRelList->pFirst); ppTriangle < (CRVL2DRegion2 **)(pRelList->pEnd); ppTriangle++)
 	{
 		pTriangle = *ppTriangle;
 
-		if(pTriangle->m_Flags & RVLOBJ2_FLAG_VISITED)
+		if (pTriangle->m_Flags & RVLOBJ2_FLAG_VISITED)
 			continue;
 
 		pTriangle->m_Flags |= RVLOBJ2_FLAG_VISITED;
@@ -3230,42 +3225,54 @@ void RVLSegmentationGetBoundary(CRVL2DRegion2 *pSegment,
 		pLink = pLink0 = (RVLMESH_LINK *)(pTriangle->m_PtArray);
 
 		do
-		{	
-			if(pLink->Flags & RVLMESH_LINK_FLAG_EDGE)
+		{
+			if (pLink->Flags & RVLMESH_LINK_FLAG_EDGE)
 			{
-				RVLMEM_ALLOC_STRUCT(pMem, RVLQLIST_MULTILEVEL, pContour)
+				Area = 0;
 
-				RVLQLIST_ADD_ENTRY(pContourList, pContour)
+				RVLMEM_ALLOC_STRUCT(pMem, RVL3DCONTOUR, pContour);
 
-				RVLQLIST_INIT(pContour)
+				RVLQLIST_ADD_ENTRY(pContourList, pContour);
+
+				pPtList = &(pContour->PtList);
+
+				RVLQLIST_INIT(pPtList);
 
 				pLink0_ = pLink_ = pLink;
 
 				do
 				{
-					RVLMEM_ALLOC_STRUCT(pMem, RVLQLIST_INT_ENTRY, pVertex)
+					RVLMEM_ALLOC_STRUCT(pMem, RVL3DPOINT3, pVertex);
 
-					RVLQLIST_ADD_ENTRY(pContour, pVertex)
+					RVLQLIST_ADD_ENTRY(pPtList, pVertex);
 
-					pVertex->i = pLink_->iPix0;
+					u = pLink_->iPix0 % w;
+					v = pLink_->iPix0 / w;
+
+					pVertex->P2D[0] = u;
+					pVertex->P2D[1] = v;
+
+					Area += (pLink_->dv*(2 * u + pLink_->du));
 
 					do
 						pLink_ = pLink_->pNext;
-					while(!(pLink_->Flags & RVLMESH_LINK_FLAG_EDGE));
+					while (!(pLink_->Flags & RVLMESH_LINK_FLAG_EDGE));
 
 					pLink_ = pLink_->pOpposite;
-				}
-				while(pLink_ != pLink0_);				
+
+					((CRVL2DRegion2 *)(pLink_->vp2DRegion))->m_Flags |= RVLOBJ2_FLAG_VISITED;
+				} while (pLink_ != pLink0_);
+
+				pContour->bHole = (Area <= 0);
 
 				break;
 			}
 
 			pLink = pLink->pNext->pOpposite;
-		}
-		while(pLink != pLink0);		
+		} while (pLink != pLink0);
 	}
 
-	for(ppTriangle = (CRVL2DRegion2 **)(pRelList->pFirst); ppTriangle < (CRVL2DRegion2 **)(pRelList->pEnd); ppTriangle++)
+	for (ppTriangle = (CRVL2DRegion2 **)(pRelList->pFirst); ppTriangle < (CRVL2DRegion2 **)(pRelList->pEnd); ppTriangle++)
 	{
 		pTriangle = *ppTriangle;
 

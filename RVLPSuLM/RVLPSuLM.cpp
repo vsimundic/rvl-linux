@@ -69,7 +69,7 @@ void CRVLPSuLM::Project(CRVL3DPose *pPoseC0,
 
 	if(iSelectedPix >= 0)
 	{
-		w = pBuilder->m_pCamera->Width;
+		w = (m_Flags & RVLPSULM_FLAG_COMPLEX ? pBuilder->m_pCamera->m_wSpherical : pBuilder->m_pCamera->Width);
 		h = pBuilder->m_pCamera->Height;
 		wExt = (2 * pPSD->m_nFOVExtensions + 1) * w;
 		u = ((iSelectedPix % wExt) << 1) + 1;
@@ -103,6 +103,11 @@ void CRVLPSuLM::Project(CRVL3DPose *pPoseC0,
 
 		RVLMXMUL3X3T2(P, RC0, A);
 
+		double R0C[9], t0C[3];
+
+		if(m_Flags & RVLPSULM_FLAG_COMPLEX)
+			RVLINVTRANSF3D(RC0, tC0, R0C, t0C)
+
 		// clear cell array
 
 		RVLPSULM_CELL *CellArray = pBuilder->m_CellArray;
@@ -123,12 +128,13 @@ void CRVLPSuLM::Project(CRVL3DPose *pPoseC0,
 			iUSelected[1] = v;
 
 			CRVL3DLine2 *pLine;
-			CvPoint Pt1, Pt2;
 			BYTE CropSide;
 			CRVL2DLine2 Line2D;
 			int dist;
 			BYTE bOut;
 			int iU1[2], iU2[2];
+			CvPoint *PtArray;
+			int nPts;
 
 			m_3DLineList.Start();
 
@@ -136,25 +142,46 @@ void CRVLPSuLM::Project(CRVL3DPose *pPoseC0,
 			{
 				pLine = (CRVL3DLine2 *)(m_3DLineList.GetNext());
 
-				bOut = RVLCrop3DLine(pLine->m_X[0], pLine->m_X[1], A, tC0, &(pBuilder->m_ROI),
-					pBuilder->m_CropLTs.minz, pBuilder->m_CropLTs.minr, pBuilder->m_CropLTs.bOutLT, 
-					iU1, iU2, &Pt1, &Pt2, CropSide);
+				//if(pLine->m_Index == 82)
+				//	int debug = 0;
 
-				Line2D.m_iU[0][0] = Pt1.x;
-				Line2D.m_iU[0][1] = Pt1.y;
-				Line2D.m_iU[1][0] = Pt2.x;
-				Line2D.m_iU[1][1] = Pt2.y;
-
-				Line2D.SetdiU();
-
-				dist = Line2D.Distance(iUSelected);
-
-				if(dist < 4)
+				if(m_Flags & RVLPSULM_FLAG_COMPLEX)
+					RVLCrop3DLineSpherical(pLine->m_X[0], pLine->m_X[1], R0C, t0C, pBuilder->m_pCamera,
+						&(pBuilder->m_ROI), pBuilder->m_CropLTs.minz, pBuilder->m_CropLTs.bOutLT, &PtArray, nPts, CropSide);
+				else				
 				{
-					*ppSelectedLine = pLine;
+					nPts = 2;
 
-					break;
+					PtArray = new CvPoint[2];
+
+					bOut = RVLCrop3DLine(pLine->m_X[0], pLine->m_X[1], A, tC0, &(pBuilder->m_ROI),
+						pBuilder->m_CropLTs.minz, pBuilder->m_CropLTs.minr, pBuilder->m_CropLTs.bOutLT, 
+						iU1, iU2, PtArray, PtArray + 1, CropSide);
 				}
+
+				for(int i = 1; i < nPts; i++)
+				{
+					Line2D.m_iU[0][0] = PtArray[i - 1].x;
+					Line2D.m_iU[0][1] = PtArray[i - 1].y;
+					Line2D.m_iU[1][0] = PtArray[i].x;
+					Line2D.m_iU[1][1] = PtArray[i].y;
+
+					Line2D.SetdiU();
+
+					if(Line2D.m_leniU > 0)
+					{
+						dist = Line2D.Distance(iUSelected);
+
+						if(dist < 4)
+						{
+							*ppSelectedLine = pLine;
+
+							break;
+						}
+					}
+				}
+
+				delete[] PtArray;
 			}
 		}
 
@@ -792,6 +819,17 @@ void CRVLPSuLM::Display(CRVLFigure * pFig,
 
 	RVLMXMUL3X3T2(P, RCM, A);
 
+	DWORD CameraFlagsOld = pPSuLMBuilder->m_pCamera->m_Flags;
+
+	double RMC[9], tMC[3];
+
+	if(m_Flags & RVLPSULM_FLAG_COMPLEX)
+	{
+		RVLINVTRANSF3D(RCM, tCM, RMC, tMC)
+
+		pPSuLMBuilder->m_pCamera->m_Flags |= RVLCAMERA_FLAG_SPHERICAL;
+	}
+
 	// display surfaces
 
 	if(Flags & RVLPSULM_DISPLAY_SURFACES)
@@ -923,12 +961,12 @@ void CRVLPSuLM::Display(CRVLFigure * pFig,
 				}	// if(pPSD->ProjectToFOVExtension(tFC, P, RCC_, iFOVExtension))
 			}	// if(Flags & RVLPSULM_DISPLAY_ELLIPSES)
 
-			if(Flags & RVLPSULM_DISPLAY_SAMPLES)
-				Display3DSurfaceSamples(pFig, pSurf, A, tCM, Flags | 
-					RVLPSULM_DISPLAY_SAMPLE_REGIONS | 
-					RVLPSULM_DISPLAY_SAMPLE_TYPES | 
-					RVLPSULM_DISPLAY_COLOR
-					);
+			//if(Flags & RVLPSULM_DISPLAY_SAMPLES)
+			//	Display3DSurfaceSamples(pFig, pSurf, A, RCM, tCM, Flags | 
+			//		RVLPSULM_DISPLAY_SAMPLE_REGIONS | 
+			//		RVLPSULM_DISPLAY_SAMPLE_TYPES | 
+			//		RVLPSULM_DISPLAY_COLOR
+			//		);
 		}	// for all surfaces
 #endif
 	}	// if(Flags & RVLPSULM_DISPLAY_SURFACES)
@@ -940,9 +978,11 @@ void CRVLPSuLM::Display(CRVLFigure * pFig,
 		CRVL3DLine2 *pLine;
 		BYTE bOut;
 		int iU1[2], iU2[2];
-		CvPoint Pt1, Pt2;
 		BYTE CropSide;
-		double X1[3], X2[3];
+		CvPoint *PtArray;
+		int nPts;
+
+		//double X1[3], X2[3];
 
 		m_3DLineList.Start();
 
@@ -950,65 +990,93 @@ void CRVLPSuLM::Display(CRVLFigure * pFig,
 		{
 			pLine = (CRVL3DLine2 *)(m_3DLineList.GetNext());
 
-			bOut = RVLCrop3DLine(pLine->m_X[0], pLine->m_X[1], A, tCM, &(pPSuLMBuilder->m_ROI),
-				pPSuLMBuilder->m_CropLTs.minz, pPSuLMBuilder->m_CropLTs.minr, pPSuLMBuilder->m_CropLTs.bOutLT, 
-				iU1, iU2, &Pt1, &Pt2, CropSide);
-
-			if(bOut & 0x04)
-				continue;
-
-			if(Flags & RVLPSULM_DISPLAY_VECTORS)
+			if(m_Flags & RVLPSULM_FLAG_COMPLEX)
+				RVLCrop3DLineSpherical(pLine->m_X[0], pLine->m_X[1], RMC, tMC, pPSuLMBuilder->m_pCamera,
+					&(pPSuLMBuilder->m_ROI), pPSuLMBuilder->m_CropLTs.minz, pPSuLMBuilder->m_CropLTs.bOutLT, &PtArray, nPts, CropSide);
+			else
 			{
-				pVector = pFig->AddVector(&Vector);
+				nPts = 2;
 
-				pVector->m_PointType = RVLGUI_POINT_DISPLAY_TYPE_SQUARE;
-				pVector->m_bClosed = FALSE;
-				pVector->m_LineWidth = 2;
+				PtArray = new CvPoint[2];
 
-				if(pLine->m_Flags & RVLOBJ2_FLAG_MARKED)
+				bOut = RVLCrop3DLine(pLine->m_X[0], pLine->m_X[1], A, tCM, &(pPSuLMBuilder->m_ROI),
+					pPSuLMBuilder->m_CropLTs.minz, pPSuLMBuilder->m_CropLTs.minr, pPSuLMBuilder->m_CropLTs.bOutLT, 
+					iU1, iU2, PtArray, PtArray + 1, CropSide);
+
+				if(bOut & 0x04)
+					nPts = 0;
+			}
+
+			if(nPts == 0)
+			{
+				delete[] PtArray;
+
+				continue;
+			}
+
+			for(int i = 1; i < nPts; i++)
+			{
+				if(Flags & RVLPSULM_DISPLAY_VECTORS)
 				{
-					pVector->m_rP = 255;
-					pVector->m_gP = 192;
-					pVector->m_bP = 255;
-					pVector->m_rL = 255;
-					pVector->m_gL = 192;
-					pVector->m_bL = 255;
+					pVector = pFig->AddVector(&Vector);
+
+					pVector->m_PointType = RVLGUI_POINT_DISPLAY_TYPE_SQUARE;
+					pVector->m_bClosed = FALSE;
+					pVector->m_LineWidth = 2;
+
+					if(pLine->m_Flags & RVLOBJ2_FLAG_MARKED)
+					{
+						pVector->m_rP = 255;
+						pVector->m_gP = 192;
+						pVector->m_bP = 255;
+						pVector->m_rL = 255;
+						pVector->m_gL = 192;
+						pVector->m_bL = 255;
+					}
+					else
+					{
+						pVector->m_rP = 255;
+						pVector->m_gP = 0;
+						pVector->m_bP = 255;
+						pVector->m_rL = 255;
+						pVector->m_gL = 0;
+						pVector->m_bL = 255;
+					}
+
+					pVector->Line(PtArray[i - 1].x, PtArray[i - 1].y, PtArray[i].x, PtArray[i].y);
 				}
 				else
 				{
-					pVector->m_rP = 255;
-					pVector->m_gP = 0;
-					pVector->m_bP = 255;
-					pVector->m_rL = 255;
-					pVector->m_gL = 0;
-					pVector->m_bL = 255;
+					PtArray[i - 1].x /= 2;
+					PtArray[i - 1].y /= 2;
+					PtArray[i].x /= 2;
+					PtArray[i].y /= 2;
+
+					cvLine(pFig->m_pImage, PtArray[i - 1], PtArray[i], cvScalar(255, 0, 255), 2);
 				}
-
-				pVector->Line(Pt1.x, Pt1.y, Pt2.x, Pt2.y);
 			}
-			else
-			{
-				Pt1.x /= 2;
-				Pt1.y /= 2;
-				Pt2.x /= 2;
-				Pt2.y /= 2;
 
-				cvLine(pFig->m_pImage, Pt1, Pt2, cvScalar(255, 0, 255), 2);
-			}
+			delete[] PtArray;
 		}
 	}
+
+	pPSuLMBuilder->m_pCamera->m_Flags = CameraFlagsOld;
 }
 
 void CRVLPSuLM::Display3DSurfaceSamples(CRVLFigure * pFig,
 										CRVL3DSurface2 *pSurf,
 										double *A, 
+										double *RCM,
 										double *tCM,
-										DWORD Flags)
+										DWORD Flags,
+										RVL3DSURFACE_SAMPLE *pSelectedSample)
 {
 	CRVLPSuLMBuilder *pPSuLMBuilder = (CRVLPSuLMBuilder *)m_vpBuilder;
 
-	int w = pPSuLMBuilder->m_pPSD->m_Width;
-	int h = pPSuLMBuilder->m_pPSD->m_Height;
+	//int w = pPSuLMBuilder->m_pPSD->m_Width;
+	//int h = pPSuLMBuilder->m_pPSD->m_Height;
+	int w = pFig->m_pImage->width;
+	int h = pFig->m_pImage->height;
 
 	CRVLDisplayVector Vector;
 	unsigned char *ImageData;
@@ -1023,6 +1091,12 @@ void CRVLPSuLM::Display3DSurfaceSamples(CRVLFigure * pFig,
 		wStep = pFig->m_pImage->widthStep;
 	}
 
+	double fu = pPSuLMBuilder->m_pStereoVision->m_KinectParams.depthFu;
+	double fv = pPSuLMBuilder->m_pStereoVision->m_KinectParams.depthFv;
+	double f = RVLMAX(fu, fv);
+
+	double kSpherical = pPSuLMBuilder->m_pCamera->m_kSpherical / f;
+
 	RVL3DSURFACE_SAMPLE *pSample = (RVL3DSURFACE_SAMPLE *)(pSurf->m_Samples.pFirst);
 
 	double *XM;
@@ -1033,20 +1107,40 @@ void CRVLPSuLM::Display3DSurfaceSamples(CRVLFigure * pFig,
 	CvScalar Color;
 	int wSampleRegion;
 	CvRect SampleRegion;
+	double U[2];
+	int iU[2];
+	double r;
 
 	while(pSample)
 	{
 		XM = pSample->X;
 
-		RVLDIF3VECTORS(XM, tCM, tmp3x1)
-		RVLMULMX3X3VECT(A, tmp3x1, XC)
+		RVLDIF3VECTORS(XM, tCM, tmp3x1);
 
-		u = DOUBLE2INT(XC[0] / XC[2]);
-		v = DOUBLE2INT(XC[1] / XC[2]);
+		if (m_Flags & RVLPSULM_FLAG_COMPLEX)
+		{
+			RVLMULMX3X3TVECT(RCM, tmp3x1, XC);
+
+			pPSuLMBuilder->m_pCamera->Project3DPointToSphere(XC, U, iU);
+
+			u = (iU[0] >> 1);
+			v = (iU[1] >> 1);
+
+			r = sqrt(RVLDOTPRODUCT3(XC, XC));
+		}
+		else
+		{			
+			RVLMULMX3X3VECT(A, tmp3x1, XC);
+
+			u = DOUBLE2INT(XC[0] / XC[2]);
+			v = DOUBLE2INT(XC[1] / XC[2]);
+		}
 
 		if(Flags & RVLPSULM_DISPLAY_COLOR)
 		{
-			if(Flags & RVLPSULM_DISPLAY_SAMPLE_TYPES)
+			if (pSample == pSelectedSample)
+				Color = cvScalar(255, 128, 0);
+			else if(Flags & RVLPSULM_DISPLAY_SAMPLE_TYPES)
 			{
 				switch(pSample->Flags){
 				case RVL3DSURFACE_SAMPLE_FLAG_MATCHED:
@@ -1092,7 +1186,7 @@ void CRVLPSuLM::Display3DSurfaceSamples(CRVLFigure * pFig,
 
 				if(Flags & RVLPSULM_DISPLAY_SAMPLE_REGIONS)
 				{
-					wSampleRegion = DOUBLE2INT(pSample->wz / XM[2]);
+					wSampleRegion = DOUBLE2INT((m_Flags & RVLPSULM_FLAG_COMPLEX ? pSample->wz / r * kSpherical : pSample->wz / XM[2]));
 
 					SampleRegion.x = ((u - wSampleRegion) << 1);
 					SampleRegion.y = ((v - wSampleRegion) << 1);
@@ -1119,7 +1213,7 @@ void CRVLPSuLM::Display3DSurfaceSamples(CRVLFigure * pFig,
 		}
 
 		pSample = (RVL3DSURFACE_SAMPLE *)(pSample->pNext);
-	}
+	}	// for each sample
 }
 
 void CRVLPSuLM::Display3DSurface(	CRVLFigure * pFig,
@@ -1127,11 +1221,17 @@ void CRVLPSuLM::Display3DSurface(	CRVLFigure * pFig,
 									CRVL3DPose *pPoseM0,
 									CvScalar Color,
 									int LineWidth,
-									DWORD Flags)
+									DWORD Flags,
+									RVL3DSURFACE_SAMPLE *pSelectedSample)
 {
 	CRVLPSuLMBuilder *pPSuLMBuilder = (CRVLPSuLMBuilder *)m_vpBuilder;
 
 	CRVLPlanarSurfaceDetector *pPSD = pPSuLMBuilder->m_pPSD;
+
+	DWORD CameraFlagsOld = pPSuLMBuilder->m_pCamera->m_Flags;
+
+	if(m_Flags & RVLPSULM_FLAG_COMPLEX)
+		pPSuLMBuilder->m_pCamera->m_Flags |= RVLCAMERA_FLAG_SPHERICAL;
 
 	CRVLDisplayVector Vector;
 	
@@ -1239,7 +1339,11 @@ void CRVLPSuLM::Display3DSurface(	CRVLFigure * pFig,
 				cvPolyLine(pFig->m_pImage, &PtArray, &nPts, 1, 1, Color);
 			}
 
-			Display3DSurfaceSamples(pFig, pSurf, A, tCM, Flags);
+		Display3DSurfaceSamples(pFig, pSurf, A, RCM, tCM, Flags |
+					RVLPSULM_DISPLAY_SAMPLE_REGIONS | 
+					RVLPSULM_DISPLAY_SAMPLE_TYPES | 
+					RVLPSULM_DISPLAY_COLOR,
+					pSelectedSample);
 
 #ifdef RVLPSULM_CONVEX_SEGMENTS
 		}
@@ -1249,6 +1353,8 @@ void CRVLPSuLM::Display3DSurface(	CRVLFigure * pFig,
 		}
 	}
 #endif
+
+	pPSuLMBuilder->m_pCamera->m_Flags = CameraFlagsOld;
 }
 
 void CRVLPSuLM::Display3DLine(	CRVLFigure * pFig,
@@ -1298,34 +1404,62 @@ void CRVLPSuLM::Display3DLine(	CRVLFigure * pFig,
 
 	RVLMXMUL3X3T2(P, RCM, A);
 
+	double RMC[9], tMC[3];
+
+	if(m_Flags & RVLPSULM_FLAG_COMPLEX)
+		RVLINVTRANSF3D(RCM, tCM, RMC, tMC)
+
 	BYTE bOut;
 	int iU1[2], iU2[2];
-	CvPoint Pt1, Pt2;
+	CvPoint *PtArray;
+	int nPts;
 	BYTE CropSide;
-	double X1[3], X2[3];
+	//double X1[3], X2[3];
 
-	bOut = RVLCrop3DLine(pLine->m_X[0], pLine->m_X[1], A, tCM, &(pPSuLMBuilder->m_ROI),
-		pPSuLMBuilder->m_CropLTs.minz, pPSuLMBuilder->m_CropLTs.minr, pPSuLMBuilder->m_CropLTs.bOutLT, 
-		iU1, iU2, &Pt1, &Pt2, CropSide);
-
-	if(bOut & 0x04)
-		return;
-
-	if(Flags & RVLPSULM_DISPLAY_VECTORS)
-	{
-		pVector = pFig->AddVector(&Vector);
-
-		pVector->Line(Pt1.x, Pt1.y, Pt2.x, Pt2.y);
-	}
+	if(m_Flags & RVLPSULM_FLAG_COMPLEX)
+		RVLCrop3DLineSpherical(pLine->m_X[0], pLine->m_X[1], RMC, tMC, pPSuLMBuilder->m_pCamera,
+			&(pPSuLMBuilder->m_ROI), pPSuLMBuilder->m_CropLTs.minz, pPSuLMBuilder->m_CropLTs.bOutLT, &PtArray, nPts, CropSide);
 	else
 	{
-		Pt1.x /= 2;
-		Pt1.y /= 2;
-		Pt2.x /= 2;
-		Pt2.y /= 2;
+		nPts = 2;
 
-		cvLine(pFig->m_pImage, Pt1, Pt2, Color, 2);
-	}	
+		PtArray = new CvPoint[2];
+
+		bOut = RVLCrop3DLine(pLine->m_X[0], pLine->m_X[1], A, tCM, &(pPSuLMBuilder->m_ROI),
+			pPSuLMBuilder->m_CropLTs.minz, pPSuLMBuilder->m_CropLTs.minr, pPSuLMBuilder->m_CropLTs.bOutLT, 
+			iU1, iU2, PtArray, PtArray + 1, CropSide);
+
+		if(bOut & 0x04)
+			nPts = 0;
+	}
+
+	if(nPts == 0)
+	{
+		delete[] PtArray;
+
+		return;
+	}
+
+	for(int i = 1; i < nPts; i++)
+	{
+		if(Flags & RVLPSULM_DISPLAY_VECTORS)
+		{
+			pVector = pFig->AddVector(&Vector);
+
+			pVector->Line(PtArray[i - 1].x, PtArray[i - 1].y, PtArray[i].x, PtArray[i].y);
+		}
+		else
+		{
+			PtArray[i - 1].x /= 2;
+			PtArray[i - 1].y /= 2;
+			PtArray[i].x /= 2;
+			PtArray[i].y /= 2;
+
+			cvLine(pFig->m_pImage, PtArray[i - 1], PtArray[i], Color, 2);
+		}
+	}
+
+	delete[] PtArray;
 }
 
 void CRVLPSuLM::Display(CRVLGUI * pGUI,
@@ -1632,6 +1766,9 @@ void CRVLPSuLM::Save(FILE * fp, DWORD Flags)
 
 	int n3DConvexSegments;
 	int i;
+
+	if(pBuilder->m_Flags2 & RVLPSULMBUILDER_FLAG2_FILE_VERSION_2)
+		fwrite(&m_Flags, sizeof(DWORD), 1, fp);
 	
 	//save if min Plane exists
 	fwrite(&m_minPlaneExists, sizeof(BOOL), 1, fp);
@@ -1734,7 +1871,7 @@ void CRVLPSuLM::Save(FILE * fp, DWORD Flags)
 
 		//CRVLClass *p2DLineSet = p2DLine->m_pClass;		
 
-		CRVL3DLine2 **p3DLineArrayEnd = m_3DLineArray + m_n3DLines;
+		CRVL3DLine2 **p3DLineArrayEnd = m_3DLineArray + m_n3DLinesTotal;
 
 		CRVL3DLine2 **pp3DLine;
 
@@ -1848,6 +1985,9 @@ void CRVLPSuLM::Load(FILE * fp, DWORD Flags)
 	CRVLClass  *p3DConvexSegmentSet = &(pBuilder->m_M3DConvexSegmentSet);
 	CRVLClass  *p3DContourSet = &(pBuilder->m_M3DContourSet);
 
+	if(Flags & RVLPSULMBUILDER_FLAG2_FILE_VERSION_2)
+		fread(&m_Flags, sizeof(DWORD), 1, fp);
+
 	//get if min Plane exists
 	fread(&m_minPlaneExists, sizeof(BOOL), 1, fp);
 
@@ -1862,6 +2002,10 @@ void CRVLPSuLM::Load(FILE * fp, DWORD Flags)
 
 	//get and store total number of 3D surface
 	fread(&m_n3DSurfacesTotal, sizeof(int), 1, fp);
+
+	int maxnDominant3DSurfaces = (m_Flags & RVLPSULM_FLAG_COMPLEX ? pBuilder->m_maxnDominant3DSurfacesComplex : 
+		pBuilder->m_maxnDominant3DSurfaces);
+	m_n3DSurfaces = (m_n3DSurfacesTotal >= maxnDominant3DSurfaces ? maxnDominant3DSurfaces : m_n3DSurfacesTotal);
 
 	//allocate SurfaceArray
 	m_3DSurfaceArray = (CRVL3DSurface2 **)(pBuilder->m_pMem0->Alloc(m_n3DSurfacesTotal * sizeof(CRVL3DSurface2 *)));
@@ -1902,7 +2046,9 @@ void CRVLPSuLM::Load(FILE * fp, DWORD Flags)
 
 		p3DSurface->m_Index = i;
 	
-		
+		if (m_Flags & RVLPSULM_FLAG_SURFACE_BOUNDARY)
+			p3DSurface->m_Flags |= RVL3DSURFACE_FLAG_BOUNDARY;
+
 		//Load 3D surface (m_N and m_d)
 		p3DSurface->Load(fp);
 
@@ -1973,7 +2119,9 @@ void CRVLPSuLM::Load(FILE * fp, DWORD Flags)
 	
 	fread(&m_n3DLinesTotal, sizeof(int), 1, fp);
 
-	m_n3DLines = (m_n3DLinesTotal > pBuilder->m_maxnDominant3DLines ? pBuilder->m_maxnDominant3DLines : m_n3DLinesTotal);
+	int maxnDominant3DLines = (m_Flags & RVLPSULM_FLAG_COMPLEX ? pBuilder->m_maxnDominant3DLinesComplex : 
+		pBuilder->m_maxnDominant3DLines);
+	m_n3DLines = (m_n3DLinesTotal > maxnDominant3DLines ? maxnDominant3DLines : m_n3DLinesTotal);
 
 	m_3DLineArray = (CRVL3DLine2 **)(pBuilder->m_pMem0->Alloc(m_n3DLinesTotal * sizeof(CRVL3DLine2 *)));
 
@@ -2571,14 +2719,14 @@ void CRVLPSuLM::CreateCellArray()
 	}
 }
 
-void CRVLPSuLM::Get3DSurfaceSamplesFrom2DRegionSamples(int nSamples)
+void CRVLPSuLM::Get3DSurfaceSamplesFrom2DRegionSamples(
+	int nSamples,
+	CRVLClass *p3DSurfaceSet,
+	RVLPTRCHAIN_ELEMENT **ppFirstSurface)
 {
-	m_nSurfaceSamples = nSamples;
+	m_nSurfaceSamples += nSamples;
 
 	if(nSamples == 0)
-		return;
-
-	if(m_n3DSurfaces == 0)
 		return;
 
 	CRVLPSuLMBuilder *pBuilder = (CRVLPSuLMBuilder *)m_vpBuilder;
@@ -2592,7 +2740,7 @@ void CRVLPSuLM::Get3DSurfaceSamplesFrom2DRegionSamples(int nSamples)
 	//double f = RVLMAX(pStereoVision->m_KinectParams.depthFu, pStereoVision->m_KinectParams.depthFv);
 
 	//CRVLC3D *p3DSurfaceSet = (CRVLC3D *)(m_3DSurfaceArray[0]->m_pClass);
-	CRVLClass *p3DSurfaceSet = m_3DSurfaceArray[0]->m_pClass;
+	//CRVLClass *p3DSurfaceSet = m_3DSurfaceArray[0]->m_pClass;
 
 	RVLAPIX *APixArray = pPSD->m_pAImage->m_pPix;
 
@@ -2604,12 +2752,12 @@ void CRVLPSuLM::Get3DSurfaceSamplesFrom2DRegionSamples(int nSamples)
 
 	RVL3DSURFACE_SAMPLE *p3DSurfaceSample = SampleMem;
 
-	CRVL3DSurface2 **p3DSurfaceArrayEnd = m_3DSurfaceArray + m_n3DSurfacesTotal;  //m_n3DSurfaces
+	//CRVL3DSurface2 **p3DSurfaceArrayEnd = m_3DSurfaceArray + m_n3DSurfacesTotal;  //m_n3DSurfaces
 
 	double RuvTol2 = pPSD->m_RuvTol*pPSD->m_RuvTol;
 	double RuvdTol2 = pPSD->m_RuvdTol*pPSD->m_RuvdTol;
 
-	CRVL3DSurface2 **pp3DSurface;
+	//CRVL3DSurface2 **pp3DSurface;
 	CRVL3DSurface2 *p3DSurface;
 	CRVL2DRegion2 *p2DRegion;
 	RVLPSD_2DREGION_SAMPLE *p2DRegionSample;
@@ -2625,9 +2773,21 @@ void CRVLPSuLM::Get3DSurfaceSamplesFrom2DRegionSamples(int nSamples)
 	BOOL bReal[3];
 	double q, wz, stdX;
 
-	for(pp3DSurface = m_3DSurfaceArray; pp3DSurface < p3DSurfaceArrayEnd; pp3DSurface++)
+	//for(pp3DSurface = m_3DSurfaceArray; pp3DSurface < p3DSurfaceArrayEnd; pp3DSurface++)
+
+	CRVLMPtrChain *pSurfaceList = &(p3DSurfaceSet->m_ObjectList);
+
+	pSurfaceList->m_pNext = *ppFirstSurface;
+
+	while (pSurfaceList->m_pNext)
 	{
-		p3DSurface = *pp3DSurface;
+		p3DSurface = (CRVL3DSurface2 *)(pSurfaceList->GetNext());
+		//p3DSurface = *pp3DSurface;
+
+		if (!(p3DSurface->m_Flags & RVL3DSURFACE_FLAG_CLOSE))
+			continue;
+
+		p3DSurface->m_Flags |= RVL3DSURFACE_FLAG_SAMPLES;
 
 		N = p3DSurface->m_N;
 
@@ -3164,9 +3324,9 @@ void CRVLPSuLM::AddToMeshFile(	char *MeshName,
 	CRVLPSuLMBuilder *pBuilder = (CRVLPSuLMBuilder *)m_vpBuilder;
 
 	double fu = pBuilder->m_pStereoVision->m_KinectParams.depthFu;
-	double fv = pBuilder->m_pStereoVision->m_KinectParams.depthFu;
-	double uc = pBuilder->m_pStereoVision->m_KinectParams.depthUc;
-	double vc = pBuilder->m_pStereoVision->m_KinectParams.depthVc;
+	//double fv = pBuilder->m_pStereoVision->m_KinectParams.depthFu;
+	//double uc = pBuilder->m_pStereoVision->m_KinectParams.depthUc;
+	//double vc = pBuilder->m_pStereoVision->m_KinectParams.depthVc;
 
 	int nSamples = m_nSurfaceSamples;
 
@@ -3225,12 +3385,15 @@ void CRVLPSuLM::AddToMeshFile(	char *MeshName,
 	// create mesh 
 
 	int j;
-	int U[2];
-	double U0[2], dU[2];
+	//int U[2];
+	//double U0[2], dU[2];
 	double fTmp;
 	double *X, *N;
 	double X0[3], N0[3], X2[3];
 	double *pVertex2;	//$
+	double w;
+	double XWM[3], YWM[3], PWM[3];
+	double p, q, s, rho;
 
 	for(i=0;i<m_n3DSurfacesTotal;i++)
 	{
@@ -3255,31 +3418,57 @@ void CRVLPSuLM::AddToMeshFile(	char *MeshName,
 
 			X = pSample->X;
 
-			RVLMULMX3X3VECT(R, X, X0)
-			RVLSUM3VECTORS(X0, t, X0)
+			RVLTRANSF3(X, R, t, X0);
 			RVLCOPY3VECTOR(X0, pVertex2)
 			
 			pVertex2 += 3;
 
 			RVLCOPY3VECTOR(N0, pN);
 
+			rho = RVLDOTPRODUCT3(N, X);
+
 			pN += 3;
 
-			U0[0] = fu * X[0] / X[2] + uc;
-			U0[1] = fv * X[1] / X[2] + vc;
+			//U0[0] = fu * X[0] / X[2] + uc;
+			//U0[1] = fv * X[1] / X[2] + vc;
 
-			dU[0] = dU[1] = scale * (pSample->wz / X[2] + 1.0);
+			//dU[0] = dU[1] = scale * (pSample->wz / X[2] + 1.0);
+
+			w = pSample->wz / fu;
+
+			XWM[0] = -X[2];
+			XWM[1] = 0.0;
+			XWM[2] = X[0];
+
+			RVLNORM3(XWM, fTmp);
+
+			RVLCROSSPRODUCT3(X, XWM, YWM);
+
+			RVLNORM3(YWM, fTmp);
+
+			p = w;
+			q = w;
 
 			for(j = 0; j < 4; j++, pVertex2 += 3, pN += 3)
 			{
+				PWM[0] = X[0] + p * XWM[0] + q * YWM[0];
+				PWM[1] = X[1] + p * XWM[1] + q * YWM[1];
+				PWM[2] = X[2] + p * XWM[2] + q * YWM[2];
 
-				U[0] = DOUBLE2INT(U0[0] + dU[0]);
-				U[1] = DOUBLE2INT(U0[1] + dU[1]);
+				s = rho / RVLDOTPRODUCT3(PWM, N);
 
-				RVLProject2DPointTo3DPlane(U, X2, p3DSurface, uc, vc, fu, fv);
+				RVLSCALE3VECTOR(PWM, s, X2);				
 
-				RVLMULMX3X3VECT(R, X2, pVertex2)
-				RVLSUM3VECTORS(pVertex2, t, pVertex2)
+				fTmp = p;
+				p = -q;
+				q = fTmp;
+
+				//U[0] = DOUBLE2INT(U0[0] + dU[0]);
+				//U[1] = DOUBLE2INT(U0[1] + dU[1]);
+
+				//RVLProject2DPointTo3DPlane(U, X2, p3DSurface, uc, vc, fu, fv);
+
+				RVLTRANSF3(X2, R, t, pVertex2);
 
 				RVLCOPY3VECTOR(N0, pN);
 
@@ -3287,9 +3476,9 @@ void CRVLPSuLM::AddToMeshFile(	char *MeshName,
 				//$*(pIdx[iGroup]++) = iVertex0 + (j + 1) % 4 + 1;
 				//$*(pIdx[iGroup]++) = iVertex0 + j + 1;
 
-				fTmp = dU[0];
-				dU[0] = -dU[1];
-				dU[1] = fTmp;
+				//fTmp = dU[0];
+				//dU[0] = -dU[1];
+				//dU[1] = fTmp;
 			}
 
 			pVertex[iGroup] = pVertex2;
@@ -3842,3 +4031,84 @@ void RVLDisplayColoredDepthMap(CRVL3DMeshObject *pSceneMesh,
 	}
 }
 
+
+
+RVL3DSURFACE_SAMPLE * CRVLPSuLM::SelectSample(
+	CRVLFigure * pFig, 
+	CRVL3DSurface2 * pSurf, 
+	CRVL3DPose *pPoseCM,
+	int u, int v)
+{
+	CRVLPSuLMBuilder *pPSuLMBuilder = (CRVLPSuLMBuilder *)m_vpBuilder;
+
+	//int w = pPSuLMBuilder->m_pPSD->m_Width;
+	//int h = pPSuLMBuilder->m_pPSD->m_Height;
+	int w = pFig->m_pImage->width;
+	int h = pFig->m_pImage->height;
+
+	double *RCM = pPoseCM->m_Rot;
+	double *tCM = pPoseCM->m_X;
+
+	double P[3 * 3];
+	double A[3 * 3];
+
+	if (!(m_Flags & RVLPSULM_FLAG_COMPLEX))
+	{
+		pPSuLMBuilder->GetProjectionMatrix(P);
+
+		RVLMXMUL3X3T2(P, RCM, A);
+	}
+
+	int minDist2 = 2 * (w * w + h * h);
+
+	RVL3DSURFACE_SAMPLE *pClosestSample = NULL;
+
+	RVL3DSURFACE_SAMPLE *pSample = (RVL3DSURFACE_SAMPLE *)(pSurf->m_Samples.pFirst);
+
+	double *XM;
+	double XC[3], tmp3x1[3];
+	double U[2];
+	int iU[2];
+	int dist2;
+	int us, vs, du, dv;
+
+	while (pSample)
+	{
+		XM = pSample->X;
+
+		RVLDIF3VECTORS(XM, tCM, tmp3x1);
+
+		if (m_Flags & RVLPSULM_FLAG_COMPLEX)
+		{
+			RVLMULMX3X3TVECT(RCM, tmp3x1, XC);
+
+			pPSuLMBuilder->m_pCamera->Project3DPointToSphere(XC, U, iU);
+
+			us = (iU[0] >> 1);
+			vs = (iU[1] >> 1);
+		}
+		else
+		{
+			RVLMULMX3X3VECT(A, tmp3x1, XC);
+
+			us = DOUBLE2INT(XC[0] / XC[2]);
+			vs = DOUBLE2INT(XC[1] / XC[2]);
+		}
+
+		du = u - us;
+		dv = v - vs;
+
+		dist2 = du * du + dv * dv;
+
+		if (dist2 < minDist2)
+		{
+			minDist2 = dist2;
+
+			pClosestSample = pSample;
+		}
+
+		pSample = (RVL3DSURFACE_SAMPLE *)(pSample->pNext);
+	}	// for each sample
+
+	return pClosestSample;
+}

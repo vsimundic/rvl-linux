@@ -69,6 +69,20 @@ struct RVL3DPOINT2
 	DWORD Flags;
 };
 
+struct RVL3DPOINT3
+{
+	double P3D[3];
+	int P2D[2];
+	void *pNext;
+};
+
+struct RVL3DCONTOUR
+{
+	bool bHole;
+	int iView;
+	RVLQLIST PtList;
+	void *pNext;
+};
 
 void RVLAddObject(CRVLObject2 *pObject, 
 				  CRVLClass *pClass);

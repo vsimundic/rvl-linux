@@ -3,6 +3,8 @@ class CRVLPSuLM;
 #define RVLPSULM_FLAG_VISITED			0x00000001
 #define RVLPSULM_FLAG_TARGET			0x00000002
 #define RVLPSULM_FLAG_CLOSE				0x00000004
+#define RVLPSULM_FLAG_COMPLEX			0x00000008
+#define RVLPSULM_FLAG_SURFACE_BOUNDARY	0x00000010
 
 #define RVLPSULM_LANDMARK_TYPE_EDGE		0
 #define RVLPSULM_LANDMARK_TYPE_CORNER	1
@@ -35,8 +37,11 @@ class CRVLPSuLM;
 #define RVLPSULM_MSMATCH_DATA_FLAG_LINES	0x01
 
 #define RVLPSULM_HYPOTHESIS_FLAG_BEST_FOR_ITS_PSULM		0x01
+#define RVLPSULM_HYPOTHESIS_FLAG_MERGED					0x02
 
 #define RVLPSULM_PARTICLE_FLAG_ASSIGNED		0x01
+
+#define RVLPSULM_SCENE_FUSION_N_SCENES		20
 
 //#define RVLPSULM_CONVEX_SEGMENTS
 #define RVLPSULM_LINES
@@ -183,6 +188,19 @@ struct RVLPSULM_HYPOTHESIS
 	char validation;				// 1 - correct; 0 - ambiguous; -1 - false
 };
 
+struct RVLPSULM_HYPOTHESIS_SCENE_FUSION
+{
+	CRVLPSuLM *pMPSuLM;
+	CRVL3DPose PoseSM;
+	double LogLikelihood;
+	double LogLikelihoodRef;
+	void *pNext;
+	double cost;
+	int iSample;
+	int iHypothesis;
+	double r;
+};
+
 struct RVLPSULM_PATH_PLANNING_NEIGHBOR
 {
 	CRVLPSuLM *pMPSuLM;
@@ -232,15 +250,18 @@ public:
 	void Display3DSurfaceSamples(	CRVLFigure * pFig,
 									CRVL3DSurface2 *pSurf,
 									double *A, 
+									double *RCM,
 									double *tCM,
-									DWORD Flags = 0x00000000);
+									DWORD Flags = 0x00000000,
+									RVL3DSURFACE_SAMPLE *pSelectedSample = NULL);
 	
 	void Display3DSurface(	CRVLFigure * pFig,
 							CRVL3DSurface2 *pSurf,
 							CRVL3DPose *pPoseM0,
 							CvScalar Color,
 							int LineWidth = 1,
-							DWORD Flags = 0x00000000);
+							DWORD Flags = 0x00000000,
+							RVL3DSURFACE_SAMPLE *pSelectedSample = NULL);
 	void Display3DLine(	CRVLFigure * pFig,
 						CRVL3DLine2 *pLine,
 						CRVL3DPose *pPoseM0,
@@ -279,7 +300,10 @@ public:
 									  bool descending = true,
 									  bool search = true);
 	//void Clone(CRVLPSuLM *pPSulMOriginal);
-	void Get3DSurfaceSamplesFrom2DRegionSamples(int nSamples);
+	void Get3DSurfaceSamplesFrom2DRegionSamples(
+		int nSamples,
+		CRVLClass *p3DSurfaceSet,
+		RVLPTRCHAIN_ELEMENT **ppFirstSurface);
 	RVLQLIST* GetCorrectHypothesesViaGT_EvalBench(CRVLMPtrChain* hypothesislist,
 											CRVL3DPose* pPoseAC,
 											double toleranceXYZ,
@@ -296,7 +320,11 @@ public:
 						double scale,
 						RVLPSULM_MESH_FILE_GROUP_DATA *GroupData,
 						int nGroups);
-   
+	RVL3DSURFACE_SAMPLE * SelectSample(
+		CRVLFigure * pFig,
+		CRVL3DSurface2 * pSurf, 
+		CRVL3DPose *pPoseCM, 
+		int u, int v);
 
 public:
 	WORD m_Index;
@@ -348,6 +376,6 @@ public:
 	double m_PriorProbabilityLocal;
 	double m_PosteriorProbabilityLocal5DOF;
 	double m_PosteriorProbabilityLocal;
-	double m_PosteriorProbabilityGlobal;
+	double m_PosteriorProbabilityGlobal;	
 };
 
