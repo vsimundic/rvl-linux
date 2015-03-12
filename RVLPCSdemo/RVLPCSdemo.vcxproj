@@ -19,8 +19,8 @@
     </ProjectConfiguration>
   </ItemGroup>
   <PropertyGroup Label="Globals">
-    <ProjectGuid>{DDE0A8B8-296A-45B2-9A84-A86EA17DFBC2}</ProjectGuid>
-    <RootNamespace>RVLPSuLMdemo</RootNamespace>
+    <ProjectGuid>{25F981DE-03E4-4F94-9FE3-AE86219B2F01}</ProjectGuid>
+    <RootNamespace>RVLPCSdemo</RootNamespace>
     <Keyword>Win32Proj</Keyword>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
@@ -76,15 +76,16 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <OutDir>$(SolutionDir)$(Configuration)\</OutDir>
     <IntDir>$(Configuration)\</IntDir>
-    <LinkIncremental>false</LinkIncremental>
+    <LinkIncremental>true</LinkIncremental>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <LinkIncremental>false</LinkIncremental>
+    <LinkIncremental>true</LinkIncremental>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
       <Optimization>Disabled</Optimization>
-      <AdditionalIncludeDirectories>$(OPENCV_BUILD)\include;..\RVLPSuLM\Include;..\RVLCore\Include;..\RVLPCS\Include;..\RapidXML\Include;$(VTK_PATH)\Debug\Include\vtk-5.10</AdditionalIncludeDirectories>
+      <InlineFunctionExpansion>Default</InlineFunctionExpansion>
+      <AdditionalIncludeDirectories>$(OPENCV_BUILD)\include;.\Include;..\RVLCore\Include;..\RVLPCS\Include;$(VTK_PATH)\Debug\Include\vtk-5.10</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <MinimalRebuild>false</MinimalRebuild>
       <BasicRuntimeChecks>Default</BasicRuntimeChecks>
@@ -94,8 +95,8 @@
       <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>RVLCore.lib;RVLPCS.lib;opencv_core243.lib;opencv_imgproc243.lib;opencv_highgui243.lib;opencv_ml243.lib;opencv_video243.lib;opencv_features2d243.lib;opencv_calib3d243.lib;opencv_objdetect243.lib;opencv_contrib243.lib;opencv_legacy243.lib;opencv_flann243.lib;opencv_nonfree243.lib;OpenNI2.lib;vtkalglib.lib;vtkCharts.lib;vtkCommon.lib;vtkDICOMParser.lib;vtkexoIIc.lib;vtkexpat.lib;vtkFiltering.lib;vtkfreetype.lib;vtkftgl.lib;vtkGenericFiltering.lib;vtkGeovis.lib;vtkGraphics.lib;vtkhdf5.lib;vtkhdf5_hl.lib;vtkHybrid.lib;vtkImaging.lib;vtkInfovis.lib;vtkIO.lib;vtkjpeg.lib;vtklibxml2.lib;vtkmetaio.lib;vtkNetCDF.lib;vtkNetCDF_cxx.lib;vtkpng.lib;vtkproj4.lib;vtkRendering.lib;vtksqlite.lib;vtksys.lib;vtktiff.lib;vtkverdict.lib;vtkViews.lib;vtkVolumeRendering.lib;vtkWidgets.lib;vtkzlib.lib;opengl32.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>..\RVLCore\Debug\lib;..\RVLPCS\Debug\lib;..\RVLPSuLM\Debug\lib;$(OPENCV_BUILD)\x86\vc10\lib;$(OPENNI2_LIB);$(VTK_PATH)\Debug\lib\vtk-5.10;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>RVLCore.lib;RVLPCS.lib;opencv_world300d.lib;OpenNI2.lib;vtkalglib-6.1-gd.lib;vtkCharts-6.1-gd.lib;vtkCommon-6.1-gd.lib;vtkDICOMParser-6.1-gd.lib;vtkexoIIc-6.1-gd.lib;vtkexpat-6.1-gd.lib;vtkFiltering-6.1-gd.lib;vtkfreetype-6.1-gd.lib;vtkftgl-6.1-gd.lib;vtkGenericFiltering-6.1-gd.lib;vtkGeovis-6.1-gd.lib;vtkGraphics-6.1-gd.lib;vtkhdf5-6.1-gd.lib;vtkhdf5_hl-6.1-gd.lib;vtkHybrid-6.1-gd.lib;vtkImaging-6.1-gd.lib;vtkInfovis-6.1-gd.lib;vtkIO-6.1-gd.lib;vtkjpeg-6.1-gd.lib;vtklibxml2-6.1-gd.lib;vtkmetaio-6.1-gd.lib;vtkNetCDF-6.1-gd.lib;vtkNetCDF_cxx-6.1-gd.lib;vtkpng-6.1-gd.lib;vtkproj4-6.1-gd.lib;vtkRendering-6.1-gd.lib;vtksqlite-6.1-gd.lib;vtksys-6.1-gd.lib;vtktiff-6.1-gd.lib;vtkverdict-6.1-gd.lib;vtkViews-6.1-gd.lib;vtkVolumeRendering-6.1-gd.lib;vtkWidgets-6.1-gd.lib;vtkzlib-6.1-gd.lib;opengl32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>..\RVLCore\Debug\lib;..\RVLPCS\Debug\lib;C:\Users\Damir\Documents\Dependancy libraries VS2013\OpenCV 3.0.0 beta\opencv\build\x64\vc12\lib;$(OPENNI2_LIB64);C:\Users\Damir\Documents\Dependancy libraries VS2013\VTK 6.1\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Console</SubSystem>
       <TargetMachine>MachineX86</TargetMachine>
@@ -104,7 +105,8 @@
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
       <Optimization>Disabled</Optimization>
-      <AdditionalIncludeDirectories>C:\Users\Damir\Documents\Dependancy libraries VS2013\OpenCV 3.0.0 beta\opencv\build\include;..\RVLPSuLM\Include;..\RVLCore\Include;..\RVLPCS\Include;..\RapidXML\Include;C:\Users\Damir\Documents\Dependancy libraries VS2013\VTK 6.1\include\vtk-6.1</AdditionalIncludeDirectories>
+      <InlineFunctionExpansion>Default</InlineFunctionExpansion>
+      <AdditionalIncludeDirectories>C:\Users\Damir\Documents\Dependancy libraries VS2013\OpenCV 3.0.0 beta\opencv\build\include;.\Include;..\RVLCore\Include;..\RVLPCS\Include;C:\Users\Damir\Documents\Dependancy libraries VS2013\VTK 6.1\include\vtk-6.1</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <MinimalRebuild>false</MinimalRebuild>
       <BasicRuntimeChecks>Default</BasicRuntimeChecks>
@@ -124,8 +126,9 @@
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <ClCompile>
       <Optimization>MaxSpeed</Optimization>
-      <IntrinsicFunctions>true</IntrinsicFunctions>
-      <AdditionalIncludeDirectories>$(OPENCV_BUILD)\include;..\RVLPSuLM\Include;..\RVLCore\Include;..\RVLPCS\Include;..\RapidXML\Include;$(VTK_PATH)\Release\Include\vtk-5.10</AdditionalIncludeDirectories>
+      <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
+      <IntrinsicFunctions>false</IntrinsicFunctions>
+      <AdditionalIncludeDirectories>$(OPENCV20)\include;.\Include;..\RVLCore\Include;..\RVLPCS\Include;$(VTK_PATH)\Debug\Include\vtk-5.10</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <FunctionLevelLinking>true</FunctionLevelLinking>
@@ -134,8 +137,8 @@
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>RVLCore.lib;RVLPCS.lib;opencv_core243.lib;opencv_imgproc243.lib;opencv_highgui243.lib;opencv_ml243.lib;opencv_video243.lib;opencv_features2d243.lib;opencv_calib3d243.lib;opencv_objdetect243.lib;opencv_contrib243.lib;opencv_legacy243.lib;opencv_flann243.lib;opencv_nonfree243.lib;OpenNI2.lib;vtkalglib.lib;vtkCharts.lib;vtkCommon.lib;vtkDICOMParser.lib;vtkexoIIc.lib;vtkexpat.lib;vtkFiltering.lib;vtkfreetype.lib;vtkftgl.lib;vtkGenericFiltering.lib;vtkGeovis.lib;vtkGraphics.lib;vtkhdf5.lib;vtkhdf5_hl.lib;vtkHybrid.lib;vtkImaging.lib;vtkInfovis.lib;vtkIO.lib;vtkjpeg.lib;vtklibxml2.lib;vtkmetaio.lib;vtkNetCDF.lib;vtkNetCDF_cxx.lib;vtkpng.lib;vtkproj4.lib;vtkRendering.lib;vtksqlite.lib;vtksys.lib;vtktiff.lib;vtkverdict.lib;vtkViews.lib;vtkVolumeRendering.lib;vtkWidgets.lib;vtkzlib.lib;opengl32.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>..\RVLCore\Release\lib;..\RVLPCS\Release\lib;..\RVLPSuLM\Release\lib;$(OPENCV_BUILD)\x86\vc10\lib;$(OPENNI2_LIB);$(VTK_PATH)\Release\lib\vtk-5.10;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>RVLCore.lib;RVLPCS.lib;cv200.lib;cxcore200.lib;highgui200.lib;vtkalglib.lib;vtkCharts.lib;vtkCommon.lib;vtkDICOMParser.lib;vtkexoIIc.lib;vtkexpat.lib;vtkFiltering.lib;vtkfreetype.lib;vtkftgl.lib;vtkGenericFiltering.lib;vtkGeovis.lib;vtkGraphics.lib;vtkhdf5.lib;vtkhdf5_hl.lib;vtkHybrid.lib;vtkImaging.lib;vtkInfovis.lib;vtkIO.lib;vtkjpeg.lib;vtklibxml2.lib;vtkmetaio.lib;vtkNetCDF.lib;vtkNetCDF_cxx.lib;vtkpng.lib;vtkproj4.lib;vtkRendering.lib;vtksqlite.lib;vtksys.lib;vtktiff.lib;vtkverdict.lib;vtkViews.lib;vtkVolumeRendering.lib;vtkWidgets.lib;vtkzlib.lib;opengl32.lib;OpenNI2.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>..\RVLCore\Release\lib;..\RVLPCS\Release\lib;$(OPENCV20)\lib;$(OPENNI2_LIB);$(VTK_PATH)\Debug\lib\vtk-5.10;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Console</SubSystem>
       <OptimizeReferences>true</OptimizeReferences>
@@ -146,8 +149,9 @@
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
       <Optimization>MaxSpeed</Optimization>
-      <IntrinsicFunctions>true</IntrinsicFunctions>
-      <AdditionalIncludeDirectories>C:\Users\Damir\Documents\Dependancy libraries VS2013\OpenCV 3.0.0 beta\opencv\build\include;..\RVLPSuLM\Include;..\RVLCore\Include;..\RVLPCS\Include;..\RapidXML\Include;C:\Users\Damir\Documents\Dependancy libraries VS2013\VTK 6.1\include\vtk-6.1</AdditionalIncludeDirectories>
+      <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
+      <IntrinsicFunctions>false</IntrinsicFunctions>
+      <AdditionalIncludeDirectories>C:\Users\Damir\Documents\Dependancy libraries VS2013\OpenCV 3.0.0 beta\opencv\build\include;.\Include;..\RVLCore\Include;..\RVLPCS\Include;C:\Users\Damir\Documents\Dependancy libraries VS2013\VTK 6.1\include\vtk-6.1</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <FunctionLevelLinking>true</FunctionLevelLinking>
@@ -166,28 +170,15 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="RVLPSuLMdemo.cpp" />
+    <ClCompile Include="RVLPCSdemo.cpp" />
+    <ClCompile Include="stdafx.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="stdafx.h" />
     <ClInclude Include="targetver.h" />
-    <ClInclude Include="VTKActorObj.h" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="ReadMe.txt" />
-  </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\RVLCore\RVLCore.vcxproj">
-      <Project>{06581169-bfdc-4b3f-a3ed-96faf894ea87}</Project>
-      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
-    </ProjectReference>
-    <ProjectReference Include="..\RVLPCS\RVLPCS.vcxproj">
-      <Project>{736aadf1-0519-469c-a860-07573ef1ed97}</Project>
-      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
-    </ProjectReference>
-    <ProjectReference Include="..\RVLPSuLM\RVLPSuLM.vcxproj">
-      <Project>{04b03a26-8de7-45f6-aa0b-b50797b5bdd5}</Project>
-      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
-    </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

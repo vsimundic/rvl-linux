@@ -24900,6 +24900,7 @@ IplImage * CRVLPSuLMBuilder::GetComplexPSuLMRGBImage(char *ImageFileName)
 			break;
 	
 		pImage_ = cvLoadImage(ImageFileName_);
+		//pImage_ = CRVLImageFilter::RVLFilterNHS(pImage_);
 
 		pPixRow_ = (unsigned char *)(pImage_->imageData);
 

@@ -96,7 +96,7 @@
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
       <Optimization>Disabled</Optimization>
-      <AdditionalIncludeDirectories>$(OPENCV_BUILD)\include;.\Include;$(OPENNI2_INCLUDE)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\Users\Damir\Documents\Dependancy libraries VS2013\OpenCV 3.0.0 beta\opencv\build\include;.\Include;$(OPENNI2_INCLUDE64);C:\Users\Damir\Documents\Dependancy libraries VS2013\VTK 6.1\include\vtk-6.1</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>WIN32;_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <PrecompiledHeader>
@@ -122,7 +122,7 @@
     <ClCompile>
       <Optimization>MaxSpeed</Optimization>
       <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
-      <AdditionalIncludeDirectories>$(OPENCV_BUILD)\include;.\Include;$(OPENNI2_INCLUDE);$(VTK_PATH)\Release\include\vtk-5.10</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\Users\Damir\Documents\Dependancy libraries VS2013\OpenCV 3.0.0 beta\opencv\build\include;.\Include;$(OPENNI2_INCLUDE64);C:\Users\Damir\Documents\Dependancy libraries VS2013\VTK 6.1\include\vtk-6.1</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>WIN32;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <PrecompiledHeader>
