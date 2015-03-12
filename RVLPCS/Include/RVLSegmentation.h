@@ -238,7 +238,6 @@ void RVLGetMomentsOf2DRegions(	CRVLMPtrChain *p2DRegionList,
 								int ImageWidth, int ImageHeight);
 bool RVL3DMeshIsConvex(CRVLMPtrChain *pTriangleList,
 					   RVL3DPOINT2 **Point3DMap);
-						CRVLMem *pMem);
 void RVLSegmentationDisplayBoundary(CRVLFigure *pFig,
 									CRVL2DRegion2 *pSegment,
 									int ImageWidth,

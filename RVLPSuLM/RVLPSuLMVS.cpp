@@ -107,8 +107,8 @@ void CRVLPSuLMVS::Init(char * CfgFile2Name)
 	//	m_PSuLMBuilder.Load(m_PSuLMBuilder.m_ModelDatabasePath,2000);
 	if((m_PSuLMBuilder.m_Flags & RVLPSULMBUILDER_FLAG_MODE) == RVLPSULMBUILDER_FLAG_MODE_LOCALIZATION)
 		m_PSuLMBuilder.LoadMap();
-	else if((m_PSuLMBuilder.m_Flags & RVLPSULMBUILDER_FLAG_MODE) == RVLPSULMBUILDER_FLAG_MODE_TRACKING)
-		m_PSuLMBuilder.m_HypothesisArray = 
+	else if ((m_PSuLMBuilder.m_Flags & RVLPSULMBUILDER_FLAG_MODE) == RVLPSULMBUILDER_FLAG_MODE_TRACKING)
+		m_PSuLMBuilder.m_HypothesisArray =
 			new RVLPSULM_HYPOTHESIS *[m_PSuLMBuilder.m_maxnHypothesesPerModel];
 
 	//FILE *fp;
@@ -454,7 +454,7 @@ void CRVLPSuLMVS::PSuLMBasedRLMUpdate(DWORD Flags)
 
 	if((m_PSuLMBuilder.m_Flags & RVLPSULMBUILDER_FLAG_MODE) == RVLPSULMBUILDER_FLAG_MODE_TRACKING)
 	{
-		if(m_pPrevPSuLM)
+		if (m_pPrevPSuLM)
 			m_PSuLMBuilder.Localization(m_pPSuLM, &m_PoseA0, m_pPrevPSuLM);
 	}
 

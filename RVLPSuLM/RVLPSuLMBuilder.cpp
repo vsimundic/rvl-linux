@@ -2477,7 +2477,7 @@ BOOL CRVLPSuLMBuilder::Create(CRVLPSuLM *pPSuLM,
 #endif
 		}	// if(m_Flags & RVLPSULMBUILDER_FLAG_LINES)
 		else
-			pPSuLM->m_n3DLines = 0;
+			pPSuLM->m_n3DLines = pPSuLM->m_n3DLinesTotal = 0;
 
 #ifdef RVLPSULM_CREATE_DEBUG_LOG
 		FILE *fpLog;
@@ -7510,6 +7510,9 @@ void CRVLPSuLMBuilder::Localization(CRVLPSuLM * pSPSuLM,
 		minCost = 0; //Search for max cost
 	else if (HypEvalMethod == RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD_P)
 	{
+		if ((m_Flags & RVLPSULMBUILDER_FLAG_MODE) == RVLPSULMBUILDER_FLAG_MODE_TRACKING)
+			UpdateBuffers(pSPSuLM);
+
 		if (m_Flags2 & RVLPSULMBUILDER_FLAG2_FIRST_ORDER_DEPENDENCY_TREE)
 		{
 			m_PriorProbabilityWorldModel = ConditionalProbabilityTree(pSPSuLM);

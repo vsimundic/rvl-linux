@@ -3301,7 +3301,7 @@ void RVLSegmentationDisplayBoundary(CRVLFigure *pFig,
 
 	RVLQLIST ContourList;
 
-	RVLSegmentationGetBoundary(pSegment, &ContourList, pMem);
+	RVLSegmentationGetBoundary(pSegment, ImageWidth, &ContourList, pMem);
 
 	RVLQLIST_INT_ENTRY *pVertex;
 	int iPix1, iPix2;
