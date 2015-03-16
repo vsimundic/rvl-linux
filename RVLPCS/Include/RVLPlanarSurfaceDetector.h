@@ -340,6 +340,7 @@ public:
 	int *m_DTMap;
 	int m_nFOVExtensions;
 	double m_FOVExtension;
+	double m_PointMeasurementUncertStD;
 		
 #ifndef RVLPSDLAD_GRBIC
 	CRVLMem *m_pMem, *m_pMem2;
@@ -800,7 +801,9 @@ private:
 		Indeksi[index2]		= tmp3;
 	};
 public:
-	void Get3DPlanarSurfaceBoundary(CRVL3DSurface2 * pSurf);
+	void Get3DPlanarSurfaceBoundary(
+		CRVL3DSurface2 * pSurf,
+		bool bPC = false);
 };
 
 #endif // !defined(AFX_RVLPLANARSURFACEDETECTOR_H__1DCCB796_4F94_4476_9777_2D5D6B292431__INCLUDED_)

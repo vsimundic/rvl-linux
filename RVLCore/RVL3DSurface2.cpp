@@ -1868,6 +1868,15 @@ void RVLProject2DPointTo3DPlane(int *i2DPoint,
 	d3DPoint[2] = z;
 }
 
+void RVLProject3DPointTo3DPlane(
+	double *XSrc,
+	CRVL3DSurface2 *p3DPlane,
+	double *XTgt)
+{
+	double s = p3DPlane->m_d / RVLDOTPRODUCT3(p3DPlane->m_N, XSrc);
+	RVLSCALE3VECTOR(XSrc, s, XTgt);
+}
+
 void RVLProject2DPointTo3DPlane(int *i2DPoint, 
 								double *d3DPoint,
 								CRVL3DSurface2 *p3DPlane,
@@ -1887,6 +1896,8 @@ void RVLProject2DPointTo3DPlane(int *i2DPoint,
 	d3DPoint[1] = z * b;
 	d3DPoint[2] = z;
 }
+
+
 
 BOOL RVL3DPlanarSurfaceEKFUpdate(	CRVL3DSurface2 *pSSurf,
 									CRVL3DSurface2 *pMSurf,

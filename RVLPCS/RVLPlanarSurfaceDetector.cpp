@@ -99,6 +99,7 @@ CRVLPlanarSurfaceDetector::CRVLPlanarSurfaceDetector()
 	m_MeshPlanarSegWERThr1 = 3;
 	m_MeshPlanarSegWERThr2 = 10;
 	m_MeshDiscontinuityThr = 0.3;
+	m_PointMeasurementUncertStD = 10.0;
 
 	// the default values of the follwing parameters are adjusted according to wang_TPAMI04
 
@@ -11878,11 +11879,19 @@ void CRVLPlanarSurfaceDetector::SegmentSTRM(CRVLC2D *p2DRegionSet,
 	
 	RVLQLIST *pPtList = PtListMem;
 
+	RVLARRAY *pRelList;
+
 	p2DRegionList->Start();
 
 	while(p2DRegionList->m_pNext)
 	{
 		p2DRegion = (CRVL2DRegion2 *)(p2DRegionList->GetNext());
+
+		pRelList = p2DRegion->m_RelList + p2DRegionSet3->m_iRelListElements;
+
+		pTriangle = *((CRVL2DRegion2 **)(pRelList->pFirst));
+
+		p2DRegion->m_pPoint3DMap = pTriangle->m_pPoint3DMap;
 
 		RVLQLIST_INIT(pPtList);
 
@@ -13716,6 +13725,8 @@ void CRVLPlanarSurfaceDetector::CreateParamList(CRVLMem *pMem)
 
 	pParamData = m_ParamList.AddParam("PSD.MeshPlanarSegWERThr2", RVLPARAM_TYPE_INT, &m_MeshPlanarSegWERThr2);
 
+	pParamData = m_ParamList.AddParam("PSD.PointMeasurementUncertStD", RVLPARAM_TYPE_DOUBLE, &m_PointMeasurementUncertStD);
+
 	pParamData = m_ParamList.AddParam("PSD.ConvexMesh", RVLPARAM_TYPE_FLAG, &m_Flags);
 	m_ParamList.AddID(pParamData, "yes", RVLPSD_MESH_CONVEX);
 }
@@ -15073,8 +15084,9 @@ void CRVLPlanarSurfaceDetector::Get3DSurfaceAndContours2(CRVL2DRegion2 *p2DRegio
 
 	double sigmaR;
 
-	if(m_Flags & RVLPSD_FLAG_MM)
-		sigmaR = p2DRegionLevel3->m_std * p2DRegionLevel3->m_std;
+	if (m_Flags & RVLPSD_FLAG_MM)
+		//sigmaR = p2DRegionLevel3->m_std * p2DRegionLevel3->m_std;
+		sigmaR = m_PointMeasurementUncertStD * m_PointMeasurementUncertStD;
 	else
 	{
 		CRVLCamera *pCamera = m_pStereoVision->m_pCameraL;
@@ -18834,11 +18846,18 @@ void RVLResetFlags(CRVLMPtrChain *pObjectList, BYTE Flags)
 	}
 }
 
-void CRVLPlanarSurfaceDetector::Get3DPlanarSurfaceBoundary(CRVL3DSurface2 * pSurf)
+void CRVLPlanarSurfaceDetector::Get3DPlanarSurfaceBoundary(
+	CRVL3DSurface2 * pSurf,
+	bool bPC)
 {
 	RVL3DPOINT3 *pPt;
 
 	RVL3DCONTOUR *pContour = (RVL3DCONTOUR *)(pSurf->m_BoundaryContourList.pFirst);
+
+	RVL3DPOINT2 **Point3DMap = ((CRVL2DRegion2 *)(pSurf->m_vp2DRegion))->m_pPoint3DMap;
+	
+	int iPix;
+	double *X;
 
 	while (pContour)
 	{
@@ -18846,11 +18865,20 @@ void CRVLPlanarSurfaceDetector::Get3DPlanarSurfaceBoundary(CRVL3DSurface2 * pSur
 
 		while (pPt)
 		{
-			RVLProject2DPointTo3DPlane(pPt->P2D, pPt->P3D, pSurf,
-				m_pStereoVision->m_KinectParams.depthUc,
-				m_pStereoVision->m_KinectParams.depthVc,
-				m_pStereoVision->m_KinectParams.depthFu,
-				m_pStereoVision->m_KinectParams.depthFv);
+			if (bPC)
+			{
+				iPix = pPt->P2D[0] + pPt->P2D[1] * m_Width;
+
+				X = Point3DMap[iPix]->XYZ;
+
+				RVLProject3DPointTo3DPlane(X, pSurf, pPt->P3D);
+			}				
+			else
+				RVLProject2DPointTo3DPlane(pPt->P2D, pPt->P3D, pSurf,
+					m_pStereoVision->m_KinectParams.depthUc,
+					m_pStereoVision->m_KinectParams.depthVc,
+					m_pStereoVision->m_KinectParams.depthFu,
+					m_pStereoVision->m_KinectParams.depthFv);
 
 			pPt = (RVL3DPOINT3 *)(pPt->pNext);
 		}

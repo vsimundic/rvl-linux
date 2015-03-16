@@ -66,6 +66,13 @@ void CRVLPSuLMVS::Init(char * CfgFile2Name)
 	m_PoseLA.m_Beta *= DEG2RAD;
 	m_PoseLA.m_Theta *= DEG2RAD;
 
+	double *R = m_PoseA0.m_Rot;
+	double *t = m_PoseA0.m_X;
+	RVLUNITMX3(R);
+	RVLNULL3VECTOR(t);
+	m_PoseA0.m_Alpha = m_PoseA0.m_Beta = m_PoseA0.m_Theta = 0.0;
+	m_PoseA0.m_ParamFlags = 0x00000000;
+	
 	// initialize PSuLMBuilder
 
 	m_PSuLMBuilder.m_pMem0 = &m_Mem0;
@@ -107,9 +114,9 @@ void CRVLPSuLMVS::Init(char * CfgFile2Name)
 	//	m_PSuLMBuilder.Load(m_PSuLMBuilder.m_ModelDatabasePath,2000);
 	if((m_PSuLMBuilder.m_Flags & RVLPSULMBUILDER_FLAG_MODE) == RVLPSULMBUILDER_FLAG_MODE_LOCALIZATION)
 		m_PSuLMBuilder.LoadMap();
-	else if ((m_PSuLMBuilder.m_Flags & RVLPSULMBUILDER_FLAG_MODE) == RVLPSULMBUILDER_FLAG_MODE_TRACKING)
-		m_PSuLMBuilder.m_HypothesisArray =
-			new RVLPSULM_HYPOTHESIS *[m_PSuLMBuilder.m_maxnHypothesesPerModel];
+	//else if ((m_PSuLMBuilder.m_Flags & RVLPSULMBUILDER_FLAG_MODE) == RVLPSULMBUILDER_FLAG_MODE_TRACKING)
+	//	m_PSuLMBuilder.m_HypothesisArray =
+	//		new RVLPSULM_HYPOTHESIS *[m_PSuLMBuilder.m_maxnHypothesesPerModel];
 
 	//FILE *fp;
 	//
@@ -443,6 +450,10 @@ void CRVLPSuLMVS::PSuLMBasedRLMUpdate(DWORD Flags)
 		m_PSuLMBuilder.m_Flags |= RVLPSULMBUILDER_FLAG_KIDNAPPED;
 	}
 
+	if ((m_PSuLMBuilder.m_Flags & RVLPSULMBUILDER_FLAG_MODE) == RVLPSULMBUILDER_FLAG_MODE_TRACKING)
+		if (m_pPrevPSuLM)
+			m_PSuLMBuilder.m_Flags &= ~RVLPSULMBUILDER_FLAG_KIDNAPPED;
+
 	if(m_PSuLMBuilder.m_Flags & RVLPSULMBUILDER_FLAG_KIDNAPPED)
 	{
 		double *R = m_PoseA0.m_Rot;
@@ -453,10 +464,8 @@ void CRVLPSuLMVS::PSuLMBasedRLMUpdate(DWORD Flags)
 	}
 
 	if((m_PSuLMBuilder.m_Flags & RVLPSULMBUILDER_FLAG_MODE) == RVLPSULMBUILDER_FLAG_MODE_TRACKING)
-	{
 		if (m_pPrevPSuLM)
 			m_PSuLMBuilder.Localization(m_pPSuLM, &m_PoseA0, m_pPrevPSuLM);
-	}
 
 	if ((m_PSuLMBuilder.m_Flags & RVLPSULMBUILDER_FLAG_MODE) == RVLPSULMBUILDER_FLAG_MODE_LOCALIZATION)
 		m_PSuLMBuilder.Localization(m_pPSuLM, &m_PoseA0);
@@ -715,7 +724,7 @@ bool CRVLPSuLMVS::Create3DMeshFromComplexPSuLM(char *ImageFileName)
 	{
 		RVLSetFileNumber(m_PSuLMBuilder.m_ImageFileName, "00000-LW.bmp", iSample);
 
-		if(!m_PSuLMBuilder.GetPanTilt(m_PSuLMBuilder.m_ImageFileName, &PoseM_M, iSample0, command))
+		if(!m_PSuLMBuilder.GetOdometry(m_PSuLMBuilder.m_ImageFileName, &PoseM_M, iSample0, command))
 		{
 			bOK = false;
 
