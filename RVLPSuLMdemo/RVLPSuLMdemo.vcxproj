@@ -134,7 +134,7 @@
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>RVLCore.lib;RVLPCS.lib;opencv_core243.lib;opencv_imgproc243.lib;opencv_highgui243.lib;opencv_ml243.lib;opencv_video243.lib;opencv_features2d243.lib;opencv_calib3d243.lib;opencv_objdetect243.lib;opencv_contrib243.lib;opencv_legacy243.lib;opencv_flann243.lib;opencv_nonfree243.lib;OpenNI2.lib;vtkalglib.lib;vtkCharts.lib;vtkCommon.lib;vtkDICOMParser.lib;vtkexoIIc.lib;vtkexpat.lib;vtkFiltering.lib;vtkfreetype.lib;vtkftgl.lib;vtkGenericFiltering.lib;vtkGeovis.lib;vtkGraphics.lib;vtkhdf5.lib;vtkhdf5_hl.lib;vtkHybrid.lib;vtkImaging.lib;vtkInfovis.lib;vtkIO.lib;vtkjpeg.lib;vtklibxml2.lib;vtkmetaio.lib;vtkNetCDF.lib;vtkNetCDF_cxx.lib;vtkpng.lib;vtkproj4.lib;vtkRendering.lib;vtksqlite.lib;vtksys.lib;vtktiff.lib;vtkverdict.lib;vtkViews.lib;vtkVolumeRendering.lib;vtkWidgets.lib;vtkzlib.lib;opengl32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>RVLCore.lib;RVLPCS.lib;opencv_core243.lib;opencv_imgproc243.lib;opencv_highgui243.lib;opencv_ml243.lib;opencv_video243.lib;opencv_features2d243.lib;opencv_calib3d243.lib;opencv_objdetect243.lib;opencv_contrib243.lib;opencv_legacy243.lib;opencv_flann243.lib;opencv_nonfree243.lib;OpenNI2.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>..\RVLCore\Release\lib;..\RVLPCS\Release\lib;..\RVLPSuLM\Release\lib;$(OPENCV_BUILD)\x86\vc10\lib;$(OPENNI2_LIB);$(VTK_PATH)\Release\lib\vtk-5.10;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Console</SubSystem>
