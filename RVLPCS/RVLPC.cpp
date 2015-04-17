@@ -8,7 +8,37 @@ bool RVLPCImport(char *FileName, double **pX, int &n)
 	if(fp == NULL)
 		return false;
 
-	fscanf(fp, "%d\n", &n);
+	char line[200];
+
+	fgets(line, 200, fp);
+
+	if (line[0] == '#')
+	{
+		bool bData = false;
+
+		int nLines = 0;
+
+		n = 0;
+
+		do
+		{
+			fgets(line, 200, fp);
+
+			if (strncmp("POINTS", line, 6) == 0)
+				sscanf(line, "POINTS %d\n", &n);
+
+			nLines++;
+
+			bData = (strncmp("DATA ascii", line, 10) == 0);
+		} while (!bData && nLines < 20);
+
+		if (n == 0 || !bData)
+			return false;
+	}
+	else if (line[0] >= '0' && line[0] <= '9')
+		sscanf(line, "%d\n", &n);
+	else
+		return false;
 
 	double *X = *pX;
 

@@ -6500,8 +6500,8 @@ void CRVLPSuLMBuilder::Localization(CRVLPSuLM * pSPSuLM,
 
 	//Define uncertainty constants
 	double XUnc, AngleUnc, ThetaUnc, XEKFUnc;
-	XUnc = 1000.0;
-	XEKFUnc = 10000.0;
+	XUnc = 5000.0;			// uncertainty for feature matching 
+	XEKFUnc = 10000.0;		// initial uncertainty for EKF
 	AngleUnc = 30.0;
 	ThetaUnc = 10.0;
 
@@ -12854,6 +12854,8 @@ void CRVLPSuLMBuilder::CreateParamList(CRVLMem * pMem)
 	pParamData = m_ParamList.AddParam("PSuLM.Localization.HypothesisGeneration.tHypTol", RVLPARAM_TYPE_DOUBLE, &m_tHypTol);
 	pParamData = m_ParamList.AddParam("PSuLM.Localization.HypothesisGeneration.InitMatchingConstraints", RVLPARAM_TYPE_FLAG, &m_Flags2);
 	m_ParamList.AddID(pParamData, "yes", RVLPSULMBUILDER_FLAG2_HYPGEN_INIT_MATCHING_CONSTRAINTS);
+	pParamData = m_ParamList.AddParam("PSuLM.Localization.HypothesisGeneration.WideAngle", RVLPARAM_TYPE_FLAG, &m_Flags2);
+	m_ParamList.AddID(pParamData, "yes", RVLPSULMBUILDER_FLAG2_WIDE_ANGLE_HYPOTHESIS_GENERATION);
 	pParamData = m_ParamList.AddParam("PSuLM.Localization.HypothesisGeneration.LastDOFEstimationMethod", RVLPARAM_TYPE_FLAG, &m_Flags);
 	m_ParamList.AddID(pParamData, "MAX_PEAK_ONLY", RVLPSULMBUILDER_FLAG_LAST_DOF_ESTIMATION_METHOD_MAX_PEAK_ONLY);
 	m_ParamList.AddID(pParamData, "BEST_PEAK_TREE", RVLPSULMBUILDER_FLAG_LAST_DOF_ESTIMATION_METHOD_BEST_PEAK_TREE);
@@ -13490,7 +13492,12 @@ void CRVLPSuLMBuilder::Hypotheses3(	CRVLPSuLM *pSPSuLM,
 	
 	RVLPSULM_HYPOTHESIS *pHypothesis = NULL;
 
-	int iAlpha = -1;
+	int iAlphaRange = 1;
+
+	if ((m_Flags & RVLPSULMBUILDER_FLAG_PC) != 0 && (m_Flags2 & RVLPSULMBUILDER_FLAG2_WIDE_ANGLE_HYPOTHESIS_GENERATION) != 0)
+		iAlphaRange = 3;
+
+	int iAlpha = -iAlphaRange;
 
 	int nM3DSurfaces;
 	RVLPSULM_MSMATCH_DATA *pMSMatch;
@@ -13575,12 +13582,15 @@ void CRVLPSuLMBuilder::Hypotheses3(	CRVLPSuLM *pSPSuLM,
 
 		if(pPrevSPSuLM)
 			pMPSuLM = pPrevSPSuLM;
-		else if(pPSuLMList->m_pNext || iAlpha > -1)
+		else if (pPSuLMList->m_pNext || iAlpha > -iAlphaRange)
 		{
-			if(iAlpha == -1)
+			if (iAlpha == 0)
+				int debug = 0;
+
+			if (iAlpha == -iAlphaRange)
 				pMPSuLM = (CRVLPSuLM *)(pPSuLMList->GetNext());
 
-			if(pMPSuLM->m_Flags & RVLPSULM_FLAG_COMPLEX)
+			if (m_Flags2 & RVLPSULMBUILDER_FLAG2_WIDE_ANGLE_HYPOTHESIS_GENERATION)
 			{
 				alpha = (double)iAlpha * 0.25 * PI;
 
@@ -13604,8 +13614,8 @@ void CRVLPSuLMBuilder::Hypotheses3(	CRVLPSuLM *pSPSuLM,
 
 				iAlpha++;
 
-				if(iAlpha > 1)
-					iAlpha = -1;
+				if (iAlpha > iAlphaRange)
+					iAlpha = -iAlphaRange;
 			}
 		}
 		else
@@ -13696,8 +13706,8 @@ void CRVLPSuLMBuilder::Hypotheses3(	CRVLPSuLM *pSPSuLM,
 
 			for(iMSurf = 0; iMSurf < nM3DSurfaces; iMSurf++)
 			{
-				//if(iSSurf == 1 && iMSurf == 23)
-				//	int debug = 0;
+				if(iSSurf == 9 && iMSurf == 6)
+					int debug = 0;
 
 				pM3DSurface = MSurfArray[iMSurf];	
 
@@ -13777,7 +13787,7 @@ void CRVLPSuLMBuilder::Hypotheses3(	CRVLPSuLM *pSPSuLM,
 
 		fprintf(fpLog, "Model %d\n\n", pMPSuLM->m_Index);	// for Nyarko
 
-		if(pMPSuLM->m_Flags & RVLPSULM_FLAG_COMPLEX)
+		if (m_Flags2 & RVLPSULMBUILDER_FLAG2_WIDE_ANGLE_HYPOTHESIS_GENERATION)
 			fprintf(fpLog, "Initial alpha=%lf\n", PoseSMInit.m_Alpha * RAD2DEG);
 
 		fprintf(fpLog, "Initial Pose Uncertainty\n");	// for Nyarko
@@ -19026,8 +19036,8 @@ CRVLPSuLM *CRVLPSuLMBuilder::Clone(CRVLPSuLM *pPSulMOriginal)
 	//pPSuLM->m_ModelFilePath = (char *)(m_pMem0->Alloc(iFileNameLength * sizeof(char)));
 	strcpy(pPSuLM->m_ModelFilePath, pPSulMOriginal->m_FileName);
 	
-	char *pPos;
-	pPos = strstr (pPSuLM->m_ModelFilePath,"LW.bmp");
+	char *pPos = (m_Flags & RVLPSULMBUILDER_FLAG_PC ? strstr(pPSuLM->m_ModelFilePath, "PC.pcd") : strstr(pPSuLM->m_ModelFilePath, "LW.bmp"));
+
 	strncpy(pPos,"M.dat",6);
 
 
