@@ -19,7 +19,7 @@
 //#include "highgui.h"
 #include "RVLCore.h"
 #include "RVLPCS.h"
-#include "Include\RVLPlanarSurfaceDetector.h"
+#include "RVLPlanarSurfaceDetector.h"
 
 
 #ifdef RVLPSDLAD_GRBIC
