@@ -18,6 +18,9 @@
 #endif
 #endif
 #ifndef DWORD
+//#ifdef RVL64BIT
+//#define DWORD unsigned long int
+//#else
 #ifdef RVL64BIT
 #define DWORD unsigned long long
 #else

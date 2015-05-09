@@ -19,7 +19,7 @@
 //#include "highgui.h"
 #include "RVLCore.h"
 #include "RVLPCS.h"
-#include "Include\RVLPlanarSurfaceDetector.h"
+#include "RVLPlanarSurfaceDetector.h"
 
 
 #ifdef RVLPSDLAD_GRBIC
@@ -36,6 +36,7 @@ CRVLPlanarSurfaceDetector::CRVLPlanarSurfaceDetector()
 	//m_Segmentation = NULL;
 	m_Point3DArray = NULL;
 	m_Point3DMap = NULL;
+	m_Point3DMapMem = NULL;
 	m_Point3DBuff = NULL;
 	m_RegionGrowingMap = NULL;
 	m_EmptyRegionGrowingMap = NULL;
@@ -53,6 +54,8 @@ CRVLPlanarSurfaceDetector::CRVLPlanarSurfaceDetector()
 	m_2DRegionMap = NULL;
 	m_3DSurfaceMap = NULL;
 	m_APixBuff = NULL;
+	m_nFOVExtensions = 0;
+	m_FOVExtension = 2.0 * PI / 3.0;
 	m_nWalls = 0;
 	m_Flags = 0x00000000;
 	m_Tol = 16.0;
@@ -96,6 +99,7 @@ CRVLPlanarSurfaceDetector::CRVLPlanarSurfaceDetector()
 	m_MeshPlanarSegWERThr1 = 3;
 	m_MeshPlanarSegWERThr2 = 10;
 	m_MeshDiscontinuityThr = 0.3;
+	m_PointMeasurementUncertStD = 10.0;
 
 	// the default values of the follwing parameters are adjusted according to wang_TPAMI04
 
@@ -154,8 +158,8 @@ CRVLPlanarSurfaceDetector::~CRVLPlanarSurfaceDetector()
 	if(m_Point3DArray)
 		delete[] m_Point3DArray;
 
-	if(m_Point3DMap)
-		delete[] m_Point3DMap;
+	if(m_Point3DMapMem)
+		delete[] m_Point3DMapMem;
 
 	if(m_Point3DBuff)
 		delete[] m_Point3DBuff;
@@ -5124,15 +5128,19 @@ void CRVLPlanarSurfaceDetector::Init()
 
 	// allocate arrays
 
+	int maxn3DPts = (2 * m_nFOVExtensions + 1) * ImageSize;
+
 	if(m_Point3DArray)
 		delete[] m_Point3DArray;
 
-	m_Point3DArray = new RVL3DPOINT2[ImageSize];
+	m_Point3DArray = new RVL3DPOINT2[maxn3DPts];
 
-	if(m_Point3DMap)
-		delete[] m_Point3DMap;
+	if(m_Point3DMapMem)
+		delete[] m_Point3DMapMem;
 
-	m_Point3DMap = new RVL3DPOINT2 *[ImageSize];
+	m_Point3DMapMem = new RVL3DPOINT2 *[maxn3DPts];
+
+	m_Point3DMap = m_Point3DMapMem;
 
 	if(m_Point3DBuff)
 		delete[] m_Point3DBuff;
@@ -10473,6 +10481,11 @@ void CRVLPlanarSurfaceDetector::SegmentSTRM(CRVLC2D *p2DRegionSet,
 
 	RVLQLIST *ListArray = m_Queue.m_ListArray;
 
+	//*** remember first triangle
+
+	RVLPTRCHAIN_ELEMENT **ppFirstTriangle = 
+		(p2DRegionSet->m_ObjectList.m_nElements == 0 ? &(p2DRegionSet->m_ObjectList.m_pFirst) : &(p2DRegionSet->m_ObjectList.m_pLast->pNext));
+	
 #pragma region Initial Triangulation
 	memset(m_bCorner, 0, ImageSize * sizeof(BYTE));
 
@@ -11667,7 +11680,7 @@ void CRVLPlanarSurfaceDetector::SegmentSTRM(CRVLC2D *p2DRegionSet,
 
 	iTriangle = 0;
 
-	p2DRegionList->Start();
+	p2DRegionList->m_pNext = *ppFirstTriangle;
 
 	while(p2DRegionList->m_pNext)
 	{
@@ -11677,6 +11690,8 @@ void CRVLPlanarSurfaceDetector::SegmentSTRM(CRVLC2D *p2DRegionSet,
 		//	int debug = 0;
 
 		p2DRegion->m_pPoint3DArray = ppPtrArrayStart;
+
+		p2DRegion->m_pPoint3DMap = m_Point3DMap;
 
 		GetPointsWithDisparity(p2DRegion,ppPtrArrayStart);
 
@@ -11864,11 +11879,19 @@ void CRVLPlanarSurfaceDetector::SegmentSTRM(CRVLC2D *p2DRegionSet,
 	
 	RVLQLIST *pPtList = PtListMem;
 
+	RVLARRAY *pRelList;
+
 	p2DRegionList->Start();
 
 	while(p2DRegionList->m_pNext)
 	{
 		p2DRegion = (CRVL2DRegion2 *)(p2DRegionList->GetNext());
+
+		pRelList = p2DRegion->m_RelList + p2DRegionSet3->m_iRelListElements;
+
+		pTriangle = *((CRVL2DRegion2 **)(pRelList->pFirst));
+
+		p2DRegion->m_pPoint3DMap = pTriangle->m_pPoint3DMap;
 
 		RVLQLIST_INIT(pPtList);
 
@@ -13702,6 +13725,8 @@ void CRVLPlanarSurfaceDetector::CreateParamList(CRVLMem *pMem)
 
 	pParamData = m_ParamList.AddParam("PSD.MeshPlanarSegWERThr2", RVLPARAM_TYPE_INT, &m_MeshPlanarSegWERThr2);
 
+	pParamData = m_ParamList.AddParam("PSD.PointMeasurementUncertStD", RVLPARAM_TYPE_DOUBLE, &m_PointMeasurementUncertStD);
+
 	pParamData = m_ParamList.AddParam("PSD.ConvexMesh", RVLPARAM_TYPE_FLAG, &m_Flags);
 	m_ParamList.AddID(pParamData, "yes", RVLPSD_MESH_CONVEX);
 }
@@ -15059,8 +15084,9 @@ void CRVLPlanarSurfaceDetector::Get3DSurfaceAndContours2(CRVL2DRegion2 *p2DRegio
 
 	double sigmaR;
 
-	if(m_Flags & RVLPSD_FLAG_MM)
-		sigmaR = p2DRegionLevel3->m_std * p2DRegionLevel3->m_std;
+	if (m_Flags & RVLPSD_FLAG_MM)
+		//sigmaR = p2DRegionLevel3->m_std * p2DRegionLevel3->m_std;
+		sigmaR = m_PointMeasurementUncertStD * m_PointMeasurementUncertStD;
 	else
 	{
 		CRVLCamera *pCamera = m_pStereoVision->m_pCameraL;
@@ -16787,33 +16813,39 @@ void CRVLPlanarSurfaceDetector::GetOrgPCProjectionParams(double &f, double &uc, 
 	f = uc / sqrt(3.0);
 }
 
-void CRVLPlanarSurfaceDetector::GetOrgPC(double * PC, int n)
+bool CRVLPlanarSurfaceDetector::ProjectToFOVExtension(	double *X,
+														double *P,
+														double *R,
+														int &iFOVExtension_)
 {
-	memset(m_Point3DMap, 0, m_Width * m_Height * sizeof(RVL3DPOINT2 *));
-
-	RVL3DPOINT2 *pPoint3D = m_Point3DArray;
-	
-	double f, uc, vc;
-
-	GetOrgPCProjectionParams(f, uc, vc);
-
-	double *pPCEnd = PC + 3 * n;
-
-	int iPix;
-	double *X;
-	int *iX;
-	double *X_;
-	int u, v;
-	double r;
-	RVL3DPOINT2 *p3DPt;
-
-	for(X_ = PC; X_ < pPCEnd; X_ += 3)
+	if (m_pStereoVision->m_pCameraL->m_Flags & RVLCAMERA_FLAG_SPHERICAL)
 	{
+		iFOVExtension_ = 0;
+
+		RVLUNITMX3(R);
+
+		return true;
+	}
+
+	int iFOVExtension;
+	double q, cs, sn;
+	double X_[3];
+	int u, v;
+
+	for(iFOVExtension = -m_nFOVExtensions; iFOVExtension <= m_nFOVExtensions; iFOVExtension++)
+	{
+		q = (double)iFOVExtension * m_FOVExtension;
+		cs = cos(q);
+		sn = sin(q);
+
+		X_[2] = cs * X[2] + sn * X[0];
+		X_[0] = -sn * X[2] + cs * X[0];
+
 		if(X_[2] < 1.0)
 			continue;
 
-		u = DOUBLE2INT(f * X_[0] / X_[2] + uc);
-		v = DOUBLE2INT(f * X_[1] / X_[2] + vc);
+		u = DOUBLE2INT(P[0] * X_[0] / X_[2] + P[2]);
+		v = DOUBLE2INT(P[4] * X[1]  / X_[2] + P[5]);
 
 		if(u < 0)
 			continue;
@@ -16827,43 +16859,133 @@ void CRVLPlanarSurfaceDetector::GetOrgPC(double * PC, int n)
 		if(v >= m_Height)
 			continue;
 
-		iPix = u + v * m_Width;
+		iFOVExtension_ = iFOVExtension;
 
-		p3DPt = m_Point3DMap[iPix];
+		sn = -sn;
 
-		r = RVLDOTPRODUCT3(X_, X_);
+		RVLROTY(cs, sn, R)
 
-		if(p3DPt)
+		return true;
+	}
+
+	return false;
+}
+
+void CRVLPlanarSurfaceDetector::GetOrgPC(double * PC, int n)
+{
+	int ImageSize = m_Width * m_Height;
+
+	int maxn3DPts =  (2 * m_nFOVExtensions + 1) * ImageSize;
+
+	memset(m_Point3DMapMem, 0, maxn3DPts * sizeof(RVL3DPOINT2 *));
+
+	m_Point3DMap = m_Point3DMapMem + m_nFOVExtensions * ImageSize;
+
+	RVL3DPOINT2 *pPoint3D = m_Point3DArray;
+	
+	double f, uc, vc;
+
+	GetOrgPCProjectionParams(f, uc, vc);
+
+	double cs[RVLPSD_MAXN_FOV_EXTENSIONS]; 
+	double sn[RVLPSD_MAXN_FOV_EXTENSIONS];
+
+	int iFOVExtension;
+	double q;
+
+	for(iFOVExtension = 0; iFOVExtension <= m_nFOVExtensions; iFOVExtension++)
+	{
+		q = (double)iFOVExtension * m_FOVExtension;
+		cs[iFOVExtension] = cos(q);
+		sn[iFOVExtension] = sin(q);
+	}
+
+	double *pPCEnd = PC + 3 * n;
+
+	int iPix;
+	double *X;
+	int *iX;
+	double *X_;
+	double X__[3];
+	int u, v;
+	double r;
+	RVL3DPOINT2 *p3DPt;	
+	RVL3DPOINT2 **Point3DMap;
+	int i;
+	double cs_, sn_;
+
+	for(X_ = PC; X_ < pPCEnd; X_ += 3)
+	{
+		for(iFOVExtension = -m_nFOVExtensions; iFOVExtension <= m_nFOVExtensions; iFOVExtension++)
 		{
-			if(r >= p3DPt->r)
+			i = RVLABS(iFOVExtension);
+
+			cs_ = cs[i];
+			sn_ = (iFOVExtension >= 0 ? sn[i] : -sn[i]);
+
+			X__[2] = cs_ * X_[2] + sn_ * X_[0];
+			X__[0] = -sn_ * X_[2] + cs_ * X_[0];
+
+			if(X__[2] < 1.0)
 				continue;
+
+			u = DOUBLE2INT(f * X__[0] / X__[2] + uc);
+			v = DOUBLE2INT(f * X_[1] / X__[2] + vc);
+
+			if(u < 0)
+				continue;
+
+			if(u >= m_Width)
+				continue;
+
+			if(v < 0)
+				continue;
+
+			if(v >= m_Height)
+				continue;
+
+			iPix = u + v * m_Width;
+
+			Point3DMap = m_Point3DMap + iFOVExtension * ImageSize;
+
+			p3DPt = Point3DMap[iPix];
+
+			r = RVLDOTPRODUCT3(X_, X_);
+
+			if(p3DPt)
+			{
+				if(r >= p3DPt->r)
+					continue;
+			}
+			else
+			{
+				p3DPt = pPoint3D;
+
+				p3DPt->u = u;
+				p3DPt->v = v;
+				p3DPt->iPix = iPix;
+				p3DPt->segmentNumber = -1;
+				p3DPt->iCell = -1;
+				p3DPt->regionList = NULL;
+
+				Point3DMap[iPix] = pPoint3D;
+
+				pPoint3D++;
+			}
+
+			X = p3DPt->XYZ;
+			RVLCOPY3VECTOR(X_, X)
+			p3DPt->r = r;
+			iX = p3DPt->iX;
+			iX[0] = DOUBLE2INT(X[0]);
+			iX[1] = DOUBLE2INT(X[1]);
+			iX[2] = DOUBLE2INT(X[2]);
+			p3DPt->x = X[0];
+			p3DPt->y = X[1];
+			p3DPt->z = X[2];
+
+			break;
 		}
-		else
-		{
-			p3DPt = pPoint3D;
-
-			p3DPt->u = u;
-			p3DPt->v = v;
-			p3DPt->iPix = iPix;
-			p3DPt->segmentNumber = -1;
-			p3DPt->iCell = -1;
-			p3DPt->regionList = NULL;
-
-			m_Point3DMap[iPix] = pPoint3D;
-
-			pPoint3D++;
-		}
-
-		X = p3DPt->XYZ;
-		RVLCOPY3VECTOR(X_, X)
-		p3DPt->r = r;
-		iX = p3DPt->iX;
-		iX[0] = DOUBLE2INT(X[0]);
-		iX[1] = DOUBLE2INT(X[1]);
-		iX[2] = DOUBLE2INT(X[2]);
-		p3DPt->x = X[0];
-		p3DPt->y = X[1];
-		p3DPt->z = X[2];
 	}
 
 	m_n3DPoints = pPoint3D - m_Point3DArray;
@@ -16895,7 +17017,7 @@ void CRVLPlanarSurfaceDetector::DisplayPC(IplImage *pDisplay)
 
 	if(minr >= maxr)
 	{
-		memset(pPix, 0, 3 * ImageSize);
+		memset(pPix, 0, 3 * (2 * m_nFOVExtensions + 1) * ImageSize);
 
 		return;
 	}
@@ -16906,30 +17028,49 @@ void CRVLPlanarSurfaceDetector::DisplayPC(IplImage *pDisplay)
 
 	double k = (255.0 - (double)offset) / log(maxr / minr);
 
-	RVL3DPOINT2 **pPt3DMapEnd = m_Point3DMap + ImageSize;
+	int dpNextRow = (2 * m_nFOVExtensions * m_Width);
+
+	m_Point3DMap = m_Point3DMapMem;
+
+	unsigned char *pPix0 = pPix;
 
 	RVL3DPOINT2 **pp3DPt;
 	unsigned char I;
+	int iFOVExtension;
+	int u, v;
 	
-	for(pp3DPt = m_Point3DMap; pp3DPt < pPt3DMapEnd; pp3DPt++)
+	for(iFOVExtension = -m_nFOVExtensions; iFOVExtension <= m_nFOVExtensions; iFOVExtension++, m_Point3DMap += ImageSize, pPix0 += (3 * m_Width))
 	{
-		p3DPt = *pp3DPt;
+		pp3DPt = m_Point3DMap;
 
-		if(p3DPt)
-		{
-			I = offset + DOUBLE2INT(k * log(p3DPt->r / minr));
+		pPix = pPix0;
 
-			*(pPix++) = I;
-			*(pPix++) = I;
-			*(pPix++) = I;
-		}
-		else
+		for(v = 0; v < m_Height; v++)
 		{
-			*(pPix++) = 0;
-			*(pPix++) = 0;
-			*(pPix++) = 0;
+			for(u = 0; u < m_Width; u++, pp3DPt++)
+			{
+				p3DPt = *pp3DPt;
+
+				if(p3DPt)
+				{
+					I = offset + DOUBLE2INT(k * log(p3DPt->r / minr));
+
+					*(pPix++) = I;
+					*(pPix++) = I;
+					*(pPix++) = I;
+				}
+				else
+				{
+					*(pPix++) = 0;
+					*(pPix++) = 0;
+					*(pPix++) = 0;
+				}
+			}
+
+			u += dpNextRow;
+			pPix += (3 * dpNextRow);
 		}
-	}	
+	}
 }
 
 
@@ -18714,11 +18855,18 @@ void RVLResetFlags(CRVLMPtrChain *pObjectList, BYTE Flags)
 	}
 }
 
-void CRVLPlanarSurfaceDetector::Get3DPlanarSurfaceBoundary(CRVL3DSurface2 * pSurf)
+void CRVLPlanarSurfaceDetector::Get3DPlanarSurfaceBoundary(
+	CRVL3DSurface2 * pSurf,
+	bool bPC)
 {
 	RVL3DPOINT3 *pPt;
 
 	RVL3DCONTOUR *pContour = (RVL3DCONTOUR *)(pSurf->m_BoundaryContourList.pFirst);
+
+	RVL3DPOINT2 **Point3DMap = ((CRVL2DRegion2 *)(pSurf->m_vp2DRegion))->m_pPoint3DMap;
+	
+	int iPix;
+	double *X;
 
 	while (pContour)
 	{
@@ -18726,11 +18874,20 @@ void CRVLPlanarSurfaceDetector::Get3DPlanarSurfaceBoundary(CRVL3DSurface2 * pSur
 
 		while (pPt)
 		{
-			RVLProject2DPointTo3DPlane(pPt->P2D, pPt->P3D, pSurf,
-				m_pStereoVision->m_KinectParams.depthUc,
-				m_pStereoVision->m_KinectParams.depthVc,
-				m_pStereoVision->m_KinectParams.depthFu,
-				m_pStereoVision->m_KinectParams.depthFv);
+			if (bPC)
+			{
+				iPix = pPt->P2D[0] + pPt->P2D[1] * m_Width;
+
+				X = Point3DMap[iPix]->XYZ;
+
+				RVLProject3DPointTo3DPlane(X, pSurf, pPt->P3D);
+			}				
+			else
+				RVLProject2DPointTo3DPlane(pPt->P2D, pPt->P3D, pSurf,
+					m_pStereoVision->m_KinectParams.depthUc,
+					m_pStereoVision->m_KinectParams.depthVc,
+					m_pStereoVision->m_KinectParams.depthFu,
+					m_pStereoVision->m_KinectParams.depthFv);
 
 			pPt = (RVL3DPOINT3 *)(pPt->pNext);
 		}

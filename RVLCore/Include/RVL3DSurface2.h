@@ -101,6 +101,10 @@ void RVLProject2DPointTo3DPlane(int *i2DPoint,
 								CRVL3DSurface2 *p3DPlane,
 								double Uc, double Vc,
 								double Fu, double Fv);
+void RVLProject3DPointTo3DPlane(
+	double *XSrc,
+	CRVL3DSurface2 *p3DPlane,
+	double *XTgt);
 BOOL RVL3DPlanarSurfaceEKFUpdate(	CRVL3DSurface2 *pSSurf,
 									CRVL3DSurface2 *pMSurf,
 									CRVL3DPose *pInitPose,

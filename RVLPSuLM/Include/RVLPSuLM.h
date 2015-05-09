@@ -232,7 +232,8 @@ public:
 					BOOL bCells = TRUE, 
 					int iSelectedPix = -1, 
 					CRVL3DSurface2 **ppSelectedSurf = NULL,
-					CRVL3DLine2 **ppSelectedLine = NULL);
+					CRVL3DLine2 **ppSelectedLine = NULL,
+					int *piFOVExtension = NULL);
 	void Project3DSurface(	CRVL3DSurface2 *pSurf, 
 							CRVL3DPose *pPoseC0);
 	int Match(	CRVL3DSurface2 *pSurface, 

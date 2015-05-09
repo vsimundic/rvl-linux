@@ -31,11 +31,9 @@
 //#define RVLPSDGCC_FLAG_PLANE						0x00000002
 //#define RVLPSDGCC_FLAG_MASK						0x00000001
 #define RVLPSDGCC_FLAG_DILATE						0x00040000		// must be compatible with RVLPSDRANSAC_FLAGs
-
 #define RVLPSD_FLAG_RELIABLE_DISPARITY				0x20000000		//Determine Reliable disparities are used with Delaunay triangulation.
 #define RVLPSD_FLAG_SUBSEGMENT						0x40000000		//Subsegmentation to be performed. Reliable disparities are used with Delaunay triangulation.
 #define RVLPSD_FLAG_MAXIMUMREGIONGROWING			0x80000000		//Maximum region growing performed 
-
 #define RVLPSD_SEGMENT_3D							0x00100000		//Original segmentation (performed on 3D image)
 #define RVLPSD_SEGMENT_REGIONBASED					0x00200000		//Region based segmentation (eg Graph based by Pedro F. Felzenszwalb or Edge Based by Robert Cupec)
 //#define RVLPSD_SEGMENT_EDGEBASED					0x00400000		//Edge based segmentation
@@ -69,6 +67,8 @@
 
 #define RVLPSDGETTEXTURE_FLAG_ORTOGONAL_MAPPING		0x00000001
 #define RVLPSDGETTEXTURE_FLAG_TEXTON_ELLIPSES		0x00000002
+
+#define RVLPSD_MAXN_FOV_EXTENSIONS					5
 
 //#define RVLPSD_PROJECT_DI_TO_PLANES_FLAG_PROJECT	
 //#define RVLPSD_SEGMENT_STRM_LOG_FILE
@@ -266,6 +266,7 @@ public:
 	//RVL3DPOINT2 **m_Point3DBuff1;
 	//RVL3DPOINT2 **m_Point3DBuff2;
 	RVL3DPOINT2 **m_Point3DMap;
+	RVL3DPOINT2 **m_Point3DMapMem;
 	RVL3DPOINT2 **m_Point3DBuff;
 	int m_n3DPoints;
 	//int m_n3DOriginalPoints;
@@ -337,6 +338,9 @@ public:
 	RVLAPIX **m_APixBuff;
 	CRVLAImage *m_pAImage;
 	int *m_DTMap;
+	int m_nFOVExtensions;
+	double m_FOVExtension;
+	double m_PointMeasurementUncertStD;
 		
 #ifndef RVLPSDLAD_GRBIC
 	CRVLMem *m_pMem, *m_pMem2;
@@ -580,7 +584,7 @@ public:
 	void CreateParamList(CRVLMem *pMem);
 	
 #endif
-	RVL3DPOINT2 *CRVLPlanarSurfaceDetector::WeightedMedian(
+	RVL3DPOINT2 *WeightedMedian(
 		//double *DataSort, 
 		//double *DataWeights, 
 		//int *Indeksi, 
@@ -640,6 +644,10 @@ public:
 	void GetOrgPCProjectionParams(double &f, double &uc, double &vc);
 	void DisplayPC(IplImage *pDisplay);
 	void AssignLabels(CRVLC2D *pTriangleSetLevel1, CRVLC2D *pTriangleSetLevel3);
+	bool ProjectToFOVExtension(	double *X,
+								double *P,
+								double *R,
+								int &iFOVExtension_);
 
 private:
 /*	RVLPSDLAD_THREE_POINTS_ITER_AB ThreePointsModified_searchb(
@@ -793,7 +801,9 @@ private:
 		Indeksi[index2]		= tmp3;
 	};
 public:
-	void Get3DPlanarSurfaceBoundary(CRVL3DSurface2 * pSurf);
+	void Get3DPlanarSurfaceBoundary(
+		CRVL3DSurface2 * pSurf,
+		bool bPC = false);
 };
 
 #endif // !defined(AFX_RVLPLANARSURFACEDETECTOR_H__1DCCB796_4F94_4476_9777_2D5D6B292431__INCLUDED_)

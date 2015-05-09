@@ -5,7 +5,7 @@
 //#include "stdafx.h"
 
 #include "RVLCore.h"
-#include "Include\RVL3DPose.h"
+#include "RVL3DPose.h"
 
 #ifdef _DEBUG
 #undef THIS_FILE
@@ -765,11 +765,11 @@ void CRVL3DPose::SetUncert(	CRVL3DPose *pstddPose)
 
 void CRVL3DPose::Reset(void)
 {
-	CreateUnitMatrix(m_Rot, 3);
+	RVLUNITMX3(m_Rot);
 
 	m_Alpha = m_Beta = m_Theta = 0.0;
 
-	memset(m_X, 0, 3 * sizeof(double));
+	RVLNULL3VECTOR(m_X);
 }
 
 //Updates pose paramaters

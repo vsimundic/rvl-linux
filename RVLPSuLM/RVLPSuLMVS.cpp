@@ -66,6 +66,13 @@ void CRVLPSuLMVS::Init(char * CfgFile2Name)
 	m_PoseLA.m_Beta *= DEG2RAD;
 	m_PoseLA.m_Theta *= DEG2RAD;
 
+	double *R = m_PoseA0.m_Rot;
+	double *t = m_PoseA0.m_X;
+	RVLUNITMX3(R);
+	RVLNULL3VECTOR(t);
+	m_PoseA0.m_Alpha = m_PoseA0.m_Beta = m_PoseA0.m_Theta = 0.0;
+	m_PoseA0.m_ParamFlags = 0x00000000;
+	
 	// initialize PSuLMBuilder
 
 	m_PSuLMBuilder.m_pMem0 = &m_Mem0;
@@ -107,9 +114,9 @@ void CRVLPSuLMVS::Init(char * CfgFile2Name)
 	//	m_PSuLMBuilder.Load(m_PSuLMBuilder.m_ModelDatabasePath,2000);
 	if((m_PSuLMBuilder.m_Flags & RVLPSULMBUILDER_FLAG_MODE) == RVLPSULMBUILDER_FLAG_MODE_LOCALIZATION)
 		m_PSuLMBuilder.LoadMap();
-	else if((m_PSuLMBuilder.m_Flags & RVLPSULMBUILDER_FLAG_MODE) == RVLPSULMBUILDER_FLAG_MODE_TRACKING)
-		m_PSuLMBuilder.m_HypothesisArray = 
-			new RVLPSULM_HYPOTHESIS *[m_PSuLMBuilder.m_maxnHypothesesPerModel];
+	//else if ((m_PSuLMBuilder.m_Flags & RVLPSULMBUILDER_FLAG_MODE) == RVLPSULMBUILDER_FLAG_MODE_TRACKING)
+	//	m_PSuLMBuilder.m_HypothesisArray =
+	//		new RVLPSULM_HYPOTHESIS *[m_PSuLMBuilder.m_maxnHypothesesPerModel];
 
 	//FILE *fp;
 	//
@@ -443,6 +450,10 @@ void CRVLPSuLMVS::PSuLMBasedRLMUpdate(DWORD Flags)
 		m_PSuLMBuilder.m_Flags |= RVLPSULMBUILDER_FLAG_KIDNAPPED;
 	}
 
+	if ((m_PSuLMBuilder.m_Flags & RVLPSULMBUILDER_FLAG_MODE) == RVLPSULMBUILDER_FLAG_MODE_TRACKING)
+		if (m_pPrevPSuLM)
+			m_PSuLMBuilder.m_Flags &= ~RVLPSULMBUILDER_FLAG_KIDNAPPED;
+
 	if(m_PSuLMBuilder.m_Flags & RVLPSULMBUILDER_FLAG_KIDNAPPED)
 	{
 		double *R = m_PoseA0.m_Rot;
@@ -453,10 +464,8 @@ void CRVLPSuLMVS::PSuLMBasedRLMUpdate(DWORD Flags)
 	}
 
 	if((m_PSuLMBuilder.m_Flags & RVLPSULMBUILDER_FLAG_MODE) == RVLPSULMBUILDER_FLAG_MODE_TRACKING)
-	{
-		if(m_pPrevPSuLM)
+		if (m_pPrevPSuLM)
 			m_PSuLMBuilder.Localization(m_pPSuLM, &m_PoseA0, m_pPrevPSuLM);
-	}
 
 	if ((m_PSuLMBuilder.m_Flags & RVLPSULMBUILDER_FLAG_MODE) == RVLPSULMBUILDER_FLAG_MODE_LOCALIZATION)
 		m_PSuLMBuilder.Localization(m_pPSuLM, &m_PoseA0);
@@ -715,7 +724,7 @@ bool CRVLPSuLMVS::Create3DMeshFromComplexPSuLM(char *ImageFileName)
 	{
 		RVLSetFileNumber(m_PSuLMBuilder.m_ImageFileName, "00000-LW.bmp", iSample);
 
-		if(!m_PSuLMBuilder.GetPanTilt(m_PSuLMBuilder.m_ImageFileName, &PoseM_M, iSample0, command))
+		if(!m_PSuLMBuilder.GetOdometry(m_PSuLMBuilder.m_ImageFileName, &PoseM_M, iSample0, command))
 		{
 			bOK = false;
 
@@ -1318,11 +1327,14 @@ void RVLPSuLMDisplayMouseCallback2(int event, int x, int y, int flags, void* vpD
 	}
 
 	int w = pData->w;
+
+	int wExt = (2 * pVS->m_PSD.m_nFOVExtensions + 1) * w;
 	
 	int iPix;
 	int a, b;
 	int nSurfaces, nSurfaces2, nLines, nLines2;
 	CRVL3DSurface2 *pSelectedSurf_;
+	int iFOVExtension;
 
 	switch( event )
 	{
@@ -1334,6 +1346,8 @@ void RVLPSuLMDisplayMouseCallback2(int event, int x, int y, int flags, void* vpD
 				pData->v = y;
 
 				pData->bSelection = true;				
+
+				iPix = x / pData->ZoomFactor + y / pData->ZoomFactor * wExt;
 
 				if(pFig->m_Flags & RVLPSULM_DISPLAY_SCENE)
 				{
@@ -1385,7 +1399,7 @@ void RVLPSuLMDisplayMouseCallback2(int event, int x, int y, int flags, void* vpD
 
 					pSelectedSurf_ = pSelectedSurf;
 
-					pPSuLM->Project(&(pFig->m_PoseC0), FALSE, iPix, &pSelectedSurf, &pSelectedLine);
+					pPSuLM->Project(&(pFig->m_PoseC0), FALSE, iPix, &pSelectedSurf, &pSelectedLine, &iFOVExtension);
 
 					if (pVS->m_PSuLMBuilder.m_Flags2 & RVLPSULMBUILDER_FLAG2_HYPOTHESIS_EVALUATION_SAMPLE_MATCHING)
 					{
@@ -1420,10 +1434,27 @@ void RVLPSuLMDisplayMouseCallback2(int event, int x, int y, int flags, void* vpD
 					pVS->m_pPSuLM->Display(pSFig, &NullPose, cvScalar(0, 255, 0), pData->mDisplayPSuLMFlags);
 				}
 
+				RVLResetFlags<CRVL2DRegion2>(&(pVS->m_AImage.m_C2DRegion.m_ObjectList), RVLOBJ2_FLAG_MARKED);
+
 				if(pSelectedSurf)
 				{
 					pPSuLM->Display3DSurface(pFig, pSelectedSurf, &NullPose, cvScalar(255, 255, 0), 2,
 						RVLPSULM_DISPLAY_VECTORS, pSelectedSurfSample);
+
+					CRVL2DRegion2 *p2DRegion;
+
+					if (!(pPSuLM->m_Flags & RVLPSULM_FLAG_COMPLEX))
+					{
+						p2DRegion = (CRVL2DRegion2 *)(pSelectedSurf->m_vp2DRegion);
+
+						if(pFig->m_Flags & RVLPSULM_DISPLAY_SCENE)
+						{
+							RVLSegmentationDisplayBoundary(pFig, p2DRegion, pData->w, &(pVS->m_Mem2), cvScalar(255, 255, 0), 1, 
+								(iFOVExtension + pVS->m_PSD.m_nFOVExtensions) * pVS->m_PSD.m_Width);
+
+							pVS->m_Mem2.Clear();
+						}
+					}
 
 					if(pHypothesis != NULL && pSelectedSurf->m_Index < nSurfaces)
 					{
@@ -1462,9 +1493,25 @@ void RVLPSuLMDisplayMouseCallback2(int event, int x, int y, int flags, void* vpD
 								pPSuLM2->Display3DSurface(pFig2, pSurf2, &NullPose, cvScalar(255, 255, 0), 2,
 									RVLPSULM_DISPLAY_VECTORS);
 							}
+						}	// for(int iMatch = 0; iMatch < nSurfaces2; iMatch++)
+					}	// if(pHypothesis != NULL && pSelectedSurf->m_Index < nSurfaces)
+
+					if (!(pPSuLM->m_Flags & RVLPSULM_FLAG_COMPLEX))
+					{
+						RVLARRAY *pRelList = p2DRegion->m_RelList + p2DRegion->m_pClass->m_iRelList[RVLRELLIST_ELEMENTS];
+
+						CRVL2DRegion2 **ppTriangle;
+
+						CRVL2DRegion2 *pTriangle;
+
+						for (ppTriangle = (CRVL2DRegion2 **)(pRelList->pFirst); ppTriangle < (CRVL2DRegion2 **)(pRelList->pEnd); ppTriangle++)
+						{
+							pTriangle = *ppTriangle;
+
+							pTriangle->m_Flags |= RVLOBJ2_FLAG_MARKED;
 						}
 					}
-				}
+				}	// if(pSelectedSurf)
 
 				if(pSelectedLine)
 				{

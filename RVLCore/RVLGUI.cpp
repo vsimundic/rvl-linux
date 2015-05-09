@@ -529,7 +529,8 @@ void RVLDisplay3DEllipse(double r1,
 						 CRVL3DPose *pPoseFC,
 						 CRVLCamera *pCamera,
 						 CvPoint **pPtArray,
-						 int &n)
+						 int &n,
+						 int uOffset)
 {
 	double *XcC = pPoseFC->m_X;
 	double r = sqrt(RVLDOTPRODUCT3(XcC, XcC));
@@ -555,6 +556,8 @@ void RVLDisplay3DEllipse(double r1,
 
 	XF[2] = 0.0;
 
+	int uOffset_ = (uOffset << 1);
+
 	CvPoint *pPt = PtArray;
 
 	double XC[3];
@@ -573,7 +576,7 @@ void RVLDisplay3DEllipse(double r1,
 
 		pCamera->Project3DPoint2(XC, U, iU);
 
-		pPt->x = iU[0];
+		pPt->x = iU[0] + uOffset_;
 		pPt->y = iU[1];
 
 		pPt++;

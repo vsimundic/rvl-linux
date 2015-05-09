@@ -7,6 +7,9 @@
 #include "RVLCore.h"
 #include "RVLPCS.h"
 #ifdef RVLVTK
+#include <vtkAutoInit.h>
+VTK_MODULE_INIT(vtkRenderingOpenGL);
+VTK_MODULE_INIT(vtkInteractionStyle);
 #include "RVLVTK.h"
 #endif
 
@@ -97,6 +100,7 @@ int main(int argc, char* argv[])
 	CRVLVTKRenderer Renderer;
 
 	Renderer.Init(800, 600);
+	Renderer.m_pWindow->Render();
 
 	int *pointmap = new int[w * h];
 #endif
@@ -216,7 +220,7 @@ int main(int argc, char* argv[])
 
 		if(VS.m_Flags & RVLSYS_FLAGS_PC)
 		{
-			if(!RVLPCImport(VS.m_ImageFileName, PC, nPC))
+			if(!RVLPCImport(VS.m_ImageFileName, &PC, nPC))
 			{
 				char message[] = "Can not open file ";
 

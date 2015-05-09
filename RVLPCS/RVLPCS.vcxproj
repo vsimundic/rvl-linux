@@ -85,7 +85,7 @@
     <ClCompile>
       <Optimization>Disabled</Optimization>
       <InlineFunctionExpansion>Default</InlineFunctionExpansion>
-      <AdditionalIncludeDirectories>$(OPENCV_BUILD)\include;.\Include;..\RVLCore\Include;$(VTK_PATH)\Debug\Include\vtk-5.10</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(OPENCV_BUILD)\include;.\Include;..\RVLCore\Include;$(VTK_PATH)\Include\vtk-6.1</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>WIN32;_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <PrecompiledHeader />
@@ -97,7 +97,7 @@
     <ClCompile>
       <Optimization>Disabled</Optimization>
       <InlineFunctionExpansion>Default</InlineFunctionExpansion>
-      <AdditionalIncludeDirectories>$(OPENCV_BUILD)\include;.\Include;..\RVLCore\Include;$(VTK_PATH)\Debug\Include\vtk-5.10</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\Users\Damir\Documents\Dependancy libraries VS2013\OpenCV 3.0.0 beta\opencv\build\include;.\Include;..\RVLCore\Include;C:\Users\Damir\Documents\Dependancy libraries VS2013\VTK 6.1\include\vtk-6.1</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>WIN32;_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <PrecompiledHeader>
@@ -110,7 +110,7 @@
     <ClCompile>
       <Optimization>MaxSpeed</Optimization>
       <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
-      <AdditionalIncludeDirectories>$(OPENCV_BUILD)\include;.\Include;..\RVLCore\Include;$(VTK_PATH)\Release\Include\vtk-5.10</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(OPENCV_BUILD)\include;.\Include;..\RVLCore\Include;$(VTK_PATH)\Include\vtk-6.1</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>WIN32;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <PrecompiledHeader />
@@ -122,7 +122,7 @@
     <ClCompile>
       <Optimization>MaxSpeed</Optimization>
       <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
-      <AdditionalIncludeDirectories>$(OPENCV_BUILD)\include;.\Include;..\RVLCore\Include;$(VTK_PATH)\Release\Include\vtk-5.10</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\Users\Damir\Documents\Dependancy libraries VS2013\OpenCV 3.0.0 beta\opencv\build\include;.\Include;..\RVLCore\Include;C:\Users\Damir\Documents\Dependancy libraries VS2013\VTK 6.1\include\vtk-6.1</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>WIN32;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <PrecompiledHeader>

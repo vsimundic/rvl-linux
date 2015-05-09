@@ -90,7 +90,8 @@ void RVLDisplay3DEllipse(double r1,
 						 CRVL3DPose *pPoseFC,
 						 CRVLCamera *pCamera,
 						 CvPoint **pPtArray,
-						 int &n);
+						 int &n,
+						 int uOffset = 0);
 #ifdef RVLOPENNI
 void RVLTransformVectorsDepthToRGB(	CRVLFigure *pFig,
 									short *D,

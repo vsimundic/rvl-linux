@@ -49,6 +49,9 @@ DWORD CRVLPCSVS::Init(char *CfgFile2Name)
 	if(m_Kinect.m_Flags & RVLKINECT_DEPTH_IMAGE_FORMAT_100UM)
 		m_PSD.m_Flags |= RVLPSD_FLAG_100UM;
 
+	if(m_Flags & RVLSYS_FLAGS_PC)
+		m_PSD.m_nFOVExtensions = 1;
+
 	m_PSD.Init();
 
 	// initialize Delaunay triangulation

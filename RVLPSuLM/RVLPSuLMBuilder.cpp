@@ -77,6 +77,7 @@ CRVLPSuLMBuilder::CRVLPSuLMBuilder(void)
 	m_maxnDominant3DLines = 20;
 	m_maxnDominant3DLinesComplex = 30;
 	//m_maxnDominant3DLinesComplex = 100;
+	m_maxnModel3DSurfaces = 0;
 	m_maxnExpandedNodes = 1000;
 	m_RotHypTol = 3.0;	// deg
 	m_tHypTol = 500.0;	// mm
@@ -412,6 +413,9 @@ void CRVLPSuLMBuilder::Init(void)
 
 	m_SampleMatchAngleTol = m_SampleMatchAngleStD * DEG2RAD;
 	m_SampleMatchDistTol = m_SampleMatchDistStD;
+
+	m_maxnDominant3DSurfacesComplex = RVLMAX(m_maxnDominant3DSurfacesComplex, m_maxnDominant3DSurfaces);
+	m_maxnDominant3DLinesComplex = RVLMAX(m_maxnDominant3DLinesComplex, m_maxnDominant3DLines);
 
 	// Cell array
 
@@ -1143,6 +1147,8 @@ BOOL CRVLPSuLMBuilder::Create(CRVLPSuLM *pPSuLM,
 
 	unsigned int DepthFormat;
 
+	DWORD HypEvalMethod = (m_Flags & RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD);
+
 	RVLQLIST *pLocalMap = &(pPSuLM->m_LocalMap);
 	RVLQLIST_INIT(pLocalMap)
 
@@ -1168,7 +1174,7 @@ BOOL CRVLPSuLMBuilder::Create(CRVLPSuLM *pPSuLM,
 
 				int nPC;
 
-				if(!RVLPCImport(pPSuLM->m_FileName, PC, nPC))
+				if(!RVLPCImport(pPSuLM->m_FileName, &PC, nPC))
 					return FALSE;
 
 				ExecTime = m_pTimer->GetTime() - StartTime;
@@ -1183,6 +1189,24 @@ BOOL CRVLPSuLMBuilder::Create(CRVLPSuLM *pPSuLM,
 			m_pMem->Clear();
 
 			m_pAImage->Create();
+
+			m_pPSD->m_Flags &= ~RVLPSD_MESH_SEGMENT_PLANAR;
+
+			int ImageSize = m_pPSD->m_Width * m_pPSD->m_Height;
+
+			RVL3DPOINT2 **Point3DMap = m_pPSD->m_Point3DMapMem;
+
+			int iFOVExtension;
+
+			for(iFOVExtension = -m_pPSD->m_nFOVExtensions; iFOVExtension <= m_pPSD->m_nFOVExtensions; iFOVExtension++, Point3DMap += ImageSize)
+			{
+				m_pPSD->m_Point3DMap = Point3DMap;	
+
+				if(iFOVExtension == m_pPSD->m_nFOVExtensions)
+					m_pPSD->m_Flags |= RVLPSD_MESH_SEGMENT_PLANAR;
+
+				m_pPSD->Segment(&(m_pAImage->m_C2DRegion),&(m_pAImage->m_C2DRegion2),&(m_pAImage->m_C2DRegion3),m_pMem);
+			}
 		}
 		else
 		{
@@ -1206,15 +1230,15 @@ BOOL CRVLPSuLMBuilder::Create(CRVLPSuLM *pPSuLM,
 			m_pAImage->Create();
 			//m_pPSD->GetPointsWithDisparity(&(m_pStereoVision->m_DisparityMap), m_pAImage, m_pMem2, false);
 			m_pPSD->GetPointsWithDisparity(&(m_pStereoVision->m_DisparityMap));
+
+			ExecTime = m_pTimer->GetTime() - StartTime;
+
+			StartTime = m_pTimer->GetTime();
+			//m_pPSD->Segment(&(m_pAImage->m_C2DRegion),&(m_pAImage->m_C2DRegion2),&(m_pAImage->m_C2DRegion3),&(m_pAImage->m_C2DContour),m_pMem);
+			m_pPSD->Segment(&(m_pAImage->m_C2DRegion),&(m_pAImage->m_C2DRegion2),&(m_pAImage->m_C2DRegion3),m_pMem);
+
+			ExecTime = m_pTimer->GetTime() - StartTime;
 		}
-
-		ExecTime = m_pTimer->GetTime() - StartTime;
-
-		StartTime = m_pTimer->GetTime();
-		//m_pPSD->Segment(&(m_pAImage->m_C2DRegion),&(m_pAImage->m_C2DRegion2),&(m_pAImage->m_C2DRegion3),&(m_pAImage->m_C2DContour),m_pMem);
-		m_pPSD->Segment(&(m_pAImage->m_C2DRegion),&(m_pAImage->m_C2DRegion2),&(m_pAImage->m_C2DRegion3),m_pMem);
-
-		ExecTime = m_pTimer->GetTime() - StartTime;
 
 		m_pMem2->Clear();
 
@@ -1610,7 +1634,7 @@ BOOL CRVLPSuLMBuilder::Create(CRVLPSuLM *pPSuLM,
 					{
 						RVLSegmentationGetBoundary(p2DRegion, iWidth, &(p3DSurface->m_BoundaryContourList), m_S3DSurfaceSet.m_pMem0);
 
-						m_pPSD->Get3DPlanarSurfaceBoundary(p3DSurface);
+						m_pPSD->Get3DPlanarSurfaceBoundary(p3DSurface, (m_Flags & RVLPSULMBUILDER_FLAG_PC) != 0);
 
 						p3DSurface->m_Flags |= RVL3DSURFACE_FLAG_BOUNDARY;
 					}
@@ -2012,34 +2036,36 @@ BOOL CRVLPSuLMBuilder::Create(CRVLPSuLM *pPSuLM,
 		//	//p2DRegion->m_Flags |= RVLOBJ2_FLAG_DOMINANT;
 		//}
 
-
-		//FILL m_pPSD->m_3DSurfaceMap
-		int ImageSize = m_pPSD->m_Width * m_pPSD->m_Height;
-
-		//Reset m_pPSD->m_3DSurfaceMap
-		memset(m_pPSD->m_3DSurfaceMap, 0, ImageSize * sizeof(CRVL3DSurface2 *));
-
-		CRVL3DSurface2 **p3DSurfacePtr = m_pPSD->m_3DSurfaceMap;
-
-		CRVL2DRegion2 **p2DRegionMapEnd = m_pPSD->m_2DRegionMap + ImageSize;
-
-		CRVL2DRegion2 **p2DRegionPtr;
-		
-		for(p2DRegionPtr = m_pPSD->m_2DRegionMap; p2DRegionPtr < p2DRegionMapEnd; p2DRegionPtr++, p3DSurfacePtr++)
+		if(HypEvalMethod == RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD_IBM)
 		{
-			p2DRegion = *p2DRegionPtr;
+			//FILL m_pPSD->m_3DSurfaceMap
+			int ImageSize = m_pPSD->m_Width * m_pPSD->m_Height;
 
-			if(p2DRegion == NULL)
-				continue;
+			//Reset m_pPSD->m_3DSurfaceMap
+			memset(m_pPSD->m_3DSurfaceMap, 0, ImageSize * sizeof(CRVL3DSurface2 *));
 
-			if(p2DRegion->m_Flags & RVLOBJ2_FLAG_REJECTED)
+			CRVL3DSurface2 **p3DSurfacePtr = m_pPSD->m_3DSurfaceMap;
+
+			CRVL2DRegion2 **p2DRegionMapEnd = m_pPSD->m_2DRegionMap + ImageSize;
+
+			CRVL2DRegion2 **p2DRegionPtr;
+			
+			for(p2DRegionPtr = m_pPSD->m_2DRegionMap; p2DRegionPtr < p2DRegionMapEnd; p2DRegionPtr++, p3DSurfacePtr++)
 			{
-				*p3DSurfacePtr = NULL;
+				p2DRegion = *p2DRegionPtr;
 
-				continue;
+				if(p2DRegion == NULL)
+					continue;
+
+				if(p2DRegion->m_Flags & RVLOBJ2_FLAG_REJECTED)
+				{
+					*p3DSurfacePtr = NULL;
+
+					continue;
+				}
+
+				*p3DSurfacePtr = (CRVL3DSurface2 *)(p2DRegion->m_vp3DSurface);		
 			}
-
-			*p3DSurfacePtr = (CRVL3DSurface2 *)(p2DRegion->m_vp3DSurface);		
 		}
 
 		//Create lines
@@ -2455,7 +2481,7 @@ BOOL CRVLPSuLMBuilder::Create(CRVLPSuLM *pPSuLM,
 #endif
 		}	// if(m_Flags & RVLPSULMBUILDER_FLAG_LINES)
 		else
-			pPSuLM->m_n3DLines = 0;
+			pPSuLM->m_n3DLines = pPSuLM->m_n3DLinesTotal = 0;
 
 #ifdef RVLPSULM_CREATE_DEBUG_LOG
 		FILE *fpLog;
@@ -3326,7 +3352,7 @@ BOOL CRVLPSuLMBuilder::Create(CRVLPSuLM *pPSuLM,
 	return TRUE;
 }
 
-bool CRVLPSuLMBuilder::GetPanTilt(char *ImageFileName,
+bool CRVLPSuLMBuilder::GetOdometry(char *ImageFileName,
 								  CRVL3DPose *pPose,
 								  int &iSample0,
 								  unsigned char &command)
@@ -3340,18 +3366,23 @@ bool CRVLPSuLMBuilder::GetPanTilt(char *ImageFileName,
 	if(fpOdometry == NULL)
 		return false;
 
-	int x, y, z, pan, tilt, roll;
+	double pan, tilt, roll;
 
-	fscanf(fpOdometry, "%d\t%d\t%d\t%d\t%d\t%d\t%d\t%c\n", &x, &y, &z, &pan, &tilt, &roll, &iSample0, &command);
+	fscanf(fpOdometry, "%lf\t%lf\t%lf\t%lf\t%lf\t%lf\t%d\t%c\n", pPose->m_X, pPose->m_X + 1, pPose->m_X + 2, &pan, &tilt, &roll, &iSample0, &command);
 
 	fclose(fpOdometry);
 
-	if (pan == 70)
-		pan += 7;
+	// todo: correct odometry files of the experiments reported in IROS15 and remove the next three lines 
 
-	pPose->m_Alpha = m_kPan * (double)pan * DEG2RAD;
-	pPose->m_Beta = m_kTilt * ((double)tilt + m_TiltOffset) * DEG2RAD;;			 
-	pPose->m_Theta = 0.0;
+	if (m_Flags2 & RVLPSULMBUILDER_FLAG2_COMPLEX)
+		if (pan == 70.0)
+			pan += 7.0;
+
+	/////
+
+	pPose->m_Alpha = m_kPan * pan * DEG2RAD;
+	pPose->m_Beta = m_kTilt * (tilt + m_TiltOffset) * DEG2RAD;;			 
+	pPose->m_Theta = roll;
 
 	pPose->UpdateRotLL();
 
@@ -3388,7 +3419,7 @@ CRVLPSuLM *CRVLPSuLMBuilder::Create(
 
 	if(m_Flags2 & RVLPSULMBUILDER_FLAG2_COMPLEX)
 	{
-		if(GetPanTilt(m_ImageFileName, &PoseM_M, iSample0, command))
+		if(GetOdometry(m_ImageFileName, &PoseM_M, iSample0, command))
 			bComplex = (command == 'O');
 		else
 			bComplex = false;
@@ -3406,7 +3437,7 @@ CRVLPSuLM *CRVLPSuLMBuilder::Create(
 		{
 			RVLSetFileNumber(m_ImageFileName, "00000-LW.bmp", iSample);
 
-			if(!GetPanTilt(m_ImageFileName, &PoseM_M, iSample0, command))
+			if(!GetOdometry(m_ImageFileName, &PoseM_M, iSample0, command))
 			{
 				PoseM_M.m_Alpha = PoseM_M.m_Beta = PoseM_M.m_Theta = 0.0;
 
@@ -6439,6 +6470,24 @@ void CRVLPSuLMBuilder::Localization(CRVLPSuLM * pSPSuLM,
 
 	CRVL3DPose PoseS0Init, testPose;
 
+	//Initialize PoseS0Init
+
+	if (pPoseS0)
+		PoseS0Init.Copy(pPoseS0);
+	else
+	{
+		PoseS0Init.m_Alpha = 0.0;
+		PoseS0Init.m_Beta = 0.0;
+		PoseS0Init.m_Theta = 0.0;
+		//PoseS0Init.m_Alpha = -45.0 * DEG2RAD;	// debug
+		PoseS0Init.UpdateRotLL();
+
+		memset(PoseS0Init.m_X, 0, 3 * sizeof(double));
+	}
+
+	PoseS0Init.m_sa = sin(PoseS0Init.m_Alpha);
+	PoseS0Init.m_ca = cos(PoseS0Init.m_Alpha);
+
 	double C[3 * 3 * 3];
 	PoseS0Init.m_C = C;
 	double invtInit[3];
@@ -6446,24 +6495,13 @@ void CRVLPSuLMBuilder::Localization(CRVLPSuLM * pSPSuLM,
 
 	PoseS0Init.m_ParamFlags = RVL3DPOSE_PARAM_FLAGS_COV_6D;
 
-	//Initialize PoseS0Init
-	PoseS0Init.m_Alpha = 0.0;
-	PoseS0Init.m_Beta = 0.0;
-	PoseS0Init.m_Theta = 0.0;
-	//PoseS0Init.m_Alpha = -45.0 * DEG2RAD;	// debug
-	PoseS0Init.UpdateRotLL();
-	PoseS0Init.m_sa = sin(PoseS0Init.m_Alpha);
-	PoseS0Init.m_ca = cos(PoseS0Init.m_Alpha);
-
-	memset(PoseS0Init.m_X, 0, 3 * sizeof(double));
-
 	//Define initial uncertainty to be used for initial matching
 	double PInit[3 * 3 * 3], PInit2[3 * 3 * 3];
 
 	//Define uncertainty constants
 	double XUnc, AngleUnc, ThetaUnc, XEKFUnc;
-	XUnc = 1000.0;
-	XEKFUnc = 10000.0;
+	XUnc = 5000.0;			// uncertainty for feature matching 
+	XEKFUnc = 10000.0;		// initial uncertainty for EKF
 	AngleUnc = 30.0;
 	ThetaUnc = 10.0;
 
@@ -6538,7 +6576,6 @@ void CRVLPSuLMBuilder::Localization(CRVLPSuLM * pSPSuLM,
 		//	DetermineUncertainty3DOFTo6DOF(PInit2,&PoseS0Init,m_pPoseSSp);
 		//	PanTiltRollUncertainty(PInit, PInit2, &PoseS0Init);
 		//}
-	 
 	}
 	else //Localization
 	{
@@ -7488,6 +7525,9 @@ void CRVLPSuLMBuilder::Localization(CRVLPSuLM * pSPSuLM,
 		minCost = 0; //Search for max cost
 	else if (HypEvalMethod == RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD_P)
 	{
+		if ((m_Flags & RVLPSULMBUILDER_FLAG_MODE) == RVLPSULMBUILDER_FLAG_MODE_TRACKING)
+			UpdateBuffers(pPrevSPSuLM);
+
 		if (m_Flags2 & RVLPSULMBUILDER_FLAG2_FIRST_ORDER_DEPENDENCY_TREE)
 		{
 			m_PriorProbabilityWorldModel = ConditionalProbabilityTree(pSPSuLM);
@@ -9085,7 +9125,7 @@ void CRVLPSuLMBuilder::Localization(CRVLPSuLM * pSPSuLM,
 				RVLCOPYMX3X3(RAs0, RAmp0)
 				RVLCOPY3VECTOR(tAs0, tAmp0)
 			}
-		}
+		}	// if(m_Flags & RVLPSULMBUILDER_FLAG_MAPBUILDING)
 
 		//Save current scene pose to previous scene pose
 		RVLCOPY3VECTOR(pPoseS0->m_X, m_pPoseSp0->m_X)
@@ -12814,6 +12854,8 @@ void CRVLPSuLMBuilder::CreateParamList(CRVLMem * pMem)
 	pParamData = m_ParamList.AddParam("PSuLM.Localization.HypothesisGeneration.tHypTol", RVLPARAM_TYPE_DOUBLE, &m_tHypTol);
 	pParamData = m_ParamList.AddParam("PSuLM.Localization.HypothesisGeneration.InitMatchingConstraints", RVLPARAM_TYPE_FLAG, &m_Flags2);
 	m_ParamList.AddID(pParamData, "yes", RVLPSULMBUILDER_FLAG2_HYPGEN_INIT_MATCHING_CONSTRAINTS);
+	pParamData = m_ParamList.AddParam("PSuLM.Localization.HypothesisGeneration.WideAngle", RVLPARAM_TYPE_FLAG, &m_Flags2);
+	m_ParamList.AddID(pParamData, "yes", RVLPSULMBUILDER_FLAG2_WIDE_ANGLE_HYPOTHESIS_GENERATION);
 	pParamData = m_ParamList.AddParam("PSuLM.Localization.HypothesisGeneration.LastDOFEstimationMethod", RVLPARAM_TYPE_FLAG, &m_Flags);
 	m_ParamList.AddID(pParamData, "MAX_PEAK_ONLY", RVLPSULMBUILDER_FLAG_LAST_DOF_ESTIMATION_METHOD_MAX_PEAK_ONLY);
 	m_ParamList.AddID(pParamData, "BEST_PEAK_TREE", RVLPSULMBUILDER_FLAG_LAST_DOF_ESTIMATION_METHOD_BEST_PEAK_TREE);
@@ -13172,6 +13214,8 @@ void CRVLPSuLMBuilder::PythonDisplayScene(RVLSURFACE_MATCH_ARRAY *MatchArray, CR
 
 }
 
+// The following function uses m_pMem2.
+
 void CRVLPSuLMBuilder::Hypotheses3(	CRVLPSuLM *pSPSuLM,
 									CRVL3DPose *pPoseS0Init,	// Initial uncertainty for EKF update
 									double *PInit,				// Uncertainty for initial matching
@@ -13179,7 +13223,7 @@ void CRVLPSuLMBuilder::Hypotheses3(	CRVLPSuLM *pSPSuLM,
 {
 	int nHypotheses = m_refnHypotheses;
 
-	int maxnM3DSurfaces = m_maxnDominant3DSurfacesComplex;
+	int maxnM3DSurfaces = RVLMAX(m_maxnDominant3DSurfaces, m_maxnDominant3DSurfacesComplex);
 
 	//int maxnSamples = 5;
 
@@ -13450,7 +13494,12 @@ void CRVLPSuLMBuilder::Hypotheses3(	CRVLPSuLM *pSPSuLM,
 	
 	RVLPSULM_HYPOTHESIS *pHypothesis = NULL;
 
-	int iAlpha = -1;
+	int iAlphaRange = 1;
+
+	if ((m_Flags & RVLPSULMBUILDER_FLAG_PC) != 0 && (m_Flags2 & RVLPSULMBUILDER_FLAG2_WIDE_ANGLE_HYPOTHESIS_GENERATION) != 0)
+		iAlphaRange = 3;
+
+	int iAlpha = -iAlphaRange;
 
 	int nM3DSurfaces;
 	RVLPSULM_MSMATCH_DATA *pMSMatch;
@@ -13535,12 +13584,15 @@ void CRVLPSuLMBuilder::Hypotheses3(	CRVLPSuLM *pSPSuLM,
 
 		if(pPrevSPSuLM)
 			pMPSuLM = pPrevSPSuLM;
-		else if(pPSuLMList->m_pNext || iAlpha > -1)
+		else if (pPSuLMList->m_pNext || iAlpha > -iAlphaRange)
 		{
-			if(iAlpha == -1)
+			//if (iAlpha == 0)
+			//	int debug = 0;
+
+			if (iAlpha == -iAlphaRange)
 				pMPSuLM = (CRVLPSuLM *)(pPSuLMList->GetNext());
 
-			if(pMPSuLM->m_Flags & RVLPSULM_FLAG_COMPLEX)
+			if (m_Flags2 & RVLPSULMBUILDER_FLAG2_WIDE_ANGLE_HYPOTHESIS_GENERATION)
 			{
 				alpha = (double)iAlpha * 0.25 * PI;
 
@@ -13564,8 +13616,8 @@ void CRVLPSuLMBuilder::Hypotheses3(	CRVLPSuLM *pSPSuLM,
 
 				iAlpha++;
 
-				if(iAlpha > 1)
-					iAlpha = -1;
+				if (iAlpha > iAlphaRange)
+					iAlpha = -iAlphaRange;
 			}
 		}
 		else
@@ -13656,8 +13708,8 @@ void CRVLPSuLMBuilder::Hypotheses3(	CRVLPSuLM *pSPSuLM,
 
 			for(iMSurf = 0; iMSurf < nM3DSurfaces; iMSurf++)
 			{
-				//if(iSSurf == 1 && iMSurf == 23)
-				//	int debug = 0;
+				if(iSSurf == 9 && iMSurf == 6)
+					int debug = 0;
 
 				pM3DSurface = MSurfArray[iMSurf];	
 
@@ -13737,7 +13789,7 @@ void CRVLPSuLMBuilder::Hypotheses3(	CRVLPSuLM *pSPSuLM,
 
 		fprintf(fpLog, "Model %d\n\n", pMPSuLM->m_Index);	// for Nyarko
 
-		if(pMPSuLM->m_Flags & RVLPSULM_FLAG_COMPLEX)
+		if (m_Flags2 & RVLPSULMBUILDER_FLAG2_WIDE_ANGLE_HYPOTHESIS_GENERATION)
 			fprintf(fpLog, "Initial alpha=%lf\n", PoseSMInit.m_Alpha * RAD2DEG);
 
 		fprintf(fpLog, "Initial Pose Uncertainty\n");	// for Nyarko
@@ -13755,7 +13807,7 @@ void CRVLPSuLMBuilder::Hypotheses3(	CRVLPSuLM *pSPSuLM,
 			pM3DSurface = (CRVL3DSurface2 *)(pMSMatch->pMData);
 			pS3DSurface = (CRVL3DSurface2 *)(pMSMatch->pSData);
 
-			if(pS3DSurface->Match2(pM3DSurface, &PoseSMInit, MatchQuality, detQ, &MatchData))
+			//if(pS3DSurface->Match2(pM3DSurface, &PoseSMInit, MatchQuality, detQ, &MatchData))
 				fprintf(fpLog, "S%d-M%d\t\t%d\n", 
 					((CRVL3DSurface2 *)(pMSMatch->pSData))->m_Index,
 					((CRVL3DSurface2 *)(pMSMatch->pMData))->m_Index,
@@ -14009,6 +14061,9 @@ last
 					RVLPrintCov(fpLog, pNode->P + 2 * 3 * 3, 3);
 
 					fprintf(fpLog, "\n");
+
+					if (nExpandedNodes == 840)
+						int debug = 0;
 #endif
 				//cvSVD(RVLMatrixHeaderA33, _eigVal, _eigVect, NULL, CV_SVD_U_T);
 
@@ -14146,10 +14201,10 @@ last
 								break;
 							}
 						}
-					}
+					}	// if P2 is a regular covariance matrix
 					else
 						bNewHypothesis = FALSE;
-				}
+				}	// if(bNewHypothesis)
 
 				nLastDOFMatches = 0; 
 
@@ -14157,12 +14212,37 @@ last
 				{
 					// Refine 5DoF hypothesis
 
+					// BLOCK: The following method worked well with Velodyne, but slightly worse with IROS15 data
+
+					//double PtT[9];
+					//RVLDIAGMX3(1e8, 1e8, 1e8, PtT);
+					//double P[3*9];
+					//double *Pq = P;
+					//double *Pqt = P + 9;
+					//double *Pt = Pqt + 9;
+					//RVLDIAGMX3(20.0 * 20.0 * DEG2RAD * DEG2RAD, 20.0 * 20.0 * DEG2RAD * DEG2RAD, 20.0 * 20.0 * DEG2RAD * DEG2RAD, Pq);
+					//RVLNULLMX3X3(Pqt);
+					//double RTB[9];
+					//RVLCOPYMX3X3T(RBT, RTB);
+					//RVLCOV3DTRANSF(PtT, RTB, Pt, Mx3x3Tmp);
+					//RVLCOMPLETESIMMX3(Pt);
+					//double P_[3 * 9];
+
+					//memcpy(P_, pPoseSM->m_C, 3 * 9 * sizeof(double));
+
+					//RVLPSuLMHypothesisPoseRefinement(pPoseSM, pNode, MatchList, P, 5);					
+
+					//memcpy(pPoseSM->m_C, P_, 3 * 9 * sizeof(double));
+
+					// END BLOCK
+
 					RVLPSuLMHypothesisPoseRefinement(pPoseSM, pNode, MatchList, PoseSMInit.m_C, 5);
 
 #ifdef RVLPSULMBUILDER_HYPOTHESES_DEBUG_LOG
 					fprintf(fpLog, "Estimating the last DOF...\n");
 #endif
 
+#pragma region Estimation of the last DOF
 					//*** estimate the last degree of freedom by evidence accumulation
 
 					//FILE *fpLastDOF;
@@ -15521,6 +15601,9 @@ last
 							if(pMSMatch == NULL)
 								break;
 
+							//if (HypothesisIndex == 2130)
+							//	int debug = 0;
+
 							if(pHypothesis == NULL)
 							{
 								RVLMEM_ALLOC_STRUCT(m_pMem, RVLPSULM_HYPOTHESIS, pHypothesis);
@@ -15735,6 +15818,7 @@ last
 					delete[] LineMatchArray;
 					delete[] LineMatchData;
 #endif
+#pragma endregion
 				}	// if(bNewHypothesis)
 			}	// if pNode satisfies the geometric criterion
 			else if(pPNode)
@@ -17810,11 +17894,13 @@ void CRVLPSuLMBuilder::PrintHypothesis(		FILE *fp,
 	{
 		pMSMatch = MatchList + pNode2->iMatch;
 
-		fprintf(fp, "M%d-S%d\n", ((CRVL3DSurface2 *)(pMSMatch->pMData))->m_Index, 
+		fprintf(fp, "M%d-S%d   ", ((CRVL3DSurface2 *)(pMSMatch->pMData))->m_Index,
 			((CRVL3DSurface2 *)(pMSMatch->pSData))->m_Index);
 
 		pNode2 = pNode2->pParent;
 	}
+
+	fprintf(fp, "\n");
 }
 
 // for Nyarko
@@ -18962,8 +19048,8 @@ CRVLPSuLM *CRVLPSuLMBuilder::Clone(CRVLPSuLM *pPSulMOriginal)
 	//pPSuLM->m_ModelFilePath = (char *)(m_pMem0->Alloc(iFileNameLength * sizeof(char)));
 	strcpy(pPSuLM->m_ModelFilePath, pPSulMOriginal->m_FileName);
 	
-	char *pPos;
-	pPos = strstr (pPSuLM->m_ModelFilePath,"LW.bmp");
+	char *pPos = (m_Flags & RVLPSULMBUILDER_FLAG_PC ? strstr(pPSuLM->m_ModelFilePath, "PC.pcd") : strstr(pPSuLM->m_ModelFilePath, "LW.bmp"));
+
 	strncpy(pPos,"M.dat",6);
 
 
@@ -23267,7 +23353,11 @@ void CRVLPSuLMBuilder::DisplayHypothesis(CRVLGUI *pGUI,
 		cvReleaseImage(&(pFig2->m_pImage));
 		
 		if(m_Flags & RVLPSULMBUILDER_FLAG_PC)
-			pFig2->EmptyBitmap(cvSize(m_pPSD->m_Width, m_pPSD->m_Height), cvScalar(0, 0, 0));
+		{
+			int wExt = (2 * m_pPSD->m_nFOVExtensions + 1) * m_pPSD->m_Width;
+
+			pFig2->EmptyBitmap(cvSize(wExt, m_pPSD->m_Height), cvScalar(0, 0, 0));
+		}
 		else if((m_Flags & RVLPSULMBUILDER_FLAG_MODE) == RVLPSULMBUILDER_FLAG_MODE_TRACKING)
 			pFig2->m_pImage = cvCloneImage(pImage2);
 		else
@@ -24867,10 +24957,11 @@ IplImage * CRVLPSuLMBuilder::GetComplexPSuLMRGBImage(char *ImageFileName)
 	{
 		RVLSetFileNumber(ImageFileName_, "00000-LW.bmp", iSample);
 
-		if(!GetPanTilt(ImageFileName_, &PoseM_M, iSample0, command))
+		if(!GetOdometry(ImageFileName_, &PoseM_M, iSample0, command))
 			break;
 	
 		pImage_ = cvLoadImage(ImageFileName_);
+		//pImage_ = CRVLImageFilter::RVLFilterNHS(pImage_);
 
 		pPixRow_ = (unsigned char *)(pImage_->imageData);
 
@@ -25778,6 +25869,12 @@ void RVL2DContourSegment(CvPoint *pPt1,				// transfer to RVL2DContour.cpp
 	}		
 }
 
+// This function is different from the one used in IROS15.
+// The version used in IROS15 performed EKF update starting from the leaf node,
+// while this version starts from the root node.
+// This version should be more correct since the matches corresponding to the 
+// nodes closer to the root are better conditioned.
+
 void RVLPSuLMHypothesisPoseRefinement(CRVL3DPose *pPose,
 									  RVLPSULM_HG_NODE *pNode,
 									  RVLPSULM_MSMATCH_DATA *MatchList,
@@ -25798,10 +25895,24 @@ void RVLPSuLMHypothesisPoseRefinement(CRVL3DPose *pPose,
 	double *R_ = PoseOld.m_Rot;
 	double *t_ = PoseOld.m_X;
 
+	int nNodes = pNode->g;
+
+	RVLPSULM_HG_NODE **NodeBuff = new RVLPSULM_HG_NODE *[nNodes];
+
+	int iNode = nNodes - 1;
+
+	RVLPSULM_HG_NODE *pNode2 = pNode;
+
+	while (pNode2)
+	{
+		NodeBuff[iNode--] = pNode2;
+
+		pNode2 = pNode2->pParent;
+	}
+
 	RVLPSULM_MSMATCH_DATA *pMSMatch;
 	CRVL3DSurface2 *pSSurf, *pMSurf;
 	int i;
-	RVLPSULM_HG_NODE *pNode2;
 	double MatchQuality;
 	double detQ;
 	double dist, angle;
@@ -25810,13 +25921,13 @@ void RVLPSuLMHypothesisPoseRefinement(CRVL3DPose *pPose,
 	{
 		memcpy(pPose->m_C, PInit, 3 * 3 * 3 * sizeof(double));
 
-		RVLCOPYMX3X3(R, R_)
-		RVLCOPY3VECTOR(t, t_)
+		RVLCOPYMX3X3(R, R_);
+		RVLCOPY3VECTOR(t, t_);
 
-		pNode2 = pNode;
-
-		while(pNode2)
+		for (iNode = 0; iNode < nNodes; iNode++)
 		{
+			pNode2 = NodeBuff[iNode];
+
 			pMSMatch = MatchList + pNode2->iMatch;
 
 			pSSurf = (CRVL3DSurface2 *)(pMSMatch->pSData);
@@ -25827,8 +25938,6 @@ void RVLPSuLMHypothesisPoseRefinement(CRVL3DPose *pPose,
 			pPose->PlanarSurfaceEKFUpdate2(C, Q, e);
 
 			RVLMULMX3X3TVECT(R, t, invt);
-
-			pNode2 = pNode2->pParent;
 		}
 
 		pPose->Diff(&PoseOld, dist, angle);
@@ -25836,6 +25945,8 @@ void RVLPSuLMHypothesisPoseRefinement(CRVL3DPose *pPose,
 		if(dist <= 100.0 && RVLABS(angle) <= 5.0 * DEG2RAD)
 			break;
 	}
+
+	delete[] NodeBuff;
 }
 
 void RVLPSuLMHypothesisPoseRefinement(RVLPSULM_HYPOTHESIS *pHypothesis,

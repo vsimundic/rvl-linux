@@ -55,7 +55,8 @@ void CRVLVTKRenderer::Save2PLY(char *filename)
 	//Saving
 	vtkSmartPointer<vtkPLYWriter> plyExp = vtkSmartPointer<vtkPLYWriter>::New();
 	plyExp->SetFileName(filename);
-	plyExp->SetInputConnection(act->GetMapper()->GetInput()->GetProducerPort());
+	plyExp->SetInputData(act->GetMapper()->GetInput());
+	//plyExp->SetInputConnection(act->GetMapper()->GetInput()->);
 	plyExp->SetArrayName("RGB");
 	plyExp->Write();
 }
