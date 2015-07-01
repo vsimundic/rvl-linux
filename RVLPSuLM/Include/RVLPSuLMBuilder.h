@@ -5,6 +5,7 @@
 //#endif
 
 #include "RVLPSuLM.h"
+#include "RVLPSuLMIndexing.h"
 
 #define RVLLOG2					0.693147180559945		// todo: move to RVLConst.h
 
@@ -95,6 +96,7 @@
 #define RVLPSULMBUILDER_FLAG_LAST_DOF_ESTIMATION_METHOD_BEST_PEAK_TREE	0x08000000
 #define RVLPSULMBUILDER_FLAG_LAST_DOF_ESTIMATION_METHOD_ALL_PEAKS		0x10000000
 #define RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_MODEL_FUSION	0x20000000
+#define RVLPSULMBUILDER_FLAG_HYPOTHESIS_GENERATION_INDEXING		0x40000000
 #define RVLPSULMBUILDER_FLAG2_SCENE_FUSION						0x00000003
 #define RVLPSULMBUILDER_FLAG2_SCENE_FUSION_LOOK_AROUND			0x00000001
 #define RVLPSULMBUILDER_FLAG2_SCENE_FUSION_MOVE					0x00000002
@@ -290,6 +292,8 @@ int RansacRoundsNeeded(int maxNoRounds, int m, double logProsacConfidence, int n
 void RandPerm(int n, int perm[]);
 //int niter_RANSAC(double p, double epsilon, int s, int Nmax);
 
+class CRVLPSuLMIndexing;
+
 class CRVLPSuLMBuilder : public CRVLRLM
 {
 public:
@@ -331,6 +335,7 @@ public:
 	BYTE *m_2DContourMap;
 	RVLRECT m_ROI;
 	CRVLPlanarSurfaceDetector *m_pPSD;
+	CRVLPSuLMIndexing m_Indexing;
 	CRVLAImage *m_pAImage;
 	RVLPSULM_CELL *m_CellArray;
 	RVLPSULM_CELL_CONST *m_CellConstArray;

@@ -36,3 +36,4 @@
 #include "vtkWindowToImageFilter.h"
 #include "vtkPNGWriter.h"
 #include "vtkConeSource.h"
+#include "vtkOBJExporter.h"

@@ -30,6 +30,9 @@
     <ClCompile Include="RVLRLM.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="RVLPSuLMIndexing.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Include\RVLPSuLM.h">
@@ -45,6 +48,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Include\RVLRLM.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Include\RVLPSuLMIndexing.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

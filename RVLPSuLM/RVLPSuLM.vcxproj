@@ -104,7 +104,7 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <ClCompile>
-      <AdditionalIncludeDirectories>$(OPENCV_BUILD)\include;.\Include;..\RVLCore\Include;..\RVLPCS\Include;..\RapidXML\Include;$(VTK_PATH)\Include\vtk-6.1</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(OPENCV_BUILD)\include;.\Include;..\RVLCore\Include;..\RVLPCS\Include;..\RapidXML\Include;$(VTK_PATH)\Include\vtk-6.1;C:\Libraries\FLANN\flann-1.8.4-src\src\cpp</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>WIN32;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <PrecompiledHeader />
@@ -141,6 +141,7 @@
     <ClCompile Include="RVLPSuLM.cpp" />
     <ClCompile Include="RVLPSuLMBuilder.cpp" />
     <ClCompile Include="RVLPSuLMGroundTruth.cpp" />
+    <ClCompile Include="RVLPSuLMIndexing.cpp" />
     <ClCompile Include="RVLPSuLMVS.cpp" />
     <ClCompile Include="RVLRLM.cpp" />
   </ItemGroup>
@@ -148,6 +149,7 @@
     <ClInclude Include="Include\RVLPSuLM.h" />
     <ClInclude Include="Include\RVLPSuLMBuilder.h" />
     <ClInclude Include="Include\RVLPSuLMGroundTruth.h" />
+    <ClInclude Include="Include\RVLPSuLMIndexing.h" />
     <ClInclude Include="Include\RVLPSuLMVS.h" />
     <ClInclude Include="Include\RVLRLM.h" />
   </ItemGroup>

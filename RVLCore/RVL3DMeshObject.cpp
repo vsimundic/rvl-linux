@@ -2450,14 +2450,11 @@ void CRVL3DMeshObject::AppendMeshObject2OBJ(int &iPt,
 				{
 					pPt = Point3DMap[iPix];
 
-					//Lubina
 					double pPtMatrix [3] = {pPt->XYZ[0], pPt->XYZ[1], pPt->XYZ[2]};
 					double RotMult [3];
 					double newpPt [3];
 					RVLMULMX3X3VECT(pPose->m_Rot, pPtMatrix, RotMult)
 					RVLSUM3VECTORS(pPose->m_X, RotMult, newpPt)
-
-					//END Lubina
 
 					if(Flags & RVLPSD_SAVE_MESH_FLAG_HULL)
 					{

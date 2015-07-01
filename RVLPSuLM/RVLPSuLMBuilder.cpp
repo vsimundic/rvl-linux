@@ -7,6 +7,7 @@
 
 //#include "stdafx.h"		// remove after moving CRVLPSuLMBuilder to RVL2
 //#include "highgui.h"
+#include <flann\flann.hpp>
 #include "RVLCore.h"
 #include "RVLPCS.h"
 #include "RVLRLM.h"
@@ -786,6 +787,14 @@ void CRVLPSuLMBuilder::Init(void)
 //	Py_DECREF(m_pyModuleName);
 //	
 //#endif
+	// Indexing
+
+	m_Indexing.m_vpBuilder = this;
+
+	m_Indexing.Init();
+
+	///
+
 	m_Flags |= RVLPSULMBUILDER_FLAG_KIDNAPPED;
 }
 
@@ -3470,6 +3479,9 @@ CRVLPSuLM *CRVLPSuLMBuilder::Create(
 			case 'C':
 				Create(pPSuLM, pMem, Flags | RVLPSULMBUILDER_CREATEMODEL_APPEND | RVLPSULMBUILDER_CREATEMODEL_APPEND_LAST, &PoseM_M, iSample - iSample0);
 
+				if (m_Flags & RVLPSULMBUILDER_FLAG_HYPOTHESIS_GENERATION_INDEXING)
+					m_Indexing.GetIndicators(pPSuLM);
+
 				if(Flags & RVLPSULMBUILDER_CREATEMODEL_FLAG_PERMANENT)
 				{
 					if (pPSuLM_ == NULL)
@@ -3510,6 +3522,9 @@ CRVLPSuLM *CRVLPSuLMBuilder::Create(
 		Create(pPSuLM, pMem, Flags, &PoseM_M);
 
 		m_Flags2 = FlagsOld;
+
+		if (m_Flags & RVLPSULMBUILDER_FLAG_HYPOTHESIS_GENERATION_INDEXING)
+			m_Indexing.GetIndicators(pPSuLM);
 
 #ifdef NEVER
 		// copy surface ptrs. from Builder's surface list to the PSuLM's surface list
@@ -6975,7 +6990,10 @@ void CRVLPSuLMBuilder::Localization(CRVLPSuLM * pSPSuLM,
 		if(HypEvalMethod == RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD_P)
 			InitHypothesisEvaluation4(pSPSuLM);
 
-		Hypotheses3(pSPSuLM, pPoseS0Init, PInit, pPrevSPSuLM);
+		if (m_Flags & RVLPSULMBUILDER_FLAG_HYPOTHESIS_GENERATION_INDEXING)
+			m_Indexing.GenerateHypotheses();
+		else
+			Hypotheses3(pSPSuLM, pPoseS0Init, PInit, pPrevSPSuLM);
 		//HypothesesPROSAC(pSPSuLM, pPoseS0Init, PInit, pPrevSPSuLM);
 		//Hypotheses3(pSPSuLM, pPoseS0Init, PInit, pPrevSPSuLM);
 		//
@@ -12848,6 +12866,8 @@ void CRVLPSuLMBuilder::CreateParamList(CRVLMem * pMem)
 	pParamData = m_ParamList.AddParam("PSuLM.ModelMapPath", RVLPARAM_TYPE_STRING, &m_ModelMapPath);
 	pParamData = m_ParamList.AddParam("PSuLM.Sequence.ScenePath", RVLPARAM_TYPE_STRING, &m_SequenceScenePath);
 
+	pParamData = m_ParamList.AddParam("PSuLM.Localization.HypothesisGeneration.Indexing", RVLPARAM_TYPE_FLAG, &m_Flags);
+	m_ParamList.AddID(pParamData, "yes", RVLPSULMBUILDER_FLAG_HYPOTHESIS_GENERATION_INDEXING);
 	pParamData = m_ParamList.AddParam("PSuLM.Localization.HypothesisGeneration.maxnExpandedNodes", RVLPARAM_TYPE_INT, &m_maxnExpandedNodes);
 	pParamData = m_ParamList.AddParam("PSuLM.Localization.HypothesisGeneration.refnHypotheses", RVLPARAM_TYPE_INT, &m_refnHypotheses);
 	pParamData = m_ParamList.AddParam("PSuLM.Localization.HypothesisGeneration.RotHypTol", RVLPARAM_TYPE_DOUBLE, &m_RotHypTol);
@@ -23803,6 +23823,9 @@ bool CRVLPSuLMBuilder::MapBuilding(CRVLPSuLM *pSPSuLM)
 
 		m_PSuLMList.Add(pNewPSuLM);
 
+		if (m_Flags & RVLPSULMBUILDER_FLAG_HYPOTHESIS_GENERATION_INDEXING)
+			m_Indexing.UpdateBase();
+
 		m_Flags &= ~RVLPSULMBUILDER_FLAG_KIDNAPPED;
 
 		return true;
@@ -23943,6 +23966,9 @@ bool CRVLPSuLMBuilder::MapBuilding(CRVLPSuLM *pSPSuLM)
 	UpdateBuffers(pSPSuLM);
 
 	m_PSuLMList.Add(pNewPSuLM);
+
+	if (m_Flags & RVLPSULMBUILDER_FLAG_HYPOTHESIS_GENERATION_INDEXING)
+		m_Indexing.UpdateBase();
 
 	if(!(m_Flags2 & RVLPSULMBUILDER_FLAG2_MAPBUILDING_MANUAL))
 	{
