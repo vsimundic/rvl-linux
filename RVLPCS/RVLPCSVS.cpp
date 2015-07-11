@@ -54,6 +54,9 @@ DWORD CRVLPCSVS::Init(char *CfgFile2Name)
 
 	m_PSD.Init();
 
+	if (m_PSD.m_Flags & RVLPSD_SEGMENT_STRM)
+		m_Flags |= RVLSYS_FLAGS_SEGMENT_MESH;
+
 	// initialize Delaunay triangulation
 
 	m_pDelaunay->m_Width = m_CameraL.Width;
@@ -84,6 +87,9 @@ void CRVLPCSVS::CreateParamList()
 
 	pParamData = m_ParamList.AddParam("VS.SegmentToConvexSets", RVLPARAM_TYPE_FLAG, &m_Flags);
 	m_ParamList.AddID(pParamData, "yes", RVLSYS_FLAGS_SEGMENT_TO_CONVEX_SETS);
+
+	pParamData = m_ParamList.AddParam("VS.GraphSegmentation", RVLPARAM_TYPE_FLAG, &m_Flags);
+	m_ParamList.AddID(pParamData, "yes", RVLSYS_FLAGS_SEGMENT_GRAPH);
 }
 
 void CRVLPCSVS::Display()
@@ -117,6 +123,12 @@ void CRVLPCSVS::Display()
 			// display grayscale image on the display image
 
 			cvCvtColor(m_Display.m_pGSImage, m_Display.m_pInputImage, CV_GRAY2RGB);
+
+			break;
+		case 3:
+			// display segmentation image on the display image
+
+			cvCopy(m_Display.m_pSegmentationImage, m_Display.m_pInputImage);
 		}
 	}
 

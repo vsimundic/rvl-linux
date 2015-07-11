@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 2013
-VisualStudioVersion = 12.0.31101.0
+VisualStudioVersion = 12.0.30501.0
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "RVLCore", "RVLCore\RVLCore.vcxproj", "{06581169-BFDC-4B3F-A3ED-96FAF894EA87}"
 EndProject
@@ -14,6 +14,10 @@ EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "RVLPSuLMdemo", "RVLPSuLMdemo\RVLPSuLMdemo.vcxproj", "{DDE0A8B8-296A-45B2-9A84-A86EA17DFBC2}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "RVLPCSdemo", "RVLPCSdemo\RVLPCSdemo.vcxproj", "{25F981DE-03E4-4F94-9FE3-AE86219B2F01}"
+	ProjectSection(ProjectDependencies) = postProject
+		{06581169-BFDC-4B3F-A3ED-96FAF894EA87} = {06581169-BFDC-4B3F-A3ED-96FAF894EA87}
+		{736AADF1-0519-469C-A860-07573EF1ED97} = {736AADF1-0519-469C-A860-07573EF1ED97}
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

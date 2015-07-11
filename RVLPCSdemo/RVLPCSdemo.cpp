@@ -7,10 +7,13 @@
 #include "RVLCore.h"
 #include "RVLPCS.h"
 #ifdef RVLVTK
+//VTK headers
 #include <vtkAutoInit.h>
 VTK_MODULE_INIT(vtkRenderingOpenGL);
 VTK_MODULE_INIT(vtkInteractionStyle);
+VTK_MODULE_INIT(vtkRenderingFreeType);//(vtkRenderingFreeTypeOpenGL);
 #include "RVLVTK.h"
+//#include "VTKActorObj.h"
 #endif
 
 int main(int argc, char* argv[])
@@ -113,6 +116,10 @@ int main(int argc, char* argv[])
 
 	IplImage *pGSImage = cvCreateImage(cvSize(w, h), IPL_DEPTH_8U, 1);
 
+	// create segmentation image
+
+	IplImage *pSegmentationImage = cvCreateImage(cvSize(w, h), IPL_DEPTH_8U, 3);
+
 	// create a display image
 
 	CRVLFigure *pFig = GUI.OpenFigure("RVLPCSdemo");
@@ -153,6 +160,7 @@ int main(int argc, char* argv[])
 	VS.m_Display.m_pDepthImage = pDepthImage;	
 	VS.m_Display.m_pRGBImage = pRGBImage;
 	VS.m_Display.m_pGSImage = pGSImage;
+	VS.m_Display.m_pSegmentationImage = pSegmentationImage;
 	VS.m_Display.m_pZoomedInputImage = pZoomedInputImage;
 	VS.m_Display.m_ImageWidth = w;
 	VS.m_Display.m_bKinect = bKinect;
@@ -165,7 +173,7 @@ int main(int argc, char* argv[])
 	//bool bContinuous = bKinect;
 	bool bContinuous = false;
 	bool bRecord = false;
-	int DisplayBitmap = 0;
+	int DisplayBitmap = (VS.m_Flags & RVLSYS_FLAGS_SEGMENT_GRAPH ? 3 : 0);
 	int ZoomFactor = 1;
 	bool bVTKRendererActive = false;
 	int iVTK3DModel = 0;
@@ -192,8 +200,6 @@ int main(int argc, char* argv[])
 	bool bNextImage = true;
 	bool bNextImageSelected;
 	clock_t t;
-	char str[200];
-	int iTextLine;
 	unsigned int DepthMapFormat;
 	int iPrevONISample;
 
@@ -239,8 +245,14 @@ int main(int argc, char* argv[])
 		}
 		else
 		{
-			RVLImportDisparityImage(VS.m_ImageFileName, pDepthImage, DepthMapFormat, 
+			pRGBImage = cvLoadImage(VS.m_ImageFileName);
+
+			char *DisparityImageFileName = RVLCreateFileName(VS.m_ImageFileName, "-LW.bmp", -1, "-D.txt");
+
+			RVLImportDisparityImage(DisparityImageFileName, pDepthImage, DepthMapFormat,
 				VS.m_Kinect.m_zToDepthLookupTable);
+
+			delete[] DisparityImageFileName;
 
 			if(DepthMapFormat == RVLKINECT_DEPTH_IMAGE_FORMAT_100UM)
 				VS.m_PSD.m_Flags |= RVLPSD_FLAG_100UM;
@@ -287,106 +299,137 @@ int main(int argc, char* argv[])
 			if(VS.m_Flags & RVLSYS_FLAGS_PC)
 				VS.m_PSD.GetOrgPC(PC, nPC);
 			else
-				VS.m_PSD.GetPointsWithDisparity(pDepthImage);
+				VS.m_PSD.GetPointsWithDisparity(pDepthImage);	
 
-			// create a triangular mesh from the point cloud
+			t = clock() - t;
 
-			VS.m_PSD.Segment(&(VS.m_AImage.m_C2DRegion),&(VS.m_AImage.m_C2DRegion2),&(VS.m_AImage.m_C2DRegion3),&(VS.m_Mem));
+			if (VS.m_Flags & RVLSYS_FLAGS_SEGMENT_GRAPH)
+			{			
+				int nPts = w * h;
 
-			if(VS.m_PSD.m_Flags & RVLPSD_MESH_SEGMENT_PLANAR)
-			{
-				nObjects = VS.m_AImage.m_C2DRegion3.m_ObjectList.m_nElements + 1;
+				RVLSWER_NODE2 *Node = new RVLSWER_NODE2[2 * nPts];
 
-				VS.m_PSD.AssignLabels(&(VS.m_AImage.m_C2DRegion), &(VS.m_AImage.m_C2DRegion3));
+				RVLARRAY_<RVLSWER_SEGMENT<RVLSWER_NODE2>> SegmentArray;
+
+				SegmentArray.Element = new RVLSWER_SEGMENT<RVLSWER_NODE2>[nPts];
+
+				int *PtMem = new int[nPts];
+
+				//// RGB image segmentation
+
+				//RVLRGBGraphSegmentation((unsigned char *)(pRGBImage->imageData), w, h, 5, 300, Node, SegmentArray, PtMem);
+
+				RVLDisplayRGBSegmentation(pRGBImage, SegmentArray, pSegmentationImage);
+
+				delete[] PtMem;
+				delete[] SegmentArray.Element;
+				delete[] Node;
 			}
+			else if (VS.m_Flags & RVLSYS_FLAGS_SEGMENT_MESH)
+			{
+				t = clock();
 
-			// segment to convex sets
-		
-			if(VS.m_Flags & RVLSYS_FLAGS_SEGMENT_TO_CONVEX_SETS)
-				nObjects = RVLSegmentToConvex(&(VS.m_AImage.m_C2DRegion), NULL, &(VS.m_AImage.m_C2DRegion2),
+				// create a triangular mesh from the point cloud
+
+				VS.m_PSD.Segment(&(VS.m_AImage.m_C2DRegion), &(VS.m_AImage.m_C2DRegion2), &(VS.m_AImage.m_C2DRegion3), &(VS.m_Mem));
+
+				// assign labels to segments
+
+				if (VS.m_PSD.m_Flags & RVLPSD_MESH_SEGMENT_PLANAR)
+				{
+					nObjects = VS.m_AImage.m_C2DRegion3.m_ObjectList.m_nElements + 1;
+
+					VS.m_PSD.AssignLabels(&(VS.m_AImage.m_C2DRegion), &(VS.m_AImage.m_C2DRegion3));
+				}
+
+				// segment the triangular mesh to convex sets
+
+				if (VS.m_Flags & RVLSYS_FLAGS_SEGMENT_TO_CONVEX_SETS)
+					nObjects = RVLSegmentToConvex(&(VS.m_AImage.m_C2DRegion), NULL, &(VS.m_AImage.m_C2DRegion2),
 					VS.m_ConvexSegmentThr, w, h, VS.m_PSD.m_Point3DMap, &(VS.m_Mem), NULL, NULL,
 					(VS.m_PSD.m_Flags & RVLPSD_FLAG_MM) != 0);
 
-			t = clock() - t;	
+				t = clock() - t;
 
-			VS.m_Display.m_ExecTime = 1000.0f * ((float)t)/CLOCKS_PER_SEC;
+				VS.m_Display.m_ExecTime = 1000.0f * ((float)t) / CLOCKS_PER_SEC;
 
-			fprintf(fpExecTime, "%d\t%lf\n", iONISample, VS.m_Display.m_ExecTime);
+				fprintf(fpExecTime, "%d\t%lf\n", iONISample, VS.m_Display.m_ExecTime);
 
-			fflush(fpExecTime);
+				fflush(fpExecTime);
 
-			// load information about selected segments 
+				// load information about selected segments 
 
-			bool *bSegmentSelected = new bool[nObjects];
+				bool *bSegmentSelected = new bool[nObjects];
 
-			memset(bSegmentSelected, 0, nObjects * sizeof(bool));
+				memset(bSegmentSelected, 0, nObjects * sizeof(bool));
 
-			if(VS.m_Kinect.m_Flags & RVLKINECT_FLAG_ONI_FILE)
-			{
-				char *SelectedSegmentsFileName = RVLKinectCreateONISampleFileName(VS.m_Kinect.m_ONIFileName, iONISample, "-SS.txt");
-
-				FILE *fp = fopen(SelectedSegmentsFileName, "r");
-
-				if(fp)
+				if (VS.m_Kinect.m_Flags & RVLKINECT_FLAG_ONI_FILE)
 				{
-					int iTmp1, iTmp2;
+					char *SelectedSegmentsFileName = RVLKinectCreateONISampleFileName(VS.m_Kinect.m_ONIFileName, iONISample, "-SS.txt");
 
-					for(int iSegment = 0; iSegment < nObjects; iSegment++)
+					FILE *fp = fopen(SelectedSegmentsFileName, "r");
+
+					if (fp)
 					{
-						fscanf(fp, "%d\t%d\n", &iTmp1, &iTmp2);
+						int iTmp1, iTmp2;
 
-						bSegmentSelected[iSegment] = (iTmp2 > 0);
+						for (int iSegment = 0; iSegment < nObjects; iSegment++)
+						{
+							fscanf(fp, "%d\t%d\n", &iTmp1, &iTmp2);
+
+							bSegmentSelected[iSegment] = (iTmp2 > 0);
+						}
+
+						fclose(fp);
 					}
 
-					fclose(fp);
+					delete[] SelectedSegmentsFileName;
 				}
 
-				delete[] SelectedSegmentsFileName;
-			}
+				CRVLMPtrChain *pTriangleList = &(VS.m_AImage.m_C2DRegion.m_ObjectList);
 
-			CRVLMPtrChain *pTriangleList = &(VS.m_AImage.m_C2DRegion.m_ObjectList);
+				CRVL2DRegion2 *pTriangle;
 
-			CRVL2DRegion2 *pTriangle;
+				pTriangleList->Start();
 
-			pTriangleList->Start();
+				while (pTriangleList->m_pNext)
+				{
+					pTriangle = (CRVL2DRegion2 *)(pTriangleList->GetNext());
 
-			while(pTriangleList->m_pNext)
-			{
-				pTriangle = (CRVL2DRegion2 *)(pTriangleList->GetNext());
+					if (pTriangle->m_Flags & RVLOBJ2_FLAG_REJECTED)
+						continue;
 
-				if(pTriangle->m_Flags & RVLOBJ2_FLAG_REJECTED)
-					continue;
+					if (pTriangle->m_Label < 0 || pTriangle->m_Label >= nObjects)
+						continue;
 
-				if(pTriangle->m_Label < 0 || pTriangle->m_Label >= nObjects)
-					continue;
+					if (bSegmentSelected[pTriangle->m_Label])
+						pTriangle->m_Flags |= RVLOBJ2_FLAG_MARKED;
+				}
 
-				if(bSegmentSelected[pTriangle->m_Label])
-					pTriangle->m_Flags |= RVLOBJ2_FLAG_MARKED;					
-			}
+				delete[] bSegmentSelected;
 
-			delete[] bSegmentSelected;
+				// filko
 
-			// filko
+				//cvCvtColor(pRGBImage, pHSVImage, CV_BGR2HSV);
 
-			//cvCvtColor(pRGBImage, pHSVImage, CV_BGR2HSV);
+				//pHSVImage->channelSeq[0] = 'H';
 
-			//pHSVImage->channelSeq[0] = 'H';
+				//pHSVImage->channelSeq[1] = 'S';
 
-			//pHSVImage->channelSeq[1] = 'S';
+				//pHSVImage->channelSeq[2] = 'V';
 
-			//pHSVImage->channelSeq[2] = 'V';
-		
-			cvCvtColor(pRGBImage, pHSVImage, CV_BGR2RGB);
+				cvCvtColor(pRGBImage, pHSVImage, CV_BGR2RGB);
 
-			  pHSVImage->channelSeq[0] = 'R';
+				pHSVImage->channelSeq[0] = 'R';
 
-			  pHSVImage->channelSeq[1] = 'G';
+				pHSVImage->channelSeq[1] = 'G';
 
-			  pHSVImage->channelSeq[2] = 'B';
+				pHSVImage->channelSeq[2] = 'B';
 
-			objects = GenMeshObjects(&(VS.m_AImage.m_C2DRegion.m_ObjectList), pHSVImage, nObjects, &pClass);
+				objects = GenMeshObjects(&(VS.m_AImage.m_C2DRegion.m_ObjectList), pHSVImage, nObjects, &pClass);
 
-			//PruneTrianglesFromObjects(objects, nObjects);
+				//PruneTrianglesFromObjects(objects, nObjects);
+			}	// if (VS.m_Flags & RVLSYS_FLAGS_SEGMENT_MESH)
 		}	// if(!bRecord)
 
 		// display the results
@@ -401,6 +444,9 @@ int main(int argc, char* argv[])
 			VS.m_Display.m_ZoomFactor = ZoomFactor;
 			VS.m_Display.m_DisplayBitmap = DisplayBitmap;
 			VS.m_Display.m_DepthMapFormat = DepthMapFormat;
+			VS.m_Display.m_pRGBImage = pRGBImage;
+			VS.m_Display.m_pGSImage = pGSImage;
+			VS.m_Display.m_pSegmentationImage = pSegmentationImage;
 	
 #ifdef NEVER
 			// clear display
@@ -551,17 +597,16 @@ int main(int argc, char* argv[])
 				bContinuous = !bContinuous;
 
 				break;
-#ifdef RVLOPENNI
 			case 'b':
-				if(bKinect)
-					DisplayBitmap = (DisplayBitmap + 1) % 3;
+				DisplayBitmap = (DisplayBitmap + 1) % (VS.m_Flags & RVLSYS_FLAGS_SEGMENT_GRAPH ? 4 : 3);
 
+#ifdef RVLOPENNI
 				VS.m_Kinect.RegisterDepthToColor((DisplayBitmap != 0));
+#endif
 
 				bRefresh = true;
 
 				break;
-#endif
 			case 'r':
 				if(VS.m_Kinect.m_Flags & RVLKINECT_FLAG_ONI_FILE)
 				{
@@ -692,12 +737,14 @@ int main(int argc, char* argv[])
 
 				break;
 			case 0x00230000:	// End
+#ifdef RVLOPENNI
 				if(bKinect && (VS.m_Kinect.m_Flags & RVLKINECT_FLAG_ONI_FILE))
 				{
 					iONISample = VS.m_Kinect.GetNoONIFrames() - 1;
 
 					bNextImageSelected = true;
 				}
+#endif
 
 				break;
 			case 0x00240000:	// Home
@@ -826,6 +873,7 @@ int main(int argc, char* argv[])
 	cvReleaseImage(&pInputImage);
 	cvReleaseImage(&pRGBImage);
 	cvReleaseImage(&pGSImage);
+	cvReleaseImage(&pSegmentationImage);
 	cvReleaseImage(&pZoomedInputImage);
 
 	return 0;

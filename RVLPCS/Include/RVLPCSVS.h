@@ -3,7 +3,9 @@
 #define RVLSYS_FLAGS_PSD						0x00000100
 #define RVLSYS_FLAGS_DELAUNAY					0x00000200
 #define RVLSYS_FLAGS_PC							0x00000400
-#define RVLSYS_FLAGS_SEGMENT_TO_CONVEX_SETS		0x00000800
+#define RVLSYS_FLAGS_SEGMENT_MESH				0x00000800
+#define RVLSYS_FLAGS_SEGMENT_TO_CONVEX_SETS		0x00001000
+#define RVLSYS_FLAGS_SEGMENT_GRAPH				0x00002000
 
 #define RVLSYS_MCMEMSIZE		2
 
@@ -21,6 +23,7 @@ struct RVLPCS_DISPLAY
 	DWORD m_DepthMapFormat;
 	IplImage *m_pRGBImage;
 	IplImage *m_pGSImage;
+	IplImage *m_pSegmentationImage;
 	IplImage *m_pZoomedInputImage;
 	bool m_bDisplayMesh;
 	bool m_bDisplayConvexSets;

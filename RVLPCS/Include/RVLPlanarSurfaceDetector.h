@@ -38,11 +38,11 @@
 #define RVLPSD_SEGMENT_REGIONBASED					0x00200000		//Region based segmentation (eg Graph based by Pedro F. Felzenszwalb or Edge Based by Robert Cupec)
 //#define RVLPSD_SEGMENT_EDGEBASED					0x00400000		//Edge based segmentation
 #define RVLPSD_SEGMENT_STRM							0x00400000		//Succesive triangulation refinement + merging
-#define RVLPSD_MESH_SEGMENT_PLANAR					0x00800000		//Segmentation into planar surface segments
-#define RVLPSD_MESH_SEGMENT_WER						0x01000000		//Segmentation into planar surface segments using WER approach
-#define RVLPSD_MESH_CONVEX							0x02000000
-#define RVLPSD_FLAG_MM								0x04000000		// segmentation is performed in mm-space (instead of uvd-space)
-#define RVLPSD_FLAG_100UM							0x08000000		// segmentation is performed in mm-space with 100um precision
+#define RVLPSD_MESH_SEGMENT_PLANAR					0x01000000		//Segmentation into planar surface segments
+#define RVLPSD_MESH_SEGMENT_WER						0x02000000		//Segmentation into planar surface segments using WER approach
+#define RVLPSD_MESH_CONVEX							0x04000000
+#define RVLPSD_FLAG_MM								0x08000000		// segmentation is performed in mm-space (instead of uvd-space)
+#define RVLPSD_FLAG_100UM							0x10000000		// segmentation is performed in mm-space with 100um precision
 #define RVLPSD_SAVE_MESH_FLAG_HULL					0x00000001
 
 

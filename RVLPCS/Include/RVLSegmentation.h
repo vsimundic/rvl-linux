@@ -67,6 +67,32 @@ struct RVLSWER_LINK
 	int Cost;
 };
 
+struct RVLSWER_NODE2
+{
+	DWORD Flags;
+	BYTE *pData;
+	RVLSWER_NODE2 *pChild[2];
+	RVLSWER_NODE2 *pParent;
+	float cost;
+	int Size;
+};
+
+template <class Type> struct RVLSWER_SEGMENT
+{
+	Type *pNode;
+	RVLARRAY_<int> PtList;
+};
+
+struct RVLSWER_LINK2
+{
+	//DWORD Flags;
+	RVLSWER_NODE2 *pNode[2];
+	//RVL3DMOMENTS Moments;
+	BYTE *pData;
+	void *pNext;
+	void **pPtrToThis;
+	float cost;
+};
 
 void RVLSaveSegmentation(FILE *fp,
 						 CRVLClass *p2DRegionSet,
@@ -245,6 +271,28 @@ void RVLSegmentationDisplayBoundary(CRVLFigure *pFig,
 									CvScalar Color,
 									int LineWidth = 1,
 									int uOffset = 0);
+void RVLGraphSegmentationFH(
+	RVLSWER_NODE2 *Node,
+	int nInNodes,
+	RVLSWER_LINK2 **SortedLinkList,
+	int nLinks,
+	float k,
+	int &nNodes,
+	RVLARRAY_<RVLSWER_SEGMENT<RVLSWER_NODE2>> &SegmentArray,
+	int *PtListMem);
+void RVLRGBGraphSegmentation(
+	unsigned char *RGB,
+	int w,
+	int h,
+	int NeighborhoodSize,
+	float k,
+	RVLSWER_NODE2 *Node,
+	RVLARRAY_<RVLSWER_SEGMENT<RVLSWER_NODE2>> &SegmentArray,
+	int *PtMem);
+void RVLDisplayRGBSegmentation(
+	IplImage *pInImage,
+	RVLARRAY_<RVLSWER_SEGMENT<RVLSWER_NODE2>> &SegmentArray,
+	IplImage *pOutImage);
 #ifdef RVLVTK
 void RVLDisplaySegmentedMesh3D(CRVLVTKRenderer *pRenderer,
                                 CRVLMPtrChain *pTriangleList,

@@ -1556,6 +1556,9 @@ void RVLQuickSort(short *Key, int *Index, int n)
 	delete[] KeyLT;
 }
 
+
+
+
 BOOL RVLEig2(double *C, double *eig)
 {
 	double p[3];

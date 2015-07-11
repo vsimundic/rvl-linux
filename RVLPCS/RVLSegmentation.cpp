@@ -5504,6 +5504,340 @@ bool RVL3DMeshIsConvex(CRVLMPtrChain *pTriangleList,
 	return true;
 }
 
+// Segmentation of RGB images using the graph segmentation method proposed in felzenszwalb_IJCV04
+
+int RVLRGBGraphSegmentationQSortCompare(const void * a, const void * b)
+{
+	float diff = (*((RVLSWER_LINK2 **)a))->cost - (*((RVLSWER_LINK2 **)b))->cost;
+
+	return (diff > 0.0f ? 1 : (diff < 0.0f ? -1 : 0));
+}
+
+void RVLRGBGraphSegmentation(
+	unsigned char *RGB,
+	int w,
+	int h,
+	int NeighborhoodSize,
+	float k,
+	RVLSWER_NODE2 *Node,
+	RVLARRAY_<RVLSWER_SEGMENT<RVLSWER_NODE2>> &SegmentArray,
+	int *PtMem)
+{
+	// create a graph from the input RGB image
+
+	int nPts = w * h;
+
+	RVLSWER_NODE2 *pNode = Node;
+
+	RVLSWER_LINK2 *Link = new RVLSWER_LINK2[nPts * NeighborhoodSize * NeighborhoodSize];
+
+	RVLSWER_LINK2 *pLink = Link;
+
+	RVLSWER_LINK2 **SortedLinkList = new RVLSWER_LINK2 *[nPts * NeighborhoodSize * NeighborhoodSize];
+
+	RVLSWER_LINK2 **ppLink = SortedLinkList;
+
+	int halfNeighborhoodSize = (NeighborhoodSize - 1) / 2;
+
+	unsigned char *pPix0 = RGB;
+
+	int u0, v0, u, v;
+	int minu, maxu, minv, maxv;
+	unsigned char *pPix;
+	int RGB0[3], RGB_[3], V3Tmp[3];
+	int iPix0, iPix;
+
+	for (v0 = 0; v0 < h; v0++)
+	{
+		minv = v0 - halfNeighborhoodSize;
+
+		if (minv < 0)
+			minv = 0;
+
+		maxv = v0 + halfNeighborhoodSize;
+
+		if (maxv >= h)
+			maxv = h - 1;
+
+		for (u0 = 0; u0 < w; u0++)
+		{
+			iPix0 = u0 + v0 * w;
+
+			pNode->pChild[0] = NULL;
+			pNode->pChild[1] = NULL;
+			pNode->pParent = NULL;
+			pNode->Size = 1;
+			pNode->cost = 0;
+
+			RGB0[0] = (int)(*(pPix0++));
+			RGB0[1] = (int)(*(pPix0++));
+			RGB0[2] = (int)(*(pPix0++));
+
+			minu = u0 - halfNeighborhoodSize;
+
+			if (minu < 0)
+				minu = 0;
+
+			maxu = u0 + halfNeighborhoodSize;
+
+			if (maxu >= w)
+				maxu = w - 1;
+
+			for (v = minv; v <= maxv; v++)
+			{
+				for (u = minu; u <= maxu; u++)
+				{
+					if (u == u0 && v == v0)
+						continue;
+
+					iPix = u + v * w;
+
+					pPix = RGB + 3 * iPix;
+
+					RGB_[0] = (int)(*(pPix++));
+					RGB_[1] = (int)(*(pPix++));
+					RGB_[2] = (int)(*pPix);
+
+					RVLDIF3VECTORS(RGB_, RGB0, V3Tmp);
+
+					pLink->cost = sqrt((float)(RVLDOTPRODUCT3(V3Tmp, V3Tmp)));
+					pLink->pNode[0] = Node + iPix0;
+					pLink->pNode[1] = Node + iPix;
+
+					*(ppLink++) = pLink;
+
+					pLink++;
+				}
+			}
+
+			pNode++;
+		}
+	}
+
+	// Create sorted link list
+
+	int nLinks = pLink - Link;
+
+	//RVLBubbleSort<RVLSWER_LINK2>(SortedLinkList, nLinks);
+
+	//short *Key = new short[nLinks];
+
+	//int i;
+
+	//for (i = 0; i < nLinks; i++)
+	//	Key[i] = (short)(10.0 * Link[i].cost);
+
+	//int *Index = new int[nLinks];
+
+	//RVLQuickSort(Key, Index, nLinks);
+
+	//delete[] Key;
+
+	//for (i = 0; i < nLinks; i++)
+	//	SortedLinkList[i] = Link + Index[i];
+
+	//delete[] Index;
+
+	int i;
+
+	for (i = 0; i < nLinks; i++)
+		SortedLinkList[i] = Link + i;
+
+	qsort(SortedLinkList, nLinks, sizeof(RVLSWER_LINK2 *), RVLRGBGraphSegmentationQSortCompare);
+
+	// Hierarchical segmentation
+
+	int nNodes;
+
+	RVLGraphSegmentationFH(Node, nPts, SortedLinkList, nLinks, k, nNodes, SegmentArray, PtMem);
+
+	// deallocate memory
+
+	delete[] Link;
+	delete[] SortedLinkList;
+}
+
+// This function implements the graph segmentation method proposed in felzenszwalb_IJCV04
+// Input:
+//     Node      - array of graph nodes filled with input nodes (points)
+//                 this array must be allocated for 2 * nInNodes elements
+//     nInNodes  - number of input graph nodes
+//     SortedLinkList - list of graph edges sorted according to their cost in ascending order
+//     nLinks    - number of graph edges
+//     k         - user defined parameter (see felzenszwalb_IJCV04)
+// Output:
+//     Node      - the function adds additional nodes into this array
+//     nNodes    - the total number of nodes after completion of the segmentatio process
+//     SegmentArray - array of detected segments
+//                 this array must be allocated before calling this function for nInNodes elements
+//     PtListMem - memory storage for points in point lists
+//                 this array must be allocated before calling this function for nInNodes elements
+// The function returns the number of segments.
+
+void RVLGraphSegmentationFH(
+	RVLSWER_NODE2 *Node,
+	int nInNodes,
+	RVLSWER_LINK2 **SortedLinkList,
+	int nLinks,
+	float k,
+	int &nNodes,
+	RVLARRAY_<RVLSWER_SEGMENT<RVLSWER_NODE2>> &SegmentArray,
+	int *PtListMem
+	)
+{
+	RVLSWER_NODE2 *pNode = Node + nInNodes;
+
+	RVLSWER_LINK2 **pLinkListEnd = SortedLinkList + nLinks;
+
+	RVLSWER_LINK2 **ppLink;
+	RVLSWER_LINK2 *pLink;
+	RVLSWER_NODE2 *pSegment1, *pSegment2;
+	float MInt, Int1, Int2;
+
+	for (ppLink = SortedLinkList; ppLink < pLinkListEnd; ppLink++)
+	{
+		pLink = *ppLink;
+
+		pSegment1 = pLink->pNode[0];
+
+		while (pSegment1->pParent)
+			pSegment1 = pSegment1->pParent;
+
+		pSegment2 = pLink->pNode[1];
+
+		while (pSegment2->pParent)
+			pSegment2 = pSegment2->pParent;
+
+		if (pSegment1 == pSegment2)
+			continue;
+
+		Int1 = pSegment1->cost + k / (float)(pSegment1->Size);
+		Int2 = pSegment2->cost + k / (float)(pSegment2->Size);
+
+		MInt = RVLMIN(Int1, Int2);
+
+		if (pLink->cost > MInt)
+			continue;
+
+		//if (pLink->cost > 10.0)
+		//	continue;
+
+		pNode->pChild[0] = pSegment1;
+		pNode->pChild[1] = pSegment2;
+		pNode->pParent = NULL;
+		pNode->cost = RVLMAX(pSegment1->cost, pSegment2->cost);
+		if (pLink->cost > pNode->cost)
+			pNode->cost = pLink->cost;
+		pNode->Size = pSegment1->Size + pSegment2->Size;
+
+		pSegment1->pParent = pNode;
+		pSegment2->pParent = pNode;
+
+		pNode++;
+	}
+
+	RVLSWER_NODE2 *pNodeListEnd = pNode;
+
+	nNodes = pNode - Node;
+
+	// create segments
+
+	RVLSWER_SEGMENT<RVLSWER_NODE2> *pSegment = SegmentArray.Element;
+
+	int *piPt = PtListMem;
+
+	RVLSWER_NODE2 **NodeBuff = new RVLSWER_NODE2 *[2 * nInNodes];
+
+	RVLSWER_NODE2 **ppNodePut, **ppNodeFetch;
+	RVLSWER_NODE2 *pNode_;
+
+	for (pNode = Node; pNode < pNodeListEnd; pNode++)
+		if (pNode->pParent == NULL)
+		{
+			pSegment->pNode = pNode;
+			pSegment->PtList.Element = piPt;
+
+			ppNodePut = ppNodeFetch = NodeBuff;
+
+			*(ppNodePut++) = pNode;
+
+			while (ppNodeFetch < ppNodePut)
+			{
+				pNode_ = *(ppNodeFetch++);
+
+				if (pNode_->pChild[0])
+				{
+					*(ppNodePut++) = pNode_->pChild[0];
+					*(ppNodePut++) = pNode_->pChild[1];
+				}
+				else
+					*(piPt++) = pNode_ - Node;
+			}
+
+			pSegment->PtList.n = piPt - pSegment->PtList.Element;
+
+			pSegment++;
+		}
+
+	delete[] NodeBuff;
+
+	SegmentArray.n = pSegment - SegmentArray.Element;
+}
+
+void RVLDisplayRGBSegmentation(
+	IplImage *pInImage,
+	RVLARRAY_<RVLSWER_SEGMENT<RVLSWER_NODE2>> &SegmentArray, 
+	IplImage *pOutImage)
+{
+	unsigned char *InPixArray = (unsigned char *)(pInImage->imageData);
+
+	cvSet(pOutImage, cvScalar(0, 0, 0));
+
+	unsigned char *OutPixArray = (unsigned char *)(pOutImage->imageData);
+
+	int i, j;
+	RVLSWER_SEGMENT<RVLSWER_NODE2> *pSegment;
+	RVLARRAY_<int> *pPtList;
+	int RGB[3], sumRGB[3];
+	unsigned char *RGB_;
+	unsigned char avgRGB_[3];
+
+	for (i = 0; i < SegmentArray.n; i++)
+	{
+		pSegment = SegmentArray.Element + i;
+
+		pPtList = &(pSegment->PtList);
+
+		// compute average segment color
+
+		RVLNULL3VECTOR(sumRGB);
+
+		for (j = 0; j < pPtList->n; j++)
+		{
+			RGB_ = InPixArray + 3 * pPtList->Element[j];
+
+			RGB[0] = (int)(RGB_[0]);
+			RGB[1] = (int)(RGB_[1]);
+			RGB[2] = (int)(RGB_[2]);
+
+			RVLSUM3VECTORS(RGB, sumRGB, sumRGB);
+		}
+		
+		avgRGB_[0] = (unsigned char)(sumRGB[0] / pPtList->n);
+		avgRGB_[1] = (unsigned char)(sumRGB[1] / pPtList->n);
+		avgRGB_[2] = (unsigned char)(sumRGB[2] / pPtList->n);
+
+		// draw segment
+
+		for (j = 0; j < pPtList->n; j++)
+		{
+			RGB_ = OutPixArray + 3 * pPtList->Element[j];
+
+			RVLCOPY3VECTOR(avgRGB_, RGB_);
+		}
+	}
+}
+
 #ifdef RVLVTK
 void RVLDisplaySegmentedMesh3D(CRVLVTKRenderer *pRenderer,
                                 CRVLMPtrChain *pTriangleList,
