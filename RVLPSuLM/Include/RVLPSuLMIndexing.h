@@ -1,13 +1,16 @@
 #pragma once
 
 #define RVLPSULM_PCG_FLAG_ACTIVE	0x01
+#define RVLPSULM_INDEXING_DEBUG
 
 struct RVLPSULM_INDICATOR
 {
 	int iPCG;
 	float m_Descriptor[10]; //[7]
+	int iFeature;
 	void *pNext;
 };
+
 
 struct RVLPSULM_PCG
 {
@@ -15,6 +18,7 @@ struct RVLPSULM_PCG
 	int Index;
 	CRVL3DPose Pose;
 	CRVLPSuLM *pPSuLM;
+	int iFeature[3];
 	void *pNext;
 };
 
