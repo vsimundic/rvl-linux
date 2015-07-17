@@ -84,7 +84,7 @@
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
       <Optimization>Disabled</Optimization>
-      <AdditionalIncludeDirectories>$(OPENCV_BUILD)\include;..\RVLPSuLM\Include;..\RVLCore\Include;..\RVLPCS\Include;..\RapidXML\Include;$(VTK_PATH)\Debug\Include\vtk-5.10;C:\Users\petra\Documents\Diplomski\flann-1.8.4-src\src\cpp</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(OPENCV_BUILD)\include;..\RVLPSuLM\Include;..\RVLCore\Include;..\RVLPCS\Include;..\RapidXML\Include;$(VTK_PATH)\Debug\Include\vtk-5.10;C:\Libraries\FLANN\flann-1.8.4-src\src\cpp</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <MinimalRebuild>false</MinimalRebuild>
       <BasicRuntimeChecks>Default</BasicRuntimeChecks>
@@ -95,7 +95,7 @@
     </ClCompile>
     <Link>
       <AdditionalDependencies>RVLCore.lib;RVLPCS.lib;opencv_core249d.lib;opencv_imgproc249d.lib;opencv_highgui249d.lib;opencv_ml249d.lib;opencv_video249d.lib;opencv_features2d249d.lib;opencv_calib3d249d.lib;opencv_objdetect249d.lib;opencv_contrib249d.lib;opencv_legacy249d.lib;opencv_flann249d.lib;opencv_nonfree249d.lib;opengl32.lib;flann.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>C:\Users\petra\Documents\Diplomski\flann-1.8.4-src\build\lib\Debug;..\RVLCore\Debug\lib;..\RVLPCS\Debug\lib;..\RVLPSuLM\Debug\lib;$(OPENCV_BUILD)\x86\vc12\lib;$(OPENNI2_LIB);$(VTK_PATH)\Debug\lib\vtk-5.10;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>C:\Libraries\FLANN\flann-1.8.4-src\build\lib\Debug;..\RVLCore\Debug\lib;..\RVLPCS\Debug\lib;..\RVLPSuLM\Debug\lib;$(OPENCV_BUILD)\x86\vc12\lib;$(OPENNI2_LIB);$(VTK_PATH)\Debug\lib\vtk-5.10;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Console</SubSystem>
       <TargetMachine>MachineX86</TargetMachine>
