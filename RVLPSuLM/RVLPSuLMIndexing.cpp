@@ -329,7 +329,7 @@ void CRVLPSuLMIndexing::GetIndicators(
 						N3G[0] = N3G[0] / 0.1743114855;
 						N3G[1] = N3G[1] / 0.1743114855;
 						N3G[2] = N3G[2] / 0.1743114855;
-						*RHO3G = RVLDOTPRODUCT3(N3, tGC)/100.0; //normiranje: 100 mm ~ 1	
+						*RHO3G = (pSurf3->m_d - RVLDOTPRODUCT3(N3, tGC))/100.0; //normiranje: 100 mm ~ 1	
 
 						RVLQLIST_ADD_ENTRY(pIndicatorList, pIndicator);
 
@@ -663,15 +663,17 @@ void CRVLPSuLMIndexing::CreateBase()
 	{
 		pPSuLM = (CRVLPSuLM *)(pBuilder->m_PSuLMList.GetNext());
 
-		GetIndicators(pPSuLM, true);	// otkomentirati
-		//GetIndicators(pPSuLM);	// zakomentirati
+		if (iPSuLM == 2)
+		{
+			GetIndicators(pPSuLM, true);	// otkomentirati
+			//GetIndicators(pPSuLM);	// zakomentirati
 
-		m_nMPCGs += m_nPCGs;
+			m_nMPCGs += m_nPCGs;
+
+			break;
+		}
 
 		iPSuLM++;
-
-		if (iPSuLM >= 1)
-			break;
 	}
 
 	m_EvidenceAccu.m_Size = m_nMPCGs;
