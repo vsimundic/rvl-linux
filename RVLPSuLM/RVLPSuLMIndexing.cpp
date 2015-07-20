@@ -153,6 +153,15 @@ void CRVLPSuLMIndexing::GetIndicators(
 	int i, j, k, l, n;
 	n = pPSuLM->m_n3DSurfaces;
 
+	RVLPSULM_PCG **PCGLT;
+
+	if (!bModel)
+	{
+		PCGLT = new RVLPSULM_PCG *[n * n * n];
+
+		memset(PCGLT, 0, n * n * n * sizeof(RVLPSULM_PCG *));
+	}
+
 	int n_ = (!bModel ? n : 0);
 	int m = pPSuLM->m_n3DLines;
 
@@ -184,6 +193,8 @@ void CRVLPSuLMIndexing::GetIndicators(
 	int maxnIndicators = (bModel ? n * n * n * n : 1000);
 
 	double *N__;
+	int PCGID;
+	bool bCreatePCG;
 	
 	for (r = 0; r <= n_ && m_nIndicators < maxnIndicators; r++){
 		if (bModel) n0 = n-1;
@@ -207,8 +218,10 @@ void CRVLPSuLMIndexing::GetIndicators(
 
 
 			// XGC <- N0
-			RVLCOPY3VECTOR(N0, XGC)
-				for (j = m1; j <= n1 && m_nIndicators < maxnIndicators; j++){
+			RVLCOPY3VECTOR(N0, XGC);
+				
+				for (j = m1; j <= n1 && m_nIndicators < maxnIndicators; j++)
+				{
 				
 				int j_;
 				if (bModel){
@@ -233,13 +246,14 @@ void CRVLPSuLMIndexing::GetIndicators(
 
 				
 				// ZGC <- UNIT(N0 x N1)
-				RVLCROSSPRODUCT3(N0, N1, ZGC)
-					RVLNORM3(ZGC, fTmp)
+				RVLCROSSPRODUCT3(N0, N1, ZGC);
+				RVLNORM3(ZGC, fTmp);
 
 				//YGC <- ZGC x XGC
-				RVLCROSSPRODUCT3(ZGC, XGC, YGC)
+				RVLCROSSPRODUCT3(ZGC, XGC, YGC);
 
-				for (k = m2; k <= n2 && m_nIndicators < maxnIndicators; k++){
+				for (k = m2; k <= n2 && m_nIndicators < maxnIndicators; k++)
+				{
 					int k_;
 					
 					if (bModel){
@@ -257,8 +271,6 @@ void CRVLPSuLMIndexing::GetIndicators(
 
 					double *N2 = pSurf2->m_N;
 
-					
-
 					fTmp = RVLDOTPRODUCT3(N1, N2);
 					// drugi element indikatora:
 					double drugi = acos(RVLABS(fTmp));
@@ -269,10 +281,31 @@ void CRVLPSuLMIndexing::GetIndicators(
 					double treci = acos(RVLABS(fTmp));
 					if (RVLABS(fTmp) >= 0.707107) continue; 
 
+					if (bModel)
+					{
+						bCreatePCG = true;
 
-					RVLMEM_ALLOC_STRUCT(pMem, RVLPSULM_PCG, pPCG)
+						RVLMEM_ALLOC_STRUCT(pMem, RVLPSULM_PCG, pPCG);
+					}
+					else
+					{
+						PCGID = (i_ * n + j_) * n + k_;
+
+						pPCG = PCGLT[PCGID];
+
+						if (bCreatePCG = (pPCG == NULL))
+						{
+							RVLMEM_ALLOC_STRUCT(pMem, RVLPSULM_PCG, pPCG);
+
+							PCGLT[PCGID] = pPCG;
+						}
+					}
+
 					double *RGC = pPCG->Pose.m_Rot;
 					double *tGC = pPCG->Pose.m_X;
+
+					if (bCreatePCG)
+					{
 					RVLCOPY3VECTOR(N0, N);
 					N__ = N + 3;
 					RVLCOPY3VECTOR(N1, N__);
@@ -285,16 +318,18 @@ void CRVLPSuLMIndexing::GetIndicators(
 					tGC_->data.db = tGC;
 					cvSolve(N_, b_, tGC_);
 
-					RVLCOPYMX3X3T(RCG, RGC)
-					RVLQLIST_ADD_ENTRY(pPCGList, pPCG)
+						RVLCOPYMX3X3T(RCG, RGC);
+						RVLQLIST_ADD_ENTRY(pPCGList, pPCG);
 
 					pPCG->Index = m_nPCGs;
 					pPCG->iFeature[0] = i_;
 					pPCG->iFeature[1] = j_;
 					pPCG->iFeature[2] = k_;
 					m_nPCGs++;
+					}
 
-					for (l = 0; l <= n3_; l++){
+					for (l = 0; l <= n3_; l++)
+					{
 						int l_;
 						
 						if (bModel){
@@ -304,10 +339,10 @@ void CRVLPSuLMIndexing::GetIndicators(
 						else
 							l_=n3+3;
 
-#ifdef RVLPSULM_INDEXING_DEBUG
-						if (i_ == 0 && j_ == 2 && k_ == 1 && l_ == 5)
-							int debug = 0;
-#endif
+//#ifdef RVLPSULM_INDEXING_DEBUG
+//						if (i_ == 0 && j_ == 2 && k_ == 1 && l_ == 5)
+//							int debug = 0;
+//#endif
 
 						CRVL3DSurface2 *pSurf3 = pPSuLM->m_3DSurfaceArray[l_];
 						double *N3 = pSurf3->m_N;
@@ -343,6 +378,8 @@ void CRVLPSuLMIndexing::GetIndicators(
 		}
 	}
 	fclose(file);
+
+	delete[] PCGLT;
 
 	/*
 	//FFL PCG
@@ -520,12 +557,12 @@ void CRVLPSuLMIndexing::GenerateHypotheses()
 		flann::Matrix<float> Q_(pIndicator->m_Descriptor, 1, 7);
 
 		// Pomoæu radiusSearch za svaki indikator iz m_IndicatorList dobiti sve indikatore iz baze unutar zadanog radijusa:
-		m_pIndex->radiusSearch(Q_ , R_, D_, 1.0f, flann::SearchParams(64));
+		m_pIndex->radiusSearch(Q_ , R_, D_, 2.24f, flann::SearchParams(64));
 
 		
 #ifdef RVLPSULM_INDEXING_DEBUG 
 		pSPCG = SPCG[pIndicator->iPCG];
-		fprintf(fpDebug, "\n\nQ: %d %d %d %d\t", pSPCG->iFeature[0], pSPCG->iFeature[1], pSPCG->iFeature[2], pIndicator->iFeature);	
+		fprintf(fpDebug, "\n\nQ: %d %d %d %d (PCG%d)\t", pSPCG->iFeature[0], pSPCG->iFeature[1], pSPCG->iFeature[2], pIndicator->iFeature, pIndicator->iPCG);	
 		for (i = 0; i < 7; i++){
 			fprintf(fpDebug, "%.4f\t", pIndicator->m_Descriptor[i]);
 		}
@@ -549,24 +586,33 @@ void CRVLPSuLMIndexing::GenerateHypotheses()
 			fprintf(fpDebug, "%d\t ",R[i] );
 
 #endif
-			if (!(pMPCG->Flags & RVLPSULM_PCG_FLAG_ACTIVE)){
-
-				m_PCG[m_iPCG[R[i]]]->Flags |= RVLPSULM_PCG_FLAG_ACTIVE;
+			if (!(pMPCG->Flags & RVLPSULM_PCG_FLAG_ACTIVE))
+			{
+				pMPCG->Flags |= RVLPSULM_PCG_FLAG_ACTIVE;
 				m_PCGBuff[brojac_aktivnih] = iMPCG;
 				brojac_aktivnih++;
 			}
-				
-			
 		}
 
 		pIndicator = (RVLPSULM_INDICATOR *)(pIndicator->pNext);
 	}
 
-	m_Mem.Clear();
+	delete[] D;
+	delete[] R;
 
 #ifdef RVLPSULM_INDEXING_DEBUG 
 	fclose(fpDebug);
 #endif
+
+#ifdef RVLPSULM_INDEXING_DEBUG 
+	fpDebug = fopen("C:\\RVL\\Debug\\IndexingMatchMatrix.txt", "w");
+	
+	int Histogram[30];
+
+	memset(Histogram, 0, 30 * sizeof(int));
+#endif
+
+	DWORD HypothesisCounter = 0;
 
 	int *brojac_SPCGs = new int[m_nPCGs]; // ako flag nije aktivan staviti na 1, ako je aktivan povecati za 1
 	int *SPCGBuff = new int[m_nPCGs];
@@ -575,27 +621,39 @@ void CRVLPSuLMIndexing::GenerateHypotheses()
 
 	RVLQLIST *pEvidenceAccu;
 
-	for (i = 0; i < brojac_aktivnih; i++){
-		pEvidenceAccu = EvidenceAccu_ + m_PCGBuff[i];
+	for (i = 0; i < brojac_aktivnih; i++)
+	{
+		iMPCG = m_PCGBuff[i];
+		
+		pMPCG = m_PCG[iMPCG];
+
+		pMPCG->Flags &= ~RVLPSULM_PCG_FLAG_ACTIVE;
+
+		pEvidenceAccu = EvidenceAccu_ + iMPCG;
 		
 		pEvidenceAccuEntry = (RVLQLIST_INT_ENTRY*)(pEvidenceAccu->pFirst);
 		piSPCG = SPCGBuff;
-		while (pEvidenceAccuEntry){
-
+		while (pEvidenceAccuEntry)
+		{
 			pSPCG = SPCG[pEvidenceAccuEntry->i];
 
-			if (!(pSPCG->Flags & RVLPSULM_PCG_FLAG_ACTIVE)){
+			if (!(pSPCG->Flags & RVLPSULM_PCG_FLAG_ACTIVE))
+			{
 				brojac_SPCGs[pEvidenceAccuEntry->i] = 1;
 				pSPCG->Flags |= RVLPSULM_PCG_FLAG_ACTIVE;
 				*(piSPCG++) = pEvidenceAccuEntry->i;
 			}
-			else brojac_SPCGs[pEvidenceAccuEntry->i] ++;
+			else 
+				brojac_SPCGs[pEvidenceAccuEntry->i] ++;
 
 			pEvidenceAccuEntry = (RVLQLIST_INT_ENTRY*)(pEvidenceAccuEntry->pNext);
 		}
 
+#ifdef RVLPSULM_INDEXING_DEBUG 
+		fprintf(fpDebug, "M%d:\n\n", iMPCG);
+#endif
+
 		SPCGBuffEnd = piSPCG;
-		DWORD HypothesisCounter = 0;
 		RVLPSULM_HYPOTHESIS *pHypothesis;
 		double RtmpInv[9];
 		double ttmpInv[3];
@@ -605,14 +663,30 @@ void CRVLPSuLMIndexing::GenerateHypotheses()
 		double *tPCGS;
 		double *RSM, *tSM;
 		
-		RVLMEM_ALLOC_STRUCT(pMem, RVLPSULM_HYPOTHESIS, pHypothesis);
-		for (piSPCG = SPCGBuff; piSPCG < SPCGBuffEnd; piSPCG++){
+		for (piSPCG = SPCGBuff; piSPCG < SPCGBuffEnd; piSPCG++)
+		{
+#ifdef RVLPSULM_INDEXING_DEBUG 
+			int count = brojac_SPCGs[*piSPCG];
+
+			fprintf(fpDebug, "%d(%d)\n", *piSPCG, count);
+
+			if (count > 29)
+				count = 29;
+
+			Histogram[count]++;
+#endif
+
+			pSPCG = SPCG[*piSPCG];
+
+			pSPCG->Flags &= ~RVLPSULM_PCG_FLAG_ACTIVE;
 
 			RPCGM = pMPCG->Pose.m_Rot;
 			tPCGM = pMPCG->Pose.m_X;
 
 			RPCGS = pSPCG->Pose.m_Rot;
 			tPCGS = pSPCG->Pose.m_X;
+
+			RVLMEM_ALLOC_STRUCT(pMem, RVLPSULM_HYPOTHESIS, pHypothesis);
 
 			RSM = pHypothesis->PoseSM.m_Rot;
 			tSM = pHypothesis->PoseSM.m_X;
@@ -621,23 +695,34 @@ void CRVLPSuLMIndexing::GenerateHypotheses()
 			RVLCOMPTRANSF3D(RPCGM, tPCGM, RtmpInv, ttmpInv, RSM, tSM);
 		
 			pHypothesis->Index = HypothesisCounter;
-			pHypothesis->pMPSuLM = m_PCG[m_PCGBuff[i]]->pPSuLM;
+			pHypothesis->pMPSuLM = pMPCG->pPSuLM;
 			
-
 			HypothesisCounter++;
-
 
 			pBuilder->m_HypothesisList.Add(pHypothesis);
 		}
 
-		
+#ifdef RVLPSULM_INDEXING_DEBUG 
+		fprintf(fpDebug, "\n");
+#endif
 	}
+		
+#ifdef RVLPSULM_INDEXING_DEBUG 
+	fclose(fpDebug);
 
+	fpDebug = fopen("C:\\RVL\\Debug\\IndexingStatistics.txt", "w");
 	
+	for (i = 0; i < 30; i++)
+		fprintf(fpDebug, "%d\n", Histogram[i]);
+	
+	fclose(fpDebug);
+#endif
+
+	m_Mem.Clear();
+
 	delete[] SPCG;
-	
-
-
+	delete[] brojac_SPCGs;
+	delete[] SPCGBuff;	
 }
 
 void CRVLPSuLMIndexing::UpdateBase()
@@ -665,18 +750,21 @@ void CRVLPSuLMIndexing::CreateBase()
 
 		if (iPSuLM == 2)
 		{
-			GetIndicators(pPSuLM, true);	// otkomentirati
-			//GetIndicators(pPSuLM);	// zakomentirati
+		GetIndicators(pPSuLM, true);	// otkomentirati
+		//GetIndicators(pPSuLM);	// zakomentirati
 
 
 
-			m_nMPCGs += m_nPCGs;
+		m_nMPCGs += m_nPCGs;
 
-			
 			break;
-		}		
-		iPSuLM++;	
+		}
+
+		iPSuLM++;
+
+
 	}
+
 
 	m_EvidenceAccu.m_Size = m_nMPCGs;
 	m_EvidenceAccu.Init();
@@ -735,13 +823,8 @@ void CRVLPSuLMIndexing::CreateBase()
 			j++;
 		}
 
-		i += 7;
-
 		// dodati iPCG od indikatora u m_iPCG
 		*(piPCG++) = pIndicator->iPCG;
-
-		if (i / 7 >= n)
-			break;
 
 #ifdef RVLPSULM_INDEXING_DEBUG 
 		pPCG = m_PCG[pIndicator->iPCG];
@@ -752,8 +835,12 @@ void CRVLPSuLMIndexing::CreateBase()
 			fprintf(fpDebugInd, "%.4f ", pIndicator->m_Descriptor[j]);
 		}
 		fprintf(fpDebugInd, "\n\n");
-	
 #endif
+
+		i += 7;
+	
+		//if (i / 7 >= n)
+		//	break;
 
 		pIndicator = (RVLPSULM_INDICATOR *)(pIndicator->pNext);
 	}
