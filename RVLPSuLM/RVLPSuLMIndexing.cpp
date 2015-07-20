@@ -314,10 +314,10 @@ void CRVLPSuLMIndexing::GetIndicators(
 
 						RVLMEM_ALLOC_STRUCT(pMem, RVLPSULM_INDICATOR, pIndicator)
 
-						//prebacivanje prva tri elementa indikatora + normiranje: 10°=0.1745329252 rad ~ 1
-						pIndicator->m_Descriptor[0] = prvi / 0.1745329252;
-						pIndicator->m_Descriptor[1] = drugi / 0.1745329252;
-						pIndicator->m_Descriptor[2] = treci / 0.1745329252;
+						//prebacivanje prva tri elementa indikatora + normiranje: 5°=0.1745329252 rad ~ 1
+						pIndicator->m_Descriptor[0] = prvi / 0.0872664625;
+						pIndicator->m_Descriptor[1] = drugi / 0.0872664625;
+						pIndicator->m_Descriptor[2] = treci / 0.0872664625;
 
 						//popunjavanje ostala èetiri mjesta deskriptora:
 						float *N3G = pIndicator->m_Descriptor + 3;
@@ -325,11 +325,11 @@ void CRVLPSuLMIndexing::GetIndicators(
 
 
 						RVLMULMX3X3VECT(RCG, N3, N3G);
-						//normiranje: 2*sin(10°/2)= 0.1743114855 ~ 1
-						N3G[0] = N3G[0] / 0.1743114855;
-						N3G[1] = N3G[1] / 0.1743114855;
-						N3G[2] = N3G[2] / 0.1743114855;
-						*RHO3G = RVLDOTPRODUCT3(N3, tGC)/100.0; //normiranje: 100 mm ~ 1	
+						//normiranje: 2*sin(5°/2)= 0.08723877473 ~ 1
+						N3G[0] = N3G[0] / 0.08723877473;
+						N3G[1] = N3G[1] / 0.08723877473;
+						N3G[2] = N3G[2] / 0.08723877473;
+						*RHO3G = (pSurf3->m_d - RVLDOTPRODUCT3(N3, tGC)) / 150.0;; //normiranje: 150 mm ~ 1	
 
 						RVLQLIST_ADD_ENTRY(pIndicatorList, pIndicator);
 
@@ -663,15 +663,19 @@ void CRVLPSuLMIndexing::CreateBase()
 	{
 		pPSuLM = (CRVLPSuLM *)(pBuilder->m_PSuLMList.GetNext());
 
-		GetIndicators(pPSuLM, true);	// otkomentirati
-		//GetIndicators(pPSuLM);	// zakomentirati
+		if (iPSuLM == 2)
+		{
+			GetIndicators(pPSuLM, true);	// otkomentirati
+			//GetIndicators(pPSuLM);	// zakomentirati
 
-		m_nMPCGs += m_nPCGs;
 
-		iPSuLM++;
 
-		if (iPSuLM >= 1)
+			m_nMPCGs += m_nPCGs;
+
+			
 			break;
+		}		
+		iPSuLM++;	
 	}
 
 	m_EvidenceAccu.m_Size = m_nMPCGs;
