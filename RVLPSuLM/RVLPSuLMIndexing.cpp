@@ -7,6 +7,9 @@
 #include "RVLPSuLMBuilder.h"
 #include "Include\RVLPSuLMIndexing.h"
 #include <math.h>
+#include <iostream>
+#include <fstream>
+using namespace std;
 //#ifdef RVLFLANN
 //#include <flann\io\hdf5.h>
 //#endif
@@ -147,8 +150,19 @@ void CRVLPSuLMIndexing::GetIndicators(
 	m_nPCGs = 0;
 		
 
-	int i, j, k, l;
-	int n = pPSuLM->m_n3DSurfaces;
+	int i, j, k, l, n;
+	n = pPSuLM->m_n3DSurfaces;
+
+	RVLPSULM_PCG **PCGLT;
+
+	if (!bModel)
+	{
+		PCGLT = new RVLPSULM_PCG *[n * n * n];
+
+		memset(PCGLT, 0, n * n * n * sizeof(RVLPSULM_PCG *));
+	}
+
+	int n_ = (!bModel ? n : 0);
 	int m = pPSuLM->m_n3DLines;
 
 	double RCG[9];
@@ -162,6 +176,212 @@ void CRVLPSuLMIndexing::GetIndicators(
 	RVLPSULM_INDICATOR *pIndicator;
 	double fTmp;
 
+	CvMat *N_ = cvCreateMat(3, 3, CV_64FC1);
+
+	double *N = N_->data.db;
+
+	CvMat *b_ = cvCreateMat(3, 1, CV_64FC1);
+
+	double *b = b_->data.db;
+
+	CvMat *tGC_ = cvCreateMatHeader(3, 1, CV_64FC1);
+	
+	int r, n0, m0, n1, m1, n2, m2, n3, m3, n3_;
+	FILE *file;
+	file = fopen("bModel.txt", "w");
+
+	int maxnIndicators = (bModel ? n * n * n * n : 1000);
+
+	double *N__;
+	int PCGID;
+	bool bCreatePCG;
+	
+	for (r = 0; r <= n_ && m_nIndicators < maxnIndicators; r++){
+		if (bModel) n0 = n-1;
+		else n0 = r;
+		m0 = 0;
+		//FFF PCG
+		for (i = m0; i <= n0; i++){
+			int i_;
+			i_ = i;
+			CRVL3DSurface2 *pSurf0 = pPSuLM->m_3DSurfaceArray[i_];
+			double *N0 = pSurf0->m_N;
+
+			if (bModel) {
+				n1 = n-1;
+				m1 = 0;
+			}
+			else {
+				n1 = n0 - i;
+				m1 = i;
+			}
+
+
+			// XGC <- N0
+			RVLCOPY3VECTOR(N0, XGC);
+
+				for (j = m1; j <= n1 && m_nIndicators < maxnIndicators; j++)
+				{
+				
+				int j_;
+				if (bModel){
+					j_=j;
+					n2 = n - 1;
+					m2 = 0;
+
+					if (i == j) continue;
+				}
+				else{
+					j_=j+1;
+					n2 = n1 - j;
+					m2 = j;
+				}
+				CRVL3DSurface2 *pSurf1 = pPSuLM->m_3DSurfaceArray[j_];
+				double *N1 = pSurf1->m_N;
+
+				fTmp = RVLDOTPRODUCT3(N0, N1);
+				// prvi element indikatora:
+				double prvi = acos(RVLABS(fTmp));
+				if (RVLABS(fTmp) >= 0.707107) continue;
+
+				
+				// ZGC <- UNIT(N0 x N1)
+				RVLCROSSPRODUCT3(N0, N1, ZGC);
+				RVLNORM3(ZGC, fTmp);
+
+				//YGC <- ZGC x XGC
+				RVLCROSSPRODUCT3(ZGC, XGC, YGC);
+
+				for (k = m2; k <= n2 && m_nIndicators < maxnIndicators; k++)
+				{
+					int k_;
+					
+					if (bModel){
+						k_ = k;
+						n3_ = n - 1;
+						if (j == k || i == k) continue;
+					}
+					else {
+						k_ = k+2;
+						n3 = n2 - k;
+						n3_ = (n3 >= k ? 0 : -1);
+					}
+
+					CRVL3DSurface2 *pSurf2 = pPSuLM->m_3DSurfaceArray[k_];
+
+					double *N2 = pSurf2->m_N;
+				
+					fTmp = RVLDOTPRODUCT3(N1, N2);
+					// drugi element indikatora:
+					double drugi = acos(RVLABS(fTmp));
+					if (RVLABS(fTmp) >= 0.707107) continue; 
+
+					fTmp = RVLDOTPRODUCT3(N2, N0);
+					// treci element indikatora:
+					double treci = acos(RVLABS(fTmp));
+					if (RVLABS(fTmp) >= 0.707107) continue; 
+
+					if (bModel)
+					{
+						bCreatePCG = true;
+
+						RVLMEM_ALLOC_STRUCT(pMem, RVLPSULM_PCG, pPCG);
+					}
+					else
+					{
+						PCGID = (i_ * n + j_) * n + k_;
+
+						pPCG = PCGLT[PCGID];
+
+						if (bCreatePCG = (pPCG == NULL))
+						{
+							RVLMEM_ALLOC_STRUCT(pMem, RVLPSULM_PCG, pPCG);
+
+							PCGLT[PCGID] = pPCG;
+						}
+					}
+
+					double *RGC = pPCG->Pose.m_Rot;
+					double *tGC = pPCG->Pose.m_X;
+
+					if (bCreatePCG)
+					{
+						RVLCOPY3VECTOR(N0, N);
+						N__ = N + 3;
+						RVLCOPY3VECTOR(N1, N__);
+						N__ = N + 6;
+						RVLCOPY3VECTOR(N2, N__);
+						b[0] = pSurf0->m_d;
+						b[1] = pSurf1->m_d;
+						b[2] = pSurf2->m_d;
+
+						tGC_->data.db = tGC;
+						cvSolve(N_, b_, tGC_);
+
+						RVLCOPYMX3X3T(RCG, RGC);
+						RVLQLIST_ADD_ENTRY(pPCGList, pPCG);
+
+						pPCG->Index = m_nPCGs;
+						pPCG->iFeature[0] = i_;
+						pPCG->iFeature[1] = j_;
+						pPCG->iFeature[2] = k_;
+						m_nPCGs++;
+					}
+
+					for (l = 0; l <= n3_; l++)
+					{
+						int l_;
+						
+						if (bModel){
+							l_=l;
+							if (j == l || i == l || k == l) continue;
+						}
+						else
+							l_=n3+3;
+
+//#ifdef RVLPSULM_INDEXING_DEBUG
+//						if (i_ == 0 && j_ == 2 && k_ == 1 && l_ == 5)
+//							int debug = 0;
+//#endif
+
+						CRVL3DSurface2 *pSurf3 = pPSuLM->m_3DSurfaceArray[l_];
+						double *N3 = pSurf3->m_N;
+
+						RVLMEM_ALLOC_STRUCT(pMem, RVLPSULM_INDICATOR, pIndicator)
+
+						//prebacivanje prva tri elementa indikatora + normiranje: 10°=0.1745329252 rad ~ 1
+						pIndicator->m_Descriptor[0] = prvi / 0.1745329252;
+						pIndicator->m_Descriptor[1] = drugi / 0.1745329252;
+						pIndicator->m_Descriptor[2] = treci / 0.1745329252;
+
+						//popunjavanje ostala èetiri mjesta deskriptora:
+						float *N3G = pIndicator->m_Descriptor + 3;
+						float *RHO3G = pIndicator->m_Descriptor + 6;
+
+						RVLMULMX3X3TVECT(RGC, N3, N3G);
+						//normiranje: 2*sin(10°/2)= 0.1743114855 ~ 1
+						N3G[0] = N3G[0] / 0.1743114855;
+						N3G[1] = N3G[1] / 0.1743114855;
+						N3G[2] = N3G[2] / 0.1743114855;
+						*RHO3G = (pSurf3->m_d - RVLDOTPRODUCT3(N3, tGC))/100.0; //normiranje: 100 mm ~ 1	
+
+						RVLQLIST_ADD_ENTRY(pIndicatorList, pIndicator);
+
+						pIndicator->iPCG = pPCG->Index;
+						pIndicator->iFeature = l_;
+						m_nIndicators++;
+
+					}
+					}
+				}
+		}
+	}
+	fclose(file);
+
+	delete[] PCGLT;
+
+	/*
+	//FFL PCG
 	for (i = 0; i < n; i++){
 		CRVL3DSurface2 *pSurf0 = pPSuLM->m_3DSurfaceArray[i];
 		double *N0 = pSurf0 -> m_N;
@@ -286,11 +506,14 @@ void CRVLPSuLMIndexing::GetIndicators(
 				}
 			}
 		}
-	}	
+	}*/	
 }
 
 void CRVLPSuLMIndexing::GenerateHypotheses()
 {
+#ifdef RVLPSULM_INDEXING_DEBUG 
+	FILE *fpDebug = fopen("C:\\RVL\\Debug\\IndexingDebug.txt", "w");
+#endif
 	CRVLPSuLMBuilder *pBuilder = (CRVLPSuLMBuilder *)(m_vpBuilder);
 
 	int r = 10000;	// broj rjesenja
@@ -304,51 +527,14 @@ void CRVLPSuLMIndexing::GenerateHypotheses()
 	// Svaki indikator je Query za radiusSearch
 
 	CRVLMem *pMem = &m_Mem;
-	
+
+	//CRVLMem *pMem = pBuilder->m_pMem;
+
 	RVLPSULM_INDICATOR *pIndicator = (RVLPSULM_INDICATOR *)(m_IndicatorList.pFirst);
 	RVLQLIST *EvidenceAccu_ = m_EvidenceAccu.m_ListArray;
 	RVLQLIST_INT_ENTRY *pEvidenceAccuEntry;
 	RVLPSULM_PCG *pMPCG, *pSPCG;
 	RVLPSULM_PCG **SPCG = new RVLPSULM_PCG*[m_nPCGs];
-
-	int i, j, k;
-	int brojac_aktivnih = 0;
-	int iMPCG;
-	while (pIndicator)
-	{
-		flann::Matrix<float> Q_(pIndicator->m_Descriptor, 1, 7);
-
-		// Pomoæu radiusSearch za svaki indikator iz m_IndicatorList dobiti sve indikatore iz baze unutar zadanog radijusa:
-		m_pIndex->radiusSearch(Q_ , R_, D_, 1.0f, flann::SearchParams(64));
-
-		// Za svaki vraæeni indeks vadi se iz m_iPCG indeks PCG-a, pomoæu tog indeksa se preko pokazivaèa u polju m_PCG dolazi do PCG-a:
-
-		
-		for (i = 0; R[i] >= 0 && i < r; i++){ 
-			iMPCG = m_iPCG[R[i]];
-			//dodavanje entry-a s indeksom indikatora scene
-			RVLMEM_ALLOC_STRUCT(pMem, RVLQLIST_INT_ENTRY, pEvidenceAccuEntry);
-			RVLQLISTARRAY_ADD_ENTRY(EvidenceAccu_, iMPCG, pEvidenceAccuEntry);
-			pEvidenceAccuEntry->i = pIndicator->iPCG;
-
-			//postavljanje flaga aktivnog PCG-a (ako nije aktivan)
-			
-			pMPCG = m_PCG[iMPCG];
-
-			if (!(pMPCG->Flags & RVLPSULM_PCG_FLAG_ACTIVE)){
-
-				m_PCG[m_iPCG[R[i]]]->Flags |= RVLPSULM_PCG_FLAG_ACTIVE;
-				m_PCGBuff[brojac_aktivnih] = iMPCG;
-				brojac_aktivnih++;
-			}
-				
-			
-		}
-
-		pIndicator = (RVLPSULM_INDICATOR *)(pIndicator->pNext);
-	}
-
-	m_Mem.Clear();
 
 	RVLPSULM_PCG *pPCG = (RVLPSULM_PCG *)(m_PCGList.pFirst);
 	RVLPSULM_PCG **ppPCG = SPCG;
@@ -362,6 +548,70 @@ void CRVLPSuLMIndexing::GenerateHypotheses()
 		pPCG = (RVLPSULM_PCG *)(pPCG->pNext);
 	}
 
+	int i, j, k;
+	int brojac_aktivnih = 0;
+	int iMPCG;
+	while (pIndicator)
+	{
+		flann::Matrix<float> Q_(pIndicator->m_Descriptor, 1, 7);
+
+		// Pomoæu radiusSearch za svaki indikator iz m_IndicatorList dobiti sve indikatore iz baze unutar zadanog radijusa:
+		m_pIndex->radiusSearch(Q_ , R_, D_, 2.24f, flann::SearchParams(64));
+
+		
+#ifdef RVLPSULM_INDEXING_DEBUG 
+		pSPCG = SPCG[pIndicator->iPCG];
+		fprintf(fpDebug, "\n\nQ: %d %d %d %d (PCG%d)\t", pSPCG->iFeature[0], pSPCG->iFeature[1], pSPCG->iFeature[2], pIndicator->iFeature, pIndicator->iPCG);	
+		for (i = 0; i < 7; i++){
+			fprintf(fpDebug, "%.4f\t", pIndicator->m_Descriptor[i]);
+		}
+		fprintf(fpDebug, "\n\nR:");
+				
+#endif
+
+		// Za svaki vraæeni indeks vadi se iz m_iPCG indeks PCG-a, pomoæu tog indeksa se preko pokazivaèa u polju m_PCG dolazi do PCG-a:	
+		for (i = 0; R[i] >= 0 && i < r; i++){ 
+			iMPCG = m_iPCG[R[i]];
+			//dodavanje entry-a s indeksom indikatora scene
+			RVLMEM_ALLOC_STRUCT(pMem, RVLQLIST_INT_ENTRY, pEvidenceAccuEntry);
+			RVLQLISTARRAY_ADD_ENTRY(EvidenceAccu_, iMPCG, pEvidenceAccuEntry);
+			pEvidenceAccuEntry->i = pIndicator->iPCG;
+
+			//postavljanje flaga aktivnog PCG-a (ako nije aktivan)
+			
+			pMPCG = m_PCG[iMPCG];
+			
+#ifdef RVLPSULM_INDEXING_DEBUG 
+			fprintf(fpDebug, "%d\t ",R[i] );
+
+#endif
+			if (!(pMPCG->Flags & RVLPSULM_PCG_FLAG_ACTIVE))
+			{
+				pMPCG->Flags |= RVLPSULM_PCG_FLAG_ACTIVE;
+				m_PCGBuff[brojac_aktivnih] = iMPCG;
+				brojac_aktivnih++;
+			}							
+		}
+
+		pIndicator = (RVLPSULM_INDICATOR *)(pIndicator->pNext);
+	}
+
+	delete[] D;
+	delete[] R;
+
+#ifdef RVLPSULM_INDEXING_DEBUG 
+	fclose(fpDebug);
+#endif
+
+#ifdef RVLPSULM_INDEXING_DEBUG 
+	fpDebug = fopen("C:\\RVL\\Debug\\IndexingMatchMatrix.txt", "w");
+	
+	int Histogram[30];
+
+	memset(Histogram, 0, 30 * sizeof(int));
+#endif
+
+	DWORD HypothesisCounter = 0;
 
 	int *brojac_SPCGs = new int[m_nPCGs]; // ako flag nije aktivan staviti na 1, ako je aktivan povecati za 1
 	int *SPCGBuff = new int[m_nPCGs];
@@ -370,39 +620,108 @@ void CRVLPSuLMIndexing::GenerateHypotheses()
 
 	RVLQLIST *pEvidenceAccu;
 
-	for (i = 0; i < brojac_aktivnih; i++){
-		pEvidenceAccu = EvidenceAccu_ + m_PCGBuff[i];
+	for (i = 0; i < brojac_aktivnih; i++)
+	{
+		iMPCG = m_PCGBuff[i];
+
+		pMPCG = m_PCG[iMPCG];
+
+		pMPCG->Flags &= ~RVLPSULM_PCG_FLAG_ACTIVE;
+
+		pEvidenceAccu = EvidenceAccu_ + iMPCG;
 		
 		pEvidenceAccuEntry = (RVLQLIST_INT_ENTRY*)(pEvidenceAccu->pFirst);
 		piSPCG = SPCGBuff;
-		while (pEvidenceAccuEntry){
-
+		while (pEvidenceAccuEntry)
+		{
 			pSPCG = SPCG[pEvidenceAccuEntry->i];
 
-			if (!(pSPCG->Flags & RVLPSULM_PCG_FLAG_ACTIVE)){
+			if (!(pSPCG->Flags & RVLPSULM_PCG_FLAG_ACTIVE))
+			{
 				brojac_SPCGs[pEvidenceAccuEntry->i] = 1;
 				pSPCG->Flags |= RVLPSULM_PCG_FLAG_ACTIVE;
 				*(piSPCG++) = pEvidenceAccuEntry->i;
 			}
-			else brojac_SPCGs[pEvidenceAccuEntry->i] ++;
+			else 
+				brojac_SPCGs[pEvidenceAccuEntry->i] ++;
 
 			pEvidenceAccuEntry = (RVLQLIST_INT_ENTRY*)(pEvidenceAccuEntry->pNext);
 		}
 
+#ifdef RVLPSULM_INDEXING_DEBUG 
+		fprintf(fpDebug, "M%d:\n\n", iMPCG);
+#endif
+
 		SPCGBuffEnd = piSPCG;
-		for (piSPCG = SPCGBuff; piSPCG < SPCGBuffEnd; piSPCG++){
+		RVLPSULM_HYPOTHESIS *pHypothesis;
+		double RtmpInv[9];
+		double ttmpInv[3];
+		double *RPCGM;
+		double *tPCGM;
+		double *RPCGS;
+		double *tPCGS;
+		double *RSM, *tSM;
+				
+		for (piSPCG = SPCGBuff; piSPCG < SPCGBuffEnd; piSPCG++)
+		{
+#ifdef RVLPSULM_INDEXING_DEBUG 
+			int count = brojac_SPCGs[*piSPCG];
 
+			fprintf(fpDebug, "%d(%d)\n", *piSPCG, count);
 
+			if (count > 29)
+				count = 29;
+
+			Histogram[count]++;
+#endif
+
+			pSPCG = SPCG[*piSPCG];
+
+			pSPCG->Flags &= ~RVLPSULM_PCG_FLAG_ACTIVE;
+
+			RPCGM = pMPCG->Pose.m_Rot;
+			tPCGM = pMPCG->Pose.m_X;
+
+			RPCGS = pSPCG->Pose.m_Rot;
+			tPCGS = pSPCG->Pose.m_X;
+
+			RVLMEM_ALLOC_STRUCT(pMem, RVLPSULM_HYPOTHESIS, pHypothesis);
+
+			RSM = pHypothesis->PoseSM.m_Rot;
+			tSM = pHypothesis->PoseSM.m_X;
+
+			RVLINVTRANSF3D(RPCGS, tPCGS, RtmpInv, ttmpInv);
+			RVLCOMPTRANSF3D(RPCGM, tPCGM, RtmpInv, ttmpInv, RSM, tSM);
+		
+			pHypothesis->Index = HypothesisCounter;
+			pHypothesis->pMPSuLM = pMPCG->pPSuLM;
+			
+			HypothesisCounter++;
+
+			pBuilder->m_HypothesisList.Add(pHypothesis);
 		}
 
-		
+#ifdef RVLPSULM_INDEXING_DEBUG 
+		fprintf(fpDebug, "\n");
+#endif
 	}
 
+#ifdef RVLPSULM_INDEXING_DEBUG 
+	fclose(fpDebug);
+
+	fpDebug = fopen("C:\\RVL\\Debug\\IndexingStatistics.txt", "w");
+
+	for (i = 0; i < 30; i++)
+		fprintf(fpDebug, "%d\n", Histogram[i]);
+
+	fclose(fpDebug);
+#endif
 	
+	m_Mem.Clear();
+
 	delete[] SPCG;
-	
-
-
+	delete[] brojac_SPCGs;
+	delete[] SPCGBuff;	
 }
 
 void CRVLPSuLMIndexing::UpdateBase()
@@ -410,7 +729,8 @@ void CRVLPSuLMIndexing::UpdateBase()
 }
 
 void CRVLPSuLMIndexing::CreateBase()
-{	
+{
+	
 	CRVLPSuLMBuilder *pBuilder = (CRVLPSuLMBuilder *)(m_vpBuilder);
 
 	ResetIndicatorList();
@@ -427,18 +747,23 @@ void CRVLPSuLMIndexing::CreateBase()
 	{
 		pPSuLM = (CRVLPSuLM *)(pBuilder->m_PSuLMList.GetNext());
 
-		GetIndicators(pPSuLM, true);
+		if (iPSuLM == 2)
+		{
+			GetIndicators(pPSuLM, true);	// otkomentirati
+			//GetIndicators(pPSuLM);	// zakomentirati
 
-		m_nMPCGs += m_nPCGs;
+			m_nMPCGs += m_nPCGs;
+
+			break;
+		}
 
 		iPSuLM++;
-
-		if (iPSuLM >= 10)
-			break;
 	}
 
 	m_EvidenceAccu.m_Size = m_nMPCGs;
 	m_EvidenceAccu.Init();
+	m_EvidenceAccu.Reset();
+
 	m_PCGBuff = new int[m_nMPCGs]; 
 
 	// napraviti FLANN indeks od m_IndicatorList	
@@ -448,19 +773,38 @@ void CRVLPSuLMIndexing::CreateBase()
 	int n = m_nIndicators;	// broj znacajki (indikatora)
 	int m = 7;		// dimenzije znacajke (indikatora)
 
+	//n = 30000;	// only for debugging!!!
+
 	float *IndicatorArray = new float[n * m]; //matrica znacajki
 	flann::Matrix<float> IndicatorArray_(IndicatorArray, n, m);
-	int *m_iPCG = new int[n];
+	m_iPCG = new int[n];
 
 	if (m_PCG)
 		delete[] m_PCG;
 
 	m_PCG = new RVLPSULM_PCG *[m_nPCGs];
+	
+	// Stvoriti matricu pointera na PCG-ove m_PCG
+	RVLPSULM_PCG *pPCG = (RVLPSULM_PCG *)(m_PCGList.pFirst);
+	RVLPSULM_PCG **ppPCG = m_PCG;
+
+	while (pPCG)
+	{
+		*(ppPCG++) = pPCG;
+
+		pPCG->Flags = 0x00;
+
+		pPCG = (RVLPSULM_PCG *)(pPCG->pNext);
+	}
 
 	int *piPCG = m_iPCG;
 	//int *pPCG = m_PCG;
 
 	RVLPSULM_INDICATOR *pIndicator = (RVLPSULM_INDICATOR *)(m_IndicatorList.pFirst);
+
+#ifdef RVLPSULM_INDEXING_DEBUG 
+	FILE *fpDebugInd = fopen("C:\\RVL\\Debug\\Indicators.txt", "w");
+#endif
 
 	int i = 0, j, k;
 	while (pIndicator)
@@ -473,30 +817,40 @@ void CRVLPSuLMIndexing::CreateBase()
 			j++;
 		}
 
-		i += 7;
-
 		// dodati iPCG od indikatora u m_iPCG
 		*(piPCG++) = pIndicator->iPCG;
+
+#ifdef RVLPSULM_INDEXING_DEBUG 
+		pPCG = m_PCG[pIndicator->iPCG];
+		fprintf(fpDebugInd, 
+			"Indikator: %d\t PCG: %d\t F: %d %d %d %d\t", 
+			i/7, pIndicator->iPCG, pPCG->iFeature[0], pPCG->iFeature[1], pPCG->iFeature[2], pIndicator->iFeature);
+		for (j = 0; j < 7; j++){
+			fprintf(fpDebugInd, "%.4f ", pIndicator->m_Descriptor[j]);
+		}
+		fprintf(fpDebugInd, "\n\n");	
+#endif
+
+		i += 7;
+
+		//if (i / 7 >= n)
+		//	break;
 
 		pIndicator = (RVLPSULM_INDICATOR *)(pIndicator->pNext);
 	}
 
-	m_pIndex = new 	flann::Index<flann::L2<float>>(IndicatorArray_, flann::KMeansIndexParams());
+#ifdef RVLPSULM_INDEXING_DEBUG 
+	fclose(fpDebugInd);
+#endif
+
+	m_pIndex = new 	flann::Index<flann::L2<float>>(IndicatorArray_, flann::KDTreeIndexParams());
 
 	// build index:
 	m_pIndex->buildIndex();
 
-	// Stvoriti matricu pointera na PCG-ove m_PCG
+	m_pIndex->save("base");
 
-	RVLPSULM_PCG *pPCG = (RVLPSULM_PCG *)(m_PCGList.pFirst);
-	RVLPSULM_PCG **ppPCG = m_PCG;
+	//m_pIndex->load("base");
 
-	while (pPCG)
-	{
-		*(ppPCG++) = pPCG;
-
-		pPCG->Flags = 0x00;
-
-		pPCG = (RVLPSULM_PCG *)(pPCG->pNext);
-	}
+	
 }

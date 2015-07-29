@@ -2435,7 +2435,9 @@ int main(int argc, char* argv[])
 			bSaveImage  = false;
 			SampleStep = 1;
 
+#ifdef RVLVTK
 			vtkSmartPointer<vtkOBJExporter> exporter;
+#endif
 
 			switch(key){
 			case '0':
