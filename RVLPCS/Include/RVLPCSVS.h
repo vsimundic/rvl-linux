@@ -11,8 +11,6 @@
 
 //#define RVLSYS_PSULMBRLM_UPDATE_LOG_FILE
 
-void RVLPCSDisplayMouseCallback(int event, int x, int y, int flags, void* vpData);
-
 struct RVLPCS_DISPLAY
 {
 	CRVLGUI *m_pGUI;
@@ -43,7 +41,8 @@ public:
 	CRVLPlanarSurfaceDetector m_PSD;	
 	CRVLDelaunay *m_pDelaunay;	
 	int m_ConvexSegmentThr;
-	RVLPCS_DISPLAY m_Display;
+	//RVLPCS_DISPLAY m_Display;
+	int m_nObjects;
 
 public:
 	CRVLPCSVS();
@@ -51,5 +50,5 @@ public:
 	DWORD Init(char *CfgFile2Name = NULL);
 	void Clear();
 	void CreateParamList();
-	void Display();
+	void Display(CRVLPCSGUI *pGUI);
 };

@@ -18895,3 +18895,5 @@ void CRVLPlanarSurfaceDetector::Get3DPlanarSurfaceBoundary(
 		pContour = (RVL3DCONTOUR *)(pContour->pNext);
 	}
 }
+
+

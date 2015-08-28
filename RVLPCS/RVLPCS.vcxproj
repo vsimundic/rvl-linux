@@ -148,6 +148,7 @@
   <ItemGroup>
     <ClInclude Include="Include\RVLPC.h" />
     <ClInclude Include="Include\RVLPCS.h" />
+    <ClInclude Include="Include\RVLPCSGUI.h" />
     <ClInclude Include="Include\RVLPCSVS.h" />
     <ClInclude Include="Include\RVLPlanarSurfaceDetector.h" />
     <ClInclude Include="Include\RVLSegmentation.h" />
@@ -160,6 +161,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="RVLPC.cpp" />
+    <ClCompile Include="RVLPCSGUI.cpp" />
     <ClCompile Include="RVLPCSVS.cpp" />
     <ClCompile Include="RVLPlanarSurfaceDetector.cpp" />
     <ClCompile Include="RVLSegmentation.cpp" />

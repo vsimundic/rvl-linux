@@ -2745,7 +2745,7 @@ int main(int argc, char* argv[])
 				VTKTexture = (VTKTexture + 1) % 4;
  
 				if(bVTKRendererActive)
-					RVLDisplaySegmentedMesh3D(&Renderer, &(VS.m_AImage.m_C2DRegion.m_ObjectList), nObjects, w, h, pointmap,
+					RVLDisplaySegmentedMesh3D(&Renderer, &(VS.m_AImage.m_C2DRegion.m_ObjectList), nObjects, w, h, VS.m_PSD.m_nFOVExtensions, pointmap,
 						VS.m_PSD.m_Point3DMap, VTKTexture, pHSVImage);
 				else
 #endif

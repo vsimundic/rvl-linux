@@ -14,5 +14,6 @@
 
 #include "RVLSegmentation.h"
 #include "RVLPlanarSurfaceDetector.h"
+#include "RVLPCSGUI.h"
 #include "RVLPCSVS.h"
 #include "RVLPC.h"

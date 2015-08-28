@@ -5838,12 +5838,107 @@ void RVLDisplayRGBSegmentation(
 	}
 }
 
+void RVLSegmentationSaveSelection(
+	CRVLMPtrChain *pTriangleList,
+	int nSegments,
+	DWORD Flags,
+	char *FileName)
+{
+	bool *bSegmentSelected = new bool[nSegments];
+
+	memset(bSegmentSelected, 0, nSegments * sizeof(bool));
+
+	bool bSelectedSegments = false;
+
+	CRVL2DRegion2 *pTriangle;
+
+	pTriangleList->Start();
+
+	while (pTriangleList->m_pNext)
+	{
+		pTriangle = (CRVL2DRegion2 *)(pTriangleList->GetNext());
+
+		if (pTriangle->m_Flags & RVLOBJ2_FLAG_REJECTED)
+			continue;
+
+		if (pTriangle->m_Label < 0 || pTriangle->m_Label >= nSegments)
+			continue;
+
+		if (pTriangle->m_Flags & Flags)
+		{
+			bSelectedSegments = true;
+
+			bSegmentSelected[pTriangle->m_Label] = true;
+		}
+	}
+
+	if (bSelectedSegments)
+	{
+		FILE *fp = fopen(FileName, "w");
+
+		for (int iSegment = 0; iSegment < nSegments; iSegment++)
+			fprintf(fp, "%d\t%d\n", iSegment, bSegmentSelected[iSegment]);
+
+		fclose(fp);
+	}
+
+	delete[] bSegmentSelected;
+}
+
+void RVLSegmentationLoadSelection(
+	CRVLMPtrChain *pTriangleList,
+	int nSegments,
+	DWORD Flags,
+	char *FileName)
+{
+	bool *bSegmentSelected = new bool[nSegments];
+
+	memset(bSegmentSelected, 0, nSegments * sizeof(bool));
+
+	FILE *fp = fopen(FileName, "r");
+
+	if (fp)
+	{
+		int iTmp1, iTmp2;
+
+		for (int iSegment = 0; iSegment < nSegments; iSegment++)
+		{
+			fscanf(fp, "%d\t%d\n", &iTmp1, &iTmp2);
+
+			bSegmentSelected[iSegment] = (iTmp2 > 0);
+		}
+
+		fclose(fp);
+	}
+
+	CRVL2DRegion2 *pTriangle;
+
+	pTriangleList->Start();
+
+	while (pTriangleList->m_pNext)
+	{
+		pTriangle = (CRVL2DRegion2 *)(pTriangleList->GetNext());
+
+		if (pTriangle->m_Flags & RVLOBJ2_FLAG_REJECTED)
+			continue;
+
+		if (pTriangle->m_Label < 0 || pTriangle->m_Label >= nSegments)
+			continue;
+
+		if (bSegmentSelected[pTriangle->m_Label])
+			pTriangle->m_Flags |= Flags;
+	}
+
+	delete[] bSegmentSelected;
+}
+
 #ifdef RVLVTK
 void RVLDisplaySegmentedMesh3D(CRVLVTKRenderer *pRenderer,
                                 CRVLMPtrChain *pTriangleList,
                                 int nObjects,
                                 int w, 
                                 int h,
+								int nFOVExtensions,
                                 int *pointmap_,
                                 RVL3DPOINT2 **Point3DMap_,
                                 int colortype,
@@ -5867,7 +5962,7 @@ void RVLDisplaySegmentedMesh3D(CRVLVTKRenderer *pRenderer,
             }
       }
       //points map
-      memset(pointmap_, 255, 3 * w * h * sizeof(int));
+	  memset(pointmap_, 255, (2 * nFOVExtensions + 1) * w * h * sizeof(int));
       //Setting texture (colortype = 1)
       vtkSmartPointer<vtkFloatArray> texCoords;
       vtkSmartPointer<vtkImageData> texImg;

@@ -293,12 +293,23 @@ void RVLDisplayRGBSegmentation(
 	IplImage *pInImage,
 	RVLARRAY_<RVLSWER_SEGMENT<RVLSWER_NODE2>> &SegmentArray,
 	IplImage *pOutImage);
+void RVLSegmentationSaveSelection(
+	CRVLMPtrChain *pTriangleList,
+	int nSegments,
+	DWORD Flags,
+	char *FileName);
+void RVLSegmentationLoadSelection(
+	CRVLMPtrChain *pTriangleList,
+	int nSegments,
+	DWORD Flags,
+	char *FileName);
 #ifdef RVLVTK
 void RVLDisplaySegmentedMesh3D(CRVLVTKRenderer *pRenderer,
                                 CRVLMPtrChain *pTriangleList,
                                 int nObjects,
                                 int w, 
                                 int h,
+								int nFOVExtensions,
                                 int *pointmap,
                                 RVL3DPOINT2 **Point3DMap,
                                 int colortype = 0,
