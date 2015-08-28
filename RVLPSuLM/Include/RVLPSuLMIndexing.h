@@ -22,6 +22,12 @@ struct RVLPSULM_PCG
 	void *pNext;
 };
 
+struct RVLPCG_MATCH
+{
+	RVLPSULM_PCG *pMPCG, *pSPCG;
+	void *pNext;
+};
+
 class CRVLPSuLMIndexing
 {
 public:
@@ -41,6 +47,7 @@ public:
 	RVLQLIST m_PCGList;
 	RVLQLIST m_IndicatorList;
 	int m_nIndicators;
+	int m_nMIndicators;
 	int *m_iPCG;
 	RVLPSULM_PCG **m_PCG;
 	flann::Index<flann::L2<float>> *m_pIndex;
@@ -52,4 +59,5 @@ public:
 	CRVLQListArray m_EvidenceAccu;
 	int *m_PCGBuff;
 	CRVLMem m_Mem;
+	int m_nFeatures;
 };
