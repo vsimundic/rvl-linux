@@ -40,7 +40,7 @@ public:
 	void GenerateHypotheses();
 	void UpdateBase();
 	void CreateBase();
-	void ResetIndicatorList();
+	void ResetIndicatorAndPCGList();
 
 public:
 	void *m_vpBuilder;

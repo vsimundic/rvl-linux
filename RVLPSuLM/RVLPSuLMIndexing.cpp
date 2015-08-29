@@ -124,10 +124,12 @@ void CRVLPSuLMIndexing::Init()
 	m_Mem.Create(10000000);
 }
 
-void CRVLPSuLMIndexing::ResetIndicatorList()
+void CRVLPSuLMIndexing::ResetIndicatorAndPCGList()
 {
 	RVLQLIST *pIndicatorList = &m_IndicatorList; 
 	RVLQLIST_INIT(pIndicatorList);
+	RVLQLIST *pPCGList = &m_PCGList;
+	RVLQLIST_INIT(pPCGList);
 }
 
 void CRVLPSuLMIndexing::GetIndicators(
@@ -140,15 +142,16 @@ void CRVLPSuLMIndexing::GetIndicators(
 
 	RVLQLIST *pPCGList = &m_PCGList;
 
-	RVLQLIST_INIT(pPCGList)
-
 	RVLQLIST *pIndicatorList = &m_IndicatorList;
 	
-	if (!bModel)
+	if (bModel)
+		m_nPCGs = m_nMPCGs;
+	else
+	{
+		m_nPCGs = 0;
+		RVLQLIST_INIT(pPCGList);
 		RVLQLIST_INIT(pIndicatorList);
-
-	m_nPCGs = 0;
-		
+	}		
 
 	int i, j, k, l, n;
 	n = pPSuLM->m_n3DSurfaces;
@@ -795,7 +798,7 @@ void CRVLPSuLMIndexing::CreateBase()
 	
 	CRVLPSuLMBuilder *pBuilder = (CRVLPSuLMBuilder *)(m_vpBuilder);
 
-	ResetIndicatorList();
+	ResetIndicatorAndPCGList();
 
 	int iPSuLM = 0;
 
@@ -817,14 +820,15 @@ void CRVLPSuLMIndexing::CreateBase()
 		GetIndicators(pPSuLM, true);  // otkomentirati
 		
 		//GetIndicators(pPSuLM);	// zakomentirati
-			m_nMPCGs += m_nPCGs;
-			m_nMIndicators += m_nIndicators;
+		m_nMPCGs = m_nPCGs;
+		m_nMIndicators += m_nIndicators;
 		//	break;
 		//}
 
+		if (iPSuLM >= 25)
+			break;
+
 		iPSuLM++;
-
-
 	}
 
 
@@ -887,16 +891,16 @@ void CRVLPSuLMIndexing::CreateBase()
 		// dodati iPCG od indikatora u m_iPCG
 		*(piPCG++) = pIndicator->iPCG;
 
-#ifdef RVLPSULM_INDEXING_DEBUG 
-		pPCG = m_PCG[pIndicator->iPCG];
-		fprintf(fpDebugInd, 
-			"Indikator: %d\t PCG: %d\t F: %d %d %d %d\t", 
-			i/7, pIndicator->iPCG, pPCG->iFeature[0], pPCG->iFeature[1], pPCG->iFeature[2], pIndicator->iFeature);
-		for (j = 0; j < 7; j++){
-			fprintf(fpDebugInd, "%.4f ", pIndicator->m_Descriptor[j]);
-		}
-		fprintf(fpDebugInd, "\n\n");
-#endif
+//#ifdef RVLPSULM_INDEXING_DEBUG 
+//		pPCG = m_PCG[pIndicator->iPCG];
+//		fprintf(fpDebugInd, 
+//			"Indikator: %d\tPCG: %d\tModel: %d\tF: %d %d %d %d\t", 
+//			i/7, pIndicator->iPCG, pPCG->pPSuLM->m_Index, pPCG->iFeature[0], pPCG->iFeature[1], pPCG->iFeature[2], pIndicator->iFeature);
+//		for (j = 0; j < 7; j++){
+//			fprintf(fpDebugInd, "%.4f ", pIndicator->m_Descriptor[j]);
+//		}
+//		fprintf(fpDebugInd, "\n\n");
+//#endif
 
 		i += 7;
 	
@@ -913,6 +917,7 @@ void CRVLPSuLMIndexing::CreateBase()
 	
 
 	
+	//flann::Index<flann::L2<float> > autotuned_index(IndicatorArray_, flann::SavedIndexParams("base"));
 
 	
 	//FILE *file;
@@ -923,8 +928,7 @@ void CRVLPSuLMIndexing::CreateBase()
 	//	// file exists
 	//	flann::SavedIndexParams savedIndexParamas("base");
 	//	
-	//	m_pIndex = new 	flann::Index<flann::L2<float>>(savedIndexParamas);
-	//	
+	//	m_pIndex = new 	flann::Index<flann::L2<float>>(IndicatorArray_, savedIndexParamas);
 	//	
 	//	//m_pIndex->load("base");
 	//}
@@ -934,7 +938,7 @@ void CRVLPSuLMIndexing::CreateBase()
 		// file not found
 		// build index:
 		m_pIndex->buildIndex();
-		m_pIndex->save("base");
+		//m_pIndex->save("base");
 		
 			
 	}

@@ -1457,47 +1457,60 @@ BOOL CRVLPSuLMBuilder::Create(CRVLPSuLM *pPSuLM,
 		RVL3DPOINT2  **Vertex2DArray = (RVL3DPOINT2  **)(pMem->Alloc(m_pPSD->m_n3DPoints * sizeof(RVL3DPOINT2  *))); 
 		memset(Vertex2DArray, 0x00, m_pPSD->m_n3DPoints * sizeof(RVL3DPOINT2 *));
 		RVL3DPOINT2  **pp2DVertexArray;
-
-
-		//Allocate space for 3D contour points
-		double *Contour3DPoints = (double *)(pMem->Alloc(3 * iWidth * iHeight * sizeof(double)));
+		double *Contour3DPoints;
 		double *p3DContourPoints;
-
-		//Allocate space for 2D contour points
-		BYTE *pFreeMem = m_pMem2->m_pFreeMem;
-		CvPoint *Contour2DPtArray = (CvPoint *)(m_pMem2->Alloc(iWidth * iHeight * sizeof(CvPoint)));
+		BYTE *pFreeMem;
+		CvPoint *Contour2DPtArray;
 		CRVLMPtrChain Contour2DMem;
-		Contour2DMem.m_pMem = m_pMem2;
 		CRVL2DContour Contour2D;
-		Contour2DMem.Add(&Contour2D);
-		Contour2D.m_ContourIPArray = (RVLIPOINT *)Contour2DPtArray;
-
-		//Allocate space for 3D contours of LEVEL2 regions
-		//CRVL3DContour **Contour3DArray = (CRVL3DContour **)(m_pMem->Alloc(nTotalNo2DContours * sizeof(CRVL3DContour *))); 
-		//memset(Contour3DArray, 0x00, nTotalNo2DContours * sizeof(CRVL3DContour *));
-		//CRVL3DContour **pp3DContourArray, **pp3DContourStart;
-
-		//Allocate space for 2D contours of LEVEL2 regions
-		CRVL2DContour **Contour2DArray = (CRVL2DContour **)(pMem->Alloc(nTotalNo2DContours * sizeof(CRVL2DContour *))); 
-		memset(Contour2DArray, 0x00, nTotalNo2DContours * sizeof(CRVL2DContour *));
-		CRVL2DContour **pp2DContourArray; //, **pp2DContourStart;
-		
-		//Allocate space for vertices (RVLIPOINT) of LEVEL2 regions 
-		RVLIPOINT *PointI2DArray = (RVLIPOINT *)(pMem->Alloc(m_pPSD->m_n3DPoints * sizeof(RVLIPOINT))); 
-		RVLIPOINT *p2DPointIArray;	
-
-		//Allocate space for 3D convex segments of LEVEL2 regions
-		CRVL3DSurface2 **ConvexSegment3DArray = (CRVL3DSurface2 **)(pMem->Alloc(nTotalNo2DContours * sizeof(CRVL3DSurface2 *))); 
-		memset(ConvexSegment3DArray, 0x00, nTotalNo2DContours * sizeof(CRVL3DSurface2 *));
-		CRVL3DSurface2 **pp3DConvexSegmentArray; //, **pp3DConvexSegmentArrayStart;
-
-		//allocate temp array to store converted /transformed vertices
-		double *TransformedVertexArray = new double[m_pPSD->m_n3DPoints*2];
-		//double *pTransformedVertexArray;
-		
-		//OpenCV 
+		CRVL2DContour **Contour2DArray;
+		CRVL2DContour **pp2DContourArray;
+		RVLIPOINT *PointI2DArray;
+		RVLIPOINT *p2DPointIArray;
+		CRVL3DSurface2 **ConvexSegment3DArray;
+		CRVL3DSurface2 **pp3DConvexSegmentArray;
 		CvSeq *pSeqContourApprox;
-		CvSeq *pSeqContour = cvCreateSeq((CV_SEQ_ELTYPE_POINT | CV_SEQ_KIND_CURVE | CV_SEQ_FLAG_CLOSED), sizeof(CvContour), sizeof(CvPoint), storage);  //CV_SEQ_POLYGON
+		CvSeq *pSeqContour;
+		double *TransformedVertexArray;
+
+		if (m_pPSD->m_Flags & RVLPSD_MESH_CONVEX)
+		{
+			//Allocate space for 3D contour points
+			Contour3DPoints = (double *)(pMem->Alloc(3 * iWidth * iHeight * sizeof(double)));
+
+			//Allocate space for 2D contour points
+			pFreeMem = m_pMem2->m_pFreeMem;
+			Contour2DPtArray = (CvPoint *)(m_pMem2->Alloc(iWidth * iHeight * sizeof(CvPoint)));
+			Contour2DMem.m_pMem = m_pMem2;
+			Contour2DMem.Add(&Contour2D);
+			Contour2D.m_ContourIPArray = (RVLIPOINT *)Contour2DPtArray;
+
+			//Allocate space for 3D contours of LEVEL2 regions
+			//CRVL3DContour **Contour3DArray = (CRVL3DContour **)(m_pMem->Alloc(nTotalNo2DContours * sizeof(CRVL3DContour *))); 
+			//memset(Contour3DArray, 0x00, nTotalNo2DContours * sizeof(CRVL3DContour *));
+			//CRVL3DContour **pp3DContourArray, **pp3DContourStart;
+
+			//Allocate space for 2D contours of LEVEL2 regions
+			Contour2DArray = (CRVL2DContour **)(pMem->Alloc(nTotalNo2DContours * sizeof(CRVL2DContour *)));
+			memset(Contour2DArray, 0x00, nTotalNo2DContours * sizeof(CRVL2DContour *));
+			pp2DContourArray; //, **pp2DContourStart;
+
+			//Allocate space for vertices (RVLIPOINT) of LEVEL2 regions 
+			PointI2DArray = (RVLIPOINT *)(pMem->Alloc(m_pPSD->m_n3DPoints * sizeof(RVLIPOINT)));
+			p2DPointIArray;
+
+			//Allocate space for 3D convex segments of LEVEL2 regions
+			ConvexSegment3DArray = (CRVL3DSurface2 **)(pMem->Alloc(nTotalNo2DContours * sizeof(CRVL3DSurface2 *)));
+			memset(ConvexSegment3DArray, 0x00, nTotalNo2DContours * sizeof(CRVL3DSurface2 *));
+			pp3DConvexSegmentArray; //, **pp3DConvexSegmentArrayStart;
+
+			//allocate temp array to store converted /transformed vertices
+			TransformedVertexArray = new double[m_pPSD->m_n3DPoints * 2];
+			//double *pTransformedVertexArray;
+
+			//OpenCV 
+			pSeqContour = cvCreateSeq((CV_SEQ_ELTYPE_POINT | CV_SEQ_KIND_CURVE | CV_SEQ_FLAG_CLOSED), sizeof(CvContour), sizeof(CvPoint), storage);  //CV_SEQ_POLYGON
+		}
 
 		int n3DContours;
 
@@ -1852,7 +1865,8 @@ BOOL CRVLPSuLMBuilder::Create(CRVLPSuLM *pPSuLM,
 
 		/////
 		
-		m_pMem2->m_pFreeMem = pFreeMem;
+		if (m_pPSD->m_Flags & RVLPSD_MESH_CONVEX)
+			m_pMem2->m_pFreeMem = pFreeMem;
 
 		CRVL3DSurface2 **SurfaceArray;
 
@@ -2830,7 +2844,8 @@ BOOL CRVLPSuLMBuilder::Create(CRVLPSuLM *pPSuLM,
 #endif
 		
 		//exit elegantly
-		delete[] TransformedVertexArray;
+		if (m_pPSD->m_Flags & RVLPSD_MESH_CONVEX)
+			delete[] TransformedVertexArray;
 	}	// if(m_Flags & RVLPSULMBUILDER_FLAG_SURFACES)
 
 	//ADD CODE HERE TO STORE TO FILE AND CHECK USING PYTHON!!
