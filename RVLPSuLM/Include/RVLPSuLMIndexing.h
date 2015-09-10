@@ -1,7 +1,33 @@
 #pragma once
 
 #define RVLPSULM_PCG_FLAG_ACTIVE	0x01
-#define RVLPSULM_INDEXING_DEBUG
+
+//#define RVLPSULM_INDEXING_FLANN
+
+//#define RVLPSULM_INDEXING_DEBUG
+//#define RVLPSULM_INDEXING_MINDICATORS_DEBUG
+//#define RVLPSULM_INDEXING_SINDICATORS_DEBUG
+//#define RVLPSULM_INDEXING_INDEXING_DEBUG
+
+#ifdef RVLPSULM_INDEXING_MINDICATORS_DEBUG
+#define RVLPSULM_INDEXING_INDICATORS_DEBUG
+#else
+#ifdef RVLPSULM_INDEXING_SINDICATORS_DEBUG
+#define RVLPSULM_INDEXING_INDICATORS_DEBUG
+#endif
+#endif
+
+#define RVLPSULM_INDEXING_GET_ORIENTATION(N, abs, iOrientation)\
+{\
+	abs[0] = RVLABS(N[0]);\
+	abs[1] = RVLABS(N[1]);\
+	abs[2] = RVLABS(N[2]);\
+	iOrientation = (abs[0] >= abs[1] ? 0 : 1);\
+	if(abs[2] > abs[iOrientation])\
+		iOrientation = 2;\
+	if(N[iOrientation] < 0.0f)\
+		iOrientation += 3;\
+}
 
 struct RVLPSULM_INDICATOR
 {
@@ -11,6 +37,12 @@ struct RVLPSULM_INDICATOR
 	void *pNext;
 };
 
+struct RVLPSULM_INDICATOR_MATCH
+{
+	int iS;
+	int iM;
+	void *pNext;
+};
 
 struct RVLPSULM_PCG
 {
@@ -41,6 +73,10 @@ public:
 	void UpdateBase();
 	void CreateBase();
 	void ResetIndicatorAndPCGList();
+	void BuildIndex();
+	void Search(
+		RVLPSULM_INDICATOR *pIndicator,
+		RVLARRAY_<int> &MatchArray);
 
 public:
 	void *m_vpBuilder;
@@ -60,4 +96,16 @@ public:
 	int *m_PCGBuff;
 	CRVLMem m_Mem;
 	int m_nFeatures;
+	float *m_FeatureArray;
+	float m_dBinSize;
+	float m_dRange;
+	float m_dOffset;
+	RVLPSULM_INDICATOR *m_MIndicatorArray;
+	int *m_IndexMem;
+	RVLARRAY_<int> *m_Index;
+	int m_maxnIndicatorsInBin;
+	int *m_MatchMem;
+
+private:
+	int m_ndBins;
 };

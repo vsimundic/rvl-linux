@@ -1,3 +1,9 @@
+template <class Type> struct RVLARRAY_
+{
+	Type *Element;
+	int n;
+};
+
 struct RVLARRAY
 {
 	BYTE *pFirst;

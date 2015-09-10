@@ -33,6 +33,7 @@ BYTE atan45_LookUpTable[1001];
 BYTE log10_LookUpTable[2001];
 int chi2_LookUpTable[1201];
 double lnFactorial_LookUpTable[101];
+int bitCount_LookUpTable[65536];
 
 /////
 
@@ -551,6 +552,21 @@ void rtUtilInit()
 
 		lnFactorial_LookUpTable[i] = lnFactorial;
 	}
+
+	for (i = 0; i < 65536; i++)
+	{
+		int count = 0;
+		unsigned int i_ = (unsigned int)i;
+
+		for (int j = 0; j < 16; j++)
+		{
+			if (i_ & (1 << j))
+				count++;
+		}
+
+		bitCount_LookUpTable[i] = count;
+	}
+		
 }
 
 // Real-time angle calculation. [0 to 90 deg] -> [0 to 120]
