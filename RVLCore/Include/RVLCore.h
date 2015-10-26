@@ -71,3 +71,4 @@ extern double RVLMatrixC33[9];
 extern int chi2_LookUpTable[1201];
 extern unsigned char RVLColorMap[64 * 3];
 extern double lnFactorial_LookUpTable[101];
+extern int bitCount_LookUpTable[65536];
