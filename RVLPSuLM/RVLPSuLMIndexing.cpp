@@ -218,6 +218,51 @@ void CRVLPSuLMIndexing::GetIndicators(
 		memset(PCGLT, 0, n * n * n * sizeof(RVLPSULM_PCG *));
 	}
 
+	double eNThr = cos(30.0 * DEG2RAD);
+
+	int *FeatureArray = new int[n];
+
+	int iFeature = 0;
+
+	int iFeature_, iFeature__;
+	CRVL3DSurface2 *pSurf, *pSurf__;
+	double *N, *N__;
+	double eN, ed;
+
+	for (iFeature_ = 0; iFeature_ < pPSuLM->m_n3DSurfacesTotal && iFeature < n; iFeature_++)
+	{
+		pSurf = pPSuLM->m_3DSurfaceArray[iFeature_];
+
+		N = pSurf->m_N;
+
+		for (iFeature__ = 0; iFeature__ < iFeature; iFeature__++)
+		{
+			pSurf__ = pPSuLM->m_3DSurfaceArray[FeatureArray[iFeature__]];
+
+			N__ = pSurf__->m_N;
+
+			eN = RVLDOTPRODUCT3(N, N__);
+
+			if (eN < eNThr)
+				continue;
+
+			ed = pSurf__->m_d - pSurf->m_d;
+
+			if (RVLABS(ed) <= m_dBinSize)
+				break;
+		}
+
+		if (iFeature__ == iFeature)
+		{
+			FeatureArray[iFeature] = iFeature_;
+
+			iFeature++;
+		}
+	}
+
+	if (iFeature < n)
+		n = iFeature;
+	
 	int n_ = (!bModel ? 4 * n - 10 : 0);
 	int m = pPSuLM->m_n3DLines;
 
@@ -234,7 +279,7 @@ void CRVLPSuLMIndexing::GetIndicators(
 
 	CvMat *N_ = cvCreateMat(3, 3, CV_64FC1);
 
-	double *N = N_->data.db;
+	N = N_->data.db;
 
 	CvMat *b_ = cvCreateMat(3, 1, CV_64FC1);
 
@@ -248,7 +293,6 @@ void CRVLPSuLMIndexing::GetIndicators(
 
 	int maxnIndicators = (bModel ? n * n * n * n : 1000);
 
-	double *N__;
 	int PCGID;
 	bool bCreatePCG;
 	
@@ -266,8 +310,12 @@ void CRVLPSuLMIndexing::GetIndicators(
 		for (i = m0; i <= n0; i++){
 			int i_;
 			i_ = i;
-			CRVL3DSurface2 *pSurf0 = pPSuLM->m_3DSurfaceArray[i_];
+			//CRVL3DSurface2 *pSurf0 = pPSuLM->m_3DSurfaceArray[i_];
+			CRVL3DSurface2 *pSurf0 = pPSuLM->m_3DSurfaceArray[FeatureArray[i_]];
 			double *N0 = pSurf0->m_N;
+
+			if (RVLABS(N0[2]) < COS45)
+				continue;
 
 			if (bModel) {
 				n1 = n-1;
@@ -275,10 +323,12 @@ void CRVLPSuLMIndexing::GetIndicators(
 			}
 			else {
 				r1 = r0 - i;
-				n1 = n - 2;
+				//n1 = n - 2;
+				n1 = n - 1;
 				if (n1 > r1)
 					n1 = r1;
-				m1 = i;
+				//m1 = i;
+				m1 = 0;
 			}
 
 
@@ -287,24 +337,28 @@ void CRVLPSuLMIndexing::GetIndicators(
 				
 				for (j = m1; j <= n1 && m_nIndicators < maxnIndicators; j++)
 				{
+					if (i == j) 
+						continue;
 				
 				int j_;
 				if (bModel){
 					j_=j;
 					n2 = n - 1;
 					m2 = 0;
-
-					if (i == j) continue;
 				}
 				else{
-					j_=j+1;
+					//j_=j+1;
+					j_ = j;
 					r2 = r1 - j;
-					n2 = n - 3;
+					//n2 = n - 3;
+					n2 = n - 1;
 					if (n2 > r2)
 						n2 = r2;
-					m2 = j;
+					//m2 = j;
+					m2 = 0;
 				}
-				CRVL3DSurface2 *pSurf1 = pPSuLM->m_3DSurfaceArray[j_];
+				//CRVL3DSurface2 *pSurf1 = pPSuLM->m_3DSurfaceArray[j_];
+				CRVL3DSurface2 *pSurf1 = pPSuLM->m_3DSurfaceArray[FeatureArray[j_]];
 				double *N1 = pSurf1->m_N;
 
 				fTmp = RVLDOTPRODUCT3(N0, N1);
@@ -322,20 +376,24 @@ void CRVLPSuLMIndexing::GetIndicators(
 
 				for (k = m2; k <= n2 && m_nIndicators < maxnIndicators; k++)
 				{
+					if (j == k || i == k)
+						continue;
+
 					int k_;
 					
 					if (bModel){
 						k_ = k;
 						n3_ = n - 1;
-						if (j == k || i == k) continue;
 					}
 					else {
-						k_ = k+2;
+						k_ = k;
+						//k_ = k+2;
 						r3 = r2 - k;
 						n3_ = (r3 < n && r3 != i_ && r3 != j_ && r3 != k_ ? 0 : -1);
 					}
 
-					CRVL3DSurface2 *pSurf2 = pPSuLM->m_3DSurfaceArray[k_];
+					//CRVL3DSurface2 *pSurf2 = pPSuLM->m_3DSurfaceArray[k_];
+					CRVL3DSurface2 *pSurf2 = pPSuLM->m_3DSurfaceArray[FeatureArray[k_]];
 
 					double *N2 = pSurf2->m_N;
 
@@ -393,9 +451,9 @@ void CRVLPSuLMIndexing::GetIndicators(
 						RVLQLIST_ADD_ENTRY(pPCGList, pPCG);
 
 						pPCG->Index = m_nPCGs;
-						pPCG->iFeature[0] = i_;
-						pPCG->iFeature[1] = j_;
-						pPCG->iFeature[2] = k_;
+						pPCG->iFeature[0] = FeatureArray[i_];
+						pPCG->iFeature[1] = FeatureArray[j_];
+						pPCG->iFeature[2] = FeatureArray[k_];
 						pPCG->pPSuLM = pPSuLM;
 						m_nPCGs++;
 					}
@@ -416,7 +474,8 @@ void CRVLPSuLMIndexing::GetIndicators(
 //							int debug = 0;
 //#endif
 
-						CRVL3DSurface2 *pSurf3 = pPSuLM->m_3DSurfaceArray[l_];
+						//CRVL3DSurface2 *pSurf3 = pPSuLM->m_3DSurfaceArray[l_];
+						CRVL3DSurface2 *pSurf3 = pPSuLM->m_3DSurfaceArray[FeatureArray[l_]];
 						double *N3 = pSurf3->m_N;
 
 						RVLMEM_ALLOC_STRUCT(pMem, RVLPSULM_INDICATOR, pIndicator)
@@ -441,7 +500,7 @@ void CRVLPSuLMIndexing::GetIndicators(
 						RVLQLIST_ADD_ENTRY(pIndicatorList, pIndicator);
 
 						pIndicator->iPCG = pPCG->Index;
-						pIndicator->iFeature = l_;
+						pIndicator->iFeature = FeatureArray[l_];
 
 						//if (pPCG->iFeature[0] == 0 && pPCG->iFeature[1] == 8 && pPCG->iFeature[2] == 29 && pIndicator->iFeature == 28)
 						//	int debug = 0;
@@ -470,6 +529,8 @@ void CRVLPSuLMIndexing::GetIndicators(
 
 	if (!bModel)
 		delete[] PCGLT;
+
+	delete[] FeatureArray;
 
 #ifdef RVLPSULM_INDEXING_INDICATORS_DEBUG
 	if (fpDebugInd)
@@ -607,6 +668,7 @@ void CRVLPSuLMIndexing::GetIndicators(
 
 void CRVLPSuLMIndexing::GenerateHypotheses()
 {
+
 #ifdef RVLPSULM_INDEXING_INDEXING_DEBUG 
 	FILE *fpIndexingDebug = fopen("C:\\RVL\\Debug\\IndexingDebug.txt", "w");
 #endif
@@ -652,6 +714,10 @@ void CRVLPSuLMIndexing::GenerateHypotheses()
 
 		pPCG = (RVLPSULM_PCG *)(pPCG->pNext);
 	}
+
+	//char *WordLT;
+
+	//AssignWordsToIndicators(SPCG, &WordLT);
 
 	RVLPSULM_INDICATOR *pIndicator = (RVLPSULM_INDICATOR *)(m_IndicatorList.pFirst);
 
@@ -1344,3 +1410,60 @@ void CRVLPSuLMIndexing::Search(
 
 	MatchArray.n = pMatch - MatchArray.Element;
 }
+
+//void CRVLPSuLMIndexing::AssignWordsToIndicators(
+//	RVLPSULM_PCG **PCG,
+//	char **pWordLT)
+//{
+//	int maxnWords = 6 * m_ndBins;
+//
+//	char *WordLT = new char[m_nPCGs * maxnWords];
+//
+//	*pWordLT = WordLT;
+//
+//	int *nWords = new int[m_nPCGs];
+//
+//	memset(nWords, 0, m_nPCGs * sizeof());
+//
+//	memset(WordLT, 0xff, m_nPCGs * maxnWords * sizeof(char));
+//
+//	RVLPSULM_INDICATOR *pIndicator = (RVLPSULM_INDICATOR *)(m_IndicatorList.pFirst);
+//
+//	int id, iBin;
+//	int iOrientation;
+//	float abs[3];
+//	float *N;
+//	char *WordLT_;
+//	RVLPSULM_PCG *pPCG;
+//
+//	while (pIndicator)
+//	{
+//		id = (int)(pIndicator->m_Descriptor[6] + m_dOffset + 0.5f);
+//
+//		if (id >= 0 && id <= m_ndBins)
+//		{
+//			N = pIndicator->m_Descriptor + 3;
+//
+//			RVLPSULM_INDEXING_GET_ORIENTATION(N, abs, iOrientation);
+//
+//			pPCG = PCG[pIndicator->iPCG];
+//
+//			iBin = iOrientation * m_ndBins + id;
+//
+//			pIndicator->word = iBin;
+//
+//			WordLT_ = WordLT + pIndicator->iPCG * maxnWords;
+//
+//			if (WordLT_[iBin] < 0)
+//			{
+//				WordLT_[iBin] = nWords[pIndicator->iPCG];
+//
+//				nWords[pIndicator->iPCG]++;
+//			}				
+//		}
+//
+//		pIndicator = (RVLPSULM_INDICATOR *)(pIndicator->pNext);
+//	}
+//
+//	delete[] nWords;
+//}

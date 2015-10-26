@@ -77,6 +77,9 @@ public:
 	void Search(
 		RVLPSULM_INDICATOR *pIndicator,
 		RVLARRAY_<int> &MatchArray);
+	//void AssignWordsToIndicators(
+	//	RVLPSULM_PCG **PCG,
+	//	char **pWordLT);
 
 public:
 	void *m_vpBuilder;
