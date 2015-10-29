@@ -6,6 +6,7 @@
 
 #include "RVLPSuLM.h"
 #include "RVLPSuLMIndexing.h"
+#include "RVLFreiburgDataSet.h"
 
 #define RVLLOG2					0.693147180559945		// todo: move to RVLConst.h
 
@@ -109,6 +110,8 @@
 #define RVLPSULMBUILDER_FLAG2_SURFACE_BOUNDARY					0x00000100
 #define RVLPSULMBUILDER_FLAG2_FIRST_ORDER_DEPENDENCY_TREE		0x00000200
 #define RVLPSULMBUILDER_FLAG2_WIDE_ANGLE_HYPOTHESIS_GENERATION	0x00000400
+#define RVLPSULMBUILDER_FLAG2_IMAGE_FORMAT						0x00000800
+#define RVLPSULMBUILDER_FLAG2_IMAGE_FORMAT_FREIBURG				0x00000800
 #define RVLPSULMBUILDER_CREATEMODEL_FLAG_PERMANENT				0x00000001
 #define RVLPSULMBUILDER_CREATEMODEL_FROM_IMAGE					0x00000002
 #define RVLPSULMBUILDER_CREATEMODEL_IMAGE_FROM_FILE				0x00000004
@@ -387,6 +390,7 @@ public:
 	char *m_ModelDatabasePath;
 	char *m_ModelMapPath;
 	char *m_SequenceScenePath;
+	char *m_DataSetPath;
 	RVLPSULM_HYPOTHESIS **m_HypothesisArray;
 	int m_nHypotheses;
 	RVLQLIST_PTR_ENTRY *m_RepresentativeHypothesisMem;
@@ -517,6 +521,7 @@ public:
 	DWORD m_HypothesisEvaluationFlags;
 	RVLPSULM_SCENE_FUSION m_SceneFusion;
 	RVLPSULM_MODEL_FUSION m_ModelFusion;
+	CRVLFreiburgDataSet m_DataSet;
 	
 //#ifdef PYTHON_DEBUG
 //	PyObject *m_pyModuleName;

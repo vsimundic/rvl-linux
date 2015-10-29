@@ -1849,14 +1849,16 @@ int main(int argc, char* argv[])
 	//DWORD mDisplayPSuLMFlags = (RVLPSULM_DISPLAY_SURFACES | RVLPSULM_DISPLAY_ELLIPSES | RVLPSULM_DISPLAY_LINES | RVLPSULM_DISPLAY_VECTORS);
 	//DWORD mDisplayPSuLMFlags = (RVLPSULM_DISPLAY_LINES | RVLPSULM_DISPLAY_VECTORS);
 	DWORD mDisplayPSuLMFlags = (RVLPSULM_DISPLAY_SURFACES | RVLPSULM_DISPLAY_ELLIPSES | RVLPSULM_DISPLAY_SAMPLES | RVLPSULM_DISPLAY_LINES | RVLPSULM_DISPLAY_VECTORS);
+	bool bFreiburg = ((VS.m_PSuLMBuilder.m_Flags2 & RVLPSULMBUILDER_FLAG2_IMAGE_FORMAT) == RVLPSULMBUILDER_FLAG2_IMAGE_FORMAT_FREIBURG);
 
 	if(VS.m_Flags & RVLSYS_FLAGS_VALIDATION)
 		mDisplayPSuLMFlags |= RVLPSULM_DISPLAY_VALIDATION;
 	int DisplayBitmap = 0;
 	int ZoomFactor = 1;
 
-	if(!bKinect)
-		RVLGetFirstValidFileName(VS.m_ImageFileName, "00000-sl.bmp", 10000);
+	if (!bKinect)
+		//RVLGetFirstValidFileName(VS.m_ImageFileName, "00000-sl.bmp", 10000);
+		VS.GetFirstValidImageFileName();
 
 	bool bVTKRendererActive = true;
 	int iVTK3DModel = 0;
@@ -1982,8 +1984,19 @@ int main(int argc, char* argv[])
 
 				pInputImage_ = pComplexImage;
 			}
-			else if(!bKinect && !(VS.m_Flags & RVLSYS_FLAGS_PC))
-				pRGBImage = cvLoadImage(VS.m_ImageFileName);
+			else if (!bKinect && !(VS.m_Flags & RVLSYS_FLAGS_PC))
+			{				
+				if ((VS.m_PSuLMBuilder.m_Flags2 & RVLPSULMBUILDER_FLAG2_IMAGE_FORMAT) == RVLPSULMBUILDER_FLAG2_IMAGE_FORMAT_FREIBURG)
+				{
+					IplImage *pHRImage = cvLoadImage(VS.m_ImageFileName);
+
+					cvResize(pHRImage, pRGBImage);
+
+					cvReleaseImage(&pHRImage);
+				}
+				else
+					pRGBImage = cvLoadImage(VS.m_ImageFileName);
+			}
 
 			t = clock();			
 
@@ -2058,11 +2071,9 @@ int main(int argc, char* argv[])
 				strcpy(VS.m_ImageFileName, g_BestSubSetImageFileName);
 				pRGBImage = cvLoadImage(VS.m_ImageFileName);
 				
-				
+				if (g_BestCost == -1000000)
+					GUI.Message("No hypotheses generated!", 300, 100, cvScalar(0, 0, 255));
 			}
-
-			if (g_BestCost == -1000000)
-				GUI.Message("No hypotheses generated!", 300, 100, cvScalar(0, 0, 255));
 
 			if ((VS.m_PSuLMBuilder.m_Flags & RVLPSULMBUILDER_FLAG_MODE) == RVLPSULMBUILDER_FLAG_MODE_TRACKING)
 			{
@@ -2381,13 +2392,20 @@ int main(int argc, char* argv[])
 
 				cvPutText(pFig->m_pImage, str, cvPoint(0, (++iTextLine) * pFig->m_FontSize), &pFig->m_Font,  cvScalar(0, 255, 255));
 
-				sprintf(str, "TT = %d", (VS.m_Flags & RVLSYS_FLAGS_PC ? VS.m_PSD.m_MeshTol : VS.m_PSD.m_uvdTol));
+				if (bFreiburg)
+				{
+					sprintf(str, "Sample step = %d", VS.m_PSuLMBuilder.m_DataSet.m_SampleStep);
 
-				cvPutText(pFig->m_pImage, str, cvPoint(0, (++iTextLine) * pFig->m_FontSize), &pFig->m_Font,  cvScalar(0, 255, 255));
+					cvPutText(pFig->m_pImage, str, cvPoint(0, (++iTextLine) * pFig->m_FontSize), &pFig->m_Font, cvScalar(0, 255, 255));
+				}
 
-				sprintf(str, "CT = %d", VS.m_ConvexSegmentThr);
+				//sprintf(str, "TT = %d", (VS.m_Flags & RVLSYS_FLAGS_PC ? VS.m_PSD.m_MeshTol : VS.m_PSD.m_uvdTol));
 
-				cvPutText(pFig->m_pImage, str, cvPoint(0, (++iTextLine) * pFig->m_FontSize), &pFig->m_Font,  cvScalar(0, 255, 255));
+				//cvPutText(pFig->m_pImage, str, cvPoint(0, (++iTextLine) * pFig->m_FontSize), &pFig->m_Font,  cvScalar(0, 255, 255));
+
+				//sprintf(str, "CT = %d", VS.m_ConvexSegmentThr);
+
+				//cvPutText(pFig->m_pImage, str, cvPoint(0, (++iTextLine) * pFig->m_FontSize), &pFig->m_Font,  cvScalar(0, 255, 255));
 
 				// show the display image
 
@@ -2434,6 +2452,9 @@ int main(int argc, char* argv[])
 			bLast = false;
 			bSaveImage  = false;
 			SampleStep = 1;
+
+			if (VS.m_PSuLMBuilder.m_Flags2 & RVLPSULMBUILDER_FLAG2_MAPBUILDING_MANUAL)
+				VS.m_PSuLMBuilder.m_Flags &= ~RVLPSULMBUILDER_FLAG_MAPBUILDING;
 
 #ifdef RVLVTK
 			vtkSmartPointer<vtkOBJExporter> exporter;
@@ -2519,7 +2540,7 @@ int main(int argc, char* argv[])
 	
 				break;
 			case 'f':	// Map building on/off
-				VS.m_PSuLMBuilder.m_Flags ^= RVLPSULMBUILDER_FLAG_MAPBUILDING;
+				VS.m_PSuLMBuilder.m_Flags |= RVLPSULMBUILDER_FLAG_MAPBUILDING;
 
 #ifdef RVLPSULMBUILDER_MAPBUILDING_SEQUENCE
 				if(VS.m_PSuLMBuilder.m_Flags & RVLPSULMBUILDER_FLAG_MAPBUILDING)
@@ -2923,13 +2944,34 @@ int main(int argc, char* argv[])
 
 				break;
 			case 0x00210000:	// PgUp
-				bBackwards = true;
+				if (bFreiburg)
+				{
+					VS.m_PSuLMBuilder.m_DataSet.m_SampleStep *= 10;
 
-				SampleStep = 10;
+					bNextImage = false;
+				}
+				else
+				{
+					bBackwards = true;
+
+					SampleStep = 10;
+				}
 
 				break;
 			case 0x00220000:	// PgDn
-				SampleStep = 10;
+				if (bFreiburg)
+				{
+					VS.m_PSuLMBuilder.m_DataSet.m_SampleStep /= 10;
+
+					if (VS.m_PSuLMBuilder.m_DataSet.m_SampleStep < 1)
+						VS.m_PSuLMBuilder.m_DataSet.m_SampleStep = 1;
+
+					bNextImage = false;
+				}
+				else
+				{
+					SampleStep = 10;
+				}
 
 				break;
 			case 0x00230000:	// End
@@ -3133,7 +3175,7 @@ int main(int argc, char* argv[])
 			{
 				iSample_ = iSample;
 
-				char *OdometryFileName = RVLCreateFileName(VS.m_ImageFileName, "-LW.bmp", -1, "-O.txt");	
+				char *OdometryFileName = RVLCreateFileName(VS.m_ImageFileName, "-LW.bmp", -1, "-O.txt");
 
 				unsigned char command;
 				int x, y, z, pan, tilt, roll, iSample0;
@@ -3143,7 +3185,7 @@ int main(int argc, char* argv[])
 				{
 					iSample_ = RVLGetFileNumber(VS.m_ImageFileName, "00000-LW.bmp");
 
-					RVLSetFileNumber(OdometryFileName, "00000-O.txt", iSample_);					
+					RVLSetFileNumber(OdometryFileName, "00000-O.txt", iSample_);
 
 					fpOdometry = fopen(OdometryFileName, "r");
 
@@ -3152,7 +3194,7 @@ int main(int argc, char* argv[])
 
 					fscanf(fpOdometry, "%d\t%d\t%d\t%d\t%d\t%d\t%d\t%c\n", &x, &y, &z, &pan, &tilt, &roll, &iSample0, &command);
 
-					fclose(fpOdometry);					
+					fclose(fpOdometry);
 
 					if (command == 'O')
 					{
@@ -3160,14 +3202,15 @@ int main(int argc, char* argv[])
 
 						break;
 					}
-				}				
+				}
 
 				RVLSetFileNumber(VS.m_ImageFileName, "00000-LW.bmp", iSample);
 
 				delete[] OdometryFileName;
 			}
 			else
-				bFileExists = GetNextFileName(&VS);// RVLGetNextFileName(VS.m_ImageFileName, "00000-LW.bmp", 10000);
+				//bFileExists = GetNextFileName(&VS);// RVLGetNextFileName(VS.m_ImageFileName, "00000-LW.bmp", 10000);
+				bFileExists = VS.GetNextImageFileName(bBackwards);
 
 			if (!bFileExists)
 			{
@@ -3257,7 +3300,8 @@ BOOL GetNextFileName(CRVLPSuLMVS *pVS)
 	}
 	else
 	{
-		return RVLGetNextFileName(pVS->m_ImageFileName, "00000-LW.bmp", 10000);
+		//return RVLGetNextFileName(pVS->m_ImageFileName, "00000-LW.bmp", 10000);
+		return pVS->GetNextImageFileName();
 	}
 	
 	
@@ -3272,6 +3316,7 @@ void GetAllSequenceData(CRVLPSuLMVS *pVS)
 		if (seqFile != NULL)
 		{
 			char sLine[500];
+
 			int iLeft, iMid, iRight;
 			int iStart, iEnd;
 			CString sFileName, sStartFileName, InputSampleFileName;
@@ -3296,102 +3341,147 @@ void GetAllSequenceData(CRVLPSuLMVS *pVS)
 				imageSequenceData.ImageFileName = CT2CA(sFileName.Mid(0, iLeft).Trim());
 
 				g_AllSequences.push_back(imageSequenceData);
-
-
 			}
-
-			fclose(seqFile);
 
 			//Set first image
 			GetImageInSequence(pVS, true);
-		}
-	}
-}
 
+			fclose(seqFile);
+		}	// if (seqFile != NULL)
+	}	// if (pVS->m_Flags & RVLSYS_FLAGS_USE_SEQUENCE_FILE)
+}
 
 BOOL GetImageInSequence(CRVLPSuLMVS *pVS, bool bInit)
 {
-	
-	if (bInit)
+	/*
+	if ((pVS->m_Flags & RVLSYS_FLAGS_IMAGE_FORMAT) == RVLSYS_FLAGS_IMAGE_FORMAT_FREIBURG)
 	{
-		//set initial image
-		IMAGE_SEQUENCE_DATA& currentSequenceData = g_AllSequences[g_CurrentSequenceNo];
-		//Copy current file name
-		RVLCopyString((char *)(currentSequenceData.ImageFileName.c_str()), &(pVS->m_ImageFileName));
-
-		RVLSetFileNumber(pVS->m_ImageFileName, "00000-LW.bmp", currentSequenceData.StartNo);
-		
-		g_CurrentImageNo = currentSequenceData.StartNo;
-		
-		return TRUE;
-
-	}
-	else
-	{ 
-		//set start image in subset
-		if (g_StartNewSubSet && pVS->m_Flags & RVLSYS_FLAGS_BEST_SUBSET_HYPOTHESIS)
+		if (bInit)
 		{
-			//if (g_CurrentSequenceNo < g_AllSequences.size())
-			//{
-			if (g_LastSubSetImageNo >= 0)
-			{
-				g_CurrentImageNo = g_LastSubSetImageNo;
-				//RVLSetFileNumber(pVS->m_ImageFileName, "00000-LW.bmp", g_CurrentImageNo);
+			IMAGE_SEQUENCE_DATA &currentSequenceData = g_AllSequences[g_CurrentSequenceNo];
 
-				IMAGE_SEQUENCE_DATA& currentSequenceData = g_AllSequences[g_CurrentSequenceNo];
-				//Copy current file name
-				RVLCopyString((char *)(currentSequenceData.ImageFileName.c_str()), &(pVS->m_ImageFileName));
+			GetImageNameInFreiburgFile((char *)(currentSequenceData.ImageFileName.c_str()), currentSequenceData.StartNo, &(pVS->m_ImageFileName));
 
-				RVLSetFileNumber(pVS->m_ImageFileName, "00000-LW.bmp", g_CurrentImageNo);
+			g_CurrentImageNo = currentSequenceData.StartNo;
 
-				g_StartNewSubSet = false;
-				return TRUE;
-			}
-			else
-				return FALSE;
-		}
-		else 
-		{ 
-			g_CurrentImageNo = RVLGetFileNumber(pVS->m_ImageFileName, "00000-LW.bmp");
-		}
-
-		//Standard search for images in sequence
-		if ((g_CurrentSequenceNo < g_AllSequences.size()) && (g_CurrentImageNo >= g_AllSequences[g_CurrentSequenceNo].EndNo))
-		{
-			//increase
-			g_CurrentSequenceNo++;
-
-			if (g_CurrentSequenceNo < g_AllSequences.size())
-			{
-				IMAGE_SEQUENCE_DATA& currentSequenceData = g_AllSequences[g_CurrentSequenceNo];
-				//Copy current file name
-				RVLCopyString((char *)currentSequenceData.ImageFileName.c_str(), &(pVS->m_ImageFileName));
-
-				RVLSetFileNumber(pVS->m_ImageFileName, "00000-LW.bmp", currentSequenceData.StartNo);
-
-				g_CurrentImageNo = currentSequenceData.StartNo;
-
-				return TRUE;
-
-			}
-			else
-			{
-				return FALSE;
-			}
+			return TRUE;
 		}
 		else
 		{
-			if (g_CurrentSequenceNo < g_AllSequences.size())
+			if ((g_CurrentSequenceNo < (int)(g_AllSequences.size())) && (g_CurrentImageNo >= g_AllSequences[g_CurrentSequenceNo].EndNo))
 			{
-				IMAGE_SEQUENCE_DATA& currentSequenceData = g_AllSequences[g_CurrentSequenceNo];
-				return RVLGetNextFileName(pVS->m_ImageFileName, "00000-LW.bmp", currentSequenceData.EndNo);
+				//increase
+				g_CurrentSequenceNo++;
+
+				if (g_CurrentSequenceNo < (int)(g_AllSequences.size()))
+				{
+					IMAGE_SEQUENCE_DATA& currentSequenceData = g_AllSequences[g_CurrentSequenceNo];
+
+					GetImageNameInFreiburgFile((char *)(currentSequenceData.ImageFileName.c_str()), currentSequenceData.StartNo, &(pVS->m_ImageFileName));
+
+					g_CurrentImageNo = currentSequenceData.StartNo;
+
+					return TRUE;
+				}
+				else
+					return FALSE;
 			}
 			else
 			{
-				return FALSE;
+				if (g_CurrentSequenceNo < (int)(g_AllSequences.size()))
+				{
+					IMAGE_SEQUENCE_DATA& currentSequenceData = g_AllSequences[g_CurrentSequenceNo];
+					return GetImageNameInFreiburgFile((char *)(currentSequenceData.ImageFileName.c_str()), currentSequenceData.StartNo, &(pVS->m_ImageFileName));
+				}
+				else
+					return FALSE;
 			}
+		}	// if(!bInit)
+	}	// if ((pVS->m_Flags & RVLSYS_FLAGS_IMAGE_FORMAT) == RVLSYS_FLAGS_IMAGE_FORMAT_FREIBURG)
+	else
+	*/
+	{
+		if (bInit)
+		{
+			//set initial image
+			IMAGE_SEQUENCE_DATA& currentSequenceData = g_AllSequences[g_CurrentSequenceNo];
+			//Copy current file name
+			RVLCopyString((char *)(currentSequenceData.ImageFileName.c_str()), &(pVS->m_ImageFileName));
+
+			RVLSetFileNumber(pVS->m_ImageFileName, "00000-LW.bmp", currentSequenceData.StartNo);
+
+			g_CurrentImageNo = currentSequenceData.StartNo;
+
+			return TRUE;
+
 		}
-		
-	}
-	
+		else
+		{
+			//set start image in subset
+			if (g_StartNewSubSet && pVS->m_Flags & RVLSYS_FLAGS_BEST_SUBSET_HYPOTHESIS)
+			{
+				//if (g_CurrentSequenceNo < g_AllSequences.size())
+				//{
+				if (g_LastSubSetImageNo >= 0)
+				{
+					g_CurrentImageNo = g_LastSubSetImageNo;
+					//RVLSetFileNumber(pVS->m_ImageFileName, "00000-LW.bmp", g_CurrentImageNo);
+
+					IMAGE_SEQUENCE_DATA& currentSequenceData = g_AllSequences[g_CurrentSequenceNo];
+					//Copy current file name
+					RVLCopyString((char *)(currentSequenceData.ImageFileName.c_str()), &(pVS->m_ImageFileName));
+
+					RVLSetFileNumber(pVS->m_ImageFileName, "00000-LW.bmp", g_CurrentImageNo);
+
+					g_StartNewSubSet = false;
+					return TRUE;
+				}
+				else
+					return FALSE;
+			}
+			else
+			{
+				g_CurrentImageNo = RVLGetFileNumber(pVS->m_ImageFileName, "00000-LW.bmp");
+			}
+
+			//Standard search for images in sequence
+			if ((g_CurrentSequenceNo < (int)(g_AllSequences.size())) && (g_CurrentImageNo >= g_AllSequences[g_CurrentSequenceNo].EndNo))
+			{
+				//increase
+				g_CurrentSequenceNo++;
+
+				if (g_CurrentSequenceNo < (int)(g_AllSequences.size()))
+				{
+					IMAGE_SEQUENCE_DATA& currentSequenceData = g_AllSequences[g_CurrentSequenceNo];
+					//Copy current file name
+					RVLCopyString((char *)currentSequenceData.ImageFileName.c_str(), &(pVS->m_ImageFileName));
+
+					RVLSetFileNumber(pVS->m_ImageFileName, "00000-LW.bmp", currentSequenceData.StartNo);
+
+					g_CurrentImageNo = currentSequenceData.StartNo;
+
+					return TRUE;
+
+				}
+				else
+				{
+					return FALSE;
+				}
+			}
+			else
+			{
+				if (g_CurrentSequenceNo < (int)(g_AllSequences.size()))
+				{
+					IMAGE_SEQUENCE_DATA& currentSequenceData = g_AllSequences[g_CurrentSequenceNo];
+					return RVLGetNextFileName(pVS->m_ImageFileName, "00000-LW.bmp", currentSequenceData.EndNo);
+				}
+				else
+				{
+					return FALSE;
+				}
+			}
+
+		}
+	}	// if ((pVS->m_Flags & RVLSYS_FLAGS_IMAGE_FORMAT) != RVLSYS_FLAGS_IMAGE_FORMAT_FREIBURG)
 }
+

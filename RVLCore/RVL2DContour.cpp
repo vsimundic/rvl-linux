@@ -1035,54 +1035,56 @@ void RVLDetectDepthDiscontinuityContours(short *Depth,
 
 	// detect depth discontinuities
 
-	int iPix = 0;
-
-	int u, v, iPix2;
-	int iNeighbor;
 	short *pDepth;
+	int iPix;
+	int u, v, iPix2;
+	int iNeighbor;	
 	short d, d2;
 
-	for(pDepth = Depth; pDepth < pDepthMapEnd; pDepth++, iPix++)
+	for (v = NeighborLimit[3]; v <= NeighborLimit[1]; v++)
 	{
-		d = *pDepth;
+		iPix = w * v + NeighborLimit[2];
+		pDepth = Depth + iPix;
 
-		if(d == InvalidDepth)
-			continue;
-
-		u = iPix % w;
-		v = iPix / w;
-
-		for(iNeighbor = 0; iNeighbor <= 3; iNeighbor++)
+		for (u = NeighborLimit[2]; u <= NeighborLimit[0]; u++, pDepth++, iPix++)
 		{
-			if(iNeighbor & 1)
+			d = *pDepth;
+
+			if (d == InvalidDepth)
+				continue;
+
+			for (iNeighbor = 0; iNeighbor <= 3; iNeighbor++)
 			{
-				if(v == NeighborLimit[iNeighbor])
+				if (iNeighbor & 1)
 				{
-					ContourMap[4 * iPix + iNeighbor] |= RVL2DCONTOUR_STOP;
-					
-					continue;
+					if (v == NeighborLimit[iNeighbor])
+					{
+						ContourMap[4 * iPix + iNeighbor] |= RVL2DCONTOUR_STOP;
+
+						continue;
+					}
 				}
-			}
-			else
-			{
-				if(u == NeighborLimit[iNeighbor])
+				else
 				{
-					ContourMap[4 * iPix + iNeighbor] |= RVL2DCONTOUR_STOP;
+					if (u == NeighborLimit[iNeighbor])
+					{
+						ContourMap[4 * iPix + iNeighbor] |= RVL2DCONTOUR_STOP;
 
-					continue;
+						continue;
+					}
 				}
+
+				iPix2 = iPix + dpNeighbor4[iNeighbor];
+
+				d2 = Depth[iPix2];
+
+				if (d2 == InvalidDepth)
+					ContourMap[4 * iPix + iNeighbor] |= (RVL2DCONTOUR_EDGE | RVL2DCONTOUR_VOID);
+				else if (d2 - d >= DepthDiscontinuityThr)
+					ContourMap[4 * iPix + iNeighbor] |= RVL2DCONTOUR_EDGE;
+				else if (d - d2 >= DepthDiscontinuityThr)
+					ContourMap[4 * iPix + iNeighbor] |= RVL2DCONTOUR_STOP;
 			}
-
-			iPix2 = iPix + dpNeighbor4[iNeighbor];
-
-			d2 = Depth[iPix2];
-
-			if(d2 == InvalidDepth)
-				ContourMap[4 * iPix + iNeighbor] |= (RVL2DCONTOUR_EDGE | RVL2DCONTOUR_VOID);
-			else if(d2 - d >= DepthDiscontinuityThr)
-				ContourMap[4 * iPix + iNeighbor] |= RVL2DCONTOUR_EDGE;
-			else if(d - d2 >= DepthDiscontinuityThr)
-				ContourMap[4 * iPix + iNeighbor] |= RVL2DCONTOUR_STOP;
 		}
 	}
 

@@ -82,7 +82,7 @@
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
       <Optimization>Disabled</Optimization>
-      <AdditionalIncludeDirectories>$(OPENCV_BUILD)\include;..\RVLPSuLM\Include;..\RVLCore\Include;..\RVLPCS\Include;..\RapidXML\Include;$(VTK_PATH)\Debug\Include\vtk-5.10;C:\Libraries\FLANN\flann-1.8.4-src\src\cpp</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(OPENCV_BUILD)\include;..\RVLPSuLM\Include;..\RVLCore\Include;..\RVLPCS\Include;..\RapidXML\Include;$(VTK_PATH)\Include\vtk-6.1;C:\Libraries\FLANN\flann-1.8.4-src\src\cpp</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>WIN32;_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <PrecompiledHeader />
@@ -138,6 +138,7 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="RVLFreiburgDataSet.cpp" />
     <ClCompile Include="RVLPSuLM.cpp" />
     <ClCompile Include="RVLPSuLMBuilder.cpp" />
     <ClCompile Include="RVLPSuLMGroundTruth.cpp" />
@@ -146,6 +147,7 @@
     <ClCompile Include="RVLRLM.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Include\RVLFreiburgDataSet.h" />
     <ClInclude Include="Include\RVLPSuLM.h" />
     <ClInclude Include="Include\RVLPSuLMBuilder.h" />
     <ClInclude Include="Include\RVLPSuLMGroundTruth.h" />

@@ -217,6 +217,7 @@ CRVLPSuLMBuilder::CRVLPSuLMBuilder(void)
 	m_ModelDatabasePath = NULL;
 	m_SequenceScenePath = NULL;
 	m_ModelMapPath = NULL;
+	m_DataSetPath = NULL;
 
 	//Hybrid localization
 	m_pPrevCameraPoseSM = NULL;
@@ -314,6 +315,9 @@ CRVLPSuLMBuilder::~CRVLPSuLMBuilder(void)
 
 	if(m_ModelMapPath)
 		delete[] m_ModelMapPath;
+
+	if (m_DataSetPath)
+		delete[] m_DataSetPath;
 
 	if(m_CellArray2)
 		delete[] m_CellArray2;
@@ -417,6 +421,12 @@ void CRVLPSuLMBuilder::Init(void)
 
 	m_maxnDominant3DSurfacesComplex = RVLMAX(m_maxnDominant3DSurfacesComplex, m_maxnDominant3DSurfaces);
 	m_maxnDominant3DLinesComplex = RVLMAX(m_maxnDominant3DLinesComplex, m_maxnDominant3DLines);
+
+	// DataSet
+
+	if ((m_Flags2 & RVLPSULMBUILDER_FLAG2_IMAGE_FORMAT) == RVLPSULMBUILDER_FLAG2_IMAGE_FORMAT_FREIBURG)
+		if (m_DataSetPath)
+			m_DataSet.Load(m_DataSetPath);
 
 	// Cell array
 
@@ -1221,14 +1231,31 @@ BOOL CRVLPSuLMBuilder::Create(CRVLPSuLM *pPSuLM,
 		{
 			if(Flags & RVLPSULMBUILDER_CREATEMODEL_IMAGE_FROM_FILE)
 			{
-				char *DisparityImageFileName = RVLCreateFileName(m_ImageFileName, "-LW.bmp", -1, "-D.txt");
+				char *DisparityImageFileName;
 
-				if(!RVLImportDisparityImage(DisparityImageFileName, &(m_pStereoVision->m_DisparityMap), 
-					DepthFormat, m_pStereoVision->m_zToDepthLookupTable))
+				if ((m_Flags2 & RVLPSULMBUILDER_FLAG2_IMAGE_FORMAT) == RVLPSULMBUILDER_FLAG2_IMAGE_FORMAT_FREIBURG)
 				{
-					delete[] DisparityImageFileName;
+					DisparityImageFileName = m_DataSet.GetDepthFileName(m_ImageFileName);
 
-					return FALSE;
+					IplImage *pDepthImage = cvLoadImage(DisparityImageFileName, CV_LOAD_IMAGE_UNCHANGED);
+
+					RVLUnderSampleHalf<short int>((short int *)(pDepthImage->imageData), pDepthImage->width, pDepthImage->height, m_pStereoVision->m_DisparityMap.Disparity);
+
+					cvReleaseImage(&pDepthImage);
+
+					m_DataSet.TransformDepthMap(&(m_pStereoVision->m_DisparityMap), m_pStereoVision->m_zToDepthLookupTable);
+				}
+				else
+				{
+					DisparityImageFileName = RVLCreateFileName(m_ImageFileName, "-LW.bmp", -1, "-D.txt");
+
+					if (!RVLImportDisparityImage(DisparityImageFileName, &(m_pStereoVision->m_DisparityMap),
+						DepthFormat, m_pStereoVision->m_zToDepthLookupTable))
+					{
+						delete[] DisparityImageFileName;
+
+						return FALSE;
+					}
 				}
 
 				delete[] DisparityImageFileName;
@@ -12844,6 +12871,8 @@ void CRVLPSuLMBuilder::CreateParamList(CRVLMem * pMem)
 
 	m_ParamList.Init();
 
+	pParamData = m_ParamList.AddParam("PSuLM.ImageFormat", RVLPARAM_TYPE_FLAG, &m_Flags2);
+	m_ParamList.AddID(pParamData, "FREIBURG", RVLPSULMBUILDER_FLAG2_IMAGE_FORMAT_FREIBURG);
 	pParamData = m_ParamList.AddParam("PSuLM.Mode", RVLPARAM_TYPE_FLAG, &m_Flags);
 	m_ParamList.AddID(pParamData, "TRACKING", RVLPSULMBUILDER_FLAG_MODE_TRACKING);
 	m_ParamList.AddID(pParamData, "LOCALIZATION", RVLPSULMBUILDER_FLAG_MODE_LOCALIZATION);
@@ -12880,6 +12909,7 @@ void CRVLPSuLMBuilder::CreateParamList(CRVLMem * pMem)
 	pParamData = m_ParamList.AddParam("PSuLM.ModelDatabasePath", RVLPARAM_TYPE_STRING, &m_ModelDatabasePath);
 	pParamData = m_ParamList.AddParam("PSuLM.ModelMapPath", RVLPARAM_TYPE_STRING, &m_ModelMapPath);
 	pParamData = m_ParamList.AddParam("PSuLM.Sequence.ScenePath", RVLPARAM_TYPE_STRING, &m_SequenceScenePath);
+	pParamData = m_ParamList.AddParam("PSuLM.DataSetPath", RVLPARAM_TYPE_STRING, &m_DataSetPath);
 
 	pParamData = m_ParamList.AddParam("PSuLM.Localization.HypothesisGeneration.Indexing", RVLPARAM_TYPE_FLAG, &m_Flags);
 	m_ParamList.AddID(pParamData, "yes", RVLPSULMBUILDER_FLAG_HYPOTHESIS_GENERATION_INDEXING);
@@ -19082,11 +19112,21 @@ CRVLPSuLM *CRVLPSuLMBuilder::Clone(CRVLPSuLM *pPSulMOriginal)
 	RVLMEM_ALLOC_STRUCT_ARRAY(m_pMem0, char, iFileNameLength + 1, pPSuLM->m_ModelFilePath);
 	//pPSuLM->m_ModelFilePath = (char *)(m_pMem0->Alloc(iFileNameLength * sizeof(char)));
 	strcpy(pPSuLM->m_ModelFilePath, pPSulMOriginal->m_FileName);
-	
-	char *pPos = (m_Flags & RVLPSULMBUILDER_FLAG_PC ? strstr(pPSuLM->m_ModelFilePath, "PC.pcd") : strstr(pPSuLM->m_ModelFilePath, "LW.bmp"));
 
-	strncpy(pPos,"M.dat",6);
+	char *pPos;
 
+	if ((m_Flags2 & RVLPSULMBUILDER_FLAG2_IMAGE_FORMAT) == RVLPSULMBUILDER_FLAG2_IMAGE_FORMAT_FREIBURG)
+	{
+		pPos = strstr(pPSuLM->m_ModelFilePath, ".png");
+
+		strncpy(pPos,".dat",4);
+	}
+	else
+	{
+		pPos = (m_Flags & RVLPSULMBUILDER_FLAG_PC ? strstr(pPSuLM->m_ModelFilePath, "PC.pcd") : strstr(pPSuLM->m_ModelFilePath, "LW.bmp"));
+
+		strncpy(pPos, "_M.dat", 6);
+	}
 
 	//*************CLONE PSuLM************//
 
@@ -23395,10 +23435,20 @@ void CRVLPSuLMBuilder::DisplayHypothesis(CRVLGUI *pGUI,
 		}
 		else if((m_Flags & RVLPSULMBUILDER_FLAG_MODE) == RVLPSULMBUILDER_FLAG_MODE_TRACKING)
 			pFig2->m_pImage = cvCloneImage(pImage2);
+		else if ((m_Flags2 & RVLPSULMBUILDER_FLAG2_IMAGE_FORMAT) == RVLPSULMBUILDER_FLAG2_IMAGE_FORMAT_FREIBURG)
+		{
+			pFig2->m_pImage = cvCreateImage(cvSize(pImage->width, pImage->height), IPL_DEPTH_8U, 3);				
+
+			IplImage *pHRImage = cvLoadImage(pMPSuLM->m_FileName);
+
+			cvResize(pHRImage, pFig2->m_pImage);
+
+			cvReleaseImage(&pHRImage);
+		}
 		else
 			pFig2->m_pImage = ((pMPSuLM->m_Flags & RVLPSULM_FLAG_COMPLEX) ? GetComplexPSuLMRGBImage(pMPSuLM->m_FileName) :
 				cvLoadImage(pMPSuLM->m_FileName));
-	
+
 		pMPSuLM->Display(pFig2, &NullPose, cvScalar(0, 255, 0), 
 			RVLPSULM_DISPLAY_SURFACES | RVLPSULM_DISPLAY_ELLIPSES | RVLPSULM_DISPLAY_LINES | RVLPSULM_DISPLAY_VECTORS);
 	}
@@ -23462,7 +23512,7 @@ void CRVLPSuLMBuilder::DisplayHypothesisData(	CRVLFigure *pFig,
 	int HypScoreMid = (HypScoreLow + HypScoreHigh) / 2;
 	int HypScoreHalfRange = HypScoreMid - HypScoreLow;
 
-	IplImage *pDataDisplay = cvCreateImage(cvSize(800, 300), IPL_DEPTH_8U, 3);	
+	IplImage *pDataDisplay = cvCreateImage(cvSize(1000, 300), IPL_DEPTH_8U, 3);	
 
 	// display text
 
@@ -23828,7 +23878,7 @@ bool CRVLPSuLMBuilder::MapBuilding(CRVLPSuLM *pSPSuLM)
 		return true;
 	}
 #else
-	if(m_PSuLMList.m_nElements == 0)
+	if (m_PSuLMList.m_nElements == 0)
 	{
 		m_maxPSuLMIndex = -1;
 
@@ -23850,128 +23900,132 @@ bool CRVLPSuLMBuilder::MapBuilding(CRVLPSuLM *pSPSuLM)
 	//if(m_nPlausibleHypotheses == 0)
 	//	return false;	
 
-	if(m_nHypotheses == 0)
-		return false;
+	CRVLPSuLM *pMPSuLM;
+
+	if (!(m_Flags2 & RVLPSULMBUILDER_FLAG2_MAPBUILDING_MANUAL))
+	{
+		if (m_nHypotheses == 0)
+			return false;
 
 #ifdef RVLPSULMBUILDER_MAPBUILDING_SEQUENCE
-	RVLPSULM_HYPOTHESIS *pHypothesis;
+		RVLPSULM_HYPOTHESIS *pHypothesis;
 
-	if((m_Flags & RVLPSULMBUILDER_FLAG_MANUAL_LOOP_CLOSING) && m_pLoopStartPSuLM)
-	{
-		bool bPreviousPSuLMMatched = false;
-		bool bLoopStartPSuLMMatched = false;
-
-		int iHypothesis;
-		CRVL3DPose *pPoseRTPrevPSuLM, *pPoseRTLoopStartPSuLM;
-
-		for(iHypothesis = 0; iHypothesis < m_nPlausibleHypotheses && !(bPreviousPSuLMMatched && bLoopStartPSuLMMatched); iHypothesis++)
+		if((m_Flags & RVLPSULMBUILDER_FLAG_MANUAL_LOOP_CLOSING) && m_pLoopStartPSuLM)
 		{
-			pHypothesis = m_HypothesisArray[iHypothesis];
+			bool bPreviousPSuLMMatched = false;
+			bool bLoopStartPSuLMMatched = false;
 
-			if(pHypothesis->pMPSuLM == m_pNearestModelPSuLM && !bPreviousPSuLMMatched)
+			int iHypothesis;
+			CRVL3DPose *pPoseRTPrevPSuLM, *pPoseRTLoopStartPSuLM;
+
+			for(iHypothesis = 0; iHypothesis < m_nPlausibleHypotheses && !(bPreviousPSuLMMatched && bLoopStartPSuLMMatched); iHypothesis++)
 			{
-				bPreviousPSuLMMatched = true;
+				pHypothesis = m_HypothesisArray[iHypothesis];
 
-				pPoseRTPrevPSuLM = &(pHypothesis->PoseSM);
+				if(pHypothesis->pMPSuLM == m_pNearestModelPSuLM && !bPreviousPSuLMMatched)
+				{
+					bPreviousPSuLMMatched = true;
+
+					pPoseRTPrevPSuLM = &(pHypothesis->PoseSM);
+				}
+
+				if(pHypothesis->pMPSuLM == m_pLoopStartPSuLM && !bLoopStartPSuLMMatched)
+				{
+					bLoopStartPSuLMMatched = true;
+
+					pPoseRTLoopStartPSuLM = &(pHypothesis->PoseSM);
+				}
 			}
 
-			if(pHypothesis->pMPSuLM == m_pLoopStartPSuLM && !bLoopStartPSuLMMatched)
+			if(bPreviousPSuLMMatched && bLoopStartPSuLMMatched)
 			{
-				bLoopStartPSuLMMatched = true;
+				pNewPSuLM = Clone(pSPSuLM);
 
-				pPoseRTLoopStartPSuLM = &(pHypothesis->PoseSM);
+				m_PSuLMList.Add(pNewPSuLM);
+
+				Connect(m_pNearestModelPSuLM, pNewPSuLM, NULL, pPoseRTPrevPSuLM);
+
+				Connect(m_pLoopStartPSuLM, pNewPSuLM, NULL, pPoseRTLoopStartPSuLM);
+
+				m_pNearestModelPSuLM = pNewPSuLM;
+
+				m_pLoopStartPSuLM = NULL;
+
+				m_Flags &= ~RVLPSULMBUILDER_FLAG_MANUAL_LOOP_CLOSING;
 			}
-		}
-
-		if(bPreviousPSuLMMatched && bLoopStartPSuLMMatched)
+			else
+				return false;
+		}	// if((m_Flags & RVLPSULMBUILDER_FLAG_MANUAL_LOOP_CLOSING) && m_pLoopStartPSuLM)
+		else
 		{
+			pHypothesis = m_HypothesisArray[0];
+
+			if(pHypothesis->pMPSuLM->m_PosteriorProbabilityLocal < 0.999)
+				return false;
+
+			CRVL3DPose *pPoseSM = &(pHypothesis->PoseSM);
+
+			double V[3];
+			double eAlpha;
+
+			pPoseSM->GetAngleAxis(V, eAlpha);
+
+			double *t = pPoseSM->m_X;
+
+			double dist = sqrt(RVLDOTPRODUCT3(t, t));
+
+			if(dist < m_MinHybridLocalizationDist && eAlpha * RAD2DEG < m_MinHybridLocalizationAngle)
+				return false;
+
 			pNewPSuLM = Clone(pSPSuLM);
 
 			m_PSuLMList.Add(pNewPSuLM);
 
-			Connect(m_pNearestModelPSuLM, pNewPSuLM, NULL, pPoseRTPrevPSuLM);
-
-			Connect(m_pLoopStartPSuLM, pNewPSuLM, NULL, pPoseRTLoopStartPSuLM);
+			Connect(m_pNearestModelPSuLM, pNewPSuLM, NULL, pPoseSM);
 
 			m_pNearestModelPSuLM = pNewPSuLM;
-
-			m_pLoopStartPSuLM = NULL;
-
-			m_Flags &= ~RVLPSULMBUILDER_FLAG_MANUAL_LOOP_CLOSING;
-		}
-		else
-			return false;
-	}	// if((m_Flags & RVLPSULMBUILDER_FLAG_MANUAL_LOOP_CLOSING) && m_pLoopStartPSuLM)
-	else
-	{
-		pHypothesis = m_HypothesisArray[0];
-
-		if(pHypothesis->pMPSuLM->m_PosteriorProbabilityLocal < 0.999)
-			return false;
-
-		CRVL3DPose *pPoseSM = &(pHypothesis->PoseSM);
-
-		double V[3];
-		double eAlpha;
-
-		pPoseSM->GetAngleAxis(V, eAlpha);
-
-		double *t = pPoseSM->m_X;
-
-		double dist = sqrt(RVLDOTPRODUCT3(t, t));
-
-		if(dist < m_MinHybridLocalizationDist && eAlpha * RAD2DEG < m_MinHybridLocalizationAngle)
-			return false;
-
-		pNewPSuLM = Clone(pSPSuLM);
-
-		m_PSuLMList.Add(pNewPSuLM);
-
-		Connect(m_pNearestModelPSuLM, pNewPSuLM, NULL, pPoseSM);
-
-		m_pNearestModelPSuLM = pNewPSuLM;
 	}
 #else	// !RVLPSULMBUILDER_MAPBUILDING_SEQUENCE
-	bool bCovered = false;
-	bool bTracking = false;
+		bool bCovered = false;
+		bool bTracking = false;
 
-	CRVLPSuLM *pMPSuLM;
-	CRVL3DPose *pPoseSM;
-	double V[3];
-	double eAlpha;
-	double *t;
-	double dist;
+		CRVL3DPose *pPoseSM;
+		double V[3];
+		double eAlpha;
+		double *t;
+		double dist;
 
-	m_PSuLMList.Start();
+		m_PSuLMList.Start();
 
-	while(m_PSuLMList.m_pNext)
-	{
-		pMPSuLM = (CRVLPSuLM *)(m_PSuLMList.GetNext());
+		while (m_PSuLMList.m_pNext)
+		{
+			pMPSuLM = (CRVLPSuLM *)(m_PSuLMList.GetNext());
 
-		if(pMPSuLM->m_pHypothesis == NULL)
-			continue;
+			if (pMPSuLM->m_pHypothesis == NULL)
+				continue;
 
-		//if(pMPSuLM->m_PosteriorProbabilityLocal < 0.999)
-		//if(pMPSuLM->m_PosteriorProbabilityLocal5DOF < 30.0)
-		if(pMPSuLM->m_PosteriorProbabilityLocal5DOF < 50.0)
-			continue;
+			//if(pMPSuLM->m_PosteriorProbabilityLocal < 0.999)
+			//if(pMPSuLM->m_PosteriorProbabilityLocal5DOF < 30.0)
+			if (pMPSuLM->m_PosteriorProbabilityLocal5DOF < 50.0)
+				continue;
 
-		bTracking = true;
+			bTracking = true;
 
-		pPoseSM = &(pMPSuLM->m_pHypothesis->PoseSM);
+			pPoseSM = &(pMPSuLM->m_pHypothesis->PoseSM);
 
-		pPoseSM->GetAngleAxis(V, eAlpha);
+			pPoseSM->GetAngleAxis(V, eAlpha);
 
-		t = pPoseSM->m_X;
+			t = pPoseSM->m_X;
 
-		dist = sqrt(RVLDOTPRODUCT3(t, t));
+			dist = sqrt(RVLDOTPRODUCT3(t, t));
 
-		//if(bCovered =(dist < m_MinHybridLocalizationDist && eAlpha * RAD2DEG < m_MinHybridLocalizationAngle))
-		//	break;
+			//if(bCovered =(dist < m_MinHybridLocalizationDist && eAlpha * RAD2DEG < m_MinHybridLocalizationAngle))
+			//	break;
+		}
+
+		if (bCovered)
+			return false;
 	}
-
-	if(bCovered)
-		return false;
 
 	//if(!bTracking)
 	//	return false;

@@ -3,8 +3,6 @@
 #define RVLVS_ERR_CAMERA		0x01000000
 #define RVLVS_ERR_EDGE_MAP_FILE	0x02000000
 
-
-
 #define RVLSYS_FLAGS_IMAGE							0x00000001
 #define RVLSYS_FLAGS_WARP_IMAGE						0x00000002
 #define RVLSYS_FLAGS_STEREO							0x00000004
@@ -17,6 +15,7 @@
 #define RVLSYS_MCMEMSIZE		2
 
 //#define RVLSYS_PSULMBRLM_UPDATE_LOG_FILE
+
 
 class CRVLVisionSystem
 {
@@ -46,5 +45,5 @@ public:
 	void Clear();
 	void UpdateMem();
 	virtual BOOL RealTimeDisplay(CRVLGUI *pGUI);
-	virtual void CreateParamList();
+	virtual void CreateParamList();	
 };

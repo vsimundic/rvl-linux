@@ -53,7 +53,6 @@ void CRVLVisionSystem::CreateParamList()
 	m_ParamList.AddID(pParamData, "yes", RVLSYS_FLAGS_USE_SEQUENCE_FILE);
 	pParamData = m_ParamList.AddParam("VS.GetBestHypothesisInSubSet", RVLPARAM_TYPE_FLAG, &m_Flags);
 	m_ParamList.AddID(pParamData, "yes", RVLSYS_FLAGS_BEST_SUBSET_HYPOTHESIS);
-
 }
 
 DWORD CRVLVisionSystem::Init(char *CfgFile2Name)
@@ -177,3 +176,4 @@ BOOL CRVLVisionSystem::RealTimeDisplay(CRVLGUI *pGUI)
 {
 	return FALSE;
 }
+

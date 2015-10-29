@@ -68,6 +68,8 @@ public:
 	void SaveMatchMatrix();
 	//void StoreHypothesesToMatchMatrix(int iSample);
 	void ComputeMatchMatrix(int iSample);
+	BOOL GetNextImageFileName(bool bBackwards = false);
+	BOOL GetFirstValidImageFileName();
 
 public:
 	CRVLPSuLMBuilder m_PSuLMBuilder;

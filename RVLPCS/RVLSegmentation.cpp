@@ -3303,33 +3303,36 @@ void RVLSegmentationDisplayBoundary(CRVLFigure *pFig,
 
 	RVLSegmentationGetBoundary(pSegment, ImageWidth, &ContourList, pMem);
 
-	RVLQLIST_INT_ENTRY *pVertex;
-	int iPix1, iPix2;
+	RVL3DPOINT3 *pVertex;
+	int u1, v1, u2, v2;
 
-	RVLQLIST_MULTILEVEL *pContour = (RVLQLIST_MULTILEVEL *)(ContourList.pFirst);
+	RVL3DCONTOUR *pContour = (RVL3DCONTOUR *)(ContourList.pFirst);
 
 	while(pContour)
 	{
-		pVertex = (RVLQLIST_INT_ENTRY *)(pContour->pFirst);
+		pVertex = (RVL3DPOINT3 *)(pContour->PtList.pFirst);
 
-		iPix1 = pVertex->i;
+		u1 = pVertex->P2D[0];
+		v1 = pVertex->P2D[1];
 
-		pVertex = (RVLQLIST_INT_ENTRY *)(pVertex->pNext);
+		pVertex = (RVL3DPOINT3 *)(pVertex->pNext);
 
 		while(pVertex)
 		{
-			iPix2 = pVertex->i;
+			u2 = pVertex->P2D[0];
+			v2 = pVertex->P2D[1];
 
 			pVector = pFig->AddVector(&Vector);
 			
-			pVector->Line(((iPix1 % ImageWidth + uOffset) << 1), ((iPix1 / ImageWidth) << 1), ((iPix2 % ImageWidth + uOffset) << 1), ((iPix2 / ImageWidth) << 1));
+			pVector->Line(((u1 + uOffset) << 1), (v1 << 1), ((u2 + uOffset) << 1), (v2 << 1));
 
-			iPix1 = iPix2;
+			u1 = u2;
+			v1 = v2;
 
-			pVertex = (RVLQLIST_INT_ENTRY *)(pVertex->pNext);
+			pVertex = (RVL3DPOINT3 *)(pVertex->pNext);
 		}
 
-		pContour = (RVLQLIST_MULTILEVEL *)(pContour->pNext);
+		pContour = (RVL3DCONTOUR *)(pContour->pNext);
 	}
 }
 

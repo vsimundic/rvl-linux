@@ -113,7 +113,8 @@ void CRVLPSuLMVS::Init(char * CfgFile2Name)
 
 	//if((m_PSuLMBuilder.m_Flags & RVLPSULMBUILDER_FLAG_MODE) == RVLPSULMBUILDER_FLAG_MODE_LOCALIZATION)
 	//	m_PSuLMBuilder.Load(m_PSuLMBuilder.m_ModelDatabasePath,2000);
-	if ((m_PSuLMBuilder.m_Flags & RVLPSULMBUILDER_FLAG_MODE) == RVLPSULMBUILDER_FLAG_MODE_LOCALIZATION)
+	if ((m_PSuLMBuilder.m_Flags & RVLPSULMBUILDER_FLAG_MODE) == RVLPSULMBUILDER_FLAG_MODE_LOCALIZATION ||
+		(m_PSuLMBuilder.m_Flags & RVLPSULMBUILDER_FLAG_MAPBUILDING))
 	{
 		m_PSuLMBuilder.LoadMap();
 
@@ -140,6 +141,9 @@ void CRVLPSuLMVS::Init(char * CfgFile2Name)
 	m_GroundTruth.Load();
 
 	LoadMatchMatrix();
+
+	if (m_PSuLMBuilder.m_Flags2 & RVLPSULMBUILDER_FLAG2_MAPBUILDING_MANUAL)
+		m_PSuLMBuilder.m_Flags &= ~RVLPSULMBUILDER_FLAG_MAPBUILDING;
 
 	if(m_Flags & (RVLSYS_FLAGS_EDIT_MAP | RVLSYS_FLAGS_REVIEW_RESULTS))
 	{
@@ -1277,6 +1281,48 @@ void CRVLPSuLMVS::ComputeMatchMatrix(int iSample)
 	m_PSuLMBuilder.m_LineMatchData.PPriorPosition = PPriorLinePositionOld;			
 }
 
+BOOL CRVLPSuLMVS::GetNextImageFileName(bool bBackwards)
+{
+	if ((m_PSuLMBuilder.m_Flags2 & RVLPSULMBUILDER_FLAG2_IMAGE_FORMAT) == RVLPSULMBUILDER_FLAG2_IMAGE_FORMAT_FREIBURG)
+	{
+		char *ImageFileName = m_PSuLMBuilder.m_DataSet.GetNextRGBFileName(m_ImageFileName, bBackwards);
+
+		if (ImageFileName)
+		{
+			delete[] m_ImageFileName;
+
+			m_ImageFileName = ImageFileName;
+
+			return TRUE;
+		}
+		else
+			return FALSE;
+	}		
+	else
+		return RVLGetNextFileName(m_ImageFileName, "00000-LW.bmp", 10000);
+}
+
+BOOL CRVLPSuLMVS::GetFirstValidImageFileName()
+{
+	if ((m_PSuLMBuilder.m_Flags2 & RVLPSULMBUILDER_FLAG2_IMAGE_FORMAT) == RVLPSULMBUILDER_FLAG2_IMAGE_FORMAT_FREIBURG)
+	{
+		char *ImageFileName = m_PSuLMBuilder.m_DataSet.GetValidRGBFileName(m_ImageFileName);
+
+		if (ImageFileName)
+		{
+			delete[] m_ImageFileName;
+
+			m_ImageFileName = ImageFileName;
+
+			return TRUE;
+		}
+		else
+			return FALSE;
+	}
+	else
+		return RVLGetFirstValidFileName(m_ImageFileName, "00000-sl.bmp", 10000);
+}
+
 void RVLPSuLMDisplayMouseCallback2(int event, int x, int y, int flags, void* vpData)
 {
 	CRVL3DPose NullPose;
@@ -1567,3 +1613,4 @@ void RVLPSuLMDisplayMouseCallback2(int event, int x, int y, int flags, void* vpD
 			}
 	}	//	switch( event )
 }
+
