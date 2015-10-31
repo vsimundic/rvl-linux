@@ -7,6 +7,8 @@ struct FREIBURG_DATASET_SAMPLE
 	int tRGBus;
 	int tDs;
 	int tDus;
+	double t[3];
+	double R[9];
 };
 
 class CRVLFreiburgDataSet
@@ -23,6 +25,9 @@ public:
 	void TransformDepthMap(
 		RVLDISPARITYMAP *pDepthMap,
 		short *zToDepthLookupTable);
+	bool GetSample(
+		char *RGBFileName,
+		FREIBURG_DATASET_SAMPLE *pSample);
 
 private:
 	char * CreateImageFileName(

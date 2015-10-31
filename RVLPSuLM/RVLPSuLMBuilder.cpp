@@ -12712,6 +12712,16 @@ void CRVLPSuLMBuilder::LoadMap()
 			if(pPSuLM->m_n3DLinesTotal > m_maxnModel3DLines)
 				m_maxnModel3DLines = pPSuLM->m_n3DLinesTotal;
 
+			//if ((m_Flags2 & RVLPSULMBUILDER_FLAG2_IMAGE_FORMAT) == RVLPSULMBUILDER_FLAG2_IMAGE_FORMAT_FREIBURG)
+			//{
+			//	FREIBURG_DATASET_SAMPLE	Sample;
+
+			//	m_DataSet.GetSample(pPSuLM->m_FileName, &Sample);
+
+			//	RVLCOPY3VECTOR(Sample.t, pPSuLM->m_PoseAbs->m_X);
+			//	RVLCOPYMX3X3(Sample.R, pPSuLM->m_PoseAbs->m_Rot);
+			//}
+
 			m_PSuLMList.Add(pPSuLM);
 			
 			pEntry = (RVLQLIST_PTR_ENTRY*)pEntry->pNext;

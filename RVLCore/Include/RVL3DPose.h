@@ -110,6 +110,7 @@ public:
 					CvMat *Z,
 					double *J);
 	BOOL GetAngleAxis(double *V, double &theta);
+	void UpdateRotFromAngleAxis(double *V, double theta);
 	void PlanarSurfaceEKFUpdate(double *C, 
 							    double *Q,
 							    double *e);

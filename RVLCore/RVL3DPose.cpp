@@ -421,6 +421,24 @@ BOOL CRVL3DPose::GetAngleAxis(double *V, double &theta)
 	return TRUE;
 }
 
+// Reference: Osnove robotike (consistent with Wikipedia - Axis angle)
+
+void CRVL3DPose::UpdateRotFromAngleAxis(double *V, double theta)
+{
+	double cq = cos(theta);
+	double sq = sin(theta);
+	double k = 1.0 - cq;
+
+	m_Rot[0 * 3 + 0] = V[0] * V[0] * k + cq;
+	m_Rot[0 * 3 + 1] = V[1] * V[0] * k - V[2] * sq;
+	m_Rot[0 * 3 + 2] = V[2] * V[0] * k + V[1] * sq;
+	m_Rot[1 * 3 + 0] = V[0] * V[1] * k + V[2] * sq;
+	m_Rot[1 * 3 + 1] = V[1] * V[1] * k + cq;
+	m_Rot[1 * 3 + 2] = V[2] * V[1] * k - V[0] * sq;
+	m_Rot[2 * 3 + 0] = V[0] * V[2] * k - V[1] * sq;
+	m_Rot[2 * 3 + 1] = V[1] * V[2] * k + V[0] * sq;
+	m_Rot[2 * 3 + 2] = V[2] * V[2] * k + cq;
+}
 
 void CRVL3DPose::Save(FILE *fp)
 {
