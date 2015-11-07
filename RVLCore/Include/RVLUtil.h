@@ -407,6 +407,8 @@
 	invC[3] = C[0] / detC;\
 }
 
+#define RVLGETFILEEXTENSION(FileName)	(strrchr(FileName, '.') + 1)
+
 struct PIX_ARRAY
 {
 	int Width;

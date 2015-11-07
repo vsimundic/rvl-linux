@@ -55,6 +55,11 @@ public:
 		IplImage *pRGBImage,
 		char *RGBExtension,
 		char *pDepthExtension);
+#ifdef RVLPCL
+	bool InputRGBDImageFromPCDFile(
+		RVLDISPARITYMAP *pDepthImage,
+		IplImage *pRGBImage);
+#endif
 	void SaveRGBDImageToFile(
 		RVLDISPARITYMAP *pDepthImage,
 		IplImage *pRGBImage,

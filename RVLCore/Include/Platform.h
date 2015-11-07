@@ -12,6 +12,7 @@
 //#define RVLWIN
 #define RVLOPENNI
 #define RVLVTK
+//#define RVLPCL
 //#define RVL3DOBJ2
 //#define RVL_DEBUG   // for debugging purposes 
 //#define RVL_LOG_FILE

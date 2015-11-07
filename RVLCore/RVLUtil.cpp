@@ -2992,7 +2992,7 @@ double RVLRandPDF(	double PDF(double val_, void *vpParams_),
 	return x;
 }
 
-#include "opencv2/nonfree/features2d.hpp"
+//#include "opencv2/nonfree/features2d.hpp"
 
 //void RVLDummy()
 //{

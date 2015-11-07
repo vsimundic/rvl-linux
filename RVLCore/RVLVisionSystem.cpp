@@ -1,6 +1,10 @@
 //#include "highgui.h"
 #include "RVLCore.h"
 #include "Include\RVLVisionSystem.h"
+#ifdef RVLPCL
+#include <pcl/io/pcd_io.h>
+#include <pcl/point_types.h>
+#endif
 
 CRVLVisionSystem::CRVLVisionSystem()
 {
@@ -196,19 +200,40 @@ bool CRVLVisionSystem::InputRGBDImageFromFile(
 	char *RGBExtension,
 	char *DepthExtension)
 {
-	pRGBImage = cvLoadImage(m_ImageFileName);
+#ifdef RVLPCL
+	if (strcmp(RVLGETFILEEXTENSION(m_ImageFileName), "pcd"))
+		return InputRGBDImageFromPCDFile(pDepthImage, pRGBImage);
+	else
+#endif
+	{
+		pRGBImage = cvLoadImage(m_ImageFileName);
 
-	if (pRGBImage == NULL)
+		if (pRGBImage == NULL)
+			return false;
+
+		char *DisparityImageFileName = RVLCreateFileName(m_ImageFileName, RGBExtension, -1, DepthExtension);
+
+		RVLImportDisparityImage(DisparityImageFileName, pDepthImage, m_StereoVision.m_DisparityMap.Format, m_Kinect.m_zToDepthLookupTable);
+
+		delete[] DisparityImageFileName;
+
+		return true;
+	}
+}
+
+#ifdef RVLPCL
+bool CRVLVisionSystem::InputRGBDImageFromPCDFile(
+	RVLDISPARITYMAP *pDepthImage,
+	IplImage *pRGBImage)
+{
+	pcl::PointCloud<pcl::PointXYZ> PC;
+
+	if (pcl::io::loadPCDFile<pcl::PointXYZ>(m_ImageFileName, PC) == -1)
 		return false;
-
-	char *DisparityImageFileName = RVLCreateFileName(m_ImageFileName, RGBExtension, -1, DepthExtension);
-
-	RVLImportDisparityImage(DisparityImageFileName, pDepthImage, m_StereoVision.m_DisparityMap.Format, m_Kinect.m_zToDepthLookupTable);
-
-	delete[] DisparityImageFileName;
 
 	return true;
 }
+#endif
 
 void CRVLVisionSystem::SaveRGBDImageToFile(
 	RVLDISPARITYMAP *pDepthImage,

@@ -84,7 +84,7 @@
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
       <Optimization>Disabled</Optimization>
-      <AdditionalIncludeDirectories>$(OPENCV_BUILD)\include;.\Include;$(OPENNI2_INCLUDE);$(VTK_PATH)\include\vtk-6.1;C:\Libraries\FLANN\flann-1.8.4-src\src\cpp\flann</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(OPENCV_BUILD)\include;.\Include;$(OPENNI2_INCLUDE);$(VTK_PATH)\include\vtk-6.1;C:\Libraries\FLANN\flann-1.8.4-src\src\cpp\flann;C:\Libraries\PCL\PCL 1.8.0\include\pcl-1.8;C:\Libraries\Eigen\eigen3</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>WIN32;_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <PrecompiledHeader />
@@ -96,7 +96,7 @@
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
       <Optimization>Disabled</Optimization>
-      <AdditionalIncludeDirectories>C:\Users\Damir\Documents\Dependancy libraries VS2013\OpenCV 3.0.0 beta\opencv\build\include;.\Include;$(OPENNI2_INCLUDE64);C:\Users\Damir\Documents\Dependancy libraries VS2013\VTK 6.1\include\vtk-6.1</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\OpenCV3.0\opencv\build\include;.\Include;$(VTK_PATH)\x64\include\vtk-6.1;C:\Program Files\OpenNI2\Include</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>WIN32;_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <PrecompiledHeader>
