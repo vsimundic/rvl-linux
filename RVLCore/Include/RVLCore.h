@@ -51,6 +51,7 @@
 #include "RVLRelation.h"
 #include "RVLAImage.h"
 #include "RVLStereoVision.h"
+#include "RVLPC.h"
 #include "RVLVisionSystem.h"
 #ifdef RVLVTK
 #include "RVLVTK.h"

@@ -1,5 +1,6 @@
 //#include "highgui.h"
 #include "RVLCore.h"
+#include "Include\RVLVisionSystem.h"
 
 CRVLVisionSystem::CRVLVisionSystem()
 {
@@ -15,6 +16,9 @@ CRVLVisionSystem::CRVLVisionSystem()
 	m_MemSize = 150000000;
 	m_Mem2Size = 150000000;
 	m_MCMemSize = 10000000;
+
+	m_nPC = 0;
+	m_PC = NULL;
 }
 
 CRVLVisionSystem::~CRVLVisionSystem()
@@ -161,6 +165,15 @@ DWORD CRVLVisionSystem::Init(char *CfgFile2Name)
 void CRVLVisionSystem::Clear()
 {
 	m_AImage.Clear();
+
+	m_nPC = 0;
+
+	if (m_PC)
+	{
+		delete[] m_PC;
+
+		m_PC = NULL;
+	}		
 }
 
 void CRVLVisionSystem::UpdateMem()
@@ -177,3 +190,51 @@ BOOL CRVLVisionSystem::RealTimeDisplay(CRVLGUI *pGUI)
 	return FALSE;
 }
 
+bool CRVLVisionSystem::InputRGBDImageFromFile(
+	RVLDISPARITYMAP *pDepthImage,
+	IplImage *pRGBImage,
+	char *RGBExtension,
+	char *DepthExtension)
+{
+	pRGBImage = cvLoadImage(m_ImageFileName);
+
+	if (pRGBImage == NULL)
+		return false;
+
+	char *DisparityImageFileName = RVLCreateFileName(m_ImageFileName, RGBExtension, -1, DepthExtension);
+
+	RVLImportDisparityImage(DisparityImageFileName, pDepthImage, m_StereoVision.m_DisparityMap.Format, m_Kinect.m_zToDepthLookupTable);
+
+	delete[] DisparityImageFileName;
+
+	return true;
+}
+
+void CRVLVisionSystem::SaveRGBDImageToFile(
+	RVLDISPARITYMAP *pDepthImage,
+	IplImage *pRGBImage,
+	char *RGBExtension)
+{
+	RVLSaveDepthImage(pDepthImage->Disparity, pDepthImage->Width, pDepthImage->Height, m_ImageFileName, pDepthImage->Format, RVLKINECT_DEPTH_IMAGE_FORMAT_1MM);
+
+	int iSample = RVLGetFileNumber(m_ImageFileName, "00000-D.txt");
+
+	RVLSetFileNumber(m_ImageFileName, "00000-D.txt", iSample + 1);
+
+	char *RGBFileName = RVLCreateFileName(m_ImageFileName, "-D.txt", iSample + 1, RGBExtension);
+
+	cvSaveImage(RGBFileName, pRGBImage);
+
+	delete[] RGBFileName;
+}
+
+void CRVLVisionSystem::SavePC()
+{
+	int iSample = RVLGetFileNumber(m_ImageFileName, "00000-PC.pcd");
+
+	char *PCFileName = RVLCreateFileName(m_ImageFileName, "-PC.pcd", iSample, "-PC.obj");
+
+	RVLPCSaveToObj(m_PC, m_nPC, PCFileName);
+
+	delete[] PCFileName;
+}

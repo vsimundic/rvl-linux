@@ -102,6 +102,7 @@ void RVLTransformVectorsDepthToRGB(	CRVLFigure *pFig,
 class CRVLGUI  
 {
 public:
+	void *m_vpVS;
 	DWORD m_Flags;
 	DWORD m_Command;
 	CRVLMem *m_pMem0;
@@ -131,6 +132,15 @@ public:
 		(2 * RVLGUI_OPTICAL_FLOW_DISPLAY_COLOR_LT_HALF_SIZE + 1)];
 	CRVL3DPose m_PoseC0ChangeScale;
 	//CRVLMutex *m_pMutex;
+	CRVLFigure *m_pFig;
+	IplImage *m_pInputImage;
+	int m_DisplayBitmap;
+	IplImage *m_pRGBImage;
+	IplImage *m_pHSVImage;
+	IplImage *m_pGSImage;
+	IplImage *m_pSegmentationImage;
+	IplImage *m_pZoomedInputImage;
+	bool m_bNextImage;
 
 public:
 	CRVLGUI();
@@ -156,6 +166,7 @@ public:
 					int w, int h,
 					CvScalar color,
 					bool bWaitForKey = true);
+	void MessageCannotOpenFile(char *FileName);
 };
 
 //#endif // !defined(AFX_RVLGUI_H__67C03517_A5D9_4A71_914C_608ADB97A9C6__INCLUDED_)

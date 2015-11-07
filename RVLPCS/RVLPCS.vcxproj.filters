@@ -15,9 +15,6 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="Include\RVLPC.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="Include\RVLPCS.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -45,9 +42,6 @@
     </ResourceCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="RVLPC.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="RVLPCSVS.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>

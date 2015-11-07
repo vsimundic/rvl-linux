@@ -181,6 +181,7 @@
     <ClCompile Include="RVLMPtrChain2.cpp" />
     <ClCompile Include="RVLObject2.cpp" />
     <ClCompile Include="RVLParameterList.cpp" />
+    <ClCompile Include="RVLPC.cpp" />
     <ClCompile Include="RVLPtrChain.cpp" />
     <ClCompile Include="RVLQListArray.cpp" />
     <ClCompile Include="RVLRelation.cpp" />
@@ -233,6 +234,7 @@
     <ClInclude Include="Include\RVLMPtrChain2.h" />
     <ClInclude Include="Include\RVLObject2.h" />
     <ClInclude Include="Include\RVLParameterList.h" />
+    <ClInclude Include="Include\RVLPC.h" />
     <ClInclude Include="Include\RVLPtrChain.h" />
     <ClInclude Include="Include\RVLQListArray.h" />
     <ClInclude Include="Include\RVLRelation.h" />

@@ -1,5 +1,4 @@
 #include "RVLCore.h"
-#include "RVLPC.h"
 
 bool RVLPCImport(char *FileName, double **pX, int &n)
 {

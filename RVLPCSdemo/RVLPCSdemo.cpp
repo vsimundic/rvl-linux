@@ -28,37 +28,6 @@ int main(int argc, char* argv[])
 
 	VS.Init("RVLPCSdemo.cfg");
 
-#ifdef RVLOPENNI
-	// initialize kinect
-
-	bool bKinect = VS.m_Kinect.Init();
-
-	//VS.m_Kinect.RegisterDepthToColor(true);
-
-	//VS.m_Kinect.GetParams();
-
-	//int u, v, z_;
-	//float x, y, z;
-	//double x__, y__;
-
-	//for(int i = 0; i < 1000; i++)
-	//{
-	//	u = RVLRandom(0, 639);
-	//	v = RVLRandom(0, 479);
-	//	z_ = RVLRandom(700, 10000);
-
-	//	VS.m_Kinect.ConvertDepthToWorld(u, v, z_, &x, &y, &z);
-
-	//	x__ = ((double)u - VS.m_Kinect.m_uc) / VS.m_Kinect.m_fu * (double)z_;
-	//	y__ = ((double)v - VS.m_Kinect.m_vc) / VS.m_Kinect.m_fv * (double)z_;
-	//}
-
-	if (bKinect)
-		VS.m_Flags &= ~RVLSYS_FLAGS_PC;
-#else
-	bool bKinect = false;
-#endif
-
 	// create GUI
 
 	CRVLPCSGUI GUI;
@@ -67,35 +36,23 @@ int main(int argc, char* argv[])
 	VS.m_PSD.m_DebugData.pGUI = &GUI;
 #endif
 
-	GUI.Init(&VS, bKinect);
+	GUI.Init(&VS);
 
 	// If Kinect is not available, display a message.
 
-	if (!bKinect)
+	if (!(VS.m_Flags & RVLSYS_FLAGS_KINECT))
 		GUI.Message("Kinect is not available.", 400, 100, cvScalar(0, 128, 255));
+
+#ifdef RVLOPENNI
+	if ((VS.m_Flags & RVLSYS_FLAGS_KINECT) && GUI.m_bRecord)
+		VS.m_StereoVision.m_DisparityMap.Format = RVLKINECT_DEPTH_IMAGE_FORMAT_1MM;
+#endif
 
 	// get the pointer to the depth image
 
 	RVLDISPARITYMAP *pDepthImage;
-	int w;
-	int h;
-	double *PC;
-	int nPC;
 
-	if(VS.m_Flags & RVLSYS_FLAGS_PC)
-	{
-		w = VS.m_PSD.m_Width;
-		h = VS.m_PSD.m_Height;
-
-		PC = new double[3 * w * h];
-	}
-	else
-	{
-		pDepthImage = &(VS.m_StereoVision.m_DisparityMap);
-
-		w = pDepthImage->Width;
-		h = pDepthImage->Height;
-	}
+	pDepthImage = &(VS.m_StereoVision.m_DisparityMap);
 
 #ifdef NEVER	// 150820
 
@@ -213,12 +170,12 @@ int main(int argc, char* argv[])
 #endif
 
 #ifdef RVLOPENNI
-		if(bKinect)
+		if (VS.m_Flags & RVLSYS_FLAGS_KINECT)
 		{
 			// acquire depth image from Kinect
 
 			if(GUI.m_bNextImage)
-				VS.m_Kinect.GetImages(pDepthImage->Disparity, GUI.m_pRGBImage, NULL, GUI.m_pGSImage, GUI.m_DepthMapFormat, GUI.m_iONISample);
+				VS.m_Kinect.GetImages(pDepthImage->Disparity, GUI.m_pRGBImage, NULL, GUI.m_pGSImage, pDepthImage->Format, GUI.m_iONISample);
 		}
 		else
 #endif
@@ -226,83 +183,24 @@ int main(int argc, char* argv[])
 
 		if(VS.m_Flags & RVLSYS_FLAGS_PC)
 		{
-			if(!RVLPCImport(VS.m_ImageFileName, &PC, nPC))
-			{
-				char message[] = "Can not open file ";
-
-				char *str = new char[strlen(VS.m_ImageFileName) + strlen(message) + 2];
-
-				strcpy(str, message);
-
-				strcat(str, VS.m_ImageFileName);
-
-				str[strlen(VS.m_ImageFileName) + strlen(message)] = '!';
-
-				GUI.Message(str, 400, 100, cvScalar(0, 128, 255));
-
-				delete[] str;
-			}
+			if (!RVLPCImport(VS.m_ImageFileName, &(VS.m_PC), VS.m_nPC))
+				GUI.MessageCannotOpenFile(VS.m_ImageFileName);
 		}
 		else
-		{
-			GUI.m_pRGBImage = cvLoadImage(VS.m_ImageFileName);
-
-			char *DisparityImageFileName = RVLCreateFileName(VS.m_ImageFileName, "-LW.bmp", -1, "-D.txt");
-
-			RVLImportDisparityImage(DisparityImageFileName, pDepthImage, GUI.m_DepthMapFormat,
-				VS.m_Kinect.m_zToDepthLookupTable);
-
-			delete[] DisparityImageFileName;
-
-			if (GUI.m_DepthMapFormat == RVLKINECT_DEPTH_IMAGE_FORMAT_100UM)
-				VS.m_PSD.m_Flags |= RVLPSD_FLAG_100UM;
-		}
+			VS.InputRGBDImageFromFile(pDepthImage, GUI.m_pRGBImage, "-LW.bmp", "-D.txt");
 
 		if (GUI.m_bRecord)
 		{
-			if(VS.m_Flags & RVLSYS_FLAGS_PC)
-			{
-				int iSample = RVLGetFileNumber(VS.m_ImageFileName, "00000-PC.pcd");
-
-				char *PCFileName = RVLCreateFileName(VS.m_ImageFileName, "-PC.pcd", iSample, "-PC.obj");
-
-				RVLPCSaveToObj(PC, nPC, PCFileName);
-
-				delete[] PCFileName;
-			}
+			if (VS.m_Flags & RVLSYS_FLAGS_PC)
+				VS.SavePC();
 			else
-			{
-				RVLSaveDepthImage(pDepthImage->Disparity, w, h, VS.m_ImageFileName, GUI.m_DepthMapFormat,
-					RVLKINECT_DEPTH_IMAGE_FORMAT_1MM);
-
-				int iSample = RVLGetFileNumber(VS.m_ImageFileName, "00000-D.txt");
-			
-				RVLSetFileNumber(VS.m_ImageFileName, "00000-D.txt", iSample + 1);
-
-				char *RGBFileName = RVLCreateFileName(VS.m_ImageFileName, "-D.txt", iSample + 1, "-LW.bmp");
-
-				cvSaveImage(RGBFileName, GUI.m_pRGBImage);
-
-				delete[] RGBFileName;
-			}
+				VS.SaveRGBDImageToFile(pDepthImage, GUI.m_pRGBImage, "-LW.bmp");
 		}
 		else
 		{
-			t = clock();			
+			t = clock();				
 
-			// clear image features
-
-			VS.m_AImage.Clear();
-
-			// compute a 3D point cloud from depth data
-
-			if(VS.m_Flags & RVLSYS_FLAGS_PC)
-				VS.m_PSD.GetOrgPC(PC, nPC);
-			else
-				VS.m_PSD.GetPointsWithDisparity(pDepthImage);	
-
-			t = clock() - t;
-
+#ifdef NEVER
 			if (VS.m_Flags & RVLSYS_FLAGS_SEGMENT_GRAPH)
 			{			
 				int nPts = w * h;
@@ -325,37 +223,17 @@ int main(int argc, char* argv[])
 				delete[] SegmentArray.Element;
 				delete[] Node;
 			}
-			else if (VS.m_Flags & RVLSYS_FLAGS_SEGMENT_MESH)
-			{
-				t = clock();
+#endif
 
-				// create a triangular mesh from the point cloud
+			VS.Segment();
 
-				VS.m_PSD.Segment(&(VS.m_AImage.m_C2DRegion), &(VS.m_AImage.m_C2DRegion2), &(VS.m_AImage.m_C2DRegion3), &(VS.m_Mem));
+			t = clock() - t;
 
-				// assign labels to segments
+			GUI.m_ExecTime = 1000.0f * ((float)t) / CLOCKS_PER_SEC;
 
-				if (VS.m_PSD.m_Flags & RVLPSD_MESH_SEGMENT_PLANAR)
-				{
-					VS.m_nObjects = VS.m_AImage.m_C2DRegion3.m_ObjectList.m_nElements + 1;
+			fprintf(fpExecTime, "%d\t%lf\n", GUI.m_iONISample, GUI.m_ExecTime);
 
-					VS.m_PSD.AssignLabels(&(VS.m_AImage.m_C2DRegion), &(VS.m_AImage.m_C2DRegion3));
-				}
-
-				// segment the triangular mesh to convex sets
-
-				if (VS.m_Flags & RVLSYS_FLAGS_SEGMENT_TO_CONVEX_SETS)
-					VS.m_nObjects = RVLSegmentToConvex(&(VS.m_AImage.m_C2DRegion), NULL, &(VS.m_AImage.m_C2DRegion2),
-					VS.m_ConvexSegmentThr, w, h, VS.m_PSD.m_Point3DMap, &(VS.m_Mem), NULL, NULL,
-					(VS.m_PSD.m_Flags & RVLPSD_FLAG_MM) != 0);
-
-				t = clock() - t;
-
-				GUI.m_ExecTime = 1000.0f * ((float)t) / CLOCKS_PER_SEC;
-
-				fprintf(fpExecTime, "%d\t%lf\n", GUI.m_iONISample, GUI.m_ExecTime);
-
-				fflush(fpExecTime);
+			fflush(fpExecTime);
 
 #ifdef NEVER // 150820
 
@@ -390,8 +268,7 @@ int main(int argc, char* argv[])
 
 				objects = GenMeshObjects(&(VS.m_AImage.m_C2DRegion.m_ObjectList), pHSVImage, nObjects, &pClass);
 #endif
-				//PruneTrianglesFromObjects(objects, nObjects);
-			}	// if (VS.m_Flags & RVLSYS_FLAGS_SEGMENT_MESH)
+			//PruneTrianglesFromObjects(objects, nObjects);
 		}	// if(!bRecord)
 
 		// display the results
@@ -765,7 +642,7 @@ int main(int argc, char* argv[])
 		{
 			// get new sample name/ID
 
-			if(!bKinect)
+			if (!(VS.m_Flags & RVLSYS_FLAGS_KINECT))
 				RVLGetNextFileName(VS.m_ImageFileName, "00000-LW.bmp", 10000);
 		}
 

@@ -347,6 +347,24 @@ int CRVLGUI::Message(	char *str,
 	return key;
 }
 
+void CRVLGUI::MessageCannotOpenFile(char *FileName)
+{
+	char message[] = "Can not open file ";
+
+	char *str = new char[strlen(FileName) + strlen(message) + 2];
+
+	strcpy(str, message);
+
+	strcat(str, FileName);
+
+	str[strlen(FileName) + strlen(message)] = '!';
+
+	Message(str, 400, 100, cvScalar(0, 128, 255));
+
+	delete[] str;
+
+}
+
 //*****************************************************
 //
 //     GLOBAL FUNCTIONS

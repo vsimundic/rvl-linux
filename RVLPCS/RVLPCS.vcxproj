@@ -146,7 +146,6 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="Include\RVLPC.h" />
     <ClInclude Include="Include\RVLPCS.h" />
     <ClInclude Include="Include\RVLPCSGUI.h" />
     <ClInclude Include="Include\RVLPCSVS.h" />
@@ -160,7 +159,6 @@
     <ResourceCompile Include="app.rc" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="RVLPC.cpp" />
     <ClCompile Include="RVLPCSGUI.cpp" />
     <ClCompile Include="RVLPCSVS.cpp" />
     <ClCompile Include="RVLPlanarSurfaceDetector.cpp" />

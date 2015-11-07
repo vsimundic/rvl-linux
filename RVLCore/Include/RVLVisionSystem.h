@@ -6,8 +6,10 @@
 #define RVLSYS_FLAGS_IMAGE							0x00000001
 #define RVLSYS_FLAGS_WARP_IMAGE						0x00000002
 #define RVLSYS_FLAGS_STEREO							0x00000004
-#define RVLSYS_FLAGS_USE_SEQUENCE_FILE				0x00000010
-#define RVLSYS_FLAGS_BEST_SUBSET_HYPOTHESIS			0x00000020
+#define RVLSYS_FLAGS_KINECT							0x00000008
+#define RVLSYS_FLAGS_PC								0x00000010
+#define RVLSYS_FLAGS_USE_SEQUENCE_FILE				0x00000020
+#define RVLSYS_FLAGS_BEST_SUBSET_HYPOTHESIS			0x00000040
 
 #define RVLSYS_FLAGS2_STEREO_ROI					0x00000001
 
@@ -37,6 +39,8 @@ public:
 	int m_MCMemSize;
 	CRVLParameterList m_ParamList;
 	CRVLMem m_ParamMem;
+	int m_nPC;
+	double *m_PC;
 
 public:
 	CRVLVisionSystem();
@@ -46,4 +50,14 @@ public:
 	void UpdateMem();
 	virtual BOOL RealTimeDisplay(CRVLGUI *pGUI);
 	virtual void CreateParamList();	
+	virtual bool InputRGBDImageFromFile(
+		RVLDISPARITYMAP *DepthImage,
+		IplImage *pRGBImage,
+		char *RGBExtension,
+		char *pDepthExtension);
+	void SaveRGBDImageToFile(
+		RVLDISPARITYMAP *pDepthImage,
+		IplImage *pRGBImage,
+		char *RGBExtension);
+	void SavePC();
 };

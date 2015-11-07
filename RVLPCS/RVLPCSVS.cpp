@@ -1,6 +1,7 @@
 //#include "highgui.h"
 #include "RVLCore.h"
 #include "RVLPCS.h"
+#include "Include\RVLPCSVS.h"
 
 CRVLPCSVS::CRVLPCSVS()
 {
@@ -57,12 +58,55 @@ DWORD CRVLPCSVS::Init(char *CfgFile2Name)
 	if (m_PSD.m_Flags & RVLPSD_SEGMENT_STRM)
 		m_Flags |= RVLSYS_FLAGS_SEGMENT_MESH;
 
+	m_StereoVision.m_DisparityMap.Format = (m_PSD.m_Flags & RVLPSD_FLAG_MM ?
+		(m_PSD.m_Flags & RVLPSD_FLAG_100UM ? RVLKINECT_DEPTH_IMAGE_FORMAT_100UM : RVLKINECT_DEPTH_IMAGE_FORMAT_1MM) :
+		RVLKINECT_DEPTH_IMAGE_FORMAT_DISPARITY);
+
 	// initialize Delaunay triangulation
 
 	m_pDelaunay->m_Width = m_CameraL.Width;
 	m_pDelaunay->m_Height = m_CameraL.Height;
 	m_pDelaunay->Init();
 	m_PSD.m_pDelaunay = m_pDelaunay;
+
+#ifdef RVLOPENNI
+	// initialize kinect
+
+	bool bKinect = m_Kinect.Init();
+
+	//VS.m_Kinect.RegisterDepthToColor(true);
+
+	//VS.m_Kinect.GetParams();
+
+	//int u, v, z_;
+	//float x, y, z;
+	//double x__, y__;
+
+	//for(int i = 0; i < 1000; i++)
+	//{
+	//	u = RVLRandom(0, 639);
+	//	v = RVLRandom(0, 479);
+	//	z_ = RVLRandom(700, 10000);
+
+	//	VS.m_Kinect.ConvertDepthToWorld(u, v, z_, &x, &y, &z);
+
+	//	x__ = ((double)u - VS.m_Kinect.m_uc) / VS.m_Kinect.m_fu * (double)z_;
+	//	y__ = ((double)v - VS.m_Kinect.m_vc) / VS.m_Kinect.m_fv * (double)z_;
+	//}
+
+	if (bKinect)
+	{
+		m_Flags |= RVLSYS_FLAGS_KINECT;
+		m_Flags &= ~RVLSYS_FLAGS_PC;
+	}	
+#endif
+
+	// point cloud
+
+	if (m_Flags & RVLSYS_FLAGS_PC)
+		m_PC = new double[3 * m_PSD.m_Width * m_PSD.m_Height];
+
+	/////
 
 	return RVL_RES_OK;
 }
@@ -110,7 +154,7 @@ void CRVLPCSVS::Display(CRVLPCSGUI *pGUI)
 		case 0:
 			// display the depth image on the display image
 
-			RVLDisplayDisparityMapColor(pGUI->m_pDepthImage, 0, FALSE, pGUI->m_pInputImage, pGUI->m_DepthMapFormat);
+			RVLDisplayDisparityMapColor(&(m_StereoVision.m_DisparityMap), 0, FALSE, pGUI->m_pInputImage, m_StereoVision.m_DisparityMap.Format);
 
 			break;
 		case 1:
@@ -201,4 +245,60 @@ void CRVLPCSVS::Display(CRVLPCSGUI *pGUI)
 	pGUI->ShowFigure(pFig);
 }
 
+bool CRVLPCSVS::InputRGBDImageFromFile(
+	RVLDISPARITYMAP *pDepthImage,
+	IplImage *pRGBImage,
+	char *RGBExtension,
+	char *DepthExtension)
+{
+	if (CRVLVisionSystem::InputRGBDImageFromFile(pDepthImage, pRGBImage, RGBExtension, DepthExtension))
+	{
+		if (m_StereoVision.m_DisparityMap.Format == RVLKINECT_DEPTH_IMAGE_FORMAT_100UM)
+			m_PSD.m_Flags |= RVLPSD_FLAG_100UM;
 
+		return true;
+	}
+	else
+		return false;
+}
+
+
+void CRVLPCSVS::Segment()
+{
+	// clear image features
+
+	m_AImage.Clear();
+
+	// compute a 3D point cloud from depth data
+
+	if (m_Flags & RVLSYS_FLAGS_PC)
+		m_PSD.GetOrgPC(m_PC, m_nPC);
+	else
+		m_PSD.GetPointsWithDisparity(&(m_StereoVision.m_DisparityMap));
+
+	int w = m_StereoVision.m_DisparityMap.Width;
+	int h = m_StereoVision.m_DisparityMap.Height;
+	
+	if (m_Flags & RVLSYS_FLAGS_SEGMENT_MESH)
+	{
+		// create a triangular mesh from the point cloud
+
+		m_PSD.Segment(&(m_AImage.m_C2DRegion), &(m_AImage.m_C2DRegion2), &(m_AImage.m_C2DRegion3), &(m_Mem));
+
+		// assign labels to segments
+
+		if (m_PSD.m_Flags & RVLPSD_MESH_SEGMENT_PLANAR)
+		{
+			m_nObjects = m_AImage.m_C2DRegion3.m_ObjectList.m_nElements + 1;
+
+			m_PSD.AssignLabels(&(m_AImage.m_C2DRegion), &(m_AImage.m_C2DRegion3));
+		}
+
+		// segment the triangular mesh to convex sets
+
+		if (m_Flags & RVLSYS_FLAGS_SEGMENT_TO_CONVEX_SETS)
+			m_nObjects = RVLSegmentToConvex(&(m_AImage.m_C2DRegion), NULL, &(m_AImage.m_C2DRegion2),
+			m_ConvexSegmentThr, w, h, m_PSD.m_Point3DMap, &(m_Mem), NULL, NULL,
+			(m_PSD.m_Flags & RVLPSD_FLAG_MM) != 0);
+	}
+}

@@ -9,18 +9,6 @@ class CRVLPCSGUI :
 	public CRVLGUI
 {
 public:
-	void *m_vpVS;
-	CRVLFigure *m_pFig;
-	IplImage *m_pInputImage;
-	int m_DisplayBitmap;
-	RVLDISPARITYMAP *m_pDepthImage;
-	DWORD m_DepthMapFormat;
-	IplImage *m_pRGBImage;
-	IplImage *m_pHSVImage;
-	IplImage *m_pGSImage;
-	IplImage *m_pSegmentationImage;
-	IplImage *m_pZoomedInputImage;
-	bool m_bNextImage;
 	bool m_bDisplayMesh;
 	bool m_bDisplayConvexSets;
 	bool m_bDisplaySelectedObjects;
@@ -43,8 +31,7 @@ public:
 	virtual ~CRVLPCSGUI();
 	bool InteractiveVisualization();
 	void Init(
-		void *vpVS,
-		bool bKinect = false);
+		void *vpVS);
 	void Clear();
 };
 

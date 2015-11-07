@@ -17,8 +17,7 @@ CRVLPCSGUI::~CRVLPCSGUI()
 }
 
 void CRVLPCSGUI::Init(
-	void *vpVS,
-	bool bKinect)
+	void *vpVS)
 {
 	m_vpVS = vpVS;
 
@@ -40,10 +39,6 @@ void CRVLPCSGUI::Init(
 
 	int *pointmap = new int[m_w * m_h];
 #endif
-
-	// depth image
-
-	m_pDepthImage = &(pVS->m_StereoVision.m_DisparityMap);
 
 	// create RGB image
 
@@ -85,7 +80,7 @@ void CRVLPCSGUI::Init(
 
 	// initialize display parameters
 
-	m_bKinect = bKinect;
+	m_bKinect = ((pVS->m_Flags & RVLSYS_FLAGS_KINECT) != 0);
 
 	m_ImageWidth = m_w;
 
@@ -99,13 +94,7 @@ void CRVLPCSGUI::Init(
 	m_iONISample = 0;
 	m_ZoomFactor = 1;
 	m_DisplayBitmap = (pVS->m_Flags & RVLSYS_FLAGS_SEGMENT_GRAPH ? 3 : 0);
-	m_DepthMapFormat = (pVS->m_PSD.m_Flags & RVLPSD_FLAG_MM ?
-		(pVS->m_PSD.m_Flags & RVLPSD_FLAG_100UM ? RVLKINECT_DEPTH_IMAGE_FORMAT_100UM : RVLKINECT_DEPTH_IMAGE_FORMAT_1MM) :
-		RVLKINECT_DEPTH_IMAGE_FORMAT_DISPARITY);
-#ifdef RVLOPENNI
-	if (m_bKinect && m_bRecord)
-		m_DepthMapFormat = RVLKINECT_DEPTH_IMAGE_FORMAT_1MM;
-#endif
+
 	m_ONISpeed = 1;
 }
 
@@ -113,9 +102,11 @@ bool CRVLPCSGUI::InteractiveVisualization()
 {
 	CRVLPCSVS *pVS = (CRVLPCSVS *)m_vpVS;
 
+	RVLDISPARITYMAP *pDepthImage = &(pVS->m_StereoVision.m_DisparityMap);
+
 #ifdef RVLOPENNI
 	if (m_bKinect && m_bRecord)
-		m_DepthMapFormat = RVLKINECT_DEPTH_IMAGE_FORMAT_1MM;
+		pDepthImage->Format = RVLKINECT_DEPTH_IMAGE_FORMAT_1MM;
 #endif
 
 	// load information about selected segments 
@@ -315,7 +306,7 @@ bool CRVLPCSGUI::InteractiveVisualization()
 		case 'r':
 			if (pVS->m_Kinect.m_Flags & RVLKINECT_FLAG_ONI_FILE)
 			{
-				RVLSaveDepthImage(m_pDepthImage->Disparity, m_w, m_h, pVS->m_ImageFileName, m_DepthMapFormat, m_DepthMapFormat);
+				RVLSaveDepthImage(pDepthImage->Disparity, m_w, m_h, pVS->m_ImageFileName, pDepthImage->Format, pDepthImage->Format);
 
 				int iSample = RVLGetFileNumber(pVS->m_ImageFileName, "00000-D.txt");
 
@@ -501,7 +492,7 @@ bool CRVLPCSGUI::InteractiveVisualization()
 
 #ifdef RVLOPENNI
 	if (m_bKinect && m_bRecord)
-		m_DepthMapFormat = RVLKINECT_DEPTH_IMAGE_FORMAT_1MM;
+		pDepthImage->Format = RVLKINECT_DEPTH_IMAGE_FORMAT_1MM;
 #endif
 
 	if (m_bNextImage)
