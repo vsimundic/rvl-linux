@@ -1,4 +1,9 @@
 //#include "highgui.h"
+#define RVLPCL
+#ifdef RVLPCL
+#include <pcl/io/pcd_io.h>
+#include <pcl/point_types.h>
+#endif
 #include "RVLCore.h"
 #include "RVLPCS.h"
 #include "Include\RVLPCSVS.h"
@@ -251,7 +256,15 @@ bool CRVLPCSVS::InputRGBDImageFromFile(
 	char *RGBExtension,
 	char *DepthExtension)
 {
-	if (CRVLVisionSystem::InputRGBDImageFromFile(pDepthImage, pRGBImage, RGBExtension, DepthExtension))
+	if (strcmp(RVLGETFILEEXTENSION(m_ImageFileName), "pcd") == 0)
+	{
+		m_Flags |= RVLSYS_FLAGS_PCLPCD;
+
+		m_PSD.m_Flags |= RVLPSD_FLAG_MM;
+
+		return InputRGBDImageFromPCDFile(pDepthImage, pRGBImage);
+	}
+	else if (CRVLVisionSystem::InputRGBDImageFromFile(pDepthImage, pRGBImage, RGBExtension, DepthExtension))
 	{
 		if (m_StereoVision.m_DisparityMap.Format == RVLKINECT_DEPTH_IMAGE_FORMAT_100UM)
 			m_PSD.m_Flags |= RVLPSD_FLAG_100UM;
@@ -273,7 +286,7 @@ void CRVLPCSVS::Segment()
 
 	if (m_Flags & RVLSYS_FLAGS_PC)
 		m_PSD.GetOrgPC(m_PC, m_nPC);
-	else
+	else if (!(m_Flags & RVLSYS_FLAGS_PCLPCD))
 		m_PSD.GetPointsWithDisparity(&(m_StereoVision.m_DisparityMap));
 
 	int w = m_StereoVision.m_DisparityMap.Width;
@@ -301,4 +314,126 @@ void CRVLPCSVS::Segment()
 			m_ConvexSegmentThr, w, h, m_PSD.m_Point3DMap, &(m_Mem), NULL, NULL,
 			(m_PSD.m_Flags & RVLPSD_FLAG_MM) != 0);
 	}
+}
+
+bool CRVLPCSVS::InputRGBDImageFromPCDFile(
+	RVLDISPARITYMAP *pDepthImage,
+	IplImage *pRGBImage)
+{
+#ifdef RVLPCL
+	pcl::PointCloud<pcl::PointXYZRGB> PC;
+
+	if (pcl::io::loadPCDFile<pcl::PointXYZRGB>(m_ImageFileName, PC) == -1)
+		return false;
+
+	int step;
+
+	if (PC.width == pDepthImage->Width && PC.height == pDepthImage->Height)
+		step = 1;
+	else if (PC.width == 2 * pDepthImage->Width && PC.height == 2 * pDepthImage->Height)
+		step = 2;
+	else
+		return false;
+
+	short *pDepth = pDepthImage->Disparity;
+
+	char *pRGB = pRGBImage->imageData;
+
+	RVL3DPOINT2 **ppP3DMap = m_PSD.m_Point3DMap;
+
+	RVL3DPOINT2 *pPoint3D = m_PSD.m_Point3DArray;
+
+	float maxz = 0.001f * (float)(m_StereoVision.m_maxz);
+
+	int iPt = 0;
+
+	int u, v;
+	pcl::PointXYZRGB Pt;
+	double *X;
+	int *iX;
+
+	for (v = 0; v < pDepthImage->Height; v++)
+	{
+		for (u = 0; u < pDepthImage->Width; u++, ppP3DMap++, pDepth++, iPt += step)
+		{
+			Pt = PC.points[iPt];
+
+			*(pRGB++) = Pt.r;
+			*(pRGB++) = Pt.g;
+			*(pRGB++) = Pt.b;
+
+			if (isfinite(Pt.z))
+			{
+				if (Pt.z > maxz)
+				{
+					*ppP3DMap = NULL;
+
+					continue;
+				}
+			}
+			else
+			{
+				*pDepth = 0;
+
+				*ppP3DMap = NULL;
+
+				continue;
+			}
+
+			X = pPoint3D->XYZ;
+
+			X[0] = 1000.0 * (double)(Pt.x);
+			X[1] = 1000.0 * (double)(Pt.y);
+			X[2] = 1000.0 * (double)(Pt.z);
+
+			iX = pPoint3D->iX;
+
+			iX[0] = DOUBLE2INT(X[0]);
+			iX[1] = DOUBLE2INT(X[1]);
+			iX[2] = DOUBLE2INT(X[2]);
+
+			pPoint3D->x = X[0];
+			pPoint3D->y = X[1];
+			pPoint3D->z = X[2];
+
+			pPoint3D->u = u;
+			pPoint3D->v = v;
+			pPoint3D->d = iX[2];
+			pPoint3D->iPix = iPt;
+			pPoint3D->segmentNumber = -1;
+			pPoint3D->refSegmentNumber = -1;
+			pPoint3D->iCell = -1;
+			pPoint3D->regionList = NULL;
+
+			*pDepth = iX[2];
+
+			*ppP3DMap = pPoint3D;
+
+			pPoint3D++;
+		}
+
+		iPt += ((step * pDepthImage->Width) * (step - 1));
+	}
+
+	m_PSD.m_n3DPoints = pPoint3D - m_PSD.m_Point3DArray;
+
+	/////
+
+	return true;
+#else
+	return false;
+#endif
+}
+
+
+bool CRVLPCSVS::InputFromFile(
+	RVLDISPARITYMAP *pDepthImage, 
+	IplImage *pRGBImage)
+{
+	if (m_Flags & RVLSYS_FLAGS_PC)
+		return RVLPCImport(m_ImageFileName, &m_PC, m_nPC);
+	else if (pDepthImage != NULL && pRGBImage != NULL)
+		return InputRGBDImageFromFile(pDepthImage, pRGBImage, "-LW.bmp", "-D.txt");
+	else
+		return false;
 }

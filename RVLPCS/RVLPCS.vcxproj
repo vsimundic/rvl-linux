@@ -97,9 +97,9 @@
     <ClCompile>
       <Optimization>Disabled</Optimization>
       <InlineFunctionExpansion>Default</InlineFunctionExpansion>
-      <AdditionalIncludeDirectories>C:\OpenCV3.0\opencv\build\include;.\Include;..\RVLCore\Include;$(VTK_PATH)\x64\include\vtk-6.1</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\OpenCV3.0\opencv\build\include;.\Include;..\RVLCore\Include;C:\Libraries\PCL\PCL 1.8.0\include\pcl-1.8;C:\Libraries\Eigen\eigen3;C:\Program Files\PCL 1.7.2\3rdParty\Boost\include\boost-1_56;$(VTK_PATH)\x64\include\vtk-6.1</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>WIN32;_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
       <PrecompiledHeader>
       </PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>

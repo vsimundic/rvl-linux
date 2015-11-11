@@ -6484,19 +6484,19 @@ CRVL3DMeshObject* GenMeshObjects(CRVLMPtrChain *pTriangleList,
 
  
 
-      //Generating Histograms
+      ////Generating Histograms
 
-      float histBase[] = {16.0, 16.0, 16.0}; //bins per dimension of color histogram
+      //float histBase[] = {16.0, 16.0, 16.0}; //bins per dimension of color histogram
 
-      for (int i = 0; i < nObjects; i++)
+      //for (int i = 0; i < nObjects; i++)
 
-      {
+      //{
 
-            //objects[i].RVLCalculateHSVHist(pImg, histBase, false);
+      //      //objects[i].RVLCalculateHSVHist(pImg, histBase, false);
 
-            objects[i].RVLCalculateRGBHist(pImg, histBase, false);
+      //      objects[i].RVLCalculateRGBHist(pImg, histBase, false);
 
-      }
+      //}
 
  
 

@@ -8,8 +8,9 @@
 #define RVLSYS_FLAGS_STEREO							0x00000004
 #define RVLSYS_FLAGS_KINECT							0x00000008
 #define RVLSYS_FLAGS_PC								0x00000010
-#define RVLSYS_FLAGS_USE_SEQUENCE_FILE				0x00000020
-#define RVLSYS_FLAGS_BEST_SUBSET_HYPOTHESIS			0x00000040
+#define RVLSYS_FLAGS_PCLPCD							0x00000020
+#define RVLSYS_FLAGS_USE_SEQUENCE_FILE				0x00000040
+#define RVLSYS_FLAGS_BEST_SUBSET_HYPOTHESIS			0x00000080
 
 #define RVLSYS_FLAGS2_STEREO_ROI					0x00000001
 
@@ -55,11 +56,6 @@ public:
 		IplImage *pRGBImage,
 		char *RGBExtension,
 		char *pDepthExtension);
-#ifdef RVLPCL
-	bool InputRGBDImageFromPCDFile(
-		RVLDISPARITYMAP *pDepthImage,
-		IplImage *pRGBImage);
-#endif
 	void SaveRGBDImageToFile(
 		RVLDISPARITYMAP *pDepthImage,
 		IplImage *pRGBImage,

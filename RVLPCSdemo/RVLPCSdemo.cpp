@@ -174,20 +174,19 @@ int main(int argc, char* argv[])
 		{
 			// acquire depth image from Kinect
 
-			if(GUI.m_bNextImage)
+			if (GUI.m_bNextImage)
 				VS.m_Kinect.GetImages(pDepthImage->Disparity, GUI.m_pRGBImage, NULL, GUI.m_pGSImage, pDepthImage->Format, GUI.m_iONISample);
 		}
 		else
 #endif
 		// import depth image
 
-		if(VS.m_Flags & RVLSYS_FLAGS_PC)
+		if(!VS.InputFromFile(pDepthImage, GUI.m_pRGBImage))
 		{
-			if (!RVLPCImport(VS.m_ImageFileName, &(VS.m_PC), VS.m_nPC))
-				GUI.MessageCannotOpenFile(VS.m_ImageFileName);
+			GUI.MessageCannotOpenFile(VS.m_ImageFileName);
+
+			return 0;
 		}
-		else
-			VS.InputRGBDImageFromFile(pDepthImage, GUI.m_pRGBImage, "-LW.bmp", "-D.txt");
 
 		if (GUI.m_bRecord)
 		{

@@ -296,9 +296,9 @@ bool CRVLPCSGUI::InteractiveVisualization()
 		case 'b':
 			m_DisplayBitmap = (m_DisplayBitmap + 1) % (pVS->m_Flags & RVLSYS_FLAGS_SEGMENT_GRAPH ? 4 : 3);
 
-#ifdef RVLOPENNI
-			pVS->m_Kinect.RegisterDepthToColor((m_DisplayBitmap != 0));
-#endif
+//#ifdef RVLOPENNI
+//			pVS->m_Kinect.RegisterDepthToColor((m_DisplayBitmap != 0));
+//#endif
 
 			bRefresh = true;
 

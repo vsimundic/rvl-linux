@@ -56,4 +56,10 @@ public:
 		char *RGBExtension,
 		char *pDepthExtension);
 	void Segment();
+	bool InputRGBDImageFromPCDFile(
+		RVLDISPARITYMAP *pDepthImage,
+		IplImage *pRGBImage);
+	bool InputFromFile(
+		RVLDISPARITYMAP *pDepthImage = NULL,
+		IplImage *pRGBImage = NULL);
 };
