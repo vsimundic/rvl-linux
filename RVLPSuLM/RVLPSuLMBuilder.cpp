@@ -12640,8 +12640,8 @@ void CRVLPSuLMBuilder::LoadMap()
 		{
 			pPSuLM = (CRVLPSuLM*)pEntry->Ptr;		
 
-			if(pPSuLM->m_Index > m_maxPSuLMIndex)
-				m_maxPSuLMIndex = pPSuLM->m_Index;
+			if((int)(pPSuLM->m_Index) > m_maxPSuLMIndex)
+				m_maxPSuLMIndex = (int)(pPSuLM->m_Index);
 
 			//if(pPSuLM->m_Index < 22)
 			//{
@@ -12668,17 +12668,17 @@ void CRVLPSuLMBuilder::LoadMap()
 
 				pGUI->Message(str, 400, 100, cvScalar(0, 128, 255), false);
 
-				fp = fopen(pPSuLM->m_ModelFilePath, "rb");
+				//fp = fopen(pPSuLM->m_ModelFilePath, "rb");
 
-				if(fp)
-				{
-					fread(&bTmp, sizeof(BOOL), 1, fp);
-					fread(&fTmp, sizeof(double), 1, fp);
-					fread(&(pPSuLM->m_iSubMap), sizeof(WORD), 1, fp);
+				//if(fp)
+				//{
+				//	fread(&bTmp, sizeof(BOOL), 1, fp);
+				//	fread(&fTmp, sizeof(double), 1, fp);
+				//	fread(&(pPSuLM->m_iSubMap), sizeof(WORD), 1, fp);
 
-					fclose(fp);
-				}
-				else
+				//	fclose(fp);
+				//}
+				//else
 					pPSuLM->m_iSubMap = 0;
 
 				m_ImageFileName = RVLCreateString(pPSuLM->m_FileName);

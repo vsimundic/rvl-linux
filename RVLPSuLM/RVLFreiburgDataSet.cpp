@@ -4,7 +4,8 @@
 
 CRVLFreiburgDataSet::CRVLFreiburgDataSet()
 {
-	m_maxet = 60000;
+	//m_maxet = 60000;
+	m_maxet = 200000;
 	m_SampleTime = 500000;
 	m_SampleStep = 1;
 	m_bSampleTime = false;
@@ -137,6 +138,9 @@ bool CRVLFreiburgDataSet::Load(char *DataSetFileName)
 				continue;
 
 			sscanf(sLine, "%d.%d", &(Sample.tRGBs), &(Sample.tRGBus));
+
+			//if (Sample.tRGBs == 1311878278 && Sample.tRGBus == 47881)
+			//	int debug = 0;
 
 			Sample.iSubset = iSubset;
 
