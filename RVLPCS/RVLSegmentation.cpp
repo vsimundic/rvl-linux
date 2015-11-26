@@ -3232,6 +3232,8 @@ void RVLSegmentationGetBoundary(
 
 				RVLMEM_ALLOC_STRUCT(pMem, RVL3DCONTOUR, pContour);
 
+				pContour->iView = 0;
+
 				RVLQLIST_ADD_ENTRY(pContourList, pContour);
 
 				pPtList = &(pContour->PtList);

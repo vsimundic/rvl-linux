@@ -1112,7 +1112,14 @@ void RightButtonPressCallback(vtkObject* caller, unsigned long eid, void* client
 }
 
 //Function for generating PSuLM VTK scene
-void GenAndDispPSuLMScene(CRVLPSuLM *psulm, CRVLVTKRenderer* pRenderer, std::map<std::string, VTKActorObj*>* vtkobjs, bool add = false, CRVL3DPose * pose = NULL, int modelIdx = 0)
+void GenAndDispPSuLMScene(
+	CRVLPSuLM *psulm, 
+	CRVLVTKRenderer* pRenderer, 
+	std::map<std::string, VTKActorObj*>* vtkobjs, 
+	bool bRGB = false, 
+	bool add = false, 
+	CRVL3DPose * pose = NULL, 
+	int modelIdx = 0)
 {
 	//Setting up VTK scene
 	vtkRenderer *ren1 = pRenderer->m_pRenderer;
@@ -1261,41 +1268,48 @@ void GenAndDispPSuLMScene(CRVLPSuLM *psulm, CRVLVTKRenderer* pRenderer, std::map
 				currentC = (RVL3DCONTOUR*)currentC->pNext;
 				continue;
 			}
-			//open image/texture for that conture (chack if it is the same as the last one to prevent constant oppening and closing of same images)
-			if (!texArray[currentC->iView])//((iSample != (iSampleOrig + currentC->iView)) || (!texObj))
+			if (bRGB)
 			{
-				iSample = iSampleOrig + currentC->iView;
-				RVLSetFileNumber(imageFileName, "00000-LW.bmp", iSample);
-				//
-				bmpR->SetFileName(imageFileName);
-				bmpR->Update();
-				////
+				//open image/texture for that conture (chack if it is the same as the last one to prevent constant oppening and closing of same images)
+				if (!texArray[currentC->iView])//((iSample != (iSampleOrig + currentC->iView)) || (!texObj))
+				{
+					iSample = iSampleOrig + currentC->iView;
+					RVLSetFileNumber(imageFileName, "00000-LW.bmp", iSample);
+					//
+					bmpR->SetFileName(imageFileName);
+					bmpR->Update();
+					////
 
-				flipFilter->SetInputConnection(bmpR->GetOutputPort());
-				flipFilter->Update();
-				//
-				texImg = vtkSmartPointer<vtkImageData>::New();
-				texImg->DeepCopy(flipFilter->GetOutput());
-				texImg->GetDimensions(imgDims);
+					flipFilter->SetInputConnection(bmpR->GetOutputPort());
+					flipFilter->Update();
+					//
+					texImg = vtkSmartPointer<vtkImageData>::New();
+					texImg->DeepCopy(flipFilter->GetOutput());
+					texImg->GetDimensions(imgDims);
 
-				char *scalarData = (char *)texImg->GetScalarPointer();
-				memcpy(texCVimg->imageData, scalarData, texCVimg->width * texCVimg->height * 3 * sizeof(char));
-				texCVimg = CRVLImageFilter::RVLFilterNHS(texCVimg);
-				memcpy(scalarData, texCVimg->imageData, texCVimg->width * texCVimg->height * 3 * sizeof(char));
-				//
-				texObj = vtkSmartPointer<vtkTexture>::New();
-				texObj->SetInputData(texImg);
-				texObj->InterpolateOn();
-				//
-				texArray[currentC->iView] = texObj;
+					char *scalarData = (char *)texImg->GetScalarPointer();
+					memcpy(texCVimg->imageData, scalarData, texCVimg->width * texCVimg->height * 3 * sizeof(char));
+					texCVimg = CRVLImageFilter::RVLFilterNHS(texCVimg);
+					memcpy(scalarData, texCVimg->imageData, texCVimg->width * texCVimg->height * 3 * sizeof(char));
+					//
+					texObj = vtkSmartPointer<vtkTexture>::New();
+					texObj->SetInputData(texImg);
+					texObj->InterpolateOn();
+					//
+					texArray[currentC->iView] = texObj;
+				}
+				texObj = texArray[currentC->iView];
 			}
-			texObj = texArray[currentC->iView];
 			//
 			noCont++;
 			//for every point in conture:
 			points = vtkSmartPointer<vtkPoints>::New();
-			texCoords = vtkSmartPointer<vtkFloatArray>::New();
-			texCoords->SetNumberOfComponents(2);
+
+			if (bRGB)
+			{
+				texCoords = vtkSmartPointer<vtkFloatArray>::New();
+				texCoords->SetNumberOfComponents(2);
+			}
 			//Resetting normal location
 			normalLocation[0] = 0;
 			normalLocation[1] = 0;
@@ -1306,7 +1320,8 @@ void GenAndDispPSuLMScene(CRVLPSuLM *psulm, CRVLVTKRenderer* pRenderer, std::map
 				//insert point in polygon
 				points->InsertNextPoint(currentP->P3D);
 				//insert texture coordinate
-				texCoords->InsertNextTuple2((float)currentP->P2D[0] / (float)imgDims[0], (float)currentP->P2D[1] / (float)imgDims[1]);
+				if (bRGB)
+					texCoords->InsertNextTuple2((float)currentP->P2D[0] / (float)imgDims[0], (float)currentP->P2D[1] / (float)imgDims[1]);
 				//adding to normal location
 				normalLocation[0] += (float)currentP->P3D[0];
 				normalLocation[1] += (float)currentP->P3D[1];
@@ -1328,7 +1343,8 @@ void GenAndDispPSuLMScene(CRVLPSuLM *psulm, CRVLVTKRenderer* pRenderer, std::map
 			polygonPolyData = vtkSmartPointer<vtkPolyData>::New();
 			polygonPolyData->SetPoints(points);
 			polygonPolyData->SetPolys(polygons);
-			polygonPolyData->GetPointData()->SetTCoords(texCoords);
+			if (bRGB)
+				polygonPolyData->GetPointData()->SetTCoords(texCoords);
 			//pass through trinagnulation filter
 			triFilter = vtkSmartPointer<vtkTriangleFilter>::New();
 			triFilter->SetInputData(polygonPolyData);
@@ -1339,7 +1355,8 @@ void GenAndDispPSuLMScene(CRVLPSuLM *psulm, CRVLVTKRenderer* pRenderer, std::map
 			mapper = vtkSmartPointer<vtkPolyDataMapper>::New();
 			//mapper->SetInputData(polygonPolyData);
 			mapper->SetInputConnection(triFilter->GetOutputPort());
-			mapper->InterpolateScalarsBeforeMappingOn();	//Needed for texture to be on top?
+			if (bRGB)
+				mapper->InterpolateScalarsBeforeMappingOn();	//Needed for texture to be on top?
 			//insert new actor to renderer
 			vtkSmartPointer<vtkActor> actor = vtkSmartPointer<vtkActor>::New();
 			actor->SetMapper(mapper);
@@ -1349,9 +1366,16 @@ void GenAndDispPSuLMScene(CRVLPSuLM *psulm, CRVLVTKRenderer* pRenderer, std::map
 			colorObj[1] = (unsigned char)(rand() * 255);
 			colorObj[2] = (unsigned char)(rand() * 255);
 			color.push_back(colorObj);
-			//actor->GetProperty()->SetColor((double)(colorObj[0] / 255.0), (double)(colorObj[1] / 255.0), (double)(colorObj[2] / 255.0));// ((double)color[vtkobjs->size()][0] / 255.0, (double)color[vtkobjs->size()][1] / 255.0, (double)color[vtkobjs->size()][2] / 255.0);
-			actor->SetTexture(texObj);
-			actor->GetProperty()->LightingOff();
+			if (bRGB)
+			{
+				actor->SetTexture(texObj);
+				actor->GetProperty()->LightingOff();
+			}
+			else if (add)
+				//actor->GetProperty()->SetColor((double)(colorObj[0] / 255.0), (double)(colorObj[1] / 255.0), (double)(colorObj[2] / 255.0));// ((double)color[vtkobjs->size()][0] / 255.0, (double)color[vtkobjs->size()][1] / 255.0, (double)color[vtkobjs->size()][2] / 255.0);
+				actor->GetProperty()->SetColor(0.5, 0.5, 0.5);
+			else
+				actor->GetProperty()->SetColor(0.0, 1.0, 0.0);
 			//If it is added transfor needs to be applied
 			if (add)
 				actor->SetUserTransform(transform);
@@ -2806,7 +2830,7 @@ int main(int argc, char* argv[])
 
 				// display scene
 				refPSuLM = VS.m_pPSuLM;
-				GenAndDispPSuLMScene(refPSuLM, &Renderer, actorObjs);
+				GenAndDispPSuLMScene(refPSuLM, &Renderer, actorObjs, (VS.m_Flags & RVLSYS_FLAGS_PC) == 0);
 
 				// display local model 
 				if (VS.m_PSuLMBuilder.m_nHypotheses > 0)
@@ -2819,7 +2843,7 @@ int main(int argc, char* argv[])
 					double *tMS = PoseMS.m_X;
 					RVLINVTRANSF3D(RSM, tSM, RMS, tMS);
 
-					GenAndDispPSuLMScene(pHypothesis->pMPSuLM, &Renderer, actorObjs, true, &PoseMS, 1);
+					GenAndDispPSuLMScene(pHypothesis->pMPSuLM, &Renderer, actorObjs, (VS.m_Flags & RVLSYS_FLAGS_PC) == 0, true, &PoseMS, 1);
 				}
 
 				std::cout << "Added reference model!" << std::endl;
