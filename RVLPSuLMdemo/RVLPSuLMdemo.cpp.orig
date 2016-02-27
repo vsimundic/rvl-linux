@@ -1,0 +1,2690 @@
+// RVLPSuLMdemo.cpp : Defines the entry point for the console application.
+//
+
+//#include "highgui.h"
+//C headers
+#include <stdio.h>
+#include <time.h>
+//#include <stdafx.h>
+#include <atlstr.h>
+//RVL headers
+#include "RVLCore.h"
+#include "RVLPCS.h"
+#include "RVLRLM.h"
+#include "RVLPSuLMBuilder.h"
+#include "RVLPSuLMGroundTruth.h"
+#include "RVLPSuLMVS.h"
+#ifdef RVLVTK
+//VTK headers
+#include <vtkAutoInit.h>
+VTK_MODULE_INIT(vtkRenderingOpenGL);
+VTK_MODULE_INIT(vtkInteractionStyle);
+VTK_MODULE_INIT(vtkRenderingFreeType);//(vtkRenderingFreeTypeOpenGL);
+#include "RVLVTK.h"
+#include "VTKActorObj.h"
+#endif
+//C++ headers
+#include <iostream>
+#include <map>
+#include <string>
+#include <sstream>
+
+
+#define RVLPSULMDEMO_DISPLAY_ONLY_REPRESENTATIVE_HYPOTHESES
+//#define RVLPSULMDEMO_DISPLAY_ONLY_BEST_LOCAL_MODEL_HYPOTHESES
+
+struct IMAGE_SEQUENCE_DATA
+{
+	std::string ImageFileName; 
+	int StartNo;
+	int EndNo;
+};
+std::vector<IMAGE_SEQUENCE_DATA> g_AllSequences;
+
+int g_CurrentSequenceNo;
+int g_CurrentImageNo;
+
+char g_BestSubSetImageFileName[200];
+int g_LastSubSetImageNo;
+int g_BestCost;
+bool g_StartNewSubSet;
+
+BOOL GetNextFileName(CRVLPSuLMVS *pVS);
+void GetAllSequenceData(CRVLPSuLMVS *pVS);
+BOOL GetImageInSequence(CRVLPSuLMVS *pVS, bool bInit = false);
+
+void MessageCanNotOpenFile(CRVLGUI *pGUI, char *FileName);
+
+
+void RVLPSuLMdemoGetNextHypothesis(CRVLPSuLMVS *pVS,
+								   int &iHypothesis,
+								   int diHypothesis,
+								   char *MatchMatrixGT,
+								   bool bFilterHypotheses,
+								   bool bFirst = false)
+{
+	int iHypothesis_ = iHypothesis;
+
+	if(!bFirst)
+		iHypothesis += diHypothesis;
+
+	int iHypothesisOutOfRange;
+
+	//if(pVS->m_PSuLMBuilder.m_Flags & RVLPSULMBUILDER_FLAG_SCENE_FUSION)
+	//	iHypothesisOutOfRange = (diHypothesis > 0 ? pVS->m_PSuLMBuilder.m_SceneFusion.m_nHypotheses : -1);
+	//else
+	{
+		iHypothesisOutOfRange = (diHypothesis > 0 ? pVS->m_PSuLMBuilder.m_nHypotheses : -1);
+
+#ifdef RVLPSULMDEMO_DISPLAY_ONLY_REPRESENTATIVE_HYPOTHESES
+
+		RVLPSULM_HYPOTHESIS *pHypothesis;		
+
+		while(iHypothesis != iHypothesisOutOfRange)
+		{
+			pHypothesis = pVS->m_PSuLMBuilder.m_HypothesisArray[iHypothesis];
+
+			if((pVS->m_Flags & RVLSYS_FLAGS_VALIDATION) && bFilterHypotheses && MatchMatrixGT != NULL)
+			{
+				//if(pHypothesis->iRepresentative == 0xffffffff && pHypothesis->validation != -1)
+				//	break;
+				if(pHypothesis == pHypothesis->pMPSuLM->m_pHypothesis && MatchMatrixGT[pHypothesis->pMPSuLM->m_Index] >= 0)
+					break;
+			}
+			else
+			{
+#ifdef RVLPSULMDEMO_DISPLAY_ONLY_BEST_LOCAL_MODEL_HYPOTHESES
+				if(pHypothesis == pHypothesis->pMPSuLM->m_pHypothesis)
+					break;
+#else
+				if(pHypothesis->iRepresentative == 0xffffffff)
+					break;
+#endif
+			}
+
+			iHypothesis += diHypothesis;						
+		}
+#endif	// #ifdef RVLPSULMDEMO_DISPLAY_ONLY_REPRESENTATIVE_HYPOTHESES
+	}
+
+	if(iHypothesis == iHypothesisOutOfRange)
+		iHypothesis = iHypothesis_;
+}
+
+//Global variables (flags mostly) for VTK viewer
+#ifdef RVLVTK
+bool textureView = true;
+bool normalsView = false;
+bool helpTextView = true;
+bool rightMouseButtonVisibilityOff = false;
+bool rightMouseButtonSelectMode = false;
+bool cameraCone = true;
+bool hypothesisCone = false;
+bool blackBackground = false;
+std::string g_SelectedObject = "";
+//Definition of iterator type
+typedef std::map<std::string, VTKActorObj*>::iterator vtk_map_it_type;
+//Reference PSuLM
+CRVLPSuLM* refPSuLM;
+int vtkHypModelIdx = 0;
+#endif
+
+#ifdef RVLVTK
+//VTK Render window key press callback
+void KeyPressCallback(vtkObject* caller, unsigned long eid, void* clientdata, void *calldata)
+{
+	vtkSmartPointer<vtkRenderWindowInteractor> iren = reinterpret_cast<vtkRenderWindowInteractor *>(caller);
+	std::string keySym = "";
+	keySym = iren->GetKeySym();
+	if (keySym == "t") //Texture/color mode on/off
+	{
+		std::map<std::string, VTKActorObj*>* actorObjs = (std::map<std::string, VTKActorObj*>*)clientdata;
+		//Iterating through map of actors
+		vtkSmartPointer<vtkActor> tempActor;
+		for (vtk_map_it_type iterator = actorObjs->begin(); iterator != actorObjs->end(); iterator++)
+		{
+			// iterator->first = key
+			// iterator->second = value
+			//Check if object type is the one we are looking for
+			if (iterator->first.find("Plane") == std::string::npos)
+				continue;
+			//Casting vtkProp to vtkActor
+			tempActor = vtkActor::SafeDownCast(iterator->second->prop);
+			if (textureView)
+			{
+				tempActor->SetTexture(NULL);
+				tempActor->GetMapper()->InterpolateScalarsBeforeMappingOff();
+			}
+			else
+			{
+				tempActor->SetTexture(iterator->second->texture);
+				tempActor->GetMapper()->InterpolateScalarsBeforeMappingOn();
+			}
+		}
+		if (textureView)
+			textureView = false;
+		else
+			textureView = true;
+		iren->GetRenderWindow()->Render();
+	}
+	else if (keySym == "n")	//Show normal mode on/off
+	{
+		std::map<std::string, VTKActorObj*>* actorObjs = (std::map<std::string, VTKActorObj*>*)clientdata;
+		//Iterating through map of actors
+		vtkSmartPointer<vtkActor> tempActor;
+		for (vtk_map_it_type iterator = actorObjs->begin(); iterator != actorObjs->end(); iterator++)
+		{
+			// iterator->first = key
+			// iterator->second = value
+			//Check if object type is the one we are looking for
+			if (iterator->first.find("Normal") == std::string::npos)
+				continue;
+			//Casting vtkProp to vtkActor
+			tempActor = vtkActor::SafeDownCast(iterator->second->prop);
+			if (normalsView)
+				tempActor->VisibilityOff();
+			else
+				tempActor->VisibilityOn();
+		}
+		if (normalsView)
+			normalsView = false;
+		else
+			normalsView = true;
+		iren->GetRenderWindow()->Render();
+	}
+	else if (keySym == "h") //Show help/status
+	{
+		std::map<std::string, VTKActorObj*>* actorObjs = (std::map<std::string, VTKActorObj*>*)clientdata;
+		//Getting required actor
+		vtkSmartPointer<vtkCornerAnnotation> tempActor = vtkCornerAnnotation::SafeDownCast(actorObjs->at("HelpTextAnnotation")->prop);
+		if (helpTextView)
+		{
+			tempActor->VisibilityOff();
+			helpTextView = false;
+		}
+		else
+		{
+			tempActor->VisibilityOn();
+			helpTextView = true;
+		}
+		iren->GetRenderWindow()->Render();
+	}
+	else if (keySym == "c")	//Show camera cone on/off
+	{
+		std::map<std::string, VTKActorObj*>* actorObjs = (std::map<std::string, VTKActorObj*>*)clientdata;
+		//Iterating through map of actors
+		vtkSmartPointer<vtkActor> tempActor;
+		for (vtk_map_it_type iterator = actorObjs->begin(); iterator != actorObjs->end(); iterator++)
+		{
+			// iterator->first = key
+			// iterator->second = value
+			//Check if object type is the one we are looking for
+			if (iterator->first.find("Camera") == std::string::npos)
+				continue;
+			//Casting vtkProp to vtkActor
+			tempActor = vtkActor::SafeDownCast(iterator->second->prop);
+			if (cameraCone)
+				tempActor->VisibilityOff();
+			else
+				tempActor->VisibilityOn();
+		}
+		if (cameraCone)
+			cameraCone = false;
+		else
+			cameraCone = true;
+		iren->GetRenderWindow()->Render();
+	}
+	else if (keySym == "y")	//Show hypothesis cone on/off
+	{
+		std::map<std::string, VTKActorObj*>* actorObjs = (std::map<std::string, VTKActorObj*>*)clientdata;
+		//Iterating through map of actors
+		vtkSmartPointer<vtkActor> tempActor;
+		for (vtk_map_it_type iterator = actorObjs->begin(); iterator != actorObjs->end(); iterator++)
+		{
+			// iterator->first = key
+			// iterator->second = value
+			//Check if object type is the one we are looking for
+			if (iterator->first.find("Hypothesis") == std::string::npos)
+				continue;
+			//Casting vtkProp to vtkActor
+			tempActor = vtkActor::SafeDownCast(iterator->second->prop);
+			if (hypothesisCone)
+				tempActor->VisibilityOff();
+			else
+				tempActor->VisibilityOn();
+		}
+		if (hypothesisCone)
+			hypothesisCone = false;
+		else
+			hypothesisCone = true;
+		iren->GetRenderWindow()->Render();
+	}
+	else if (keySym == "1") //Toggle right mouse button select mode
+	{
+		std::map<std::string, VTKActorObj*>* actorObjs = (std::map<std::string, VTKActorObj*>*)clientdata;
+		//Getting required actor
+		vtkSmartPointer<vtkCornerAnnotation> tempActor = vtkCornerAnnotation::SafeDownCast(actorObjs->at("HelpTextAnnotation")->prop);
+		if (rightMouseButtonSelectMode)
+		{
+			tempActor->SetText(3, "Right mouse button mode: None");
+			rightMouseButtonSelectMode = false;
+			//Clearing selected string (only on screen)
+			vtkSmartPointer<vtkCornerAnnotation> tempHelpActor = vtkCornerAnnotation::SafeDownCast(actorObjs->at("HelpTextAnnotation")->prop);
+			tempHelpActor->SetText(1, " ");
+		}
+		else
+		{
+			tempActor->SetText(3, "Right mouse button mode: Select mode");
+			//Setting other modes off
+			rightMouseButtonVisibilityOff = false;
+			//This one on
+			rightMouseButtonSelectMode = true;
+		}
+		iren->GetRenderWindow()->Render();
+	}
+	else if (keySym == "2") //Toggle right mouse button VisibilityOff mode
+	{
+		std::map<std::string, VTKActorObj*>* actorObjs = (std::map<std::string, VTKActorObj*>*)clientdata;
+		//Getting required actor
+		vtkSmartPointer<vtkCornerAnnotation> tempActor = vtkCornerAnnotation::SafeDownCast(actorObjs->at("HelpTextAnnotation")->prop);
+		if (rightMouseButtonVisibilityOff)
+		{
+			tempActor->SetText(3, "Right mouse button mode: None");
+			rightMouseButtonVisibilityOff = false;
+		}
+		else
+		{
+			tempActor->SetText(3, "Right mouse button mode: VisibilityOff");
+			//Setting other modes off
+			if (rightMouseButtonSelectMode) //If the switch is from select mode then we have to potentialy empty lower right text in help actor
+			{
+				rightMouseButtonSelectMode = false;
+				//Clearing selected string (only on screen)
+				vtkSmartPointer<vtkCornerAnnotation> tempHelpActor = vtkCornerAnnotation::SafeDownCast(actorObjs->at("HelpTextAnnotation")->prop);
+				tempHelpActor->SetText(1, " ");
+			}
+			//This one on
+			rightMouseButtonVisibilityOff = true;
+		}
+		iren->GetRenderWindow()->Render();
+	}
+	else if (keySym == "x") //Take a screenshot as VTKscreenshot.png in app dir
+	{
+		vtkSmartPointer<vtkWindowToImageFilter> windowToImageFilter = vtkSmartPointer<vtkWindowToImageFilter>::New();
+		windowToImageFilter->SetInput(iren->GetRenderWindow());
+		windowToImageFilter->SetMagnification(3); //set the resolution of the output image (3 times the current resolution of vtk render window)
+		windowToImageFilter->SetInputBufferTypeToRGBA(); //also record the alpha (transparency) channel
+		windowToImageFilter->Update();
+
+		vtkSmartPointer<vtkPNGWriter> writer = vtkSmartPointer<vtkPNGWriter>::New();
+		std::string filename = "VTKscreenshot.png";
+		writer->SetFileName(filename.c_str());
+		writer->SetInputConnection(windowToImageFilter->GetOutputPort());
+		writer->Write();
+	}
+	else if (keySym == "b") //Change background black/sky blue
+	{
+		if (blackBackground)
+		{
+			iren->GetRenderWindow()->GetRenderers()->GetFirstRenderer()->SetBackground(0.5294, 0.8078, 0.9803);
+			blackBackground = false;
+		}
+		else
+		{
+			iren->GetRenderWindow()->GetRenderers()->GetFirstRenderer()->SetBackground(0,0,0);
+			blackBackground = true;
+		}
+		//
+		iren->GetRenderWindow()->Render();
+	}
+	cout << "VTK - KeyPressCallbackCommand, Key: " << keySym << endl;
+}
+
+//VTK Render window right mouse button press callback function
+void RightButtonPressCallback(vtkObject* caller, unsigned long eid, void* clientdata, void *calldata)
+{
+	//get location
+	vtkSmartPointer<vtkRenderWindowInteractor> iren = reinterpret_cast<vtkRenderWindowInteractor *>(caller);
+	int* clickPos = iren->GetEventPosition();
+
+	//pick from this location.
+	vtkSmartPointer<vtkPropPicker>  picker = vtkSmartPointer<vtkPropPicker>::New();
+	picker->Pick(clickPos[0], clickPos[1], 0, iren->GetRenderWindow()->GetRenderers()->GetFirstRenderer());
+
+	//get picked actor
+	vtkSmartPointer<vtkActor> pickedActor = picker->GetActor();
+	if (!pickedActor)
+		return;
+
+	std::map<std::string, VTKActorObj*>* actorObjs = (std::map<std::string, VTKActorObj*>*)clientdata;
+
+	//Iterating through map of actors
+	vtkSmartPointer<vtkActor> tempActor;
+	for (vtk_map_it_type iterator = actorObjs->begin(); iterator != actorObjs->end(); iterator++)
+	{
+		// iterator->first = key
+		// iterator->second = value
+		tempActor = vtkActor::SafeDownCast(iterator->second->prop);
+		if (tempActor == pickedActor)
+		{
+			if (rightMouseButtonVisibilityOff)
+			{
+				tempActor->VisibilityOff();
+				std::cout << iterator->first << " set to invisible!" << std::endl;
+			}
+			else if (rightMouseButtonSelectMode)
+			{
+				if (g_SelectedObject != "")
+					vtkActor::SafeDownCast(actorObjs->at(g_SelectedObject)->prop)->GetMapper()->InterpolateScalarsBeforeMappingOn();
+				g_SelectedObject = iterator->first;
+				tempActor->GetMapper()->InterpolateScalarsBeforeMappingOff();
+				//Write on screen the name of the currently selected object
+				//Find the HelpText object
+				vtkSmartPointer<vtkCornerAnnotation> tempHelpActor = vtkCornerAnnotation::SafeDownCast(actorObjs->at("HelpTextAnnotation")->prop);
+				std::string selstr = "Last selected object: ";
+				selstr += g_SelectedObject;
+				tempHelpActor->SetText(1, selstr.c_str());
+			}
+			break;
+		}
+	}
+	iren->GetRenderWindow()->Render();
+	//
+	std::cout << "Right mouse callback!" << std::endl;
+}
+
+//Function for generating PSuLM VTK scene
+void GenAndDispPSuLMScene(CRVLPSuLM *psulm, CRVLVTKRenderer* pRenderer, std::map<std::string, VTKActorObj*>* vtkobjs, bool add = false, CRVL3DPose * pose = NULL, int modelIdx = 0)
+{
+	//Setting up VTK scene
+	vtkRenderer *ren1 = pRenderer->m_pRenderer;
+	vtkRenderWindow *renWin = pRenderer->m_pWindow;
+	vtkRenderWindowInteractor *iren = pRenderer->m_pInteractor;
+
+	//Callbacks, keyboard and mouse // ONLY NEEDED THE FIRST TIME
+	if (!add)
+	{
+		vtkSmartPointer<vtkCallbackCommand> keypressCallback = vtkSmartPointer<vtkCallbackCommand>::New();
+		keypressCallback->SetCallback(KeyPressCallback);
+		keypressCallback->SetClientData(vtkobjs);
+		iren->AddObserver(vtkCommand::KeyPressEvent, keypressCallback);
+		vtkSmartPointer<vtkCallbackCommand> mousepressCallback = vtkSmartPointer<vtkCallbackCommand>::New();
+		mousepressCallback->SetCallback(RightButtonPressCallback);
+		mousepressCallback->SetClientData(vtkobjs);
+		iren->AddObserver(vtkCommand::RightButtonPressEvent, mousepressCallback);
+		//Clearnig scene
+		if (vtkobjs->size())
+		{
+			for (vtk_map_it_type iterator = vtkobjs->begin(); iterator != vtkobjs->end(); iterator++)
+			{
+				delete iterator->second;
+			}
+		}
+		vtkobjs->clear();
+		ren1->RemoveAllViewProps();
+		ren1->Clear();
+		renWin->Render();
+	}
+
+	//Polygon(surface) objects
+	vtkSmartPointer<vtkPoints> points;
+	vtkSmartPointer<vtkPolygon> polygon;
+	vtkSmartPointer<vtkCellArray> polygons;
+	vtkSmartPointer<vtkPolyData> polygonPolyData;
+	vtkSmartPointer<vtkTriangleFilter> triFilter;
+	//Mapper and actor
+	vtkSmartPointer<vtkPolyDataMapper> mapper;
+	vtkSmartPointer<vtkActor> actor;
+	//Texture objects
+	vtkSmartPointer<vtkFloatArray> texCoords;
+	vtkSmartPointer<vtkImageData> texImg;
+	vtkSmartPointer<vtkTexture> texObj;
+	vtkSmartPointer<vtkBMPReader> bmpR = vtkSmartPointer<vtkBMPReader>::New();
+	vtkSmartPointer<vtkImageFlip> flipFilter = vtkSmartPointer<vtkImageFlip>::New();
+	flipFilter->SetFilteredAxis(1); // flip y axis;
+	//Array of pointers for texture objects
+	vtkSmartPointer<vtkTexture> texArray[50];
+
+	//VTK objects for normals
+	vtkSmartPointer<vtkPolyData> normalPolyData;
+	vtkSmartPointer<vtkPoints> normalPoints = vtkSmartPointer<vtkPoints>::New();
+	normalPoints->SetDataTypeToFloat();
+	normalPoints->Reset();
+	vtkSmartPointer<vtkCellArray> normalVertices = vtkSmartPointer<vtkCellArray>::New();
+	normalVertices->Reset();
+	vtkSmartPointer<vtkFloatArray> normalValues = vtkSmartPointer<vtkFloatArray>::New();
+	normalValues->SetNumberOfComponents(3);
+	normalValues->Reset();
+	vtkSmartPointer<vtkUnsignedCharArray> normalRGB = vtkSmartPointer<vtkUnsignedCharArray>::New();
+	normalRGB->Reset();
+	normalRGB->SetName("RGB");
+	normalRGB->SetNumberOfComponents(3);
+	vtkSmartPointer<vtkGlyph3D> normalGlyph;
+	vtkSmartPointer<vtkArrowSource> normalArrowSource;
+	vtkSmartPointer<vtkPolyDataMapper> normalMapper;
+	vtkSmartPointer<vtkActor> normalActor;
+
+	//VTK objects for cone (camera position) placement
+	vtkSmartPointer<vtkConeSource> coneSource;
+	vtkSmartPointer<vtkPolyDataMapper> coneMapper;
+	vtkSmartPointer<vtkActor> coneActor;
+
+	//Actor helper object
+	VTKActorObj* actorObj;
+
+	//RVL  & other temp objects
+	CRVL3DSurface2* currentS;
+	RVL3DCONTOUR* currentC;
+	RVL3DPOINT3* currentP;
+	int iSampleOrig = RVLGetFileNumber(psulm->m_FileName, "00000-LW.bmp");
+	int iSample = iSampleOrig;
+	char *imageFileName = psulm->m_FileName;
+	int imgDims[3];
+	int noPoints = 0;
+	int noCont = 0;
+	float normalLocation[3];
+	//Actor name
+	std::string actName = "";
+	std::stringstream ss;
+	ss.str("");
+	ss.clear();
+
+	//OpenCV objects
+	IplImage* texCVimg = cvCreateImage(cvSize(320, 240), IPL_DEPTH_8U, 3); //needed for texture work
+
+	//generating random color
+	//unsigned char **color = new unsigned char*[psulm->m_n3DSurfacesTotal * 10];	//best guess that there is max 3 contours per surface
+	//for (int i = 0; i < psulm->m_n3DSurfacesTotal * 10; i++)
+	//{
+	//	color[i] = new unsigned char[3];
+	//	color[i][0] = (unsigned char)(rand() * 255);
+	//	color[i][1] = (unsigned char)(rand() * 255);
+	//	color[i][2] = (unsigned char)(rand() * 255);
+	//}
+	std::vector<unsigned char*> color;
+
+	//Setting up transform object if the PSuLM is to be added te previous scene
+	vtkSmartPointer<vtkTransform> transform;
+	double transfMat[16];
+	if (add)
+	{
+		transform = vtkSmartPointer<vtkTransform>::New();
+		transfMat[0] = pose->m_Rot[0];
+		transfMat[1] = pose->m_Rot[1];
+		transfMat[2] = pose->m_Rot[2];
+		transfMat[3] = pose->m_X[0];
+		transfMat[4] = pose->m_Rot[3];
+		transfMat[5] = pose->m_Rot[4];
+		transfMat[6] = pose->m_Rot[5];
+		transfMat[7] = pose->m_X[1];
+		transfMat[8] = pose->m_Rot[6];
+		transfMat[9] = pose->m_Rot[7];
+		transfMat[10] = pose->m_Rot[8];
+		transfMat[11] = pose->m_X[2];
+		transfMat[12] = 0.0;
+		transfMat[13] = 0.0;
+		transfMat[14] = 0.0;
+		transfMat[15] = 1.0;
+		transform->SetMatrix(transfMat);
+	}
+
+	//For every surface in psulm:
+	for (int i = 0; i < psulm->m_n3DSurfacesTotal; i++)
+	{
+		currentS = psulm->m_3DSurfaceArray[i];
+		//for every conture in surface:
+		currentC = (RVL3DCONTOUR*)currentS->m_BoundaryContourList.pFirst;
+		noCont = 0;
+		while (currentC)
+		{
+			//Check if hole conture
+			if (currentC->bHole)
+			{
+				currentC = (RVL3DCONTOUR*)currentC->pNext;
+				continue;
+			}
+			//open image/texture for that conture (chack if it is the same as the last one to prevent constant oppening and closing of same images)
+			if (!texArray[currentC->iView])//((iSample != (iSampleOrig + currentC->iView)) || (!texObj))
+			{
+				iSample = iSampleOrig + currentC->iView;
+				RVLSetFileNumber(imageFileName, "00000-LW.bmp", iSample);
+				//
+				bmpR->SetFileName(imageFileName);
+				bmpR->Update();
+				////
+
+				flipFilter->SetInputConnection(bmpR->GetOutputPort());
+				flipFilter->Update();
+				//
+				texImg = vtkSmartPointer<vtkImageData>::New();
+				texImg->DeepCopy(flipFilter->GetOutput());
+				texImg->GetDimensions(imgDims);
+
+				char *scalarData = (char *)texImg->GetScalarPointer();
+				memcpy(texCVimg->imageData, scalarData, texCVimg->width * texCVimg->height * 3 * sizeof(char));
+				texCVimg = CRVLImageFilter::RVLFilterNHS(texCVimg);
+				memcpy(scalarData, texCVimg->imageData, texCVimg->width * texCVimg->height * 3 * sizeof(char));
+				//
+				texObj = vtkSmartPointer<vtkTexture>::New();
+				texObj->SetInputData(texImg);
+				texObj->InterpolateOn();
+				//
+				texArray[currentC->iView] = texObj;
+			}
+			texObj = texArray[currentC->iView];
+			//
+			noCont++;
+			//for every point in conture:
+			points = vtkSmartPointer<vtkPoints>::New();
+			texCoords = vtkSmartPointer<vtkFloatArray>::New();
+			texCoords->SetNumberOfComponents(2);
+			//Resetting normal location
+			normalLocation[0] = 0;
+			normalLocation[1] = 0;
+			normalLocation[2] = 0;
+			currentP = (RVL3DPOINT3*)currentC->PtList.pFirst;
+			while (currentP)
+			{
+				//insert point in polygon
+				points->InsertNextPoint(currentP->P3D);
+				//insert texture coordinate
+				texCoords->InsertNextTuple2((float)currentP->P2D[0] / (float)imgDims[0], (float)currentP->P2D[1] / (float)imgDims[1]);
+				//adding to normal location
+				normalLocation[0] += (float)currentP->P3D[0];
+				normalLocation[1] += (float)currentP->P3D[1];
+				normalLocation[2] += (float)currentP->P3D[2];
+				//next point
+				currentP = (RVL3DPOINT3*)currentP->pNext;
+				//end point
+			}
+			//create index list for polygon
+			polygon = vtkSmartPointer<vtkPolygon>::New();
+			noPoints = points->GetNumberOfPoints();
+			polygon->GetPointIds()->SetNumberOfIds(noPoints);
+			for (int k = 0; k < noPoints; k++)
+				polygon->GetPointIds()->SetId(k, k);
+			//create poligons(cellarray) and polydata
+			polygons = vtkSmartPointer<vtkCellArray>::New();
+			polygons->InsertNextCell(polygon);
+			//polydata object
+			polygonPolyData = vtkSmartPointer<vtkPolyData>::New();
+			polygonPolyData->SetPoints(points);
+			polygonPolyData->SetPolys(polygons);
+			polygonPolyData->GetPointData()->SetTCoords(texCoords);
+			//pass through trinagnulation filter
+			triFilter = vtkSmartPointer<vtkTriangleFilter>::New();
+			triFilter->SetInputData(polygonPolyData);
+			triFilter->PassVertsOn();
+			triFilter->Update();
+			//get new polydata from filter (deep copy?) and add texture coordinates (or not)
+			//crate mapper (and link to texture) and actor
+			mapper = vtkSmartPointer<vtkPolyDataMapper>::New();
+			//mapper->SetInputData(polygonPolyData);
+			mapper->SetInputConnection(triFilter->GetOutputPort());
+			mapper->InterpolateScalarsBeforeMappingOn();	//Needed for texture to be on top?
+			//insert new actor to renderer
+			vtkSmartPointer<vtkActor> actor = vtkSmartPointer<vtkActor>::New();
+			actor->SetMapper(mapper);
+			//Setting up random color that can be used later for same object
+			unsigned char colorObj[3];
+			colorObj[0] = (unsigned char)(rand() * 255);
+			colorObj[1] = (unsigned char)(rand() * 255);
+			colorObj[2] = (unsigned char)(rand() * 255);
+			color.push_back(colorObj);
+			//actor->GetProperty()->SetColor((double)(colorObj[0] / 255.0), (double)(colorObj[1] / 255.0), (double)(colorObj[2] / 255.0));// ((double)color[vtkobjs->size()][0] / 255.0, (double)color[vtkobjs->size()][1] / 255.0, (double)color[vtkobjs->size()][2] / 255.0);
+			actor->SetTexture(texObj);
+			actor->GetProperty()->LightingOff();
+			//If it is added transfor needs to be applied
+			if (add)
+				actor->SetUserTransform(transform);
+			//
+			ren1->AddActor(actor);
+			//insert new actor/mapper/polydata to vtkobjs (and create appropriate name)
+			actorObj = new VTKActorObj(actor, triFilter->GetOutput(), texObj);
+			ss << "Model_" << modelIdx << "_Plane_" << i << "_Contour_" << noCont;
+			actName = ss.str();
+			ss.str("");
+			ss.clear();
+			vtkobjs->insert(std::pair<std::string, VTKActorObj*>(actName, actorObj));
+
+			//creating normal entry
+			normalLocation[0] /= (float)noPoints;
+			normalLocation[1] /= (float)noPoints;
+			normalLocation[2] /= (float)noPoints;
+			normalPoints->InsertNextPoint(normalLocation);
+			normalValues->InsertNextTuple3((float)currentS->m_N[0], (float)currentS->m_N[1], (float)currentS->m_N[2]);
+			normalVertices->InsertNextCell(1);
+			normalVertices->InsertCellPoint(color.size() - 1);
+			normalRGB->InsertNextTupleValue(color[color.size() - 1]);
+			//
+			currentC = (RVL3DCONTOUR*)currentC->pNext;
+			//end conture
+		}
+		//end surface
+		//std::cout << noCont << std::endl;
+	}
+	//Genereting and inserting other VTK objects
+	//Normals object
+	//polydata
+	normalPolyData = vtkSmartPointer<vtkPolyData>::New();
+	normalPolyData->SetPoints(normalPoints);
+	normalPolyData->SetVerts(normalVertices);
+	normalPolyData->GetPointData()->SetNormals(normalValues);
+	normalPolyData->GetPointData()->SetScalars(normalRGB);
+	//Glyphs
+	normalArrowSource = vtkSmartPointer<vtkArrowSource>::New();
+	normalGlyph = vtkSmartPointer<vtkGlyph3D>::New();
+	normalGlyph->SetInputData(normalPolyData);
+	normalGlyph->SetSourceConnection(normalArrowSource->GetOutputPort());
+	normalGlyph->SetVectorModeToUseNormal();
+	normalGlyph->SetColorModeToColorByScalar();
+	normalGlyph->SetScaleModeToDataScalingOff();
+	normalGlyph->SetScaleFactor(300);
+	normalGlyph->Update();
+	//mapper
+	normalMapper = vtkSmartPointer<vtkPolyDataMapper>::New();
+	normalMapper->SetInputConnection(normalGlyph->GetOutputPort());
+	//actor
+	normalActor = vtkSmartPointer<vtkActor>::New();
+	normalActor->SetMapper(normalMapper);
+	normalActor->VisibilityOff();
+	//normalActor->GetProperty()->SetColor(1.0, 0.0, 0.0);
+	//If it is added transfor needs to be applied
+	if (add)
+		normalActor->SetUserTransform(transform);
+	ren1->AddActor(normalActor);
+	//insert new actor/mapper/polydata to vtkobjs (and create appropriate name)
+	actorObj = new VTKActorObj(normalActor, normalPolyData);
+	ss << "Model_" << modelIdx << "NormalGlyphs3D";
+	actName = ss.str();
+	ss.str("");
+	ss.clear();
+	vtkobjs->insert(std::pair<std::string, VTKActorObj*>(actName, actorObj));
+
+	//Camera position objects
+	//cone source
+	coneSource = vtkSmartPointer<vtkConeSource>::New();
+	coneSource->SetResolution(10);
+	coneSource->SetHeight(200.0);
+	coneSource->SetRadius(100.0);
+	coneSource->SetDirection(0.0, 0.0, 1.0);
+	//cone mapper
+	coneMapper = vtkSmartPointer<vtkPolyDataMapper>::New();
+	coneMapper->SetInputConnection(coneSource->GetOutputPort());
+	//cone actor
+	coneActor = vtkSmartPointer<vtkActor>::New();
+	coneActor->SetMapper(coneMapper);
+	coneActor->GetProperty()->SetColor(1.0, 0.0, 0.0);
+	if (add)
+		coneActor->SetUserTransform(transform);
+	ren1->AddActor(coneActor);
+	//insert new actor/mapper/polydata to vtkobjs (and create appropriate name)
+	actorObj = new VTKActorObj(coneActor);
+	ss << "Model_" << modelIdx << "CameraCone";
+	actName = ss.str();
+	ss.str("");
+	ss.clear();
+	vtkobjs->insert(std::pair<std::string, VTKActorObj*>(actName, actorObj));
+
+	//Text help/status object // ONLY NEEDED THE FIRST TIME
+	if (!add)
+	{
+		vtkSmartPointer<vtkCornerAnnotation> helpAnnotation = vtkSmartPointer<vtkCornerAnnotation>::New();
+		helpAnnotation->SetLinearFontScaleFactor(2);
+		helpAnnotation->SetNonlinearFontScaleFactor(1);
+		helpAnnotation->SetMaximumFontSize(15);
+		//helpAnnotation->SetText(0, "lower left");
+		//helpAnnotation->SetText(1, "lower right");
+		helpAnnotation->SetText(2, "Help:\nPress 'h' to toggle this help on/off.(default on)\nPress 't' to toggle texture/color representation.(default texture)\nPress 'n' to toggle normals on/off.(default off)\n \
+			Press 'x' to capture screenshot of current view as file VTKscreenshot.png.\nPress '1' for right mouse button 'Select mode' on/off.(default off)\n \
+			Press '2' for right mouse button 'VisibilityOff mode' on/off.(default off)\nPress 'c' to toggle camera postitions on/off.(default on)\nPress 'y' to toggle hypothesis positions on/off.(default off)");
+		helpAnnotation->SetText(3, "Right mouse button mode: None");
+		helpAnnotation->GetTextProperty()->SetColor(1, 0, 0);
+		//insert new actor/mapper/polydata to vtkobjs (and create appropriate name)
+		ren1->AddViewProp(helpAnnotation);
+		actorObj = new VTKActorObj(helpAnnotation, NULL);
+		actName = "HelpTextAnnotation";
+		vtkobjs->insert(std::pair<std::string, VTKActorObj*>(actName, actorObj));
+	}
+
+	//run render
+	ren1->ResetCamera();
+	ren1->SetBackground(0.5294, 0.8078, 0.9803);
+	renWin->Render();
+	//iren->Start();
+
+	//releasing teaxtures
+	for (int i = 0; i < 50; i++)
+		texArray[i] = NULL;
+}
+
+//Function for adding hypothesis pose to VTK PSuLM scene
+void AddHypothesisToPSuLMScene(CRVLVTKRenderer* pRenderer, std::map<std::string, VTKActorObj*>* vtkobjs, CRVL3DPose * hypPose, int hypIdx)
+{
+	//Setting up VTK scene
+	vtkRenderer *ren1 = pRenderer->m_pRenderer;
+	vtkRenderWindow *renWin = pRenderer->m_pWindow;
+	vtkRenderWindowInteractor *iren = pRenderer->m_pInteractor;
+
+	//VTK objects for cone (camera position) placement
+	vtkSmartPointer<vtkConeSource> coneSource;
+	vtkSmartPointer<vtkPolyDataMapper> coneMapper;
+	vtkSmartPointer<vtkActor> coneActor;
+
+	//Setting up transform object for hypothesis pose
+	vtkSmartPointer<vtkTransform> transform;
+	double transfMat[16];
+	transform = vtkSmartPointer<vtkTransform>::New();
+	transfMat[0] = hypPose->m_Rot[0];
+	transfMat[1] = hypPose->m_Rot[1];
+	transfMat[2] = hypPose->m_Rot[2];
+	transfMat[3] = hypPose->m_X[0];
+	transfMat[4] = hypPose->m_Rot[3];
+	transfMat[5] = hypPose->m_Rot[4];
+	transfMat[6] = hypPose->m_Rot[5];
+	transfMat[7] = hypPose->m_X[1];
+	transfMat[8] = hypPose->m_Rot[6];
+	transfMat[9] = hypPose->m_Rot[7];
+	transfMat[10] = hypPose->m_Rot[8];
+	transfMat[11] = hypPose->m_X[2];
+	transfMat[12] = 0.0;
+	transfMat[13] = 0.0;
+	transfMat[14] = 0.0;
+	transfMat[15] = 1.0;
+	transform->SetMatrix(transfMat);
+
+	//Hypothesis cone position objects
+	//cone source
+	coneSource = vtkSmartPointer<vtkConeSource>::New();
+	coneSource->SetResolution(10);
+	coneSource->SetHeight(200.0);
+	coneSource->SetRadius(100.0);
+	coneSource->SetDirection(0.0, 0.0, 1.0);
+	//cone mapper
+	coneMapper = vtkSmartPointer<vtkPolyDataMapper>::New();
+	coneMapper->SetInputConnection(coneSource->GetOutputPort());
+	//cone actor
+	coneActor = vtkSmartPointer<vtkActor>::New();
+	coneActor->SetMapper(coneMapper);
+	coneActor->GetProperty()->SetColor(0.0, 0.0, 1.0);
+	//transform it
+	coneActor->SetUserTransform(transform);
+	coneActor->VisibilityOff();
+	//add it
+	ren1->AddActor(coneActor);
+	//insert new actor/mapper/polydata to vtkobjs (and create appropriate name)
+	//Actor helper object
+	VTKActorObj* actorObj = new VTKActorObj(coneActor);
+	//Actor name
+	std::string actName = "";
+	std::stringstream ss;
+	ss << "Model_" << hypIdx << "_HypothesisCone";
+	actName = ss.str();
+	ss.str("");
+	ss.clear();
+	vtkobjs->insert(std::pair<std::string, VTKActorObj*>(actName, actorObj));
+}
+#endif
+
+int main(int argc, char* argv[])
+{
+	printf("Initialization...\n");
+
+	FILE *fpExecTime = fopen("C:\\RVL\\ExpRez\\ExecTime.txt", "w");
+
+	fclose(fpExecTime);
+
+	CRVL3DPose NullPose;
+
+	RVLNULL3VECTOR(NullPose.m_X);
+	RVLUNITMX3(NullPose.m_Rot);
+
+	//CRVL3DPose PoseLC;
+
+	//RVLNULL3VECTOR(PoseLC.m_X);
+
+	//RVLMXEL(PoseLC.m_Rot, 3, 0, 0) = 0.0;
+	//RVLMXEL(PoseLC.m_Rot, 3, 1, 0) = 0.0;
+	//RVLMXEL(PoseLC.m_Rot, 3, 2, 0) = 1.0;
+
+	//RVLMXEL(PoseLC.m_Rot, 3, 0, 1) = -1.0;
+	//RVLMXEL(PoseLC.m_Rot, 3, 1, 1) = 0.0;
+	//RVLMXEL(PoseLC.m_Rot, 3, 2, 1) = 0.0;
+
+	//RVLMXEL(PoseLC.m_Rot, 3, 0, 2) = 0.0;
+	//RVLMXEL(PoseLC.m_Rot, 3, 1, 2) = -1.0;
+	//RVLMXEL(PoseLC.m_Rot, 3, 2, 2) = 0.0;
+
+	//CRVL3DPose PoseCL;
+
+	//RVLINVTRANSF3D(PoseLC.m_Rot, PoseLC.m_X, PoseCL.m_Rot, PoseCL.m_X)
+
+	// create vision system
+
+	CRVLPSuLMVS VS;
+
+	// initialize vision system
+
+	VS.CreateParamList();
+
+	VS.Init("RVLPSuLMdemo.cfg");
+
+	// create GUI
+
+	CRVLGUI GUI;
+
+	GUI.m_pMem0 = &(VS.m_Mem0);
+	GUI.m_pMem = &(VS.m_Mem);
+
+#ifdef RVLPSD_SEGMENT_STRM_DEBUG
+	VS.m_PSD.m_DebugData.pGUI = &GUI;
+#endif
+
+	GUI.Init();
+
+	// initialize result review/sample sequence
+
+	char ResImageFileName[1001];
+
+	if (VS.m_Flags & RVLSYS_FLAGS_REVIEW_RESULTS)
+	{
+		VS.m_fpRes = fopen("C:\\RVL\\ExpRez\\ExpRes.txt", "r");
+
+		if (VS.m_fpRes == NULL)
+		{
+			GUI.Message("Cannot find files with results!", 400, 100, cvScalar(0, 0, 255));
+
+			return 0;
+		}
+
+		fscanf(VS.m_fpRes, "%d\t%lf\t%lf\t%lf\t%lf\t%lf\t%lf\t%s\n", &(VS.m_iResPSuLM), &(VS.m_ResPose.m_Alpha), &(VS.m_ResPose.m_Beta), &(VS.m_ResPose.m_Theta),
+			VS.m_ResPose.m_X, VS.m_ResPose.m_X + 1, VS.m_ResPose.m_X + 2, ResImageFileName);
+
+		VS.m_ResPose.UpdateRotLL();
+
+		VS.m_ImageFileName = RVLCreateString(ResImageFileName);
+	}
+	else
+	{
+		VS.m_fpRes = fopen("C:\\RVL\\ExpRez\\ExpRes.txt", "w");
+
+		fclose(VS.m_fpRes);
+
+		GetAllSequenceData(&VS);
+	}
+
+	/////
+
+	int iMPSuLM = 0;
+
+	if(VS.m_Flags & RVLSYS_FLAGS_EDIT_MAP)
+	{
+		while(iMPSuLM <= VS.m_PSuLMBuilder.m_maxPSuLMIndex && VS.m_PSuLMBuilder.m_PSuLMArray[iMPSuLM] == NULL)
+			iMPSuLM++;
+
+		if(VS.m_PSuLMBuilder.m_PSuLMArray[iMPSuLM] == NULL)
+		{
+			GUI.Message("Map is empty.", 400, 100, cvScalar(0, 128, 255));
+
+			return 0;
+		}
+	}
+
+	bool bComplex = ((VS.m_PSuLMBuilder.m_Flags2 & RVLPSULMBUILDER_FLAG2_COMPLEX) != 0);
+
+	// initialize kinect
+
+	bool bKinect;
+
+	if((VS.m_Flags & RVLSYS_FLAGS_EDIT_MAP) || bComplex)
+		bKinect = false;
+	else
+	{
+#ifdef RVLOPENNI
+		bKinect = VS.m_Kinect.Init();
+
+		if(bKinect)
+			VS.m_Flags &= ~RVLSYS_FLAGS_PC;
+		else
+			GUI.Message("Kinect is not available.", 400, 100, cvScalar(0, 128, 255));
+#else
+		bKinect = false;
+#endif
+	}
+
+	// get the pointer to the depth image
+
+	RVLDISPARITYMAP *pDepthImage;
+	int w;
+	int h;
+	double *PC = NULL;
+	int nPC;
+
+	if(VS.m_Flags & RVLSYS_FLAGS_PC)
+	{
+		w = VS.m_PSD.m_Width;
+		h = VS.m_PSD.m_Height;
+	}
+	else
+	{
+		pDepthImage = &(VS.m_StereoVision.m_DisparityMap);
+
+		w = pDepthImage->Width;
+		h = pDepthImage->Height;
+	}
+
+#ifdef RVLVTK
+	// create VTK renderer
+
+	CRVLVTKRenderer Renderer;
+
+	Renderer.Init(800, 600);
+	Renderer.m_pWindow->Render();
+
+<<<<<<< HEAD
+	int *pointmap = new int[w * h * (2 * VS.m_PSD.m_nFOVExtensions + 1)];
+=======
+	int *pointmap = new int[w * h];
+	//List of actors and related objects, with names
+	std::map<std::string, VTKActorObj*>* actorObjs = new std::map<std::string, VTKActorObj*>();
+	//Needed for visualization 
+	CRVLPSuLM* vtkModelPSuLM;
+	CRVL3DPose* vtkPose3D = new CRVL3DPose();
+	RVLPSULM_NEIGHBOUR* vtkNeighbourPSuLM;
+	RVLQLIST_PTR_ENTRY* vtkNeighbourPtr;
+	//
+>>>>>>> dfilko_branch
+#endif
+
+	// create RGB image
+
+	IplImage *pRGBImage = cvCreateImage(cvSize(w, h), IPL_DEPTH_8U, 3);
+
+	VS.m_pRGBImage = pRGBImage;
+
+	// create grayscale image
+
+	IplImage *pGSImage = cvCreateImage(cvSize(w, h), IPL_DEPTH_8U, 1);
+
+	// create input image
+
+	int wExt = (2 * VS.m_PSD.m_nFOVExtensions + 1) * w;
+
+	IplImage *pInputImage = cvCreateImage(cvSize(wExt, h), IPL_DEPTH_8U, 3);
+
+	// create zoomed image
+
+	IplImage *pZoomedInputImage = cvCreateImage(cvSize(2 * wExt, 2 * h), IPL_DEPTH_8U, 3);
+
+	// create auxiliary image
+
+	//IplImage *pAuxImage = cvCreateImage(cvSize(w, h), IPL_DEPTH_8U, 3);
+
+	// create previous RGB image
+
+	IplImage *pPrevRGBImage = cvCreateImage(cvSize(w, h), IPL_DEPTH_8U, 3);
+
+	// create HSV image
+
+    IplImage *pHSVImage = cvCreateImage(cvSize(w, h), IPL_DEPTH_8U, 3);
+
+	// create complex image
+
+	if(bComplex)
+		VS.m_CameraL.m_Flags |= RVLCAMERA_FLAG_SPHERICAL;
+
+	VS.m_CameraL.m_PanRange = 240;
+	VS.m_CameraL.m_TiltRange = 125;
+	VS.m_CameraL.m_PixPerDeg = 3;
+
+	VS.m_CameraL.InitSpherical();
+
+	VS.m_PSuLMBuilder.m_ROI.right = 2 * (VS.m_CameraL.m_wSpherical - 1) + 1;		
+	VS.m_PSuLMBuilder.m_ROI.bottom = 2 * (VS.m_CameraL.m_hSpherical - 1) + 1;
+
+	IplImage *pComplexImage;
+
+	// create mesh file
+
+	if(VS.m_Flags & RVLSYS_FLAGS_CREATE_GLOBAL_MESH)
+		VS.CreateMeshFile("Mesh.obj");
+
+	// bRecord flag
+
+	bool bRecord = ((VS.m_Flags & RVLSYS_FLAGS_RECORD) != 0);
+
+	// create main display image
+
+	CRVLFigure *pFig = GUI.OpenFigure("Scene");
+
+	if(!bRecord)
+		pFig->m_Flags |= (RVLPSULM_DISPLAY_SCENE | RVLFIG_FLAG_DATA);
+
+	pFig->m_FontSize = 16;
+	cvInitFont(&(pFig->m_Font), CV_FONT_HERSHEY_SIMPLEX, 0.5, 0.5, 0, 2);	
+
+	//if(VS.m_Flags & RVLSYS_FLAGS_PC)
+	//{
+	//	RVLCOPYMX3X3(PoseCL.m_Rot, pFig->m_PoseC0.m_Rot)
+	//	RVLCOPY3VECTOR(PoseCL.m_X, pFig->m_PoseC0.m_X)
+	//}
+	//else
+		pFig->m_PoseC0.Reset();
+
+	RVLPSULMDISPLAY_MOUSE_CALLBACK_DATA MouseCallbackData;	
+
+	IplImage *pInputImage_ = pInputImage;
+
+	MouseCallbackData.w = (bComplex ? VS.m_CameraL.m_wSpherical : w);
+	MouseCallbackData.pGUI = &GUI;
+	MouseCallbackData.pFig = pFig;
+	MouseCallbackData.pVS = &VS;
+	MouseCallbackData.pImage = pInputImage_;
+	MouseCallbackData.pImage2 = pPrevRGBImage;
+	//MouseCallbackData.pPoseCM = (VS.m_Flags & RVLSYS_FLAGS_PC ? &PoseCL : &NullPose);
+
+	// create auxiliary display image
+
+	CRVLFigure *pFig2 = GUI.OpenFigure("Model");
+
+	pFig2->m_Flags |= (RVLPSULM_DISPLAY_MODEL | RVLFIG_FLAG_DATA);
+
+	pFig2->EmptyBitmap(cvSize(wExt, h), cvScalar(0, 0, 0));
+
+	pFig2->m_FontSize = 16;
+	cvInitFont(&(pFig2->m_Font), CV_FONT_HERSHEY_SIMPLEX, 0.5, 0.5, 0, 2);
+
+	pFig2->m_PoseC0.Reset();
+
+	MouseCallbackData.pFig2 = pFig2;
+
+	RVLPSULMDISPLAY_MOUSE_CALLBACK_DATA MouseCallbackData2;	
+
+	MouseCallbackData2.w = (bComplex ? VS.m_CameraL.m_wSpherical : w);
+	MouseCallbackData2.pGUI = &GUI;
+	MouseCallbackData2.pFig = pFig2;
+	MouseCallbackData2.pFig2 = pFig;
+	MouseCallbackData2.pVS = &VS;
+	MouseCallbackData2.ZoomFactor = 1;	
+	MouseCallbackData2.pImage = pInputImage_;
+	MouseCallbackData2.pImage2 = pPrevRGBImage;
+	//MouseCallbackData2.pPoseCM = (VS.m_Flags & RVLSYS_FLAGS_PC ? &PoseCL : &NullPose);
+
+	// allocate memory
+
+	int *SizeArray = new int[2 * w * h];
+
+	RVLPSULM_MATCH2 *RefHypMatchArray = NULL;
+	int nRefHypMatches;
+
+	// main loop
+
+	bool bDisplayMesh = false;
+	bool bDisplayConvexSets = false;
+	bool bDisplayHypothesis = true;
+	bool bDisplayPSuLM = false;
+	//bool bContinuous = bKinect;
+	bool bFrames = false;
+	bool bFilterHypotheses = true;
+	//bool bManualTrigger = true;
+	bool bManualTrigger = bKinect;
+	bool bLocalize = !bManualTrigger;
+	bool bContinuous = bManualTrigger;
+	//DWORD mDisplayPSuLMFlags = (RVLPSULM_DISPLAY_SURFACES | RVLPSULM_DISPLAY_VECTORS | RVLPSULM_DISPLAY_SAMPLES);
+	//DWORD mDisplayPSuLMFlags = (RVLPSULM_DISPLAY_SURFACES | RVLPSULM_DISPLAY_ELLIPSES | RVLPSULM_DISPLAY_LINES | RVLPSULM_DISPLAY_VECTORS);
+	//DWORD mDisplayPSuLMFlags = (RVLPSULM_DISPLAY_LINES | RVLPSULM_DISPLAY_VECTORS);
+	DWORD mDisplayPSuLMFlags = (RVLPSULM_DISPLAY_SURFACES | RVLPSULM_DISPLAY_ELLIPSES | RVLPSULM_DISPLAY_SAMPLES | RVLPSULM_DISPLAY_LINES | RVLPSULM_DISPLAY_VECTORS);
+
+	if(VS.m_Flags & RVLSYS_FLAGS_VALIDATION)
+		mDisplayPSuLMFlags |= RVLPSULM_DISPLAY_VALIDATION;
+	int DisplayBitmap = 0;
+	int ZoomFactor = 1;
+
+	if(!bKinect)
+		RVLGetFirstValidFileName(VS.m_ImageFileName, "00000-sl.bmp", 10000);
+
+	bool bVTKRendererActive = true;
+	int iVTK3DModel = 0;
+
+	char VTK3DModelFileName[] = "VTK3DModel_00000.ply";
+	char VTKMessageConst[] = "3D model in PLY-format saved in ";
+	char *VTKMessage = new char[strlen(VTKMessageConst) + strlen(VTK3DModelFileName) + 1];
+
+	char GlobalMeshFileName[] = "Mesh.obj";
+
+	int VTKTexture = 3;
+	
+	int nObjects = 1;
+	int textureFileNumber = 1;
+
+	RVLPSULM_HYPOTHESIS *HypothesisMem = NULL;
+
+	DWORD HypEvalMethod = (VS.m_PSuLMBuilder.m_Flags & RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD);
+
+	int iHypothesis;
+	int key;
+	int iSample, iSample_;
+	bool bRefresh;
+	bool bNextImage;
+	bool bBackwards;
+	bool bLast;
+	bool bSaveImage;
+	clock_t t;
+	char str[200];
+	int iTextLine;
+	unsigned int DepthMapFormat;
+	CRVLMPtrChain *pPSuLMList;
+	CRVLMem *pMem;
+	RVLQLIST *pMap;
+	RVLPSULM_HYPOTHESIS *pHypothesis;
+	CRVLPSuLM *pPSuLM;
+	int iMPSuLM_;
+#ifdef RVLPSULMDEMO_DISPLAY_ONLY_REPRESENTATIVE_HYPOTHESES
+	int iHypothesis_;
+#endif	
+	int key_;
+	int SampleStep;
+	char *MatchMatrixGT;
+	//int bNextFile = 1;
+	do
+	{
+		DepthMapFormat = RVLKINECT_DEPTH_IMAGE_FORMAT_DISPARITY;
+
+		memcpy(pPrevRGBImage->imageData, pRGBImage->imageData, pRGBImage->imageSize);
+
+#ifdef RVLOPENNI
+		if(bKinect)
+		{
+			// acquire depth image from Kinect
+
+			//if(bRecord)
+			//	DepthMapFormat = RVLKINECT_DEPTH_IMAGE_FORMAT_1MM;
+
+			VS.m_Kinect.GetImages(pDepthImage->Disparity, pRGBImage, NULL, pGSImage, DepthMapFormat);
+		}
+		else
+#endif
+		if(VS.m_Flags & RVLSYS_FLAGS_PC)
+		{
+			if(!RVLPCImport(VS.m_ImageFileName, &PC, nPC))
+			{
+				MessageCanNotOpenFile(&GUI, VS.m_ImageFileName);
+
+				cvWaitKey();
+
+				return 0;
+			}
+			else
+			{
+				int iSample = RVLGetFileNumber(VS.m_ImageFileName, "00000-PC.pcd");
+
+				char *PCFileName = RVLCreateFileName(VS.m_ImageFileName, "-PC.pcd", iSample, "-PC.obj");
+
+				RVLPCSaveToObj(PC, nPC, PCFileName);
+
+				delete[] PCFileName;
+			}
+		}
+		else if(bRecord)
+		{
+			if(!RVLImportDisparityImage(VS.m_ImageFileName, pDepthImage, DepthMapFormat, VS.m_Kinect.m_zToDepthLookupTable))
+			{
+				MessageCanNotOpenFile(&GUI, VS.m_ImageFileName);
+			
+				cvWaitKey();
+
+				return 0;
+			}
+			else
+			{
+				RVLSaveDepthImage(pDepthImage->Disparity, w, h, VS.m_ImageFileName, RVLKINECT_DEPTH_IMAGE_FORMAT_1MM, 
+					RVLKINECT_DEPTH_IMAGE_FORMAT_1MM);
+
+				int iSample = RVLGetFileNumber(VS.m_ImageFileName, "00000-D.txt");
+			
+				RVLSetFileNumber(VS.m_ImageFileName, "00000-D.txt", iSample + 1);
+			}
+		}	// if(bRecord)
+
+		if(!bRecord && bLocalize)
+		{
+			if (VS.m_Flags & RVLSYS_FLAGS_EDIT_MAP)
+			{
+				pPSuLM = VS.m_PSuLMBuilder.m_PSuLMArray[iMPSuLM];
+
+				RVLCopyString(pPSuLM->m_FileName, &(VS.m_ImageFileName));
+
+				if (HypEvalMethod == RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD_P)
+					VS.m_PSuLMBuilder.InitHypothesisEvaluation4(pPSuLM);
+
+				if (VS.m_PSuLMBuilder.m_Flags2 & RVLPSULMBUILDER_FLAG2_HYPOTHESIS_EVALUATION_SAMPLE_MATCHING)
+					VS.m_PSuLMBuilder.InitHypothesisEvaluation3(pPSuLM);
+			}
+
+			if(bComplex)
+			{
+				pComplexImage = VS.m_PSuLMBuilder.GetComplexPSuLMRGBImage(VS.m_ImageFileName);
+
+				pInputImage_ = pComplexImage;
+			}
+			else if(!bKinect && !(VS.m_Flags & RVLSYS_FLAGS_PC))
+				pRGBImage = cvLoadImage(VS.m_ImageFileName);
+
+			t = clock();			
+
+			//// clear image features
+
+			//VS.m_AImage.Clear();
+
+			//// compute a 3D point cloud from depth data
+
+			//if(VS.m_Flags & RVLSYS_FLAGS_PC)
+			//	VS.m_PSD.GetOrgPC(PC, nPC);
+			//else
+			//	VS.m_PSD.GetPointsWithDisparity(pDepthImage);
+
+			//// create a triangular mesh from the point cloud
+
+			//VS.m_PSD.Segment(&(VS.m_AImage.m_C2DRegion),&(VS.m_AImage.m_C2DRegion2),&(VS.m_AImage.m_C2DRegion3),&(VS.m_Mem));
+
+			//// segment to convex sets
+		
+			//if(VS.m_Flags & RVLSYS_FLAGS_SEGMENT_TO_CONVEX_SETS)
+			//	nObjects = RVLSegmentToConvex(&(VS.m_AImage.m_C2DRegion), NULL, &(VS.m_AImage.m_C2DRegion2),
+			//		VS.m_ConvexSegmentThr, w, h, VS.m_PSD.m_Point3DMap, &(VS.m_Mem), NULL, NULL,
+			//		(VS.m_PSD.m_Flags & RVLPSD_FLAG_MM) != 0);
+
+			// debug
+
+			//VS.m_PSuLMBuilder.m_pNearestModelPSuLM = VS.m_PSuLMBuilder.GetPSuLM(8);			
+
+			/////
+
+			//VS.m_PSuLMBuilder.m_Flags |= RVLPSULMBUILDER_FLAG_KIDNAPPED;
+
+			g_StartNewSubSet = false; //This flag needs to be reset
+			if ((VS.m_Flags & (RVLSYS_FLAGS_BEST_SUBSET_HYPOTHESIS | RVLSYS_FLAGS_REVIEW_RESULTS)) == RVLSYS_FLAGS_BEST_SUBSET_HYPOTHESIS)
+			{
+				unsigned char command;
+				CRVL3DPose PoseTemp;
+				int iTemp;
+				
+				
+				//initialize
+				command = 'O';
+				g_BestCost = -1000000;
+				//Copy current file name
+				strcpy(g_BestSubSetImageFileName, VS.m_ImageFileName);
+				BOOL bFileExists;
+				
+				do
+				{
+					VS.m_PSuLMBuilder.GetPanTilt(VS.m_ImageFileName, &PoseTemp, iTemp, command);
+
+					VS.Update(bKinect ? 0x00000000 : RVLPSULMBUILDER_CREATEMODEL_IMAGE_FROM_FILE);
+					if (VS.m_PSuLMBuilder.m_nHypotheses > 0)
+					{
+						if (VS.m_PSuLMBuilder.m_HypothesisArray[0]->cost > g_BestCost)
+						{
+							g_BestCost = VS.m_PSuLMBuilder.m_HypothesisArray[0]->cost;
+							strcpy(g_BestSubSetImageFileName, VS.m_ImageFileName);
+						}
+					}
+					bFileExists = GetNextFileName(&VS);
+
+				} while (command != 'C');
+
+				
+				//Store last image number
+				g_LastSubSetImageNo = (bFileExists ? RVLGetFileNumber(VS.m_ImageFileName, "00000-LW.bmp") : -1);
+				g_StartNewSubSet = true;
+
+				//Reset current image to best subsetimage
+				strcpy(VS.m_ImageFileName, g_BestSubSetImageFileName);
+				pRGBImage = cvLoadImage(VS.m_ImageFileName);
+				
+				
+			}
+
+			if (g_BestCost == -1000000)
+				GUI.Message("No hypotheses generated!", 300, 100, cvScalar(0, 0, 255));
+
+			VS.Update(bKinect ? 0x00000000 : RVLPSULMBUILDER_CREATEMODEL_IMAGE_FROM_FILE);
+
+			if (VS.m_Flags & RVLSYS_FLAGS_REVIEW_RESULTS)
+			{
+				if (HypEvalMethod == RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD_P)
+					VS.m_PSuLMBuilder.InitHypothesisEvaluation4(VS.m_pPSuLM);
+
+				if (VS.m_PSuLMBuilder.m_Flags2 & RVLPSULMBUILDER_FLAG2_HYPOTHESIS_EVALUATION_SAMPLE_MATCHING)
+					VS.m_PSuLMBuilder.InitHypothesisEvaluation3(VS.m_pPSuLM);
+
+				if (VS.m_iResPSuLM >= 0)
+				{
+					VS.m_PSuLMBuilder.m_nHypotheses = VS.m_PSuLMBuilder.m_HypothesisList.m_nElements = 1;
+
+					if (HypothesisMem)
+						delete[] HypothesisMem;
+
+					HypothesisMem = new RVLPSULM_HYPOTHESIS[1];
+
+					pHypothesis = HypothesisMem;
+
+					pHypothesis->pMPSuLM = VS.m_PSuLMBuilder.m_PSuLMArray[VS.m_iResPSuLM];
+
+					pHypothesis->PoseSM.Copy(&(VS.m_ResPose));
+
+					pHypothesis->iRepresentative = 0xffffffff;
+
+					pHypothesis->Probability = 0.0;
+
+					pHypothesis->pMPSuLM->m_PosteriorProbabilityLocal = pHypothesis->pMPSuLM->m_PosteriorProbabilityGlobal = 0.0;
+
+					pHypothesis->pMPSuLM->m_PosteriorProbabilityLocal5DOF = 0.0;
+
+					if (VS.m_PSuLMBuilder.m_HypothesisArray)
+						delete[] VS.m_PSuLMBuilder.m_HypothesisArray;
+
+					VS.m_PSuLMBuilder.m_HypothesisArray = new RVLPSULM_HYPOTHESIS *[1];
+
+					VS.m_PSuLMBuilder.m_HypothesisArray[0] = pHypothesis;
+				}
+				else
+					VS.m_PSuLMBuilder.m_nHypotheses = 0;
+			}
+			else
+			{
+				fpExecTime = fopen("C:\\RVL\\ExpRez\\ExecTime.txt", "a");
+
+				fprintf(fpExecTime, "%lf\t%lf\t%s\n", VS.m_PSuLMBuilder.m_CreateTime, VS.m_PSuLMBuilder.m_LocalizationTime, VS.m_ImageFileName);
+
+				fclose(fpExecTime);
+
+				VS.m_fpRes = fopen("C:\\RVL\\ExpRez\\ExpRes.txt", "a");
+
+				if (VS.m_PSuLMBuilder.m_nHypotheses > 0)
+				{
+					pHypothesis = VS.m_PSuLMBuilder.m_HypothesisArray[0];
+
+					fprintf(VS.m_fpRes, "%d\t%lf\t%lf\t%lf\t%lf\t%lf\t%lf\t%s\n",
+						pHypothesis->pMPSuLM->m_Index,
+						pHypothesis->PoseSM.m_Alpha, pHypothesis->PoseSM.m_Beta, pHypothesis->PoseSM.m_Theta,
+						pHypothesis->PoseSM.m_X[0], pHypothesis->PoseSM.m_X[1], pHypothesis->PoseSM.m_X[2],
+						VS.m_ImageFileName);
+				}
+				else
+					fprintf(VS.m_fpRes, "%d\t%lf\t%lf\t%lf\t%lf\t%lf\t%lf\t%s\n", -1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, VS.m_ImageFileName);
+
+				fclose(VS.m_fpRes);
+			}
+
+			//VS.Create3DMeshFromComplexPSuLM(VS.m_ImageFileName);
+
+			//VS.m_PSuLMBuilder.GetComplexPSuLMRGBImage(VS.m_ImageFileName);
+
+			t = clock() - t;	
+
+			if(!bComplex)
+			{
+				//// mark segment edges
+
+				//if(VS.m_PSD.m_Flags & RVLPSD_MESH_SEGMENT_PLANAR)
+				if(!(VS.m_Flags & RVLSYS_FLAGS_CREATE_GLOBAL_MESH) || 
+					!(VS.m_PSuLMBuilder.m_Flags & RVLPSULMBUILDER_FLAG_MODE_LOCALIZATION))
+				{
+					nObjects = VS.m_AImage.m_C2DRegion3.m_ObjectList.m_nElements + 1;
+
+					VS.m_PSD.AssignLabels(&(VS.m_AImage.m_C2DRegion), &(VS.m_AImage.m_C2DRegion3));
+				}
+
+				RVLSegmentationEdgesFromLabels(&(VS.m_AImage.m_C2DRegion));
+
+				// store RGB image
+
+				cvCvtColor(pRGBImage, pHSVImage, CV_BGR2RGB);
+
+				pHSVImage->channelSeq[0] = 'R';
+
+				pHSVImage->channelSeq[1] = 'G';
+
+				pHSVImage->channelSeq[2] = 'B';
+
+				if(VS.m_Flags & RVLSYS_FLAGS_EDIT_MAP)
+					VS.m_PSuLMBuilder.GetConnectedSubMap(pPSuLM);
+
+				if(bManualTrigger)
+					bContinuous = false;
+			}			
+		}	// if(!bRecord && bLocalize)
+
+		// display the results
+
+		iSample = RVLGetFileNumber(VS.m_ImageFileName, "00000-LW.bmp");
+
+		// computing match matrix for validation of the hypothesis evaluation results
+
+		int MatchMatrixOffset = iSample * (VS.m_PSuLMBuilder.m_maxPSuLMIndex + 1);
+
+		MatchMatrixGT = (iSample >= 0 && iSample < VS.m_nSamples ? VS.m_MatchMatrixGT + MatchMatrixOffset : NULL);
+
+		//VS.ComputeMatchMatrix(iSample);
+
+		/////
+
+		if(VS.m_Flags & RVLSYS_FLAGS_EDIT_MAP)
+		{
+			VS.m_pPSuLM->m_Index = pPSuLM->m_Index;
+
+			RVLQLIST_PTR_ENTRY *pNeighborPtr = (RVLQLIST_PTR_ENTRY *)(pPSuLM->m_NeighbourList->pFirst);
+
+			VS.m_PSuLMBuilder.m_nHypotheses = 0;
+
+			while(pNeighborPtr)
+			{
+				pNeighborPtr = (RVLQLIST_PTR_ENTRY *)(pNeighborPtr->pNext);	
+
+				VS.m_PSuLMBuilder.m_nHypotheses++;
+			}
+
+			VS.m_PSuLMBuilder.m_HypothesisList.m_nElements = VS.m_PSuLMBuilder.m_nHypotheses;
+
+			if(VS.m_PSuLMBuilder.m_nHypotheses > 0)
+			{
+				if(HypothesisMem)
+					delete[] HypothesisMem;
+
+				HypothesisMem = new RVLPSULM_HYPOTHESIS[VS.m_PSuLMBuilder.m_nHypotheses];				
+
+				if(VS.m_PSuLMBuilder.m_HypothesisArray)
+					delete[] VS.m_PSuLMBuilder.m_HypothesisArray;
+
+				VS.m_PSuLMBuilder.m_HypothesisArray = new RVLPSULM_HYPOTHESIS *[VS.m_PSuLMBuilder.m_nHypotheses];
+			
+				pHypothesis = HypothesisMem;
+
+				pNeighborPtr = (RVLQLIST_PTR_ENTRY *)(pPSuLM->m_NeighbourList->pFirst);
+
+				iHypothesis = 0;
+
+				RVLPSULM_NEIGHBOUR *pNeighborRel;
+
+				while(pNeighborPtr)
+				{
+					pNeighborRel = (RVLPSULM_NEIGHBOUR *)(pNeighborPtr->Ptr);
+
+					pHypothesis->pMPSuLM = pNeighborRel->pPSuLM;
+
+					double *RMS = pNeighborRel->pPoseRel->m_Rot;
+					double *tMS = pNeighborRel->pPoseRel->m_X;
+					double *RSM = pHypothesis->PoseSM.m_Rot;
+					double *tSM = pHypothesis->PoseSM.m_X;
+
+					RVLINVTRANSF3D(RMS, tMS, RSM, tSM)
+
+					pHypothesis->PoseSM.UpdatePTRLL();
+
+					pHypothesis->Index = iHypothesis;
+
+					pHypothesis->cost = 0;
+
+					pHypothesis->iRepresentative = 0xffffffff;
+
+					pHypothesis->pMPSuLM->m_pHypothesis = pHypothesis;
+
+					pHypothesis->Probability = 0.0;
+
+					pHypothesis->pMPSuLM->m_PosteriorProbabilityLocal = pHypothesis->pMPSuLM->m_PosteriorProbabilityGlobal = 0.0;
+
+					pHypothesis->pMPSuLM->m_PosteriorProbabilityLocal5DOF = 0.0;
+
+					VS.m_PSuLMBuilder.m_HypothesisArray[iHypothesis] = pHypothesis;
+
+					iHypothesis++;
+				
+					pHypothesis++;
+
+					pNeighborPtr = (RVLQLIST_PTR_ENTRY *)(pNeighborPtr->pNext);	
+				}
+
+				iHypothesis = 0;
+			}
+		}	// if(VS.m_Flags & RVLSYS_FLAGS_EDIT_MAP)
+		else
+		{
+			iHypothesis = 0;
+
+			RVLPSuLMdemoGetNextHypothesis(&VS, iHypothesis, 1, MatchMatrixGT, bFilterHypotheses, true);
+
+			if(VS.m_pPSuLM)
+				VS.m_pPSuLM->m_Index = 0xffffffff;
+		}
+
+		if (RefHypMatchArray)
+		{
+			delete[] RefHypMatchArray;
+
+			RefHypMatchArray = NULL;
+		}
+		
+		do
+		{
+			// clear display
+
+			pFig->Clear();
+
+			pFig2->Clear();
+
+			// select bitmap to display
+
+			if(!bComplex)
+			{
+				if(VS.m_Flags & RVLSYS_FLAGS_PC)
+					VS.m_PSD.DisplayPC(pInputImage);
+				else
+				{
+					switch(DisplayBitmap){
+					case 0:
+						// display the depth image on the display image
+
+						RVLDisplayDisparityMapColor(pDepthImage, 0, FALSE, pInputImage, DepthMapFormat);
+
+						break;
+					case 1:
+						// display RGB image on the display image
+
+						cvCopy(pRGBImage, pInputImage);
+
+						break;
+					case 2:
+						// display grayscale image on the display image
+
+						cvCvtColor(pGSImage, pInputImage, CV_GRAY2RGB);
+					}
+				}
+
+				RVLZoom(pInputImage, pZoomedInputImage, 2);
+			}
+
+			if(bLocalize)
+			{
+				if(!bComplex)
+				{
+					// display the mesh or convex sets
+
+					if(bDisplayMesh)
+						RVLDisplay2DRegions(pFig, &(VS.m_AImage.m_C2DRegion.m_ObjectList), VS.m_CameraL.Width, RVLColor(0, 255, 0));
+
+					if(bDisplayConvexSets)
+						RVLDisplay2DRegions(pFig, &(VS.m_AImage.m_C2DRegion.m_ObjectList), VS.m_CameraL.Width, 
+							RVLColor(255, 0, 255), 1, RVLMESH_LINK_FLAG_EDGE, RVLMESH_LINK_FLAG_EDGE);
+				}
+
+				if(bDisplayHypothesis)
+				{
+					VS.m_PSuLMBuilder.DisplayHypothesis(&GUI, pFig, pFig2, VS.m_pPSuLM, mDisplayPSuLMFlags, pInputImage_,
+						pPrevRGBImage, iHypothesis);				
+
+					VS.m_PSuLMBuilder.DisplayHypothesisData(pFig, VS.m_pPSuLM, MatchMatrixGT, mDisplayPSuLMFlags, iHypothesis);
+
+#ifdef RVLPSULMBUILDER_CONDITIONAL_PROBABILITY_TREE_DEBUG_LOG
+					if (RefHypMatchArray)
+						VS.m_PSuLMBuilder.CompareHypotheses(RefHypMatchArray, nRefHypMatches, 
+							VS.m_PSuLMBuilder.m_DebugData.MatchArray, VS.m_PSuLMBuilder.m_DebugData.nMatches,
+							"C:\\RVL\\Debug\\HypComparison.txt");
+#endif // RVLPSULMBUILDER_CONDITIONAL_PROBABILITY_TREE_DEBUG_LOG
+
+				}
+
+				if(bDisplayPSuLM)
+				{
+					pFig->m_pImage = cvCloneImage(pInputImage_);
+
+					//if(VS.m_Flags & RVLSYS_FLAGS_PC)
+					//	VS.m_pPSuLM->Display(pFig, &PoseLC, cvScalar(0, 255, 0), mDisplayPSuLMFlags);
+					//else
+						VS.m_pPSuLM->Display(pFig, &NullPose, cvScalar(0, 255, 0), mDisplayPSuLMFlags);
+				}
+
+				GUI.DisplayVectors(pFig, 0, 0, (double)ZoomFactor);
+
+				GUI.DisplayVectors(pFig2, 0, 0, 1.0);
+
+				// display some numerical data
+
+				iTextLine = 0;
+
+				sprintf(str, "Exec. Time = %4.0f ms", 1000.0f * ((float)t)/CLOCKS_PER_SEC);
+
+				cvPutText(pFig->m_pImage, str, cvPoint(0, (++iTextLine) * pFig->m_FontSize), &pFig->m_Font,  cvScalar(0, 255, 255));
+
+				sprintf(str, "TT = %d", (VS.m_Flags & RVLSYS_FLAGS_PC ? VS.m_PSD.m_MeshTol : VS.m_PSD.m_uvdTol));
+
+				cvPutText(pFig->m_pImage, str, cvPoint(0, (++iTextLine) * pFig->m_FontSize), &pFig->m_Font,  cvScalar(0, 255, 255));
+
+				sprintf(str, "CT = %d", VS.m_ConvexSegmentThr);
+
+				cvPutText(pFig->m_pImage, str, cvPoint(0, (++iTextLine) * pFig->m_FontSize), &pFig->m_Font,  cvScalar(0, 255, 255));
+
+				// show the display image
+
+				MouseCallbackData.ZoomFactor = ZoomFactor;
+				MouseCallbackData.mDisplayPSuLMFlags = mDisplayPSuLMFlags;
+				MouseCallbackData.iHypothesis = (VS.m_PSuLMBuilder.m_nHypotheses > 0 ? iHypothesis : -1);
+				MouseCallbackData.pImage = pInputImage_;
+				MouseCallbackData.MatchMatrixGT = MatchMatrixGT;
+				MouseCallbackData.pSelectedSurf = NULL;
+
+				GUI.ShowFigure(pFig);	
+
+				cvSetMouseCallback("Scene", RVLPSuLMDisplayMouseCallback2, &MouseCallbackData);
+			
+				MouseCallbackData2.ZoomFactor = ZoomFactor;
+				MouseCallbackData2.mDisplayPSuLMFlags = mDisplayPSuLMFlags;
+				MouseCallbackData2.iHypothesis = (VS.m_PSuLMBuilder.m_nHypotheses > 0 ? iHypothesis : -1);
+				MouseCallbackData2.pImage = pInputImage_;
+				MouseCallbackData2.MatchMatrixGT = MatchMatrixGT;
+				MouseCallbackData2.pSelectedSurf = NULL;
+
+				GUI.ShowFigure(pFig2);	
+
+				cvSetMouseCallback("Model", RVLPSuLMDisplayMouseCallback2, &MouseCallbackData2);
+
+				//cvSaveImage("C:\\RVL\\ExpRez\\RVLDisplay.bmp", pDisplay);
+			}
+			else
+			{
+				pFig->m_pImage = pInputImage_;
+
+				GUI.ShowFigure(pFig);
+			}
+
+			// wait until a key is pressed
+
+			key = (bContinuous ? cvWaitKey(1) : cvWaitKey());
+
+			// change the display according to the key pressed
+
+			bNextImage = true;
+			bRefresh = false;
+			bBackwards = false;
+			bLast = false;
+			bSaveImage  = false;
+			SampleStep = 1;
+
+			switch(key){
+			case '0':
+				pHypothesis = VS.m_PSuLMBuilder.m_HypothesisArray[iHypothesis];
+
+				if(pHypothesis)
+					VS.m_GroundTruth.Add(RVLGetFileNumber(VS.m_ImageFileName, "00000-LW.bmp"), pHypothesis->pMPSuLM->m_Index, &(pHypothesis->PoseSM));
+
+				bRefresh = true;
+
+				break;
+			case '1':
+				printf("Enter model number: ");
+
+				int iPSuLM;
+
+				scanf("%d", &iPSuLM);
+
+				VS.m_PSuLMBuilder.m_pNearestModelPSuLM = VS.m_PSuLMBuilder.m_PSuLMArray[iPSuLM];
+
+				VS.m_PSuLMBuilder.m_Flags &= ~RVLPSULMBUILDER_FLAG_GLOBAL;
+
+				VS.m_PSuLMBuilder.m_Flags |= RVLPSULMBUILDER_FLAG_KIDNAPPED;
+
+				bNextImage = false;
+
+				break;
+			case 'a':
+				mDisplayPSuLMFlags ^= RVLPSULM_DISPLAY_SAMPLES;
+			
+				bRefresh = true;				
+	
+				break;
+			case 'b':
+				//DisplayBitmap = (DisplayBitmap + 1) % 3;
+				DisplayBitmap = (DisplayBitmap + 1) % 2;
+
+#ifdef RVLOPENNI
+				if(bKinect)
+					VS.m_Kinect.RegisterDepthToColor((DisplayBitmap != 0));
+#endif
+				bRefresh = true;
+
+				break;
+			case 'c':
+				bContinuous = !bContinuous;
+
+				if(bContinuous && bManualTrigger)
+					bLocalize = false;
+
+				break;
+			case 'C':
+				if(VS.m_PSuLMBuilder.m_Flags2 & RVLPSULMBUILDER_FLAG2_MAPBUILDING_MANUAL)
+				{
+					pHypothesis = VS.m_PSuLMBuilder.m_HypothesisArray[iHypothesis];
+
+					if(pHypothesis)
+					{
+						CRVLPSuLM *pPSuLM;
+
+						VS.m_PSuLMBuilder.m_PSuLMList.Start();
+
+						while(VS.m_PSuLMBuilder.m_PSuLMList.m_pNext)
+							pPSuLM = (CRVLPSuLM *)(VS.m_PSuLMBuilder.m_PSuLMList.GetNext());
+
+						VS.m_PSuLMBuilder.Connect(pHypothesis->pMPSuLM, pPSuLM, NULL, &(pHypothesis->PoseSM));
+
+						GUI.Message("PSuLMs connected.", 300, 100, cvScalar(0, 255, 0));
+					}
+				}
+
+				bRefresh = true;
+
+				break;
+			case 'e':
+				mDisplayPSuLMFlags ^= (RVLPSULM_DISPLAY_ELLIPSES | RVLPSULM_DISPLAY_LINES);
+			
+				bRefresh = true;				
+	
+				break;
+			case 'f':	// Map building on/off
+				VS.m_PSuLMBuilder.m_Flags ^= RVLPSULMBUILDER_FLAG_MAPBUILDING;
+
+#ifdef RVLPSULMBUILDER_MAPBUILDING_SEQUENCE
+				if(VS.m_PSuLMBuilder.m_Flags & RVLPSULMBUILDER_FLAG_MAPBUILDING)
+				{
+					VS.m_PSuLMBuilder.m_Flags &= ~RVLPSULMBUILDER_FLAG_GLOBAL;
+
+					//if(VS.m_PSuLMBuilder.m_nPlausibleHypotheses > 0)
+					//	VS.m_PSuLMBuilder.m_pNearestModelPSuLM = VS.m_PSuLMBuilder.m_HypothesisArray[0]->pMPSuLM;
+
+					if(VS.m_PSuLMBuilder.m_nHypotheses > 0)
+						if(VS.m_PSuLMBuilder.m_HypothesisArray[0]->pMPSuLM->m_PosteriorProbabilityLocal >= 0.999)
+							VS.m_PSuLMBuilder.m_pNearestModelPSuLM = VS.m_PSuLMBuilder.m_HypothesisArray[0]->pMPSuLM;
+				}
+#endif
+
+				bNextImage = false;
+
+				bLocalize = true;
+
+				break;
+			case 'F':
+				if(VS.m_Flags & RVLSYS_FLAGS_VALIDATION)
+				{
+					bFilterHypotheses = !bFilterHypotheses;
+		
+					bRefresh = true;
+				}
+
+				break;
+			case 'g':	// global localization on/off
+				VS.m_PSuLMBuilder.m_Flags ^= RVLPSULMBUILDER_FLAG_GLOBAL;
+
+				break;
+			case 'h':
+				bDisplayHypothesis = (!bDisplayHypothesis && !bRecord);
+
+				bDisplayPSuLM = (bDisplayPSuLM && !bDisplayHypothesis);
+
+				bRefresh = true;
+
+				break;
+			case 'H':	//Add hypothesis to current scene
+
+				//Add best hypothesis to scene
+				//AddHypothesisToPSuLMScene(&Renderer, actorObjs, &VS.m_PSuLMBuilder.m_HypothesisArray[iHypothesis]->PoseSM, iHypothesis);
+				vtkModelPSuLM = (CRVLPSuLM*)VS.m_PSuLMBuilder.m_HypothesisArray[0]->pMPSuLM;
+				//check if hypothesis is linked to reference PSuLM
+				if (vtkModelPSuLM == refPSuLM)
+				{
+					AddHypothesisToPSuLMScene(&Renderer, actorObjs, &VS.m_PSuLMBuilder.m_HypothesisArray[0]->PoseSM, vtkHypModelIdx);
+					vtkHypModelIdx++;
+				}
+				vtkNeighbourPtr = (RVLQLIST_PTR_ENTRY*)refPSuLM->m_NeighbourList->pFirst;
+				double *R1;
+				double *t1;
+				double *R2;
+				double *t2;
+				double *R;
+				double *t;
+
+				while (vtkNeighbourPtr)
+				{
+					vtkNeighbourPSuLM = (RVLPSULM_NEIGHBOUR*)vtkNeighbourPtr->Ptr;
+					//check if neighbour is reference PSuLM
+					if (vtkNeighbourPSuLM->pPSuLM == vtkModelPSuLM)
+					{
+						R1 = vtkNeighbourPSuLM->pPoseRel->m_Rot;
+						t1 = vtkNeighbourPSuLM->pPoseRel->m_X;
+						R2 = VS.m_PSuLMBuilder.m_HypothesisArray[0]->PoseSM.m_Rot;
+						t2 = VS.m_PSuLMBuilder.m_HypothesisArray[0]->PoseSM.m_X;
+						R = vtkPose3D->m_Rot;
+						t = vtkPose3D->m_X;
+						// T(R, t) = T(R1, t1) * T(R2, t2)
+						RVLCOMPTRANSF3D(R1, t1, R2, t2, R, t)
+
+						AddHypothesisToPSuLMScene(&Renderer, actorObjs, vtkPose3D, vtkHypModelIdx);
+						vtkHypModelIdx++;
+					}
+					//
+					vtkNeighbourPtr = (RVLQLIST_PTR_ENTRY*)vtkNeighbourPtr->pNext;
+				}
+
+				bRefresh = true;
+
+				break;
+			case 'i':	// loop start <- last MPSuLM
+				if(VS.m_PSuLMBuilder.m_pNearestModelPSuLM)
+				{
+					VS.m_PSuLMBuilder.m_pLoopStartPSuLM = VS.m_PSuLMBuilder.m_pNearestModelPSuLM;
+
+					bRefresh = true;
+				}
+
+				break;
+			case 'l':	// loop closing 
+				if((VS.m_PSuLMBuilder.m_Flags & RVLPSULMBUILDER_FLAG_MAPBUILDING) && VS.m_PSuLMBuilder.m_pLoopStartPSuLM)
+				{
+					VS.m_PSuLMBuilder.m_Flags |= RVLPSULMBUILDER_FLAG_MANUAL_LOOP_CLOSING;
+
+					VS.m_PSuLMBuilder.m_Flags &= ~RVLPSULMBUILDER_FLAG_GLOBAL;
+				}
+
+				break;
+			case 'm':
+				bDisplayMesh = (!bDisplayMesh && !bRecord);
+
+				bRefresh = true;
+
+				break;
+			case 'M':
+				//key_ = GUI.Message("Run UpdateRelativePoseUncertainties()?", 600, 100, cvScalar(0, 128, 255));
+
+				//if(key_ == 'y')
+				//{
+				//	VS.m_PSuLMBuilder.UpdateRelativePoseUncertainties();
+
+				//	GUI.Message("UpdateRelativePoseUncertainties() completed.", 600, 100, cvScalar(0, 128, 255));
+				//}
+
+				if(VS.m_Flags & RVLSYS_FLAGS_EDIT_MAP)
+				{
+					key_ = GUI.Message("Run CreateLocal3DMesh()?", 600, 100, cvScalar(0, 128, 255));
+
+					if(key_ == 'y')
+					{
+						VS.CreateLocal3DMesh(pPSuLM);
+
+						GUI.Message("CreateLocal3DMesh() completed.", 600, 100, cvScalar(0, 128, 255));
+					}
+				}
+				else if(bComplex)
+				{
+					GUI.Message("Creating 3D mesh...", 600, 100, cvScalar(0, 128, 255), false);
+
+					VS.Create3DMeshFromComplexPSuLM(VS.m_ImageFileName);
+
+					GUI.Message("3D mesh created.", 600, 100, cvScalar(0, 255, 0));
+				}
+
+				bRefresh = true;
+
+				break;
+			case 'o':
+				bNextImage = false;
+
+				break;
+#ifdef RVLVTK
+			case 'p':
+				if (bVTKRendererActive)
+				{
+					RVLSetFileNumber(VTK3DModelFileName, "00000.ply", iVTK3DModel);
+
+					Renderer.Save2PLY(VTK3DModelFileName);
+
+					//iVTK3DModel++;
+
+					strcpy(VTKMessage, VTKMessageConst);
+					strcat(VTKMessage, VTK3DModelFileName);
+
+					GUI.Message(VTKMessage, 600, 100, cvScalar(0, 128, 255));
+				}
+
+				bRefresh = true;
+
+				break;
+#endif
+			case 'r':
+				bRecord = (!bRecord && bKinect);
+
+				bContinuous = false;
+
+				DisplayBitmap = 0;
+
+				bDisplayMesh = false;
+
+				bDisplayConvexSets = false;
+
+				break;
+			case 'R':
+				if (VS.m_PSuLMBuilder.m_DebugData.MatchArray)
+				{
+					if (RefHypMatchArray)
+						delete[] RefHypMatchArray;
+
+					nRefHypMatches = VS.m_PSuLMBuilder.m_DebugData.nMatches;
+
+					RefHypMatchArray = new RVLPSULM_MATCH2[nRefHypMatches];
+
+					memcpy(RefHypMatchArray, VS.m_PSuLMBuilder.m_DebugData.MatchArray, nRefHypMatches * sizeof(RVLPSULM_MATCH2));
+
+					GUI.Message("The current hypothesis is set as the reference hypothesis.", 600, 100, cvScalar(0, 255, 128));
+				}
+				else
+					GUI.Message("Cannot set reference hypothesis. No match data is generated.", 600, 100, cvScalar(0, 0, 255));
+
+				bRefresh = true;
+
+				break;
+			case 's':
+				if(bRecord && bKinect)
+				{
+					cvSaveImage(VS.m_ImageFileName, VS.m_pRGBImage);	
+
+					char *DepthImageFileName = RVLCreateFileName(VS.m_ImageFileName, "-LW.bmp", -1, "-D.txt");
+
+					RVLSaveDepthImage(VS.m_StereoVision.m_DisparityMap.Disparity, VS.m_StereoVision.m_DisparityMap.Width, 
+						VS.m_StereoVision.m_DisparityMap.Height, DepthImageFileName, VS.m_StereoVision.m_DisparityMap.Format, 
+						VS.m_StereoVision.m_DisparityMap.Format);					
+
+					bSaveImage = true;
+				}
+
+				break;
+			case 'S':
+				bDisplayConvexSets = (!bDisplayConvexSets && !bRecord);
+
+				bRefresh = true;
+
+				break;
+			case 't':
+#ifdef RVLVTK
+				VTKTexture = (VTKTexture + 1) % 4;
+ 
+				if(bVTKRendererActive)
+					RVLDisplaySegmentedMesh3D(&Renderer, &(VS.m_AImage.m_C2DRegion.m_ObjectList), nObjects, w, h, pointmap,
+						VS.m_PSD.m_Point3DMap, VTKTexture, pHSVImage);
+				else
+#endif
+				GUI.Message("VTK Texture mode changed.", 600, 100, cvScalar(0, 128, 255));
+
+				bRefresh = true;
+
+				break;
+			case 'u':
+				bDisplayPSuLM = (!bDisplayPSuLM && !bRecord);
+
+				bDisplayHypothesis = (bDisplayHypothesis & !bDisplayPSuLM);
+
+				bRefresh = true;
+
+				break;
+			case 'v':
+				if(VS.m_Flags & RVLSYS_FLAGS_VALIDATION)
+				{
+					key_ = GUI.Message("Run validation? (If yes, press 'y')", 500, 100, cvScalar(0, 128, 255));
+
+					if(key_ == 'y')
+						VS.Validate();
+
+					bRefresh = true;
+				}
+
+				break;
+#ifdef RVLVTK
+			case 'V':
+<<<<<<< HEAD
+				RVLDisplaySegmentedMesh3D(&Renderer, &(VS.m_AImage.m_C2DRegion.m_ObjectList), nObjects, w, h, pointmap, VS.m_PSD.m_Point3DMapMem, 
+					VTKTexture);
+
+				Renderer.Save2PLY(VTK3DModelFileName);
+=======
+				int modelIdx;
+				std::cout << "Please input ID of reference PSuLM: ";
+				std::cin >> modelIdx;
+				//Adding first model PSuLM
+				std::cout << "Adding reference model!" << std::endl;
+				refPSuLM = VS.m_PSuLMBuilder.m_PSuLMArray[modelIdx];//(CRVLPSuLM*)VS.m_PSuLMBuilder.m_HypothesisArray[0]->pMPSuLM;// .m_PSuLMList.m_pFirst->pData;// ->pNext->pData;
+				GenAndDispPSuLMScene(refPSuLM, &Renderer, actorObjs);
+				std::cout << "Added reference model!" << std::endl;
+				//Running through neighbour psulms of first model
+				vtkNeighbourPtr = (RVLQLIST_PTR_ENTRY*)refPSuLM->m_NeighbourList->pFirst;
+				modelIdx = 1;
+				while (vtkNeighbourPtr)
+				{
+					vtkNeighbourPSuLM = (RVLPSULM_NEIGHBOUR*)vtkNeighbourPtr->Ptr;
+					//
+					std::cout << "Adding model: " << modelIdx << std::endl;
+					GenAndDispPSuLMScene(vtkNeighbourPSuLM->pPSuLM, &Renderer, actorObjs, true, vtkNeighbourPSuLM->pPoseRel, modelIdx);
+					//AddHypothesisToPSuLMScene(&Renderer, actorObjs, vtkNeighbourPSuLM->pPoseRel, modelIdx);
+					std::cout << "Added model: " << modelIdx << std::endl;
+					modelIdx++;
+					//
+					vtkNeighbourPtr = (RVLQLIST_PTR_ENTRY*)vtkNeighbourPtr->pNext;
+				}
+
+				//Add best hypothesis to scene
+				//AddHypothesisToPSuLMScene(&Renderer, actorObjs, &VS.m_PSuLMBuilder.m_HypothesisArray[0]->PoseSM, 0);
+>>>>>>> dfilko_branch
+
+				bRefresh = true;
+				bVTKRendererActive = true;
+
+				break;
+#endif
+			case 'x':
+				pPSuLMList = &(VS.m_PSuLMBuilder.m_PSuLMList);
+
+				pMem = VS.m_PSuLMBuilder.m_pMem;
+
+				pMap = VS.m_PSuLMBuilder.ConvertPtrChain2QLIST(pPSuLMList, pMem);
+
+				VS.m_PSuLMBuilder.SaveXMLMap(VS.m_PSuLMBuilder.m_ModelMapPath, pMap);
+
+				GUI.Message("Map saved.", 600, 100, cvScalar(0, 128, 255));
+
+				bRefresh = true;
+
+				break;
+			case 'z':
+				if(ZoomFactor == 1)
+				{
+					ZoomFactor = 2;
+					pInputImage_ = pZoomedInputImage;
+				}
+				else
+				{
+					ZoomFactor = 1;
+					pInputImage_ = pInputImage;
+				}
+
+				bRefresh = true;
+
+				break;
+			case '+':
+				if(VS.m_Flags & RVLSYS_FLAGS_VALIDATION)
+				{
+					pHypothesis = VS.m_PSuLMBuilder.m_HypothesisArray[iHypothesis];
+
+					if(pHypothesis)
+					{
+						MatchMatrixGT[pHypothesis->pMPSuLM->m_Index] = 1;
+					}
+
+					bRefresh = true;
+				}
+
+				break;
+			case '-':
+				if(VS.m_Flags & RVLSYS_FLAGS_VALIDATION)
+				{
+					pHypothesis = VS.m_PSuLMBuilder.m_HypothesisArray[iHypothesis];
+
+					if(pHypothesis)
+					{
+						MatchMatrixGT[pHypothesis->pMPSuLM->m_Index] = -1;
+					}
+
+					bRefresh = true;
+				}
+
+				break;
+			case '?':
+				if(VS.m_Flags & RVLSYS_FLAGS_VALIDATION)
+				{
+					pHypothesis = VS.m_PSuLMBuilder.m_HypothesisArray[iHypothesis];
+
+					if(pHypothesis)
+					{
+						MatchMatrixGT[pHypothesis->pMPSuLM->m_Index] = 0;
+					}
+
+					bRefresh = true;
+				}
+
+				break;
+			case 0x00000008:	// backspace
+				bBackwards = true;
+
+				break;
+			case 0x0000000d:	// Enter
+				if(bManualTrigger)
+				{
+					bLocalize = true;
+
+					bNextImage = false;
+				}
+
+				break;
+			case 0x00210000:	// PgUp
+				bBackwards = true;
+
+				SampleStep = 10;
+
+				break;
+			case 0x00220000:	// PgDn
+				SampleStep = 10;
+
+				break;
+			case 0x00230000:	// End
+				if(VS.m_Flags & RVLSYS_FLAGS_EDIT_MAP)
+					bLast = true;
+
+				break;
+			case 0x00240000:	// Home
+				if(VS.m_PSuLMBuilder.m_nHypotheses > 0)
+				{
+					iHypothesis = 0;
+
+					bRefresh = true;
+				}
+
+				break;
+			case 0x00260000:	// Up
+				if(VS.m_PSuLMBuilder.m_nHypotheses > 0)
+				{
+					RVLPSuLMdemoGetNextHypothesis(&VS, iHypothesis, -1, MatchMatrixGT, bFilterHypotheses);
+
+					bRefresh = true;
+				}
+			//	if(VS.m_Flags & RVLSYS_FLAGS_PC)
+			//		VS.m_PSD.m_MeshTol++;
+			//	else
+			//		VS.m_PSD.m_uvdTol++;
+
+			//	bNextImage = false;
+
+				break;
+			case 0x00280000:	// Down
+				if(VS.m_PSuLMBuilder.m_nHypotheses > 0)
+				{
+					RVLPSuLMdemoGetNextHypothesis(&VS, iHypothesis, 1, MatchMatrixGT, bFilterHypotheses);
+
+					bRefresh = true;
+				}
+
+			//	if(VS.m_Flags & RVLSYS_FLAGS_PC)
+			//	{
+			//		if(VS.m_PSD.m_MeshTol > 1)
+			//			VS.m_PSD.m_MeshTol--;
+			//	}
+			//	else
+			//	{
+			//		if(VS.m_PSD.m_uvdTol > 1)
+			//			VS.m_PSD.m_uvdTol--;
+			//	}
+
+			//	bNextImage = false;
+
+				break;
+			//case 0x00270000:
+			//	VS.m_ConvexSegmentThr++;
+
+			//	bNextImage = false;
+
+			//	break;
+			//case 0x00250000:
+			//	if(VS.m_ConvexSegmentThr > 0)
+			//		VS.m_ConvexSegmentThr--;
+
+			//	bNextImage = false;
+			case 0x002e0000:	// delete
+				if(VS.m_Flags & RVLSYS_FLAGS_EDIT_MAP)
+				{
+					if(VS.m_PSuLMBuilder.m_nHypotheses > 0)
+					{
+						key_ = GUI.Message("Do you really want to delete this connection? (If yes, press 'y')", 600, 100, cvScalar(0, 128, 255));
+
+						if(key_ == 'y')
+						{
+							pHypothesis = VS.m_PSuLMBuilder.m_HypothesisArray[iHypothesis];
+
+							VS.m_PSuLMBuilder.DeleteConnection(pPSuLM, pHypothesis->pMPSuLM);
+		
+							int n = VS.m_PSuLMBuilder.m_nHypotheses - iHypothesis - 1;
+
+							if(n > 0)
+								memmove(VS.m_PSuLMBuilder.m_HypothesisArray + iHypothesis, VS.m_PSuLMBuilder.m_HypothesisArray + iHypothesis + 1, 
+									n * sizeof(RVLPSULM_HYPOTHESIS *));
+
+							VS.m_PSuLMBuilder.m_nHypotheses--;
+
+							VS.m_PSuLMBuilder.m_HypothesisList.m_nElements--;
+
+							if(iHypothesis > VS.m_PSuLMBuilder.m_nHypotheses - 1)
+								iHypothesis = VS.m_PSuLMBuilder.m_nHypotheses - 1;
+						}
+
+						bRefresh = true;
+					}
+					else
+					{
+						key_ = GUI.Message("Do you really want to delete this PSuLM? (If yes, press 'y')", 600, 100, cvScalar(0, 0, 255));
+
+						if(key_ == 'y')
+						{
+							VS.m_PSuLMBuilder.m_PSuLMList.Start();
+
+							RVLPTRCHAIN_ELEMENT *pCurrent;
+							CRVLPSuLM *pPSuLM_;
+
+							while(VS.m_PSuLMBuilder.m_PSuLMList.m_pNext)
+							{
+								pCurrent = VS.m_PSuLMBuilder.m_PSuLMList.m_pCurrent;
+
+								pPSuLM_ = (CRVLPSuLM *)(VS.m_PSuLMBuilder.m_PSuLMList.GetNext());
+
+								if(pPSuLM_ == pPSuLM)
+								{
+									VS.m_PSuLMBuilder.m_PSuLMList.RemoveAt(pCurrent);
+
+									VS.m_PSuLMBuilder.m_PSuLMArray[iMPSuLM] = NULL;
+
+									if(VS.m_PSuLMBuilder.m_PSuLMList.m_nElements > 0)
+									{
+										while(iMPSuLM <= VS.m_PSuLMBuilder.m_maxPSuLMIndex && VS.m_PSuLMBuilder.m_PSuLMArray[iMPSuLM] == NULL)
+											iMPSuLM++;
+
+										if(iMPSuLM > VS.m_PSuLMBuilder.m_maxPSuLMIndex)
+											iMPSuLM = 0;
+
+										while(iMPSuLM <= VS.m_PSuLMBuilder.m_maxPSuLMIndex && VS.m_PSuLMBuilder.m_PSuLMArray[iMPSuLM] == NULL)
+											iMPSuLM++;
+									}
+									else
+										iMPSuLM = 0;
+
+									break;
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+		while(bRefresh && !bContinuous);
+
+		// next image/model
+
+		//if(!bKinect && bNextImage)
+		if((!bRecord && !bManualTrigger && bNextImage) || (bRecord && bSaveImage) || (bManualTrigger && bLocalize))
+		{
+			//if(VS.m_Flags & RVLSYS_FLAGS_VALIDATION)
+			//{
+			//	key_ = GUI.Message("Do you want to save the validation results for this image? (If yes, press 'y')", 700, 100, cvScalar(0, 128, 255));
+
+			//	if(key_ == 'y')
+			//		VS.SaveValidation();
+			//	VS.StoreHypothesesToMatchMatrix(RVLGetFileNumber(VS.m_ImageFileName, "00000-LW.bmp"));
+			//}
+
+			BOOL bFileExists = TRUE;
+
+			if(bKinect)
+			{
+				int iSample = RVLGetFileNumber(VS.m_ImageFileName, "00000-LW.bmp");
+
+				RVLSetFileNumber(VS.m_ImageFileName, "00000-LW.bmp", iSample + 1);
+			}
+			else if(VS.m_Flags & RVLSYS_FLAGS_EDIT_MAP)
+			{
+				iMPSuLM_ = iMPSuLM;
+
+				if(bBackwards)
+				{
+					iMPSuLM -= SampleStep;
+
+					while(iMPSuLM >= 0 && VS.m_PSuLMBuilder.m_PSuLMArray[iMPSuLM] == NULL)
+						iMPSuLM--;
+
+					if(iMPSuLM < 0)
+						iMPSuLM = iMPSuLM_;
+				}
+				else if(bLast)
+				{
+					while(iMPSuLM <= VS.m_PSuLMBuilder.m_maxPSuLMIndex)
+					{
+						if(VS.m_PSuLMBuilder.m_PSuLMArray[iMPSuLM])
+							iMPSuLM_ = iMPSuLM;
+
+						iMPSuLM++;
+					}
+
+					iMPSuLM = iMPSuLM_;
+				}
+				else
+				{
+					iMPSuLM += SampleStep;
+
+					while(iMPSuLM <= VS.m_PSuLMBuilder.m_maxPSuLMIndex && VS.m_PSuLMBuilder.m_PSuLMArray[iMPSuLM] == NULL)
+						iMPSuLM++;
+
+					if(iMPSuLM > VS.m_PSuLMBuilder.m_maxPSuLMIndex)
+						iMPSuLM = iMPSuLM_;
+				}
+			}	
+			else if (bComplex)
+			{
+				iSample_ = iSample;
+
+				char *OdometryFileName = RVLCreateFileName(VS.m_ImageFileName, "-LW.bmp", -1, "-O.txt");	
+
+				unsigned char command;
+				int x, y, z, pan, tilt, roll, iSample0;
+				FILE *fpOdometry;
+
+				while (bFileExists = GetNextFileName(&VS)) //RVLGetNextFileName(VS.m_ImageFileName, "00000-LW.bmp", 10000))
+				{
+					iSample_ = RVLGetFileNumber(VS.m_ImageFileName, "00000-LW.bmp");
+
+					RVLSetFileNumber(OdometryFileName, "00000-O.txt", iSample_);					
+
+					fpOdometry = fopen(OdometryFileName, "r");
+
+					if (fpOdometry == NULL)
+						continue;
+
+					fscanf(fpOdometry, "%d\t%d\t%d\t%d\t%d\t%d\t%d\t%c\n", &x, &y, &z, &pan, &tilt, &roll, &iSample0, &command);
+
+					fclose(fpOdometry);					
+
+					if (command == 'O')
+					{
+						iSample = iSample_;
+
+						break;
+					}
+				}				
+
+				RVLSetFileNumber(VS.m_ImageFileName, "00000-LW.bmp", iSample);
+
+				delete[] OdometryFileName;
+			}
+			else
+				bFileExists = GetNextFileName(&VS);// RVLGetNextFileName(VS.m_ImageFileName, "00000-LW.bmp", 10000);
+
+			if (!bFileExists)
+			{
+				GUI.Message("All files are processed.", 500, 100, cvScalar(0, 255, 0));
+
+				break;
+			}
+		}
+
+		if(!bRecord)
+			VS.m_Mem.Clear();
+	}
+	while (key != 27);
+
+	if(VS.m_Flags & RVLSYS_FLAGS_VALIDATION)
+	{
+		key_ = GUI.Message("Do you want to save match matrix? (If yes, press 'y')", 600, 100, cvScalar(0, 128, 255));
+
+		if(key_ == 'y')
+			VS.SaveMatchMatrix();
+	}
+
+	// free memory
+
+	if(HypothesisMem)
+		delete[] HypothesisMem;
+
+	if(PC)
+		delete[] PC;
+
+	delete[] SizeArray;
+	delete[] VTKMessage;
+
+	if (RefHypMatchArray)
+		delete[] RefHypMatchArray;
+
+	GUI.CloseFigure("RVLPCSdemo");
+
+	cvReleaseImage(&pInputImage);
+	cvReleaseImage(&pRGBImage);
+	cvReleaseImage(&pGSImage);
+	cvReleaseImage(&pZoomedInputImage);
+	//cvReleaseImage(&pAuxImage);
+	cvReleaseImage(&pPrevRGBImage);
+
+	return 0;
+}
+
+void MessageCanNotOpenFile(CRVLGUI *pGUI, char *FileName)
+{
+	char message[] = "Can not open file ";
+
+	char *str = new char[strlen(FileName) + strlen(message) + 2];
+
+	strcpy(str, message);
+
+	strcat(str, FileName);
+
+	str[strlen(FileName) + strlen(message)] = '!';
+
+	pGUI->Message(str, 400, 100, cvScalar(0, 128, 255));
+
+	delete[] str;
+}
+
+BOOL GetNextFileName(CRVLPSuLMVS *pVS) 
+{
+	if (pVS->m_Flags & RVLSYS_FLAGS_REVIEW_RESULTS)
+	{
+		char ResImageFileName[1001];
+
+		if (feof(pVS->m_fpRes))
+			return FALSE;
+
+		fscanf(pVS->m_fpRes, "%d\t%lf\t%lf\t%lf\t%lf\t%lf\t%lf\t%s\n", &(pVS->m_iResPSuLM), &(pVS->m_ResPose.m_Alpha), &(pVS->m_ResPose.m_Beta), &(pVS->m_ResPose.m_Theta),
+			pVS->m_ResPose.m_X, pVS->m_ResPose.m_X + 1, pVS->m_ResPose.m_X + 2, ResImageFileName);
+
+		pVS->m_ResPose.UpdateRotLL();
+
+		pVS->m_ImageFileName = RVLCreateString(ResImageFileName);
+
+		return TRUE;
+	}
+	else if (pVS->m_Flags & RVLSYS_FLAGS_USE_SEQUENCE_FILE)
+	{
+		return GetImageInSequence(pVS);
+	}
+	else
+	{
+		return RVLGetNextFileName(pVS->m_ImageFileName, "00000-LW.bmp", 10000);
+	}
+	
+	
+}
+
+void GetAllSequenceData(CRVLPSuLMVS *pVS)
+{
+<<<<<<< HEAD
+	if (pVS->m_Flags & RVLSYS_FLAGS_USE_SEQUENCE_FILE)
+	{
+		//Read sequence data 
+		FILE *seqFile= fopen(pVS->m_SequenceFileName, "r");
+		if (seqFile != NULL)
+		{
+			char sLine[500];
+			int iLeft, iMid, iRight;
+			int iStart, iEnd;
+			CString sFileName, sStartFileName, InputSampleFileName;
+
+			g_CurrentSequenceNo = 0;
+			g_CurrentImageNo = 0;
+
+			while (!feof(seqFile))
+			{
+				fgets(sLine, 500, seqFile);
+
+				IMAGE_SEQUENCE_DATA imageSequenceData;
+
+				sFileName = (CString)sLine;
+				iLeft = sFileName.Find('[', 0);
+				iMid = sFileName.Find(':', iLeft);
+				iRight = sFileName.Find(']', iMid);
+				sscanf(CT2A(sFileName.Mid(iLeft + 1, iMid - iLeft - 1)), "%d", &(imageSequenceData.StartNo));
+				sscanf(CT2A(sFileName.Mid(iMid + 1, iRight - iMid - 1)), "%d", &(imageSequenceData.EndNo));
+				//std::string stemp(CT2CA(sFileName.Mid(0, iLeft - 1).Trim()));
+				
+				imageSequenceData.ImageFileName = CT2CA(sFileName.Mid(0, iLeft).Trim());
+				
+				g_AllSequences.push_back(imageSequenceData);
+				
+
+			}
+
+			fclose(seqFile);
+
+			//Set first image
+			GetImageInSequence(pVS,true);
+		}
+	}	
+=======
+	//if (pVS->m_Flags & RVLSYS_FLAGS_USE_SEQUENCE_FILE)
+	//{
+	//	//Read sequence data 
+	//	FILE *seqFile= fopen(pVS->m_SequenceFileName, "r");
+	//	if (seqFile != NULL)
+	//	{
+	//		char sLine[500];
+	//		int iLeft, iMid, iRight;
+	//		int iStart, iEnd;
+	//		CString sFileName, sStartFileName, InputSampleFileName;
+
+	//		g_CurrentSequenceNo = 0;
+	//		g_CurrentImageNo = 0;
+
+	//		while (!feof(seqFile))
+	//		{
+	//			fgets(sLine, 500, seqFile);
+
+	//			IMAGE_SEQUENCE_DATA imageSequenceData;
+
+	//			sFileName = (CString)sLine;
+	//			iLeft = sFileName.Find('[', 0);
+	//			iMid = sFileName.Find(':', iLeft);
+	//			iRight = sFileName.Find(']', iMid);
+	//			sscanf(CT2A(sFileName.Mid(iLeft + 1, iMid - iLeft - 1)), "%d", &(imageSequenceData.StartNo));
+	//			sscanf(CT2A(sFileName.Mid(iMid + 1, iRight - iMid - 1)), "%d", &(imageSequenceData.EndNo));
+	//			//std::string stemp(CT2CA(sFileName.Mid(0, iLeft - 1).Trim()));
+	//			
+	//			imageSequenceData.ImageFileName = CT2CA(sFileName.Mid(0, iLeft).Trim());
+	//			
+	//			g_AllSequences.push_back(imageSequenceData);
+	//			
+
+	//		}
+
+	//		fclose(seqFile);
+
+	//		//Set first image
+	//		GetImageInSequence(pVS,true);
+	//	}
+	//}
+	
+>>>>>>> dfilko_branch
+}
+
+
+BOOL GetImageInSequence(CRVLPSuLMVS *pVS, bool bInit)
+{
+	
+	if (bInit)
+	{
+		//set initial image
+		IMAGE_SEQUENCE_DATA& currentSequenceData = g_AllSequences[g_CurrentSequenceNo];
+		//Copy current file name
+		RVLCopyString((char *)(currentSequenceData.ImageFileName.c_str()), &(pVS->m_ImageFileName));
+
+		RVLSetFileNumber(pVS->m_ImageFileName, "00000-LW.bmp", currentSequenceData.StartNo);
+		
+		g_CurrentImageNo = currentSequenceData.StartNo;
+		
+		return TRUE;
+
+	}
+	else
+	{ 
+		//set start image in subset
+		if (g_StartNewSubSet && pVS->m_Flags & RVLSYS_FLAGS_BEST_SUBSET_HYPOTHESIS)
+		{
+			//if (g_CurrentSequenceNo < g_AllSequences.size())
+			//{
+			if (g_LastSubSetImageNo >= 0)
+			{
+				g_CurrentImageNo = g_LastSubSetImageNo;
+				//RVLSetFileNumber(pVS->m_ImageFileName, "00000-LW.bmp", g_CurrentImageNo);
+
+				IMAGE_SEQUENCE_DATA& currentSequenceData = g_AllSequences[g_CurrentSequenceNo];
+				//Copy current file name
+				RVLCopyString((char *)(currentSequenceData.ImageFileName.c_str()), &(pVS->m_ImageFileName));
+
+				RVLSetFileNumber(pVS->m_ImageFileName, "00000-LW.bmp", g_CurrentImageNo);
+
+				g_StartNewSubSet = false;
+				return TRUE;
+			}
+			else
+				return FALSE;
+		}
+		else 
+		{ 
+			g_CurrentImageNo = RVLGetFileNumber(pVS->m_ImageFileName, "00000-LW.bmp");
+		}
+
+		//Standard search for images in sequence
+		if ((g_CurrentSequenceNo < g_AllSequences.size()) && (g_CurrentImageNo >= g_AllSequences[g_CurrentSequenceNo].EndNo))
+		{
+			//increase
+			g_CurrentSequenceNo++;
+
+			if (g_CurrentSequenceNo < g_AllSequences.size())
+			{
+				IMAGE_SEQUENCE_DATA& currentSequenceData = g_AllSequences[g_CurrentSequenceNo];
+				//Copy current file name
+				RVLCopyString((char *)currentSequenceData.ImageFileName.c_str(), &(pVS->m_ImageFileName));
+
+				RVLSetFileNumber(pVS->m_ImageFileName, "00000-LW.bmp", currentSequenceData.StartNo);
+
+				g_CurrentImageNo = currentSequenceData.StartNo;
+
+				return TRUE;
+
+			}
+			else
+			{
+				return FALSE;
+			}
+		}
+		else
+		{
+			if (g_CurrentSequenceNo < g_AllSequences.size())
+			{
+				IMAGE_SEQUENCE_DATA& currentSequenceData = g_AllSequences[g_CurrentSequenceNo];
+				return RVLGetNextFileName(pVS->m_ImageFileName, "00000-LW.bmp", currentSequenceData.EndNo);
+			}
+			else
+			{
+				return FALSE;
+			}
+		}
+		
+	}
+	
+}

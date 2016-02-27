@@ -12,12 +12,17 @@ CRVLVisionSystem::CRVLVisionSystem()
 	m_ImageFileName = NULL;
 
 	m_Mem0Size = 150000000;
-	m_MemSize = 150000000;
+	m_MemSize = 500000000;
 	m_Mem2Size = 150000000;
 	m_MCMemSize = 10000000;
 
 	m_nPC = 0;
 	m_PC = NULL;
+
+	m_LidarParams.minTilt = -4.0;
+	m_LidarParams.maxTilt = 24.0;
+	m_LidarParams.dTilt = 0.2;
+	m_LidarParams.nPanIn120deg = 1024;
 }
 
 CRVLVisionSystem::~CRVLVisionSystem()
@@ -47,6 +52,8 @@ void CRVLVisionSystem::CreateParamList()
 	pParamData = m_ParamList.AddParam("VS.MCMemSize", RVLPARAM_TYPE_INT, &m_MCMemSize);
 	pParamData = m_ParamList.AddParam("VS.ImageFileName", RVLPARAM_TYPE_STRING, &m_ImageFileName);
 	pParamData = m_ParamList.AddParam("VS.SequenceFileName", RVLPARAM_TYPE_STRING, &m_SequenceFileName);
+	pParamData = m_ParamList.AddParam("VS.PointCloud", RVLPARAM_TYPE_FLAG, &m_Flags);
+	m_ParamList.AddID(pParamData, "yes", RVLSYS_FLAGS_PC);
 	pParamData = m_ParamList.AddParam("VS.Kinect.ONIFileName", RVLPARAM_TYPE_STRING, &(m_Kinect.m_ONIFileName));
 	pParamData = m_ParamList.AddParam("VS.Kinect.ONIFile", RVLPARAM_TYPE_FLAG, &(m_Kinect.m_Flags));
 	m_ParamList.AddID(pParamData, "yes", RVLKINECT_FLAG_ONI_FILE);
@@ -88,53 +95,58 @@ DWORD CRVLVisionSystem::Init(char *CfgFile2Name)
 	m_StereoVision.m_pCameraL = &m_CameraL;
 	m_StereoVision.m_pCameraR = &m_CameraR;
 
-	m_StereoVision.CreateParamList(&m_Mem0);
+	if (m_Flags & RVLSYS_FLAGS_PC)
+		GetOrgPCProjectionSize();
+	else
+	{
+		m_StereoVision.CreateParamList(&m_Mem0);
 
-	if(CfgFile2Name)
-		m_StereoVision.m_ParamList.LoadParams(CfgFile2Name);
+		if (CfgFile2Name)
+			m_StereoVision.m_ParamList.LoadParams(CfgFile2Name);
 
-	//if(m_Flags & RVLSYS_FLAGS_STEREO)
+		//if(m_Flags & RVLSYS_FLAGS_STEREO)
 		//if((m_StereoVision.m_Flags & RVLSTEREO_FLAGS_METHOD_SVS) == 0)
 		//	m_StereoVision.CreateTriangulationLookupTable();
 
-	if(m_StereoVision.m_Flags & RVLSTEREO_FLAGS_CALIB_METHOD_SVS)
-		m_StereoVision.InitCamerasSVS(m_StereoVision.m_ParamFileName);
-	//else
-	//{
-	//	DWORD res;
+		if (m_StereoVision.m_Flags & RVLSTEREO_FLAGS_CALIB_METHOD_SVS)
+			m_StereoVision.InitCamerasSVS(m_StereoVision.m_ParamFileName);
+		//else
+		//{
+		//	DWORD res;
 
-	//	res = m_CameraL.Init(m_StereoVision.m_ParamFileName);
+		//	res = m_CameraL.Init(m_StereoVision.m_ParamFileName);
 
-	//	if(res != RVL_RES_OK)
-	//		return RVLVS_ERR_CAMERA | res;
+		//	if(res != RVL_RES_OK)
+		//		return RVLVS_ERR_CAMERA | res;
 
-	//	res = m_CameraR.Init(m_StereoVision.m_ParamFileName);	// this should be changed if the right camera is different
-	//								
-	//	if(res != RVL_RES_OK)
-	//		return RVLVS_ERR_CAMERA | res;
+		//	res = m_CameraR.Init(m_StereoVision.m_ParamFileName);	// this should be changed if the right camera is different
+		//								
+		//	if(res != RVL_RES_OK)
+		//		return RVLVS_ERR_CAMERA | res;
 
-	//	m_CameraL.GetParallelStereoCameraSystem(&m_CameraR);
-	//
-	//	m_CameraL.CreateImageNrmLookupTable(0);
-	//	m_CameraR.CreateImageNrmLookupTable(0);
-	//}
+		//	m_CameraL.GetParallelStereoCameraSystem(&m_CameraR);
+		//
+		//	m_CameraL.CreateImageNrmLookupTable(0);
+		//	m_CameraR.CreateImageNrmLookupTable(0);
+		//}
 
-	m_StereoVision.Init();
+		m_StereoVision.Init();
 
-	m_StereoVision.m_zToDepthLookupTable = m_Kinect.m_zToDepthLookupTable;
+		m_StereoVision.m_zToDepthLookupTable = m_Kinect.m_zToDepthLookupTable;
 
-	m_Kinect.m_scale = m_StereoVision.m_KinectScale;
+		m_Kinect.m_scale = m_StereoVision.m_KinectScale;
 
-	// initialize ROI
+		// initialize ROI
 
-	if(m_Flags2 & RVLSYS_FLAGS2_STEREO_ROI)
-	{
-		m_ROI.left = m_StereoVision.m_nDisp;
-		m_ROI.right = m_CameraL.Width - 1;
-		m_ROI.top = 0;
-		m_ROI.bottom = m_CameraL.Height - 1;
+		if (m_Flags2 & RVLSYS_FLAGS2_STEREO_ROI)
+		{
+			m_ROI.left = m_StereoVision.m_nDisp;
+			m_ROI.right = m_CameraL.Width - 1;
+			m_ROI.top = 0;
+			m_ROI.bottom = m_CameraL.Height - 1;
 
-		m_AImage.m_pROI = &m_ROI;
+			m_AImage.m_pROI = &m_ROI;
+		}
 	}
 
 	// initialize A-image
@@ -236,4 +248,14 @@ void CRVLVisionSystem::SavePC()
 	RVLPCSaveToObj(m_PC, m_nPC, PCFileName);
 
 	delete[] PCFileName;
+}
+
+void CRVLVisionSystem::GetOrgPCProjectionSize()
+{
+	m_CameraL.Width = m_CameraL.m_nrmImage.Width = m_LidarParams.nPanIn120deg;
+	double dv_ = m_LidarParams.dTilt * DEG2RAD;
+	double maxv_ = 2.0 * tan(m_LidarParams.maxTilt * DEG2RAD);
+	double minv_ = 2.0 * tan(m_LidarParams.minTilt * DEG2RAD);
+	double fv = 1.0 / dv_;
+	m_CameraL.Height = m_CameraL.m_nrmImage.Height = (int)floor(-minv_ * fv) + (int)floor(maxv_ * fv) + 2;
 }

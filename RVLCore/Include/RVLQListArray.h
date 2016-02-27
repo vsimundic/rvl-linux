@@ -73,6 +73,21 @@
 	pEntry = (type *)(pListTmp->pFirst); \
 	while(pEntry) {if(pEntry->adr == HTadr) break; pEntry = (type *)(pEntry->pNext);} \
 	}
+#define RVLQLIST_INIT_(List) {List.pFirst = NULL; List.ppNext = &(List.pFirst);}
+#define RVLQLIST_ADD_ENTRY_(List, pEntry) {*(List.ppNext) = pEntry; List.ppNext = &(pEntry->pNext); pEntry->pNext = NULL;}
+#define RVLQLIST_ARRAY_INIT(Array, pQList)	{for(int i = 0; i < Array.n; i++) {pQList = Array.Element + i; RVLQLIST_INIT(pQList);}}
+#define RVLQLIST_ARRAY_INIT2(pArray, Attribute, QListType)	{for(int i = 0; i < pArray->n; i++){QList<QListType> *pQList = &(pArray->Element[i].Attribute); RVLQLIST_INIT(pQList)}}
+#define RVLQLIST_COPY(List, ListElementType, Field, Array, DataType)\
+{\
+	ListElementType *pListElement = List.pFirst;\
+	DataType *pData = Array.Element;\
+		while (pListElement)\
+			{\
+		*(pData++) = pListElement->Field;\
+		pListElement = pListElement->pNext;\
+			}\
+	Array.n = pData - Array.Element;\
+}
 
 struct RVLQLIST	
 {
@@ -224,6 +239,43 @@ inline RVLQLIST* InsertSortQLISTWithCopy(RVLQLIST *pList, int dir, CRVLMem *pMem
 		pEntry = (T*)pEntry->pNext;
 	 }
 	return pList_N;
+}
+
+namespace RVL
+{
+	template <typename Type> struct QList
+	{
+		Type *pFirst;
+		Type **ppNext;
+	};
+
+	namespace QLIST
+	{
+		struct Index
+		{
+			int Idx;
+			Index *pNext;
+		};
+
+		void CopyToArray(QList<Index> *pList, Array<int> *pArray);
+
+		template<typename T>
+		void CopyToArray(QList<T> *pList, Array<T> *pArray)
+		{
+			T *pData = pList->pFirst;
+
+			T *pData_ = pArray->Element;
+
+			while (pData)
+			{
+				*(pData_++) = (*pData);
+
+				pData = pData->pNext;
+			}
+
+			pArray->n = pData_ - pArray->Element;
+		}
+	}
 }
 
 class CRVLQListArray

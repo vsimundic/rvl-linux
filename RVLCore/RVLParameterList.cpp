@@ -35,7 +35,8 @@ void CRVLParameterList::SetParam(char *ParamName,
 	RVLPARAM_DATA *pParamData;
 	DWORD *pDWParam;
 	int *piParam;
-	double *pfParam;
+	float *pfParam;
+	double *plfParam;
 	char **pstrParam;
 
 	m_List.Start();
@@ -73,10 +74,17 @@ void CRVLParameterList::SetParam(char *ParamName,
 				sscanf(value, "%d", piParam);
 
 				break;
-			case RVLPARAM_TYPE_DOUBLE:
-				pfParam = (double *)(pParamData->pParam);
+			case RVLPARAM_TYPE_FLOAT:
+				pfParam = (float *)(pParamData->pParam);
 
-				sscanf(value, "%lf", pfParam);
+				sscanf(value, "%f", pfParam);
+
+				break;
+
+			case RVLPARAM_TYPE_DOUBLE:
+				plfParam = (double *)(pParamData->pParam);
+
+				sscanf(value, "%lf", plfParam);
 
 				break;
 			case RVLPARAM_TYPE_STRING:
@@ -172,7 +180,8 @@ void CRVLParameterList::SaveParams(char *ParamFileName)
 
 	RVLPARAM_DATA *pParamData;
 	int ivalue;
-	double fvalue;
+	float fvalue;
+	double lfvalue;
 	char *pstrvalue;
 	DWORD DWvalue;
 
@@ -194,10 +203,16 @@ void CRVLParameterList::SaveParams(char *ParamFileName)
 			fprintf(fp, "%d\n", ivalue);
 
 			break;
-		case RVLPARAM_TYPE_DOUBLE:
-			fvalue = *((double *)(pParamData->pParam));
+		case RVLPARAM_TYPE_FLOAT:
+			fvalue = *((float *)(pParamData->pParam));
 
-			fprintf(fp, "%lf\n", fvalue);
+			fprintf(fp, "%f\n", fvalue);
+
+			break;
+		case RVLPARAM_TYPE_DOUBLE:
+			lfvalue = *((double *)(pParamData->pParam));
+
+			fprintf(fp, "%lf\n", lfvalue);
 
 			break;
 		case RVLPARAM_TYPE_STRING:

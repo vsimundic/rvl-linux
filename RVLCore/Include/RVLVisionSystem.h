@@ -19,6 +19,13 @@
 
 //#define RVLSYS_PSULMBRLM_UPDATE_LOG_FILE
 
+struct RVLLIDAR_PARAMS
+{
+	double minTilt;
+	double maxTilt;
+	double dTilt;
+	int nPanIn120deg;
+};
 
 class CRVLVisionSystem
 {
@@ -42,6 +49,7 @@ public:
 	CRVLMem m_ParamMem;
 	int m_nPC;
 	double *m_PC;
+	RVLLIDAR_PARAMS m_LidarParams;
 
 public:
 	CRVLVisionSystem();
@@ -61,4 +69,5 @@ public:
 		IplImage *pRGBImage,
 		char *RGBExtension);
 	void SavePC();
+	void GetOrgPCProjectionSize();
 };

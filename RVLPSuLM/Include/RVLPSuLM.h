@@ -222,6 +222,19 @@ void RVLDisplayColoredDepthMap(CRVL3DMeshObject *pSceneMesh,
 							   int w,
 							   int h,
 							   PIX_ARRAY *pPixArray);
+#ifdef RVLVTK
+void RVLPSuLMKeyPressCallback(vtkObject* caller, unsigned long eid, void* clientdata, void *calldata);
+void RVLPSuLMRightButtonPressCallback(vtkObject* caller, unsigned long eid, void* clientdata, void *calldata);
+void RVLPSuLMGenAndDispPSuLMScene(
+	CRVLPSuLM *psulm,
+	CRVLVTKRenderer* pRenderer,
+	std::map<std::string, VTKActorObj*>* vtkobjs,
+	bool bRGB = false,
+	bool add = false,
+	CRVL3DPose * pose = NULL,
+	int modelIdx = 0);
+void RVLPSuLMAddHypothesisToPSuLMScene(CRVLVTKRenderer* pRenderer, std::map<std::string, VTKActorObj*>* vtkobjs, CRVL3DPose * hypPose, int hypIdx);
+#endif
 
 class CRVLPSuLM
 {

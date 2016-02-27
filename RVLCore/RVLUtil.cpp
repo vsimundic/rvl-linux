@@ -17,7 +17,9 @@
 #include "RVLMem.h"
 #include "RVLPtrChain.h"
 #include "RVLMPtrChain.h"
+#include "RVLArray.h"
 #include "RVLQListArray.h"
+#include "RVL3DTools.h"
 #include "RVLUtil.h"
 
 ///////////////////////////////////////////////////////////

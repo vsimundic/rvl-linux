@@ -74,6 +74,7 @@
 //#define RVLPSD_SEGMENT_STRM_LOG_FILE
 //#define RVLPSD_SEGMENT_STRM_DEBUG
 //#define RVLPSD_SAMPLE_SURF_DEBUG
+//#define RVLPSD_SEGMENT_STRM_PC_DEBUG
 #define RVLPSD_GET3DSURFACES_UVD
 
 struct RVLPSDLAD_THREE_POINTS_ITER_AB
@@ -341,6 +342,7 @@ public:
 	int m_nFOVExtensions;
 	double m_FOVExtension;
 	double m_PointMeasurementUncertStD;
+	RVLLIDAR_PARAMS *m_pLidarParams;
 		
 #ifndef RVLPSDLAD_GRBIC
 	CRVLMem *m_pMem, *m_pMem2;
@@ -641,7 +643,7 @@ public:
 	virtual ~CRVLPlanarSurfaceDetector();
 	void GetRegionBoundaries(void);
 	void GetOrgPC(double * PC, int n);
-	void GetOrgPCProjectionParams(double &f, double &uc, double &vc);
+	void GetOrgPCProjectionParams(double &fu, double &fv, double &uc, double &vc);
 	void DisplayPC(IplImage *pDisplay);
 	void AssignLabels(CRVLC2D *pTriangleSetLevel1, CRVLC2D *pTriangleSetLevel3);
 	bool ProjectToFOVExtension(	double *X,

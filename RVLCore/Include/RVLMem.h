@@ -25,10 +25,14 @@
 
 class CRVLMem  
 {
+//#ifdef RVLNAMESPACE
+	//using namespace RVL;
+//#endif
+
 public:
 	BYTE *m_pFreeMem;
 	BYTE *m_pEndBlock;
-	BYTE *m_pStartBlock;	
+	BYTE *m_pStartBlock;
 	
 private:
 	BYTE *m_pFirstBlock;

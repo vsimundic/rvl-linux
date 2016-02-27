@@ -1,13 +1,14 @@
 //#include <vtkAutoInit.h>
 //VTK_MODULE_INIT(vtkRenderingOpenGL);
 //VTK_MODULE_INIT(vtkInteractionStyle);
-#include "vtkActor.h"
-#include "vtkPointData.h"
-#include "vtkCellData.h"
-#include "vtkFloatArray.h"
-#include "vtkSmartPointer.h"
-#include "vtkPolyData.h"
-#include "vtkTexture.h"
+#ifdef RVLVTK
+//#include "vtkActor.h"
+//#include "vtkPointData.h"
+//#include "vtkCellData.h"
+//#include "vtkFloatArray.h"
+//#include "vtkSmartPointer.h"
+//#include "vtkPolyData.h"
+//#include "vtkTexture.h"
 
 class VTKActorObj
 {
@@ -37,3 +38,4 @@ public:
 		texture = NULL;
 	}
 };
+#endif

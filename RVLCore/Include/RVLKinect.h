@@ -27,7 +27,9 @@ public:
 					IplImage *pImageDepth = NULL, 
 					IplImage *pImageGS = NULL,
 					unsigned int Format = RVLKINECT_DEPTH_IMAGE_FORMAT_DISPARITY,
-					int frameIdx = 0);
+					int frameIdx = 0,
+					void *vpDepthFrame = NULL,
+					void *vpColorFrame = NULL);
 	void RegisterDepthToColor(bool bRegister);
 	void GetParams();
 	void ConvertDepthToWorld(int u, int v, int z, float *px, float *py, float *pz);

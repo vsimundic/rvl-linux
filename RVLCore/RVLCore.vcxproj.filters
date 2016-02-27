@@ -150,6 +150,9 @@
     <ClCompile Include="RVLPC.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="RVLRGBDTools.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Include\Platform.h">
@@ -306,6 +309,24 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Include\RVLPC.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Include\RVLCore2.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Include\RVL3DTools.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Include\RVLCoreTypes.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Include\RVLRGBDTools.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Include\RVLPlatform.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Include\VTKActorObj.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

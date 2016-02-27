@@ -24,17 +24,19 @@
 #include "opencv\highgui.h"
 //#include "opencv2\calib3d\calib3d_c.h"
 #include "RVLConst.h"
-#include "RVLBuffer.h"
 #include "RVLMem.h"
 #include "RVLArray.h"
 #include "RVLQListArray.h"
+#include "RVLMChain.h"
+#include "RVLParameterList.h"
+#include "RVLBuffer.h"
 #include "RVLChain.h"
 #include "RVLWChain.h"
 #include "RVLPtrChain.h"
-#include "RVLMChain.h"
 #include "RVLMChain2.h"
 #include "RVLMPtrChain2.h"
 #include "RVLMPtrChain.h"
+#include "RVL3DTools.h"
 #include "RVLUtil.h"
 #include "RVLKinect.h"
 #include "RVLCamera.h"
@@ -42,7 +44,6 @@
 #include "RVL3DPose.h"
 #include "RVL2DCellArray.h"
 #include "Rect.h"
-#include "RVLParameterList.h"
 #include "RVLAPix.h"
 #include "RVLHistogram.h"
 #include "RVLGUI.h"
@@ -58,6 +59,7 @@
 #endif
 #include "RVLVTKRenderer.h"
 #include "RVLImageFilter.h"
+
 
 extern CvMat *RVLMatrix31;
 extern CvMat *RVLMatrixHeader31;

@@ -97,7 +97,7 @@
     <ClCompile>
       <Optimization>Disabled</Optimization>
       <InlineFunctionExpansion>Default</InlineFunctionExpansion>
-      <AdditionalIncludeDirectories>C:\OpenCV3.0\opencv\build\include;.\Include;..\RVLCore\Include;C:\Libraries\PCL\PCL 1.8.0\include\pcl-1.8;C:\Libraries\Eigen\eigen3;C:\Program Files\PCL 1.7.2\3rdParty\Boost\include\boost-1_56;$(VTK_PATH)\x64\include\vtk-6.1</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>.\Include;..\RVLCore\Include;C:\Libraries\PCL\PCL 1.8.0\include\pcl-1.8;C:\Libraries\Eigen\eigen3;C:\Program Files\PCL 1.7.2\3rdParty\Boost\include\boost-1_56;$(VTK_PATH)\x64\include\vtk-6.1;C:\OpenCV3.0\opencv\build\include</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>WIN32;_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
       <PrecompiledHeader>
@@ -122,9 +122,9 @@
     <ClCompile>
       <Optimization>MaxSpeed</Optimization>
       <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
-      <AdditionalIncludeDirectories>C:\Users\Damir\Documents\Dependancy libraries VS2013\OpenCV 3.0.0 beta\opencv\build\include;.\Include;..\RVLCore\Include;C:\Users\Damir\Documents\Dependancy libraries VS2013\VTK 6.1\include\vtk-6.1</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>.\Include;..\RVLCore\Include;C:\Libraries\PCL\PCL 1.8.0\include\pcl-1.8;C:\Libraries\Eigen\eigen3;C:\Program Files\PCL 1.7.2\3rdParty\Boost\include\boost-1_56;$(VTK_PATH)\x64\include\vtk-6.1;C:\OpenCV3.0\opencv\build\include</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>WIN32;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
       <PrecompiledHeader>
       </PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>

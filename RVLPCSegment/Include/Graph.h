@@ -1,0 +1,166 @@
+#pragma once
+
+#define RVLPCSEGMENT_GRAPH_GET_NEIGHBOR(iNode, pEdgePtr, pEdge_, iNeighbor)\
+{\
+	pEdge_ = pEdgePtr->pEdge;\
+	iNeighbor = (pEdge_->iVertex[0] == iNode ? pEdge_->iVertex[1] : pEdge_->iVertex[0]);\
+}
+
+#define RVLPCSEGMENT_GRAPH_GET_EDGE_SIDE(pEdge, iNode, side) side = (pEdge->iVertex[0] == iNode ? 0 : 1);
+
+#define RVLPCSEGMENT_GRAPH_GET_NEIGHBOR2(iNode, pEdgePtr, pEdge_, iNeighbor, side)\
+{\
+	pEdge_ = pEdgePtr->pEdge;\
+	RVLPCSEGMENT_GRAPH_GET_EDGE_SIDE(pEdge_, iNode, side);\
+	iNeighbor = pEdge_->iVertex[1 - side];\
+}
+
+
+namespace RVL
+{
+	template<typename NodeType, typename EdgeType, typename EdgePtrType>
+	class Graph
+	{
+	public:
+		Graph()
+		{
+			NodeMem = NULL;
+			EdgeMem = NULL;
+			EdgePtrMem = NULL;
+		}
+		virtual ~Graph()
+		{
+			Clear();
+		}
+
+		void Clear()
+		{
+			RVL_DELETE_ARRAY(NodeMem);
+			RVL_DELETE_ARRAY(EdgeMem);
+			RVL_DELETE_ARRAY(EdgePtrMem);
+		}
+
+	public:
+		Array<NodeType> NodeArray;
+		Array<EdgeType> EdgeArray;
+		NodeType *NodeMem;
+		EdgeType *EdgeMem;
+		EdgePtrType *EdgePtrMem;
+	};
+
+	//template<typename GraphType, typename DataType, bool(*f)(int, GraphType *, DataType *)>
+	//void RegionGrowing(GraphType* pGraph, DataType *pData, int *piNodeFetch, int *piNodePut)
+	//{
+
+	//}
+
+	//template<int>
+	//void RegionGrowing(void *vpGraph, void *pData, int *piNodeFetch, int *piNodePut)
+	//{
+
+	//}
+
+	template<typename GraphType, typename NodeType, typename EdgeType, typename EdgePtrType, typename DataType, int(*f)(int, int, EdgeType *, GraphType *, DataType *)>
+	int * RegionGrowing(GraphType *pGraph, DataType *pData, int *piNodeFetch, int *piNodePut)
+	{
+		int iNode, iNode_;
+		EdgeType *pEdge;
+		EdgePtrType *pEdgePtr;
+		NodeType *pNode;
+
+		while (piNodeFetch < piNodePut)
+		{
+			iNode = *(piNodeFetch++);
+
+			pNode = pGraph->NodeArray.Element + iNode;
+
+			pEdgePtr = pNode->EdgeList.pFirst;
+
+			while (pEdgePtr)
+			{
+				RVLPCSEGMENT_GRAPH_GET_NEIGHBOR(iNode, pEdgePtr, pEdge, iNode_);
+
+				if (f(iNode_, iNode, pEdge, pGraph, pData) > 0)
+					*(piNodePut++) = iNode_;
+
+				pEdgePtr = pEdgePtr->pNext;
+			}	// for every neighborint node
+		}	// region growing loop
+
+		return piNodeFetch;
+	}
+
+	template<typename GraphType, typename NodeType, typename EdgeType, typename EdgePtrType, typename DataType, int(*f)(int, int, EdgeType *, GraphType *, DataType *)>
+	int * RegionGrowing2(GraphType *pGraph, DataType *pData, int *piNodeFetch, int *piNodePut)
+	{
+		int iNode, iNode_;
+		EdgeType *pEdge;
+		EdgePtrType *pEdgePtr;
+		NodeType *pNode;
+
+		while (piNodeFetch < piNodePut)
+		{
+			iNode = *(piNodeFetch++);
+
+			if (f(iNode, 0, NULL, pGraph, pData) > 0)
+			{
+				pNode = pGraph->NodeArray.Element + iNode;
+
+				pEdgePtr = pNode->EdgeList.pFirst;
+
+				while (pEdgePtr)
+				{
+					RVLPCSEGMENT_GRAPH_GET_NEIGHBOR(iNode, pEdgePtr, pEdge, iNode_);
+
+					*(piNodePut++) = iNode_;
+
+					pEdgePtr = pEdgePtr->pNext;
+				}	// for every neighborint node
+			}
+		}	// region growing loop
+
+		return piNodeFetch;
+	}
+
+	template<typename GraphType, typename NodeType, typename EdgeType, typename EdgePtrType, typename DataType, int(*f)(int, int, EdgeType *, GraphType *, DataType *)>
+	int * RegionGrowing3(GraphType *pGraph, DataType *pData, int *piNodeFetch, int *piNodePut, int *&piBoundaryNode)
+	{
+		int iNode, iNode_;
+		EdgeType *pEdge;
+		EdgePtrType *pEdgePtr;
+		NodeType *pNode;
+		int nodeClass;
+		bool bBoundary;
+
+		while (piNodeFetch < piNodePut)
+		{
+			iNode = *(piNodeFetch++);
+
+			pNode = pGraph->NodeArray.Element + iNode;
+
+			bBoundary = false;
+
+			pEdgePtr = pNode->EdgeList.pFirst;
+
+			while (pEdgePtr)
+			{
+				RVLPCSEGMENT_GRAPH_GET_NEIGHBOR(iNode, pEdgePtr, pEdge, iNode_);
+
+				nodeClass = f(iNode_, iNode, pEdge, pGraph, pData);
+
+				if (nodeClass > 0)
+					*(piNodePut++) = iNode_;
+				else if (nodeClass < 0)
+					bBoundary = true;				
+
+				pEdgePtr = pEdgePtr->pNext;
+			}	// for every neighborint node
+
+			if (bBoundary || pNode->bBoundary)
+				*(piBoundaryNode++) = iNode;
+		}	// region growing loop
+
+		return piNodeFetch;
+	}
+}
+

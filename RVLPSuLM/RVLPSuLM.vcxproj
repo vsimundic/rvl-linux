@@ -114,9 +114,9 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
-      <AdditionalIncludeDirectories>C:\Users\Damir\Documents\Dependancy libraries VS2013\OpenCV 3.0.0 beta\opencv\build\include;.\Include;..\RVLCore\Include;..\RVLPCS\Include;..\RapidXML\Include;C:\Users\Damir\Documents\Dependancy libraries VS2013\VTK 6.1\include\vtk-6.1</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\OpenCV3.0\opencv\build\include;.\Include;..\RVLCore\Include;..\RVLPCS\Include;..\RapidXML\Include;$(VTK_PATH)\x64\include\vtk-6.1;C:\Libraries\FLANN\flann-1.8.4-src\src\cpp</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>WIN32;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
       <PrecompiledHeader>
       </PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>

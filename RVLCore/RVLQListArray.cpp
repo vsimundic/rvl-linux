@@ -41,3 +41,21 @@ void CRVLQListArray::InitListArray(RVLQLIST *EmptyListArray,
 		RVLQLIST_INIT2(pEmptyList, pList)
 }
 
+using namespace RVL;
+
+void QLIST::CopyToArray(QList<Index> *pList, Array<int> *pArray)
+{
+	Index *pIdx = pList->pFirst;
+
+	int *pIdx_ = pArray->Element;
+
+	while (pIdx)
+	{
+		*(pIdx_++) = pIdx->Idx;
+
+		pIdx = pIdx->pNext;
+	}
+		
+	pArray->n = pIdx_ - pArray->Element;
+}
+

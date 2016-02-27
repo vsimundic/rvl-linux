@@ -122,9 +122,9 @@
     <ClCompile>
       <Optimization>MaxSpeed</Optimization>
       <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
-      <AdditionalIncludeDirectories>C:\Users\Damir\Documents\Dependancy libraries VS2013\OpenCV 3.0.0 beta\opencv\build\include;.\Include;$(OPENNI2_INCLUDE64);C:\Users\Damir\Documents\Dependancy libraries VS2013\VTK 6.1\include\vtk-6.1</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\OpenCV3.0\opencv\build\include;.\Include;$(VTK_PATH)\x64\include\vtk-6.1;C:\Program Files\OpenNI2\Include</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>WIN32;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
       <PrecompiledHeader>
       </PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
@@ -185,6 +185,7 @@
     <ClCompile Include="RVLPtrChain.cpp" />
     <ClCompile Include="RVLQListArray.cpp" />
     <ClCompile Include="RVLRelation.cpp" />
+    <ClCompile Include="RVLRGBDTools.cpp" />
     <ClCompile Include="RVLStereoVision.cpp" />
     <ClCompile Include="RVLTimer.cpp" />
     <ClCompile Include="RVLUtil.cpp" />
@@ -208,6 +209,7 @@
     <ClInclude Include="Include\RVL3DObject.h" />
     <ClInclude Include="Include\RVL3DPose.h" />
     <ClInclude Include="Include\RVL3DSurface2.h" />
+    <ClInclude Include="Include\RVL3DTools.h" />
     <ClInclude Include="Include\RVLAImage.h" />
     <ClInclude Include="Include\RVLAPix.h" />
     <ClInclude Include="Include\RVLArray.h" />
@@ -219,7 +221,9 @@
     <ClInclude Include="Include\RVLClass.h" />
     <ClInclude Include="Include\RVLConst.h" />
     <ClInclude Include="Include\RVLCore.h" />
+    <ClInclude Include="Include\RVLCore2.h" />
     <ClInclude Include="Include\RVLCoreObjectLib.h" />
+    <ClInclude Include="Include\RVLCoreTypes.h" />
     <ClInclude Include="Include\RVLDelaunay.h" />
     <ClInclude Include="Include\RVLEDT.h" />
     <ClInclude Include="Include\RVLFigure.h" />
@@ -235,9 +239,11 @@
     <ClInclude Include="Include\RVLObject2.h" />
     <ClInclude Include="Include\RVLParameterList.h" />
     <ClInclude Include="Include\RVLPC.h" />
+    <ClInclude Include="Include\RVLPlatform.h" />
     <ClInclude Include="Include\RVLPtrChain.h" />
     <ClInclude Include="Include\RVLQListArray.h" />
     <ClInclude Include="Include\RVLRelation.h" />
+    <ClInclude Include="Include\RVLRGBDTools.h" />
     <ClInclude Include="Include\RVLStereoVision.h" />
     <ClInclude Include="Include\RVLTimer.h" />
     <ClInclude Include="Include\RVLUtil.h" />
@@ -245,6 +251,7 @@
     <ClInclude Include="Include\RVLVTK.h" />
     <ClInclude Include="Include\RVLVTKRenderer.h" />
     <ClInclude Include="Include\RVLWChain.h" />
+    <ClInclude Include="Include\VTKActorObj.h" />
   </ItemGroup>
   <ItemGroup>
     <Image Include="app.ico" />

@@ -48,6 +48,7 @@ DWORD CRVLPCSVS::Init(char *CfgFile2Name)
 	m_PSD.m_pMem2 = &m_Mem2;
 	m_PSD.CreateParamList(&m_Mem0);
 	m_PSD.m_pTimer = m_pTimer;
+	m_PSD.m_pLidarParams = &m_LidarParams;
 
 	if(CfgFile2Name)
 		m_PSD.m_ParamList.LoadParams(CfgFile2Name);
@@ -130,9 +131,6 @@ void CRVLPCSVS::CreateParamList()
 	RVLPARAM_DATA *pParamData;
 
 	pParamData = m_ParamList.AddParam("Segmentation.Convex.Thr", RVLPARAM_TYPE_INT, &m_ConvexSegmentThr);
-
-	pParamData = m_ParamList.AddParam("VS.PointCloud", RVLPARAM_TYPE_FLAG, &m_Flags);
-	m_ParamList.AddID(pParamData, "yes", RVLSYS_FLAGS_PC);
 
 	pParamData = m_ParamList.AddParam("VS.SegmentToConvexSets", RVLPARAM_TYPE_FLAG, &m_Flags);
 	m_ParamList.AddID(pParamData, "yes", RVLSYS_FLAGS_SEGMENT_TO_CONVEX_SETS);

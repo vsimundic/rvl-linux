@@ -100,7 +100,7 @@ void CRVLPSuLMVS::Init(char * CfgFile2Name)
 	{
 		m_PSuLMBuilder.m_Flags |= RVLPSULMBUILDER_FLAG_PC;
 
-		m_PSD.GetOrgPCProjectionParams(m_CameraL.fNrm, m_CameraL.CenterXNrm, m_CameraL.CenterYNrm);
+		m_PSD.GetOrgPCProjectionParams(m_CameraL.fNrm, m_CameraL.fvNrm, m_CameraL.CenterXNrm, m_CameraL.CenterYNrm);
 
 		m_CameraL.fvNrm = m_CameraL.fNrm;
 	}

@@ -117,6 +117,14 @@ bool CRVLKinect::Init(char *ONIFileName)
 			//printf("Kinect: Couldn't start depth stream:\n%s\n", openni::OpenNI::getExtendedError());
 			pDepthStream->destroy();
 		}
+
+		// only for debug purpose!!!
+
+		openni::VideoMode DepthMode = pDepthStream->getVideoMode();
+
+		int debug = 0;
+
+		/////
 	}
 	else
 	{
@@ -129,6 +137,7 @@ bool CRVLKinect::Init(char *ONIFileName)
 		openni::VideoMode cmod = openni::VideoMode();
 		cmod.setFps(30);
 		cmod.setResolution(320, 240);
+		//cmod.setResolution(640, 480);
 		cmod.setPixelFormat(openni::PixelFormat::PIXEL_FORMAT_RGB888);
 		//cmod.setPixelFormat(openni::PixelFormat::PIXEL_FORMAT_YUV422);
 		pColorStream->setVideoMode(cmod);
@@ -171,7 +180,9 @@ bool CRVLKinect::GetImages(	short *pDepth,
 							IplImage *pImageDepth, 
 							IplImage *pImageGS,
 							unsigned int Format,
-							int frameIdx)
+							int frameIdx,
+							void *vpDepthFrame,
+							void *vpColorFrame)
 {
 	openni::Device *pDevice = (openni::Device *)m_vpDevice;
 	openni::VideoStream *pDepthStream = (openni::VideoStream *)m_vpDepthStream;
@@ -181,6 +192,9 @@ bool CRVLKinect::GetImages(	short *pDepth,
 
 	openni::VideoFrameRef DepthFrame;
 	openni::VideoFrameRef ColorFrame;
+
+	openni::VideoFrameRef *pDepthFrame = (vpDepthFrame ? (openni::VideoFrameRef *)vpDepthFrame : &DepthFrame);
+	openni::VideoFrameRef *pColorFrame = (vpColorFrame ? (openni::VideoFrameRef *)vpColorFrame : &ColorFrame);
 
 	bool bDepth = false;
 	bool bColor = (pImageRGB == NULL);
@@ -218,37 +232,37 @@ bool CRVLKinect::GetImages(	short *pDepth,
 			if(m_Flags & RVLKINECT_FLAG_ONI_FILE)
 				pPlaybackControl->seek(*pDepthStream, frameIdx);
 
-			pDepthStream->readFrame(&DepthFrame);
+			pDepthStream->readFrame(pDepthFrame);
 
 			if(m_Flags & RVLKINECT_FLAG_ONI_FILE)
 			{
 				//pPlaybackControl->seek(*pColorStream, DepthFrame.getFrameIndex() - 3);
 
-				pColorStream->readFrame(&ColorFrame);
+				pColorStream->readFrame(pColorFrame);
 
 				//pPlaybackControl->seek(*pColorStream, ColorFrame.getFrameIndex() - 1);
 
 				//pColorStream->readFrame(&ColorFrame);
 			}
 
-			if(!DepthFrame.isValid())
+			if(!pDepthFrame->isValid())
 				continue;
 
 			bDepth = true;
 
-			width = DepthFrame.getWidth() / m_scale;
-			height = DepthFrame.getHeight() / m_scale;
+			width = pDepthFrame->getWidth() / m_scale;
+			height = pDepthFrame->getHeight() / m_scale;
 
-			DepthMode = DepthFrame.getVideoMode();
+			DepthMode = pDepthFrame->getVideoMode();
 
 			//if(DepthMode.getPixelFormat() == openni::PIXEL_FORMAT_DEPTH_1_MM )
 			//	int debug = 0;
 
 			pDepth_ = pDepth;
 
-			pDepthRow = (const openni::DepthPixel*)DepthFrame.getData();
+			pDepthRow = (const openni::DepthPixel*)pDepthFrame->getData();
 
-			rowSize = DepthFrame.getStrideInBytes() / sizeof(openni::DepthPixel);
+			rowSize = pDepthFrame->getStrideInBytes() / sizeof(openni::DepthPixel);
 			
 			if(pImageDepth)
 				pDisplayDepth = (unsigned char *)(pImageDepth->imageData);
@@ -325,26 +339,26 @@ bool CRVLKinect::GetImages(	short *pDepth,
 		case 1:
 			if((m_Flags & RVLKINECT_FLAG_ONI_FILE) == 0)
 			{
-				pColorStream->readFrame(&ColorFrame);
+				pColorStream->readFrame(pColorFrame);
 
-				if(!ColorFrame.isValid())
+				if(!pColorFrame->isValid())
 					continue;	
 			}
 
 			bColor = true;
 
-			width = ColorFrame.getWidth() / m_RGBscale;
-			height = ColorFrame.getHeight() / m_RGBscale;
+			width = pColorFrame->getWidth() / m_RGBscale;
+			height = pColorFrame->getHeight() / m_RGBscale;
 
 			if(pImageRGB)
 			{		
-				pColorStream->readFrame(&ColorFrame);
+				pColorStream->readFrame(pColorFrame);
 
-				pRGBRow = (const openni::RGB888Pixel*)ColorFrame.getData();
+				pRGBRow = (const openni::RGB888Pixel*)pColorFrame->getData();
 
 				pPixRGB = pImageRGB->imageData;
 
-				rowSizeRGB = ColorFrame.getStrideInBytes() / sizeof(openni::RGB888Pixel);
+				rowSizeRGB = pColorFrame->getStrideInBytes() / sizeof(openni::RGB888Pixel);
 
 				for (v = 0; v < height; v++)
 				{
