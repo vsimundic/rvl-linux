@@ -58,4 +58,3 @@ void QLIST::CopyToArray(QList<Index> *pList, Array<int> *pArray)
 		
 	pArray->n = pIdx_ - pArray->Element;
 }
-

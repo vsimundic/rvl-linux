@@ -163,6 +163,37 @@ void SURFEL::ComputeParameters(
 	pSurfel->r0 = pSurfel->d / RVLDOTPRODUCT3(N, P0);
 }
 
+void SURFEL::CreateFromPoint(
+	Surfel *pSurfel, 
+	Point *pPt)
+{
+	float *P = pSurfel->P;
+	float *P_ = pPt->P;
+
+	RVLCOPY3VECTOR(P_, P);
+
+	float *P0 = pSurfel->P0;
+
+	RVLCOPY3VECTOR(P_, P0);
+
+	float *N = pSurfel->N;
+	float *N_ = pPt->N;
+
+	RVLCOPY3VECTOR(N_, N);
+
+	pSurfel->d = RVLDOTPRODUCT3(N, P);
+
+	int *RGB = pSurfel->RGB;
+	unsigned char *RGB_ = pPt->RGB;
+
+	RVLCONVTOINT3(RGB_, RGB);
+
+	pSurfel->r0 = pSurfel->d / RVLDOTPRODUCT3(N, P0);
+}
+
+// Create point pPoint from the surfel pSurfel such that its position is identical to the position of the surfel centroid,
+// its normal i identical to the surfel normal and its color is identical to the surfel color
+
 void SURFEL::GetPoint(
 	Surfel *pSurfel,
 	Point *pPoint)
@@ -404,6 +435,8 @@ void SURFEL::KeyPressCallback(vtkObject* caller, unsigned long eid, void* client
 	std::string keySym = "";
 	keySym = interactor->GetKeySym();
 
+	PlanarSurfelDetector *pDetector = (PlanarSurfelDetector *)(pData->vpDetector);
+
 	bool bUpdateDisplay = false;
 	bool bDisplayBoundary = false;
 	bool bDefineBoundary = false;
@@ -412,7 +445,7 @@ void SURFEL::KeyPressCallback(vtkObject* caller, unsigned long eid, void* client
 	{
 		pData->iSelection = 2;
 	}
-	else if(keySym == "p")
+	else if(keySym == "b")
 	{
 		if (pData->mode != RVLSURFEL_DISPLAY_MODE_NEIGHBOR_PAIR)
 		{
@@ -431,7 +464,18 @@ void SURFEL::KeyPressCallback(vtkObject* caller, unsigned long eid, void* client
 			bUpdateDisplay = true;
 		}
 	}
-	else if(keySym == "s")
+	else if (keySym == "p")
+	{
+		if (pData->iSelectedSurfel >= 0)
+		{
+			pDetector->DefinePolygon(pMesh, pData->pSurfels, pData->iSelectedSurfel);
+
+			pData->pSurfels->Display(pData->pVisualizer, pMesh, pData->iSelectedSurfel, pData->SelectionColor);
+
+			bUpdateDisplay = true;
+		}
+	}
+	else if (keySym == "s")
 	{
 		if (pData->mode == RVLSURFEL_DISPLAY_MODE_NEIGHBOR_PAIR)
 		{
@@ -471,9 +515,7 @@ void SURFEL::KeyPressCallback(vtkObject* caller, unsigned long eid, void* client
 #endif
 
 	if (bDefineBoundary)
-	{
-		PlanarSurfelDetector *pDetector = (PlanarSurfelDetector *)(pData->vpDetector);
-
+	{	
 		QList<QLIST::Index> G;
 
 		int iSurfel = pData->iSelectedSurfel;

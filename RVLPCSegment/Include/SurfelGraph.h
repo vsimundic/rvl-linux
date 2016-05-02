@@ -10,12 +10,12 @@ namespace RVL
 	{
 		QList<QLIST::Index> PtList;
 		//QList<QLIST::Index> Boundary;
-		float P[3];
-		float N[3];
-		float d;
-		int RGB[3];
-		float P0[3];
-		float r0;
+		float P[3];		// centroid
+		float N[3];		// normal
+		float d;		// plane offset
+		int RGB[3];		// average color
+		float P0[3];	// central point
+		float r0;		// distance 
 		QList<MeshEdgePtr> EdgeList;
 		Surfel *pNext;
 	};
@@ -93,6 +93,9 @@ namespace RVL
 		void ComputeParameters(
 			Surfel *pSurfel,		
 			MESH::Distribution &distribution,
+			Point *pPt);
+		void CreateFromPoint(
+			Surfel *pSurfel,
 			Point *pPt);
 		void GetPoint(
 			Surfel *pSurfel,

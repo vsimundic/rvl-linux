@@ -63,6 +63,10 @@ void CRVLVisionSystem::CreateParamList()
 	m_ParamList.AddID(pParamData, "yes", RVLSYS_FLAGS_USE_SEQUENCE_FILE);
 	pParamData = m_ParamList.AddParam("VS.GetBestHypothesisInSubSet", RVLPARAM_TYPE_FLAG, &m_Flags);
 	m_ParamList.AddID(pParamData, "yes", RVLSYS_FLAGS_BEST_SUBSET_HYPOTHESIS);
+	pParamData = m_ParamList.AddParam("VS.minTilt", RVLPARAM_TYPE_DOUBLE, &(m_LidarParams.minTilt));
+	pParamData = m_ParamList.AddParam("VS.maxTilt", RVLPARAM_TYPE_DOUBLE, &(m_LidarParams.maxTilt));
+	pParamData = m_ParamList.AddParam("VS.dTilt", RVLPARAM_TYPE_DOUBLE, &(m_LidarParams.dTilt));
+	pParamData = m_ParamList.AddParam("VS.nPanIn120deg", RVLPARAM_TYPE_INT, &(m_LidarParams.nPanIn120deg));
 }
 
 DWORD CRVLVisionSystem::Init(char *CfgFile2Name)

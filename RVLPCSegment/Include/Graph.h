@@ -1,12 +1,24 @@
 #pragma once
 
+// For a given node index iNode and an edge connector pEdgePtr belonging to this node, the function returns the index of the opposite node.
+// pEdge_ is the output variable representing the edge corresponding to the connector pEdgePtr.
+
 #define RVLPCSEGMENT_GRAPH_GET_NEIGHBOR(iNode, pEdgePtr, pEdge_, iNeighbor)\
 {\
 	pEdge_ = pEdgePtr->pEdge;\
 	iNeighbor = (pEdge_->iVertex[0] == iNode ? pEdge_->iVertex[1] : pEdge_->iVertex[0]);\
 }
 
+// Input: edge pEdge, node idx. iNode
+// Output: side <- the side of the edge pEdge to which is connected the node iNode 
+
 #define RVLPCSEGMENT_GRAPH_GET_EDGE_SIDE(pEdge, iNode, side) side = (pEdge->iVertex[0] == iNode ? 0 : 1);
+
+// Input: node idx. iNode, 
+//        connector pEdgePtr connecting an edge to the node iNode
+// Output: pEdge_ <- the edge connected to the node iNode by the connector pEdgePtr, 
+//         side   <- the side of the edge pEdge to which is connected the node iNode,
+//         iNeighbor <- Opp(pEdge_, iNode), where Opp is defined in ARP3D.TR3
 
 #define RVLPCSEGMENT_GRAPH_GET_NEIGHBOR2(iNode, pEdgePtr, pEdge_, iNeighbor, side)\
 {\

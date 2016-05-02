@@ -275,6 +275,19 @@ namespace RVL
 
 			pArray->n = pData_ - pArray->Element;
 		}
+
+		template<typename T>
+		void InitListArray(Array<QList<T>> &EmptyListArray, Array<QList<T>> &ListArray)
+		{
+			QList<T> *pEmptyListArrayEnd = EmptyListArray.Element + ListArray.n;
+
+			QList<T> *pList = ListArray.Element;
+
+			QList<T> *pEmptyList;
+
+			for (pEmptyList = EmptyListArray.Element; pEmptyList < pEmptyListArrayEnd; pEmptyList++, pList++)
+				RVLQLIST_INIT2(pEmptyList, pList)
+		};
 	}
 }
 

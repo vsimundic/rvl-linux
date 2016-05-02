@@ -2,8 +2,17 @@
 
 //#define RVLMESH_BOUNDARY_DEBUG
 
+// Input:  mesh pMesh, 
+//         vertex idx. iPt, 
+//         connector pEdgePtr connecting an edge E to the vertex iPt,
+//         array map defining a region R (map[i] = map[iPt] for all vertices i of the mesh pMesh belonging to the region R)
+// Output: pEdge <- the next edge E' in EdgeList[iPt] following E, such that Opp(E', iPt) is in R, where Opp is defined in ARP3D.TR3
+//         iNeighborPt <- Opp(E', iPt)
+//         pEdgePtr <- connector connecting pEdge to iPt,
+// Temporary variables: pPt, pEdgeList, side
+
 #ifdef RVLMESH_BOUNDARY_DEBUG
-#define RVLMESH_GET_NEXT_BOUNDARY_EDGE(pMesh, iPt, pEdgePtr, side, map, iNeighborPt, pPt, pEdgeList, pEdge)\
+#define RVLMESH_GET_NEXT_IN_REGION(pMesh, iPt, pEdgePtr, side, map, iNeighborPt, pPt, pEdgeList, pEdge)\
 {\
 	pPt = pMesh->NodeArray.Element + iPt;\
 	pEdgeList = &(pPt->EdgeList);\
@@ -15,7 +24,7 @@
 	}while (map[iNeighborPt] != map[iPt]);\
 }
 #else
-#define RVLMESH_GET_NEXT_BOUNDARY_EDGE(pMesh, iPt, pEdgePtr, side, map, iNeighborPt, pPt, pEdgeList, pEdge)\
+#define RVLMESH_GET_NEXT_IN_REGION(pMesh, iPt, pEdgePtr, side, map, iNeighborPt, pPt, pEdgeList, pEdge)\
 {\
 	pPt = pMesh->NodeArray.Element + iPt;\
 	pEdgeList = &(pPt->EdgeList);\
@@ -27,7 +36,10 @@
 }
 #endif
 
-#define RVLMESH_GET_NEXT_BOUNDARY_POINT(iPt, pEdge, side, pEdgePtr)\
+// Input: pEdge, side
+// Output: iPt <- point on the side side of the edge pEdge; pEdgePtr <- connector of point iPt and pEdge
+
+#define RVLMESH_GET_POINT(pEdge, side, iPt, pEdgePtr)\
 {\
 	iPt = pEdge->iVertex[side];\
 	pEdgePtr = pEdge->pVertexEdgePtr[side];\
@@ -39,10 +51,10 @@ namespace RVL
 	{
 		struct Distribution
 		{
-			float t[3];
-			float R[9];
-			float var[3];
-			int RGB[3];
+			float t[3];		// centroid 
+			float R[9];		// principal axes (each row is one axis)
+			float var[3];	// point variances in directions of the principal axes
+			int RGB[3];		// average color
 		};
 	}
 
@@ -64,20 +76,21 @@ namespace RVL
 
 	struct Point
 	{
-		unsigned char RGB[3];
-		float P[3];
-		float N[3];
-		QList<MeshEdgePtr> EdgeList;
-		bool bBoundary;
+		unsigned char RGB[3];			// color
+		float P[3];						// position
+		float N[3];						// normal
+		QList<MeshEdgePtr> EdgeList;	// edge list (list of edge connectors)
+		bool bBoundary;					// true if the point is on the image boundary, on a depth discontinuity contur or on the boundary of a region of undefined depth,
+										// i.e. if there is a boundary edge connected to this point.
 	};
 
 	namespace MESH
 	{
 		struct PointEdge
 		{
-			int iPt;
-			MeshEdgePtr *pEdgePtr;
-			unsigned char side;
+			int iPt;				// vertex index
+			MeshEdgePtr *pEdgePtr;	// connector connecting an edge E to the vertex iPt
+			unsigned char side;		// side of the edge E to which the iPt is connected
 		};
 	}
 
@@ -92,14 +105,19 @@ namespace RVL
 				MESH::Distribution &distribution);
 			bool FindBoundaryEdge(
 				QList<QLIST::Index> *pInPtList,
+				QLIST::Index *&pPtIdx,
 				int *map,
 				int &iPt,
 				MeshEdgePtr *&pEdgePtr);
-			bool Boundary(
+			void Boundary(
 				QList<QLIST::Index> *pInPtList,
 				int *Map,
 				QList<QLIST::Index> *pOutPtArray,
 				QLIST::Index *pMem);
+
+			// For a mesh point index iPt, the function returns true if the point is on the boundary of a region in the map map containing elements with value idx. 
+			// pEdgePtr <- the connector connecting the first region boundar edge in CCW direction.
+
 			bool IsBoundaryPoint(
 				int iPt,
 				int *map,
@@ -108,12 +126,16 @@ namespace RVL
 			{
 				Point *pPt = NodeArray.Element + iPt;
 
-				bool bOut = false;
+				bool bOut = false;		// A neighboring vertex belonging to another region is found.
 
 				pEdgePtr = pPt->EdgeList.pFirst;
 
 				int iPt_;
 				MeshEdge *pEdge;
+
+				// If the vertex is a boundary point and the first neighbor belongs to the same region, 
+				// then the first edge is the first region boundary edge in CCW direction.
+				// An example of this case is shown in ARP3D.TR3, Fig: Detection of region boundary (a).
 
 				if (pPt->bBoundary)
 				{
@@ -122,6 +144,10 @@ namespace RVL
 					if (map[iPt_] == idx)
 						return true;
 				}
+
+				// If a neighbor belonging to another region is already found and the currently processed neighbor belongs to the query region, 
+				// then the query edge is the first region boundary edge in CCW direction.
+				// An example of this case is shown in ARP3D.TR3, Fig: Detection of region boundary (b).
 
 				while (pEdgePtr)
 				{
@@ -138,6 +164,10 @@ namespace RVL
 					pEdgePtr = pEdgePtr->pNext;
 				}
 
+				// If no neighbors belonging to the query region are found after a neighbor belonging to another region is found,
+				// then the only possibility that a region boundary edge is connected to the vertex iPt is that this is the first edge in the edge list.
+				// An example of this case is shown in ARP3D.TR3, Fig: Detection of region boundary (c).
+
 				if (bOut)
 				{
 					pEdgePtr = pPt->EdgeList.pFirst;
@@ -147,6 +177,10 @@ namespace RVL
 					if (map[iPt_] == idx)
 						return true;
 				}
+
+				// (all neighbors of vertex iPt belong to another region) or 
+				// ((all neighbors belong to the query region) and (there is no mesh boundary edges in the edge list))
+				// In either case, vertex iPt is not a region boundary point.
 
 				return false;
 			}
