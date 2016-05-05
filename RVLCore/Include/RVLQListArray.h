@@ -17,6 +17,8 @@
 
 #define RVLQLIST_INSERT_ENTRY(pList, pEntry1, pEntry2, pNewEntry) {if(pList->pFirst == pEntry2){pList->pFirst = pNewEntry; pNewEntry->pNext = pEntry2;}else{pEntry1->pNext = pNewEntry; pNewEntry->pNext = pEntry2;}}
 
+#define RVLQLIST_INSERT_ENTRY2(ppEntry, pNewEntry) {pNewEntry->pNext = (*ppEntry); *ppEntry = pNewEntry;}
+
 #define RVLQLIST_REMOVE_ENTRY(pList, pEntry, ppEntry) {if(pEntry->pNext == NULL){pList->ppNext = ppEntry;*ppEntry = NULL;}else{*ppEntry = pEntry->pNext;}}
 
 #define RVLQLIST_REMOVE_ENTRY2(pList, pEntry, type)\

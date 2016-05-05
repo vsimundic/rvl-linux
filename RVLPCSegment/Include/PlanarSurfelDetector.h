@@ -11,11 +11,22 @@
 #endif
 #endif
 #define RVLPLANARSURFELDETECTOR_PLANE_INTERSECTION
+#define RVLPLANARSURFELDETECTOR_POLYGONALIZE_BOUNDARY
+//#define RVLPLANARSURFELDETECTOR_POLYGONALIZE_BOUNDARY_2
 
 //#define RVLPLANARSURFELDETECTOR_CONNECTED_COMPONENT_DEBUG
-#define RVLPLANARSURFELDETECTOR_G_REGION_DEBUG
+//#define RVLPLANARSURFELDETECTOR_G_REGION_DEBUG
+//#define RVLPLANARSURFELDETECTOR_EDGE_BOUNDARY_DEBUG
+//#define RVLPLANARSURFELDETECTOR_CUT_PROPAGATION_DEBUG
+
+#ifdef RVLPLANARSURFELDETECTOR_G_REGION_DEBUG
+#ifndef RVLPLANARSURFELDETECTOR_EDGE_BOUNDARY_DEBUG
 #define RVLPLANARSURFELDETECTOR_EDGE_BOUNDARY_DEBUG
+#endif
+#ifndef RVLPLANARSURFELDETECTOR_CUT_PROPAGATION_DEBUG
 #define RVLPLANARSURFELDETECTOR_CUT_PROPAGATION_DEBUG
+#endif
+#endif
 
 #ifdef RVLPLANARSURFELDETECTOR_CONNECTED_COMPONENT_DEBUG
 #define RVLPLANARSURFELDETECTOR_DEBUG
@@ -29,7 +40,7 @@
 #define RVLPLANARSURFELDETECTOR_REGIONGROWING_MODE_FIND_CLOSEST_INLIER	1
 #define RVLPLANARSURFELDETECTOR_REGIONGROWING_MODE_ATTACK				2
 #define RVLPLANARSURFELDETECTOR_CUT_PROPAGATION_EDGE_FLAG_CUT			0x01
-#define RVLPLANARSURFELDETECTOR_CUT_PROPAGATION_EDGE_FLAG_BOUNDARY		0x02
+#define RVLPLANARSURFELDETECTOR_CUT_PROPAGATION_EDGE_FLAG_SOURCE		0x02
 #define RVLPLANARSURFELDETECTOR_CUT_PROPAGATION_EDGE_FLAG_CLOSED		0x08
 #define RVLPLANARSURFELDETECTOR_CUT_PROPAGATION_EDGE_FLAG_SINK			0x20
 #define RVLPLANARSURFELDETECTOR_CUT_PROPAGATION_EDGE_FLAG_INTERSECTION	0x80
@@ -280,7 +291,8 @@ namespace RVL
 			int iSinkEnd,
 			int *markMap,
 			int mark,
-			int *&piEdgeBuffEnd);
+			int *&piEdgeBuffEndd,
+			int &nPtEdges);
 		//void LineCut(
 		//	Mesh *pMesh,
 		//	int *map,
@@ -293,13 +305,14 @@ namespace RVL
 		//	int *&piEdgeBuffEnd);
 		bool MinimumCut(
 			Mesh *pMesh,
-			int *map,
+			SurfelGraph *pSurfels,
 			int WID,
 			int GID,
 			int BID,
 			Array<MESH::PointEdge> &BoundaryPointEdgeArray,
 			int iSinkStart,
-			int iSinkEnd);
+			int iSinkEnd,
+			int nPtEdges);
 #ifdef RVLPLANARSURFELDETECTOR_PLANE_INTERSECTION
 		void IntersectionPlane(
 			SurfelGraph *pSurfels,
@@ -359,7 +372,9 @@ namespace RVL
 
 						QList<QLIST::Index> *pLineCutBuff = &lineCutBuff;
 
-						RVLQLIST_ADD_ENTRY(pLineCutBuff, pCutPropagationBuffEntry)
+						RVLQLIST_ADD_ENTRY(pLineCutBuff, pCutPropagationBuffEntry);
+
+						edgeFlags[iEdge] |= RVLPLANARSURFELDETECTOR_CUT_PROPAGATION_EDGE_FLAG_INTERSECTION;
 					}
 					else
 					{
@@ -403,6 +418,30 @@ namespace RVL
 			SurfelGraph *pSurfels,
 			int iSurfel);
 		void ClearProcessed();
+#ifdef RVLPLANARSURFELDETECTOR_POLYGONALIZE_BOUNDARY
+		void GetEdgeMidPoint(
+			Mesh *pMesh,
+			int iEdge,
+			float *P,
+			float *N,
+			float d,
+			bool bPlaneIntersection = true);
+		bool InsideGRegion(
+			Mesh *pMesh,
+			SurfelGraph *pSurfels,
+			int WID,
+			int GID,
+			int BID,
+			float *N,
+			float d,
+			int iEdgeStart,
+			int sideStart,			
+			int iEdgeEnd,
+			float *PEnd,
+			float *dP,
+			Array<int> &initCut,
+			Array<int> &lineCut);
+#endif
 #ifdef RVLPLANARSURFELDETECTOR_EDGE_BOUNDARY_DEBUG
 		void SaveNeighborhood(
 			Mesh *pMesh,
@@ -427,6 +466,17 @@ namespace RVL
 			int side,
 			int type,
 			bool *bMap);
+#endif
+#ifdef RVLPLANARSURFELDETECTOR_G_REGION_DEBUG
+		void SaveWGB(
+			Mesh *pMesh,
+			SurfelGraph *pSurfels,
+			int WID,
+			int GID,
+			int BID);
+		void SaveIdxArray(
+			FILE *fp,
+			Array<int> &Array);
 #endif
 
 	public:
@@ -474,18 +524,9 @@ namespace RVL
 		float dLineCut;
 		QList<QLIST::Index> lineCutBuff;
 #endif
-#ifdef RVLPLANARSURFELDETECTOR_G_REGION_DEBUG
-		void SaveWGB(
-			Mesh *pMesh,
-			SurfelGraph *pSurfels,
-			int WID,
-			int GID,
-			int BID);
-		void SaveIdxArray(
-			FILE *fp,
-			Array<int> &Array);
+		FILE *fpDebugPts;
+		FILE *fpDebugEdges;
 	};
-#endif
 }
 
 

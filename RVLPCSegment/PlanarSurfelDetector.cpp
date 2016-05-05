@@ -41,8 +41,8 @@ PlanarSurfelDetector::PlanarSurfelDetector()
 #endif
 
 #ifdef RVLPLANARSURFELDETECTOR_EDGE_BOUNDARY_DEBUG
-	debugDefineBoundaryiSurfel = 23;
-	debugDefineBoundaryiSurfel_ = 56;
+	debugDefineBoundaryiSurfel = 18;
+	debugDefineBoundaryiSurfel_ = 55;
 #endif
 }
 
@@ -111,7 +111,7 @@ void PlanarSurfelDetector::Init(
 
 	neighborMem = new QLIST::Index[nPts];
 
-	PointEdgeBuff = new MESH::PointEdge[2 * nEdges];
+	PointEdgeBuff = new MESH::PointEdge[4 * nEdges];
 
 	cutCostMap = new unsigned int[nEdges];
 
@@ -190,8 +190,8 @@ int PSD::RegionGrowingOperation(
 	PlanarSurfelDetectorRegionGrowingData *pData
 	)
 {
-	if (iNode == 142837)
-		int debug = 0;
+	//if (iNode == 142837)
+	//	int debug = 0;
 
 	if(pData->mode == RVLPLANARSURFELDETECTOR_REGIONGROWING_MODE_FIND_CLOSEST_INLIER)
 	{
@@ -527,7 +527,7 @@ void PlanarSurfelDetector::Segment(
 
 			pSurfel++;
 
-			//if (iSurfel > 0)	// debug
+			//if (iSurfel > 200)	// debug
 			//	break;
 		}
 	}	// for every vertex
@@ -998,6 +998,10 @@ void PlanarSurfelDetector::DefineBoundary(
 
 			PointEdgeArray.Element = PointEdgeBuff;
 
+			Array<MESH::PointEdge> cut;
+
+			cut.Element = PointEdgeBuff + 2 * pMesh->EdgeArray.n;
+
 			int iSourceStart;
 			int iSourceEnd;
 			int iSinkStart;
@@ -1032,9 +1036,11 @@ void PlanarSurfelDetector::DefineBoundary(
 
 				if (bW)
 				{
-					CutPropagation(pMesh, pSurfels->surfelMap, iSurfel, nSurfels, iSurfel_, PointEdgeArray, iSourceStart, iSourceEnd, iSinkStart, iSinkEnd, map, -1, piGEdgeBuffEnd);
+					int nPtEdges;
 
-					MinimumCut(pMesh, pSurfels->surfelMap, iSurfel, nSurfels, iSurfel_, PointEdgeArray, iSinkStart, iSinkEnd);
+					CutPropagation(pMesh, pSurfels->surfelMap, iSurfel, nSurfels, iSurfel_, PointEdgeArray, iSourceStart, iSourceEnd, iSinkStart, iSinkEnd, map, -1, piGEdgeBuffEnd, nPtEdges);
+
+					MinimumCut(pMesh, pSurfels, iSurfel, nSurfels, iSurfel_, PointEdgeArray, iSinkStart, iSinkEnd, nPtEdges);
 
 					piPt++;
 				}
@@ -1223,8 +1229,8 @@ int PSD::DistanceOperation(
 	Mesh *pMesh,
 	PSD::DistanceComputationData *pData)
 {
-	if (iNode == 142837)
-		int debug = 0;
+	//if (iNode == 142837)
+	//	int debug = 0;
 
 	int iRegion = pData->map[iNode];
 
@@ -1509,8 +1515,6 @@ void PlanarSurfelDetector::EdgeBoundary(
 #ifdef RVLPLANARSURFELDETECTOR_EDGE_BOUNDARY_DEBUG
 	bool bDebug = (WID == debugDefineBoundaryiSurfel && BID == debugDefineBoundaryiSurfel_);
 	
-	FILE *fpDebugPts;
-	FILE *fpDebugEdges;
 	Point *pPtDebug;
 	int debugCounter;
 
@@ -1807,7 +1811,8 @@ void PlanarSurfelDetector::CutPropagation(
 	int iSinkEnd,
 	int *markMap,
 	int mark,
-	int *&piEdgeBuffEnd)
+	int *&piEdgeBuffEnd,
+	int &nPtEdges)
 {
 	// Set flag RVLPLANARSURFELDETECTOR_CUT_PROPAGATION_EDGE_FLAG_SINK of all sink point-edges. 
 	// Put the indices of all sink edges to iEdgeBuff.
@@ -1825,7 +1830,7 @@ void PlanarSurfelDetector::CutPropagation(
 		if (edgeFlags[iEdge] == 0)
 			*(piEdgeBuffEnd++) = iEdge;
 
-		// the first sink point-edge is the opposite of the first point-edge of the first point-edge of BW-segment.
+		// the first sink point-edge is the opposite of the first point-edge of BW-segment.
 		edgeFlags[iEdge] |= (RVLPLANARSURFELDETECTOR_CUT_PROPAGATION_EDGE_FLAG_SINK << (i == iSinkStart ? 1 - pPtEdge->side : pPtEdge->side));
 	}
 
@@ -1918,12 +1923,10 @@ void PlanarSurfelDetector::CutPropagation(
 		if (edgeFlags[iEdge] == 0)
 			*(piEdgeBuffEnd++) = iEdge;
 
-		edgeFlags[iEdge] |= (RVLPLANARSURFELDETECTOR_CUT_PROPAGATION_EDGE_FLAG_CLOSED << (1 - side));
+		edgeFlags[iEdge] |= ((RVLPLANARSURFELDETECTOR_CUT_PROPAGATION_EDGE_FLAG_CLOSED << (1 - side)) | RVLPLANARSURFELDETECTOR_CUT_PROPAGATION_EDGE_FLAG_SOURCE);
 	}
 
 #ifdef RVLPLANARSURFELDETECTOR_CUT_PROPAGATION_DEBUG
-	FILE *fpDebugPts;
-	FILE *fpDebugEdges;
 	bool *bDebugMap;
 	unsigned int debugDepth;
 	int debugLoopCounter;
@@ -2143,6 +2146,8 @@ void PlanarSurfelDetector::CutPropagation(
 				int debug = 0;
 #endif
 	}	// wave propagation loop
+
+	nPtEdges = iPtEdge;
 
 #ifdef RVLPLANARSURFELDETECTOR_CUT_PROPAGATION_DEBUG
 	if (bDebug)
@@ -2366,14 +2371,17 @@ void PlanarSurfelDetector::SaveEdge(
 
 bool PlanarSurfelDetector::MinimumCut(
 	Mesh *pMesh,
-	int *map,
+	SurfelGraph *pSurfels, 
 	int WID,
 	int GID,
 	int BID,
 	Array<MESH::PointEdge> &BoundaryPointEdgeArray,
 	int iSinkStart,
-	int iSinkEnd)
+	int iSinkEnd,
+	int nPtEdges)
 {
+	// pEdgePtr0 <- sink point-edge with the minimum cut cost.
+
 	unsigned int minCutCost = 0xffffffff;
 
 	MeshEdgePtr *pEdgePtr0 = NULL;
@@ -2383,7 +2391,7 @@ bool PlanarSurfelDetector::MinimumCut(
 	int iEdge;
 	int side0;
 
-	for (i = iSinkStart; i < iSinkEnd; i++)
+	for (i = iSinkStart; i <= iSinkEnd; i++)
 	{
 		pPtEdge = BoundaryPointEdgeArray.Element + i;
 
@@ -2409,8 +2417,6 @@ bool PlanarSurfelDetector::MinimumCut(
 #ifdef RVLPLANARSURFELDETECTOR_CUT_PROPAGATION_DEBUG
 	bool bDebug = (WID == debugDefineBoundaryiSurfel && BID == debugDefineBoundaryiSurfel_);
 
-	FILE *fpDebugEdges;
-
 	if (bDebug)
 	{
 		fpDebugEdges = fopen("C:\\RVL\\Debug\\PSDEdgeBoundaryDebugEdges.txt", "a");
@@ -2421,8 +2427,24 @@ bool PlanarSurfelDetector::MinimumCut(
 		fflush(fpDebugEdges);
 	}
 #endif
-
+	
 	edgeFlags[pEdge->idx] |= RVLPLANARSURFELDETECTOR_CUT_PROPAGATION_EDGE_FLAG_CUT;
+
+	// Follow the minimum cost cut path to the source.
+
+#ifdef RVLPLANARSURFELDETECTOR_POLYGONALIZE_BOUNDARY
+	int *cutBuffMem = new int[2 * nPtEdges];
+
+	Array<int> minCut;
+	minCut.Element = cutBuffMem;
+
+	Array<int> lineCut;
+	lineCut.Element = cutBuffMem + nPtEdges;
+
+	int *piCutEdge = minCut.Element;
+
+	*(piCutEdge++) = pEdge->idx;
+#endif
 
 	int side;	
 	MeshEdge *pEdge_;
@@ -2434,7 +2456,7 @@ bool PlanarSurfelDetector::MinimumCut(
 	unsigned int cutCost;
 	int side1, side2;
 
-	while (cutCostMap[pEdge->idx] > 1)
+	while (!(edgeFlags[pEdge->idx] & RVLPLANARSURFELDETECTOR_CUT_PROPAGATION_EDGE_FLAG_SOURCE))
 	{
 		cutCost = cutCostMap[pEdge->idx];
 
@@ -2456,22 +2478,25 @@ bool PlanarSurfelDetector::MinimumCut(
 
 			pEdgePtr_ = pEdgePtr;
 
-			RVLPLANARSURFELDETECTOR_GET_NEXT_EDGE_IN_LOOP(pMesh, pEdgeList, iPt, pEdgePtr_, side_, map, iNextPt, pEdge_, ID, WID, GID, BID);
+			RVLPLANARSURFELDETECTOR_GET_NEXT_EDGE_IN_LOOP(pMesh, pEdgeList, iPt, pEdgePtr_, side_, pSurfels->surfelMap, iNextPt, pEdge_, ID, WID, GID, BID);
 
 			pNextEdgePtr = NULL;
 
 			while (pEdgePtr_ != pEdgePtr)
-			{
-				iPt = iNextPt;
-
-				if (cutCostMap[pEdge_->idx] < cutCost)
+			{			
+				if (pSurfels->surfelMap[iPt] == GID || pSurfels->surfelMap[iNextPt] == GID)
 				{
-					pNextEdgePtr = pEdgePtr_;
+					if (cutCostMap[pEdge_->idx] < cutCost)
+					{
+						pNextEdgePtr = pEdgePtr_;
 
-					break;
+						break;
+					}
 				}
 
-				RVLPLANARSURFELDETECTOR_GET_NEXT_EDGE_IN_LOOP(pMesh, pEdgeList, iPt, pEdgePtr_, side_, map, iNextPt, pEdge_, ID, WID, GID, BID);
+				iPt = iNextPt;
+
+				RVLPLANARSURFELDETECTOR_GET_NEXT_EDGE_IN_LOOP(pMesh, pEdgeList, iPt, pEdgePtr_, side_, pSurfels->surfelMap, iNextPt, pEdge_, ID, WID, GID, BID);
 			}
 
 			if (pNextEdgePtr)
@@ -2485,7 +2510,11 @@ bool PlanarSurfelDetector::MinimumCut(
 
 		pEdge = pEdgePtr->pEdge;
 
+#ifdef RVLPLANARSURFELDETECTOR_POLYGONALIZE_BOUNDARY
+		*(piCutEdge++) = pEdge->idx;
+#else
 		edgeFlags[pEdge->idx] |= RVLPLANARSURFELDETECTOR_CUT_PROPAGATION_EDGE_FLAG_CUT;
+#endif
 
 #ifdef RVLPLANARSURFELDETECTOR_CUT_PROPAGATION_DEBUG
 		if (bDebug)
@@ -2497,6 +2526,152 @@ bool PlanarSurfelDetector::MinimumCut(
 		}
 #endif
 	}
+
+#ifdef RVLPLANARSURFELDETECTOR_POLYGONALIZE_BOUNDARY
+	// poly <- list of vertices of the initial polygonal boundary.
+
+	minCut.n = piCutEdge - minCut.Element;
+
+	QLIST::Index *polyMem = new QLIST::Index[2 * minCut.n];
+
+	QLIST::Index *pPolyVertex = polyMem;
+
+	QList<QLIST::Index> poly;
+
+	QList<QLIST::Index> *pPoly = &poly;	
+
+	RVLQLIST_INIT(pPoly);
+
+	bool bIntersection = false;
+	bool bPrevEdgeIsOnIntersection = false;
+
+	for (i = 0; i < minCut.n; i++)
+	{
+		iEdge = minCut.Element[i];
+
+		bIntersection = ((edgeFlags[iEdge] & RVLPLANARSURFELDETECTOR_CUT_PROPAGATION_EDGE_FLAG_INTERSECTION) != 0);
+
+		if (!bIntersection & bPrevEdgeIsOnIntersection)
+		{
+			RVLQLIST_ADD_ENTRY(pPoly, pPolyVertex);
+
+			pPolyVertex->Idx = i - 1;
+
+			pPolyVertex++;
+		}
+
+		if (i == 0 || (bIntersection & !bPrevEdgeIsOnIntersection) || i == minCut.n - 1)
+		{			
+			RVLQLIST_ADD_ENTRY(pPoly, pPolyVertex);
+
+			pPolyVertex->Idx = i;
+
+			pPolyVertex++;
+		}
+
+		bPrevEdgeIsOnIntersection = bIntersection;
+	}
+
+	// Compute midpoints of the initial cut edges.
+
+	float *midPt = new float[3 * minCut.n];
+
+	float *P = midPt;
+
+	for (i = 0; i < minCut.n; i++, P += 3)
+	{
+		iEdge = minCut.Element[i];
+
+		GetEdgeMidPoint(pMesh, iEdge, P, NLineCut, dLineCut, (edgeFlags[iEdge] & RVLPLANARSURFELDETECTOR_CUT_PROPAGATION_EDGE_FLAG_INTERSECTION) != 0);
+	}
+
+	// Assure that the polygonal boundary passes completely through G-region.
+
+	if (minCut.n > 1)
+	{
+		int side = side0;
+
+		float *N = pSurfels->NodeArray.Element[WID].N;
+
+		int iEdge1_, iEdge2_;
+		float *P1, *P2, *P_;
+		float dP[3], NBnd[3];
+		float fTmp;
+		float dBnd;
+		int iMostDistantEdge;
+		float dist, maxDist;
+
+		QLIST::Index **ppPolyVertex = &(poly.pFirst);
+
+		iEdge1_ = (*ppPolyVertex)->Idx;
+
+		iEdge = minCut.Element[iEdge1_];
+
+		P1 = midPt + 3 * iEdge1_;
+
+		ppPolyVertex = &((*ppPolyVertex)->pNext);
+
+		while (*ppPolyVertex)
+		{
+			iEdge2_ = (*ppPolyVertex)->Idx;
+
+			P2 = midPt + 3 * iEdge2_;
+
+			RVLDIF3VECTORS(P2, P1, dP);
+
+			RVLCROSSPRODUCT3(N, dP, NBnd);
+
+			RVLNORM3(NBnd, fTmp);
+
+			dBnd = RVLDOTPRODUCT3(NBnd, P1);
+
+			if (InsideGRegion(pMesh, pSurfels, WID, GID, BID, NBnd, dBnd, iEdge1_, side, iEdge2_, P2, dP, minCut, lineCut))
+			{
+				iEdge1_ = iEdge2_;
+
+				P1 = P2;
+
+				side = -1;
+
+				ppPolyVertex = &((*ppPolyVertex)->pNext);
+			}
+			else
+			{
+				iMostDistantEdge = iEdge1_;
+
+				maxDist = -1.0;
+
+				P_ = midPt + 3 * iEdge1_;
+
+				for (i = iEdge1_; i <= iEdge2_; i++, P_ += 3)
+				{
+					dist = RVLDOTPRODUCT3(NBnd, P_) - dBnd;
+
+					dist = RVLABS(dist);
+
+					if (dist > maxDist)
+					{
+						maxDist = dist;
+
+						iMostDistantEdge = i;
+					}
+				}
+
+				RVLQLIST_INSERT_ENTRY2(ppPolyVertex, pPolyVertex);
+
+				pPolyVertex->Idx = iMostDistantEdge;
+
+				pPolyVertex++;
+			}			
+		}
+	}	// if (nCut > 1)
+
+	// Free memory.
+
+	delete[] cutBuffMem;
+	delete[] polyMem;
+	delete[] midPt;
+#endif
 
 #ifdef RVLPLANARSURFELDETECTOR_CUT_PROPAGATION_DEBUG
 	if (bDebug)
@@ -2865,6 +3040,33 @@ void PlanarSurfelDetector::DefinePolygon(
 
 		DefineBoundary(pMesh, pSurfels, data, iSurfel, iSurfel_, G);
 
+#ifdef RVLPLANARSURFELDETECTOR_G_REGION_DEBUG
+		if (iSurfel == 18)
+		{
+			int iPtDebug = 74819;
+
+			Point *pPtDebug = pMesh->NodeArray.Element + iPtDebug;
+
+			MeshEdge *pEdgeDebug;
+			int iPtDebug_;
+
+			MeshEdgePtr *pEdgePtrDebug = pPtDebug->EdgeList.pFirst;
+
+			while (pEdgePtrDebug)
+			{
+				RVLPCSEGMENT_GRAPH_GET_NEIGHBOR(iPtDebug, pEdgePtrDebug, pEdgeDebug, iPtDebug_);
+
+				if (pSurfels->surfelMap[iPtDebug_] == 18)
+					break;
+
+				pEdgePtrDebug = pEdgePtrDebug->pNext;
+			}
+
+			if (pEdgePtrDebug == NULL)
+				int debug = 0;
+		}
+#endif
+
 		// Clear the seed points from the seed point list of iSurfel_
 
 		pGSeedPtList = GSeedListArray.Element + iSurfel;
@@ -2938,8 +3140,8 @@ void PlanarSurfelDetector::SaveWGB(
 
 	if (bDebug)
 	{
-		FILE *fpDebugPts = fopen("C:\\RVL\\Debug\\PSDEdgeBoundaryDebugPoints.txt", "w");
-		FILE *fpDebugEdges = fopen("C:\\RVL\\Debug\\PSDEdgeBoundaryDebugEdges.txt", "w");
+		fpDebugPts = fopen("C:\\RVL\\Debug\\PSDEdgeBoundaryDebugPoints.txt", "w");
+		fpDebugEdges = fopen("C:\\RVL\\Debug\\PSDEdgeBoundaryDebugEdges.txt", "w");
 		fclose(fpDebugEdges);
 
 		Surfel *pSurfel = pSurfels->NodeArray.Element + WID;
@@ -2989,5 +3191,201 @@ void PlanarSurfelDetector::SaveIdxArray(
 
 	for (i = 0; i < Array.n; i++)
 		fprintf(fp, "%d\n", Array.Element[i]);
+}
+#endif
+
+#ifdef RVLPLANARSURFELDETECTOR_POLYGONALIZE_BOUNDARY
+void PlanarSurfelDetector::GetEdgeMidPoint(
+	Mesh *pMesh,
+	int iEdge,
+	float *P,
+	float *N,
+	float d,
+	bool bPlaneIntersection)
+{
+	MeshEdge *pEdge = pMesh->EdgeArray.Element + iEdge;
+
+	float *P1 = pMesh->NodeArray.Element[pEdge->iVertex[0]].P;
+	float *P2 = pMesh->NodeArray.Element[pEdge->iVertex[1]].P;
+	
+	float dP[3];
+
+	RVLDIF3VECTORS(P2, P1, dP);
+
+	float s = (bPlaneIntersection ? (d - RVLDOTPRODUCT3(N, P1)) / RVLDOTPRODUCT3(N, dP) : 0.5f);
+	
+	RVLSCALE3VECTOR(dP, s, dP);
+
+	RVLSUM3VECTORS(P1, dP, P);
+}
+
+bool PlanarSurfelDetector::InsideGRegion(
+	Mesh *pMesh,
+	SurfelGraph *pSurfels,
+	int WID,
+	int GID,
+	int BID,
+	float *N,
+	float d,	
+	int iEdgeStart_,
+	int sideStart,
+	int iEdgeEnd_,
+	float *PEnd,
+	float *dP,
+	Array<int> &initCut,
+	Array<int> &lineCut)
+{
+#ifdef RVLPLANARSURFELDETECTOR_CUT_PROPAGATION_DEBUG
+	bool bDebug = (WID == debugDefineBoundaryiSurfel && BID == debugDefineBoundaryiSurfel_);
+#endif
+
+	int iEdgeStart = initCut.Element[iEdgeStart_];
+	int iEdgeEnd = initCut.Element[iEdgeEnd_];
+
+	MeshEdge *pEdge;
+
+	if (iEdgeEnd_ == iEdgeStart_ + 1 || (edgeFlags[iEdgeStart] & edgeFlags[iEdgeEnd] & RVLPLANARSURFELDETECTOR_CUT_PROPAGATION_EDGE_FLAG_INTERSECTION) != 0)
+	{
+		for (int i = iEdgeStart_ + 1; i <= iEdgeEnd_; i++)
+		{
+			edgeFlags[initCut.Element[i]] |= RVLPLANARSURFELDETECTOR_CUT_PROPAGATION_EDGE_FLAG_CUT;
+
+#ifdef RVLPLANARSURFELDETECTOR_CUT_PROPAGATION_DEBUG
+			if (bDebug)
+			{
+				pEdge = pMesh->EdgeArray.Element + initCut.Element[i];
+
+				fprintf(fpDebugEdges, "%d\t%d\t%d\t7\n", pEdge->idx, pEdge->iVertex[0], pEdge->iVertex[1]);
+				fprintf(fpDebugEdges, "%d\t%d\t%d\t7\n", pEdge->idx, pEdge->iVertex[1], pEdge->iVertex[0]);
+
+				fflush(fpDebugEdges);
+			}
+#endif
+		}			
+	}
+	else
+	{
+		MeshEdgePtr *pEdgePtr0 = pMesh->EdgeArray.Element[iEdgeStart].pVertexEdgePtr[(sideStart >= 0 ? sideStart : 0)];
+
+		MeshEdgePtr *pEdgePtr = pEdgePtr0;
+
+		pEdge = pEdgePtr->pEdge;
+
+		int i = 0;
+
+#ifdef RVLPLANARSURFELDETECTOR_POLYGONALIZE_BOUNDARY_2
+		float dist2Prev = RVLDOTPRODUCT3(dP, dP);
+
+		float P[3], dP_[3];
+		float dist2;
+#endif
+		int side;
+		MeshEdge *pEdge_;
+		MeshEdgePtr *pEdgePtr_, *pNextEdgePtr;
+		int iPt, iNextPt;
+		int side_;
+		int ID;
+		QList<MeshEdgePtr> *pEdgeList;
+		unsigned int cutCost;
+		int side1, side2;
+		float *P1, *P2;
+
+		while (pEdge->idx != iEdgeEnd)
+		{
+			cutCost = cutCostMap[pEdge->idx];
+
+			pNextEdgePtr = NULL;
+
+			if (pEdgePtr == pEdgePtr0 && sideStart >= 0)
+				side1 = side2 = sideStart;
+			else
+			{
+				side1 = 0;
+				side2 = 1;
+			}
+
+			for (side = side1; side <= side2; side++)
+			{
+				pEdgePtr = pEdge->pVertexEdgePtr[side];
+
+				iPt = pEdge->iVertex[side];
+
+				pEdgePtr_ = pEdgePtr;
+
+				RVLPLANARSURFELDETECTOR_GET_NEXT_EDGE_IN_LOOP(pMesh, pEdgeList, iPt, pEdgePtr_, side_, pSurfels->surfelMap, iNextPt, pEdge_, ID, WID, GID, BID);
+
+				pNextEdgePtr = NULL;
+
+				P1 = pMesh->NodeArray.Element[iPt].P;
+
+				while (pEdgePtr_ != pEdgePtr)
+				{
+					P2 = pMesh->NodeArray.Element[iNextPt].P;
+
+					if (pSurfels->surfelMap[iPt] == GID || pSurfels->surfelMap[iNextPt] == GID)
+					{
+						if (RVLPLANARSURFELDETECTOR_ON_LINE_CUT(N, d, P1, P2))
+						{
+#ifdef RVLPLANARSURFELDETECTOR_POLYGONALIZE_BOUNDARY_2
+							GetEdgeMidPoint(pMesh, pEdge_->idx, P, N, d);
+
+							RVLDIF3VECTORS(PEnd, P, dP_);
+
+							dist2 = RVLDOTPRODUCT3(dP_, dP_);
+							
+							if (dist2 < dist2Prev)
+#else
+							if (cutCostMap[pEdge_->idx] < cutCost)
+#endif
+							{
+#ifdef RVLPLANARSURFELDETECTOR_POLYGONALIZE_BOUNDARY_2
+								dist2Prev = dist2;
+#endif
+
+								pNextEdgePtr = pEdgePtr_;
+
+								break;
+							}
+						}
+					}
+
+					iPt = iNextPt;
+
+					P1 = P2;
+
+					RVLPLANARSURFELDETECTOR_GET_NEXT_EDGE_IN_LOOP(pMesh, pEdgeList, iPt, pEdgePtr_, side_, pSurfels->surfelMap, iNextPt, pEdge_, ID, WID, GID, BID);
+				}
+
+				if (pNextEdgePtr)
+					break;
+			}
+
+			if (pNextEdgePtr == NULL)
+				return false;
+
+			pEdgePtr = pNextEdgePtr;
+
+			pEdge = pEdgePtr->pEdge;
+
+			lineCut.Element[i++] = pEdge->idx;
+
+#ifdef RVLPLANARSURFELDETECTOR_CUT_PROPAGATION_DEBUG
+			if (bDebug)
+			{
+				fprintf(fpDebugEdges, "%d\t%d\t%d\t7\n", pEdge->idx, pEdge->iVertex[0], pEdge->iVertex[1]);
+				fprintf(fpDebugEdges, "%d\t%d\t%d\t7\n", pEdge->idx, pEdge->iVertex[1], pEdge->iVertex[0]);
+
+				fflush(fpDebugEdges);
+			}
+#endif
+		}
+
+		lineCut.n = i;
+
+		for (i = 0; i < lineCut.n; i++)
+			edgeFlags[lineCut.Element[i]] |= RVLPLANARSURFELDETECTOR_CUT_PROPAGATION_EDGE_FLAG_CUT;
+	}
+
+	return true;
 }
 #endif

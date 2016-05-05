@@ -301,8 +301,8 @@ void SurfelGraph::DisplayHardEdges(
 
 		if (bEdge)
 			pVisualizer->PaintPoint(iPt, pMesh->pPolygonData, Color);
-		else
-			int debug = 0;
+		//else
+		//	int debug = 0;
 
 		pPtIdx = pPtIdx->pNext;
 	}
