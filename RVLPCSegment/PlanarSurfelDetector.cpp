@@ -41,8 +41,8 @@ PlanarSurfelDetector::PlanarSurfelDetector()
 #endif
 
 #ifdef RVLPLANARSURFELDETECTOR_EDGE_BOUNDARY_DEBUG
-	debugDefineBoundaryiSurfel = 18;
-	debugDefineBoundaryiSurfel_ = 55;
+	debugDefineBoundaryiSurfel = 1;
+	debugDefineBoundaryiSurfel_ = 38;
 #endif
 }
 
@@ -158,6 +158,7 @@ void PlanarSurfelDetector::CreateParamList(CRVLMem *pMem)
 	pParamData = ParamList.AddParam("SurfelDetector.kNormal", RVLPARAM_TYPE_FLOAT, &kNormal);
 	pParamData = ParamList.AddParam("SurfelDetector.kRGB", RVLPARAM_TYPE_FLOAT, &kRGB);
 	pParamData = ParamList.AddParam("SurfelDetector.maxRange", RVLPARAM_TYPE_FLOAT, &maxRange);
+	pParamData = ParamList.AddParam("SurfelDetector.minSurfelSize", RVLPARAM_TYPE_INT, &minSurfelSize);
 }
 
 void PlanarSurfelDetector::RandomIndices(Array<int> &A)
@@ -409,7 +410,7 @@ void PlanarSurfelDetector::Segment(
 		
 		surfelPtArray.n = piPtBuffEnd - surfelPtArray.Element;
 
-		if (surfelPtArray.n >= minSurfelSize)
+		//if (surfelPtArray.n >= minSurfelSize)
 		{
 			// Create surfel lists.
 
@@ -425,7 +426,7 @@ void PlanarSurfelDetector::Segment(
 
 			pPt = Pt + iPtSeed;
 
-			if (surfelPtArray.n >= 20)
+			if (surfelPtArray.n >= RVLMAX(20, minSurfelSize))
 			{
 				pMesh->ComputeDistribution(surfelPtArray, distribution);
 
@@ -519,8 +520,10 @@ void PlanarSurfelDetector::Segment(
 #ifdef RVLPLANARSURFELDETECTOR_POLYGONS
 			// Define Polygon.
 
-			DefinePolygon(pMesh, pSurfels, iSurfel);
+			if (piPtBuffEnd - iPtBuff >= minSurfelSize)
+				DefinePolygon(pMesh, pSurfels, iSurfel);
 #endif
+
 			// Next surfel index
 
 			iSurfel++;
@@ -1863,6 +1866,10 @@ void PlanarSurfelDetector::CutPropagation(
 	{
 		pPtEdge_ = BoundaryPointEdgeArray.Element + i;
 		pEdge = pPtEdge_->pEdgePtr->pEdge;
+		iEdge = pEdge->idx;
+
+		if (edgeFlags[iEdge] == 0)
+			*(piEdgeBuffEnd++) = iEdge;
 
 		if (i == iSourceStart)
 		{
@@ -1917,11 +1924,6 @@ void PlanarSurfelDetector::CutPropagation(
 //				pCutPropagationBuffEntry++;
 //			}
 //		}
-
-		iEdge = pPtEdge_->pEdgePtr->pEdge->idx;
-
-		if (edgeFlags[iEdge] == 0)
-			*(piEdgeBuffEnd++) = iEdge;
 
 		edgeFlags[iEdge] |= ((RVLPLANARSURFELDETECTOR_CUT_PROPAGATION_EDGE_FLAG_CLOSED << (1 - side)) | RVLPLANARSURFELDETECTOR_CUT_PROPAGATION_EDGE_FLAG_SOURCE);
 	}
@@ -3041,6 +3043,9 @@ void PlanarSurfelDetector::DefinePolygon(
 		DefineBoundary(pMesh, pSurfels, data, iSurfel, iSurfel_, G);
 
 #ifdef RVLPLANARSURFELDETECTOR_G_REGION_DEBUG
+		if (cutCostMap[452844] < 0xffffffff)
+			int debug = 0;
+
 		if (iSurfel == 18)
 		{
 			int iPtDebug = 74819;
