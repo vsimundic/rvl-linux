@@ -41,8 +41,8 @@ PlanarSurfelDetector::PlanarSurfelDetector()
 #endif
 
 #ifdef RVLPLANARSURFELDETECTOR_EDGE_BOUNDARY_DEBUG
-	debugDefineBoundaryiSurfel = 1;
-	debugDefineBoundaryiSurfel_ = 38;
+	debugDefineBoundaryiSurfel = 28;
+	debugDefineBoundaryiSurfel_ = 749;
 #endif
 }
 
@@ -85,7 +85,7 @@ void PlanarSurfelDetector::Init(
 
 	regionGrowingData.distThr = surfelDistThr * surfelDistThr;
 	regionGrowingData.kRGB2 = kRGB * kRGB;
-	regionGrowingData.kNormal2 = kNormal * kNormal;
+	regionGrowingData.kNormal2 = 0.0f;
 	regionGrowingData.kPlane2 = kPlane * kPlane;
 	regionGrowingData.surfelMap = pSurfels->surfelMap;
 	regionGrowingData.buffer = map;
@@ -191,8 +191,8 @@ int PSD::RegionGrowingOperation(
 	PlanarSurfelDetectorRegionGrowingData *pData
 	)
 {
-	//if (iNode == 142837)
-	//	int debug = 0;
+	if (iNode == 177628)
+		int debug = 0;
 
 	if(pData->mode == RVLPLANARSURFELDETECTOR_REGIONGROWING_MODE_FIND_CLOSEST_INLIER)
 	{
@@ -336,8 +336,7 @@ void PlanarSurfelDetector::Segment(
 	PlanarSurfelDetectorRegionGrowingData data;
 
 	data.distThr = surfelDistThr * surfelDistThr;
-	data.kRGB2 = kRGB * kRGB;
-	data.kNormal2 = kNormal * kNormal;
+	data.kRGB2 = kRGB * kRGB;	
 	data.kPlane2 = kPlane * kPlane;
 	data.surfelMap = pSurfels->surfelMap;	
 	data.buffer = regionGrowingBuffer;
@@ -405,6 +404,7 @@ void PlanarSurfelDetector::Segment(
 		data.pPtTemplate = Pt + iPtSeed;
 		data.iSurfel = iSurfel;
 		data.mode = RVLPLANARSURFELDETECTOR_REGIONGROWING_MODE_SURFEL_DETECTION;
+		data.kNormal2 = kNormal * kNormal;
 		
 		piPtBuffEnd = RegionGrowing<Mesh, Point, MeshEdge, MeshEdgePtr, PlanarSurfelDetectorRegionGrowingData, PSD::RegionGrowingOperation>(pMesh, &data, piPtFetch, piPtPut);
 		
@@ -462,11 +462,13 @@ void PlanarSurfelDetector::Segment(
 
 			// Final region growing
 
+			data.kNormal2 = 0.0f;
+
 			piPtFetch = piPtPut = iPtBuff;
 
 			*(piPtPut++) = data.iPtSeed;
 
-			regionGrowingBuffer[iPtSeed] = iSurfel;
+			regionGrowingBuffer[data.iPtSeed] = iSurfel;
 
 			data.mode = RVLPLANARSURFELDETECTOR_REGIONGROWING_MODE_SURFEL_DETECTION;
 
@@ -530,8 +532,8 @@ void PlanarSurfelDetector::Segment(
 
 			pSurfel++;
 
-			//if (iSurfel > 200)	// debug
-			//	break;
+			if (iSurfel > 27)	// debug
+				break;
 		}
 	}	// for every vertex
 
@@ -670,6 +672,7 @@ void PlanarSurfelDetector::DefineBoundary(
 	QList<QLIST::Index> &G)
 {
 #ifdef RVLPLANARSURFELDETECTOR_G_REGION_DEBUG
+	//bool bDebug = (iSurfel == 0);
 	bool bDebug = (iSurfel == debugDefineBoundaryiSurfel && iSurfel_ == debugDefineBoundaryiSurfel_);
 
 	if (bDebug)
@@ -3016,6 +3019,11 @@ void PlanarSurfelDetector::DefinePolygon(
 
 	// neighborList <- neighbors of iSurfel_.
 
+#ifdef RVLPLANARSURFELDETECTOR_G_REGION_DEBUG
+	if (iSurfel_ == 28)
+		int debug = 0;
+#endif
+
 	GetNeighbors(pMesh, pSurfels, iSurfel_);
 
 	// Define boundaries between iSurfel and all surfels in neighborList.
@@ -3142,6 +3150,7 @@ void PlanarSurfelDetector::SaveWGB(
 	int BID)
 {
 	bool bDebug = (WID == debugDefineBoundaryiSurfel && BID == debugDefineBoundaryiSurfel_);
+	//bool bDebug = (WID == 0);
 
 	if (bDebug)
 	{
