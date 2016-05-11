@@ -224,8 +224,7 @@ namespace RVL
 			SurfelGraph *pSurfels,
 			PlanarSurfelDetectorRegionGrowingData &data,
 			int iSurfel,
-			int iSurfel_,
-			QList<QLIST::Index> &G);
+			int iSurfel_);
 		void DefineBoundaryTest(
 			Mesh *pMesh,
 			SurfelGraph *pSurfels,
@@ -241,6 +240,15 @@ namespace RVL
 			int iPt_,
 			int iSurfel_);
 	private:
+		bool GRegion(
+			Mesh *pMesh,
+			SurfelGraph *pSurfels,
+			PlanarSurfelDetectorRegionGrowingData &data,
+			int iSurfel,
+			int iSurfel_,
+			Array<int> &G,
+			Array<int> &GBnd,
+			Array<int> &WBnd);
 		void ConnectedComponent(
 			Mesh *pMesh,
 			SurfelGraph *pSurfels,
@@ -404,7 +412,6 @@ namespace RVL
 			int GID,
 			int BID,
 			Array<MESH::PointEdge> &BoundaryPointEdgeArray,
-			int &iGBPt,
 			int *&iGBBndPtArrayEnd,
 			int *&piBWConnectionEnd);
 		void BBoundary(

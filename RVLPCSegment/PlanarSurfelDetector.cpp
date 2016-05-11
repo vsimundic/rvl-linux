@@ -41,8 +41,8 @@ PlanarSurfelDetector::PlanarSurfelDetector()
 #endif
 
 #ifdef RVLPLANARSURFELDETECTOR_EDGE_BOUNDARY_DEBUG
-	debugDefineBoundaryiSurfel = 28;
-	debugDefineBoundaryiSurfel_ = 749;
+	debugDefineBoundaryiSurfel = 7;
+	debugDefineBoundaryiSurfel_ = 8;
 #endif
 }
 
@@ -191,8 +191,8 @@ int PSD::RegionGrowingOperation(
 	PlanarSurfelDetectorRegionGrowingData *pData
 	)
 {
-	if (iNode == 177628)
-		int debug = 0;
+	//if (iNode == 177628)
+	//	int debug = 0;
 
 	if(pData->mode == RVLPLANARSURFELDETECTOR_REGIONGROWING_MODE_FIND_CLOSEST_INLIER)
 	{
@@ -532,8 +532,8 @@ void PlanarSurfelDetector::Segment(
 
 			pSurfel++;
 
-			if (iSurfel > 27)	// debug
-				break;
+			//if (iSurfel > 27)	// debug
+			//	break;
 		}
 	}	// for every vertex
 
@@ -610,7 +610,7 @@ void PlanarSurfelDetector::DefineBoundaryTest(
 
 	GetNeighbors(pMesh, pSurfels, iSurfel);
 
-	DefineBoundary(pMesh, pSurfels, data, iSurfel, iSurfel_, G);
+	DefineBoundary(pMesh, pSurfels, data, iSurfel, iSurfel_);
 
 	ClearProcessed();
 
@@ -668,9 +668,20 @@ void PlanarSurfelDetector::DefineBoundary(
 	SurfelGraph *pSurfels,
 	PlanarSurfelDetectorRegionGrowingData &data,
 	int iSurfel,
-	int iSurfel_,
-	QList<QLIST::Index> &G)
+	int iSurfel_)
 {
+	CRVLMem *pMem2A = &(Mem2A);
+
+	pMem2A->Clear();
+
+	CRVLMem *pMem2B = &Mem2B;
+
+#ifdef RVLPLANARSURFELDETECTOR_PLANE_INTERSECTION
+	// Compute intersection plane.
+
+	IntersectionPlane(pSurfels, iSurfel, iSurfel_);
+#endif
+
 #ifdef RVLPLANARSURFELDETECTOR_G_REGION_DEBUG
 	//bool bDebug = (iSurfel == 0);
 	bool bDebug = (iSurfel == debugDefineBoundaryiSurfel && iSurfel_ == debugDefineBoundaryiSurfel_);
@@ -679,22 +690,59 @@ void PlanarSurfelDetector::DefineBoundary(
 		int debug = 0;
 #endif
 
-#ifdef RVLPLANARSURFELDETECTOR_PLANE_INTERSECTION
-	// Compute intersection plane.
-
-	IntersectionPlane(pSurfels, iSurfel, iSurfel_);
-#endif
-
 	//if (iSurfel == 8 && iSurfel_ == 44)
 	//	int debug = 0;
 
-	CRVLMem *pMem2A = &(Mem2A);
-
 	int nMeshPts = pMesh->NodeArray.n;
 
-	Array<int> seed;
+	///// New 11.05.2016. ...GRegion()
 
-	pMem2A->Clear();
+	int *GRegionBuff;
+
+	RVLMEM_ALLOC_STRUCT_ARRAY(pMem2A, int, nMeshPts, GRegionBuff);
+
+	Array<int> G;
+
+	G.Element = GRegionBuff;
+	
+	QLIST::CopyToArray(GSeedListArray.Element + iSurfel, &G);
+
+	int nSeed = G.n;
+
+#ifdef RVLPLANARSURFELDETECTOR_G_REGION_DEBUG
+	if (bDebug)
+	{
+		FILE *fpDebugIdxArray = fopen("C:\\RVL\\Debug\\PSDIdxArray.txt", "w");
+
+		SaveIdxArray(fpDebugIdxArray, G);
+
+		fclose(fpDebugIdxArray);
+	}
+#endif
+
+	Array<int> GBnd, WBnd;
+
+	bool bW_ = GRegion(pMesh, pSurfels, data, iSurfel, iSurfel_, G, GBnd, WBnd);
+
+	int i;
+	int iPt;
+
+	for (i = 0; i < G.n; i++)
+	{
+		iPt = G.Element[i];
+
+		if (mProcessed[iPt] == 0x00)
+		{
+			mProcessed[iPt] = RVLPLANARSURFELDETECTOR_PROCESSED_G;
+
+			processedBuff.Element[processedBuff.n++] = iPt;
+		}
+	}
+
+	/////
+
+#ifdef RVLPLANARSURFELDETECTOR_DEFINE_BOUNDARY_OLD
+	Array<int> seed;
 
 	RVLMEM_ALLOC_STRUCT_ARRAY(pMem2A, int, nMeshPts, seed.Element);
 
@@ -917,8 +965,8 @@ void PlanarSurfelDetector::DefineBoundary(
 
 		RVLMEM_SET_FREE(pMem2A, piPtDistanceBuffEnd)
 
-		if (nWCC > 1)
-		{
+			if (nWCC > 1)
+			{
 			// Compute the minimum spanning tree of the connected components of W.
 
 			int *tree = new int[nWCC];
@@ -942,10 +990,29 @@ void PlanarSurfelDetector::DefineBoundary(
 #ifdef RVLPLANARSURFELDETECTOR_G_REGION_DEBUG
 			SaveWGB(pMesh, pSurfels, iSurfel, nSurfels, iSurfel_);
 #endif
-		}
+			}
 
 		delete[] distanceMatrix;
 		delete[] edgeMatrix;
+	}	// if (nWCC > 0)
+#endif
+
+	int nSurfels = pMesh->NodeArray.n;
+
+	int *iGPt = G.Element;
+	int *piGPtArrayEnd = G.Element + G.n;
+	int nG = G.n;
+
+	int *piPt;
+	int *iGEdgeBuff;
+	int *piGEdgeBuffEnd;
+
+	if (bW_)
+	{		
+		int *iGBndPt = GBnd.Element;
+		int *piGBndPtArrayEnd = GBnd.Element + GBnd.n;
+		int *iWCCPt = WBnd.Element;
+		int *iWCCPtArrayEnd = WBnd.Element + WBnd.n;
 
 		/// Determine the boundary between surfels iSurfel and iSurfel_ by cut propagation.		
 
@@ -972,7 +1039,7 @@ void PlanarSurfelDetector::DefineBoundary(
 		int *iBWConnectionPt = iGBBndPt;
 
 		int *piBWConnectionPtArrayEnd = iBWConnectionPt;
-		
+
 		// Find a point iPt, which is a boundary point of G-region and use it as the seed for boundary detection.
 
 		bool bBWConnected = false;
@@ -1052,7 +1119,7 @@ void PlanarSurfelDetector::DefineBoundary(
 				}
 				else if (!bBWConnected)
 				{
-					BWConnect(pMesh, pSurfels->surfelMap, iSurfel, nSurfels, iSurfel_, PointEdgeArray, iPt_, piGBBndPtArrayEnd, piBWConnectionPtArrayEnd);
+					BWConnect(pMesh, pSurfels->surfelMap, iSurfel, nSurfels, iSurfel_, PointEdgeArray, piGBBndPtArrayEnd, piBWConnectionPtArrayEnd);
 
 					bBWConnected = true;
 
@@ -1128,9 +1195,14 @@ void PlanarSurfelDetector::DefineBoundary(
 	reassignToBData.map = pSurfels->surfelMap;
 	reassignToBData.pPSD = this;
 
-	int *pSeedEnd = iPtBuff + seed.n;
+	int *pSeedEnd = G.Element + nSeed;
 
-	for (piPt = iPtBuff; piPt < pSeedEnd; piPt++)
+	MeshEdgePtr *pEdgePtr;
+	MeshEdge *pEdge;
+	int iPt_;
+	int *piPtFetch, *piPtPut;	
+
+	for (piPt = G.Element; piPt < pSeedEnd; piPt++)
 	{
 		iPt = *piPt;
 
@@ -1167,7 +1239,7 @@ void PlanarSurfelDetector::DefineBoundary(
 
 	///
 
-	if (nWCC > 0)
+	if (bW_)
 	{
 		// Reset edgeFlags and cutCostMap
 
@@ -1190,6 +1262,9 @@ void PlanarSurfelDetector::DefineBoundary(
 //#endif
 
 	// Reassign points to surfels.
+
+	Surfel *pSurfel = pSurfels->NodeArray.Element + iSurfel;
+	Surfel *pSurfel_ = pSurfels->NodeArray.Element + iSurfel_;
 
 	QList<QLIST::Index> *pW = &(pSurfel->PtList);
 	//QList<QLIST::Index> *pG = &G;
@@ -2705,13 +2780,10 @@ void PlanarSurfelDetector::BWConnect(
 	int GID,
 	int BID,
 	Array<MESH::PointEdge> &BoundaryPointEdgeArray,
-	int &iGBPt,
 	int *&iGBBndPtArrayEnd,
 	int *&piBWConnectionEnd)
 {
 	// iPt0 <- the point on the boundary of G-region touching B-region closest to a W-region.
-
-	iGBPt = -1;
 
 	//int *iGBBndPt = iGBBndPtArrayEnd;
 
@@ -3033,7 +3105,7 @@ void PlanarSurfelDetector::DefinePolygon(
 	QList<QLIST::Index> *pNeighborList = &neighborList;
 
 	int iSurfel;
-	QList<QLIST::Index> G;
+	//QList<QLIST::Index> G;
 	QList<QLIST::Index> *pGSeedPtList;
 	QLIST::Index *pNeighbor;
 	QLIST::Index **ppNeighbor;
@@ -3048,7 +3120,7 @@ void PlanarSurfelDetector::DefinePolygon(
 
 		// Define boundary between iSurfel and iSurfel_.
 
-		DefineBoundary(pMesh, pSurfels, data, iSurfel, iSurfel_, G);
+		DefineBoundary(pMesh, pSurfels, data, iSurfel, iSurfel_);
 
 #ifdef RVLPLANARSURFELDETECTOR_G_REGION_DEBUG
 		if (cutCostMap[452844] < 0xffffffff)
@@ -3403,3 +3475,292 @@ bool PlanarSurfelDetector::InsideGRegion(
 	return true;
 }
 #endif
+
+// Input:  pMesh - mesh,
+//         pSurfels - surfel graph,
+//         data - data structure with region growing parameters,
+//         iSurfel - initial W-surfel idx.,
+//         iSurfel_ - initial B-surfel idx.,
+//         G - array with indices of initial (seed) points of G-region.
+//
+// Output: G - array with indices of G-region points,
+//         GBnd - array of indices of G-region boundary points,
+//         WBnd - array of indices of W-region boundary points,
+//         The values of pSurfels->surfelMap corresponding to the points of G-region are set to the total number of mesh vertices.
+//         map (member variable) - at the end of the execution of GRegion(), all elements corresponding to the G-region 
+//                                 are set to the index of the closest connected component of W-region (starting from 1).
+//         distanceMap (member variable) - at the end of the execution of GRegion(), each element corresponding to the G-region 
+//                                         has the value representing the distance to the closest W-region point, 
+//                                         where the points used to connect the parts of W-region into a single connected component 
+//                                         are ignored by this distance transform.
+//
+// For a given mesh pMesh segmented to surfels pSurfels, this function determines the G-region between two neighboring surfels,
+// W-surfel identifed by index iSurfel and B-surfel identified by index iSurfel_, by expanding B-surfel into W-surfel.
+// The obtained G-region is stored in array G and its boundary is stored in array GBnd.
+// Arrays G and WBnd are allocated in Mem2A, while GBnd is allocated in Mem2B.
+//
+// The function uses the following temporary maps (member variables of PlanarSurfelDetector):
+//         map - at the beginning of the execution of GRegion(), all elements must be set to -1.
+//         distanceMap - at the beginning of the execution of GRegion(), all elements must be set to 0xffffffff.
+
+bool PlanarSurfelDetector::GRegion(
+	Mesh *pMesh,
+	SurfelGraph *pSurfels,
+	PlanarSurfelDetectorRegionGrowingData &data,
+	int iSurfel,
+	int iSurfel_,
+	Array<int> &G,
+	Array<int> &GBnd,
+	Array<int> &WBnd)
+{
+#ifdef RVLPLANARSURFELDETECTOR_G_REGION_DEBUG
+	//bool bDebug = (iSurfel == 0);
+	bool bDebug = (iSurfel == debugDefineBoundaryiSurfel && iSurfel_ == debugDefineBoundaryiSurfel_);
+
+	if (bDebug)
+		int debug = 0;
+#endif
+
+	//if (iSurfel == 8 && iSurfel_ == 44)
+	//	int debug = 0;
+
+	CRVLMem *pMem2A = &(Mem2A);
+
+	int nMeshPts = pMesh->NodeArray.n;
+
+	int *iPtBuff = G.Element;
+
+	/// B attacks iSurfel. G <- the regions of iSurfel conquered by B. W <- iSurfel \ G.
+
+	int *iGPt = iPtBuff;
+
+	int *piPtFetch = iGPt;
+
+	int *piPtPut = iPtBuff + G.n;
+
+	int *piPt;
+
+	for (piPt = iGPt; piPt < piPtPut; piPt++)
+		map[*piPt] = 0;
+
+	//int *iBBndPt = iPtBuff;
+
+	//int *iGPt = iPtBuff + nBBndPts;
+
+	//int *piPtFetch = iBBndPt;
+
+	//int *piPtPut = iGPt;	
+
+	CRVLMem *pMem2B = &Mem2B;
+
+	int *iGBndPt;
+
+	RVLMEM_ALLOC_STRUCT_ARRAY(pMem2B, int, nMeshPts, iGBndPt);
+
+	int *piGBndPtArrayEnd = iGBndPt;
+
+	data.mode = RVLPLANARSURFELDETECTOR_REGIONGROWING_MODE_ATTACK;
+	data.iAttackedSurfel = iSurfel;
+	data.iSurfel = 0;
+
+	Surfel *pSurfel = pSurfels->NodeArray.Element + iSurfel;
+	Surfel *pSurfel_ = pSurfels->NodeArray.Element + iSurfel_;
+
+	Point PtTemplate;
+
+	SURFEL::GetPoint(pSurfel_, &PtTemplate);	// PtTemplate <- reference point for B-region created from pSurfel_
+
+	data.pPtTemplate = &PtTemplate;
+
+	// iGPt <- array of indices of points in G-region
+	// iGBndPt <- array of indices of boundary points of G-region
+
+	int *piGPtArrayEnd = RegionGrowing3<Mesh, Point, MeshEdge, MeshEdgePtr, PlanarSurfelDetectorRegionGrowingData, PSD::RegionGrowingOperation>(pMesh, &data, piPtFetch, piPtPut,
+		piGBndPtArrayEnd);
+
+	int nG = piGPtArrayEnd - iGPt;	// nG <- total no. of points in G-region
+
+	RVLMEM_SET_FREE(pMem2A, piGPtArrayEnd);
+
+	RVLMEM_SET_FREE(pMem2B, piGBndPtArrayEnd);
+
+	// iBoundaryGEnd = piBoundaryGEnd -  iBoundaryPtBuff;	// documentation
+
+	//#ifdef RVLPLANARSURFELDETECTOR_EDGE_BOUNDARY_DEBUG
+	//	debugPtArray.Element = iPtBuff;	
+	//
+	//	int *piPtDebug = iPtBuff;
+	//
+	//	for (int *piPt = iBoundaryPtBuff; piPt < piBoundaryGEnd; piPt++)
+	//		if (pSurfels->surfelMap[*piPt] == iSurfel)
+	//			*(piPtDebug++) = *piPt;
+	//
+	//	debugPtArray.n = piPtDebug - debugPtArray.Element;
+	//#endif
+
+	/// Detect connected components of W.
+	/// nWCC <- total no. of connected components.
+	/// For each boundary point i of every connected component j of W-region, where j = 0, 1, ..., nWCC-1
+	///     map[i] <- j
+	///     distanceMap[i] <- 0
+	/// end for.
+
+	// For all vertices i in G-region pSurfels->surfelMap[i] <- nSurfels 
+
+	int nSurfels = pMesh->NodeArray.n;
+
+	int iPt, iPt_;
+
+	for (piPt = iGPt; piPt < piGPtArrayEnd; piPt++)
+	{
+		iPt = *piPt;
+
+		pSurfels->surfelMap[iPt] = nSurfels;
+	}
+
+#ifdef RVLPLANARSURFELDETECTOR_G_REGION_DEBUG
+	SaveWGB(pMesh, pSurfels, iSurfel, nSurfels, iSurfel_);
+
+	if (bDebug)
+	{
+		FILE *fpSurfels = fopen("C:\\RVL\\Debug\\PSDSurfels.txt", "w");
+
+		fprintf(fpSurfels, "%f\t%f\t%f\t%f\t%f\t%f\n", pSurfel->P[0], pSurfel->P[1], pSurfel->P[2], pSurfel->N[0], pSurfel->N[1], pSurfel->N[2]);
+		fprintf(fpSurfels, "%f\t%f\t%f\t%f\t%f\t%f\n", pSurfel_->P[0], pSurfel_->P[1], pSurfel_->P[2], pSurfel_->N[0], pSurfel_->N[1], pSurfel_->N[2]);
+
+		fclose(fpSurfels);
+	}
+#endif
+
+	// 
+
+	int nWCC = 0;
+
+	//int *iWCCPtArray = piGEnd;
+	int *iWCCPt;
+
+	RVLMEM_ALLOC_STRUCT_ARRAY(pMem2A, int, nMeshPts, iWCCPt);
+
+	int *iWCCPtArrayEnd = iWCCPt;
+
+#ifdef RVLPLANARSURFELDETECTOR_CONNECTED_COMPONENT_DEBUG
+	debugState = 0;
+#endif
+
+	MeshEdgePtr *pEdgePtr;
+	MeshEdge *pEdge;
+
+	for (piPt = iGBndPt; piPt < piGBndPtArrayEnd; piPt++)
+	{
+		iPt = *piPt;
+
+		if (pSurfels->surfelMap[iPt] == nSurfels)	// Is this condition necessary ?
+		{
+			// Find a point iPt_, which is a neighbor of iPt, belongs to W-region and doesn't belong to any already detected connected component of W-region.
+			// This point is used as the seed for new connected component of W-region.
+
+			pEdgePtr = pMesh->NodeArray.Element[iPt].EdgeList.pFirst;
+
+			while (pEdgePtr)
+			{
+				RVLPCSEGMENT_GRAPH_GET_NEIGHBOR(iPt, pEdgePtr, pEdge, iPt_);
+
+				if (pSurfels->surfelMap[iPt_] == iSurfel)
+					if (map[iPt_] < 0)
+					{
+						// iPt_ is the seed for new connected component of W-region.
+
+						nWCC++;
+
+						ConnectedComponent(pMesh, pSurfels, iPt_, iSurfel, nWCC, iWCCPtArrayEnd, map, distanceMap);
+					}
+
+				pEdgePtr = pEdgePtr->pNext;
+			}
+		}
+	}
+
+	///
+
+	if (nWCC > 0)	// Check if there are connected components of W-region. If nWCC = 0, then W-region is completely covered by G-region.
+	{
+		// iWCC = iWCCPtArray - iPtBuff;		// documentation
+		//int iWCCPtArrayEnd = iWCCPtArrayEnd - iPtBuff;
+
+#ifdef RVLPLANARSURFELDETECTOR_CONNECTED_COMPONENT_DEBUG
+		debugPtArray.Element = iWCCPtArray;
+		debugPtArray.n = iWCCPtArrayEnd - iWCCPtArray;
+
+		nWCC = 1;
+#endif
+
+		/// If there are multiple connected components of W-region, then connect them into a single connected component.
+
+		int nDistanceMatrixElements = nWCC * nWCC;
+
+		unsigned int *distanceMatrix = new unsigned int[nDistanceMatrixElements];
+
+		memset(distanceMatrix, 0xff, nDistanceMatrixElements * sizeof(unsigned int));
+
+		MeshEdge **edgeMatrix = new MeshEdge *[nDistanceMatrixElements];
+
+		PSD::DistanceComputationData distCompData;
+
+		distCompData.distanceMap = distanceMap;
+		distCompData.distanceMatrix = distanceMatrix;
+		distCompData.edgeMatrix = edgeMatrix;
+		distCompData.map = map;
+		distCompData.nRegions = nWCC;
+
+		// Compute distances between the connected components of W-region.
+		// For each point of G-region, the corresponding element of map is set to the index of the closest connected component of W-region 
+		// and the corresponding element of distanceMap is set to the distance to this connected component.
+
+		piPtFetch = iWCCPt;
+
+		piPtPut = iWCCPtArrayEnd;
+
+		int *piPtDistanceBuffEnd = RegionGrowing<Mesh, Point, MeshEdge, MeshEdgePtr, PSD::DistanceComputationData, PSD::DistanceOperation>(pMesh, &distCompData, piPtFetch, piPtPut);
+
+		RVLMEM_SET_FREE(pMem2A, piPtDistanceBuffEnd);
+
+		if (nWCC > 1)
+		{
+			// Compute the minimum spanning tree of the connected components of W.
+
+			int *tree = new int[nWCC];
+
+			MinimumSpanningTree(distanceMatrix, nWCC, tree);
+
+			// Connect W-region into a single connected component.
+
+			MeshEdge **edgeArray = edgeMatrix + nWCC;
+			int iWCC;
+
+			for (iWCC = 1; iWCC < nWCC; iWCC++, edgeArray += nWCC)
+			{
+				pEdge = edgeArray[tree[iWCC]];
+
+				Connect(pMesh, pEdge, iSurfel, map, distanceMap, pSurfels->surfelMap);
+			}
+
+			delete[] tree;
+
+#ifdef RVLPLANARSURFELDETECTOR_G_REGION_DEBUG
+			SaveWGB(pMesh, pSurfels, iSurfel, nSurfels, iSurfel_);
+#endif
+		}	// if (nWCC > 1)
+
+		delete[] distanceMatrix;
+		delete[] edgeMatrix;
+	}	// if(nWCC > 0)
+
+	G.Element = iGPt;
+	G.n = nG;
+	GBnd.Element = iGBndPt;
+	GBnd.n = piGBndPtArrayEnd - iGBndPt;
+	WBnd.Element = iWCCPt;
+	WBnd.n = iWCCPtArrayEnd - iWCCPt;
+
+	return (nWCC > 0);
+}
