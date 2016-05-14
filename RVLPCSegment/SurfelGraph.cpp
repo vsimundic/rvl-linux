@@ -42,7 +42,7 @@ void SurfelGraph::GetNeighbors(
 
 	QList<MeshEdgePtr> *pEdgeList = &(pSurfel->EdgeList);
 
-	QLIST::Index *pPtIdx = pSurfel->PtList.pFirst;
+	QLIST::Index2 *pPtIdx = pSurfel->PtList.pFirst;
 
 	int iPt, iPt_;
 	int iSurfel_;
@@ -183,10 +183,7 @@ void SURFEL::CreateFromPoint(
 
 	pSurfel->d = RVLDOTPRODUCT3(N, P);
 
-	int *RGB = pSurfel->RGB;
-	unsigned char *RGB_ = pPt->RGB;
-
-	RVLCONVTOINT3(RGB_, RGB);
+	RVLCOPY3VECTOR(pPt->RGB, pSurfel->RGB);
 
 	pSurfel->r0 = pSurfel->d / RVLDOTPRODUCT3(N, P0);
 }
@@ -200,14 +197,14 @@ void SURFEL::GetPoint(
 {
 	RVLCOPY3VECTOR(pSurfel->P, pPoint->P);
 	RVLCOPY3VECTOR(pSurfel->N, pPoint->N);
-	RVLCONVTOUCHAR3(pSurfel->RGB, pPoint->RGB);
+	RVLCOPY3VECTOR(pSurfel->RGB, pPoint->RGB);
 }
 
 void SurfelGraph::Init(int nPoints)
 {
 	Clear();
 
-	PtMem = new QLIST::Index[nPoints];
+	PtMem = new QLIST::Index2[nPoints];
 	surfelMap = new int[nPoints];
 	NodeArray.Element = new Surfel[nPoints];
 }
@@ -266,7 +263,7 @@ void SurfelGraph::DisplayHardEdges(
 {
 	Surfel *pSurfel = NodeArray.Element + iSurfel;
 
-	QLIST::Index *pPtIdx = pSurfel->PtList.pFirst;
+	QLIST::Index2 *pPtIdx = pSurfel->PtList.pFirst;
 
 	int iPt, iPt_;
 	MeshEdgePtr *pEdgePtr;
@@ -689,7 +686,7 @@ void SurfelGraph::DisplaySurfelBoundary(
 	int iSurfel,
 	unsigned char *Color)
 {
-	QList<QLIST::Index> *pSurfelPtList = &(NodeArray.Element[iSurfel].PtList);
+	QList<QLIST::Index2> *pSurfelPtList = &(NodeArray.Element[iSurfel].PtList);
 
 	QList<QLIST::Index> Boundary;
 

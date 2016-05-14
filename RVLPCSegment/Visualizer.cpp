@@ -155,6 +155,25 @@ void Visualizer::PaintPoint(
 }
 
 void Visualizer::PaintPointSet(
+	QList<QLIST::Index2> *piPtList,
+	vtkSmartPointer<vtkPolyData> &pd,
+	unsigned char *Color)
+{
+	vtkSmartPointer<vtkUnsignedCharArray> rgbPointData;
+
+	rgbPointData = rgbPointData->SafeDownCast(pd->GetPointData()->GetArray("RGB"));
+
+	QLIST::Index2 *pPtIdx = piPtList->pFirst;
+
+	while (pPtIdx)
+	{
+		rgbPointData->SetTupleValue(pPtIdx->Idx, Color);
+
+		pPtIdx = pPtIdx->pNext;
+	}
+}
+
+void Visualizer::PaintPointSet(
 	QList<QLIST::Index> *piPtList,
 	vtkSmartPointer<vtkPolyData> &pd,
 	unsigned char *Color)

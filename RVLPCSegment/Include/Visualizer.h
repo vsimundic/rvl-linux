@@ -24,6 +24,10 @@ namespace RVL
 			vtkSmartPointer<vtkPolyData> &pd,
 			unsigned char *Color);
 		void PaintPointSet(
+			QList<QLIST::Index2> *piPtList,
+			vtkSmartPointer<vtkPolyData> &pd,
+			unsigned char *Color);
+		void PaintPointSet(
 			QList<QLIST::Index> *piPtList,
 			vtkSmartPointer<vtkPolyData> &pd,
 			unsigned char *Color);

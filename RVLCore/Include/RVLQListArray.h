@@ -259,6 +259,13 @@ namespace RVL
 			Index *pNext;
 		};
 
+		struct Index2
+		{
+			int Idx;
+			Index2 *pNext;
+			Index2 **pPtrToThis;
+		};
+
 		void CopyToArray(QList<Index> *pList, Array<int> *pArray);
 
 		template<typename T>

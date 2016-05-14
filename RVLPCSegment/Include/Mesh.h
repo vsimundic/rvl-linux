@@ -76,7 +76,7 @@ namespace RVL
 
 	struct Point
 	{
-		unsigned char RGB[3];			// color
+		int RGB[3];			// color
 		float P[3];						// position
 		float N[3];						// normal
 		QList<MeshEdgePtr> EdgeList;	// edge list (list of edge connectors)
@@ -110,7 +110,7 @@ namespace RVL
 				int &iPt,
 				MeshEdgePtr *&pEdgePtr);
 			void Boundary(
-				QList<QLIST::Index> *pInPtList,
+				QList<QLIST::Index2> *pInPtList,
 				int *Map,
 				QList<QLIST::Index> *pOutPtArray,
 				QLIST::Index *pMem);

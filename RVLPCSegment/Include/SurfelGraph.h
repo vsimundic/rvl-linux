@@ -8,7 +8,7 @@ namespace RVL
 {
 	struct Surfel
 	{
-		QList<QLIST::Index> PtList;
+		QList<QLIST::Index2> PtList;
 		//QList<QLIST::Index> Boundary;
 		float P[3];		// centroid
 		float N[3];		// normal
@@ -79,7 +79,7 @@ namespace RVL
 			unsigned char *Color);
 
 	public:		
-		QLIST::Index *PtMem;
+		QLIST::Index2 *PtMem;
 		int *surfelMap;
 	private:
 		bool *bConnected;

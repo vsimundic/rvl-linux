@@ -14,6 +14,7 @@
 #define RVLPLANARSURFELDETECTOR_POLYGONALIZE_BOUNDARY
 //#define RVLPLANARSURFELDETECTOR_POLYGONALIZE_BOUNDARY_2
 
+#define RVLPLANARSURFELDETECTOR_PSEUDO_RANDOM_DEBUG
 //#define RVLPLANARSURFELDETECTOR_CONNECTED_COMPONENT_DEBUG
 #define RVLPLANARSURFELDETECTOR_G_REGION_DEBUG
 //#define RVLPLANARSURFELDETECTOR_EDGE_BOUNDARY_DEBUG
@@ -25,6 +26,9 @@
 #endif
 #ifndef RVLPLANARSURFELDETECTOR_CUT_PROPAGATION_DEBUG
 #define RVLPLANARSURFELDETECTOR_CUT_PROPAGATION_DEBUG
+#endif
+#ifndef RVLPLANARSURFELDETECTOR_PSEUDO_RANDOM_DEBUG
+#define RVLPLANARSURFELDETECTOR_PSEUDO_RANDOM_DEBUG
 #endif
 #endif
 
@@ -112,7 +116,7 @@ namespace RVL
 		float kNormal2;
 		float kPlane2;
 		float distThr;
-		Point *pPtTemplate;
+		Surfel *pTemplate;
 		int iSurfel;
 		int *surfelMap;
 		int *buffer;
@@ -121,6 +125,7 @@ namespace RVL
 		float *costMap;
 		float *costBuffer;
 		int iAttackedSurfel;
+		int GID;
 #endif
 #endif
 		unsigned char mode;
@@ -165,21 +170,19 @@ namespace RVL
 			MeshEdge *pEdge,
 			Mesh *pMesh,
 			ReassignToBData *pData);
+		template<typename T1, typename T2>
 		inline void VertexDist(
-			Point *pPt1,
-			Point *pPt2,
+			T1 *pPt1,
+			T2 *pPt2,
 			float &distRGB,
 			float &distN,
 			float &distP)
 		{
-			int RGB1[3], RGB2[3];
 			int V3Tmp[3];
 			float dN[3];
 			float dP[3];
 
-			RVLCONVTOINT3(pPt1->RGB, RGB1);
-			RVLCONVTOINT3(pPt2->RGB, RGB2);
-			RVLDIF3VECTORS(RGB2, RGB1, V3Tmp);
+			RVLDIF3VECTORS(pPt2->RGB, pPt1->RGB, V3Tmp);
 
 			distRGB = (float)(RVLDOTPRODUCT3(V3Tmp, V3Tmp));
 
@@ -248,7 +251,8 @@ namespace RVL
 			int iSurfel_,
 			Array<int> &G,
 			Array<int> &GBnd,
-			Array<int> &WBnd);
+			Array<int> &WBnd,
+			bool *&bPrevW);
 		void ConnectedComponent(
 			Mesh *pMesh,
 			SurfelGraph *pSurfels,
@@ -405,7 +409,7 @@ namespace RVL
 #endif
 			}
 		}
-		void BWConnect(
+		bool BWConnect(
 			Mesh *pMesh,
 			int *map,
 			int WID,
@@ -425,6 +429,14 @@ namespace RVL
 			SurfelGraph *pSurfels,
 			int iSurfel);
 		void ClearProcessed();
+		void GetAttackSeed(
+			Mesh *pMesh,
+			SurfelGraph *pSurfels,
+			int WID,
+			int GID,
+			int BID,
+			Array<int> &BBnd,
+			Array<int> &G);
 #ifdef RVLPLANARSURFELDETECTOR_POLYGONALIZE_BOUNDARY
 		void GetEdgeMidPoint(
 			Mesh *pMesh,
