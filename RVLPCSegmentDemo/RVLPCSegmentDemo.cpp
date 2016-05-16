@@ -72,7 +72,19 @@ int main(int argc, char ** argv)
 
 	detector.Init(&mesh, &surfels, &mem);
 
+	detector.pTimer = new CRVLTimer;
+
+	printf("Segmentation to surfels...");
+
+	double StartTime = detector.pTimer->GetTime();
+
 	detector.Segment(&mesh, &surfels);
+
+	double ExecTime = detector.pTimer->GetTime() - StartTime;
+
+	printf("completed.\n");
+	printf("No. of surfels = %d\n", surfels.NodeArray.n);
+	printf("Total segmentation time = %lf s\n", ExecTime);
 
 	// Display mesh.
 
@@ -92,6 +104,8 @@ int main(int argc, char ** argv)
 	visualizer.Run();
 
 	// free memory
+
+	delete detector.pTimer;
 
 	return 0;
 }

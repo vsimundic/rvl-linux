@@ -18,6 +18,7 @@ namespace RVL
 		float r0;		// distance 
 		QList<MeshEdgePtr> EdgeList;
 		Surfel *pNext;
+		int size;
 	};
 
 	class SurfelGraph;

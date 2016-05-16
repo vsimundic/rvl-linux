@@ -14,9 +14,9 @@
 #define RVLPLANARSURFELDETECTOR_POLYGONALIZE_BOUNDARY
 //#define RVLPLANARSURFELDETECTOR_POLYGONALIZE_BOUNDARY_2
 
-#define RVLPLANARSURFELDETECTOR_PSEUDO_RANDOM_DEBUG
+//#define RVLPLANARSURFELDETECTOR_PSEUDO_RANDOM_DEBUG
 //#define RVLPLANARSURFELDETECTOR_CONNECTED_COMPONENT_DEBUG
-#define RVLPLANARSURFELDETECTOR_G_REGION_DEBUG
+//#define RVLPLANARSURFELDETECTOR_G_REGION_DEBUG
 //#define RVLPLANARSURFELDETECTOR_EDGE_BOUNDARY_DEBUG
 //#define RVLPLANARSURFELDETECTOR_CUT_PROPAGATION_DEBUG
 
@@ -130,6 +130,9 @@ namespace RVL
 #endif
 		unsigned char mode;
 		int iPtSeed;
+		int maxSize;
+		int size;
+		int dSize;
 	};
 
 	namespace PSD
@@ -508,6 +511,7 @@ namespace RVL
 		int minSurfelSize;
 		float maxRange;
 		unsigned char *mProcessed;
+		CRVLTimer *pTimer;
 #ifdef RVLPLANARSURFELDETECTOR_EDGE_BOUNDARY_DEBUG
 		int debugDefineBoundaryiSurfel;
 		int debugDefineBoundaryiSurfel_;

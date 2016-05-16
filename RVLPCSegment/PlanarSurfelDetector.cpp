@@ -35,6 +35,7 @@ PlanarSurfelDetector::PlanarSurfelDetector()
 	GSeedMem = NULL;
 	neighborMem = NULL;
 	GSeedListArray.Element = NULL;
+	pTimer = NULL;
 
 #ifdef RVLPLANARSURFELDETECTOR_DEBUG
 	iPtBuffDebug = NULL;
@@ -45,8 +46,8 @@ PlanarSurfelDetector::PlanarSurfelDetector()
 	//debugDefineBoundaryiSurfel_ = 11;
 	//debugDefineBoundaryiSurfel = 0;
 	//debugDefineBoundaryiSurfel_ = 28;
-	debugDefineBoundaryiSurfel = 27;
-	debugDefineBoundaryiSurfel_ = 101;
+	debugDefineBoundaryiSurfel = 2;
+	debugDefineBoundaryiSurfel_ = 3;
 #endif
 }
 
@@ -246,6 +247,9 @@ int PSD::RegionGrowingOperation(
 
 		if (pData->surfelMap[iNode] != pData->iAttackedSurfel)
 			return -1;	// iNode does not belong to G.
+
+		if (pData->size > pData->maxSize)
+			return -1;	// Maximum size is exceeded.
 	}
 
 	{
@@ -302,6 +306,8 @@ int PSD::RegionGrowingOperation(
 #endif
 #endif
 #endif
+							pData->size += pData->dSize;
+
 							return 1;	// iNode belongs to G.
 						}
 					}
@@ -385,7 +391,6 @@ void PlanarSurfelDetector::Segment(
 	int iPtSeed;
 	int *piPtFetch, *piPtPut, *piPtBuffEnd, *piPt, *piBoundaryPt;
 	Point *pPt;
-	Point ptTemplate;
 	MESH::Distribution distribution;
 	//Surfel *pSurfel_;
 	QList<MeshEdgePtr> *pEdgeList;
@@ -490,7 +495,8 @@ void PlanarSurfelDetector::Segment(
 
 			// Final region growing
 
-			data.kNormal2 = 0.0f;
+			//data.kNormal2 = 0.0f;
+			data.kNormal2 = 4.0f;
 
 			piPtFetch = piPtPut = iPtBuff;
 
@@ -499,8 +505,12 @@ void PlanarSurfelDetector::Segment(
 			regionGrowingBuffer[data.iPtSeed] = iSurfel;
 
 			data.mode = RVLPLANARSURFELDETECTOR_REGIONGROWING_MODE_SURFEL_DETECTION;
+			data.size = 0;
+			data.dSize = 1;
 
 			piPtBuffEnd = RegionGrowing<Mesh, Point, MeshEdge, MeshEdgePtr, PlanarSurfelDetectorRegionGrowingData, PSD::RegionGrowingOperation>(pMesh, &data, piPtFetch, piPtPut);
+
+			pSurfel->size = data.size;
 
 			// Form the final surfel point set
 
@@ -697,6 +707,9 @@ void PlanarSurfelDetector::DefineBoundary(
 	int iSurfel,
 	int iSurfel_)
 {
+	Surfel *pSurfel = pSurfels->NodeArray.Element + iSurfel;
+	Surfel *pSurfel_ = pSurfels->NodeArray.Element + iSurfel_;
+
 	CRVLMem *pMem2A = &(Mem2A);
 
 	pMem2A->Clear();
@@ -757,6 +770,10 @@ void PlanarSurfelDetector::DefineBoundary(
 
 	G_.Element = G.Element + G.n;
 
+	data.size = 0;
+	data.maxSize = nMeshPts;
+	data.dSize = 0;
+
 	GetAttackSeed(pMesh, pSurfels, iSurfel_, nSurfels, iSurfel, G, G_);
 
 #ifdef RVLPLANARSURFELDETECTOR_G_REGION_DEBUG
@@ -771,6 +788,11 @@ void PlanarSurfelDetector::DefineBoundary(
 #endif
 
 	// Attack iSurfel_ by iSurfel.
+
+	data.size = 0;
+	//data.maxSize = 4 * pSurfel_->size;
+	data.maxSize = 1000;
+	data.dSize = 1;
 
 	Array<int> GBnd, WBnd;
 	int i;
@@ -805,7 +827,7 @@ void PlanarSurfelDetector::DefineBoundary(
 			map[iPt] = -1;
 			distanceMap[iPt] = 0xffffffff;		
 
-			if (pSurfels->surfelMap[iPt] == nSurfels)
+			if (pSurfels->surfelMap[iPt] != iSurfel_)
 				*(iGPt++) = iPt;
 		}
 
@@ -835,6 +857,10 @@ void PlanarSurfelDetector::DefineBoundary(
 	int nSeed = G.n;
 
 	bool bW_ = GRegion(pMesh, pSurfels, data, iSurfel, iSurfel_, G, GBnd, WBnd, bPrevW);
+
+	data.maxSize = nMeshPts;
+	data.dSize = 0;
+	data.size = 0;
 
 	for (i = 0; i < G.n; i++)
 	{
@@ -1110,9 +1136,10 @@ void PlanarSurfelDetector::DefineBoundary(
 	int *piGPtArrayEnd = G.Element + G.n;
 	int nG = G.n;
 
+	int *piPt;
+
 	int *iGEdgeBuff;
 	int *piGEdgeBuffEnd;
-	int *piPt;
 
 	if (bW_)
 	{		
@@ -1121,6 +1148,7 @@ void PlanarSurfelDetector::DefineBoundary(
 		int *iWCCPt = WBnd.Element;
 		int *iWCCPtArrayEnd = WBnd.Element + WBnd.n;
 
+//#ifdef NEVER	// switch off cut propagation
 		/// Determine the boundary between surfels iSurfel and iSurfel_ by cut propagation.		
 
 		// Allocate memory for a buffer used by CutPropagation().
@@ -1258,6 +1286,7 @@ void PlanarSurfelDetector::DefineBoundary(
 		//	pSurfels->surfelMap[*piPt_] = nSurfels;
 
 		RVLMEM_ALLOC_LOCAL_FREE(pMem2A);
+//#endif		// switch off cut propagation
 
 		// Reset map and distanceMap.
 
@@ -1289,6 +1318,7 @@ void PlanarSurfelDetector::DefineBoundary(
 //			int debug = 0;
 //#endif
 
+//#ifdef NEVER		// switch off cut propagation
 	/// Grow B-region util reaching the cut.
 
 	int *iExpBPtBuff;
@@ -1360,6 +1390,8 @@ void PlanarSurfelDetector::DefineBoundary(
 		}
 	}
 
+//#endif	// switch off cut propagation
+
 //#ifdef RVLPLANARSURFELDETECTOR_DEBUG
 //	// Only for debugging purpose!
 //	// Check if all edgeFlags are set to 0x00 and whole cutCostMap to 0xffffffff
@@ -1370,9 +1402,6 @@ void PlanarSurfelDetector::DefineBoundary(
 //#endif
 
 	// Reassign points to surfels.
-
-	Surfel *pSurfel = pSurfels->NodeArray.Element + iSurfel;
-	Surfel *pSurfel_ = pSurfels->NodeArray.Element + iSurfel_;
 
 	QList<QLIST::Index2> *pW = &(pSurfel->PtList);
 	//QList<QLIST::Index> *pG = &G;
@@ -3255,6 +3284,9 @@ void PlanarSurfelDetector::DefinePolygon(
 	Surfel *pSurfel = pSurfels->NodeArray.Element + iSurfel_;
 
 	regionGrowingData.pTemplate = pSurfel;
+	regionGrowingData.maxSize = nPts;
+	regionGrowingData.size = 0;
+	regionGrowingData.dSize = 0;
 
 	GetNeighbors(pMesh, pSurfels, iSurfel_);
 
