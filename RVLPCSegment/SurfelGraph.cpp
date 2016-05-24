@@ -13,12 +13,13 @@ SurfelGraph::SurfelGraph()
 {
 	PtMem = NULL;
 	surfelBndMem = NULL;
-	bConnected = NULL;
+	surfelBndMem2 = NULL;
+	neighborEdge = NULL;
 	surfelMap = NULL;
-	//surfelBndMap = NULL;
 	nodeColor = NULL;
 	NodeArray.Element = NULL;
 	edgeMarkMap = NULL;
+	EdgeArray.Element = NULL;
 }
 
 
@@ -27,116 +28,18 @@ SurfelGraph::~SurfelGraph()
 	Clear();
 }
 
-void SurfelGraph::InitGetNeighborsBoundaryAndSize(Mesh *pMesh)
+void SurfelGraph::InitGetNeighborsBoundaryAndSize()
 {
-	RVL_DELETE_ARRAY(bConnected);
+	neighborEdge = new SURFEL::Edge *[NodeArray.n];
 
-	bConnected = new bool[NodeArray.n];
+	memset(neighborEdge, 0, NodeArray.n * sizeof(SURFEL::Edge *));
 
-	memset(bConnected, 0, NodeArray.n * sizeof(bool));
-
-	memset(edgeMarkMap, 0, pMesh->EdgeArray.n * sizeof(unsigned char));
-}
-
-void SurfelGraph::GetNeighborsBoundaryAndSize(
-	int iSurfel,
-	Mesh *pMesh,
-	CRVLMem *pMem)
-{
-	Surfel *pSurfel = NodeArray.Element + iSurfel;
-
-	QList<MeshEdgePtr> *pEdgeList = &(pSurfel->EdgeList);
-
-	QLIST::Index2 *pPtIdx = pSurfel->PtList.pFirst;
-
-	pSurfel->size = 0;
-
-	int iPt, iPt_;
-	int iSurfel_;
-	Point *pPt;
-	MeshEdgePtr *pEdgePtr, *pSEdgePtr;
-	MeshEdge *pEdge, *pSEdge;
-	Surfel *pSurfel_;
-	QList<MeshEdgePtr> *pEdgeList_;
-	bool bBoundary;
-
-	while (pPtIdx)	// for each surfel point 
-	{
-		pSurfel->size++;
-
-		iPt = pPtIdx->Idx;
-
-		//if (markMap[iPt] == 0)
-		{
-			//markMap[iPt] = 1;
-
-			pPt = pMesh->NodeArray.Element + iPt;
-
-			//bBoundary = false;
-
-			//if (pPt->bBoundary)
-
-			pEdgePtr = pPt->EdgeList.pFirst;
-
-			while (pEdgePtr)	// for each neighbor of pPt
-			{
-				RVLPCSEGMENT_GRAPH_GET_NEIGHBOR(iPt, pEdgePtr, pEdge, iPt_);
-
-				iSurfel_ = surfelMap[iPt_];
-
-				if (iSurfel_ != iSurfel)
-
-				if (iSurfel_ > iSurfel)
-				{
-					if (!bConnected[iSurfel_])
-					{
-						bConnected[iSurfel_] = true;
-
-						RVLMEM_ALLOC_STRUCT(pMem, MeshEdge, pSEdge);
-
-						pSEdge->iVertex[0] = iSurfel;
-						pSEdge->iVertex[1] = iSurfel_;
-
-						RVLMEM_ALLOC_STRUCT(pMem, MeshEdgePtr, pSEdgePtr);
-
-						pSEdgePtr->pEdge = pSEdge;
-
-						RVLQLIST_ADD_ENTRY(pEdgeList, pSEdgePtr);
-
-						pSurfel_ = NodeArray.Element + iSurfel_;
-
-						pEdgeList_ = &(pSurfel_->EdgeList);
-
-						RVLMEM_ALLOC_STRUCT(pMem, MeshEdgePtr, pSEdgePtr);
-
-						pSEdgePtr->pEdge = pSEdge;
-
-						RVLQLIST_ADD_ENTRY(pEdgeList_, pSEdgePtr);
-					}
-				}
-
-				pEdgePtr = pEdgePtr->pNext;
-			}	// for each neighbor of pPt
-		}
-
-		pPtIdx = pPtIdx->pNext;
-	}	// for each surfel point 
-
-	pSEdgePtr = pEdgeList->pFirst;
-
-	while (pSEdgePtr)
-	{
-		RVLPCSEGMENT_GRAPH_GET_NEIGHBOR(iSurfel, pSEdgePtr, pSEdge, iSurfel_);
-
-		bConnected[iSurfel_] = false;
-
-		pSEdgePtr = pSEdgePtr->pNext;
-	}
+	memset(edgeMarkMap, 0, nMeshEdges * sizeof(unsigned char));
 }
 
 void SurfelGraph::FreeGetNeighborsBoundaryAndSize()
 {
-	RVL_DELETE_ARRAY(bConnected);
+	RVL_DELETE_ARRAY(neighborEdge);
 }
 
 void SURFEL::ComputeParameters(
@@ -227,8 +130,10 @@ void SurfelGraph::Init(Mesh *pMesh)
 
 	nMeshVertices = pMesh->NodeArray.n;
 	nMeshEdges = pMesh->EdgeArray.n;
+
 	PtMem = new QLIST::Index2[nMeshVertices];
-	surfelBndMem = new int[nMeshVertices];
+	surfelBndMem = new MeshEdgePtr *[2 * nMeshEdges];
+	surfelBndMem2 = new Array<MeshEdgePtr *>[nMeshEdges];
 	surfelMap = new int[nMeshVertices];
 	//surfelBndMap = new QLIST::Index2[nPoints];
 	NodeArray.Element = new Surfel[nMeshVertices];
@@ -240,12 +145,14 @@ void SurfelGraph::Clear()
 {
 	RVL_DELETE_ARRAY(PtMem);
 	RVL_DELETE_ARRAY(surfelBndMem);
-	RVL_DELETE_ARRAY(bConnected);
+	RVL_DELETE_ARRAY(surfelBndMem2);
 	RVL_DELETE_ARRAY(surfelMap);
 	//RVL_DELETE_ARRAY(surfelBndMap);
 	RVL_DELETE_ARRAY(nodeColor);
 	RVL_DELETE_ARRAY(NodeArray.Element);
 	RVL_DELETE_ARRAY(edgeMarkMap);
+	RVL_DELETE_ARRAY(neighborEdge);
+	RVL_DELETE_ARRAY(EdgeArray.Element);
 }
 
 void SurfelGraph::NodeColors(unsigned char *SelectionColor)
@@ -300,14 +207,17 @@ void SurfelGraph::DisplayHardEdges(
 	int iSurfel_;
 	//Surfel *pSurfel_;
 	bool bEdge;
+	Point *pPt;
 
 	while (pPtIdx)
 	{
 		iPt = pPtIdx->Idx;
 
+		pPt = pMesh->NodeArray.Element + iPt;
+
 		bEdge = false;
 
-		pEdgePtr = pSurfel->EdgeList.pFirst;
+		pEdgePtr = pPt->EdgeList.pFirst;
 
 		while (pEdgePtr)
 		{

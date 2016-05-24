@@ -4,23 +4,11 @@
 #define RVLSURFEL_DISPLAY_MODE_BOUNDARY			1
 #define RVLSURFEL_DISPLAY_MODE_NEIGHBOR_PAIR	2
 
+#define RVLSURFEL_EDGE_FLAG_HARD				0x01
+#define RVLSURFEL_EDGE_FLAG_CONVEX				0x02
+
 namespace RVL
 {
-	struct Surfel
-	{
-		QList<QLIST::Index2> PtList;
-		Array<Array<MeshEdgePtr *>> BoundaryArray;
-		float P[3];		// centroid
-		float N[3];		// normal
-		float d;		// plane offset
-		int RGB[3];		// average color
-		float P0[3];	// central point
-		float r0;		// distance 
-		QList<MeshEdgePtr> EdgeList;
-		Surfel *pNext;
-		int size;
-	};
-
 	class SurfelGraph;
 
 	namespace SURFEL
@@ -37,18 +25,46 @@ namespace RVL
 			int iSelectedSurfel2;
 			int iSelection;
 		};
+
+		struct EdgePtr;
+
+		struct Edge
+		{
+			int iVertex[2];
+			EdgePtr *pVertexEdgePtr[2];
+			unsigned char flags;
+			int idx;
+			Edge *pNext;
+		};
+
+		struct EdgePtr
+		{
+			Edge *pEdge;
+			EdgePtr *pNext;
+		};
 	}
+
+	struct Surfel
+	{
+		QList<QLIST::Index2> PtList;
+		Array<Array<MeshEdgePtr *>> BoundaryArray;
+		float P[3];		// centroid
+		float N[3];		// normal
+		float d;		// plane offset
+		int RGB[3];		// average color
+		float P0[3];	// central point
+		float r0;		// distance 
+		QList<SURFEL::EdgePtr> EdgeList;
+		Surfel *pNext;
+		int size;
+	};
 
 	class SurfelGraph : public Graph < Surfel, MeshEdge, MeshEdgePtr >
 	{
 	public:
 		SurfelGraph();
 		virtual ~SurfelGraph();
-		void GetNeighborsBoundaryAndSize(
-			int iSurfel,
-			Mesh *pMesh,
-			CRVLMem *pMem);
-		void InitGetNeighborsBoundaryAndSize(Mesh *pMesh);
+		void InitGetNeighborsBoundaryAndSize();
 		void FreeGetNeighborsBoundaryAndSize();
 		void NodeColors(unsigned char *SelectionColor);
 		void Display(
@@ -89,13 +105,16 @@ namespace RVL
 		int nMeshEdges;
 		QLIST::Index2 *PtMem;
 		int *surfelMap;
-		int *surfelBndMem;
+		MeshEdgePtr **surfelBndMem;
+		Array<MeshEdgePtr *> *surfelBndMem2;
 		//QLIST::Index2 *surfelBndMap;
+		unsigned char *edgeMarkMap;
+		CRVLMem *pMem;
+		SURFEL::Edge **neighborEdge;
+		Array<SURFEL::Edge *> EdgeArray;
 	private:
-		bool *bConnected;
 		unsigned char *nodeColor;
 		SURFEL::DisplayCallbackData DisplayData;
-		unsigned char *edgeMarkMap;
 	};
 
 	namespace SURFEL

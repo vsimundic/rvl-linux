@@ -16,7 +16,7 @@
 
 //#define RVLPLANARSURFELDETECTOR_PSEUDO_RANDOM_DEBUG
 //#define RVLPLANARSURFELDETECTOR_CONNECTED_COMPONENT_DEBUG
-#define RVLPLANARSURFELDETECTOR_G_REGION_DEBUG
+//#define RVLPLANARSURFELDETECTOR_G_REGION_DEBUG
 //#define RVLPLANARSURFELDETECTOR_EDGE_BOUNDARY_DEBUG
 //#define RVLPLANARSURFELDETECTOR_CUT_PROPAGATION_DEBUG
 
@@ -245,6 +245,13 @@ namespace RVL
 			Mesh *pMesh,
 			int iPt_,
 			int iSurfel_);
+		void GetNeighbors(
+			Mesh *pMesh,
+			SurfelGraph *pSurfels,
+			int iSurfel,
+			QList<SURFEL::Edge> *pEdgeList,
+			int &nEdges,
+			bool bSmall = false);
 		void DisplaySoftEdges(
 			Visualizer *pVisualizer,
 			Mesh *pMesh,
@@ -446,6 +453,10 @@ namespace RVL
 			int BID,
 			Array<int> &BBnd,
 			Array<int> &G);
+		int GetClosestNeighbor(
+			SurfelGraph *pSurfels,
+			int iSurfel,
+			QList<SURFEL::Edge> &neighborList);
 		void JoinSurfel(
 			Mesh *pMesh,
 			SurfelGraph *pSurfels,

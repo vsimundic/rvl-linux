@@ -272,6 +272,19 @@ namespace RVL
 			Index2 **pPtrToThis;
 		};
 
+		template<typename T> struct Ptr
+		{
+			T *ptr;
+			Ptr<T> *pNext;
+		};
+
+		template<typename T> struct Ptr2
+		{
+			T *ptr;
+			Ptr2<T> *pNext;
+			Ptr2<T> **pPtrToThis;
+		};
+
 		void CopyToArray(QList<Index> *pList, Array<int> *pArray);
 
 		template<typename T>

@@ -175,5 +175,43 @@ namespace RVL
 
 		return piNodeFetch;
 	}
+
+	template<typename NodeType, typename EdgeType, typename EdgePtrType>
+	inline EdgeType *ConnectNodes(
+		int iNode1,
+		int iNode2,
+		Array<NodeType> &NodeArray,
+		CRVLMem *pMem
+		)
+	{
+		NodeType *pNode1 = NodeArray.Element + iNode1;
+		NodeType *pNode2 = NodeArray.Element + iNode2;
+
+		QList<EdgePtrType> *pEdgeList1 = &(pNode1->EdgeList);
+		QList<EdgePtrType> *pEdgeList2 = &(pNode2->EdgeList);
+
+		EdgeType *pEdge;
+
+		RVLMEM_ALLOC_STRUCT(pMem, EdgeType, pEdge);
+
+		pEdge->iVertex[0] = iNode1;
+		pEdge->iVertex[1] = iNode2;
+
+		EdgePtrType *pEdgePtr;
+
+		RVLMEM_ALLOC_STRUCT(pMem, EdgePtrType, pEdgePtr);
+
+		pEdgePtr->pEdge = pEdge;
+
+		RVLQLIST_ADD_ENTRY(pEdgeList1, pEdgePtr);
+
+		RVLMEM_ALLOC_STRUCT(pMem, EdgePtrType, pEdgePtr);
+
+		pEdgePtr->pEdge = pEdge;
+
+		RVLQLIST_ADD_ENTRY(pEdgeList2, pEdgePtr);
+
+		return pEdge;
+	}
 }
 
