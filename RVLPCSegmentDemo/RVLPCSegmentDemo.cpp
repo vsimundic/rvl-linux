@@ -62,7 +62,7 @@ int main(int argc, char ** argv)
 
 	SurfelGraph surfels;
 
-	surfels.Init(mesh.NodeArray.n);
+	surfels.Init(&mesh);
 
 	PlanarSurfelDetector detector;
 
@@ -101,6 +101,7 @@ int main(int argc, char ** argv)
 	visualizer.Create();
 	surfels.InitDisplay(&visualizer, &mesh, &detector);
 	surfels.Display(&visualizer, &mesh);
+	//detector.DisplaySoftEdges(&visualizer, &mesh, &surfels, SelectionColor);
 	visualizer.Run();
 
 	// free memory

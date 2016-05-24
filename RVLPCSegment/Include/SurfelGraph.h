@@ -9,7 +9,7 @@ namespace RVL
 	struct Surfel
 	{
 		QList<QLIST::Index2> PtList;
-		//QList<QLIST::Index> Boundary;
+		Array<Array<MeshEdgePtr *>> BoundaryArray;
 		float P[3];		// centroid
 		float N[3];		// normal
 		float d;		// plane offset
@@ -44,12 +44,12 @@ namespace RVL
 	public:
 		SurfelGraph();
 		virtual ~SurfelGraph();
-		void GetNeighbors(
+		void GetNeighborsBoundaryAndSize(
 			int iSurfel,
 			Mesh *pMesh,
 			CRVLMem *pMem);
-		void InitGetNeighbors();
-		void FreeGetNeighbors();
+		void InitGetNeighborsBoundaryAndSize(Mesh *pMesh);
+		void FreeGetNeighborsBoundaryAndSize();
 		void NodeColors(unsigned char *SelectionColor);
 		void Display(
 			Visualizer *pVisualizer,
@@ -63,7 +63,7 @@ namespace RVL
 			Mesh *pMesh,
 			int iSurfel,
 			unsigned char *Color);
-		void Init(int nPoints);
+		void Init(Mesh *pMesh);
 		void Clear();
 		unsigned char * GetColor(int iSurfel);
 		void PrintData(
@@ -78,15 +78,24 @@ namespace RVL
 			Mesh * pMesh, 
 			int iSurfel,
 			unsigned char *Color);
+		void Save(
+			int iSurfel,
+			Mesh *pMesh,
+			FILE *fpPoints,
+			FILE *fpEdges);
 
-	public:		
+	public:	
+		int nMeshVertices;
+		int nMeshEdges;
 		QLIST::Index2 *PtMem;
 		int *surfelMap;
+		int *surfelBndMem;
+		//QLIST::Index2 *surfelBndMap;
 	private:
 		bool *bConnected;
 		unsigned char *nodeColor;
 		SURFEL::DisplayCallbackData DisplayData;
-		
+		unsigned char *edgeMarkMap;
 	};
 
 	namespace SURFEL

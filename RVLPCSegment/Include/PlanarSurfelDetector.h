@@ -16,7 +16,7 @@
 
 //#define RVLPLANARSURFELDETECTOR_PSEUDO_RANDOM_DEBUG
 //#define RVLPLANARSURFELDETECTOR_CONNECTED_COMPONENT_DEBUG
-//#define RVLPLANARSURFELDETECTOR_G_REGION_DEBUG
+#define RVLPLANARSURFELDETECTOR_G_REGION_DEBUG
 //#define RVLPLANARSURFELDETECTOR_EDGE_BOUNDARY_DEBUG
 //#define RVLPLANARSURFELDETECTOR_CUT_PROPAGATION_DEBUG
 
@@ -245,6 +245,11 @@ namespace RVL
 			Mesh *pMesh,
 			int iPt_,
 			int iSurfel_);
+		void DisplaySoftEdges(
+			Visualizer *pVisualizer,
+			Mesh *pMesh,
+			SurfelGraph *pSurfels,
+			unsigned char *Color);
 	private:
 		bool GRegion(
 			Mesh *pMesh,
@@ -255,7 +260,8 @@ namespace RVL
 			Array<int> &G,
 			Array<int> &GBnd,
 			Array<int> &WBnd,
-			bool *&bPrevW);
+			bool *&bPrevW,
+			bool bGtoW = true);
 		void ConnectedComponent(
 			Mesh *pMesh,
 			SurfelGraph *pSurfels,
@@ -440,6 +446,11 @@ namespace RVL
 			int BID,
 			Array<int> &BBnd,
 			Array<int> &G);
+		void JoinSurfel(
+			Mesh *pMesh,
+			SurfelGraph *pSurfels,
+			int iSurfel,
+			int iSurfel_);
 #ifdef RVLPLANARSURFELDETECTOR_POLYGONALIZE_BOUNDARY
 		void GetEdgeMidPoint(
 			Mesh *pMesh,
@@ -510,6 +521,8 @@ namespace RVL
 		float surfelDistThr;
 		int minSurfelSize;
 		float maxRange;
+		int maxAttackSize;
+		bool bJoinSmallSurfelsToClosestNeighbors;
 		unsigned char *mProcessed;
 		CRVLTimer *pTimer;
 #ifdef RVLPLANARSURFELDETECTOR_EDGE_BOUNDARY_DEBUG

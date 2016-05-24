@@ -12,7 +12,7 @@
 // Input: edge pEdge, node idx. iNode
 // Output: side <- the side of the edge pEdge to which is connected the node iNode 
 
-#define RVLPCSEGMENT_GRAPH_GET_EDGE_SIDE(pEdge, iNode, side) side = (pEdge->iVertex[0] == iNode ? 0 : 1);
+#define RVLPCSEGMENT_GRAPH_GET_EDGE_SIDE(pEdge, iNode) (pEdge->iVertex[0] == iNode ? 0 : 1);
 
 // Input: node idx. iNode, 
 //        connector pEdgePtr connecting an edge to the node iNode
@@ -23,10 +23,11 @@
 #define RVLPCSEGMENT_GRAPH_GET_NEIGHBOR2(iNode, pEdgePtr, pEdge_, iNeighbor, side)\
 {\
 	pEdge_ = pEdgePtr->pEdge;\
-	RVLPCSEGMENT_GRAPH_GET_EDGE_SIDE(pEdge_, iNode, side);\
+	side = RVLPCSEGMENT_GRAPH_GET_EDGE_SIDE(pEdge_, iNode);\
 	iNeighbor = pEdge_->iVertex[1 - side];\
 }
 
+#define RVLPCSEGMENT_GRAPH_GET_NODE(pEdgePtr)	(pEdgePtr->pEdge->pVertexEdgePtr[0] == pEdgePtr ? pEdgePtr->pEdge->iVertex[0] : pEdgePtr->pEdge->iVertex[1])
 
 namespace RVL
 {

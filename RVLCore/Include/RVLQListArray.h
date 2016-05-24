@@ -33,6 +33,12 @@
 		((type *)(pEntry->pNext))->pPtrToThis = pEntry->pPtrToThis;\
 	}}
 
+#define RVLQLIST_MOVE_ENTRY2(pSrcList, pTgtList, pEntry, type)\
+	{\
+		RVLQLIST_REMOVE_ENTRY2(pSrcList, pEntry, type);\
+		RVLQLIST_ADD_ENTRY2(pTgtList, pEntry);\
+	}
+
 #define RVLQLIST_APPEND(pList, pList2)\
 	{if(pList2->pFirst)\
 	{\
@@ -297,6 +303,23 @@ namespace RVL
 			for (pEmptyList = EmptyListArray.Element; pEmptyList < pEmptyListArrayEnd; pEmptyList++, pList++)
 				RVLQLIST_INIT2(pEmptyList, pList)
 		};
+
+		template<typename T>
+		int Size(QList<T> &list)
+		{
+			int size = 0;
+
+			T *pEntry = list.pFirst;
+
+			while (pEntry)
+			{
+				size++;
+
+				pEntry = pEntry->pNext;
+			}
+
+			return size;
+		}
 	}
 }
 

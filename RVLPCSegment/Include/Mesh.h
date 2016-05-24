@@ -114,11 +114,17 @@ namespace RVL
 				int *Map,
 				QList<QLIST::Index> *pOutPtArray,
 				QLIST::Index *pMem);
+			void Boundary(
+				QList<QLIST::Index2> *pInPtList,
+				int *map,
+				Array<Array<MeshEdgePtr *>> &BoundaryArray,
+				MeshEdgePtr **&pBoundaryMem, 
+				unsigned char *edgeMarkMap);
 
 			// For a mesh point index iPt, the function returns true if the point is on the boundary of a region in the map map containing elements with value idx. 
 			// pEdgePtr <- the connector connecting the first region boundar edge in CCW direction.
 
-			bool IsBoundaryPoint(
+			inline bool IsBoundaryPoint(
 				int iPt,
 				int *map,
 				int idx,
@@ -181,6 +187,60 @@ namespace RVL
 				// (all neighbors of vertex iPt belong to another region) or 
 				// ((all neighbors belong to the query region) and (there is no mesh boundary edges in the edge list))
 				// In either case, vertex iPt is not a region boundary point.
+
+				return false;
+			}
+
+			// Input:  iPt - index of a boundary vertex,
+			//         map - map,
+			//         pEdgePtr - the connector connecting edge E to the vertex iPt, where E is the first region boundar edge in CCW direction
+			// Output: pEdgePtr - the connector connecting an edge E' to the vertex iPt, where E' is the next first region boundar edge in CCW direction after E.
+
+			inline bool GetNextBoundaryEdge(
+				int iPt,
+				int *map,
+				MeshEdgePtr *&pEdgePtr)
+			{
+				int idx = map[iPt];
+
+				bool bOut = false;
+
+				MeshEdgePtr *pEdgePtr0 = pEdgePtr;
+
+				pEdgePtr = pEdgePtr->pNext;
+
+				int iPt_;
+				MeshEdge *pEdge;
+
+				while (pEdgePtr)
+				{
+					RVLPCSEGMENT_GRAPH_GET_NEIGHBOR(iPt, pEdgePtr, pEdge, iPt_);
+
+					if (map[iPt_] == idx)
+					{
+						if (bOut)
+							return (pEdgePtr != pEdgePtr0);
+					}
+					else
+						bOut = true;
+
+					pEdgePtr = pEdgePtr->pNext;
+				}
+
+				if (!bOut)
+					return false;
+
+				Point *pPt = NodeArray.Element + iPt;
+
+				if (pPt->bBoundary)
+					return false;
+
+				pEdgePtr = pPt->EdgeList.pFirst;
+
+				RVLPCSEGMENT_GRAPH_GET_NEIGHBOR(iPt, pEdgePtr, pEdge, iPt_);
+
+				if (map[iPt_] == idx)
+					return (pEdgePtr != pEdgePtr0);
 
 				return false;
 			}
