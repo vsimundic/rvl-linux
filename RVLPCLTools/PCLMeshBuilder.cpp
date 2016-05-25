@@ -4,8 +4,10 @@
 #include "PCLPointCloud.h"
 #include <pcl/io/pcd_io.h>
 #include <pcl/io/ply_io.h>
+#include <pcl/surface/organized_fast_mesh.h>
+#include <pcl/filters/fast_bilateral.h>
+#include <pcl/features/normal_3d_omp.h>
 #include "PCLMeshBuilder.h"
-
 
 using namespace RVL;
 

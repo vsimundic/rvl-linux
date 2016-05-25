@@ -326,7 +326,8 @@ void SURFEL::MouseRButtonDown(vtkObject* caller, unsigned long eid, void* client
 
 		if (pData->iSelection == 1)
 		{
-			pData->pVisualizer->PaintPointSet(&(pData->pSurfels->NodeArray.Element[iSurfel].PtList), pMesh->pPolygonData, pData->SelectionColor);
+			if (iSurfel >= 0)
+				pData->pVisualizer->PaintPointSet(&(pData->pSurfels->NodeArray.Element[iSurfel].PtList), pMesh->pPolygonData, pData->SelectionColor);
 
 			pData->iSelectedSurfel = iSurfel;
 

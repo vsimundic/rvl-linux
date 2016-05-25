@@ -621,7 +621,7 @@ void PlanarSurfelDetector::Segment(
 
 			pSurfel++;
 
-			//if (iSurfel > 35)	// debug
+			//if (iSurfel > 0)	// debug
 			//	break;
 		}
 	}	// for every vertex

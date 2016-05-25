@@ -99,7 +99,8 @@ namespace RVL
 		public:
 			Mesh();
 			virtual ~Mesh();
-			void LoadFromPLY(char *PLYFileName);
+			void LoadPolyDataFromPLY(char *PLYFileName);
+			bool CreateOrderedMeshFromPolyData();
 			void ComputeDistribution(
 				Array<int> &PtArray,
 				MESH::Distribution &distribution);
@@ -247,6 +248,7 @@ namespace RVL
 
 		public:
 			vtkSmartPointer<vtkPolyData> pPolygonData;
+			float normalEstimationRadius;
 
 #ifdef RVLMESH_BOUNDARY_DEBUG		
 			int debugState;

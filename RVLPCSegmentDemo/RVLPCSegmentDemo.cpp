@@ -13,6 +13,10 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 #include "Visualizer.h"
 #include "SurfelGraph.h"
 #include "PlanarSurfelDetector.h"
+#include <pcl/common/common.h>
+#include <pcl/PolygonMesh.h>
+#include "PCLTools.h"
+#include "PCLMeshBuilder.h"
 
 using namespace RVL;
 
@@ -55,9 +59,34 @@ int main(int argc, char ** argv)
 	// Read mesh from file.
 
 	Mesh mesh;
+	pcl::PointCloud<pcl::PointXYZRGBA>::Ptr PC(new pcl::PointCloud<pcl::PointXYZRGBA>());
+	pcl::PolygonMesh PCLMesh;
 
-	mesh.LoadFromPLY(MeshFileName);
+	if (strcmp(RVLGETFILEEXTENSION(MeshFileName), "pcd") == 0)
+	{	
+		PCLLoadPCD(MeshFileName, PC);
 
+		PCLMeshBuilder meshBuilder;
+
+		meshBuilder.sigmaS = 5.0f;
+		meshBuilder.sigmaR = 0.002f;
+		meshBuilder.bBilateralFilter = true;
+
+		meshBuilder.CreateMesh(PC, PCLMesh);
+
+		PCLMeshToPolygonData(PCLMesh, mesh.pPolygonData);
+	}
+	else if (strcmp(RVLGETFILEEXTENSION(MeshFileName), "ply") == 0)
+		mesh.LoadPolyDataFromPLY(MeshFileName);
+	else
+	{
+		printf("ERROR: Unknown file format!\n");
+
+		return 1;
+	}		
+
+	mesh.CreateOrderedMeshFromPolyData();
+	
 	// Segment mesh to surfels.
 
 	SurfelGraph surfels;
@@ -101,7 +130,7 @@ int main(int argc, char ** argv)
 	visualizer.Create();
 	surfels.InitDisplay(&visualizer, &mesh, &detector);
 	surfels.Display(&visualizer, &mesh);
-	//detector.DisplaySoftEdges(&visualizer, &mesh, &surfels, SelectionColor);
+	detector.DisplaySoftEdges(&visualizer, &mesh, &surfels, SelectionColor);
 	visualizer.Run();
 
 	// free memory
