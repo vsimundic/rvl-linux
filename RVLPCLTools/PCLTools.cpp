@@ -19,3 +19,10 @@ int RVL::PCLMeshToPolygonData(
 {
 	return pcl::VTKUtils::mesh2vtk(mesh, polygonData);
 }
+
+void RVL::PCLSavePLY(
+	char *FileName,
+	pcl::PolygonMesh &mesh)
+{
+	pcl::io::savePLYFile(FileName, mesh);
+}

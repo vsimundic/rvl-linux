@@ -7,4 +7,8 @@ namespace RVL
 	int PCLMeshToPolygonData(
 		pcl::PolygonMesh &mesh,
 		vtkSmartPointer< vtkPolyData > &polygonData);
+
+	void PCLSavePLY(
+		char *FileName,
+		pcl::PolygonMesh &mesh);
 }

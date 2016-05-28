@@ -17,13 +17,17 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 #include <pcl/PolygonMesh.h>
 #include "PCLTools.h"
 #include "PCLMeshBuilder.h"
+#include "RGBDCamera.h"
 
 using namespace RVL;
+
+#define RVLPCSEGMENT_DEMO_FLAG_SAVE_PLY			0x00000001
 
 void CreateParamList(
 	CRVLParameterList *pParamList,
 	CRVLMem *pMem,
-	char **pMeshFileName)
+	char **pMeshFileName,
+	DWORD &flags)
 {
 	pParamList->m_pMem = pMem;
 
@@ -32,6 +36,8 @@ void CreateParamList(
 	pParamList->Init();
 
 	pParamData = pParamList->AddParam("MeshFileName", RVLPARAM_TYPE_STRING, pMeshFileName);
+	pParamData = pParamList->AddParam("Save PLY", RVLPARAM_TYPE_ID, &flags);
+	pParamList->AddID(pParamData, "yes", RVLPCSEGMENT_DEMO_FLAG_SAVE_PLY);
 }
 
 int main(int argc, char ** argv)
@@ -50,41 +56,90 @@ int main(int argc, char ** argv)
 
 	char *MeshFileName = NULL;
 
+	DWORD flags = 0x00000000;
+
 	CRVLParameterList ParamList;
 
-	CreateParamList(&ParamList, &mem0, &MeshFileName);
+	CreateParamList(&ParamList, &mem0, &MeshFileName, flags);
 
 	ParamList.LoadParams("RVLPCSegmentDemo.cfg");
 
 	// Read mesh from file.
 
+	int w = 640;
+	int h = 480;
+
+	char *fileExtension = RVLGETFILEEXTENSION(MeshFileName);
+
 	Mesh mesh;
-	pcl::PointCloud<pcl::PointXYZRGBA>::Ptr PC(new pcl::PointCloud<pcl::PointXYZRGBA>());
+	pcl::PointCloud<pcl::PointXYZRGBA>::Ptr PC(new pcl::PointCloud<pcl::PointXYZRGBA>(w, h));
 	pcl::PolygonMesh PCLMesh;
 
-	if (strcmp(RVLGETFILEEXTENSION(MeshFileName), "pcd") == 0)
-	{	
-		PCLLoadPCD(MeshFileName, PC);
-
-		PCLMeshBuilder meshBuilder;
-
-		meshBuilder.sigmaS = 5.0f;
-		meshBuilder.sigmaR = 0.002f;
-		meshBuilder.bBilateralFilter = true;
-
-		meshBuilder.CreateMesh(PC, PCLMesh);
-
-		PCLMeshToPolygonData(PCLMesh, mesh.pPolygonData);
-	}
-	else if (strcmp(RVLGETFILEEXTENSION(MeshFileName), "ply") == 0)
+	if (strcmp(fileExtension, "ply") == 0)
 		mesh.LoadPolyDataFromPLY(MeshFileName);
 	else
 	{
-		printf("ERROR: Unknown file format!\n");
+		if (strcmp(fileExtension, "pcd") == 0)
+			PCLLoadPCD(MeshFileName, PC);
+		else if (strcmp(fileExtension, "bmp") == 0)
+		{
+			Array2D<short int> depthImage;
 
-		return 1;
-	}		
+			depthImage.w = w;
+			depthImage.h = h;
 
+			int nPix = depthImage.w * depthImage.h;
+
+			depthImage.Element = new short int[nPix];
+
+			char *depthFileName = RVLCreateString(MeshFileName);
+
+			sprintf(RVLGETFILEEXTENSION(depthFileName), "txt");
+
+			unsigned int format;
+
+			ImportDisparityImage(depthFileName, depthImage, format);
+
+			IplImage *RGBImage = cvLoadImage(MeshFileName);
+
+			RGBDCamera camera;
+
+			camera.GetPointCloud(&depthImage, RGBImage, PC);
+
+			delete[] depthFileName;			
+			delete[] depthImage.Element;
+
+			cvReleaseImage(&RGBImage);
+		}
+		else
+		{
+			printf("ERROR: Unknown file format!\n");
+
+			return 1;
+		}
+
+		PCLMeshBuilder meshBuilder;
+
+		meshBuilder.CreateParamList(&mem0);
+
+		meshBuilder.ParamList.LoadParams("RVLPCSegmentDemo.cfg");
+
+		meshBuilder.CreateMesh(PC, PCLMesh);
+
+		if (flags & RVLPCSEGMENT_DEMO_FLAG_SAVE_PLY)
+		{
+			char *PLYFileName = RVLCreateString(MeshFileName);
+
+			sprintf(RVLGETFILEEXTENSION(PLYFileName), "ply");
+
+			PCLSavePLY(PLYFileName, PCLMesh);
+
+			delete[] PLYFileName;
+		}
+
+		PCLMeshToPolygonData(PCLMesh, mesh.pPolygonData);
+	}
+	
 	mesh.CreateOrderedMeshFromPolyData();
 	
 	// Segment mesh to surfels.

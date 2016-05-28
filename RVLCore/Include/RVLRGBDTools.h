@@ -8,4 +8,8 @@ namespace RVL
 		unsigned char *displayPixArray,
 		bool bInverse,
 		unsigned int format);
+	bool ImportDisparityImage(
+		char *fileName,
+		Array2D<short int> &depthImage,
+		unsigned int &Format);
 }

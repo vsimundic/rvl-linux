@@ -7,7 +7,9 @@
 #include <pcl/surface/organized_fast_mesh.h>
 #include <pcl/filters/fast_bilateral.h>
 #include <pcl/features/normal_3d_omp.h>
+#include "RVLCore2.h"
 #include "PCLMeshBuilder.h"
+
 
 using namespace RVL;
 
@@ -15,7 +17,8 @@ PCLMeshBuilder::PCLMeshBuilder()
 {
 	sigmaS = 5.0f;
 	sigmaR = 0.05f;	
-	bBilateralFilter = false;
+	normalEstR = 0.010f;
+	flags = 0x00000000;
 }
 
 
@@ -30,11 +33,20 @@ void PCLMeshBuilder::CreateMesh(
 {
 	pcl::PointCloud<pcl::PointXYZRGBA>::Ptr PC_;
 
+	int i;
+
+	//for (i = 0; i < PC->points.size(); i++)
+	//{
+	//	PC->points[i].x *= 0.001f;
+	//	PC->points[i].y *= 0.001f;
+	//	PC->points[i].z *= 0.001f;
+	//}
+
 	// Bilateral filtering
 
 	pcl::PointCloud<pcl::PointXYZRGBA>::Ptr FPC(new pcl::PointCloud<pcl::PointXYZRGBA>());
 
-	if (bBilateralFilter)
+	if (flags & RVLPCLMESHBUILDER_FLAG_BILATERAL_FILTER)
 	{
 		pcl::FastBilateralFilter<pcl::PointXYZRGBA> bilateralFilter;
 
@@ -58,12 +70,10 @@ void PCLMeshBuilder::CreateMesh(
 
 	pcl::NormalEstimationOMP<pcl::PointXYZRGBA, pcl::Normal> norm_est;
 
-	norm_est.setRadiusSearch(0.010f);
+	norm_est.setRadiusSearch((float)normalEstR);
 	norm_est.setInputCloud(PC_);
 	norm_est.setSearchMethod(tree);
 	norm_est.compute(*N);
-
-	int i;
 
 	for (i = 0; i < N->points.size(); i++)
 		if (!isfinite(N->points[i].normal_x))
@@ -108,5 +118,20 @@ void PCLMeshBuilder::CreateMesh(
 	pcl::PCLPointCloud2 aux;
 	pcl::concatenateFields(N2, mesh.cloud, aux);
 	mesh.cloud = aux;
+}
+
+void PCLMeshBuilder::CreateParamList(CRVLMem *pMem)
+{
+	ParamList.m_pMem = pMem;
+
+	RVLPARAM_DATA *pParamData;
+
+	ParamList.Init();
+
+	pParamData = ParamList.AddParam("MeshBuilder.sigmaS", RVLPARAM_TYPE_DOUBLE, &sigmaS);
+	pParamData = ParamList.AddParam("MeshBuilder.sigmaR", RVLPARAM_TYPE_DOUBLE, &sigmaR);
+	pParamData = ParamList.AddParam("MeshBuilder.normalEstR", RVLPARAM_TYPE_DOUBLE, &normalEstR);
+	pParamData = ParamList.AddParam("MeshBuilder.bilateralFilter", RVLPARAM_TYPE_FLAG, &flags);
+	ParamList.AddID(pParamData, "yes", RVLPCLMESHBUILDER_FLAG_BILATERAL_FILTER);
 }
 
