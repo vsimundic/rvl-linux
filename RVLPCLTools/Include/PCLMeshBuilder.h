@@ -20,6 +20,17 @@ namespace RVL
 		double sigmaR;
 		double normalEstR;		
 		CRVLParameterList ParamList;
+	private:
+		pcl::PointCloud<pcl::PointXYZRGBA> FPC;
+		pcl::PointCloud<pcl::Normal> N;
+		//pcl::FastBilateralFilter<pcl::PointXYZRGBA> bilateralFilter;
+		//pcl::NormalEstimationOMP<pcl::PointXYZRGBA, pcl::Normal> norm_est;
+		//pcl::OrganizedFastMesh<pcl::PointXYZRGBA> OFM;
+		void *vpBilateralFilter;
+		void *vpNormalEstimator;
+		void *vpOFM;
+		pcl::PCLPointCloud2 N2;
+		pcl::PCLPointCloud2 aux;
 	};
 }
 

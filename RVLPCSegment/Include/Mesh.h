@@ -99,6 +99,12 @@ namespace RVL
 		public:
 			Mesh();
 			virtual ~Mesh();
+			bool Load(
+				char *FileName,
+				PCLMeshBuilder *pMeshBuilder,
+				pcl::PointCloud<pcl::PointXYZRGBA>::Ptr PC,
+				pcl::PolygonMesh &PCLMesh,
+				bool bSavePLY = false);
 			void LoadPolyDataFromPLY(char *PLYFileName);
 			bool CreateOrderedMeshFromPolyData();
 			void ComputeDistribution(

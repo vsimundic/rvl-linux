@@ -9,15 +9,15 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 #include "RVLVTK.h"
 #include "RVLCore2.h"
 #include "Graph.h"
-#include "Mesh.h"
-#include "Visualizer.h"
-#include "SurfelGraph.h"
-#include "PlanarSurfelDetector.h"
 #include <pcl/common/common.h>
 #include <pcl/PolygonMesh.h>
 #include "PCLTools.h"
 #include "PCLMeshBuilder.h"
 #include "RGBDCamera.h"
+#include "Mesh.h"
+#include "Visualizer.h"
+#include "SurfelGraph.h"
+#include "PlanarSurfelDetector.h"
 
 using namespace RVL;
 
@@ -66,81 +66,25 @@ int main(int argc, char ** argv)
 
 	// Read mesh from file.
 
+	PCLMeshBuilder meshBuilder;
+
+	meshBuilder.CreateParamList(&mem0);
+
+	meshBuilder.ParamList.LoadParams("RVLPCSegmentDemo.cfg");
+
 	int w = 640;
 	int h = 480;
-
-	char *fileExtension = RVLGETFILEEXTENSION(MeshFileName);
 
 	Mesh mesh;
 	pcl::PointCloud<pcl::PointXYZRGBA>::Ptr PC(new pcl::PointCloud<pcl::PointXYZRGBA>(w, h));
 	pcl::PolygonMesh PCLMesh;
 
-	if (strcmp(fileExtension, "ply") == 0)
-		mesh.LoadPolyDataFromPLY(MeshFileName);
+	printf("Creating mesh from %s:\n", MeshFileName);
+
+	if (mesh.Load(MeshFileName, &meshBuilder, PC, PCLMesh, (flags & RVLPCSEGMENT_DEMO_FLAG_SAVE_PLY) != 0))
+		printf("Mesh created.\n");
 	else
-	{
-		if (strcmp(fileExtension, "pcd") == 0)
-			PCLLoadPCD(MeshFileName, PC);
-		else if (strcmp(fileExtension, "bmp") == 0)
-		{
-			Array2D<short int> depthImage;
-
-			depthImage.w = w;
-			depthImage.h = h;
-
-			int nPix = depthImage.w * depthImage.h;
-
-			depthImage.Element = new short int[nPix];
-
-			char *depthFileName = RVLCreateString(MeshFileName);
-
-			sprintf(RVLGETFILEEXTENSION(depthFileName), "txt");
-
-			unsigned int format;
-
-			ImportDisparityImage(depthFileName, depthImage, format);
-
-			IplImage *RGBImage = cvLoadImage(MeshFileName);
-
-			RGBDCamera camera;
-
-			camera.GetPointCloud(&depthImage, RGBImage, PC);
-
-			delete[] depthFileName;			
-			delete[] depthImage.Element;
-
-			cvReleaseImage(&RGBImage);
-		}
-		else
-		{
-			printf("ERROR: Unknown file format!\n");
-
-			return 1;
-		}
-
-		PCLMeshBuilder meshBuilder;
-
-		meshBuilder.CreateParamList(&mem0);
-
-		meshBuilder.ParamList.LoadParams("RVLPCSegmentDemo.cfg");
-
-		meshBuilder.CreateMesh(PC, PCLMesh);
-
-		if (flags & RVLPCSEGMENT_DEMO_FLAG_SAVE_PLY)
-		{
-			char *PLYFileName = RVLCreateString(MeshFileName);
-
-			sprintf(RVLGETFILEEXTENSION(PLYFileName), "ply");
-
-			PCLSavePLY(PLYFileName, PCLMesh);
-
-			delete[] PLYFileName;
-		}
-
-		PCLMeshToPolygonData(PCLMesh, mesh.pPolygonData);
-	}
-	
-	mesh.CreateOrderedMeshFromPolyData();
+		printf("ERROR: Mesh can't be created!\n");
 	
 	// Segment mesh to surfels.
 
