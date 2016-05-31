@@ -4356,7 +4356,7 @@ void PlanarSurfelDetector::GetNeighbors(
 
 			iPt = RVLPCSEGMENT_GRAPH_GET_NODE(pEdgePtr);
 
-			pEdgePtr_ = pEdgePtr;
+			pEdgePtr_ = pMesh->NodeArray.Element[iPt].EdgeList.pFirst;
 
 			while (pEdgePtr_)
 			{

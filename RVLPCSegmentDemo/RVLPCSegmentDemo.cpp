@@ -135,6 +135,7 @@ int main(int argc, char ** argv)
 	// free memory
 
 	delete detector.pTimer;
+	delete[] MeshFileName;
 
 	return 0;
 }

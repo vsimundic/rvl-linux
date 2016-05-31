@@ -648,15 +648,15 @@ void SurfelGraph::DisplaySurfelBoundary(
 {
 	Surfel *pSurfel = NodeArray.Element + iSurfel;
 
-	QList<QLIST::Index2> *pSurfelPtList = &(pSurfel->PtList);
+	//QList<QLIST::Index2> *pSurfelPtList = &(pSurfel->PtList);
 
-	pSurfel->BoundaryArray.Element = new Array <MeshEdgePtr *>[nMeshVertices];
+	//pSurfel->BoundaryArray.Element = new Array <MeshEdgePtr *>[nMeshVertices];
 
-	MeshEdgePtr **boundaryMem = new MeshEdgePtr *[pMesh->EdgeArray.n];
+	//MeshEdgePtr **boundaryMem = new MeshEdgePtr *[pMesh->EdgeArray.n];
 
-	MeshEdgePtr **pBoundaryMem = boundaryMem;
+	//MeshEdgePtr **pBoundaryMem = boundaryMem;
 
-	pMesh->Boundary(pSurfelPtList, surfelMap, pSurfel->BoundaryArray, pBoundaryMem, edgeMarkMap);
+	//pMesh->Boundary(pSurfelPtList, surfelMap, pSurfel->BoundaryArray, pBoundaryMem, edgeMarkMap);
 
 	Array<int> boundaryPtArray;
 
@@ -681,8 +681,8 @@ void SurfelGraph::DisplaySurfelBoundary(
 
 	pVisualizer->PaintPointSet(&boundaryPtArray, pMesh->pPolygonData, Color);
 
-	delete[] pSurfel->BoundaryArray.Element;
-	delete[] boundaryMem;
+	//delete[] pSurfel->BoundaryArray.Element;
+	//delete[] boundaryMem;
 	delete[] boundaryPtArray.Element;
 
 	//QList<QLIST::Index> Boundary;

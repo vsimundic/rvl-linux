@@ -469,3 +469,20 @@ template <class Type> void GetCovMatrix3(
 	C[7] = C[5];
 	C[8] = pMoments->S2[8] / fn - M[2] * M[2];
 }
+
+template <typename Type> inline void LinePlaneIntersection(
+	Type *P1,
+	Type *P2,
+	Type *N,
+	Type d,
+	Type *PIS)
+{
+	Type dP[3];
+
+	RVLDIF3VECTORS(P2, P1, dP);
+
+	Type s = (d - RVLDOTPRODUCT3(N, P1)) / (RVLDOTPRODUCT3(N, dP));
+
+	RVLSCALE3VECTOR(dP, s, PIS);
+	RVLSUM3VECTORS(PIS, P1, PIS);
+}
