@@ -84,6 +84,12 @@ namespace RVL
 										// i.e. if there is a boundary edge connected to this point.
 	};
 
+	struct OrientedPoint
+	{
+		float P[3];
+		float N[3];
+	};
+
 	namespace MESH
 	{
 		struct PointEdge
