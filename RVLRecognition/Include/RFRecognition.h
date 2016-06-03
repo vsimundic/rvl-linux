@@ -197,7 +197,8 @@ namespace RVL
 			RECOG::RFFeature *pFeature);
 		void LoadFeature(
 			FILE *fp,
-			RECOG::RFFeature *pFeature);
+			RECOG::RFFeature *pFeature,
+			CRVLMem *pMem_);
 		void Voxels(Mesh *pMesh);
 		void MatchDescriptors(
 			Mesh *pSMesh,
