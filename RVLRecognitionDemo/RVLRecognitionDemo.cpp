@@ -22,21 +22,21 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 
 using namespace RVL;
 
-//void CreateParamList(
-//	CRVLParameterList *pParamList,
-//	CRVLMem *pMem,
-//	char **pMeshFileName)
-//{
-//	pParamList->m_pMem = pMem;
-//
-//	RVLPARAM_DATA *pParamData;
-//
-//	pParamList->Init();
-//
-//	pParamData = pParamList->AddParam("MeshFileName", RVLPARAM_TYPE_STRING, pMeshFileName);
-//	//pParamData = pParamList->AddParam("Save PLY", RVLPARAM_TYPE_ID, &flags);
-//	//pParamList->AddID(pParamData, "yes", RVLPCSEGMENT_DEMO_FLAG_SAVE_PLY);
-//}
+void CreateParamList(
+	CRVLParameterList *pParamList,
+	CRVLMem *pMem,
+	char **pMeshFileName)
+{
+	pParamList->m_pMem = pMem;
+
+	RVLPARAM_DATA *pParamData;
+
+	pParamList->Init();
+
+	pParamData = pParamList->AddParam("SceneFileName", RVLPARAM_TYPE_STRING, pMeshFileName);
+	//pParamData = pParamList->AddParam("Save PLY", RVLPARAM_TYPE_ID, &flags);
+	//pParamList->AddID(pParamData, "yes", RVLPCSEGMENT_DEMO_FLAG_SAVE_PLY);
+}
 
 int main(int argc, char ** argv)
 {
@@ -50,17 +50,17 @@ int main(int argc, char ** argv)
 
 	mem.Create(100000000);
 
-	//// Read parameters from a configuration file.
+	// Read parameters from a configuration file.
 
-	//char *MeshFileName = NULL;
+	char *sceneMeshFileName = NULL;
 
 	////DWORD flags = 0x00000000;
 
-	//CRVLParameterList ParamList;
+	CRVLParameterList ParamList;
 
-	//CreateParamList(&ParamList, &mem0, &MeshFileName);
+	CreateParamList(&ParamList, &mem0, &sceneMeshFileName);
 
-	//ParamList.LoadParams("RVLRecognitionDemo.cfg");
+	ParamList.LoadParams("RVLRecognitionDemo.cfg");
 
 	// Initialize recognition.
 
@@ -70,6 +70,7 @@ int main(int argc, char ** argv)
 
 	recognition.ParamList.LoadParams("RVLRecognitionDemo.cfg");
 
+	recognition.pMem0 = &mem0;
 	recognition.pMem = &mem;
 
 	SurfelGraph surfels;
@@ -84,10 +85,34 @@ int main(int argc, char ** argv)
 
 	recognition.pSurfelDetector = &surfelDetector;	
 
-	// Training.
+	// Training or recognition (depending on mode).
 
 	if (recognition.mode == RVLRECOGNITION_MODE_TRAINING)
 		recognition.CreateModelDatabase();
+	else if (recognition.mode == RVLRECOGNITION_MODE_RECOGNITION)
+	{
+		if (!recognition.LoadModelDatabase())
+			return 1;
+
+		Mesh mesh;
+
+		mesh.LoadPolyDataFromPLY(sceneMeshFileName);
+
+		recognition.FindObjects(&mesh);
+
+		FILE *fpInterpretation = fopen("C:\\RVL\\Debug\\interpretation.txt", "w");
+
+		RECOG::Hypothesis *pHypothesis = recognition.sceneInterpretation.pFirst;
+
+		while (pHypothesis)
+		{
+			RECOG::WriteHypothesis(fpInterpretation, pHypothesis);
+
+			pHypothesis = pHypothesis->pNext;
+		}
+
+		fclose(fpInterpretation);
+	}		
 
 	// free memory
 

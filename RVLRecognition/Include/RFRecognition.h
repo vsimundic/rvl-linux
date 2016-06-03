@@ -24,6 +24,8 @@ namespace RVL
 
 		struct RFFeature
 		{
+			int objectID;
+			int frameID;
 			float cq;
 			float N[3];
 			float R[9];
@@ -63,6 +65,15 @@ namespace RVL
 			int iPt;
 		};
 
+		struct Hypothesis
+		{
+			int objectID;
+			int frameID;
+			float R[9];
+			float t[3];
+			Hypothesis *pNext;
+		};
+
 		bool SurfelCylinderIntersection(
 			Mesh *pMesh,
 			SurfelGraph *pSurfels,
@@ -80,6 +91,15 @@ namespace RVL
 			SurfelGraph *pSurfels,
 			RECOG::RFRegionGrowingData *pData
 			);
+		int AdjustVoxelBoxSide(
+			float minSrc,
+			float maxSrc,
+			float voxelSize,
+			float &minTgt,
+			float &maxTgt);
+		void WriteHypothesis(
+			FILE *fp,
+			RECOG::Hypothesis *pHypothesis);
 
 		inline int IdentifyVolume(
 			float *P,
@@ -112,7 +132,7 @@ namespace RVL
 			float *t_ = pFeature->t;
 			float *N_ = pFeature->N;
 
-			RVLCOPYMX3X3(R, R_);
+			RVLCOPYMX3X3T(R, R_);
 
 			RVLMULMX3X3VECT(R, N, N_);
 
@@ -124,6 +144,8 @@ namespace RVL
 			RVLSUM3VECTORS(P0, t_, t_);
 
 			pFeature->cq = cq;
+			pFeature->objectID = -1;
+			pFeature->frameID = -1;
 
 			return pFeature;
 		}
@@ -147,6 +169,8 @@ namespace RVL
 		virtual ~RFRecognition();
 		void CreateParamList(CRVLMem *pMem);
 		void CreateModelDatabase();
+		bool LoadModelDatabase();
+		void FindObjects(Mesh *pMesh);
 		void Init(
 			Mesh *pMesh,
 			SurfelGraph *pSurfels);
@@ -171,6 +195,25 @@ namespace RVL
 		void SaveFeature(
 			FILE *fp,
 			RECOG::RFFeature *pFeature);
+		void LoadFeature(
+			FILE *fp,
+			RECOG::RFFeature *pFeature);
+		void Voxels(Mesh *pMesh);
+		void MatchDescriptors(
+			Mesh *pSMesh,
+			RECOG::RFFeature *pSFeature,
+			RECOG::RFFeature *pMFeature,
+			int &matchScore);
+		void RadiusSearch(
+			Mesh *pMesh, 
+			float *P,
+			float r2);
+		inline void GetVoxel(float *P, int &ix, int &iy, int &iz)
+		{
+			ix = (int)floor((P[0] - voxelBox.minx) / voxelSize);
+			iy = (int)floor((P[1] - voxelBox.miny) / voxelSize);
+			iz = (int)floor((P[2] - voxelBox.minz) / voxelSize);
+		}
 
 	public:
 		CRVLParameterList ParamList;
@@ -182,18 +225,32 @@ namespace RVL
 		Visualizer visualizer;
 		char *modelMeshFileName;
 		char *featureFileName;
+		CRVLMem *pMem0;
 		CRVLMem *pMem;
 		RECOG::RFFeatureDetectionParams featureDetectionParams;
 		float kLineLength;
 		float maxGap;
 		float mincnx;
 		int descriptorSize;
+		float voxelSize;
+		int minRefSurfelSize;
+		float minRefLineSize;
+		float eNThr;
+		float ePThr;
+		float matchThr;
+		QList<RECOG::RFFeature> modelFeatureList;
+		QList<RECOG::Hypothesis> sceneInterpretation;
 	private:
 		unsigned char *markMap;
 		int *iSurfBuff;
 		int meshSize;
 		int surfelGraphSize;
 		RECOG::Line3D *lineMem;
+		Array3D<QList<QLIST::Index>> voxel;
+		QLIST::Index *voxelMem;
+		Box<float> voxelBox;
+		int maxnPtsPerVoxel;
+		Array<int> voxel8Pack;
 	};
 
 }

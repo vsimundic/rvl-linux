@@ -486,3 +486,31 @@ template <typename Type> inline void LinePlaneIntersection(
 	RVLSCALE3VECTOR(dP, s, PIS);
 	RVLSUM3VECTORS(PIS, P1, PIS);
 }
+
+namespace RVL
+{
+	template <typename Type> struct Box
+	{
+		Type minx;
+		Type maxx;
+		Type miny;
+		Type maxy;
+		Type minz;
+		Type maxz;
+	};
+
+	template <typename Type> void PrintMatrix(FILE *fp, Type *A, int n, int m)
+	{
+		Type *pA = A;
+
+		int i, j;
+
+		for (i = 0; i < n; i++)
+		{
+			for (j = 0; j < m; j++, pA++)
+				fprintf(fp, "%f\t", *pA);
+
+			fprintf(fp, "\n");
+		}
+	}
+}

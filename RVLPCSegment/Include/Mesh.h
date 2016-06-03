@@ -133,6 +133,7 @@ namespace RVL
 				Array<Array<MeshEdgePtr *>> &BoundaryArray,
 				MeshEdgePtr **&pBoundaryMem, 
 				unsigned char *edgeMarkMap);
+			void BoundingBox(Box<float> *pBox);
 
 			// For a mesh point index iPt, the function returns true if the point is on the boundary of a region in the map map containing elements with value idx. 
 			// pEdgePtr <- the connector connecting the first region boundar edge in CCW direction.

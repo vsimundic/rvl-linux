@@ -39,6 +39,15 @@ namespace RVL
 		int w;
 		int h;
 	};
+
+	template <typename Type> struct Array3D
+	{
+		Type *Element;
+		int a;
+		int b;
+		int c;
+	};
 }
 
 #define RVLARRAY_RESIZE(Array, Type, size) {Array.n = size; if(size > Array.n){RVL_DELETE_ARRAY(Array.Element); Array.Element = new Type[size];}}
+#define RVL3DARRAY_ELEMENT(Array, x, y, z)	(Array.Element + Array.a * (Array.b * (z) + (y)) + (x))
