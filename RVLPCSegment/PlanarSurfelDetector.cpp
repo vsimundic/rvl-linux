@@ -269,19 +269,19 @@ int PSD::RegionGrowingOperation(
 			return -1;	// Maximum size is exceeded.
 	}
 
-	{
-		Point *pPt_ = pMesh->NodeArray.Element + iNode;
+	Point *pPt_ = pMesh->NodeArray.Element + iNode;
 
-		float eRGB, eN, eP;
+	float eRGB, eN, eP;
 		
 #ifndef RVLPLANARSURFELDETECTOR_CONNECTED
 #ifndef RVLPLANARSURFELDETECTOR_DIST_COST
 #ifdef RVLPLANARSURFELDETECTOR_MIN_COST
-		float cost;
+	float cost;
 #endif
 #endif
 #endif
-	
+	if (RVLDOTPRODUCT3(pPt_->N, pPt_->N) > 0.5f)
+	{
 		PSD::VertexDist<Surfel, Point>(pData->pTemplate, pPt_, eRGB, eN, eP);
 
 		float costRGB, costN, costP;
@@ -327,10 +327,10 @@ int PSD::RegionGrowingOperation(
 
 							return 1;	// iNode belongs to G.
 						}
-					}
-				}
-			}
-		}
+					} // if (pData->mode == RVLPLANARSURFELDETECTOR_REGIONGROWING_MODE_SURFEL_DETECTION || pData->mode == RVLPLANARSURFELDETECTOR_REGIONGROWING_MODE_ATTACK)
+				}	// if ((costP = pData->kPlane2 * eP) <= pData->distThr)
+			}	// if ((costN = pData->kNormal2 * eN) <= pData->distThr)
+		}	// if ((costRGB = pData->kRGB2 * eRGB) <= pData->distThr)
 
 		if (pData->mode == RVLPLANARSURFELDETECTOR_REGIONGROWING_MODE_FIND_CLOSEST_INLIER)
 		{
@@ -338,7 +338,7 @@ int PSD::RegionGrowingOperation(
 
 			return 1;
 		}			
-	}
+	}	// if (RVLDOTPRODUCT3(pPt_->N, pPt_->N) > 0.5f)
 
 	return -1;	// iNode does not belong to G.
 }
@@ -679,8 +679,8 @@ void PlanarSurfelDetector::Segment(
 	{
 		for (iSurfel = 0; iSurfel < pSurfels->NodeArray.n; iSurfel++, pSurfel++)
 		{
-			//if (iSurfel == 142)
-			//	int debug = 0;
+			if (iSurfel == 8145)
+				int debug = 0;
 
 			pSurfel->size = QLIST::Size(pSurfel->PtList);
 
