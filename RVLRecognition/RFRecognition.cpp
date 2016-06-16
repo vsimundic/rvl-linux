@@ -25,6 +25,7 @@ RFRecognition::RFRecognition()
 	featureFileName = NULL;
 	markMap = NULL;
 	iSurfBuff = NULL;
+	iSurfBuff2 = NULL;
 	lineMem = NULL;
 	voxelMem = NULL;
 	voxel8Pack.Element = NULL;
@@ -57,6 +58,7 @@ RFRecognition::~RFRecognition()
 	RVL_DELETE_ARRAY(featureFileName);
 	RVL_DELETE_ARRAY(markMap);
 	RVL_DELETE_ARRAY(iSurfBuff);
+	RVL_DELETE_ARRAY(iSurfBuff2);
 	RVL_DELETE_ARRAY(lineMem);
 	RVL_DELETE_ARRAY(voxelMem);
 	RVL_DELETE_ARRAY(voxel8Pack.Element);
@@ -84,12 +86,14 @@ void RFRecognition::Init(
 	{
 		RVL_DELETE_ARRAY(markMap);
 		RVL_DELETE_ARRAY(iSurfBuff);
+		RVL_DELETE_ARRAY(iSurfBuff2);
 
 		surfelGraphSize = newSurfelGraphSize;
 
 		markMap = new unsigned char[surfelGraphSize];
 		memset(markMap, 0, sizeof(unsigned char) * surfelGraphSize);
 		iSurfBuff = new int[surfelGraphSize];
+		iSurfBuff2 = new int[surfelGraphSize];
 	}	
 }
 
@@ -282,12 +286,15 @@ void RFRecognition::DetectFeatureBase(
 	RGData.lineArray = pFeatureBase->lineArray;
 	RGData.psBuff = &sBuff;
 	RGData.markMap = markMap;
+	RGData.piVisited = iSurfBuff2;
+
+	*(RGData.piVisited++) = iRefSurfel;
 
 	int *piSurfBuffEnd = RegionGrowing<SurfelGraph, Surfel, SURFEL::Edge, SURFEL::EdgePtr, RECOG::RFRegionGrowingData, RECOG::RegionGrowingOperation>(pSurfels, &RGData, piFetch, piPut);
 
 	int *piSurf;
 
-	for (piSurf = iSurfBuff; piSurf < piSurfBuffEnd; piSurf++)
+	for (piSurf = iSurfBuff2; piSurf < RGData.piVisited; piSurf++)
 		markMap[*piSurf] = 0;
 
 //#ifdef RVLRFRECOGNITION_DEBUG
@@ -372,6 +379,8 @@ void RFRecognition::DetectFeatureBase(
 //	}	// for each reference plane.
 //#endif
 
+//VIDOVIC - zakomentirano
+/*
 #ifdef RVLRFRECOGNITION_FEATURE_BASE_VISUALIZATION
 	// Visualization
 
@@ -389,6 +398,8 @@ void RFRecognition::DetectFeatureBase(
 	//pSurfelDetector->DisplaySoftEdges(&visualizer, pMesh, pSurfels, SelectionColor);
 	visualizer.Run();
 #endif
+*/
+//END VIDOVIC
 
 	// Free memory.
 
@@ -658,6 +669,27 @@ void RFRecognition::FindObjects(Mesh *pMesh)
 
 	Init(pMesh, pSurfels);
 
+	//VIDOVIC
+	#ifdef RVLRFRECOGNITION_FEATURE_BASE_VISUALIZATION
+		// Visualization
+
+		unsigned char SelectionColor[3];
+
+		SelectionColor[0] = 0;
+		SelectionColor[1] = 255;
+		SelectionColor[2] = 0;
+
+		pSurfels->NodeColors(SelectionColor);
+
+		visualizer.Create();
+		pSurfels->InitDisplay(&visualizer, pMesh, pSurfelDetector); //VIDOVIC
+		pSurfels->DisplayData.vpRecognition = this;//VIDOVIC
+		pSurfels->Display(&visualizer, pMesh);
+		//pSurfelDetector->DisplaySoftEdges(&visualizer, pMesh, pSurfels, SelectionColor);
+		visualizer.Run();
+	#endif
+	//END VIDOVIC
+
 	QList<RECOG::Hypothesis> *pHypothesisList = &sceneInterpretation;
 
 	RVLQLIST_INIT(pHypothesisList);
@@ -728,6 +760,7 @@ void RFRecognition::FindObjects(Mesh *pMesh)
 
 					pHypothesis->objectID = pMFeature->objectID;
 					pHypothesis->frameID = pMFeature->frameID;
+					pHypothesis->probability = matchScore; //VIDOVIC
 
 					RFsS = pSFeature->R;
 					tFsS = pSFeature->t;
@@ -986,6 +1019,30 @@ void RFRecognition::LoadFeature(
 	fread(pFeature->descriptor.PtArray.Element, sizeof(OrientedPoint), pFeature->descriptor.PtArray.n, fp);
 }
 
+//VIDOVIC
+void RFRecognition::FindBestHypothesis(RECOG::Hypothesis **pBestHypothesis)
+{
+	RECOG::Hypothesis *pHypothesis = sceneInterpretation.pFirst;
+
+	*pBestHypothesis = pHypothesis;
+	float highestProbability = pHypothesis->probability;
+
+	pHypothesis = pHypothesis->pNext;
+
+	while (pHypothesis)
+	{
+		if (pHypothesis->probability > highestProbability)
+		{
+			*pBestHypothesis = pHypothesis;
+			highestProbability = pHypothesis->probability;
+		}
+
+		pHypothesis = pHypothesis->pNext;
+	}
+
+}
+//END VIDOVIC
+
 bool RECOG::SurfelCylinderIntersection(
 	Mesh *pMesh,
 	SurfelGraph *pSurfels, 
@@ -1178,6 +1235,8 @@ int RECOG::RegionGrowingOperation(
 
 	pData->markMap[iNode] = 1;
 
+	*(pData->piVisited++) = iNode;
+
 	float *N = pData->N;
 	float *N_ = pData->pSurfels->NodeArray.Element[iNode].N;
 
@@ -1215,6 +1274,20 @@ void RECOG::WriteHypothesis(
 	PrintMatrix<float>(fp, pHypothesis->t, 1, 3);
 	fprintf(fp, "\n");
 }
+
+//VIDOVIC
+void RECOG::WriteHypothesisError(
+	FILE *fp,
+	RECOG::Hypothesis *pHypothesis,
+	float positionError,
+	float angleError)
+{
+	fprintf(fp, "ObjectID=%d\n", pHypothesis->objectID);
+	fprintf(fp, "FrameID=%d\n", pHypothesis->frameID);
+	fprintf(fp, "distance\ttheta\n");
+	fprintf(fp, "%f\t%f\n", positionError, angleError);
+}
+//END VIDOVIC
 
 #ifdef RVLRFRECOGNITION_DEBUG
 void RECOG::DebugWriteFeature(

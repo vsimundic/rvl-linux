@@ -4,7 +4,7 @@
 #define RVLRECOGNITION_MODE_TRAINING			1
 
 #define RVLRFRECOGNITION_DEBUG
-//#define RVLRFRECOGNITION_FEATURE_BASE_VISUALIZATION
+#define RVLRFRECOGNITION_FEATURE_BASE_VISUALIZATION
 
 namespace RVL
 {
@@ -57,6 +57,7 @@ namespace RVL
 			float dp;
 			Array<RECOG::Line3D> *lineArray;
 			Array<float> *psBuff;
+			int *piVisited;
 		};
 
 		struct RFLinePoint
@@ -71,6 +72,7 @@ namespace RVL
 			int frameID;
 			float R[9];
 			float t[3];
+			float probability; //VIDOVIC
 			Hypothesis *pNext;
 		};
 
@@ -100,6 +102,13 @@ namespace RVL
 		void WriteHypothesis(
 			FILE *fp,
 			RECOG::Hypothesis *pHypothesis);
+		//VIDOVIC
+		void WriteHypothesisError(
+			FILE *fp,
+			RECOG::Hypothesis *pHypothesis,
+			float positionError,
+			float angleError);
+		//END VIDOVIC
 
 		inline int IdentifyVolume(
 			float *P,
@@ -215,6 +224,7 @@ namespace RVL
 			iy = (int)floor((P[1] - voxelBox.miny) / voxelSize);
 			iz = (int)floor((P[2] - voxelBox.minz) / voxelSize);
 		}
+		void FindBestHypothesis(RECOG::Hypothesis **pBestHypothesis); //VIDOVIC
 
 	public:
 		CRVLParameterList ParamList;
@@ -244,6 +254,7 @@ namespace RVL
 	private:
 		unsigned char *markMap;
 		int *iSurfBuff;
+		int *iSurfBuff2;
 		int meshSize;
 		int surfelGraphSize;
 		RECOG::Line3D *lineMem;

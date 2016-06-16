@@ -19,6 +19,7 @@ namespace RVL
 			SurfelGraph *pSurfels;
 			Mesh *pMesh;
 			void *vpDetector;
+			void *vpRecognition;//VIDOVIC
 			int  mode;
 			unsigned char SelectionColor[3];
 			int iSelectedSurfel;
@@ -112,9 +113,9 @@ namespace RVL
 		CRVLMem *pMem;
 		SURFEL::Edge **neighborEdge;
 		Array<SURFEL::Edge *> EdgeArray;
+		SURFEL::DisplayCallbackData DisplayData; //VIDOVIC
 	private:
 		unsigned char *nodeColor;
-		SURFEL::DisplayCallbackData DisplayData;
 	};
 
 	namespace SURFEL

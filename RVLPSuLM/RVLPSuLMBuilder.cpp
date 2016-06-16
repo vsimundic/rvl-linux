@@ -12487,17 +12487,25 @@ void CRVLPSuLMBuilder::InitHypothesisEvaluation4(CRVLPSuLM * pSPSuLM)
 		varOrientUncert = r * m_SampleMatchAngleTol;
 		varOrientUncert *= varOrientUncert;
 
-		RVLSCALE3VECTOR2(tFS, r, ZRS)
+		RVLSCALE3VECTOR2(tFS, r, ZRS);
 
 		//RVLORTHOGONAL3(ZRS, XRS, i, j, k, Vect3Tmp, fTmp)
-		RVLORTHOGONAL3(ZRS, XRS, i, j, k, fTmp)
+		RVLORTHOGONAL3(ZRS, XRS, i, j, k, fTmp);
 
-		RVLCROSSPRODUCT3(ZRS, XRS, YRS)
+		RVLCROSSPRODUCT3(ZRS, XRS, YRS);
 
-		RVLSCALE3VECTOR(XRS, varOrientUncert, Mx3x3TmpRow0)
-		RVLSCALE3VECTOR(YRS, varOrientUncert, Mx3x3TmpRow1)
-		RVLNULL3VECTOR(Mx3x3TmpRow2)
-		RVLMXMUL3X3T1(Mx3x3Tmp, RSR, COrientUncert)
+		RVLSCALE3VECTOR(XRS, varOrientUncert, Mx3x3TmpRow0);
+		RVLSCALE3VECTOR(YRS, varOrientUncert, Mx3x3TmpRow1);
+		RVLNULL3VECTOR(Mx3x3TmpRow2);
+		RVLMXMUL3X3T1(Mx3x3Tmp, RSR, COrientUncert);
+
+		double J[9];
+
+		RVLSKEW(tFS, J);
+		RVLSCALEMX3X3(J, m_SampleMatchAngleTol, J);
+
+		double A[9];
+		RVLMXMUL3X3T2(J, J, A);
 	
 		RVLSUMMX3X3(Cp, COrientUncert, Cp)
 		RVLSUMMX3X3(Cp, CPositionUncert, Cp)

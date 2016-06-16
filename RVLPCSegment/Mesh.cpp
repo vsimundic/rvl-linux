@@ -36,6 +36,31 @@ void Mesh::LoadPolyDataFromPLY(char *PLYFileName)
 	pPolygonData = reader->GetOutput();
 }
 
+//VIDOVIC
+void Mesh::SavePolyDataToPLY(char *PLYFileName, Mesh *pMesh)
+{
+	char *sceneNoisedMeshFileName = new char[100];
+
+	vtkSmartPointer<vtkPLYWriter> writer = vtkSmartPointer<vtkPLYWriter>::New();
+
+	//create noised mesh filename
+	strcpy(sceneNoisedMeshFileName, PLYFileName);
+	strcpy(sceneNoisedMeshFileName + strlen(sceneNoisedMeshFileName) - strlen(".ply"), "_noised.ply");
+
+	writer->SetFileName(sceneNoisedMeshFileName);
+	
+#if VTK_MAJOR_VERSION <= 5
+	writer->SetInput(pPolygonData);
+#else
+	writer->SetInputData(pPolygonData);
+#endif
+
+	writer->Write();
+
+	delete[] sceneNoisedMeshFileName;
+}
+//END VIDOVIC
+
 bool Mesh::CreateOrderedMeshFromPolyData()
 {
 	int noPts = pPolygonData->GetNumberOfPoints();

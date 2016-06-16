@@ -2,19 +2,19 @@
 //
 
 //#include "highgui.h"
+#include "Platform.h"
 #include <stdio.h>
 #include <time.h>
-#include "RVLCore.h"
-#include "RVLPCS.h"
-#ifdef RVLVTK
-//VTK headers
 #include <vtkAutoInit.h>
 VTK_MODULE_INIT(vtkRenderingOpenGL);
 VTK_MODULE_INIT(vtkInteractionStyle);
 VTK_MODULE_INIT(vtkRenderingFreeType);//(vtkRenderingFreeTypeOpenGL);
-#include "RVLVTK.h"
+//#include "RVLVTK.h"
 //#include "VTKActorObj.h"
-#endif
+//#endif
+#include "RVLCore.h"
+#include "RVLPCS.h"
+//VTK headers
 
 int main(int argc, char* argv[])
 {

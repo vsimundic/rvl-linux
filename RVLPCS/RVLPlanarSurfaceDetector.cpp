@@ -72,6 +72,7 @@ CRVLPlanarSurfaceDetector::CRVLPlanarSurfaceDetector()
 	m_FOVExtension = 2.0 * PI / 3.0;
 	m_nWalls = 0;
 	m_Flags = 0x00000000;
+	m_Flags2 = 0x00000000;
 	m_Tol = 16.0;
 	m_ResidualThr = 80.0;
 	m_MEstThr = 2.0;
@@ -12227,8 +12228,7 @@ void CRVLPlanarSurfaceDetector::UpdateSTRMQueue(CRVL2DRegion2 **TriangleArray,
 #endif
 			}
 
-			//eThr = m_MeshTol;
-			eThr = 20.0 + 0.01 * m_Point3DMap[((RVLMESH_LINK *)(pTriangle->m_PtArray))->iPix0]->r;
+			eThr = (m_Flags2 & RVLPSD_FLAG2_VELODYNE_SENSOR_UNCERT_MODEL ? 20.0 + 0.01 * m_Point3DMap[((RVLMESH_LINK *)(pTriangle->m_PtArray))->iPix0]->r : m_MeshTol);
 		}	// if(m_Flags & RVLPSD_FLAG_MM)
 		else
 		{
@@ -12450,16 +12450,11 @@ void CRVLPlanarSurfaceDetector::GetMaxDeviation(CRVL2DRegion2 *pPolygon,
 #endif
 				X = m_Point3DMap[iPix]->XYZ;
 
-				// minimum distance to the plane
-
-				//fe = RVLDOTPRODUCT3(fN, X) - rho;
-
-				// distance along the beam
-
-				fe = (rho / RVLDOTPRODUCT3(fN, X) - 1.0) * m_Point3DMap[iPix]->r;
-
-				/////
-
+				if (m_Flags & RVLPSD_FLAG_PC_BEAM_DISTANCE)
+					fe = (rho / RVLDOTPRODUCT3(fN, X) - 1.0) * m_Point3DMap[iPix]->r;		// distance along the beam
+				else
+					fe = RVLDOTPRODUCT3(fN, X) - rho;	// distance to the plane
+				
 				if(fe < 0.0)
 					fe = -fe;
 

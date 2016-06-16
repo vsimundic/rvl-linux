@@ -12,6 +12,7 @@
 #include "Visualizer.h"
 #include "SurfelGraph.h"
 #include "PlanarSurfelDetector.h"
+#include "RFRecognition.h" //VIDOVIC
 
 using namespace RVL;
 
@@ -304,6 +305,8 @@ void SURFEL::MouseRButtonDown(vtkObject* caller, unsigned long eid, void* client
 
 	Mesh *pMesh = pData->pMesh;
 
+	RFRecognition *pRecognition = (RFRecognition *)pData->vpRecognition; //VIDOVIC
+
 	vtkSmartPointer<vtkPolyData> pd = pMesh->pPolygonData;
 
 	vtkSmartPointer<vtkFloatArray> pointData;
@@ -357,6 +360,35 @@ void SURFEL::MouseRButtonDown(vtkObject* caller, unsigned long eid, void* client
 		pData->pSurfels->PrintData(pData->pVisualizer, iSurfel);
 
 		interactor->GetRenderWindow()->Render();
+
+		//VIDOVIC
+		if (iSurfel >= 0)
+		{
+			RECOG::RFFeatureBase featureBase;
+			QList<RECOG::RFFeature> featureList;
+			QList<RECOG::RFFeature> *pFeatureList = &featureList;
+			CRVLMem Mem;
+			Mem.Create(100000);
+			RECOG::Line3D *pLine;
+			int i;
+
+			pRecognition->DetectFeatureBase(pMesh, pData->pSurfels, iSurfel, &featureBase);
+
+			for (i = 0; i < featureBase.lineArray[0].n; i++)
+			{
+				pLine = featureBase.lineArray[0].Element + i;
+
+				if (pLine->length < pRecognition->minRefLineSize)
+					continue;
+
+				// Detect features.
+
+				RVLQLIST_INIT(pFeatureList);
+
+				pRecognition->DetectFeatures(pMesh, pData->pSurfels, &featureBase, 0, i, pFeatureList, &Mem);
+			}
+		}
+		//END VIDOVIC
 	}
 }
 

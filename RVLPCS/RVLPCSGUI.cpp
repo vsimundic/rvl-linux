@@ -90,6 +90,7 @@ void CRVLPCSGUI::Init(
 	//m_bContinuous = bKinect;
 	m_bContinuous = false;
 	m_bRecord = false;
+	m_bNextImage = true;
 
 	m_iONISample = 0;
 	m_ZoomFactor = 1;

@@ -1,4 +1,4 @@
-//#include <vtkAutoInit.h>
+#include <vtkAutoInit.h>
 //VTK_MODULE_INIT(vtkRenderingOpenGL);
 //VTK_MODULE_INIT(vtkInteractionStyle);
 #ifdef RVLVTK

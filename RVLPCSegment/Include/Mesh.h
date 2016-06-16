@@ -112,6 +112,7 @@ namespace RVL
 				pcl::PolygonMesh &PCLMesh,
 				bool bSavePLY = false);
 			void LoadPolyDataFromPLY(char *PLYFileName);
+			void SavePolyDataToPLY(char *PLYFileName, Mesh *pMesh);
 			bool CreateOrderedMeshFromPolyData();
 			void ComputeDistribution(
 				Array<int> &PtArray,
