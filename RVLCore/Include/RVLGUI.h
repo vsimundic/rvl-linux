@@ -146,7 +146,7 @@ public:
 	CRVLGUI();
 	virtual ~CRVLGUI();
 	CRVLFigure *OpenFigure(	char *ImageName,
-							int MemSize = 1000000);
+							int MemSize = 5000000);
 	void ShowFigure(CRVLFigure *pFig);
 	void DisplayVectors(CRVLFigure *pFig,
 						int u0, int v0,
