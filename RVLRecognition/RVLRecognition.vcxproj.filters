@@ -27,12 +27,18 @@
     <ClInclude Include="Include\RFRecognition.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Include\RVLMeshNoiser.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="stdafx.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="RFRecognition.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="RVLMeshNoiser.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

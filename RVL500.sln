@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 2013
-VisualStudioVersion = 12.0.31101.0
+VisualStudioVersion = 12.0.30501.0
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "RVLCore", "RVLCore\RVLCore.vcxproj", "{06581169-BFDC-4B3F-A3ED-96FAF894EA87}"
 EndProject
@@ -57,8 +57,17 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "RVLRecognitionDemo", "RVLRe
 	EndProjectSection
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "RVLPCGTTools", "RVLPCGTTools\RVLPCGTTools.vcxproj", "{A7BB2F8F-CF57-4A8C-9F60-B1723F7E8AA1}"
+	ProjectSection(ProjectDependencies) = postProject
+		{06581169-BFDC-4B3F-A3ED-96FAF894EA87} = {06581169-BFDC-4B3F-A3ED-96FAF894EA87}
+	EndProjectSection
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "RVLPCGroundTruthDemo", "RVLPCGroundTruthDemo\RVLPCGroundTruthDemo.vcxproj", "{8871961C-818F-4F95-B2EF-6BF93633E0D1}"
+	ProjectSection(ProjectDependencies) = postProject
+		{06581169-BFDC-4B3F-A3ED-96FAF894EA87} = {06581169-BFDC-4B3F-A3ED-96FAF894EA87}
+		{A7BB2F8F-CF57-4A8C-9F60-B1723F7E8AA1} = {A7BB2F8F-CF57-4A8C-9F60-B1723F7E8AA1}
+		{4AAB03C0-3C88-4DFE-8F4B-E79EA831F97F} = {4AAB03C0-3C88-4DFE-8F4B-E79EA831F97F}
+		{76E5F0CE-5BBF-4698-992E-8C9502398014} = {76E5F0CE-5BBF-4698-992E-8C9502398014}
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

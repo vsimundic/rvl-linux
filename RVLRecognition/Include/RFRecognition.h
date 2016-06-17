@@ -8,6 +8,8 @@
 
 namespace RVL
 {
+	class RFRecognition;
+
 	namespace RECOG
 	{
 		struct RFFeatureDetectionParams
@@ -74,6 +76,11 @@ namespace RVL
 			float t[3];
 			float probability; //VIDOVIC
 			Hypothesis *pNext;
+		};
+
+		struct RFRecognitionCallbackData
+		{
+			RFRecognition *pRecognition;
 		};
 
 		bool SurfelCylinderIntersection(
@@ -168,6 +175,12 @@ namespace RVL
 			FILE *fp,
 			RECOG::RFFeature *pFeature,
 			float normalLength);
+		void DetectAndWriteFeatures(
+			Mesh *pMesh,
+			SurfelGraph *pSurfels,
+			int iSelectedPt,
+			int iSelectedSurfel,
+			void *vpData);
 #endif
 	}
 

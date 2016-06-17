@@ -4,10 +4,12 @@
 #include "PCLPointCloud.h"
 #include <pcl/io/pcd_io.h>
 #include <pcl/io/ply_io.h>
+#include <pcl/surface/vtk_smoothing/vtk_utils.h>
 #include <pcl/surface/organized_fast_mesh.h>
 #include <pcl/filters/fast_bilateral.h>
 #include <pcl/features/normal_3d_omp.h>
 #include "RVLCore2.h"
+#include "RVLVTK.h"
 #include "PCLMeshBuilder.h"
 
 
@@ -97,6 +99,56 @@ void PCLMeshBuilder::CreateMesh(
 	pcl::toPCLPointCloud2(N, N2);	
 	pcl::concatenateFields(N2, mesh.cloud, aux);
 	mesh.cloud = aux;
+}
+
+bool PCLMeshBuilder::CreateMesh(
+	vtkSmartPointer<vtkPolyData> pPolygonData,
+	pcl::PolygonMesh &mesh)
+{
+	vtkSmartPointer<vtkUnsignedCharArray> rgbPointData = rgbPointData->SafeDownCast(pPolygonData->GetPointData()->GetArray("Colors"));
+	if (rgbPointData == NULL)
+	{
+		rgbPointData = rgbPointData->SafeDownCast(pPolygonData->GetPointData()->GetArray("RGB"));
+
+		if (rgbPointData)
+			rgbPointData->SetName("Colors");
+		else
+			return false;
+	}
+
+	pcl::VTKUtils::vtk2mesh(pPolygonData, mesh);
+
+	vtkSmartPointer<vtkFloatArray> normalPointData = normalPointData->SafeDownCast(pPolygonData->GetPointData()->GetArray("Normals"));
+	if (normalPointData == NULL)
+	{
+		normalPointData = normalPointData->SafeDownCast(pPolygonData->GetPointData()->GetNormals());
+
+		if (normalPointData == NULL)
+			return false;
+	}
+
+	int nPts = pPolygonData->GetNumberOfPoints();
+
+	nPts = normalPointData->GetNumberOfTuples();
+
+	N.resize(nPts);
+
+	float N_[3];
+	
+	for (int i = 0; i < nPts; i++)
+	{
+		normalPointData->GetTupleValue(i, N_);
+
+		N.points[i].normal_x = N_[0];
+		N.points[i].normal_y = N_[1];
+		N.points[i].normal_z = N_[2];
+	}
+
+	pcl::toPCLPointCloud2(N, N2);
+	pcl::concatenateFields(N2, mesh.cloud, aux);
+	mesh.cloud = aux;
+
+	return true;
 }
 
 void PCLMeshBuilder::CreateParamList(CRVLMem *pMem)

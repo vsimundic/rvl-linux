@@ -670,24 +670,30 @@ void RFRecognition::FindObjects(Mesh *pMesh)
 	Init(pMesh, pSurfels);
 
 	//VIDOVIC
-	#ifdef RVLRFRECOGNITION_FEATURE_BASE_VISUALIZATION
-		// Visualization
+#ifdef RVLRFRECOGNITION_FEATURE_BASE_VISUALIZATION
+	// Visualization
 
-		unsigned char SelectionColor[3];
+	unsigned char SelectionColor[3];
 
-		SelectionColor[0] = 0;
-		SelectionColor[1] = 255;
-		SelectionColor[2] = 0;
+	SelectionColor[0] = 0;
+	SelectionColor[1] = 255;
+	SelectionColor[2] = 0;
 
-		pSurfels->NodeColors(SelectionColor);
+	pSurfels->NodeColors(SelectionColor);
 
-		visualizer.Create();
-		pSurfels->InitDisplay(&visualizer, pMesh, pSurfelDetector); //VIDOVIC
-		pSurfels->DisplayData.vpRecognition = this;//VIDOVIC
-		pSurfels->Display(&visualizer, pMesh);
-		//pSurfelDetector->DisplaySoftEdges(&visualizer, pMesh, pSurfels, SelectionColor);
-		visualizer.Run();
-	#endif
+	visualizer.Create();
+	pSurfels->InitDisplay(&visualizer, pMesh, pSurfelDetector); //VIDOVIC
+#ifdef RVLRFRECOGNITION_DEBUG
+	RECOG::RFRecognitionCallbackData displayData;
+	displayData.pRecognition = this;
+	pSurfels->DisplayData.vpUserFunctionData = &displayData;
+	pSurfels->DisplayData.userFunction = &RECOG::DetectAndWriteFeatures;
+#endif
+	//pSurfels->DisplayData.vpRecognition = this;//VIDOVIC
+	pSurfels->Display(&visualizer, pMesh);
+	//pSurfelDetector->DisplaySoftEdges(&visualizer, pMesh, pSurfels, SelectionColor);
+	visualizer.Run();
+#endif
 	//END VIDOVIC
 
 	QList<RECOG::Hypothesis> *pHypothesisList = &sceneInterpretation;
@@ -1341,6 +1347,40 @@ void RECOG::DebugWriteDescriptor(
 		RVLSUM3VECTORS(P1, N, P2);
 
 		fprintf(fp, "%f\t%f\t%f\t%f\t%f\t%f\t1\n", P1[0], P1[1], P1[2], P2[0], P2[1], P2[2]);
+	}
+}
+
+void RECOG::DetectAndWriteFeatures(
+	Mesh *pMesh, 
+	SurfelGraph *pSurfels, 
+	int iSelectedPt, 
+	int iSelectedSurfel, 
+	void *vpData)
+{
+	RECOG::RFRecognitionCallbackData *pData = (RECOG::RFRecognitionCallbackData *)vpData;
+
+	RECOG::RFFeatureBase featureBase;
+	QList<RECOG::RFFeature> featureList;
+	QList<RECOG::RFFeature> *pFeatureList = &featureList;
+	CRVLMem Mem;
+	Mem.Create(100000);
+	RECOG::Line3D *pLine;
+	int i;
+
+	pData->pRecognition->DetectFeatureBase(pMesh, pSurfels, iSelectedSurfel, &featureBase);
+
+	for (i = 0; i < featureBase.lineArray[0].n; i++)
+	{
+		pLine = featureBase.lineArray[0].Element + i;
+
+		if (pLine->length < pData->pRecognition->minRefLineSize)
+			continue;
+
+		// Detect features.
+
+		RVLQLIST_INIT(pFeatureList);
+
+		pData->pRecognition->DetectFeatures(pMesh, pSurfels, &featureBase, 0, i, pFeatureList, &Mem);
 	}
 }
 #endif

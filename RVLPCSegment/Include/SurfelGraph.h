@@ -19,7 +19,8 @@ namespace RVL
 			SurfelGraph *pSurfels;
 			Mesh *pMesh;
 			void *vpDetector;
-			void *vpRecognition;//VIDOVIC
+			void *vpUserFunctionData;
+			void(*userFunction)(Mesh *pMesh, SurfelGraph *pSurfels, int iSelectedPt, int iSelectedSurfel, void *vpData);
 			int  mode;
 			unsigned char SelectionColor[3];
 			int iSelectedSurfel;

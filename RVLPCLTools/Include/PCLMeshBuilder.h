@@ -12,6 +12,9 @@ namespace RVL
 		void CreateMesh(
 			pcl::PointCloud<pcl::PointXYZRGBA>::Ptr PC,
 			pcl::PolygonMesh &mesh);
+		bool CreateMesh(
+			vtkSmartPointer<vtkPolyData> pPolygonData,
+			pcl::PolygonMesh &mesh);
 		void CreateParamList(CRVLMem *pMem);
 
 	public:

@@ -1,10 +1,12 @@
 //#include "stdafx.h"
+#include <pcl/io/pcd_io.h>
 #include "RVLVTK.h"
 #include "RVLCore2.h"
 #include "Graph.h"
 #include <Eigen\Eigenvalues>
 #include <pcl/common/common.h>
 #include <pcl/PolygonMesh.h>
+#include <pcl/surface/vtk_smoothing/vtk_utils.h>
 #include "PCLTools.h"
 #include "PCLMeshBuilder.h"
 #include "RGBDCamera.h"
@@ -37,7 +39,7 @@ void Mesh::LoadPolyDataFromPLY(char *PLYFileName)
 }
 
 //VIDOVIC
-void Mesh::SavePolyDataToPLY(char *PLYFileName, Mesh *pMesh)
+void Mesh::SavePolyDataToPLY(char *PLYFileName)
 {
 	char *sceneNoisedMeshFileName = new char[100];
 
