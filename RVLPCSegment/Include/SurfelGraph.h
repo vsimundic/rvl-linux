@@ -7,6 +7,8 @@
 #define RVLSURFEL_EDGE_FLAG_HARD				0x01
 #define RVLSURFEL_EDGE_FLAG_CONVEX				0x02
 
+#define RVLSURFEL_VERSION_0		0
+
 namespace RVL
 {
 	class SurfelGraph;
@@ -101,6 +103,16 @@ namespace RVL
 			Mesh *pMesh,
 			FILE *fpPoints,
 			FILE *fpEdges);
+		void SaveSurfel(
+			FILE *fp,
+			int iSurfel);
+		void LoadSurfel(
+			FILE *fp,
+			int iSurfel);
+		void Save(
+			FILE *fp,
+			char *meshFileName,
+			void *vpDetector);
 
 	public:	
 		int nMeshVertices;

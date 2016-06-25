@@ -743,3 +743,62 @@ void SurfelGraph::Save(
 		pPtIdx = pPtIdx->pNext;
 	}
 }
+
+void SurfelGraph::SaveSurfel(
+	FILE *fp,
+	int iSurfel)
+{
+	fwrite(&iSurfel, sizeof(int), 1, fp);
+	
+	Surfel *pSurfel = NodeArray.Element + iSurfel;
+
+	fwrite(pSurfel->N, sizeof(float), 3, fp);
+	fwrite(&(pSurfel->d), sizeof(float), 1, fp);
+	fwrite(pSurfel->P, sizeof(float), 3, fp);
+	fwrite(pSurfel->RGB, sizeof(int), 3, fp);
+}
+
+void SurfelGraph::LoadSurfel(
+	FILE *fp,
+	int iSurfel)
+{
+	fread(&iSurfel, sizeof(int), 1, fp);
+
+	Surfel *pSurfel = NodeArray.Element + iSurfel;
+
+	fread(pSurfel->N, sizeof(float), 3, fp);
+	fread(&(pSurfel->d), sizeof(float), 1, fp);
+	fread(pSurfel->P, sizeof(float), 3, fp);
+	fread(pSurfel->RGB, sizeof(int), 3, fp);
+}
+
+void SurfelGraph::Save(
+	FILE *fp,
+	char *meshFileName,
+	void *vpDetector)
+{
+	char header[] = "RVL::SurfelGraph 000";
+
+	int headerLength = strlen(header);
+
+	sprintf(header + headerLength - 3, "%03d", RVLSURFEL_VERSION_0);
+
+	fwrite(header, sizeof(char), headerLength + 1, fp);
+
+	fwrite(meshFileName, sizeof(char), strlen(meshFileName) + 1, fp);
+
+	PlanarSurfelDetector *pDetector = (PlanarSurfelDetector *)vpDetector;
+
+	pDetector->Save(fp);
+
+	fwrite(&nMeshVertices, sizeof(int), 1, fp);
+	fwrite(surfelMap, sizeof(int), nMeshVertices, fp);
+
+	fwrite(&(NodeArray.n), sizeof(int), 1, fp);
+
+	int iSurfel;
+
+	for (iSurfel = 0; iSurfel < NodeArray.n; iSurfel++)
+		if (NodeArray.Element[iSurfel].size > 0)
+			SaveSurfel(fp, iSurfel);
+}

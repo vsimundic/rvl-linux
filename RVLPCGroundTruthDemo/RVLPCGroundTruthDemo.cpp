@@ -245,6 +245,8 @@ bool RecordData(RVLGT_SEGMENTATION_PARAMS *pGTSegmentParams, PCLMeshBuilder *pMe
 	IplImage* depthImg = cvCreateImageHeader(cvSize(depthMatView.cols, depthMatView.rows), IPL_DEPTH_8U, 1);
 	IplImage* depthImgFiltered = cvCreateImageHeader(cvSize(depthMatOrigSum.cols, depthMatOrigSum.rows), IPL_DEPTH_8U, 1);
 
+	pcl::PointCloud<pcl::PointXYZRGBA>::Ptr PC(new pcl::PointCloud<pcl::PointXYZRGBA>(GT_IMWIDTH, GT_IMHEIGHT));
+	pcl::PolygonMesh PCLMesh;
 
 	//Helper variables
 	double minVal, maxVal; //for rescaling
@@ -363,8 +365,6 @@ bool RecordData(RVLGT_SEGMENTATION_PARAMS *pGTSegmentParams, PCLMeshBuilder *pMe
 
 					Array2D<short int> depthImage;
 					RGBDCamera camera;
-					pcl::PointCloud<pcl::PointXYZRGBA>::Ptr PC(new pcl::PointCloud<pcl::PointXYZRGBA>(GT_IMWIDTH, GT_IMHEIGHT));
-					pcl::PolygonMesh PCLMesh;
 
 					depthImage.w = GT_IMWIDTH;
 					depthImage.h = GT_IMHEIGHT;
@@ -540,6 +540,13 @@ bool GenerateGT(RVLGT_PCLSUPERVOXEL_PARAMS *pPCLSuperVoxelParams, RVLGT_SEGMENTA
 					printf(" >> Extracting surfels...");
 					pDetector->Segment(&mesh, &surfels);
 					printf("completed. Found %d surfels.\n", surfels.NodeArray.n);
+					printf(">> Saving surfels...");								// CUPEC
+					char *surfelFileName = CreateFileName(pGTSegmentParams->iImageNo, pGTSegmentParams->pDefaultFileLocation, ".sur");		// CUPEC
+					FILE *fpSurfels = fopen(surfelFileName, "wb");				// CUPEC
+					surfels.Save(fpSurfels, pCurrentFileName, pDetector);		// CUPEC
+					fclose(fpSurfels);											// CUPEC
+					delete[] surfelFileName;									// CUPEC
+					printf("completed.\n");										// CUPEC
 				}
 				else
 				{
@@ -607,6 +614,7 @@ bool GenerateGT(RVLGT_PCLSUPERVOXEL_PARAMS *pPCLSuperVoxelParams, RVLGT_SEGMENTA
 				CurrentImageDetails.pClickedPoints = pClickedPoints;
 				CurrentImageDetails.pLabelMap = pLabelMap;
 				CurrentImageDetails.imageNumber = pGTSegmentParams->iImageNo;
+				CurrentImageDetails.maxLabelNo = maxNoLabels;
 
 				DisplaySegmentedImage(&CurrentImageDetails);
 				printf(" >> Existing ground truth loaded!\n");

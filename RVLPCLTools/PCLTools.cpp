@@ -24,5 +24,5 @@ void RVL::PCLSavePLY(
 	char *FileName,
 	pcl::PolygonMesh &mesh)
 {
-	pcl::io::savePLYFile(FileName, mesh);
+	pcl::io::savePLYFileBinary(FileName, mesh);
 }

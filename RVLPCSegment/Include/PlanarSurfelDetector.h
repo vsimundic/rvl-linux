@@ -51,6 +51,8 @@
 #define RVLPLANARSURFELDETECTOR_PROCESSED_G								0x01
 #define RVLPLANARSURFELDETECTOR_PROCESSED_SEED							0x02
 
+#define RVLPLANARSURFELDETECTOR_VERSION_0	0
+
 #define RVLPLANARSURFELDETECTOR_GET_NEXT_EDGE(pEdgeList, iPt, pEdgePtr, side, map, iNeighborPt, pEdge, OppID, WID, GID, BID)\
 {\
 	do\
@@ -257,6 +259,8 @@ namespace RVL
 			Mesh *pMesh,
 			SurfelGraph *pSurfels,
 			unsigned char *Color);
+		void Save(FILE *fp);
+
 	private:
 		bool GRegion(
 			Mesh *pMesh,

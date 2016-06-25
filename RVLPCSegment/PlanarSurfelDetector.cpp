@@ -106,7 +106,8 @@ void PlanarSurfelDetector::Init(
 
 	regionGrowingData.distThr = surfelDistThr * surfelDistThr;
 	regionGrowingData.kRGB2 = kRGB * kRGB;
-	regionGrowingData.kNormal2 = 0.0f;
+	//regionGrowingData.kNormal2 = 0.0f;
+	regionGrowingData.kNormal2 = kNormal * kNormal;
 	regionGrowingData.kPlane2 = kPlane * kPlane;
 	regionGrowingData.surfelMap = pSurfels->surfelMap;
 	regionGrowingData.buffer = map;
@@ -548,7 +549,8 @@ void PlanarSurfelDetector::Segment(
 			// Final region growing
 
 			//data.kNormal2 = 0.0f;
-			data.kNormal2 = 4.0f;
+			//data.kNormal2 = 4.0f;
+			data.kNormal2 = kNormal * kNormal;
 
 			piPtFetch = piPtPut = iPtBuff2;
 
@@ -4465,4 +4467,25 @@ int PlanarSurfelDetector::GetClosestNeighbor(
 	}
 
 	return iClosestNeighbor;
+}
+
+void PlanarSurfelDetector::Save(FILE *fp)
+{
+	char header[] = "RVL::PlanarSurfelDetector 000";
+
+	int headerLength = strlen(header);
+
+	sprintf(header + headerLength - 3, "%03d", RVLPLANARSURFELDETECTOR_VERSION_0);
+
+	fwrite(header, sizeof(char), headerLength + 1, fp);
+
+	fwrite(&k, sizeof(float), 1, fp);
+	fwrite(&kRGB, sizeof(float), 1, fp);
+	fwrite(&kNormal, sizeof(float), 1, fp);
+	fwrite(&kPlane, sizeof(float), 1, fp);
+	fwrite(&surfelDistThr, sizeof(float), 1, fp);
+	fwrite(&minSurfelSize, sizeof(int), 1, fp);
+	fwrite(&maxRange, sizeof(float), 1, fp);
+	fwrite(&maxAttackSize, sizeof(int), 1, fp);
+	fwrite(&bJoinSmallSurfelsToClosestNeighbors, sizeof(bool), 1, fp);
 }
