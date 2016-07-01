@@ -38,6 +38,7 @@ struct RVLGT_SEGMENTATION_PARAMS
 	int MinNoOfPoints;
 	int MaxDist;
 	char *pDefaultFileLocation;
+	int minConnectedComponentSize;
 };
 
 struct RVLGT_PCLSUPERVOXEL_PARAMS

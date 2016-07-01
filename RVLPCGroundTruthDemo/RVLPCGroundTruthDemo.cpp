@@ -59,9 +59,7 @@ typedef pcl::PointCloud<PointT> PointCloudT;
 typedef pcl::PointXYZL PointLT;
 typedef pcl::PointCloud<PointLT> PointLCloudT;
 
-
-
-
+void RVLflood(int* image, RVLGT_SEGMENTATION_PARAMS *pGTSegmentParams);
 
 void CreateParamList(
 	CRVLParameterList *pParamList,
@@ -82,6 +80,7 @@ void CreateParamList(
 	pParamData = pParamList->AddParam("GT.PercThreshold", RVLPARAM_TYPE_FLOAT, &(pGTSegmentParams->PercThreshold));
 	pParamData = pParamList->AddParam("GT.MinNoOfPoints", RVLPARAM_TYPE_INT, &(pGTSegmentParams->MinNoOfPoints));
 	pParamData = pParamList->AddParam("GT.MaxDist", RVLPARAM_TYPE_INT, &(pGTSegmentParams->MaxDist));
+	pParamData = pParamList->AddParam("GT.minConnectedComponentSize", RVLPARAM_TYPE_INT, &(pGTSegmentParams->minConnectedComponentSize));
 
 	pParamData = pParamList->AddParam("GT.GenerateGT", RVLPARAM_TYPE_FLAG, &flags);
 	pParamList->AddID(pParamData, "yes", RVLPCGT_DEMO_FLAG_GENERATE_GT);
@@ -431,6 +430,7 @@ bool GenerateGT(RVLGT_PCLSUPERVOXEL_PARAMS *pPCLSuperVoxelParams, RVLGT_SEGMENTA
 	//Common variables
 	char *pCurrentFileName;
 	char *windowNameRGB = "Current RGB image";
+	char *windowNameDepth = "Current depth image";
 	
 
 	if ((*pFlags & RVLPCGT_DEMO_FLAG_USER_SURFEL) != 0)
@@ -481,7 +481,7 @@ bool GenerateGT(RVLGT_PCLSUPERVOXEL_PARAMS *pPCLSuperVoxelParams, RVLGT_SEGMENTA
 	//Images to display
 	Mat imageInput;
 	Mat imageInputOrig;
-
+	IplImage *depthImageInput;
 
 
 	int currLabel, maxNoLabels;
@@ -489,6 +489,7 @@ bool GenerateGT(RVLGT_PCLSUPERVOXEL_PARAMS *pPCLSuperVoxelParams, RVLGT_SEGMENTA
 	int depthDiff;
 
 	char *pCurrentRGBFileName;
+	char *pCurrentDepthFileName;
 	char *pCurrentMaskFileName;
 	
 	RVLGT_IMAGE_DETAILS CurrentImageDetails;
@@ -497,8 +498,6 @@ bool GenerateGT(RVLGT_PCLSUPERVOXEL_PARAMS *pPCLSuperVoxelParams, RVLGT_SEGMENTA
 
 	CurrentImageDetails.segmentColor = pSegmentColor;
 	CurrentImageDetails.pWindowTitle = windowNameRGB;
-
-	
 
 	bool bLoadPtCloud = true;
 
@@ -520,11 +519,29 @@ bool GenerateGT(RVLGT_PCLSUPERVOXEL_PARAMS *pPCLSuperVoxelParams, RVLGT_SEGMENTA
 
 			printf("\nImage: %d\n", pGTSegmentParams->iImageNo);
 
+			//Read depth image
+			pCurrentDepthFileName = CreateFileName(pGTSegmentParams->iImageNo, pGTSegmentParams->pDefaultFileLocation, ".txt");
+
+			Array2D<short int> depthImage;
+
+			depthImage.Element = NULL;
+			depthImage.w = depthImage.h = 0;
+
+			unsigned int format;
+
+			ImportDisparityImage(pCurrentDepthFileName, depthImage, format);
+
+			depthImageInput = cvCreateImage(cvSize(depthImage.w, depthImage.h), IPL_DEPTH_8U, 3);
+			DisplayDisparityMap(depthImage, (unsigned char *)(depthImageInput->imageData), true, RVLRGB_DEPTH_FORMAT_1MM);
+
 			//Display images
 			namedWindow(windowNameRGB);
 			imshow(windowNameRGB, imageInputOrig);
+			namedWindow(windowNameDepth);
+			cvShowImage(windowNameDepth, depthImageInput);
 			waitKey(1);
 
+			cvReleaseImage(&depthImageInput);
 
 			CurrentImageDetails.pRGBImage = &imageInputOrig;
 
@@ -559,7 +576,7 @@ bool GenerateGT(RVLGT_PCLSUPERVOXEL_PARAMS *pPCLSuperVoxelParams, RVLGT_SEGMENTA
 				maxNoLabels = surfels.NodeArray.n + 1;
 
 				
-			}
+			}	// if ((*pFlags & RVLPCGT_DEMO_FLAG_USER_SURFEL) != 0)
 			else
 			{
 				printf(" >> Loading PCD file...");
@@ -604,7 +621,7 @@ bool GenerateGT(RVLGT_PCLSUPERVOXEL_PARAMS *pPCLSuperVoxelParams, RVLGT_SEGMENTA
 				//Assign pointer to label map
 				pLabelMap = pLabelMapHelper;
 				maxNoLabels = supervoxel_clusters.size() + 1;
-			}
+			}	// if ((*pFlags & RVLPCGT_DEMO_FLAG_USER_SURFEL) == 0)
 
 			
 			//Check if ground truth exists
@@ -763,9 +780,9 @@ bool GenerateGT(RVLGT_PCLSUPERVOXEL_PARAMS *pPCLSuperVoxelParams, RVLGT_SEGMENTA
 			// Set up the callback
 			cvSetMouseCallback(windowNameRGB, my_mouse_callback_ClickPoint, (void *)&CurrentImageDetails);
 
+			delete[] pCurrentDepthFileName;
 
-
-		}
+		} // if (bLoadPtCloud)
 
 #pragma endregion
 
@@ -774,7 +791,7 @@ bool GenerateGT(RVLGT_PCLSUPERVOXEL_PARAMS *pPCLSuperVoxelParams, RVLGT_SEGMENTA
 		//////////////////////////////  //////////////////////////////
 		//////SAVE CURRENT GT/mask image
 		//////////////////////////////  //////////////////////////////
-		if (c == 83 || c == 115) //|| bSaveGT == true) //S or s -> save current GT/mask image
+		if (c == 'S' || c == 's') //|| bSaveGT == true) //S or s -> save current GT/mask image
 		{
 
 			pCurrentMaskFileName = CreateFileName(pGTSegmentParams->iImageNo, pGTSegmentParams->pDefaultFileLocation, "_GT.txt");
@@ -784,12 +801,18 @@ bool GenerateGT(RVLGT_PCLSUPERVOXEL_PARAMS *pPCLSuperVoxelParams, RVLGT_SEGMENTA
 
 #pragma endregion
 
+		// COENE
+
+		if (c == 'C' || c == 'c') {
+			RVLflood(CurrentImageDetails.pGTMask, pGTSegmentParams);
+			DisplaySegmentedImage(&CurrentImageDetails);
+		}
 
 #pragma region Get next image
 		//////////////////////////////  //////////////////////////////
 		//////GET NEXT IMAGE
 		//////////////////////////////  //////////////////////////////
-		if (c == 78 || c == 110) //N or n -> get next image
+		if (c == 'N' || c == 'n') //N or n -> get next image
 		{
 			//Save once again in case the user forgot to save
 			pCurrentMaskFileName = CreateFileName(pGTSegmentParams->iImageNo, pGTSegmentParams->pDefaultFileLocation, "_GT.txt");
@@ -946,3 +969,64 @@ int main(int argc, char ** argv)
 	return 0;
 }
 
+void RVLflood(int* image, RVLGT_SEGMENTATION_PARAMS *pGTSegmentParams){
+	int seq = 1;
+	//int labelmap[GT_IMWIDTH * GT_IMHEIGHT] = { 0 };
+	int *labelmap = new int[GT_IMWIDTH * GT_IMHEIGHT];
+	memset(labelmap, 0, GT_IMWIDTH * GT_IMHEIGHT * sizeof(int));
+	queue<int> region;
+	queue<int> floodregion;
+	int *pGTMask3 = new int[GT_IMWIDTH*GT_IMHEIGHT];
+	ReadGTMask(pGTSegmentParams->iImageNo - 1, pGTMask3, pGTSegmentParams->pDefaultFileLocation);
+	for (int i = 0; i < GT_IMWIDTH * GT_IMHEIGHT; i++){
+		if (labelmap[i] == 0 && pGTSegmentParams->iImageNo == image[i]){
+			labelmap[i] = seq;
+			floodregion.push(i);
+			while (!floodregion.empty()){
+				int coord = floodregion.front();
+				floodregion.pop();
+				int right = (coord + 1) % (GT_IMHEIGHT*GT_IMWIDTH);
+				int left = (coord - 1) % (GT_IMHEIGHT*GT_IMWIDTH);
+				int above = (coord - GT_IMWIDTH) % (GT_IMHEIGHT*GT_IMWIDTH);
+				int under = (coord + GT_IMWIDTH) % (GT_IMHEIGHT*GT_IMWIDTH);
+				int direction = right;
+				if (direction>0 && labelmap[direction] == 0 && image[direction] == image[coord]){
+					labelmap[direction] = seq;
+					floodregion.push(direction);
+				}
+				direction = left;
+				if (direction>0 && labelmap[direction] == 0 && image[direction] == image[coord]){
+					labelmap[direction] = seq;
+					floodregion.push(direction);
+				}
+				direction = above;
+				if (direction>0 && labelmap[direction] == 0 && image[direction] == image[coord]){
+					labelmap[direction] = seq;
+					floodregion.push(direction);
+				}
+				direction = under;
+				if (direction>0 && labelmap[direction] == 0 && image[direction] == image[coord]){
+					labelmap[direction] = seq;
+					floodregion.push(direction);
+				}
+				region.push(coord);
+			}
+			if (region.size() < pGTSegmentParams->minConnectedComponentSize && (pGTSegmentParams->iImageNo - 1) >= 0){
+				int c;
+				while (!region.empty()){
+					c = region.front();
+					region.pop();
+					image[c] = pGTMask3[c];
+				}
+			}
+			std::queue<int> empty;
+			std::swap(region, empty);
+			std::queue<int> empty2;
+			std::swap(floodregion, empty2);
+			seq++;
+		}
+	}
+
+	delete[] labelmap;
+	delete[] pGTMask3;
+}
