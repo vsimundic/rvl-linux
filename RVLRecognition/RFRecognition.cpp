@@ -1,5 +1,7 @@
 //#include "stdafx.h"
 #include "RVLVTK.h"
+//#include <vtkCubeSource.h>
+#include <vtkAxesActor.h>
 #include "RVLCore2.h"
 #include "Graph.h"
 #include <Eigen\Eigenvalues>
@@ -156,6 +158,8 @@ void RFRecognition::CreateModelDatabase()
 
 	// Detect feature base.
 
+	printf("Detect feature...");
+
 	int objectID = 0;
 
 	RECOG::RFFeatureBase featureBase;
@@ -193,13 +197,19 @@ void RFRecognition::CreateModelDatabase()
 	modelFeatureList.pFirst->objectID = 0;
 	modelFeatureList.pFirst->frameID = 0;
 
+	printf("completed.\n");
+
 	// Save feature.
+
+	printf("Save feature to %s...", featureFileName);
 
 	FILE *fpFeature = fopen(featureFileName, "wb");
 
 	SaveFeature(fpFeature, modelFeatureList.pFirst);
 
 	fclose(fpFeature);
+
+	printf("completed.\n");
 }
 
 bool RFRecognition::LoadModelDatabase()
@@ -719,8 +729,8 @@ void RFRecognition::FindObjects(Mesh *pMesh)
 	RECOG::Line3D *pLine;
 	RECOG::RFFeature *pSFeature;
 	RECOG::Hypothesis *pHypothesis;
-	float *RFsS, *tFsS, *RFmM, *tFmM, *RMS, *tMS;
-	float VTmp[3];
+	float *RFsS, *tFsS, *RFmM, *tFmM, *RMS, *tMS, *RFsS_, *tFsS_;
+	float RMFm[9], tMFm[3];
 
 	for (iSurfel = 0; iSurfel < nSurfels; iSurfel++)
 	{
@@ -769,13 +779,17 @@ void RFRecognition::FindObjects(Mesh *pMesh)
 					pHypothesis->probability = matchScore; //VIDOVIC
 
 					RFsS = pSFeature->R;
-					tFsS = pSFeature->t;
+					tFsS = pSFeature->t;					
 					RFmM = pMFeature->R;
 					tFmM = pMFeature->t;
 					RMS = pHypothesis->R;
 					tMS = pHypothesis->t;
-
-					RVLCOMPTRANSF3DWITHINV(RFmM, tFmM, RFsS, tFsS, RMS, tMS, VTmp);
+					RFsS_ = pHypothesis->RF;
+					tFsS_ = pHypothesis->tF;
+					RVLCOPYMX3X3(RFsS, RFsS_);
+					RVLCOPY3VECTOR(tFsS, tFsS_);
+					RVLINVTRANSF3D(RFmM, tFmM, RMFm, tMFm);
+					RVLCOMPTRANSF3D(RFsS, tFsS, RMFm, tMFm, RMS, tMS);
 				}
 
 				pSFeature = pSFeature->pNext;
@@ -1280,6 +1294,91 @@ void RECOG::WriteHypothesis(
 	PrintMatrix<float>(fp, pHypothesis->t, 1, 3);
 	fprintf(fp, "\n");
 }
+
+void RFRecognition::InitDisplay(
+	Visualizer *pVisualizer,
+	Mesh *pMesh)
+{
+	pVisualizer->SetMesh(pMesh);
+	
+	displayData.pMesh = pMesh;
+	displayData.pSurfels = pSurfels;
+	displayData.pRecognition = this;
+	displayData.pVisualizer = pVisualizer;
+
+	pSurfels->InitDisplay(pVisualizer, pMesh, pSurfelDetector);
+
+	//pVisualizer->SetMouseRButtonDownCallback(SURFEL::MouseRButtonDown, &DisplayData);
+	//pVisualizer->SetKeyPressCallback(SURFEL::KeyPressCallback, &DisplayData);
+}
+
+void RFRecognition::Display()
+{	
+	Mesh *pMesh = displayData.pMesh;
+	Visualizer *pVisualizer = displayData.pVisualizer;
+
+	pSurfels->Display(pVisualizer, pMesh);
+
+	//double t[3];
+
+	RECOG::Hypothesis *pHypothesis = sceneInterpretation.pFirst;
+
+	while (pHypothesis)
+	{
+		//// Create a cube.
+		//vtkSmartPointer<vtkCubeSource> cubeSource =
+		//	vtkSmartPointer<vtkCubeSource>::New();
+		//cubeSource->SetXLength(5.0);
+		//cubeSource->SetYLength(5.0);
+		//cubeSource->SetZLength(5.0);
+
+		vtkSmartPointer<vtkAxesActor> axes = vtkSmartPointer<vtkAxesActor>::New();
+
+		axes->SetTotalLength(10.0, 10.0, 10.0);
+
+		// Create a mapper and actor.
+		vtkSmartPointer<vtkPolyDataMapper> mapper = vtkSmartPointer<vtkPolyDataMapper>::New();
+		//mapper->SetInputConnection(cubeSource->GetOutputPort());
+		//vtkSmartPointer<vtkActor> actor = vtkSmartPointer<vtkActor>::New();
+		//actor->SetMapper(mapper);
+		//actor->GetProperty()->SetColor(1.0, 0.0, 0.0);
+		//t[0] = (double)(pHypothesis->tF[0]);
+		//t[1] = (double)(pHypothesis->tF[1]);
+		//t[2] = (double)(pHypothesis->tF[2]);
+		////actor->SetPosition(t);
+		//axes->SetPosition(t);
+
+		vtkSmartPointer<vtkTransform> transform = vtkSmartPointer<vtkTransform>::New();
+		//transform->Translate(pHypothesis->tF[0], pHypothesis->tF[1], pHypothesis->tF[2]);
+		double T[16];
+		T[0] = (double)(pHypothesis->RF[0]);
+		T[1] = (double)(pHypothesis->RF[1]);
+		T[2] = (double)(pHypothesis->RF[2]);
+		T[4] = (double)(pHypothesis->RF[3]);
+		T[5] = (double)(pHypothesis->RF[4]);
+		T[6] = (double)(pHypothesis->RF[5]);
+		T[8] = (double)(pHypothesis->RF[6]);
+		T[9] = (double)(pHypothesis->RF[7]);
+		T[10] = (double)(pHypothesis->RF[8]);
+		T[3] = (double)(pHypothesis->tF[0]);
+		T[7] = (double)(pHypothesis->tF[1]);
+		T[11] = (double)(pHypothesis->tF[2]);
+		T[12] = T[13] = T[14] = 0.0;
+		T[15] = 1.0;
+
+		transform->SetMatrix(T);
+
+		axes->SetUserTransform(transform);
+
+		vtkMatrix4x4 *T_ = axes->GetMatrix();
+
+		//pVisualizer->renderer->AddActor(actor);
+		pVisualizer->renderer->AddActor(axes);
+
+		pHypothesis = pHypothesis->pNext;
+	}
+}
+	
 
 //VIDOVIC
 void RECOG::WriteHypothesisError(

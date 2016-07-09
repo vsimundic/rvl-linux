@@ -4,7 +4,7 @@
 #define RVLRECOGNITION_MODE_TRAINING			1
 
 #define RVLRFRECOGNITION_DEBUG
-#define RVLRFRECOGNITION_FEATURE_BASE_VISUALIZATION
+//#define RVLRFRECOGNITION_FEATURE_BASE_VISUALIZATION
 
 namespace RVL
 {
@@ -74,6 +74,8 @@ namespace RVL
 			int frameID;
 			float R[9];
 			float t[3];
+			float RF[9];
+			float tF[3];
 			float probability; //VIDOVIC
 			Hypothesis *pNext;
 		};
@@ -81,6 +83,9 @@ namespace RVL
 		struct RFRecognitionCallbackData
 		{
 			RFRecognition *pRecognition;
+			Mesh *pMesh;
+			SurfelGraph *pSurfels;
+			Visualizer *pVisualizer;
 		};
 
 		bool SurfelCylinderIntersection(
@@ -238,6 +243,10 @@ namespace RVL
 			iz = (int)floor((P[2] - voxelBox.minz) / voxelSize);
 		}
 		void FindBestHypothesis(RECOG::Hypothesis **pBestHypothesis); //VIDOVIC
+		void InitDisplay(
+			Visualizer *pVisualizer,
+			Mesh *pMesh);
+		void Display();
 
 	public:
 		CRVLParameterList ParamList;
@@ -276,6 +285,7 @@ namespace RVL
 		Box<float> voxelBox;
 		int maxnPtsPerVoxel;
 		Array<int> voxel8Pack;
+		RECOG::RFRecognitionCallbackData displayData;
 	};
 
 }

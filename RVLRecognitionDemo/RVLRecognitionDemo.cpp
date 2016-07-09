@@ -112,6 +112,24 @@ int main(int argc, char ** argv)
 		}
 
 		fclose(fpInterpretation);
+
+		// Visualization
+
+		unsigned char SelectionColor[3];
+
+		SelectionColor[0] = 0;
+		SelectionColor[1] = 255;
+		SelectionColor[2] = 0;
+
+		surfels.NodeColors(SelectionColor);
+
+		Visualizer visualizer;
+
+		visualizer.Create();
+
+		recognition.InitDisplay(&visualizer, &mesh);
+		recognition.Display();
+		visualizer.Run();
 	}		
 
 	// free memory
