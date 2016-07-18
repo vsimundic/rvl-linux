@@ -27,8 +27,19 @@ struct RVLGT_IMAGE_DETAILS
 	int *segmentColor;
 	char *pWindowTitle;
 	int maxLabelNo;
+	bool * pixelmode;
 };
 
+// COENE ROI data structure
+struct RVLGT_IMAGE_DETAILS_ROI
+{
+	RVLGT_IMAGE_DETAILS* details;
+	int startx;
+	int starty;
+	int width;
+	int height;
+};
+/////
 
 struct RVLGT_SEGMENTATION_PARAMS
 {
@@ -37,8 +48,8 @@ struct RVLGT_SEGMENTATION_PARAMS
 	float PercThreshold;
 	int MinNoOfPoints;
 	int MaxDist;
+	int minConnectedComponentSize;		//COENE
 	char *pDefaultFileLocation;
-	int minConnectedComponentSize;
 };
 
 struct RVLGT_PCLSUPERVOXEL_PARAMS

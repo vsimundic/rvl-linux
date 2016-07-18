@@ -53,6 +53,22 @@ using namespace std;
 #define RVLPCGT_DEMO_FLAG_GENERATE_GT				0x00100000
 #define RVLPCGT_DEMO_FLAG_USER_SURFEL				0x10000000
 
+// COENE struct needed to pass to callback function
+struct Group_Structure_VTK{
+	vtkSmartPointer<vtkRenderWindow> *window;
+	RVLGT_IMAGE_DETAILS* details;
+	Mesh* mesh;
+};
+
+// COENE definition of needed functions
+void flood(int* image, RVLGT_SEGMENTATION_PARAMS *pGTSegmentParams);
+vtkSmartPointer<vtkRenderWindow> vtk_initialiser(Mesh& mesh, RVLGT_IMAGE_DETAILS *pImgDetails);
+void DisplaySegmentationInMesh(vtkSmartPointer<vtkRenderWindow> window, Mesh &mesh, RVLGT_IMAGE_DETAILS *pImgDetails);
+void userFunction(vtkObject *caller, unsigned long eid, void *clientdata, void *calldata);
+void zoomROI(RVLGT_IMAGE_DETAILS& CurrentImageDetails, Mat* image_roi, int* clickedpoints);
+void my_mouse_callback_ClickPoint_ROI(int event, int x, int y, int flags, void* param);
+////////
+
 // Types
 typedef pcl::PointXYZRGBA PointT;
 typedef pcl::PointCloud<PointT> PointCloudT;
@@ -102,7 +118,58 @@ void CreateParamList(
 	pParamList->AddID(pParamData, "yes", RVLPCGT_DEMO_FLAG_SAVE_PLY);
 }
 
-void DisplaySegmentedImage(RVLGT_IMAGE_DETAILS *pImgDetails)
+//void DisplaySegmentedImage(RVLGT_IMAGE_DETAILS *pImgDetails)
+//{
+//	cv::Mat segmentedImage;
+//
+//	int iseg, currIdx, iLabel;
+//	int *psegColor;
+//	cv::Vec3b color;
+//
+//	float opacity = 0.7;
+//
+//	//Create copy of original
+//	pImgDetails->pRGBImage->copyTo(segmentedImage);
+//
+//	for (int row = 0; row < pImgDetails->pRGBImage->rows; ++row)
+//	{
+//		for (int col = 0; col < pImgDetails->pRGBImage->cols; ++col)
+//		{
+//
+//			currIdx = row*GT_IMWIDTH + col;
+//			iLabel = pImgDetails->pGTMask[currIdx];
+//
+//			if (iLabel > -1)
+//			{
+//				iseg = iLabel % 37;
+//			}
+//			else
+//			{
+//				iseg = 37;
+//			}
+//
+//			psegColor = pImgDetails->segmentColor + iseg * 3;
+//
+//			color = segmentedImage.at<cv::Vec3b>(cv::Point(col, row));
+//
+//			for (int i = 0; i < 3; i++)
+//			{
+//				color[i] = color[i] * (1 - opacity) + psegColor[i] * opacity;
+//			}
+//
+//			//save pixel
+//			segmentedImage.at<cv::Vec3b>(cv::Point(col, row)) = color;
+//
+//		}
+//	}
+//
+//	cv::namedWindow(pImgDetails->pWindowTitle);
+//	cv::imshow(pImgDetails->pWindowTitle, segmentedImage);
+//	cv::waitKey(1);
+//
+//}
+
+void DisplaySegmentedImage(RVLGT_IMAGE_DETAILS *pImgDetails, int startw = 0, int starth = 0, bool large = false)		//COENE, dynamicly adaptable to ROI
 {
 	cv::Mat segmentedImage;
 
@@ -119,8 +186,9 @@ void DisplaySegmentedImage(RVLGT_IMAGE_DETAILS *pImgDetails)
 	{
 		for (int col = 0; col < pImgDetails->pRGBImage->cols; ++col)
 		{
-
-			currIdx = row*GT_IMWIDTH + col;
+			//COENE, made calculation dynamicly adaptable to ROI
+			currIdx = row*GT_IMWIDTH + col + ((starth * GT_IMWIDTH) + startw);
+			/////////////
 			iLabel = pImgDetails->pGTMask[currIdx];
 
 			if (iLabel > -1)
@@ -147,19 +215,73 @@ void DisplaySegmentedImage(RVLGT_IMAGE_DETAILS *pImgDetails)
 		}
 	}
 
-	cv::namedWindow(pImgDetails->pWindowTitle);
+	// COENE, dynamicly adaptable to ROI
+	if (large){
+		namedWindow(pImgDetails->pWindowTitle, WINDOW_NORMAL);
+	}
+	else{
+		cv::namedWindow(pImgDetails->pWindowTitle);
+	}
+	////////
+
 	cv::imshow(pImgDetails->pWindowTitle, segmentedImage);
 	cv::waitKey(1);
 
 }
 
-void SwitchLabels(RVLGT_IMAGE_DETAILS *pImgDetails)
+
+//void SwitchLabels(RVLGT_IMAGE_DETAILS *pImgDetails)
+//{
+//	//Make sure all clicked points exist
+//	if (pImgDetails->pClickedPoints[0]>-1 && pImgDetails->pClickedPoints[1]>-1 && pImgDetails->pClickedPoints[2]>-1 && pImgDetails->pClickedPoints[3]>-1)
+//	{
+//		int idxSource = pImgDetails->pClickedPoints[1] * GT_IMWIDTH + pImgDetails->pClickedPoints[0];
+//		int idxTarget = pImgDetails->pClickedPoints[3] * GT_IMWIDTH + pImgDetails->pClickedPoints[2];
+//
+//		int lblSource = pImgDetails->pLabelMap[idxSource];
+//
+//		int lblGTTarget = pImgDetails->pGTMask[idxTarget];
+//
+//		int currIdx;
+//
+//		//NOTE: lblSource and lblGTTarget do not have have the same meaning!!!
+//		//lblSource is obtained from the surfel or supervoxel map
+//		//lblGTTarget is obtained from the derived ground truth mask
+//		//lblSource = -1 means undefined pixel in surfel or supervoxel map; 
+//		//lblGTTarget = -1 means undefined pixel in surfel or supervoxel map + pixels with depth value greater than MaxDist; 
+//		if (lblSource > -1 && lblSource < pImgDetails->maxLabelNo && lblGTTarget > -1)
+//		{
+//			for (int v = 0; v < GT_IMHEIGHT; v++)
+//			{
+//				for (int u = 0; u < GT_IMWIDTH; u++)
+//				{
+//					currIdx = v*GT_IMWIDTH + u;
+//
+//					if (pImgDetails->pLabelMap[currIdx] == lblSource)
+//					{
+//						pImgDetails->pGTMask[currIdx] = lblGTTarget;
+//					}
+//
+//				}
+//			}
+//			DisplaySegmentedImage(pImgDetails);
+//		}
+//		
+//	}
+//	
+//}
+
+void SwitchLabels(RVLGT_IMAGE_DETAILS *pImgDetails, int startw = 0, int starth = 0, int width = GT_IMWIDTH, int height = GT_IMHEIGHT)	// COENE, dynamicly adaptable to ROI
 {
 	//Make sure all clicked points exist
 	if (pImgDetails->pClickedPoints[0]>-1 && pImgDetails->pClickedPoints[1]>-1 && pImgDetails->pClickedPoints[2]>-1 && pImgDetails->pClickedPoints[3]>-1)
 	{
-		int idxSource = pImgDetails->pClickedPoints[1] * GT_IMWIDTH + pImgDetails->pClickedPoints[0];
-		int idxTarget = pImgDetails->pClickedPoints[3] * GT_IMWIDTH + pImgDetails->pClickedPoints[2];
+		// COENE made calculation dynamicly adaptable to ROI
+		int idxSource = pImgDetails->pClickedPoints[1] * GT_IMWIDTH + pImgDetails->pClickedPoints[0] + ((starth * GT_IMWIDTH) + startw);
+		int idxTarget = pImgDetails->pClickedPoints[3] * GT_IMWIDTH + pImgDetails->pClickedPoints[2] + ((starth * GT_IMWIDTH) + startw);
+		////
+
+		bool* pixelmode = pImgDetails->pixelmode;
 
 		int lblSource = pImgDetails->pLabelMap[idxSource];
 
@@ -172,27 +294,37 @@ void SwitchLabels(RVLGT_IMAGE_DETAILS *pImgDetails)
 		//lblGTTarget is obtained from the derived ground truth mask
 		//lblSource = -1 means undefined pixel in surfel or supervoxel map; 
 		//lblGTTarget = -1 means undefined pixel in surfel or supervoxel map + pixels with depth value greater than MaxDist; 
+
 		if (lblSource > -1 && lblSource < pImgDetails->maxLabelNo && lblGTTarget > -1)
 		{
-			for (int v = 0; v < GT_IMHEIGHT; v++)
-			{
-				for (int u = 0; u < GT_IMWIDTH; u++)
+			if (!(*pixelmode)){
+				for (int v = 0; v < height; v++)		// COENE, dynamicly adaptable to ROI
 				{
-					currIdx = v*GT_IMWIDTH + u;
-
-					if (pImgDetails->pLabelMap[currIdx] == lblSource)
+					for (int u = 0; u < width; u++)		// COENE, dynamicly adaptable to ROI
 					{
-						pImgDetails->pGTMask[currIdx] = lblGTTarget;
-					}
+						// COENE, dynamicly adaptable to ROI
+						currIdx = v*GT_IMWIDTH + u + ((starth * GT_IMWIDTH) + startw);
+						////
 
+						if (pImgDetails->pLabelMap[currIdx] == lblSource)
+						{
+							pImgDetails->pGTMask[currIdx] = lblGTTarget;
+						}
+
+					}
 				}
 			}
-			DisplaySegmentedImage(pImgDetails);
+			else{
+				pImgDetails->pGTMask[idxSource] = pImgDetails->pGTMask[idxTarget];
+			}
+
+			DisplaySegmentedImage(pImgDetails, startw, starth, startw != 0);	// COENE, dynamicly adaptable to ROI
 		}
-		
+
 	}
-	
+
 }
+
 
 void my_mouse_callback_ClickPoint(int event, int x, int y, int flags, void* param)
 {
@@ -499,6 +631,13 @@ bool GenerateGT(RVLGT_PCLSUPERVOXEL_PARAMS *pPCLSuperVoxelParams, RVLGT_SEGMENTA
 	CurrentImageDetails.segmentColor = pSegmentColor;
 	CurrentImageDetails.pWindowTitle = windowNameRGB;
 
+	// COENE, setting up variables
+
+	Mat* image_roi = NULL;
+	int clickedpoints_ROI[4];
+	bool pixelmode = false;
+	////////////
+
 	bool bLoadPtCloud = true;
 
 	while (true)
@@ -774,9 +913,8 @@ bool GenerateGT(RVLGT_PCLSUPERVOXEL_PARAMS *pPCLSuperVoxelParams, RVLGT_SEGMENTA
 
 
 			} //End Ground truth does not exist
-
+			CurrentImageDetails.pixelmode = &pixelmode;
 			
-
 			// Set up the callback
 			cvSetMouseCallback(windowNameRGB, my_mouse_callback_ClickPoint, (void *)&CurrentImageDetails);
 
@@ -801,12 +939,33 @@ bool GenerateGT(RVLGT_PCLSUPERVOXEL_PARAMS *pPCLSuperVoxelParams, RVLGT_SEGMENTA
 
 #pragma endregion
 
-		// COENE
+#pragma region Zoom, connected component and mesh
+		// COENE , connected component
 
 		if (c == 'C' || c == 'c') {
-			RVLflood(CurrentImageDetails.pGTMask, pGTSegmentParams);
+			flood(CurrentImageDetails.pGTMask, pGTSegmentParams);
 			DisplaySegmentedImage(&CurrentImageDetails);
 		}
+		/////
+
+		// Coene , Zoom ROI
+		if (c == 'Z' || c == 'z') {
+			zoomROI(CurrentImageDetails, image_roi, clickedpoints_ROI);
+		}
+		/////
+
+		// COENE, generate mesh window when pressing P
+		if (c == 'p' || c == 'P'){
+			vtkSmartPointer<vtkRenderWindow> window = vtk_initialiser(mesh, &CurrentImageDetails);
+		}
+		if (c == 'o' || c == 'O'){
+			pixelmode = !pixelmode;
+		}
+
+		if (c == 'r' || c == 'R')
+			DisplaySegmentedImage(&CurrentImageDetails);
+		/////
+#pragma endregion
 
 #pragma region Get next image
 		//////////////////////////////  //////////////////////////////
@@ -888,6 +1047,11 @@ bool GenerateGT(RVLGT_PCLSUPERVOXEL_PARAMS *pPCLSuperVoxelParams, RVLGT_SEGMENTA
 	delete[] pClickedPoints;
 	delete[] pSegmentColor;
 
+	// Coene, delete mem allocation of ROI
+	if (image_roi != NULL){
+		delete image_roi;
+	}
+	////////
 
 	cvDestroyAllWindows();
 
@@ -1030,3 +1194,243 @@ void RVLflood(int* image, RVLGT_SEGMENTATION_PARAMS *pGTSegmentParams){
 	delete[] labelmap;
 	delete[] pGTMask3;
 }
+
+///////////////////////////////// 
+////FROM HERE COENE ADDED FUNCTIONS
+///////////////////////////////
+
+
+// COENE, Connected component function
+void flood(int* image, RVLGT_SEGMENTATION_PARAMS *pGTSegmentParams){
+	int seq = 1;
+	int labelmap[GT_IMWIDTH * GT_IMHEIGHT] = { 0 };
+	queue<int> region;
+	queue<int> floodregion;
+	int pGTMask3[GT_IMWIDTH*GT_IMHEIGHT];
+	ReadGTMask(pGTSegmentParams->iImageNo - 1, pGTMask3, pGTSegmentParams->pDefaultFileLocation);
+	for (int i = 0; i < GT_IMWIDTH * GT_IMHEIGHT; i++){
+		if (labelmap[i] == 0 && pGTSegmentParams->iImageNo == image[i]){
+			labelmap[i] = seq;
+			floodregion.push(i);
+			while (!floodregion.empty()){
+				int coord = floodregion.front();
+				floodregion.pop();
+				int right = (coord + 1) % (GT_IMHEIGHT*GT_IMWIDTH);
+				int left = (coord - 1) % (GT_IMHEIGHT*GT_IMWIDTH);
+				int above = (coord - GT_IMWIDTH) % (GT_IMHEIGHT*GT_IMWIDTH);
+				int under = (coord + GT_IMWIDTH) % (GT_IMHEIGHT*GT_IMWIDTH);
+				int direction = right;
+				if (direction>0 && labelmap[direction] == 0 && image[direction] == image[coord]){
+					labelmap[direction] = seq;
+					floodregion.push(direction);
+				}
+				direction = left;
+				if (direction>0 && labelmap[direction] == 0 && image[direction] == image[coord]){
+					labelmap[direction] = seq;
+					floodregion.push(direction);
+				}
+				direction = above;
+				if (direction>0 && labelmap[direction] == 0 && image[direction] == image[coord]){
+					labelmap[direction] = seq;
+					floodregion.push(direction);
+				}
+				direction = under;
+				if (direction>0 && labelmap[direction] == 0 && image[direction] == image[coord]){
+					labelmap[direction] = seq;
+					floodregion.push(direction);
+				}
+				region.push(coord);
+			}
+			if (region.size() < pGTSegmentParams->minConnectedComponentSize && (pGTSegmentParams->iImageNo - 1) >= 0){
+				int c;
+				while (!region.empty()){
+					c = region.front();
+					region.pop();
+					image[c] = pGTMask3[c];
+				}
+			}
+			std::queue<int> empty;
+			std::swap(region, empty);
+			std::queue<int> empty2;
+			std::swap(floodregion, empty2);
+			seq++;
+		}
+	}
+}
+
+////////
+
+
+// COENE initialise VTK window function
+vtkSmartPointer<vtkRenderWindow> vtk_initialiser(Mesh &mesh, RVLGT_IMAGE_DETAILS *pImgDetails){
+	// Initialize VTK.
+	vtkSmartPointer<vtkRenderer> renderer;
+	vtkSmartPointer<vtkRenderWindow> window;
+	vtkSmartPointer<vtkRenderWindowInteractor> interactor;
+	vtkSmartPointer<vtkInteractorStyleTrackballCamera> style;
+	vtkSmartPointer<vtkPolyDataMapper> map;
+	vtkSmartPointer<vtkActor> actor;
+	vtkSmartPointer<vtkPointPicker> pointPicker;
+
+	//initialize vtk
+	renderer = vtkSmartPointer<vtkRenderer>::New();
+	window = vtkSmartPointer<vtkRenderWindow>::New();
+	interactor = vtkSmartPointer<vtkRenderWindowInteractor>::New();
+	window->AddRenderer(renderer);
+	window->SetSize(800, 600);
+	interactor->SetRenderWindow(window);
+	style = vtkSmartPointer<vtkInteractorStyleTrackballCamera>::New();
+	interactor->SetInteractorStyle(style);
+	renderer->SetBackground(0.5294, 0.8078, 0.9803);
+
+	// initialise the rest
+	pointPicker = vtkSmartPointer<vtkPointPicker>::New();
+	interactor->SetPicker(pointPicker);
+	map = vtkSmartPointer<vtkPolyDataMapper>::New();
+	map->SetInputData(mesh.pPolygonData);		// outside
+	map->InterpolateScalarsBeforeMappingOff();
+	actor = vtkSmartPointer<vtkActor>::New();
+	actor->SetMapper(map);
+	renderer->AddActor(actor);
+
+	//RightMouseButton callback
+	vtkSmartPointer<vtkCallbackCommand> mouseRButtonDownCallback = vtkSmartPointer<vtkCallbackCommand>::New();
+	mouseRButtonDownCallback->SetCallback(userFunction);
+	Group_Structure_VTK group;
+	group.details = pImgDetails;
+	group.mesh = &mesh;
+	group.window = &window;
+	mouseRButtonDownCallback->SetClientData(&group);
+	interactor->AddObserver(vtkCommand::RightButtonPressEvent, mouseRButtonDownCallback);
+
+	// color properly
+	DisplaySegmentationInMesh(window, mesh, pImgDetails);
+	// render image
+	renderer->ResetCamera();
+	window->Render();
+	window->GetInteractor()->Start();
+	return window;
+}
+////////////
+
+
+// COENE function that displays the labels on the mesh
+void DisplaySegmentationInMesh(vtkSmartPointer<vtkRenderWindow> window, Mesh& mesh, RVLGT_IMAGE_DETAILS *pImgDetails)
+{
+	vtkSmartPointer<vtkUnsignedCharArray> rgbPointData;
+	rgbPointData = rgbPointData->SafeDownCast(mesh.pPolygonData->GetPointData()->GetArray("RGB"));
+	int* psegColor;
+	int iseg;
+	int iLabel;
+	unsigned char Color[3];
+	for (int i = 0; i < GT_IMWIDTH *GT_IMHEIGHT; i++){
+		iLabel = pImgDetails->pGTMask[i];
+
+		if (iLabel > -1)
+		{
+			iseg = iLabel % 37;
+		}
+		else
+		{
+			iseg = 37;
+		}
+		psegColor = pImgDetails->segmentColor + iseg * 3;
+		Color[0] = psegColor[2];
+		Color[1] = psegColor[1];
+		Color[2] = psegColor[1];
+		rgbPointData->SetTupleValue(i, Color);
+	}
+	mesh.pPolygonData->Modified();
+	window->Modified();
+	window->GetInteractor()->GetRenderWindow()->Render();
+}
+/////////
+
+// Coene callback function that invokes the switching of labels on the mesh and on the 2D image,
+void userFunction(vtkObject *caller, unsigned long eid, void *clientdata, void *calldata)
+{
+	vtkSmartPointer<vtkRenderWindowInteractor> interactor = reinterpret_cast<vtkRenderWindowInteractor*>(caller);
+	Group_Structure_VTK* group = (Group_Structure_VTK*)clientdata;
+	interactor->GetPicker()->Pick(interactor->GetEventPosition()[0], interactor->GetEventPosition()[1], 0,
+		interactor->GetRenderWindow()->GetRenderers()->GetFirstRenderer());
+	double p[4];
+	int id = ((vtkPointPicker*)interactor->GetPicker())->GetPointId();
+	int x = id % GT_IMWIDTH;
+	my_mouse_callback_ClickPoint(CV_EVENT_LBUTTONUP, x, (id - x) / GT_IMWIDTH, 0, group->details);
+	DisplaySegmentationInMesh(*(group->window), *(group->mesh), group->details);
+}
+
+void zoomROI(RVLGT_IMAGE_DETAILS& CurrentImageDetails, Mat* image_roi, int* clickedpoints){
+	if (CurrentImageDetails.pClickedPoints[2] > -1 && CurrentImageDetails.pClickedPoints[3] > -1){
+		const int imw = 50;
+		const int imh = 50;
+		int beginx = CurrentImageDetails.pClickedPoints[2];
+		int beginy = CurrentImageDetails.pClickedPoints[3];
+
+		if ((beginx + imw)>GT_IMWIDTH){
+			beginx = GT_IMWIDTH - imw;
+		}
+		if ((beginy + imh)>GT_IMHEIGHT){
+			beginy = GT_IMHEIGHT - imh;
+		}
+
+		RVLGT_IMAGE_DETAILS* ROI_Details = new RVLGT_IMAGE_DETAILS();
+
+		Rect region_of_interest = Rect(beginx, beginy, imw, imh);
+		Mat image_roi2 = (*CurrentImageDetails.pRGBImage)(region_of_interest);
+		// Coene, delete mem allocation of ROI, if it already existed
+		if (image_roi != NULL){
+			delete image_roi;
+		}
+		image_roi = new Mat(image_roi2);
+		ROI_Details->pRGBImage = image_roi;
+
+		ROI_Details->segmentColor = CurrentImageDetails.segmentColor;
+		ROI_Details->pGTMask = CurrentImageDetails.pGTMask;
+		ROI_Details->pWindowTitle = "ROI";
+		ROI_Details->pClickedPoints = clickedpoints;
+		ROI_Details->pLabelMap = CurrentImageDetails.pLabelMap;
+		ROI_Details->maxLabelNo = CurrentImageDetails.maxLabelNo;
+		ROI_Details->imageNumber = CurrentImageDetails.imageNumber;
+		ROI_Details->pixelmode = CurrentImageDetails.pixelmode;
+
+		DisplaySegmentedImage(ROI_Details, beginx, beginy, true);
+
+		RVLGT_IMAGE_DETAILS_ROI* ROI_Details_wrapped = new RVLGT_IMAGE_DETAILS_ROI();
+		ROI_Details_wrapped->details = ROI_Details;
+		ROI_Details_wrapped->startx = beginx;
+		ROI_Details_wrapped->starty = beginy;
+		ROI_Details_wrapped->width = imw;
+		ROI_Details_wrapped->height = imh;
+		cvSetMouseCallback(ROI_Details->pWindowTitle, my_mouse_callback_ClickPoint_ROI, (void *)ROI_Details_wrapped);
+	}
+}
+
+
+// COENE, new callback function for ROI
+void my_mouse_callback_ClickPoint_ROI(int event, int x, int y, int flags, void* param)
+{
+	RVLGT_IMAGE_DETAILS_ROI * pCurrentImageDetails2 = (RVLGT_IMAGE_DETAILS_ROI *)param;
+	RVLGT_IMAGE_DETAILS* pCurrentImageDetails = pCurrentImageDetails2->details;
+	int startw = pCurrentImageDetails2->startx;
+	int starth = pCurrentImageDetails2->starty;
+	int width = pCurrentImageDetails2->width;
+	int height = pCurrentImageDetails2->height;
+
+	switch (event)
+	{
+
+	case CV_EVENT_LBUTTONUP:
+		pCurrentImageDetails->pClickedPoints[0] = x;
+		pCurrentImageDetails->pClickedPoints[1] = y;
+		SwitchLabels(pCurrentImageDetails, startw, starth, width, height);
+		break;
+
+	case CV_EVENT_RBUTTONUP:
+		pCurrentImageDetails->pClickedPoints[2] = x;
+		pCurrentImageDetails->pClickedPoints[3] = y;
+		break;
+
+	}
+}
+////////////

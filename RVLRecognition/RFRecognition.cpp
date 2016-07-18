@@ -210,6 +210,104 @@ void RFRecognition::CreateModelDatabase()
 	fclose(fpFeature);
 
 	printf("completed.\n");
+
+#ifdef RVLRFRECOGNITION_FEATURE_BASE_VISUALIZATION
+	// Visualization
+
+	unsigned char SelectionColor[3];
+
+	SelectionColor[0] = 0;
+	SelectionColor[1] = 255;
+	SelectionColor[2] = 0;
+
+	pSurfels->NodeColors(SelectionColor);
+
+	Visualizer visualizer;
+
+	visualizer.Create();
+
+	InitDisplay(&visualizer, &mesh);
+	
+	pSurfels->Display(&visualizer, &mesh);
+
+	RECOG::RFFeature *pFeature = modelFeatureList.pFirst;
+
+	while (pFeature)
+	{
+		vtkSmartPointer<vtkAxesActor> axes = vtkSmartPointer<vtkAxesActor>::New();
+
+		axes->SetTotalLength(10.0, 10.0, 10.0);
+
+		// Create a mapper and actor.
+		vtkSmartPointer<vtkPolyDataMapper> mapper = vtkSmartPointer<vtkPolyDataMapper>::New();
+		vtkSmartPointer<vtkTransform> transform = vtkSmartPointer<vtkTransform>::New();
+		double T[16];
+		T[0] = (double)(pFeature->R[0]);
+		T[1] = (double)(pFeature->R[1]);
+		T[2] = (double)(pFeature->R[2]);
+		T[4] = (double)(pFeature->R[3]);
+		T[5] = (double)(pFeature->R[4]);
+		T[6] = (double)(pFeature->R[5]);
+		T[8] = (double)(pFeature->R[6]);
+		T[9] = (double)(pFeature->R[7]);
+		T[10] = (double)(pFeature->R[8]);
+		T[3] = (double)(pFeature->t[0]);
+		T[7] = (double)(pFeature->t[1]);
+		T[11] = (double)(pFeature->t[2]);
+		T[12] = T[13] = T[14] = 0.0;
+		T[15] = 1.0;
+
+		transform->SetMatrix(T);
+
+		axes->SetUserTransform(transform);
+
+		vtkMatrix4x4 *T_ = axes->GetMatrix();
+
+		visualizer.renderer->AddActor(axes);
+
+		pFeature = pFeature->pNext;
+	}
+
+	//RECOG::Hypothesis *pHypothesis = sceneInterpretation.pFirst;
+
+	//while (pHypothesis)
+	//{
+	//	vtkSmartPointer<vtkAxesActor> axes = vtkSmartPointer<vtkAxesActor>::New();
+
+	//	axes->SetTotalLength(10.0, 10.0, 10.0);
+
+	//	// Create a mapper and actor.
+	//	vtkSmartPointer<vtkPolyDataMapper> mapper = vtkSmartPointer<vtkPolyDataMapper>::New();
+	//	vtkSmartPointer<vtkTransform> transform = vtkSmartPointer<vtkTransform>::New();
+	//	double T[16];
+	//	T[0] = (double)(pHypothesis->RF[0]);
+	//	T[1] = (double)(pHypothesis->RF[1]);
+	//	T[2] = (double)(pHypothesis->RF[2]);
+	//	T[4] = (double)(pHypothesis->RF[3]);
+	//	T[5] = (double)(pHypothesis->RF[4]);
+	//	T[6] = (double)(pHypothesis->RF[5]);
+	//	T[8] = (double)(pHypothesis->RF[6]);
+	//	T[9] = (double)(pHypothesis->RF[7]);
+	//	T[10] = (double)(pHypothesis->RF[8]);
+	//	T[3] = (double)(pHypothesis->tF[0]);
+	//	T[7] = (double)(pHypothesis->tF[1]);
+	//	T[11] = (double)(pHypothesis->tF[2]);
+	//	T[12] = T[13] = T[14] = 0.0;
+	//	T[15] = 1.0;
+
+	//	transform->SetMatrix(T);
+
+	//	axes->SetUserTransform(transform);
+
+	//	vtkMatrix4x4 *T_ = axes->GetMatrix();
+
+	//	pVisualizer->renderer->AddActor(axes);
+
+	//	pHypothesis = pHypothesis->pNext;
+	//}
+
+	visualizer.Run();
+#endif
 }
 
 bool RFRecognition::LoadModelDatabase()
