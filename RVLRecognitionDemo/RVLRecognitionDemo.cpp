@@ -19,13 +19,18 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 #include "SurfelGraph.h"
 #include "PlanarSurfelDetector.h"
 #include "RFRecognition.h"
+#include "PSGM.h"
 
 using namespace RVL;
+
+#define RVLRECOGNITION_METHOD_RF		0
+#define RVLRECOGNITION_METHOD_PSGM		1
 
 void CreateParamList(
 	CRVLParameterList *pParamList,
 	CRVLMem *pMem,
-	char **pMeshFileName)
+	char **pMeshFileName,
+	DWORD &method)
 {
 	pParamList->m_pMem = pMem;
 
@@ -34,6 +39,8 @@ void CreateParamList(
 	pParamList->Init();
 
 	pParamData = pParamList->AddParam("SceneFileName", RVLPARAM_TYPE_STRING, pMeshFileName);
+	pParamData = pParamList->AddParam("Recognition.method", RVLPARAM_TYPE_ID, &method);
+	pParamList->AddID(pParamData, "PSGM", RVLRECOGNITION_METHOD_PSGM);
 	//pParamData = pParamList->AddParam("Save PLY", RVLPARAM_TYPE_ID, &flags);
 	//pParamList->AddID(pParamData, "yes", RVLPCSEGMENT_DEMO_FLAG_SAVE_PLY);
 }
@@ -53,29 +60,19 @@ int main(int argc, char ** argv)
 	// Read parameters from a configuration file.
 
 	char *sceneMeshFileName = NULL;
+	DWORD method = RVLRECOGNITION_METHOD_PSGM;
 
 	////DWORD flags = 0x00000000;
 
 	CRVLParameterList ParamList;
 
-	CreateParamList(&ParamList, &mem0, &sceneMeshFileName);
+	CreateParamList(&ParamList, &mem0, &sceneMeshFileName, method);
 
 	ParamList.LoadParams("RVLRecognitionDemo.cfg");
 
-	// Initialize recognition.
-
-	RFRecognition recognition;
-
-	recognition.CreateParamList(&mem0);
-
-	recognition.ParamList.LoadParams("RVLRecognitionDemo.cfg");
-
-	recognition.pMem0 = &mem0;
-	recognition.pMem = &mem;
+	// Initialize surfel detection
 
 	SurfelGraph surfels;
-
-	recognition.pSurfels = &surfels;
 
 	PlanarSurfelDetector surfelDetector;
 
@@ -83,56 +80,104 @@ int main(int argc, char ** argv)
 
 	surfelDetector.ParamList.LoadParams("RVLRecognitionDemo.cfg");
 
-	recognition.pSurfelDetector = &surfelDetector;	
+	// Initialize visualization
 
-	// Training or recognition (depending on mode).
+	unsigned char SelectionColor[3];
 
-	if (recognition.mode == RVLRECOGNITION_MODE_TRAINING)
-		recognition.CreateModelDatabase();
-	else if (recognition.mode == RVLRECOGNITION_MODE_RECOGNITION)
+	SelectionColor[0] = 0;
+	SelectionColor[1] = 255;
+	SelectionColor[2] = 0;
+
+	Visualizer visualizer;
+
+	visualizer.Create();
+
+	if (method == RVLRECOGNITION_METHOD_RF)
 	{
-		if (!recognition.LoadModelDatabase())
-			return 1;
+		// Initialize recognition.
+
+		RFRecognition recognition;
+
+		recognition.CreateParamList(&mem0);
+
+		recognition.ParamList.LoadParams("RVLRecognitionDemo.cfg");
+
+		recognition.pMem0 = &mem0;
+		recognition.pMem = &mem;
+
+		recognition.pSurfels = &surfels;
+
+		recognition.pSurfelDetector = &surfelDetector;
+
+		// Training or recognition (depending on mode).
+
+		if (recognition.mode == RVLRECOGNITION_MODE_TRAINING)
+			recognition.CreateModelDatabase();
+		else if (recognition.mode == RVLRECOGNITION_MODE_RECOGNITION)
+		{
+			if (!recognition.LoadModelDatabase())
+				return 1;
+
+			Mesh mesh;
+
+			mesh.LoadPolyDataFromPLY(sceneMeshFileName);
+
+			recognition.FindObjects(&mesh);
+
+			FILE *fpInterpretation = fopen("C:\\RVL\\Debug\\interpretation.txt", "w");
+
+			RECOG::Hypothesis *pHypothesis = recognition.sceneInterpretation.pFirst;
+
+			while (pHypothesis)
+			{
+				RECOG::WriteHypothesis(fpInterpretation, pHypothesis);
+
+				pHypothesis = pHypothesis->pNext;
+			}
+
+			fclose(fpInterpretation);
+
+			// Visualization
+
+			recognition.InitDisplay(&visualizer, &mesh);
+			recognition.Display();
+			visualizer.Run();
+		}
+	}	// if (method == RVLRECOGNITION_METHOD_RF)
+	else if (method == RVLRECOGNITION_METHOD_PSGM)
+	{
+		// Initialize recognition.
+
+		PSGM recognition;
+
+		recognition.pMem = &mem;
+
+		recognition.pSurfels = &surfels;
+
+		recognition.pSurfelDetector = &surfelDetector;
+
+		// Load scene mesh from file.
 
 		Mesh mesh;
 
 		mesh.LoadPolyDataFromPLY(sceneMeshFileName);
 
-		recognition.FindObjects(&mesh);
+		// Scene interpretation.
 
-		FILE *fpInterpretation = fopen("C:\\RVL\\Debug\\interpretation.txt", "w");
-
-		RECOG::Hypothesis *pHypothesis = recognition.sceneInterpretation.pFirst;
-
-		while (pHypothesis)
-		{
-			RECOG::WriteHypothesis(fpInterpretation, pHypothesis);
-
-			pHypothesis = pHypothesis->pNext;
-		}
-
-		fclose(fpInterpretation);
+		recognition.Interpret(&mesh);
 
 		// Visualization
 
-		unsigned char SelectionColor[3];
-
-		SelectionColor[0] = 0;
-		SelectionColor[1] = 255;
-		SelectionColor[2] = 0;
-
 		surfels.NodeColors(SelectionColor);
-
-		Visualizer visualizer;
-
-		visualizer.Create();
-
 		recognition.InitDisplay(&visualizer, &mesh);
 		recognition.Display();
 		visualizer.Run();
-	}		
+	}	// if (method == RVLRECOGNITION_METHOD_PSGM)
 
 	// free memory
+
+	if (sceneMeshFileName)
+		delete[] sceneMeshFileName;
 
 	return 0;
 }

@@ -52,6 +52,7 @@ namespace RVL
 	{
 		QList<QLIST::Index2> PtList;
 		Array<Array<MeshEdgePtr *>> BoundaryArray;
+		Array<Array<MeshEdgePtr *>> PolygonBoundaryArray;
 		float P[3];		// centroid
 		float N[3];		// normal
 		float d;		// plane offset
@@ -88,6 +89,8 @@ namespace RVL
 		unsigned char * GetColor(int iSurfel);
 		void PrintData(
 			Visualizer *pVisualizer,
+			Mesh *pMesh,
+			int iVertex,
 			int iSurfel);
 		void InitDisplay(
 			Visualizer *pVisualizer,

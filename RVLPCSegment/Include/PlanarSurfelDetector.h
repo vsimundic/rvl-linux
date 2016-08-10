@@ -254,6 +254,22 @@ namespace RVL
 			QList<SURFEL::Edge> *pEdgeList,
 			int &nEdges,
 			bool bSmall = false);
+		void JoinSmallSurfelsToClosestNeighbors(
+			Mesh *pMesh,
+			SurfelGraph *pSurfels);
+		void CreatePolygons(
+			Mesh *pMesh,
+			SurfelGraph *pSurfels,
+			Mesh *pPolygonMesh);
+		void PlanarSurfelDetector::Polygonalize(
+			SurfelGraph *pSurfels,
+			Array<MeshEdgePtr *> *pBoundary,
+			int iContourStart,
+			int iContourEnd,
+			float *PStart,
+			float *PEnd,
+			int iSurfel,
+			int iSurfel_);
 		void DisplaySoftEdges(
 			Visualizer *pVisualizer,
 			Mesh *pMesh,

@@ -629,7 +629,7 @@ void PlanarSurfelDetector::Segment(
 
 			pSurfel++;
 
-			//if (iSurfel > 0)	// debug
+			//if (iSurfel > 600)	// debug
 			//	break;
 		}
 	}	// for every vertex
@@ -663,7 +663,10 @@ void PlanarSurfelDetector::Segment(
 
 	pSurfels->InitGetNeighborsBoundaryAndSize();
 
-	pSurfel = pSurfels->NodeArray.Element;
+	if (bJoinSmallSurfelsToClosestNeighbors)
+		JoinSmallSurfelsToClosestNeighbors(pMesh, pSurfels);
+
+	// Identify neighbors of large surfels and create edges between neighboring surfels. 
 
 	MeshEdgePtr **pNewBoundaryElement = pSurfels->surfelBndMem;
 	Array<MeshEdgePtr *> *pNewBoundary = pSurfels->surfelBndMem2;
@@ -673,64 +676,6 @@ void PlanarSurfelDetector::Segment(
 	QList<SURFEL::Edge> SEdgeList;
 
 	QList<SURFEL::Edge> *pSEdgeList_ = &SEdgeList;
-
-	int iClosestNeighbor;
-	MeshEdgePtr *pEdgePtr;
-
-	if (bJoinSmallSurfelsToClosestNeighbors)
-	{
-		for (iSurfel = 0; iSurfel < pSurfels->NodeArray.n; iSurfel++, pSurfel++)
-		{
-			if (iSurfel == 8145)
-				int debug = 0;
-
-			pSurfel->size = QLIST::Size(pSurfel->PtList);
-
-			if (pSurfel->size > 0 && pSurfel->size < minSurfelSize)
-			{
-				pPtList = &(pSurfel->PtList);
-
-				pSurfel->BoundaryArray.Element = pNewBoundary;
-
-				if (pSurfel->size == 1)
-				{
-					pEdgePtr = pMesh->NodeArray.Element[pPtList->pFirst->Idx].EdgeList.pFirst;
-
-					if (pEdgePtr)
-					{
-						pSurfel->BoundaryArray.n = 1;
-
-						pNewBoundary->Element = pNewBoundaryElement;
-
-						pNewBoundaryElement++;
-
-						pNewBoundary->Element[0] = pEdgePtr;
-
-						pNewBoundary->n = 1;
-					}
-					else
-						pSurfel->BoundaryArray.n = 0;
-				}
-				else
-					pMesh->Boundary(pPtList, pSurfels->surfelMap, pSurfel->BoundaryArray, pNewBoundaryElement, pSurfels->edgeMarkMap);
-
-				Mem2A.Clear();
-
-				GetNeighbors(pMesh, pSurfels, iSurfel, &SEdgeList, nSEdges, true);
-
-				iClosestNeighbor = GetClosestNeighbor(pSurfels, iSurfel, SEdgeList);
-
-				if (iClosestNeighbor >= 0)
-				{
-					JoinSurfel(pMesh, pSurfels, iSurfel, iClosestNeighbor);
-
-					pSurfel->size = 0;
-				}
-			}	// if (pSurfel->size > 0 && pSurfel->size < minSurfelSize)
-		}	// for every surfel
-	}	// if (bJoinSmallSurfelsToClosestNeighbors)
-
-	// Identify neighbors of large surfels and create edges between neighboring surfels. 
 
 	RVLQLIST_INIT(pSEdgeList_);
 
@@ -3967,6 +3912,9 @@ bool PlanarSurfelDetector::GRegion(
 	data.iAttackedSurfel = iSurfel;
 	data.iSurfel = 0;
 
+	float kNormal2 = data.kNormal2;
+	data.kNormal2 = 0.0f;
+
 	Surfel *pSurfel = pSurfels->NodeArray.Element + iSurfel;
 	Surfel *pSurfel_ = pSurfels->NodeArray.Element + iSurfel_;
 
@@ -3977,6 +3925,8 @@ bool PlanarSurfelDetector::GRegion(
 
 	int *piGPtArrayEnd = RegionGrowing3<Mesh, Point, MeshEdge, MeshEdgePtr, PlanarSurfelDetectorRegionGrowingData, PSD::RegionGrowingOperation>(pMesh, &data, piPtFetch, piPtPut,
 		piGBndPtArrayEnd);
+
+	data.kNormal2 = kNormal2;
 
 	int nG = piGPtArrayEnd - iGPt;	// nG <- total no. of points in G-region
 
@@ -4467,6 +4417,156 @@ int PlanarSurfelDetector::GetClosestNeighbor(
 	}
 
 	return iClosestNeighbor;
+}
+
+void PlanarSurfelDetector::JoinSmallSurfelsToClosestNeighbors(
+	Mesh *pMesh,
+	SurfelGraph *pSurfels)
+{
+	Surfel *pSurfel = pSurfels->NodeArray.Element;
+
+	MeshEdgePtr **pNewBoundaryElement = pSurfels->surfelBndMem;
+	Array<MeshEdgePtr *> *pNewBoundary = pSurfels->surfelBndMem2;
+
+	int nSEdges = 0;
+
+	QList<SURFEL::Edge> SEdgeList;
+
+	QList<SURFEL::Edge> *pSEdgeList_ = &SEdgeList;
+
+	int iSurfel;
+	int iClosestNeighbor;
+	MeshEdgePtr *pEdgePtr;
+	QList<QLIST::Index2> *pPtList;
+
+	for (iSurfel = 0; iSurfel < pSurfels->NodeArray.n; iSurfel++, pSurfel++)
+	{
+		//if (iSurfel == 8145)
+		//	int debug = 0;
+
+		pSurfel->size = QLIST::Size(pSurfel->PtList);
+
+		if (pSurfel->size > 0 && pSurfel->size < minSurfelSize)
+		{
+			pPtList = &(pSurfel->PtList);
+
+			pSurfel->BoundaryArray.Element = pNewBoundary;
+
+			if (pSurfel->size == 1)
+			{
+				pEdgePtr = pMesh->NodeArray.Element[pPtList->pFirst->Idx].EdgeList.pFirst;
+
+				if (pEdgePtr)
+				{
+					pSurfel->BoundaryArray.n = 1;
+
+					pNewBoundary->Element = pNewBoundaryElement;
+
+					pNewBoundaryElement++;
+
+					pNewBoundary->Element[0] = pEdgePtr;
+
+					pNewBoundary->n = 1;
+				}
+				else
+					pSurfel->BoundaryArray.n = 0;
+			}
+			else
+				pMesh->Boundary(pPtList, pSurfels->surfelMap, pSurfel->BoundaryArray, pNewBoundaryElement, pSurfels->edgeMarkMap);
+
+			Mem2A.Clear();
+
+			GetNeighbors(pMesh, pSurfels, iSurfel, &SEdgeList, nSEdges, true);
+
+			iClosestNeighbor = GetClosestNeighbor(pSurfels, iSurfel, SEdgeList);
+
+			if (iClosestNeighbor >= 0)
+			{
+				JoinSurfel(pMesh, pSurfels, iSurfel, iClosestNeighbor);
+
+				pSurfel->size = 0;
+			}
+		}	// if (pSurfel->size > 0 && pSurfel->size < minSurfelSize)
+	}	// for every surfel
+}
+
+void PlanarSurfelDetector::CreatePolygons(
+	Mesh *pMesh,
+	SurfelGraph *pSurfels,
+	Mesh *pPolygonMesh)
+{
+	int iSurfel;
+	int iBoundary;
+	Surfel *pSurfel;
+	Array<MeshEdgePtr *> *pBoundary;
+	MeshEdgePtr *pBoundaryElement;
+	int iBoundaryElement, iBoundaryElement0;
+
+	for (iSurfel = 0; iSurfel < pSurfels->NodeArray.n; iSurfel++)
+	{
+		pSurfel = pSurfels->NodeArray.Element + iSurfel;
+
+		if (pSurfel->size == 0)
+			continue;
+
+		for (iBoundary = 0; iBoundary < pSurfel->BoundaryArray.n; iBoundary++)
+		{
+			pBoundary = pSurfel->BoundaryArray.Element + iBoundary;
+
+			/// Polygonalize surfel boundary.
+
+			// Identify first vertex.
+
+			iBoundaryElement = 0;
+
+			// 
+
+			while (iBoundaryElement != iBoundaryElement0)
+			{
+				// Identify the next vertex.
+
+				// Polygonalize the boundary semgent between two vertices.
+
+				// Get next boundary element.
+
+				iBoundaryElement++;
+
+				if (iBoundaryElement >= pBoundary->n)
+					iBoundaryElement = 0;
+			}
+
+			/// Check if the boundary intersects with itself. If yes, then correct it.
+
+
+		}	// for each boundary
+	}	// for each surfel
+
+	// Create ploygon mesh.
+}
+
+// Polygonalize boundary segment between two vertices.
+// Input:  pSurfels - surfels
+//         pBoundary - boundary
+//         iContourStart - the first boundary element of the segment
+//         iContourEnd - the first boundary element of the followng segment
+//         PStart - position of the starting point
+//         PEnd - position of the ending point
+//         iSurfel - surfel to which pBoundary belongs
+//         iSurfel_ - surfel which shares pBoundary with iSurfel
+
+void PlanarSurfelDetector::Polygonalize(
+	SurfelGraph *pSurfels,
+	Array<MeshEdgePtr *> *pBoundary,
+	int iContourStart,
+	int iContourEnd,
+	float *PStart,
+	float *PEnd,
+	int iSurfel,
+	int iSurfel_)
+{
+	// (N, d) <- separating plane.
+
+	// 
 }
 
 void PlanarSurfelDetector::Save(FILE *fp)

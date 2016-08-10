@@ -355,7 +355,7 @@ void SURFEL::MouseRButtonDown(vtkObject* caller, unsigned long eid, void* client
 
 		pd->Modified();
 
-		pData->pSurfels->PrintData(pData->pVisualizer, iSurfel);
+		pData->pSurfels->PrintData(pData->pVisualizer, pMesh, selectedPoint, iSurfel);
 
 		interactor->GetRenderWindow()->Render();
 
@@ -535,7 +535,7 @@ void SURFEL::KeyPressCallback(vtkObject* caller, unsigned long eid, void* client
 	{
 		pd->Modified();
 
-		pData->pSurfels->PrintData(pData->pVisualizer, pData->iSelectedSurfel);
+		pData->pSurfels->PrintData(pData->pVisualizer, pMesh, -1, pData->iSelectedSurfel);
 
 		interactor->GetRenderWindow()->Render();
 	}
@@ -543,15 +543,26 @@ void SURFEL::KeyPressCallback(vtkObject* caller, unsigned long eid, void* client
 
 void SurfelGraph::PrintData(
 	Visualizer *pVisualizer,
+	Mesh *pMesh,
+	int iVertex,
 	int iSurfel)
 {
 	Surfel *pSurfel = NodeArray.Element + iSurfel;
 
-	char str[2000], str2[200];
+	char str[2000], str2[500];
 
-	sprintf(str, "Surfel %d", iSurfel);
+	if (iVertex >= 0)
+	{
+		Point *pPt = pMesh->NodeArray.Element + iVertex;
 
-	sprintf(str2, "\nP=(%f, %f, %f)\nN=(%f, %f, %f)\nRGB=(%d, %d, %d)",
+		sprintf(str, "Point %d\nP=(%f, %f, %f)\nN=(%f, %f, %f)\nRGB=(%d, %d, %d)",
+			iVertex, pPt->P[0], pPt->P[1], pPt->P[2], pPt->N[0], pPt->N[1], pPt->N[2], pPt->RGB[0], pPt->RGB[1], pPt->RGB[2]);
+	}
+	else
+		str[0] = 0;
+
+	sprintf(str2, "Surfel %d\nP=(%f, %f, %f)\nN=(%f, %f, %f)\nRGB=(%d, %d, %d)",
+		iSurfel,
 		pSurfel->P[0], pSurfel->P[1], pSurfel->P[2],
 		pSurfel->N[0], pSurfel->N[1], pSurfel->N[2],
 		pSurfel->RGB[0], pSurfel->RGB[1], pSurfel->RGB[2]);
