@@ -150,6 +150,10 @@ int main(int argc, char ** argv)
 
 		PSGM recognition;
 
+		recognition.CreateParamList(&mem0);
+
+		recognition.ParamList.LoadParams("RVLRecognitionDemo.cfg");
+
 		recognition.pMem = &mem;
 
 		recognition.pSurfels = &surfels;

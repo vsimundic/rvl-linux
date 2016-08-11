@@ -561,7 +561,7 @@ void SurfelGraph::PrintData(
 	else
 		str[0] = 0;
 
-	sprintf(str2, "Surfel %d\nP=(%f, %f, %f)\nN=(%f, %f, %f)\nRGB=(%d, %d, %d)",
+	sprintf(str2, "\nSurfel %d\nP=(%f, %f, %f)\nN=(%f, %f, %f)\nRGB=(%d, %d, %d)",
 		iSurfel,
 		pSurfel->P[0], pSurfel->P[1], pSurfel->P[2],
 		pSurfel->N[0], pSurfel->N[1], pSurfel->N[2],

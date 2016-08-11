@@ -29,7 +29,9 @@
 
 #define RVLPCSEGMENT_GRAPH_GET_NODE(pEdgePtr)	(pEdgePtr->pEdge->pVertexEdgePtr[0] == pEdgePtr ? pEdgePtr->pEdge->iVertex[0] : pEdgePtr->pEdge->iVertex[1])
 
-#define RVLPCSEGMENT_GRAPH_GET_OPPOSITE_NODE(pEdgePtr)	(pEdgePtr->pEdge->pVertexEdgePtr[0] == pEdgePtr ? pEdgePtr->pEdge->pVertexEdgePtr[1] : pEdgePtr->pEdge->pVertexEdgePtr[0])
+#define RVLPCSEGMENT_GRAPH_GET_OPPOSITE_NODE(pEdgePtr)	(pEdgePtr->pEdge->pVertexEdgePtr[0] == pEdgePtr ? pEdgePtr->pEdge->iVertex[1] : pEdgePtr->pEdge->iVertex[0])
+
+#define RVLPCSEGMENT_GRAPH_GET_OPPOSITE_EDGE_PTR(pEdgePtr)	(pEdgePtr->pEdge->pVertexEdgePtr[0] == pEdgePtr ? pEdgePtr->pEdge->pVertexEdgePtr[1] : pEdgePtr->pEdge->pVertexEdgePtr[0])
 
 namespace RVL
 {
@@ -204,12 +206,14 @@ namespace RVL
 		RVLMEM_ALLOC_STRUCT(pMem, EdgePtrType, pEdgePtr);
 
 		pEdgePtr->pEdge = pEdge;
+		pEdge->pVertexEdgePtr[0] = pEdgePtr;
 
 		RVLQLIST_ADD_ENTRY(pEdgeList1, pEdgePtr);
 
 		RVLMEM_ALLOC_STRUCT(pMem, EdgePtrType, pEdgePtr);
 
 		pEdgePtr->pEdge = pEdge;
+		pEdge->pVertexEdgePtr[1] = pEdgePtr;
 
 		RVLQLIST_ADD_ENTRY(pEdgeList2, pEdgePtr);
 
