@@ -8,6 +8,7 @@ VTK_MODULE_INIT(vtkInteractionStyle);
 VTK_MODULE_INIT(vtkRenderingFreeType);
 #include "RVLVTK.h"
 #include "RVLCore2.h"
+#include "Util.h"
 #include "Graph.h"
 #include <pcl/common/common.h>
 #include <pcl/PolygonMesh.h>

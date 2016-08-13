@@ -1,5 +1,7 @@
 #pragma once
 
+//#define RVLPSGM_NORMAL_HULL
+
 namespace RVL
 {
 	class PSGM;
@@ -19,6 +21,7 @@ namespace RVL
 			{
 				Array<int> iSurfelArray;
 				Array<int> iVertexArray;
+				int size;
 			};
 
 			struct DisplayData
@@ -67,6 +70,12 @@ namespace RVL
 		float DistanceFromNormalHull(
 			Array<RECOG::PSGM_::NormalHullElement> &NHull,
 			float *N);
+		void UpdateMeanNormal(
+			float *sumN,
+			float &wN,
+			float *N,
+			float w,
+			float *meanN);
 
 	public:
 		CRVLParameterList ParamList;
@@ -78,7 +87,8 @@ namespace RVL
 		Array<QList<QLIST::Index>> surfelVertexList;
 		QLIST::Index *surfelVertexMem;
 		RECOG::PSGM_::DisplayData displayData;
-		Array<RECOG::PSGM_::Cluster> clusters;
+		Array<RECOG::PSGM_::Cluster *> clusters;
+		RECOG::PSGM_::Cluster *clusterMem;
 		int *clusterSurfelMem;
 		int *clusterVertexMem;
 		int *clusterMap;

@@ -5,6 +5,7 @@
 #include <vtkAxesActor.h>
 #include <vtkLine.h>
 #include "RVLCore2.h"
+#include "Util.h"
 #include "Graph.h"
 #include <Eigen\Eigenvalues>
 #include <pcl/common/common.h>
@@ -29,6 +30,7 @@ PSGM::PSGM()
 	surfelVertexList.Element = NULL;
 	surfelVertexMem = NULL;
 	clusterMap = NULL;
+	clusterMem = NULL;
 	clusterSurfelMem = NULL;
 	clusterVertexMem = NULL;
 	vertexArray.Element = NULL;
@@ -41,6 +43,7 @@ PSGM::~PSGM()
 	RVL_DELETE_ARRAY(surfelVertexList.Element);
 	RVL_DELETE_ARRAY(surfelVertexMem);
 	RVL_DELETE_ARRAY(clusterMap);
+	RVL_DELETE_ARRAY(clusterMem);
 	RVL_DELETE_ARRAY(clusterSurfelMem);
 	RVL_DELETE_ARRAY(clusterVertexMem);
 	RVL_DELETE_ARRAY(vertexArray.Element);
@@ -229,17 +232,16 @@ void PSGM::Interpret(
 
 	///// Cluster surfels into convex surfaces.
 
-	maxnClusters = pSurfels->NodeArray.n;
-
 	RVL_DELETE_ARRAY(clusterMap);
 
 	clusterMap = new int[pSurfels->NodeArray.n];
 
 	memset(clusterMap, 0xff, pSurfels->NodeArray.n * sizeof(int));
 
-	RVL_DELETE_ARRAY(clusters.Element);
+	RVL_DELETE_ARRAY(clusterMem);
 
-	clusters.Element = new RECOG::PSGM_::Cluster[maxnClusters];
+	clusterMem = new RECOG::PSGM_::Cluster[pSurfels->NodeArray.n];
+
 	clusters.n = 0;
 
 	RVL_DELETE_ARRAY(clusterSurfelMem);
@@ -263,9 +265,31 @@ void PSGM::Interpret(
 
 	QLIST::Index *candidateMem = new QLIST::Index[pSurfels->NodeArray.n];
 
+	Array<int> surfelBuff1, surfelBuff2;
+
+	surfelBuff1.n = pSurfels->NodeArray.n;
+	surfelBuff1.Element = new int[pSurfels->NodeArray.n];
+
+	int i;
+
+	for (i = 0; i < pSurfels->NodeArray.n; i++)
+		surfelBuff1.Element[i] = i;
+	
+	surfelBuff2.Element = new int[pSurfels->NodeArray.n];
+
+	Array<int> *pSurfelBuff = &surfelBuff1;
+	Array<int> *pSurfelBuff_ = &surfelBuff2;
+	Array<int> *pTmp;
+
+#ifdef RVLPSGM_NORMAL_HULL
 	Array<RECOG::PSGM_::NormalHullElement> NHull;
 
 	NHull.Element = new RECOG::PSGM_::NormalHullElement[pSurfels->NodeArray.n];
+#else
+	float meanN[3];
+	float sumN[3];
+	float wN;
+#endif
 
 	RECOG::PSGM_::Cluster *pCluster;
 	int iCluster;
@@ -277,7 +301,7 @@ void PSGM::Interpret(
 	QLIST::Index **ppCandidateIdx, **ppBestCandidateIdx;
 	float dist, minDist;
 
-	for (iCluster = 0; iCluster < maxnClusters; iCluster++)
+	for (iCluster = 0; iCluster < pSurfels->NodeArray.n; iCluster++)
 	{
 		// pSurfel <- the largest surfel which is not assigned to a cluster.
 
@@ -285,13 +309,19 @@ void PSGM::Interpret(
 
 		iLargestSurfel = -1;
 
-		for (iSurfel = 0; iSurfel < pSurfels->NodeArray.n; iSurfel++)
-		{
-			pSurfel = pSurfels->NodeArray.Element + iSurfel;
+		pSurfelBuff_->n = 0;
 
-			if (pSurfel->size > maxSurfelSize)
+		for (i = 0; i < pSurfelBuff->n; i++)
+		{
+			iSurfel = pSurfelBuff->Element[i];
+
+			if (clusterMap[iSurfel] < 0)
 			{
-				if (clusterMap[iSurfel] < 0)
+				pSurfelBuff_->Element[pSurfelBuff_->n++] = iSurfel;
+
+				pSurfel = pSurfels->NodeArray.Element + iSurfel;
+
+				if (pSurfel->size > maxSurfelSize)
 				{
 					maxSurfelSize = pSurfel->size;
 
@@ -300,18 +330,23 @@ void PSGM::Interpret(
 			}
 		}
 
+		pTmp = pSurfelBuff;
+		pSurfelBuff = pSurfelBuff_;
+		pSurfelBuff_ = pTmp;
+
 		if (iLargestSurfel < 0)
 			break;
 
 		// Initialize a new cluster.
 
-		pCluster = clusters.Element + iCluster;
+		pCluster = clusterMem + iCluster;
 
 		pCluster->iSurfelArray.Element = piSurfel;
 		pCluster->iVertexArray.Element = piVertex;
 
 		pCluster->iSurfelArray.n = 0;
 		pCluster->iVertexArray.n = 0;
+		pCluster->size = 0;
 
 		clusters.n++;
 
@@ -322,7 +357,12 @@ void PSGM::Interpret(
 
 		QLIST::Index *pNewCandidate = candidateMem;
 
+#ifdef RVLPSGM_NORMAL_HULL
 		NHull.n = 0;
+#else
+		RVLNULL3VECTOR(sumN);
+		wN = 0.0f;
+#endif
 
 		RVLQLIST_ADD_ENTRY(pCandidateList, pNewCandidate);
 
@@ -338,7 +378,7 @@ void PSGM::Interpret(
 		{
 			// iSurfel <- the best candidate for expanding cluster.
 
-			minDist = 2.0f;
+			minDist = PI;
 
 			ppCandidateIdx = &(candidateList.pFirst);
 
@@ -350,7 +390,12 @@ void PSGM::Interpret(
 
 				pSurfel_ = pSurfels->NodeArray.Element + iSurfel_;
 
+#ifdef RVLPSGM_NORMAL_HULL
 				dist = DistanceFromNormalHull(NHull, pSurfel_->N);
+#else
+				float e = RVLDOTPRODUCT3(meanN, pSurfel_->N);
+				dist = (wN < 1e-10 ? 0.0f : acos(e));
+#endif
 
 				if (dist < minDist)
 				{
@@ -374,8 +419,8 @@ void PSGM::Interpret(
 
 			// Add iSurfel to cluster.
 
-			if (iSurfel == 56)
-				int debug = 0;
+			//if (iSurfel == 56)
+			//	int debug = 0;
 
 			clusterMap[iSurfel] = iCluster;
 
@@ -383,11 +428,19 @@ void PSGM::Interpret(
 
 			pCluster->iSurfelArray.n++;
 
-			// Update normal hull.
-
 			pSurfel = pSurfels->NodeArray.Element + iSurfel;
 
+			pCluster->size += pSurfel->size;
+
+#ifdef RVLPSGM_NORMAL_HULL
+			// Update normal hull.
+			
 			UpdateNormalHull(NHull, pSurfel->N);
+#else
+			// Update mean normal.
+
+			UpdateMeanNormal(sumN, wN, pSurfel->N, (float)(pSurfel->size), meanN);
+#endif
 
 			// Add vertices of iSurfel, which are inside convex (or outside concave) surface into cluster.
 
@@ -468,7 +521,44 @@ void PSGM::Interpret(
 	delete[] candidateMem;
 	delete[] bVertexVisited;
 	delete[] bSurfelVisited;
+#ifdef RVLPSGM_NORMAL_HULL
 	delete[] NHull.Element;
+#endif
+
+	// Create sorted cluster array.
+
+	int maxClusterSize = 0;
+	int size;
+
+	for (i = 0; i < clusters.n; i++)
+	{
+		size = clusterMem[i].size;
+
+		if (size > maxClusterSize)
+			maxClusterSize = size;
+	}
+
+	int maxnBins = 100000;
+
+	int k = (maxClusterSize < maxnBins ? 1 : maxClusterSize / maxnBins + 1);	
+
+	int *key = new int[clusters.n];
+
+	for (i = 0; i < clusters.n; i++)
+		key[i] = clusterMem[i].size / k;
+
+	RVL::QuickSort(key, surfelBuff1.Element, clusters.n);
+
+	RVL_DELETE_ARRAY(clusters.Element);
+
+	clusters.Element = new RECOG::PSGM_::Cluster *[clusters.n];
+
+	for (i = 0; i < clusters.n; i++)
+		clusters.Element[i] = clusterMem + surfelBuff1.Element[clusters.n - i - 1];
+
+	delete[] surfelBuff1.Element;
+	delete[] surfelBuff2.Element;
+	delete[] key;
 }
 
 bool PSGM::Inside(
@@ -709,6 +799,27 @@ float PSGM::DistanceFromNormalHull(
 	return maxDist;
 }
 
+void PSGM::UpdateMeanNormal(
+	float *sumN,
+	float &wN,
+	float *N,
+	float w,
+	float *meanN)
+{
+	float VTmp[3];
+	RVLSCALE3VECTOR(N, w, VTmp);
+	RVLSUM3VECTORS(sumN, VTmp, sumN);
+	wN += w;
+	RVLSCALE3VECTOR2(sumN, wN, meanN);
+	float fTmp = sqrt(RVLDOTPRODUCT3(meanN, meanN));
+	if (fTmp > 1e-10)
+	{
+		RVLSCALE3VECTOR2(meanN, fTmp, meanN);
+	}
+	else
+		RVLSET3VECTOR(meanN, 0.0f, 0.0f, 1.0f);
+}
+
 void PSGM::InitDisplay(
 	Visualizer *pVisualizer,
 	Mesh *pMesh)
@@ -728,9 +839,9 @@ void PSGM::Display()
 	Mesh *pMesh = displayData.pMesh;
 	Visualizer *pVisualizer = displayData.pVisualizer;
 
-	//DisplayClusters();
+	DisplayClusters();
 
-	pSurfels->Display(pVisualizer, pMesh);
+	//pSurfels->Display(pVisualizer, pMesh);
 
 	DisplayVertices();
 }
@@ -748,7 +859,7 @@ void PSGM::DisplayClusters()
 
 	for (iCluster = 0; iCluster < clusters.n; iCluster++)
 	{
-		pCluster = clusters.Element + iCluster;
+		pCluster = clusters.Element[iCluster];
 
 		color[0] = (unsigned char)(rand() % 256);
 		color[1] = (unsigned char)(rand() % 256);

@@ -3,6 +3,7 @@
 //#include <vtkCubeSource.h>
 #include <vtkAxesActor.h>
 #include "RVLCore2.h"
+#include "Util.h"
 #include "Graph.h"
 #include <Eigen\Eigenvalues>
 #include <pcl/common/common.h>
