@@ -360,10 +360,10 @@ void SURFEL::MouseRButtonDown(vtkObject* caller, unsigned long eid, void* client
 
 		interactor->GetRenderWindow()->Render();
 
-		if (pData->userFunction)
+		if (pData->RButtonDownUserFunction)
 		{
 			if (iSurfel >= 0)
-				pData->userFunction(pMesh, pData->pSurfels, (int)selectedPoint, iSurfel, pData->vpUserFunctionData);
+				pData->RButtonDownUserFunction(pMesh, pData->pSurfels, (int)selectedPoint, iSurfel, pData->vpUserFunctionData);
 		}
 	}
 }
@@ -653,7 +653,7 @@ void SurfelGraph::InitDisplay(
 	DisplayData.mode = RVLSURFEL_DISPLAY_MODE_SURFELS;
 	DisplayData.iSelectedSurfel = DisplayData.iSelectedSurfel2 = -1;
 	DisplayData.iSelection = 1;
-	DisplayData.userFunction = NULL;
+	DisplayData.RButtonDownUserFunction = NULL;
 
 	pVisualizer->SetMouseRButtonDownCallback(SURFEL::MouseRButtonDown, &DisplayData);
 	pVisualizer->SetKeyPressCallback(SURFEL::KeyPressCallback, &DisplayData);

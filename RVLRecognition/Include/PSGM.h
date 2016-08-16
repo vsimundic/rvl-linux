@@ -10,11 +10,24 @@ namespace RVL
 	{
 		namespace PSGM_
 		{
+			struct NormalHullElement
+			{
+				float N[3];
+				float Nh[3];
+			};
+
 			struct Vertex
 			{
 				float P[3];
+				Array<NormalHullElement> normalHull;
 				Array<int> iSurfelArray;
 				Vertex *pNext;
+			};
+
+			struct ModelInstanceElement
+			{
+				float d;
+				bool defined;
 			};
 
 			struct Cluster
@@ -22,6 +35,13 @@ namespace RVL
 				Array<int> iSurfelArray;
 				Array<int> iVertexArray;
 				int size;
+				Array<ModelInstanceElement> modelInstance;
+			};
+
+			struct Plane
+			{
+				float N[3];
+				float d;
 			};
 
 			struct DisplayData
@@ -30,12 +50,6 @@ namespace RVL
 				Mesh *pMesh;
 				SurfelGraph *pSurfels;
 				Visualizer *pVisualizer;
-			};
-
-			struct NormalHullElement
-			{
-				float N[3];
-				float Nh[3];
 			};
 		}
 	}
@@ -56,6 +70,7 @@ namespace RVL
 		void DisplayVertices();
 		void DisplayClusters();
 	private:
+		void CreateTemplate();
 		bool Inside(
 			int iVertex,
 			RECOG::PSGM_::Cluster *pCluster,
@@ -84,16 +99,19 @@ namespace RVL
 		SurfelGraph *pSurfels;
 		QList<RECOG::PSGM_::Vertex> vertexList;
 		Array<RECOG::PSGM_::Vertex *> vertexArray;
-		Array<QList<QLIST::Index>> surfelVertexList;
-		QLIST::Index *surfelVertexMem;
 		RECOG::PSGM_::DisplayData displayData;
 		Array<RECOG::PSGM_::Cluster *> clusters;
+		int *clusterMap;
+		int nDominantClusters;
+		float kNoise;
+		Array<RECOG::PSGM_::Plane> convexTemplate;
+	private:
+		Array<QList<QLIST::Index>> surfelVertexList;
+		QLIST::Index *surfelVertexMem;
 		RECOG::PSGM_::Cluster *clusterMem;
 		int *clusterSurfelMem;
 		int *clusterVertexMem;
-		int *clusterMap;
-		int maxnClusters;
-		float kNoise;
+		RECOG::PSGM_::ModelInstanceElement *modelInstanceMem;
 	};
 }
 

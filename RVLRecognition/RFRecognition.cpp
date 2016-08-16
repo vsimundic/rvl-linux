@@ -796,7 +796,7 @@ void RFRecognition::FindObjects(Mesh *pMesh)
 	RECOG::RFRecognitionCallbackData displayData;
 	displayData.pRecognition = this;
 	pSurfels->DisplayData.vpUserFunctionData = &displayData;
-	pSurfels->DisplayData.userFunction = &RECOG::DetectAndWriteFeatures;
+	pSurfels->DisplayData.RButtonDownUserFunction = &RECOG::DetectAndWriteFeatures;
 #endif
 	//pSurfels->DisplayData.vpRecognition = this;//VIDOVIC
 	pSurfels->Display(&visualizer, pMesh);

@@ -22,7 +22,8 @@ namespace RVL
 			Mesh *pMesh;
 			void *vpDetector;
 			void *vpUserFunctionData;
-			void(*userFunction)(Mesh *pMesh, SurfelGraph *pSurfels, int iSelectedPt, int iSelectedSurfel, void *vpData);
+			void(*RButtonDownUserFunction)(Mesh *pMesh, SurfelGraph *pSurfels, int iSelectedPt, int iSelectedSurfel, void *vpData);
+			void(*KeyPressUserFunction)(Mesh *pMesh, SurfelGraph *pSurfels, int key, void *vpData);
 			int  mode;
 			unsigned char SelectionColor[3];
 			int iSelectedSurfel;

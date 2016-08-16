@@ -23,8 +23,13 @@ using namespace RVL;
 
 PSGM::PSGM()
 {
-	maxnClusters = 1;
+	nDominantClusters = 1;
 	kNoise = 1.2f;
+
+	convexTemplate.n = 66;
+	convexTemplate.Element = new RECOG::PSGM_::Plane[convexTemplate.n];
+
+	CreateTemplate();
 
 	clusters.Element = NULL;
 	surfelVertexList.Element = NULL;
@@ -34,6 +39,7 @@ PSGM::PSGM()
 	clusterSurfelMem = NULL;
 	clusterVertexMem = NULL;
 	vertexArray.Element = NULL;
+	modelInstanceMem = NULL;
 }
 
 
@@ -47,6 +53,8 @@ PSGM::~PSGM()
 	RVL_DELETE_ARRAY(clusterSurfelMem);
 	RVL_DELETE_ARRAY(clusterVertexMem);
 	RVL_DELETE_ARRAY(vertexArray.Element);
+	RVL_DELETE_ARRAY(convexTemplate.Element);	
+	RVL_DELETE_ARRAY(modelInstanceMem);
 }
 
 void PSGM::CreateParamList(CRVLMem *pMem)
@@ -57,7 +65,7 @@ void PSGM::CreateParamList(CRVLMem *pMem)
 
 	ParamList.Init();
 
-	pParamData = ParamList.AddParam("PSGM.maxnClusters", RVLPARAM_TYPE_INT, &maxnClusters);
+	pParamData = ParamList.AddParam("PSGM.nDominantClusters", RVLPARAM_TYPE_INT, &nDominantClusters);
 	pParamData = ParamList.AddParam("PSGM.kNoise", RVLPARAM_TYPE_FLOAT, &kNoise);
 }
 
@@ -175,6 +183,12 @@ void PSGM::Interpret(
 								pVertex->iSurfelArray.Element[1] = iSurfel_;
 								pVertex->iSurfelArray.Element[2] = iPrevSurfel;
 								pVertex->iSurfelArray.n = 3;
+
+								RVLMEM_ALLOC_STRUCT_ARRAY(pMem, RECOG::PSGM_::NormalHullElement, 3, pVertex->normalHull.Element);
+								pVertex->normalHull.n = 0;
+								UpdateNormalHull(pVertex->normalHull, pSurfels->NodeArray.Element[iSurfel].N);
+								UpdateNormalHull(pVertex->normalHull, pSurfels->NodeArray.Element[iSurfel_].N);
+								UpdateNormalHull(pVertex->normalHull, pSurfels->NodeArray.Element[iPrevSurfel].N);
 
 								RVLQLIST_ADD_ENTRY(pVertexList, pVertex);
 
@@ -559,6 +573,218 @@ void PSGM::Interpret(
 	delete[] surfelBuff1.Element;
 	delete[] surfelBuff2.Element;
 	delete[] key;
+
+	// Fit model.
+
+	RVL_DELETE_ARRAY(modelInstanceMem);
+
+	modelInstanceMem = new RECOG::PSGM_::ModelInstanceElement[nDominantClusters * convexTemplate.n];
+
+	int iModelInstanceElement;
+	RECOG::PSGM_::ModelInstanceElement *pModelInstanceElement;
+	float d;
+	float *N;
+	bool bDefined;
+
+	for (iCluster = 0; iCluster < nDominantClusters; iCluster++)
+	{
+		pCluster = clusters.Element[iCluster];
+
+		pCluster->modelInstance.Element = modelInstanceMem + iCluster * convexTemplate.n;
+		pCluster->modelInstance.n = convexTemplate.n;
+
+		for (iModelInstanceElement = 0; iModelInstanceElement < convexTemplate.n; iModelInstanceElement++)
+		{
+			pModelInstanceElement = pCluster->modelInstance.Element + iModelInstanceElement;
+			pModelInstanceElement->defined = false;
+
+			//for (i = 0; i < pCluster->iVertexArray.n; i++)
+			//{
+			//	pVertex = vertexArray.Element[pCluster->iVertexArray.Element[i]];
+
+			//	N = convexTemplate.Element[iModelInstanceElement].N;
+
+			//	dist = DistanceFromNormalHull(pVertex->normalHull, N);
+
+			//	if (dist <= 0.0f)
+			//	{
+			//		d = RVLDOTPRODUCT3(N, pVertex->P);
+
+			//		if (pModelInstanceElement->defined)
+			//		{
+			//			if (d > pModelInstanceElement->d)
+			//				pModelInstanceElement->d = d;
+			//		}
+			//		else
+			//		{
+			//			pModelInstanceElement->d = d;
+			//			pModelInstanceElement->defined = true;
+			//		}
+			//	}
+			//}
+
+			if (!pModelInstanceElement->defined)
+			{
+				bDefined = false;
+
+				for (i = 0; i < pCluster->iVertexArray.n; i++)
+				{
+					pVertex = vertexArray.Element[pCluster->iVertexArray.Element[i]];
+
+					N = convexTemplate.Element[iModelInstanceElement].N;
+
+					d = RVLDOTPRODUCT3(N, pVertex->P);
+
+					if (bDefined)
+					{
+						if (d > pModelInstanceElement->d)
+							pModelInstanceElement->d = d;
+					}
+					else
+					{
+						pModelInstanceElement->d = d;
+						bDefined = true;
+					}
+				}
+			}
+		}
+	}
+
+	// Save model instances to a file.
+
+	FILE *fp = fopen("C:\\RVL\\ExpRez\\PSGM.txt", "w");
+
+	for (iCluster = 0; iCluster < nDominantClusters; iCluster++)
+	{
+		pCluster = clusters.Element[iCluster];
+
+		for (iModelInstanceElement = 0; iModelInstanceElement < convexTemplate.n; iModelInstanceElement++)
+		{
+			pModelInstanceElement = pCluster->modelInstance.Element + iModelInstanceElement;
+
+			fprintf(fp, "%f\t", pModelInstanceElement->d);
+		}
+
+		for (iModelInstanceElement = 0; iModelInstanceElement < convexTemplate.n; iModelInstanceElement++)
+		{
+			pModelInstanceElement = pCluster->modelInstance.Element + iModelInstanceElement;
+
+			fprintf(fp, "%d\t", (int)(pModelInstanceElement->defined));
+		}
+
+		fprintf(fp, "\n");
+	}
+
+	fclose(fp);
+}
+
+void PSGM::CreateTemplate()
+{
+	float h = 0.25f * PI;
+	float q = 0.5f * h;
+	float sh = sin(h);
+	float ch = cos(h);
+	float sq = sin(q);
+	float cq = cos(q);
+
+	float *NT = new float[3 * 13];
+
+	float *N;
+
+	N = NT;
+	RVLSET3VECTOR(N, 0.0f, 0.0f, 1.0f);
+	N = NT + 3;
+	RVLSET3VECTOR(N, 0.0f, -ch, ch);
+	N = NT + 2 * 3;
+	RVLSET3VECTOR(N, ch, 0.0f, ch);
+	N = NT + 11 * 3;
+	RVLSET3VECTOR(N, 0.0f, ch, ch);
+	N = NT + 12 * 3;
+	RVLSET3VECTOR(N, -ch, 0.0f, ch);
+
+	int templ[] = {
+		3, 0, 1,
+		4, 0, 2,
+		5, 1, 2,
+		6, 0, 11,
+		7, 0, 12,
+		8, 2, 11,
+		9, 1, 12,
+		10, 11, 12 };
+
+	int i;
+	float *N_, *N__;
+	float NTmp[3];
+	float fTmp;
+
+	for (i = 0; i < 8; i++)
+	{
+		N = NT + 3 * templ[3 * i];
+		N_ = NT + 3 * templ[3 * i + 1];
+		N__ = NT + 3 * templ[3 * i + 2];
+		RVLSUM3VECTORS(N_, N__, N);
+		RVLNORM3(N, fTmp);
+	}
+
+	float R[] = {
+		0.0f, 0.0f, -1.0f,
+		1.0f, 0.0f, 0.0f,
+		0.0f, -1.0f, 0.0f };
+
+	float R_[9];
+
+	RVLMXMUL3X3(R, R, R_);
+
+	int j;
+	int i_;
+	RECOG::PSGM_::Plane *pPlane;
+
+	for (i = 0; i < 6; i++)
+	{
+		for (j = 0; j < 11; j++)
+		{
+			pPlane = convexTemplate.Element + 11 * i + j;
+
+			N = pPlane->N;
+
+			N_ = NT + 3 * j;
+
+			i_ = i % 3;
+
+			if (i_ == 0)
+			{
+				RVLCOPY3VECTOR(N_, N);
+			}
+			else if (i_ == 1)
+			{
+				RVLMULMX3X3VECT(R, N_, N)
+			}				
+			else
+			{
+				RVLMULMX3X3VECT(R_, N_, N)
+			}
+				
+			if (i >= 3)
+			{ 
+				RVLNEGVECT3(N, N);
+			}
+				
+			pPlane->d = 1.0f;
+		}
+	}
+
+	// Only for debugging purpose!
+
+	FILE *fp = fopen("convex_template.txt", "w");
+
+	for (i = 0; i < convexTemplate.n; i++)
+		fprintf(fp, "%f\t%f\t%f\n", convexTemplate.Element[i].N[0], convexTemplate.Element[i].N[1], convexTemplate.Element[i].N[2]);
+
+	fclose(fp);
+
+	//
+
+	delete[] NT;
 }
 
 bool PSGM::Inside(
@@ -587,6 +813,7 @@ bool PSGM::Inside(
 		e = RVLDOTPRODUCT3(pSurfel_->N, pVertex->P) - pSurfel_->d;
 
 		if (e > maxe)
+		//if (e < -maxe)
 			return false;
 	}
 
@@ -611,6 +838,7 @@ bool PSGM::BelowPlane(
 		e = RVLDOTPRODUCT3(pSurfel->N, pVertex->P) - pSurfel->d;
 
 		if (e > maxe)
+		//if (e < -maxe)
 			return false;
 	}
 
