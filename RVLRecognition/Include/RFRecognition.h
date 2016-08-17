@@ -180,7 +180,7 @@ namespace RVL
 			FILE *fp,
 			RECOG::RFFeature *pFeature,
 			float normalLength);
-		void DetectAndWriteFeatures(
+		bool DetectAndWriteFeatures(
 			Mesh *pMesh,
 			SurfelGraph *pSurfels,
 			int iSelectedPt,

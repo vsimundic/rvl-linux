@@ -25,6 +25,8 @@ PSGM::PSGM()
 {
 	nDominantClusters = 1;
 	kNoise = 1.2f;
+	minInitialSurfelSize = 20;
+	minVertexPerc = 50;
 
 	convexTemplate.n = 66;
 	convexTemplate.Element = new RECOG::PSGM_::Plane[convexTemplate.n];
@@ -40,6 +42,8 @@ PSGM::PSGM()
 	clusterVertexMem = NULL;
 	vertexArray.Element = NULL;
 	modelInstanceMem = NULL;
+	vertexDisplayLineArray.Element = NULL;
+	vertexDisplayLineArrayMem = NULL;
 }
 
 
@@ -55,6 +59,8 @@ PSGM::~PSGM()
 	RVL_DELETE_ARRAY(vertexArray.Element);
 	RVL_DELETE_ARRAY(convexTemplate.Element);	
 	RVL_DELETE_ARRAY(modelInstanceMem);
+	RVL_DELETE_ARRAY(vertexDisplayLineArray.Element);
+	RVL_DELETE_ARRAY(vertexDisplayLineArrayMem);
 }
 
 void PSGM::CreateParamList(CRVLMem *pMem)
@@ -67,6 +73,8 @@ void PSGM::CreateParamList(CRVLMem *pMem)
 
 	pParamData = ParamList.AddParam("PSGM.nDominantClusters", RVLPARAM_TYPE_INT, &nDominantClusters);
 	pParamData = ParamList.AddParam("PSGM.kNoise", RVLPARAM_TYPE_FLOAT, &kNoise);
+	pParamData = ParamList.AddParam("PSGM.minInitialSurfelSize", RVLPARAM_TYPE_INT, &minInitialSurfelSize);
+	pParamData = ParamList.AddParam("PSGM.minVertexPerc", RVLPARAM_TYPE_INT, &minVertexPerc);
 }
 
 void PSGM::Interpret(
@@ -271,6 +279,7 @@ void PSGM::Interpret(
 	int *piVertex = clusterVertexMem;
 
 	bool *bVertexVisited = new bool[vertexArray.n];	
+	bool *bVertexInCluster = new bool[vertexArray.n];
 
 	bool *bSurfelVisited = new bool[pSurfels->NodeArray.n];
 
@@ -314,12 +323,15 @@ void PSGM::Interpret(
 	QLIST::Index *pCandidateIdx, *pBestCandidateIdx;
 	QLIST::Index **ppCandidateIdx, **ppBestCandidateIdx;
 	float dist, minDist;
+	int nSurfelVertices;
+	int nSurfelVerticesInCluster;
+	int *piVertex_, *piVertex__;
 
 	for (iCluster = 0; iCluster < pSurfels->NodeArray.n; iCluster++)
 	{
 		// pSurfel <- the largest surfel which is not assigned to a cluster.
 
-		maxSurfelSize = 0;
+		maxSurfelSize = minInitialSurfelSize - 1;
 
 		iLargestSurfel = -1;
 
@@ -351,6 +363,9 @@ void PSGM::Interpret(
 		if (iLargestSurfel < 0)
 			break;
 
+		//if (iLargestSurfel == 25)
+		//	int debug = 0;
+
 		// Initialize a new cluster.
 
 		pCluster = clusterMem + iCluster;
@@ -365,6 +380,7 @@ void PSGM::Interpret(
 		clusters.n++;
 
 		memset(bVertexVisited, 0, vertexArray.n * sizeof(bool));
+		memset(bVertexInCluster, 0, vertexArray.n * sizeof(bool));
 		memset(bSurfelVisited, 0, pSurfels->NodeArray.n * sizeof(bool));
 
 		RVLQLIST_INIT(pCandidateList);
@@ -431,9 +447,71 @@ void PSGM::Interpret(
 
 			RVLQLIST_REMOVE_ENTRY(pCandidateList, pBestCandidateIdx, ppBestCandidateIdx);
 
+			//if (iSurfel == 8)
+			//	int debug = 0;
+
+			// Add vertices of iSurfel, which are inside convex (or outside concave) surface into cluster.
+
+			iFirstNewVertex = pCluster->iVertexArray.n;
+
+			piVertex_ = piVertex;
+
+			pSurfelVertexList = surfelVertexList.Element + iSurfel;
+
+			nSurfelVertices = nSurfelVerticesInCluster = 0;
+
+			pVertexIdx = pSurfelVertexList->pFirst;
+
+			while (pVertexIdx)
+			{
+				if (bVertexVisited[pVertexIdx->Idx])
+				{
+					if (bVertexInCluster[pVertexIdx->Idx])
+						nSurfelVerticesInCluster++;
+				}
+				else
+				{
+					if (Inside(pVertexIdx->Idx, pCluster, iSurfel))
+					{
+						*(piVertex++) = pVertexIdx->Idx;
+
+						nSurfelVerticesInCluster++;
+					}
+						
+				}
+
+				nSurfelVertices++;
+
+				pVertexIdx = pVertexIdx->pNext;
+			}
+
+			if (nSurfelVertices == 0)
+				continue;
+
+			if (100 * nSurfelVerticesInCluster / nSurfelVertices < minVertexPerc)
+			{
+				piVertex = piVertex_;
+
+				continue;
+			}
+
+			pCluster->iVertexArray.n = piVertex - pCluster->iVertexArray.Element;
+
+			pVertexIdx = pSurfelVertexList->pFirst;
+
+			while (pVertexIdx)
+			{
+				bVertexVisited[pVertexIdx->Idx] = true;
+
+				pVertexIdx = pVertexIdx->pNext;
+			}
+
+			for (piVertex__ = piVertex_; piVertex__ < piVertex; piVertex__++)
+				bVertexInCluster[*piVertex__] = true;
+
 			// Add iSurfel to cluster.
 
-			//if (iSurfel == 56)
+			//if (iLargestSurfel == 25 && iSurfel == 192)
 			//	int debug = 0;
 
 			clusterMap[iSurfel] = iCluster;
@@ -456,29 +534,6 @@ void PSGM::Interpret(
 			UpdateMeanNormal(sumN, wN, pSurfel->N, (float)(pSurfel->size), meanN);
 #endif
 
-			// Add vertices of iSurfel, which are inside convex (or outside concave) surface into cluster.
-
-			iFirstNewVertex = pCluster->iVertexArray.n;
-
-			pSurfelVertexList = surfelVertexList.Element + iSurfel;
-
-			pVertexIdx = pSurfelVertexList->pFirst;
-
-			while (pVertexIdx)
-			{
-				if (!bVertexVisited[pVertexIdx->Idx])
-				{
-					bVertexVisited[pVertexIdx->Idx] = true;
-
-					if (Inside(pVertexIdx->Idx, pCluster, iSurfel))
-						*(piVertex++) = pVertexIdx->Idx;
-				}
-
-				pVertexIdx = pVertexIdx->pNext;
-			}
-
-			pCluster->iVertexArray.n = piVertex - pCluster->iVertexArray.Element;
-
 			// Remove candidates which are not consistent with new vertices added to the cluster.
 
 			ppCandidateIdx = &(candidateList.pFirst);
@@ -488,6 +543,9 @@ void PSGM::Interpret(
 			while (pCandidateIdx)
 			{
 				pSurfel_ = pSurfels->NodeArray.Element + pCandidateIdx->Idx;
+
+				//if (pCandidateIdx->Idx == 8)
+				//	int debug = 0;
 
 				if (BelowPlane(pCluster, pSurfel_, iFirstNewVertex))
 					ppCandidateIdx = &(pCandidateIdx->pNext);
@@ -505,10 +563,16 @@ void PSGM::Interpret(
 			{
 				iSurfel_ = RVLPCSEGMENT_GRAPH_GET_OPPOSITE_NODE(pSurfelEdgePtr);
 
+				//if (iSurfel_ == 8)
+				//	int debug = 0;
+
 				if (clusterMap[iSurfel_] < 0)
 				{
 					if (!bSurfelVisited[iSurfel_])
 					{
+						//if (iSurfel_ == 8)
+						//	int debug = 0;
+
 						bSurfelVisited[iSurfel_] = true;
 
 						pSurfel_ = pSurfels->NodeArray.Element + iSurfel_;
@@ -534,6 +598,7 @@ void PSGM::Interpret(
 
 	delete[] candidateMem;
 	delete[] bVertexVisited;
+	delete[] bVertexInCluster;
 	delete[] bSurfelVisited;
 #ifdef RVLPSGM_NORMAL_HULL
 	delete[] NHull.Element;
@@ -568,7 +633,19 @@ void PSGM::Interpret(
 	clusters.Element = new RECOG::PSGM_::Cluster *[clusters.n];
 
 	for (i = 0; i < clusters.n; i++)
-		clusters.Element[i] = clusterMem + surfelBuff1.Element[clusters.n - i - 1];
+	{
+		iCluster = surfelBuff1.Element[clusters.n - i - 1];
+		clusters.Element[i] = clusterMem + iCluster;
+		surfelBuff2.Element[iCluster] = i;
+	}		
+
+	// Update cluster map.	
+
+	for (iSurfel = 0; iSurfel < pSurfels->NodeArray.n; iSurfel++)
+	{
+		if (clusterMap[iSurfel] >= 0)
+			clusterMap[iSurfel] = surfelBuff2.Element[clusterMap[iSurfel]];
+	}	
 
 	delete[] surfelBuff1.Element;
 	delete[] surfelBuff2.Element;
@@ -1050,14 +1127,23 @@ void PSGM::UpdateMeanNormal(
 
 void PSGM::InitDisplay(
 	Visualizer *pVisualizer,
-	Mesh *pMesh)
+	Mesh *pMesh,
+	unsigned char *selectionColor)
 {
+	pVisualizer->normalLength = 10.0;
+
 	pVisualizer->SetMesh(pMesh);
 
 	displayData.pMesh = pMesh;
 	displayData.pSurfels = pSurfels;
 	displayData.pRecognition = this;
-	displayData.pVisualizer = pVisualizer;
+	displayData.pVisualizer = pVisualizer;	
+	RVLCOPY3VECTOR(selectionColor, displayData.selectionColor);
+	displayData.iSelectedCluster = -1;
+
+	pSurfels->DisplayData.keyPressUserFunction = &RECOG::PSGM_::keyPressUserFunction;
+	pSurfels->DisplayData.mouseRButtonDownUserFunction = &RECOG::PSGM_::mouseRButtonDownUserFunction;
+	pSurfels->DisplayData.vpUserFunctionData = &displayData;
 
 	pSurfels->InitDisplay(pVisualizer, pMesh, pSurfelDetector);
 }
@@ -1069,9 +1155,15 @@ void PSGM::Display()
 
 	DisplayClusters();
 
+	displayData.bClusters = true;
+	displayData.bVertices = false;
+
 	//pSurfels->Display(pVisualizer, pMesh);
 
 	DisplayVertices();
+
+	if (!displayData.bVertices)
+		displayData.vertices->VisibilityOff();
 }
 
 void PSGM::DisplayClusters()
@@ -1079,26 +1171,14 @@ void PSGM::DisplayClusters()
 	Mesh *pMesh = displayData.pMesh;
 	Visualizer *pVisualizer = displayData.pVisualizer;
 
-	RECOG::PSGM_::Cluster *pCluster;
 	int iCluster;
-	Surfel *pSurfel;
-	int i;
 	unsigned char color[3];
 
 	for (iCluster = 0; iCluster < clusters.n; iCluster++)
 	{
-		pCluster = clusters.Element[iCluster];
+		RandomColor(color);
 
-		color[0] = (unsigned char)(rand() % 256);
-		color[1] = (unsigned char)(rand() % 256);
-		color[2] = (unsigned char)(rand() % 256);
-
-		for (i = 0; i < pCluster->iSurfelArray.n; i++)
-		{
-			pSurfel = pSurfels->NodeArray.Element + pCluster->iSurfelArray.Element[i];
-
-			pVisualizer->PaintPointSet(&(pSurfel->PtList), pMesh->pPolygonData, color);
-		}
+		PaintCluster(iCluster, color);
 	}
 }
 
@@ -1181,8 +1261,7 @@ void PSGM::DisplayVertices()
 	Visualizer *pVisualizer = displayData.pVisualizer;
 
 	// Create the polydata where we will store all the geometric data
-	vtkSmartPointer<vtkPolyData> linesPolyData =
-		vtkSmartPointer<vtkPolyData>::New();
+	linesPolyData =	vtkSmartPointer<vtkPolyData>::New();
 
 	// Create a vtkPoints container and store the points in it
 	vtkSmartPointer<vtkPoints> pts =
@@ -1237,12 +1316,28 @@ void PSGM::DisplayVertices()
 
 	vtkSmartPointer<vtkLine> *line = new vtkSmartPointer<vtkLine>[nLines];
 
+	RVL_DELETE_ARRAY(vertexDisplayLineArray.Element);
+
+	vertexDisplayLineArray.Element = new Array<int>[vertexArray.n];
+
+	RVL_DELETE_ARRAY(vertexDisplayLineArrayMem);
+
+	vertexDisplayLineArrayMem = new int[nLines];
+
+	int *pVertexDisplayLineIdx = vertexDisplayLineArrayMem;
+
 	iLine = 0;
 
-	pVertex = vertexList.pFirst;
+	int iVertex;
 
-	while (pVertex)
+	for (iVertex = 0; iVertex < vertexArray.n; iVertex++)
 	{
+		pVertex = vertexArray.Element[iVertex];
+
+		vertexDisplayLineArray.Element[iVertex].n = pVertex->iSurfelArray.n;
+
+		vertexDisplayLineArray.Element[iVertex].Element = pVertexDisplayLineIdx;
+
 		for (iSurfel = 0; iSurfel < pVertex->iSurfelArray.n; iSurfel++)
 		{
 			line[iLine] = vtkSmartPointer<vtkLine>::New();
@@ -1254,10 +1349,10 @@ void PSGM::DisplayVertices()
 
 			colors->InsertNextTupleValue(red);
 
+			*(pVertexDisplayLineIdx++) = iLine;
+
 			iLine++;
 		}
-
-		pVertex = pVertex->pNext;
 	}
 
 	// Add the lines to the polydata container
@@ -1278,11 +1373,170 @@ void PSGM::DisplayVertices()
 
 	mapper->SetInputData(linesPolyData);
 
-	vtkSmartPointer<vtkActor> actor =
-		vtkSmartPointer<vtkActor>::New();
-	actor->SetMapper(mapper);
+	//vtkSmartPointer<vtkActor> actor =
+	//	vtkSmartPointer<vtkActor>::New();
+	//actor->SetMapper(mapper);
+	displayData.vertices = vtkSmartPointer<vtkActor>::New();
+	displayData.vertices->SetMapper(mapper);
 
-	pVisualizer->renderer->AddActor(actor);
+	pVisualizer->renderer->AddActor(displayData.vertices);
 
 	delete[] line;
+}
+
+void PSGM::PaintCluster(
+	int iCluster,
+	unsigned char *color)
+{
+	Mesh *pMesh = displayData.pMesh;
+	Visualizer *pVisualizer = displayData.pVisualizer;
+
+	RECOG::PSGM_::Cluster *pCluster = clusters.Element[iCluster];
+
+	int i;
+	int iSurfel;
+	Surfel *pSurfel;
+
+	for (i = 0; i < pCluster->iSurfelArray.n; i++)
+	{
+		iSurfel = pCluster->iSurfelArray.Element[i];
+
+		pSurfel = pSurfels->NodeArray.Element + iSurfel;
+
+		pVisualizer->PaintPointSet(&(pSurfel->PtList), pMesh->pPolygonData, color);
+	}
+}
+
+void PSGM::PaintClusterVertices(
+	int iCluster,
+	unsigned char *color)
+{
+	RECOG::PSGM_::Cluster *pCluster = clusters.Element[iCluster];
+
+	int iVertex;
+	vtkSmartPointer<vtkUnsignedCharArray> rgbPointData = rgbPointData->SafeDownCast(linesPolyData->GetCellData()->GetScalars());
+
+	int i, j;
+
+	for (i = 0; i < pCluster->iVertexArray.n; i++)
+	{
+		iVertex = pCluster->iVertexArray.Element[i];
+
+		for (j = 0; j < vertexDisplayLineArray.Element[iVertex].n; j++)
+			rgbPointData->SetTupleValue(vertexDisplayLineArray.Element[iVertex].Element[j], color);
+	}	
+}
+
+void PSGM::UpdateVertexDisplayLines()
+{
+	linesPolyData->Modified();
+}
+
+bool RVL::RECOG::PSGM_::keyPressUserFunction(
+	Mesh *pMesh, 
+	SurfelGraph *pSurfels, 
+	std::string &key, 
+	void *vpData)
+{
+	RECOG::PSGM_::DisplayData *pData = (RECOG::PSGM_::DisplayData *)vpData;
+
+	PSGM *pRecognition = pData->pRecognition;
+	Visualizer *pVisualizer = pData->pVisualizer;
+
+	if (key == "a")
+	{
+		pData->bClusters = !pData->bClusters;
+
+		if (pData->bClusters)
+			pRecognition->DisplayClusters();
+		else
+		{
+			pSurfels->Display(pVisualizer, pMesh);
+
+			if (pData->bVertices)
+			{
+				if (pData->iSelectedCluster >= 0)
+				{
+					unsigned char color[3];
+
+					RVLSET3VECTOR(color, 255, 0, 0);
+
+					pRecognition->PaintClusterVertices(pData->iSelectedCluster, color);
+
+					pRecognition->UpdateVertexDisplayLines();
+				}
+			}
+
+			pData->iSelectedCluster = -1;
+		}
+			
+		return true;
+	}
+	else if (key == "v")
+	{
+		pData->bVertices = !pData->bVertices;
+
+		if (pData->bVertices)
+			pData->vertices->VisibilityOn();
+		else
+			pData->vertices->VisibilityOff();
+
+		return true;
+	}
+
+	return false;
+}
+
+bool RVL::RECOG::PSGM_::mouseRButtonDownUserFunction(
+	Mesh *pMesh,
+	SurfelGraph *pSurfels,
+	int iSelectedPt,
+	int iSelectedSurfel,
+	void *vpData)
+{
+	RECOG::PSGM_::DisplayData *pData = (RECOG::PSGM_::DisplayData *)vpData;
+
+	if (!pData->bClusters)
+		return false;
+
+	PSGM *pRecognition = pData->pRecognition;
+	Visualizer *pVisualizer = pData->pVisualizer;
+
+	unsigned char color[3];
+
+	if (pData->iSelectedCluster >= 0)
+	{
+		RandomColor(color);
+
+		pRecognition->PaintCluster(pData->iSelectedCluster, color);
+
+		if (pData->bVertices)
+		{
+			RVLSET3VECTOR(color, 255, 0, 0);
+
+			pRecognition->PaintClusterVertices(pData->iSelectedCluster, color);
+		}
+	}
+
+	int iCluster = pRecognition->clusterMap[iSelectedSurfel];
+
+	if (iCluster >= 0)
+	{
+		pRecognition->PaintCluster(iCluster, pData->selectionColor);
+
+		if (pData->bVertices)
+		{
+			RVLSET3VECTOR(color, 255, 255, 0);
+
+			pRecognition->PaintClusterVertices(iCluster, color);
+
+			pRecognition->UpdateVertexDisplayLines();
+		}
+
+		pData->iSelectedCluster = iCluster;
+
+		return true;
+	}
+	else
+		return false;
 }

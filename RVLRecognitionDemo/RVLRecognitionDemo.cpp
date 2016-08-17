@@ -174,7 +174,7 @@ int main(int argc, char ** argv)
 		// Visualization
 
 		surfels.NodeColors(SelectionColor);
-		recognition.InitDisplay(&visualizer, &mesh);
+		recognition.InitDisplay(&visualizer, &mesh, SelectionColor);
 		recognition.Display();
 		visualizer.Run();
 	}	// if (method == RVLRECOGNITION_METHOD_PSGM)

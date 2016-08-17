@@ -11,6 +11,7 @@ namespace RVL
 		void SetWindowSize(int width, int height);
 		void SetBackgroundColor(double r, double g, double b);
 		void SetMesh(Mesh *pMesh);
+		void Normals(Mesh *pMesh);
 		void SetKeyPressCallback(
 			void(*f)(vtkObject *caller, unsigned long eid, void *clientdata, void *calldata),
 			void *clientData);
@@ -43,10 +44,14 @@ namespace RVL
 		vtkSmartPointer<vtkInteractorStyleTrackballCamera> style;
 		vtkSmartPointer<vtkPolyDataMapper> map;
 		vtkSmartPointer<vtkActor> actor;
+		vtkSmartPointer<vtkActor> normals;
 		vtkSmartPointer<vtkPointPicker> pointPicker;
 		vtkSmartPointer<vtkCornerAnnotation> text;
 		vtkSmartPointer<vtkCallbackCommand> keypressCallback;
-		vtkSmartPointer<vtkCallbackCommand> mouseRButtonDownCallback;		
+		vtkSmartPointer<vtkCallbackCommand> mouseRButtonDownCallback;	
+		double normalLength;
+		bool bNormals;
+		bool bNormalsVisible;
 	};
 }
 

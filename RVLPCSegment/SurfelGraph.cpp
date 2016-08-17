@@ -28,6 +28,8 @@ SurfelGraph::SurfelGraph()
 	NodeArray.Element = NULL;
 	edgeMarkMap = NULL;
 	EdgeArray.Element = NULL;
+	DisplayData.mouseRButtonDownUserFunction = NULL;
+	DisplayData.keyPressUserFunction = NULL;
 }
 
 
@@ -322,48 +324,58 @@ void SURFEL::MouseRButtonDown(vtkObject* caller, unsigned long eid, void* client
 	{
 		int iSurfel = pData->pSurfels->surfelMap[selectedPoint];
 
-		if (pData->iSelectedSurfel >= 0 && (pData->iSelection == 1 && pData->iSelectedSurfel != iSurfel))
-			pData->pVisualizer->PaintPointSet(&(pData->pSurfels->NodeArray.Element[pData->iSelectedSurfel].PtList), pMesh->pPolygonData,
-			pData->pSurfels->GetColor(pData->iSelectedSurfel));
+		bool bSelection = false;
 
-		if (pData->iSelectedSurfel2 >= 0 && ((pData->iSelection == 1 || (pData->iSelection == 2 && pData->iSelectedSurfel2 != iSurfel))))
-			pData->pVisualizer->PaintPointSet(&(pData->pSurfels->NodeArray.Element[pData->iSelectedSurfel2].PtList), pMesh->pPolygonData, 
-			pData->pSurfels->GetColor(pData->iSelectedSurfel2));
-
-		//pData->pSurfels->DisplaySurfelBoundary(pData->pVisualizer, pMesh, iSurfel, pData->SelectionColor);
-
-		if (pData->iSelection == 1)
+		if (pData->mouseRButtonDownUserFunction)
 		{
 			if (iSurfel >= 0)
-				pData->pVisualizer->PaintPointSet(&(pData->pSurfels->NodeArray.Element[iSurfel].PtList), pMesh->pPolygonData, pData->SelectionColor);
-
-			pData->iSelectedSurfel = iSurfel;
-
-			pData->iSelectedSurfel2 = -1;
-		}
-		else// if (pData->iSelection == 2)
-		{
-			unsigned char SelectionColor2[3];
-
-			RVLSCALECOLOR(pData->SelectionColor, 75, SelectionColor2);
-
-			pData->pVisualizer->PaintPointSet(&(pData->pSurfels->NodeArray.Element[iSurfel].PtList), pMesh->pPolygonData, SelectionColor2);
-
-			pData->iSelectedSurfel2 = iSurfel;
-
-			pData->iSelection = 1;
+				bSelection |= pData->mouseRButtonDownUserFunction(pMesh, pData->pSurfels, (int)selectedPoint, iSurfel, pData->vpUserFunctionData);
 		}
 
-		pd->Modified();
-
-		pData->pSurfels->PrintData(pData->pVisualizer, pMesh, selectedPoint, iSurfel);
-
-		interactor->GetRenderWindow()->Render();
-
-		if (pData->RButtonDownUserFunction)
+		if (!bSelection)
 		{
-			if (iSurfel >= 0)
-				pData->RButtonDownUserFunction(pMesh, pData->pSurfels, (int)selectedPoint, iSurfel, pData->vpUserFunctionData);
+			if (pData->iSelectedSurfel >= 0 && (pData->iSelection == 1 && pData->iSelectedSurfel != iSurfel))
+				pData->pVisualizer->PaintPointSet(&(pData->pSurfels->NodeArray.Element[pData->iSelectedSurfel].PtList), pMesh->pPolygonData,
+				pData->pSurfels->GetColor(pData->iSelectedSurfel));
+
+			if (pData->iSelectedSurfel2 >= 0 && ((pData->iSelection == 1 || (pData->iSelection == 2 && pData->iSelectedSurfel2 != iSurfel))))
+				pData->pVisualizer->PaintPointSet(&(pData->pSurfels->NodeArray.Element[pData->iSelectedSurfel2].PtList), pMesh->pPolygonData,
+				pData->pSurfels->GetColor(pData->iSelectedSurfel2));
+
+			//pData->pSurfels->DisplaySurfelBoundary(pData->pVisualizer, pMesh, iSurfel, pData->SelectionColor);
+
+			if (pData->iSelection == 1)
+			{
+				if (iSurfel >= 0)
+					pData->pVisualizer->PaintPointSet(&(pData->pSurfels->NodeArray.Element[iSurfel].PtList), pMesh->pPolygonData, pData->SelectionColor);
+
+				pData->iSelectedSurfel = iSurfel;
+
+				pData->iSelectedSurfel2 = -1;
+			}
+			else// if (pData->iSelection == 2)
+			{
+				unsigned char SelectionColor2[3];
+
+				RVLSCALECOLOR(pData->SelectionColor, 75, SelectionColor2);
+
+				pData->pVisualizer->PaintPointSet(&(pData->pSurfels->NodeArray.Element[iSurfel].PtList), pMesh->pPolygonData, SelectionColor2);
+
+				pData->iSelectedSurfel2 = iSurfel;
+
+				pData->iSelection = 1;
+			}
+
+			bSelection = true;
+		}
+
+		if (bSelection)
+		{
+			pd->Modified();
+
+			pData->pSurfels->PrintData(pData->pVisualizer, pMesh, selectedPoint, iSurfel);
+
+			interactor->GetRenderWindow()->Render();
 		}
 	}
 }
@@ -421,6 +433,20 @@ void SURFEL::KeyPressCallback(vtkObject* caller, unsigned long eid, void* client
 
 		bUpdateDisplay = true;
 	}
+	else if (keySym == "n")
+	{
+		if (pData->pVisualizer->bNormals)
+		{
+			pData->pVisualizer->bNormalsVisible = !pData->pVisualizer->bNormalsVisible;
+
+			if (pData->pVisualizer->bNormalsVisible)
+				pData->pVisualizer->normals->VisibilityOn();
+			else
+				pData->pVisualizer->normals->VisibilityOff();
+
+			bUpdateDisplay = true;
+		}
+	}
 	else if (keySym == "p")
 	{
 		if (pData->iSelectedSurfel >= 0)
@@ -470,6 +496,9 @@ void SURFEL::KeyPressCallback(vtkObject* caller, unsigned long eid, void* client
 		}
 	}
 #endif
+
+	if (pData->keyPressUserFunction)
+		bUpdateDisplay |= pData->keyPressUserFunction(pMesh, pData->pSurfels, keySym, pData->vpUserFunctionData);
 
 	if (bDefineBoundary)
 	{	
@@ -562,13 +591,17 @@ void SurfelGraph::PrintData(
 	else
 		str[0] = 0;
 
-	sprintf(str2, "\nSurfel %d\nP=(%f, %f, %f)\nN=(%f, %f, %f)\nRGB=(%d, %d, %d)",
-		iSurfel,
-		pSurfel->P[0], pSurfel->P[1], pSurfel->P[2],
-		pSurfel->N[0], pSurfel->N[1], pSurfel->N[2],
-		pSurfel->RGB[0], pSurfel->RGB[1], pSurfel->RGB[2]);
+	if (iSurfel >= 0)
+	{
+		sprintf(str2, "\nSurfel %d\nP=(%f, %f, %f)\nN=(%f, %f, %f)\nRGB=(%d, %d, %d)\nsize=%d",
+			iSurfel,
+			pSurfel->P[0], pSurfel->P[1], pSurfel->P[2],
+			pSurfel->N[0], pSurfel->N[1], pSurfel->N[2],
+			pSurfel->RGB[0], pSurfel->RGB[1], pSurfel->RGB[2],
+			pSurfel->size);
 
-	strcat(str, str2);
+		strcat(str, str2);
+	}
 
 	//// Print indices of the adjacent surfels
 
@@ -653,7 +686,6 @@ void SurfelGraph::InitDisplay(
 	DisplayData.mode = RVLSURFEL_DISPLAY_MODE_SURFELS;
 	DisplayData.iSelectedSurfel = DisplayData.iSelectedSurfel2 = -1;
 	DisplayData.iSelection = 1;
-	DisplayData.RButtonDownUserFunction = NULL;
 
 	pVisualizer->SetMouseRButtonDownCallback(SURFEL::MouseRButtonDown, &DisplayData);
 	pVisualizer->SetKeyPressCallback(SURFEL::KeyPressCallback, &DisplayData);

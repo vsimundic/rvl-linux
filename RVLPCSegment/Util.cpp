@@ -96,3 +96,10 @@ void RVL::QuickSort(int *Key, int *Index, int n)
 	delete[] KeyLT.Element;
 	delete[] KeyMem;
 }
+
+void RVL::RandomColor(unsigned char *color)
+{
+	color[0] = (unsigned char)(rand() % 256);
+	color[1] = (unsigned char)(rand() % 256);
+	color[2] = (unsigned char)(rand() % 256);
+}

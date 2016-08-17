@@ -50,7 +50,24 @@ namespace RVL
 				Mesh *pMesh;
 				SurfelGraph *pSurfels;
 				Visualizer *pVisualizer;
+				bool bClusters;
+				bool bVertices;
+				vtkSmartPointer<vtkActor> vertices;
+				unsigned char selectionColor[3];
+				int iSelectedCluster;
 			};
+
+			bool keyPressUserFunction(
+				Mesh *pMesh, 
+				SurfelGraph *pSurfels, 
+				std::string &key, 
+				void *vpData);
+			bool mouseRButtonDownUserFunction(
+				Mesh *pMesh,
+				SurfelGraph *pSurfels,
+				int iSelectedPt,
+				int iSelectedSurfel,
+				void *vpData);
 		}
 	}
 
@@ -64,11 +81,19 @@ namespace RVL
 			Mesh *pMesh);
 		void InitDisplay(
 			Visualizer *pVisualizer,
-			Mesh *pMesh);
+			Mesh *pMesh,
+			unsigned char *selectionColor);
 		void Display();
 		void DisplayModelInstance(Visualizer *pVisualizer);
 		void DisplayVertices();
 		void DisplayClusters();
+		void PaintCluster(
+			int iCluster,
+			unsigned char *color);
+		void PaintClusterVertices(
+			int iCluster,
+			unsigned char *color);
+		void UpdateVertexDisplayLines();
 	private:
 		void CreateTemplate();
 		bool Inside(
@@ -105,6 +130,8 @@ namespace RVL
 		int nDominantClusters;
 		float kNoise;
 		Array<RECOG::PSGM_::Plane> convexTemplate;
+		int minInitialSurfelSize;
+		int minVertexPerc;
 	private:
 		Array<QList<QLIST::Index>> surfelVertexList;
 		QLIST::Index *surfelVertexMem;
@@ -112,6 +139,9 @@ namespace RVL
 		int *clusterSurfelMem;
 		int *clusterVertexMem;
 		RECOG::PSGM_::ModelInstanceElement *modelInstanceMem;
+		Array<Array<int>> vertexDisplayLineArray;
+		int *vertexDisplayLineArrayMem;
+		vtkSmartPointer<vtkPolyData> linesPolyData;
 	};
 }
 

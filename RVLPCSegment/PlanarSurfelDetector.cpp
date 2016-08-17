@@ -176,6 +176,8 @@ void PlanarSurfelDetector::CreateParamList(CRVLMem *pMem)
 
 	ParamList.Init();
 
+	int iTmp;
+
 	//pParamData = ParamList.AddParam("PSD.SegmentationType", RVLPARAM_TYPE_FLAG, &m_Flags);
 	//ParamList.AddID(pParamData, "3D", RVLPSD_SEGMENT_3D);
 	pParamData = ParamList.AddParam("SurfelDetector.kPlane", RVLPARAM_TYPE_FLOAT, &kPlane);
@@ -184,6 +186,10 @@ void PlanarSurfelDetector::CreateParamList(CRVLMem *pMem)
 	pParamData = ParamList.AddParam("SurfelDetector.maxRange", RVLPARAM_TYPE_FLOAT, &maxRange);
 	pParamData = ParamList.AddParam("SurfelDetector.minSurfelSize", RVLPARAM_TYPE_INT, &minSurfelSize);
 	pParamData = ParamList.AddParam("SurfelDetector.maxAttackSize", RVLPARAM_TYPE_INT, &maxAttackSize);
+	iTmp = 0;
+	pParamData = ParamList.AddParam("SurfelDetector.bJoinSmallSurfelsToClosestNeighbors", RVLPARAM_TYPE_FLAG, &iTmp);
+	ParamList.AddID(pParamData, "yes", 1);
+	bJoinSmallSurfelsToClosestNeighbors = (iTmp > 0);
 }
 
 void PlanarSurfelDetector::RandomIndices(Array<int> &A)
@@ -438,6 +444,9 @@ void PlanarSurfelDetector::Segment(
 
 		// Initial region growing		
 
+		//if (iSurfel == 29)
+		//	int debug = 0;
+
 		piPtFetch = piPtPut = iPtBuff;
 
 		piBoundaryPt = iBoundaryPtBuff;
@@ -658,11 +667,19 @@ void PlanarSurfelDetector::Segment(
 
 	//	pPtIdx++;
 	//}
-
-	// Determine surfel size. 
-	// Identify small surfels and join them to closest neighbors.
+	
+	// Initialize buffers for determining of surfel neighbors, boundaries and sizes.
 
 	pSurfels->InitGetNeighborsBoundaryAndSize();
+
+	// Determine surfel size. 
+
+	pSurfel = pSurfels->NodeArray.Element;
+
+	for (iSurfel = 0; iSurfel < pSurfels->NodeArray.n; iSurfel++, pSurfel++)
+		pSurfel->size = QLIST::Size(pSurfel->PtList);
+
+	// Identify small surfels and join them to closest neighbors.
 
 	if (bJoinSmallSurfelsToClosestNeighbors)
 		JoinSmallSurfelsToClosestNeighbors(pMesh, pSurfels);
@@ -686,7 +703,8 @@ void PlanarSurfelDetector::Segment(
 
 	for (iSurfel = 0; iSurfel < pSurfels->NodeArray.n; iSurfel++, pSurfel++)
 	{
-		if (pSurfel->size >= minSurfelSize)
+		//if (pSurfel->size >= minSurfelSize)
+		if (pSurfel->size > 0)
 		{
 			pPtList = &(pSurfel->PtList);
 
@@ -4444,8 +4462,6 @@ void PlanarSurfelDetector::JoinSmallSurfelsToClosestNeighbors(
 	{
 		//if (iSurfel == 8145)
 		//	int debug = 0;
-
-		pSurfel->size = QLIST::Size(pSurfel->PtList);
 
 		if (pSurfel->size > 0 && pSurfel->size < minSurfelSize)
 		{

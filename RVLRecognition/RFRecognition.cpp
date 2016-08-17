@@ -796,7 +796,7 @@ void RFRecognition::FindObjects(Mesh *pMesh)
 	RECOG::RFRecognitionCallbackData displayData;
 	displayData.pRecognition = this;
 	pSurfels->DisplayData.vpUserFunctionData = &displayData;
-	pSurfels->DisplayData.RButtonDownUserFunction = &RECOG::DetectAndWriteFeatures;
+	pSurfels->DisplayData.mouseRButtonDownUserFunction = &RECOG::DetectAndWriteFeatures;
 #endif
 	//pSurfels->DisplayData.vpRecognition = this;//VIDOVIC
 	pSurfels->Display(&visualizer, pMesh);
@@ -1548,7 +1548,7 @@ void RECOG::DebugWriteDescriptor(
 	}
 }
 
-void RECOG::DetectAndWriteFeatures(
+bool RECOG::DetectAndWriteFeatures(
 	Mesh *pMesh, 
 	SurfelGraph *pSurfels, 
 	int iSelectedPt, 
@@ -1580,5 +1580,7 @@ void RECOG::DetectAndWriteFeatures(
 
 		pData->pRecognition->DetectFeatures(pMesh, pSurfels, &featureBase, 0, i, pFeatureList, &Mem);
 	}
+
+	return false;
 }
 #endif

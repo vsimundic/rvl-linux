@@ -16,4 +16,5 @@
 namespace RVL
 {
 	void QuickSort(int *Key, int *Index, int n);
+	void RandomColor(unsigned char *color);
 }

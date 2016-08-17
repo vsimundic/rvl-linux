@@ -1,5 +1,6 @@
 //#include "stdafx.h"
 #include "RVLVTK.h"
+#include <vtkLine.h>
 #include "RVLCore2.h"
 #include "Util.h"
 #include "Graph.h"
@@ -16,7 +17,9 @@ using namespace RVL;
 
 Visualizer::Visualizer()
 {
-
+	normalLength = 1.0;
+	bNormals = false;
+	bNormalsVisible = false;
 }
 
 
@@ -104,6 +107,112 @@ void Visualizer::SetMesh(Mesh *pMesh)
 
 	//Insert actor
 	renderer->AddActor(actor);
+
+	//Normals
+	if (bNormals)
+	{
+		Normals(pMesh);
+
+		if (!bNormalsVisible)
+			normals->VisibilityOff();
+	}
+}
+
+void Visualizer::Normals(Mesh *pMesh)
+{
+	// Create the polydata where we will store all the geometric data
+	vtkSmartPointer<vtkPolyData> linesPolyData =
+		vtkSmartPointer<vtkPolyData>::New();
+
+	// Create a vtkPoints container and store the points in it
+	vtkSmartPointer<vtkPoints> pts =
+		vtkSmartPointer<vtkPoints>::New();
+
+	int iLine = 0;
+
+	double P0[3], P1[3], V[3];
+	int iPt;
+	Point *pPt;
+	float *P, *N;
+
+	for (iPt = 0; iPt < pMesh->NodeArray.n; iPt++)
+	{
+		pPt = pMesh->NodeArray.Element + iPt;
+
+		P = pPt->P;
+		N = pPt->N;
+
+		RVLCOPY3VECTOR(P, P0);
+
+		pts->InsertNextPoint(P0);
+
+		RVLSCALE3VECTOR(N, normalLength, V);
+
+		RVLSUM3VECTORS(P0, V, P1);
+
+		pts->InsertNextPoint(P1);
+
+		iLine++;
+	}
+
+	// Add the points to the polydata container
+	linesPolyData->SetPoints(pts);
+
+	// Create lines.
+
+	vtkSmartPointer<vtkCellArray> lines =
+		vtkSmartPointer<vtkCellArray>::New();
+
+	vtkSmartPointer<vtkUnsignedCharArray> colors =
+		vtkSmartPointer<vtkUnsignedCharArray>::New();
+
+	colors->SetNumberOfComponents(3);
+
+	unsigned char red[3] = { 255, 0, 0 };
+
+	int nLines = iLine;
+
+	vtkSmartPointer<vtkLine> *line = new vtkSmartPointer<vtkLine>[nLines];
+
+	for (iLine = 0; iLine < nLines; iLine++)
+	{
+		line[iLine] = vtkSmartPointer<vtkLine>::New();
+
+		line[iLine]->GetPointIds()->SetId(0, 2 * iLine);
+		line[iLine]->GetPointIds()->SetId(1, 2 * iLine + 1);
+
+		lines->InsertNextCell(line[iLine]);
+
+		colors->InsertNextTupleValue(red);
+	}
+
+	// Add the lines to the polydata container
+	linesPolyData->SetLines(lines);
+
+	// Color the lines.
+	// SetScalars() automatically associates the values in the data array passed as parameter
+	// to the elements in the same indices of the cell data array on which it is called.
+	// This means the first component (red) of the colors array
+	// is matched with the first component of the cell array (line 0)
+	// and the second component (green) of the colors array
+	// is matched with the second component of the cell array (line 1)
+	linesPolyData->GetCellData()->SetScalars(colors);
+
+	// Setup the visualization pipeline
+	vtkSmartPointer<vtkPolyDataMapper> mapper =
+		vtkSmartPointer<vtkPolyDataMapper>::New();
+
+	mapper->SetInputData(linesPolyData);
+
+	//vtkSmartPointer<vtkActor> actor =
+	//	vtkSmartPointer<vtkActor>::New();
+	//actor->SetMapper(mapper);
+	normals = vtkSmartPointer<vtkActor>::New();
+	normals->SetMapper(mapper);
+
+	renderer->AddActor(normals);
+
+	delete[] line;
 }
 
 void Visualizer::SetKeyPressCallback(
