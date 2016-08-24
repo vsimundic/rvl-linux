@@ -169,6 +169,7 @@ int main(int argc, char ** argv)
 
 		// Scene interpretation.
 
+		recognition.SetSceneFileName(sceneMeshFileName);
 		recognition.Interpret(&mesh);
 
 		// Visualization

@@ -27,6 +27,8 @@ PSGM::PSGM()
 	kNoise = 1.2f;
 	minInitialSurfelSize = 20;
 	minVertexPerc = 50;
+	kReferenceSurfelSize = 0.2f;
+	kReferenceTangentSize = 0.3f;
 
 	convexTemplate.n = 66;
 	convexTemplate.Element = new RECOG::PSGM_::Plane[convexTemplate.n];
@@ -41,9 +43,10 @@ PSGM::PSGM()
 	clusterSurfelMem = NULL;
 	clusterVertexMem = NULL;
 	vertexArray.Element = NULL;
-	modelInstanceMem = NULL;
+	//modelInstanceMem = NULL;
 	vertexDisplayLineArray.Element = NULL;
 	vertexDisplayLineArrayMem = NULL;
+	sceneFileName = NULL;
 }
 
 
@@ -58,9 +61,10 @@ PSGM::~PSGM()
 	RVL_DELETE_ARRAY(clusterVertexMem);
 	RVL_DELETE_ARRAY(vertexArray.Element);
 	RVL_DELETE_ARRAY(convexTemplate.Element);	
-	RVL_DELETE_ARRAY(modelInstanceMem);
+	//RVL_DELETE_ARRAY(modelInstanceMem);
 	RVL_DELETE_ARRAY(vertexDisplayLineArray.Element);
 	RVL_DELETE_ARRAY(vertexDisplayLineArrayMem);
+	RVL_DELETE_ARRAY(sceneFileName);
 }
 
 void PSGM::CreateParamList(CRVLMem *pMem)
@@ -75,6 +79,8 @@ void PSGM::CreateParamList(CRVLMem *pMem)
 	pParamData = ParamList.AddParam("PSGM.kNoise", RVLPARAM_TYPE_FLOAT, &kNoise);
 	pParamData = ParamList.AddParam("PSGM.minInitialSurfelSize", RVLPARAM_TYPE_INT, &minInitialSurfelSize);
 	pParamData = ParamList.AddParam("PSGM.minVertexPerc", RVLPARAM_TYPE_INT, &minVertexPerc);
+	pParamData = ParamList.AddParam("PSGM.kReferenceSurfelSize", RVLPARAM_TYPE_FLOAT, &kReferenceSurfelSize);
+	pParamData = ParamList.AddParam("PSGM.kReferenceTangentSize", RVLPARAM_TYPE_FLOAT, &kReferenceTangentSize);
 }
 
 void PSGM::Interpret(
@@ -653,106 +659,40 @@ void PSGM::Interpret(
 
 	// Fit model.
 
-	RVL_DELETE_ARRAY(modelInstanceMem);
+	int nClusters = RVLMIN(clusters.n, nDominantClusters);
 
-	modelInstanceMem = new RECOG::PSGM_::ModelInstanceElement[nDominantClusters * convexTemplate.n];
+	RECOG::PSGM_::ModelInstance *pModelInstance;
 
-	int iModelInstanceElement;
-	RECOG::PSGM_::ModelInstanceElement *pModelInstanceElement;
-	float d;
-	float *N;
-	bool bDefined;
-
-	for (iCluster = 0; iCluster < nDominantClusters; iCluster++)
+	for (iCluster = 0; iCluster < nClusters; iCluster++)
 	{
+		ReferenceFrames(iCluster);
+
 		pCluster = clusters.Element[iCluster];
 
-		pCluster->modelInstance.Element = modelInstanceMem + iCluster * convexTemplate.n;
-		pCluster->modelInstance.n = convexTemplate.n;
+		pModelInstance = pCluster->modelInstanceList.pFirst;
 
-		for (iModelInstanceElement = 0; iModelInstanceElement < convexTemplate.n; iModelInstanceElement++)
+		while (pModelInstance)
 		{
-			pModelInstanceElement = pCluster->modelInstance.Element + iModelInstanceElement;
-			pModelInstanceElement->defined = false;
+			FitModel(pCluster, pModelInstance);
 
-			//for (i = 0; i < pCluster->iVertexArray.n; i++)
-			//{
-			//	pVertex = vertexArray.Element[pCluster->iVertexArray.Element[i]];
-
-			//	N = convexTemplate.Element[iModelInstanceElement].N;
-
-			//	dist = DistanceFromNormalHull(pVertex->normalHull, N);
-
-			//	if (dist <= 0.0f)
-			//	{
-			//		d = RVLDOTPRODUCT3(N, pVertex->P);
-
-			//		if (pModelInstanceElement->defined)
-			//		{
-			//			if (d > pModelInstanceElement->d)
-			//				pModelInstanceElement->d = d;
-			//		}
-			//		else
-			//		{
-			//			pModelInstanceElement->d = d;
-			//			pModelInstanceElement->defined = true;
-			//		}
-			//	}
-			//}
-
-			if (!pModelInstanceElement->defined)
-			{
-				bDefined = false;
-
-				for (i = 0; i < pCluster->iVertexArray.n; i++)
-				{
-					pVertex = vertexArray.Element[pCluster->iVertexArray.Element[i]];
-
-					N = convexTemplate.Element[iModelInstanceElement].N;
-
-					d = RVLDOTPRODUCT3(N, pVertex->P);
-
-					if (bDefined)
-					{
-						if (d > pModelInstanceElement->d)
-							pModelInstanceElement->d = d;
-					}
-					else
-					{
-						pModelInstanceElement->d = d;
-						bDefined = true;
-					}
-				}
-			}
+			pModelInstance = pModelInstance->pNext;
 		}
 	}
 
 	// Save model instances to a file.
 
-	FILE *fp = fopen("C:\\RVL\\ExpRez\\PSGM.txt", "w");
+	char *PSGModelInstanceFileName = RVLCreateString(sceneFileName);
 
-	for (iCluster = 0; iCluster < nDominantClusters; iCluster++)
-	{
-		pCluster = clusters.Element[iCluster];
+	sprintf(PSGModelInstanceFileName + strlen(PSGModelInstanceFileName) - 3, "txt");
 
-		for (iModelInstanceElement = 0; iModelInstanceElement < convexTemplate.n; iModelInstanceElement++)
-		{
-			pModelInstanceElement = pCluster->modelInstance.Element + iModelInstanceElement;
+	FILE *fp = fopen(PSGModelInstanceFileName, "w");
 
-			fprintf(fp, "%f\t", pModelInstanceElement->d);
-		}
-
-		for (iModelInstanceElement = 0; iModelInstanceElement < convexTemplate.n; iModelInstanceElement++)
-		{
-			pModelInstanceElement = pCluster->modelInstance.Element + iModelInstanceElement;
-
-			fprintf(fp, "%d\t", (int)(pModelInstanceElement->defined));
-		}
-
-		fprintf(fp, "\n");
-	}
+	for (iCluster = 0; iCluster < nClusters; iCluster++)
+		SaveModelInstances(fp, iCluster);
 
 	fclose(fp);
+
+	delete[] PSGModelInstanceFileName;
 }
 
 void PSGM::CreateTemplate()
@@ -791,7 +731,6 @@ void PSGM::CreateTemplate()
 
 	int i;
 	float *N_, *N__;
-	float NTmp[3];
 	float fTmp;
 
 	for (i = 0; i < 8; i++)
@@ -862,6 +801,427 @@ void PSGM::CreateTemplate()
 	//
 
 	delete[] NT;
+}
+
+void PSGM::FitModel(
+	RECOG::PSGM_::Cluster *pCluster,
+	RECOG::PSGM_::ModelInstance *pModelInstance)
+{
+	RVLMEM_ALLOC_STRUCT_ARRAY(pMem, RECOG::PSGM_::ModelInstanceElement, convexTemplate.n, pModelInstance->modelInstance.Element);
+
+	pModelInstance->modelInstance.n = convexTemplate.n;
+
+	int iModelInstanceElement;
+	RECOG::PSGM_::ModelInstanceElement *pModelInstanceElement;
+	bool bDefined;
+	float d;
+	RECOG::PSGM_::Vertex *pVertex;
+	int i;
+	float *N;
+
+	for (iModelInstanceElement = 0; iModelInstanceElement < convexTemplate.n; iModelInstanceElement++)
+	{
+		pModelInstanceElement = pModelInstance->modelInstance.Element + iModelInstanceElement;
+		pModelInstanceElement->defined = false;
+
+		//for (i = 0; i < pCluster->iVertexArray.n; i++)
+		//{
+		//	pVertex = vertexArray.Element[pCluster->iVertexArray.Element[i]];
+
+		//	N = convexTemplate.Element[iModelInstanceElement].N;
+
+		//	dist = DistanceFromNormalHull(pVertex->normalHull, N);
+
+		//	if (dist <= 0.0f)
+		//	{
+		//		d = RVLDOTPRODUCT3(N, pVertex->P);
+
+		//		if (pModelInstanceElement->defined)
+		//		{
+		//			if (d > pModelInstanceElement->d)
+		//				pModelInstanceElement->d = d;
+		//		}
+		//		else
+		//		{
+		//			pModelInstanceElement->d = d;
+		//			pModelInstanceElement->defined = true;
+		//		}
+		//	}
+		//}
+
+		if (!pModelInstanceElement->defined)
+		{
+			bDefined = false;
+
+			for (i = 0; i < pCluster->iVertexArray.n; i++)
+			{
+				pVertex = vertexArray.Element[pCluster->iVertexArray.Element[i]];
+
+				N = convexTemplate.Element[iModelInstanceElement].N;
+
+				d = RVLDOTPRODUCT3(N, pVertex->P);
+
+				if (bDefined)
+				{
+					if (d > pModelInstanceElement->d)
+						pModelInstanceElement->d = d;
+				}
+				else
+				{
+					pModelInstanceElement->d = d;
+					bDefined = true;
+				}
+			}
+		}
+	}
+}
+
+bool PSGM::ReferenceFrames(int iCluster)
+{
+	RECOG::PSGM_::Cluster *pCluster = clusters.Element[iCluster];
+
+	// Identify the largest surfel in the cluster.
+
+	int maxSize = 0;
+
+	int iSurfel;
+	Surfel *pSurfel;
+	int i;
+
+	for (i = 0; i < pCluster->iSurfelArray.n; i++)
+	{
+		iSurfel = pCluster->iSurfelArray.Element[i];
+
+		pSurfel = pSurfels->NodeArray.Element + iSurfel;
+
+		if (pSurfel->size > maxSize)
+			maxSize = pSurfel->size;
+	}
+
+	if (maxSize == 0)
+		return false;
+
+	/// Determine reference frames of model instances. 
+
+	QList<RECOG::PSGM_::ModelInstance> *pModelInstanceList = &(pCluster->modelInstanceList);
+
+	RVLQLIST_INIT(pModelInstanceList);
+
+	float cs = COS45;
+
+	Array<RECOG::PSGM_::Tangent> tangentArray;
+
+	tangentArray.Element = new RECOG::PSGM_::Tangent[pCluster->iSurfelArray.n];
+
+	//Array<RECOG::PSGM_::NormalHullElement> normalHull;
+
+	//normalHull.Element = new RECOG::PSGM_::NormalHullElement[pCluster->iSurfelArray.n];
+
+	RECOG::PSGM_::TangentRegionGrowingData tangentRGData;
+
+	tangentRGData.bParent = new bool[pSurfels->NodeArray.n];
+	memset(tangentRGData.bParent, 0, pSurfels->NodeArray.n * sizeof(bool));
+	tangentRGData.pRecognition = this;
+	tangentRGData.cs = cs;
+	tangentRGData.iCluster = iCluster;
+	tangentRGData.pTangentArray = &tangentArray;
+	//tangentRGData.pNormalHull = &normalHull;
+
+	int *iSurfelBuff = new int[pCluster->iSurfelArray.n];
+
+	float kReferenceTangentSize2 = kReferenceTangentSize *  kReferenceTangentSize;
+
+	int *piSurfelFetch, *piSurfelPut, *piSurfel, *piSurfelBuffEnd;
+	RECOG::PSGM_::ModelInstance *pModelInstance;
+	int iTangent;
+	float maxTangentLen;
+	RECOG::PSGM_::Tangent *pTangent;
+	float *R, *Z, *X, *t, *P1, *P2;
+	float Y[3], P[3];
+	Eigen::Matrix3f M;
+	Eigen::Vector3f B, t_;
+	float d;
+
+	for (i = 0; i < pCluster->iSurfelArray.n; i++)
+	{
+		iSurfel = pCluster->iSurfelArray.Element[i];
+
+		pSurfel = pSurfels->NodeArray.Element + iSurfel;
+
+		if (pSurfel->size >= kReferenceSurfelSize * maxSize)
+		{
+			piSurfelPut = piSurfelFetch = iSurfelBuff;
+
+			*(piSurfelPut++) = iSurfel;
+
+			RVLCOPY3VECTOR(pSurfel->N, tangentRGData.planeA.N);
+			tangentRGData.planeA.d = pSurfel->d;
+			tangentArray.n = 0;
+			//normalHull.n = 0;
+
+			piSurfelBuffEnd = RegionGrowing<SurfelGraph, Surfel, SURFEL::Edge, SURFEL::EdgePtr, RECOG::PSGM_::TangentRegionGrowingData, RECOG::PSGM_::ValidTangent>
+				(pSurfels, &tangentRGData, piSurfelFetch, piSurfelPut);
+
+			for (piSurfel = iSurfelBuff; piSurfel < piSurfelBuffEnd; piSurfel++)
+				tangentRGData.bParent[*piSurfel] = false;
+
+			maxTangentLen = 0.0f;
+
+			for (iTangent = 0; iTangent < tangentArray.n; iTangent++)
+			{
+				pTangent = tangentArray.Element + iTangent;
+
+				if (pTangent->len > maxTangentLen)
+					maxTangentLen = pTangent->len;
+			}
+
+			if (maxTangentLen > 0.0f)
+			{
+				for (iTangent = 0; iTangent < tangentArray.n; iTangent++)
+				{
+					pTangent = tangentArray.Element + iTangent;
+
+					if (pTangent->len >= kReferenceTangentSize2 * maxTangentLen)
+					{
+						RVLMEM_ALLOC_STRUCT(pMem, RECOG::PSGM_::ModelInstance, pModelInstance);
+
+						RVLQLIST_ADD_ENTRY(pModelInstanceList, pModelInstance);
+
+						R = pModelInstance->R;
+
+						Z = pSurfel->N;
+
+						RVLCOPYTOCOL3(Z, 2, R);
+
+						X = pTangent->V;
+
+						RVLCOPYTOCOL3(X, 0, R);
+
+						RVLCROSSPRODUCT3(Z, X, Y);
+
+						RVLCOPYTOCOL3(Y, 1, R);
+
+						P1 = vertexArray.Element[pTangent->iVertex[0]]->P;
+						P2 = vertexArray.Element[pTangent->iVertex[1]]->P;
+
+						RVLSUM3VECTORS(P1, P2, P);
+
+						RVLSCALE3VECTOR(P, 0.5f, P);
+
+						d = RVLDOTPRODUCT3(X, P);
+
+						M << pSurfel->N[0], pSurfel->N[1], pSurfel->N[2], pTangent->N[0], pTangent->N[1], pTangent->N[2], X[0], X[1], X[2];
+
+						B << pSurfel->d, pTangent->d, d;
+
+						t_ = M.colPivHouseholderQr().solve(B);
+
+						t = pModelInstance->t;
+
+						RVLCOPY3VECTOR(t_, t);
+					}	// if (pTangent->len >= kReferenceTangentSize2 * maxTangentLen)
+				}	// for every tangent
+			}	// if (maxTangentLen > 0.0f)
+		}	// if (pSurfel->size >= kReferenceSurfelSize * maxSize)
+	}	// for every surfel in the cluster
+
+	delete[] tangentArray.Element;
+	delete[] tangentRGData.bParent;
+	delete[] iSurfelBuff;
+	//delete[] normalHull.Element;
+
+	return true;
+}
+
+int RVL::RECOG::PSGM_::ValidTangent(
+	int iSurfel, 
+	int iSurfel_, 
+	SURFEL::Edge *pEdge, 
+	SurfelGraph *pSurfels, 
+	RECOG::PSGM_::TangentRegionGrowingData *pData)
+{	
+	PSGM *pRecognition = pData->pRecognition;
+
+	//if (pRecognition->clusterMap[iSurfel] != pData->iCluster)
+	//	return -1;
+
+	if (pData->bParent[iSurfel])
+		return -1;
+
+	Surfel *pSurfel = pSurfels->NodeArray.Element + iSurfel;
+	Surfel *pSurfel_ = pSurfels->NodeArray.Element + iSurfel_;
+
+	float *N0 = pData->planeA.N;
+	float d0 = pData->planeA.d;
+	float *N = pSurfel->N;
+	float *N_ = pSurfel_->N;
+	float cs = RVLDOTPRODUCT3(N0, N);
+
+	if (cs <= pData->cs)
+	{
+		RECOG::PSGM_::Tangent *pTangent = pData->pTangentArray->Element + pData->pTangentArray->n;
+
+		pData->pTangentArray->n++;
+
+		float *NT = pTangent->N;
+
+		// N0'*NT = cs,     NT = (s*N + (1-s)*N_) / || s*N + (1-s)*N_ ||
+		// N0'*(s*N + (1-s)*N_) = cs*sqrt(s*N + (1-s)*N_)'*(s*N + (1-s)*N_)
+		// s*N0'*N + N0'*N_ - s*N0'*N_ = cs * sqrt(s^2*N'*N + 2*s*(1-s)*N'*N_ + (1-s)^2*N_'*N_)
+		// N0'(N-N_)*s + N0'*N_ = cs * sqrt(s^2 + 2*s*(1-s)*N'*N_ + (1-s)^2)
+		// N0'(N-N_)*s + N0'*N_ = cs * sqrt(2*(1 - N'*N_)*s^2 - 2*(1 - N'*N_)*s + 1)
+		// a*s + b = cs * sqrt(c*s^2 - c*s + 1),     a = N0'(N-N_), b = N0'*N_, c = 2*(1 - N'*N_)
+		// a^2*s^2 + 2*a*b*s + b^2 = cs^2 * (c*s^2 - c*s + 1)
+		// p*s^2 + q*s + r = 0,     p = a^2-cs^2*c, q = 2*a*b+cs^2*c, r = b^2-cs^2
+		// s = (-q +- sqrt(q^2 - 4*p*r))/(2*p),    0 <= s <= 1
+
+		float VTmp[3];
+		RVLDIF3VECTORS(N, N_, VTmp);
+		float a = RVLDOTPRODUCT3(N0, VTmp);
+		float b = RVLDOTPRODUCT3(N0, N_);
+		float c = 2.0f * (1.0f - RVLDOTPRODUCT3(N, N_));
+		float cs2 = pData->cs * pData->cs;
+		float p = a*a - cs2 * c;
+		float q = 2.0f * a * b + cs2 * c;
+		float r = b * b - cs2;
+		float f = -sqrt(q * q - 4.0f * p * r);
+		float s = (-q + f) / (2 * p);
+		
+		if (s < 0.0f || s > 1.0f)
+			s = (-q - f) / (2 * p);
+
+		RVLSCALE3VECTOR(N, s, VTmp);
+		float s_ = 1.0f - s;
+		RVLSCALE3VECTOR(N_, s_, NT);
+		RVLSUM3VECTORS(NT, VTmp, NT);
+		float fTmp;
+		RVLNORM3(NT, fTmp);
+
+		//pRecognition->UpdateNormalHull(*(pData->pNormalHull), NT);
+
+		QList<QLIST::Index> *pVertexList = pRecognition->surfelVertexList.Element + iSurfel;
+
+		bool bMindT = false;
+
+		int nTangentVertices = 0;
+		
+		pTangent->len = 0.0f;
+
+		float *V = pTangent->V;
+
+		RVLCROSSPRODUCT3(N0, NT, V);
+
+		RVLNORM3(V, fTmp);
+
+		Eigen::Matrix3f M;
+
+		M << N0[0], N0[1], N0[2], NT[0], NT[1], NT[2], V[0], V[1], V[2];
+
+		Eigen::Vector3f B, P_;
+		RECOG::PSGM_::Vertex *pVertex;
+		int i;
+		float mindT, dT, d_, len13, len23;
+		float P1[3], P2[3], dP13[3], dP23[3], PProj[3], dP[3];
+		float *P;
+
+		QLIST::Index *pVertexIdx = pVertexList->pFirst;
+
+		while (pVertexIdx)
+		{
+			pVertex = pRecognition->vertexArray.Element[pVertexIdx->Idx];
+
+			for (i = 0; i < pVertex->iSurfelArray.n; i++)
+			{
+				if (pVertex->iSurfelArray.Element[i] == iSurfel_)
+				{
+					P = pVertex->P;
+
+					dT = RVLDOTPRODUCT3(NT, P);
+
+					d_ = RVLDOTPRODUCT3(V, P);
+
+					B << d0, dT, d_;
+
+					P_ = M.colPivHouseholderQr().solve(B);					
+					
+					if (nTangentVertices == 0)
+					{
+						nTangentVertices = 1;
+
+						RVLCOPY3VECTOR(P_, P1);
+
+						pTangent->iVertex[0] = pVertexIdx->Idx;
+					}
+					else if (nTangentVertices == 1)
+					{
+						nTangentVertices = 2;
+
+						RVLCOPY3VECTOR(P_, P2);
+
+						RVLDIF3VECTORS(P2, P1, dP);
+
+						pTangent->len = RVLDOTPRODUCT3(dP, dP);
+
+						pTangent->iVertex[1] = pVertexIdx->Idx;
+					}
+					else	// if (nTangentVertices == 2)
+					{
+						RVLCOPY3VECTOR(P_, PProj);
+
+						RVLDIF3VECTORS(PProj, P1, dP13);
+
+						len13 = RVLDOTPRODUCT3(dP13, dP13);
+
+						RVLDIF3VECTORS(PProj, P2, dP23);
+
+						len23 = RVLDOTPRODUCT3(dP23, dP23);
+
+						if (len13 > pTangent->len || len23 > pTangent->len)
+						{
+							if (len13 > len23)
+							{
+								pTangent->iVertex[1] = pVertexIdx->Idx;
+
+								pTangent->len = len13;
+							}
+							else
+							{
+								pTangent->iVertex[0] = pVertexIdx->Idx;
+
+								pTangent->len = len23;
+							}
+						}
+					}	// if (nTangentVertices == 2)
+
+					if (bMindT)
+					{
+						if (dT < mindT)
+							mindT = dT;
+					}
+					else
+					{
+						mindT = dT;
+
+						bMindT = true;
+					}
+				}	// if (pVertex->iSurfelArray.Element[i] == iSurfel_) 			
+			}	// for all surfels meeting in pVertex
+
+			pVertexIdx = pVertexIdx->pNext;
+		}	// for all vertices on the boundary of iSurfel
+
+		pTangent->d = mindT;
+
+		return -1;
+	}	// if (RVLDOTPRODUCT3(N0, N) > pData->cs && RVLDOTPRODUCT3(N0, N_) <= pData->cs)
+	else if (pRecognition->clusterMap[iSurfel] == pData->iCluster)
+	{
+		pData->bParent[iSurfel] = true;
+
+		return 1;
+	}
+	else
+		return -1;
 }
 
 bool PSGM::Inside(
@@ -1125,6 +1485,46 @@ void PSGM::UpdateMeanNormal(
 		RVLSET3VECTOR(meanN, 0.0f, 0.0f, 1.0f);
 }
 
+void PSGM::SetSceneFileName(char *sceneFileName_)
+{
+	RVLCopyString(sceneFileName_, &sceneFileName);
+}
+
+void PSGM::SaveModelInstances(
+	FILE *fp,
+	int iCluster)
+{
+	RECOG::PSGM_::Cluster *pCluster = clusters.Element[iCluster];
+
+	int iModelInstanceElement;
+	RECOG::PSGM_::ModelInstanceElement *pModelInstanceElement;
+
+	RECOG::PSGM_::ModelInstance *pModelInstance = pCluster->modelInstanceList.pFirst;
+
+	while (pModelInstance)
+	{
+		fprintf(fp, "%d\t", iCluster);
+
+		for (iModelInstanceElement = 0; iModelInstanceElement < convexTemplate.n; iModelInstanceElement++)
+		{
+			pModelInstanceElement = pModelInstance->modelInstance.Element + iModelInstanceElement;
+
+			fprintf(fp, "%f\t", pModelInstanceElement->d);
+		}
+
+		for (iModelInstanceElement = 0; iModelInstanceElement < convexTemplate.n; iModelInstanceElement++)
+		{
+			pModelInstanceElement = pModelInstance->modelInstance.Element + iModelInstanceElement;
+
+			fprintf(fp, "%d\t", (int)(pModelInstanceElement->defined));
+		}
+
+		fprintf(fp, "\n");
+
+		pModelInstance = pModelInstance->pNext;
+	}
+}
+
 void PSGM::InitDisplay(
 	Visualizer *pVisualizer,
 	Mesh *pMesh,
@@ -1164,6 +1564,8 @@ void PSGM::Display()
 
 	if (!displayData.bVertices)
 		displayData.vertices->VisibilityOff();
+
+	DisplayReferenceFrames();
 }
 
 void PSGM::DisplayClusters()
@@ -1430,6 +1832,88 @@ void PSGM::PaintClusterVertices(
 void PSGM::UpdateVertexDisplayLines()
 {
 	linesPolyData->Modified();
+}
+
+void PSGM::DisplayReferenceFrames()
+{
+	Visualizer *pVisualizer = displayData.pVisualizer;
+
+	double axesLength = 10.0;
+
+	// Create the polydata where we will store all the geometric data
+	referenceFramesPolyData = vtkSmartPointer<vtkPolyData>::New();
+
+	// Create a vtkPoints container and store the points in it
+	vtkSmartPointer<vtkPoints> pts =
+		vtkSmartPointer<vtkPoints>::New();
+
+	// Create lines.
+	vtkSmartPointer<vtkCellArray> lines =
+		vtkSmartPointer<vtkCellArray>::New();
+
+	// Create colors.
+	vtkSmartPointer<vtkUnsignedCharArray> colors =
+		vtkSmartPointer<vtkUnsignedCharArray>::New();
+
+	colors->SetNumberOfComponents(3);
+
+	int nClusters = RVLMIN(clusters.n, nDominantClusters);
+
+	RECOG::PSGM_::Cluster *pCluster;
+	int iCluster;
+	RECOG::PSGM_::ModelInstance *pModelInstance;
+
+	for (iCluster = 0; iCluster < nClusters; iCluster++)
+	{
+		pCluster = clusters.Element[iCluster];
+
+		pModelInstance = pCluster->modelInstanceList.pFirst;
+
+		while (pModelInstance)
+		{
+			pVisualizer->AddReferenceFrame(pts, lines, colors, pModelInstance->R, pModelInstance->t, 10.0);
+
+			//vtkSmartPointer<vtkAxesActor> axes = vtkSmartPointer<vtkAxesActor>::New();
+
+			//axes->SetTotalLength(axesLength, axesLength, axesLength);
+
+			//vtkSmartPointer<vtkPolyDataMapper> mapper = vtkSmartPointer<vtkPolyDataMapper>::New();
+
+			//vtkSmartPointer<vtkTransform> transform = vtkSmartPointer<vtkTransform>::New();
+			//double T[16];
+			//RVLCREATE3DTRANSF(pModelInstance->R, pModelInstance->t, T);
+
+			//transform->SetMatrix(T);
+
+			//axes->SetUserTransform(transform);
+
+			//vtkMatrix4x4 *T_ = axes->GetMatrix();
+
+			//pVisualizer->renderer->AddActor(axes);
+
+			pModelInstance = pModelInstance->pNext;
+		}
+	}
+
+	// Add the points to the polydata container
+	referenceFramesPolyData->SetPoints(pts);
+
+	// Add the lines to the polydata container
+	referenceFramesPolyData->SetLines(lines);
+
+	// Color the lines.
+	referenceFramesPolyData->GetCellData()->SetScalars(colors);
+
+	// Setup the visualization pipeline
+	vtkSmartPointer<vtkPolyDataMapper> mapper =
+		vtkSmartPointer<vtkPolyDataMapper>::New();
+
+	mapper->SetInputData(referenceFramesPolyData);
+
+	displayData.referenceFrames = vtkSmartPointer<vtkActor>::New();
+	displayData.referenceFrames->SetMapper(mapper);
+
+	pVisualizer->renderer->AddActor(displayData.referenceFrames);
 }
 
 bool RVL::RECOG::PSGM_::keyPressUserFunction(

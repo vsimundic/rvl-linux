@@ -27,6 +27,8 @@
 	iNeighbor = pEdge_->iVertex[1 - side];\
 }
 
+#define RVLPCSEGMENT_GRAPH_GET_SIDE(pEdgePtr)	(pEdgePtr->pEdge->pVertexEdgePtr[0] == pEdgePtr ? 0 : 1)
+
 #define RVLPCSEGMENT_GRAPH_GET_NODE(pEdgePtr)	(pEdgePtr->pEdge->pVertexEdgePtr[0] == pEdgePtr ? pEdgePtr->pEdge->iVertex[0] : pEdgePtr->pEdge->iVertex[1])
 
 #define RVLPCSEGMENT_GRAPH_GET_OPPOSITE_NODE(pEdgePtr)	(pEdgePtr->pEdge->pVertexEdgePtr[0] == pEdgePtr ? pEdgePtr->pEdge->iVertex[1] : pEdgePtr->pEdge->iVertex[0])
@@ -35,6 +37,22 @@
 
 namespace RVL
 {
+	namespace GRAPH
+	{
+		template<typename EdgeType> struct EdgePtr
+		{
+			EdgeType *pEdge;
+			EdgePtr<EdgeType> *pNext;
+		};
+
+		struct Edge
+		{
+			int iNode[2];
+			GRAPH::EdgePtr<GRAPH::Edge> *pEdgePtr[2];
+			int idx;
+		};
+	}
+
 	template<typename NodeType, typename EdgeType, typename EdgePtrType>
 	class Graph
 	{

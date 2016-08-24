@@ -36,6 +36,13 @@ namespace RVL
 			Array<int> *piPtArray,
 			vtkSmartPointer<vtkPolyData> &pd,
 			unsigned char *Color);
+		void AddReferenceFrame(
+			vtkSmartPointer<vtkPoints> &pts,
+			vtkSmartPointer<vtkCellArray> &lines,
+			vtkSmartPointer<vtkUnsignedCharArray> &colors,
+			float *R,
+			float *t,
+			double size);
 
 	public:
 		vtkSmartPointer<vtkRenderer> renderer;

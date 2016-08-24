@@ -1424,46 +1424,15 @@ void RFRecognition::Display()
 
 	while (pHypothesis)
 	{
-		//// Create a cube.
-		//vtkSmartPointer<vtkCubeSource> cubeSource =
-		//	vtkSmartPointer<vtkCubeSource>::New();
-		//cubeSource->SetXLength(5.0);
-		//cubeSource->SetYLength(5.0);
-		//cubeSource->SetZLength(5.0);
-
 		vtkSmartPointer<vtkAxesActor> axes = vtkSmartPointer<vtkAxesActor>::New();
 
 		axes->SetTotalLength(10.0, 10.0, 10.0);
 
-		// Create a mapper and actor.
 		vtkSmartPointer<vtkPolyDataMapper> mapper = vtkSmartPointer<vtkPolyDataMapper>::New();
-		//mapper->SetInputConnection(cubeSource->GetOutputPort());
-		//vtkSmartPointer<vtkActor> actor = vtkSmartPointer<vtkActor>::New();
-		//actor->SetMapper(mapper);
-		//actor->GetProperty()->SetColor(1.0, 0.0, 0.0);
-		//t[0] = (double)(pHypothesis->tF[0]);
-		//t[1] = (double)(pHypothesis->tF[1]);
-		//t[2] = (double)(pHypothesis->tF[2]);
-		////actor->SetPosition(t);
-		//axes->SetPosition(t);
 
 		vtkSmartPointer<vtkTransform> transform = vtkSmartPointer<vtkTransform>::New();
-		//transform->Translate(pHypothesis->tF[0], pHypothesis->tF[1], pHypothesis->tF[2]);
 		double T[16];
-		T[0] = (double)(pHypothesis->RF[0]);
-		T[1] = (double)(pHypothesis->RF[1]);
-		T[2] = (double)(pHypothesis->RF[2]);
-		T[4] = (double)(pHypothesis->RF[3]);
-		T[5] = (double)(pHypothesis->RF[4]);
-		T[6] = (double)(pHypothesis->RF[5]);
-		T[8] = (double)(pHypothesis->RF[6]);
-		T[9] = (double)(pHypothesis->RF[7]);
-		T[10] = (double)(pHypothesis->RF[8]);
-		T[3] = (double)(pHypothesis->tF[0]);
-		T[7] = (double)(pHypothesis->tF[1]);
-		T[11] = (double)(pHypothesis->tF[2]);
-		T[12] = T[13] = T[14] = 0.0;
-		T[15] = 1.0;
+		RVLCREATE3DTRANSF(pHypothesis->RF, pHypothesis->tF, T);
 
 		transform->SetMatrix(T);
 
@@ -1471,7 +1440,6 @@ void RFRecognition::Display()
 
 		vtkMatrix4x4 *T_ = axes->GetMatrix();
 
-		//pVisualizer->renderer->AddActor(actor);
 		pVisualizer->renderer->AddActor(axes);
 
 		pHypothesis = pHypothesis->pNext;

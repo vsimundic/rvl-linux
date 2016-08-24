@@ -132,6 +132,7 @@
     <ClInclude Include="Include\Graph.h" />
     <ClInclude Include="Include\Mesh.h" />
     <ClInclude Include="Include\PlanarSurfelDetector.h" />
+    <ClInclude Include="Include\PolygonGraph.h" />
     <ClInclude Include="Include\SurfelGraph.h" />
     <ClInclude Include="Include\Util.h" />
     <ClInclude Include="Include\Visualizer.h" />
@@ -142,6 +143,7 @@
     <ClCompile Include="Graph.cpp" />
     <ClCompile Include="Mesh.cpp" />
     <ClCompile Include="PlanarSurfelDetector.cpp" />
+    <ClCompile Include="PolygonGraph.cpp" />
     <ClCompile Include="stdafx.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>

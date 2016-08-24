@@ -322,3 +322,85 @@ void Visualizer::PaintPointSet(
 	for (i = 0; i < piPtArray->n; i++)
 		rgbPointData->SetTupleValue(piPtArray->Element[i], Color);
 }
+
+void Visualizer::AddReferenceFrame(
+	vtkSmartPointer<vtkPoints> &pts,
+	vtkSmartPointer<vtkCellArray> &lines,
+	vtkSmartPointer<vtkUnsignedCharArray> &colors,
+	float *R,
+	float *t,
+	double size)
+{
+	double V[3], P1[3], P2[3];
+
+	int iPt0 = pts->GetNumberOfPoints();
+
+	// colors
+
+	unsigned char red[3] = { 255, 0, 0 };
+	unsigned char green[3] = { 0, 255, 0 };
+	unsigned char blue[3] = { 0, 0, 255 };
+
+	// origin
+
+	RVLCOPY3VECTOR(t, P1);
+
+	pts->InsertNextPoint(P1);
+
+	// x-axis
+
+	RVLCOPYCOLMX3X3(R, 0, V);
+
+	RVLSCALE3VECTOR(V, size, V);
+
+	RVLSUM3VECTORS(P1, V, P2);
+
+	pts->InsertNextPoint(P2);
+
+	vtkSmartPointer<vtkLine> xAxis = vtkSmartPointer<vtkLine>::New();
+
+	xAxis->GetPointIds()->SetId(0, iPt0);
+	xAxis->GetPointIds()->SetId(1, iPt0 + 1);
+
+	lines->InsertNextCell(xAxis);
+
+	colors->InsertNextTupleValue(red);
+
+	// y-axis
+
+	RVLCOPYCOLMX3X3(R, 1, V);
+
+	RVLSCALE3VECTOR(V, size, V);
+
+	RVLSUM3VECTORS(P1, V, P2);
+
+	pts->InsertNextPoint(P2);
+
+	vtkSmartPointer<vtkLine> yAxis = vtkSmartPointer<vtkLine>::New();
+
+	yAxis->GetPointIds()->SetId(0, iPt0);
+	yAxis->GetPointIds()->SetId(1, iPt0 + 2);
+
+	lines->InsertNextCell(yAxis);
+
+	colors->InsertNextTupleValue(green);
+
+	// z-axis
+
+	RVLCOPYCOLMX3X3(R, 2, V);
+
+	RVLSCALE3VECTOR(V, size, V);
+
+	RVLSUM3VECTORS(P1, V, P2);
+
+	pts->InsertNextPoint(P2);
+
+	vtkSmartPointer<vtkLine> zAxis = vtkSmartPointer<vtkLine>::New();
+
+	zAxis->GetPointIds()->SetId(0, iPt0);
+	zAxis->GetPointIds()->SetId(1, iPt0 + 3);
+
+	lines->InsertNextCell(zAxis);
+
+	colors->InsertNextTupleValue(blue);
+}
