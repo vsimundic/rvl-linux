@@ -7,17 +7,12 @@
 #include "RVLCore2.h"
 #include "Util.h"
 #include "Graph.h"
-#include <Eigen\Eigenvalues>
-#include <pcl/common/common.h>
-#include <pcl/PolygonMesh.h>
-#include "PCLTools.h"
-#include "PCLMeshBuilder.h"
-#include "RGBDCamera.h"
 #include "Mesh.h"
 #include "Visualizer.h"
 #include "SurfelGraph.h"
 #include "PlanarSurfelDetector.h"
 #include "PSGM.h"
+#include <Eigen\Eigenvalues>
 
 using namespace RVL;
 
@@ -29,6 +24,7 @@ PSGM::PSGM()
 	minVertexPerc = 50;
 	kReferenceSurfelSize = 0.2f;
 	kReferenceTangentSize = 0.3f;
+	baseSeparationAngle = 22.5f;
 
 	convexTemplate.n = 66;
 	convexTemplate.Element = new RECOG::PSGM_::Plane[convexTemplate.n];
@@ -81,6 +77,7 @@ void PSGM::CreateParamList(CRVLMem *pMem)
 	pParamData = ParamList.AddParam("PSGM.minVertexPerc", RVLPARAM_TYPE_INT, &minVertexPerc);
 	pParamData = ParamList.AddParam("PSGM.kReferenceSurfelSize", RVLPARAM_TYPE_FLOAT, &kReferenceSurfelSize);
 	pParamData = ParamList.AddParam("PSGM.kReferenceTangentSize", RVLPARAM_TYPE_FLOAT, &kReferenceTangentSize);
+	pParamData = ParamList.AddParam("PSGM.baseSeparationAngle", RVLPARAM_TYPE_FLOAT, &baseSeparationAngle);
 }
 
 void PSGM::Interpret(
@@ -811,6 +808,8 @@ void PSGM::FitModel(
 
 	pModelInstance->modelInstance.n = convexTemplate.n;
 
+	float *R = pModelInstance->R;
+
 	int iModelInstanceElement;
 	RECOG::PSGM_::ModelInstanceElement *pModelInstanceElement;
 	bool bDefined;
@@ -818,11 +817,19 @@ void PSGM::FitModel(
 	RECOG::PSGM_::Vertex *pVertex;
 	int i;
 	float *N;
+	float N_[3];
 
 	for (iModelInstanceElement = 0; iModelInstanceElement < convexTemplate.n; iModelInstanceElement++)
 	{
+		if (iModelInstanceElement == 64)
+			int debug = 0;
+
 		pModelInstanceElement = pModelInstance->modelInstance.Element + iModelInstanceElement;
 		pModelInstanceElement->defined = false;
+
+		N = convexTemplate.Element[iModelInstanceElement].N;
+
+		RVLMULMX3X3VECT(R, N, N_);
 
 		//for (i = 0; i < pCluster->iVertexArray.n; i++)
 		//{
@@ -855,11 +862,9 @@ void PSGM::FitModel(
 
 			for (i = 0; i < pCluster->iVertexArray.n; i++)
 			{
-				pVertex = vertexArray.Element[pCluster->iVertexArray.Element[i]];
+				pVertex = vertexArray.Element[pCluster->iVertexArray.Element[i]];				
 
-				N = convexTemplate.Element[iModelInstanceElement].N;
-
-				d = RVLDOTPRODUCT3(N, pVertex->P);
+				d = RVLDOTPRODUCT3(N_, pVertex->P);
 
 				if (bDefined)
 				{
@@ -880,19 +885,16 @@ bool PSGM::ReferenceFrames(int iCluster)
 {
 	RECOG::PSGM_::Cluster *pCluster = clusters.Element[iCluster];
 
-	// Identify the largest surfel in the cluster.
+	// Identify the largest surfel.
 
 	int maxSize = 0;
 
-	int iSurfel;
-	Surfel *pSurfel;
 	int i;
+	Surfel *pSurfel;
 
 	for (i = 0; i < pCluster->iSurfelArray.n; i++)
 	{
-		iSurfel = pCluster->iSurfelArray.Element[i];
-
-		pSurfel = pSurfels->NodeArray.Element + iSurfel;
+		pSurfel = pSurfels->NodeArray.Element + pCluster->iSurfelArray.Element[i];
 
 		if (pSurfel->size > maxSize)
 			maxSize = pSurfel->size;
@@ -900,6 +902,33 @@ bool PSGM::ReferenceFrames(int iCluster)
 
 	if (maxSize == 0)
 		return false;
+
+	int sizeThr = (int)((float)maxSize * kReferenceSurfelSize);
+
+	// Sort surfels in the cluster.
+
+	Array<SortIndex<int>> iSortedSurfelArray;
+	
+	iSortedSurfelArray.Element = new SortIndex<int>[pCluster->iSurfelArray.n];
+	iSortedSurfelArray.n = 0;
+
+	int iSurfel;
+
+	for (i = 0; i < pCluster->iSurfelArray.n; i++)
+	{
+		iSurfel = pCluster->iSurfelArray.Element[i];
+
+		pSurfel = pSurfels->NodeArray.Element + iSurfel;
+
+		if (pSurfel->size >= sizeThr)
+		{
+			iSortedSurfelArray.Element[iSortedSurfelArray.n].idx = iSurfel;
+			iSortedSurfelArray.Element[iSortedSurfelArray.n].cost = pSurfel->size;
+			iSortedSurfelArray.n++;
+		}
+	}
+		
+	BubbleSort<SortIndex<int>>(iSortedSurfelArray, true);
 
 	/// Determine reference frames of model instances. 
 
@@ -921,38 +950,66 @@ bool PSGM::ReferenceFrames(int iCluster)
 
 	tangentRGData.bParent = new bool[pSurfels->NodeArray.n];
 	memset(tangentRGData.bParent, 0, pSurfels->NodeArray.n * sizeof(bool));
+	tangentRGData.bBase = new bool[pSurfels->NodeArray.n];
+	memset(tangentRGData.bBase, 0, pSurfels->NodeArray.n * sizeof(bool));
 	tangentRGData.pRecognition = this;
 	tangentRGData.cs = cs;
 	tangentRGData.iCluster = iCluster;
 	tangentRGData.pTangentArray = &tangentArray;
 	//tangentRGData.pNormalHull = &normalHull;
+	float baseSeparationAngleRad = baseSeparationAngle * DEG2RAD;
+	tangentRGData.baseSeparationAngle = baseSeparationAngleRad;
 
 	int *iSurfelBuff = new int[pCluster->iSurfelArray.n];
 
 	float kReferenceTangentSize2 = kReferenceTangentSize *  kReferenceTangentSize;
 
+	float csSeparationAngle = cos(baseSeparationAngleRad);
+
+	Array<SortIndex<float>> iSortedTangentArray;
+	
+	iSortedTangentArray.Element = new SortIndex<float>[pCluster->iSurfelArray.n];
+
+	Array<QList<QLIST::Index>> iTangentAngleArray;
+
+	iTangentAngleArray.n = (int)round(360.0f / baseSeparationAngle);
+	iTangentAngleArray.Element = new QList<QLIST::Index>[iTangentAngleArray.n];
+	QLIST::Index *iTangentAngleMem = new QLIST::Index[pCluster->iSurfelArray.n];
+
 	int *piSurfelFetch, *piSurfelPut, *piSurfel, *piSurfelBuffEnd;
 	RECOG::PSGM_::ModelInstance *pModelInstance;
 	int iTangent;
 	float maxTangentLen;
-	RECOG::PSGM_::Tangent *pTangent;
-	float *R, *Z, *X, *t, *P1, *P2;
+	RECOG::PSGM_::Tangent *pTangent, *pTangent_;
+	float *R, *Z, *X, *t, *P1, *P2, *X_;
 	float Y[3], P[3];
 	Eigen::Matrix3f M;
 	Eigen::Vector3f B, t_;
-	float d;
+	float p, q, d;
+	float tangentLenThr;
+	int iLargestTangent;
+	float *X0;
+	float Y0[3];
+	int iAngle;
+	QList<QLIST::Index> *pAngleBinList;	
+	QLIST::Index *pTangentAngleEntry;
+	int j;
 
-	for (i = 0; i < pCluster->iSurfelArray.n; i++)
+	for (i = 0; i < iSortedSurfelArray.n; i++)
 	{
-		iSurfel = pCluster->iSurfelArray.Element[i];
+		iSurfel = iSortedSurfelArray.Element[i].idx;
 
 		pSurfel = pSurfels->NodeArray.Element + iSurfel;
 
-		if (pSurfel->size >= kReferenceSurfelSize * maxSize)
+		if (!tangentRGData.bBase[iSurfel])
 		{
+			Z = pSurfel->N;
+
 			piSurfelPut = piSurfelFetch = iSurfelBuff;
 
 			*(piSurfelPut++) = iSurfel;
+
+			tangentRGData.bBase[iSurfel] = true;
 
 			RVLCOPY3VECTOR(pSurfel->N, tangentRGData.planeA.N);
 			tangentRGData.planeA.d = pSurfel->d;
@@ -965,31 +1022,79 @@ bool PSGM::ReferenceFrames(int iCluster)
 			for (piSurfel = iSurfelBuff; piSurfel < piSurfelBuffEnd; piSurfel++)
 				tangentRGData.bParent[*piSurfel] = false;
 
-			maxTangentLen = 0.0f;
-
+			maxTangentLen = 0;
+			
 			for (iTangent = 0; iTangent < tangentArray.n; iTangent++)
 			{
 				pTangent = tangentArray.Element + iTangent;
 
 				if (pTangent->len > maxTangentLen)
+				{
 					maxTangentLen = pTangent->len;
+
+					iLargestTangent = iTangent;
+				}					
 			}
 
 			if (maxTangentLen > 0.0f)
 			{
+				X0 = tangentArray.Element[iLargestTangent].V;
+
+				RVLCROSSPRODUCT3(Z, X0, Y0);
+
+				tangentLenThr = kReferenceTangentSize2 * maxTangentLen;
+
+				for (iAngle = 0; iAngle < iTangentAngleArray.n; iAngle++)
+				{
+					pAngleBinList = iTangentAngleArray.Element + iAngle;
+
+					RVLQLIST_INIT(pAngleBinList);
+				}
+
+				pTangentAngleEntry = iTangentAngleMem;
+
+				iSortedTangentArray.n = 0;
+
 				for (iTangent = 0; iTangent < tangentArray.n; iTangent++)
 				{
 					pTangent = tangentArray.Element + iTangent;
 
-					if (pTangent->len >= kReferenceTangentSize2 * maxTangentLen)
+					if (pTangent->len >= tangentLenThr)
+					{
+						iSortedTangentArray.Element[iSortedTangentArray.n].idx = iTangent;
+						iSortedTangentArray.Element[iSortedTangentArray.n].cost = pTangent->len;
+						iSortedTangentArray.n++;
+
+						X = pTangent->V;
+
+						p = RVLDOTPRODUCT3(X0, X);
+						q = RVLDOTPRODUCT3(Y0, X);
+
+						iAngle = (int)round((atan2(q, p) + PI) / baseSeparationAngleRad) % iTangentAngleArray.n;
+
+						pAngleBinList = iTangentAngleArray.Element + iAngle;
+
+						RVLQLIST_ADD_ENTRY(pAngleBinList, pTangentAngleEntry);
+
+						pTangentAngleEntry->Idx = iTangent;
+
+						pTangentAngleEntry++;
+					}
+				}
+
+				BubbleSort<SortIndex<float>>(iSortedTangentArray, true);
+
+				for (iTangent = 0; iTangent < iSortedTangentArray.n; iTangent++)
+				{
+					pTangent = tangentArray.Element + iSortedTangentArray.Element[iTangent].idx;
+
+					if (!pTangent->bMerged)
 					{
 						RVLMEM_ALLOC_STRUCT(pMem, RECOG::PSGM_::ModelInstance, pModelInstance);
 
 						RVLQLIST_ADD_ENTRY(pModelInstanceList, pModelInstance);
 
 						R = pModelInstance->R;
-
-						Z = pSurfel->N;
 
 						RVLCOPYTOCOL3(Z, 2, R);
 
@@ -1019,6 +1124,32 @@ bool PSGM::ReferenceFrames(int iCluster)
 						t = pModelInstance->t;
 
 						RVLCOPY3VECTOR(t_, t);
+
+						p = RVLDOTPRODUCT3(X0, X);
+						q = RVLDOTPRODUCT3(Y0, X);
+
+						iAngle = (int)round((atan2(q, p) + PI) / baseSeparationAngleRad) % iTangentAngleArray.n;
+
+						for (j = 0; j < 2; j++)
+						{
+							pAngleBinList = iTangentAngleArray.Element + iAngle;
+
+							pTangentAngleEntry = pAngleBinList->pFirst;
+
+							while (pTangentAngleEntry)
+							{
+								pTangent_ = tangentArray.Element + pTangentAngleEntry->Idx;
+
+								X_ = pTangent_->V;
+
+								if (RVLDOTPRODUCT3(X, X_) > csSeparationAngle)
+									pTangent_->bMerged = true;
+
+								pTangentAngleEntry = pTangentAngleEntry->pNext;
+							}
+
+							iAngle = (iAngle + iTangentAngleArray.n - 1) % iTangentAngleArray.n;
+						}
 					}	// if (pTangent->len >= kReferenceTangentSize2 * maxTangentLen)
 				}	// for every tangent
 			}	// if (maxTangentLen > 0.0f)
@@ -1027,8 +1158,12 @@ bool PSGM::ReferenceFrames(int iCluster)
 
 	delete[] tangentArray.Element;
 	delete[] tangentRGData.bParent;
+	delete[] tangentRGData.bBase;
 	delete[] iSurfelBuff;
 	//delete[] normalHull.Element;
+	delete[] iSortedSurfelArray.Element;
+	delete[] iSortedTangentArray.Element;
+	delete[] iTangentAngleMem;
 
 	return true;
 }
@@ -1062,6 +1197,8 @@ int RVL::RECOG::PSGM_::ValidTangent(
 		RECOG::PSGM_::Tangent *pTangent = pData->pTangentArray->Element + pData->pTangentArray->n;
 
 		pData->pTangentArray->n++;
+
+		pTangent->bMerged = false;
 
 		float *NT = pTangent->N;
 
@@ -1217,6 +1354,9 @@ int RVL::RECOG::PSGM_::ValidTangent(
 	else if (pRecognition->clusterMap[iSurfel] == pData->iCluster)
 	{
 		pData->bParent[iSurfel] = true;
+
+		if (cs < pData->baseSeparationAngle)
+			pData->bBase[iSurfel] = true;
 
 		return 1;
 	}

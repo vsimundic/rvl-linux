@@ -9,7 +9,12 @@
 #include <pcl/filters/fast_bilateral.h>
 #include <pcl/features/normal_3d_omp.h>
 #include "RVLCore2.h"
+#include "Util.h"
 #include "RVLVTK.h"
+#include "Graph.h"
+#include "Mesh.h"
+#include "RGBDCamera.h"
+#include "PCLTools.h"
 #include "PCLMeshBuilder.h"
 
 
@@ -166,3 +171,85 @@ void PCLMeshBuilder::CreateParamList(CRVLMem *pMem)
 	ParamList.AddID(pParamData, "yes", RVLPCLMESHBUILDER_FLAG_BILATERAL_FILTER);
 }
 
+bool PCLMeshBuilder::Load(
+	char *FileName,
+	Mesh *pMesh,
+	pcl::PointCloud<pcl::PointXYZRGBA>::Ptr PC,
+	pcl::PolygonMesh &PCLMesh,
+	bool bSavePLY)
+{
+	char *fileExtension = RVLGETFILEEXTENSION(FileName);
+
+	if (strcmp(fileExtension, "ply") == 0)
+		pMesh->LoadPolyDataFromPLY(FileName);
+	else
+	{
+		if (strcmp(fileExtension, "pcd") == 0)
+			PCLLoadPCD(FileName, PC);
+		else if (strcmp(fileExtension, "bmp") == 0)
+		{
+			char *depthFileName = RVLCreateString(FileName);
+
+			sprintf(RVLGETFILEEXTENSION(depthFileName), "txt");
+
+			Array2D<short int> depthImage;
+
+			depthImage.Element = NULL;
+			depthImage.w = depthImage.h = 0;
+
+			unsigned int format;
+
+			ImportDisparityImage(depthFileName, depthImage, format);
+
+			IplImage *RGBImage = cvLoadImage(FileName);
+
+			RGBDCamera camera;
+
+			printf("Creating point cloud from RGB-D image.\n");
+
+			camera.GetPointCloud(&depthImage, RGBImage, PC);
+
+			delete[] depthFileName;
+			delete[] depthImage.Element;
+
+			cvReleaseImage(&RGBImage);
+		}
+		else
+		{
+			printf("ERROR: Unknown file format!\n");
+
+			return false;
+		}
+
+		printf("Creating organized PCL mesh from point cloud...");
+
+		CreateMesh(PC, PCLMesh);
+
+		printf("completed.\n");
+
+		if (bSavePLY)
+		{
+			char *PLYFileName = RVLCreateString(FileName);
+
+			sprintf(RVLGETFILEEXTENSION(PLYFileName), "ply");
+
+			printf("Saving mesh to %s...", PLYFileName);
+
+			PCLSavePLY(PLYFileName, PCLMesh);
+
+			printf("completed.\n");
+
+			delete[] PLYFileName;
+		}
+
+		PCLMeshToPolygonData(PCLMesh, pMesh->pPolygonData);
+	}
+
+	printf("Creating ordered mesh from PCL mesh...");
+
+	pMesh->CreateOrderedMeshFromPolyData();
+
+	printf("completed.\n");
+
+	return true;
+}

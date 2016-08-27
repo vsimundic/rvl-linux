@@ -1,16 +1,16 @@
 //#include "stdafx.h"
-#include <pcl/io/pcd_io.h>
+//#include <pcl/io/pcd_io.h>
 #include "RVLVTK.h"
 #include "RVLCore2.h"
 #include "Util.h"
 #include "Graph.h"
 #include <Eigen\Eigenvalues>
-#include <pcl/common/common.h>
-#include <pcl/PolygonMesh.h>
-#include <pcl/surface/vtk_smoothing/vtk_utils.h>
-#include "PCLTools.h"
-#include "PCLMeshBuilder.h"
-#include "RGBDCamera.h"
+//#include <pcl/common/common.h>
+//#include <pcl/PolygonMesh.h>
+//#include <pcl/surface/vtk_smoothing/vtk_utils.h>
+//#include "PCLTools.h"
+//#include "PCLMeshBuilder.h"
+//#include "RGBDCamera.h"
 #include "Mesh.h"
 
 using namespace RVL;
@@ -763,88 +763,88 @@ void Mesh::Boundary(
 	}	// for each surfel point
 }
 
-bool Mesh::Load(
-	char *FileName,
-	PCLMeshBuilder *pMeshBuilder,
-	pcl::PointCloud<pcl::PointXYZRGBA>::Ptr PC,
-	pcl::PolygonMesh &PCLMesh,
-	bool bSavePLY)
-{
-	char *fileExtension = RVLGETFILEEXTENSION(FileName);
-
-	if (strcmp(fileExtension, "ply") == 0)
-		LoadPolyDataFromPLY(FileName);
-	else
-	{
-		if (strcmp(fileExtension, "pcd") == 0)
-			PCLLoadPCD(FileName, PC);
-		else if (strcmp(fileExtension, "bmp") == 0)
-		{
-			char *depthFileName = RVLCreateString(FileName);
-
-			sprintf(RVLGETFILEEXTENSION(depthFileName), "txt");
-
-			Array2D<short int> depthImage;
-
-			depthImage.Element = NULL;
-			depthImage.w = depthImage.h = 0;
-
-			unsigned int format;
-
-			ImportDisparityImage(depthFileName, depthImage, format);
-
-			IplImage *RGBImage = cvLoadImage(FileName);
-
-			RGBDCamera camera;
-
-			printf("Creating point cloud from RGB-D image.\n");
-
-			camera.GetPointCloud(&depthImage, RGBImage, PC);
-
-			delete[] depthFileName;
-			delete[] depthImage.Element;
-
-			cvReleaseImage(&RGBImage);
-		}
-		else
-		{
-			printf("ERROR: Unknown file format!\n");
-
-			return false;
-		}
-
-		printf("Creating organized PCL mesh from point cloud...");
-
-		pMeshBuilder->CreateMesh(PC, PCLMesh);
-
-		printf("completed.\n");
-
-		if (bSavePLY)
-		{
-			char *PLYFileName = RVLCreateString(FileName);
-
-			sprintf(RVLGETFILEEXTENSION(PLYFileName), "ply");
-
-			printf("Saving mesh to %s...", PLYFileName);
-
-			PCLSavePLY(PLYFileName, PCLMesh);
-
-			printf("completed.\n");
-
-			delete[] PLYFileName;
-		}
-
-		PCLMeshToPolygonData(PCLMesh, pPolygonData);
-	}
-
-	printf("Creating ordered mesh from PCL mesh...");
-
-	CreateOrderedMeshFromPolyData();
-
-	printf("completed.\n");
-
-	return true;
-}
+//bool Mesh::Load(
+//	char *FileName,
+//	PCLMeshBuilder *pMeshBuilder,
+//	pcl::PointCloud<pcl::PointXYZRGBA>::Ptr PC,
+//	pcl::PolygonMesh &PCLMesh,
+//	bool bSavePLY)
+//{
+//	char *fileExtension = RVLGETFILEEXTENSION(FileName);
+//
+//	if (strcmp(fileExtension, "ply") == 0)
+//		LoadPolyDataFromPLY(FileName);
+//	else
+//	{
+//		if (strcmp(fileExtension, "pcd") == 0)
+//			PCLLoadPCD(FileName, PC);
+//		else if (strcmp(fileExtension, "bmp") == 0)
+//		{
+//			char *depthFileName = RVLCreateString(FileName);
+//
+//			sprintf(RVLGETFILEEXTENSION(depthFileName), "txt");
+//
+//			Array2D<short int> depthImage;
+//
+//			depthImage.Element = NULL;
+//			depthImage.w = depthImage.h = 0;
+//
+//			unsigned int format;
+//
+//			ImportDisparityImage(depthFileName, depthImage, format);
+//
+//			IplImage *RGBImage = cvLoadImage(FileName);
+//
+//			RGBDCamera camera;
+//
+//			printf("Creating point cloud from RGB-D image.\n");
+//
+//			camera.GetPointCloud(&depthImage, RGBImage, PC);
+//
+//			delete[] depthFileName;
+//			delete[] depthImage.Element;
+//
+//			cvReleaseImage(&RGBImage);
+//		}
+//		else
+//		{
+//			printf("ERROR: Unknown file format!\n");
+//
+//			return false;
+//		}
+//
+//		printf("Creating organized PCL mesh from point cloud...");
+//
+//		pMeshBuilder->CreateMesh(PC, PCLMesh);
+//
+//		printf("completed.\n");
+//
+//		if (bSavePLY)
+//		{
+//			char *PLYFileName = RVLCreateString(FileName);
+//
+//			sprintf(RVLGETFILEEXTENSION(PLYFileName), "ply");
+//
+//			printf("Saving mesh to %s...", PLYFileName);
+//
+//			PCLSavePLY(PLYFileName, PCLMesh);
+//
+//			printf("completed.\n");
+//
+//			delete[] PLYFileName;
+//		}
+//
+//		PCLMeshToPolygonData(PCLMesh, pPolygonData);
+//	}
+//
+//	printf("Creating ordered mesh from PCL mesh...");
+//
+//	CreateOrderedMeshFromPolyData();
+//
+//	printf("completed.\n");
+//
+//	return true;
+//}
 
 void Mesh::BoundingBox(Box<float> *pBox)
 {

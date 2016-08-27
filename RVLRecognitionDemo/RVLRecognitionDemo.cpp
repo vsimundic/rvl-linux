@@ -10,17 +10,17 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 #include "RVLCore2.h"
 #include "Util.h"
 #include "Graph.h"
-#include <pcl/common/common.h>
-#include <pcl/PolygonMesh.h>
-#include "PCLTools.h"
-#include "PCLMeshBuilder.h"
-#include "RGBDCamera.h"
 #include "Mesh.h"
 #include "Visualizer.h"
 #include "SurfelGraph.h"
 #include "PlanarSurfelDetector.h"
 #include "RFRecognition.h"
 #include "PSGM.h"
+#include <pcl/common/common.h>
+#include <pcl/PolygonMesh.h>
+#include "PCLTools.h"
+#include "RGBDCamera.h"
+#include "PCLMeshBuilder.h"
 
 using namespace RVL;
 

@@ -1,16 +1,16 @@
 //#include "stdafx.h"
-#include <pcl/io/pcd_io.h>
+//#include <pcl/io/pcd_io.h>
 #include "RVLVTK.h"
 #include "RVLCore2.h"
 #include "Util.h"
 #include "Graph.h"
-#include <Eigen\Eigenvalues>
-#include <pcl/common/common.h>
-#include <pcl/PolygonMesh.h>
-#include <pcl/surface/vtk_smoothing/vtk_utils.h>
-#include "PCLTools.h"
-#include "PCLMeshBuilder.h"
-#include "RGBDCamera.h"
+//#include <Eigen\Eigenvalues>
+//#include <pcl/common/common.h>
+//#include <pcl/PolygonMesh.h>
+//#include <pcl/surface/vtk_smoothing/vtk_utils.h>
+//#include "PCLTools.h"
+//#include "PCLMeshBuilder.h"
+//#include "RGBDCamera.h"
 #include "Mesh.h"
 #include "PolygonGraph.h"
 

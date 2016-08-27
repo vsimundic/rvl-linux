@@ -15,6 +15,56 @@
 
 namespace RVL
 {
+	template <typename T> struct SortIndex
+	{
+		int idx;
+		T cost;
+	};
+
 	void QuickSort(int *Key, int *Index, int n);
 	void RandomColor(unsigned char *color);
+
+	// created by Damir Filko
+	// adapted for general case by Robert Cupec
+
+	template <class Type>
+	void BubbleSort(Array<Type> &InOutArray,
+		bool descending = false)
+	{
+		Type tempVoid;
+		bool chg = true;
+
+		int i;
+
+		while (chg)
+		{
+			chg = false;
+			for (i = 0; i < InOutArray.n - 1; i++)
+			{
+				if (descending)
+				{
+					if (InOutArray.Element[i + 1].cost > InOutArray.Element[i].cost)
+					{
+						tempVoid = InOutArray.Element[i];
+						InOutArray.Element[i] = InOutArray.Element[i + 1];
+						InOutArray.Element[i + 1] = tempVoid;
+
+						chg = true;
+					}
+				}
+				else
+				{
+					if (InOutArray.Element[i + 1].cost < InOutArray.Element[i].cost)
+					{
+						tempVoid = InOutArray.Element[i];
+						InOutArray.Element[i] = InOutArray.Element[i + 1];
+						InOutArray.Element[i + 1] = tempVoid;
+
+						chg = true;
+					}
+				}
+			}
+		}
+	}
 }
+

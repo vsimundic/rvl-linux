@@ -10,15 +10,16 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 #include "RVLCore2.h"
 #include "Util.h"
 #include "Graph.h"
-#include <pcl/common/common.h>
-#include <pcl/PolygonMesh.h>
-#include "PCLTools.h"
-#include "PCLMeshBuilder.h"
-#include "RGBDCamera.h"
 #include "Mesh.h"
 #include "Visualizer.h"
 #include "SurfelGraph.h"
 #include "PlanarSurfelDetector.h"
+#include <pcl/common/common.h>
+#include <pcl/PolygonMesh.h>
+#include "PCLTools.h"
+#include "RGBDCamera.h"
+#include "PCLMeshBuilder.h"
+
 
 using namespace RVL;
 
@@ -82,7 +83,8 @@ int main(int argc, char ** argv)
 
 	printf("Creating mesh from %s:\n", MeshFileName);
 
-	if (mesh.Load(MeshFileName, &meshBuilder, PC, PCLMesh, (flags & RVLPCSEGMENT_DEMO_FLAG_SAVE_PLY) != 0))
+	//if (mesh.Load(MeshFileName, &meshBuilder, PC, PCLMesh, (flags & RVLPCSEGMENT_DEMO_FLAG_SAVE_PLY) != 0))
+	if (meshBuilder.Load(MeshFileName, &mesh, PC, PCLMesh, (flags & RVLPCSEGMENT_DEMO_FLAG_SAVE_PLY) != 0))
 		printf("Mesh created.\n");
 	else
 		printf("ERROR: Mesh can't be created!\n");

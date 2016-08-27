@@ -59,6 +59,7 @@ namespace RVL
 				float d;
 				float len;
 				int iVertex[2];
+				bool bMerged;
 			};
 
 			struct TangentRegionGrowingData
@@ -70,6 +71,8 @@ namespace RVL
 				Array<RECOG::PSGM_::Tangent> *pTangentArray;
 				bool *bParent;
 				//Array<RECOG::PSGM_::NormalHullElement> *pNormalHull;
+				float baseSeparationAngle;
+				bool *bBase;
 			};
 
 			struct DisplayData
@@ -179,6 +182,7 @@ namespace RVL
 		int minVertexPerc;
 		float kReferenceSurfelSize;
 		float kReferenceTangentSize;
+		float baseSeparationAngle;
 	private:		
 		QLIST::Index *surfelVertexMem;
 		RECOG::PSGM_::Cluster *clusterMem;

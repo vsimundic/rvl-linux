@@ -16,6 +16,12 @@ namespace RVL
 			vtkSmartPointer<vtkPolyData> pPolygonData,
 			pcl::PolygonMesh &mesh);
 		void CreateParamList(CRVLMem *pMem);
+		bool Load(
+			char *FileName,
+			Mesh *pMesh,
+			pcl::PointCloud<pcl::PointXYZRGBA>::Ptr PC,
+			pcl::PolygonMesh &PCLMesh,
+			bool bSavePLY);
 
 	public:
 		DWORD flags;

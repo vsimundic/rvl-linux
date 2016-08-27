@@ -4,12 +4,12 @@
 #include "RVLCore2.h"
 #include "Util.h"
 #include "Graph.h"
-#include <Eigen\Eigenvalues>
-#include <pcl/common/common.h>
-#include <pcl/PolygonMesh.h>
-#include "PCLTools.h"
-#include "PCLMeshBuilder.h"
-#include "RGBDCamera.h"
+//#include <Eigen\Eigenvalues>
+//#include <pcl/common/common.h>
+//#include <pcl/PolygonMesh.h>
+//#include "PCLTools.h"
+//#include "PCLMeshBuilder.h"
+//#include "RGBDCamera.h"
 #include "Mesh.h"
 #include "Visualizer.h"
 
