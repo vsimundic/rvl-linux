@@ -96,7 +96,7 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\RVLPCSegment\Include;..\RVLPCLTools\Include;..\RVLCore\Include;C:\Libraries\PCL\PCL 1.8.0\include\pcl-1.8;C:\Libraries\Eigen\eigen3;C:\Program Files\PCL 1.7.2\3rdParty\Boost\include\boost-1_56;$(VTK_PATH)\x64\include\vtk-6.1;C:\OpenCV3.0\opencv\build\include;C:\Program Files\OpenNI2\Include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\RVLPCSegment\Include;..\RVLPCLTools\Include;..\RVLCore\Include;C:\Libraries\PCL\PCL 1.8.0\include\pcl-1.8;C:\Libraries\Eigen\eigen3;C:\Program Files\PCL 1.7.2\3rdParty\Boost\include\boost-1_56;$(VTK_PATH)\x64\include\vtk-6.1;C:\OpenCV3.0\opencv\build\include;C:\Program Files\OpenNI2\Include;..\RapidXML\Include</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -129,7 +129,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\RVLPCSegment\Include;..\RVLPCLTools\Include;..\RVLCore\Include;C:\Libraries\PCL\PCL 1.8.0\include\pcl-1.8;C:\Libraries\Eigen\eigen3;C:\Program Files\PCL 1.7.2\3rdParty\Boost\include\boost-1_56;$(VTK_PATH)\x64\include\vtk-6.1;C:\OpenCV3.0\opencv\build\include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\RVLPCSegment\Include;..\RVLPCLTools\Include;..\RVLCore\Include;C:\Libraries\PCL\PCL 1.8.0\include\pcl-1.8;C:\Libraries\Eigen\eigen3;C:\Program Files\PCL 1.7.2\3rdParty\Boost\include\boost-1_56;$(VTK_PATH)\x64\include\vtk-6.1;C:\OpenCV3.0\opencv\build\include;..\RapidXML\Include</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -144,10 +144,12 @@
     <Text Include="ReadMe.txt" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="RVLPCSegmentCreateTrainingData.h" />
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="targetver.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="RVLPCSegmentCreateTrainingData.cpp" />
     <ClCompile Include="RVLPCSegmentDemo.cpp" />
     <ClCompile Include="stdafx.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>

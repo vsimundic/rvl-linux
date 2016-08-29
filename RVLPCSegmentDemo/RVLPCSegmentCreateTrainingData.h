@@ -1,0 +1,16 @@
+int DetPrimaryGTObj(Surfel *pSurfel, cv::Mat labGTImg, int noObj);
+float GetShortestDistanceToBoundary(int x, int y, Array<MeshEdgePtr *> &BoundaryArray);
+void DrawSurfelBoundary(Array<MeshEdgePtr *> &BoundaryArray, cv::Mat img);
+bool GetSurfelGTValidity(Surfel *pSurfel, cv::Mat labGTImg, float thr);
+void FindSurfelNeighbours(std::vector<Surfel*> &nList, Surfel *pSurfel, SurfelGraph *surfels, int thr = 5);
+void SetSurfelImgAdjacency(Surfel *pSurfel, SurfelGraph *surfels, Mesh *mesh, int thr = 5);
+void GetSurfelImgCentroid(int &x, int &y, Surfel *pSurfel);
+void AddVTKLine(float *P1, float *P2, vtkSmartPointer<vtkRenderer> renderer, double *color);
+cv::Mat GenColoredGTImg(cv::Mat labImg);
+cv::Mat GenColoredSegmentationImg(SurfelGraph *surfels);
+void DrawSurfelImgAdjacencyOpenCV(cv::Mat img, SurfelGraph *surfels);
+void RenderSurfelImgAdjacencyVTK(vtkSmartPointer<vtkRenderer> renderer, SurfelGraph *surfels);
+void PreprocessGTLab(cv::Mat GTLabImg, cv::Mat GTDisparityImg);
+void DetermineImgAdjDescriptors(Surfel *pSurfel, Mesh *mesh);
+void GenerateSSF(SurfelGraph *surfels, std::string filename);
+void RunSeg2Bench(bool save = false);

@@ -49,6 +49,12 @@ namespace RVL
 		};
 	}
 
+	struct SurfelAdjecencyDescriptors
+	{
+		double cupyDescriptor[4];
+		double minDist;
+	};
+
 	struct Surfel
 	{
 		QList<QLIST::Index2> PtList;
@@ -63,6 +69,9 @@ namespace RVL
 		QList<SURFEL::EdgePtr> EdgeList;
 		Surfel *pNext;
 		int size;
+		int ObjectID;	//Filko
+		std::vector<Surfel*> imgAdjacency;	//Filko
+		std::vector<SurfelAdjecencyDescriptors*> imgAdjacencyDescriptors;	//Filko
 	};
 
 	class SurfelGraph : public Graph < Surfel, MeshEdge, MeshEdgePtr >

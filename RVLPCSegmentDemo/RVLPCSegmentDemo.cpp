@@ -20,10 +20,13 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 #include "RGBDCamera.h"
 #include "PCLMeshBuilder.h"
 
+//#define RVLPCSEGMENT_DEMO_CREATE_TRAINING_DATA
+
+#define RVLPCSEGMENT_DEMO_FLAG_SAVE_PLY			0x00000001
 
 using namespace RVL;
 
-#define RVLPCSEGMENT_DEMO_FLAG_SAVE_PLY			0x00000001
+#include "RVLPCSegmentCreateTrainingData.h"
 
 void CreateParamList(
 	CRVLParameterList *pParamList,
@@ -44,6 +47,13 @@ void CreateParamList(
 
 int main(int argc, char ** argv)
 {
+#ifdef RVLPCSEGMENT_DEMO_CREATE_TRAINING_DATA
+	RunSeg2Bench(true);
+	//SceneSegFile::SceneSegFile* ssf = new SceneSegFile::SceneSegFile("test");
+	///*ssf = SceneSegFile::GenerateTestSceneSegFile();
+	//ssf->Save("test.ssf");*/
+	//ssf->Load("test.ssf");
+#else
 	// Create memory storage.
 
 	CRVLMem mem0;	// permanent memory
@@ -141,5 +151,6 @@ int main(int argc, char ** argv)
 	delete[] MeshFileName;
 
 	return 0;
+#endif
 }
 
