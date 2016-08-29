@@ -38,6 +38,7 @@ void CRVLParameterList::SetParam(char *ParamName,
 	float *pfParam;
 	double *plfParam;
 	char **pstrParam;
+	bool *pbParam;
 
 	m_List.Start();
 
@@ -116,6 +117,10 @@ void CRVLParameterList::SetParam(char *ParamName,
 				}
 
 				break;
+			case RVLPARAM_TYPE_BOOL:
+				pbParam = (bool *)(pParamData->pParam);
+
+				*pbParam = (strcmp(value, "yes") == 0 || strcmp(value, "y") == 0 || strcmp(value, "1") == 0);
 			}
 
 			return;
@@ -184,6 +189,7 @@ void CRVLParameterList::SaveParams(char *ParamFileName)
 	double lfvalue;
 	char *pstrvalue;
 	DWORD DWvalue;
+	bool bvalue;
 
 	m_List.Start();
 
@@ -243,6 +249,13 @@ void CRVLParameterList::SaveParams(char *ParamFileName)
 			fprintf(fp, "\n");
 
 			break;
+		case RVLPARAM_TYPE_BOOL:
+			bvalue = *((bool *)(pParamData->pParam));
+
+			if (bvalue)
+				fprintf(fp, "yes");
+			else
+				fprintf(fp, "no");
 		}	// switch(pParamData->Type)
 	}	// while(m_List.m_pNext)
 

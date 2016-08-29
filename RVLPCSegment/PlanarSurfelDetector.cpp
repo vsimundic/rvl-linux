@@ -186,10 +186,7 @@ void PlanarSurfelDetector::CreateParamList(CRVLMem *pMem)
 	pParamData = ParamList.AddParam("SurfelDetector.maxRange", RVLPARAM_TYPE_FLOAT, &maxRange);
 	pParamData = ParamList.AddParam("SurfelDetector.minSurfelSize", RVLPARAM_TYPE_INT, &minSurfelSize);
 	pParamData = ParamList.AddParam("SurfelDetector.maxAttackSize", RVLPARAM_TYPE_INT, &maxAttackSize);
-	iTmp = 0;
-	pParamData = ParamList.AddParam("SurfelDetector.bJoinSmallSurfelsToClosestNeighbors", RVLPARAM_TYPE_FLAG, &iTmp);
-	ParamList.AddID(pParamData, "yes", 1);
-	bJoinSmallSurfelsToClosestNeighbors = (iTmp > 0);
+	pParamData = ParamList.AddParam("SurfelDetector.bJoinSmallSurfelsToClosestNeighbors", RVLPARAM_TYPE_BOOL, &bJoinSmallSurfelsToClosestNeighbors);
 }
 
 void PlanarSurfelDetector::RandomIndices(Array<int> &A)
@@ -704,7 +701,7 @@ void PlanarSurfelDetector::Segment(
 	for (iSurfel = 0; iSurfel < pSurfels->NodeArray.n; iSurfel++, pSurfel++)
 	{
 		//if (pSurfel->size >= minSurfelSize)
-		if (pSurfel->size > 0)
+		if (pSurfel->size > 1)
 		{
 			pPtList = &(pSurfel->PtList);
 
