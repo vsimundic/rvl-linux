@@ -105,6 +105,10 @@ int main(int argc, char ** argv)
 
 	surfels.Init(&mesh);
 
+	surfels.CreateParamList(&mem0);
+
+	surfels.ParamList.LoadParams("RVLPCSegmentDemo.cfg");
+
 	PlanarSurfelDetector detector;
 
 	detector.CreateParamList(&mem0);

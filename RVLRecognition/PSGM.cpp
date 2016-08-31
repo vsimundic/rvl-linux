@@ -25,6 +25,7 @@ PSGM::PSGM()
 	kReferenceSurfelSize = 0.2f;
 	kReferenceTangentSize = 0.3f;
 	baseSeparationAngle = 22.5f;
+	edgeTangentAngle = 100.0f;
 
 	convexTemplate.n = 66;
 	convexTemplate.Element = new RECOG::PSGM_::Plane[convexTemplate.n];
@@ -78,6 +79,7 @@ void PSGM::CreateParamList(CRVLMem *pMem)
 	pParamData = ParamList.AddParam("PSGM.kReferenceSurfelSize", RVLPARAM_TYPE_FLOAT, &kReferenceSurfelSize);
 	pParamData = ParamList.AddParam("PSGM.kReferenceTangentSize", RVLPARAM_TYPE_FLOAT, &kReferenceTangentSize);
 	pParamData = ParamList.AddParam("PSGM.baseSeparationAngle", RVLPARAM_TYPE_FLOAT, &baseSeparationAngle);
+	pParamData = ParamList.AddParam("PSGM.edgeTangentAngle", RVLPARAM_TYPE_FLOAT, &edgeTangentAngle);
 }
 
 void PSGM::Interpret(
@@ -118,7 +120,10 @@ void PSGM::Interpret(
 	surfelVertexList.Element = new QList<QLIST::Index>[pSurfels->NodeArray.n];
 	surfelVertexList.n = pSurfels->NodeArray.n;
 
-	int iSurfel, iSurfel_, iPrevSurfel;
+	float csEdgeTangentAngle = cos(edgeTangentAngle * DEG2RAD);
+	float snEdgeTangentAngle = sqrt(1.0f - csEdgeTangentAngle * csEdgeTangentAngle);
+
+	int iSurfel, iSurfel_, iPrevSurfel, iSurfel1, iSurfel2;
 	int iBoundary;
 	int iPointEdge;
 	int iPt, iPt_;
@@ -130,6 +135,9 @@ void PSGM::Interpret(
 	RECOG::PSGM_::Vertex *pVertex;
 	Point *pPt;
 	QList<QLIST::Index> *pSurfelVertexList;
+	float *N, *N1, *N2;
+	float N2_[3], VTmp[3];
+	float fTmp;
 
 	for (iSurfel = 0; iSurfel < pSurfels->NodeArray.n; iSurfel++)
 	{
@@ -139,8 +147,10 @@ void PSGM::Interpret(
 
 		pSurfel = pSurfels->NodeArray.Element + iSurfel;
 
-		if (pSurfel->size == 0)
+		if (pSurfel->size <= 1)
 			continue;
+
+		N = pSurfel->N;
 
 		for (iBoundary = 0; iBoundary < pSurfel->BoundaryArray.n; iBoundary++)
 		{
@@ -163,22 +173,27 @@ void PSGM::Interpret(
 				//int debug = 0;
 
 				while (true)
-				{					
-					RVLQLIST_GET_NEXT_CIRCULAR(pEdgeList, pEdgePtr_);
+				{			
+					if (pPt->bBoundary && pEdgePtr_->pNext == NULL && iPrevSurfel < pMesh->NodeArray.n)
+						iSurfel_ = pMesh->NodeArray.n;
+					else
+					{
+						RVLQLIST_GET_NEXT_CIRCULAR(pEdgeList, pEdgePtr_);
 
-					RVLPCSEGMENT_GRAPH_GET_NEIGHBOR(iPt, pEdgePtr_, pEdge, iPt_);
+						RVLPCSEGMENT_GRAPH_GET_NEIGHBOR(iPt, pEdgePtr_, pEdge, iPt_);
 
-					iSurfel_ = pSurfels->surfelMap[iPt_];
+						iSurfel_ = pSurfels->surfelMap[iPt_];
 
-					if (iSurfel_ == iSurfel)
-						break;
+						if (iSurfel_ == iSurfel)
+							break;
+					}
 
 					//debug++;
 
 					//if (debug >= 20)
 					//	debug = 0;
 
-					if (iSurfel_ >= 0 && iSurfel_ < pMesh->NodeArray.n)
+					if (iSurfel_ >= 0 && iSurfel_ <= pMesh->NodeArray.n)
 					{
 						if (iPrevSurfel >= 0 && iPrevSurfel != iSurfel_)
 						{
@@ -190,16 +205,44 @@ void PSGM::Interpret(
 
 								RVLMEM_ALLOC_STRUCT_ARRAY(pMem, int, 3, pVertex->iSurfelArray.Element);
 
+								if (iSurfel_ > iPrevSurfel)
+								{
+									iSurfel1 = iPrevSurfel;
+									iSurfel2 = iSurfel_;
+								}
+								else
+								{
+									iSurfel1 = iSurfel_;
+									iSurfel2 = iPrevSurfel;
+								}
+
 								pVertex->iSurfelArray.Element[0] = iSurfel;
-								pVertex->iSurfelArray.Element[1] = iSurfel_;
-								pVertex->iSurfelArray.Element[2] = iPrevSurfel;
+								pVertex->iSurfelArray.Element[1] = iSurfel1;
+								pVertex->iSurfelArray.Element[2] = iSurfel2;
 								pVertex->iSurfelArray.n = 3;
+
+								N1 = pSurfels->NodeArray.Element[iSurfel1].N;
+
+								if (iSurfel2 == pMesh->NodeArray.n)
+								{
+									RVLSUM3VECTORS(N, N1, VTmp);
+
+									fTmp = csEdgeTangentAngle / sqrt(RVLDOTPRODUCT3(VTmp, VTmp));
+
+									RVLSCALE3VECTOR(VTmp, fTmp, VTmp);
+
+									RVLCROSSPRODUCT3(N, N1, )
+
+									N2 = N2_;
+								}
+								else
+									N2 = pSurfels->NodeArray.Element[iSurfel2].N;
 
 								RVLMEM_ALLOC_STRUCT_ARRAY(pMem, RECOG::PSGM_::NormalHullElement, 3, pVertex->normalHull.Element);
 								pVertex->normalHull.n = 0;
-								UpdateNormalHull(pVertex->normalHull, pSurfels->NodeArray.Element[iSurfel].N);
-								UpdateNormalHull(pVertex->normalHull, pSurfels->NodeArray.Element[iSurfel_].N);
-								UpdateNormalHull(pVertex->normalHull, pSurfels->NodeArray.Element[iPrevSurfel].N);
+								UpdateNormalHull(pVertex->normalHull, N);
+								UpdateNormalHull(pVertex->normalHull, N1);
+								UpdateNormalHull(pVertex->normalHull, N2);
 
 								RVLQLIST_ADD_ENTRY(pVertexList, pVertex);
 
@@ -208,9 +251,9 @@ void PSGM::Interpret(
 								nVertexSurfelRelations += 3;
 							}
 						}
+					}	// if (iSurfel_ >= 0 && iSurfel_ <= pMesh->NodeArray.n)		
 
-						iPrevSurfel = iSurfel_;
-					}	// if (iSurfel_ >= 0 && iSurfel_ < pMesh->NodeArray.n)					
+					iPrevSurfel = iSurfel_;
 				}	// for each neighboring point of the point iPt
 			}	// for each point-edge on the boundary contour
 		}	// for each boundary contour
@@ -818,11 +861,12 @@ void PSGM::FitModel(
 	int i;
 	float *N;
 	float N_[3];
+	float dist;
 
 	for (iModelInstanceElement = 0; iModelInstanceElement < convexTemplate.n; iModelInstanceElement++)
 	{
-		if (iModelInstanceElement == 64)
-			int debug = 0;
+		//if (iModelInstanceElement == 32)
+		//	int debug = 0;
 
 		pModelInstanceElement = pModelInstance->modelInstance.Element + iModelInstanceElement;
 		pModelInstanceElement->defined = false;
@@ -831,30 +875,28 @@ void PSGM::FitModel(
 
 		RVLMULMX3X3VECT(R, N, N_);
 
-		//for (i = 0; i < pCluster->iVertexArray.n; i++)
-		//{
-		//	pVertex = vertexArray.Element[pCluster->iVertexArray.Element[i]];
+		for (i = 0; i < pCluster->iVertexArray.n; i++)
+		{
+			pVertex = vertexArray.Element[pCluster->iVertexArray.Element[i]];
 
-		//	N = convexTemplate.Element[iModelInstanceElement].N;
+			dist = DistanceFromNormalHull(pVertex->normalHull, N_);
 
-		//	dist = DistanceFromNormalHull(pVertex->normalHull, N);
+			if (dist <= 0.0f)
+			{
+				d = RVLDOTPRODUCT3(N_, pVertex->P);
 
-		//	if (dist <= 0.0f)
-		//	{
-		//		d = RVLDOTPRODUCT3(N, pVertex->P);
-
-		//		if (pModelInstanceElement->defined)
-		//		{
-		//			if (d > pModelInstanceElement->d)
-		//				pModelInstanceElement->d = d;
-		//		}
-		//		else
-		//		{
-		//			pModelInstanceElement->d = d;
-		//			pModelInstanceElement->defined = true;
-		//		}
-		//	}
-		//}
+				if (pModelInstanceElement->defined)
+				{
+					if (d > pModelInstanceElement->d)
+						pModelInstanceElement->d = d;
+				}
+				else
+				{
+					pModelInstanceElement->d = d;
+					pModelInstanceElement->defined = true;
+				}
+			}
+		}
 
 		if (!pModelInstanceElement->defined)
 		{

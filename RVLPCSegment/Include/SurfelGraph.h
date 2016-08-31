@@ -29,6 +29,9 @@ namespace RVL
 			int iSelectedSurfel;
 			int iSelectedSurfel2;
 			int iSelection;
+			float edgeFeatureDepth;
+			vtkSmartPointer<vtkPolyData> edgeFeaturesPolyData;
+			vtkSmartPointer<vtkActor> edgeFeatures;
 		};
 
 		struct EdgePtr;
@@ -69,6 +72,8 @@ namespace RVL
 		QList<SURFEL::EdgePtr> EdgeList;
 		Surfel *pNext;
 		int size;
+		float physicalSize;
+		bool bEdge;
 		int ObjectID;	//Filko
 		std::vector<Surfel*> imgAdjacency;	//Filko
 		std::vector<SurfelAdjecencyDescriptors*> imgAdjacencyDescriptors;	//Filko
@@ -79,6 +84,7 @@ namespace RVL
 	public:
 		SurfelGraph();
 		virtual ~SurfelGraph();
+		void CreateParamList(CRVLMem *pMem);
 		void InitGetNeighborsBoundaryAndSize();
 		void FreeGetNeighborsBoundaryAndSize();
 		void NodeColors(unsigned char *SelectionColor);
@@ -94,6 +100,7 @@ namespace RVL
 			Mesh *pMesh,
 			int iSurfel,
 			unsigned char *Color);
+		void DisplayEdgeFeatures();
 		void Init(Mesh *pMesh);
 		void Clear();
 		unsigned char * GetColor(int iSurfel);
@@ -128,10 +135,12 @@ namespace RVL
 			void *vpDetector);
 
 	public:	
+		CRVLParameterList ParamList;
 		int nMeshVertices;
 		int nMeshEdges;
 		QLIST::Index2 *PtMem;
 		int *surfelMap;
+		int *edgeMap;
 		MeshEdgePtr **surfelBndMem;
 		Array<MeshEdgePtr *> *surfelBndMem2;
 		//QLIST::Index2 *surfelBndMap;

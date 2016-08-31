@@ -26,9 +26,10 @@ PlanarSurfelDetector::PlanarSurfelDetector()
 	kPlane = 400.0f;
 	surfelDistThr = 2.0f;
 	minSurfelSize = 20;
+	minEdgeFeatureSize = 5;
 	maxRange = 5000.0f;
 	maxAttackSize = 1000;
-	bJoinSmallSurfelsToClosestNeighbors = true;
+	bJoinSmallSurfelsToClosestNeighbors = false;
 
 	pMem = NULL;
 	//iPtBuff = NULL;
@@ -176,8 +177,6 @@ void PlanarSurfelDetector::CreateParamList(CRVLMem *pMem)
 
 	ParamList.Init();
 
-	int iTmp;
-
 	//pParamData = ParamList.AddParam("PSD.SegmentationType", RVLPARAM_TYPE_FLAG, &m_Flags);
 	//ParamList.AddID(pParamData, "3D", RVLPSD_SEGMENT_3D);
 	pParamData = ParamList.AddParam("SurfelDetector.kPlane", RVLPARAM_TYPE_FLOAT, &kPlane);
@@ -185,6 +184,7 @@ void PlanarSurfelDetector::CreateParamList(CRVLMem *pMem)
 	pParamData = ParamList.AddParam("SurfelDetector.kRGB", RVLPARAM_TYPE_FLOAT, &kRGB);
 	pParamData = ParamList.AddParam("SurfelDetector.maxRange", RVLPARAM_TYPE_FLOAT, &maxRange);
 	pParamData = ParamList.AddParam("SurfelDetector.minSurfelSize", RVLPARAM_TYPE_INT, &minSurfelSize);
+	pParamData = ParamList.AddParam("SurfelDetector.minEdgeFeatureSize", RVLPARAM_TYPE_INT, &minEdgeFeatureSize);
 	pParamData = ParamList.AddParam("SurfelDetector.maxAttackSize", RVLPARAM_TYPE_INT, &maxAttackSize);
 	pParamData = ParamList.AddParam("SurfelDetector.bJoinSmallSurfelsToClosestNeighbors", RVLPARAM_TYPE_BOOL, &bJoinSmallSurfelsToClosestNeighbors);
 }
@@ -373,6 +373,8 @@ void PlanarSurfelDetector::Segment(
 
 	memset(pSurfels->surfelMap, 0xff, nPts * sizeof(int));
 
+	memset(pSurfels->edgeMap, 0xff, nPts * sizeof(int));
+
 	int *iPtBuff = new int[nPts];
 
 	int *iPtBuff2 = new int[nPts];
@@ -438,6 +440,8 @@ void PlanarSurfelDetector::Segment(
 
 		if (RVLDOTPRODUCT3(pPt->N, pPt->N) < 0.5f)
 			continue;
+
+		pSurfel->bEdge = false;
 
 		// Initial region growing		
 
@@ -714,6 +718,10 @@ void PlanarSurfelDetector::Segment(
 			GetNeighbors(pMesh, pSurfels, iSurfel, &SEdgeList, nSEdges);
 		}
 	}
+
+	// Detect edges.
+
+	Edges(pMesh, pSurfels, &SEdgeList, nSEdges);
 
 	// Create surfel edge array.
 
@@ -4218,6 +4226,359 @@ void PlanarSurfelDetector::GetAttackSeed(
 	}
 
 	G.n = piGPt - G.Element;
+}
+
+void PlanarSurfelDetector::Edges(
+	Mesh *pMesh,
+	SurfelGraph *pSurfels,
+	QList<SURFEL::Edge> *pSEdgeList,
+	int &nSEdges)
+{
+	int iEdgeFeature = pSurfels->NodeArray.n;
+
+	int iSurfel, iBoundary, iPointEdge;
+	Array<MeshEdgePtr *> *pBoundary;
+	MeshEdgePtr *pEdgePtr;
+	int iPt;
+	Surfel *pSurfel;
+	Point *pPt;
+	int iStart;	
+
+	for (iSurfel = 0; iSurfel < pSurfels->NodeArray.n; iSurfel++)
+	{
+		pSurfel = pSurfels->NodeArray.Element + iSurfel;
+
+		if (pSurfel->size <= 1)
+			continue;
+
+		for (iBoundary = 0; iBoundary < pSurfel->BoundaryArray.n; iBoundary++)
+		{
+			pBoundary = pSurfel->BoundaryArray.Element + iBoundary;
+
+			iStart = -1;
+
+			for (iPointEdge = 0; iPointEdge < pBoundary->n; iPointEdge++)
+			{
+				pEdgePtr = pBoundary->Element[iPointEdge];
+
+				iPt = RVLPCSEGMENT_GRAPH_GET_NODE(pEdgePtr);
+
+				pPt = pMesh->NodeArray.Element + iPt;
+
+				if (iStart >= 0)
+				{
+					if (!pPt->bBoundary)
+					{
+						iEdgeFeature += CreateEdgeFeatures(pMesh, pSurfels, iSurfel, iBoundary, iStart, iPointEdge - 1, iEdgeFeature, pSEdgeList, nSEdges, pMem);
+
+						iStart = -1;
+					}						
+				}
+				else if (pPt->bBoundary)
+					iStart = iPointEdge;
+			}	// for each point-edge on the boundary contour
+
+			if (iStart >= 0)
+				iEdgeFeature += CreateEdgeFeatures(pMesh, pSurfels, iSurfel, iBoundary, iStart, iPointEdge, iEdgeFeature, pSEdgeList, nSEdges, pMem);
+		}	// for each boundary contour
+	}	// for every surfel
+
+	pSurfels->NodeArray.n = iEdgeFeature;
+}
+
+int PlanarSurfelDetector::CreateEdgeFeatures(
+	Mesh *pMesh,
+	SurfelGraph *pSurfels,
+	int iSurfel,
+	int iBoundary,
+	int iStart,
+	int iEnd,
+	int iNewFeature,
+	QList<SURFEL::Edge> *pSEdgeList,
+	int &nSEdges,
+	CRVLMem *pMem)
+{
+	int segmentSize = iEnd - iStart;
+
+	if (segmentSize < minEdgeFeatureSize)
+		return 0;
+
+	/// Recursive segmentation of the boundary segment between iStart and iEnd into approximatelly linear clusters.
+
+	Surfel *pSurfel = pSurfels->NodeArray.Element + iSurfel;
+
+	float *NParent = pSurfel->N;
+
+	Array<MeshEdgePtr *> *pBoundary = pSurfel->BoundaryArray.Element + iBoundary;
+
+	QList<QLIST::Index> segmentEndpointList;
+
+	QList<QLIST::Index> *pSegmentEndpointList = &segmentEndpointList;
+
+	RVLQLIST_INIT(pSegmentEndpointList);
+
+	QLIST::Index *pSegmentEndpointMem = new QLIST::Index[segmentSize];
+
+	QLIST::Index *pSegmentEndpoint = pSegmentEndpointMem;
+
+	// pSegmentEndpoint1 <- index of the first point of the boundary segment.
+
+	QLIST::Index *pSegmentEndpoint1 = pSegmentEndpoint;
+
+	pSegmentEndpoint1->Idx = iStart;
+
+	RVLQLIST_ADD_ENTRY(pSegmentEndpointList, pSegmentEndpoint1);
+
+	pSegmentEndpoint++;
+
+	// pSegmentEndpoint2 <- index of the last point of the boundary segment.
+
+	QLIST::Index *pSegmentEndpoint2 = pSegmentEndpoint;
+
+	pSegmentEndpoint2->Idx = iEnd - 1;
+
+	RVLQLIST_ADD_ENTRY(pSegmentEndpointList, pSegmentEndpoint2);
+
+	pSegmentEndpoint++;
+
+	//
+
+	int iNewFeature_ = iNewFeature;
+
+	float eThr = 2.0f / kPlane;
+
+	int iPointEdge, iPt, iPointEdge3;
+	MeshEdgePtr *pEdgePtr;
+	Point *pPt, *pPt1, *pPt2;
+	float *P, *P1, *P2, *P_;
+	float dP[3], NE[3], V[3], Q[3], P1_[3], P2_[3];
+	float d, dE, e, maxe, e_;
+	float fTmp;
+	QLIST::Index *pSegmentEndpoint1_, *pSegmentEndpoint2_;
+	float *N;
+	SURFEL::Edge *pSEdge;
+	Surfel *pEdgeFeature;
+	float l, s;
+	Array<MeshEdgePtr *> *pEdgePtArray;
+	QList<SURFEL::EdgePtr> *pSEdgeList_;
+
+	while (true)
+	{
+		// P1 <- position vector of the point indexed by pSegmentEndpoint1->idx
+
+		pEdgePtr = pBoundary->Element[pSegmentEndpoint1->Idx];
+
+		iPt = RVLPCSEGMENT_GRAPH_GET_NODE(pEdgePtr);
+
+		pPt1 = pMesh->NodeArray.Element + iPt;
+
+		P1 = pPt1->P;
+
+		// P2 <- position vector of the point indexed by pSegmentEndpoint2->idx
+
+		pEdgePtr = pBoundary->Element[pSegmentEndpoint2->Idx];
+
+		iPt = RVLPCSEGMENT_GRAPH_GET_NODE(pEdgePtr);
+
+		pPt2 = pMesh->NodeArray.Element + iPt;
+		
+		P2 = pPt2->P;
+
+		// P1_ <- projection of P1 onto the supporting plane of iSurfel.
+
+		d = RVLDOTPRODUCT3(NParent, P1) - pSurfel->d;
+
+		RVLSCALE3VECTOR(NParent, d, V);
+
+		RVLDIF3VECTORS(P1, V, P1_);
+
+		// P2_ <- projection of P2 onto the supporting plane of iSurfel.
+
+		d = RVLDOTPRODUCT3(NParent, P2) - pSurfel->d;
+
+		RVLSCALE3VECTOR(NParent, d, V);
+
+		RVLDIF3VECTORS(P2, V, P2_);
+
+		// dP <- P2_ - P1_
+
+		RVLDIF3VECTORS(P2_, P1_, dP);
+
+		// NE <- P1_ x dP / || P1_ x dP ||
+
+		RVLCROSSPRODUCT3(P1_, dP, NE);
+
+		RVLNORM3(NE, fTmp);
+
+		// dE <- NE' * P1
+
+		dE = RVLDOTPRODUCT3(NE, P1_);
+
+		// l <- || dP ||;
+
+		l = sqrt(RVLDOTPRODUCT3(dP, dP));
+
+		// V <- dP / || dP ||
+
+		RVLSCALE3VECTOR2(dP, l, V)
+
+		// iPointEdge3 <- index of the point from the segment between pSegmentEndpoint1->idx and pSegmentEndpoint2->idx, which is the most distant from the plane (NE, dE).
+		// If all points of this segment are at distance eThr or closer, then iPointEdge3 <- -1.
+
+		maxe = eThr;
+
+		iPointEdge3 = -1;
+
+		for (iPointEdge = pSegmentEndpoint1->Idx + 1; iPointEdge < pSegmentEndpoint2->Idx; iPointEdge++)
+		{
+			pEdgePtr = pBoundary->Element[iPointEdge];
+
+			iPt = RVLPCSEGMENT_GRAPH_GET_NODE(pEdgePtr);
+
+			pPt = pMesh->NodeArray.Element + iPt;
+
+			P = pPt->P;
+
+			e = RVLDOTPRODUCT3(NE, P) - dE;
+
+			e = RVLABS(e);
+
+			RVLDIF3VECTORS(P, P1_, Q);
+
+			s = RVLDOTPRODUCT3(V, Q);
+
+			if (s < 0.0f)
+			{
+				e_ = sqrt(RVLDOTPRODUCT3(Q, Q));
+
+				if (e_ > e)
+					e = e_;
+			}
+			else if (s > l)
+			{
+				RVLDIF3VECTORS(P, P2_, Q);
+
+				e_ = sqrt(RVLDOTPRODUCT3(Q, Q));
+
+				if (e_ > e)
+					e = e_;
+			}
+
+			if (e > maxe)
+			{
+				maxe = e;
+
+				iPointEdge3 = iPointEdge;
+			}
+		}
+
+		if (iPointEdge3 >= 0)	// If there is a point in the interval [pSegmentEndpoint1->idx, pSegmentEndpoint2->idx], 
+								// which is outside of the tolerance eThr from the plane (NE, dE)
+		{
+			if (iPointEdge3 - 1 > pSegmentEndpoint1->Idx)
+			{
+				// Insert an endpoint pSegmentEndpoint2_ with index iPointEdge3 - 1 between pSegmentEndpoint1 and pSegmentEndpoint2.
+
+				pSegmentEndpoint2_ = pSegmentEndpoint;
+
+				RVLQLIST_INSERT_ENTRY(pSegmentEndpointList, pSegmentEndpoint1, pSegmentEndpoint2, pSegmentEndpoint2_);
+
+				pSegmentEndpoint2_->Idx = iPointEdge3 - 1;
+
+				pSegmentEndpoint++;
+			}
+			else
+				pSegmentEndpoint2_ = pSegmentEndpoint1;
+
+			// Insert an endpoint pSegmentEndpoint1_ with index iPointEdge3 between pSegmentEndpoint2_ and pSegmentEndpoint2.
+
+			pSegmentEndpoint1_ = pSegmentEndpoint;
+
+			RVLQLIST_INSERT_ENTRY(pSegmentEndpointList, pSegmentEndpoint2_, pSegmentEndpoint2, pSegmentEndpoint1_);
+			
+			pSegmentEndpoint1_->Idx = iPointEdge3;
+
+			pSegmentEndpoint++;
+
+			// If pSegmentEndpoint2_ = pSegmentEndpoint1, then pSegmentEndpoint1 <- pSegmentEndpoint1_, otherwise pSegmentEndpoint2 <- pSegmentEndpoint2_
+
+			if (pSegmentEndpoint2_ == pSegmentEndpoint1)
+				pSegmentEndpoint1 = pSegmentEndpoint1_;
+			else
+				pSegmentEndpoint2 = pSegmentEndpoint2_;
+		}
+		else // If all points in the interval [pSegmentEndpoint1->idx, pSegmentEndpoint2->idx] are within the tolerance eThr from the plane (NE, dE)
+		{
+			segmentSize = pSegmentEndpoint2->Idx - pSegmentEndpoint1->Idx + 1;
+
+			if (segmentSize >= minEdgeFeatureSize)
+			{
+				// Create new edge feature.
+
+				pEdgeFeature = pSurfels->NodeArray.Element + iNewFeature_;
+
+				pEdgeFeature->bEdge = true;
+
+				N = pEdgeFeature->N;
+
+				RVLCOPY3VECTOR(NE, N);
+
+				pEdgeFeature->d = dE;
+
+				P_ = pEdgeFeature->P;
+
+				RVLCOPY3VECTOR(P1_, P_);
+
+				pEdgeFeature->physicalSize = l;
+
+				// Connect the new edge feature to the iSurfel.
+
+				pSEdgeList_ = &(pEdgeFeature->EdgeList);
+
+				RVLQLIST_INIT(pSEdgeList_);
+
+				pSEdge = ConnectNodes<Surfel, SURFEL::Edge, SURFEL::EdgePtr>(iSurfel, iNewFeature_, pSurfels->NodeArray, pMem);
+
+				RVLQLIST_ADD_ENTRY(pSEdgeList, pSEdge);
+
+				nSEdges++;
+
+				// Assign points to the new edge feature.
+
+				for (iPointEdge = pSegmentEndpoint1->Idx; iPointEdge <= pSegmentEndpoint2->Idx; iPointEdge++)
+				{
+					pEdgePtr = pBoundary->Element[iPointEdge];
+
+					iPt = RVLPCSEGMENT_GRAPH_GET_NODE(pEdgePtr);
+
+					pSurfels->edgeMap[iPt] = iNewFeature_;
+				}
+
+				RVLMEM_ALLOC_STRUCT(pMem, Array<MeshEdgePtr *>, pEdgePtArray);
+
+				pEdgePtArray->Element = pBoundary->Element + pSegmentEndpoint1->Idx;
+				pEdgePtArray->n = segmentSize;
+
+				pEdgeFeature->BoundaryArray.Element = pEdgePtArray;
+				pEdgeFeature->BoundaryArray.n = 1;
+
+				//
+				
+				iNewFeature_++;
+			}
+
+			pSegmentEndpoint1 = pSegmentEndpoint2->pNext;
+
+			if (pSegmentEndpoint1)
+				pSegmentEndpoint2 = pSegmentEndpoint1->pNext;
+			else
+				break;
+		}
+	}	// while(true)
+
+	delete[] pSegmentEndpointMem;
+
+	return iNewFeature_ - iNewFeature;
 }
 
 void PlanarSurfelDetector::DisplaySoftEdges(

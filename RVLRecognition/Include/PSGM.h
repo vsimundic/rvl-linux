@@ -183,6 +183,7 @@ namespace RVL
 		float kReferenceSurfelSize;
 		float kReferenceTangentSize;
 		float baseSeparationAngle;
+		float edgeTangentAngle;
 	private:		
 		QLIST::Index *surfelVertexMem;
 		RECOG::PSGM_::Cluster *clusterMem;

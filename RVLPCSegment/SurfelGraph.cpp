@@ -1,5 +1,6 @@
 //#include "stdafx.h"
 #include "RVLVTK.h"
+#include <vtkPolyLine.h>
 #include "RVLCore2.h"
 #include "Util.h"
 #include "Graph.h"
@@ -14,6 +15,7 @@
 #include "SurfelGraph.h"
 #include "PlanarSurfelDetector.h"
 //#include "RFRecognition.h" //VIDOVIC
+//#include <Eigen\Eigenvalues>
 
 using namespace RVL;
 
@@ -24,6 +26,7 @@ SurfelGraph::SurfelGraph()
 	surfelBndMem2 = NULL;
 	neighborEdge = NULL;
 	surfelMap = NULL;
+	edgeMap = NULL;
 	nodeColor = NULL;
 	NodeArray.Element = NULL;
 	edgeMarkMap = NULL;
@@ -36,6 +39,17 @@ SurfelGraph::SurfelGraph()
 SurfelGraph::~SurfelGraph()
 {
 	Clear();
+}
+
+void SurfelGraph::CreateParamList(CRVLMem *pMem)
+{
+	ParamList.m_pMem = pMem;
+
+	RVLPARAM_DATA *pParamData;
+
+	ParamList.Init();
+
+	pParamData = ParamList.AddParam("SurfelGraph.visualization.edgeFeatureDepth", RVLPARAM_TYPE_FLOAT, &(DisplayData.edgeFeatureDepth));
 }
 
 void SurfelGraph::InitGetNeighborsBoundaryAndSize()
@@ -145,8 +159,9 @@ void SurfelGraph::Init(Mesh *pMesh)
 	surfelBndMem = new MeshEdgePtr *[2 * nMeshEdges];
 	surfelBndMem2 = new Array<MeshEdgePtr *>[nMeshEdges];
 	surfelMap = new int[nMeshVertices];
+	edgeMap = new int[nMeshVertices];
 	//surfelBndMap = new QLIST::Index2[nPoints];
-	NodeArray.Element = new Surfel[nMeshVertices];
+	NodeArray.Element = new Surfel[2 * nMeshVertices];
 	edgeMarkMap = new unsigned char[nMeshEdges];
 }
 
@@ -157,6 +172,7 @@ void SurfelGraph::Clear()
 	RVL_DELETE_ARRAY(surfelBndMem);
 	RVL_DELETE_ARRAY(surfelBndMem2);
 	RVL_DELETE_ARRAY(surfelMap);
+	RVL_DELETE_ARRAY(edgeMap);	
 	//RVL_DELETE_ARRAY(surfelBndMap);
 	RVL_DELETE_ARRAY(nodeColor);
 	RVL_DELETE_ARRAY(NodeArray.Element);
@@ -277,6 +293,9 @@ void SurfelGraph::Display(
 	{
 		pSurfel = NodeArray.Element + iSurfel;
 
+		if (pSurfel->bEdge)
+			continue;
+
 		color_ = nodeColor + 3 * iSurfel;
 
 		if (iSurfel == iSelectedSurfel)
@@ -298,6 +317,8 @@ void SurfelGraph::Display(
 		
 		//DisplayHardEdges(pVisualizer, pMesh, iSurfel, HardEdgeColor);
 	}
+
+	DisplayEdgeFeatures();
 }
 
 //VTK Render window right mouse button press callback
@@ -746,6 +767,173 @@ void SurfelGraph::DisplaySurfelBoundary(
 	//pVisualizer->PaintPointSet(&Boundary, pMesh->pPolygonData, Color);
 
 	//delete[] BoundaryMem;
+}
+
+void SurfelGraph::DisplayEdgeFeatures()
+{
+	Visualizer *pVisualizer = DisplayData.pVisualizer;
+
+	// Create the polydata where we will store all the geometric data
+	DisplayData.edgeFeaturesPolyData = vtkSmartPointer<vtkPolyData>::New();
+
+	// Create a vtkPoints container and store the points in it
+	vtkSmartPointer<vtkPoints> pts = vtkSmartPointer<vtkPoints>::New();
+
+	//// Create a cell array to store the lines in and add the lines to it
+	vtkSmartPointer<vtkCellArray> polyLines = vtkSmartPointer<vtkCellArray>::New();
+
+#ifdef NEVER
+	// Create colors.
+	vtkSmartPointer<vtkUnsignedCharArray> colors =
+		vtkSmartPointer<vtkUnsignedCharArray>::New();	
+
+	colors->SetNumberOfComponents(3);
+
+	unsigned char red[3] = { 255, 0, 0 };
+
+	colors->InsertNextTupleValue(red);
+#endif
+	///
+
+	// Determine the total number of edge features.
+
+	int nEdgeFeatures = 0;
+
+	int iFeature;
+
+	for (iFeature = 0; iFeature < NodeArray.n; iFeature++)
+		if (NodeArray.Element[iFeature].bEdge)
+			nEdgeFeatures++;
+
+	// Allocate polyline pointers.
+
+	vtkSmartPointer<vtkPolyLine> *polyLine = new vtkSmartPointer<vtkPolyLine>[nEdgeFeatures];
+
+	//
+
+	int iEdgeFeature = 0;
+
+	int i, iParentSurfel;
+	Surfel *pFeature, *pParentSurfel;
+	SURFEL::EdgePtr *pSEdgePtr;
+	float *NParent, *N, *P1;
+	float P2[3], P3[3], P4[3], U[3], V[3], VTmp[3];
+	//Eigen::Matrix3f M;
+	//Eigen::Vector3f B, t_;
+	float fTmp;
+	double P[3];
+
+	for (iFeature = 0; iFeature < NodeArray.n; iFeature++)
+	{
+		pFeature = NodeArray.Element + iFeature;
+
+		if (!pFeature->bEdge)
+			continue;
+
+		// N <- edge feature normal
+
+		N = pFeature->N;
+
+		// NParent <- parent surfel normal
+
+		pSEdgePtr = pFeature->EdgeList.pFirst;
+
+		iParentSurfel = RVLPCSEGMENT_GRAPH_GET_OPPOSITE_NODE(pSEdgePtr);
+
+		pParentSurfel = NodeArray.Element + iParentSurfel;
+
+		NParent = pParentSurfel->N;		
+
+		// V <- unit(NParent x N)
+
+		RVLCROSSPRODUCT3(NParent, N, V);
+
+		RVLNORM3(V, fTmp);
+
+		// P1 <- the first endpoint of the edge feature
+
+		P1 = pFeature->P;
+
+		// P2 <- P1 + pFeature->physicalSize * V
+
+		RVLSCALE3VECTOR(V, pFeature->physicalSize, VTmp);
+
+		RVLSUM3VECTORS(P1, VTmp, P2);
+
+		// U <- DisplayData.edgeFeatureDepth * unit(V x N)
+
+		RVLCROSSPRODUCT3(V, N, U);
+
+		RVLNORM3(U, fTmp);
+
+		RVLSCALE3VECTOR(U, DisplayData.edgeFeatureDepth, U);
+
+		// P3 <- P1 + U
+
+		RVLSUM3VECTORS(P1, U, P3);
+
+		// P4 <- P2 + U
+
+		RVLSUM3VECTORS(P2, U, P4);
+
+		// Add P1, P2, P3 and P4 to pts
+
+		RVLCOPY3VECTOR(P1, P);
+
+		pts->InsertNextPoint(P);
+
+		RVLCOPY3VECTOR(P2, P);
+
+		pts->InsertNextPoint(P);
+
+		RVLCOPY3VECTOR(P4, P);
+
+		pts->InsertNextPoint(P);
+
+		RVLCOPY3VECTOR(P3, P);
+
+		pts->InsertNextPoint(P);
+
+		// Create rectangle P1-P2-P3-P4.
+
+		polyLine[iEdgeFeature] = vtkSmartPointer<vtkPolyLine>::New();
+
+		polyLine[iEdgeFeature]->GetPointIds()->SetNumberOfIds(5);
+
+		for (i = 0; i < 4; i++)
+			polyLine[iEdgeFeature]->GetPointIds()->SetId(i, 4 * iEdgeFeature + i);
+
+		polyLine[iEdgeFeature]->GetPointIds()->SetId(4, 4 * iEdgeFeature);
+
+		// Add polyline to polyLines.
+
+		polyLines->InsertNextCell(polyLine[iEdgeFeature]);
+
+		// Assign color to polyline.
+
+		//colors->InsertNextTupleValue(red);
+
+		iEdgeFeature++;
+	}
+
+	// Add the points to the polydata container
+	DisplayData.edgeFeaturesPolyData->SetPoints(pts);
+
+	// Add the lines to the polydata container
+	DisplayData.edgeFeaturesPolyData->SetLines(polyLines);
+
+	// Color the lines.
+	//DisplayData.edgeFeaturesPolyData->GetCellData()->SetScalars(colors);
+
+	// Setup the visualization pipeline
+	vtkSmartPointer<vtkPolyDataMapper> mapper =	vtkSmartPointer<vtkPolyDataMapper>::New();
+
+	mapper->SetInputData(DisplayData.edgeFeaturesPolyData);
+
+	DisplayData.edgeFeatures = vtkSmartPointer<vtkActor>::New();
+	DisplayData.edgeFeatures->SetMapper(mapper);
+
+	pVisualizer->renderer->AddActor(DisplayData.edgeFeatures);
 }
 
 void SurfelGraph::Save(
