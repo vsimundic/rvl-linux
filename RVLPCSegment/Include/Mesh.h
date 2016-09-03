@@ -82,6 +82,7 @@ namespace RVL
 		QList<MeshEdgePtr> EdgeList;	// edge list (list of edge connectors)
 		bool bBoundary;					// true if the point is on the image boundary, on a depth discontinuity contur or on the boundary of a region of undefined depth,
 										// i.e. if there is a boundary edge connected to this point.
+		bool bValid;
 	};
 
 	struct OrientedPoint
@@ -263,6 +264,7 @@ namespace RVL
 		public:
 			vtkSmartPointer<vtkPolyData> pPolygonData;
 			float normalEstimationRadius;
+			int nBoundaryPts;
 
 #ifdef RVLMESH_BOUNDARY_DEBUG		
 			int debugState;

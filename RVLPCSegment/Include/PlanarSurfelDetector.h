@@ -325,22 +325,17 @@ namespace RVL
 			bool &bW,
 			int *markMap,
 			int mark);
-		void Edges(
+		void Boundaries(
 			Mesh *pMesh,
-			SurfelGraph *pSurfels,
-			QList<SURFEL::Edge> *pSEdgeList,
-			int &nSEdges);
+			SurfelGraph *pSurfels);
+		void EdgeFetures(
+			Mesh *pMesh,
+			SurfelGraph *pSurfels);
 		int CreateEdgeFeatures(
 			Mesh *pMesh,
 			SurfelGraph *pSurfels,
-			int iSurfel,
-			int iBoundary,
-			int iStart,
-			int iEnd,
-			int iNewFeature,
-			QList<SURFEL::Edge> *pSEdgeList,
-			int &nSEdges,
-			CRVLMem *pMem);
+			Array<MeshEdgePtr *> *pBoundary,
+			int iNewFeature);
 		void DeallocateMemory();
 		void CutPropagation(
 			Mesh *pMesh,
@@ -568,6 +563,7 @@ namespace RVL
 		float surfelDistThr;
 		int minSurfelSize;
 		int minEdgeFeatureSize;
+		float maxEdgeFeatureConcavity;
 		float maxRange;
 		int maxAttackSize;
 		bool bJoinSmallSurfelsToClosestNeighbors;

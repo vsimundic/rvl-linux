@@ -299,7 +299,173 @@ bool Mesh::CreateOrderedMeshFromPolyData()
 
 	EdgeArray.n = pEdge - EdgeArray.Element;
 
-	///
+	// Remove invalid points.
+
+	Array<int> iPtBuff1;
+
+	iPtBuff1.Element = new int[noPts];
+
+	Array<int> iPtBuff2;
+
+	iPtBuff2.Element = new int[noPts];
+
+	Array<int> *piPtBuffPut = &iPtBuff1;
+	Array<int> *piPtBuffFetch = &iPtBuff2;
+
+	for (iPt = 0; iPt < noPts; iPt++)
+	{
+		piPtBuffFetch->Element[iPt] = iPt;
+
+		pPt = NodeArray.Element + iPt;
+
+		pPt->bValid = true;
+	}
+		
+	piPtBuffFetch->n = noPts;
+
+	piPtBuffPut->n = 0;
+
+	bool *bVisited = new bool[noPts];
+
+	memset(bVisited, 0, noPts * sizeof(bool));
+
+	int i, j, k;
+	int nEdges;
+	int nBoundaryEdges;
+	Array<int> *piPtBuffTmp;
+	int iPt_;
+	Point *pPt_;
+	int *EdgePoly_;
+
+	while (piPtBuffFetch->n > 0)
+	{
+		for (i = 0; i < piPtBuffFetch->n; i++)
+		{
+			iPt = piPtBuffFetch->Element[i];
+
+			//if (iPt == 45075)
+			//	int debug = 0;
+
+			pPt = NodeArray.Element + iPt;
+
+			pVertexEdgeList = VertexEdgeListArray.Element + iPt;
+
+			nEdges = nBoundaryEdges = 0;
+
+			pVertexEdgeIdx = pVertexEdgeList->pFirst;
+
+			while (pVertexEdgeIdx)
+			{
+				iEdge = pVertexEdgeIdx->Idx;
+
+				EdgePoly = EdgePolyAssignmentArray + 4 * iEdge;
+
+				if (EdgePoly[0] >= 0 || EdgePoly[1] >= 0)
+				{
+					if (EdgePoly[0] < 0 || EdgePoly[1] < 0)
+						nBoundaryEdges++;
+
+					nEdges++;
+				}
+
+				pVertexEdgeIdx = pVertexEdgeIdx->pNext;
+			}
+
+			// If there is less than two edges connected to vertex pPt, then don't generate the edge list for that vertex.
+
+			if (nEdges < 2)
+			{
+				pPt->bValid = false;
+
+				continue;
+			}	
+
+			// If there are more than two boundary edges connected to vertex pPt, then set position and normal of pPt to null vectors.
+			// In that case, the edge list is empty.
+			// The vertices with normal set to null vector should be rejected from any further processing, which effectively removes such vertices from the mesh.
+			// By removing all vertices with more than two boundary edges from the mesh, the 2. property of the organized mesh is preserved 
+			// (See the definition of the organized mesh in ARP3D.TR30).
+
+			if (nBoundaryEdges <= 2)
+				pPt->bBoundary = (nBoundaryEdges > 0);
+			else
+			{
+				pPt->bValid = false;
+
+				RVLNULL3VECTOR(pPt->P);
+				RVLNULL3VECTOR(pPt->N);
+
+				pVertexEdgeIdx = pVertexEdgeList->pFirst;
+
+				while (pVertexEdgeIdx)
+				{
+					iEdge = pVertexEdgeIdx->Idx;
+
+					pEdge = EdgeArray.Element + iEdge;
+
+					EdgePoly = EdgePolyAssignmentArray + 4 * iEdge;
+
+					for (j = 0; j < 2; j++)
+					{
+						iPoly = EdgePoly[j];
+
+						if (iPoly >= 0)
+						{
+							//if (iPoly == 43984)
+							//	int debug = 0;
+
+							PolyData = PolyArray + polyDataSize * iPoly;
+
+							nPts = PolyData[0];
+
+							PolyEdge = PolyEdgeAssignmentArray + maxnPolygonVertices * iPoly;
+
+							for (k = 0; k < nPts; k++)
+							{
+								iEdge_ = PolyEdge[k];
+
+								EdgePoly_ = EdgePolyAssignmentArray + 4 * iEdge_;
+
+								if (EdgePoly_[0] == iPoly)
+									EdgePoly_[0] = -1;
+								else
+									EdgePoly_[1] = -1;
+							}
+						}
+					}
+
+					iPt_ = (pEdge->iVertex[0] == iPt ? pEdge->iVertex[1] : pEdge->iVertex[0]);
+
+					if (!bVisited[iPt_])
+					{
+						pPt_ = NodeArray.Element + iPt_;
+
+						if (pPt_->bValid)
+						{
+							bVisited[iPt_] = true;
+
+							piPtBuffPut->Element[piPtBuffPut->n++] = iPt_;
+						}
+					}
+
+					pVertexEdgeIdx = pVertexEdgeIdx->pNext;
+				}	// for every edge ending in pPt
+			}	// if (!pPt->bValid)
+		}	// for every point in piPtBuffFetch
+
+		for (i = 0; i < piPtBuffPut->n; i++)
+			bVisited[piPtBuffPut->Element[i]] = false;
+
+		piPtBuffTmp = piPtBuffFetch;
+		piPtBuffFetch = piPtBuffPut;
+		piPtBuffPut = piPtBuffTmp;
+
+		piPtBuffPut->n = 0;
+	}	// while (piPtBuffFetch->n > 0)
+
+	delete[] iPtBuff1.Element;
+	delete[] iPtBuff2.Element;
+	delete[] bVisited;
 
 	// Arrange edge lists of vertices according to the 2. property of Organized mesh (See the definition of organized mesh in ARP3D.TR3).
 
@@ -309,9 +475,9 @@ bool Mesh::CreateOrderedMeshFromPolyData()
 
 	//int watchdog;
 
+	nBoundaryPts = 0;
+
 	int iEdge0;
-	int nEdges;
-	int nBoundaryEdges;
 
 	for (iPt = 0; iPt < noPts; iPt++)
 	{
@@ -321,13 +487,16 @@ bool Mesh::CreateOrderedMeshFromPolyData()
 
 		RVLQLIST_INIT(pEdgeList);
 
+		if (!pPt->bValid)
+			continue;
+
 		pVertexEdgeList = VertexEdgeListArray.Element + iPt;
 
 		// Count edges connected to vertex pPt, i.e. the size of the edge list of pPt.
 		// Count the boundary edges (See the definition of boundary edges in ARP3D.TR3).
 		// If there are boundary edges connected to pPt, then iEdge0 <- the first edge connected to pPt in the CCW direction.
 
-		nEdges = nBoundaryEdges = 0;
+		nEdges = nBoundaryEdges = 0;		// only for debugging purpose!!!
 
 		pVertexEdgeIdx = pVertexEdgeList->pFirst;
 
@@ -339,57 +508,40 @@ bool Mesh::CreateOrderedMeshFromPolyData()
 
 			EdgePoly = EdgePolyAssignmentArray + 4 * iEdge;
 
-			if (EdgePoly[0] < 0)
+			if (EdgePoly[0] >= 0 || EdgePoly[1] >= 0)
 			{
-				nBoundaryEdges++;
+				if (EdgePoly[0] < 0)
+				{
+					nBoundaryEdges++;		// only for debugging purpose!!!
 
-				if (pEdge->iVertex[1] == iPt)
-					iEdge0 = iEdge;
-			}				
+					if (pEdge->iVertex[1] == iPt)
+						iEdge0 = iEdge;
+				}
+				else if (EdgePoly[1] < 0)
+				{
+					nBoundaryEdges++;		// only for debugging purpose!!!
 
-			if (EdgePoly[1] < 0)
-			{
-				nBoundaryEdges++;
+					if (pEdge->iVertex[0] == iPt)
+						iEdge0 = iEdge;
+				}
 
-				if (pEdge->iVertex[0] == iPt)
-					iEdge0 = iEdge;
+				nEdges++;		// only for debugging purpose!!!
 			}
-				
-			nEdges++;
 
 			pVertexEdgeIdx = pVertexEdgeIdx->pNext;
 		}
 
-		// If there is less than two edges connected to vertex pPt, then don't generate the edge list for that vertex.
-
 		if (nEdges < 2)
-			continue;
-
-		//if (nEdges == 1)	// debug
-		//	continue;
-
-		// If there are more than two boundary edges connected to vertex pPt, then set position and normal of pPt to null vectors.
-		// In that case, the edge list is empty.
-		// The vertices with normal set to null vector should be rejected from any further processing, which effectively removes such vertices from the mesh.
-		// By removing all vertices with more than two boundary edges from the mesh, the 2. property of the organized mesh is preserved 
-		// (See the definition of the organized mesh in ARP3D.TR30).
+			int debug = 0;
 
 		if (nBoundaryEdges > 2)
-		{
-			RVLNULL3VECTOR(pPt->P);
-			RVLNULL3VECTOR(pPt->N);
-
-			continue;
-		}			
-
-		//if (nBoundaryEdges % 2 == 1)
-		//	int debug = 0;
-
-		pPt->bBoundary = (nBoundaryEdges > 0);
+			int debug = 0;
 
 		// If no boundary edge is connected to vertex pPt, then the first edge in its edge list can be any edge connected to it.
 
-		if (!pPt->bBoundary)
+		if (pPt->bBoundary)
+			nBoundaryPts++;
+		else
 			iEdge0 = pVertexEdgeList->pFirst->Idx;
 
 		//watchdog = 0;

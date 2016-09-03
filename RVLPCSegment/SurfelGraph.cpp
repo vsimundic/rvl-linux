@@ -24,6 +24,7 @@ SurfelGraph::SurfelGraph()
 	PtMem = NULL;
 	surfelBndMem = NULL;
 	surfelBndMem2 = NULL;
+	BndMem = NULL;
 	neighborEdge = NULL;
 	surfelMap = NULL;
 	edgeMap = NULL;
@@ -158,6 +159,7 @@ void SurfelGraph::Init(Mesh *pMesh)
 	PtMem = new QLIST::Index2[nMeshVertices];
 	surfelBndMem = new MeshEdgePtr *[2 * nMeshEdges];
 	surfelBndMem2 = new Array<MeshEdgePtr *>[nMeshEdges];
+	BndMem = new MeshEdgePtr *[pMesh->nBoundaryPts];
 	surfelMap = new int[nMeshVertices];
 	edgeMap = new int[nMeshVertices];
 	//surfelBndMap = new QLIST::Index2[nPoints];
@@ -171,6 +173,7 @@ void SurfelGraph::Clear()
 	RVL_DELETE_ARRAY(PtMem);
 	RVL_DELETE_ARRAY(surfelBndMem);
 	RVL_DELETE_ARRAY(surfelBndMem2);
+	RVL_DELETE_ARRAY(BndMem);
 	RVL_DELETE_ARRAY(surfelMap);
 	RVL_DELETE_ARRAY(edgeMap);	
 	//RVL_DELETE_ARRAY(surfelBndMap);
@@ -813,15 +816,12 @@ void SurfelGraph::DisplayEdgeFeatures()
 
 	int iEdgeFeature = 0;
 
-	int i, iParentSurfel;
-	Surfel *pFeature, *pParentSurfel;
-	SURFEL::EdgePtr *pSEdgePtr;
-	float *NParent, *N, *P1;
-	float P2[3], P3[3], P4[3], U[3], V[3], VTmp[3];
-	//Eigen::Matrix3f M;
-	//Eigen::Vector3f B, t_;
-	float fTmp;
+	int i;
+	Surfel *pFeature;
+	float *N, *V, *P1;
+	float P2[3], P3[3], P4[3], U[3], VTmp[3];
 	double P[3];
+	float fTmp;
 
 	for (iFeature = 0; iFeature < NodeArray.n; iFeature++)
 	{
@@ -834,21 +834,9 @@ void SurfelGraph::DisplayEdgeFeatures()
 
 		N = pFeature->N;
 
-		// NParent <- parent surfel normal
+		// V <- unit vector in edge direction.
 
-		pSEdgePtr = pFeature->EdgeList.pFirst;
-
-		iParentSurfel = RVLPCSEGMENT_GRAPH_GET_OPPOSITE_NODE(pSEdgePtr);
-
-		pParentSurfel = NodeArray.Element + iParentSurfel;
-
-		NParent = pParentSurfel->N;		
-
-		// V <- unit(NParent x N)
-
-		RVLCROSSPRODUCT3(NParent, N, V);
-
-		RVLNORM3(V, fTmp);
+		V = pFeature->V;
 
 		// P1 <- the first endpoint of the edge feature
 

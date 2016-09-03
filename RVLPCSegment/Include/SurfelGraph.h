@@ -68,6 +68,7 @@ namespace RVL
 		float d;		// plane offset
 		int RGB[3];		// average color
 		float P0[3];	// central point
+		float V[3];
 		float r0;		// distance 
 		QList<SURFEL::EdgePtr> EdgeList;
 		Surfel *pNext;
@@ -149,6 +150,8 @@ namespace RVL
 		SURFEL::Edge **neighborEdge;
 		Array<SURFEL::Edge *> EdgeArray;
 		SURFEL::DisplayCallbackData DisplayData; //VIDOVIC
+		QList<QLIST::Entry<Array<MeshEdgePtr *>>> BoundaryList;
+		MeshEdgePtr **BndMem;
 	private:
 		unsigned char *nodeColor;
 	};
