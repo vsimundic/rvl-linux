@@ -427,6 +427,7 @@ void SURFEL::KeyPressCallback(vtkObject* caller, unsigned long eid, void* client
 	bool bUpdateDisplay = false;
 	bool bDisplayBoundary = false;
 	bool bDefineBoundary = false;
+	bool bDisplaySoftEdges = false;
 
 	if (keySym == "2")
 	{
@@ -454,6 +455,17 @@ void SURFEL::KeyPressCallback(vtkObject* caller, unsigned long eid, void* client
 	else if (keySym == "c")
 	{
 		bDisplayBoundary = true;
+
+		bUpdateDisplay = true;
+	}
+	else if (keySym == "g")
+	{
+		bDisplaySoftEdges = !bDisplaySoftEdges;
+
+		if (bDisplaySoftEdges)
+			pDetector->DisplaySoftEdges(pData->pVisualizer, pMesh, pData->pSurfels, pData->SelectionColor);
+		else
+			pData->pSurfels->Display(pData->pVisualizer, pMesh);
 
 		bUpdateDisplay = true;
 	}
