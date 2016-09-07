@@ -14,6 +14,7 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 #include "Visualizer.h"
 #include "SurfelGraph.h"
 #include "PlanarSurfelDetector.h"
+#include "RVLRecognition.h"
 #include "RFRecognition.h"
 #include "PSGM.h"
 #include <pcl/common/common.h>
@@ -74,6 +75,10 @@ int main(int argc, char ** argv)
 	// Initialize surfel detection
 
 	SurfelGraph surfels;
+
+	surfels.CreateParamList(&mem0);
+
+	surfels.ParamList.LoadParams("RVLRecognitionDemo.cfg");
 
 	PlanarSurfelDetector surfelDetector;
 
@@ -161,23 +166,32 @@ int main(int argc, char ** argv)
 
 		recognition.pSurfelDetector = &surfelDetector;
 
-		// Load scene mesh from file.
+		if (recognition.mode == RVLRECOGNITION_MODE_TRAINING)
+		{
+			// Add your code here.
+		}
+		else if (recognition.mode == RVLRECOGNITION_MODE_RECOGNITION)
+		{
+			// Poziv funkcije LoadModelDatabase()
 
-		Mesh mesh;
+			// Load scene mesh from file.
 
-		mesh.LoadPolyDataFromPLY(sceneMeshFileName);
+			Mesh mesh;
 
-		// Scene interpretation.
+			mesh.LoadPolyDataFromPLY(sceneMeshFileName);
 
-		recognition.SetSceneFileName(sceneMeshFileName);
-		recognition.Interpret(&mesh);
+			// Scene interpretation.
 
-		// Visualization
+			recognition.SetSceneFileName(sceneMeshFileName);
+			recognition.Interpret(&mesh);
 
-		surfels.NodeColors(SelectionColor);
-		recognition.InitDisplay(&visualizer, &mesh, SelectionColor);
-		recognition.Display();
-		visualizer.Run();
+			// Visualization
+
+			surfels.NodeColors(SelectionColor);
+			recognition.InitDisplay(&visualizer, &mesh, SelectionColor);
+			recognition.Display();
+			visualizer.Run();
+		}
 	}	// if (method == RVLRECOGNITION_METHOD_PSGM)
 
 	// free memory

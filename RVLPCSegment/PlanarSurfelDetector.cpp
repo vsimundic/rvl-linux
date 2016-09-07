@@ -4247,6 +4247,8 @@ void PlanarSurfelDetector::Boundaries(
 
 	MeshEdgePtr **ppEdgePtr = pSurfels->BndMem;
 
+	int iDebug = 0;
+
 	int iPt, iPt_;
 	QLIST::Entry<Array<MeshEdgePtr *>> *pBoundary;
 	Point *pPt, *pPt_;
@@ -4254,6 +4256,9 @@ void PlanarSurfelDetector::Boundaries(
 
 	for (iPt = 0; iPt < pMesh->NodeArray.n; iPt++)
 	{
+		//if (iPt == 153453)
+		//	int debug = 0;
+
 		pPt = pMesh->NodeArray.Element + iPt;
 
 		if (!pPt->bValid)
@@ -4283,10 +4288,15 @@ void PlanarSurfelDetector::Boundaries(
 
 					iPt_ = RVLPCSEGMENT_GRAPH_GET_OPPOSITE_NODE(pEdgePtr);
 
+					//if (iPt_ == 153453)
+					//	int debug = 0;
+
 					pPt_ = pMesh->NodeArray.Element + iPt_;
 				}
 
 				pBoundary->data.n = ppEdgePtr - pBoundary->data.Element;
+
+				iDebug++;
 			}
 		}
 	}
@@ -4356,6 +4366,9 @@ int PlanarSurfelDetector::CreateEdgeFeatures(
 		pEdgePtr = pBoundary->Element[iPointEdge];
 
 		iPt = RVLPCSEGMENT_GRAPH_GET_NODE(pEdgePtr);
+
+		//if (iPt == 153453)
+		//	int debug = 0;
 
 		pPt = pMesh->NodeArray.Element + iPt;
 
@@ -4575,6 +4588,9 @@ int PlanarSurfelDetector::CreateEdgeFeatures(
 			pEdgePtr = pBoundary->Element[iPointEdge];
 
 			iPt = RVLPCSEGMENT_GRAPH_GET_NODE(pEdgePtr);
+
+			if (iPt == 153453)
+				int debug = 0;
 
 			pPt = pMesh->NodeArray.Element + iPt;
 

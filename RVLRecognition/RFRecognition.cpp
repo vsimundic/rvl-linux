@@ -10,6 +10,7 @@
 #include "Visualizer.h"
 #include "SurfelGraph.h"
 #include "PlanarSurfelDetector.h"
+#include "RVLRecognition.h"
 #include "RFRecognition.h"
 
 using namespace RVL;

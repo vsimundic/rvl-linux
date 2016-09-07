@@ -34,6 +34,7 @@ SurfelGraph::SurfelGraph()
 	EdgeArray.Element = NULL;
 	DisplayData.mouseRButtonDownUserFunction = NULL;
 	DisplayData.keyPressUserFunction = NULL;
+	DisplayData.edgeFeatureDepth = 0.01f;
 }
 
 
@@ -320,8 +321,6 @@ void SurfelGraph::Display(
 		
 		//DisplayHardEdges(pVisualizer, pMesh, iSurfel, HardEdgeColor);
 	}
-
-	DisplayEdgeFeatures();
 }
 
 //VTK Render window right mouse button press callback

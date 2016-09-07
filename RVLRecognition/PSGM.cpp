@@ -11,6 +11,7 @@
 #include "Visualizer.h"
 #include "SurfelGraph.h"
 #include "PlanarSurfelDetector.h"
+#include "RVLRecognition.h"
 #include "PSGM.h"
 #include <Eigen\Eigenvalues>
 
@@ -18,6 +19,7 @@ using namespace RVL;
 
 PSGM::PSGM()
 {
+	mode = RVLRECOGNITION_MODE_RECOGNITION;
 	nDominantClusters = 1;
 	kNoise = 1.2f;
 	minInitialSurfelSize = 20;
@@ -26,6 +28,7 @@ PSGM::PSGM()
 	kReferenceTangentSize = 0.3f;
 	baseSeparationAngle = 22.5f;
 	//edgeTangentAngle = 100.0f;
+	displayData.normalLen = 10.0f;
 
 	convexTemplate.n = 66;
 	convexTemplate.Element = new RECOG::PSGM_::Plane[convexTemplate.n];
@@ -72,6 +75,8 @@ void PSGM::CreateParamList(CRVLMem *pMem)
 
 	ParamList.Init();
 
+	pParamData = ParamList.AddParam("Recognition.mode", RVLPARAM_TYPE_ID, &mode);
+	ParamList.AddID(pParamData, "TRAINING", RVLRECOGNITION_MODE_TRAINING);
 	pParamData = ParamList.AddParam("PSGM.nDominantClusters", RVLPARAM_TYPE_INT, &nDominantClusters);
 	pParamData = ParamList.AddParam("PSGM.kNoise", RVLPARAM_TYPE_FLOAT, &kNoise);
 	pParamData = ParamList.AddParam("PSGM.minInitialSurfelSize", RVLPARAM_TYPE_INT, &minInitialSurfelSize);
@@ -80,6 +85,7 @@ void PSGM::CreateParamList(CRVLMem *pMem)
 	pParamData = ParamList.AddParam("PSGM.kReferenceTangentSize", RVLPARAM_TYPE_FLOAT, &kReferenceTangentSize);
 	pParamData = ParamList.AddParam("PSGM.baseSeparationAngle", RVLPARAM_TYPE_FLOAT, &baseSeparationAngle);
 	//pParamData = ParamList.AddParam("PSGM.edgeTangentAngle", RVLPARAM_TYPE_FLOAT, &edgeTangentAngle);
+	pParamData = ParamList.AddParam("PSGM.visualization.normalLen", RVLPARAM_TYPE_FLOAT, &(displayData.normalLen));
 }
 
 void PSGM::Interpret(
@@ -159,6 +165,9 @@ void PSGM::Interpret(
 
 		pSurfel = pSurfels->NodeArray.Element + iSurfel;
 
+		if (pSurfel->bEdge)
+			continue;
+
 		if (pSurfel->size <= 1)
 			continue;
 
@@ -195,7 +204,7 @@ void PSGM::Interpret(
 
 					iSurfel_ = pSurfels->surfelMap[iPt_];
 
-					if (iSurfel_ < pSurfels->NodeArray.n)
+					if (iSurfel_ >= 0 && iSurfel_ < pSurfels->NodeArray.n)
 					{
 						if (!bVisited[iSurfel_])
 						{
@@ -228,7 +237,7 @@ void PSGM::Interpret(
 
 					iSurfel_ = pSurfels->surfelMap[iPt_];
 
-					if (iSurfel_ < pSurfels->NodeArray.n)
+					if (iSurfel_ >= 0 && iSurfel_ < pSurfels->NodeArray.n)
 						bVisited[iSurfel_] = false;
 
 					pEdgePtr_ = pEdgePtr_->pNext;
@@ -240,7 +249,8 @@ void PSGM::Interpret(
 				{
 					if (pPt->bBoundary)
 					{
-						nEdgeFeatures++;
+						if (iEdgeFeature >= 0)
+							nEdgeFeatures++;
 
 						pEdgePtr_ = pEdgeList->pFirst;
 
@@ -248,19 +258,19 @@ void PSGM::Interpret(
 
 						iEdgeFeature_ = pSurfels->edgeMap[iPt_];
 
-						if (iEdgeFeature_ != iEdgeFeature)
+						if (iEdgeFeature_ >= 0 && iEdgeFeature_ != iEdgeFeature)
 							nEdgeFeatures++;
 
 						iPt__ = RVLPCSEGMENT_GRAPH_GET_OPPOSITE_NODE(pLastEdgePtr);
 
 						iEdgeFeature__ = pSurfels->edgeMap[iPt__];
 
-						if (iEdgeFeature__ != iEdgeFeature && iEdgeFeature__ != iEdgeFeature_)
+						if (iEdgeFeature__ >= 0 && iEdgeFeature__ != iEdgeFeature && iEdgeFeature__ != iEdgeFeature_)
 							nEdgeFeatures++;
 
 						if (nPlanarFeatures == 1 && nEdgeFeatures >= 2)
 						{
-							if (iEdgeFeature > iEdgeFeature_ || iEdgeFeature > iEdgeFeature__)
+							if ((iEdgeFeature_ >= 0 && iEdgeFeature > iEdgeFeature_) || (iEdgeFeature__ >= 0 && iEdgeFeature > iEdgeFeature__))
 								bSmallestIndex = false;
 						}
 					}
@@ -271,15 +281,22 @@ void PSGM::Interpret(
 				if (bSmallestIndex && nFeatures >= 3)	// If iPt is the point with the smallest index in its immediate neighborhood 
 														// and at least three features meet in iPt, then this point is a vertex.
 				{
+					//if (iPt == 221223)
+					//	int debug = 0;
+
 					// Create vertex.
 
 					RVLMEM_ALLOC_STRUCT(pMem, RECOG::PSGM_::Vertex, pVertex);
+
+					pVertex->bEdge = pPt->bBoundary;
 
 					RVLCOPY3VECTOR(pPt->P, pVertex->P);
 
 					RVLMEM_ALLOC_STRUCT_ARRAY(pMem, int, nFeatures, pVertex->iSurfelArray.Element);
 
 					RVLMEM_ALLOC_STRUCT_ARRAY(pMem, RECOG::PSGM_::NormalHullElement, nFeatures, pVertex->normalHull.Element);
+
+					nVertexSurfelRelations += nFeatures;
 
 					pVertex->normalHull.n = 0;
 
@@ -299,7 +316,7 @@ void PSGM::Interpret(
 
 						iSurfel_ = pSurfels->surfelMap[iPt_];
 
-						if (iSurfel_ < pSurfels->NodeArray.n)
+						if (iSurfel_ >= 0 && iSurfel_ < pSurfels->NodeArray.n)
 						{
 							if (!bVisited[iSurfel_])
 							{
@@ -310,8 +327,6 @@ void PSGM::Interpret(
 								pSurfel_ = pSurfels->NodeArray.Element + iSurfel_;
 
 								UpdateNormalHull(pVertex->normalHull, pSurfel_->N);
-
-								nVertexSurfelRelations ++;
 							}
 						}
 
@@ -320,11 +335,14 @@ void PSGM::Interpret(
 
 					if (pPt->bBoundary)
 					{
-						pVertex->iSurfelArray.Element[iFeature++] = iEdgeFeature;
+						if (iEdgeFeature >= 0)
+						{
+							pVertex->iSurfelArray.Element[iFeature++] = iEdgeFeature;
 
-						pEdgeFeature = pSurfels->NodeArray.Element + iEdgeFeature;
+							pEdgeFeature = pSurfels->NodeArray.Element + iEdgeFeature;
 
-						UpdateNormalHull(pVertex->normalHull, pEdgeFeature->N);
+							UpdateNormalHull(pVertex->normalHull, pEdgeFeature->N);
+						}
 
 						pEdgePtr_ = pEdgeList->pFirst;
 
@@ -332,7 +350,7 @@ void PSGM::Interpret(
 
 						iEdgeFeature_ = pSurfels->edgeMap[iPt_];
 
-						if (iEdgeFeature_ != iEdgeFeature)
+						if (iEdgeFeature_ >= 0 && iEdgeFeature_ != iEdgeFeature)
 						{
 							pVertex->iSurfelArray.Element[iFeature++] = iEdgeFeature_;
 
@@ -345,7 +363,7 @@ void PSGM::Interpret(
 
 						iEdgeFeature__ = pSurfels->edgeMap[iPt__];
 
-						if (iEdgeFeature__ != iEdgeFeature && iEdgeFeature__ != iEdgeFeature_)
+						if (iEdgeFeature__ >= 0 && iEdgeFeature__ != iEdgeFeature && iEdgeFeature__ != iEdgeFeature_)
 						{
 							pVertex->iSurfelArray.Element[iFeature++] = iEdgeFeature__;
 
@@ -354,6 +372,14 @@ void PSGM::Interpret(
 							UpdateNormalHull(pVertex->normalHull, pEdgeFeature->N);
 						}
 					}
+
+					pVertex->iSurfelArray.n = nFeatures;
+
+					//if (pVertex->normalHull.n < 3)
+					//	int debug = 0;
+
+					//if (iFeature != nFeatures)
+					//	int debug = 0;
 
 					// Reset bVisited.
 
@@ -367,7 +393,7 @@ void PSGM::Interpret(
 
 						iSurfel_ = pSurfels->surfelMap[iPt_];
 
-						if (iSurfel_ < pSurfels->NodeArray.n)
+						if (iSurfel_ >= 0 && iSurfel_ < pSurfels->NodeArray.n)
 							bVisited[iSurfel_] = false;
 
 						pEdgePtr_ = pEdgePtr_->pNext;
@@ -560,15 +586,21 @@ void PSGM::Interpret(
 
 	Array<int> surfelBuff1, surfelBuff2;
 
-	surfelBuff1.n = pSurfels->NodeArray.n;
 	surfelBuff1.Element = new int[pSurfels->NodeArray.n];
+
+	surfelBuff1.n = 0;
 
 	int i;
 
 	for (i = 0; i < pSurfels->NodeArray.n; i++)
-		surfelBuff1.Element[i] = i;
+	{
+		pSurfel = pSurfels->NodeArray.Element + i;
+
+		if (!pSurfel->bEdge)
+			surfelBuff1.Element[surfelBuff1.n++] = i;
+	}
 	
-	surfelBuff2.Element = new int[pSurfels->NodeArray.n];
+	surfelBuff2.Element = new int[surfelBuff1.n];
 
 	Array<int> *pSurfelBuff = &surfelBuff1;
 	Array<int> *pSurfelBuff_ = &surfelBuff2;
@@ -610,17 +642,20 @@ void PSGM::Interpret(
 		{
 			iSurfel = pSurfelBuff->Element[i];
 
-			if (clusterMap[iSurfel] < 0)
+			pSurfel = pSurfels->NodeArray.Element + iSurfel;
+
+			if (!pSurfel->bEdge)
 			{
-				pSurfelBuff_->Element[pSurfelBuff_->n++] = iSurfel;
-
-				pSurfel = pSurfels->NodeArray.Element + iSurfel;
-
-				if (pSurfel->size > maxSurfelSize)
+				if (clusterMap[iSurfel] < 0)
 				{
-					maxSurfelSize = pSurfel->size;
+					pSurfelBuff_->Element[pSurfelBuff_->n++] = iSurfel;
 
-					iLargestSurfel = iSurfel;
+					if (pSurfel->size > maxSurfelSize)
+					{
+						maxSurfelSize = pSurfel->size;
+
+						iLargestSurfel = iSurfel;
+					}
 				}
 			}
 		}
@@ -647,6 +682,8 @@ void PSGM::Interpret(
 		pCluster->size = 0;
 
 		clusters.n++;
+
+		clusterMap[iLargestSurfel] = iCluster;
 
 		memset(bVertexVisited, 0, vertexArray.n * sizeof(bool));
 		memset(bVertexInCluster, 0, vertexArray.n * sizeof(bool));
@@ -1078,72 +1115,67 @@ void PSGM::FitModel(
 
 	int iModelInstanceElement;
 	RECOG::PSGM_::ModelInstanceElement *pModelInstanceElement;
-	bool bDefined;
 	float d;
 	RECOG::PSGM_::Vertex *pVertex;
 	int i;
-	float *N;
+	float *N, *P;
 	float N_[3];
 	float dist;
+	float maxdDefinedNormal;
 
 	for (iModelInstanceElement = 0; iModelInstanceElement < convexTemplate.n; iModelInstanceElement++)
 	{
-		//if (iModelInstanceElement == 32)
+		//if (iModelInstanceElement == 33)
 		//	int debug = 0;
 
 		pModelInstanceElement = pModelInstance->modelInstance.Element + iModelInstanceElement;
-		pModelInstanceElement->defined = false;
+
+		pModelInstanceElement->valid = false;
 
 		N = convexTemplate.Element[iModelInstanceElement].N;
 
 		RVLMULMX3X3VECT(R, N, N_);
 
+		pVertex = vertexArray.Element[pCluster->iVertexArray.Element[0]];
+
+		pModelInstanceElement->d = RVLDOTPRODUCT3(N_, pVertex->P);
+
 		for (i = 0; i < pCluster->iVertexArray.n; i++)
 		{
 			pVertex = vertexArray.Element[pCluster->iVertexArray.Element[i]];
 
-			dist = DistanceFromNormalHull(pVertex->normalHull, N_);
+			d = RVLDOTPRODUCT3(N_, pVertex->P);
 
-			if (dist <= 0.0f)
+			if (d > pModelInstanceElement->d)
+				pModelInstanceElement->d = d;
+
+			if (pVertex->normalHull.n >= 3)
 			{
-				d = RVLDOTPRODUCT3(N_, pVertex->P);
+				dist = DistanceFromNormalHull(pVertex->normalHull, N_);
 
-				if (pModelInstanceElement->defined)
+				if (dist <= 0.0f)
 				{
-					if (d > pModelInstanceElement->d)
-						pModelInstanceElement->d = d;
-				}
-				else
-				{
-					pModelInstanceElement->d = d;
-					pModelInstanceElement->defined = true;
+					if (pModelInstanceElement->valid)
+					{
+						if (d > maxdDefinedNormal)
+							maxdDefinedNormal = d;
+					}
+					else
+					{
+						maxdDefinedNormal = d;
+						pModelInstanceElement->valid = true;
+					}
 				}
 			}
-		}
 
-		if (!pModelInstanceElement->defined)
-		{
-			bDefined = false;
+			P = pVertex->P;
 
-			for (i = 0; i < pCluster->iVertexArray.n; i++)
-			{
-				pVertex = vertexArray.Element[pCluster->iVertexArray.Element[i]];				
+			if (RVLDOTPRODUCT3(N_, P) >= 0.0f)
+				pModelInstanceElement->valid = false;
+		}	// for every vertex in the cluster
 
-				d = RVLDOTPRODUCT3(N_, pVertex->P);
-
-				if (bDefined)
-				{
-					if (d > pModelInstanceElement->d)
-						pModelInstanceElement->d = d;
-				}
-				else
-				{
-					pModelInstanceElement->d = d;
-					bDefined = true;
-				}
-			}
-		}
-	}
+		pModelInstanceElement->e = (pModelInstanceElement->valid ? pModelInstanceElement->d - maxdDefinedNormal : 0.0f);
+	}	// for every model instance descriptor element
 }
 
 bool PSGM::ReferenceFrames(int iCluster)
@@ -1276,6 +1308,8 @@ bool PSGM::ReferenceFrames(int iCluster)
 
 			tangentRGData.bBase[iSurfel] = true;
 
+			tangentRGData.bParent[iSurfel] = true;
+
 			RVLCOPY3VECTOR(pSurfel->N, tangentRGData.planeA.N);
 			tangentRGData.planeA.d = pSurfel->d;
 			tangentArray.n = 0;
@@ -1286,6 +1320,9 @@ bool PSGM::ReferenceFrames(int iCluster)
 
 			for (piSurfel = iSurfelBuff; piSurfel < piSurfelBuffEnd; piSurfel++)
 				tangentRGData.bParent[*piSurfel] = false;
+
+			if (piSurfelBuffEnd - iSurfelBuff > pCluster->iSurfelArray.n)
+				int debug = 0;
 
 			maxTangentLen = 0;
 			
@@ -1921,7 +1958,14 @@ void PSGM::SaveModelInstances(
 		{
 			pModelInstanceElement = pModelInstance->modelInstance.Element + iModelInstanceElement;
 
-			fprintf(fp, "%d\t", (int)(pModelInstanceElement->defined));
+			fprintf(fp, "%d\t", (int)(pModelInstanceElement->valid));
+		}
+
+		for (iModelInstanceElement = 0; iModelInstanceElement < convexTemplate.n; iModelInstanceElement++)
+		{
+			pModelInstanceElement = pModelInstance->modelInstance.Element + iModelInstanceElement;
+
+			fprintf(fp, "%f\t", pModelInstanceElement->e);
 		}
 
 		fprintf(fp, "\n");
@@ -1960,17 +2004,19 @@ void PSGM::Display()
 
 	DisplayClusters();
 
+	pSurfels->DisplayEdgeFeatures();
+
 	displayData.bClusters = true;
 	displayData.bVertices = false;
 
 	//pSurfels->Display(pVisualizer, pMesh);
 
-	DisplayVertices();
+	//DisplayVertices();
 
-	if (!displayData.bVertices)
-		displayData.vertices->VisibilityOff();
+	//if (!displayData.bVertices)
+	//	displayData.vertices->VisibilityOff();
 
-	DisplayReferenceFrames();
+	//DisplayReferenceFrames();
 }
 
 void PSGM::DisplayClusters()
@@ -2062,7 +2108,7 @@ void PSGM::DisplayModelInstance(Visualizer *pVisualizer)
 
 void PSGM::DisplayVertices()
 {
-	double lineLength = 10.0;
+	double lineLength = displayData.normalLen;
 
 	Mesh *pMesh = displayData.pMesh;
 	Visualizer *pVisualizer = displayData.pVisualizer;

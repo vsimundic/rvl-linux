@@ -22,12 +22,14 @@ namespace RVL
 				Array<NormalHullElement> normalHull;
 				Array<int> iSurfelArray;
 				Vertex *pNext;
+				bool bEdge;
 			};
 
 			struct ModelInstanceElement
 			{
 				float d;
-				bool defined;
+				float e;
+				bool valid;
 			};
 
 			struct ModelInstance
@@ -87,6 +89,7 @@ namespace RVL
 				vtkSmartPointer<vtkActor> referenceFrames;
 				unsigned char selectionColor[3];
 				int iSelectedCluster;
+				float normalLen;
 			};
 
 			int ValidTangent(
@@ -166,6 +169,7 @@ namespace RVL
 
 	public:
 		CRVLParameterList ParamList;
+		DWORD mode;
 		CRVLMem *pMem;
 		PlanarSurfelDetector *pSurfelDetector;
 		SurfelGraph *pSurfels;
