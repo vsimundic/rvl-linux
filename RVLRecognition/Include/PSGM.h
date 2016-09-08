@@ -141,6 +141,9 @@ namespace RVL
 			Array<RECOG::PSGM_::NormalHullElement> &NHull,
 			float *N);
 	private:
+		void DetectVertices(
+			Mesh *pMesh,
+			int &nVertexSurfelRelations);
 		void CreateTemplate();
 		void FitModel(
 			RECOG::PSGM_::Cluster *pCluster,
