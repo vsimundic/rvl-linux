@@ -113,428 +113,18 @@ void PSGM::Interpret(
 
 	// Detect vertices.
 
-	int nVertexSurfelRelations;
+	DetectVertices(pMesh);
 
-	DetectVertices(pMesh, nVertexSurfelRelations);
+	// Cluster surfels into convex surfaces.
 
-	///// Cluster surfels into convex surfaces.
-
-	RVL_DELETE_ARRAY(clusterMap);
-
-	clusterMap = new int[pSurfels->NodeArray.n];
-
-	memset(clusterMap, 0xff, pSurfels->NodeArray.n * sizeof(int));
-
-	RVL_DELETE_ARRAY(clusterMem);
-
-	clusterMem = new RECOG::PSGM_::Cluster[pSurfels->NodeArray.n];
-
-	clusters.n = 0;
-
-	RVL_DELETE_ARRAY(clusterSurfelMem);
-
-	clusterSurfelMem = new int[pSurfels->NodeArray.n];
-
-	int *piSurfel = clusterSurfelMem;
-
-	RVL_DELETE_ARRAY(clusterVertexMem);
-
-	clusterVertexMem = new int[nVertexSurfelRelations];
-
-	int *piVertex = clusterVertexMem;
-
-	bool *bVertexVisited = new bool[vertexArray.n];	
-	bool *bVertexInCluster = new bool[vertexArray.n];
-
-	bool *bSurfelVisited = new bool[pSurfels->NodeArray.n];
-
-	QList<QLIST::Index> candidateList;
-	QList<QLIST::Index> *pCandidateList = &candidateList;
-
-	QLIST::Index *candidateMem = new QLIST::Index[pSurfels->NodeArray.n];
-
-	Array<int> surfelBuff1, surfelBuff2;
-
-	surfelBuff1.Element = new int[pSurfels->NodeArray.n];
-
-	surfelBuff1.n = 0;
-
-	int i;
-	Surfel *pSurfel;
-
-	for (i = 0; i < pSurfels->NodeArray.n; i++)
-	{
-		pSurfel = pSurfels->NodeArray.Element + i;
-
-		if (!pSurfel->bEdge)
-			surfelBuff1.Element[surfelBuff1.n++] = i;
-	}
-	
-	surfelBuff2.Element = new int[surfelBuff1.n];
-
-	Array<int> *pSurfelBuff = &surfelBuff1;
-	Array<int> *pSurfelBuff_ = &surfelBuff2;
-	Array<int> *pTmp;
-
-#ifdef RVLPSGM_NORMAL_HULL
-	Array<RECOG::PSGM_::NormalHullElement> NHull;
-
-	NHull.Element = new RECOG::PSGM_::NormalHullElement[pSurfels->NodeArray.n];
-#else
-	float meanN[3];
-	float sumN[3];
-	float wN;
-#endif
-
-	RECOG::PSGM_::Cluster *pCluster;
-	int iCluster;
-	int maxSurfelSize;
-	int iLargestSurfel;
-	int iFirstNewVertex;
-	QLIST::Index *pCandidateIdx, *pBestCandidateIdx;
-	QLIST::Index **ppCandidateIdx, **ppBestCandidateIdx;
-	float dist, minDist;
-	int nSurfelVertices;
-	int nSurfelVerticesInCluster;
-	int *piVertex_, *piVertex__;
-	int iSurfel, iSurfel_;
-	Surfel *pSurfel_;
-	QList<QLIST::Index> *pSurfelVertexList;
-	QLIST::Index *pVertexIdx;
-
-	for (iCluster = 0; iCluster < pSurfels->NodeArray.n; iCluster++)
-	{
-		// pSurfel <- the largest surfel which is not assigned to a cluster.
-
-		maxSurfelSize = minInitialSurfelSize - 1;
-
-		iLargestSurfel = -1;
-
-		pSurfelBuff_->n = 0;
-
-		for (i = 0; i < pSurfelBuff->n; i++)
-		{
-			iSurfel = pSurfelBuff->Element[i];
-
-			pSurfel = pSurfels->NodeArray.Element + iSurfel;
-
-			if (!pSurfel->bEdge)
-			{
-				if (clusterMap[iSurfel] < 0)
-				{
-					pSurfelBuff_->Element[pSurfelBuff_->n++] = iSurfel;
-
-					if (pSurfel->size > maxSurfelSize)
-					{
-						maxSurfelSize = pSurfel->size;
-
-						iLargestSurfel = iSurfel;
-					}
-				}
-			}
-		}
-
-		pTmp = pSurfelBuff;
-		pSurfelBuff = pSurfelBuff_;
-		pSurfelBuff_ = pTmp;
-
-		if (iLargestSurfel < 0)
-			break;
-
-		//if (iLargestSurfel == 25)
-		//	int debug = 0;
-
-		// Initialize a new cluster.
-
-		pCluster = clusterMem + iCluster;
-
-		pCluster->iSurfelArray.Element = piSurfel;
-		pCluster->iVertexArray.Element = piVertex;
-
-		pCluster->iSurfelArray.n = 0;
-		pCluster->iVertexArray.n = 0;
-		pCluster->size = 0;
-
-		clusters.n++;
-
-		clusterMap[iLargestSurfel] = iCluster;
-
-		memset(bVertexVisited, 0, vertexArray.n * sizeof(bool));
-		memset(bVertexInCluster, 0, vertexArray.n * sizeof(bool));
-		memset(bSurfelVisited, 0, pSurfels->NodeArray.n * sizeof(bool));
-
-		RVLQLIST_INIT(pCandidateList);
-
-		QLIST::Index *pNewCandidate = candidateMem;
-
-#ifdef RVLPSGM_NORMAL_HULL
-		NHull.n = 0;
-#else
-		RVLNULL3VECTOR(sumN);
-		wN = 0.0f;
-#endif
-
-		RVLQLIST_ADD_ENTRY(pCandidateList, pNewCandidate);
-
-		pNewCandidate->Idx = iLargestSurfel;
-
-		pNewCandidate++;
-
-		bSurfelVisited[iLargestSurfel] = true;
-
-		// Region growing.
-
-		while (pCandidateList->pFirst)
-		{
-			// iSurfel <- the best candidate for expanding cluster.
-
-			minDist = PI;
-
-			ppCandidateIdx = &(candidateList.pFirst);
-
-			pCandidateIdx = *ppCandidateIdx;
-
-			while (pCandidateIdx)
-			{
-				iSurfel_ = pCandidateIdx->Idx;
-
-				pSurfel_ = pSurfels->NodeArray.Element + iSurfel_;
-
-#ifdef RVLPSGM_NORMAL_HULL
-				dist = DistanceFromNormalHull(NHull, pSurfel_->N);
-#else
-				float e = RVLDOTPRODUCT3(meanN, pSurfel_->N);
-				dist = (wN < 1e-10 ? 0.0f : acos(e));
-#endif
-
-				if (dist < minDist)
-				{
-					minDist = dist;
-
-					iSurfel = iSurfel_;
-
-					pBestCandidateIdx = pCandidateIdx;
-
-					ppBestCandidateIdx = ppCandidateIdx;
-				}
-
-				ppCandidateIdx = &(pCandidateIdx->pNext);
-
-				pCandidateIdx = *ppCandidateIdx;
-			}
-
-			// Remove iSurfel from candidateList.
-
-			RVLQLIST_REMOVE_ENTRY(pCandidateList, pBestCandidateIdx, ppBestCandidateIdx);
-
-			//if (iSurfel == 8)
-			//	int debug = 0;
-
-			// Add vertices of iSurfel, which are inside convex (or outside concave) surface into cluster.
-
-			iFirstNewVertex = pCluster->iVertexArray.n;
-
-			piVertex_ = piVertex;
-
-			pSurfelVertexList = surfelVertexList.Element + iSurfel;
-
-			nSurfelVertices = nSurfelVerticesInCluster = 0;
-
-			pVertexIdx = pSurfelVertexList->pFirst;
-
-			while (pVertexIdx)
-			{
-				if (bVertexVisited[pVertexIdx->Idx])
-				{
-					if (bVertexInCluster[pVertexIdx->Idx])
-						nSurfelVerticesInCluster++;
-				}
-				else
-				{
-					if (Inside(pVertexIdx->Idx, pCluster, iSurfel))
-					{
-						*(piVertex++) = pVertexIdx->Idx;
-
-						nSurfelVerticesInCluster++;
-					}
-						
-				}
-
-				nSurfelVertices++;
-
-				pVertexIdx = pVertexIdx->pNext;
-			}
-
-			if (nSurfelVertices == 0)
-				continue;
-
-			if (100 * nSurfelVerticesInCluster / nSurfelVertices < minVertexPerc)
-			{
-				piVertex = piVertex_;
-
-				continue;
-			}
-
-			pCluster->iVertexArray.n = piVertex - pCluster->iVertexArray.Element;
-
-			pVertexIdx = pSurfelVertexList->pFirst;
-
-			while (pVertexIdx)
-			{
-				bVertexVisited[pVertexIdx->Idx] = true;
-
-				pVertexIdx = pVertexIdx->pNext;
-			}
-
-			for (piVertex__ = piVertex_; piVertex__ < piVertex; piVertex__++)
-				bVertexInCluster[*piVertex__] = true;
-
-			// Add iSurfel to cluster.
-
-			//if (iLargestSurfel == 25 && iSurfel == 192)
-			//	int debug = 0;
-
-			clusterMap[iSurfel] = iCluster;
-
-			*(piSurfel++) = iSurfel;
-
-			pCluster->iSurfelArray.n++;
-
-			pSurfel = pSurfels->NodeArray.Element + iSurfel;
-
-			pCluster->size += pSurfel->size;
-
-#ifdef RVLPSGM_NORMAL_HULL
-			// Update normal hull.
-			
-			UpdateNormalHull(NHull, pSurfel->N);
-#else
-			// Update mean normal.
-
-			UpdateMeanNormal(sumN, wN, pSurfel->N, (float)(pSurfel->size), meanN);
-#endif
-
-			// Remove candidates which are not consistent with new vertices added to the cluster.
-
-			ppCandidateIdx = &(candidateList.pFirst);
-
-			pCandidateIdx = candidateList.pFirst;
-
-			while (pCandidateIdx)
-			{
-				pSurfel_ = pSurfels->NodeArray.Element + pCandidateIdx->Idx;
-
-				//if (pCandidateIdx->Idx == 8)
-				//	int debug = 0;
-
-				if (BelowPlane(pCluster, pSurfel_, iFirstNewVertex))
-					ppCandidateIdx = &(pCandidateIdx->pNext);
-				else
-					RVLQLIST_REMOVE_ENTRY(pCandidateList, pCandidateIdx, ppCandidateIdx)
-				
-				pCandidateIdx = pCandidateIdx->pNext;
-			}
-
-			// Add new candidates in candidateList.
-
-			SURFEL::EdgePtr *pSurfelEdgePtr = pSurfel->EdgeList.pFirst;
-
-			while (pSurfelEdgePtr)
-			{
-				iSurfel_ = RVLPCSEGMENT_GRAPH_GET_OPPOSITE_NODE(pSurfelEdgePtr);
-
-				//if (iSurfel_ == 8)
-				//	int debug = 0;
-
-				if (clusterMap[iSurfel_] < 0)
-				{
-					if (!bSurfelVisited[iSurfel_])
-					{
-						//if (iSurfel_ == 8)
-						//	int debug = 0;
-
-						bSurfelVisited[iSurfel_] = true;
-
-						pSurfel_ = pSurfels->NodeArray.Element + iSurfel_;
-
-						if (pSurfel_->size > 0)
-						{
-							if (BelowPlane(pCluster, pSurfel_))
-							{
-								RVLQLIST_ADD_ENTRY(pCandidateList, pNewCandidate);
-
-								pNewCandidate->Idx = iSurfel_;
-
-								pNewCandidate++;
-							}
-						}
-					}
-				}
-
-				pSurfelEdgePtr = pSurfelEdgePtr->pNext;
-			}
-		}	// region growing loop
-	}	// for each cluster
-
-	delete[] candidateMem;
-	delete[] bVertexVisited;
-	delete[] bVertexInCluster;
-	delete[] bSurfelVisited;
-#ifdef RVLPSGM_NORMAL_HULL
-	delete[] NHull.Element;
-#endif
-
-	// Create sorted cluster array.
-
-	int maxClusterSize = 0;
-	int size;
-
-	for (i = 0; i < clusters.n; i++)
-	{
-		size = clusterMem[i].size;
-
-		if (size > maxClusterSize)
-			maxClusterSize = size;
-	}
-
-	int maxnBins = 100000;
-
-	int k = (maxClusterSize < maxnBins ? 1 : maxClusterSize / maxnBins + 1);	
-
-	int *key = new int[clusters.n];
-
-	for (i = 0; i < clusters.n; i++)
-		key[i] = clusterMem[i].size / k;
-
-	RVL::QuickSort(key, surfelBuff1.Element, clusters.n);
-
-	RVL_DELETE_ARRAY(clusters.Element);
-
-	clusters.Element = new RECOG::PSGM_::Cluster *[clusters.n];
-
-	for (i = 0; i < clusters.n; i++)
-	{
-		iCluster = surfelBuff1.Element[clusters.n - i - 1];
-		clusters.Element[i] = clusterMem + iCluster;
-		surfelBuff2.Element[iCluster] = i;
-	}		
-
-	// Update cluster map.	
-
-	for (iSurfel = 0; iSurfel < pSurfels->NodeArray.n; iSurfel++)
-	{
-		if (clusterMap[iSurfel] >= 0)
-			clusterMap[iSurfel] = surfelBuff2.Element[clusterMap[iSurfel]];
-	}	
-
-	delete[] surfelBuff1.Element;
-	delete[] surfelBuff2.Element;
-	delete[] key;
+	Clusters();
 
 	// Fit model.
 
 	int nClusters = RVLMIN(clusters.n, nDominantClusters);
 
+	int iCluster;
+	RECOG::PSGM_::Cluster *pCluster;
 	RECOG::PSGM_::ModelInstance *pModelInstance;
 
 	for (iCluster = 0; iCluster < nClusters; iCluster++)
@@ -570,8 +160,7 @@ void PSGM::Interpret(
 }
 
 void PSGM::DetectVertices(
-	Mesh *pMesh,
-	int &nVertexSurfelRelations)
+	Mesh *pMesh)
 {
 	QList<RECOG::PSGM_::Vertex> *pVertexList = &vertexList;
 
@@ -1005,6 +594,421 @@ void PSGM::DetectVertices(
 
 		pVertex = pVertex->pNext;
 	}
+}
+
+void PSGM::Clusters()
+{
+	RVL_DELETE_ARRAY(clusterMap);
+
+	clusterMap = new int[pSurfels->NodeArray.n];
+
+	memset(clusterMap, 0xff, pSurfels->NodeArray.n * sizeof(int));
+
+	RVL_DELETE_ARRAY(clusterMem);
+
+	clusterMem = new RECOG::PSGM_::Cluster[pSurfels->NodeArray.n];
+
+	clusters.n = 0;
+
+	RVL_DELETE_ARRAY(clusterSurfelMem);
+
+	clusterSurfelMem = new int[pSurfels->NodeArray.n];
+
+	int *piSurfel = clusterSurfelMem;
+
+	RVL_DELETE_ARRAY(clusterVertexMem);
+
+	clusterVertexMem = new int[nVertexSurfelRelations];
+
+	int *piVertex = clusterVertexMem;
+
+	bool *bVertexVisited = new bool[vertexArray.n];
+	bool *bVertexInCluster = new bool[vertexArray.n];
+
+	bool *bSurfelVisited = new bool[pSurfels->NodeArray.n];
+
+	QList<QLIST::Index> candidateList;
+	QList<QLIST::Index> *pCandidateList = &candidateList;
+
+	QLIST::Index *candidateMem = new QLIST::Index[pSurfels->NodeArray.n];
+
+	Array<int> surfelBuff1, surfelBuff2;
+
+	surfelBuff1.Element = new int[pSurfels->NodeArray.n];
+
+	surfelBuff1.n = 0;
+
+	int i;
+	Surfel *pSurfel;
+
+	for (i = 0; i < pSurfels->NodeArray.n; i++)
+	{
+		pSurfel = pSurfels->NodeArray.Element + i;
+
+		if (!pSurfel->bEdge)
+			surfelBuff1.Element[surfelBuff1.n++] = i;
+	}
+
+	surfelBuff2.Element = new int[surfelBuff1.n];
+
+	Array<int> *pSurfelBuff = &surfelBuff1;
+	Array<int> *pSurfelBuff_ = &surfelBuff2;
+	Array<int> *pTmp;
+
+#ifdef RVLPSGM_NORMAL_HULL
+	Array<RECOG::PSGM_::NormalHullElement> NHull;
+
+	NHull.Element = new RECOG::PSGM_::NormalHullElement[pSurfels->NodeArray.n];
+#else
+	float meanN[3];
+	float sumN[3];
+	float wN;
+#endif
+
+	RECOG::PSGM_::Cluster *pCluster;
+	int iCluster;
+	int maxSurfelSize;
+	int iLargestSurfel;
+	int iFirstNewVertex;
+	QLIST::Index *pCandidateIdx, *pBestCandidateIdx;
+	QLIST::Index **ppCandidateIdx, **ppBestCandidateIdx;
+	float dist, minDist;
+	int nSurfelVertices;
+	int nSurfelVerticesInCluster;
+	int *piVertex_, *piVertex__;
+	int iSurfel, iSurfel_;
+	Surfel *pSurfel_;
+	QList<QLIST::Index> *pSurfelVertexList;
+	QLIST::Index *pVertexIdx;
+
+	for (iCluster = 0; iCluster < pSurfels->NodeArray.n; iCluster++)
+	{
+		// pSurfel <- the largest surfel which is not assigned to a cluster.
+
+		maxSurfelSize = minInitialSurfelSize - 1;
+
+		iLargestSurfel = -1;
+
+		pSurfelBuff_->n = 0;
+
+		for (i = 0; i < pSurfelBuff->n; i++)
+		{
+			iSurfel = pSurfelBuff->Element[i];
+
+			pSurfel = pSurfels->NodeArray.Element + iSurfel;
+
+			if (!pSurfel->bEdge)
+			{
+				if (clusterMap[iSurfel] < 0)
+				{
+					pSurfelBuff_->Element[pSurfelBuff_->n++] = iSurfel;
+
+					if (pSurfel->size > maxSurfelSize)
+					{
+						maxSurfelSize = pSurfel->size;
+
+						iLargestSurfel = iSurfel;
+					}
+				}
+			}
+		}
+
+		pTmp = pSurfelBuff;
+		pSurfelBuff = pSurfelBuff_;
+		pSurfelBuff_ = pTmp;
+
+		if (iLargestSurfel < 0)
+			break;
+
+		//if (iLargestSurfel == 25)
+		//	int debug = 0;
+
+		// Initialize a new cluster.
+
+		pCluster = clusterMem + iCluster;
+
+		pCluster->iSurfelArray.Element = piSurfel;
+		pCluster->iVertexArray.Element = piVertex;
+
+		pCluster->iSurfelArray.n = 0;
+		pCluster->iVertexArray.n = 0;
+		pCluster->size = 0;
+
+		clusters.n++;
+
+		clusterMap[iLargestSurfel] = iCluster;
+
+		memset(bVertexVisited, 0, vertexArray.n * sizeof(bool));
+		memset(bVertexInCluster, 0, vertexArray.n * sizeof(bool));
+		memset(bSurfelVisited, 0, pSurfels->NodeArray.n * sizeof(bool));
+
+		RVLQLIST_INIT(pCandidateList);
+
+		QLIST::Index *pNewCandidate = candidateMem;
+
+#ifdef RVLPSGM_NORMAL_HULL
+		NHull.n = 0;
+#else
+		RVLNULL3VECTOR(sumN);
+		wN = 0.0f;
+#endif
+
+		RVLQLIST_ADD_ENTRY(pCandidateList, pNewCandidate);
+
+		pNewCandidate->Idx = iLargestSurfel;
+
+		pNewCandidate++;
+
+		bSurfelVisited[iLargestSurfel] = true;
+
+		// Region growing.
+
+		while (pCandidateList->pFirst)
+		{
+			// iSurfel <- the best candidate for expanding cluster.
+
+			minDist = PI;
+
+			ppCandidateIdx = &(candidateList.pFirst);
+
+			pCandidateIdx = *ppCandidateIdx;
+
+			while (pCandidateIdx)
+			{
+				iSurfel_ = pCandidateIdx->Idx;
+
+				pSurfel_ = pSurfels->NodeArray.Element + iSurfel_;
+
+#ifdef RVLPSGM_NORMAL_HULL
+				dist = DistanceFromNormalHull(NHull, pSurfel_->N);
+#else
+				float e = RVLDOTPRODUCT3(meanN, pSurfel_->N);
+				dist = (wN < 1e-10 ? 0.0f : acos(e));
+#endif
+
+				if (dist < minDist)
+				{
+					minDist = dist;
+
+					iSurfel = iSurfel_;
+
+					pBestCandidateIdx = pCandidateIdx;
+
+					ppBestCandidateIdx = ppCandidateIdx;
+				}
+
+				ppCandidateIdx = &(pCandidateIdx->pNext);
+
+				pCandidateIdx = *ppCandidateIdx;
+			}
+
+			// Remove iSurfel from candidateList.
+
+			RVLQLIST_REMOVE_ENTRY(pCandidateList, pBestCandidateIdx, ppBestCandidateIdx);
+
+			//if (iSurfel == 8)
+			//	int debug = 0;
+
+			// Add vertices of iSurfel, which are inside convex (or outside concave) surface into cluster.
+
+			iFirstNewVertex = pCluster->iVertexArray.n;
+
+			piVertex_ = piVertex;
+
+			pSurfelVertexList = surfelVertexList.Element + iSurfel;
+
+			nSurfelVertices = nSurfelVerticesInCluster = 0;
+
+			pVertexIdx = pSurfelVertexList->pFirst;
+
+			while (pVertexIdx)
+			{
+				if (bVertexVisited[pVertexIdx->Idx])
+				{
+					if (bVertexInCluster[pVertexIdx->Idx])
+						nSurfelVerticesInCluster++;
+				}
+				else
+				{
+					if (Inside(pVertexIdx->Idx, pCluster, iSurfel))
+					{
+						*(piVertex++) = pVertexIdx->Idx;
+
+						nSurfelVerticesInCluster++;
+					}
+
+				}
+
+				nSurfelVertices++;
+
+				pVertexIdx = pVertexIdx->pNext;
+			}
+
+			if (nSurfelVertices == 0)
+				continue;
+
+			if (100 * nSurfelVerticesInCluster / nSurfelVertices < minVertexPerc)
+			{
+				piVertex = piVertex_;
+
+				continue;
+			}
+
+			pCluster->iVertexArray.n = piVertex - pCluster->iVertexArray.Element;
+
+			pVertexIdx = pSurfelVertexList->pFirst;
+
+			while (pVertexIdx)
+			{
+				bVertexVisited[pVertexIdx->Idx] = true;
+
+				pVertexIdx = pVertexIdx->pNext;
+			}
+
+			for (piVertex__ = piVertex_; piVertex__ < piVertex; piVertex__++)
+				bVertexInCluster[*piVertex__] = true;
+
+			// Add iSurfel to cluster.
+
+			//if (iLargestSurfel == 25 && iSurfel == 192)
+			//	int debug = 0;
+
+			clusterMap[iSurfel] = iCluster;
+
+			*(piSurfel++) = iSurfel;
+
+			pCluster->iSurfelArray.n++;
+
+			pSurfel = pSurfels->NodeArray.Element + iSurfel;
+
+			pCluster->size += pSurfel->size;
+
+#ifdef RVLPSGM_NORMAL_HULL
+			// Update normal hull.
+
+			UpdateNormalHull(NHull, pSurfel->N);
+#else
+			// Update mean normal.
+
+			UpdateMeanNormal(sumN, wN, pSurfel->N, (float)(pSurfel->size), meanN);
+#endif
+
+			// Remove candidates which are not consistent with new vertices added to the cluster.
+
+			ppCandidateIdx = &(candidateList.pFirst);
+
+			pCandidateIdx = candidateList.pFirst;
+
+			while (pCandidateIdx)
+			{
+				pSurfel_ = pSurfels->NodeArray.Element + pCandidateIdx->Idx;
+
+				//if (pCandidateIdx->Idx == 8)
+				//	int debug = 0;
+
+				if (BelowPlane(pCluster, pSurfel_, iFirstNewVertex))
+					ppCandidateIdx = &(pCandidateIdx->pNext);
+				else
+					RVLQLIST_REMOVE_ENTRY(pCandidateList, pCandidateIdx, ppCandidateIdx)
+
+					pCandidateIdx = pCandidateIdx->pNext;
+			}
+
+			// Add new candidates in candidateList.
+
+			SURFEL::EdgePtr *pSurfelEdgePtr = pSurfel->EdgeList.pFirst;
+
+			while (pSurfelEdgePtr)
+			{
+				iSurfel_ = RVLPCSEGMENT_GRAPH_GET_OPPOSITE_NODE(pSurfelEdgePtr);
+
+				//if (iSurfel_ == 8)
+				//	int debug = 0;
+
+				if (clusterMap[iSurfel_] < 0)
+				{
+					if (!bSurfelVisited[iSurfel_])
+					{
+						//if (iSurfel_ == 8)
+						//	int debug = 0;
+
+						bSurfelVisited[iSurfel_] = true;
+
+						pSurfel_ = pSurfels->NodeArray.Element + iSurfel_;
+
+						if (pSurfel_->size > 0)
+						{
+							if (BelowPlane(pCluster, pSurfel_))
+							{
+								RVLQLIST_ADD_ENTRY(pCandidateList, pNewCandidate);
+
+								pNewCandidate->Idx = iSurfel_;
+
+								pNewCandidate++;
+							}
+						}
+					}
+				}
+
+				pSurfelEdgePtr = pSurfelEdgePtr->pNext;
+			}
+		}	// region growing loop
+	}	// for each cluster
+
+	delete[] candidateMem;
+	delete[] bVertexVisited;
+	delete[] bVertexInCluster;
+	delete[] bSurfelVisited;
+#ifdef RVLPSGM_NORMAL_HULL
+	delete[] NHull.Element;
+#endif
+
+	// Create sorted cluster array.
+
+	int maxClusterSize = 0;
+	int size;
+
+	for (i = 0; i < clusters.n; i++)
+	{
+		size = clusterMem[i].size;
+
+		if (size > maxClusterSize)
+			maxClusterSize = size;
+	}
+
+	int maxnBins = 100000;
+
+	int k = (maxClusterSize < maxnBins ? 1 : maxClusterSize / maxnBins + 1);
+
+	int *key = new int[clusters.n];
+
+	for (i = 0; i < clusters.n; i++)
+		key[i] = clusterMem[i].size / k;
+
+	RVL::QuickSort(key, surfelBuff1.Element, clusters.n);
+
+	RVL_DELETE_ARRAY(clusters.Element);
+
+	clusters.Element = new RECOG::PSGM_::Cluster *[clusters.n];
+
+	for (i = 0; i < clusters.n; i++)
+	{
+		iCluster = surfelBuff1.Element[clusters.n - i - 1];
+		clusters.Element[i] = clusterMem + iCluster;
+		surfelBuff2.Element[iCluster] = i;
+	}
+
+	// Update cluster map.	
+
+	for (iSurfel = 0; iSurfel < pSurfels->NodeArray.n; iSurfel++)
+	{
+		if (clusterMap[iSurfel] >= 0)
+			clusterMap[iSurfel] = surfelBuff2.Element[clusterMap[iSurfel]];
+	}
+
+	delete[] surfelBuff1.Element;
+	delete[] surfelBuff2.Element;
+	delete[] key;
 }
 
 void PSGM::CreateTemplate()

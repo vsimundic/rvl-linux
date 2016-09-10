@@ -142,8 +142,8 @@ namespace RVL
 			float *N);
 	private:
 		void DetectVertices(
-			Mesh *pMesh,
-			int &nVertexSurfelRelations);
+			Mesh *pMesh);
+		void Clusters();
 		void CreateTemplate();
 		void FitModel(
 			RECOG::PSGM_::Cluster *pCluster,
@@ -202,6 +202,7 @@ namespace RVL
 		vtkSmartPointer<vtkPolyData> linesPolyData;
 		vtkSmartPointer<vtkPolyData> referenceFramesPolyData;
 		char *sceneFileName;
+		int nVertexSurfelRelations;
 	};
 }
 
