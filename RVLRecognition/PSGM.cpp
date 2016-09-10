@@ -113,13 +113,19 @@ void PSGM::Interpret(
 
 	// Detect vertices.
 
+	printf("Detect vertices.\n");
+
 	DetectVertices(pMesh);
 
 	// Cluster surfels into convex surfaces.
 
+	printf("Detect convex clusters.\n");
+
 	Clusters();
 
 	// Fit model.
+
+	printf("Fit convex template.\n");
 
 	int nClusters = RVLMIN(clusters.n, nDominantClusters);
 
@@ -144,6 +150,8 @@ void PSGM::Interpret(
 	}
 
 	// Save model instances to a file.
+
+	printf("Save model instances to a file.\n");
 
 	char *PSGModelInstanceFileName = RVLCreateString(sceneFileName);
 

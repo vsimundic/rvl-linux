@@ -135,6 +135,11 @@ namespace RVL
 		int maxSize;
 		int size;
 		int dSize;
+		int *iPtBuff;
+		int *iPtBuff2;
+		int *iBoundaryPtBuff;
+		Array<int> surfelPtArray;
+		int *iSurfelSeed;
 	};
 
 	namespace PSD
@@ -278,6 +283,15 @@ namespace RVL
 		void Save(FILE *fp);
 
 	private:
+		void InitPlanarRegionGrowing(
+			Mesh *pMesh,
+			SurfelGraph *pSurfels);
+		void PlanarRegionGrowing(
+			Mesh *pMesh,
+			SurfelGraph *pSurfels,
+			int iPtSeed,
+			int iSurfel);
+		void FreePlanarRegionGrowingMem();
 		bool GRegion(
 			Mesh *pMesh,
 			SurfelGraph *pSurfels,

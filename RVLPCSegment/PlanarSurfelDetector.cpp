@@ -377,56 +377,20 @@ void PlanarSurfelDetector::Segment(
 
 	memset(pSurfels->edgeMap, 0xff, nPts * sizeof(int));
 
-	int *iPtBuff = new int[nPts];
-
-	int *iPtBuff2 = new int[nPts];
-
-	int *iBoundaryPtBuff = new int[nPts];
-
-	Array<int> surfelPtArray;
-
-	surfelPtArray.Element = iPtBuff;
-
 	int *regionGrowingBuffer = new int[nPts];
 
-	memset(regionGrowingBuffer, 0xff, nPts * sizeof(int));
+	regionGrowingData.buffer = regionGrowingBuffer;
 
-	int *iSurfelSeed = new int[nPts];
+	InitPlanarRegionGrowing(pMesh, pSurfels);
 
 	int iSurfel = 0;
 
 	Surfel *pSurfel = pSurfels->NodeArray.Element;
 
-	PlanarSurfelDetectorRegionGrowingData data;
-
-	data.distThr = surfelDistThr * surfelDistThr;
-	data.kRGB2 = kRGB * kRGB;	
-	data.kPlane2 = kPlane * kPlane;
-	data.surfelMap = pSurfels->surfelMap;	
-	data.buffer = regionGrowingBuffer;
-	data.costMap = data.costBuffer = NULL;
-#ifndef RVLPLANARSURFELDETECTOR_CONNECTED
-#ifdef RVLPLANARSURFELDETECTOR_MIN_COST
-#ifndef RVLPLANARSURFELDETECTOR_DIST_COST
-	data.costMap = new float[nPts];
-	data.costBuffer = new float[nPts];
-#endif
-#endif
-#endif
-
 	int i;
-	int iPt;
 	int iPtSeed;
-	int *piPtFetch, *piPtPut, *piPtBuffEnd, *piPtBuff2End, *piPt, *piBoundaryPt;
 	Point *pPt;
-	MESH::Distribution distribution;
-	//Surfel *pSurfel_;
-	QList<SURFEL::EdgePtr> *pSEdgeList;
 	QList<QLIST::Index2> *pPtList;
-	//int iSurfel_;
-	//bool bAddToNewSurfel;
-	//float r0_, r, r_;
-	QLIST::Index2 *pPtIdx;
 
 	for (i = 0; i < nPts; i++)
 	{
@@ -448,206 +412,27 @@ void PlanarSurfelDetector::Segment(
 
 		pSurfel->bEdge = false;
 
-		// Initial region growing		
+		regionGrowingData.buffer = regionGrowingBuffer;
 
-		//if (iSurfel == 29)
-		//	int debug = 0;
+		PlanarRegionGrowing(pMesh, pSurfels, iPtSeed, iSurfel);
 
-		piPtFetch = piPtPut = iPtBuff;
-
-		piBoundaryPt = iBoundaryPtBuff;
-
-		*(piPtPut++) = iPtSeed;
-
-		regionGrowingBuffer[iPtSeed] = iSurfel;
-
-#ifndef RVLPLANARSURFELDETECTOR_CONNECTED
-#ifdef RVLPLANARSURFELDETECTOR_MIN_COST
-#ifndef RVLPLANARSURFELDETECTOR_DIST_COST
-		data.costMap[iPtSeed] = 0.0f;
-#endif
-#endif
-#endif
-
-		iSurfelSeed[iSurfel] = iPtSeed;
-
-		SURFEL::CreateFromPoint(pSurfel, Pt + iPtSeed);
-
-		data.pTemplate = pSurfel;
-		data.iSurfel = iSurfel;
-		data.mode = RVLPLANARSURFELDETECTOR_REGIONGROWING_MODE_SURFEL_DETECTION;
-		data.kNormal2 = kNormal * kNormal;
-		
-		piPtBuffEnd = RegionGrowing<Mesh, Point, MeshEdge, MeshEdgePtr, PlanarSurfelDetectorRegionGrowingData, PSD::RegionGrowingOperation>(pMesh, &data, piPtFetch, piPtPut);
-		
-		surfelPtArray.n = piPtBuffEnd - surfelPtArray.Element;
-
-		//if (surfelPtArray.n >= minSurfelSize)
-		{
-			// Create surfel lists.
-
-			pSEdgeList = &(pSurfel->EdgeList);
-
-			RVLQLIST_INIT(pSEdgeList);
-
-			pPtList = &(pSurfel->PtList);
-
-			RVLQLIST_INIT(pPtList);
-
-			// Compute surfel parameters
-
-			pPt = Pt + iPtSeed;
-
-			if (surfelPtArray.n >= RVLMAX(20, minSurfelSize))
-			{
-				pMesh->ComputeDistribution(surfelPtArray, distribution);
-
-				SURFEL::ComputeParameters(pSurfel, distribution, pPt);
-			}
-			else
-				SURFEL::CreateFromPoint(pSurfel, pPt);
-
-			// iPtSeed <- the closest point to pSurfel->P which is consistent with pSurfel
-
-			data.mode = RVLPLANARSURFELDETECTOR_REGIONGROWING_MODE_SURFEL_DETECTION;
-
-			int iPtSeed_ = -1;
-			float minDist = 0.0;
-
-			float dist;
-			float dP[3];
-
-			for (piPt = iPtBuff; piPt < piPtBuffEnd; piPt++)
-			{
-				iPt = *piPt;
-
-				pPt = pMesh->NodeArray.Element + iPt;
-
-				regionGrowingBuffer[iPt] = -1;
-
-				if (PSD::RegionGrowingOperation(iPt, 0, NULL, pMesh, &data))
-				{
-					RVLDIF3VECTORS(pPt->P, pSurfel->P, dP);
-
-					dist = RVLDOTPRODUCT3(dP, dP);
-
-					if (iPtSeed_ < 0 || dist < minDist)
-					{
-						iPtSeed_ = iPt;
-						minDist = dist;
-					}
-				}
-			
-				regionGrowingBuffer[iPt] = -1;
-				//pSurfels->surfelMap[iPt] = iSurfel;
-			}
-
-			if (iPtSeed_ >= 0)
-				iPtSeed = iPtSeed_;
-			
-			//// iPtSeed <- the closest point to iPtSeed which is consistent with ptTemplate
-
-			//piPtFetch = piPtPut = iPtBuff;
-
-			//*(piPtPut++) = iPtSeed;
-
-			//data.iPtSeed = -1;
-			//data.mode = RVLPLANARSURFELDETECTOR_REGIONGROWING_MODE_FIND_CLOSEST_INLIER;
-
-			//piPtBuffEnd = RegionGrowing2<Mesh, Point, MeshEdge, MeshEdgePtr, PlanarSurfelDetectorRegionGrowingData, PSD::RegionGrowingOperation>(pMesh, &data, piPtFetch, piPtPut);
-
-			//for (piPt = iPtBuff; piPt < piPtBuffEnd; piPt++)
-			//	regionGrowingBuffer[*piPt] = -1;
-
-			//if (data.iPtSeed < 0)
-			//	data.iPtSeed = iPtSeed;
-
-			// Final region growing
-
-			//data.kNormal2 = 0.0f;
-			//data.kNormal2 = 4.0f;
-			data.kNormal2 = kNormal * kNormal;
-
-			piPtFetch = piPtPut = iPtBuff2;
-
-			*(piPtPut++) = iPtSeed;
-
-			regionGrowingBuffer[iPtSeed] = iSurfel;
-
-			data.mode = RVLPLANARSURFELDETECTOR_REGIONGROWING_MODE_SURFEL_DETECTION;
-			//data.mode = RVLPLANARSURFELDETECTOR_REGIONGROWING_MODE_ATTACK;
-			data.size = 1;
-			data.dSize = 1;
-			data.maxSize = nPts;
-			data.iAttackedSurfel = iSurfel;
-
-			piPtBuff2End = RegionGrowing<Mesh, Point, MeshEdge, MeshEdgePtr, PlanarSurfelDetectorRegionGrowingData, PSD::RegionGrowingOperation>(pMesh, &data, piPtFetch, piPtPut);
-
-			pSurfel->size = data.size;
-
-			//for (piPt = iPtBuff; piPt < piPtBuffEnd; piPt++)
-			//	pSurfels->surfelMap[*piPt] = -1;
-
-			// Form the final surfel point set
-
-			for (piPt = iPtBuff2; piPt < piPtBuff2End; piPt++)
-			{
-				iPt = *piPt;
-
-				//pPt = Pt + iPt;
-
-				//iSurfel_ = pSurfels->surfelMap[iPt];
-
-				//if (iSurfel_ >= 0)
-				//{
-				//	pSurfel_ = pSurfels->NodeArray.Element + iSurfel_;
-
-				//	r0_ = pSurfel_->d / RVLDOTPRODUCT3(pSurfel_->N, pSurfel->P0);
-				//	r = pSurfel->d / RVLDOTPRODUCT3(pSurfel->N, pPt->P);
-				//	r_ = pSurfel_->d / RVLDOTPRODUCT3(pSurfel_->N, pPt->P);
-
-				//	bAddToNewSurfel = ((r0_ - pSurfel->r0) * (r_ - r) >= 0.0);
-				//}
-				//else
-				//	bAddToNewSurfel = true;
-
-				//if (bAddToNewSurfel)
-				{
-					pSurfels->surfelMap[iPt] = iSurfel;
-
-#ifndef RVLPLANARSURFELDETECTOR_CONNECTED
-#ifdef RVLPLANARSURFELDETECTOR_MIN_COST
-#ifndef RVLPLANARSURFELDETECTOR_DIST_COST
-					data.costMap[iPt] = data.costBuffer[iPt];
-#endif
-#endif
-#endif
-					pPtIdx = pSurfels->PtMem + iPt;
-
-					RVLQLIST_ADD_ENTRY2(pPtList, pPtIdx);
-
-					pPtIdx->Idx = iPt;
-				}
-
-				regionGrowingBuffer[iPt] = -1;
-			}	// for (piPt = iPtBuff; piPt < piPtBuffEnd; piPt++)
+		regionGrowingData.buffer = map;
 
 #ifdef RVLPLANARSURFELDETECTOR_POLYGONS
-			// Define Polygon.
+		// Define Polygon.
 
-			if (piPtBuff2End - iPtBuff2 >= minSurfelSize)
-				DefinePolygon(pMesh, pSurfels, iSurfel);
+		if (pSurfel->size >= minSurfelSize)
+			DefinePolygon(pMesh, pSurfels, iSurfel);
 #endif
 
-			// Next surfel index
+		// Next surfel index
 
-			iSurfel++;
+		iSurfel++;
 
-			pSurfel++;
+		pSurfel++;
 
-			//if (iSurfel > 600)	// debug
-			//	break;
-		}
+		//if (iSurfel > 600)	// debug
+		//	break;
 	}	// for every vertex
 
 	pSurfels->NodeArray.n = iSurfel;
@@ -756,14 +541,253 @@ void PlanarSurfelDetector::Segment(
 
 	pSurfels->FreeGetNeighborsBoundaryAndSize();
 
-	delete[] iSurfelSeed;
+	FreePlanarRegionGrowingMem();
+
 	delete[] regionGrowingBuffer;
-	RVL_DELETE_ARRAY(data.costMap);
-	RVL_DELETE_ARRAY(data.costBuffer);
-	delete[] iPtBuff;
-	delete[] iPtBuff2;
-	delete[] iBoundaryPtBuff;
 	delete[] RandPtIdxArray.Element;
+}
+
+void PlanarSurfelDetector::InitPlanarRegionGrowing(
+	Mesh *pMesh,
+	SurfelGraph *pSurfels)
+{
+	int nPts = pMesh->NodeArray.n;
+
+	regionGrowingData.iPtBuff = new int[nPts];
+
+	regionGrowingData.iPtBuff2 = new int[nPts];
+
+	regionGrowingData.iBoundaryPtBuff = new int[nPts];
+
+	regionGrowingData.surfelPtArray.Element = regionGrowingData.iPtBuff;
+
+	//regionGrowingData.buffer = new int[nPts];
+
+	memset(regionGrowingData.buffer, 0xff, nPts * sizeof(int));
+
+	regionGrowingData.iSurfelSeed = new int[nPts];
+
+	//regionGrowingData.distThr = surfelDistThr * surfelDistThr;
+	//regionGrowingData.kRGB2 = kRGB * kRGB;
+	//regionGrowingData.kPlane2 = kPlane * kPlane;
+	//regionGrowingData.surfelMap = pSurfels->surfelMap;
+	//regionGrowingData.costMap = regionGrowingData.costBuffer = NULL;
+#ifndef RVLPLANARSURFELDETECTOR_CONNECTED
+#ifdef RVLPLANARSURFELDETECTOR_MIN_COST
+#ifndef RVLPLANARSURFELDETECTOR_DIST_COST
+	data.costMap = new float[nPts];
+	data.costBuffer = new float[nPts];
+#endif
+#endif
+#endif
+}
+
+void PlanarSurfelDetector::PlanarRegionGrowing(
+	Mesh *pMesh,
+	SurfelGraph *pSurfels,
+	int iPtSeed,
+	int iSurfel)
+{
+	Point *Pt = pMesh->NodeArray.Element;
+
+	int *piPtFetch = regionGrowingData.iPtBuff;
+	int *piPtPut = piPtFetch;
+
+	int *piBoundaryPt = regionGrowingData.iBoundaryPtBuff;
+
+	*(piPtPut++) = iPtSeed;
+
+	regionGrowingData.buffer[iPtSeed] = iSurfel;
+
+#ifndef RVLPLANARSURFELDETECTOR_CONNECTED
+#ifdef RVLPLANARSURFELDETECTOR_MIN_COST
+#ifndef RVLPLANARSURFELDETECTOR_DIST_COST
+	data.costMap[iPtSeed] = 0.0f;
+#endif
+#endif
+#endif
+
+	regionGrowingData.iSurfelSeed[iSurfel] = iPtSeed;
+
+	Surfel *pSurfel = pSurfels->NodeArray.Element + iSurfel;
+
+	SURFEL::CreateFromPoint(pSurfel, Pt + iPtSeed);
+
+	regionGrowingData.pTemplate = pSurfel;
+	regionGrowingData.iSurfel = iSurfel;
+	regionGrowingData.mode = RVLPLANARSURFELDETECTOR_REGIONGROWING_MODE_SURFEL_DETECTION;
+	regionGrowingData.kNormal2 = kNormal * kNormal;
+
+	int *piPtBuffEnd = RegionGrowing<Mesh, Point, MeshEdge, MeshEdgePtr, PlanarSurfelDetectorRegionGrowingData, PSD::RegionGrowingOperation>(pMesh, &regionGrowingData, piPtFetch, piPtPut);
+
+	regionGrowingData.surfelPtArray.n = piPtBuffEnd - regionGrowingData.surfelPtArray.Element;
+
+	// Create surfel lists.
+
+	QList<SURFEL::EdgePtr> *pSEdgeList = &(pSurfel->EdgeList);
+
+	RVLQLIST_INIT(pSEdgeList);
+
+	QList<QLIST::Index2> *pPtList = &(pSurfel->PtList);
+
+	RVLQLIST_INIT(pPtList);
+
+	// Compute surfel parameters
+
+	Point *pPt = Pt + iPtSeed;
+
+	if (regionGrowingData.surfelPtArray.n >= RVLMAX(20, minSurfelSize))
+	{
+		MESH::Distribution distribution;
+
+		pMesh->ComputeDistribution(regionGrowingData.surfelPtArray, distribution);
+
+		SURFEL::ComputeParameters(pSurfel, distribution, pPt);
+	}
+	else
+		SURFEL::CreateFromPoint(pSurfel, pPt);
+
+	// iPtSeed <- the closest point to pSurfel->P which is consistent with pSurfel
+
+	regionGrowingData.mode = RVLPLANARSURFELDETECTOR_REGIONGROWING_MODE_SURFEL_DETECTION;
+
+	int iPtSeed_ = -1;
+	float minDist = 0.0;
+
+	float dist;
+	float dP[3];
+	int *piPt;
+	int iPt;
+
+	for (piPt = regionGrowingData.iPtBuff; piPt < piPtBuffEnd; piPt++)
+	{
+		iPt = *piPt;
+
+		pPt = pMesh->NodeArray.Element + iPt;
+
+		regionGrowingData.buffer[iPt] = -1;
+
+		if (PSD::RegionGrowingOperation(iPt, 0, NULL, pMesh, &regionGrowingData))
+		{
+			RVLDIF3VECTORS(pPt->P, pSurfel->P, dP);
+
+			dist = RVLDOTPRODUCT3(dP, dP);
+
+			if (iPtSeed_ < 0 || dist < minDist)
+			{
+				iPtSeed_ = iPt;
+				minDist = dist;
+			}
+		}
+
+		regionGrowingData.buffer[iPt] = -1;
+		//pSurfels->surfelMap[iPt] = iSurfel;
+	}
+
+	if (iPtSeed_ >= 0)
+		iPtSeed = iPtSeed_;
+
+	//// iPtSeed <- the closest point to iPtSeed which is consistent with ptTemplate
+
+	//piPtFetch = piPtPut = iPtBuff;
+
+	//*(piPtPut++) = iPtSeed;
+
+	//data.iPtSeed = -1;
+	//data.mode = RVLPLANARSURFELDETECTOR_REGIONGROWING_MODE_FIND_CLOSEST_INLIER;
+
+	//piPtBuffEnd = RegionGrowing2<Mesh, Point, MeshEdge, MeshEdgePtr, PlanarSurfelDetectorRegionGrowingData, PSD::RegionGrowingOperation>(pMesh, &data, piPtFetch, piPtPut);
+
+	//for (piPt = iPtBuff; piPt < piPtBuffEnd; piPt++)
+	//	regionGrowingBuffer[*piPt] = -1;
+
+	//if (data.iPtSeed < 0)
+	//	data.iPtSeed = iPtSeed;
+
+	// Final region growing
+
+	//data.kNormal2 = 0.0f;
+	//data.kNormal2 = 4.0f;
+	regionGrowingData.kNormal2 = kNormal * kNormal;
+
+	piPtFetch = piPtPut = regionGrowingData.iPtBuff2;
+
+	*(piPtPut++) = iPtSeed;
+
+	regionGrowingData.buffer[iPtSeed] = iSurfel;
+
+	regionGrowingData.mode = RVLPLANARSURFELDETECTOR_REGIONGROWING_MODE_SURFEL_DETECTION;
+	//data.mode = RVLPLANARSURFELDETECTOR_REGIONGROWING_MODE_ATTACK;
+	regionGrowingData.size = 1;
+	regionGrowingData.dSize = 1;
+	regionGrowingData.maxSize = pMesh->NodeArray.n;
+	regionGrowingData.iAttackedSurfel = iSurfel;
+
+	int *piPtBuff2End = RegionGrowing<Mesh, Point, MeshEdge, MeshEdgePtr, PlanarSurfelDetectorRegionGrowingData, PSD::RegionGrowingOperation>(pMesh, &regionGrowingData, piPtFetch, piPtPut);
+
+	pSurfel->size = regionGrowingData.size;
+
+	//for (piPt = iPtBuff; piPt < piPtBuffEnd; piPt++)
+	//	pSurfels->surfelMap[*piPt] = -1;
+
+	// Form the final surfel point set
+
+	QLIST::Index2 *pPtIdx;
+
+	for (piPt = regionGrowingData.iPtBuff2; piPt < piPtBuff2End; piPt++)
+	{
+		iPt = *piPt;
+
+		//pPt = Pt + iPt;
+
+		//iSurfel_ = pSurfels->surfelMap[iPt];
+
+		//if (iSurfel_ >= 0)
+		//{
+		//	pSurfel_ = pSurfels->NodeArray.Element + iSurfel_;
+
+		//	r0_ = pSurfel_->d / RVLDOTPRODUCT3(pSurfel_->N, pSurfel->P0);
+		//	r = pSurfel->d / RVLDOTPRODUCT3(pSurfel->N, pPt->P);
+		//	r_ = pSurfel_->d / RVLDOTPRODUCT3(pSurfel_->N, pPt->P);
+
+		//	bAddToNewSurfel = ((r0_ - pSurfel->r0) * (r_ - r) >= 0.0);
+		//}
+		//else
+		//	bAddToNewSurfel = true;
+
+		//if (bAddToNewSurfel)
+		{
+			pSurfels->surfelMap[iPt] = iSurfel;
+
+#ifndef RVLPLANARSURFELDETECTOR_CONNECTED
+#ifdef RVLPLANARSURFELDETECTOR_MIN_COST
+#ifndef RVLPLANARSURFELDETECTOR_DIST_COST
+			data.costMap[iPt] = data.costBuffer[iPt];
+#endif
+#endif
+#endif
+			pPtIdx = pSurfels->PtMem + iPt;
+
+			RVLQLIST_ADD_ENTRY2(pPtList, pPtIdx);
+
+			pPtIdx->Idx = iPt;
+		}
+
+		regionGrowingData.buffer[iPt] = -1;
+	}	// for (piPt = iPtBuff; piPt < piPtBuffEnd; piPt++)
+
+	pSurfel->size = piPtBuff2End - regionGrowingData.iPtBuff2;
+}
+
+void PlanarSurfelDetector::FreePlanarRegionGrowingMem()
+{
+	delete[] regionGrowingData.iSurfelSeed;
+	//delete[] regionGrowingData.buffer;
+	RVL_DELETE_ARRAY(regionGrowingData.costMap);
+	RVL_DELETE_ARRAY(regionGrowingData.costBuffer);
+	delete[] regionGrowingData.iPtBuff;
+	delete[] regionGrowingData.iPtBuff2;
+	delete[] regionGrowingData.iBoundaryPtBuff;
 }
 
 void PlanarSurfelDetector::DefineBoundaryTest(
@@ -3470,6 +3494,7 @@ void PlanarSurfelDetector::DefinePolygon(
 	regionGrowingData.maxSize = nPts;
 	regionGrowingData.size = 0;
 	regionGrowingData.dSize = 0;
+	regionGrowingData.buffer = map;
 
 	GetNeighbors(pMesh, pSurfels, iSurfel_);
 
@@ -4525,7 +4550,7 @@ int PlanarSurfelDetector::CreateEdgeFeatures(
 	float l, s;
 	Array<MeshEdgePtr *> *pEdgePtArray;
 	bool bPtProjectionOutOfLineSegment;
-	int iPointEdge_;
+	//int iPointEdge_;
 
 	while (pSegmentEndpoint2)
 	{
@@ -5395,7 +5420,7 @@ void PlanarSurfelDetector::CreatePolygons(
 	int iBoundary;
 	Surfel *pSurfel;
 	Array<MeshEdgePtr *> *pBoundary;
-	MeshEdgePtr *pBoundaryElement;
+	//MeshEdgePtr *pBoundaryElement;
 	int iBoundaryElement, iBoundaryElement0;
 
 	for (iSurfel = 0; iSurfel < pSurfels->NodeArray.n; iSurfel++)
