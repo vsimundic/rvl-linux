@@ -168,6 +168,7 @@ namespace RVL
 			float *meanN);
 		void SaveModelInstances(
 			FILE *fp,
+			int iModel,
 			int iCluster);
 
 	public:

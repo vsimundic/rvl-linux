@@ -160,7 +160,7 @@ void PSGM::Interpret(
 	FILE *fp = fopen(PSGModelInstanceFileName, "w");
 
 	for (iCluster = 0; iCluster < nClusters; iCluster++)
-		SaveModelInstances(fp, iCluster);
+		SaveModelInstances(fp, -1, iCluster);
 
 	fclose(fp);
 
@@ -1958,18 +1958,26 @@ void PSGM::SetSceneFileName(char *sceneFileName_)
 
 void PSGM::SaveModelInstances(
 	FILE *fp,
+	int iModel,
 	int iCluster)
 {
 	RECOG::PSGM_::Cluster *pCluster = clusters.Element[iCluster];
 
+	int i;
 	int iModelInstanceElement;
-	RECOG::PSGM_::ModelInstanceElement *pModelInstanceElement;
+	RECOG::PSGM_::ModelInstanceElement *pModelInstanceElement;	
 
 	RECOG::PSGM_::ModelInstance *pModelInstance = pCluster->modelInstanceList.pFirst;
 
 	while (pModelInstance)
 	{
-		fprintf(fp, "%d\t", iCluster);
+		fprintf(fp, "%d\t%d\t", iModel, iCluster);
+
+		for (i = 0; i < 9; i++)
+			fprintf(fp, "%f\t", pModelInstance->R[i]);
+
+		for (i = 0; i < 3; i++)
+			fprintf(fp, "%f\t", pModelInstance->t[i]);
 
 		for (iModelInstanceElement = 0; iModelInstanceElement < convexTemplate.n; iModelInstanceElement++)
 		{
@@ -2493,6 +2501,24 @@ bool RVL::RECOG::PSGM_::mouseRButtonDownUserFunction(
 		}
 
 		pData->iSelectedCluster = iCluster;
+
+		FILE *fp = fopen("C:\\RVL\\Debug\\cluster_vertices.txt", "w");
+
+		RECOG::PSGM_::Cluster *pCluster = pRecognition->clusters.Element[iCluster];
+
+		int i, iVertex;
+		RECOG::PSGM_::Vertex *pVertex;
+
+		for (i = 0; i < pCluster->iVertexArray.n; i++)
+		{
+			iVertex = pCluster->iVertexArray.Element[i];
+
+			pVertex = pRecognition->vertexArray.Element[iVertex];
+
+			fprintf(fp, "%d\t%lf\t%lf\t%lf\n", iVertex, pVertex->P[0], pVertex->P[1], pVertex->P[2]);
+		}
+
+		fclose(fp);
 
 		return true;
 	}
