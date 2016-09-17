@@ -131,6 +131,12 @@ int main(int argc, char ** argv)
 	printf("No. of surfels = %d\n", surfels.NodeArray.n);
 	printf("Total segmentation time = %lf s\n", ExecTime);
 
+	// Group surfels into objects.
+
+	surfels.ImageAdjacency(&mesh);
+
+	//GetSurfelRelationDescritors(&mesh, &surfels, 6);
+
 	// Display mesh.
 
 	unsigned char SelectionColor[3];

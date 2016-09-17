@@ -205,7 +205,7 @@ void FindSurfelNeighbours(std::vector<Surfel*> &nList, Surfel *pSurfel, SurfelGr
 }
 
 //Sets a list of neighbouring surfels
-void SetSurfelImgAdjacency(Surfel *pSurfel, SurfelGraph *surfels, Mesh *mesh, int thr)
+void SetSurfelImgAdjacency(Surfel *pSurfel, SurfelGraph *surfels, Mesh *mesh, bool *bVisited, int thr)
 {
 	//find largest boundary (most probable outer boundary)
 	int boundary = 0;
@@ -233,6 +233,8 @@ void SetSurfelImgAdjacency(Surfel *pSurfel, SurfelGraph *surfels, Mesh *mesh, in
 	int iPt, iPt2, x, y;
 	std::vector<Surfel*>::iterator surfIt;
 	double tempDist;
+	int iSurfel;
+	int i;
 	for (iPointEdge = 0; iPointEdge < BoundaryArray.n; iPointEdge++)
 	{
 		pCurrEdge = BoundaryArray.Element[iPointEdge];
@@ -240,6 +242,7 @@ void SetSurfelImgAdjacency(Surfel *pSurfel, SurfelGraph *surfels, Mesh *mesh, in
 		iPt = RVLPCSEGMENT_GRAPH_GET_NODE(pCurrEdge);
 		y = floor(iPt / 640.0);
 		x = floor(iPt - 640.0 * y);
+
 		//Running through point neighbourhood
 		for (int yy = y - thr; yy < y + thr; yy++)
 		{
@@ -250,7 +253,8 @@ void SetSurfelImgAdjacency(Surfel *pSurfel, SurfelGraph *surfels, Mesh *mesh, in
 				if ((xx < 0) || (xx >= 640))
 					continue;
 				iPt2 = yy * 640 + xx;
-				pOtherSurfel = &surfels->NodeArray.Element[surfels->surfelMap[iPt2]];	//surfel owner of the pixel
+				iSurfel = surfels->surfelMap[iPt2];
+				pOtherSurfel = &surfels->NodeArray.Element[iSurfel];	//surfel owner of the pixel
 				surfIt = std::find(pSurfel->imgAdjacency.begin(), pSurfel->imgAdjacency.end(), pOtherSurfel);	//find if that surfel is already on the list
 				if ((pOtherSurfel->size < 640 * 480) && (pOtherSurfel->size != 0) && (pOtherSurfel->size != 1) && (pOtherSurfel->ObjectID > 0) && (pOtherSurfel != pSurfel)/*&& (pOtherSurfel->ObjectID != pSurfel->ObjectID)*/ && (surfIt == pSurfel->imgAdjacency.end()))
 				{
@@ -263,6 +267,7 @@ void SetSurfelImgAdjacency(Surfel *pSurfel, SurfelGraph *surfels, Mesh *mesh, in
 					desc->cupyDescriptor[1] = 0.0;
 					desc->cupyDescriptor[2] = 0.0;
 					desc->cupyDescriptor[3] = 0.0;
+					desc->commonBoundaryLength = 0;
 					pSurfel->imgAdjacencyDescriptors.push_back(desc);	//push descriptor on the list
 
 					//push to other surfel
@@ -277,8 +282,8 @@ void SetSurfelImgAdjacency(Surfel *pSurfel, SurfelGraph *surfels, Mesh *mesh, in
 						desc->minDist = tempDist;
 				}
 			}
-		}
-	}
+		}	//Running through point neighbourhood
+	}	// for every boundary point
 }
 
 //Return surfel's centroind on the image. Useful for 2D visualization
@@ -765,6 +770,10 @@ void RunSeg2Bench(bool save)
 	}
 
 	//Adjacency and its descriptors
+	bool *bVisited = new bool[surfels.NodeArray.n];
+
+	memset(bVisited, 0, surfels.NodeArray.n * sizeof(bool));
+
 	pCurrSurfel = surfels.NodeArray.Element;
 	for (int i = 0; i < surfels.NodeArray.n; pCurrSurfel++, i++)
 	{
@@ -774,11 +783,13 @@ void RunSeg2Bench(bool save)
 		if (GetSurfelGTValidity(pCurrSurfel, GTlabImg, validityDist))
 		{
 			//Set Surfel naighbours
-			SetSurfelImgAdjacency(pCurrSurfel, &surfels, &mesh, neighbourhoodDist);
+			SetSurfelImgAdjacency(pCurrSurfel, &surfels, &mesh, bVisited, neighbourhoodDist);
 			//Calculate descriptors
 			DetermineImgAdjDescriptors(pCurrSurfel, &mesh);
 		}
 	}
+
+	delete[] bVisited;
 
 	//Same as SSF (SceneSegFile)
 	if (save)

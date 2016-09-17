@@ -1261,7 +1261,7 @@ bool PSGM::ReferenceFrames(int iCluster)
 
 	Array<RECOG::PSGM_::Tangent> tangentArray;
 
-	tangentArray.Element = new RECOG::PSGM_::Tangent[pCluster->iSurfelArray.n];
+	tangentArray.Element = new RECOG::PSGM_::Tangent[pSurfels->NodeArray.n];
 
 	//Array<RECOG::PSGM_::NormalHullElement> normalHull;
 

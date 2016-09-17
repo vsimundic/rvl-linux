@@ -21,6 +21,8 @@ using namespace RVL;
 
 SurfelGraph::SurfelGraph()
 {
+	imageAdjacencyThr = 6;
+
 	PtMem = NULL;
 	surfelBndMem = NULL;
 	surfelBndMem2 = NULL;
@@ -168,6 +170,171 @@ void SurfelGraph::Init(Mesh *pMesh)
 	edgeMarkMap = new unsigned char[nMeshEdges];
 }
 
+void SurfelGraph::ImageAdjacency(Mesh *pMesh)
+{
+	bool *bVisited = new bool[NodeArray.n];
+
+	memset(bVisited, 0, NodeArray.n * sizeof(bool));
+
+	int *surfelIdx = new int[NodeArray.n];
+
+	memset(surfelIdx, 0xff, NodeArray.n * sizeof(int));
+
+	int iSurfel;
+	Surfel *pSurfel;
+
+	for (iSurfel = 0; iSurfel < NodeArray.n; iSurfel++)
+	{
+		pSurfel = NodeArray.Element + iSurfel;
+
+		if (pSurfel->size <= 0)
+			continue;
+
+		ImageAdjacency(pMesh, iSurfel, surfelIdx, bVisited);
+	}
+
+	delete[] bVisited;
+	delete[] surfelIdx;
+}
+
+void SurfelGraph::ImageAdjacency(
+	Mesh *pMesh,
+	int iSurfel,
+	int *surfelIdx,
+	bool *bVisited)
+{
+	Surfel *pSurfel = NodeArray.Element + iSurfel;
+
+	//find largest boundary (most probable outer boundary)
+	int boundary = 0;
+	int boundarySize = 0;
+	if (pSurfel->BoundaryArray.n > 1)
+	{
+		for (int b = 0; b < pSurfel->BoundaryArray.n; b++)
+		{
+			if (pSurfel->BoundaryArray.Element[b].n > boundarySize)
+			{
+				boundarySize = pSurfel->BoundaryArray.Element[b].n;
+				boundary = b;
+			}
+		}
+	}
+	else
+		boundarySize = pSurfel->BoundaryArray.Element[boundary].n;
+
+	//run through edges
+	Array<MeshEdgePtr *> BoundaryArray = pSurfel->BoundaryArray.Element[boundary];
+	MeshEdgePtr *pCurrEdge;
+	Surfel *pOtherSurfel;
+	SurfelAdjecencyDescriptors *desc;
+	int iBoundary, iPointEdge;
+	int iPt, iPt2, x, y;
+	double tempDist;
+	int iOtherSurfel;
+	int i;
+	Point *pPt, *pPt2;
+	float *P, *P2;
+	float dP[3];
+
+	for (iPointEdge = 0; iPointEdge < BoundaryArray.n; iPointEdge++)
+	{
+		pCurrEdge = BoundaryArray.Element[iPointEdge];
+
+		iPt = RVLPCSEGMENT_GRAPH_GET_NODE(pCurrEdge);
+
+		pPt = pMesh->NodeArray.Element + iPt;
+
+		P = pPt->P;
+
+		y = floor(iPt / 640.0);
+		x = floor(iPt - 640.0 * y);
+
+		//Running through point neighbourhood
+		for (int yy = y - imageAdjacencyThr; yy < y + imageAdjacencyThr; yy++)
+		{
+			if ((yy < 0) || (yy >= 480))
+				continue;
+			for (int xx = x - imageAdjacencyThr; xx < x + imageAdjacencyThr; xx++)
+			{
+				if ((xx < 0) || (xx >= 640))
+					continue;
+				iPt2 = yy * 640 + xx;
+				pPt2 = pMesh->NodeArray.Element + iPt2;
+				P2 = pPt2->P;
+				iOtherSurfel = surfelMap[iPt2];
+				pOtherSurfel = NodeArray.Element + iOtherSurfel;	//surfel owner of the pixel
+				
+				if ((pOtherSurfel->size < 640 * 480) && (pOtherSurfel->size > 1) && (iOtherSurfel != iSurfel)/*&& (pOtherSurfel->ObjectID != pSurfel->ObjectID)*/ && surfelIdx[iOtherSurfel] < 0)
+				{
+					surfelIdx[iOtherSurfel] = pSurfel->imgAdjacency.size();
+
+					pSurfel->imgAdjacency.push_back(pOtherSurfel);	//push surfel pointer on the list
+
+					//calculate min dist
+					//preallocate the adjacency descriptor for future use
+					desc = new SurfelAdjecencyDescriptors;
+
+					RVLDIF3VECTORS(P2, P, dP);
+
+					desc->minDist = RVLDOTPRODUCT3(dP, dP);
+					desc->cupyDescriptor[0] = 0.0;
+					desc->cupyDescriptor[1] = 0.0;
+					desc->cupyDescriptor[2] = 0.0;
+					desc->cupyDescriptor[3] = 0.0;
+					desc->commonBoundaryLength = 0;
+					pSurfel->imgAdjacencyDescriptors.push_back(desc);	//push descriptor on the list
+
+					bVisited[iSurfel] = true;
+
+					//push to other surfel
+					pOtherSurfel->imgAdjacency.push_back(pSurfel);
+					pOtherSurfel->imgAdjacencyDescriptors.push_back(desc);
+				}
+				else if (surfelIdx[iOtherSurfel] >= 0)	//If it is on the list, find and update min distance
+				{
+					desc = pSurfel->imgAdjacencyDescriptors.at(surfelIdx[iOtherSurfel]);	//get related descriptor
+
+					RVLDIF3VECTORS(P2, P, dP);
+
+					tempDist = RVLDOTPRODUCT3(dP, dP);
+					if (tempDist < desc->minDist)	//update if the new one is smaller
+						desc->minDist = tempDist;
+
+					bVisited[iSurfel] = true;
+				}
+			}
+		}	//Running through point neighbourhood
+
+		for (i = 0; i < pSurfel->imgAdjacency.size(); i++)
+		{
+			pOtherSurfel = pSurfel->imgAdjacency.at(i);
+
+			iSurfel = pOtherSurfel - NodeArray.Element;
+
+			if (bVisited[iSurfel])
+			{
+				bVisited[iSurfel] = false;
+
+				desc = pSurfel->imgAdjacencyDescriptors.at(i);
+
+				desc->commonBoundaryLength++;
+			}
+		}
+	}	// for every boundary point
+
+	for (i = 0; i < pSurfel->imgAdjacency.size(); i++)
+	{
+		desc = pSurfel->imgAdjacencyDescriptors.at(i);
+
+		desc->minDist = sqrt(desc->minDist);
+
+		pOtherSurfel = pSurfel->imgAdjacency.at(i);
+
+		iOtherSurfel = pOtherSurfel - NodeArray.Element;
+
+		surfelIdx[iOtherSurfel] = -1;
+	}
+}
 
 void SurfelGraph::Clear()
 {

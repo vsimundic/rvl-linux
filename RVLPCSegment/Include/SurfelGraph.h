@@ -56,6 +56,7 @@ namespace RVL
 	{
 		double cupyDescriptor[4];
 		double minDist;
+		int commonBoundaryLength;
 	};
 
 	struct Surfel
@@ -134,6 +135,12 @@ namespace RVL
 			FILE *fp,
 			char *meshFileName,
 			void *vpDetector);
+		void ImageAdjacency(Mesh *pMesh);
+		void ImageAdjacency(
+			Mesh *pMesh, 
+			int iSurfel, 
+			int *surfelIdx,
+			bool *bVisited);
 
 	public:	
 		CRVLParameterList ParamList;
@@ -152,6 +159,7 @@ namespace RVL
 		SURFEL::DisplayCallbackData DisplayData; //VIDOVIC
 		QList<QLIST::Entry<Array<MeshEdgePtr *>>> BoundaryList;
 		MeshEdgePtr **BndMem;
+		int imageAdjacencyThr;
 	private:
 		unsigned char *nodeColor;
 	};
