@@ -4,12 +4,6 @@
 #include "RVLCore2.h"
 #include "Util.h"
 #include "Graph.h"
-//#include <Eigen\Eigenvalues>
-//#include <pcl/common/common.h>
-//#include <pcl/PolygonMesh.h>
-//#include "PCLTools.h"
-//#include "PCLMeshBuilder.h"
-//#include "RGBDCamera.h"
 #include "Mesh.h"
 #include "Visualizer.h"
 #include "SurfelGraph.h"
@@ -34,6 +28,7 @@ SurfelGraph::SurfelGraph()
 	NodeArray.Element = NULL;
 	edgeMarkMap = NULL;
 	EdgeArray.Element = NULL;
+
 	DisplayData.mouseRButtonDownUserFunction = NULL;
 	DisplayData.keyPressUserFunction = NULL;
 	DisplayData.edgeFeatureDepth = 0.01f;
@@ -180,6 +175,8 @@ void SurfelGraph::ImageAdjacency(Mesh *pMesh)
 
 	memset(surfelIdx, 0xff, NodeArray.n * sizeof(int));
 
+	nImageAdjacencyRelations = 0;
+
 	int iSurfel;
 	Surfel *pSurfel;
 
@@ -187,7 +184,7 @@ void SurfelGraph::ImageAdjacency(Mesh *pMesh)
 	{
 		pSurfel = NodeArray.Element + iSurfel;
 
-		if (pSurfel->size <= 0)
+		if (pSurfel->size <= 1)
 			continue;
 
 		ImageAdjacency(pMesh, iSurfel, surfelIdx, bVisited);
@@ -266,13 +263,15 @@ void SurfelGraph::ImageAdjacency(
 				
 				if ((pOtherSurfel->size < 640 * 480) && (pOtherSurfel->size > 1) && (iOtherSurfel != iSurfel)/*&& (pOtherSurfel->ObjectID != pSurfel->ObjectID)*/ && surfelIdx[iOtherSurfel] < 0)
 				{
+					nImageAdjacencyRelations++;
+
 					surfelIdx[iOtherSurfel] = pSurfel->imgAdjacency.size();
 
 					pSurfel->imgAdjacency.push_back(pOtherSurfel);	//push surfel pointer on the list
 
 					//calculate min dist
 					//preallocate the adjacency descriptor for future use
-					desc = new SurfelAdjecencyDescriptors;
+					RVLMEM_ALLOC_STRUCT(pMem, SurfelAdjecencyDescriptors, desc);
 
 					RVLDIF3VECTORS(P2, P, dP);
 
@@ -284,7 +283,7 @@ void SurfelGraph::ImageAdjacency(
 					desc->commonBoundaryLength = 0;
 					pSurfel->imgAdjacencyDescriptors.push_back(desc);	//push descriptor on the list
 
-					bVisited[iSurfel] = true;
+					bVisited[iOtherSurfel] = true;
 
 					//push to other surfel
 					pOtherSurfel->imgAdjacency.push_back(pSurfel);
@@ -300,7 +299,7 @@ void SurfelGraph::ImageAdjacency(
 					if (tempDist < desc->minDist)	//update if the new one is smaller
 						desc->minDist = tempDist;
 
-					bVisited[iSurfel] = true;
+					bVisited[iOtherSurfel] = true;
 				}
 			}
 		}	//Running through point neighbourhood
@@ -309,11 +308,11 @@ void SurfelGraph::ImageAdjacency(
 		{
 			pOtherSurfel = pSurfel->imgAdjacency.at(i);
 
-			iSurfel = pOtherSurfel - NodeArray.Element;
+			iOtherSurfel = pOtherSurfel - NodeArray.Element;
 
-			if (bVisited[iSurfel])
+			if (bVisited[iOtherSurfel])
 			{
-				bVisited[iSurfel] = false;
+				bVisited[iOtherSurfel] = false;
 
 				desc = pSurfel->imgAdjacencyDescriptors.at(i);
 

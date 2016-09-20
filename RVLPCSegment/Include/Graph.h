@@ -53,6 +53,12 @@ namespace RVL
 			GRAPH::EdgePtr<GRAPH::Edge> *pEdgePtr[2];
 			int idx;
 		};
+
+		template<typename EdgeType> struct AggregateNode
+		{
+			Array<int> iElementArray;
+			QList<EdgePtr<EdgeType>> EdgeList;
+		};
 	}
 
 	template<typename NodeType, typename EdgeType, typename EdgePtrType>

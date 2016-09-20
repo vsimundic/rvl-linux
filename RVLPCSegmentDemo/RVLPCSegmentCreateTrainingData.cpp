@@ -205,7 +205,7 @@ void FindSurfelNeighbours(std::vector<Surfel*> &nList, Surfel *pSurfel, SurfelGr
 }
 
 //Sets a list of neighbouring surfels
-void SetSurfelImgAdjacency(Surfel *pSurfel, SurfelGraph *surfels, Mesh *mesh, bool *bVisited, int thr)
+void SetSurfelImgAdjacency(Surfel *pSurfel, SurfelGraph *surfels, Mesh *mesh, int thr)
 {
 	//find largest boundary (most probable outer boundary)
 	int boundary = 0;
@@ -770,10 +770,6 @@ void RunSeg2Bench(bool save)
 	}
 
 	//Adjacency and its descriptors
-	bool *bVisited = new bool[surfels.NodeArray.n];
-
-	memset(bVisited, 0, surfels.NodeArray.n * sizeof(bool));
-
 	pCurrSurfel = surfels.NodeArray.Element;
 	for (int i = 0; i < surfels.NodeArray.n; pCurrSurfel++, i++)
 	{
@@ -783,13 +779,11 @@ void RunSeg2Bench(bool save)
 		if (GetSurfelGTValidity(pCurrSurfel, GTlabImg, validityDist))
 		{
 			//Set Surfel naighbours
-			SetSurfelImgAdjacency(pCurrSurfel, &surfels, &mesh, bVisited, neighbourhoodDist);
+			SetSurfelImgAdjacency(pCurrSurfel, &surfels, &mesh, neighbourhoodDist);
 			//Calculate descriptors
 			DetermineImgAdjDescriptors(pCurrSurfel, &mesh);
 		}
 	}
-
-	delete[] bVisited;
 
 	//Same as SSF (SceneSegFile)
 	if (save)

@@ -13,6 +13,13 @@ namespace RVL
 {
 	class SurfelGraph;
 
+	struct SurfelAdjecencyDescriptors
+	{
+		double cupyDescriptor[4];
+		double minDist;
+		int commonBoundaryLength;
+	};
+
 	namespace SURFEL
 	{
 		struct DisplayCallbackData
@@ -51,13 +58,6 @@ namespace RVL
 			EdgePtr *pNext;
 		};
 	}
-
-	struct SurfelAdjecencyDescriptors
-	{
-		double cupyDescriptor[4];
-		double minDist;
-		int commonBoundaryLength;
-	};
 
 	struct Surfel
 	{
@@ -140,7 +140,7 @@ namespace RVL
 			Mesh *pMesh, 
 			int iSurfel, 
 			int *surfelIdx,
-			bool *bVisited);
+			bool *bVisited);		
 
 	public:	
 		CRVLParameterList ParamList;
@@ -160,6 +160,7 @@ namespace RVL
 		QList<QLIST::Entry<Array<MeshEdgePtr *>>> BoundaryList;
 		MeshEdgePtr **BndMem;
 		int imageAdjacencyThr;
+		int nImageAdjacencyRelations;
 	private:
 		unsigned char *nodeColor;
 	};

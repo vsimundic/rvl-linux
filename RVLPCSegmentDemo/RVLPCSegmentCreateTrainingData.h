@@ -3,7 +3,7 @@ float GetShortestDistanceToBoundary(int x, int y, Array<MeshEdgePtr *> &Boundary
 void DrawSurfelBoundary(Array<MeshEdgePtr *> &BoundaryArray, cv::Mat img);
 bool GetSurfelGTValidity(Surfel *pSurfel, cv::Mat labGTImg, float thr);
 void FindSurfelNeighbours(std::vector<Surfel*> &nList, Surfel *pSurfel, SurfelGraph *surfels, int thr = 5);
-void SetSurfelImgAdjacency(Surfel *pSurfel, SurfelGraph *surfels, Mesh *mesh, bool *bVisited, int thr = 5);
+void SetSurfelImgAdjacency(Surfel *pSurfel, SurfelGraph *surfels, Mesh *mesh, int thr = 5);
 void GetSurfelImgCentroid(int &x, int &y, Surfel *pSurfel);
 void AddVTKLine(float *P1, float *P2, vtkSmartPointer<vtkRenderer> renderer, double *color);
 cv::Mat GenColoredGTImg(cv::Mat labImg);

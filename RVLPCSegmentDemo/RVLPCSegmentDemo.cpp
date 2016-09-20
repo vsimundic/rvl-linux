@@ -13,6 +13,7 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 #include "Mesh.h"
 #include "Visualizer.h"
 #include "SurfelGraph.h"
+#include "ObjectGraph.h"
 #include "PlanarSurfelDetector.h"
 #include <pcl/common/common.h>
 #include <pcl/PolygonMesh.h>
@@ -103,6 +104,8 @@ int main(int argc, char ** argv)
 
 	SurfelGraph surfels;
 
+	surfels.pMem = &mem;
+
 	surfels.Init(&mesh);
 
 	surfels.CreateParamList(&mem0);
@@ -119,7 +122,7 @@ int main(int argc, char ** argv)
 
 	detector.pTimer = new CRVLTimer;
 
-	printf("Segmentation to surfels...");
+	printf("Segmentation to surfels... ");
 
 	double StartTime = detector.pTimer->GetTime();
 
@@ -133,9 +136,25 @@ int main(int argc, char ** argv)
 
 	// Group surfels into objects.
 
+	printf("Grouping surfels into objects... ");
+
 	surfels.ImageAdjacency(&mesh);
 
-	//GetSurfelRelationDescritors(&mesh, &surfels, 6);
+	Surfel *pSurfel = surfels.NodeArray.Element;
+
+	for (int i = 0; i < surfels.NodeArray.n; pSurfel++, i++)
+	{
+		if (pSurfel->size <= 1)
+			continue;
+
+		DetermineImgAdjDescriptors(pSurfel, &mesh);
+	}
+
+	SURFEL::ObjectGraph objects;
+
+	objects.Create(&surfels);
+
+	printf("completed.\n");
 
 	// Display mesh.
 
