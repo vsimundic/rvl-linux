@@ -16,12 +16,21 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 #include "PlanarSurfelDetector.h"
 #include "RVLRecognition.h"
 #include "RFRecognition.h"
+#include "RVLMeshNoiser.h"
 #include "PSGM.h"
 #include <pcl/common/common.h>
 #include <pcl/PolygonMesh.h>
 #include "PCLTools.h"
 #include "RGBDCamera.h"
 #include "PCLMeshBuilder.h"
+
+// VIDOVIC
+//#define RVL_COORDINATE_SYSTEM_NOISE_STABILITY_TEST
+//#define RVL_COORDINATE_SYSTEM_NOISE_STABILITY_TEST_DEBUG
+//#define RVL_FEATURE_TEST_SCENE_SEQUENCE
+//#define RVL_FEATURE_TEST_PRECISION_RECALL_GRAPH
+#define RVL_LOAD_SINGLE_MODEL
+//END VIDOVIC
 
 using namespace RVL;
 
@@ -32,6 +41,8 @@ void CreateParamList(
 	CRVLParameterList *pParamList,
 	CRVLMem *pMem,
 	char **pMeshFileName,
+	char **pSceneSequenceFileName,	//VIDOVIC
+	char **pModelSequenceFileName,	//VIDOVIC
 	DWORD &method)
 {
 	pParamList->m_pMem = pMem;
@@ -41,8 +52,11 @@ void CreateParamList(
 	pParamList->Init();
 
 	pParamData = pParamList->AddParam("SceneFileName", RVLPARAM_TYPE_STRING, pMeshFileName);
+	pParamData = pParamList->AddParam("SceneSequenceFileName", RVLPARAM_TYPE_STRING, pSceneSequenceFileName);	//VIDOVIC
+	pParamData = pParamList->AddParam("ModelSequenceFileName", RVLPARAM_TYPE_STRING, pModelSequenceFileName);	//VIDOVIC
 	pParamData = pParamList->AddParam("Recognition.method", RVLPARAM_TYPE_ID, &method);
 	pParamList->AddID(pParamData, "PSGM", RVLRECOGNITION_METHOD_PSGM);
+	pParamList->AddID(pParamData, "RF", RVLRECOGNITION_METHOD_RF); //VIDOVIC
 	//pParamData = pParamList->AddParam("Save PLY", RVLPARAM_TYPE_ID, &flags);
 	//pParamList->AddID(pParamData, "yes", RVLPCSEGMENT_DEMO_FLAG_SAVE_PLY);
 }
@@ -53,22 +67,30 @@ int main(int argc, char ** argv)
 
 	CRVLMem mem0;	// permanent memory
 
-	mem0.Create(1000000);
+	mem0.Create(1000000000);
 
 	CRVLMem mem;	// cycle memory
 
-	mem.Create(100000000);
+	mem.Create(1000000000);
 
 	// Read parameters from a configuration file.
 
 	char *sceneMeshFileName = NULL;
+	char *sceneSequenceFileName = NULL; //VIDOVIC
+	char *modelSequenceFileName = NULL; //VIDOVIC
 	DWORD method = RVLRECOGNITION_METHOD_PSGM;
+	//DWORD method = RVLRECOGNITION_METHOD_RF; //VIDOVIC
 
 	////DWORD flags = 0x00000000;
 
 	CRVLParameterList ParamList;
 
-	CreateParamList(&ParamList, &mem0, &sceneMeshFileName, method);
+	CreateParamList(&ParamList,
+		&mem0,
+		&sceneMeshFileName,
+		&sceneSequenceFileName,
+		&modelSequenceFileName,
+		method);	 //VIDOVIC
 
 	ParamList.LoadParams("RVLRecognitionDemo.cfg");
 
@@ -85,6 +107,13 @@ int main(int argc, char ** argv)
 	surfelDetector.CreateParamList(&mem0);
 
 	surfelDetector.ParamList.LoadParams("RVLRecognitionDemo.cfg");
+
+	//VIDOVIC
+	//initialize mesh noiser
+	MeshNoiser noiser;
+
+	noiser.SetParam(1, 0.05);
+	//END VIDOVIC
 
 	// Initialize visualization
 
@@ -126,9 +155,48 @@ int main(int argc, char ** argv)
 
 			Mesh mesh;
 
+			//VIDOVIC
+#ifdef RVL_COORDINATE_SYSTEM_NOISE_STABILITY_TEST
+
+			recognition.CoordinateSystemNoiseStabilityTest(sceneMeshFileName, noiser, 0);
+
+#endif // RVL_COORDINATE_SYSTEM_NOISE_STABILITY_TEST
+
+#ifdef RVL_FEATURE_TEST_SCENE_SEQUENCE
+
+			recognition.FeatureTestSceneSequence(sceneSequenceFileName, noiser);
+
+#endif // RVL_FEATURE_TEST_SCENE_SEQUENCE
+
+#ifdef RVL_FEATURE_TEST_PRECISION_RECALL_GRAPH
+
+			recognition.FeatureTestPrecisionRecallGraph(sceneMeshFileName, sceneSequenceFileName, noiser);
+
+#endif // RVL_FEATURE_TEST_PRECISION_RECALL_GRAPH
+
+#ifdef RVL_LOAD_SINGLE_MODEL
+
+
+			//VIDOVIC
+			RECOG::Hypothesis *pBestHypothesis = NULL;
+			float V[3], theta;
+			float distance;
+			//END VIDOVIC
+
 			mesh.LoadPolyDataFromPLY(sceneMeshFileName);
 
 			recognition.FindObjects(&mesh);
+
+			//VIDOVIC
+			recognition.FindBestHypothesis(&pBestHypothesis);
+
+			recognition.GetAngleAxis(pBestHypothesis->R, V, theta);
+			recognition.GetDistance(pBestHypothesis->t, distance);
+
+			FILE *fpHypothesisErrorDebug = NULL;
+
+			fpHypothesisErrorDebug = fopen("C:\\RVL\\Debug\\hypothesisErrorDebug.txt", "w");
+			//END VIDOVIC
 
 			FILE *fpInterpretation = fopen("C:\\RVL\\Debug\\interpretation.txt", "w");
 
@@ -138,13 +206,25 @@ int main(int argc, char ** argv)
 			{
 				RECOG::WriteHypothesis(fpInterpretation, pHypothesis);
 
+				//VIDOVIC
+				recognition.GetAngleAxis(pHypothesis->R, V, theta);
+				recognition.GetDistance(pHypothesis->t, distance);
+
+				RECOG::WriteHypothesisError(fpHypothesisErrorDebug, pHypothesis, distance, theta * 180 / PI);
+				//END VIDOVIC
+
 				pHypothesis = pHypothesis->pNext;
 			}
 
 			fclose(fpInterpretation);
+			fclose(fpHypothesisErrorDebug); //VIDOVIC
+
+#endif // RVL_LOAD_SINGLE_MODEL
+			//END VIDOVIC
 
 			// Visualization
 
+			surfels.NodeColors(SelectionColor); //VIDOVIC
 			recognition.InitDisplay(&visualizer, &mesh);
 			recognition.Display();
 			visualizer.Run();
@@ -168,7 +248,7 @@ int main(int argc, char ** argv)
 
 		if (recognition.mode == RVLRECOGNITION_MODE_TRAINING)
 		{
-			// Add your code here.
+			recognition.Learn(modelSequenceFileName); //VIDOVIC
 		}
 		else if (recognition.mode == RVLRECOGNITION_MODE_RECOGNITION)
 		{
@@ -198,6 +278,15 @@ int main(int argc, char ** argv)
 
 	if (sceneMeshFileName)
 		delete[] sceneMeshFileName;
+
+	//VIDOVIC
+	if (sceneSequenceFileName)
+		delete[] sceneSequenceFileName;
+
+	if (modelSequenceFileName)
+		delete[] modelSequenceFileName;
+
+	//END VIDOVIC
 
 	return 0;
 }

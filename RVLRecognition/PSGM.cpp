@@ -47,6 +47,9 @@ PSGM::PSGM()
 	vertexDisplayLineArray.Element = NULL;
 	vertexDisplayLineArrayMem = NULL;
 	sceneFileName = NULL;
+	modelDataBase = NULL; //VIDOVIC
+	modelsInDataBase = NULL; //VIDOVIC
+	modelInstanceDB.n = 0; //VIDOVIC
 }
 
 
@@ -65,6 +68,9 @@ PSGM::~PSGM()
 	RVL_DELETE_ARRAY(vertexDisplayLineArray.Element);
 	RVL_DELETE_ARRAY(vertexDisplayLineArrayMem);
 	RVL_DELETE_ARRAY(sceneFileName);
+	RVL_DELETE_ARRAY(modelInstanceDB.Element); //VIDOVIC
+	RVL_DELETE_ARRAY(modelDataBase); //VIDOVIC
+	RVL_DELETE_ARRAY(modelsInDataBase); //VIDOVIC
 }
 
 void PSGM::CreateParamList(CRVLMem *pMem)
@@ -1289,13 +1295,13 @@ bool PSGM::ReferenceFrames(int iCluster)
 
 	Array<SortIndex<float>> iSortedTangentArray;
 	
-	iSortedTangentArray.Element = new SortIndex<float>[pCluster->iSurfelArray.n];
+	iSortedTangentArray.Element = new SortIndex<float>[pSurfels->NodeArray.n];
 
 	Array<QList<QLIST::Index>> iTangentAngleArray;
 
 	iTangentAngleArray.n = (int)round(360.0f / baseSeparationAngle);
 	iTangentAngleArray.Element = new QList<QLIST::Index>[iTangentAngleArray.n];
-	QLIST::Index *iTangentAngleMem = new QLIST::Index[pCluster->iSurfelArray.n];
+	QLIST::Index *iTangentAngleMem = new QLIST::Index[pSurfels->NodeArray.n];
 
 	int *piSurfelFetch, *piSurfelPut, *piSurfel, *piSurfelBuffEnd;
 	RECOG::PSGM_::ModelInstance *pModelInstance;
@@ -2005,6 +2011,168 @@ void PSGM::SaveModelInstances(
 		pModelInstance = pModelInstance->pNext;
 	}
 }
+
+//VIDOVIC
+bool PSGM::ModelExistInDB(char *modelFileName, FileSequenceLoader dbLoader)
+{
+	char *dbFileName = new char[50];
+
+	while (dbLoader.GetNextName(dbFileName))
+		if (!strcmp(modelFileName, dbFileName))
+			return 1;
+
+	return 0;
+}
+
+void PSGM::SaveModelID(FileSequenceLoader dbLoader)
+{
+	FILE *fp = fopen(modelsInDataBase, "w");
+
+	char modelName[50], modelPath[200];
+	int modelID;
+
+	while (dbLoader.GetNext(modelPath, modelName, &modelID))
+		fprintf(fp, "%d\t%s\n", modelID, modelName);
+
+	fprintf(fp, "\nend");
+
+	fclose(fp);
+}
+
+void PSGM::Learn(char *modelSequenceFileName)
+{
+	FileSequenceLoader modelsLoader;
+	FileSequenceLoader dbLoader;
+
+	char *modelFilePath = new char[200];
+	char *modelFileName = new char[200];
+
+	Mesh mesh;
+
+	int iCluster, nClusters, currentModelID;
+
+	RVL_DELETE_ARRAY(modelDataBase);
+	RVL_DELETE_ARRAY(modelsInDataBase);
+
+	if (!modelDataBase)
+		modelDataBase = "modelDB.dat";
+
+	if (!modelsInDataBase)
+		modelsInDataBase = "DBModels.txt";
+
+	modelsLoader.Init(modelSequenceFileName);
+	dbLoader.Init(modelsInDataBase);
+
+	FILE *fp = fopen(modelDataBase, "a");
+
+	bool saveDBSequenceFile = false;
+
+	while (modelsLoader.GetNext(modelFilePath, modelFileName))
+	{
+		if (ModelExistInDB(modelFileName, dbLoader))
+			continue;
+
+		saveDBSequenceFile = true;
+
+		mesh.LoadPolyDataFromPLY(modelFilePath);
+
+		SetSceneFileName(modelFilePath);
+
+		Interpret(&mesh);
+
+		nClusters = RVLMIN(clusters.n, nDominantClusters);
+
+		currentModelID = dbLoader.GetLastModelID() + 1;
+
+		for (iCluster = 0; iCluster < nClusters; iCluster++)
+			SaveModelInstances(fp, currentModelID, iCluster);
+
+		dbLoader.AddModel(currentModelID, modelFilePath, modelFileName);
+	}
+
+	if (saveDBSequenceFile)
+		SaveModelID(dbLoader);
+
+	fclose(fp);
+}
+
+
+void PSGM::LoadModelDataBase()
+{
+	FILE *fp = fopen(modelDataBase, "r");
+
+	char line[1600];
+
+	int iModelInstance, iModelInstanceElement, i;
+
+	RECOG::PSGM_::ModelInstanceElement *pModelInstanceElement;
+	RECOG::PSGM_::ModelInstance *pModelInstance;
+
+	if (fp)
+	{
+		//count number of lines in model DB
+		while (!feof(fp))
+		{
+			fgets(line, 1600, fp);
+
+			modelInstanceDB.n++;
+		}
+
+		rewind(fp);
+
+		modelInstanceDB.Element = new RECOG::PSGM_::ModelInstance[modelInstanceDB.n];
+
+		pModelInstance = modelInstanceDB.Element;
+
+		for (iModelInstance = 0; iModelInstance < modelInstanceDB.n; iModelInstance++)
+		{
+			pModelInstance->modelInstance.Element = new RECOG::PSGM_::ModelInstanceElement[convexTemplate.n];
+
+			pModelInstance->modelInstance.n = convexTemplate.n;
+
+			fscanf(fp, "%d\t%d\t", &pModelInstance->iModel, &pModelInstance->iCluster);
+
+			for (i = 0; i < 9; i++)
+				fscanf(fp, "%f\t", &pModelInstance->R[i]);
+
+			for (i = 0; i < 3; i++)
+				fscanf(fp, "%f\t", &pModelInstance->t[i]);
+
+			for (iModelInstanceElement = 0; iModelInstanceElement < convexTemplate.n; iModelInstanceElement++)
+			{
+				pModelInstanceElement = pModelInstance->modelInstance.Element + iModelInstanceElement;
+
+				fscanf(fp, "%f\t", &pModelInstanceElement->d);
+			}
+
+			for (iModelInstanceElement = 0; iModelInstanceElement < convexTemplate.n; iModelInstanceElement++)
+			{
+				pModelInstanceElement = pModelInstance->modelInstance.Element + iModelInstanceElement;
+
+				fscanf(fp, "%d\t", &pModelInstanceElement->valid);
+			}
+
+			for (iModelInstanceElement = 0; iModelInstanceElement < convexTemplate.n; iModelInstanceElement++)
+			{
+				pModelInstanceElement = pModelInstance->modelInstance.Element + iModelInstanceElement;
+
+				fscanf(fp, "%f\t", &pModelInstanceElement->e);
+			}
+
+			if (iModelInstance == modelInstanceDB.n - 1)
+				pModelInstance->pNext = NULL;
+			else
+			{
+				pModelInstance->pNext = pModelInstance + 1;
+				pModelInstance++;
+			}
+		}
+	}
+
+	fclose(fp);
+}
+
+//END VIDOVIC
 
 void PSGM::InitDisplay(
 	Visualizer *pVisualizer,

@@ -1,11 +1,12 @@
 #pragma once
 
 #define RVLRFRECOGNITION_DEBUG
-#define RVLRFRECOGNITION_FEATURE_BASE_VISUALIZATION
+//#define RVLRFRECOGNITION_FEATURE_BASE_VISUALIZATION
 
 namespace RVL
 {
 	class RFRecognition;
+	class MeshNoiser; //VIDOVIC
 
 	namespace RECOG
 	{
@@ -240,10 +241,17 @@ namespace RVL
 			iz = (int)floor((P[2] - voxelBox.minz) / voxelSize);
 		}
 		void FindBestHypothesis(RECOG::Hypothesis **pBestHypothesis); //VIDOVIC
+		void LoadSceneModels(char *sceneSequenceFileName); //VIDOVIC
+		void GetSceneModelFileName(int modelIndex, char *fileName); //VIDOVIC
 		void InitDisplay(
 			Visualizer *pVisualizer,
 			Mesh *pMesh);
 		void Display();
+		bool GetAngleAxis(float *R, float *V, float &theta); //VIDOVIC
+		void GetDistance(float *t, float &distance); //VIDOVIC
+		void CoordinateSystemNoiseStabilityTest(char *sceneMeshFileName, MeshNoiser noiser, bool debug); //VIDOVIC
+		void FeatureTestSceneSequence(char *sceneSequenceFileName, MeshNoiser noiser); //VIDOVIC
+		void FeatureTestPrecisionRecallGraph(char *sceneMeshFileName, char *sceneSequenceFileName, MeshNoiser noiser); //VIDOVIC
 
 	public:
 		CRVLParameterList ParamList;
@@ -270,6 +278,7 @@ namespace RVL
 		float matchThr;
 		QList<RECOG::RFFeature> modelFeatureList;
 		QList<RECOG::Hypothesis> sceneInterpretation;
+		std::vector<std::vector<char>> sceneModelNames; //VIDOVIC
 	private:
 		unsigned char *markMap;
 		int *iSurfBuff;

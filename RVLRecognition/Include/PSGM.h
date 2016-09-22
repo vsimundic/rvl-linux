@@ -34,6 +34,8 @@ namespace RVL
 
 			struct ModelInstance
 			{
+				int iModel; // VIDOVIC
+				int iCluster; // VIDOVIC
 				float R[9];
 				float t[3];
 				Array<ModelInstanceElement> modelInstance;
@@ -140,6 +142,10 @@ namespace RVL
 		void UpdateNormalHull(
 			Array<RECOG::PSGM_::NormalHullElement> &NHull,
 			float *N);
+		bool ModelExistInDB(char *modelFileName, FileSequenceLoader dbLoader); //VIDOVIC
+		void SaveModelID(FileSequenceLoader dbLoader); //VIDOVIC
+		void Learn(char *modelSequenceFileName); //VIDOVIC
+		void LoadModelDataBase(); //VIDOVIC
 	private:
 		void DetectVertices(
 			Mesh *pMesh);
@@ -192,6 +198,7 @@ namespace RVL
 		float kReferenceTangentSize;
 		float baseSeparationAngle;
 		float edgeTangentAngle;
+		Array<RECOG::PSGM_::ModelInstance> modelInstanceDB; //VIDOVIC
 	private:		
 		QLIST::Index *surfelVertexMem;
 		RECOG::PSGM_::Cluster *clusterMem;
@@ -204,6 +211,8 @@ namespace RVL
 		vtkSmartPointer<vtkPolyData> referenceFramesPolyData;
 		char *sceneFileName;
 		int nVertexSurfelRelations;
+		char *modelDataBase; //VIDOVIC
+		char *modelsInDataBase; //VIDOVIC
 	};
 }
 

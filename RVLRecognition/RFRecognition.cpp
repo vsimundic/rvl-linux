@@ -10,6 +10,7 @@
 #include "Visualizer.h"
 #include "SurfelGraph.h"
 #include "PlanarSurfelDetector.h"
+#include "RVLMeshNoiser.h" //VIDOVIC
 #include "RVLRecognition.h"
 #include "RFRecognition.h"
 
@@ -1155,6 +1156,358 @@ void RFRecognition::FindBestHypothesis(RECOG::Hypothesis **pBestHypothesis)
 		pHypothesis = pHypothesis->pNext;
 	}
 
+}
+
+void RFRecognition::LoadSceneModels(char *sceneSequenceFileName)
+{
+	FILE *fp = fopen(sceneSequenceFileName, "r");
+
+	char line[100];
+	int lineCnt = 0;
+	int sequenceFileNameLength;
+
+	while (TRUE)
+	{
+		fgets(line, 100, fp);
+
+		//int linelen = strlen(line);
+
+		if (line[0] == '\n')
+			continue;
+
+		if (strstr(line, "end") == line)
+			break;
+
+		lineCnt++;
+
+		sceneModelNames.resize(lineCnt, std::vector<char>(0));
+
+		sceneModelNames[lineCnt - 1].assign(line, line + strlen(line) - 1);
+
+		sequenceFileNameLength = strlen(strrchr(sceneSequenceFileName, '\\')) - 1;
+
+		sceneModelNames[lineCnt - 1].insert(sceneModelNames[lineCnt - 1].begin(), sceneSequenceFileName, sceneSequenceFileName + strlen(sceneSequenceFileName) - sequenceFileNameLength);
+		sceneModelNames[lineCnt - 1].insert(sceneModelNames[lineCnt - 1].end(), 1, '\0');
+	}
+
+	fclose(fp);
+}
+
+void RFRecognition::GetSceneModelFileName(int modelIndex, char *fileName)
+{
+	char *pSceneFileName;
+	int fileNameLength;
+
+	pSceneFileName = sceneModelNames[modelIndex].data();
+
+	fileNameLength = sceneModelNames[modelIndex].size();
+
+	memcpy(fileName, pSceneFileName, fileNameLength);
+
+	//DELETE ROW
+	//sceneModelNames.erase(recognition.sceneModelNames.begin() + modelIndex);
+
+}
+
+bool RFRecognition::GetAngleAxis(float *R, float *V, float &theta)
+{
+	float k = 0.5 * (R[0 * 3 + 0] + R[1 * 3 + 1] + R[2 * 3 + 2] - 1.0);
+
+	if (k > 1.0)
+	{
+		theta = 0.0;
+
+		return FALSE;
+	}
+	else if (k < -1.0)
+	{
+		theta = PI;
+
+		return FALSE;
+	}
+
+	theta = acos(k);
+
+	k = 0.5 / sin(theta);
+
+	V[0] = k * (R[2 * 3 + 1] - R[1 * 3 + 2]);
+	V[1] = k * (R[0 * 3 + 2] - R[2 * 3 + 0]);
+	V[2] = k * (R[1 * 3 + 0] - R[0 * 3 + 1]);
+
+	return TRUE;
+}
+
+void RFRecognition::GetDistance(float *t, float &distance)
+{
+	distance = sqrt(t[0] * t[0] + t[1] * t[1] + t[2] * t[2]);
+}
+
+void RFRecognition::CoordinateSystemNoiseStabilityTest(char *sceneMeshFileName, MeshNoiser noiser, bool debug)
+{
+	int i;
+	RECOG::Hypothesis *pBestHypothesis = NULL;
+	FILE *fpHypothesisError = fopen("C:\\RVL\\Debug\\hypothesisError.txt", "w");
+	float V[3], theta;
+	float distance;
+	Mesh mesh;
+	//PCLMeshBuilder meshBuilder; //KOMENTIRANO DA SE NE BI MORAO INCLUDATI PCL
+
+	for (i = 0; i < 100; i++)
+	{
+		//DEBUG
+		printf("ITER: %d\n", i);
+
+		mesh.Clear();
+		mesh.pPolygonData = NULL;
+		mesh.LoadPolyDataFromPLY(sceneMeshFileName);
+
+		//add white noise to scene object
+		noiser.AddWhiteNoise(&mesh);
+
+		//save noised object
+		//mesh.SavePolyDataToPLY(sceneMeshFileName, &mesh);
+
+		FindObjects(&mesh);
+
+		if (debug)
+		{
+			char errorFileName[50];
+			char meshFileName[50];
+
+			FILE *fpHypothesisErrorDebug = NULL;
+			RECOG::Hypothesis *pHypothesis = NULL;
+			//pcl::PolygonMesh polygonMesh; //KOMENTIRANO DA SE NE BI MORAO INCLUDATI PCL
+
+			//find best hypothesis
+			FindBestHypothesis(&pBestHypothesis);
+
+			GetAngleAxis(pBestHypothesis->R, V, theta);
+			GetDistance(pBestHypothesis->t, distance);
+
+			RECOG::WriteHypothesisError(fpHypothesisError, pBestHypothesis, distance, theta * 180 / PI);
+
+			if (distance >= 10 || theta >= 0.1)
+			{
+				sprintf(errorFileName, "C:\\RVL\\Debug\\hypothesisError_%d.txt", i);
+				sprintf(meshFileName, "C:\\RVL\\Debug\\all_noised_%d.ply", i);
+
+				fpHypothesisErrorDebug = fopen(errorFileName, "w");
+
+				pHypothesis = sceneInterpretation.pFirst;
+
+				while (pHypothesis)
+				{
+					GetAngleAxis(pHypothesis->R, V, theta);
+					GetDistance(pHypothesis->t, distance);
+
+					RECOG::WriteHypothesisError(fpHypothesisErrorDebug, pHypothesis, distance, theta * 180 / PI);
+
+					pHypothesis = pHypothesis->pNext;
+				}
+
+
+				fclose(fpHypothesisErrorDebug);
+
+				//meshBuilder.CreateMesh(mesh.pPolygonData, polygonMesh); //KOMENTIRANO DA SE NE BI MORAO INCLUDATI PCL
+				//PCLSavePLY(meshFileName, polygonMesh); //KOMENTIRANO DA SE NE BI MORAO INCLUDATI PCL
+
+				//mesh.pPolygonData->Delete();
+			}
+		}
+		else
+		{
+			//find best hypothesis
+			FindBestHypothesis(&pBestHypothesis);
+
+			GetAngleAxis(pBestHypothesis->R, V, theta);
+			GetDistance(pBestHypothesis->t, distance);
+
+			RECOG::WriteHypothesisError(fpHypothesisError, pBestHypothesis, distance, theta * 180 / PI);
+		}
+	}
+
+	fclose(fpHypothesisError);
+}
+
+void RFRecognition::FeatureTestSceneSequence(char *sceneSequenceFileName, MeshNoiser noiser)
+{
+	int iSceneModel, nSceneModels;
+
+	RECOG::Hypothesis *pHypothesis = NULL;
+	RECOG::Hypothesis *pBestHypothesis = NULL;
+	FILE *fpSceneModelsHypothesis = NULL;
+
+	float V[3], theta;
+	float distance;
+
+	Mesh mesh;
+	char *sceneMeshFileName = new char[100];
+
+	FileSequenceLoader fileLoader;
+
+	fileLoader.Init(sceneSequenceFileName);
+
+	fpSceneModelsHypothesis = fopen("C:\\RVL\\Debug\\sceneModelsHypothesisError.txt", "w");
+
+	nSceneModels = fileLoader.nFileNames;
+
+	for (iSceneModel = 0; iSceneModel < nSceneModels; iSceneModel++)
+	{
+		mesh.Clear();
+		mesh.pPolygonData = NULL;
+
+		fileLoader.GetFilePath(iSceneModel, sceneMeshFileName);
+
+		printf("*****************************************************************\n");
+		printf("Scene Model %d: %s\n", iSceneModel, strrchr(sceneMeshFileName, '\\') + 1);
+		printf("*****************************************************************\n");
+
+		mesh.LoadPolyDataFromPLY(sceneMeshFileName);
+
+		//add white noise to scene object
+		noiser.AddWhiteNoise(&mesh);
+
+		FindObjects(&mesh);
+
+		//find best hypothesis
+		FindBestHypothesis(&pBestHypothesis);
+
+		fprintf(fpSceneModelsHypothesis, "%s %d: %s\n", "Scene Model", iSceneModel, strrchr(sceneMeshFileName, '\\') + 1);
+
+		if (pBestHypothesis)
+		{
+			GetAngleAxis(pBestHypothesis->R, V, theta);
+			GetDistance(pBestHypothesis->t, distance);
+
+			fprintf(fpSceneModelsHypothesis, "%s\t%s\t%s\n", "dist_ERR", "theta_ERR", "score");
+			fprintf(fpSceneModelsHypothesis, "%s\n", "Best hypothesis:");
+			fprintf(fpSceneModelsHypothesis, "%f\t%f\t%f\n", distance, theta * 180 / PI, pBestHypothesis->probability);
+			fprintf(fpSceneModelsHypothesis, "%s\n", "All hypothesis:");
+
+			pHypothesis = sceneInterpretation.pFirst;
+
+			while (pHypothesis)
+			{
+				GetAngleAxis(pHypothesis->R, V, theta);
+				GetDistance(pHypothesis->t, distance);
+
+				RECOG::WriteHypothesisError(fpSceneModelsHypothesis, pHypothesis, distance, theta * 180 / PI);
+
+				pHypothesis = pHypothesis->pNext;
+			}
+		}
+		else{
+			fprintf(fpSceneModelsHypothesis, "%s\n", "NO Hypothesis!!");
+		}
+
+		fprintf(fpSceneModelsHypothesis, "\n");
+	}
+
+	fclose(fpSceneModelsHypothesis);
+}
+
+void RFRecognition::FeatureTestPrecisionRecallGraph(char *sceneMeshFileName, char *sceneSequenceFileName, MeshNoiser noiser)
+{
+
+	RECOG::Hypothesis *pBestHypothesis = NULL;
+	FILE *fpTrue = NULL;
+	FILE *fpFalse = NULL;
+	FILE *fpBestHypothesisError = NULL;
+
+	Mesh mesh;
+
+	float V[3], theta;
+	float distance;
+
+	int iRefModelIter, refModelIter = 110;
+	int iSceneModel, nSceneModels;
+	int iSceneModelIter, sceneModelIter = 5;
+
+	FileSequenceLoader fileLoader;
+
+	fileLoader.Init(sceneSequenceFileName);
+
+	fpTrue = fopen("C:\\RVL\\Debug\\True_400.txt", "w");
+	fpBestHypothesisError = fopen("C:\\RVL\\Debug\\bestHypothesisError_400.txt", "w");
+
+	printf("*****************************************************************\n");
+	printf("Ref Model: %s\n", strrchr(sceneMeshFileName, '\\') + 1);
+	printf("*****************************************************************\n");
+
+	for (iRefModelIter = 0; iRefModelIter < refModelIter; iRefModelIter++)
+	{
+		printf("Iteration: %d\n", iRefModelIter + 1);
+
+		mesh.Clear();
+		mesh.pPolygonData = NULL;
+
+		mesh.LoadPolyDataFromPLY(sceneMeshFileName);
+
+		//add white noise to scene object
+		noiser.AddWhiteNoise(&mesh);
+
+		FindObjects(&mesh);
+
+		//find best hypothesis
+		FindBestHypothesis(&pBestHypothesis);
+
+		if (pBestHypothesis)
+		{
+			fprintf(fpTrue, "%f\n", pBestHypothesis->probability);
+
+			GetAngleAxis(pBestHypothesis->R, V, theta);
+			GetDistance(pBestHypothesis->t, distance);
+
+			RECOG::WriteHypothesisError(fpBestHypothesisError, pBestHypothesis, distance, theta * 180 / PI);
+		}
+		else
+			fprintf(fpTrue, "%s\n", "NO HYPOTHESIS");
+	}
+
+	fclose(fpTrue);
+	fclose(fpBestHypothesisError);
+
+	fpFalse = fopen("C:\\RVL\\Debug\\False_400.txt", "w");
+
+	nSceneModels = fileLoader.nFileNames;
+
+	for (iSceneModel = 0; iSceneModel < nSceneModels; iSceneModel++)
+	{
+		fileLoader.GetFilePath(iSceneModel, sceneMeshFileName);
+
+		//without Reference model
+		if (!strcmp(strrchr(sceneMeshFileName, '\\') + 1, "all.ply"))
+			continue;
+
+		printf("*****************************************************************\n");
+		printf("Scene Model %d: %s\n", iSceneModel, strrchr(sceneMeshFileName, '\\') + 1);
+		printf("*****************************************************************\n");
+
+		for (iSceneModelIter = 0; iSceneModelIter < sceneModelIter; iSceneModelIter++)
+		{
+			printf("Iteration: %d\n", iSceneModelIter + 1);
+
+			mesh.Clear();
+			mesh.pPolygonData = NULL;
+
+			mesh.LoadPolyDataFromPLY(sceneMeshFileName);
+
+			//add white noise to scene object
+			noiser.AddWhiteNoise(&mesh);
+
+			FindObjects(&mesh);
+
+			//find best hypothesis
+			FindBestHypothesis(&pBestHypothesis);
+
+			if (pBestHypothesis)
+				fprintf(fpFalse, "%f\n", pBestHypothesis->probability);
+			else
+				fprintf(fpFalse, "%s\n", "NO HYPOTHESIS");
+		}
+	}
+
+	fclose(fpFalse);
 }
 //END VIDOVIC
 

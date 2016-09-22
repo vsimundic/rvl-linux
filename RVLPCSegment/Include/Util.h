@@ -66,5 +66,38 @@ namespace RVL
 			}
 		}
 	}
+
+	//VIDOVIC
+	class FileSequenceLoader
+	{
+	public:
+		FileSequenceLoader();
+		~FileSequenceLoader();
+
+		bool Init(char *sequenceFileName);
+		bool Get(int index, char *filePath, char *fileName, int *ID);
+		bool GetNext(char *filePath, char *fileName, int *ID);
+		bool Get(int index, char *filePath, char *fileName);
+		bool GetNext(char *filePath, char *fileName);
+		bool GetFilePath(int index, char *filePath);
+		bool GetNextPath(char *filePath);
+		bool GetFileName(int index, char *fileName);
+		bool GetNextName(char *fileName);
+		bool GetID(int index, int *ID);
+		bool GetNextID(int *ID);
+		int GetLastModelID();
+		void AddModel(int ID, char *filePath, char *fileName);
+		void ResetID();
+
+	public:
+		int nFileNames;
+
+	private:
+		std::vector<std::vector<char>> names;
+		std::vector<std::vector<char>> paths;
+		std::vector<int> IDs;
+		int currentID;
+	};
+	//END VIDOVIC
 }
 
