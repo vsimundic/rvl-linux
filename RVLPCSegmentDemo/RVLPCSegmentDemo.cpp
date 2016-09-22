@@ -33,7 +33,8 @@ void CreateParamList(
 	CRVLParameterList *pParamList,
 	CRVLMem *pMem,
 	char **pMeshFileName,
-	DWORD &flags)
+	DWORD &flags,
+	bool &bSegmentToObjects)
 {
 	pParamList->m_pMem = pMem;
 
@@ -44,6 +45,7 @@ void CreateParamList(
 	pParamData = pParamList->AddParam("MeshFileName", RVLPARAM_TYPE_STRING, pMeshFileName);
 	pParamData = pParamList->AddParam("Save PLY", RVLPARAM_TYPE_ID, &flags);
 	pParamList->AddID(pParamData, "yes", RVLPCSEGMENT_DEMO_FLAG_SAVE_PLY);
+	pParamData = pParamList->AddParam("SegmentToObjects", RVLPARAM_TYPE_BOOL, &bSegmentToObjects);
 }
 
 int main(int argc, char ** argv)
@@ -70,10 +72,11 @@ int main(int argc, char ** argv)
 	char *MeshFileName = NULL;
 
 	DWORD flags = 0x00000000;
+	bool bSegmentToObjects = false;
 
 	CRVLParameterList ParamList;
 
-	CreateParamList(&ParamList, &mem0, &MeshFileName, flags);
+	CreateParamList(&ParamList, &mem0, &MeshFileName, flags, bSegmentToObjects);
 
 	ParamList.LoadParams("RVLPCSegmentDemo.cfg");
 
@@ -136,27 +139,34 @@ int main(int argc, char ** argv)
 
 	// Group surfels into objects.
 
-	printf("Grouping surfels into objects... ");
-
-	surfels.ImageAdjacency(&mesh);
-
-	Surfel *pSurfel = surfels.NodeArray.Element;
-
-	for (int i = 0; i < surfels.NodeArray.n; pSurfel++, i++)
-	{
-		if (pSurfel->size <= 1)
-			continue;
-
-		DetermineImgAdjDescriptors(pSurfel, &mesh);
-	}
-
 	SURFEL::ObjectGraph objects;
 
-	objects.Create(&surfels);
+	if (bSegmentToObjects)
+	{
+		printf("Grouping surfels into objects... ");
 
-	printf("completed.\n");
+		surfels.ImageAdjacency(&mesh);
 
-	// Display mesh.
+		Surfel *pSurfel = surfels.NodeArray.Element;
+
+		for (int i = 0; i < surfels.NodeArray.n; pSurfel++, i++)
+		{
+			if (pSurfel->size <= 1)
+				continue;
+
+			DetermineImgAdjDescriptors(pSurfel, &mesh);
+		}
+
+		objects.Create(&surfels);
+
+		objects.ComputeRelationCosts();
+
+		objects.WERSegmentation();
+
+		printf("completed.\n");
+	}
+
+	// Display segmentation.
 
 	unsigned char SelectionColor[3];
 
@@ -170,7 +180,15 @@ int main(int argc, char ** argv)
 
 	visualizer.Create();
 	surfels.InitDisplay(&visualizer, &mesh, &detector);
-	surfels.Display(&visualizer, &mesh);
+
+	if (bSegmentToObjects)
+	{
+		objects.InitDisplay(&visualizer, &mesh, SelectionColor);
+		objects.Display();
+	}
+	else
+		surfels.Display(&visualizer, &mesh);
+
 	//detector.DisplaySoftEdges(&visualizer, &mesh, &surfels, SelectionColor);
 	visualizer.Run();
 

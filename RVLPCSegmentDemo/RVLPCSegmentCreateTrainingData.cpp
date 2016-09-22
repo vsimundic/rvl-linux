@@ -36,7 +36,8 @@ void CreateParamList(
 	CRVLParameterList *pParamList,
 	CRVLMem *pMem,
 	char **pMeshFileName,
-	DWORD &flags);
+	DWORD &flags,
+	bool &bSegmentToObjects);
 
 //Returns surfels Label ID with most object support
 int DetPrimaryGTObj(Surfel *pSurfel, cv::Mat labGTImg, int noObj)
@@ -670,10 +671,11 @@ void RunSeg2Bench(bool save)
 	char *MeshFileName = NULL;
 
 	DWORD flags = 0x00000000;
+	bool bSegmentToObjects = false;
 
 	CRVLParameterList ParamList;
 
-	CreateParamList(&ParamList, &mem0, &MeshFileName, flags);
+	CreateParamList(&ParamList, &mem0, &MeshFileName, flags, bSegmentToObjects);
 
 	ParamList.LoadParams("RVLPCSegmentDemo.cfg");
 

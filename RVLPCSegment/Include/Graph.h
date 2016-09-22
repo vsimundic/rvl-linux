@@ -47,6 +47,13 @@ namespace RVL
 			EdgePtr<EdgeType> *pNext;
 		};
 
+		template<typename EdgeType> struct EdgePtr2
+		{
+			EdgeType *pEdge;
+			EdgePtr2<EdgeType> *pNext;
+			EdgePtr2<EdgeType> **pPtrToThis;
+		};
+
 		struct Edge
 		{
 			int iNode[2];
@@ -56,8 +63,8 @@ namespace RVL
 
 		template<typename EdgeType> struct AggregateNode
 		{
-			Array<int> iElementArray;
-			QList<EdgePtr<EdgeType>> EdgeList;
+			QList<QLIST::Index> elementList;
+			QList<EdgePtr2<EdgeType>> EdgeList;
 		};
 	}
 
@@ -249,8 +256,9 @@ namespace RVL
 	namespace GRAPH
 	{
 		template<typename NodeType, typename EdgeType, typename EdgePtrType, typename CostType>
-		void WERSegmentation(
+		void WERAggregation(
 			Graph<typename NodeType, typename EdgeType, typename EdgePtrType> &graph,
+			int *aggregateMap,
 			QLIST::Index *elementListMem,
 			CostType minCostDiff,
 			CostType costResolution)
@@ -282,6 +290,8 @@ namespace RVL
 
 			CostType maxPossibleCost = 0;
 
+			int i;
+
 			for (i = 0; i < graph.EdgeArray.n; i++)
 				maxPossibleCost += graph.EdgeArray.Element[i].cost;
 
@@ -308,7 +318,7 @@ namespace RVL
 
 			QLIST::Index2 *pEdgeQueueEntry = edgeQueueMem;
 
-			CostType iMaxCost = 0;
+			int iMaxCost = 0;
 
 			CostType cost;
 			int iCost;
@@ -408,9 +418,9 @@ namespace RVL
 					pEdge12 = pEdgePtr21->pEdge;
 
 					if (pEdge12->iVertex[0] == iNode2)
-						pEdge12->iVertex[0] == iNode1;
+						pEdge12->iVertex[0] = iNode1;
 					else if (pEdge12->iVertex[1] == iNode2)
-						pEdge12->iVertex[1] == iNode1;
+						pEdge12->iVertex[1] = iNode1;
 
 					pEdgePtr21 = pEdgePtr21->pNext;
 				}
@@ -434,12 +444,12 @@ namespace RVL
 					iNode3 = pEdge13->iVertex[side3];
 
 					if (iNode3 == iNode1)
-						RVLQLIST_REMOVE_ENTRY2(pEdgeList1, pEdgePtr13, EdgePtrType);	// Remove pEdge13 from the edge list of iNode1.
+						RVLQLIST_REMOVE_ENTRY2(pEdgeList1, pEdgePtr13, EdgePtrType)	// Remove pEdge13 from the edge list of iNode1.
 					else if (iVisitedNodeEdge[iNode3] >= 0)
 					{
 						// Remove pEdge13 from the edge list of iNode1. 
 
-						RVLQLIST_REMOVE_ENTRY2(pEdgeList1, pEdgePtr13, EdgePtrType);	
+						RVLQLIST_REMOVE_ENTRY2(pEdgeList1, pEdgePtr13, EdgePtrType)	
 
 						// Remove pEdge13 from the edge list of iNode3. 
 
@@ -449,7 +459,7 @@ namespace RVL
 
 						pEdgeList3 = &(pNode3->EdgeList);
 
-						RVLQLIST_REMOVE_ENTRY2(pEdgeList3, pEdgePtr31);
+						RVLQLIST_REMOVE_ENTRY2(pEdgeList3, pEdgePtr31, EdgePtrType)
 
 						// pRefEdge <- the first visited edge which connects iNode1 and iNode3
 
@@ -465,7 +475,7 @@ namespace RVL
 
 							pEdgeList_ = edgeQueue.Element + RVLPCSEGMENT_GRAPH_LOG_BIN_INDEX(pEdge13->cost, minCostDiff, lnCostResolution);;
 
-							RVLQLIST_REMOVE_ENTRY2(pEdgeList_, pEdge13QueueEntry);
+							RVLQLIST_REMOVE_ENTRY2(pEdgeList_, pEdge13QueueEntry, QLIST::Index2)
 						}
 
 						// Remove pRefEdge from edgeQueue.
@@ -476,7 +486,7 @@ namespace RVL
 						{
 							pEdgeList_ = edgeQueue.Element + RVLPCSEGMENT_GRAPH_LOG_BIN_INDEX(pRefEdge->cost, minCostDiff, lnCostResolution);
 
-							RVLQLIST_REMOVE_ENTRY2(pEdgeList_, pRefEdgeQueueEntry);
+							RVLQLIST_REMOVE_ENTRY2(pEdgeList_, pRefEdgeQueueEntry, QLIST::Index2)
 						}
 
 						// pRefEdge->cost <- pRefEdge->cost + pEdge13->cost
@@ -491,7 +501,7 @@ namespace RVL
 
 							pEdgeList_ = edgeQueue.Element + iCost;
 
-							RVLQLIST_ADD_ENTRY2(pEdgeList_, pRefEdgeQueueEntry);
+							RVLQLIST_ADD_ENTRY2(pEdgeList_, pRefEdgeQueueEntry)
 
 							// Update iMaxCost.
 
@@ -538,6 +548,26 @@ namespace RVL
 			delete[] iVisitedNodeEdge;
 			delete[] edgeQueue.Element;
 			delete[] edgeQueueMem;
+
+			// Fill the elementMap.
+
+			memset(aggregateMap, 0xff, graph.NodeArray.n * sizeof(int));
+
+			for (iNode = 0; iNode < graph.NodeArray.n; iNode++)
+			{
+				pNode = graph.NodeArray.Element + iNode;
+
+				pElementList = &(pNode->elementList);
+
+				pElement = pElementList->pFirst;
+
+				while (pElement)
+				{
+					aggregateMap[pElement->Idx] = iNode;
+
+					pElement = pElement->pNext;
+				}
+			}
 		}	// WERSegmentation()
 	}	// namespace GRAPH
 }	// namespace RVL
