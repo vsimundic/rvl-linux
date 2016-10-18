@@ -950,7 +950,7 @@ void PSGM::Clusters()
 
 						pSurfel_ = pSurfels->NodeArray.Element + iSurfel_;
 
-						if (pSurfel_->size > 0)
+						if (pSurfel_->size > 1)
 						{
 							if (BelowPlane(pCluster, pSurfel_))
 							{
