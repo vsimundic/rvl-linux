@@ -710,6 +710,14 @@ void ObjectGraph::Create(SurfelGraph *pSurfels_)
 
 void ObjectGraph::WERSegmentation()
 {
+#ifdef RVLPCSEGMENT_GRAPH_WERAGGREGATION_DEBUG
+	FILE *fp = fopen("C:\\RVL\\Debug\\WERAggGraph.txt", "w");
+
+	WriteSurfelDataToFile(fp);
+
+	fclose(fp);
+#endif
+
 	GRAPH::WERAggregation<GRAPH::AggregateNode<AgEdge>, AgEdge, GRAPH::EdgePtr2<AgEdge>, float>(*this, objectMap, elementMem, WERSegmentationMinCostDiff, WERSegmentationCostResolution);
 }
 
@@ -737,6 +745,9 @@ void ObjectGraph::ComputeRelationCosts()
 			{
 				pEdge = pEdgePtr->pEdge;
 
+				if (iNode == 15 && iNode_ == 27)
+					int debug = 0;
+
 				ComputeRelationCost(pEdge);
 			}
 
@@ -753,7 +764,7 @@ void ObjectGraph::ComputeRelationCost(AgEdge *pEdge)
 	float depthStepExtThr = scale * 0.025f;
 	float concaveAngleThr = 45.0f * DEG2RAD;
 	float concaveMinCost = 0.3f;
-	float alpha = 0.8f;
+	float alpha = 0.5f;
 
 	float f1 = pEdge->desc.cupyDescriptor[0];
 	float f2 = pEdge->desc.cupyDescriptor[1];
@@ -833,9 +844,29 @@ void ObjectGraph::PaintObject(
 	{
 		pSurfel = pSurfels->NodeArray.Element + piElement->Idx;
 
-		pVisualizer->PaintPointSet(&(pSurfel->PtList), pMesh->pPolygonData, color);
+		if (!pSurfel->bEdge)
+			pVisualizer->PaintPointSet(&(pSurfel->PtList), pMesh->pPolygonData, color);
 
 		piElement = piElement->pNext;
+	}
+}
+
+void ObjectGraph::WriteSurfelDataToFile(FILE *fp)
+{
+	fprintf(fp, "========== EDGES ==========\n\n");
+
+	int iEdge;
+	AgEdge *pEdge;
+
+	for (iEdge = 0; iEdge < EdgeArray.n; iEdge++)
+	{
+		pEdge = EdgeArray.Element + iEdge;
+
+		fprintf(fp, "E%d(%d-%d): cost=%f\n",
+			pEdge->idx,
+			pEdge->iVertex[0],
+			pEdge->iVertex[1],
+			pEdge->cost);
 	}
 }
 
@@ -852,18 +883,27 @@ bool RVL::SURFEL::objectKeyPressUserFunction(
 
 	if (key == "a")
 	{
-		pData->bObjects = !pData->bObjects;
-
 		if (pData->bObjects)
-			pObjects->Display();
-		else
 		{
+			pData->bObjects = false;
+
 			pSurfels->Display(pVisualizer, pMesh);
 
 			pData->iSelectedObject = -1;
-		}
 
-		return true;
+			return true;
+		}
+	}
+	else if (key == "o")
+	{
+		if (!pData->bObjects)
+		{
+			pData->bObjects = true;
+
+			pObjects->Display();
+
+			return true;
+		}		
 	}
 
 	return false;

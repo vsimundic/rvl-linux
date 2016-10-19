@@ -12,6 +12,7 @@
 //#include <Eigen\Eigenvalues>
 
 using namespace RVL;
+using namespace SURFEL;
 
 SurfelGraph::SurfelGraph()
 {
@@ -1215,3 +1216,4 @@ void SurfelGraph::Save(
 		if (NodeArray.Element[iSurfel].size > 0)
 			SaveSurfel(fp, iSurfel);
 }
+

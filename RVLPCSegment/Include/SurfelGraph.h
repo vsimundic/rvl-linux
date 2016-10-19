@@ -140,7 +140,7 @@ namespace RVL
 			Mesh *pMesh, 
 			int iSurfel, 
 			int *surfelIdx,
-			bool *bVisited);		
+			bool *bVisited);			
 
 	public:	
 		CRVLParameterList ParamList;
