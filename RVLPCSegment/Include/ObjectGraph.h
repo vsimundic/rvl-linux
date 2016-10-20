@@ -61,6 +61,7 @@ namespace RVL
 			void PaintObject(
 				int iObject,
 				unsigned char *color);
+			void WriteSurfelDataToFile(FILE *fp);
 
 		public:
 			SurfelGraph *pSurfels;
