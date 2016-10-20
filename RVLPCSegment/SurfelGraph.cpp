@@ -12,6 +12,7 @@
 //#include <Eigen\Eigenvalues>
 
 using namespace RVL;
+using namespace SURFEL;
 
 SurfelGraph::SurfelGraph()
 {
@@ -219,6 +220,16 @@ void SurfelGraph::ImageAdjacency(
 	else
 		boundarySize = pSurfel->BoundaryArray.Element[boundary].n;
 
+	int i;
+	int iOtherSurfel;
+
+	for (i = 0; i < pSurfel->imgAdjacency.size(); i++)
+	{
+		iOtherSurfel = pSurfel->imgAdjacency.at(i) - NodeArray.Element;
+
+		surfelIdx[iOtherSurfel] = i;
+	}
+
 	//run through edges
 	Array<MeshEdgePtr *> BoundaryArray = pSurfel->BoundaryArray.Element[boundary];
 	MeshEdgePtr *pCurrEdge;
@@ -227,8 +238,6 @@ void SurfelGraph::ImageAdjacency(
 	int iBoundary, iPointEdge;
 	int iPt, iPt2, x, y;
 	double tempDist;
-	int iOtherSurfel;
-	int i;
 	Point *pPt, *pPt2;
 	float *P, *P2;
 	float dP[3];
@@ -259,47 +268,55 @@ void SurfelGraph::ImageAdjacency(
 				pPt2 = pMesh->NodeArray.Element + iPt2;
 				P2 = pPt2->P;
 				iOtherSurfel = surfelMap[iPt2];
+
+				if (iOtherSurfel < 0 || iOtherSurfel >= NodeArray.n)
+					continue;
+
 				pOtherSurfel = NodeArray.Element + iOtherSurfel;	//surfel owner of the pixel
 				
-				if ((pOtherSurfel->size < 640 * 480) && (pOtherSurfel->size > 1) && (iOtherSurfel != iSurfel)/*&& (pOtherSurfel->ObjectID != pSurfel->ObjectID)*/ && surfelIdx[iOtherSurfel] < 0)
+				if ((pOtherSurfel->size < 640 * 480) && (pOtherSurfel->size > 1) && (iOtherSurfel != iSurfel))
 				{
-					nImageAdjacencyRelations++;
+					if (surfelIdx[iOtherSurfel] < 0)
+					{
+						nImageAdjacencyRelations++;
 
-					surfelIdx[iOtherSurfel] = pSurfel->imgAdjacency.size();
+						//calculate min dist
+						//preallocate the adjacency descriptor for future use
+						RVLMEM_ALLOC_STRUCT(pMem, SurfelAdjecencyDescriptors, desc);
 
-					pSurfel->imgAdjacency.push_back(pOtherSurfel);	//push surfel pointer on the list
+						RVLDIF3VECTORS(P2, P, dP);
 
-					//calculate min dist
-					//preallocate the adjacency descriptor for future use
-					RVLMEM_ALLOC_STRUCT(pMem, SurfelAdjecencyDescriptors, desc);
+						desc->minDist = RVLDOTPRODUCT3(dP, dP);
+						desc->cupyDescriptor[0] = 0.0;
+						desc->cupyDescriptor[1] = 0.0;
+						desc->cupyDescriptor[2] = 0.0;
+						desc->cupyDescriptor[3] = 0.0;
+						desc->commonBoundaryLength = 0;
 
-					RVLDIF3VECTORS(P2, P, dP);
+						surfelIdx[iOtherSurfel] = pSurfel->imgAdjacency.size();
 
-					desc->minDist = RVLDOTPRODUCT3(dP, dP);
-					desc->cupyDescriptor[0] = 0.0;
-					desc->cupyDescriptor[1] = 0.0;
-					desc->cupyDescriptor[2] = 0.0;
-					desc->cupyDescriptor[3] = 0.0;
-					desc->commonBoundaryLength = 0;
-					pSurfel->imgAdjacencyDescriptors.push_back(desc);	//push descriptor on the list
+						pSurfel->imgAdjacency.push_back(pOtherSurfel);	//push surfel pointer on the list
+						pSurfel->imgAdjacencyDescriptors.push_back(desc);	//push descriptor on the list
 
-					bVisited[iOtherSurfel] = true;
+						pOtherSurfel->imgAdjacency.push_back(pSurfel);
+						pOtherSurfel->imgAdjacencyDescriptors.push_back(desc);
 
-					//push to other surfel
-					pOtherSurfel->imgAdjacency.push_back(pSurfel);
-					pOtherSurfel->imgAdjacencyDescriptors.push_back(desc);
-				}
-				else if (surfelIdx[iOtherSurfel] >= 0)	//If it is on the list, find and update min distance
-				{
-					desc = pSurfel->imgAdjacencyDescriptors.at(surfelIdx[iOtherSurfel]);	//get related descriptor
+						bVisited[iOtherSurfel] = true;
 
-					RVLDIF3VECTORS(P2, P, dP);
+						//push to other surfel
+					}
+					else
+					{
+						desc = pSurfel->imgAdjacencyDescriptors.at(surfelIdx[iOtherSurfel]);	//get related descriptor
 
-					tempDist = RVLDOTPRODUCT3(dP, dP);
-					if (tempDist < desc->minDist)	//update if the new one is smaller
-						desc->minDist = tempDist;
+						RVLDIF3VECTORS(P2, P, dP);
 
-					bVisited[iOtherSurfel] = true;
+						tempDist = RVLDOTPRODUCT3(dP, dP);
+						if (tempDist < desc->minDist)	//update if the new one is smaller
+							desc->minDist = tempDist;
+
+						bVisited[iOtherSurfel] = true;
+					}
 				}
 			}
 		}	//Running through point neighbourhood
@@ -1199,3 +1216,4 @@ void SurfelGraph::Save(
 		if (NodeArray.Element[iSurfel].size > 0)
 			SaveSurfel(fp, iSurfel);
 }
+
