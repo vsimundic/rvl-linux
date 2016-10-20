@@ -3,7 +3,7 @@
 
 //#include "stdafx.h"
 #include <vtkAutoInit.h>
-VTK_MODULE_INIT(vtkRenderingOpenGL);
+VTK_MODULE_INIT(vtkRenderingOpenGL2);
 VTK_MODULE_INIT(vtkInteractionStyle);
 VTK_MODULE_INIT(vtkRenderingFreeType);
 #include "RVLVTK.h"
@@ -21,7 +21,7 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 #include "RGBDCamera.h"
 #include "PCLMeshBuilder.h"
 
-//#define RVLPCSEGMENT_DEMO_CREATE_TRAINING_DATA
+#define RVLPCSEGMENT_DEMO_CREATE_TRAINING_DATA
 
 #define RVLPCSEGMENT_DEMO_FLAG_SAVE_PLY			0x00000001
 

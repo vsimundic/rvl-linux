@@ -75,6 +75,7 @@ void ObjectGraph::Create(SurfelGraph *pSurfels_)
 
 		RVLQLIST_INIT(pElementList);
 		RVLQLIST_ADD_ENTRY(pElementList, piElement);
+		piElement->Idx = iSurfel;
 
 		piElement++;
 
@@ -116,6 +117,172 @@ void ObjectGraph::Create(SurfelGraph *pSurfels_)
 				pEdge->pVertexEdgePtr[1] = pEdgePtr;
 				pEdgePtr++;
 			}
+		}
+	}
+}
+
+void ObjectGraph::CreateFromSSF(std::string ssfFileName)
+{
+	//Loading SSF
+	//SSF vars
+	this->ssf = std::make_shared<SceneSegFile::SceneSegFile>("");
+	this->ssf->Load(ssfFileName);
+	std::shared_ptr<SceneSegFile::SegFileElement> currSSFElement;
+	std::shared_ptr<SceneSegFile::FeatureGroup> currSSFAdjacencyFeatureGroup;
+	std::shared_ptr<SceneSegFile::FeatureSet> currSSFAdjacencyLink;
+	//Get number of surfels and their links
+	int noSurfels = this->ssf->elements.size();
+	int noLinks = 0;
+	//Supplementary vars
+	std::map<int, std::vector<int>> adjacencyLinks;
+	std::vector<int> *currLink;
+	std::vector<int> *otherLink;
+	std::map<int, std::vector<int>>::iterator adjacencyLinks_iter;
+	std::vector<SurfelAdjecencyDescriptors*> adjacencyDescriptors;
+	SurfelAdjecencyDescriptors *pDesc;
+	//std::map<int, int> adjacencyLinks2SSFElementsMap;
+	for (int i = 0; i < noSurfels; i++)
+	{
+		currSSFElement = this->ssf->elements.at(i);
+		currSSFAdjacencyFeatureGroup = currSSFElement->featureGroups.at(SceneSegFile::FeatureGroupsList::AdjacencyFeatureGroup);
+		adjacencyLinks.insert(std::pair<int, std::vector<int>>(currSSFElement->id, std::vector<int>()));
+		currLink = &adjacencyLinks.at(currSSFElement->id);
+		for (SceneSegFile::featureSets_map_iter_type featureSetsIterator = currSSFAdjacencyFeatureGroup->featureSets.begin(); featureSetsIterator != currSSFAdjacencyFeatureGroup->featureSets.end(); featureSetsIterator++)
+		{
+			// iterator->first = key
+			// iterator->second = value
+			currSSFAdjacencyLink = featureSetsIterator->second;
+			currLink->push_back(featureSetsIterator->first);
+		}
+		this->objID2idxMap.insert(std::pair<int, int>(currSSFElement->id, i));
+	}
+	//Prune links. Remove duplicates and links whose surfels are not in the list
+	for (adjacencyLinks_iter = adjacencyLinks.begin(); adjacencyLinks_iter != adjacencyLinks.end(); adjacencyLinks_iter++)
+	{
+		// iterator->first = key
+		// iterator->second = value
+		currLink = &adjacencyLinks_iter->second;
+		//running through surfel links
+		for (int i = 0; i < currLink->size(); i++)
+		{
+			if (adjacencyLinks.count(currLink->at(i)) > 0)	//if it is on the list
+			{
+				otherLink = &adjacencyLinks.at(currLink->at(i));	//other surfel's links
+				//Find the corresponding surfel and remove it
+				for (int k = 0; k < otherLink->size(); k++)
+				{
+					if (adjacencyLinks_iter->first == otherLink->at(k))
+					{
+						otherLink->erase(otherLink->begin() + k);
+						break;
+					}
+				}
+			}
+			else //if it doesn't exist then it was probably in the background
+			{
+				currLink->erase(currLink->begin() + i);
+				i--; //because of size change (current stays current)
+			}
+		}
+		noLinks += currLink->size();	//
+		//Adding descriptors
+		currSSFElement = this->ssf->elements.at(this->objID2idxMap.at(adjacencyLinks_iter->first));
+		currSSFAdjacencyFeatureGroup = currSSFElement->featureGroups.at(SceneSegFile::FeatureGroupsList::AdjacencyFeatureGroup);
+		for (int i = 0; i < currLink->size(); i++)
+		{
+			currSSFAdjacencyLink = currSSFAdjacencyFeatureGroup->featureSets.at(currLink->at(i));
+			double *cupyF = (double*)currSSFAdjacencyLink->features.at(SceneSegFile::FeaturesList::CupysFeature)->GetDataPtr();
+			pDesc = new SurfelAdjecencyDescriptors;
+
+			pDesc->minDist = cupyF[3];
+			pDesc->cupyDescriptor[0] = cupyF[0];
+			pDesc->cupyDescriptor[1] = cupyF[1];
+			pDesc->cupyDescriptor[2] = cupyF[2];
+			pDesc->cupyDescriptor[3] = cupyF[3];
+			int *cBL = (int*)currSSFAdjacencyLink->features.at(SceneSegFile::FeaturesList::CommonBoundaryLength)->GetDataPtr();
+			pDesc->commonBoundaryLength = *cBL;
+			adjacencyDescriptors.push_back(pDesc);	//push descriptor on the list
+		}
+	}
+	
+	
+	pSurfels = NULL;//pSurfels_;
+
+	RVL_DELETE_ARRAY(NodeArray.Element);
+	NodeArray.Element = new GRAPH::AggregateNode<AgEdge>[noSurfels];//[pSurfels->NodeArray.n];
+	NodeArray.n = noSurfels;//pSurfels->NodeArray.n;
+	RVL_DELETE_ARRAY(EdgeArray.Element);
+	EdgeArray.Element = new AgEdge[noLinks];// [pSurfels->nImageAdjacencyRelations];
+	EdgeArray.n = noLinks;// pSurfels->nImageAdjacencyRelations;
+	RVL_DELETE_ARRAY(EdgePtrMem);
+	EdgePtrMem = new GRAPH::EdgePtr2<AgEdge>[2 * EdgeArray.n];
+	RVL_DELETE_ARRAY(elementMem);
+	elementMem = new QLIST::Index[noSurfels];// [pSurfels->NodeArray.n];
+	RVL_DELETE_ARRAY(objectMap);
+	objectMap = new int[noSurfels];// [pSurfels->NodeArray.n];
+
+	QLIST::Index *piElement = elementMem;
+
+	GRAPH::EdgePtr2<AgEdge> *pEdgePtr = EdgePtrMem;
+
+	AgEdge *pEdge = EdgeArray.Element;
+
+	int i;
+	int iSurfel, iSurfel_;
+	//Surfel *pSurfel, *pSurfel_;
+	GRAPH::AggregateNode<AgEdge> *pAgNode, *pAgNode_;
+	QList<GRAPH::EdgePtr2<AgEdge>> *pEdgeList, *pEdgeList_;
+	QList<QLIST::Index> *pElementList;
+	int iDesc = 0;
+	//List initialization
+	for (iSurfel = 0; iSurfel < noSurfels; iSurfel++)
+	{
+		//pSurfel = pSurfels->NodeArray.Element + iSurfel;
+
+		pAgNode = NodeArray.Element + iSurfel;
+
+		pElementList = &(pAgNode->elementList);
+
+		RVLQLIST_INIT(pElementList);
+		RVLQLIST_ADD_ENTRY(pElementList, piElement);
+
+		piElement++;
+
+		pEdgeList = &(pAgNode->EdgeList);
+
+		RVLQLIST_INIT(pEdgeList);
+	}
+
+	//iSurfel = 0;
+	//Runnng through surfels
+	for (iSurfel = 0, adjacencyLinks_iter = adjacencyLinks.begin(); adjacencyLinks_iter != adjacencyLinks.end(); adjacencyLinks_iter++, iSurfel++)
+	{
+		pAgNode = NodeArray.Element + iSurfel;
+		// iterator->first = key
+		// iterator->second = value
+		currLink = &adjacencyLinks_iter->second;
+		//running through surfel links
+		for (int i = 0; i < currLink->size(); i++)
+		{
+			//pSurfel_ = pSurfel->imgAdjacency.at(i);
+			pDesc = adjacencyDescriptors.at(iDesc);// pSurfel->imgAdjacencyDescriptors.at(i);
+
+			pEdge->iVertex[0] = adjacencyLinks_iter->first;	//surfel
+			pEdge->iVertex[1] = currLink->at(i);	//other surfel
+			pEdge->desc = *pDesc;
+			pEdge->idx = EdgeArray.n;
+			pEdgePtr->pEdge = pEdge;
+			RVLQLIST_ADD_ENTRY2(pEdgeList, pEdgePtr);
+			pEdge->pVertexEdgePtr[0] = pEdgePtr;
+			pEdgePtr++;
+			pEdgePtr->pEdge = pEdge;
+			pAgNode_ = NodeArray.Element + this->objID2idxMap.at(currLink->at(i));//+ iSurfel_;
+			pEdgeList_ = &(pAgNode_->EdgeList);
+			RVLQLIST_ADD_ENTRY2(pEdgeList_, pEdgePtr);
+			pEdge->pVertexEdgePtr[1] = pEdgePtr;
+			pEdgePtr++;
+
+			iDesc++;//aggr list index
 		}
 	}
 }

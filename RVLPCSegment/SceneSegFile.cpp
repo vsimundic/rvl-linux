@@ -19,7 +19,9 @@ namespace SceneSegFile
 		{ FeaturesList::CupysFeature, "CupysFeature" },
 		{ FeaturesList::GTObjectID, "GTObjectID" },
 		{ FeaturesList::SameGTObject, "SameGTObject" },
-		{ FeaturesList::PixelAffiliation, "PixelAffiliation" }
+		{ FeaturesList::PixelAffiliation, "PixelAffiliation" },
+		{ FeaturesList::GTObjHistogram, "GTObjHistogram" },
+		{ FeaturesList::CommonBoundaryLength, "CommonBoundaryLength" }
 	};
 
 	SceneSegFile* GenerateTestSceneSegFile()
