@@ -21,7 +21,7 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 #include "RGBDCamera.h"
 #include "PCLMeshBuilder.h"
 
-#define RVLPCSEGMENT_DEMO_CREATE_TRAINING_DATA
+//#define RVLPCSEGMENT_DEMO_CREATE_TRAINING_DATA
 
 #define RVLPCSEGMENT_DEMO_FLAG_SAVE_PLY			0x00000001
 
@@ -46,6 +46,94 @@ void CreateParamList(
 	pParamData = pParamList->AddParam("Save PLY", RVLPARAM_TYPE_ID, &flags);
 	pParamList->AddID(pParamData, "yes", RVLPCSEGMENT_DEMO_FLAG_SAVE_PLY);
 	pParamData = pParamList->AddParam("SegmentToObjects", RVLPARAM_TYPE_BOOL, &bSegmentToObjects);
+}
+
+//Generate a colored opencv image based on surfel data from SSF
+cv::Mat GenColoredSurfelImgFromSSF(std::shared_ptr<SceneSegFile::SceneSegFile> ssf)
+{
+	std::shared_ptr<SceneSegFile::SegFileElement> currSSFElement;
+	std::shared_ptr<SceneSegFile::FeatureTypeInt> pixAff;
+
+	cv::Mat coloredSegLab(480, 640, CV_8UC3, cv::Scalar::all(0));
+	
+	unsigned char labSegColor[3];
+	int x = 0, y = 0;
+
+	for (int i = 0; i < ssf->elements.size(); i++)
+	{
+		currSSFElement = ssf->elements.at(i);
+
+		pixAff = std::dynamic_pointer_cast<SceneSegFile::FeatureTypeInt>(currSSFElement->features.features.at(SceneSegFile::FeaturesList::PixelAffiliation));
+		
+		//Generate surfel color
+		labSegColor[0] = rand() % 255;
+		labSegColor[1] = rand() % 255;
+		labSegColor[2] = rand() % 255;
+
+		//Set pixel colors
+		for (int k = 0; k < pixAff->size; k++)
+		{
+			y = floor(pixAff->data[k] / 640.0);
+			x = floor(pixAff->data[k] - 640.0 * y);
+			coloredSegLab.at<cv::Vec3b>(y, x)[0] = labSegColor[0];
+			coloredSegLab.at<cv::Vec3b>(y, x)[1] = labSegColor[1];
+			coloredSegLab.at<cv::Vec3b>(y, x)[2] = labSegColor[2];
+		}
+
+	}
+	//return image
+	return coloredSegLab;
+}
+
+//Generate a colored opencv image based on surfel data from SSF
+cv::Mat GenColoredSegmentationImgFromObjectGraph(SURFEL::ObjectGraph* objects)
+{
+	std::shared_ptr<SceneSegFile::SceneSegFile> ssf = objects->ssf;
+
+	std::shared_ptr<SceneSegFile::SegFileElement> currSSFElement;
+	std::shared_ptr<SceneSegFile::FeatureTypeInt> pixAff;
+
+	cv::Mat coloredSegLab(480, 640, CV_8UC3, cv::Scalar::all(0));
+
+	GRAPH::AggregateNode<SURFEL::AgEdge> *pObject;
+	QLIST::Index *piElement;
+
+	unsigned char labSegColor[3];
+	int x = 0, y = 0;
+
+	for (int iObject = 0; iObject < objects->NodeArray.n; iObject++)
+	{
+		//Generate surfel color
+		labSegColor[0] = rand() % 255;
+		labSegColor[1] = rand() % 255;
+		labSegColor[2] = rand() % 255;
+
+		pObject = objects->NodeArray.Element + iObject;
+		
+		piElement = pObject->elementList.pFirst;
+
+		while (piElement)
+		{
+			currSSFElement = ssf->elements.at(piElement->Idx);
+
+			pixAff = std::dynamic_pointer_cast<SceneSegFile::FeatureTypeInt>(currSSFElement->features.features.at(SceneSegFile::FeaturesList::PixelAffiliation));
+
+			//Set pixel colors
+			for (int k = 0; k < pixAff->size; k++)
+			{
+				y = floor(pixAff->data[k] / 640.0);
+				x = floor(pixAff->data[k] - 640.0 * y);
+				coloredSegLab.at<cv::Vec3b>(y, x)[0] = labSegColor[0];
+				coloredSegLab.at<cv::Vec3b>(y, x)[1] = labSegColor[1];
+				coloredSegLab.at<cv::Vec3b>(y, x)[2] = labSegColor[2];
+			}
+
+			piElement = piElement->pNext;
+		}
+
+	}
+	//return image
+	return coloredSegLab;
 }
 
 int main(int argc, char ** argv)
@@ -73,6 +161,7 @@ int main(int argc, char ** argv)
 
 	DWORD flags = 0x00000000;
 	bool bSegmentToObjects = false;
+	bool bSegmentToObjectsFromSSF = true;
 
 	CRVLParameterList ParamList;
 
@@ -164,6 +253,31 @@ int main(int argc, char ** argv)
 		objects.WERSegmentation();
 
 		printf("completed.\n");
+	}
+
+	if (bSegmentToObjects && bSegmentToObjectsFromSSF)
+	{
+		SURFEL::ObjectGraph objects2;
+
+		std::string ssfFileName(MeshFileName);
+		ssfFileName.erase(ssfFileName.find_last_of("."));
+		ssfFileName += ".ssf";
+		
+		std::cout << "Loading and creating ObjectGraph from SSF!" << std::endl;
+		objects2.CreateFromSSF(ssfFileName);
+
+		std::cout << "Compute relation cost!" << std::endl;
+		objects2.ComputeRelationCosts();
+
+		std::cout << "WER segmentation!" << std::endl;
+		objects2.WERSegmentation();
+
+		printf("completed.\n");
+
+		//Visualization
+		cv::imshow("Colored surfel image", GenColoredSurfelImgFromSSF(objects2.ssf));
+		cv::imshow("Colored segmentation image", GenColoredSegmentationImgFromObjectGraph(&objects2));
+		cv::waitKey(1);
 	}
 
 	// Display segmentation.

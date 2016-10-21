@@ -24,6 +24,7 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 #include <iostream>
 #include <vector>
 #include <algorithm>
+#include <unordered_set>
 #include "SceneSegFile.hpp"
 #include "ObjectGraph.h"
 
@@ -268,6 +269,7 @@ void SetSurfelImgAdjacency(Surfel *pSurfel, SurfelGraph *surfels, Mesh *mesh, in
 	double tempDist;
 	int iOtherSurfel;
 	int i;
+	std::unordered_set<int> visitedSurfels;	//visited surfels (for common boundary lenght) (indices of imgAdjacency list)
 	for (iPointEdge = 0; iPointEdge < BoundaryArray.n; iPointEdge++)
 	{
 		pCurrEdge = BoundaryArray.Element[iPointEdge];
@@ -275,7 +277,7 @@ void SetSurfelImgAdjacency(Surfel *pSurfel, SurfelGraph *surfels, Mesh *mesh, in
 		iPt = RVLPCSEGMENT_GRAPH_GET_NODE(pCurrEdge);
 		y = floor(iPt / 640.0);
 		x = floor(iPt - 640.0 * y);
-
+		visitedSurfels.clear();
 		//Running through point neighbourhood
 		for (int yy = y - thr; yy < y + thr; yy++)
 		{
@@ -308,6 +310,8 @@ void SetSurfelImgAdjacency(Surfel *pSurfel, SurfelGraph *surfels, Mesh *mesh, in
 					//push to other surfel
 					pOtherSurfel->imgAdjacency.push_back(pSurfel);
 					pOtherSurfel->imgAdjacencyDescriptors.push_back(desc);
+					
+					visitedSurfels.insert(pSurfel->imgAdjacency.size() - 1);	//Visited surfel on the list
 				}
 				else if (surfIt != pSurfel->imgAdjacency.end())	//If it is on the list, find and update min distance
 				{
@@ -315,9 +319,17 @@ void SetSurfelImgAdjacency(Surfel *pSurfel, SurfelGraph *surfels, Mesh *mesh, in
 					tempDist = sqrt((mesh->NodeArray.Element[iPt].P[0] - mesh->NodeArray.Element[iPt2].P[0]) * (mesh->NodeArray.Element[iPt].P[0] - mesh->NodeArray.Element[iPt2].P[0]) + (mesh->NodeArray.Element[iPt].P[1] - mesh->NodeArray.Element[iPt2].P[1]) * (mesh->NodeArray.Element[iPt].P[1] - mesh->NodeArray.Element[iPt2].P[1]) + (mesh->NodeArray.Element[iPt].P[2] - mesh->NodeArray.Element[iPt2].P[2]) * (mesh->NodeArray.Element[iPt].P[2] - mesh->NodeArray.Element[iPt2].P[2]));
 					if (tempDist < desc->minDist)	//update if the new one is smaller
 						desc->minDist = tempDist;
+					visitedSurfels.insert(surfIt - pSurfel->imgAdjacency.begin());	//Visited surfel on the list
 				}
 			}
 		}	//Running through point neighbourhood
+
+		//Updating Common boundary lenght
+		for (const int& s : visitedSurfels)
+		{
+			desc = pSurfel->imgAdjacencyDescriptors.at(s);	//get related descriptor
+			desc->commonBoundaryLength++;
+		}
 	}	// for every boundary point
 }
 
@@ -699,8 +711,8 @@ void GenerateSSF(SurfelGraph *surfels, std::string filename, int minSurfelSize, 
 
 void RunSeg2Bench(bool save)
 {
-	SURFEL::ObjectGraph gra;
-	gra.CreateFromSSF("C:/Users/Damir/Documents/Project_benchmark_data/OSD-0.2/combined/learn17.ssf");
+	//SURFEL::ObjectGraph gra;
+	//gra.CreateFromSSF("C:/Users/Damir/Documents/Project_benchmark_data/OSD-0.2/combined/learn17.ssf");
 	
 	//Cupec
 	// Create memory storage.
@@ -818,6 +830,7 @@ void RunSeg2Bench(bool save)
 
 	//Detect primary GT object for ALL surfels
 	Surfel *pCurrSurfel = surfels.NodeArray.Element;
+	std::cout << "Detecting primary GT object!" << std::endl;
 	for (int i = 0; i < surfels.NodeArray.n; pCurrSurfel++, i++)
 	{
 		pCurrSurfel->ObjectID = -1;
@@ -829,6 +842,7 @@ void RunSeg2Bench(bool save)
 
 	//Adjacency and its descriptors
 	pCurrSurfel = surfels.NodeArray.Element;
+	std::cout << "Finding image adjacency and determining descriptors!" << std::endl;
 	for (int i = 0; i < surfels.NodeArray.n; pCurrSurfel++, i++)
 	{
 		if ((pCurrSurfel->ObjectID == -1) || (checkbackground && ((pCurrSurfel->ObjectID == 255) || (pCurrSurfel->ObjectID == 0))) || (pCurrSurfel->size == 1) || (pCurrSurfel->size == 0) || pCurrSurfel->bEdge || pCurrSurfel->size < detector.minSurfelSize)
@@ -846,7 +860,9 @@ void RunSeg2Bench(bool save)
 	//Same as SSF (SceneSegFile)
 	if (save)
 	{
+		std::cout << "Saving SSF!" << std::endl;
 		GenerateSSF(&surfels, ssfFileName, detector.minSurfelSize, checkbackground);
+		std::cout << "Saved!" << std::endl;
 	}
 
 	//Visualization

@@ -210,9 +210,9 @@ namespace RVL
 
 			/// main loop
 
-			int *iVisitedNodeEdge = new int[graph.EdgeArray.n];
+			int *iVisitedNodeEdge = new int[graph.NodeArray.n];
 
-			memset(iVisitedNodeEdge, 0xff, graph.EdgeArray.n * sizeof(int));
+			memset(iVisitedNodeEdge, 0xff, graph.NodeArray.n * sizeof(int));
 
 			//QLIST::Index2 **ppNextDebug = NULL;
 
@@ -833,6 +833,7 @@ void ObjectGraph::CreateFromSSF(std::string ssfFileName)
 
 		RVLQLIST_INIT(pElementList);
 		RVLQLIST_ADD_ENTRY(pElementList, piElement);
+		piElement->Idx = iSurfel;
 
 		piElement++;
 
@@ -846,6 +847,8 @@ void ObjectGraph::CreateFromSSF(std::string ssfFileName)
 	for (iSurfel = 0, adjacencyLinks_iter = adjacencyLinks.begin(); adjacencyLinks_iter != adjacencyLinks.end(); adjacencyLinks_iter++, iSurfel++)
 	{
 		pAgNode = NodeArray.Element + iSurfel;
+
+		pEdgeList = &(pAgNode->EdgeList);
 		// iterator->first = key
 		// iterator->second = value
 		currLink = &adjacencyLinks_iter->second;
@@ -855,10 +858,11 @@ void ObjectGraph::CreateFromSSF(std::string ssfFileName)
 			//pSurfel_ = pSurfel->imgAdjacency.at(i);
 			pDesc = adjacencyDescriptors.at(iDesc);// pSurfel->imgAdjacencyDescriptors.at(i);
 
-			pEdge->iVertex[0] = adjacencyLinks_iter->first;	//surfel
-			pEdge->iVertex[1] = currLink->at(i);	//other surfel
+			pEdge->iVertex[0] = this->objID2idxMap.at(adjacencyLinks_iter->first);	//surfel
+			pEdge->iVertex[1] = this->objID2idxMap.at(currLink->at(i));	//other surfel
 			pEdge->desc = *pDesc;
-			pEdge->idx = EdgeArray.n;
+			pEdge->cost = 0.0f;
+			pEdge->idx = pEdge - EdgeArray.Element;
 			pEdgePtr->pEdge = pEdge;
 			RVLQLIST_ADD_ENTRY2(pEdgeList, pEdgePtr);
 			pEdge->pVertexEdgePtr[0] = pEdgePtr;
@@ -869,6 +873,7 @@ void ObjectGraph::CreateFromSSF(std::string ssfFileName)
 			RVLQLIST_ADD_ENTRY2(pEdgeList_, pEdgePtr);
 			pEdge->pVertexEdgePtr[1] = pEdgePtr;
 			pEdgePtr++;
+			pEdge++;
 
 			iDesc++;//aggr list index
 		}

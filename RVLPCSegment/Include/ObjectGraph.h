@@ -49,7 +49,7 @@ namespace RVL
 			ObjectGraph();
 			virtual ~ObjectGraph();
 			void Create(SurfelGraph *pSurfels_);
-			void CreateFromSSF(std::string ssfFileName);
+			void CreateFromSSF(std::string ssfFileName);	//Filko
 			void WERSegmentation();
 			void ComputeRelationCosts();
 			void ComputeRelationCost(AgEdge *pEdge);
