@@ -278,6 +278,13 @@ int main(int argc, char ** argv)
 		cv::imshow("Colored surfel image", GenColoredSurfelImgFromSSF(objects2.ssf));
 		cv::imshow("Colored segmentation image", GenColoredSegmentationImgFromObjectGraph(&objects2));
 		cv::waitKey(1);
+
+		//Evaluation
+		int E[2];
+		int N = 0;
+		objects2.CalculateOverAndUnderSegmentation(E, N, false);
+		std::cout << "Oversegmenation error: " << 1 - E[0] / (float)N << std::endl;
+		std::cout << "Undersegmenation error: " << E[1] / (float)N << std::endl;
 	}
 
 	// Display segmentation.

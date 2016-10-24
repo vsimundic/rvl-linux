@@ -709,7 +709,8 @@ void ObjectGraph::Create(SurfelGraph *pSurfels_)
 	}
 }
 
-void ObjectGraph::CreateFromSSF(std::string ssfFileName)
+//Create (initialize) ObjectGraph object from SFF file
+void ObjectGraph::CreateFromSSF(std::string ssfFileName)	
 {
 	//Loading SSF
 	//SSF vars
@@ -878,6 +879,119 @@ void ObjectGraph::CreateFromSSF(std::string ssfFileName)
 			iDesc++;//aggr list index
 		}
 	}
+}
+
+//Return 'Ntrue', 'Nfalse' and 'N' needed to calculate oversegmentation (Fos = 1 - Ntrue/N) and undersegmenation (Fus =Nfalse/N) error. The asumption is that the GT object hist bin with the highest values is the correct one!!! 
+void ObjectGraph::CalculateOverAndUnderSegmentation(int *E, int &N, bool useBackground)
+{
+	std::shared_ptr<SceneSegFile::SceneSegFile> ssf = this->ssf;
+	std::shared_ptr<SceneSegFile::SegFileElement> currSSFElement;
+	std::shared_ptr<SceneSegFile::FeatureTypeInt> GTObjHistogram_surfel;
+
+	//Getting GThist size and initializing GT object histogram;
+	currSSFElement = ssf->elements.at(0);
+	GTObjHistogram_surfel = std::dynamic_pointer_cast<SceneSegFile::FeatureTypeInt>(currSSFElement->features.features.at(SceneSegFile::FeaturesList::GTObjHistogram));
+	int GTHistSize = GTObjHistogram_surfel->size;	
+	int *GTObjHistogram = new int[GTHistSize * this->NodeArray.n];	//GTObject histogam per segmented object
+	memset(GTObjHistogram, 0, GTHistSize * this->NodeArray.n * sizeof(int));
+	int *maxObj = new int[GTHistSize];	//Idx of segmented object per maximum bin
+	memset(maxObj, 0, GTHistSize * sizeof(int));
+	int *g = new int[GTHistSize];	//gama
+	memset(g, 0, GTHistSize * sizeof(int));
+	int *maxBin = new int[this->NodeArray.n];	//maximum bin per segmented object
+	memset(maxBin, 0, this->NodeArray.n * sizeof(int));
+
+	GRAPH::AggregateNode<SURFEL::AgEdge> *pObject;
+	QLIST::Index *piElement;
+
+	//Calculating GT object histogram
+	for (int iObject = 0; iObject < this->NodeArray.n; iObject++)
+	{
+		pObject = this->NodeArray.Element + iObject;
+
+		piElement = pObject->elementList.pFirst;
+
+		while (piElement)
+		{
+			//current data
+			currSSFElement = ssf->elements.at(piElement->Idx);
+			GTObjHistogram_surfel = std::dynamic_pointer_cast<SceneSegFile::FeatureTypeInt>(currSSFElement->features.features.at(SceneSegFile::FeaturesList::GTObjHistogram));
+			for (int i = 0; i < GTHistSize; i++)
+				GTObjHistogram[iObject * GTHistSize + i] += GTObjHistogram_surfel->data[i];
+			piElement = piElement->pNext;
+		}
+
+	}
+	
+	E[0] = 0;	//Oversegmentation values
+	E[1] = 0;	//Undersegmentation values
+	int* ptrGTObjHist;
+	int max = 0;
+
+	int totVal = 0;
+	for (int iObject = 0; iObject < this->NodeArray.n; iObject++)
+	{
+		pObject = this->NodeArray.Element + iObject;
+		//check if object
+		piElement = pObject->elementList.pFirst;
+		if (!piElement)
+			continue;
+		//
+		ptrGTObjHist = &(GTObjHistogram[iObject * GTHistSize]);
+		
+		//find max
+		max = 0;
+		maxBin[iObject] = -1;
+		for (int i = 0; i < GTHistSize; i++)
+		{
+			if (ptrGTObjHist[i] > max)
+			{
+				maxBin[iObject] = i;
+				max = ptrGTObjHist[i];
+			}
+		}
+
+		//Sum false values
+		for (int i = 0; i < GTHistSize; i++)
+		{
+			if ((i == 0) && !useBackground)
+				continue;
+
+			if (i != maxBin[iObject])
+				E[1] += ptrGTObjHist[i];
+
+			totVal += ptrGTObjHist[i];
+		}
+		
+		//Set max segmented object per max bin
+		if (ptrGTObjHist[maxBin[iObject]] > g[maxBin[iObject]])
+		{
+			maxObj[maxBin[iObject]] = iObject;
+			g[maxBin[iObject]] = ptrGTObjHist[maxBin[iObject]];
+		}
+	}
+
+	//Sum positive values
+	for (int i = 0; i < GTHistSize; i++)
+	{
+		if ((i == 0) && !useBackground)
+			continue;
+
+		if (i = maxBin[maxObj[i]])
+			E[0] += GTObjHistogram[maxObj[i] * GTHistSize + i];
+	}
+
+
+	//Final results
+	/*E[0] = 1 - E[0] / totVal;
+	E[1] /= totVal;*/
+	N = totVal;
+
+	//DeRef
+	delete[] GTObjHistogram;
+	delete[] maxObj;
+	delete[] g;
+	delete[] maxBin;
 }
 
 void ObjectGraph::WERSegmentation()

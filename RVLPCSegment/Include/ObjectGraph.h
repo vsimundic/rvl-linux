@@ -50,6 +50,7 @@ namespace RVL
 			virtual ~ObjectGraph();
 			void Create(SurfelGraph *pSurfels_);
 			void CreateFromSSF(std::string ssfFileName);	//Filko
+			void CalculateOverAndUnderSegmentation(int *E, int &N, bool useBackground = true);	//Filko
 			void WERSegmentation();
 			void ComputeRelationCosts();
 			void ComputeRelationCost(AgEdge *pEdge);
