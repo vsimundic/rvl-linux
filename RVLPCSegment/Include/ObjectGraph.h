@@ -1,5 +1,7 @@
 #pragma once
 #include "Graph.h"
+#include <memory>
+#include "SceneSegFile.hpp"
 
 namespace RVL
 {
@@ -47,6 +49,8 @@ namespace RVL
 			ObjectGraph();
 			virtual ~ObjectGraph();
 			void Create(SurfelGraph *pSurfels_);
+			void CreateFromSSF(std::string ssfFileName);	//Filko
+			void CalculateOverAndUnderSegmentation(int *E, int &N, bool useBackground = true);	//Filko
 			void WERSegmentation();
 			void ComputeRelationCosts();
 			void ComputeRelationCost(AgEdge *pEdge);
@@ -66,6 +70,8 @@ namespace RVL
 			float WERSegmentationCostResolution;
 			ObjectDisplayData displayData;
 			int *objectMap;
+			std::shared_ptr<SceneSegFile::SceneSegFile> ssf;	//Filko
+			std::map<int, int> objID2idxMap; //Filko
 		private:
 			QLIST::Index *elementMem;
 		};
