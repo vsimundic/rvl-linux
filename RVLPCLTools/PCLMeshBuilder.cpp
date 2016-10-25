@@ -242,7 +242,10 @@ bool PCLMeshBuilder::Load(
 			delete[] PLYFileName;
 		}
 
-		PCLMeshToPolygonData(PCLMesh, pMesh->pPolygonData);
+		vtkSmartPointer<vtkPolyData> pd = vtkSmartPointer<vtkPolyData>::New();
+		PCLMeshToPolygonData(PCLMesh, pd);
+		pMesh->pPolygonData = vtkSmartPointer<vtkPolyData>::New();
+		pMesh->pPolygonData->DeepCopy(pd);
 	}
 
 	printf("Creating ordered mesh from PCL mesh...");

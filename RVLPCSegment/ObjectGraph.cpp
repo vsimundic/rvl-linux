@@ -659,6 +659,7 @@ void ObjectGraph::Create(SurfelGraph *pSurfels_)
 
 		RVLQLIST_INIT(pElementList);
 		RVLQLIST_ADD_ENTRY(pElementList, piElement);
+		piElement->Idx = iSurfel;
 
 		piElement++;
 
@@ -706,6 +707,291 @@ void ObjectGraph::Create(SurfelGraph *pSurfels_)
 			}
 		}
 	}
+}
+
+//Create (initialize) ObjectGraph object from SFF file
+void ObjectGraph::CreateFromSSF(std::string ssfFileName)	
+{
+	//Loading SSF
+	//SSF vars
+	this->ssf = std::make_shared<SceneSegFile::SceneSegFile>("");
+	this->ssf->Load(ssfFileName);
+	std::shared_ptr<SceneSegFile::SegFileElement> currSSFElement;
+	std::shared_ptr<SceneSegFile::FeatureGroup> currSSFAdjacencyFeatureGroup;
+	std::shared_ptr<SceneSegFile::FeatureSet> currSSFAdjacencyLink;
+	//Get number of surfels and their links
+	int noSurfels = this->ssf->elements.size();
+	int noLinks = 0;
+	//Supplementary vars
+	std::map<int, std::vector<int>> adjacencyLinks;
+	std::vector<int> *currLink;
+	std::vector<int> *otherLink;
+	std::map<int, std::vector<int>>::iterator adjacencyLinks_iter;
+	std::vector<SurfelAdjecencyDescriptors*> adjacencyDescriptors;
+	SurfelAdjecencyDescriptors *pDesc;
+	//std::map<int, int> adjacencyLinks2SSFElementsMap;
+	for (int i = 0; i < noSurfels; i++)
+	{
+		currSSFElement = this->ssf->elements.at(i);
+		currSSFAdjacencyFeatureGroup = currSSFElement->featureGroups.at(SceneSegFile::FeatureGroupsList::AdjacencyFeatureGroup);
+		adjacencyLinks.insert(std::pair<int, std::vector<int>>(currSSFElement->id, std::vector<int>()));
+		currLink = &adjacencyLinks.at(currSSFElement->id);
+		for (SceneSegFile::featureSets_map_iter_type featureSetsIterator = currSSFAdjacencyFeatureGroup->featureSets.begin(); featureSetsIterator != currSSFAdjacencyFeatureGroup->featureSets.end(); featureSetsIterator++)
+		{
+			// iterator->first = key
+			// iterator->second = value
+			currSSFAdjacencyLink = featureSetsIterator->second;
+			currLink->push_back(featureSetsIterator->first);
+		}
+		this->objID2idxMap.insert(std::pair<int, int>(currSSFElement->id, i));
+	}
+	//Prune links. Remove duplicates and links whose surfels are not in the list
+	for (adjacencyLinks_iter = adjacencyLinks.begin(); adjacencyLinks_iter != adjacencyLinks.end(); adjacencyLinks_iter++)
+	{
+		// iterator->first = key
+		// iterator->second = value
+		currLink = &adjacencyLinks_iter->second;
+		//running through surfel links
+		for (int i = 0; i < currLink->size(); i++)
+		{
+			if (adjacencyLinks.count(currLink->at(i)) > 0)	//if it is on the list
+			{
+				otherLink = &adjacencyLinks.at(currLink->at(i));	//other surfel's links
+				//Find the corresponding surfel and remove it
+				for (int k = 0; k < otherLink->size(); k++)
+				{
+					if (adjacencyLinks_iter->first == otherLink->at(k))
+					{
+						otherLink->erase(otherLink->begin() + k);
+						break;
+					}
+				}
+			}
+			else //if it doesn't exist then it was probably in the background
+			{
+				currLink->erase(currLink->begin() + i);
+				i--; //because of size change (current stays current)
+			}
+		}
+		noLinks += currLink->size();	//
+		//Adding descriptors
+		currSSFElement = this->ssf->elements.at(this->objID2idxMap.at(adjacencyLinks_iter->first));
+		currSSFAdjacencyFeatureGroup = currSSFElement->featureGroups.at(SceneSegFile::FeatureGroupsList::AdjacencyFeatureGroup);
+		for (int i = 0; i < currLink->size(); i++)
+		{
+			currSSFAdjacencyLink = currSSFAdjacencyFeatureGroup->featureSets.at(currLink->at(i));
+			double *cupyF = (double*)currSSFAdjacencyLink->features.at(SceneSegFile::FeaturesList::CupysFeature)->GetDataPtr();
+			pDesc = new SurfelAdjecencyDescriptors;
+
+			pDesc->minDist = cupyF[3];
+			pDesc->cupyDescriptor[0] = cupyF[0];
+			pDesc->cupyDescriptor[1] = cupyF[1];
+			pDesc->cupyDescriptor[2] = cupyF[2];
+			pDesc->cupyDescriptor[3] = cupyF[3];
+			int *cBL = (int*)currSSFAdjacencyLink->features.at(SceneSegFile::FeaturesList::CommonBoundaryLength)->GetDataPtr();
+			pDesc->commonBoundaryLength = *cBL;
+			adjacencyDescriptors.push_back(pDesc);	//push descriptor on the list
+		}
+	}
+	
+	
+	pSurfels = NULL;//pSurfels_;
+
+	RVL_DELETE_ARRAY(NodeArray.Element);
+	NodeArray.Element = new GRAPH::AggregateNode<AgEdge>[noSurfels];//[pSurfels->NodeArray.n];
+	NodeArray.n = noSurfels;//pSurfels->NodeArray.n;
+	RVL_DELETE_ARRAY(EdgeArray.Element);
+	EdgeArray.Element = new AgEdge[noLinks];// [pSurfels->nImageAdjacencyRelations];
+	EdgeArray.n = noLinks;// pSurfels->nImageAdjacencyRelations;
+	RVL_DELETE_ARRAY(EdgePtrMem);
+	EdgePtrMem = new GRAPH::EdgePtr2<AgEdge>[2 * EdgeArray.n];
+	RVL_DELETE_ARRAY(elementMem);
+	elementMem = new QLIST::Index[noSurfels];// [pSurfels->NodeArray.n];
+	RVL_DELETE_ARRAY(objectMap);
+	objectMap = new int[noSurfels];// [pSurfels->NodeArray.n];
+
+	QLIST::Index *piElement = elementMem;
+
+	GRAPH::EdgePtr2<AgEdge> *pEdgePtr = EdgePtrMem;
+
+	AgEdge *pEdge = EdgeArray.Element;
+
+	int i;
+	int iSurfel, iSurfel_;
+	//Surfel *pSurfel, *pSurfel_;
+	GRAPH::AggregateNode<AgEdge> *pAgNode, *pAgNode_;
+	QList<GRAPH::EdgePtr2<AgEdge>> *pEdgeList, *pEdgeList_;
+	QList<QLIST::Index> *pElementList;
+	int iDesc = 0;
+	//List initialization
+	for (iSurfel = 0; iSurfel < noSurfels; iSurfel++)
+	{
+		//pSurfel = pSurfels->NodeArray.Element + iSurfel;
+
+		pAgNode = NodeArray.Element + iSurfel;
+
+		pElementList = &(pAgNode->elementList);
+
+		RVLQLIST_INIT(pElementList);
+		RVLQLIST_ADD_ENTRY(pElementList, piElement);
+		piElement->Idx = iSurfel;
+
+		piElement++;
+
+		pEdgeList = &(pAgNode->EdgeList);
+
+		RVLQLIST_INIT(pEdgeList);
+	}
+
+	//iSurfel = 0;
+	//Runnng through surfels
+	for (iSurfel = 0, adjacencyLinks_iter = adjacencyLinks.begin(); adjacencyLinks_iter != adjacencyLinks.end(); adjacencyLinks_iter++, iSurfel++)
+	{
+		pAgNode = NodeArray.Element + iSurfel;
+
+		pEdgeList = &(pAgNode->EdgeList);
+		// iterator->first = key
+		// iterator->second = value
+		currLink = &adjacencyLinks_iter->second;
+		//running through surfel links
+		for (int i = 0; i < currLink->size(); i++)
+		{
+			//pSurfel_ = pSurfel->imgAdjacency.at(i);
+			pDesc = adjacencyDescriptors.at(iDesc);// pSurfel->imgAdjacencyDescriptors.at(i);
+
+			pEdge->iVertex[0] = this->objID2idxMap.at(adjacencyLinks_iter->first);	//surfel
+			pEdge->iVertex[1] = this->objID2idxMap.at(currLink->at(i));	//other surfel
+			pEdge->desc = *pDesc;
+			pEdge->cost = 0.0f;
+			pEdge->idx = pEdge - EdgeArray.Element;
+			pEdgePtr->pEdge = pEdge;
+			RVLQLIST_ADD_ENTRY2(pEdgeList, pEdgePtr);
+			pEdge->pVertexEdgePtr[0] = pEdgePtr;
+			pEdgePtr++;
+			pEdgePtr->pEdge = pEdge;
+			pAgNode_ = NodeArray.Element + this->objID2idxMap.at(currLink->at(i));//+ iSurfel_;
+			pEdgeList_ = &(pAgNode_->EdgeList);
+			RVLQLIST_ADD_ENTRY2(pEdgeList_, pEdgePtr);
+			pEdge->pVertexEdgePtr[1] = pEdgePtr;
+			pEdgePtr++;
+			pEdge++;
+
+			iDesc++;//aggr list index
+		}
+	}
+}
+
+//Return 'Ntrue', 'Nfalse' and 'N' needed to calculate oversegmentation (Fos = 1 - Ntrue/N) and undersegmenation (Fus =Nfalse/N) error. The asumption is that the GT object hist bin with the highest values is the correct one!!! 
+void ObjectGraph::CalculateOverAndUnderSegmentation(int *E, int &N, bool useBackground)
+{
+	std::shared_ptr<SceneSegFile::SceneSegFile> ssf = this->ssf;
+	std::shared_ptr<SceneSegFile::SegFileElement> currSSFElement;
+	std::shared_ptr<SceneSegFile::FeatureTypeInt> GTObjHistogram_surfel;
+
+	//Getting GThist size and initializing GT object histogram;
+	currSSFElement = ssf->elements.at(0);
+	GTObjHistogram_surfel = std::dynamic_pointer_cast<SceneSegFile::FeatureTypeInt>(currSSFElement->features.features.at(SceneSegFile::FeaturesList::GTObjHistogram));
+	int GTHistSize = GTObjHistogram_surfel->size;	
+	int *GTObjHistogram = new int[GTHistSize * this->NodeArray.n];	//GTObject histogam per segmented object
+	memset(GTObjHistogram, 0, GTHistSize * this->NodeArray.n * sizeof(int));
+	int *maxObj = new int[GTHistSize];	//Idx of segmented object per maximum bin
+	memset(maxObj, 0, GTHistSize * sizeof(int));
+	int *g = new int[GTHistSize];	//gama
+	memset(g, 0, GTHistSize * sizeof(int));
+	int *maxBin = new int[this->NodeArray.n];	//maximum bin per segmented object
+	memset(maxBin, 0, this->NodeArray.n * sizeof(int));
+
+	GRAPH::AggregateNode<SURFEL::AgEdge> *pObject;
+	QLIST::Index *piElement;
+
+	//Calculating GT object histogram
+	for (int iObject = 0; iObject < this->NodeArray.n; iObject++)
+	{
+		pObject = this->NodeArray.Element + iObject;
+
+		piElement = pObject->elementList.pFirst;
+
+		while (piElement)
+		{
+			//current data
+			currSSFElement = ssf->elements.at(piElement->Idx);
+			GTObjHistogram_surfel = std::dynamic_pointer_cast<SceneSegFile::FeatureTypeInt>(currSSFElement->features.features.at(SceneSegFile::FeaturesList::GTObjHistogram));
+			for (int i = 0; i < GTHistSize; i++)
+				GTObjHistogram[iObject * GTHistSize + i] += GTObjHistogram_surfel->data[i];
+			piElement = piElement->pNext;
+		}
+
+	}
+	
+	E[0] = 0;	//Oversegmentation values
+	E[1] = 0;	//Undersegmentation values
+	int* ptrGTObjHist;
+	int max = 0;
+
+	int totVal = 0;
+	for (int iObject = 0; iObject < this->NodeArray.n; iObject++)
+	{
+		pObject = this->NodeArray.Element + iObject;
+		//check if object
+		piElement = pObject->elementList.pFirst;
+		if (!piElement)
+			continue;
+		//
+		ptrGTObjHist = &(GTObjHistogram[iObject * GTHistSize]);
+		
+		//find max
+		max = 0;
+		maxBin[iObject] = -1;
+		for (int i = 0; i < GTHistSize; i++)
+		{
+			if (ptrGTObjHist[i] > max)
+			{
+				maxBin[iObject] = i;
+				max = ptrGTObjHist[i];
+			}
+		}
+
+		//Sum false values
+		for (int i = 0; i < GTHistSize; i++)
+		{
+			if ((i == 0) && !useBackground)
+				continue;
+
+			if (i != maxBin[iObject])
+				E[1] += ptrGTObjHist[i];
+
+			totVal += ptrGTObjHist[i];
+		}
+		
+		//Set max segmented object per max bin
+		if (ptrGTObjHist[maxBin[iObject]] > g[maxBin[iObject]])
+		{
+			maxObj[maxBin[iObject]] = iObject;
+			g[maxBin[iObject]] = ptrGTObjHist[maxBin[iObject]];
+		}
+	}
+
+	//Sum positive values
+	for (int i = 0; i < GTHistSize; i++)
+	{
+		if ((i == 0) && !useBackground)
+			continue;
+
+		if (i = maxBin[maxObj[i]])
+			E[0] += GTObjHistogram[maxObj[i] * GTHistSize + i];
+	}
+
+
+	//Final results
+	/*E[0] = 1 - E[0] / totVal;
+	E[1] /= totVal;*/
+	N = totVal;
+
+	//DeRef
+	delete[] GTObjHistogram;
+	delete[] maxObj;
+	delete[] g;
+	delete[] maxBin;
 }
 
 void ObjectGraph::WERSegmentation()
