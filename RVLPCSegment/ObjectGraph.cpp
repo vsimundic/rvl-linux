@@ -816,8 +816,7 @@ void ObjectGraph::CreateFromSSF(std::string ssfFileName)
 
 	AgEdge *pEdge = EdgeArray.Element;
 
-	int i;
-	int iSurfel, iSurfel_;
+	int iSurfel;
 	//Surfel *pSurfel, *pSurfel_;
 	GRAPH::AggregateNode<AgEdge> *pAgNode, *pAgNode_;
 	QList<GRAPH::EdgePtr2<AgEdge>> *pEdgeList, *pEdgeList_;

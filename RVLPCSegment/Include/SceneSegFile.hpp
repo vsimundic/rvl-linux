@@ -8,8 +8,8 @@
 #include <memory>
 
 //RapidXML
-#include "RapidXML/rapidxml.hpp"
-#include "RapidXML/rapidxml_print.hpp"
+#include "rapidxml.hpp"
+#include "rapidxml_print.hpp"
 
 namespace SceneSegFile
 {
