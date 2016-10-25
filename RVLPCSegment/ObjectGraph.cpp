@@ -210,9 +210,9 @@ namespace RVL
 
 			/// main loop
 
-			int *iVisitedNodeEdge = new int[graph.EdgeArray.n];
+			int *iVisitedNodeEdge = new int[graph.NodeArray.n];
 
-			memset(iVisitedNodeEdge, 0xff, graph.EdgeArray.n * sizeof(int));
+			memset(iVisitedNodeEdge, 0xff, graph.NodeArray.n * sizeof(int));
 
 			//QLIST::Index2 **ppNextDebug = NULL;
 
