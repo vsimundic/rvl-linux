@@ -46,7 +46,7 @@ namespace RVL
 			{
 				Array<int> iSurfelArray;
 				Array<int> iVertexArray;
-				int size;	
+				int size;
 				QList<RECOG::PSGM_::ModelInstance> modelInstanceList;
 			};
 
@@ -93,6 +93,29 @@ namespace RVL
 				int iSelectedCluster;
 				float normalLen;
 			};
+
+			//VIDOVIC
+			struct MatchInstance
+			{
+				int iScene;
+				int iModel;
+				float R[9];
+				float t[3];
+				float score;
+				float angle;
+				float distance;
+				MatchInstance *pNext;
+			};
+
+			struct FPMatch
+			{
+				int iScene;
+				int iModel;
+				float t[3];
+				float n;
+				FPMatch *pNext;
+			};
+			//END VIDOVIC
 
 			int ValidTangent(
 				int iSurfel,
@@ -146,6 +169,12 @@ namespace RVL
 		void SaveModelID(FileSequenceLoader dbLoader); //VIDOVIC
 		void Learn(char *modelSequenceFileName); //VIDOVIC
 		void LoadModelDataBase(); //VIDOVIC
+		void Match(); //VIDOVIC
+		void MSTransformation(RECOG::PSGM_::ModelInstance *pMModelInstance, RECOG::PSGM_::ModelInstance *pSModelInstance, float *tBestMatch, float *R, float *t); //VIDOVIC
+		void SetNumberOfScenes(int scenesNumber); //VIDOVIC
+		void SaveMatches(); //VIDOVIC
+		void CompareMatchesToGT(ECCVGTLoader *ECCVGT, float scoreThresh, float angleThresh, float distanceThresh, float &precision, float &recall); //VIDOVIC
+		void CompareSMIMatchesToGT(ECCVGTLoader *ECCVGT, float scoreThresh, float angleThresh, float distanceThresh, float &precision, float &recall); //VIDOVIC
 	private:
 		void DetectVertices(
 			Mesh *pMesh);
@@ -199,6 +228,10 @@ namespace RVL
 		float baseSeparationAngle;
 		float edgeTangentAngle;
 		Array<RECOG::PSGM_::ModelInstance> modelInstanceDB; //VIDOVIC
+		Array<RECOG::PSGM_::MatchInstance> matches; //VIDOVIC
+		RECOG::PSGM_::MatchInstance *pMatches; //VIDOVIC
+		QList<RECOG::PSGM_::MatchInstance> SMImatches; //VIDOVIC
+
 	private:		
 		QLIST::Index *surfelVertexMem;
 		RECOG::PSGM_::Cluster *clusterMem;
@@ -213,6 +246,12 @@ namespace RVL
 		int nVertexSurfelRelations;
 		char *modelDataBase; //VIDOVIC
 		char *modelsInDataBase; //VIDOVIC
+		int nSModelInstances; //VIDOVIC
+		int nSamples; //RANSAC //VIDOVIC
+		int stdNoise; //RANSAC //VIDOVIC
+		bool bNormalValidityTest; // VIDOVIC
+		char *sceneMIMatch; //VIDOVIC
+		int iScene; //VIDOVIC
 	};
 }
 

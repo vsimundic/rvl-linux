@@ -247,8 +247,8 @@ namespace RVL
 			Visualizer *pVisualizer,
 			Mesh *pMesh);
 		void Display();
-		bool GetAngleAxis(float *R, float *V, float &theta); //VIDOVIC
-		void GetDistance(float *t, float &distance); //VIDOVIC
+		//bool GetAngleAxis(float *R, float *V, float &theta); //VIDOVIC
+		//void GetDistance(float *t, float &distance); //VIDOVIC
 		void CoordinateSystemNoiseStabilityTest(char *sceneMeshFileName, MeshNoiser noiser, bool debug); //VIDOVIC
 		void FeatureTestSceneSequence(char *sceneSequenceFileName, MeshNoiser noiser); //VIDOVIC
 		void FeatureTestPrecisionRecallGraph(char *sceneMeshFileName, char *sceneSequenceFileName, MeshNoiser noiser); //VIDOVIC

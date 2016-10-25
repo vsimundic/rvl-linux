@@ -3,7 +3,8 @@
 
 //#include "stdafx.h"
 #include <vtkAutoInit.h>
-VTK_MODULE_INIT(vtkRenderingOpenGL);
+//VTK_MODULE_INIT(vtkRenderingOpenGL);
+VTK_MODULE_INIT(vtkRenderingOpenGL2);
 VTK_MODULE_INIT(vtkInteractionStyle);
 VTK_MODULE_INIT(vtkRenderingFreeType);
 #include "RVLVTK.h"
@@ -30,6 +31,8 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 //#define RVL_FEATURE_TEST_SCENE_SEQUENCE
 //#define RVL_FEATURE_TEST_PRECISION_RECALL_GRAPH
 #define RVL_LOAD_SINGLE_MODEL
+
+#define RVLRECOGNITION_DEMO_FLAG_SAVE_PLY			0x00000001
 //END VIDOVIC
 
 using namespace RVL;
@@ -43,7 +46,11 @@ void CreateParamList(
 	char **pMeshFileName,
 	char **pSceneSequenceFileName,	//VIDOVIC
 	char **pModelSequenceFileName,	//VIDOVIC
-	DWORD &method)
+	char **pModelsInDB,	//VIDOVIC
+	char **pGTFolder,	//VIDOVIC
+	DWORD &method,
+	DWORD &flags //VIDOVIC
+	)
 {
 	pParamList->m_pMem = pMem;
 
@@ -54,11 +61,13 @@ void CreateParamList(
 	pParamData = pParamList->AddParam("SceneFileName", RVLPARAM_TYPE_STRING, pMeshFileName);
 	pParamData = pParamList->AddParam("SceneSequenceFileName", RVLPARAM_TYPE_STRING, pSceneSequenceFileName);	//VIDOVIC
 	pParamData = pParamList->AddParam("ModelSequenceFileName", RVLPARAM_TYPE_STRING, pModelSequenceFileName);	//VIDOVIC
+	pParamData = pParamList->AddParam("ModelsInDataBase", RVLPARAM_TYPE_STRING, pModelsInDB);	//VIDOVIC
+	pParamData = pParamList->AddParam("GTFolder", RVLPARAM_TYPE_STRING, pGTFolder);	//VIDOVIC
 	pParamData = pParamList->AddParam("Recognition.method", RVLPARAM_TYPE_ID, &method);
 	pParamList->AddID(pParamData, "PSGM", RVLRECOGNITION_METHOD_PSGM);
 	pParamList->AddID(pParamData, "RF", RVLRECOGNITION_METHOD_RF); //VIDOVIC
-	//pParamData = pParamList->AddParam("Save PLY", RVLPARAM_TYPE_ID, &flags);
-	//pParamList->AddID(pParamData, "yes", RVLPCSEGMENT_DEMO_FLAG_SAVE_PLY);
+	pParamData = pParamList->AddParam("Save PLY", RVLPARAM_TYPE_ID, &flags); //VIDOVIC
+	pParamList->AddID(pParamData, "yes", RVLRECOGNITION_DEMO_FLAG_SAVE_PLY); //VIDOVIC
 }
 
 int main(int argc, char ** argv)
@@ -68,20 +77,24 @@ int main(int argc, char ** argv)
 	CRVLMem mem0;	// permanent memory
 
 	mem0.Create(1000000000);
+	//mem0.Create(100000000000); //VIDOVIC
 
 	CRVLMem mem;	// cycle memory
 
 	mem.Create(1000000000);
+	//mem.Create(100000000000); //VIDOVIC
 
 	// Read parameters from a configuration file.
 
 	char *sceneMeshFileName = NULL;
 	char *sceneSequenceFileName = NULL; //VIDOVIC
 	char *modelSequenceFileName = NULL; //VIDOVIC
+	char *modelsInDB = NULL; //VIDOVIC
+	char *GTFolder = NULL; //VIDOVIC
 	DWORD method = RVLRECOGNITION_METHOD_PSGM;
 	//DWORD method = RVLRECOGNITION_METHOD_RF; //VIDOVIC
 
-	////DWORD flags = 0x00000000;
+	DWORD flags = 0x00000000; //VIDOVIC
 
 	CRVLParameterList ParamList;
 
@@ -90,7 +103,10 @@ int main(int argc, char ** argv)
 		&sceneMeshFileName,
 		&sceneSequenceFileName,
 		&modelSequenceFileName,
-		method);	 //VIDOVIC
+		&modelsInDB,
+		&GTFolder,
+		method,
+		flags);	 //VIDOVIC
 
 	ParamList.LoadParams("RVLRecognitionDemo.cfg");
 
@@ -190,8 +206,8 @@ int main(int argc, char ** argv)
 			//VIDOVIC
 			recognition.FindBestHypothesis(&pBestHypothesis);
 
-			recognition.GetAngleAxis(pBestHypothesis->R, V, theta);
-			recognition.GetDistance(pBestHypothesis->t, distance);
+			GetAngleAxis(pBestHypothesis->R, V, theta);
+			GetDistance(pBestHypothesis->t, distance);
 
 			FILE *fpHypothesisErrorDebug = NULL;
 
@@ -207,8 +223,8 @@ int main(int argc, char ** argv)
 				RECOG::WriteHypothesis(fpInterpretation, pHypothesis);
 
 				//VIDOVIC
-				recognition.GetAngleAxis(pHypothesis->R, V, theta);
-				recognition.GetDistance(pHypothesis->t, distance);
+				GetAngleAxis(pHypothesis->R, V, theta);
+				GetDistance(pHypothesis->t, distance);
 
 				RECOG::WriteHypothesisError(fpHypothesisErrorDebug, pHypothesis, distance, theta * 180 / PI);
 				//END VIDOVIC
@@ -252,18 +268,95 @@ int main(int argc, char ** argv)
 		}
 		else if (recognition.mode == RVLRECOGNITION_MODE_RECOGNITION)
 		{
-			// Poziv funkcije LoadModelDatabase()
+			recognition.LoadModelDataBase(); //VIDOVIC
 
 			// Load scene mesh from file.
 
 			Mesh mesh;
 
-			mesh.LoadPolyDataFromPLY(sceneMeshFileName);
+			//mesh.LoadPolyDataFromPLY(sceneMeshFileName);
+
+			//VIDOVIC
+
+			//ECCVGTLoader TEST
+			FileSequenceLoader sceneSequence;
+
+			sceneSequence.Init(sceneSequenceFileName);
+
+			recognition.SetNumberOfScenes(sceneSequence.nFileNames);
+
+			ECCVGTLoader ECCVGT;
+
+			ECCVGT.Init(sceneSequence, GTFolder, modelsInDB);
+
+			ECCVGT.SaveGTFile("F:\\Projekti\\ARP3D\\Auxiliary\\Models\\GT.txt");
+
+			char filePath[200];
+
+			while (sceneSequence.GetNextPath(filePath))
+			{
+				printf("Scene %s...\n", filePath);
+
+				mesh.LoadPolyDataFromPLY(filePath);
+
+				recognition.SetSceneFileName(filePath);
+				recognition.Interpret(&mesh);
+
+				printf("Scene %s...finished!\n\n", filePath);
+			}
+
+			recognition.SaveMatches();
+
+			float precision, recall;
+			float scoreThresh, angleThresh, distanceThresh;
+
+			scoreThresh = 46.5;
+			angleThresh = PI/4;
+			distanceThresh = 50;
+
+			FILE *fp;
+
+			int graphID = 0;
+
+			fp = fopen("F:\\Projekti\\ARP3D\\compare.txt", "w");
+
+			//for (angleThresh = PI / 4; angleThresh < 3*PI/4; angleThresh += PI / 4)
+			//{
+				for (distanceThresh = 50; distanceThresh <= 100; distanceThresh += 25)
+				{
+					printf("ScoreThresh: %f\t%f\n", angleThresh, distanceThresh);
+
+					for (scoreThresh = 33.0; scoreThresh <= 66; scoreThresh += 0.1)
+					{
+						//recognition.CompareMatchesToGT(&ECCVGT, scoreThresh, angleThresh, distanceThresh, precision, recall);
+
+						recognition.CompareSMIMatchesToGT(&ECCVGT, scoreThresh, angleThresh, distanceThresh, precision, recall);
+
+						ECCVGT.ResetMatchFlag();
+
+						printf("ScoreThresh: %f\n", scoreThresh);
+						printf("Precision: %f\n", precision);
+						printf("Recall: %f\n", recall);
+						printf("\n");
+
+						fprintf(fp, "%d\t%f\t%f\t%f\t%f\t%f\n", graphID, angleThresh, distanceThresh, scoreThresh, precision, recall);
+					}
+
+					graphID++;
+
+				}
+			//}
+
+			fclose(fp);
+
+			recognition.SaveMatches();
+
+			//END VIDOVIC
 
 			// Scene interpretation.
 
-			recognition.SetSceneFileName(sceneMeshFileName);
-			recognition.Interpret(&mesh);
+			//recognition.SetSceneFileName(sceneMeshFileName);
+			//recognition.Interpret(&mesh);
 
 			// Visualization
 

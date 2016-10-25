@@ -165,6 +165,7 @@ void SurfelGraph::Init(Mesh *pMesh)
 	edgeMarkMap = new unsigned char[nMeshEdges];
 }
 
+#ifdef NEVER
 void SurfelGraph::ImageAdjacency(Mesh *pMesh)
 {
 	bool *bVisited = new bool[NodeArray.n];
@@ -334,6 +335,7 @@ void SurfelGraph::ImageAdjacency(
 		surfelIdx[iOtherSurfel] = -1;
 	}
 }
+#endif
 
 void SurfelGraph::Clear()
 {

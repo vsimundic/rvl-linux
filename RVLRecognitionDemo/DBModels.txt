@@ -1,0 +1,10 @@
+0	all-small.ply
+1	100.919.00-cup.ply
+2	101.328.92.ply
+3	200.572.55.ply
+4	242.09.6219-pitcher.ply
+5	800.921.09.ply
+6	all.ply
+7	Brita_water_filter_pitcher_6cup_x2.ply
+
+end
