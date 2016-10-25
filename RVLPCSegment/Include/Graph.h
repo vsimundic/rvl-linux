@@ -1,5 +1,8 @@
 #pragma once
 
+//#define RVLPCSEGMENT_GRAPH_WERAGGREGATION_DEBUG
+//#define RVLPCSEGMENT_GRAPH_WERAGGREGATION_DETAILED_DEBUG
+
 // For a given node index iNode and an edge connector pEdgePtr belonging to this node, the function returns the index of the opposite node.
 // pEdge_ is the output variable representing the edge corresponding to the connector pEdgePtr.
 
@@ -47,6 +50,13 @@ namespace RVL
 			EdgePtr<EdgeType> *pNext;
 		};
 
+		template<typename EdgeType> struct EdgePtr2
+		{
+			EdgeType *pEdge;
+			EdgePtr2<EdgeType> *pNext;
+			EdgePtr2<EdgeType> **pPtrToThis;
+		};
+
 		struct Edge
 		{
 			int iNode[2];
@@ -56,8 +66,8 @@ namespace RVL
 
 		template<typename EdgeType> struct AggregateNode
 		{
-			Array<int> iElementArray;
-			QList<EdgePtr<EdgeType>> EdgeList;
+			QList<QLIST::Index> elementList;
+			QList<EdgePtr2<EdgeType>> EdgeList;
 		};
 	}
 
@@ -245,300 +255,5 @@ namespace RVL
 
 		return pEdge;
 	}
-
-	namespace GRAPH
-	{
-		template<typename NodeType, typename EdgeType, typename EdgePtrType, typename CostType>
-		void WERSegmentation(
-			Graph<typename NodeType, typename EdgeType, typename EdgePtrType> &graph,
-			QLIST::Index *elementListMem,
-			CostType minCostDiff,
-			CostType costResolution)
-		{
-			// Initialize elements lists of all nodes. 
-
-			QLIST::Index *pElement = elementListMem;
-
-			NodeType *pNode;
-			int iNode;
-			QList<QLIST::Index> *pElementList;
-
-			for (iNode = 0; iNode < graph.NodeArray.n; iNode++)
-			{
-				pNode = graph.NodeArray.Element + iNode;
-
-				pElementList = &(pNode->elementList);
-
-				RVLQLIST_INIT(pElementList);
-
-				RVLQLIST_ADD_ENTRY(pElementList, pElement);
-
-				pElement->Idx = iNode;
-
-				pElement++;
-			}
-
-			// maxPossibleCost <- the maximum possible cost.
-
-			CostType maxPossibleCost = 0;
-
-			for (i = 0; i < graph.EdgeArray.n; i++)
-				maxPossibleCost += graph.EdgeArray.Element[i].cost;
-
-			// edgeQueue <- edge queue sorted according to their cost.
-
-			float lnCostResolution = log((float)(1 + costResolution));
-
-			Array<QList<QLIST::Index2>> edgeQueue;
-
-			edgeQueue.n = RVLPCSEGMENT_GRAPH_LOG_BIN_INDEX(maxPossibleCost, minCostDiff, lnCostResolution) + 1;
-
-			edgeQueue.Element = new QList<QLIST::Index2>[edgeQueue.n];
-
-			QLIST::Index2 *edgeQueueMem = new QLIST::Index2[graph.EdgeArray.n];
-
-			QList<QLIST::Index2> *pEdgeList;
-
-			for (i = 0; i < edgeQueue.n; i++)
-			{
-				pEdgeList = edgeQueue.Element + i;
-
-				RVLQLIST_INIT(pEdgeList);
-			}
-
-			QLIST::Index2 *pEdgeQueueEntry = edgeQueueMem;
-
-			CostType iMaxCost = 0;
-
-			CostType cost;
-			int iCost;
-			EdgeType *pEdge;
-			int iEdge;
-
-			for (iEdge = 0; iEdge < graph.EdgeArray.n; iEdge++)
-			{
-				pEdge = graph.EdgeArray.Element + iEdge;
-
-				cost = pEdge->cost;
-
-				if (cost > 0)
-				{
-					iCost = RVLPCSEGMENT_GRAPH_LOG_BIN_INDEX(cost, minCostDiff, lnCostResolution);
-
-					pEdgeList = edgeQueue.Element + iCost;
-
-					RVLQLIST_ADD_ENTRY2(pEdgeList, pEdgeQueueEntry);
-
-					pEdgeQueueEntry->Idx = iEdge;
-
-					if (iCost > iMaxCost)
-						iMaxCost = iCost;
-				}
-
-				pEdgeQueueEntry++;
-			}
-
-			/// main loop
-
-			int *iVisitedNodeEdge = new int[graph.EdgeArray.n];
-
-			memset(iVisitedNodeEdge, 0xff, graph.EdgeArray.n * sizeof(int));			
-
-			int iNode1, iNode2, iNode3, iEdge13, iRefEdge;
-			EdgePtrType *pEdgePtr13, *pEdgePtr31, *pEdgePtr21;
-			NodeType *pNode1, *pNode2, *pNode3;
-			QList<EdgePtrType> *pEdgeList1, *pEdgeList2, *pEdgeList3;
-			int side3;
-			QLIST::Index2 *pEdge13QueueEntry, *pRefEdgeQueueEntry;
-			QList<QLIST::Index2> *pEdgeList_;
-			EdgeType *pEdge12, *pEdge13, *pRefEdge;
-			QList<QLIST::Index> *pElementList1, *pElementList2;
-			bool bNewMaxCost;
-
-			pEdgeList = edgeQueue.Element + iMaxCost;
-
-			pEdgeQueueEntry = pEdgeList->pFirst;
-
-			while (iMaxCost >= 0)
-			{
-				// pEdge <- the first top edge in the edgeQueue.
-
-				iEdge = pEdgeQueueEntry->Idx;
-
-				pEdge = graph.EdgeArray.Element + iEdge;
-
-				// iNode1, iNode2 <- nodes connected by pEdge
-
-				iNode1 = pEdge->iVertex[0];
-
-				pNode1 = graph.NodeArray.Element + iNode1;
-
-				pEdgeList1 = &(pNode1->EdgeList);
-
-				pElementList1 = &(pNode1->elementList);
-
-				iNode2 = pEdge->iVertex[1];
-
-				pNode2 = graph.NodeArray.Element + iNode2;
-
-				pEdgeList2 = &(pNode2->EdgeList);
-
-				pElementList2 = &(pNode2->elementList);
-
-				// iNode1 <- union of iNode1 and iNode2 
-
-				RVLQLIST_APPEND(pElementList1, pElementList2);
-
-				// iNode2 <- empty set
-
-				RVLQLIST_INIT(pElementList2);
-
-				// Remove the edge connecting iNode1 and iNode2 from the edgeQueue.
-
-				RVLQLIST_REMOVE_ENTRY2(pEdgeList, pEdgeQueueEntry, QLIST::Index2);
-
-				// Append the edge list of iNode2 to the edge list of iNode1.
-
-				RVLQLIST_APPEND(pEdgeList1, pEdgeList2);
-
-				pEdgePtr21 = pEdgeList2->pFirst;
-
-				while (pEdgePtr21)
-				{
-					pEdge12 = pEdgePtr21->pEdge;
-
-					if (pEdge12->iVertex[0] == iNode2)
-						pEdge12->iVertex[0] == iNode1;
-					else if (pEdge12->iVertex[1] == iNode2)
-						pEdge12->iVertex[1] == iNode1;
-
-					pEdgePtr21 = pEdgePtr21->pNext;
-				}
-
-				// 
-
-				bNewMaxCost = false;
-
-				pEdgePtr13 = pEdgeList1->pFirst;
-
-				while (pEdgePtr13)	// for every edge of iNode1
-				{
-					// iNode3 <- node connected to iNode1 via edge pEdge13
-
-					pEdge13 = pEdgePtr13->pEdge;
-
-					iEdge13 = pEdge13->idx;
-
-					side3 = 1 - RVLPCSEGMENT_GRAPH_GET_SIDE(pEdgePtr13);
-
-					iNode3 = pEdge13->iVertex[side3];
-
-					if (iNode3 == iNode1)
-						RVLQLIST_REMOVE_ENTRY2(pEdgeList1, pEdgePtr13, EdgePtrType);	// Remove pEdge13 from the edge list of iNode1.
-					else if (iVisitedNodeEdge[iNode3] >= 0)
-					{
-						// Remove pEdge13 from the edge list of iNode1. 
-
-						RVLQLIST_REMOVE_ENTRY2(pEdgeList1, pEdgePtr13, EdgePtrType);	
-
-						// Remove pEdge13 from the edge list of iNode3. 
-
-						pEdgePtr31 = pEdge13->pVertexEdgePtr[side3];
-
-						pNode3 = graph.NodeArray.Element + iNode3;
-
-						pEdgeList3 = &(pNode3->EdgeList);
-
-						RVLQLIST_REMOVE_ENTRY2(pEdgeList3, pEdgePtr31);
-
-						// pRefEdge <- the first visited edge which connects iNode1 and iNode3
-
-						iRefEdge = iVisitedNodeEdge[iNode3];
-
-						pRefEdge = graph.EdgeArray.Element + iRefEdge;
-
-						// Remove pEdge13 from edgeQueue.
-
-						if (pEdge13->cost > 0)
-						{
-							pEdge13QueueEntry = edgeQueueMem + iEdge13;
-
-							pEdgeList_ = edgeQueue.Element + RVLPCSEGMENT_GRAPH_LOG_BIN_INDEX(pEdge13->cost, minCostDiff, lnCostResolution);;
-
-							RVLQLIST_REMOVE_ENTRY2(pEdgeList_, pEdge13QueueEntry);
-						}
-
-						// Remove pRefEdge from edgeQueue.
-
-						pRefEdgeQueueEntry = edgeQueueMem + iRefEdge;
-
-						if (pRefEdge->cost > 0)
-						{
-							pEdgeList_ = edgeQueue.Element + RVLPCSEGMENT_GRAPH_LOG_BIN_INDEX(pRefEdge->cost, minCostDiff, lnCostResolution);
-
-							RVLQLIST_REMOVE_ENTRY2(pEdgeList_, pRefEdgeQueueEntry);
-						}
-
-						// pRefEdge->cost <- pRefEdge->cost + pEdge13->cost
-
-						pRefEdge->cost += pEdge13->cost;
-
-						if (pRefEdge->cost > 0)
-						{
-							// Add pRefEdge to edgeQueue.
-
-							iCost = RVLPCSEGMENT_GRAPH_LOG_BIN_INDEX(pRefEdge->cost, minCostDiff, lnCostResolution);
-
-							pEdgeList_ = edgeQueue.Element + iCost;
-
-							RVLQLIST_ADD_ENTRY2(pEdgeList_, pRefEdgeQueueEntry);
-
-							// Update iMaxCost.
-
-							if (iCost > iMaxCost)
-							{
-								iMaxCost = iCost;
-
-								pEdgeList = edgeQueue.Element + iMaxCost;
-
-								pEdgeQueueEntry = pEdgeList->pFirst;
-
-								bNewMaxCost = true;
-							}
-						}
-					}
-					else
-						iVisitedNodeEdge[iNode3] = iEdge;
-
-					pEdgePtr13 = pEdgePtr13->pNext;
-				}	// for every edge of iNode1
-
-				if (!bNewMaxCost)
-				{
-					pEdgeQueueEntry = pEdgeQueueEntry->pNext;
-
-					while (pEdgeQueueEntry == NULL)
-					{
-						iMaxCost--;
-
-						if (iMaxCost >= 0)
-						{
-							pEdgeList = edgeQueue.Element + iMaxCost;
-
-							pEdgeQueueEntry = pEdgeList->pFirst;
-						}
-						else
-							break;
-					}						
-				}
-			}	// while (iMaxCost >= 0)
-
-			/// 
-
-			delete[] iVisitedNodeEdge;
-			delete[] edgeQueue.Element;
-			delete[] edgeQueueMem;
-		}	// WERSegmentation()
-	}	// namespace GRAPH
 }	// namespace RVL
 

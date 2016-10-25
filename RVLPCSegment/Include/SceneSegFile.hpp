@@ -26,6 +26,7 @@ namespace SceneSegFile
 		virtual std::string GetDataAsString() = 0;// { return ""; }
 		virtual void SetData(void*, int) = 0;
 		virtual void CopyData(void*, int) = 0;
+		virtual void* GetDataPtr() = 0;
 	};
 
 	//Feature type "int"
@@ -62,6 +63,10 @@ namespace SceneSegFile
 			this->data = new int[size];	//Generate new data buffer and copy
 			memcpy(this->data, data, size * sizeof(int));
 			this->size = size;
+		}
+		void* GetDataPtr()
+		{
+			return this->data;
 		}
 		FeatureTypeInt& operator = (const FeatureTypeInt& other)
 		{
@@ -115,6 +120,10 @@ namespace SceneSegFile
 			memcpy(this->data, data, size * sizeof(float));
 			this->size = size;
 		}
+		void* GetDataPtr()
+		{
+			return this->data;
+		}
 		FeatureTypeFloat& operator = (const FeatureTypeFloat& other)
 		{
 			if (this != &other) //selfcheck
@@ -167,6 +176,10 @@ namespace SceneSegFile
 			memcpy(this->data, data, size * sizeof(double));
 			this->size = size;
 		}
+		void* GetDataPtr()
+		{
+			return this->data;
+		}
 		FeatureTypeDouble& operator = (const FeatureTypeDouble& other)
 		{
 			if (this != &other) //selfcheck
@@ -206,6 +219,10 @@ namespace SceneSegFile
 			this->data = *(bool*)data;
 			this->size = 1;
 		}
+		void* GetDataPtr()
+		{
+			return &this->data;
+		}
 		FeatureTypeBool& operator = (const FeatureTypeBool& other)
 		{
 			if (this != &other) //selfcheck
@@ -240,6 +257,10 @@ namespace SceneSegFile
 			this->data = *(std::string*)data;
 			this->size = size;
 		}
+		void* GetDataPtr()
+		{
+			return &this->data;
+		}
 		FeatureTypeString& operator = (const FeatureTypeString& other)
 		{
 			if (this != &other) //selfcheck
@@ -265,7 +286,10 @@ namespace SceneSegFile
 		std::map<int, std::shared_ptr<FeatureType>> features;
 		std::string name;
 		bool idx;
-		FeatureSet() { this->name = ""; }
+		FeatureSet() { 
+			this->name = "";
+			this->idx = false;
+		}
 		FeatureSet(std::string featureSetName, bool idx) : name(featureSetName), idx(idx) {  }
 		~FeatureSet() {}
 		//Adds new parameter to a set
@@ -620,6 +644,7 @@ namespace SceneSegFile
 					std::string childName2;
 					std::string featureType;
 					std::string nodeName;
+					std::string atribName;
 					int childID;
 					int childID2;
 					bool childID2Idx = false;
@@ -643,7 +668,8 @@ namespace SceneSegFile
 						ss >> childID;
 						//						
 						isFeature = true;
-						if (elementChildNode->last_attribute()->name() == "idx")
+						atribName = elementChildNode->last_attribute()->name();
+						if (atribName == "idx")
 							isFeatureIdx = true;
 					}
 					else if (nodeName == "FeatureSet")
@@ -656,7 +682,8 @@ namespace SceneSegFile
 						ss >> childID;
 						//					
 						isFeatureSet = true;
-						if (elementChildNode->last_attribute()->name() == "idx")
+						atribName = elementChildNode->last_attribute()->name();
+						if (atribName == "idx")
 							isFeatureSetIdx = true;
 					}
 					else if (nodeName == "FeatureGroup")
@@ -669,7 +696,8 @@ namespace SceneSegFile
 						ss >> childID;
 						//					
 						isFeatureGroup = true;
-						if (elementChildNode->last_attribute()->name() == "idx")
+						atribName = elementChildNode->last_attribute()->name();
+						if (atribName == "idx")
 							isFeatureGroupIdx = true;
 					}
 
@@ -683,9 +711,10 @@ namespace SceneSegFile
 							childName2 = featureGroupChildNode->first_attribute()->value();
 							ss.clear();
 							ss.str("");
-							ss << elementChildNode->last_attribute()->value();
+							ss << featureGroupChildNode->last_attribute()->value();
 							ss >> childID2;
-							if (elementChildNode->last_attribute()->name() == "idx")
+							atribName = featureGroupChildNode->last_attribute()->name();
+							if (atribName == "idx")
 								childID2Idx = true;
 							else
 								childID2Idx = false;
@@ -749,6 +778,7 @@ namespace SceneSegFile
 			//iterating trough all features in the set
 			std::string setFeatureName;
 			std::string setFeatureType;
+			std::string atribName;
 			int setFeatureID;
 			bool setFeatureIdx = false;
 			//There are only three atributes so we can use FIRST, FIRST->NEXT and LAST
@@ -760,7 +790,8 @@ namespace SceneSegFile
 			ss.str("");
 			ss << node->last_attribute()->value();
 			ss >> setFeatureID;
-			if (node->last_attribute()->name() == "idx")
+			atribName = node->last_attribute()->name();
+			if (atribName == "idx")
 				setFeatureIdx = true;
 			//Creating appropriate feature type
 			if (setFeatureType == "int")
@@ -936,10 +967,12 @@ namespace SceneSegFile
 		{
 			Centroid = 0,	//float
 			NormalAngleDifference,	//float
-			CupysFeature,	//float
+			CupysFeature,	//double
 			GTObjectID,		//int
 			SameGTObject,	//bool
 			PixelAffiliation,	//int
+			GTObjHistogram,	//int
+			CommonBoundaryLength,	//int
 		};
 	};
 

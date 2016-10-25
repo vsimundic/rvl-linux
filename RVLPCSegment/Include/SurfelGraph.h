@@ -79,6 +79,7 @@ namespace RVL
 		int ObjectID;	//Filko
 		//std::vector<Surfel*> imgAdjacency;	//Filko
 		//std::vector<SurfelAdjecencyDescriptors*> imgAdjacencyDescriptors;	//Filko
+		std::vector<int> GTObjHist; //Filko
 	};
 
 	class SurfelGraph : public Graph < Surfel, MeshEdge, MeshEdgePtr >

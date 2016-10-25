@@ -1,4 +1,5 @@
 int DetPrimaryGTObj(Surfel *pSurfel, cv::Mat labGTImg, int noObj);
+void SetPrimaryGTObj(Surfel *pSurfel, cv::Mat labGTImg, int noObj);
 float GetShortestDistanceToBoundary(int x, int y, Array<MeshEdgePtr *> &BoundaryArray);
 void DrawSurfelBoundary(Array<MeshEdgePtr *> &BoundaryArray, cv::Mat img);
 bool GetSurfelGTValidity(Surfel *pSurfel, cv::Mat labGTImg, float thr);

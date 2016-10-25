@@ -24,7 +24,9 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 #include <iostream>
 #include <vector>
 #include <algorithm>
+#include <unordered_set>
 #include "SceneSegFile.hpp"
+#include "ObjectGraph.h"
 
 #define RVLPCSEGMENT_DEMO_FLAG_SAVE_PLY			0x00000001
 
@@ -36,7 +38,8 @@ void CreateParamList(
 	CRVLParameterList *pParamList,
 	CRVLMem *pMem,
 	char **pMeshFileName,
-	DWORD &flags);
+	DWORD &flags,
+	bool &bSegmentToObjects);
 
 //Returns surfels Label ID with most object support
 int DetPrimaryGTObj(Surfel *pSurfel, cv::Mat labGTImg, int noObj)
@@ -69,6 +72,37 @@ int DetPrimaryGTObj(Surfel *pSurfel, cv::Mat labGTImg, int noObj)
 	return objIdx;
 }
 
+//Returns surfels Label ID with most object support
+void SetPrimaryGTObj(Surfel *pSurfel, cv::Mat labGTImg, int noObj)
+{
+	int objIdx = -1;	//default value
+	//Generate histogram of object (pixel) support
+	int *objHist = new int[noObj];
+	memset(objHist, 0, noObj * sizeof(int));
+	RVL::QLIST::Index2 *pt;
+	int x = 0, y = 0;
+	pt = pSurfel->PtList.pFirst;
+	for (int i = 0; i < pSurfel->size; i++)
+	{
+		y = floor(pt->Idx / 640.0);
+		x = floor(pt->Idx - 640.0 * y);
+		objHist[labGTImg.at<cv::Vec3b>(y, x)[0]]++;
+		pt = pt->pNext;
+	}
+	//find max support and set surfel GTObjHist
+	int max = 0;
+	for (int i = 0; i < noObj; i++)
+	{
+		if (objHist[i] > max)
+		{
+			max = objHist[i];
+			objIdx = i;
+		}
+		pSurfel->GTObjHist.push_back(objHist[i]);
+	}
+	delete[] objHist;
+	pSurfel->ObjectID = objIdx;
+}
 //Return shortest distance on the image between some pixel and the pixels on the boundary
 float GetShortestDistanceToBoundary(int x, int y, Array<MeshEdgePtr *> &BoundaryArray)
 {
@@ -233,8 +267,9 @@ void SetSurfelImgAdjacency(Surfel *pSurfel, SurfelGraph *surfels, Mesh *mesh, in
 	int iPt, iPt2, x, y;
 	std::vector<Surfel*>::iterator surfIt;
 	double tempDist;
-	int iSurfel;
+	int iOtherSurfel;
 	int i;
+	std::unordered_set<int> visitedSurfels;	//visited surfels (for common boundary lenght) (indices of imgAdjacency list)
 	for (iPointEdge = 0; iPointEdge < BoundaryArray.n; iPointEdge++)
 	{
 		pCurrEdge = BoundaryArray.Element[iPointEdge];
@@ -242,7 +277,7 @@ void SetSurfelImgAdjacency(Surfel *pSurfel, SurfelGraph *surfels, Mesh *mesh, in
 		iPt = RVLPCSEGMENT_GRAPH_GET_NODE(pCurrEdge);
 		y = floor(iPt / 640.0);
 		x = floor(iPt - 640.0 * y);
-
+		visitedSurfels.clear();
 		//Running through point neighbourhood
 		for (int yy = y - thr; yy < y + thr; yy++)
 		{
@@ -253,10 +288,12 @@ void SetSurfelImgAdjacency(Surfel *pSurfel, SurfelGraph *surfels, Mesh *mesh, in
 				if ((xx < 0) || (xx >= 640))
 					continue;
 				iPt2 = yy * 640 + xx;
-				iSurfel = surfels->surfelMap[iPt2];
-				pOtherSurfel = &surfels->NodeArray.Element[iSurfel];	//surfel owner of the pixel
+				iOtherSurfel = surfels->surfelMap[iPt2];
+				if ((iOtherSurfel < 0) || (iOtherSurfel >= surfels->NodeArray.n))
+					continue;
+				pOtherSurfel = &surfels->NodeArray.Element[iOtherSurfel];	//surfel owner of the pixel
 				surfIt = std::find(pSurfel->imgAdjacency.begin(), pSurfel->imgAdjacency.end(), pOtherSurfel);	//find if that surfel is already on the list
-				if ((pOtherSurfel->size < 640 * 480) && (pOtherSurfel->size != 0) && (pOtherSurfel->size != 1) && (pOtherSurfel->ObjectID > 0) && (pOtherSurfel != pSurfel)/*&& (pOtherSurfel->ObjectID != pSurfel->ObjectID)*/ && (surfIt == pSurfel->imgAdjacency.end()))
+				if ((pOtherSurfel->size < 640 * 480) && (pOtherSurfel->size != 0) && (pOtherSurfel->size != 1) && (pOtherSurfel->ObjectID >= 0) && (pOtherSurfel != pSurfel)/*&& (pOtherSurfel->ObjectID != pSurfel->ObjectID)*/ && (surfIt == pSurfel->imgAdjacency.end()))
 				{
 					pSurfel->imgAdjacency.push_back(pOtherSurfel);	//push surfel pointer on the list
 					//calculate min dist
@@ -273,6 +310,8 @@ void SetSurfelImgAdjacency(Surfel *pSurfel, SurfelGraph *surfels, Mesh *mesh, in
 					//push to other surfel
 					pOtherSurfel->imgAdjacency.push_back(pSurfel);
 					pOtherSurfel->imgAdjacencyDescriptors.push_back(desc);
+					
+					visitedSurfels.insert(pSurfel->imgAdjacency.size() - 1);	//Visited surfel on the list
 				}
 				else if (surfIt != pSurfel->imgAdjacency.end())	//If it is on the list, find and update min distance
 				{
@@ -280,9 +319,17 @@ void SetSurfelImgAdjacency(Surfel *pSurfel, SurfelGraph *surfels, Mesh *mesh, in
 					tempDist = sqrt((mesh->NodeArray.Element[iPt].P[0] - mesh->NodeArray.Element[iPt2].P[0]) * (mesh->NodeArray.Element[iPt].P[0] - mesh->NodeArray.Element[iPt2].P[0]) + (mesh->NodeArray.Element[iPt].P[1] - mesh->NodeArray.Element[iPt2].P[1]) * (mesh->NodeArray.Element[iPt].P[1] - mesh->NodeArray.Element[iPt2].P[1]) + (mesh->NodeArray.Element[iPt].P[2] - mesh->NodeArray.Element[iPt2].P[2]) * (mesh->NodeArray.Element[iPt].P[2] - mesh->NodeArray.Element[iPt2].P[2]));
 					if (tempDist < desc->minDist)	//update if the new one is smaller
 						desc->minDist = tempDist;
+					visitedSurfels.insert(surfIt - pSurfel->imgAdjacency.begin());	//Visited surfel on the list
 				}
 			}
 		}	//Running through point neighbourhood
+
+		//Updating Common boundary lenght
+		for (const int& s : visitedSurfels)
+		{
+			desc = pSurfel->imgAdjacencyDescriptors.at(s);	//get related descriptor
+			desc->commonBoundaryLength++;
+		}
 	}	// for every boundary point
 }
 
@@ -378,7 +425,7 @@ cv::Mat GenColoredSegmentationImg(SurfelGraph *surfels)
 	int x = 0, y = 0;
 	for (int i = 0; i < surfels->NodeArray.n; pCurrSurfel++, i++)
 	{
-		if ((pCurrSurfel->size == 1) || (pCurrSurfel->size == 0))
+		if ((pCurrSurfel->size == 1) || (pCurrSurfel->size == 0) || pCurrSurfel->bEdge)
 			continue;
 		//Generate surfel color
 		labSegColor[0] = rand() % 255;
@@ -401,7 +448,7 @@ cv::Mat GenColoredSegmentationImg(SurfelGraph *surfels)
 }
 
 //Draw adjacency lines on preexisting image. Green lines for surfels belonging to same object and red lines for different objects
-void DrawSurfelImgAdjacencyOpenCV(cv::Mat img, SurfelGraph *surfels)
+void DrawSurfelImgAdjacencyOpenCV(cv::Mat img, SurfelGraph *surfels, bool checkbackground = true)
 {
 	//Connection
 	int x = 0, y = 0, x0 = 0, y0 = 0;
@@ -409,7 +456,7 @@ void DrawSurfelImgAdjacencyOpenCV(cv::Mat img, SurfelGraph *surfels)
 	Surfel *pOtherSurfel;
 	for (int i = 0; i < surfels->NodeArray.n; pCurrSurfel++, i++)
 	{
-		if ((pCurrSurfel->ObjectID == -1) || (pCurrSurfel->ObjectID == 255) || (pCurrSurfel->ObjectID == 0) || (pCurrSurfel->size == 1) || (pCurrSurfel->size == 0))
+		if ((pCurrSurfel->ObjectID == -1) || (checkbackground && ((pCurrSurfel->ObjectID == 255) || (pCurrSurfel->ObjectID == 0))) || (pCurrSurfel->size == 1) || (pCurrSurfel->size == 0) || pCurrSurfel->bEdge)
 			continue;
 
 		GetSurfelImgCentroid(x, y, pCurrSurfel);
@@ -426,7 +473,7 @@ void DrawSurfelImgAdjacencyOpenCV(cv::Mat img, SurfelGraph *surfels)
 }
 
 //Render adjacency lines on VTK renderer. Green lines for surfels belonging to same object and red lines for different objects
-void RenderSurfelImgAdjacencyVTK(vtkSmartPointer<vtkRenderer> renderer, SurfelGraph *surfels)
+void RenderSurfelImgAdjacencyVTK(vtkSmartPointer<vtkRenderer> renderer, SurfelGraph *surfels, bool checkbackground = true)
 {
 	Surfel *pCurrSurfel = surfels->NodeArray.Element;
 	Surfel *pOtherSurfel;
@@ -434,7 +481,7 @@ void RenderSurfelImgAdjacencyVTK(vtkSmartPointer<vtkRenderer> renderer, SurfelGr
 	double colorGreen[3] = { 0, 255, 0 };
 	for (int i = 0; i < surfels->NodeArray.n; pCurrSurfel++, i++)
 	{
-		if ((pCurrSurfel->ObjectID == -1) || (pCurrSurfel->ObjectID == 255) || (pCurrSurfel->ObjectID == 0) || (pCurrSurfel->size == 1) || (pCurrSurfel->size == 0))
+		if ((pCurrSurfel->ObjectID == -1) || (checkbackground && ((pCurrSurfel->ObjectID == 255) || (pCurrSurfel->ObjectID == 0))) || (pCurrSurfel->size == 1) || (pCurrSurfel->size == 0) || pCurrSurfel->bEdge)
 			continue;
 
 		for (int a = 0; a < pCurrSurfel->imgAdjacency.size(); a++)
@@ -539,7 +586,7 @@ void DetermineImgAdjDescriptors(Surfel *pSurfel, Mesh *mesh)
 				a[0]++;
 			
 		}
-		a[0] /= (float)boundarySize;
+		a[0] /= (double)boundarySize;
 		a[1] = 1.0 - a[0];
 
 		tempN[0] = pSurfel->N[0] - pOtherSurfel->N[0];
@@ -558,11 +605,11 @@ void DetermineImgAdjDescriptors(Surfel *pSurfel, Mesh *mesh)
 				a[2]++;
 
 		}
-		a[2] /= (float)boundarySizeOther;
+		a[2] /= (double)boundarySizeOther;
 		a[3] = 1.0 - a[2];
 
 		int p, q;
-		int tempm = 0;
+		double tempm = 0;
 		//argmax_l(max_i(a_i_l))
 		for (int pp = 0; pp < 4; pp++)
 		{
@@ -586,7 +633,7 @@ void DetermineImgAdjDescriptors(Surfel *pSurfel, Mesh *mesh)
 }
 
 //Generate scene segmenation file
-void GenerateSSF(SurfelGraph *surfels, std::string filename)
+void GenerateSSF(SurfelGraph *surfels, std::string filename, int minSurfelSize, bool checkbackground = true)
 {
 	std::stringstream ss;
 	//SceneSegFile object
@@ -598,7 +645,7 @@ void GenerateSSF(SurfelGraph *surfels, std::string filename)
 	//for surfel
 	for (int i = 0; i < surfels->NodeArray.n; pCurrSurfel++, i++)
 	{
-		if ((pCurrSurfel->ObjectID == -1) || (pCurrSurfel->ObjectID == 255) || (pCurrSurfel->ObjectID == 0) || (pCurrSurfel->size == 1) || (pCurrSurfel->size == 0))
+		if ((pCurrSurfel->ObjectID == -1) || (checkbackground && ((pCurrSurfel->ObjectID == 255) || (pCurrSurfel->ObjectID == 0))) || (pCurrSurfel->size == 1) || (pCurrSurfel->size == 0) || pCurrSurfel->bEdge || pCurrSurfel->size < minSurfelSize)
 			continue;
 
 		//Create element
@@ -626,6 +673,12 @@ void GenerateSSF(SurfelGraph *surfels, std::string filename)
 		}
 		surfel->features.AddFeature(SceneSegFile::FeaturesList::PixelAffiliation, SceneSegFile::FeaturesDictionary::dictionary.at(SceneSegFile::FeaturesList::PixelAffiliation), "int");
 		surfel->features.SetFeatureData<int>(SceneSegFile::FeaturesList::PixelAffiliation, pixelIndices, pCurrSurfel->size);
+		//GTObjHistogram
+		int *GTObjHist = new int[pCurrSurfel->GTObjHist.size()];
+		for (int i = 0; i < pCurrSurfel->GTObjHist.size(); i++)
+			GTObjHist[i] = pCurrSurfel->GTObjHist[i];
+		surfel->features.AddFeature(SceneSegFile::FeaturesList::GTObjHistogram, SceneSegFile::FeaturesDictionary::dictionary.at(SceneSegFile::FeaturesList::GTObjHistogram), "int");
+		surfel->features.SetFeatureData<int>(SceneSegFile::FeaturesList::GTObjHistogram, GTObjHist, pCurrSurfel->GTObjHist.size());
 		//Add feature groups
 		//Adjacency group
 		surfel->AddFeatureGroup(SceneSegFile::FeatureGroupsList::AdjacencyFeatureGroup, SceneSegFile::FeatureGroupsDictionary::dictionary.at(SceneSegFile::FeatureGroupsList::AdjacencyFeatureGroup));
@@ -639,12 +692,16 @@ void GenerateSSF(SurfelGraph *surfels, std::string filename)
 			adjFeatureGroup->AddFeatureSet(pOtherSurfel - surfels->NodeArray.Element, SceneSegFile::FeatureSetsDictionary::dictionary.at(SceneSegFile::FeatureSetsList::AdjacencyNode), true);
 			std::shared_ptr<SceneSegFile::FeatureSet> adjFeatureSet = adjFeatureGroup->featureSets.at(pOtherSurfel - surfels->NodeArray.Element);
 			//Add features
+			//Same GT object
 			adjFeatureSet->AddFeature(SceneSegFile::FeaturesList::SameGTObject, SceneSegFile::FeaturesDictionary::dictionary.at(SceneSegFile::FeaturesList::SameGTObject), "bool");
 			bool sameGTObj = pCurrSurfel->ObjectID == pOtherSurfel->ObjectID ? true : false;
 			adjFeatureSet->SetFeatureData<bool>(SceneSegFile::FeaturesList::SameGTObject, &sameGTObj);
 			//Cupy feature vector
 			adjFeatureSet->AddFeature(SceneSegFile::FeaturesList::CupysFeature, SceneSegFile::FeaturesDictionary::dictionary.at(SceneSegFile::FeaturesList::CupysFeature), "double");
 			adjFeatureSet->CopyFeatureData<double>(SceneSegFile::FeaturesList::CupysFeature, pCurrSurfel->imgAdjacencyDescriptors.at(i)->cupyDescriptor, 4);
+			//CommonBoundaryLenght
+			adjFeatureSet->AddFeature(SceneSegFile::FeaturesList::CommonBoundaryLength, SceneSegFile::FeaturesDictionary::dictionary.at(SceneSegFile::FeaturesList::CommonBoundaryLength), "int");
+			adjFeatureSet->CopyFeatureData<int>(SceneSegFile::FeaturesList::CommonBoundaryLength, &pCurrSurfel->imgAdjacencyDescriptors.at(i)->commonBoundaryLength, 1);
 		}
 	}
 
@@ -654,6 +711,9 @@ void GenerateSSF(SurfelGraph *surfels, std::string filename)
 
 void RunSeg2Bench(bool save)
 {
+	//SURFEL::ObjectGraph gra;
+	//gra.CreateFromSSF("C:/Users/Damir/Documents/Project_benchmark_data/OSD-0.2/combined/learn17.ssf");
+	
 	//Cupec
 	// Create memory storage.
 
@@ -670,10 +730,11 @@ void RunSeg2Bench(bool save)
 	char *MeshFileName = NULL;
 
 	DWORD flags = 0x00000000;
+	bool bSegmentToObjects = false;
 
 	CRVLParameterList ParamList;
 
-	CreateParamList(&ParamList, &mem0, &MeshFileName, flags);
+	CreateParamList(&ParamList, &mem0, &MeshFileName, flags, bSegmentToObjects);
 
 	ParamList.LoadParams("RVLPCSegmentDemo.cfg");
 
@@ -745,6 +806,7 @@ void RunSeg2Bench(bool save)
 	//parameters
 	int validityDist = 5;	//max distance from border
 	int neighbourhoodDist = 6;	//from -neighbourhoodDist to +neighbourhoodDist
+	bool checkbackground = false;
 	//Segmentation analysis
 	//filenames
 	std::string labelImgFileName(MeshFileName);
@@ -753,27 +815,37 @@ void RunSeg2Bench(bool save)
 	std::string ssfFileName = labelImgFileName + ".ssf";
 	labelImgFileName += "a.png";
 	delete[] MeshFileName;
+	////TEST SSF LOAD
+	//SceneSegFile::SceneSegFile* ssf = new SceneSegFile::SceneSegFile("test");
+	//ssf->Load(ssfFileName);
+	//
 	//Load label image
 	cv::Mat GTlabImg = cv::imread(labelImgFileName);
 	cv::Mat GTdepthImg = cv::imread(depthImgFileName, cv::ImreadModes::IMREAD_ANYDEPTH);
-	//Preprocess GT label image (such as labeling background)
-	PreprocessGTLab(GTlabImg, GTdepthImg);
+	////Preprocess GT label image (such as labeling background)
+	//PreprocessGTLab(GTlabImg, GTdepthImg);
+	//Get label min/max value
+	double minLab, maxLab;
+	cv::minMaxLoc(GTlabImg, &minLab, &maxLab);
 
 	//Detect primary GT object for ALL surfels
 	Surfel *pCurrSurfel = surfels.NodeArray.Element;
+	std::cout << "Detecting primary GT object!" << std::endl;
 	for (int i = 0; i < surfels.NodeArray.n; pCurrSurfel++, i++)
 	{
 		pCurrSurfel->ObjectID = -1;
-		if ((pCurrSurfel->size == 1) || (pCurrSurfel->size == 0))
+		if ((pCurrSurfel->size == 1) || (pCurrSurfel->size == 0) || pCurrSurfel->bEdge || pCurrSurfel->size < detector.minSurfelSize)
 			continue;
-		pCurrSurfel->ObjectID = DetPrimaryGTObj(pCurrSurfel, GTlabImg, 256); //256 objects because background has label of 255
+		/*pCurrSurfel->ObjectID = DetPrimaryGTObj(pCurrSurfel, GTlabImg, 256);*/ //256 objects because background has label of 255
+		SetPrimaryGTObj(pCurrSurfel, GTlabImg, maxLab + 1); //maxLab + 1 because the last GT object label has to be maxLab and not maxLab - 1
 	}
 
 	//Adjacency and its descriptors
 	pCurrSurfel = surfels.NodeArray.Element;
+	std::cout << "Finding image adjacency and determining descriptors!" << std::endl;
 	for (int i = 0; i < surfels.NodeArray.n; pCurrSurfel++, i++)
 	{
-		if ((pCurrSurfel->ObjectID == -1) || (pCurrSurfel->ObjectID == 255) || (pCurrSurfel->ObjectID == 0) || (pCurrSurfel->size == 1) || (pCurrSurfel->size == 0))
+		if ((pCurrSurfel->ObjectID == -1) || (checkbackground && ((pCurrSurfel->ObjectID == 255) || (pCurrSurfel->ObjectID == 0))) || (pCurrSurfel->size == 1) || (pCurrSurfel->size == 0) || pCurrSurfel->bEdge || pCurrSurfel->size < detector.minSurfelSize)
 			continue;
 		//Check surfel validity
 		if (GetSurfelGTValidity(pCurrSurfel, GTlabImg, validityDist))
@@ -788,7 +860,9 @@ void RunSeg2Bench(bool save)
 	//Same as SSF (SceneSegFile)
 	if (save)
 	{
-		GenerateSSF(&surfels, ssfFileName);
+		std::cout << "Saving SSF!" << std::endl;
+		GenerateSSF(&surfels, ssfFileName, detector.minSurfelSize, checkbackground);
+		std::cout << "Saved!" << std::endl;
 	}
 
 	//Visualization
@@ -798,7 +872,7 @@ void RunSeg2Bench(bool save)
 	//Segmentation label image
 	cv::Mat segLabImg = GenColoredSegmentationImg(&surfels);
 	//Draw Img adjacency links wrt GT
-	DrawSurfelImgAdjacencyOpenCV(segLabImg, &surfels);
+	DrawSurfelImgAdjacencyOpenCV(segLabImg, &surfels, checkbackground);
 	cv::imshow("Colored Segmentation label", segLabImg);
 	cv::waitKey(1);
 	//VTK visualization
@@ -808,7 +882,7 @@ void RunSeg2Bench(bool save)
 	surfels.Display(&visualizer, &mesh);
 	detector.DisplaySoftEdges(&visualizer, &mesh, &surfels, SelectionColor);
 	//Render Img adjacency links wrt GT
-	RenderSurfelImgAdjacencyVTK(visualizer.renderer, &surfels);
+	RenderSurfelImgAdjacencyVTK(visualizer.renderer, &surfels, checkbackground);
 	visualizer.Run();
 }
 
