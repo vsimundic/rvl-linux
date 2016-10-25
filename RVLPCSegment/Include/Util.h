@@ -21,6 +21,19 @@ namespace RVL
 		T cost;
 	};
 
+	//VIDOVIC
+	struct GTInstance{
+		int iScene;
+		int iModel;
+		float R[9];
+		float t[3];
+		bool matched;
+	};
+
+	bool GetAngleAxis(float *R, float *V, float &theta);
+	void GetDistance(float *t, float &distance);
+	//END VIDOVIC
+
 	void QuickSort(int *Key, int *Index, int n);
 	void RandomColor(unsigned char *color);
 
@@ -97,6 +110,35 @@ namespace RVL
 		std::vector<std::vector<char>> paths;
 		std::vector<int> IDs;
 		int currentID;
+	};
+
+	class ECCVGTLoader
+	{
+	public:
+		ECCVGTLoader();
+		~ECCVGTLoader();
+
+		bool Init(char *filePath, char *GTFolderPath, char *modelsID);
+		bool Init(FileSequenceLoader sceneSequence, char *GTFolderPath, char *modelsID);
+		bool SaveGTFile(char *filePath);
+		void ResetMatchFlag();
+
+	private:
+		bool LoadModels(char *filePath);
+		int FindModelID(char *modelName);
+		void CreateGTFilePath(char *scenePath, char *GTFilePath);
+
+	public:
+		int nScenes;
+		int nModels;
+		Array<Array<GTInstance>> GT;
+
+	private:
+		int iScene;
+		char *modelsInDB;
+		char *GTFolder;
+		char *GTFilePath;
+
 	};
 	//END VIDOVIC
 }

@@ -105,6 +105,40 @@ void RVL::RandomColor(unsigned char *color)
 }
 
 //VIDOVIC
+bool RVL::GetAngleAxis(float *R, float *V, float &theta)
+{
+	float k = 0.5 * (R[0 * 3 + 0] + R[1 * 3 + 1] + R[2 * 3 + 2] - 1.0);
+
+	if (k > 1.0)
+	{
+		theta = 0.0;
+
+		return FALSE;
+	}
+	else if (k < -1.0)
+	{
+		theta = PI;
+
+		return FALSE;
+	}
+
+	theta = acos(k);
+
+	k = 0.5 / sin(theta);
+
+	V[0] = k * (R[2 * 3 + 1] - R[1 * 3 + 2]);
+	V[1] = k * (R[0 * 3 + 2] - R[2 * 3 + 0]);
+	V[2] = k * (R[1 * 3 + 0] - R[0 * 3 + 1]);
+
+	return TRUE;
+}
+
+void RVL::GetDistance(float *t, float &distance)
+{
+	distance = sqrt(t[0] * t[0] + t[1] * t[1] + t[2] * t[2]);
+}
+
+
 FileSequenceLoader::FileSequenceLoader()
 {
 	nFileNames = 0;
@@ -173,7 +207,6 @@ bool FileSequenceLoader::Init(char *sequenceFileName)
 				names[lineCnt - 1].assign(line, line + strlen(line) - 1);
 
 			names[lineCnt - 1].insert(names[lineCnt - 1].end(), 1, '\0');
-
 
 			//Save path
 			paths.resize(lineCnt, std::vector<char>(0));
@@ -387,6 +420,246 @@ void FileSequenceLoader::AddModel(int ID, char *filePath, char *fileName)
 	names[names.size() - 1].insert(names[names.size() - 1].end(), 1, '\0');
 
 	nFileNames++;
+}
 
+ECCVGTLoader::ECCVGTLoader()
+{
+	nScenes = 0;
+	nModels = 0;
+	iScene = 0;
+	GT.Element = NULL;
+	GT.n = 0;
+	modelsInDB = NULL;
+	GTFolder = NULL;
+	GTFilePath = NULL;
+}
+
+ECCVGTLoader::~ECCVGTLoader()
+{
+	int i;
+
+	for (i = 0; i < nScenes; i++)
+		RVL_DELETE_ARRAY(GT.Element[i].Element)
+
+	RVL_DELETE_ARRAY(GT.Element);
+	RVL_DELETE_ARRAY(modelsInDB);
+	RVL_DELETE_ARRAY(GTFolder);
+	RVL_DELETE_ARRAY(GTFilePath);
+}
+
+bool ECCVGTLoader::Init(char *filePath, char *GTFolderPath, char *modelsID)
+{
+	nScenes = 1;
+
+	GT.Element = new Array<GTInstance>[nScenes];
+	GT.n = nScenes;
+
+	modelsInDB = new char[strlen(modelsID) + 1];
+	memcpy(modelsInDB, modelsID, strlen(modelsID));
+	modelsInDB[strlen(modelsID)] = '\0';
+
+	GTFolder = new char[strlen(GTFolderPath) + 1];
+	memcpy(GTFolder, GTFolderPath, strlen(GTFolderPath));
+	GTFolder[strlen(GTFolderPath)] = '\0';
+
+	GTFilePath = new char[200];
+
+	CreateGTFilePath(filePath, GTFilePath);
+
+	if (LoadModels(GTFilePath))
+	{
+		iScene++;
+
+		return 1;
+	}
+	else
+		return 0;
+}
+
+bool ECCVGTLoader::Init(FileSequenceLoader sceneSequence, char *GTFolderPath, char *modelsID)
+{
+	nScenes = sceneSequence.nFileNames;
+
+	GT.Element = new Array<GTInstance>[nScenes];
+	GT.n = nScenes;
+
+	char filePath[200];
+
+	modelsInDB = new char[strlen(modelsID) + 1];
+	memcpy(modelsInDB, modelsID, strlen(modelsID));
+	modelsInDB[strlen(modelsID)] = '\0';
+
+	GTFolder = new char[strlen(GTFolderPath) + 1];
+	memcpy(GTFolder, GTFolderPath, strlen(GTFolderPath));
+	GTFolder[strlen(GTFolderPath)] = '\0';
+
+	GTFilePath = new char[200];
+
+	while (sceneSequence.GetNextPath(filePath))
+	{
+		CreateGTFilePath(filePath, GTFilePath);
+
+		if (!LoadModels(GTFilePath))
+			return 0;
+
+		iScene++;
+	}
+
+	return 1;
+}
+
+bool ECCVGTLoader::LoadModels(char *filePath)
+{
+	FILE *fp = fopen(filePath, "r");
+
+	int nSModels;
+
+	if (fp)
+	{
+		char line[200];
+		int iModel, i;
+
+		fgets(line, 200, fp);
+		fscanf(fp, "%d\n", &nSModels);
+		fgets(line, 200, fp);
+
+		GT.Element[iScene].Element = new GTInstance[nSModels];
+		GT.Element[iScene].n = nSModels;
+
+		nModels += nSModels;
+
+		GTInstance *pGT = GT.Element[iScene].Element;
+		
+
+		for (iModel = 0; iModel < nSModels; iModel++)
+		{
+			pGT->iScene = iScene;
+
+			fgets(line, 200, fp);
+
+			line[strlen(line) - 1] = '\0';
+
+			pGT->iModel = FindModelID(line);
+
+			for (i = 0; i < 3; i++)
+				fscanf(fp, "%f %f %f %f\n", &pGT->R[i * 3], &pGT->R[i * 3 + 1], &pGT->R[i * 3 + 2], &pGT->t[i]);
+
+			pGT->matched = false;
+
+			fgets(line, 200, fp);
+			fgets(line, 200, fp);
+
+			pGT++;
+		}
+
+		fclose(fp);
+
+		return 1;
+	}
+	else
+		return 0;
+}
+
+int ECCVGTLoader::FindModelID(char *modelName)
+{
+	//char *dbFileName = new char[50];
+	char dbFileName[50];
+	int index = 0;
+	int ID;
+
+	FileSequenceLoader dbLoader;
+	dbLoader.Init(modelsInDB);
+
+	while (dbLoader.GetNextName(dbFileName))
+	{
+		if (!strcmp(modelName, dbFileName))
+		{
+			dbLoader.GetID(index, &ID);
+			return ID;
+		}
+		index++;
+	}
+
+	return -1;	
+}
+
+void ECCVGTLoader::CreateGTFilePath(char *scenePath, char *GTFilePath)
+{
+	int GTFileSize = strlen(GTFolder);
+
+	int modelNameSize = strlen(strrchr(scenePath, '\\'));
+
+	memcpy(GTFilePath, GTFolder, GTFileSize);
+
+	memcpy(GTFilePath + GTFileSize, scenePath + strlen(scenePath) - modelNameSize, modelNameSize - 3);
+
+	GTFileSize += modelNameSize - 3;
+
+	memcpy(GTFilePath + GTFileSize, "txt", 3);
+
+	GTFileSize += 3;
+
+	memcpy(GTFilePath + GTFileSize, "\0", 1);
+}
+
+bool ECCVGTLoader::SaveGTFile(char *filePath)
+{
+	FILE *fp;
+
+	fp = fopen(filePath, "w");
+
+	int iS, iM, i;
+
+	if (fp)
+	{
+		GTInstance *pGT;
+
+		for (iS = 0; iS < nScenes; iS++)
+		{
+			pGT = GT.Element[iS].Element;
+
+			for (iM = 0; iM < GT.Element[iS].n; iM++)
+			{
+				fprintf(fp, "%d\t%d\t", pGT->iScene, pGT->iModel);
+
+				for (i = 0; i < 9; i++)
+					fprintf(fp, "%f\t", pGT->R[i]);
+
+				for (i = 0; i < 3; i++)
+					fprintf(fp, "%f\t", pGT->t[i]);
+
+				fprintf(fp, "%d\n", (int)pGT->matched);
+
+				pGT++;
+			}
+		}
+
+		fclose(fp);
+
+		return 1;
+	}
+	else
+		return 0;
+}
+
+void ECCVGTLoader::ResetMatchFlag()
+{
+	GTInstance *pGT;
+
+	int iModel, nModels;
+
+	for (iScene = 0; iScene < nScenes; iScene++)
+	{
+		pGT = GT.Element[iScene].Element;
+
+		nModels = GT.Element[iScene].n;
+
+		for (iModel = 0; iModel < nModels; iModel++)
+		{
+			pGT->matched = false;
+
+			pGT++;
+		}
+	}
 }
 //END VIDOVIC

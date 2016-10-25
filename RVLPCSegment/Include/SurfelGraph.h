@@ -77,8 +77,8 @@ namespace RVL
 		float physicalSize;
 		bool bEdge;
 		int ObjectID;	//Filko
-		std::vector<Surfel*> imgAdjacency;	//Filko
-		std::vector<SurfelAdjecencyDescriptors*> imgAdjacencyDescriptors;	//Filko
+		//std::vector<Surfel*> imgAdjacency;	//Filko
+		//std::vector<SurfelAdjecencyDescriptors*> imgAdjacencyDescriptors;	//Filko
 		std::vector<int> GTObjHist; //Filko
 	};
 
@@ -136,12 +136,12 @@ namespace RVL
 			FILE *fp,
 			char *meshFileName,
 			void *vpDetector);
-		void ImageAdjacency(Mesh *pMesh);
-		void ImageAdjacency(
-			Mesh *pMesh, 
-			int iSurfel, 
-			int *surfelIdx,
-			bool *bVisited);			
+		//void ImageAdjacency(Mesh *pMesh);
+		//void ImageAdjacency(
+		//	Mesh *pMesh, 
+		//	int iSurfel, 
+		//	int *surfelIdx,
+		//	bool *bVisited);		
 
 	public:	
 		CRVLParameterList ParamList;

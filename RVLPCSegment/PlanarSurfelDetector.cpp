@@ -396,6 +396,9 @@ void PlanarSurfelDetector::Segment(
 	{
 		iPtSeed = RandPtIdxArray.Element[i];
 
+		//if(i == 18947)
+		//	int debug = 0;
+
 		if (pSurfels->surfelMap[iPtSeed] >= 0)
 			continue;
 

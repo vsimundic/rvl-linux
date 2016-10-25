@@ -1209,6 +1209,8 @@ void RFRecognition::GetSceneModelFileName(int modelIndex, char *fileName)
 
 }
 
+//Moved to Util.cpp
+/*
 bool RFRecognition::GetAngleAxis(float *R, float *V, float &theta)
 {
 	float k = 0.5 * (R[0 * 3 + 0] + R[1 * 3 + 1] + R[2 * 3 + 2] - 1.0);
@@ -1241,6 +1243,7 @@ void RFRecognition::GetDistance(float *t, float &distance)
 {
 	distance = sqrt(t[0] * t[0] + t[1] * t[1] + t[2] * t[2]);
 }
+*/
 
 void RFRecognition::CoordinateSystemNoiseStabilityTest(char *sceneMeshFileName, MeshNoiser noiser, bool debug)
 {
