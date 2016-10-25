@@ -618,6 +618,7 @@ ObjectGraph::~ObjectGraph()
 	RVL_DELETE_ARRAY(objectMap);
 }
 
+#ifdef RVLSURFEL_IMAGE_ADJACENCY
 void ObjectGraph::Create(SurfelGraph *pSurfels_)
 {
 	pSurfels = pSurfels_;
@@ -708,6 +709,7 @@ void ObjectGraph::Create(SurfelGraph *pSurfels_)
 		}
 	}
 }
+#endif
 
 //Create (initialize) ObjectGraph object from SFF file
 void ObjectGraph::CreateFromSSF(std::string ssfFileName)	

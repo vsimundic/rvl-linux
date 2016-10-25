@@ -1,5 +1,7 @@
 #pragma once
 
+//#define RVLSURFEL_IMAGE_ADJACENCY
+
 #define RVLSURFEL_DISPLAY_MODE_SURFELS			0
 #define RVLSURFEL_DISPLAY_MODE_BOUNDARY			1
 #define RVLSURFEL_DISPLAY_MODE_NEIGHBOR_PAIR	2
@@ -77,9 +79,11 @@ namespace RVL
 		float physicalSize;
 		bool bEdge;
 		int ObjectID;	//Filko
-		//std::vector<Surfel*> imgAdjacency;	//Filko
-		//std::vector<SurfelAdjecencyDescriptors*> imgAdjacencyDescriptors;	//Filko
+#ifdef 	RVLSURFEL_IMAGE_ADJACENCY
+		std::vector<Surfel*> imgAdjacency;	//Filko
+		std::vector<SurfelAdjecencyDescriptors*> imgAdjacencyDescriptors;	//Filko
 		std::vector<int> GTObjHist; //Filko
+#endif
 	};
 
 	class SurfelGraph : public Graph < Surfel, MeshEdge, MeshEdgePtr >
@@ -136,12 +140,14 @@ namespace RVL
 			FILE *fp,
 			char *meshFileName,
 			void *vpDetector);
-		//void ImageAdjacency(Mesh *pMesh);
-		//void ImageAdjacency(
-		//	Mesh *pMesh, 
-		//	int iSurfel, 
-		//	int *surfelIdx,
-		//	bool *bVisited);		
+#ifdef RVLSURFEL_IMAGE_ADJACENCY
+		void ImageAdjacency(Mesh *pMesh);
+		void ImageAdjacency(
+			Mesh *pMesh, 
+			int iSurfel, 
+			int *surfelIdx,
+			bool *bVisited);	
+#endif
 
 	public:	
 		CRVLParameterList ParamList;
