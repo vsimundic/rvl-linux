@@ -3017,8 +3017,6 @@ void PSGM::CompareSMIMatchesToGT(
 
 								pFPMatch->n++;
 
-								FP++;
-
 								break;
 							}
 						}
@@ -3027,18 +3025,23 @@ void PSGM::CompareSMIMatchesToGT(
 					pFPMatch = pFPMatch->pNext;
 				}
 
-				//add new cluster to FPMatch list
-				RVLMEM_ALLOC_STRUCT(pMem, RECOG::PSGM_::FPMatch, pNewFPMatch);
+				if (!FPmatch)
+				{
+					//add new cluster to FPMatch list
+					RVLMEM_ALLOC_STRUCT(pMem, RECOG::PSGM_::FPMatch, pNewFPMatch);
 
-				pNewFPMatch->iScene = pSMIMatch->iScene;
+					pNewFPMatch->iScene = pSMIMatch->iScene;
 
-				pNewFPMatch->iModel = pSMIMatch->iModel;
+					pNewFPMatch->iModel = pSMIMatch->iModel;
 
-				RVLCOPY3VECTOR(pSMIMatch->t, pNewFPMatch->t);
+					RVLCOPY3VECTOR(pSMIMatch->t, pNewFPMatch->t);
 
-				pNewFPMatch->n = 1;
+					pNewFPMatch->n = 1;
 
-				RVLQLIST_ADD_ENTRY(pFPMatchList, pNewFPMatch);
+					RVLQLIST_ADD_ENTRY(pFPMatchList, pNewFPMatch);
+
+					FP++;
+				}
 
 			}
 		}
