@@ -1,5 +1,5 @@
 int DetPrimaryGTObj(Surfel *pSurfel, cv::Mat labGTImg, int noObj);
-void SetPrimaryGTObj(Surfel *pSurfel, cv::Mat labGTImg, int noObj);
+//void SetPrimaryGTObj(Surfel *pSurfel, cv::Mat labGTImg, int noObj);
 float GetShortestDistanceToBoundary(int x, int y, Array<MeshEdgePtr *> &BoundaryArray);
 void DrawSurfelBoundary(Array<MeshEdgePtr *> &BoundaryArray, cv::Mat img);
 bool GetSurfelGTValidity(Surfel *pSurfel, cv::Mat labGTImg, float thr);
@@ -14,4 +14,7 @@ void RenderSurfelImgAdjacencyVTK(vtkSmartPointer<vtkRenderer> renderer, SurfelGr
 void PreprocessGTLab(cv::Mat GTLabImg, cv::Mat GTDisparityImg);
 void DetermineImgAdjDescriptors(Surfel *pSurfel, Mesh *mesh);
 void GenerateSSF(SurfelGraph *surfels, std::string filename);
+void GenerateSSF(SurfelGraph *surfels, std::string filename, int minSurfelSize, bool checkbackground = true);
 void RunSeg2Bench(bool save = false);
+cv::Mat GenColoredSurfelImgFromSSF(std::shared_ptr<SceneSegFile::SceneSegFile> ssf);
+cv::Mat GenColoredSegmentationImgFromObjectGraph(SURFEL::ObjectGraph* objects);

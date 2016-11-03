@@ -166,7 +166,7 @@ void SurfelGraph::Init(Mesh *pMesh)
 	edgeMarkMap = new unsigned char[nMeshEdges];
 }
 
-#ifdef NEVER
+#ifdef RVLSURFEL_IMAGE_ADJACENCY
 void SurfelGraph::ImageAdjacency(Mesh *pMesh)
 {
 	bool *bVisited = new bool[NodeArray.n];
@@ -350,6 +350,75 @@ void SurfelGraph::ImageAdjacency(
 		iOtherSurfel = pOtherSurfel - NodeArray.Element;
 
 		surfelIdx[iOtherSurfel] = -1;
+	}
+}
+
+//Returns surfels Label ID with most object support
+void SurfelGraph::SetPrimaryGTObj(Surfel *pSurfel, cv::Mat labGTImg, int noObj)
+{
+	int objIdx = -1;	//default value
+	//Generate histogram of object (pixel) support
+	int *objHist = new int[noObj];
+	memset(objHist, 0, noObj * sizeof(int));
+	RVL::QLIST::Index2 *pt;
+	int x = 0, y = 0;
+	pt = pSurfel->PtList.pFirst;
+	for (int i = 0; i < pSurfel->size; i++)
+	{
+		y = floor(pt->Idx / 640.0);
+		x = floor(pt->Idx - 640.0 * y);
+		objHist[labGTImg.at<cv::Vec3b>(y, x)[0]]++;
+		pt = pt->pNext;
+	}
+	//find max support and set surfel GTObjHist
+	int max = 0;
+	for (int i = 0; i < noObj; i++)
+	{
+		if (objHist[i] > max)
+		{
+			max = objHist[i];
+			objIdx = i;
+		}
+		pSurfel->GTObjHist.push_back(objHist[i]);
+	}
+	delete[] objHist;
+	pSurfel->ObjectID = objIdx;
+}
+
+void SurfelGraph::AssignGroundTruthSegmentation(
+	char *meshFileName,
+	int minSurfelSize)
+{
+	//Segmentation analysis
+	//filenames
+	std::string labelImgFileName(meshFileName);
+	labelImgFileName.erase(labelImgFileName.find_last_of("."));
+	//std::string depthImgFileName = labelImgFileName + "d.png";
+	//std::string ssfFileName = labelImgFileName + ".ssf";
+	labelImgFileName += "a.png";
+	////TEST SSF LOAD
+	//SceneSegFile::SceneSegFile* ssf = new SceneSegFile::SceneSegFile("test");
+	//ssf->Load(ssfFileName);
+	//
+	//Load label image
+	cv::Mat GTlabImg = cv::imread(labelImgFileName);
+	//cv::Mat GTdepthImg = cv::imread(depthImgFileName, cv::ImreadModes::IMREAD_ANYDEPTH);
+	////Preprocess GT label image (such as labeling background)
+	//PreprocessGTLab(GTlabImg, GTdepthImg);
+	//Get label min/max value
+	double minLab, maxLab;
+	cv::minMaxLoc(GTlabImg, &minLab, &maxLab);
+
+	//Detect primary GT object for ALL surfels
+	Surfel *pCurrSurfel = NodeArray.Element;
+	std::cout << "Detecting primary GT object!" << std::endl;
+	for (int i = 0; i < NodeArray.n; pCurrSurfel++, i++)
+	{
+		pCurrSurfel->ObjectID = -1;
+		if ((pCurrSurfel->size == 1) || (pCurrSurfel->size == 0) || pCurrSurfel->bEdge || pCurrSurfel->size < minSurfelSize)
+			continue;
+		/*pCurrSurfel->ObjectID = DetPrimaryGTObj(pCurrSurfel, GTlabImg, 256);*/ //256 objects because background has label of 255
+		SetPrimaryGTObj(pCurrSurfel, GTlabImg, maxLab + 1); //maxLab + 1 because the last GT object label has to be maxLab and not maxLab - 1
 	}
 }
 #endif

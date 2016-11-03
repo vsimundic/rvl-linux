@@ -1,6 +1,6 @@
 #pragma once
 
-//#define RVLSURFEL_IMAGE_ADJACENCY
+#define RVLSURFEL_IMAGE_ADJACENCY
 
 #define RVLSURFEL_DISPLAY_MODE_SURFELS			0
 #define RVLSURFEL_DISPLAY_MODE_BOUNDARY			1
@@ -147,6 +147,13 @@ namespace RVL
 			int iSurfel, 
 			int *surfelIdx,
 			bool *bVisited);	
+		void SetPrimaryGTObj(
+			Surfel *pSurfel, 
+			cv::Mat labGTImg, 
+			int noObj);
+		void AssignGroundTruthSegmentation(
+			char *meshFileName,
+			int minSurfelSize);
 #endif
 
 	public:	
