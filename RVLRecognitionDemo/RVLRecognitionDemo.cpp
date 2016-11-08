@@ -25,6 +25,8 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 #include "RGBDCamera.h"
 #include "PCLMeshBuilder.h"
 
+//test za commit
+
 // VIDOVIC
 //#define RVL_COORDINATE_SYSTEM_NOISE_STABILITY_TEST
 //#define RVL_COORDINATE_SYSTEM_NOISE_STABILITY_TEST_DEBUG
