@@ -98,6 +98,7 @@ void PSGM::CreateParamList(CRVLMem *pMem)
 	pParamData = ParamList.AddParam("Recognition.mode", RVLPARAM_TYPE_ID, &mode);
 	ParamList.AddID(pParamData, "TRAINING", RVLRECOGNITION_MODE_TRAINING);
 	ParamList.AddID(pParamData, "RECOGNITION", RVLRECOGNITION_MODE_RECOGNITION); //VIDOVIC
+	ParamList.AddID(pParamData, "CREATE_CTIS", RVLRECOGNITION_MODE_PSGM_CREATE_CTIS);
 	pParamData = ParamList.AddParam("PSGM.nDominantClusters", RVLPARAM_TYPE_INT, &nDominantClusters);
 	pParamData = ParamList.AddParam("PSGM.kNoise", RVLPARAM_TYPE_FLOAT, &kNoise);
 	pParamData = ParamList.AddParam("PSGM.minInitialSurfelSize", RVLPARAM_TYPE_INT, &minInitialSurfelSize);
@@ -184,7 +185,7 @@ void PSGM::Interpret(
 
 	char *PSGModelInstanceFileName = RVLCreateString(sceneFileName);
 
-	sprintf(PSGModelInstanceFileName + strlen(PSGModelInstanceFileName) - 3, "txt");
+	sprintf(PSGModelInstanceFileName + strlen(PSGModelInstanceFileName) - 3, "cti");
 
 	FILE *fp = fopen(PSGModelInstanceFileName, "w");
 

@@ -364,6 +364,37 @@ int main(int argc, char ** argv)
 			recognition.InitDisplay(&visualizer, &mesh, SelectionColor);
 			recognition.Display();
 			visualizer.Run();
+		}	// if (recognition.mode == RVLRECOGNITION_MODE_RECOGNITION)
+		else if (recognition.mode == RVLRECOGNITION_MODE_PSGM_CREATE_CTIS)
+		{
+			Mesh mesh;
+
+			FileSequenceLoader sceneSequence;
+
+			sceneSequence.Init(sceneSequenceFileName);
+
+			recognition.SetNumberOfScenes(sceneSequence.nFileNames);
+
+			char filePath[200];
+
+			while (sceneSequence.GetNextPath(filePath))
+			{
+				printf("Scene %s...\n", filePath);
+
+				mesh.LoadPolyDataFromPLY(filePath);
+
+				recognition.SetSceneFileName(filePath);
+				recognition.Interpret(&mesh);
+
+				printf("Scene %s...finished!\n\n", filePath);
+			}
+
+			// Visualization
+
+			surfels.NodeColors(SelectionColor);
+			recognition.InitDisplay(&visualizer, &mesh, SelectionColor);
+			recognition.Display();
+			visualizer.Run();
 		}
 	}	// if (method == RVLRECOGNITION_METHOD_PSGM)
 

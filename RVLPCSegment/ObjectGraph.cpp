@@ -1032,8 +1032,8 @@ void ObjectGraph::ComputeRelationCosts()
 			{
 				pEdge = pEdgePtr->pEdge;
 
-				if (iNode == 15 && iNode_ == 27)
-					int debug = 0;
+				//if (iNode == 15 && iNode_ == 27)
+				//	int debug = 0;
 
 				ComputeRelationCost(pEdge);
 			}

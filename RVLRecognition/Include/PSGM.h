@@ -2,6 +2,8 @@
 
 //#define RVLPSGM_NORMAL_HULL
 
+#define RVLRECOGNITION_MODE_PSGM_CREATE_CTIS		2
+
 namespace RVL
 {
 	class PSGM;
