@@ -170,10 +170,10 @@ int main(int argc, char ** argv)
 		printf("No. of surfels = %d\n", surfels.NodeArray.n);
 		printf("Total segmentation time = %lf s\n", ExecTime);
 
+#ifdef RVLSURFEL_IMAGE_ADJACENCY
 		if (flags & RVLPCSEGMENT_DEMO_FLAG_SEGMENTATION_GT)
 			surfels.AssignGroundTruthSegmentation(MeshFileName, detector.minSurfelSize);
 
-#ifdef RVLSURFEL_IMAGE_ADJACENCY
 		// Group surfels into objects.
 
 		if (bSegmentToObjects || (flags & RVLPCSEGMENT_DEMO_FLAG_SAVE_SSF))
@@ -209,8 +209,10 @@ int main(int argc, char ** argv)
 			GenerateSSF(&surfels, ssfFileName, detector.minSurfelSize, false);
 			std::cout << "Saved!" << std::endl;
 		}
+#endif
 	}	// If fileExtension != "ssf"
 
+#ifdef RVLSURFEL_IMAGE_ADJACENCY
 	if (bSegmentToObjects)
 	{
 		printf("Grouping surfels into objects... ");
