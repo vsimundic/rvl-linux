@@ -1,0 +1,272 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="12.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{06581169-BFDC-4B3F-A3ED-96FAF894EA87}</ProjectGuid>
+    <RootNamespace>RVLCore</RootNamespace>
+    <Keyword>ManagedCProj</Keyword>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <PlatformToolset>v120</PlatformToolset>
+    <CharacterSet>MultiByte</CharacterSet>
+    <CLRSupport>false</CLRSupport>
+    <WholeProgramOptimization>false</WholeProgramOptimization>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <PlatformToolset>v120</PlatformToolset>
+    <CharacterSet>MultiByte</CharacterSet>
+    <CLRSupport>false</CLRSupport>
+    <WholeProgramOptimization>false</WholeProgramOptimization>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <PlatformToolset>v120</PlatformToolset>
+    <CharacterSet>MultiByte</CharacterSet>
+    <CLRSupport>false</CLRSupport>
+    <WholeProgramOptimization>false</WholeProgramOptimization>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <PlatformToolset>v120</PlatformToolset>
+    <CharacterSet>MultiByte</CharacterSet>
+    <CLRSupport>false</CLRSupport>
+    <WholeProgramOptimization>false</WholeProgramOptimization>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="..\RVLCompileAndLinkPaths.props" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="..\RVLCompileAndLinkPaths.props" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="..\RVLCompileAndLinkPaths.props" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="..\RVLCompileAndLinkPaths.props" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup>
+    <_ProjectFileVersion>12.0.30501.0</_ProjectFileVersion>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <OutDir>.\Debug\Lib\</OutDir>
+    <IntDir>.\Debug\</IntDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <OutDir>.\Release\Lib\</OutDir>
+    <IntDir>.\Release\</IntDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" />
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <ClCompile>
+      <Optimization>Disabled</Optimization>
+      <AdditionalIncludeDirectories>$(OPENCV_BUILD)\include;.\Include;$(OPENNI2_INCLUDE);$(VTK_PATH)\include\vtk-6.1;C:\Libraries\FLANN\flann-1.8.4-src\src\cpp\flann;C:\Libraries\PCL\PCL 1.8.0\include\pcl-1.8;C:\Libraries\Eigen\eigen3</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+      <PrecompiledHeader />
+      <PrecompiledHeaderOutputFile>.\Debug/RVLCore.pch</PrecompiledHeaderOutputFile>
+      <WarningLevel>Level3</WarningLevel>
+      <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <Optimization>Disabled</Optimization>
+      <AdditionalIncludeDirectories>.\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
+      <PrecompiledHeader>
+      </PrecompiledHeader>
+      <PrecompiledHeaderOutputFile>.\Debug/RVLCore.pch</PrecompiledHeaderOutputFile>
+      <WarningLevel>Level3</WarningLevel>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <ClCompile>
+      <Optimization>MaxSpeed</Optimization>
+      <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
+      <AdditionalIncludeDirectories>$(OPENCV_BUILD)\include;.\Include;$(OPENNI2_INCLUDE);$(VTK_PATH)\include\vtk-6.1</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <PrecompiledHeader />
+      <WarningLevel>Level3</WarningLevel>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <Optimization>MaxSpeed</Optimization>
+      <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
+      <AdditionalIncludeDirectories>.\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <PrecompiledHeader>
+      </PrecompiledHeader>
+      <WarningLevel>Level3</WarningLevel>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <Reference Include="System">
+      <CopyLocalSatelliteAssemblies>true</CopyLocalSatelliteAssemblies>
+      <ReferenceOutputAssembly>true</ReferenceOutputAssembly>
+    </Reference>
+    <Reference Include="System.Data">
+      <CopyLocalSatelliteAssemblies>true</CopyLocalSatelliteAssemblies>
+      <ReferenceOutputAssembly>true</ReferenceOutputAssembly>
+    </Reference>
+    <Reference Include="System.Xml">
+      <CopyLocalSatelliteAssemblies>true</CopyLocalSatelliteAssemblies>
+      <ReferenceOutputAssembly>true</ReferenceOutputAssembly>
+    </Reference>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="RVL2DCellArray.cpp" />
+    <ClCompile Include="RVL2DContour.cpp" />
+    <ClCompile Include="RVL2DLine2.cpp" />
+    <ClCompile Include="RVL2DLine3.cpp" />
+    <ClCompile Include="RVL2DObject.cpp" />
+    <ClCompile Include="RVL2DPose.cpp" />
+    <ClCompile Include="RVL2DRegion2.cpp" />
+    <ClCompile Include="RVL3DContour.cpp" />
+    <ClCompile Include="RVL3DLine2.cpp" />
+    <ClCompile Include="RVL3DMeshObject.cpp" />
+    <ClCompile Include="RVL3DObject.cpp" />
+    <ClCompile Include="RVL3DPose.cpp" />
+    <ClCompile Include="RVL3DSurface2.cpp" />
+    <ClCompile Include="RVLAImage.cpp" />
+    <ClCompile Include="RVLBuffer.cpp" />
+    <ClCompile Include="RVLC2D.cpp" />
+    <ClCompile Include="RVLC2DContour.cpp" />
+    <ClCompile Include="RVLCamera.cpp" />
+    <ClCompile Include="RVLChain.cpp" />
+    <ClCompile Include="RVLClass.cpp" />
+    <ClCompile Include="RVLDelaunay.cpp" />
+    <ClCompile Include="RVLDisplayVector.cpp" />
+    <ClCompile Include="RVLEDT.cpp" />
+    <ClCompile Include="RVLFigure.cpp" />
+    <ClCompile Include="RVLGUI.cpp" />
+    <ClCompile Include="RVLHistogram.cpp" />
+    <ClCompile Include="RVLImageFilter.cpp" />
+    <ClCompile Include="RVLKinect.cpp" />
+    <ClCompile Include="RVLMChain.cpp" />
+    <ClCompile Include="RVLMChain2.cpp" />
+    <ClCompile Include="RVLMem.cpp" />
+    <ClCompile Include="RVLMPtrChain.cpp" />
+    <ClCompile Include="RVLMPtrChain2.cpp" />
+    <ClCompile Include="RVLObject2.cpp" />
+    <ClCompile Include="RVLParameterList.cpp" />
+    <ClCompile Include="RVLPC.cpp" />
+    <ClCompile Include="RVLPtrChain.cpp" />
+    <ClCompile Include="RVLQListArray.cpp" />
+    <ClCompile Include="RVLRelation.cpp" />
+    <ClCompile Include="RVLRGBDTools.cpp" />
+    <ClCompile Include="RVLStereoVision.cpp" />
+    <ClCompile Include="RVLTimer.cpp" />
+    <ClCompile Include="RVLUtil.cpp" />
+    <ClCompile Include="RVLVisionSystem.cpp" />
+    <ClCompile Include="RVLVTKRenderer.cpp" />
+    <ClCompile Include="RVLWChain.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Include\Platform.h" />
+    <ClInclude Include="Include\Rect.h" />
+    <ClInclude Include="Include\RVL2DCellArray.h" />
+    <ClInclude Include="Include\RVL2DContour.h" />
+    <ClInclude Include="Include\RVL2DLine2.h" />
+    <ClInclude Include="Include\RVL2DLine3.h" />
+    <ClInclude Include="Include\RVL2DObject.h" />
+    <ClInclude Include="Include\RVL2DPose.h" />
+    <ClInclude Include="Include\RVL2DRegion2.h" />
+    <ClInclude Include="Include\RVL3DContour.h" />
+    <ClInclude Include="Include\RVL3DLine2.h" />
+    <ClInclude Include="Include\RVL3DMeshObject.h" />
+    <ClInclude Include="Include\RVL3DObject.h" />
+    <ClInclude Include="Include\RVL3DPose.h" />
+    <ClInclude Include="Include\RVL3DSurface2.h" />
+    <ClInclude Include="Include\RVL3DTools.h" />
+    <ClInclude Include="Include\RVLAImage.h" />
+    <ClInclude Include="Include\RVLAPix.h" />
+    <ClInclude Include="Include\RVLArray.h" />
+    <ClInclude Include="Include\RVLBuffer.h" />
+    <ClInclude Include="Include\RVLC2D.h" />
+    <ClInclude Include="Include\RVLC2DContour.h" />
+    <ClInclude Include="Include\RVLCamera.h" />
+    <ClInclude Include="Include\RVLChain.h" />
+    <ClInclude Include="Include\RVLClass.h" />
+    <ClInclude Include="Include\RVLConst.h" />
+    <ClInclude Include="Include\RVLCore.h" />
+    <ClInclude Include="Include\RVLCore2.h" />
+    <ClInclude Include="Include\RVLCoreObjectLib.h" />
+    <ClInclude Include="Include\RVLCoreTypes.h" />
+    <ClInclude Include="Include\RVLDelaunay.h" />
+    <ClInclude Include="Include\RVLEDT.h" />
+    <ClInclude Include="Include\RVLFigure.h" />
+    <ClInclude Include="Include\RVLGUI.h" />
+    <ClInclude Include="Include\RVLHistogram.h" />
+    <ClInclude Include="Include\RVLImageFilter.h" />
+    <ClInclude Include="Include\RVLKinect.h" />
+    <ClInclude Include="Include\RVLMChain.h" />
+    <ClInclude Include="Include\RVLMChain2.h" />
+    <ClInclude Include="Include\RVLMem.h" />
+    <ClInclude Include="Include\RVLMPtrChain.h" />
+    <ClInclude Include="Include\RVLMPtrChain2.h" />
+    <ClInclude Include="Include\RVLObject2.h" />
+    <ClInclude Include="Include\RVLParameterList.h" />
+    <ClInclude Include="Include\RVLPC.h" />
+    <ClInclude Include="Include\RVLPlatform.h" />
+    <ClInclude Include="Include\RVLPtrChain.h" />
+    <ClInclude Include="Include\RVLQListArray.h" />
+    <ClInclude Include="Include\RVLRelation.h" />
+    <ClInclude Include="Include\RVLRGBDTools.h" />
+    <ClInclude Include="Include\RVLStereoVision.h" />
+    <ClInclude Include="Include\RVLTimer.h" />
+    <ClInclude Include="Include\RVLUtil.h" />
+    <ClInclude Include="Include\RVLVisionSystem.h" />
+    <ClInclude Include="Include\RVLVTK.h" />
+    <ClInclude Include="Include\RVLVTKRenderer.h" />
+    <ClInclude Include="Include\RVLWChain.h" />
+    <ClInclude Include="Include\VTKActorObj.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="app.ico" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="app.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <Text Include="ReadMe.txt" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>
