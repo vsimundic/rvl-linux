@@ -147,6 +147,8 @@ namespace RVL
 		void CreateParamList(CRVLMem *pMem);
 		void Interpret(
 			Mesh *pMesh);
+		void InterpretCTIS(
+			Mesh *pMesh);
 		void InitDisplay(
 			Visualizer *pVisualizer,
 			Mesh *pMesh,

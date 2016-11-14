@@ -4,7 +4,7 @@
 //#include "stdafx.h"
 #include <vtkAutoInit.h>
 //VTK_MODULE_INIT(vtkRenderingOpenGL);
-VTK_MODULE_INIT(vtkRenderingOpenGL);
+VTK_MODULE_INIT(vtkRenderingOpenGL2);
 VTK_MODULE_INIT(vtkInteractionStyle);
 VTK_MODULE_INIT(vtkRenderingFreeType);
 #include "RVLVTK.h"
@@ -291,7 +291,7 @@ int main(int argc, char ** argv)
 
 			ECCVGT.Init(sceneSequence, GTFolder, modelsInDB);
 
-			ECCVGT.SaveGTFile("F:\\Projekti\\ARP3D\\Auxiliary\\Models\\GT.txt");
+			ECCVGT.SaveGTFile("D:\\ARP3D\\GT.txt");
 
 			char filePath[200];
 
@@ -303,6 +303,7 @@ int main(int argc, char ** argv)
 
 				recognition.SetSceneFileName(filePath);
 				recognition.Interpret(&mesh);
+				//recognition.InterpretCTIS(&mesh);
 
 				printf("Scene %s...finished!\n\n", filePath);
 			}
@@ -320,7 +321,7 @@ int main(int argc, char ** argv)
 
 			int graphID = 0;
 
-			fp = fopen("F:\\Projekti\\ARP3D\\compare.txt", "w");
+			fp = fopen("D:\\ARP3D\\compare.txt", "w");
 
 			//for (angleThresh = PI / 4; angleThresh < 3*PI/4; angleThresh += PI / 4)
 			//{
@@ -387,16 +388,24 @@ int main(int argc, char ** argv)
 
 				recognition.SetSceneFileName(filePath);
 				recognition.Interpret(&mesh);
-
+				
 				printf("Scene %s...finished!\n\n", filePath);
+				
+				// Visualization
+				surfels.NodeColors(SelectionColor);
+				recognition.InitDisplay(&visualizer, &mesh, SelectionColor);
+				recognition.Display();
+				visualizer.Run();
+				visualizer.renderer->RemoveAllViewProps();
+
 			}
 
-			// Visualization
+			//// Visualization
 
-			surfels.NodeColors(SelectionColor);
-			recognition.InitDisplay(&visualizer, &mesh, SelectionColor);
-			recognition.Display();
-			visualizer.Run();
+			//surfels.NodeColors(SelectionColor);
+			//recognition.InitDisplay(&visualizer, &mesh, SelectionColor);
+			//recognition.Display();
+			//visualizer.Run();
 		}
 	}	// if (method == RVLRECOGNITION_METHOD_PSGM)
 

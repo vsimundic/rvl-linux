@@ -14,6 +14,7 @@
 #include "RVLRecognition.h"
 #include "PSGM.h"
 #include <Eigen\Eigenvalues>
+#include <Eigen\QR> //PETRA
 #include <random> //VIDOVIC
 
 using namespace RVL;
@@ -202,6 +203,42 @@ void PSGM::Interpret(
 		Match();
 	//END VIDOVIC
 }
+
+//PETRA
+namespace Eigen{
+	template<class Matrix>
+	void read_binary(const char* filename, Matrix& matrix){
+		std::ifstream in(filename, ios::in | std::ios::binary);
+		typename Matrix::Index rows = 0, cols = 0;
+		in.read((char*)(&rows), sizeof(typename Matrix::Index));
+		in.read((char*)(&cols), sizeof(typename Matrix::Index));
+		matrix.resize(rows, cols);
+		in.read((char *)matrix.data(), rows*cols*sizeof(typename Matrix::Scalar));
+		in.close();
+	}
+}
+
+void PSGM::InterpretCTIS(
+	Mesh *pMesh)
+{
+	
+	
+	
+
+	//RVLCTIMatchInPrimitiveSpace:
+	//Load matrix M
+	Eigen::Matrix<float, 66, 9> M;
+	Eigen::read_binary("M.bin", M);
+	int m;
+	m = 9;
+
+	//Match scene MI to model MI
+	if (mode == RVLRECOGNITION_MODE_RECOGNITION)
+		Match();
+	
+}
+//END PETRA
+
 
 void PSGM::DetectVertices(
 	Mesh *pMesh)
@@ -3079,7 +3116,7 @@ void PSGM::SaveMatches()
 {
 	FILE *fp;
 
-	fp = fopen("F:\\Projekti\\ARP3D\\Auxiliary\\Models\\sceneMatchDebug2.txt", "w");
+	fp = fopen("D:\\ARP3D\\\Models\\sceneMatchDebug2.txt", "w");
 
 	int iMatches, i;
 
@@ -3107,7 +3144,7 @@ void PSGM::SaveMatches()
 
 	fclose(fp);
 
-	fp = fopen("F:\\Projekti\\ARP3D\\Auxiliary\\Models\\SMIMatches.txt", "w");
+	fp = fopen("D:\\ARP3D\\\Models\\SMIMatches.txt", "w");
 
 	RECOG::PSGM_::MatchInstance *pSMIMatch = SMImatches.pFirst;
 
