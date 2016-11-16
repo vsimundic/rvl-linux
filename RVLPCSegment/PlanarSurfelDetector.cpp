@@ -65,8 +65,8 @@ PlanarSurfelDetector::PlanarSurfelDetector()
 	//debugDefineBoundaryiSurfel_ = 9;
 	//debugDefineBoundaryiSurfel = 6;
 	//debugDefineBoundaryiSurfel_ = 8;
-	debugDefineBoundaryiSurfel = 4;
-	debugDefineBoundaryiSurfel_ = 6;
+	debugDefineBoundaryiSurfel = 0;
+	debugDefineBoundaryiSurfel_ = 40;
 #endif
 }
 
@@ -434,8 +434,10 @@ void PlanarSurfelDetector::Segment(
 
 		pSurfel++;
 
-		//if (iSurfel > 600)	// debug
-		//	break;
+		if (iSurfel == 40)	// debug
+		//if (iSurfel == 85)	// debug
+			int debug = 0;
+			//break;
 	}	// for every vertex
 
 	pSurfels->NodeArray.n = iSurfel;
@@ -1551,7 +1553,8 @@ void PlanarSurfelDetector::DefineBoundary(
 	reassignToBData.map = pSurfels->surfelMap;
 	reassignToBData.pPSD = this;
 
-	int *pSeedEnd = G.Element + nSeed;
+	//int *pSeedEnd = G.Element + nSeed;
+	int *pSeedEnd = G.Element + G.n;
 
 	MeshEdgePtr *pEdgePtr;
 	MeshEdge *pEdge;
@@ -3472,6 +3475,9 @@ void PlanarSurfelDetector::AddToSeed(
 		RVLQLIST_ADD_ENTRY(pSeedPtList, pNewGSeedPt);
 
 		pNewGSeedPt->Idx = iPt_;
+
+		if (iPt_ == 111409)
+			int debug = 0;
 
 		pNewGSeedPt++;
 	}
