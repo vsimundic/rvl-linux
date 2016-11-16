@@ -14,8 +14,11 @@
 #include "RVLRecognition.h"
 #include "PSGM.h"
 #include <Eigen\Eigenvalues>
-#include <Eigen\QR> //PETRA
 #include <random> //VIDOVIC
+#include <Eigen\QR> //PETRA
+#include <fstream>
+#include <sstream>
+#include <vector>
 
 using namespace RVL;
 
@@ -217,26 +220,181 @@ namespace Eigen{
 		in.close();
 	}
 }
-
-void PSGM::InterpretCTIS(
-	Mesh *pMesh)
+//presumes that a cluster list already exists (segmentation)
+void PSGM::LoadCTI(std::string filename)
 {
-	
-	
-	
+	std::fstream ctifilestream;
+	ctifilestream.open(filename, std::fstream::in);
+	int idx = 0;
+	int iModel;
+	int iCluster = 0;
+	int oCluster = 0;
+	RECOG::PSGM_::Cluster *pCluster;// = clusters.Element[iCluster];
+	RECOG::PSGM_::ModelInstanceElement *pModelInstanceElement;
+	RECOG::PSGM_::ModelInstance *pModelInstance;// = pCluster->modelInstanceList.pFirst;
+	int i;
+	std::vector<int*> valid;
+	std::vector<float*> d;
+	std::vector<float*> e;
+	QList<RECOG::PSGM_::ModelInstance> *modelInstanceList;
+	while (!ctifilestream.eof()) //for each line
+	{
+		ctifilestream >> iModel;
+		idx++;
+		ctifilestream >> iCluster;
+		idx++;
 
+		//detect new cluster // save ModelInstanceElement
+		if (iCluster != oCluster)
+		{
+			RVL_DELETE_ARRAY(pModelInstance->modelInstance.Element);
+			pModelInstance->modelInstance.Element = new RECOG::PSGM_::ModelInstanceElement[valid.size()];//[pSurfels->NodeArray.n];
+			pModelInstance->modelInstance.n = valid.size();//pSurfels->NodeArray.n;
+
+			for (int iModelInstance = 0; iModelInstance < pModelInstance->modelInstance.n; iModelInstance++)
+			{
+				for (i = 0; i < 66; i++)
+				{
+					pModelInstanceElement = pModelInstance->modelInstance.Element + i;
+					pModelInstanceElement->d = d[iModelInstance][i];
+					pModelInstanceElement->valid = valid[iModelInstance][i];
+					pModelInstanceElement->e = e[iModelInstance][i];
+				}
+			}
+
+			//Deref
+			for (i = 0; i < d.size(); i++)
+			{
+				delete [] d[i];
+				delete [] valid[i];
+				delete [] e[i];
+			}
+		}
+
+
+		pCluster = clusters.Element[iCluster];
+		pModelInstance = new RECOG::PSGM_::ModelInstance;
+		modelInstanceList = &(pCluster->modelInstanceList);
+		RVLQLIST_ADD_ENTRY(modelInstanceList, pModelInstance);
+	
+		for (i = 0; i < 9; i++)
+			ctifilestream >> pModelInstance->R[i];
+		idx += i;
+
+		for (i = 0; i < 3; i++)
+			ctifilestream >> pModelInstance->t[i];
+		idx += i;
+
+		
+		float *pd = new float[66];
+		for (i = 0; i < 66; i++)
+			ctifilestream >> pd[i];
+		d.push_back(pd);
+
+		int *pValid = new int[66];
+		for (i = 0; i < 66; i++)
+			ctifilestream >> pValid[i];
+		valid.push_back(pValid);
+
+		float *pe = new float[66];
+		for (i = 0; i < 66; i++)
+			ctifilestream >> pe[i];
+		e.push_back(pe);
+
+		oCluster = iCluster;
+	}
+}
+void PSGM::InterpretCTIS(Mesh *pMesh)
+{
+	// Create ordered mesh.
+
+	pMesh->CreateOrderedMeshFromPolyData();
+
+	// Detect surfels.
+
+	pSurfels->Init(pMesh);
+
+	pSurfelDetector->Init(pMesh, pSurfels, pMem);
+
+	printf("Segmentation to surfels...");
+
+	pSurfelDetector->Segment(pMesh, pSurfels);
+
+	printf("completed.\n");
+
+	int nSurfels = pSurfels->NodeArray.n;
+
+	printf("No. of surfels = %d\n", nSurfels);
+
+	// Detect vertices.
+
+	printf("Detect vertices.\n");
+
+	DetectVertices(pMesh);
+
+	// Cluster surfels into convex surfaces.
+
+	printf("Detect convex clusters.\n");
+
+	Clusters();
+
+	//load CTI descriptors for each cluster
+
+
+	//match CTI descriptor to model
 	//RVLCTIMatchInPrimitiveSpace:
 	//Load matrix M
 	Eigen::Matrix<float, 66, 9> M;
 	Eigen::read_binary("M.bin", M);
-	int m;
-	m = 9;
+
+	Eigen::Matrix<float, 3, 13> nT;
+
+
+
 
 	//Match scene MI to model MI
 	if (mode == RVLRECOGNITION_MODE_RECOGNITION)
 		Match();
 	
 }
+
+void PSGM::ConvexTemplate(Eigen::Matrix<float, 3, 13> *nT)
+{
+	float h, q, sh, ch, sq, cq;
+	float pi = 3.1415;
+	h = pi / 4;
+	q = h / 2;
+	sh = sin(h);
+	ch = cos(h);
+	sq = sin(q);
+	cq = cos(q);
+
+	for (int i = 0; i < 3; i++)
+	{
+		for (int j = 0; j < 13; j++)
+		{
+			nT[i][j] = 0;
+		}
+	}
+
+	nT[0][0] = 0;
+	nT[1][0] = 0;
+	nT[2][0] = 1;
+	nT[0][1] = 0;
+	nT[1][1] = -ch;
+	nT[2][1] = ch;
+	nT[0][2] = ch;
+	nT[1][2] = 0;
+	nT[2][2] = ch;
+	nT[0][11] = 0;
+	nT[1][11] = ch;
+	nT[2][11] = ch;
+	nT[0][12] = -ch;
+	nT[1][12] = 0;
+	nT[2][12] = ch;
+
+}
+
 //END PETRA
 
 

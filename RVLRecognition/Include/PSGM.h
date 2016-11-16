@@ -149,6 +149,9 @@ namespace RVL
 			Mesh *pMesh);
 		void InterpretCTIS(
 			Mesh *pMesh);
+		void LoadCTI(std::string filename);
+		void PSGM::ConvexTemplate(
+			Eigen::Matrix<float, 3, 13> *nT);
 		void InitDisplay(
 			Visualizer *pVisualizer,
 			Mesh *pMesh,

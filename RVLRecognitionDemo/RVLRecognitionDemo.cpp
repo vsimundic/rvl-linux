@@ -303,7 +303,7 @@ int main(int argc, char ** argv)
 
 				recognition.SetSceneFileName(filePath);
 				recognition.Interpret(&mesh);
-				//recognition.InterpretCTIS(&mesh);
+				recognition.InterpretCTIS(&mesh);
 
 				printf("Scene %s...finished!\n\n", filePath);
 			}
