@@ -114,6 +114,8 @@ int main(int argc, char ** argv)
 
 	SurfelGraph surfels;
 
+	surfels.pMem = &mem;
+
 	surfels.CreateParamList(&mem0);
 
 	surfels.ParamList.LoadParams("RVLRecognitionDemo.cfg");

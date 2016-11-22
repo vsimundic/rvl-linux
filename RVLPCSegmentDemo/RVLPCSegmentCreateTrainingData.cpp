@@ -39,7 +39,8 @@ void CreateParamList(
 	CRVLMem *pMem,
 	char **pMeshFileName,
 	DWORD &flags,
-	bool &bSegmentToObjects);
+	bool &bSegmentToObjects,
+	bool &bObjectAggregationLevel2);
 
 #ifdef RVLSURFEL_IMAGE_ADJACENCY
 //Returns surfels Label ID with most object support
@@ -701,10 +702,11 @@ void RunSeg2Bench(bool save)
 
 	DWORD flags = 0x00000000;
 	bool bSegmentToObjects = false;
+	bool bObjectAggregationLevel2 = false;
 
 	CRVLParameterList ParamList;
 
-	CreateParamList(&ParamList, &mem0, &MeshFileName, flags, bSegmentToObjects);
+	CreateParamList(&ParamList, &mem0, &MeshFileName, flags, bSegmentToObjects, bObjectAggregationLevel2);
 
 	ParamList.LoadParams("RVLPCSegmentDemo.cfg");
 

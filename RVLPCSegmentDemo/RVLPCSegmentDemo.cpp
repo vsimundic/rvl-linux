@@ -36,7 +36,8 @@ void CreateParamList(
 	CRVLMem *pMem,
 	char **pMeshFileName,
 	DWORD &flags,
-	bool &bSegmentToObjects)
+	bool &bSegmentToObjects,
+	bool &bObjectAggregationLevel2)
 {
 	pParamList->m_pMem = pMem;
 
@@ -52,6 +53,7 @@ void CreateParamList(
 	pParamData = pParamList->AddParam("Segmentation GT", RVLPARAM_TYPE_FLAG, &flags);
 	pParamList->AddID(pParamData, "yes", RVLPCSEGMENT_DEMO_FLAG_SEGMENTATION_GT);
 	pParamData = pParamList->AddParam("SegmentToObjects", RVLPARAM_TYPE_BOOL, &bSegmentToObjects);
+	pParamData = pParamList->AddParam("ObjectAggregationLevel2", RVLPARAM_TYPE_BOOL, &bObjectAggregationLevel2);
 }
 
 int main(int argc, char ** argv)
@@ -79,10 +81,11 @@ int main(int argc, char ** argv)
 
 	DWORD flags = 0x00000000;
 	bool bSegmentToObjects = false;
+	bool bObjectAggregationLevel2 = false;
 
 	CRVLParameterList ParamList;
 
-	CreateParamList(&ParamList, &mem0, &MeshFileName, flags, bSegmentToObjects);
+	CreateParamList(&ParamList, &mem0, &MeshFileName, flags, bSegmentToObjects, bObjectAggregationLevel2);
 
 	ParamList.LoadParams("RVLPCSegmentDemo.cfg");
 
@@ -215,11 +218,20 @@ int main(int argc, char ** argv)
 #ifdef RVLSURFEL_IMAGE_ADJACENCY
 	if (bSegmentToObjects)
 	{
-		printf("Grouping surfels into objects... ");
+		printf("Aggregating surfels into objects... ");
 
 		objects.WERSegmentation();
 
 		printf("completed.\n");
+
+		if (bObjectAggregationLevel2)
+		{
+			printf("Aggregating objects (LEVEL 2)... ");
+
+			surfels.DetectVertices(&mesh);
+
+			printf("completed.\n");
+		}
 	}
 
 	if (bSurfelsFromSSF)

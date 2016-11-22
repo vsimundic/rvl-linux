@@ -1,6 +1,6 @@
 #pragma once
 
-//#define RVLSURFEL_IMAGE_ADJACENCY
+#define RVLSURFEL_IMAGE_ADJACENCY
 
 #define RVLSURFEL_DISPLAY_MODE_SURFELS			0
 #define RVLSURFEL_DISPLAY_MODE_BOUNDARY			1
@@ -41,6 +41,9 @@ namespace RVL
 			float edgeFeatureDepth;
 			vtkSmartPointer<vtkPolyData> edgeFeaturesPolyData;
 			vtkSmartPointer<vtkActor> edgeFeatures;
+			vtkSmartPointer<vtkActor> vertices;
+			float normalLen;
+			bool bVertices;
 		};
 
 		struct EdgePtr;
@@ -59,6 +62,22 @@ namespace RVL
 			Edge *pEdge;
 			EdgePtr *pNext;
 		};
+
+		struct NormalHullElement
+		{
+			float N[3];
+			float Nh[3];
+		};
+
+		struct Vertex
+		{
+			float P[3];
+			Array<NormalHullElement> normalHull;
+			Array<int> iSurfelArray;
+			Vertex *pNext;
+			bool bEdge;
+		};
+
 	}
 
 	struct Surfel
@@ -94,6 +113,11 @@ namespace RVL
 		void CreateParamList(CRVLMem *pMem);
 		void InitGetNeighborsBoundaryAndSize();
 		void FreeGetNeighborsBoundaryAndSize();
+		void DetectVertices(
+			Mesh *pMesh);
+		void UpdateNormalHull(
+			Array<SURFEL::NormalHullElement> &NHull,
+			float *N);
 		void NodeColors(unsigned char *SelectionColor);
 		void Display(
 			Visualizer *pVisualizer,
@@ -125,6 +149,11 @@ namespace RVL
 			Mesh * pMesh, 
 			int iSurfel,
 			unsigned char *Color);
+		void DisplayVertices();
+		void UpdateVertexDisplayLines();
+		void PaintVertices(
+			Array<int> *pVertexArray,
+			unsigned char *color);
 		void Save(
 			int iSurfel,
 			Mesh *pMesh,
@@ -175,8 +204,16 @@ namespace RVL
 		MeshEdgePtr **BndMem;
 		int imageAdjacencyThr;
 		int nImageAdjacencyRelations;
+		QList<SURFEL::Vertex> vertexList;
+		Array<SURFEL::Vertex *> vertexArray;
+		Array<QList<QLIST::Index>> surfelVertexList;
+		int nVertexSurfelRelations;
 	private:
 		unsigned char *nodeColor;
+		QLIST::Index *surfelVertexMem;
+		Array<Array<int>> vertexDisplayLineArray;
+		int *vertexDisplayLineArrayMem;
+		vtkSmartPointer<vtkPolyData> linesPolyData;
 	};
 
 	namespace SURFEL

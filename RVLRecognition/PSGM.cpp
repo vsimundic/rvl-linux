@@ -28,8 +28,7 @@ PSGM::PSGM()
 	kReferenceSurfelSize = 0.2f;
 	kReferenceTangentSize = 0.3f;
 	baseSeparationAngle = 22.5f;
-	//edgeTangentAngle = 100.0f;
-	displayData.normalLen = 10.0f;
+	//edgeTangentAngle = 100.0f;	
 
 	convexTemplate.n = 66;
 	convexTemplate.Element = new RECOG::PSGM_::Plane[convexTemplate.n];
@@ -37,16 +36,11 @@ PSGM::PSGM()
 	CreateTemplate();
 
 	clusters.Element = NULL;
-	surfelVertexList.Element = NULL;
-	surfelVertexMem = NULL;
 	clusterMap = NULL;
 	clusterMem = NULL;
 	clusterSurfelMem = NULL;
 	clusterVertexMem = NULL;
-	vertexArray.Element = NULL;
 	//modelInstanceMem = NULL;
-	vertexDisplayLineArray.Element = NULL;
-	vertexDisplayLineArrayMem = NULL;
 	sceneFileName = NULL;
 	modelInstanceDB.Element = NULL; //VIDOVIC
 	modelDataBase = NULL; //VIDOVIC
@@ -68,17 +62,12 @@ PSGM::PSGM()
 PSGM::~PSGM()
 {
 	RVL_DELETE_ARRAY(clusters.Element);
-	RVL_DELETE_ARRAY(surfelVertexList.Element);
-	RVL_DELETE_ARRAY(surfelVertexMem);
 	RVL_DELETE_ARRAY(clusterMap);
 	RVL_DELETE_ARRAY(clusterMem);
 	RVL_DELETE_ARRAY(clusterSurfelMem);
 	RVL_DELETE_ARRAY(clusterVertexMem);
-	RVL_DELETE_ARRAY(vertexArray.Element);
 	RVL_DELETE_ARRAY(convexTemplate.Element);	
 	//RVL_DELETE_ARRAY(modelInstanceMem);
-	RVL_DELETE_ARRAY(vertexDisplayLineArray.Element);
-	RVL_DELETE_ARRAY(vertexDisplayLineArrayMem);
 	RVL_DELETE_ARRAY(sceneFileName);
 	RVL_DELETE_ARRAY(modelInstanceDB.Element); //VIDOVIC
 	RVL_DELETE_ARRAY(modelDataBase); //VIDOVIC
@@ -107,7 +96,6 @@ void PSGM::CreateParamList(CRVLMem *pMem)
 	pParamData = ParamList.AddParam("PSGM.kReferenceTangentSize", RVLPARAM_TYPE_FLOAT, &kReferenceTangentSize);
 	pParamData = ParamList.AddParam("PSGM.baseSeparationAngle", RVLPARAM_TYPE_FLOAT, &baseSeparationAngle);
 	//pParamData = ParamList.AddParam("PSGM.edgeTangentAngle", RVLPARAM_TYPE_FLOAT, &edgeTangentAngle);
-	pParamData = ParamList.AddParam("PSGM.visualization.normalLen", RVLPARAM_TYPE_FLOAT, &(displayData.normalLen));
 	pParamData = ParamList.AddParam("ModelDataBase", RVLPARAM_TYPE_STRING, &modelDataBase); //VIDOVIC
 	pParamData = ParamList.AddParam("ModelsInDataBase", RVLPARAM_TYPE_STRING, &modelsInDataBase); //VIDOVIC
 	pParamData = ParamList.AddParam("PSGM.RANSAC.nSamples", RVLPARAM_TYPE_INT, &nSamples); //VIDOVIC
@@ -143,7 +131,7 @@ void PSGM::Interpret(
 
 	printf("Detect vertices.\n");
 
-	DetectVertices(pMesh);
+	pSurfels->DetectVertices(pMesh);
 
 	// Cluster surfels into convex surfaces.
 
@@ -203,443 +191,6 @@ void PSGM::Interpret(
 	//END VIDOVIC
 }
 
-void PSGM::DetectVertices(
-	Mesh *pMesh)
-{
-	QList<RECOG::PSGM_::Vertex> *pVertexList = &vertexList;
-
-	RVLQLIST_INIT(pVertexList);
-
-	nVertexSurfelRelations = 0;
-
-	int nVertices = 0;
-
-	RVL_DELETE_ARRAY(surfelVertexList.Element);
-
-	surfelVertexList.Element = new QList<QLIST::Index>[pSurfels->NodeArray.n];
-	surfelVertexList.n = pSurfels->NodeArray.n;
-
-	//float csEdgeTangentAngle = cos(edgeTangentAngle * DEG2RAD);
-	//float snEdgeTangentAngle = sqrt(1.0f - csEdgeTangentAngle * csEdgeTangentAngle);
-
-	bool *bVisited = new bool[pSurfels->NodeArray.n];
-
-	memset(bVisited, 0, pSurfels->NodeArray.n * sizeof(bool));
-
-	int iSurfel, iSurfel_;
-	//int iSurfel1, iSurfel2;
-	//int iPrevSurfel;
-	int iBoundary;
-	int iPointEdge;
-	int iPt, iPt_, iPt__;
-	Surfel *pSurfel;
-	Array<MeshEdgePtr *> *pBoundary;
-	MeshEdgePtr *pEdgePtr, *pEdgePtr_, *pLastEdgePtr;
-	//MeshEdge *pEdge;
-	QList<MeshEdgePtr> *pEdgeList;
-	RECOG::PSGM_::Vertex *pVertex;
-	Point *pPt;
-	//Point *pPt_;
-	QList<QLIST::Index> *pSurfelVertexList;
-	float *N;
-	//float *N1, *N2;
-	//float N2_[3], VTmp[3];
-	//float fTmp;
-	int nPlanarFeatures, nEdgeFeatures, nFeatures, iFeature;
-	int iEdgeFeature, iEdgeFeature_, iEdgeFeature__;
-	bool bSmallestIndex;
-	Surfel *pSurfel_, *pEdgeFeature;
-
-	for (iSurfel = 0; iSurfel < pSurfels->NodeArray.n; iSurfel++)
-	{
-		pSurfelVertexList = surfelVertexList.Element + iSurfel;
-
-		RVLQLIST_INIT(pSurfelVertexList);
-
-		pSurfel = pSurfels->NodeArray.Element + iSurfel;
-
-		if (pSurfel->bEdge)
-			continue;
-
-		if (pSurfel->size <= 1)
-			continue;
-
-		N = pSurfel->N;
-
-		for (iBoundary = 0; iBoundary < pSurfel->BoundaryArray.n; iBoundary++)
-		{
-			pBoundary = pSurfel->BoundaryArray.Element + iBoundary;
-
-			for (iPointEdge = 0; iPointEdge < pBoundary->n; iPointEdge++)
-			{
-				pEdgePtr = pBoundary->Element[iPointEdge];
-
-				// Determine if iPt is the point with the smallest index in its immediate neighborhood.
-
-				iPt = RVLPCSEGMENT_GRAPH_GET_NODE(pEdgePtr);
-
-				pPt = pMesh->NodeArray.Element + iPt;
-
-				if (pPt->bBoundary)
-					iEdgeFeature = pSurfels->edgeMap[iPt];
-
-				bVisited[iSurfel] = true;
-
-				nPlanarFeatures = 1;
-
-				pEdgeList = &(pPt->EdgeList);
-
-				pEdgePtr_ = pEdgeList->pFirst;
-
-				while (pEdgePtr_)
-				{
-					iPt_ = RVLPCSEGMENT_GRAPH_GET_OPPOSITE_NODE(pEdgePtr_);
-
-					iSurfel_ = pSurfels->surfelMap[iPt_];
-
-					if (iSurfel_ >= 0 && iSurfel_ < pSurfels->NodeArray.n)
-					{
-						if (!bVisited[iSurfel_])
-						{
-							if (iSurfel_ < iSurfel)
-								break;
-
-							nPlanarFeatures++;
-
-							bVisited[iSurfel_] = true;
-						}
-					}
-
-					if (pEdgePtr_->pNext == NULL)
-						pLastEdgePtr = pEdgePtr_;
-
-					pEdgePtr_ = pEdgePtr_->pNext;
-				}
-
-				bSmallestIndex = (pEdgePtr_ == NULL);
-
-				// Reset bVisited.
-
-				bVisited[iSurfel] = false;
-
-				pEdgePtr_ = pEdgeList->pFirst;
-
-				while (pEdgePtr_)
-				{
-					iPt_ = RVLPCSEGMENT_GRAPH_GET_OPPOSITE_NODE(pEdgePtr_);
-
-					iSurfel_ = pSurfels->surfelMap[iPt_];
-
-					if (iSurfel_ >= 0 && iSurfel_ < pSurfels->NodeArray.n)
-						bVisited[iSurfel_] = false;
-
-					pEdgePtr_ = pEdgePtr_->pNext;
-				}
-
-				nEdgeFeatures = 0;
-
-				if (bSmallestIndex)	// If iPt is the point with the smallest index in its immediate neighborhood
-				{
-					if (pPt->bBoundary)
-					{
-						if (iEdgeFeature >= 0)
-							nEdgeFeatures++;
-
-						pEdgePtr_ = pEdgeList->pFirst;
-
-						iPt_ = RVLPCSEGMENT_GRAPH_GET_OPPOSITE_NODE(pEdgePtr_);
-
-						iEdgeFeature_ = pSurfels->edgeMap[iPt_];
-
-						if (iEdgeFeature_ >= 0 && iEdgeFeature_ != iEdgeFeature)
-							nEdgeFeatures++;
-
-						iPt__ = RVLPCSEGMENT_GRAPH_GET_OPPOSITE_NODE(pLastEdgePtr);
-
-						iEdgeFeature__ = pSurfels->edgeMap[iPt__];
-
-						if (iEdgeFeature__ >= 0 && iEdgeFeature__ != iEdgeFeature && iEdgeFeature__ != iEdgeFeature_)
-							nEdgeFeatures++;
-
-						if (nPlanarFeatures == 1 && nEdgeFeatures >= 2)
-						{
-							if ((iEdgeFeature_ >= 0 && iEdgeFeature > iEdgeFeature_) || (iEdgeFeature__ >= 0 && iEdgeFeature > iEdgeFeature__))
-								bSmallestIndex = false;
-						}
-					}
-				}	// if (pEdgePtr_ == NULL)
-
-				nFeatures = nPlanarFeatures + nEdgeFeatures;
-
-				if (bSmallestIndex && nFeatures >= 3)	// If iPt is the point with the smallest index in its immediate neighborhood 
-					// and at least three features meet in iPt, then this point is a vertex.
-				{
-					//if (iPt == 221223)
-					//	int debug = 0;
-
-					// Create vertex.
-
-					RVLMEM_ALLOC_STRUCT(pMem, RECOG::PSGM_::Vertex, pVertex);
-
-					pVertex->bEdge = pPt->bBoundary;
-
-					RVLCOPY3VECTOR(pPt->P, pVertex->P);
-
-					RVLMEM_ALLOC_STRUCT_ARRAY(pMem, int, nFeatures, pVertex->iSurfelArray.Element);
-
-					RVLMEM_ALLOC_STRUCT_ARRAY(pMem, RECOG::PSGM_::NormalHullElement, nFeatures, pVertex->normalHull.Element);
-
-					nVertexSurfelRelations += nFeatures;
-
-					pVertex->normalHull.n = 0;
-
-					iFeature = 0;
-
-					bVisited[iSurfel] = true;
-
-					pVertex->iSurfelArray.Element[iFeature++] = iSurfel;
-
-					UpdateNormalHull(pVertex->normalHull, pSurfel->N);
-
-					pEdgePtr_ = pEdgeList->pFirst;
-
-					while (pEdgePtr_)
-					{
-						iPt_ = RVLPCSEGMENT_GRAPH_GET_OPPOSITE_NODE(pEdgePtr_);
-
-						iSurfel_ = pSurfels->surfelMap[iPt_];
-
-						if (iSurfel_ >= 0 && iSurfel_ < pSurfels->NodeArray.n)
-						{
-							if (!bVisited[iSurfel_])
-							{
-								bVisited[iSurfel_] = true;
-
-								pVertex->iSurfelArray.Element[iFeature++] = iSurfel_;
-
-								pSurfel_ = pSurfels->NodeArray.Element + iSurfel_;
-
-								UpdateNormalHull(pVertex->normalHull, pSurfel_->N);
-							}
-						}
-
-						pEdgePtr_ = pEdgePtr_->pNext;
-					}
-
-					if (pPt->bBoundary)
-					{
-						if (iEdgeFeature >= 0)
-						{
-							pVertex->iSurfelArray.Element[iFeature++] = iEdgeFeature;
-
-							pEdgeFeature = pSurfels->NodeArray.Element + iEdgeFeature;
-
-							UpdateNormalHull(pVertex->normalHull, pEdgeFeature->N);
-						}
-
-						pEdgePtr_ = pEdgeList->pFirst;
-
-						iPt_ = RVLPCSEGMENT_GRAPH_GET_OPPOSITE_NODE(pEdgePtr_);
-
-						iEdgeFeature_ = pSurfels->edgeMap[iPt_];
-
-						if (iEdgeFeature_ >= 0 && iEdgeFeature_ != iEdgeFeature)
-						{
-							pVertex->iSurfelArray.Element[iFeature++] = iEdgeFeature_;
-
-							pEdgeFeature = pSurfels->NodeArray.Element + iEdgeFeature_;
-
-							UpdateNormalHull(pVertex->normalHull, pEdgeFeature->N);
-						}
-
-						iPt__ = RVLPCSEGMENT_GRAPH_GET_OPPOSITE_NODE(pLastEdgePtr);
-
-						iEdgeFeature__ = pSurfels->edgeMap[iPt__];
-
-						if (iEdgeFeature__ >= 0 && iEdgeFeature__ != iEdgeFeature && iEdgeFeature__ != iEdgeFeature_)
-						{
-							pVertex->iSurfelArray.Element[iFeature++] = iEdgeFeature__;
-
-							pEdgeFeature = pSurfels->NodeArray.Element + iEdgeFeature__;
-
-							UpdateNormalHull(pVertex->normalHull, pEdgeFeature->N);
-						}
-					}
-
-					pVertex->iSurfelArray.n = nFeatures;
-
-					//if (pVertex->normalHull.n < 3)
-					//	int debug = 0;
-
-					//if (iFeature != nFeatures)
-					//	int debug = 0;
-
-					// Reset bVisited.
-
-					bVisited[iSurfel] = false;
-
-					pEdgePtr_ = pEdgeList->pFirst;
-
-					while (pEdgePtr_)
-					{
-						iPt_ = RVLPCSEGMENT_GRAPH_GET_OPPOSITE_NODE(pEdgePtr_);
-
-						iSurfel_ = pSurfels->surfelMap[iPt_];
-
-						if (iSurfel_ >= 0 && iSurfel_ < pSurfels->NodeArray.n)
-							bVisited[iSurfel_] = false;
-
-						pEdgePtr_ = pEdgePtr_->pNext;
-					}
-
-					// Add vertex to the vertex list.
-
-					RVLQLIST_ADD_ENTRY(pVertexList, pVertex);
-
-					nVertices++;
-				}	// if (bSmallestIndex && nFeatures >= 3)
-
-#ifdef NEVER
-				// Old version.
-
-				pEdgePtr_ = RVLPCSEGMENT_GRAPH_GET_OPPOSITE_EDGE_PTR(pEdgePtr);
-
-				iPt = RVLPCSEGMENT_GRAPH_GET_NODE(pEdgePtr_);
-
-				pPt = pMesh->NodeArray.Element + iPt;
-
-				pEdgeList = &(pPt->EdgeList);
-
-				iPrevSurfel = -1;
-
-				while (true)	// for each neighboring point of the point iPt
-				{
-					if (pPt->bBoundary && pEdgePtr_->pNext == NULL && iPrevSurfel < pMesh->NodeArray.n)
-						iSurfel_ = pMesh->NodeArray.n;
-					else
-					{
-						RVLQLIST_GET_NEXT_CIRCULAR(pEdgeList, pEdgePtr_);
-
-						RVLPCSEGMENT_GRAPH_GET_NEIGHBOR(iPt, pEdgePtr_, pEdge, iPt_);
-
-						iSurfel_ = pSurfels->surfelMap[iPt_];
-
-						if (iSurfel_ == iSurfel)
-							break;
-					}
-
-					//debug++;
-
-					//if (debug >= 20)
-					//	debug = 0;
-
-					if (iSurfel_ >= 0 && iSurfel_ <= pMesh->NodeArray.n)
-					{
-						if (iPrevSurfel >= 0 && iPrevSurfel != iSurfel_)
-						{
-							if (iSurfel < iSurfel_ && iSurfel < iPrevSurfel)
-							{
-								RVLMEM_ALLOC_STRUCT(pMem, RECOG::PSGM_::Vertex, pVertex);
-
-								RVLCOPY3VECTOR(pPt->P, pVertex->P);
-
-								RVLMEM_ALLOC_STRUCT_ARRAY(pMem, int, 3, pVertex->iSurfelArray.Element);
-
-								if (iSurfel_ > iPrevSurfel)
-								{
-									iSurfel1 = iPrevSurfel;
-									iSurfel2 = iSurfel_;
-								}
-								else
-								{
-									iSurfel1 = iSurfel_;
-									iSurfel2 = iPrevSurfel;
-								}
-
-								pVertex->iSurfelArray.Element[0] = iSurfel;
-								pVertex->iSurfelArray.Element[1] = iSurfel1;
-								pVertex->iSurfelArray.Element[2] = iSurfel2;
-								pVertex->iSurfelArray.n = 3;
-
-								N1 = pSurfels->NodeArray.Element[iSurfel1].N;
-
-								if (iSurfel2 == pMesh->NodeArray.n)
-								{
-									RVLSUM3VECTORS(N, N1, VTmp);
-
-									//fTmp = csEdgeTangentAngle / sqrt(RVLDOTPRODUCT3(VTmp, VTmp));
-
-									RVLSCALE3VECTOR(VTmp, fTmp, VTmp);
-
-									RVLCROSSPRODUCT3(N, N1, )
-
-										N2 = N2_;
-								}
-								else
-									N2 = pSurfels->NodeArray.Element[iSurfel2].N;
-
-								RVLMEM_ALLOC_STRUCT_ARRAY(pMem, RECOG::PSGM_::NormalHullElement, 3, pVertex->normalHull.Element);
-								pVertex->normalHull.n = 0;
-								UpdateNormalHull(pVertex->normalHull, N);
-								UpdateNormalHull(pVertex->normalHull, N1);
-								UpdateNormalHull(pVertex->normalHull, N2);
-
-								RVLQLIST_ADD_ENTRY(pVertexList, pVertex);
-
-								nVertices++;
-
-								nVertexSurfelRelations += 3;
-							}
-						}
-					}	// if (iSurfel_ >= 0 && iSurfel_ <= pMesh->NodeArray.n)		
-
-					iPrevSurfel = iSurfel_;
-				}	// for each neighboring point of the point iPt
-#endif
-			}	// for each point-edge on the boundary contour
-		}	// for each boundary contour
-	}	// for each surfel
-
-	delete[] bVisited;
-
-	RVL_DELETE_ARRAY(vertexArray.Element);
-
-	vertexArray.Element = new RECOG::PSGM_::Vertex *[nVertices];
-	vertexArray.n = nVertices;
-
-	QLIST::CreatePtrArray<RECOG::PSGM_::Vertex>(&vertexList, &vertexArray);
-
-	// Assign vertices to surfels.
-
-	RVL_DELETE_ARRAY(surfelVertexMem);
-
-	surfelVertexMem = new QLIST::Index[nVertexSurfelRelations];
-
-	QLIST::Index *pVertexIdx = surfelVertexMem;
-
-	int iVertex = 0;
-
-	pVertex = vertexList.pFirst;
-
-	while (pVertex)
-	{
-		for (iSurfel = 0; iSurfel < pVertex->iSurfelArray.n; iSurfel++)
-		{
-			pSurfelVertexList = surfelVertexList.Element + pVertex->iSurfelArray.Element[iSurfel];
-
-			RVLQLIST_ADD_ENTRY(pSurfelVertexList, pVertexIdx);
-
-			pVertexIdx->Idx = iVertex;
-
-			pVertexIdx++;
-		}
-
-		iVertex++;
-
-		pVertex = pVertex->pNext;
-	}
-}
-
 void PSGM::Clusters()
 {
 	RVL_DELETE_ARRAY(clusterMap);
@@ -662,12 +213,12 @@ void PSGM::Clusters()
 
 	RVL_DELETE_ARRAY(clusterVertexMem);
 
-	clusterVertexMem = new int[nVertexSurfelRelations];
+	clusterVertexMem = new int[pSurfels->nVertexSurfelRelations];
 
 	int *piVertex = clusterVertexMem;
 
-	bool *bVertexVisited = new bool[vertexArray.n];
-	bool *bVertexInCluster = new bool[vertexArray.n];
+	bool *bVertexVisited = new bool[pSurfels->vertexArray.n];
+	bool *bVertexInCluster = new bool[pSurfels->vertexArray.n];
 
 	bool *bSurfelVisited = new bool[pSurfels->NodeArray.n];
 
@@ -782,8 +333,8 @@ void PSGM::Clusters()
 
 		clusterMap[iLargestSurfel] = iCluster;
 
-		memset(bVertexVisited, 0, vertexArray.n * sizeof(bool));
-		memset(bVertexInCluster, 0, vertexArray.n * sizeof(bool));
+		memset(bVertexVisited, 0, pSurfels->vertexArray.n * sizeof(bool));
+		memset(bVertexInCluster, 0, pSurfels->vertexArray.n * sizeof(bool));
 		memset(bSurfelVisited, 0, pSurfels->NodeArray.n * sizeof(bool));
 
 		RVLQLIST_INIT(pCandidateList);
@@ -859,7 +410,7 @@ void PSGM::Clusters()
 
 			piVertex_ = piVertex;
 
-			pSurfelVertexList = surfelVertexList.Element + iSurfel;
+			pSurfelVertexList = pSurfels->surfelVertexList.Element + iSurfel;
 
 			nSurfelVertices = nSurfelVerticesInCluster = 0;
 
@@ -1176,7 +727,7 @@ void PSGM::FitModel(
 	int iModelInstanceElement;
 	RECOG::PSGM_::ModelInstanceElement *pModelInstanceElement;
 	float d;
-	RECOG::PSGM_::Vertex *pVertex;
+	SURFEL::Vertex *pVertex;
 	int i;
 	float *N, *P;
 	float N_[3];
@@ -1196,13 +747,13 @@ void PSGM::FitModel(
 
 		RVLMULMX3X3VECT(R, N, N_);
 
-		pVertex = vertexArray.Element[pCluster->iVertexArray.Element[0]];
+		pVertex = pSurfels->vertexArray.Element[pCluster->iVertexArray.Element[0]];
 
 		pModelInstanceElement->d = RVLDOTPRODUCT3(N_, pVertex->P);
 
 		for (i = 0; i < pCluster->iVertexArray.n; i++)
 		{
-			pVertex = vertexArray.Element[pCluster->iVertexArray.Element[i]];
+			pVertex = pSurfels->vertexArray.Element[pCluster->iVertexArray.Element[i]];
 
 			d = RVLDOTPRODUCT3(N_, pVertex->P);
 
@@ -1482,8 +1033,8 @@ bool PSGM::ReferenceFrames(int iCluster)
 
 						// Computing origin of the reference frame.
 
-						//P1 = vertexArray.Element[pTangent->iVertex[0]]->P;
-						//P2 = vertexArray.Element[pTangent->iVertex[1]]->P;
+						//P1 = pSurfels->vertexArray.Element[pTangent->iVertex[0]]->P;
+						//P2 = pSurfels->vertexArray.Element[pTangent->iVertex[1]]->P;
 
 						//RVLSUM3VECTORS(P1, P2, P);
 
@@ -1614,7 +1165,7 @@ int RVL::RECOG::PSGM_::ValidTangent(
 
 		//pRecognition->UpdateNormalHull(*(pData->pNormalHull), NT);
 
-		QList<QLIST::Index> *pVertexList = pRecognition->surfelVertexList.Element + iSurfel;
+		QList<QLIST::Index> *pVertexList = pSurfels->surfelVertexList.Element + iSurfel;
 
 		bool bMindT = false;
 
@@ -1633,7 +1184,7 @@ int RVL::RECOG::PSGM_::ValidTangent(
 		M << N0[0], N0[1], N0[2], NT[0], NT[1], NT[2], V[0], V[1], V[2];
 
 		Eigen::Vector3f B, P_;
-		RECOG::PSGM_::Vertex *pVertex;
+		SURFEL::Vertex *pVertex;
 		int i;
 		float mindT, dT, d_, len13, len23;
 		float P1[3], P2[3], dP13[3], dP23[3], PProj[3], dP[3];
@@ -1643,7 +1194,7 @@ int RVL::RECOG::PSGM_::ValidTangent(
 
 		while (pVertexIdx)
 		{
-			pVertex = pRecognition->vertexArray.Element[pVertexIdx->Idx];
+			pVertex = pSurfels->vertexArray.Element[pVertexIdx->Idx];
 
 			for (i = 0; i < pVertex->iSurfelArray.n; i++)
 			{
@@ -1749,7 +1300,7 @@ bool PSGM::Inside(
 {
 	float maxe = kNoise * 2.0f / pSurfelDetector->kPlane;
 
-	RECOG::PSGM_::Vertex *pVertex = vertexArray.Element[iVertex];
+	SURFEL::Vertex *pVertex = pSurfels->vertexArray.Element[iVertex];
 
 	int i;
 	int iSurfel_;
@@ -1784,11 +1335,11 @@ bool PSGM::BelowPlane(
 
 	float e;
 	int iVertex_;
-	RECOG::PSGM_::Vertex *pVertex;
+	SURFEL::Vertex *pVertex;
 
 	for (iVertex_ = 0; iVertex_ < pCluster->iVertexArray.n; iVertex_++)
 	{
-		pVertex = vertexArray.Element[pCluster->iVertexArray.Element[iVertex_]];
+		pVertex = pSurfels->vertexArray.Element[pCluster->iVertexArray.Element[iVertex_]];
 
 		e = RVLDOTPRODUCT3(pSurfel->N, pVertex->P) - pSurfel->d;
 
@@ -1800,156 +1351,8 @@ bool PSGM::BelowPlane(
 	return true;
 }
 
-void PSGM::UpdateNormalHull(
-	Array<RECOG::PSGM_::NormalHullElement> &NHull,
-	float *N)
-{
-	float *N_;
-	float *Nh_;
-	float fTmp;
-
-	if (NHull.n == 0)
-	{
-		N_ = NHull.Element[0].N;
-
-		RVLCOPY3VECTOR(N, N_);
-
-		NHull.n = 1;
-
-		return;
-	}
-	else if (NHull.n == 1)
-	{
-		N_ = NHull.Element[0].N;
-		Nh_ = NHull.Element[0].Nh;
-
-		RVLCROSSPRODUCT3(N, N_, Nh_);
-
-		fTmp = sqrt(RVLDOTPRODUCT3(Nh_, Nh_));
-
-		if (RVLABS(fTmp) < 1e-10)
-			return;
-
-		RVLSCALE3VECTOR2(Nh_, fTmp, Nh_);
-
-		N_ = NHull.Element[1].N;
-		float *Nh__ = NHull.Element[1].Nh;
-
-		RVLCOPY3VECTOR(N, N_);
-
-		RVLNEGVECT3(Nh_, Nh__);
-
-		NHull.n = 2;
-
-		return;
-	}
-
-	RECOG::PSGM_::NormalHullElement *pHullElement = NHull.Element + NHull.n - 1;
-
-	N_ = pHullElement->N;
-	Nh_ = pHullElement->Nh;
-
-	bool bPrevIn = (RVLDOTPRODUCT3(Nh_, N) <= 0.0f);
-
-	int iStart = -1;
-
-	int iEnd;
-	int i;	
-	bool bIn;
-
-	for (i = 0; i < NHull.n; i++)
-	{
-		pHullElement = NHull.Element + i;
-
-		N_ = pHullElement->N;
-		Nh_ = pHullElement->Nh;
-
-		bIn = (RVLDOTPRODUCT3(Nh_, N) <= 0.0f);
-
-		if (bIn)
-		{
-			if (!bPrevIn)
-				iEnd = i;
-		}
-		else if (bPrevIn)
-			iStart = i;
-
-		bPrevIn = bIn;
-	}
-
-	if (iStart < 0)
-		return;
-
-	pHullElement = NHull.Element + iStart;
-
-	N_ = pHullElement->N;
-	Nh_ = pHullElement->Nh;
-
-	float Nh[3];
-
-	RVLCROSSPRODUCT3(N, N_, Nh);
-
-	fTmp = sqrt(RVLDOTPRODUCT3(Nh, Nh));
-
-	if (RVLABS(fTmp) < 1e-10)
-		return;
-
-	RVLSCALE3VECTOR2(Nh, fTmp, Nh_);
-
-	pHullElement = NHull.Element + iEnd;
-
-	N_ = pHullElement->N;
-
-	RVLCROSSPRODUCT3(N_, N, Nh);
-
-	fTmp = sqrt(RVLDOTPRODUCT3(Nh, Nh));
-
-	if (RVLABS(fTmp) < 1e-10)
-		return;
-
-	if (iEnd == (iStart + 1) % NHull.n)	// Size of NHull should be increased.
-	{
-		if (iEnd > 0)
-		{
-			memmove(NHull.Element + iEnd + 1, NHull.Element + iEnd, (NHull.n - iEnd) * sizeof(RECOG::PSGM_::NormalHullElement));
-
-			iEnd++;
-		}
-
-		NHull.n++;
-	}
-	else if (iEnd > (iStart + 2) % NHull.n)	// Size of NHull should be decreased.
-	{
-		if (iEnd > iStart)
-		{
-			memmove(NHull.Element + iStart + 2, NHull.Element + iEnd, (NHull.n - iEnd - 1) * sizeof(RECOG::PSGM_::NormalHullElement));
-
-			NHull.n -= (iEnd - iStart - 2);
-		}
-		else 
-		{
-			if (iEnd > 0)
-			{
-				memmove(NHull.Element, NHull.Element + iEnd, (iStart - iEnd) * sizeof(RECOG::PSGM_::NormalHullElement));
-
-				iStart -= iEnd;
-			}
-
-			NHull.n = iStart + 2;			
-		}
-	}
-
-	pHullElement = NHull.Element + (iStart + 1) % NHull.n;
-
-	N_ = pHullElement->N;
-	Nh_ = pHullElement->Nh;
-
-	RVLCOPY3VECTOR(N, N_);
-	RVLSCALE3VECTOR2(Nh, fTmp, Nh_);
-}
-
 float PSGM::DistanceFromNormalHull(
-	Array<RECOG::PSGM_::NormalHullElement> &NHull,
+	Array<SURFEL::NormalHullElement> &NHull,
 	float *N)
 {
 	if (NHull.n == 0)
@@ -3171,7 +2574,6 @@ void PSGM::Display()
 	pSurfels->DisplayEdgeFeatures();
 
 	displayData.bClusters = true;
-	displayData.bVertices = false;
 
 	//pSurfels->Display(pVisualizer, pMesh);
 
@@ -3270,137 +2672,6 @@ void PSGM::DisplayModelInstance(Visualizer *pVisualizer)
 	pVisualizer->renderer->AddActor(pVisualizer->actor);
 }
 
-void PSGM::DisplayVertices()
-{
-	double lineLength = displayData.normalLen;
-
-	Mesh *pMesh = displayData.pMesh;
-	Visualizer *pVisualizer = displayData.pVisualizer;
-
-	// Create the polydata where we will store all the geometric data
-	linesPolyData =	vtkSmartPointer<vtkPolyData>::New();
-
-	// Create a vtkPoints container and store the points in it
-	vtkSmartPointer<vtkPoints> pts =
-		vtkSmartPointer<vtkPoints>::New();
-
-	int iLine = 0;
-
-	double P0[3], P[3], V[3];
-	Surfel *pSurfel;
-	int iSurfel;
-
-	RECOG::PSGM_::Vertex *pVertex = vertexList.pFirst;
-
-	while (pVertex)
-	{
-		RVLCOPY3VECTOR(pVertex->P, P0);
-
-		for (iSurfel = 0; iSurfel < pVertex->iSurfelArray.n; iSurfel++)
-		{
-			pSurfel = pSurfels->NodeArray.Element + pVertex->iSurfelArray.Element[iSurfel];
-
-			pts->InsertNextPoint(P0);
-
-			RVLSCALE3VECTOR(pSurfel->N, lineLength, V);
-
-			RVLSUM3VECTORS(P0, V, P);
-
-			pts->InsertNextPoint(P);
-
-			iLine++;
-		}
-
-		pVertex = pVertex->pNext;
-	}
-
-	// Add the points to the polydata container
-	linesPolyData->SetPoints(pts);
-
-	// Create lines.
-
-	vtkSmartPointer<vtkCellArray> lines =
-		vtkSmartPointer<vtkCellArray>::New();
-
-	vtkSmartPointer<vtkUnsignedCharArray> colors =
-		vtkSmartPointer<vtkUnsignedCharArray>::New();
-
-	colors->SetNumberOfComponents(3);
-
-	unsigned char red[3] = { 255, 0, 0 };
-
-	int nLines = iLine;
-
-	vtkSmartPointer<vtkLine> *line = new vtkSmartPointer<vtkLine>[nLines];
-
-	RVL_DELETE_ARRAY(vertexDisplayLineArray.Element);
-
-	vertexDisplayLineArray.Element = new Array<int>[vertexArray.n];
-
-	RVL_DELETE_ARRAY(vertexDisplayLineArrayMem);
-
-	vertexDisplayLineArrayMem = new int[nLines];
-
-	int *pVertexDisplayLineIdx = vertexDisplayLineArrayMem;
-
-	iLine = 0;
-
-	int iVertex;
-
-	for (iVertex = 0; iVertex < vertexArray.n; iVertex++)
-	{
-		pVertex = vertexArray.Element[iVertex];
-
-		vertexDisplayLineArray.Element[iVertex].n = pVertex->iSurfelArray.n;
-
-		vertexDisplayLineArray.Element[iVertex].Element = pVertexDisplayLineIdx;
-
-		for (iSurfel = 0; iSurfel < pVertex->iSurfelArray.n; iSurfel++)
-		{
-			line[iLine] = vtkSmartPointer<vtkLine>::New();
-
-			line[iLine]->GetPointIds()->SetId(0, 2 * iLine);
-			line[iLine]->GetPointIds()->SetId(1, 2 * iLine + 1);
-
-			lines->InsertNextCell(line[iLine]);
-
-			colors->InsertNextTupleValue(red);
-
-			*(pVertexDisplayLineIdx++) = iLine;
-
-			iLine++;
-		}
-	}
-
-	// Add the lines to the polydata container
-	linesPolyData->SetLines(lines);
-
-	// Color the lines.
-	// SetScalars() automatically associates the values in the data array passed as parameter
-	// to the elements in the same indices of the cell data array on which it is called.
-	// This means the first component (red) of the colors array
-	// is matched with the first component of the cell array (line 0)
-	// and the second component (green) of the colors array
-	// is matched with the second component of the cell array (line 1)
-	linesPolyData->GetCellData()->SetScalars(colors);
-
-	// Setup the visualization pipeline
-	vtkSmartPointer<vtkPolyDataMapper> mapper =
-		vtkSmartPointer<vtkPolyDataMapper>::New();
-
-	mapper->SetInputData(linesPolyData);
-
-	//vtkSmartPointer<vtkActor> actor =
-	//	vtkSmartPointer<vtkActor>::New();
-	//actor->SetMapper(mapper);
-	displayData.vertices = vtkSmartPointer<vtkActor>::New();
-	displayData.vertices->SetMapper(mapper);
-
-	pVisualizer->renderer->AddActor(displayData.vertices);
-
-	delete[] line;
-}
-
 void PSGM::PaintCluster(
 	int iCluster,
 	unsigned char *color)
@@ -3430,23 +2701,7 @@ void PSGM::PaintClusterVertices(
 {
 	RECOG::PSGM_::Cluster *pCluster = clusters.Element[iCluster];
 
-	int iVertex;
-	vtkSmartPointer<vtkUnsignedCharArray> rgbPointData = rgbPointData->SafeDownCast(linesPolyData->GetCellData()->GetScalars());
-
-	int i, j;
-
-	for (i = 0; i < pCluster->iVertexArray.n; i++)
-	{
-		iVertex = pCluster->iVertexArray.Element[i];
-
-		for (j = 0; j < vertexDisplayLineArray.Element[iVertex].n; j++)
-			rgbPointData->SetTupleValue(vertexDisplayLineArray.Element[iVertex].Element[j], color);
-	}	
-}
-
-void PSGM::UpdateVertexDisplayLines()
-{
-	linesPolyData->Modified();
+	pSurfels->PaintVertices(&(pCluster->iVertexArray), color);
 }
 
 void PSGM::DisplayReferenceFrames()
@@ -3552,7 +2807,7 @@ bool RVL::RECOG::PSGM_::keyPressUserFunction(
 		{
 			pSurfels->Display(pVisualizer, pMesh);
 
-			if (pData->bVertices)
+			if (pSurfels->DisplayData.bVertices)
 			{
 				if (pData->iSelectedCluster >= 0)
 				{
@@ -3562,24 +2817,13 @@ bool RVL::RECOG::PSGM_::keyPressUserFunction(
 
 					pRecognition->PaintClusterVertices(pData->iSelectedCluster, color);
 
-					pRecognition->UpdateVertexDisplayLines();
+					pSurfels->UpdateVertexDisplayLines();
 				}
 			}
 
 			pData->iSelectedCluster = -1;
 		}
 			
-		return true;
-	}
-	else if (key == "v")
-	{
-		pData->bVertices = !pData->bVertices;
-
-		if (pData->bVertices)
-			pData->vertices->VisibilityOn();
-		else
-			pData->vertices->VisibilityOff();
-
 		return true;
 	}
 
@@ -3609,7 +2853,7 @@ bool RVL::RECOG::PSGM_::mouseRButtonDownUserFunction(
 
 		pRecognition->PaintCluster(pData->iSelectedCluster, color);
 
-		if (pData->bVertices)
+		if (pSurfels->DisplayData.bVertices)
 		{
 			RVLSET3VECTOR(color, 255, 0, 0);
 
@@ -3623,13 +2867,13 @@ bool RVL::RECOG::PSGM_::mouseRButtonDownUserFunction(
 	{
 		pRecognition->PaintCluster(iCluster, pData->selectionColor);
 
-		if (pData->bVertices)
+		if (pSurfels->DisplayData.bVertices)
 		{
 			RVLSET3VECTOR(color, 255, 255, 0);
 
 			pRecognition->PaintClusterVertices(iCluster, color);
 
-			pRecognition->UpdateVertexDisplayLines();
+			pSurfels->UpdateVertexDisplayLines();
 		}
 
 		pData->iSelectedCluster = iCluster;
@@ -3639,13 +2883,13 @@ bool RVL::RECOG::PSGM_::mouseRButtonDownUserFunction(
 		RECOG::PSGM_::Cluster *pCluster = pRecognition->clusters.Element[iCluster];
 
 		int i, iVertex;
-		RECOG::PSGM_::Vertex *pVertex;
+		SURFEL::Vertex *pVertex;
 
 		for (i = 0; i < pCluster->iVertexArray.n; i++)
 		{
 			iVertex = pCluster->iVertexArray.Element[i];
 
-			pVertex = pRecognition->vertexArray.Element[iVertex];
+			pVertex = pSurfels->vertexArray.Element[iVertex];
 
 			fprintf(fp, "%d\t%lf\t%lf\t%lf\n", iVertex, pVertex->P[0], pVertex->P[1], pVertex->P[2]);
 		}
