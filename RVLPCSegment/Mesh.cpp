@@ -95,7 +95,10 @@ bool Mesh::CreateOrderedMeshFromPolyData()
 
 	Clear();
 
-	NodeArray.Element = new Point[noPts];
+	NodeMem = new Point[noPts]; // VIDOVIC
+
+	//NodeArray.Element = new Point[noPts]; //VIDOVIC
+	NodeArray.Element = NodeMem; //VIDOVIC
 
 	NodeArray.n = noPts;
 
@@ -146,7 +149,10 @@ bool Mesh::CreateOrderedMeshFromPolyData()
 
 	int maxnEdges = maxnPolygonVertices * nPolys;
 
-	EdgeArray.Element = new MeshEdge[maxnEdges];
+	EdgeMem = new MeshEdge[maxnEdges]; // VIDOVIC
+
+	//EdgeArray.Element = new MeshEdge[maxnEdges]; //VIDOVIC
+	EdgeArray.Element = EdgeMem; //VIDOVIC
 
 	MeshEdge *pEdge = EdgeArray.Element;
 

@@ -618,6 +618,7 @@ ObjectGraph::~ObjectGraph()
 	RVL_DELETE_ARRAY(objectMap);
 }
 
+#ifdef RVLSURFEL_IMAGE_ADJACENCY
 void ObjectGraph::Create(SurfelGraph *pSurfels_)
 {
 	pSurfels = pSurfels_;
@@ -708,6 +709,7 @@ void ObjectGraph::Create(SurfelGraph *pSurfels_)
 		}
 	}
 }
+#endif
 
 //Create (initialize) ObjectGraph object from SFF file
 void ObjectGraph::CreateFromSSF(std::string ssfFileName)	
@@ -816,8 +818,7 @@ void ObjectGraph::CreateFromSSF(std::string ssfFileName)
 
 	AgEdge *pEdge = EdgeArray.Element;
 
-	int i;
-	int iSurfel, iSurfel_;
+	int iSurfel;
 	//Surfel *pSurfel, *pSurfel_;
 	GRAPH::AggregateNode<AgEdge> *pAgNode, *pAgNode_;
 	QList<GRAPH::EdgePtr2<AgEdge>> *pEdgeList, *pEdgeList_;
@@ -1031,8 +1032,8 @@ void ObjectGraph::ComputeRelationCosts()
 			{
 				pEdge = pEdgePtr->pEdge;
 
-				if (iNode == 15 && iNode_ == 27)
-					int debug = 0;
+				//if (iNode == 15 && iNode_ == 27)
+				//	int debug = 0;
 
 				ComputeRelationCost(pEdge);
 			}

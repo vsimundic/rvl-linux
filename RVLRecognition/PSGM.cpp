@@ -14,6 +14,7 @@
 #include "RVLRecognition.h"
 #include "PSGM.h"
 #include <Eigen\Eigenvalues>
+#include <random> //VIDOVIC
 
 using namespace RVL;
 
@@ -27,8 +28,7 @@ PSGM::PSGM()
 	kReferenceSurfelSize = 0.2f;
 	kReferenceTangentSize = 0.3f;
 	baseSeparationAngle = 22.5f;
-	//edgeTangentAngle = 100.0f;
-	displayData.normalLen = 10.0f;
+	//edgeTangentAngle = 100.0f;	
 
 	convexTemplate.n = 66;
 	convexTemplate.Element = new RECOG::PSGM_::Plane[convexTemplate.n];
@@ -36,41 +36,44 @@ PSGM::PSGM()
 	CreateTemplate();
 
 	clusters.Element = NULL;
-	surfelVertexList.Element = NULL;
-	surfelVertexMem = NULL;
 	clusterMap = NULL;
 	clusterMem = NULL;
 	clusterSurfelMem = NULL;
 	clusterVertexMem = NULL;
-	vertexArray.Element = NULL;
 	//modelInstanceMem = NULL;
-	vertexDisplayLineArray.Element = NULL;
-	vertexDisplayLineArrayMem = NULL;
 	sceneFileName = NULL;
+	modelInstanceDB.Element = NULL; //VIDOVIC
 	modelDataBase = NULL; //VIDOVIC
 	modelsInDataBase = NULL; //VIDOVIC
+	sceneMIMatch = NULL; //VIDOVIC
 	modelInstanceDB.n = 0; //VIDOVIC
+	nSModelInstances = 0; //VIDOVIC
+
+	nSamples = 20; //VIDOVIC
+	stdNoise = 2; //VIDOVIC
+
+	bNormalValidityTest = true; //VIDOVIC
+
+	matches.Element = NULL; //VIDOVIC
+	iScene = 0;
 }
 
 
 PSGM::~PSGM()
 {
 	RVL_DELETE_ARRAY(clusters.Element);
-	RVL_DELETE_ARRAY(surfelVertexList.Element);
-	RVL_DELETE_ARRAY(surfelVertexMem);
 	RVL_DELETE_ARRAY(clusterMap);
 	RVL_DELETE_ARRAY(clusterMem);
 	RVL_DELETE_ARRAY(clusterSurfelMem);
 	RVL_DELETE_ARRAY(clusterVertexMem);
-	RVL_DELETE_ARRAY(vertexArray.Element);
 	RVL_DELETE_ARRAY(convexTemplate.Element);	
 	//RVL_DELETE_ARRAY(modelInstanceMem);
-	RVL_DELETE_ARRAY(vertexDisplayLineArray.Element);
-	RVL_DELETE_ARRAY(vertexDisplayLineArrayMem);
 	RVL_DELETE_ARRAY(sceneFileName);
 	RVL_DELETE_ARRAY(modelInstanceDB.Element); //VIDOVIC
 	RVL_DELETE_ARRAY(modelDataBase); //VIDOVIC
 	RVL_DELETE_ARRAY(modelsInDataBase); //VIDOVIC
+	RVL_DELETE_ARRAY(sceneMIMatch); //VIDOVIC
+	RVL_DELETE_ARRAY(matches.Element); //VIDOVIC
 }
 
 void PSGM::CreateParamList(CRVLMem *pMem)
@@ -83,6 +86,8 @@ void PSGM::CreateParamList(CRVLMem *pMem)
 
 	pParamData = ParamList.AddParam("Recognition.mode", RVLPARAM_TYPE_ID, &mode);
 	ParamList.AddID(pParamData, "TRAINING", RVLRECOGNITION_MODE_TRAINING);
+	ParamList.AddID(pParamData, "RECOGNITION", RVLRECOGNITION_MODE_RECOGNITION); //VIDOVIC
+	ParamList.AddID(pParamData, "CREATE_CTIS", RVLRECOGNITION_MODE_PSGM_CREATE_CTIS);
 	pParamData = ParamList.AddParam("PSGM.nDominantClusters", RVLPARAM_TYPE_INT, &nDominantClusters);
 	pParamData = ParamList.AddParam("PSGM.kNoise", RVLPARAM_TYPE_FLOAT, &kNoise);
 	pParamData = ParamList.AddParam("PSGM.minInitialSurfelSize", RVLPARAM_TYPE_INT, &minInitialSurfelSize);
@@ -91,7 +96,12 @@ void PSGM::CreateParamList(CRVLMem *pMem)
 	pParamData = ParamList.AddParam("PSGM.kReferenceTangentSize", RVLPARAM_TYPE_FLOAT, &kReferenceTangentSize);
 	pParamData = ParamList.AddParam("PSGM.baseSeparationAngle", RVLPARAM_TYPE_FLOAT, &baseSeparationAngle);
 	//pParamData = ParamList.AddParam("PSGM.edgeTangentAngle", RVLPARAM_TYPE_FLOAT, &edgeTangentAngle);
-	pParamData = ParamList.AddParam("PSGM.visualization.normalLen", RVLPARAM_TYPE_FLOAT, &(displayData.normalLen));
+	pParamData = ParamList.AddParam("ModelDataBase", RVLPARAM_TYPE_STRING, &modelDataBase); //VIDOVIC
+	pParamData = ParamList.AddParam("ModelsInDataBase", RVLPARAM_TYPE_STRING, &modelsInDataBase); //VIDOVIC
+	pParamData = ParamList.AddParam("PSGM.RANSAC.nSamples", RVLPARAM_TYPE_INT, &nSamples); //VIDOVIC
+	pParamData = ParamList.AddParam("PSGM.RANSAC.stdNoise", RVLPARAM_TYPE_INT, &stdNoise); //VIDOVIC
+	pParamData = ParamList.AddParam("PSGM.normalValidityTest", RVLPARAM_TYPE_BOOL, &bNormalValidityTest); //VIDOVIC
+	pParamData = ParamList.AddParam("PSGM.SceneMIMatch", RVLPARAM_TYPE_STRING, &sceneMIMatch); //VIDOVIC
 }
 
 void PSGM::Interpret(
@@ -121,7 +131,7 @@ void PSGM::Interpret(
 
 	printf("Detect vertices.\n");
 
-	DetectVertices(pMesh);
+	pSurfels->DetectVertices(pMesh);
 
 	// Cluster surfels into convex surfaces.
 
@@ -152,6 +162,8 @@ void PSGM::Interpret(
 			FitModel(pCluster, pModelInstance);
 
 			pModelInstance = pModelInstance->pNext;
+
+			nSModelInstances++; //VIDOVIC
 		}
 	}
 
@@ -161,7 +173,7 @@ void PSGM::Interpret(
 
 	char *PSGModelInstanceFileName = RVLCreateString(sceneFileName);
 
-	sprintf(PSGModelInstanceFileName + strlen(PSGModelInstanceFileName) - 3, "txt");
+	sprintf(PSGModelInstanceFileName + strlen(PSGModelInstanceFileName) - 3, "cti");
 
 	FILE *fp = fopen(PSGModelInstanceFileName, "w");
 
@@ -171,443 +183,12 @@ void PSGM::Interpret(
 	fclose(fp);
 
 	delete[] PSGModelInstanceFileName;
-}
 
-void PSGM::DetectVertices(
-	Mesh *pMesh)
-{
-	QList<RECOG::PSGM_::Vertex> *pVertexList = &vertexList;
-
-	RVLQLIST_INIT(pVertexList);
-
-	nVertexSurfelRelations = 0;
-
-	int nVertices = 0;
-
-	RVL_DELETE_ARRAY(surfelVertexList.Element);
-
-	surfelVertexList.Element = new QList<QLIST::Index>[pSurfels->NodeArray.n];
-	surfelVertexList.n = pSurfels->NodeArray.n;
-
-	//float csEdgeTangentAngle = cos(edgeTangentAngle * DEG2RAD);
-	//float snEdgeTangentAngle = sqrt(1.0f - csEdgeTangentAngle * csEdgeTangentAngle);
-
-	bool *bVisited = new bool[pSurfels->NodeArray.n];
-
-	memset(bVisited, 0, pSurfels->NodeArray.n * sizeof(bool));
-
-	int iSurfel, iSurfel_;
-	//int iSurfel1, iSurfel2;
-	//int iPrevSurfel;
-	int iBoundary;
-	int iPointEdge;
-	int iPt, iPt_, iPt__;
-	Surfel *pSurfel;
-	Array<MeshEdgePtr *> *pBoundary;
-	MeshEdgePtr *pEdgePtr, *pEdgePtr_, *pLastEdgePtr;
-	//MeshEdge *pEdge;
-	QList<MeshEdgePtr> *pEdgeList;
-	RECOG::PSGM_::Vertex *pVertex;
-	Point *pPt;
-	//Point *pPt_;
-	QList<QLIST::Index> *pSurfelVertexList;
-	float *N;
-	//float *N1, *N2;
-	//float N2_[3], VTmp[3];
-	//float fTmp;
-	int nPlanarFeatures, nEdgeFeatures, nFeatures, iFeature;
-	int iEdgeFeature, iEdgeFeature_, iEdgeFeature__;
-	bool bSmallestIndex;
-	Surfel *pSurfel_, *pEdgeFeature;
-
-	for (iSurfel = 0; iSurfel < pSurfels->NodeArray.n; iSurfel++)
-	{
-		pSurfelVertexList = surfelVertexList.Element + iSurfel;
-
-		RVLQLIST_INIT(pSurfelVertexList);
-
-		pSurfel = pSurfels->NodeArray.Element + iSurfel;
-
-		if (pSurfel->bEdge)
-			continue;
-
-		if (pSurfel->size <= 1)
-			continue;
-
-		N = pSurfel->N;
-
-		for (iBoundary = 0; iBoundary < pSurfel->BoundaryArray.n; iBoundary++)
-		{
-			pBoundary = pSurfel->BoundaryArray.Element + iBoundary;
-
-			for (iPointEdge = 0; iPointEdge < pBoundary->n; iPointEdge++)
-			{
-				pEdgePtr = pBoundary->Element[iPointEdge];
-
-				// Determine if iPt is the point with the smallest index in its immediate neighborhood.
-
-				iPt = RVLPCSEGMENT_GRAPH_GET_NODE(pEdgePtr);
-
-				pPt = pMesh->NodeArray.Element + iPt;
-
-				if (pPt->bBoundary)
-					iEdgeFeature = pSurfels->edgeMap[iPt];
-
-				bVisited[iSurfel] = true;
-
-				nPlanarFeatures = 1;
-
-				pEdgeList = &(pPt->EdgeList);
-
-				pEdgePtr_ = pEdgeList->pFirst;
-
-				while (pEdgePtr_)
-				{
-					iPt_ = RVLPCSEGMENT_GRAPH_GET_OPPOSITE_NODE(pEdgePtr_);
-
-					iSurfel_ = pSurfels->surfelMap[iPt_];
-
-					if (iSurfel_ >= 0 && iSurfel_ < pSurfels->NodeArray.n)
-					{
-						if (!bVisited[iSurfel_])
-						{
-							if (iSurfel_ < iSurfel)
-								break;
-
-							nPlanarFeatures++;
-
-							bVisited[iSurfel_] = true;
-						}
-					}
-
-					if (pEdgePtr_->pNext == NULL)
-						pLastEdgePtr = pEdgePtr_;
-
-					pEdgePtr_ = pEdgePtr_->pNext;
-				}
-
-				bSmallestIndex = (pEdgePtr_ == NULL);
-
-				// Reset bVisited.
-
-				bVisited[iSurfel] = false;
-
-				pEdgePtr_ = pEdgeList->pFirst;
-
-				while (pEdgePtr_)
-				{
-					iPt_ = RVLPCSEGMENT_GRAPH_GET_OPPOSITE_NODE(pEdgePtr_);
-
-					iSurfel_ = pSurfels->surfelMap[iPt_];
-
-					if (iSurfel_ >= 0 && iSurfel_ < pSurfels->NodeArray.n)
-						bVisited[iSurfel_] = false;
-
-					pEdgePtr_ = pEdgePtr_->pNext;
-				}
-
-				nEdgeFeatures = 0;
-
-				if (bSmallestIndex)	// If iPt is the point with the smallest index in its immediate neighborhood
-				{
-					if (pPt->bBoundary)
-					{
-						if (iEdgeFeature >= 0)
-							nEdgeFeatures++;
-
-						pEdgePtr_ = pEdgeList->pFirst;
-
-						iPt_ = RVLPCSEGMENT_GRAPH_GET_OPPOSITE_NODE(pEdgePtr_);
-
-						iEdgeFeature_ = pSurfels->edgeMap[iPt_];
-
-						if (iEdgeFeature_ >= 0 && iEdgeFeature_ != iEdgeFeature)
-							nEdgeFeatures++;
-
-						iPt__ = RVLPCSEGMENT_GRAPH_GET_OPPOSITE_NODE(pLastEdgePtr);
-
-						iEdgeFeature__ = pSurfels->edgeMap[iPt__];
-
-						if (iEdgeFeature__ >= 0 && iEdgeFeature__ != iEdgeFeature && iEdgeFeature__ != iEdgeFeature_)
-							nEdgeFeatures++;
-
-						if (nPlanarFeatures == 1 && nEdgeFeatures >= 2)
-						{
-							if ((iEdgeFeature_ >= 0 && iEdgeFeature > iEdgeFeature_) || (iEdgeFeature__ >= 0 && iEdgeFeature > iEdgeFeature__))
-								bSmallestIndex = false;
-						}
-					}
-				}	// if (pEdgePtr_ == NULL)
-
-				nFeatures = nPlanarFeatures + nEdgeFeatures;
-
-				if (bSmallestIndex && nFeatures >= 3)	// If iPt is the point with the smallest index in its immediate neighborhood 
-					// and at least three features meet in iPt, then this point is a vertex.
-				{
-					//if (iPt == 221223)
-					//	int debug = 0;
-
-					// Create vertex.
-
-					RVLMEM_ALLOC_STRUCT(pMem, RECOG::PSGM_::Vertex, pVertex);
-
-					pVertex->bEdge = pPt->bBoundary;
-
-					RVLCOPY3VECTOR(pPt->P, pVertex->P);
-
-					RVLMEM_ALLOC_STRUCT_ARRAY(pMem, int, nFeatures, pVertex->iSurfelArray.Element);
-
-					RVLMEM_ALLOC_STRUCT_ARRAY(pMem, RECOG::PSGM_::NormalHullElement, nFeatures, pVertex->normalHull.Element);
-
-					nVertexSurfelRelations += nFeatures;
-
-					pVertex->normalHull.n = 0;
-
-					iFeature = 0;
-
-					bVisited[iSurfel] = true;
-
-					pVertex->iSurfelArray.Element[iFeature++] = iSurfel;
-
-					UpdateNormalHull(pVertex->normalHull, pSurfel->N);
-
-					pEdgePtr_ = pEdgeList->pFirst;
-
-					while (pEdgePtr_)
-					{
-						iPt_ = RVLPCSEGMENT_GRAPH_GET_OPPOSITE_NODE(pEdgePtr_);
-
-						iSurfel_ = pSurfels->surfelMap[iPt_];
-
-						if (iSurfel_ >= 0 && iSurfel_ < pSurfels->NodeArray.n)
-						{
-							if (!bVisited[iSurfel_])
-							{
-								bVisited[iSurfel_] = true;
-
-								pVertex->iSurfelArray.Element[iFeature++] = iSurfel_;
-
-								pSurfel_ = pSurfels->NodeArray.Element + iSurfel_;
-
-								UpdateNormalHull(pVertex->normalHull, pSurfel_->N);
-							}
-						}
-
-						pEdgePtr_ = pEdgePtr_->pNext;
-					}
-
-					if (pPt->bBoundary)
-					{
-						if (iEdgeFeature >= 0)
-						{
-							pVertex->iSurfelArray.Element[iFeature++] = iEdgeFeature;
-
-							pEdgeFeature = pSurfels->NodeArray.Element + iEdgeFeature;
-
-							UpdateNormalHull(pVertex->normalHull, pEdgeFeature->N);
-						}
-
-						pEdgePtr_ = pEdgeList->pFirst;
-
-						iPt_ = RVLPCSEGMENT_GRAPH_GET_OPPOSITE_NODE(pEdgePtr_);
-
-						iEdgeFeature_ = pSurfels->edgeMap[iPt_];
-
-						if (iEdgeFeature_ >= 0 && iEdgeFeature_ != iEdgeFeature)
-						{
-							pVertex->iSurfelArray.Element[iFeature++] = iEdgeFeature_;
-
-							pEdgeFeature = pSurfels->NodeArray.Element + iEdgeFeature_;
-
-							UpdateNormalHull(pVertex->normalHull, pEdgeFeature->N);
-						}
-
-						iPt__ = RVLPCSEGMENT_GRAPH_GET_OPPOSITE_NODE(pLastEdgePtr);
-
-						iEdgeFeature__ = pSurfels->edgeMap[iPt__];
-
-						if (iEdgeFeature__ >= 0 && iEdgeFeature__ != iEdgeFeature && iEdgeFeature__ != iEdgeFeature_)
-						{
-							pVertex->iSurfelArray.Element[iFeature++] = iEdgeFeature__;
-
-							pEdgeFeature = pSurfels->NodeArray.Element + iEdgeFeature__;
-
-							UpdateNormalHull(pVertex->normalHull, pEdgeFeature->N);
-						}
-					}
-
-					pVertex->iSurfelArray.n = nFeatures;
-
-					//if (pVertex->normalHull.n < 3)
-					//	int debug = 0;
-
-					//if (iFeature != nFeatures)
-					//	int debug = 0;
-
-					// Reset bVisited.
-
-					bVisited[iSurfel] = false;
-
-					pEdgePtr_ = pEdgeList->pFirst;
-
-					while (pEdgePtr_)
-					{
-						iPt_ = RVLPCSEGMENT_GRAPH_GET_OPPOSITE_NODE(pEdgePtr_);
-
-						iSurfel_ = pSurfels->surfelMap[iPt_];
-
-						if (iSurfel_ >= 0 && iSurfel_ < pSurfels->NodeArray.n)
-							bVisited[iSurfel_] = false;
-
-						pEdgePtr_ = pEdgePtr_->pNext;
-					}
-
-					// Add vertex to the vertex list.
-
-					RVLQLIST_ADD_ENTRY(pVertexList, pVertex);
-
-					nVertices++;
-				}	// if (bSmallestIndex && nFeatures >= 3)
-
-#ifdef NEVER
-				// Old version.
-
-				pEdgePtr_ = RVLPCSEGMENT_GRAPH_GET_OPPOSITE_EDGE_PTR(pEdgePtr);
-
-				iPt = RVLPCSEGMENT_GRAPH_GET_NODE(pEdgePtr_);
-
-				pPt = pMesh->NodeArray.Element + iPt;
-
-				pEdgeList = &(pPt->EdgeList);
-
-				iPrevSurfel = -1;
-
-				while (true)	// for each neighboring point of the point iPt
-				{
-					if (pPt->bBoundary && pEdgePtr_->pNext == NULL && iPrevSurfel < pMesh->NodeArray.n)
-						iSurfel_ = pMesh->NodeArray.n;
-					else
-					{
-						RVLQLIST_GET_NEXT_CIRCULAR(pEdgeList, pEdgePtr_);
-
-						RVLPCSEGMENT_GRAPH_GET_NEIGHBOR(iPt, pEdgePtr_, pEdge, iPt_);
-
-						iSurfel_ = pSurfels->surfelMap[iPt_];
-
-						if (iSurfel_ == iSurfel)
-							break;
-					}
-
-					//debug++;
-
-					//if (debug >= 20)
-					//	debug = 0;
-
-					if (iSurfel_ >= 0 && iSurfel_ <= pMesh->NodeArray.n)
-					{
-						if (iPrevSurfel >= 0 && iPrevSurfel != iSurfel_)
-						{
-							if (iSurfel < iSurfel_ && iSurfel < iPrevSurfel)
-							{
-								RVLMEM_ALLOC_STRUCT(pMem, RECOG::PSGM_::Vertex, pVertex);
-
-								RVLCOPY3VECTOR(pPt->P, pVertex->P);
-
-								RVLMEM_ALLOC_STRUCT_ARRAY(pMem, int, 3, pVertex->iSurfelArray.Element);
-
-								if (iSurfel_ > iPrevSurfel)
-								{
-									iSurfel1 = iPrevSurfel;
-									iSurfel2 = iSurfel_;
-								}
-								else
-								{
-									iSurfel1 = iSurfel_;
-									iSurfel2 = iPrevSurfel;
-								}
-
-								pVertex->iSurfelArray.Element[0] = iSurfel;
-								pVertex->iSurfelArray.Element[1] = iSurfel1;
-								pVertex->iSurfelArray.Element[2] = iSurfel2;
-								pVertex->iSurfelArray.n = 3;
-
-								N1 = pSurfels->NodeArray.Element[iSurfel1].N;
-
-								if (iSurfel2 == pMesh->NodeArray.n)
-								{
-									RVLSUM3VECTORS(N, N1, VTmp);
-
-									//fTmp = csEdgeTangentAngle / sqrt(RVLDOTPRODUCT3(VTmp, VTmp));
-
-									RVLSCALE3VECTOR(VTmp, fTmp, VTmp);
-
-									RVLCROSSPRODUCT3(N, N1, )
-
-										N2 = N2_;
-								}
-								else
-									N2 = pSurfels->NodeArray.Element[iSurfel2].N;
-
-								RVLMEM_ALLOC_STRUCT_ARRAY(pMem, RECOG::PSGM_::NormalHullElement, 3, pVertex->normalHull.Element);
-								pVertex->normalHull.n = 0;
-								UpdateNormalHull(pVertex->normalHull, N);
-								UpdateNormalHull(pVertex->normalHull, N1);
-								UpdateNormalHull(pVertex->normalHull, N2);
-
-								RVLQLIST_ADD_ENTRY(pVertexList, pVertex);
-
-								nVertices++;
-
-								nVertexSurfelRelations += 3;
-							}
-						}
-					}	// if (iSurfel_ >= 0 && iSurfel_ <= pMesh->NodeArray.n)		
-
-					iPrevSurfel = iSurfel_;
-				}	// for each neighboring point of the point iPt
-#endif
-			}	// for each point-edge on the boundary contour
-		}	// for each boundary contour
-	}	// for each surfel
-
-	delete[] bVisited;
-
-	RVL_DELETE_ARRAY(vertexArray.Element);
-
-	vertexArray.Element = new RECOG::PSGM_::Vertex *[nVertices];
-	vertexArray.n = nVertices;
-
-	QLIST::CreatePtrArray<RECOG::PSGM_::Vertex>(&vertexList, &vertexArray);
-
-	// Assign vertices to surfels.
-
-	RVL_DELETE_ARRAY(surfelVertexMem);
-
-	surfelVertexMem = new QLIST::Index[nVertexSurfelRelations];
-
-	QLIST::Index *pVertexIdx = surfelVertexMem;
-
-	int iVertex = 0;
-
-	pVertex = vertexList.pFirst;
-
-	while (pVertex)
-	{
-		for (iSurfel = 0; iSurfel < pVertex->iSurfelArray.n; iSurfel++)
-		{
-			pSurfelVertexList = surfelVertexList.Element + pVertex->iSurfelArray.Element[iSurfel];
-
-			RVLQLIST_ADD_ENTRY(pSurfelVertexList, pVertexIdx);
-
-			pVertexIdx->Idx = iVertex;
-
-			pVertexIdx++;
-		}
-
-		iVertex++;
-
-		pVertex = pVertex->pNext;
-	}
+	//VIDOVIC
+	//Match scene MI to model MI
+	if (mode == RVLRECOGNITION_MODE_RECOGNITION)
+		Match();
+	//END VIDOVIC
 }
 
 void PSGM::Clusters()
@@ -632,12 +213,12 @@ void PSGM::Clusters()
 
 	RVL_DELETE_ARRAY(clusterVertexMem);
 
-	clusterVertexMem = new int[nVertexSurfelRelations];
+	clusterVertexMem = new int[pSurfels->nVertexSurfelRelations];
 
 	int *piVertex = clusterVertexMem;
 
-	bool *bVertexVisited = new bool[vertexArray.n];
-	bool *bVertexInCluster = new bool[vertexArray.n];
+	bool *bVertexVisited = new bool[pSurfels->vertexArray.n];
+	bool *bVertexInCluster = new bool[pSurfels->vertexArray.n];
 
 	bool *bSurfelVisited = new bool[pSurfels->NodeArray.n];
 
@@ -752,8 +333,8 @@ void PSGM::Clusters()
 
 		clusterMap[iLargestSurfel] = iCluster;
 
-		memset(bVertexVisited, 0, vertexArray.n * sizeof(bool));
-		memset(bVertexInCluster, 0, vertexArray.n * sizeof(bool));
+		memset(bVertexVisited, 0, pSurfels->vertexArray.n * sizeof(bool));
+		memset(bVertexInCluster, 0, pSurfels->vertexArray.n * sizeof(bool));
 		memset(bSurfelVisited, 0, pSurfels->NodeArray.n * sizeof(bool));
 
 		RVLQLIST_INIT(pCandidateList);
@@ -829,7 +410,7 @@ void PSGM::Clusters()
 
 			piVertex_ = piVertex;
 
-			pSurfelVertexList = surfelVertexList.Element + iSurfel;
+			pSurfelVertexList = pSurfels->surfelVertexList.Element + iSurfel;
 
 			nSurfelVertices = nSurfelVerticesInCluster = 0;
 
@@ -1146,7 +727,7 @@ void PSGM::FitModel(
 	int iModelInstanceElement;
 	RECOG::PSGM_::ModelInstanceElement *pModelInstanceElement;
 	float d;
-	RECOG::PSGM_::Vertex *pVertex;
+	SURFEL::Vertex *pVertex;
 	int i;
 	float *N, *P;
 	float N_[3];
@@ -1166,45 +747,57 @@ void PSGM::FitModel(
 
 		RVLMULMX3X3VECT(R, N, N_);
 
-		pVertex = vertexArray.Element[pCluster->iVertexArray.Element[0]];
+		pVertex = pSurfels->vertexArray.Element[pCluster->iVertexArray.Element[0]];
 
 		pModelInstanceElement->d = RVLDOTPRODUCT3(N_, pVertex->P);
 
 		for (i = 0; i < pCluster->iVertexArray.n; i++)
 		{
-			pVertex = vertexArray.Element[pCluster->iVertexArray.Element[i]];
+			pVertex = pSurfels->vertexArray.Element[pCluster->iVertexArray.Element[i]];
 
 			d = RVLDOTPRODUCT3(N_, pVertex->P);
 
 			if (d > pModelInstanceElement->d)
 				pModelInstanceElement->d = d;
 
-			if (pVertex->normalHull.n >= 3)
+			//VIDOVIC
+			if (bNormalValidityTest)
 			{
-				dist = DistanceFromNormalHull(pVertex->normalHull, N_);
-
-				if (dist <= 0.0f)
+				if (pVertex->normalHull.n >= 3)
 				{
-					if (pModelInstanceElement->valid)
+					dist = DistanceFromNormalHull(pVertex->normalHull, N_);
+
+					if (dist <= 0.0f)
 					{
-						if (d > maxdDefinedNormal)
+						if (pModelInstanceElement->valid)
+						{
+							if (d > maxdDefinedNormal)
+								maxdDefinedNormal = d;
+						}
+						else
+						{
 							maxdDefinedNormal = d;
-					}
-					else
-					{
-						maxdDefinedNormal = d;
-						pModelInstanceElement->valid = true;
+							pModelInstanceElement->valid = true;
+						}
 					}
 				}
+
+				P = pVertex->P;
+
+				if (RVLDOTPRODUCT3(N_, P) >= 0.0f)
+					pModelInstanceElement->valid = false;
 			}
-
-			P = pVertex->P;
-
-			if (RVLDOTPRODUCT3(N_, P) >= 0.0f)
-				pModelInstanceElement->valid = false;
+			else
+				pModelInstanceElement->valid = true;
+			//END VIDOVIC
 		}	// for every vertex in the cluster
 
-		pModelInstanceElement->e = (pModelInstanceElement->valid ? pModelInstanceElement->d - maxdDefinedNormal : 0.0f);
+		//VIDOVIC
+		if (bNormalValidityTest)
+			pModelInstanceElement->e = (pModelInstanceElement->valid ? pModelInstanceElement->d - maxdDefinedNormal : 0.0f);
+		else
+			pModelInstanceElement->e = 0.0f;
+		//END VIDOVIC
 	}	// for every model instance descriptor element
 }
 
@@ -1438,24 +1031,28 @@ bool PSGM::ReferenceFrames(int iCluster)
 
 						RVLCOPYTOCOL3(Y, 1, R);
 
-						P1 = vertexArray.Element[pTangent->iVertex[0]]->P;
-						P2 = vertexArray.Element[pTangent->iVertex[1]]->P;
+						// Computing origin of the reference frame.
 
-						RVLSUM3VECTORS(P1, P2, P);
+						//P1 = pSurfels->vertexArray.Element[pTangent->iVertex[0]]->P;
+						//P2 = pSurfels->vertexArray.Element[pTangent->iVertex[1]]->P;
 
-						RVLSCALE3VECTOR(P, 0.5f, P);
+						//RVLSUM3VECTORS(P1, P2, P);
 
-						d = RVLDOTPRODUCT3(X, P);
+						//RVLSCALE3VECTOR(P, 0.5f, P);
 
-						M << pSurfel->N[0], pSurfel->N[1], pSurfel->N[2], pTangent->N[0], pTangent->N[1], pTangent->N[2], X[0], X[1], X[2];
+						//d = RVLDOTPRODUCT3(X, P);
 
-						B << pSurfel->d, pTangent->d, d;
+						//M << pSurfel->N[0], pSurfel->N[1], pSurfel->N[2], pTangent->N[0], pTangent->N[1], pTangent->N[2], X[0], X[1], X[2];
 
-						t_ = M.colPivHouseholderQr().solve(B);
+						//B << pSurfel->d, pTangent->d, d;
+
+						//t_ = M.colPivHouseholderQr().solve(B);
 
 						t = pModelInstance->t;
 
-						RVLCOPY3VECTOR(t_, t);
+						//RVLCOPY3VECTOR(t_, t);
+
+						RVLNULL3VECTOR(t);
 
 						p = RVLDOTPRODUCT3(X0, X);
 						q = RVLDOTPRODUCT3(Y0, X);
@@ -1568,7 +1165,7 @@ int RVL::RECOG::PSGM_::ValidTangent(
 
 		//pRecognition->UpdateNormalHull(*(pData->pNormalHull), NT);
 
-		QList<QLIST::Index> *pVertexList = pRecognition->surfelVertexList.Element + iSurfel;
+		QList<QLIST::Index> *pVertexList = pSurfels->surfelVertexList.Element + iSurfel;
 
 		bool bMindT = false;
 
@@ -1587,7 +1184,7 @@ int RVL::RECOG::PSGM_::ValidTangent(
 		M << N0[0], N0[1], N0[2], NT[0], NT[1], NT[2], V[0], V[1], V[2];
 
 		Eigen::Vector3f B, P_;
-		RECOG::PSGM_::Vertex *pVertex;
+		SURFEL::Vertex *pVertex;
 		int i;
 		float mindT, dT, d_, len13, len23;
 		float P1[3], P2[3], dP13[3], dP23[3], PProj[3], dP[3];
@@ -1597,7 +1194,7 @@ int RVL::RECOG::PSGM_::ValidTangent(
 
 		while (pVertexIdx)
 		{
-			pVertex = pRecognition->vertexArray.Element[pVertexIdx->Idx];
+			pVertex = pSurfels->vertexArray.Element[pVertexIdx->Idx];
 
 			for (i = 0; i < pVertex->iSurfelArray.n; i++)
 			{
@@ -1703,7 +1300,7 @@ bool PSGM::Inside(
 {
 	float maxe = kNoise * 2.0f / pSurfelDetector->kPlane;
 
-	RECOG::PSGM_::Vertex *pVertex = vertexArray.Element[iVertex];
+	SURFEL::Vertex *pVertex = pSurfels->vertexArray.Element[iVertex];
 
 	int i;
 	int iSurfel_;
@@ -1738,11 +1335,11 @@ bool PSGM::BelowPlane(
 
 	float e;
 	int iVertex_;
-	RECOG::PSGM_::Vertex *pVertex;
+	SURFEL::Vertex *pVertex;
 
 	for (iVertex_ = 0; iVertex_ < pCluster->iVertexArray.n; iVertex_++)
 	{
-		pVertex = vertexArray.Element[pCluster->iVertexArray.Element[iVertex_]];
+		pVertex = pSurfels->vertexArray.Element[pCluster->iVertexArray.Element[iVertex_]];
 
 		e = RVLDOTPRODUCT3(pSurfel->N, pVertex->P) - pSurfel->d;
 
@@ -1754,156 +1351,8 @@ bool PSGM::BelowPlane(
 	return true;
 }
 
-void PSGM::UpdateNormalHull(
-	Array<RECOG::PSGM_::NormalHullElement> &NHull,
-	float *N)
-{
-	float *N_;
-	float *Nh_;
-	float fTmp;
-
-	if (NHull.n == 0)
-	{
-		N_ = NHull.Element[0].N;
-
-		RVLCOPY3VECTOR(N, N_);
-
-		NHull.n = 1;
-
-		return;
-	}
-	else if (NHull.n == 1)
-	{
-		N_ = NHull.Element[0].N;
-		Nh_ = NHull.Element[0].Nh;
-
-		RVLCROSSPRODUCT3(N, N_, Nh_);
-
-		fTmp = sqrt(RVLDOTPRODUCT3(Nh_, Nh_));
-
-		if (RVLABS(fTmp) < 1e-10)
-			return;
-
-		RVLSCALE3VECTOR2(Nh_, fTmp, Nh_);
-
-		N_ = NHull.Element[1].N;
-		float *Nh__ = NHull.Element[1].Nh;
-
-		RVLCOPY3VECTOR(N, N_);
-
-		RVLNEGVECT3(Nh_, Nh__);
-
-		NHull.n = 2;
-
-		return;
-	}
-
-	RECOG::PSGM_::NormalHullElement *pHullElement = NHull.Element + NHull.n - 1;
-
-	N_ = pHullElement->N;
-	Nh_ = pHullElement->Nh;
-
-	bool bPrevIn = (RVLDOTPRODUCT3(Nh_, N) <= 0.0f);
-
-	int iStart = -1;
-
-	int iEnd;
-	int i;	
-	bool bIn;
-
-	for (i = 0; i < NHull.n; i++)
-	{
-		pHullElement = NHull.Element + i;
-
-		N_ = pHullElement->N;
-		Nh_ = pHullElement->Nh;
-
-		bIn = (RVLDOTPRODUCT3(Nh_, N) <= 0.0f);
-
-		if (bIn)
-		{
-			if (!bPrevIn)
-				iEnd = i;
-		}
-		else if (bPrevIn)
-			iStart = i;
-
-		bPrevIn = bIn;
-	}
-
-	if (iStart < 0)
-		return;
-
-	pHullElement = NHull.Element + iStart;
-
-	N_ = pHullElement->N;
-	Nh_ = pHullElement->Nh;
-
-	float Nh[3];
-
-	RVLCROSSPRODUCT3(N, N_, Nh);
-
-	fTmp = sqrt(RVLDOTPRODUCT3(Nh, Nh));
-
-	if (RVLABS(fTmp) < 1e-10)
-		return;
-
-	RVLSCALE3VECTOR2(Nh, fTmp, Nh_);
-
-	pHullElement = NHull.Element + iEnd;
-
-	N_ = pHullElement->N;
-
-	RVLCROSSPRODUCT3(N_, N, Nh);
-
-	fTmp = sqrt(RVLDOTPRODUCT3(Nh, Nh));
-
-	if (RVLABS(fTmp) < 1e-10)
-		return;
-
-	if (iEnd == (iStart + 1) % NHull.n)	// Size of NHull should be increased.
-	{
-		if (iEnd > 0)
-		{
-			memmove(NHull.Element + iEnd + 1, NHull.Element + iEnd, (NHull.n - iEnd) * sizeof(RECOG::PSGM_::NormalHullElement));
-
-			iEnd++;
-		}
-
-		NHull.n++;
-	}
-	else if (iEnd > (iStart + 2) % NHull.n)	// Size of NHull should be decreased.
-	{
-		if (iEnd > iStart)
-		{
-			memmove(NHull.Element + iStart + 2, NHull.Element + iEnd, (NHull.n - iEnd - 1) * sizeof(RECOG::PSGM_::NormalHullElement));
-
-			NHull.n -= (iEnd - iStart - 2);
-		}
-		else 
-		{
-			if (iEnd > 0)
-			{
-				memmove(NHull.Element, NHull.Element + iEnd, (iStart - iEnd) * sizeof(RECOG::PSGM_::NormalHullElement));
-
-				iStart -= iEnd;
-			}
-
-			NHull.n = iStart + 2;			
-		}
-	}
-
-	pHullElement = NHull.Element + (iStart + 1) % NHull.n;
-
-	N_ = pHullElement->N;
-	Nh_ = pHullElement->Nh;
-
-	RVLCOPY3VECTOR(N, N_);
-	RVLSCALE3VECTOR2(Nh, fTmp, Nh_);
-}
-
 float PSGM::DistanceFromNormalHull(
-	Array<RECOG::PSGM_::NormalHullElement> &NHull,
+	Array<SURFEL::NormalHullElement> &NHull,
 	float *N)
 {
 	if (NHull.n == 0)
@@ -2024,6 +1473,8 @@ bool PSGM::ModelExistInDB(char *modelFileName, FileSequenceLoader dbLoader)
 	return 0;
 }
 
+
+
 void PSGM::SaveModelID(FileSequenceLoader dbLoader)
 {
 	FILE *fp = fopen(modelsInDataBase, "w");
@@ -2051,8 +1502,8 @@ void PSGM::Learn(char *modelSequenceFileName)
 
 	int iCluster, nClusters, currentModelID;
 
-	RVL_DELETE_ARRAY(modelDataBase);
-	RVL_DELETE_ARRAY(modelsInDataBase);
+	//RVL_DELETE_ARRAY(modelDataBase);
+	//RVL_DELETE_ARRAY(modelsInDataBase);
 
 	if (!modelDataBase)
 		modelDataBase = "modelDB.dat";
@@ -2067,10 +1518,14 @@ void PSGM::Learn(char *modelSequenceFileName)
 
 	bool saveDBSequenceFile = false;
 
+	printf("Model DB creation started...\n");
+
 	while (modelsLoader.GetNext(modelFilePath, modelFileName))
 	{
 		if (ModelExistInDB(modelFileName, dbLoader))
 			continue;
+
+		printf("\nProcessing model %s!\n", modelFileName);
 
 		saveDBSequenceFile = true;
 
@@ -2090,6 +1545,8 @@ void PSGM::Learn(char *modelSequenceFileName)
 		dbLoader.AddModel(currentModelID, modelFilePath, modelFileName);
 	}
 
+	printf("Model DB creation completed!\n");
+
 	if (saveDBSequenceFile)
 		SaveModelID(dbLoader);
 
@@ -2101,7 +1558,7 @@ void PSGM::LoadModelDataBase()
 {
 	FILE *fp = fopen(modelDataBase, "r");
 
-	char line[1600];
+	char line[1600] = {0};
 
 	int iModelInstance, iModelInstanceElement, i;
 
@@ -2113,7 +1570,12 @@ void PSGM::LoadModelDataBase()
 		//count number of lines in model DB
 		while (!feof(fp))
 		{
+			line[0] = '\0';
+
 			fgets(line, 1600, fp);
+
+			if (line[0] == '\0' || line[0] == '\n')
+				continue;
 
 			modelInstanceDB.n++;
 		}
@@ -2167,11 +1629,916 @@ void PSGM::LoadModelDataBase()
 				pModelInstance++;
 			}
 		}
+
+		fclose(fp);
+	}
+}
+
+void PSGM::Match()
+{
+	printf("Scene to model match started...\n");
+
+	float csMinSampleAngleDiff = cos(PI / 4);
+	float minE, minETotal, E, SMI_minETotal;
+
+	float tBestMatch[3], SMI_tBestMatch[3];
+	int bestMatchMIMID, bestMatchModelID, bestSRF, iSRF;
+	int SMI_bestMatchMIMID, SMI_bestMatchModelID, SMI_bestSRF, SMI_iSRF;
+
+	QList<RECOG::PSGM_::MatchInstance> *pSMIMatches = &SMImatches;
+	RVLQLIST_INIT(pSMIMatches);
+
+	RECOG::PSGM_::MatchInstance *pSMIMatch;
+
+	float R_[9], t_[3];
+
+	Eigen::Matrix3f A;
+	Eigen::Vector3f B, t;
+
+	int i, idx;
+
+	float dISv, dIMvt;
+
+	FILE *fp;
+
+	if (!sceneMIMatch)
+		sceneMIMatch = "sceneMatch.txt";
+
+	fp = fopen(sceneMIMatch, "w");
+
+	FILE *fp2 = fopen("F:\\Projekti\\ARP3D\\Auxiliary\\Models\\sceneMatchDebug.txt", "w");
+
+	//find sample candidates
+	QList<QLIST::Index> iSampleCandidateList;
+	QList<QLIST::Index> *pISampleCandidateList = &iSampleCandidateList;
+
+	RVLQLIST_INIT(pISampleCandidateList);
+
+	QLIST::Index *pNewISampleCandidate;
+	RECOG::PSGM_::Plane *pPlane = convexTemplate.Element;
+
+	int debugCnt = 0;
+
+	for (int idx = 0; idx < convexTemplate.n; idx++)
+	{
+		if (RVLABS(pPlane->N[2]) <= csMinSampleAngleDiff)
+		{
+			RVLMEM_ALLOC_STRUCT(pMem, QLIST::Index, pNewISampleCandidate);
+
+			RVLQLIST_ADD_ENTRY(pISampleCandidateList, pNewISampleCandidate);
+
+			pNewISampleCandidate->Idx = idx;
+
+			debugCnt++;
+		}		
+
+		pPlane++;
+	}
+
+	int iMIS, iMIM;
+	int iSCluster, iSClusterMI;
+
+	int nClusters = RVLMIN(clusters.n, nDominantClusters);
+
+	RECOG::PSGM_::ModelInstance *pSModelInstance;
+	RECOG::PSGM_::ModelInstance *pMModelInstance;
+
+	RECOG::PSGM_::ModelInstance *pSBestModelInstance;
+	RECOG::PSGM_::ModelInstance *pMBestModelInstance;
+
+	RECOG::PSGM_::ModelInstance *SMI_pSBestModelInstance;
+	RECOG::PSGM_::ModelInstance *SMI_pMBestModelInstance;
+
+	debugCnt = 0;
+
+	//for (iMIS = 0; iMIS < nSModelInstances; iMIS++)
+	for (iSCluster = 0; iSCluster < nClusters; iSCluster++)
+	{
+		printf("%d/%d dominant scene clusters...", iSCluster + 1, nClusters);
+
+		pSModelInstance = clusters.Element[iSCluster]->modelInstanceList.pFirst;
+
+		minETotal = 66.0;
+
+		iSRF = -1;
+
+		while (pSModelInstance)
+		{
+			debugCnt++;
+
+			minE = 66.0;
+
+			SMI_minETotal = 66.0;
+
+			iSRF++;
+
+			pMModelInstance = modelInstanceDB.Element;
+
+			for (iMIM = 0; iMIM < modelInstanceDB.n; iMIM++)
+			{
+				//CTDMatchRANSAC
+				float pPrior = 2.5 * stdNoise;
+
+				int nValidSampleCandidates = 0;
+
+				//find valid sample candidates
+				Array<QLIST::Index> iValidSampleCandidate;
+				iValidSampleCandidate.Element = new QLIST::Index[convexTemplate.n];
+
+				QLIST::Index *piValidSampleCandidate = iValidSampleCandidate.Element;
+
+				QLIST::Index *pISampleCandidate = pISampleCandidateList->pFirst;
+
+				while (pISampleCandidate)
+				{
+					if (pSModelInstance->modelInstance.Element[pISampleCandidate->Idx].valid == true && pMModelInstance->modelInstance.Element[pISampleCandidate->Idx].valid == true)
+					{
+						piValidSampleCandidate->Idx = pISampleCandidate->Idx;
+
+						piValidSampleCandidate->pNext = piValidSampleCandidate + 1;
+
+						piValidSampleCandidate++;
+
+						nValidSampleCandidates++;
+					}
+
+					pISampleCandidate = pISampleCandidate->pNext;
+				}
+
+				iValidSampleCandidate.n = nValidSampleCandidates;
+
+				int nValids = 0;
+
+				//find iValid
+				Array<QLIST::Index> iValid;
+				iValid.Element = new QLIST::Index[convexTemplate.n];
+				QLIST::Index *piValid = iValid.Element;
+				int iPlane;
+
+				for (iPlane = 0; iPlane < convexTemplate.n; iPlane++)
+				{
+					if (pSModelInstance->modelInstance.Element[iPlane].valid == true && pMModelInstance->modelInstance.Element[iPlane].valid == true)
+					{
+						piValid->Idx = iPlane;
+
+						piValid->pNext = piValid + 1;
+
+						piValid++;
+
+						nValids++;
+					}
+				}
+
+				iValid.n = nValids;
+
+				int iRansac;
+				bool bValidSample;
+
+				std::random_device rd;
+				std::mt19937 eng(rd());
+				std::uniform_int_distribution<> distribution(0, nValidSampleCandidates - 1);
+				//std::uniform_int_distribution<> distribution(0, 66); // FOR DEBUG ONLY
+
+				int iSample[2];
+				int ID[2];
+				float V[3];
+				float N_[3] = {0, 0, 1};
+				float fTmp;
+				int nValidSamplesSearch;
+
+				Array<QLIST::Index> iConsensus;
+				iConsensus.Element = new QLIST::Index[convexTemplate.n];
+				iConsensus.n = 0;
+
+				QLIST::Index *piConsensus = iConsensus.Element;
+
+				for (iRansac = 0; iRansac < nSamples; iRansac++)
+				{
+					bValidSample = false;
+
+					nValidSamplesSearch = 0;
+
+					while (!bValidSample)
+					{
+						nValidSamplesSearch++;
+
+						iSample[0] = distribution(eng);
+						iSample[1] = distribution(eng);
+
+						ID[0] = iValidSampleCandidate.Element[iSample[0]].Idx;
+						ID[1] = iValidSampleCandidate.Element[iSample[1]].Idx;
+
+						RVLCROSSPRODUCT3(N_, convexTemplate.Element[ID[0]].N, V);
+
+						fTmp = sqrt(RVLDOTPRODUCT3(V, V));
+
+						//if (RVLABS(fTmp) < 1e-10)
+						//return;
+
+						RVLSCALE3VECTOR2(V, fTmp, V);
+
+						if (RVLDOTPRODUCT3(V, convexTemplate.Element[ID[1]].N) >= csMinSampleAngleDiff)
+							bValidSample = true;
+
+						if (nValidSamplesSearch > 2000)
+							break;
+					}
+
+					if (nValidSamplesSearch > 2000)
+						break;
+
+					float dM[3];
+					float dS[3];
+					float N[9];
+
+					dM[0] = pMModelInstance->modelInstance.Element[0].d;
+					dM[1] = pMModelInstance->modelInstance.Element[ID[0]].d;
+					dM[2] = pMModelInstance->modelInstance.Element[ID[1]].d;
+
+					dS[0] = pSModelInstance->modelInstance.Element[0].d * 1000;
+					dS[1] = pSModelInstance->modelInstance.Element[ID[0]].d * 1000;
+					dS[2] = pSModelInstance->modelInstance.Element[ID[1]].d * 1000;
+
+					RVLCOPYTOCOL3(convexTemplate.Element[0].N, 0, N);
+					RVLCOPYTOCOL3(convexTemplate.Element[ID[0]].N, 1, N);
+					RVLCOPYTOCOL3(convexTemplate.Element[ID[1]].N, 2, N);
+
+					//A << N[0], N[1], N[2], N[3], N[4], N[5], N[6], N[7], N[8]; // N
+					A << N[0], N[3], N[6], N[1], N[4], N[7], N[2], N[5], N[8]; // N'
+					B << dS[0] - dM[0], dS[1] - dM[1], dS[2] - dM[2];
+					t = A.colPivHouseholderQr().solve(B);
+
+					Array<QLIST::Index> iConsensusTemp;
+
+					iConsensusTemp.Element = new QLIST::Index[convexTemplate.n];
+					iConsensusTemp.n = 0;
+
+					QLIST::Index *piConsensusTemp = iConsensusTemp.Element;
+
+					E = 0;
+
+					for (i = 0; i < iValid.n; i++)
+					{
+						idx = iValid.Element[i].Idx;
+
+						dISv = pSModelInstance->modelInstance.Element[idx].d * 1000;
+
+						dIMvt = pMModelInstance->modelInstance.Element[idx].d + RVLDOTPRODUCT3(t, convexTemplate.Element[idx].N);
+
+						fTmp = (dISv - dIMvt) / pPrior;
+
+						if (fTmp*fTmp < 1)
+						{
+							E += fTmp*fTmp;
+
+							piConsensusTemp->Idx = idx;	//	!!! saved id in original MI array
+							piConsensusTemp->pNext = piConsensusTemp + 1;
+
+							iConsensusTemp.n++;
+
+							piConsensusTemp++;
+						}
+						else
+							E += 1;
+					}
+
+					if (E < minE)
+					{
+						minE = E;
+
+						iConsensus.n = iConsensusTemp.n;
+
+						piConsensusTemp = iConsensusTemp.Element;
+
+						piConsensus = iConsensus.Element;
+
+						for (i = 0; i < iConsensusTemp.n; i++)
+						{
+							piConsensus->Idx = piConsensusTemp->Idx;
+							piConsensus->pNext = piConsensus + 1;
+
+							piConsensus++;
+							piConsensusTemp++;
+						}
+					}
+
+					RVL_DELETE_ARRAY(iConsensusTemp.Element);
+				}
+
+				if (iConsensus.n >= 3)
+				{
+					float dISc, dIMc, *nTc, *dISMc;
+						
+					nTc = new float[3 * iConsensus.n];
+					dISMc = new float[iConsensus.n];
+
+					piConsensus = iConsensus.Element;
+
+					for (i = 0; i < iConsensus.n; i++)
+					{
+						idx = piConsensus->Idx;
+
+						dISc = pSModelInstance->modelInstance.Element[idx].d * 1000;
+						dIMc = pMModelInstance->modelInstance.Element[idx].d;
+
+						dISMc[i] = dISc - dIMc;
+
+						//RVLCOPYTOCOL3(convexTemplate.Element[idx].N, i, nTc);
+						nTc[i] = convexTemplate.Element[idx].N[0];
+						nTc[iConsensus.n + i] = convexTemplate.Element[idx].N[1];
+						nTc[2*iConsensus.n + i] = convexTemplate.Element[idx].N[2];
+
+						piConsensus++;
+					}
+
+					int j, k;
+
+					//nTc*nTc'
+					for (i = 0; i < 3; i++)
+						for (j = 0; j < 3; j++)
+							if (i <= j)
+							{
+								A(i * 3 + j) = 0;
+
+								for (k = 0; k < iConsensus.n; k++)
+									A(i * 3 + j) += nTc[i * iConsensus.n + k] * nTc[j * iConsensus.n + k];
+							}
+							else
+								A(i * 3 + j) = A(j * 3 + i);
+						
+					//nTc*(dISc-dIMc)
+					for (i = 0; i < 3; i++)
+					{
+						B(i) = 0;
+						for (j = 0; j < iConsensus.n; j++)
+							B(i) += nTc[i * iConsensus.n + j] * dISMc[j];
+					}
+									
+					t = A.colPivHouseholderQr().solve(B);
+
+					delete[] nTc;
+					delete[] dISMc;
+
+					E = 0;
+
+					for (i = 0; i < iValid.n; i++)
+					{
+						idx = iValid.Element[i].Idx;
+
+						dISv = pSModelInstance->modelInstance.Element[idx].d * 1000;
+
+						dIMvt = pMModelInstance->modelInstance.Element[idx].d + RVLDOTPRODUCT3(t, convexTemplate.Element[idx].N);
+
+						fTmp = (dISv - dIMvt) / pPrior;
+
+						if (fTmp*fTmp < 1)
+							E += fTmp*fTmp;
+						else
+							E += 1;
+					}
+
+					E += 66 - iValid.n;
+
+				}
+				else
+				{
+					t << 0, 0, 0;
+					E = 66;
+				}
+				
+
+				if (E < minETotal)
+				{
+					minETotal = E;
+
+					int i;
+
+					for (i = 0; i < 3; i++)
+						tBestMatch[i] = t(i);
+
+					bestMatchMIMID = iMIM;
+					bestMatchModelID = pMModelInstance->iModel;
+					bestSRF = iSRF;
+
+					pMBestModelInstance = pMModelInstance;
+					pSBestModelInstance = pSModelInstance;
+				}
+
+				if (E < SMI_minETotal)
+				{
+					SMI_minETotal = E;
+
+					int i;
+
+					for (i = 0; i < 3; i++)
+						SMI_tBestMatch[i] = t(i);
+
+					SMI_bestMatchMIMID = iMIM;
+					SMI_bestMatchModelID = pMModelInstance->iModel;
+					SMI_bestSRF = iSRF;
+
+					SMI_pMBestModelInstance = pMModelInstance;
+					SMI_pSBestModelInstance = pSModelInstance;
+				}
+
+
+				RVL_DELETE_ARRAY(iValidSampleCandidate.Element);
+
+				RVL_DELETE_ARRAY(iValid.Element);
+
+				RVL_DELETE_ARRAY(iConsensus.Element);
+
+				pMModelInstance = pMModelInstance->pNext;
+
+			}	//for all model MI
+
+			//save all SMI matches
+			MSTransformation(SMI_pMBestModelInstance, SMI_pSBestModelInstance, SMI_tBestMatch, R_, t_);
+
+			RVLMEM_ALLOC_STRUCT(pMem, RECOG::PSGM_::MatchInstance, pSMIMatch);
+
+			RVLQLIST_ADD_ENTRY(pSMIMatches, pSMIMatch);
+
+			pSMIMatch->iScene = iScene;
+
+			pSMIMatch->iModel = SMI_bestMatchModelID;
+
+			for (i = 0; i < 9; i++)
+				pSMIMatch->R[i] = R_[i];
+
+			for (i = 0; i < 3; i++)
+				pSMIMatch->t[i] = t_[i];
+
+			pSMIMatch->score = SMI_minETotal;
+
+			pSMIMatch->angle = NAN;
+
+			pSMIMatch->distance = NAN;
+
+			pSModelInstance = pSModelInstance->pNext;
+
+		}	// for all MI in cluster
+
+		printf("completed.\n", iSCluster + 1, nClusters);
+
+		MSTransformation(pMBestModelInstance, pSBestModelInstance, tBestMatch, R_, t_);
+
+		//FOR DEBUG
+		//fprintf(fp, "%d\t%d\t%d\t%d\t%f\t%f\t%f\t%f\n", iSCluster, bestSRF, bestMatchMIMID, bestMatchModelID, minETotal, tBestMatch[0], tBestMatch[1], tBestMatch[2]);
+		fprintf(fp2, "%d\t%d\t%d\t%d\t%f\t%f\t%f\t%f\n", iSCluster, bestSRF, bestMatchMIMID, bestMatchModelID, minETotal, tBestMatch[0], tBestMatch[1], tBestMatch[2]);
+
+		fprintf(fp, "%d\t%d\t%d\t%d\t%f\t", iSCluster, bestSRF, bestMatchMIMID, bestMatchModelID, minETotal);
+
+		for (i = 0; i < 9; i++)
+			fprintf(fp, "%f\t", R_[i]);
+
+		for (i = 0; i < 3;i++)
+			fprintf(fp, "%f\t", t_[i]);
+
+		fprintf(fp, "\n");
+
+		//save Matches
+		pMatches->iScene = iScene;
+		pMatches->iModel = bestMatchModelID;
+
+		for (i = 0; i < 9; i++)
+			pMatches->R[i] = R_[i];
+
+		for (i = 0; i < 3; i++)
+			pMatches->t[i] = t_[i];
+
+		pMatches->score = minETotal;
+
+		pMatches->angle = NAN;
+
+		pMatches->distance = NAN;
+
+		pMatches++;
+		matches.n++;
+
+	}	// for all dominant clusters
+
+	iScene++;
+
+	fclose(fp);
+	fclose(fp2);
+
+	printf("SMI_n: %d\n", debugCnt);
+}
+
+void PSGM::MSTransformation(
+	RECOG::PSGM_::ModelInstance *pMModelInstance,
+	RECOG::PSGM_::ModelInstance *pSModelInstance,
+	float *tBestMatch,
+	float *R,
+	float *t)
+{
+	float R_[9], t_[3];
+
+	//RVLSCALE3VECTOR(pMModelInstance->t, 0, pMModelInstance->t);
+
+	RVLINVTRANSF3D(pMModelInstance->R, pMModelInstance->t, R_, t_);
+
+	RVLSUM3VECTORS(t_, tBestMatch, t_);
+
+	RVLCOMPTRANSF3D(pSModelInstance->R, pSModelInstance->t, R_, t_, R, t);
+}
+
+void PSGM::SetNumberOfScenes(int scenesNumber)
+{
+	matches.Element = new RECOG::PSGM_::MatchInstance[scenesNumber*nDominantClusters];
+	matches.n = 0;
+
+	pMatches = matches.Element;
+}
+
+void PSGM::CompareMatchesToGT(
+	ECCVGTLoader *ECCVGT,
+	float scoreThresh,
+	float angleThresh,
+	float distanceThresh,
+	float &precision,
+	float &recall)
+{
+	int iMatches, iGTS, iGTM, nGTModels;
+
+	int nGTSecenes = ECCVGT->GT.n;
+
+	int TP = 0, FP = 0, FN = 0;
+
+	float R[9], RGT[9], tGT[3], t[3];
+		
+	float V[3], theta, distance;
+
+	bool match = false;
+
+	//reset matches pointer!!
+	pMatches = matches.Element;
+
+	RVL::GTInstance *pGT;
+
+	FILE *fp = fopen("RM.txt", "w");
+	FILE *fp2 = fopen("GT_R.txt", "w");
+	FILE *fp3 = fopen("R.txt", "w");
+
+	//Find TP and FP
+	for (iMatches = 0; iMatches < matches.n; iMatches++)
+	{
+		if (pMatches->score < scoreThresh)
+		{
+			match = false;
+
+			for (iGTS = 0; iGTS < nGTSecenes; iGTS++)
+			{				
+				pGT = ECCVGT->GT.Element[iGTS].Element;
+
+				nGTModels = ECCVGT->GT.Element[iGTS].n;
+
+				for (iGTM = 0; iGTM < nGTModels; iGTM++)
+				{
+					if (pMatches->iScene == pGT->iScene)
+					{
+						if (pMatches->iModel == pGT->iModel)
+						{
+							RVLSCALEMX3X3(pGT->R, 1000, RGT);
+
+							RVLMXMUL3X3T2(pMatches->R, RGT, R);
+
+							fprintf(fp, "\n");
+
+							for (int i = 0; i < 9; i++)
+								if (i % 3 == 2)
+									fprintf(fp, "%f\n", pMatches->R[i]);								
+								else
+									fprintf(fp, "%f\t", pMatches->R[i]);
+
+							fprintf(fp2, "\n");
+
+							for (int i = 0; i < 9; i++)
+								if (i % 3 == 2)
+									fprintf(fp2, "%f\n", pGT->R[i]);
+								else
+									fprintf(fp2, "%f\t", pGT->R[i]);
+
+							fprintf(fp3, "\n");
+
+							for (int i = 0; i < 9; i++)
+								if (i % 3 == 2)
+									fprintf(fp3, "%f\n", R[i]);
+								else
+									fprintf(fp3, "%f\t", R[i]);
+
+							RVLSCALE3VECTOR(pGT->t, 1000, tGT)
+
+							RVLDIF3VECTORS(pMatches->t, tGT, t);
+
+							GetAngleAxis(R, V, theta);
+
+							GetDistance(t, distance);
+
+							fprintf(fp3, "\n%f\t%f\n", theta, distance);
+
+							if ((theta < angleThresh || (theta > (PI - angleThresh) && theta < (PI + angleThresh))) && distance < distanceThresh)
+							//if (distance < distanceThresh)
+							{
+								if (!pGT->matched)
+								{
+									TP++;
+
+									pGT->matched = true;
+								}									
+
+								match = true;								
+
+								break;
+							}
+						}
+					}
+
+					pGT++;
+				}
+
+				if (match)
+					break;			
+			}
+
+			if (!match)
+				FP++;
+		}
+
+		pMatches++;
+	}
+
+	//find FN
+	for (iGTS = 0; iGTS < nGTSecenes; iGTS++)
+	{
+		pGT = ECCVGT->GT.Element[iGTS].Element;
+
+		nGTModels = ECCVGT->GT.Element[iGTS].n;
+
+		for (iGTM = 0; iGTM < nGTModels; iGTM++)
+		{
+			if (!pGT->matched)
+			{
+				FN++;
+				printf("GT Model %d not matched!\n", iGTM);
+			}				
+
+			pGT++;
+		}		
+	}
+
+	precision = (float)TP / (float)(TP + FP);
+
+	recall = (float)TP / (float)(TP + FN);
+
+	printf("TP: %d\n", TP);
+	printf("FP: %d\n", FP);
+	printf("FN: %d\n", FN);
+
+	fclose(fp);
+	fclose(fp2);
+	fclose(fp3);
+}
+
+//UNDER CONSTRUCTION
+void PSGM::CompareSMIMatchesToGT(
+	ECCVGTLoader *ECCVGT,
+	float scoreThresh,
+	float angleThresh,
+	float distanceThresh,
+	float &precision,
+	float &recall)
+{
+
+	RVL::GTInstance *pGT;
+
+	int nGTSecenes = ECCVGT->GT.n;
+
+	int TP = 0, FP = 0, FN = 0;
+
+	int iGTS, iGTM, nGTModels;
+
+	float R[9], RGT[9], tGT[3], t[3];
+
+	float V[3], theta, distance;
+
+	bool match, FPmatch;
+
+	QList<RECOG::PSGM_::FPMatch> FPMatchList;
+	QList<RECOG::PSGM_::FPMatch> *pFPMatchList = &FPMatchList;
+
+	RECOG::PSGM_::FPMatch *pNewFPMatch;
+	RECOG::PSGM_::FPMatch *pFPMatch;
+
+	RVLQLIST_INIT(pFPMatchList);
+
+	RECOG::PSGM_::MatchInstance *pSMIMatch = SMImatches.pFirst;
+
+	//find TP and FP
+	while (pSMIMatch)
+	{
+		if (pSMIMatch->score < scoreThresh)
+		{
+			match = false;
+
+			//TP
+			for (iGTS = 0; iGTS < nGTSecenes; iGTS++)
+			{
+				pGT = ECCVGT->GT.Element[iGTS].Element;
+
+				nGTModels = ECCVGT->GT.Element[iGTS].n;
+
+				for (iGTM = 0; iGTM < nGTModels; iGTM++)
+				{
+					if (pSMIMatch->iScene == pGT->iScene)
+					{
+						if (pSMIMatch->iModel == pGT->iModel)
+						{
+							RVLSCALEMX3X3(pGT->R, 1000, RGT);
+
+							RVLMXMUL3X3T2(pSMIMatch->R, RGT, R);
+
+							RVLSCALE3VECTOR(pGT->t, 1000, tGT)
+
+							RVLDIF3VECTORS(pSMIMatch->t, tGT, t);
+
+							GetAngleAxis(R, V, theta);
+
+							GetDistance(t, distance);
+
+							//if ((theta < angleThresh || (theta >(PI - angleThresh) && theta < (PI + angleThresh))) && distance < distanceThresh)
+							if (distance < distanceThresh)
+							{
+								if (!pGT->matched)
+								{
+									TP++;
+
+									pGT->matched = true;
+								}
+
+								match = true;
+
+								break;
+							}
+						}
+					}
+
+					pGT++;
+				}
+
+				if (match)
+					break;
+			}
+
+			//FP
+			if (!match)
+			{
+				FPmatch = false;
+
+				pFPMatch = pFPMatchList->pFirst;
+
+				while (pFPMatch)
+				{
+					if (pSMIMatch->iScene == pFPMatch->iScene)
+					{
+						if (pSMIMatch->iModel == pFPMatch->iModel)
+						{
+							RVLDIF3VECTORS(pSMIMatch->t, pFPMatch->t, t);
+
+							GetDistance(t, distance);
+
+							if (distance < distanceThresh)
+							{
+								FPmatch = true;
+
+								//Update FP match cluster
+								RVLSCALE3VECTOR(pFPMatch->t, pFPMatch->n, pFPMatch->t);
+
+								RVLSUM3VECTORS(pSMIMatch->t, pFPMatch->t, pFPMatch->t);
+
+								RVLSCALE3VECTOR2(pFPMatch->t, pFPMatch->n + 1, pFPMatch->t);
+
+								pFPMatch->n++;
+
+								FP++;
+
+								break;
+							}
+						}
+					}
+
+					pFPMatch = pFPMatch->pNext;
+				}
+
+				//add new cluster to FPMatch list
+				RVLMEM_ALLOC_STRUCT(pMem, RECOG::PSGM_::FPMatch, pNewFPMatch);
+
+				pNewFPMatch->iScene = pSMIMatch->iScene;
+
+				pNewFPMatch->iModel = pSMIMatch->iModel;
+
+				RVLCOPY3VECTOR(pSMIMatch->t, pNewFPMatch->t);
+
+				pNewFPMatch->n = 1;
+
+				RVLQLIST_ADD_ENTRY(pFPMatchList, pNewFPMatch);
+
+			}
+		}
+
+		pSMIMatch = pSMIMatch->pNext;
+	}
+
+	//find FN
+	for (iGTS = 0; iGTS < nGTSecenes; iGTS++)
+	{
+		pGT = ECCVGT->GT.Element[iGTS].Element;
+
+		nGTModels = ECCVGT->GT.Element[iGTS].n;
+
+		for (iGTM = 0; iGTM < nGTModels; iGTM++)
+		{
+			if (!pGT->matched)
+			{
+				FN++;
+				printf("GT Model %d not matched!\n", iGTM);
+			}
+
+			pGT++;
+		}
+	}
+
+	precision = (float)TP / (float)(TP + FP);
+
+	recall = (float)TP / (float)(TP + FN);
+
+	printf("TP: %d\n", TP);
+	printf("FP: %d\n", FP);
+	printf("FN: %d\n", FN);
+}
+
+void PSGM::SaveMatches()
+{
+	FILE *fp;
+
+	fp = fopen("F:\\Projekti\\ARP3D\\Auxiliary\\Models\\sceneMatchDebug2.txt", "w");
+
+	int iMatches, i;
+
+	//reset pointer to matches!!
+	pMatches = matches.Element;
+
+	for (iMatches = 0; iMatches < matches.n; iMatches++)
+	{
+		fprintf(fp, "%d\t%d\t", pMatches->iScene, pMatches->iModel);
+
+		for (i = 0; i < 9; i++)
+			fprintf(fp, "%f\t", pMatches->R[i]);
+
+		for (i = 0; i < 3; i++)
+			fprintf(fp, "%f\t", pMatches->t[i]);
+
+		fprintf(fp, "%f\t", pMatches->score);
+
+		fprintf(fp, "%f\t", pMatches->angle);
+
+		fprintf(fp, "%f\n", pMatches->distance);
+
+		pMatches++;
+	}
+
+	fclose(fp);
+
+	fp = fopen("F:\\Projekti\\ARP3D\\Auxiliary\\Models\\SMIMatches.txt", "w");
+
+	RECOG::PSGM_::MatchInstance *pSMIMatch = SMImatches.pFirst;
+
+	int cnt = 0;
+
+	while (pSMIMatch)
+	{
+		cnt++;
+
+		fprintf(fp, "%d\t%d\t", pSMIMatch->iScene, pSMIMatch->iModel);
+
+		for (i = 0; i < 9; i++)
+			fprintf(fp, "%f\t", pSMIMatch->R[i]);
+
+		for (i = 0; i < 3; i++)
+			fprintf(fp, "%f\t", pSMIMatch->t[i]);
+
+		fprintf(fp, "%f\t", pSMIMatch->score);
+
+		fprintf(fp, "%f\t", pSMIMatch->angle);
+
+		fprintf(fp, "%f\n", pSMIMatch->distance);
+
+		pSMIMatch = pSMIMatch->pNext;
 	}
 
 	fclose(fp);
 }
-
 //END VIDOVIC
 
 void PSGM::InitDisplay(
@@ -2207,7 +2574,6 @@ void PSGM::Display()
 	pSurfels->DisplayEdgeFeatures();
 
 	displayData.bClusters = true;
-	displayData.bVertices = false;
 
 	//pSurfels->Display(pVisualizer, pMesh);
 
@@ -2306,137 +2672,6 @@ void PSGM::DisplayModelInstance(Visualizer *pVisualizer)
 	pVisualizer->renderer->AddActor(pVisualizer->actor);
 }
 
-void PSGM::DisplayVertices()
-{
-	double lineLength = displayData.normalLen;
-
-	Mesh *pMesh = displayData.pMesh;
-	Visualizer *pVisualizer = displayData.pVisualizer;
-
-	// Create the polydata where we will store all the geometric data
-	linesPolyData =	vtkSmartPointer<vtkPolyData>::New();
-
-	// Create a vtkPoints container and store the points in it
-	vtkSmartPointer<vtkPoints> pts =
-		vtkSmartPointer<vtkPoints>::New();
-
-	int iLine = 0;
-
-	double P0[3], P[3], V[3];
-	Surfel *pSurfel;
-	int iSurfel;
-
-	RECOG::PSGM_::Vertex *pVertex = vertexList.pFirst;
-
-	while (pVertex)
-	{
-		RVLCOPY3VECTOR(pVertex->P, P0);
-
-		for (iSurfel = 0; iSurfel < pVertex->iSurfelArray.n; iSurfel++)
-		{
-			pSurfel = pSurfels->NodeArray.Element + pVertex->iSurfelArray.Element[iSurfel];
-
-			pts->InsertNextPoint(P0);
-
-			RVLSCALE3VECTOR(pSurfel->N, lineLength, V);
-
-			RVLSUM3VECTORS(P0, V, P);
-
-			pts->InsertNextPoint(P);
-
-			iLine++;
-		}
-
-		pVertex = pVertex->pNext;
-	}
-
-	// Add the points to the polydata container
-	linesPolyData->SetPoints(pts);
-
-	// Create lines.
-
-	vtkSmartPointer<vtkCellArray> lines =
-		vtkSmartPointer<vtkCellArray>::New();
-
-	vtkSmartPointer<vtkUnsignedCharArray> colors =
-		vtkSmartPointer<vtkUnsignedCharArray>::New();
-
-	colors->SetNumberOfComponents(3);
-
-	unsigned char red[3] = { 255, 0, 0 };
-
-	int nLines = iLine;
-
-	vtkSmartPointer<vtkLine> *line = new vtkSmartPointer<vtkLine>[nLines];
-
-	RVL_DELETE_ARRAY(vertexDisplayLineArray.Element);
-
-	vertexDisplayLineArray.Element = new Array<int>[vertexArray.n];
-
-	RVL_DELETE_ARRAY(vertexDisplayLineArrayMem);
-
-	vertexDisplayLineArrayMem = new int[nLines];
-
-	int *pVertexDisplayLineIdx = vertexDisplayLineArrayMem;
-
-	iLine = 0;
-
-	int iVertex;
-
-	for (iVertex = 0; iVertex < vertexArray.n; iVertex++)
-	{
-		pVertex = vertexArray.Element[iVertex];
-
-		vertexDisplayLineArray.Element[iVertex].n = pVertex->iSurfelArray.n;
-
-		vertexDisplayLineArray.Element[iVertex].Element = pVertexDisplayLineIdx;
-
-		for (iSurfel = 0; iSurfel < pVertex->iSurfelArray.n; iSurfel++)
-		{
-			line[iLine] = vtkSmartPointer<vtkLine>::New();
-
-			line[iLine]->GetPointIds()->SetId(0, 2 * iLine);
-			line[iLine]->GetPointIds()->SetId(1, 2 * iLine + 1);
-
-			lines->InsertNextCell(line[iLine]);
-
-			colors->InsertNextTupleValue(red);
-
-			*(pVertexDisplayLineIdx++) = iLine;
-
-			iLine++;
-		}
-	}
-
-	// Add the lines to the polydata container
-	linesPolyData->SetLines(lines);
-
-	// Color the lines.
-	// SetScalars() automatically associates the values in the data array passed as parameter
-	// to the elements in the same indices of the cell data array on which it is called.
-	// This means the first component (red) of the colors array
-	// is matched with the first component of the cell array (line 0)
-	// and the second component (green) of the colors array
-	// is matched with the second component of the cell array (line 1)
-	linesPolyData->GetCellData()->SetScalars(colors);
-
-	// Setup the visualization pipeline
-	vtkSmartPointer<vtkPolyDataMapper> mapper =
-		vtkSmartPointer<vtkPolyDataMapper>::New();
-
-	mapper->SetInputData(linesPolyData);
-
-	//vtkSmartPointer<vtkActor> actor =
-	//	vtkSmartPointer<vtkActor>::New();
-	//actor->SetMapper(mapper);
-	displayData.vertices = vtkSmartPointer<vtkActor>::New();
-	displayData.vertices->SetMapper(mapper);
-
-	pVisualizer->renderer->AddActor(displayData.vertices);
-
-	delete[] line;
-}
-
 void PSGM::PaintCluster(
 	int iCluster,
 	unsigned char *color)
@@ -2466,23 +2701,7 @@ void PSGM::PaintClusterVertices(
 {
 	RECOG::PSGM_::Cluster *pCluster = clusters.Element[iCluster];
 
-	int iVertex;
-	vtkSmartPointer<vtkUnsignedCharArray> rgbPointData = rgbPointData->SafeDownCast(linesPolyData->GetCellData()->GetScalars());
-
-	int i, j;
-
-	for (i = 0; i < pCluster->iVertexArray.n; i++)
-	{
-		iVertex = pCluster->iVertexArray.Element[i];
-
-		for (j = 0; j < vertexDisplayLineArray.Element[iVertex].n; j++)
-			rgbPointData->SetTupleValue(vertexDisplayLineArray.Element[iVertex].Element[j], color);
-	}	
-}
-
-void PSGM::UpdateVertexDisplayLines()
-{
-	linesPolyData->Modified();
+	pSurfels->PaintVertices(&(pCluster->iVertexArray), color);
 }
 
 void PSGM::DisplayReferenceFrames()
@@ -2588,7 +2807,7 @@ bool RVL::RECOG::PSGM_::keyPressUserFunction(
 		{
 			pSurfels->Display(pVisualizer, pMesh);
 
-			if (pData->bVertices)
+			if (pSurfels->DisplayData.bVertices)
 			{
 				if (pData->iSelectedCluster >= 0)
 				{
@@ -2598,24 +2817,13 @@ bool RVL::RECOG::PSGM_::keyPressUserFunction(
 
 					pRecognition->PaintClusterVertices(pData->iSelectedCluster, color);
 
-					pRecognition->UpdateVertexDisplayLines();
+					pSurfels->UpdateVertexDisplayLines();
 				}
 			}
 
 			pData->iSelectedCluster = -1;
 		}
 			
-		return true;
-	}
-	else if (key == "v")
-	{
-		pData->bVertices = !pData->bVertices;
-
-		if (pData->bVertices)
-			pData->vertices->VisibilityOn();
-		else
-			pData->vertices->VisibilityOff();
-
 		return true;
 	}
 
@@ -2645,7 +2853,7 @@ bool RVL::RECOG::PSGM_::mouseRButtonDownUserFunction(
 
 		pRecognition->PaintCluster(pData->iSelectedCluster, color);
 
-		if (pData->bVertices)
+		if (pSurfels->DisplayData.bVertices)
 		{
 			RVLSET3VECTOR(color, 255, 0, 0);
 
@@ -2659,13 +2867,13 @@ bool RVL::RECOG::PSGM_::mouseRButtonDownUserFunction(
 	{
 		pRecognition->PaintCluster(iCluster, pData->selectionColor);
 
-		if (pData->bVertices)
+		if (pSurfels->DisplayData.bVertices)
 		{
 			RVLSET3VECTOR(color, 255, 255, 0);
 
 			pRecognition->PaintClusterVertices(iCluster, color);
 
-			pRecognition->UpdateVertexDisplayLines();
+			pSurfels->UpdateVertexDisplayLines();
 		}
 
 		pData->iSelectedCluster = iCluster;
@@ -2675,13 +2883,13 @@ bool RVL::RECOG::PSGM_::mouseRButtonDownUserFunction(
 		RECOG::PSGM_::Cluster *pCluster = pRecognition->clusters.Element[iCluster];
 
 		int i, iVertex;
-		RECOG::PSGM_::Vertex *pVertex;
+		SURFEL::Vertex *pVertex;
 
 		for (i = 0; i < pCluster->iVertexArray.n; i++)
 		{
 			iVertex = pCluster->iVertexArray.Element[i];
 
-			pVertex = pRecognition->vertexArray.Element[iVertex];
+			pVertex = pSurfels->vertexArray.Element[iVertex];
 
 			fprintf(fp, "%d\t%lf\t%lf\t%lf\n", iVertex, pVertex->P[0], pVertex->P[1], pVertex->P[2]);
 		}

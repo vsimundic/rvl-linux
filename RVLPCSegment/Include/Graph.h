@@ -89,7 +89,7 @@ namespace RVL
 		void Clear()
 		{
 			RVL_DELETE_ARRAY(NodeMem);
-			RVL_DELETE_ARRAY(EdgeMem);
+			RVL_DELETE_ARRAY(EdgeMem); 
 			RVL_DELETE_ARRAY(EdgePtrMem);
 		}
 

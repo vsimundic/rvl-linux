@@ -2,6 +2,8 @@
 
 //#define RVLPSGM_NORMAL_HULL
 
+#define RVLRECOGNITION_MODE_PSGM_CREATE_CTIS		2
+
 namespace RVL
 {
 	class PSGM;
@@ -10,21 +12,6 @@ namespace RVL
 	{
 		namespace PSGM_
 		{
-			struct NormalHullElement
-			{
-				float N[3];
-				float Nh[3];
-			};
-
-			struct Vertex
-			{
-				float P[3];
-				Array<NormalHullElement> normalHull;
-				Array<int> iSurfelArray;
-				Vertex *pNext;
-				bool bEdge;
-			};
-
 			struct ModelInstanceElement
 			{
 				float d;
@@ -46,7 +33,7 @@ namespace RVL
 			{
 				Array<int> iSurfelArray;
 				Array<int> iVertexArray;
-				int size;	
+				int size;
 				QList<RECOG::PSGM_::ModelInstance> modelInstanceList;
 			};
 
@@ -86,13 +73,33 @@ namespace RVL
 				SurfelGraph *pSurfels;
 				Visualizer *pVisualizer;
 				bool bClusters;
-				bool bVertices;
-				vtkSmartPointer<vtkActor> vertices;
-				vtkSmartPointer<vtkActor> referenceFrames;
 				unsigned char selectionColor[3];
 				int iSelectedCluster;
-				float normalLen;
+				vtkSmartPointer<vtkActor> referenceFrames;
 			};
+
+			//VIDOVIC
+			struct MatchInstance
+			{
+				int iScene;
+				int iModel;
+				float R[9];
+				float t[3];
+				float score;
+				float angle;
+				float distance;
+				MatchInstance *pNext;
+			};
+
+			struct FPMatch
+			{
+				int iScene;
+				int iModel;
+				float t[3];
+				float n;
+				FPMatch *pNext;
+			};
+			//END VIDOVIC
 
 			int ValidTangent(
 				int iSurfel,
@@ -128,7 +135,6 @@ namespace RVL
 			unsigned char *selectionColor);
 		void Display();
 		void DisplayModelInstance(Visualizer *pVisualizer);
-		void DisplayVertices();
 		void DisplayClusters();
 		void PaintCluster(
 			int iCluster,
@@ -136,19 +142,19 @@ namespace RVL
 		void PaintClusterVertices(
 			int iCluster,
 			unsigned char *color);
-		void UpdateVertexDisplayLines();
 		void DisplayReferenceFrames();
 		void SetSceneFileName(char *sceneFileName_);
-		void UpdateNormalHull(
-			Array<RECOG::PSGM_::NormalHullElement> &NHull,
-			float *N);
 		bool ModelExistInDB(char *modelFileName, FileSequenceLoader dbLoader); //VIDOVIC
 		void SaveModelID(FileSequenceLoader dbLoader); //VIDOVIC
 		void Learn(char *modelSequenceFileName); //VIDOVIC
 		void LoadModelDataBase(); //VIDOVIC
+		void Match(); //VIDOVIC
+		void MSTransformation(RECOG::PSGM_::ModelInstance *pMModelInstance, RECOG::PSGM_::ModelInstance *pSModelInstance, float *tBestMatch, float *R, float *t); //VIDOVIC
+		void SetNumberOfScenes(int scenesNumber); //VIDOVIC
+		void SaveMatches(); //VIDOVIC
+		void CompareMatchesToGT(ECCVGTLoader *ECCVGT, float scoreThresh, float angleThresh, float distanceThresh, float &precision, float &recall); //VIDOVIC
+		void CompareSMIMatchesToGT(ECCVGTLoader *ECCVGT, float scoreThresh, float angleThresh, float distanceThresh, float &precision, float &recall); //VIDOVIC
 	private:
-		void DetectVertices(
-			Mesh *pMesh);
 		void Clusters();
 		void CreateTemplate();
 		void FitModel(
@@ -164,7 +170,7 @@ namespace RVL
 			Surfel *pSurfel,
 			int iFirstVertex = 0);
 		float DistanceFromNormalHull(
-			Array<RECOG::PSGM_::NormalHullElement> &NHull,
+			Array<SURFEL::NormalHullElement> &NHull,
 			float *N);
 		void UpdateMeanNormal(
 			float *sumN,
@@ -183,9 +189,6 @@ namespace RVL
 		CRVLMem *pMem;
 		PlanarSurfelDetector *pSurfelDetector;
 		SurfelGraph *pSurfels;
-		QList<RECOG::PSGM_::Vertex> vertexList;
-		Array<RECOG::PSGM_::Vertex *> vertexArray;
-		Array<QList<QLIST::Index>> surfelVertexList;
 		RECOG::PSGM_::DisplayData displayData;
 		Array<RECOG::PSGM_::Cluster *> clusters;
 		int *clusterMap;
@@ -199,20 +202,25 @@ namespace RVL
 		float baseSeparationAngle;
 		float edgeTangentAngle;
 		Array<RECOG::PSGM_::ModelInstance> modelInstanceDB; //VIDOVIC
+		Array<RECOG::PSGM_::MatchInstance> matches; //VIDOVIC
+		RECOG::PSGM_::MatchInstance *pMatches; //VIDOVIC
+		QList<RECOG::PSGM_::MatchInstance> SMImatches; //VIDOVIC
+
 	private:		
-		QLIST::Index *surfelVertexMem;
 		RECOG::PSGM_::Cluster *clusterMem;
 		int *clusterSurfelMem;
 		int *clusterVertexMem;
 		//RECOG::PSGM_::ModelInstanceElement *modelInstanceMem;
-		Array<Array<int>> vertexDisplayLineArray;
-		int *vertexDisplayLineArrayMem;
-		vtkSmartPointer<vtkPolyData> linesPolyData;
 		vtkSmartPointer<vtkPolyData> referenceFramesPolyData;
 		char *sceneFileName;
-		int nVertexSurfelRelations;
 		char *modelDataBase; //VIDOVIC
 		char *modelsInDataBase; //VIDOVIC
+		int nSModelInstances; //VIDOVIC
+		int nSamples; //RANSAC //VIDOVIC
+		int stdNoise; //RANSAC //VIDOVIC
+		bool bNormalValidityTest; // VIDOVIC
+		char *sceneMIMatch; //VIDOVIC
+		int iScene; //VIDOVIC
 	};
 }
 

@@ -3,7 +3,7 @@
 
 //#include "stdafx.h"
 #include <vtkAutoInit.h>
-VTK_MODULE_INIT(vtkRenderingOpenGL2);
+VTK_MODULE_INIT(vtkRenderingOpenGL);
 VTK_MODULE_INIT(vtkInteractionStyle);
 VTK_MODULE_INIT(vtkRenderingFreeType);
 #include "RVLVTK.h"
@@ -24,6 +24,8 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 //#define RVLPCSEGMENT_DEMO_CREATE_TRAINING_DATA
 
 #define RVLPCSEGMENT_DEMO_FLAG_SAVE_PLY			0x00000001
+#define RVLPCSEGMENT_DEMO_FLAG_SAVE_SSF			0x00000002
+#define RVLPCSEGMENT_DEMO_FLAG_SEGMENTATION_GT	0x00000004
 
 using namespace RVL;
 
@@ -34,7 +36,8 @@ void CreateParamList(
 	CRVLMem *pMem,
 	char **pMeshFileName,
 	DWORD &flags,
-	bool &bSegmentToObjects)
+	bool &bSegmentToObjects,
+	bool &bObjectAggregationLevel2)
 {
 	pParamList->m_pMem = pMem;
 
@@ -43,97 +46,14 @@ void CreateParamList(
 	pParamList->Init();
 
 	pParamData = pParamList->AddParam("MeshFileName", RVLPARAM_TYPE_STRING, pMeshFileName);
-	pParamData = pParamList->AddParam("Save PLY", RVLPARAM_TYPE_ID, &flags);
+	pParamData = pParamList->AddParam("Save PLY", RVLPARAM_TYPE_FLAG, &flags);
 	pParamList->AddID(pParamData, "yes", RVLPCSEGMENT_DEMO_FLAG_SAVE_PLY);
+	pParamData = pParamList->AddParam("Save SSF", RVLPARAM_TYPE_FLAG, &flags);
+	pParamList->AddID(pParamData, "yes", RVLPCSEGMENT_DEMO_FLAG_SAVE_SSF);
+	pParamData = pParamList->AddParam("Segmentation GT", RVLPARAM_TYPE_FLAG, &flags);
+	pParamList->AddID(pParamData, "yes", RVLPCSEGMENT_DEMO_FLAG_SEGMENTATION_GT);
 	pParamData = pParamList->AddParam("SegmentToObjects", RVLPARAM_TYPE_BOOL, &bSegmentToObjects);
-}
-
-//Generate a colored opencv image based on surfel data from SSF
-cv::Mat GenColoredSurfelImgFromSSF(std::shared_ptr<SceneSegFile::SceneSegFile> ssf)
-{
-	std::shared_ptr<SceneSegFile::SegFileElement> currSSFElement;
-	std::shared_ptr<SceneSegFile::FeatureTypeInt> pixAff;
-
-	cv::Mat coloredSegLab(480, 640, CV_8UC3, cv::Scalar::all(0));
-	
-	unsigned char labSegColor[3];
-	int x = 0, y = 0;
-
-	for (int i = 0; i < ssf->elements.size(); i++)
-	{
-		currSSFElement = ssf->elements.at(i);
-
-		pixAff = std::dynamic_pointer_cast<SceneSegFile::FeatureTypeInt>(currSSFElement->features.features.at(SceneSegFile::FeaturesList::PixelAffiliation));
-		
-		//Generate surfel color
-		labSegColor[0] = rand() % 255;
-		labSegColor[1] = rand() % 255;
-		labSegColor[2] = rand() % 255;
-
-		//Set pixel colors
-		for (int k = 0; k < pixAff->size; k++)
-		{
-			y = floor(pixAff->data[k] / 640.0);
-			x = floor(pixAff->data[k] - 640.0 * y);
-			coloredSegLab.at<cv::Vec3b>(y, x)[0] = labSegColor[0];
-			coloredSegLab.at<cv::Vec3b>(y, x)[1] = labSegColor[1];
-			coloredSegLab.at<cv::Vec3b>(y, x)[2] = labSegColor[2];
-		}
-
-	}
-	//return image
-	return coloredSegLab;
-}
-
-//Generate a colored opencv image based on surfel data from SSF
-cv::Mat GenColoredSegmentationImgFromObjectGraph(SURFEL::ObjectGraph* objects)
-{
-	std::shared_ptr<SceneSegFile::SceneSegFile> ssf = objects->ssf;
-
-	std::shared_ptr<SceneSegFile::SegFileElement> currSSFElement;
-	std::shared_ptr<SceneSegFile::FeatureTypeInt> pixAff;
-
-	cv::Mat coloredSegLab(480, 640, CV_8UC3, cv::Scalar::all(0));
-
-	GRAPH::AggregateNode<SURFEL::AgEdge> *pObject;
-	QLIST::Index *piElement;
-
-	unsigned char labSegColor[3];
-	int x = 0, y = 0;
-
-	for (int iObject = 0; iObject < objects->NodeArray.n; iObject++)
-	{
-		//Generate surfel color
-		labSegColor[0] = rand() % 255;
-		labSegColor[1] = rand() % 255;
-		labSegColor[2] = rand() % 255;
-
-		pObject = objects->NodeArray.Element + iObject;
-		
-		piElement = pObject->elementList.pFirst;
-
-		while (piElement)
-		{
-			currSSFElement = ssf->elements.at(piElement->Idx);
-
-			pixAff = std::dynamic_pointer_cast<SceneSegFile::FeatureTypeInt>(currSSFElement->features.features.at(SceneSegFile::FeaturesList::PixelAffiliation));
-
-			//Set pixel colors
-			for (int k = 0; k < pixAff->size; k++)
-			{
-				y = floor(pixAff->data[k] / 640.0);
-				x = floor(pixAff->data[k] - 640.0 * y);
-				coloredSegLab.at<cv::Vec3b>(y, x)[0] = labSegColor[0];
-				coloredSegLab.at<cv::Vec3b>(y, x)[1] = labSegColor[1];
-				coloredSegLab.at<cv::Vec3b>(y, x)[2] = labSegColor[2];
-			}
-
-			piElement = piElement->pNext;
-		}
-
-	}
-	//return image
-	return coloredSegLab;
+	pParamData = pParamList->AddParam("ObjectAggregationLevel2", RVLPARAM_TYPE_BOOL, &bObjectAggregationLevel2);
 }
 
 int main(int argc, char ** argv)
@@ -161,157 +81,208 @@ int main(int argc, char ** argv)
 
 	DWORD flags = 0x00000000;
 	bool bSegmentToObjects = false;
-	bool bSegmentToObjectsFromSSF = true;
+	bool bObjectAggregationLevel2 = false;
 
 	CRVLParameterList ParamList;
 
-	CreateParamList(&ParamList, &mem0, &MeshFileName, flags, bSegmentToObjects);
+	CreateParamList(&ParamList, &mem0, &MeshFileName, flags, bSegmentToObjects, bObjectAggregationLevel2);
 
 	ParamList.LoadParams("RVLPCSegmentDemo.cfg");
 
-	// Read mesh from file.
+	if (flags & RVLPCSEGMENT_DEMO_FLAG_SAVE_SSF)
+		flags |= RVLPCSEGMENT_DEMO_FLAG_SEGMENTATION_GT;
 
-	PCLMeshBuilder meshBuilder;
+	// Segmentation to surfels.
 
-	meshBuilder.CreateParamList(&mem0);
-
-	meshBuilder.ParamList.LoadParams("RVLPCSegmentDemo.cfg");
-
-	int w = 640;
-	int h = 480;
-
-	Mesh mesh;
-	pcl::PointCloud<pcl::PointXYZRGBA>::Ptr PC(new pcl::PointCloud<pcl::PointXYZRGBA>(w, h));
-	pcl::PolygonMesh PCLMesh;
-
-	printf("Creating mesh from %s:\n", MeshFileName);
-
-	//if (mesh.Load(MeshFileName, &meshBuilder, PC, PCLMesh, (flags & RVLPCSEGMENT_DEMO_FLAG_SAVE_PLY) != 0))
-	if (meshBuilder.Load(MeshFileName, &mesh, PC, PCLMesh, (flags & RVLPCSEGMENT_DEMO_FLAG_SAVE_PLY) != 0))
-		printf("Mesh created.\n");
-	else
-		printf("ERROR: Mesh can't be created!\n");
-	
-	// Segment mesh to surfels.
+	bool bSurfelsFromSSF = false;
 
 	SurfelGraph surfels;
-
-	surfels.pMem = &mem;
-
-	surfels.Init(&mesh);
-
-	surfels.CreateParamList(&mem0);
-
-	surfels.ParamList.LoadParams("RVLPCSegmentDemo.cfg");
-
-	PlanarSurfelDetector detector;
-
-	detector.CreateParamList(&mem0);
-
-	detector.ParamList.LoadParams("RVLPCSegmentDemo.cfg");
-
-	detector.Init(&mesh, &surfels, &mem);
-
-	detector.pTimer = new CRVLTimer;
-
-	printf("Segmentation to surfels... ");
-
-	double StartTime = detector.pTimer->GetTime();
-
-	detector.Segment(&mesh, &surfels);
-
-	double ExecTime = detector.pTimer->GetTime() - StartTime;
-
-	printf("completed.\n");
-	printf("No. of surfels = %d\n", surfels.NodeArray.n);
-	printf("Total segmentation time = %lf s\n", ExecTime);
-
-	// Group surfels into objects.
-
 	SURFEL::ObjectGraph objects;
+	PlanarSurfelDetector detector;
+	Mesh mesh;
 
-	if (bSegmentToObjects)
+	char *fileExtension = RVLGETFILEEXTENSION(MeshFileName);
+
+	if (strcmp(fileExtension, "ssf") == 0)
 	{
-		printf("Grouping surfels into objects... ");
-
-		surfels.ImageAdjacency(&mesh);
-
-		Surfel *pSurfel = surfels.NodeArray.Element;
-
-		for (int i = 0; i < surfels.NodeArray.n; pSurfel++, i++)
-		{
-			if (pSurfel->size <= 1)
-				continue;
-
-			DetermineImgAdjDescriptors(pSurfel, &mesh);
-		}
-
-		objects.Create(&surfels);
-
-		objects.ComputeRelationCosts();
-
-		objects.WERSegmentation();
-
-		printf("completed.\n");
-	}
-
-	if (bSegmentToObjects && bSegmentToObjectsFromSSF)
-	{
-		SURFEL::ObjectGraph objects2;
+		// Read surfels from a ssf-file.
 
 		std::string ssfFileName(MeshFileName);
 		ssfFileName.erase(ssfFileName.find_last_of("."));
 		ssfFileName += ".ssf";
-		
+
 		std::cout << "Loading and creating ObjectGraph from SSF!" << std::endl;
-		objects2.CreateFromSSF(ssfFileName);
+		objects.CreateFromSSF(ssfFileName);
 
 		std::cout << "Compute relation cost!" << std::endl;
-		objects2.ComputeRelationCosts();
+		objects.ComputeRelationCosts();
 
-		std::cout << "WER segmentation!" << std::endl;
-		objects2.WERSegmentation();
+		bSurfelsFromSSF = true;
+	}
+	else
+	{
+		// Read mesh from file.
+
+		PCLMeshBuilder meshBuilder;
+
+		meshBuilder.CreateParamList(&mem0);
+
+		meshBuilder.ParamList.LoadParams("RVLPCSegmentDemo.cfg");
+
+		int w = 640;
+		int h = 480;
+
+		pcl::PointCloud<pcl::PointXYZRGBA>::Ptr PC(new pcl::PointCloud<pcl::PointXYZRGBA>(w, h));
+		pcl::PolygonMesh PCLMesh;
+
+		printf("Creating mesh from %s:\n", MeshFileName);
+
+		//if (mesh.Load(MeshFileName, &meshBuilder, PC, PCLMesh, (flags & RVLPCSEGMENT_DEMO_FLAG_SAVE_PLY) != 0))
+		if (meshBuilder.Load(MeshFileName, &mesh, PC, PCLMesh, (flags & RVLPCSEGMENT_DEMO_FLAG_SAVE_PLY) != 0))
+			printf("Mesh created.\n");
+		else
+			printf("ERROR: Mesh can't be created!\n");
+
+		// Segment mesh to surfels.		
+
+		surfels.pMem = &mem;
+
+		surfels.Init(&mesh);
+
+		surfels.CreateParamList(&mem0);
+
+		surfels.ParamList.LoadParams("RVLPCSegmentDemo.cfg");		
+
+		detector.CreateParamList(&mem0);
+
+		detector.ParamList.LoadParams("RVLPCSegmentDemo.cfg");
+
+		detector.Init(&mesh, &surfels, &mem);
+
+		detector.pTimer = new CRVLTimer;
+
+		printf("Segmentation to surfels... ");
+
+		double StartTime = detector.pTimer->GetTime();
+
+		detector.Segment(&mesh, &surfels);
+
+		double ExecTime = detector.pTimer->GetTime() - StartTime;
+
+		printf("completed.\n");
+		printf("No. of surfels = %d\n", surfels.NodeArray.n);
+		printf("Total segmentation time = %lf s\n", ExecTime);
+
+#ifdef RVLSURFEL_IMAGE_ADJACENCY
+		if (flags & RVLPCSEGMENT_DEMO_FLAG_SEGMENTATION_GT)
+			surfels.AssignGroundTruthSegmentation(MeshFileName, detector.minSurfelSize);
+
+		// Group surfels into objects.
+
+		if (bSegmentToObjects || (flags & RVLPCSEGMENT_DEMO_FLAG_SAVE_SSF))
+		{
+			printf("Computing realtions between adjacent surfels...");
+
+			surfels.ImageAdjacency(&mesh);
+
+			Surfel *pSurfel = surfels.NodeArray.Element;
+
+			for (int i = 0; i < surfels.NodeArray.n; pSurfel++, i++)
+			{
+				if (pSurfel->size <= 1)
+					continue;
+
+				DetermineImgAdjDescriptors(pSurfel, &mesh);
+			}
+
+			objects.Create(&surfels);
+
+			objects.ComputeRelationCosts();
+
+			printf("completed.\n");
+		}
+
+		if (flags & RVLPCSEGMENT_DEMO_FLAG_SAVE_SSF)
+		{
+			std::string ssfFileName(MeshFileName);
+			ssfFileName.erase(ssfFileName.find_last_of("."));
+			ssfFileName += ".ssf";
+
+			std::cout << "Saving SSF!" << std::endl;
+			GenerateSSF(&surfels, ssfFileName, detector.minSurfelSize, false);
+			std::cout << "Saved!" << std::endl;
+		}
+#endif
+	}	// If fileExtension != "ssf"
+
+#ifdef RVLSURFEL_IMAGE_ADJACENCY
+	if (bSegmentToObjects)
+	{
+		printf("Aggregating surfels into objects... ");
+
+		objects.WERSegmentation();
 
 		printf("completed.\n");
 
-		//Visualization
-		cv::imshow("Colored surfel image", GenColoredSurfelImgFromSSF(objects2.ssf));
-		cv::imshow("Colored segmentation image", GenColoredSegmentationImgFromObjectGraph(&objects2));
-		cv::waitKey(1);
+		if (bObjectAggregationLevel2)
+		{
+			printf("Aggregating objects (LEVEL 2)... ");
 
-		//Evaluation
-		int E[2];
-		int N = 0;
-		objects2.CalculateOverAndUnderSegmentation(E, N, false);
-		std::cout << "Oversegmenation error: " << 1 - E[0] / (float)N << std::endl;
-		std::cout << "Undersegmenation error: " << E[1] / (float)N << std::endl;
+			surfels.DetectVertices(&mesh);
+
+			printf("completed.\n");
+		}
 	}
 
-	// Display segmentation.
-
-	unsigned char SelectionColor[3];
-
-	SelectionColor[0] = 0;
-	SelectionColor[1] = 255;
-	SelectionColor[2] = 0;
-
-	surfels.NodeColors(SelectionColor);	
-
-	Visualizer visualizer;	
-
-	visualizer.Create();
-	surfels.InitDisplay(&visualizer, &mesh, &detector);
-
-	if (bSegmentToObjects)
+	if (bSurfelsFromSSF)
 	{
-		objects.InitDisplay(&visualizer, &mesh, SelectionColor);
-		objects.Display();
+		if (bSegmentToObjects)
+		{
+			//Visualization
+			cv::imshow("Colored surfel image", GenColoredSurfelImgFromSSF(objects.ssf));
+			cv::imshow("Colored segmentation image", GenColoredSegmentationImgFromObjectGraph(&objects));
+
+			//Evaluation
+			int E[2];
+			int N = 0;
+			objects.CalculateOverAndUnderSegmentation(E, N, false);
+			std::cout << "Oversegmenation error: " << 1 - E[0] / (float)N << std::endl;
+			std::cout << "Undersegmenation error: " << E[1] / (float)N << std::endl;
+
+			cv::waitKey();
+		}
 	}
 	else
-		surfels.Display(&visualizer, &mesh);
+#endif
+	{
+		// Display segmentation.
 
-	//detector.DisplaySoftEdges(&visualizer, &mesh, &surfels, SelectionColor);
-	visualizer.Run();
+		unsigned char SelectionColor[3];
+
+		SelectionColor[0] = 0;
+		SelectionColor[1] = 255;
+		SelectionColor[2] = 0;
+
+		surfels.NodeColors(SelectionColor);
+
+		Visualizer visualizer;
+
+		visualizer.Create();
+		surfels.InitDisplay(&visualizer, &mesh, &detector);
+
+#ifdef RVLSURFEL_IMAGE_ADJACENCY
+		if (bSegmentToObjects)
+		{
+			objects.InitDisplay(&visualizer, &mesh, SelectionColor);
+			objects.Display();
+		}
+		else
+#endif
+			surfels.Display(&visualizer, &mesh);
+
+		//detector.DisplaySoftEdges(&visualizer, &mesh, &surfels, SelectionColor);
+		visualizer.Run();
+	}
 
 	// free memory
 
