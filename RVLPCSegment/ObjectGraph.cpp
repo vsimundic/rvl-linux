@@ -978,7 +978,7 @@ void ObjectGraph::CalculateOverAndUnderSegmentation(int *E, int &N, bool useBack
 		if ((i == 0) && !useBackground)
 			continue;
 
-		if (i = maxBin[maxObj[i]])
+		if (i == maxBin[maxObj[i]])
 			E[0] += GTObjHistogram[maxObj[i] * GTHistSize + i];
 	}
 
