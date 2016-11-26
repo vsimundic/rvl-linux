@@ -224,7 +224,7 @@ int main(int argc, char ** argv)
 
 		printf("completed.\n");
 
-		if (bObjectAggregationLevel2)
+		if (!bSurfelsFromSSF && bObjectAggregationLevel2)
 		{
 			printf("Aggregating objects (LEVEL 2)... ");
 

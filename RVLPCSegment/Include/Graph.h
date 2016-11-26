@@ -1,6 +1,6 @@
 #pragma once
 
-//#define RVLPCSEGMENT_GRAPH_WERAGGREGATION_DEBUG
+#define RVLPCSEGMENT_GRAPH_WERAGGREGATION_DEBUG
 //#define RVLPCSEGMENT_GRAPH_WERAGGREGATION_DETAILED_DEBUG
 
 // For a given node index iNode and an edge connector pEdgePtr belonging to this node, the function returns the index of the opposite node.
@@ -68,6 +68,7 @@ namespace RVL
 		{
 			QList<QLIST::Index> elementList;
 			QList<EdgePtr2<EdgeType>> EdgeList;
+			int size;
 		};
 	}
 

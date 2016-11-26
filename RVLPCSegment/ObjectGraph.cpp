@@ -600,12 +600,14 @@ ObjectGraph::ObjectGraph()
 {
 	WERSegmentationMinCostDiff = 0.1f;
 	WERSegmentationCostResolution = 0.01f;
+	kCoverage = 0.99f;
 
 	elementMem = NULL;
 	NodeArray.Element = NULL;
 	EdgeArray.Element = NULL;
 	EdgePtrMem = NULL;
 	objectMap = NULL;
+	objectArray.Element = NULL;
 }
 
 
@@ -616,6 +618,7 @@ ObjectGraph::~ObjectGraph()
 	RVL_DELETE_ARRAY(EdgeArray.Element);
 	RVL_DELETE_ARRAY(EdgePtrMem);
 	RVL_DELETE_ARRAY(objectMap);
+	RVL_DELETE_ARRAY(objectArray.Element);
 }
 
 #ifdef RVLSURFEL_IMAGE_ADJACENCY
@@ -667,6 +670,11 @@ void ObjectGraph::Create(SurfelGraph *pSurfels_)
 		pEdgeList = &(pAgNode->EdgeList);
 
 		RVLQLIST_INIT(pEdgeList);
+
+		//if (pSurfel->size < 0)
+		//	int debug = 0;
+
+		pAgNode->size = pSurfel->size;
 	}
 
 	for (iSurfel = 0; iSurfel < pSurfels->NodeArray.n; iSurfel++)
@@ -978,7 +986,7 @@ void ObjectGraph::CalculateOverAndUnderSegmentation(int *E, int &N, bool useBack
 		if ((i == 0) && !useBackground)
 			continue;
 
-		if (i = maxBin[maxObj[i]])
+		if (i == maxBin[maxObj[i]])
 			E[0] += GTObjHistogram[maxObj[i] * GTHistSize + i];
 	}
 
@@ -1006,6 +1014,122 @@ void ObjectGraph::WERSegmentation()
 #endif
 
 	GRAPH::WERAggregation<GRAPH::AggregateNode<AgEdge>, AgEdge, GRAPH::EdgePtr2<AgEdge>, float>(*this, objectMap, elementMem, WERSegmentationMinCostDiff, WERSegmentationCostResolution);
+
+	CreateSortedObjectArray();
+
+#ifdef RVLPCSEGMENT_OBJECT_GRAPH_LOG
+	FILE *fpLog = fopen("C:\\RVL\\Debug\\WERAggGraph.txt", "w");
+
+	WriteObjectDataToFile(fpLog);
+
+	fclose(fpLog);
+#endif
+}
+
+void ObjectGraph::CreateSortedObjectArray()
+{
+	// Compute object sizes and determine the number of objects.
+
+	int *objectArray_ = new int[NodeArray.n];
+
+	objectArray.n = 0;
+
+	int nPts = 0;
+
+	int iNode;
+	GRAPH::AggregateNode<AgEdge> *pAgNode, *pElement;
+	QLIST::Index *pElementIdx;
+	int size;
+
+	for (iNode = 0; iNode < NodeArray.n; iNode++)
+	{
+		if (iNode == 1230 || iNode == 786 || iNode == 946)
+			int debug = 0;
+
+		pAgNode = NodeArray.Element + iNode;
+
+		pElementIdx = pAgNode->elementList.pFirst;
+
+		if (pElementIdx)
+		{
+			size = 0;
+
+			while (pElementIdx)
+			{
+				pElement = NodeArray.Element + pElementIdx->Idx;
+
+				size += pElement->size;
+
+				pElementIdx = pElementIdx->pNext;
+			}
+
+			pAgNode->size = size;
+
+			if (size > 0)
+				nPts += size;
+
+			if (size > 1)
+				objectArray_[objectArray.n++] = iNode;
+		}
+	}
+
+	for (iNode = 0; iNode < NodeArray.n; iNode++)
+	{
+		pAgNode = NodeArray.Element + iNode;
+
+		if (pAgNode->elementList.pFirst == NULL)
+			pAgNode->size = 0;
+	}
+
+	RVL_DELETE_ARRAY(objectArray.Element);
+
+	objectArray.Element = new int[objectArray.n];
+
+	int nCoverage = 0;
+
+	bool *bCoverage = new bool[objectArray.n];
+
+	memset(bCoverage, 0, objectArray.n * sizeof(bool));
+
+	float fnPts = (float)nPts;
+
+	int iObject = 0;
+
+	int iiNode, iiMaxObject;
+	int maxObjectSize;
+
+	while ((float)nCoverage / fnPts < kCoverage)
+	{
+		maxObjectSize = 0;
+
+		for (iiNode = 0; iiNode < objectArray.n; iiNode++)
+		{
+			if (bCoverage[iiNode])
+				continue;
+
+			iNode = objectArray_[iiNode];
+
+			pAgNode = NodeArray.Element + iNode;
+
+			if (pAgNode->size > maxObjectSize)
+			{
+				maxObjectSize = pAgNode->size;
+
+				iiMaxObject = iiNode;
+			}
+		}
+
+		objectArray.Element[iObject++] = objectArray_[iiMaxObject];
+
+		bCoverage[iiMaxObject] = true;
+
+		nCoverage += maxObjectSize;
+	}
+
+	objectArray.n = iObject;
+
+	delete[] bCoverage;
+	delete[] objectArray_;
 }
 
 void ObjectGraph::ComputeRelationCosts()
@@ -1155,6 +1279,11 @@ void ObjectGraph::WriteSurfelDataToFile(FILE *fp)
 			pEdge->iVertex[1],
 			pEdge->cost);
 	}
+}
+
+void ObjectGraph::WriteObjectDataToFile(FILE *fp)
+{
+
 }
 
 bool RVL::SURFEL::objectKeyPressUserFunction(

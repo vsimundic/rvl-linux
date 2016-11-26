@@ -926,6 +926,9 @@ cv::Mat GenColoredSegmentationImgFromObjectGraph(SURFEL::ObjectGraph* objects)
 		{
 			currSSFElement = ssf->elements.at(piElement->Idx);
 
+			if (piElement->Idx == 2)
+				int debug = 0;
+
 			pixAff = std::dynamic_pointer_cast<SceneSegFile::FeatureTypeInt>(currSSFElement->features.features.at(SceneSegFile::FeaturesList::PixelAffiliation));
 
 			//Set pixel colors

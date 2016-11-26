@@ -3,6 +3,8 @@
 #include <memory>
 #include "SceneSegFile.hpp"
 
+#define RVLPCSEGMENT_OBJECT_GRAPH_LOG
+
 namespace RVL
 {
 	namespace SURFEL
@@ -54,6 +56,7 @@ namespace RVL
 			void WERSegmentation();
 			void ComputeRelationCosts();
 			void ComputeRelationCost(AgEdge *pEdge);
+			void CreateSortedObjectArray();
 			void InitDisplay(
 				Visualizer *pVisualizer,
 				Mesh *pMesh,
@@ -63,6 +66,7 @@ namespace RVL
 				int iObject,
 				unsigned char *color);
 			void WriteSurfelDataToFile(FILE *fp);
+			void WriteObjectDataToFile(FILE *fp);
 
 		public:
 			SurfelGraph *pSurfels;
@@ -72,6 +76,8 @@ namespace RVL
 			int *objectMap;
 			std::shared_ptr<SceneSegFile::SceneSegFile> ssf;	//Filko
 			std::map<int, int> objID2idxMap; //Filko
+			Array<int> objectArray;
+			float kCoverage;
 		private:
 			QLIST::Index *elementMem;
 		};
