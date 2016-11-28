@@ -46,9 +46,13 @@ namespace SceneSegFile
 			//Iterating through parameters
 			for (int i = 0; i < this->size; i++)
 				ss << this->data[i] << " ";
-			//removig last 'space'
+
 			std::string tempStr = ss.str();
-			tempStr.erase(tempStr.end() - 1);	//Check?
+
+			if (this->size > 0)
+				//removig last 'space'
+				tempStr.erase(tempStr.end() - 1);	//Check?
+
 			return tempStr;
 		}
 		void SetData(void* data, int size)

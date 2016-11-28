@@ -557,7 +557,10 @@ void DetermineImgAdjDescriptors(Surfel *pSurfel, Mesh *mesh)
 				a[0]++;
 			
 		}
-		a[0] /= (double)boundarySize;
+		if (boundarySize > 0)
+			a[0] /= (double)boundarySize;
+		else
+			a[0] = 0.0f;
 		a[1] = 1.0 - a[0];
 
 		tempN[0] = pSurfel->N[0] - pOtherSurfel->N[0];
@@ -576,7 +579,10 @@ void DetermineImgAdjDescriptors(Surfel *pSurfel, Mesh *mesh)
 				a[2]++;
 
 		}
-		a[2] /= (double)boundarySizeOther;
+		if (boundarySizeOther > 0)
+			a[2] /= (double)boundarySizeOther;
+		else
+			a[2] = 0.0f;
 		a[3] = 1.0 - a[2];
 
 		int p, q;
