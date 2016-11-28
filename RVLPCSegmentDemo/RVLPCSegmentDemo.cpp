@@ -200,6 +200,8 @@ int main(int argc, char ** argv)
 			objects.ComputeRelationCosts();
 
 			printf("completed.\n");
+
+			objects.Debug();
 		}
 
 		if (flags & RVLPCSEGMENT_DEMO_FLAG_SAVE_SSF)

@@ -3,7 +3,7 @@
 #include <memory>
 #include "SceneSegFile.hpp"
 
-#define RVLPCSEGMENT_OBJECT_GRAPH_LOG
+//#define RVLPCSEGMENT_OBJECT_GRAPH_LOG
 
 namespace RVL
 {
@@ -32,6 +32,14 @@ namespace RVL
 			bool bObjects;
 		};
 
+		struct ObjectEdgeData
+		{
+			float PContinuous;
+			float PConvex;
+			float PClean;
+			float P;
+		};
+
 		bool objectKeyPressUserFunction(
 			Mesh *pMesh,
 			SurfelGraph *pSurfels,
@@ -55,7 +63,9 @@ namespace RVL
 			void CalculateOverAndUnderSegmentation(int *E, int &N, bool useBackground = true);	//Filko
 			void WERSegmentation();
 			void ComputeRelationCosts();
-			void ComputeRelationCost(AgEdge *pEdge);
+			void ComputeRelationCost(
+				AgEdge *pEdge,
+				ObjectEdgeData &data);
 			void CreateSortedObjectArray();
 			void InitDisplay(
 				Visualizer *pVisualizer,
@@ -67,6 +77,7 @@ namespace RVL
 				unsigned char *color);
 			void WriteSurfelDataToFile(FILE *fp);
 			void WriteObjectDataToFile(FILE *fp);
+			void Debug();
 
 		public:
 			SurfelGraph *pSurfels;
