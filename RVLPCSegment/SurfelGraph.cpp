@@ -423,7 +423,8 @@ void SurfelGraph::AssignGroundTruthSegmentation(
 	for (int i = 0; i < NodeArray.n; pCurrSurfel++, i++)
 	{
 		pCurrSurfel->ObjectID = -1;
-		if ((pCurrSurfel->size == 1) || (pCurrSurfel->size == 0) || pCurrSurfel->bEdge || pCurrSurfel->size < minSurfelSize)
+		//if ((pCurrSurfel->size == 1) || (pCurrSurfel->size == 0) || pCurrSurfel->bEdge || pCurrSurfel->size < minSurfelSize)
+		if ((pCurrSurfel->size <= 1) || pCurrSurfel->bEdge)
 			continue;
 		/*pCurrSurfel->ObjectID = DetPrimaryGTObj(pCurrSurfel, GTlabImg, 256);*/ //256 objects because background has label of 255
 		SetPrimaryGTObj(pCurrSurfel, GTlabImg, maxLab + 1); //maxLab + 1 because the last GT object label has to be maxLab and not maxLab - 1

@@ -92,12 +92,15 @@ int main(int argc, char ** argv)
 	if (flags & RVLPCSEGMENT_DEMO_FLAG_SAVE_SSF)
 		flags |= RVLPCSEGMENT_DEMO_FLAG_SEGMENTATION_GT;
 
-	// Segmentation to surfels.
+	SURFEL::ObjectGraph objects;
+
+	objects.CreateParamList(&mem0);
+
+	objects.ParamList.LoadParams("RVLPCSegmentDemo.cfg");
 
 	bool bSurfelsFromSSF = false;
 
 	SurfelGraph surfels;
-	SURFEL::ObjectGraph objects;
 	PlanarSurfelDetector detector;
 	Mesh mesh;
 
@@ -111,10 +114,10 @@ int main(int argc, char ** argv)
 		ssfFileName.erase(ssfFileName.find_last_of("."));
 		ssfFileName += ".ssf";
 
-		std::cout << "Loading and creating ObjectGraph from SSF!" << std::endl;
+		std::cout << "Loading and creating ObjectGraph from " << ssfFileName.data() << "." << std::endl;
 		objects.CreateFromSSF(ssfFileName);
 
-		std::cout << "Compute relation cost!" << std::endl;
+		std::cout << "Compute relation cost." << std::endl;
 		objects.ComputeRelationCosts();
 
 		bSurfelsFromSSF = true;
@@ -219,7 +222,7 @@ int main(int argc, char ** argv)
 
 #ifdef RVLSURFEL_IMAGE_ADJACENCY
 	if (bSegmentToObjects)
-	{
+	{	
 		printf("Aggregating surfels into objects... ");
 
 		objects.WERSegmentation();
@@ -248,8 +251,8 @@ int main(int argc, char ** argv)
 			int E[2];
 			int N = 0;
 			objects.CalculateOverAndUnderSegmentation(E, N, false);
-			std::cout << "Oversegmenation error: " << 1 - E[0] / (float)N << std::endl;
-			std::cout << "Undersegmenation error: " << E[1] / (float)N << std::endl;
+			std::cout << "Oversegmenation error: " << 100.0f * (1 - E[0] / (float)N) << "%" << std::endl;
+			std::cout << "Undersegmenation error: " << 100.0f * E[1] / (float)N << "%" << std::endl;
 
 			cv::waitKey();
 		}

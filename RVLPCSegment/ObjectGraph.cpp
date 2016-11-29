@@ -601,6 +601,7 @@ ObjectGraph::ObjectGraph()
 	WERSegmentationMinCostDiff = 0.1f;
 	WERSegmentationCostResolution = 0.01f;
 	kCoverage = 0.99f;
+	alpha = 0.5f;
 
 	elementMem = NULL;
 	NodeArray.Element = NULL;
@@ -619,6 +620,17 @@ ObjectGraph::~ObjectGraph()
 	RVL_DELETE_ARRAY(EdgePtrMem);
 	RVL_DELETE_ARRAY(objectMap);
 	RVL_DELETE_ARRAY(objectArray.Element);
+}
+
+void ObjectGraph::CreateParamList(CRVLMem *pMem)
+{
+	ParamList.m_pMem = pMem;
+
+	RVLPARAM_DATA *pParamData;
+
+	ParamList.Init();
+
+	pParamData = ParamList.AddParam("ObjectGraph.alpha", RVLPARAM_TYPE_FLOAT, &alpha);
 }
 
 #ifdef RVLSURFEL_IMAGE_ADJACENCY
@@ -931,7 +943,6 @@ void ObjectGraph::CalculateOverAndUnderSegmentation(int *E, int &N, bool useBack
 				GTObjHistogram[iObject * GTHistSize + i] += GTObjHistogram_surfel->data[i];
 			piElement = piElement->pNext;
 		}
-
 	}
 	
 	E[0] = 0;	//Oversegmentation values
@@ -1180,7 +1191,6 @@ void ObjectGraph::ComputeRelationCost(
 	float depthStepExtThr = scale * 0.025f;
 	float concaveAngleThr = 45.0f * DEG2RAD;
 	float concaveMinCost = 0.3f;
-	float alpha = 0.5f;
 
 	float f1 = pEdge->desc.cupyDescriptor[0];
 	float f2 = pEdge->desc.cupyDescriptor[1];
