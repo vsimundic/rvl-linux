@@ -3,7 +3,7 @@
 
 //#include "stdafx.h"
 #include <vtkAutoInit.h>
-VTK_MODULE_INIT(vtkRenderingOpenGL);
+VTK_MODULE_INIT(vtkRenderingOpenGL2);
 VTK_MODULE_INIT(vtkInteractionStyle);
 VTK_MODULE_INIT(vtkRenderingFreeType);
 #include "RVLVTK.h"
@@ -40,7 +40,10 @@ void CreateParamList(
 	char **pMeshFileName,
 	DWORD &flags,
 	bool &bSegmentToObjects,
-	bool &bObjectAggregationLevel2);
+	bool &bObjectAggregationLevel2,
+	char **pSVMClassifierParamsFileName,
+	char **pSequenceFileName,
+	char **pSegmentationResultsFileName);
 
 #ifdef RVLSURFEL_IMAGE_ADJACENCY
 //Returns surfels Label ID with most object support
@@ -706,6 +709,9 @@ void RunSeg2Bench(bool save)
 	// Read parameters from a configuration file.
 
 	char *MeshFileName = NULL;
+	char *SVMClassifierParamsFileName = NULL;
+	char *SequenceFileName = NULL;
+	char *SegmentationResultsFileName = NULL;
 
 	DWORD flags = 0x00000000;
 	bool bSegmentToObjects = false;
@@ -713,7 +719,9 @@ void RunSeg2Bench(bool save)
 
 	CRVLParameterList ParamList;
 
-	CreateParamList(&ParamList, &mem0, &MeshFileName, flags, bSegmentToObjects, bObjectAggregationLevel2);
+	//CreateParamList(&ParamList, &mem0, &MeshFileName, flags, bSegmentToObjects, bObjectAggregationLevel2);
+	CreateParamList(&ParamList, &mem0, &MeshFileName, flags, bSegmentToObjects, bObjectAggregationLevel2, &SVMClassifierParamsFileName, &SequenceFileName, &SegmentationResultsFileName);
+
 
 	ParamList.LoadParams("RVLPCSegmentDemo.cfg");
 

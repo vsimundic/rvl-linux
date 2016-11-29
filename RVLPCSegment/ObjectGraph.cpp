@@ -1187,13 +1187,19 @@ void ObjectGraph::ComputeRelationCost(
 	float f3 = pEdge->desc.cupyDescriptor[2];
 	float f4 = pEdge->desc.cupyDescriptor[3];
 
-	data.PContinuous = (f4 <= depthStepIntThr ? 1.0f : (f4 <= depthStepExtThr ? (depthStepExtThr - f4) / (depthStepExtThr - depthStepIntThr) : 0.0f));
+	//data.PContinuous = (f4 <= depthStepIntThr ? 1.0f : (f4 <= depthStepExtThr ? (depthStepExtThr - f4) / (depthStepExtThr - depthStepIntThr) : 0.0f));
 
-	data.PConvex = (f1 >= 0 ? 1.0f : (f1 >= -concaveAngleThr ? concaveMinCost + (1.0f - concaveMinCost) * (concaveAngleThr + f1) / concaveAngleThr : concaveMinCost));
+	//data.PConvex = (f1 >= 0 ? 1.0f : (f1 >= -concaveAngleThr ? concaveMinCost + (1.0f - concaveMinCost) * (concaveAngleThr + f1) / concaveAngleThr : concaveMinCost));
 
-	data.PClean = 0.5f + 0.5f * f2;
+	//data.PClean = 0.5f + 0.5f * f2;
 
-	data.P = RVLMIN(data.PContinuous, RVLMIN(data.PConvex, data.PClean));
+	//data.P = RVLMIN(data.PContinuous, RVLMIN(data.PConvex, data.PClean));
+
+	//Nyarko - SVM Classification (courtesy of Grbiæ)
+	data.PContinuous = -1.0;
+	data.PConvex = -1.0;
+	data.PClean = -1.0;
+	data.P = this->pSVMClassifier->makeClassification(pEdge->desc.cupyDescriptor, 4);
 
 	pEdge->cost = data.P;
 
@@ -1353,6 +1359,13 @@ void ObjectGraph::Debug()
 		}
 	}
 }
+
+// Initialize SVM Classifier
+void ObjectGraph::InitSVMClassifier(char *svmParamsFileName)
+{
+	this->pSVMClassifier = new SVMClassifier(svmParamsFileName);
+}
+
 
 bool RVL::SURFEL::objectKeyPressUserFunction(
 	Mesh *pMesh,

@@ -2,6 +2,7 @@
 #include "Graph.h"
 #include <memory>
 #include "SceneSegFile.hpp"
+#include "SVMClassifier.h"
 
 //#define RVLPCSEGMENT_OBJECT_GRAPH_LOG
 
@@ -77,6 +78,7 @@ namespace RVL
 				unsigned char *color);
 			void WriteSurfelDataToFile(FILE *fp);
 			void WriteObjectDataToFile(FILE *fp);
+			void InitSVMClassifier(char *svmParamsFileName);	//Nyarko
 			void Debug();
 
 		public:
@@ -87,6 +89,7 @@ namespace RVL
 			int *objectMap;
 			std::shared_ptr<SceneSegFile::SceneSegFile> ssf;	//Filko
 			std::map<int, int> objID2idxMap; //Filko
+			SVMClassifier *pSVMClassifier;  //Nyarko
 			Array<int> objectArray;
 			float kCoverage;
 		private:
