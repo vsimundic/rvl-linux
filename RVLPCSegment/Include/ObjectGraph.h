@@ -59,6 +59,7 @@ namespace RVL
 		public:
 			ObjectGraph();
 			virtual ~ObjectGraph();
+			void CreateParamList(CRVLMem *pMem);
 			void Create(SurfelGraph *pSurfels_);
 			void CreateFromSSF(std::string ssfFileName);	//Filko
 			void CalculateOverAndUnderSegmentation(int *E, int &N, bool useBackground = true);	//Filko
@@ -82,6 +83,7 @@ namespace RVL
 			void Debug();
 
 		public:
+			CRVLParameterList ParamList;
 			SurfelGraph *pSurfels;
 			float WERSegmentationMinCostDiff;
 			float WERSegmentationCostResolution;
@@ -92,6 +94,7 @@ namespace RVL
 			SVMClassifier *pSVMClassifier;  //Nyarko
 			Array<int> objectArray;
 			float kCoverage;
+			float alpha;
 		private:
 			QLIST::Index *elementMem;
 		};

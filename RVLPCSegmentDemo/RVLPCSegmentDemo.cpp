@@ -183,7 +183,7 @@ void RunMainProg(CRVLMem *mem0, CRVLMem *mem, DWORD flags, char *MeshFilePathNam
 		ssfFileName.erase(ssfFileName.find_last_of("."));
 		ssfFileName += ".ssf";
 
-		std::cout << "Loading and creating ObjectGraph from SSF!" << std::endl;
+		std::cout << "Loading and creating ObjectGraph from " << ssfFileName.data() << "." << std::endl;
 		objects.CreateFromSSF(ssfFileName);
 
 		std::cout << "Initializing SVM Classifier!" << std::endl;
@@ -297,7 +297,7 @@ void RunMainProg(CRVLMem *mem0, CRVLMem *mem, DWORD flags, char *MeshFilePathNam
 
 #ifdef RVLSURFEL_IMAGE_ADJACENCY
 	if (bSegmentToObjects)
-	{
+	{	
 		printf("Aggregating surfels into objects... ");
 
 		objects.WERSegmentation();
@@ -323,8 +323,8 @@ void RunMainProg(CRVLMem *mem0, CRVLMem *mem, DWORD flags, char *MeshFilePathNam
 			int E[2];
 			int N = 0;
 			objects.CalculateOverAndUnderSegmentation(E, N, false);
-			std::cout << "Oversegmenation error: " << 1 - E[0] / (float)N << std::endl;
-			std::cout << "Undersegmenation error: " << E[1] / (float)N << std::endl;
+			std::cout << "Oversegmenation error: " << 100.0f * (1 - E[0] / (float)N) << "%" << std::endl;
+			std::cout << "Undersegmenation error: " << 100.0f * E[1] / (float)N << "%" << std::endl;
 
 			fprintf(fp, "%s\t%d\t%d\t%d\n", fileName, E[0], E[1], N);
 
@@ -380,5 +380,8 @@ void RunMainProg(CRVLMem *mem0, CRVLMem *mem, DWORD flags, char *MeshFilePathNam
 	if (detector.pTimer)
 		delete detector.pTimer;
 
+	return 0;
+#endif
+}
 
 }
