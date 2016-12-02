@@ -27,6 +27,12 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 #include "vtkGeometryFilter.h"
 #include "vtkAppendPolyData.h"
 #include "vtkAlgorithm.h"
+#include "vtkCamera.h"
+#include "vtkWindowToImageFilter.h"
+#include "vtkHull.h"
+#include "vtkSphereSource.h"
+#include "vtkPlanes.h"
+#include <vtkPlaneSource.h>
 
 //#define RVLPCSEGMENT_DEMO_CREATE_TRAINING_DATA
 
@@ -187,7 +193,251 @@ void testvtkdistance()
 	interactor->Start();
 }
 
-void ObjectAggregationLevel2(SURFEL::ObjectGraph *ograph, RVL::SurfelGraph *sgraph, RVL::Mesh *mesh)
+cv::Mat GenerateVTKDepthImage(vtkSmartPointer<vtkRenderWindow> renWin, int width, int height, double fx, double fy, double cx, double cy, double horizFOV, double vertFOV, double clipnear, double clipfar)
+{
+	//opencv
+	cv::Mat renderedDepthImg(height, width, CV_16UC1, cv::Scalar::all(0));
+
+	// create the camera
+	vtkSmartPointer<vtkCamera> camera = vtkSmartPointer<vtkCamera>::New();
+
+	// the camera can stay at the origin because we are transforming the scene objects
+	camera->SetPosition(0, 0, 0);
+	//// look in the +Z direction of the camera coordinate system
+	camera->SetFocalPoint(0, 0, 1);
+	//// the camera Y axis points down
+	camera->SetViewUp(0, -1, 0);
+	//// ensure the relevant range of depths are rendered
+	camera->SetClippingRange(clipnear, clipfar);
+	//// convert the principal point to window center (normalized coordinate system) and set it
+	double wcx = -2 * (cx - width / 2) / width;
+	double wcy = 2 * (cy - height / 2) / height;
+	camera->SetWindowCenter(wcx, wcy);
+	// convert the focal length to view angle and set it
+	double view_angle = 57.2958 * (2.0 * atan2(height / 2.0, fy));
+	camera->SetViewAngle(view_angle);
+
+	//get old camera
+	vtkSmartPointer<vtkCamera> oldCamera = renWin->GetRenderers()->GetFirstRenderer()->GetActiveCamera();
+	int oldwidth = renWin->GetSize()[0];
+	int oldheight = renWin->GetSize()[1];
+	renWin->SetSize(width, height);
+	renWin->GetRenderers()->GetFirstRenderer()->SetActiveCamera(camera);
+	renWin->Render();
+
+	float *d = renWin->GetZbufferData(0, 0, width - 1, 479);
+	double tempd;
+	for (int y = 0; y < height; y++)
+	{
+		for (int x = 0; x < width; x++)
+		{
+			if (d[y * width + x] == 1.0) //Check if valid
+			{
+				renderedDepthImg.at<uint16_t>(y, x) = 0;
+				continue;
+			}
+			tempd = (d[y * width + x] * (1.0 / clipfar - 1.0 / clipnear) * clipnear + 1.0) / clipnear;
+			renderedDepthImg.at<uint16_t>(y, x) = (uint16_t)((1.0 / tempd) * 1000); //in milimeters
+		}
+	}
+
+	//returning to old
+	renWin->GetRenderers()->GetFirstRenderer()->SetActiveCamera(oldCamera);
+	renWin->SetSize(oldwidth, oldheight);
+	renWin->Render();
+
+	cv::flip(renderedDepthImg, renderedDepthImg, 0); //flip image
+	
+	/*//useful for depth image visualization
+	cv::Mat depthMat(height, width, CV_8UC1);
+	double minVal, maxVal;
+	cv::minMaxLoc(renderedDepthImg, &minVal, &maxVal);
+	renderedDepthImg.convertTo(depthMat, CV_8U, -255.0f / maxVal, 255.0f);
+	cv::imshow("Rendered depth image", depthMat);
+	cv::waitKey(1);*/
+
+	return renderedDepthImg;
+}
+
+cv::Mat GenerateVTKDepthImage_Kinect(vtkSmartPointer<vtkRenderWindow> renWin, double clipnear, double clipfar)
+{
+	int width = 640;
+	int height = 480; 
+	double fx = 581.45624912987f;
+	double fy = 543.1221626989097f;
+	double cx = 317.2825290065861f;
+	double cy = 240.955527515504f;
+	double horizFOV = 58.5;
+	double vertFOV = 46.6;
+	
+	//opencv
+	cv::Mat renderedDepthImg(height, width, CV_16UC1, cv::Scalar::all(0));
+
+	// create the camera
+	vtkSmartPointer<vtkCamera> camera = vtkSmartPointer<vtkCamera>::New();
+
+	// the camera can stay at the origin because we are transforming the scene objects
+	camera->SetPosition(0, 0, 0);
+	//// look in the +Z direction of the camera coordinate system
+	camera->SetFocalPoint(0, 0, 1);
+	//// the camera Y axis points down
+	camera->SetViewUp(0, -1, 0);
+	//// ensure the relevant range of depths are rendered
+	camera->SetClippingRange(clipnear, clipfar);
+	//// convert the principal point to window center (normalized coordinate system) and set it
+	double wcx = -2 * (cx - width / 2) / width;
+	double wcy = 2 * (cy - height / 2) / height;
+	camera->SetWindowCenter(wcx, wcy);
+	// convert the focal length to view angle and set it
+	double view_angle = 57.2958 * (2.0 * atan2(height / 2.0, fy));
+	camera->SetViewAngle(view_angle);//vertical 46.6
+
+	//get old camera
+	vtkSmartPointer<vtkCamera> oldCamera = renWin->GetRenderers()->GetFirstRenderer()->GetActiveCamera();
+	int oldwidth = renWin->GetSize()[0];
+	int oldheight = renWin->GetSize()[1];
+	renWin->SetSize(width, height);
+	renWin->GetRenderers()->GetFirstRenderer()->SetActiveCamera(camera);
+	renWin->Render();
+
+	float *d = renWin->GetZbufferData(0, 0, width - 1, height - 1);
+	double tempd;
+	for (int y = 0; y < height; y++)
+	{
+		for (int x = 0; x < width; x++)
+		{
+			if (d[y * width + x] == 1.0) //Check if valid
+			{
+				renderedDepthImg.at<uint16_t>(y, x) = 0;
+				continue;
+			}
+			tempd = (d[y * width + x] * (1.0 / clipfar - 1.0 / clipnear) * clipnear + 1.0) / clipnear;
+			renderedDepthImg.at<uint16_t>(y, x) = (uint16_t)((1.0 / tempd) * 1000); //in milimeters
+		}
+	}
+
+	//returning to old
+	renWin->GetRenderers()->GetFirstRenderer()->SetActiveCamera(oldCamera);
+	renWin->SetSize(oldwidth, oldheight);
+
+	cv::flip(renderedDepthImg, renderedDepthImg, 0); //flip vertically
+
+	return renderedDepthImg;
+}
+
+//void TestVTK_Plane_z_buffer(float distancefromZ, int width, int height, float fx, float fy, float cx, float cy, float horizFOV, float clipnear, float clipfar)
+//{
+//	// Initialize VTK.
+//	vtkSmartPointer<vtkRenderer> renderer = vtkSmartPointer<vtkRenderer>::New();
+//	vtkSmartPointer<vtkRenderWindow> window = vtkSmartPointer<vtkRenderWindow>::New();
+//	vtkSmartPointer<vtkRenderWindowInteractor> interactor = vtkSmartPointer<vtkRenderWindowInteractor>::New();
+//	window->AddRenderer(renderer);
+//	window->SetSize(640, 480);
+//	interactor->SetRenderWindow(window);
+//	vtkSmartPointer<vtkInteractorStyleTrackballCamera> style = vtkSmartPointer<vtkInteractorStyleTrackballCamera>::New();
+//	interactor->SetInteractorStyle(style);
+//	renderer->SetBackground(0.5294, 0.8078, 0.9803);
+//
+//	vtkSmartPointer<vtkPlaneSource> plane = vtkSmartPointer<vtkPlaneSource>::New();
+//	/*plane->SetCenter(0.0, 0.0, distancefromZ);*/
+//	plane->SetNormal(0.0, 0.0, -1.0);
+//	plane->SetOrigin(-500, -500, distancefromZ);
+//	plane->SetPoint1(-500, 500, distancefromZ);
+//	plane->SetPoint2(500, -500, distancefromZ);
+//	plane->SetResolution(100, 100);
+//	plane->Update();
+//
+//	vtkSmartPointer<vtkPolyDataMapper> planeMap = vtkSmartPointer<vtkPolyDataMapper>::New();
+//	planeMap->SetInputConnection(plane->GetOutputPort());
+//	vtkSmartPointer<vtkActor> planeActor = vtkSmartPointer<vtkActor>::New();
+//	planeActor->SetMapper(planeMap);
+//	renderer->AddActor(planeActor);
+//
+//	//opencv
+//	cv::Mat renderedDepthImg(480, 640, CV_16UC1, cv::Scalar::all(0));
+//
+//	// create the camera
+//	vtkSmartPointer<vtkCamera> camera = vtkSmartPointer<vtkCamera>::New();
+//	//camera->ParallelProjectionOn();
+//	//camera->SetParallelScale(0.5);
+//	//camera->DeepCopy(renWin->GetRenderers()->GetFirstRenderer()->GetActiveCamera());
+//	//// convert camera rotation and translation into a 4x4 homogeneous transformation matrix
+//	//vtkSmartPointer<vtkMatrix4x4> camera_RT = make_transform(camera_rot, camera_trans);
+//	//// apply the transform to scene objects
+//	//camera->SetModelTransformMatrix(camera_RT);
+//
+//	// the camera can stay at the origin because we are transforming the scene objects
+//	camera->SetPosition(0, 0, 0);
+//	//// look in the +Z direction of the camera coordinate system
+//	camera->SetFocalPoint(0, 0, 1);
+//	//// the camera Y axis points down
+//	camera->SetViewUp(0, -1, 0);
+//	//// ensure the relevant range of depths are rendered
+//	camera->SetClippingRange(clipnear, clipfar);
+//	//// convert the principal point to window center (normalized coordinate system) and set it
+//	double wcx = -2 * (cx - width / 2) / width;
+//	double wcy = 2 * (cy - height / 2) / height;
+//	camera->SetWindowCenter(wcx, wcy);
+//	// convert the focal length to view angle and set it
+//	double view_angle = 57.2958 * (2.0 * atan2(height / 2.0, fy));
+//	//std::cout << "view_angle = " << view_angle << std::endl;
+//	camera->SetViewAngle(view_angle);//vertical 46,6
+//
+//	window->GetRenderers()->GetFirstRenderer()->SetActiveCamera(camera);
+//	window->Render();
+//	window->GetInteractor()->Start();
+//	/*vtkSmartPointer<vtkWindowToImageFilter> imgf = vtkSmartPointer<vtkWindowToImageFilter>::New();
+//	imgf->SetInputBufferTypeToZBuffer();
+//	imgf->SetInput(renWin);
+//	imgf->Update();
+//	imgf->GetOutput();
+//	vtkSmartPointer<vtkImageData> imgdata = imgf->GetOutput();*/
+//
+//
+//	float *d = window->GetZbufferData(0, 0, 639, 479);
+//	for (int y = 0; y < 480; y++)
+//	{
+//		for (int x = 0; x < 640; x++)
+//		{
+//			renderedDepthImg.at<uint16_t>(y, x) = (uint16_t)((clipnear + (d[y * 640 + x] * (clipfar - clipnear))) * 1000);// (uint16_t)static_cast<double*>(imgdata->GetScalarPointer(x, y, 0)); //static_cast<float*>(imgdata->GetScalarPointer(x, y, 0))[0] * 1000;//  d[y * 640 + x] * 1000;//
+//		}
+//	}
+//
+//	/*cv::flip(renderedDepthImg, renderedDepthImg, 0);
+//	cv::Mat depthMat(480, 640, CV_8UC1);
+//	double minVal, maxVal;
+//	cv::minMaxLoc(renderedDepthImg, &minVal, &maxVal);
+//	renderedDepthImg.convertTo(depthMat, CV_8U, -255.0f / maxVal, 255.0f);
+//	cv::imshow("Rendered depth image", depthMat);
+//	cv::waitKey();*/
+//}
+
+cv::Mat GenerateVTKPolyDataDepthImage_Kinect(vtkSmartPointer<vtkPolyData> pd)
+{
+	// Initialize VTK.
+	vtkSmartPointer<vtkRenderer> renderer = vtkSmartPointer<vtkRenderer>::New();
+	vtkSmartPointer<vtkRenderWindow> renWin = vtkSmartPointer<vtkRenderWindow>::New();
+	renWin->OffScreenRenderingOn(); //OFF-SCREEN RENDERING
+	renWin->AddRenderer(renderer);
+	renWin->SetSize(640, 480); //HARDCODED 640X480 IMAGE
+
+	//adding polydata actor
+	vtkSmartPointer<vtkPolyDataMapper>	map = vtkSmartPointer<vtkPolyDataMapper>::New();
+	map->SetInputData(pd);
+	vtkSmartPointer<vtkActor> act = vtkSmartPointer<vtkActor>::New();
+	act->SetMapper(map);
+	renderer->AddActor(act);
+
+	//find zbounds
+	double *bounds;
+	pd->GetPoints()->ComputeBounds(); //just in case
+	bounds = pd->GetPoints()->GetBounds(); // (Xmin, Xmax) = (bounds[0], bounds[1]), (Ymin, Ymax) = (bounds[2], bounds[3]), (Zmin, Zmax) = (bounds[4], bounds[5])
+
+	//Generate and return Kinect-like depth image
+	return GenerateVTKDepthImage_Kinect(renWin, bounds[4], bounds[5]);
+}
+
+void ObjectAggregationLevel2(SURFEL::ObjectGraph *ograph, RVL::SurfelGraph *sgraph, RVL::Mesh *mesh, std::string MeshFileName)
 {
 	// Initialize VTK.
 	vtkSmartPointer<vtkRenderer> renderer = vtkSmartPointer<vtkRenderer>::New();
@@ -280,13 +530,99 @@ void ObjectAggregationLevel2(SURFEL::ObjectGraph *ograph, RVL::SurfelGraph *sgra
 	}
 
 	//Testing possible convex hull and checking distance to surface
-	vtkSmartPointer<vtkAppendPolyData> append = vtkSmartPointer<vtkAppendPolyData>::New();
+	/*vtkSmartPointer<vtkAppendPolyData> append = vtkSmartPointer<vtkAppendPolyData>::New();
 	append->SetOutputPointsPrecision(vtkAlgorithm::DesiredOutputPrecision::DEFAULT_PRECISION);
 	vtkSmartPointer<vtkDelaunay3D> d3d = vtkSmartPointer<vtkDelaunay3D>::New();
 	vtkSmartPointer<vtkGeometryFilter> gf = vtkSmartPointer<vtkGeometryFilter>::New();
 	vtkSmartPointer<vtkImplicitPolyDataDistance> implicitPolyDataDistance = vtkSmartPointer<vtkImplicitPolyDataDistance>::New();
 	float tempdist;
-	float maxdist;
+	float maxdist;*/
+	//for (int i = 0; i < vtkPCobjectlist.size() - 1; i++)
+	//{
+	//	for (int k = i + 1; k < vtkPCobjectlist.size(); k++)
+	//	{
+	//		append->RemoveAllInputs(); //from previous iteration
+	//		//add imputs and merge
+	//		append->AddInputData(vtkPCobjectlist.at(i));
+	//		append->AddInputData(vtkPCobjectlist.at(k));
+	//		append->Update();
+	//		//run delaunay 3D algorithm and extract geometry
+	//		d3d->SetInputData(append->GetOutput());
+	//		d3d->Update();
+	//		gf->SetInputConnection(d3d->GetOutputPort());
+	//		gf->Update();
+	//		if (gf->GetOutput()->GetNumberOfPolys() == 0)
+	//		{
+	//			std::cout << std::endl << "Combination " << i << ", " << k << " doesn't have polygons!!" << " Number of points: " << vtkPCobjectlist.at(i)->GetNumberOfPoints() << ", " << vtkPCobjectlist.at(k)->GetNumberOfPoints() << std::endl;
+	//			continue;
+	//		}
+	//		//Check distances
+	//		//one way
+	//		implicitPolyDataDistance->SetInput(gf->GetOutput());
+	//		points = vtkPCobjectlist.at(i)->GetPoints();
+	//		maxdist = 0;
+	//		for (int p = 0; p < points->GetNumberOfPoints(); p++)
+	//		{
+	//			tempdist = abs(implicitPolyDataDistance->EvaluateFunction(points->GetPoint(p)));
+	//			if (tempdist > maxdist)
+	//				maxdist = tempdist;
+	//		}
+	//		std::cout << std::endl << "Max dist for combination " << i << ", " << k << ", using " << i << "'s points: " << maxdist << std::endl;
+	//		//other way
+	//		points = vtkPCobjectlist.at(k)->GetPoints();
+	//		maxdist = 0;
+	//		for (int p = 0; p < points->GetNumberOfPoints(); p++)
+	//		{
+	//			tempdist = abs(implicitPolyDataDistance->EvaluateFunction(points->GetPoint(p)));
+	//			if (tempdist > maxdist)
+	//				maxdist = tempdist;
+	//		}
+	//		std::cout << std::endl << "Max dist for combination " << i << ", " << k << ", using " << k << "'s points: " << maxdist << std::endl;
+
+	//		////debug (visualization of specific combination)
+	//		//if ((i == 3) && (k == 6))
+	//		//{
+	//		//	vtkSmartPointer<vtkPolyDataMapper> mapD;
+	//		//	vtkSmartPointer<vtkActor> actD;
+	//		//	verts = vtkSmartPointer<vtkCellArray>::New();
+	//		//	for (int kk = 0; kk < gf->GetOutput()->GetNumberOfPoints(); kk++)
+	//		//	{
+	//		//		verts->InsertNextCell(1);
+	//		//		verts->InsertCellPoint(kk);
+	//		//	}
+	//		//	polyData = vtkSmartPointer<vtkPolyData>::New();
+	//		//	polyData->DeepCopy(gf->GetOutput());
+	//		//	polyData->SetVerts(verts);
+	//		//	mapD = vtkSmartPointer<vtkPolyDataMapper>::New();
+	//		//	mapD->SetInputData(polyData);
+	//		//	/*vtkSmartPointer<vtkDataSetMapper> delaunayMapper = vtkSmartPointer<vtkDataSetMapper>::New();
+	//		//	delaunayMapper->SetInputConnection(d3d->GetOutputPort());*/
+	//		//	actD = vtkSmartPointer<vtkActor>::New();
+	//		//	actD->SetMapper(mapD);
+	//		//	actD->GetProperty()->SetPointSize(5);
+	//		//	renderer->AddActor(actD);
+
+	//		//	//renderer->ResetCamera();
+	//		//	//renderer->TwoSidedLightingOff();
+	//		//	//window->Render();
+	//		//	//interactor->Start();
+	//		//}
+	//	}
+	//}
+
+	//Testing possible convex hull (split objects) by comparing rendered and measured depth images
+	std::string depthImgFileName(MeshFileName);
+	depthImgFileName.erase(depthImgFileName.find_last_of("."));
+	depthImgFileName += "d.png";
+	cv::Mat depthImg = cv::imread(depthImgFileName, cv::ImreadModes::IMREAD_ANYDEPTH);
+	cv::Mat renderedDepthImg;
+	vtkSmartPointer<vtkAppendPolyData> append = vtkSmartPointer<vtkAppendPolyData>::New();
+	append->SetOutputPointsPrecision(vtkAlgorithm::DesiredOutputPrecision::DEFAULT_PRECISION);
+	vtkSmartPointer<vtkDelaunay3D> d3d = vtkSmartPointer<vtkDelaunay3D>::New();
+	vtkSmartPointer<vtkGeometryFilter> gf = vtkSmartPointer<vtkGeometryFilter>::New();
+	int noPixUpper;
+	int noPixLower;
+	int noPixMWSupport;
 	for (int i = 0; i < vtkPCobjectlist.size() - 1; i++)
 	{
 		for (int k = i + 1; k < vtkPCobjectlist.size(); k++)
@@ -306,97 +642,640 @@ void ObjectAggregationLevel2(SURFEL::ObjectGraph *ograph, RVL::SurfelGraph *sgra
 				std::cout << std::endl << "Combination " << i << ", " << k << " doesn't have polygons!!" << " Number of points: " << vtkPCobjectlist.at(i)->GetNumberOfPoints() << ", " << vtkPCobjectlist.at(k)->GetNumberOfPoints() << std::endl;
 				continue;
 			}
-			//Check distances
-			//one way
-			implicitPolyDataDistance->SetInput(gf->GetOutput());
-			points = vtkPCobjectlist.at(i)->GetPoints();
-			maxdist = 0;
-			for (int p = 0; p < points->GetNumberOfPoints(); p++)
+			//rendering depth
+			renderedDepthImg = GenerateVTKPolyDataDepthImage_Kinect(gf->GetOutput());
+			//Running through all pixels that have depth
+			noPixUpper = 0;
+			noPixLower = 0;
+			noPixMWSupport = 0;
+			for (int y = 0; y < 480; y++)
 			{
-				tempdist = abs(implicitPolyDataDistance->EvaluateFunction(points->GetPoint(p)));
-				if (tempdist > maxdist)
-					maxdist = tempdist;
+				for (int x = 0; x < 640; x++)
+				{
+					if (renderedDepthImg.at<uint16_t>(y, x) == 0)
+						continue;
+					else if ((renderedDepthImg.at<uint16_t>(y, x) > 0) && (depthImg.at<uint16_t>(y, x) == 0))
+						noPixMWSupport++;
+					else if (renderedDepthImg.at<uint16_t>(y, x) >= depthImg.at<uint16_t>(y, x))
+						noPixUpper++;
+					else 
+						noPixLower++;
+				}
 			}
-			std::cout << std::endl << "Max dist for combination " << i << ", " << k << ", using " << i << "'s points: " << maxdist << std::endl;
-			//other way
-			points = vtkPCobjectlist.at(k)->GetPoints();
-			maxdist = 0;
-			for (int p = 0; p < points->GetNumberOfPoints(); p++)
-			{
-				tempdist = abs(implicitPolyDataDistance->EvaluateFunction(points->GetPoint(p)));
-				if (tempdist > maxdist)
-					maxdist = tempdist;
-			}
-			std::cout << std::endl << "Max dist for combination " << i << ", " << k << ", using " << k << "'s points: " << maxdist << std::endl;
-
-			////debug (visualization of specific combination)
-			//if ((i == 3) && (k == 6))
-			//{
-			//	vtkSmartPointer<vtkPolyDataMapper> mapD;
-			//	vtkSmartPointer<vtkActor> actD;
-			//	verts = vtkSmartPointer<vtkCellArray>::New();
-			//	for (int kk = 0; kk < gf->GetOutput()->GetNumberOfPoints(); kk++)
-			//	{
-			//		verts->InsertNextCell(1);
-			//		verts->InsertCellPoint(kk);
-			//	}
-			//	polyData = vtkSmartPointer<vtkPolyData>::New();
-			//	polyData->DeepCopy(gf->GetOutput());
-			//	polyData->SetVerts(verts);
-			//	mapD = vtkSmartPointer<vtkPolyDataMapper>::New();
-			//	mapD->SetInputData(polyData);
-			//	/*vtkSmartPointer<vtkDataSetMapper> delaunayMapper = vtkSmartPointer<vtkDataSetMapper>::New();
-			//	delaunayMapper->SetInputConnection(d3d->GetOutputPort());*/
-			//	actD = vtkSmartPointer<vtkActor>::New();
-			//	actD->SetMapper(mapD);
-			//	actD->GetProperty()->SetPointSize(5);
-			//	renderer->AddActor(actD);
-
-			//	//renderer->ResetCamera();
-			//	//renderer->TwoSidedLightingOff();
-			//	//window->Render();
-			//	//interactor->Start();
-			//}
+			std::cout << std::endl << "Combination " << i << ", " << k << " noPixUpper = " << noPixUpper << ", noPixLower = " << noPixLower << ", noPixMWSupport = " << noPixMWSupport << std::endl;
 		}
 	}
 
-	//create convex hull for all objects
-	std::cout << std::endl << "Delaunay 3D + geometry filter! " << std::endl;
-	for (int i = 0; i < vtkPCobjectlist.size(); i++)
-	{
-		if (vtkPCobjectlist.at(i)->GetNumberOfPoints() == 0)
-			continue;
-		d3d->SetInputData(vtkPCobjectlist.at(i));
-		d3d->Update();
-		gf->SetInputConnection(d3d->GetOutputPort());
-		gf->Update();
-		polyData = vtkSmartPointer<vtkPolyData>::New();
-		polyData->DeepCopy(gf->GetOutput());
-		vtkCHobjectlist.push_back(polyData);
-		std::cout << i << " ";
-	}
+	////create convex hull for all objects
+	//std::cout << std::endl << "Delaunay 3D + geometry filter! " << std::endl;
+	//double zbounds[2] = {100.0, 0.0};
+	//double *bounds;
+	//for (int i = 0; i < vtkPCobjectlist.size(); i++)
+	//{
+	//	if (vtkPCobjectlist.at(i)->GetNumberOfPoints() == 0)
+	//		continue;
+	//	d3d->SetInputData(vtkPCobjectlist.at(i));
+	//	d3d->Update();
+	//	gf->SetInputConnection(d3d->GetOutputPort());
+	//	gf->Update();
+	//	polyData = vtkSmartPointer<vtkPolyData>::New();
+	//	polyData->DeepCopy(gf->GetOutput());
+	//	vtkCHobjectlist.push_back(polyData);
+	//	std::cout << i << " ";
+	//	//get zbounds
+	//	polyData->GetPoints()->ComputeBounds();
+	//	bounds = polyData->GetPoints()->GetBounds();
+	//	if (bounds[4] < zbounds[0])
+	//		zbounds[0] = bounds[4];
+	//	if (bounds[5] > zbounds[1])
+	//		zbounds[1] = bounds[5];
+	//}
 
-	//CH visualization
-	vtkSmartPointer<vtkPolyDataMapper> map;
-	vtkSmartPointer<vtkActor> act;
-	for (int i = 0; i < vtkCHobjectlist.size(); i++)
+	////CH visualization
+	//vtkSmartPointer<vtkPolyDataMapper> map;
+	//vtkSmartPointer<vtkActor> act;
+	//for (int i = 0; i < vtkCHobjectlist.size(); i++)
+	//{
+	//	if (vtkCHobjectlist.at(i)->GetNumberOfPoints() == 0)
+	//		continue;
+	//	verts = vtkSmartPointer<vtkCellArray>::New();
+	//	for (int k = 0; k < vtkCHobjectlist.at(i)->GetNumberOfPoints(); k++)
+	//	{
+	//		verts->InsertNextCell(1);
+	//		verts->InsertCellPoint(k);
+	//	}
+	//	vtkCHobjectlist.at(i)->SetVerts(verts);
+	//	map = vtkSmartPointer<vtkPolyDataMapper>::New();
+	//	map->SetInputData(vtkCHobjectlist.at(i));
+	//	act = vtkSmartPointer<vtkActor>::New();
+	//	act->SetMapper(map);
+	//	act->GetProperty()->SetPointSize(5);
+	//	renderer->AddActor(act);
+	//}
+
+	//Start VTK
+	renderer->ResetCamera();
+	renderer->TwoSidedLightingOff();
+	window->Render();
+
+	//cv::Mat rendereddepth = GenerateVTKDepthImage(window, 640, 480, 581.45624912987f, 543.1221626989097f, 317.2825290065861f, 240.955527515504f, 57.7, 46.6, zbounds[0], zbounds[1]);
+	////debug
+	//uint16_t d1 = depthImg.at<uint16_t>(300, 200);
+	//uint16_t d2 = rendereddepth.at<uint16_t>(300, 200);
+
+
+	interactor->Start();
+}
+
+//Generates vtkPolyData object (points and polys) that represenent a single CTI primitive, planeNormals is column wise (all_normals_x_coordinates, all_normals_y_coordinates, all_normals_z_coordinates)
+vtkSmartPointer<vtkPolyData> GenerateCTIPrimitivePolydata_CW(float *planeNormals, float *planeDist, bool centered = false, int *mask = NULL)
+{
+	vtkSmartPointer<vtkPolyData> outPD;
+
+	float *planeDistLocal = planeDist;
+	//center the model
+	if (!centered)
 	{
-		if (vtkCHobjectlist.at(i)->GetNumberOfPoints() == 0)
-			continue;
-		verts = vtkSmartPointer<vtkCellArray>::New();
-		for (int k = 0; k < vtkCHobjectlist.at(i)->GetNumberOfPoints(); k++)
+		//make copy of original plane dist
+		planeDistLocal = new float[66];
+		memcpy(planeDistLocal, planeDist, 66 * sizeof(float));
+
+		//Finding MIN and MAX for each normal dimension
+		float maxN[3] = { -10, -10, -10 };
+		int maxI[3] = { 0, 0, 0 };
+		float minN[3] = { 10, 10, 10 };
+		int minI[3] = { 0, 0, 0 };
+		for (int i = 0; i < 66; i++)
 		{
-			verts->InsertNextCell(1);
-			verts->InsertCellPoint(k);
+			if (planeNormals[i] > maxN[0])
+			{
+				maxN[0] = planeNormals[i];
+				maxI[0] = i;
+			}
+			if (planeNormals[i] < minN[0])
+			{
+				minN[0] = planeNormals[i];
+				minI[0] = i;
+			}
+
+			if (planeNormals[i + 66] > maxN[1])
+			{
+				maxN[1] = planeNormals[i + 66];
+				maxI[1] = i;
+			}
+			if (planeNormals[i + 66] < minN[1])
+			{
+				minN[1] = planeNormals[i + 66];
+				minI[1] = i;
+			}
+
+			if (planeNormals[i + 66 * 2] > maxN[2])
+			{
+				maxN[2] = planeNormals[i + 66 * 2];
+				maxI[2] = i;
+			}
+			if (planeNormals[i + 66 * 2] < minN[2])
+			{
+				minN[2] = planeNormals[i + 66 * 2];
+				minI[2] = i;
+			}
 		}
-		vtkCHobjectlist.at(i)->SetVerts(verts);
-		map = vtkSmartPointer<vtkPolyDataMapper>::New();
-		map->SetInputData(vtkCHobjectlist.at(i));
-		act = vtkSmartPointer<vtkActor>::New();
-		act->SetMapper(map);
-		act->GetProperty()->SetPointSize(5);
-		renderer->AddActor(act);
+		//centering
+		float newexampleTemp[66];
+		float tempV[3];
+		tempV[0] = 0.5 * (planeDistLocal[maxI[0]] - planeDistLocal[minI[0]]);
+		tempV[1] = 0.5 * (planeDistLocal[maxI[1]] - planeDistLocal[minI[1]]);
+		tempV[2] = 0.5 * (planeDistLocal[maxI[2]] - planeDistLocal[minI[2]]);
+		for (int i = 0; i < 66; i++)
+		{
+			newexampleTemp[i] = planeNormals[i] * tempV[0] + planeNormals[i + 66] * tempV[1] + planeNormals[i + 66 * 2] * tempV[2];
+			planeDistLocal[i] -= newexampleTemp[i];
+		}
 	}
+
+	//Generiate primitive (convex hull)
+	vtkSmartPointer<vtkHull> hullFilter = vtkSmartPointer<vtkHull>::New();
+	vtkSmartPointer<vtkPoints> points = vtkSmartPointer<vtkPoints>::New();
+	vtkSmartPointer<vtkFloatArray> normalp = vtkSmartPointer<vtkFloatArray>::New();
+	normalp->SetNumberOfComponents(3);
+	for (int i = 0; i < 66; i++)
+	{
+		points->InsertPoint(i, planeNormals[i] * planeDistLocal[i], planeNormals[i + 66] * planeDistLocal[i], planeNormals[i + 66 * 2] * planeDistLocal[i]);
+		normalp->InsertTuple3(i, planeNormals[i], planeNormals[i + 66], planeNormals[i + 66 * 2]);
+	}
+	vtkSmartPointer<vtkPlanes> planes = vtkSmartPointer<vtkPlanes>::New();
+	planes->SetPoints(points);
+	planes->SetNormals(normalp);
+	hullFilter->SetPlanes(planes);
+	vtkSmartPointer<vtkPolyData> hullPD = vtkSmartPointer<vtkPolyData>::New();
+	hullFilter->GenerateHull(hullPD, -500, 500, -500, 500, -500, 500);
+	vtkSmartPointer<vtkPolyData> interPD = hullPD;
+	//If mask exists remove unwanted polygons
+	if (mask)
+	{
+		double n[3];
+		float cosfi;
+		vtkSmartPointer<vtkCellArray> polys = hullPD->GetPolys();
+		vtkSmartPointer<vtkCellArray> newpolys = vtkSmartPointer<vtkCellArray>::New();
+		vtkIdType *polysPtsIds;
+		vtkIdType npts;
+		polys->InitTraversal();
+		//run through all polygons and find planes with the same normal that shuld be in the output
+		for (int i = 0; i < hullPD->GetNumberOfPolys(); i++)
+		{
+			polys->GetNextCell(npts, polysPtsIds);
+			//calculate polygon normal
+			vtkPolygon::ComputeNormal(hullPD->GetPoints(), npts, polysPtsIds, n);
+			//find corresponding normal in normal list
+			for (int k = 0; k < 66; k++)
+			{
+				cosfi = n[0] * planeNormals[k] + n[1] * planeNormals[k + 66] + n[2] * planeNormals[k + 66 * 2];
+				if ((cosfi > 0.9999) && (mask[k] == 1))
+				{
+					newpolys->InsertNextCell(npts, polysPtsIds);
+					break;
+				}
+			}
+
+		}
+		vtkSmartPointer<vtkPolyData> maskedPD = vtkSmartPointer<vtkPolyData>::New();
+		maskedPD->SetPoints(hullPD->GetPoints());
+		maskedPD->SetPolys(newpolys);
+
+		interPD = maskedPD;
+	}
+
+	//clean polydata from unused poimts and degenerate polygons
+	vtkSmartPointer<vtkCleanPolyData> cleanPD = vtkSmartPointer<vtkCleanPolyData>::New();
+	cleanPD->SetInputData(interPD);
+	cleanPD->Update();
+
+	//make copy of the final polydata and send it back
+	outPD = vtkSmartPointer<vtkPolyData>::New();
+	outPD->DeepCopy(cleanPD->GetOutput());
+	return outPD;
+}
+
+//Generates vtkPolyData object (points and polys) that represenent a single CTI primitive, planeNormals is row wise (normal_1_x_coordinate, normal_1_y_coordinate, normal_1_z_coordinate, normal_2_x_coordinate, ...)
+vtkSmartPointer<vtkPolyData> GenerateCTIPrimitivePolydata_RW(float *planeNormals, float *planeDist, bool centered = false, int *mask = NULL)
+{
+	vtkSmartPointer<vtkPolyData> outPD;
+
+	float *planeDistLocal = planeDist;
+	//center the model
+	if (!centered)
+	{
+		//make copy of original plane dist
+		planeDistLocal = new float[66];
+		memcpy(planeDistLocal, planeDist, 66 * sizeof(float));
+
+		//Finding MIN and MAX for each normal dimension
+		float maxN[3] = { -10, -10, -10 };
+		int maxI[3] = { 0, 0, 0 };
+		float minN[3] = { 10, 10, 10 };
+		int minI[3] = { 0, 0, 0 };
+		for (int i = 0; i < 66; i++)
+		{
+			if (planeNormals[i * 3] > maxN[0])
+			{
+				maxN[0] = planeNormals[i * 3];
+				maxI[0] = i;
+			}
+			if (planeNormals[i * 3] < minN[0])
+			{
+				minN[0] = planeNormals[i * 3];
+				minI[0] = i;
+			}
+
+			if (planeNormals[i * 3 + 1] > maxN[1])
+			{
+				maxN[1] = planeNormals[i * 3 + 1];
+				maxI[1] = i;
+			}
+			if (planeNormals[i * 3 + 1] < minN[1])
+			{
+				minN[1] = planeNormals[i * 3 + 1];
+				minI[1] = i;
+			}
+
+			if (planeNormals[i * 3 + 2] > maxN[2])
+			{
+				maxN[2] = planeNormals[i * 3 + 2];
+				maxI[2] = i;
+			}
+			if (planeNormals[i * 3 + 2] < minN[2])
+			{
+				minN[2] = planeNormals[i * 3 + 2];
+				minI[2] = i;
+			}
+		}
+		//centering
+		float newexampleTemp[66];
+		float tempV[3];
+		tempV[0] = 0.5 * (planeDistLocal[maxI[0]] - planeDistLocal[minI[0]]);
+		tempV[1] = 0.5 * (planeDistLocal[maxI[1]] - planeDistLocal[minI[1]]);
+		tempV[2] = 0.5 * (planeDistLocal[maxI[2]] - planeDistLocal[minI[2]]);
+		for (int i = 0; i < 66; i++)
+		{
+			newexampleTemp[i] = planeNormals[i * 3] * tempV[0] + planeNormals[i * 3 + 1] * tempV[1] + planeNormals[i * 3 + 2] * tempV[2];
+			planeDistLocal[i] -= newexampleTemp[i];
+		}
+	}
+
+	//Generiate primitive (convex hull)
+	vtkSmartPointer<vtkHull> hullFilter = vtkSmartPointer<vtkHull>::New();
+	vtkSmartPointer<vtkPoints> points = vtkSmartPointer<vtkPoints>::New();
+	vtkSmartPointer<vtkFloatArray> normalp = vtkSmartPointer<vtkFloatArray>::New();
+	normalp->SetNumberOfComponents(3);
+	for (int i = 0; i < 66; i++)
+	{
+		points->InsertPoint(i, planeNormals[i * 3] * planeDistLocal[i], planeNormals[i * 3 + 1] * planeDistLocal[i], planeNormals[i * 3 + 2] * planeDistLocal[i]);
+		normalp->InsertTuple3(i, planeNormals[i * 3], planeNormals[i * 3 + 1], planeNormals[i * 3 + 2]);
+	}
+	vtkSmartPointer<vtkPlanes> planes = vtkSmartPointer<vtkPlanes>::New();
+	planes->SetPoints(points);
+	planes->SetNormals(normalp);
+	hullFilter->SetPlanes(planes);
+	vtkSmartPointer<vtkPolyData> hullPD = vtkSmartPointer<vtkPolyData>::New();
+	hullFilter->GenerateHull(hullPD, -500, 500, -500, 500, -500, 500);
+	vtkSmartPointer<vtkPolyData> interPD = hullPD;
+	//If mask exists remove unwanted polygons
+	if (mask)
+	{
+		double n[3];
+		float cosfi;
+		vtkSmartPointer<vtkCellArray> polys = hullPD->GetPolys();
+		vtkSmartPointer<vtkCellArray> newpolys = vtkSmartPointer<vtkCellArray>::New();
+		vtkIdType *polysPtsIds;
+		vtkIdType npts;
+		polys->InitTraversal();
+		//run through all polygons and find planes with the same normal that shuld be in the output
+		for (int i = 0; i < hullPD->GetNumberOfPolys(); i++)
+		{
+			polys->GetNextCell(npts, polysPtsIds);
+			//calculate polygon normal
+			vtkPolygon::ComputeNormal(hullPD->GetPoints(), npts, polysPtsIds, n);
+			//find corresponding normal in normal list
+			for (int k = 0; k < 66; k++)
+			{
+				cosfi = n[0] * planeNormals[k * 3] + n[1] * planeNormals[k * 3 * 1] + n[2] * planeNormals[k * 3 + 2];
+				if ((cosfi > 0.9999) && (mask[k] == 1))
+				{
+					newpolys->InsertNextCell(npts, polysPtsIds);
+					break;
+				}
+			}
+
+		}
+		vtkSmartPointer<vtkPolyData> maskedPD = vtkSmartPointer<vtkPolyData>::New();
+		maskedPD->SetPoints(hullPD->GetPoints());
+		maskedPD->SetPolys(newpolys);
+
+		//intermediate
+		interPD = maskedPD;
+	}
+
+	//clean polydata from unused poimts and degenerate polygons
+	vtkSmartPointer<vtkCleanPolyData> cleanPD = vtkSmartPointer<vtkCleanPolyData>::New();
+	cleanPD->SetInputData(interPD);
+	cleanPD->Update();
+
+	//make copy of the final polydata and send it back
+	outPD = vtkSmartPointer<vtkPolyData>::New();
+	outPD->DeepCopy(cleanPD->GetOutput());
+	return outPD;
+}
+
+void RenderCTIConvexHull()
+{
+	// Initialize VTK.
+	vtkSmartPointer<vtkRenderer> renderer = vtkSmartPointer<vtkRenderer>::New();
+	vtkSmartPointer<vtkRenderWindow> window = vtkSmartPointer<vtkRenderWindow>::New();
+	vtkSmartPointer<vtkRenderWindowInteractor> interactor = vtkSmartPointer<vtkRenderWindowInteractor>::New();
+	window->AddRenderer(renderer);
+	window->SetSize(800, 600);
+	interactor->SetRenderWindow(window);
+	vtkSmartPointer<vtkInteractorStyleTrackballCamera> style = vtkSmartPointer<vtkInteractorStyleTrackballCamera>::New();
+	interactor->SetInteractorStyle(style);
+	renderer->SetBackground(0.5294, 0.8078, 0.9803);
+
+	//Load files
+	std::string normalsfilename = "cti_normals.txt";
+	std::string examplesfilename = "cti_d_2examples.txt";
+
+	float normals[3 * 66];
+	float example1[66];
+	float example2[66];
+	float example3[66];
+	float example4[66];
+	float example5[66];
+
+	std::fstream dat;
+	//loading normals
+	dat.open(normalsfilename, std::fstream::in);
+	for (int i = 0; i < 3 * 66; i++)
+		dat >> normals[i];
+
+	//Finding MIN and MAX for each normal dimension
+	float maxN[3] = { -10, -10, -10 };
+	int maxI[3] = { 0, 0, 0 };
+	float minN[3] = { 10, 10, 10 };
+	int minI[3] = { 0, 0, 0 };
+	for (int i = 0; i < 66; i++)
+	{
+		if (normals[i] > maxN[0])
+		{
+			maxN[0] = normals[i];
+			maxI[0] = i;
+		}
+		if (normals[i] < minN[0])
+		{
+			minN[0] = normals[i];
+			minI[0] = i;
+		}
+
+		if (normals[i + 66] > maxN[1])
+		{
+			maxN[1] = normals[i + 66];
+			maxI[1] = i;
+		}
+		if (normals[i + 66] < minN[1])
+		{
+			minN[1] = normals[i + 66];
+			minI[1] = i;
+		}
+
+		if (normals[i + 66 * 2] > maxN[2])
+		{
+			maxN[2] = normals[i + 66 * 2];
+			maxI[2] = i;
+		}
+		if (normals[i + 66 * 2] < minN[2])
+		{
+			minN[2] = normals[i + 66 * 2];
+			minI[2] = i;
+		}
+	}
+
+	//Loading examples
+	dat.close();
+	dat.open(examplesfilename, std::fstream::in);
+	float d1max = 0;
+	float d2max = 0;
+	float d1min = 1000;
+	float d2min = 1000;
+	float temp = 0;
+	//1
+	for (int i = 0; i < 66; i++)
+		dat >> example1[i];
+	//2
+	for (int i = 0; i < 66; i++)
+		dat >> example2[i];
+	//3
+	for (int i = 0; i < 66; i++)
+		dat >> example3[i];
+	//4
+	for (int i = 0; i < 66; i++)
+		dat >> example4[i];
+	//5
+	for (int i = 0; i < 66; i++)
+		dat >> example5[i];
+
+	//Example 1
+	//Centering
+	//float newexampleTemp[66];
+	//float tempV[3];
+	//tempV[0] = 0.5 * (example1[maxI[0]] - example1[minI[0]]);
+	//tempV[1] = 0.5 * (example1[maxI[1]] - example1[minI[1]]);
+	//tempV[2] = 0.5 * (example1[maxI[2]] - example1[minI[2]]);
+	//for (int i = 0; i < 66; i++)
+	//{
+	//	newexampleTemp[i] = normals[i] * tempV[0] + normals[i + 66] * tempV[1] + normals[i + 66 * 2] * tempV[2];
+	//	example1[i] -= newexampleTemp[i];
+	//}
+	////Hull
+	//vtkSmartPointer<vtkHull> hullFilter = vtkSmartPointer<vtkHull>::New();
+	//vtkSmartPointer<vtkPoints> points = vtkSmartPointer<vtkPoints>::New();
+	//vtkSmartPointer<vtkFloatArray> normalsp = vtkSmartPointer<vtkFloatArray>::New();
+	//normalsp->SetNumberOfComponents(3);
+	//for (int i = 0; i < 66; i++)
+	//{
+	//	//hullFilter->AddPlane(normals[i], normals[i + 66], normals[i + 66 * 2], example1[i]);
+	//	points->InsertPoint(i, normals[i] * example1[i], normals[i + 66] * example1[i], normals[i + 66 * 2] * example1[i]);
+	//	normalsp->InsertTuple3(i, normals[i], normals[i + 66], normals[i + 66 * 2]);
+	//}
+	//vtkSmartPointer<vtkPlanes> planes = vtkSmartPointer<vtkPlanes>::New();
+	//planes->SetPoints(points);
+	//planes->SetNormals(normalsp);
+	//hullFilter->SetPlanes(planes);
+	//vtkSmartPointer<vtkPolyData> polyData = vtkSmartPointer<vtkPolyData>::New();
+	//hullFilter->GenerateHull(polyData, -200, 200, -200, 200, -200, 200);
+	//vtkSmartPointer<vtkPolyDataMapper> map1 = vtkSmartPointer<vtkPolyDataMapper>::New();
+	////map1->SetInputConnection(hullFilter->GetOutputPort());
+	//map1->SetInputData(GenerateCTIPrimitivePolydata_CW(normals, example1));
+	//vtkSmartPointer<vtkActor> act1 = vtkSmartPointer<vtkActor>::New();
+	//act1->SetMapper(map1);
+	//renderer->AddActor(act1);
+
+	////Example 2
+	////Centering
+	//float newexampleTemp[66];
+	//float tempV[3];
+	//tempV[0] = 0.5 * (example2[maxI[0]] - example2[minI[0]]);
+	//tempV[1] = 0.5 * (example2[maxI[1]] - example2[minI[1]]);
+	//tempV[2] = 0.5 * (example2[maxI[2]] - example2[minI[2]]);
+	//for (int i = 0; i < 66; i++)
+	//{
+	//	newexampleTemp[i] = normals[i] * tempV[0] + normals[i + 66] * tempV[1] + normals[i + 66 * 2] * tempV[2];
+	//	example2[i] -= newexampleTemp[i];
+	//}
+	////Hull
+	//vtkSmartPointer<vtkHull> hullFilter = vtkSmartPointer<vtkHull>::New();
+	//vtkSmartPointer<vtkPoints> points = vtkSmartPointer<vtkPoints>::New();
+	//vtkSmartPointer<vtkFloatArray> normalsp = vtkSmartPointer<vtkFloatArray>::New();
+	//normalsp->SetNumberOfComponents(3);
+	//for (int i = 0; i < 66; i++)
+	//{
+	//	//hullFilter->AddPlane(normals[i], normals[i + 66], normals[i + 66 * 2], example2[i]);
+	//	points->InsertPoint(i, normals[i] * example2[i], normals[i + 66] * example2[i], normals[i + 66 * 2] * example2[i]);
+	//	normalsp->InsertTuple3(i, normals[i], normals[i + 66], normals[i + 66 * 2]);
+	//}
+	//vtkSmartPointer<vtkPlanes> planes = vtkSmartPointer<vtkPlanes>::New();
+	//planes->SetPoints(points);
+	//planes->SetNormals(normalsp);
+	//hullFilter->SetPlanes(planes);
+	//vtkSmartPointer<vtkPolyData> polyData = vtkSmartPointer<vtkPolyData>::New();
+	//hullFilter->GenerateHull(polyData, -200, 200, -200, 200, -200, 200);
+	//vtkSmartPointer<vtkPolyDataMapper> map1 = vtkSmartPointer<vtkPolyDataMapper>::New();
+	////map1->SetInputConnection(hullFilter->GetOutputPort());
+	//map1->SetInputData(polyData);
+	//vtkSmartPointer<vtkActor> act1 = vtkSmartPointer<vtkActor>::New();
+	//act1->SetMapper(map1);
+	//renderer->AddActor(act1);
+
+	////Example 3
+	////Centering
+	//float newexampleTemp[66];
+	//float tempV[3];
+	//tempV[0] = 0.5 * (example3[maxI[0]] - example3[minI[0]]);
+	//tempV[1] = 0.5 * (example3[maxI[1]] - example3[minI[1]]);
+	//tempV[2] = 0.5 * (example3[maxI[2]] - example3[minI[2]]);
+	//for (int i = 0; i < 66; i++)
+	//{
+	//	newexampleTemp[i] = normals[i] * tempV[0] + normals[i + 66] * tempV[1] + normals[i + 66 * 2] * tempV[2];
+	//	example3[i] -= newexampleTemp[i];
+	//}
+	////Hull
+	//vtkSmartPointer<vtkHull> hullFilter = vtkSmartPointer<vtkHull>::New();
+	//vtkSmartPointer<vtkPoints> points = vtkSmartPointer<vtkPoints>::New();
+	//vtkSmartPointer<vtkFloatArray> normalsp = vtkSmartPointer<vtkFloatArray>::New();
+	//normalsp->SetNumberOfComponents(3);
+	//for (int i = 0; i < 66; i++)
+	//{
+	//	//hullFilter->AddPlane(normals[i], normals[i + 66], normals[i + 66 * 2], example1[i]);
+	//	points->InsertPoint(i, normals[i] * example3[i], normals[i + 66] * example3[i], normals[i + 66 * 2] * example3[i]);
+	//	normalsp->InsertTuple3(i, normals[i], normals[i + 66], normals[i + 66 * 2]);
+	//}
+	//vtkSmartPointer<vtkPlanes> planes = vtkSmartPointer<vtkPlanes>::New();
+	//planes->SetPoints(points);
+	//planes->SetNormals(normalsp);
+	//hullFilter->SetPlanes(planes);
+	//vtkSmartPointer<vtkPolyData> polyData = vtkSmartPointer<vtkPolyData>::New();
+	//hullFilter->GenerateHull(polyData, -200, 200, -200, 200, -200, 200);
+	//vtkSmartPointer<vtkPolyDataMapper> map1 = vtkSmartPointer<vtkPolyDataMapper>::New();
+	////map1->SetInputConnection(hullFilter->GetOutputPort());
+	//map1->SetInputData(polyData);
+	//vtkSmartPointer<vtkActor> act1 = vtkSmartPointer<vtkActor>::New();
+	//act1->SetMapper(map1);
+	//renderer->AddActor(act1);
+
+	////Example 4
+	////Centering
+	//float newexampleTemp[66];
+	//float tempV[3];
+	//tempV[0] = 0.5 * (example4[maxI[0]] - example4[minI[0]]);
+	//tempV[1] = 0.5 * (example4[maxI[1]] - example4[minI[1]]);
+	//tempV[2] = 0.5 * (example4[maxI[2]] - example4[minI[2]]);
+	//for (int i = 0; i < 66; i++)
+	//{
+	//	newexampleTemp[i] = normals[i] * tempV[0] + normals[i + 66] * tempV[1] + normals[i + 66 * 2] * tempV[2];
+	//	example4[i] -= newexampleTemp[i];
+	//}
+	////Hull
+	//vtkSmartPointer<vtkHull> hullFilter = vtkSmartPointer<vtkHull>::New();
+	//vtkSmartPointer<vtkPoints> points = vtkSmartPointer<vtkPoints>::New();
+	//vtkSmartPointer<vtkFloatArray> normalsp = vtkSmartPointer<vtkFloatArray>::New();
+	//normalsp->SetNumberOfComponents(3);
+	//for (int i = 0; i < 66; i++)
+	//{
+	//	//hullFilter->AddPlane(normals[i], normals[i + 66], normals[i + 66 * 2], example1[i]);
+	//	points->InsertPoint(i, normals[i] * example4[i], normals[i + 66] * example4[i], normals[i + 66 * 2] * example4[i]);
+	//	normalsp->InsertTuple3(i, normals[i], normals[i + 66], normals[i + 66 * 2]);
+	//}
+	//vtkSmartPointer<vtkPlanes> planes = vtkSmartPointer<vtkPlanes>::New();
+	//planes->SetPoints(points);
+	//planes->SetNormals(normalsp);
+	//hullFilter->SetPlanes(planes);
+	//vtkSmartPointer<vtkPolyData> polyData = vtkSmartPointer<vtkPolyData>::New();
+	//hullFilter->GenerateHull(polyData, -200, 200, -200, 200, -200, 200);
+	///*vtkSmartPointer<vtkCleanPolyData> cpd = vtkSmartPointer<vtkCleanPolyData>::New();
+	//cpd->SetInputData(polyData);
+	//cpd->Update();
+	//vtkSmartPointer<vtkPolyData> polyDataC = cpd->GetOutput();*/
+	////removing zero distance planes
+	//double n[3];
+	////std::vector<int> planes2remove;
+	//float cosfi;
+	//vtkSmartPointer<vtkCellArray> polys = polyData->GetPolys();
+	//vtkSmartPointer<vtkCellArray> newpolys = vtkSmartPointer<vtkCellArray>::New();
+	//vtkIdType *polysPtsIds;
+	//vtkIdType npts;
+	//polys->InitTraversal();
+	//bool found;
+	//for (int i = 0; i < polyData->GetNumberOfPolys(); i++)
+	//{
+	//	polys->GetNextCell(npts, polysPtsIds);
+	//	/*if (npts < 3)
+	//	{
+	//		planes2remove.push_back(i);
+	//		continue;
+	//	}*/
+	//	vtkPolygon::ComputeNormal(polyData->GetPoints(), npts, polysPtsIds, n);
+	//	//if ((n[0] == 0) && (n[1] == 0) && (n[2] == 0))
+	//	//{
+	//	//	//planes2remove.push_back(i);
+	//	//	continue;
+	//	//}
+	//	//find corresponding normal in normal list
+	//	found = false;
+	//	for (int k = 0; k < 66; k++)
+	//	{
+	//		cosfi = n[0] * normals[k] + n[1] * normals[k + 66] + n[2] * normals[k + 66 * 2];
+	//		if ((cosfi > 0.9999) && (example5[k] == 0))
+	//		{
+	//			found = true;
+	//			break;
+	//		}
+	//			//planes2remove.push_back(i);
+	//	}
+	//	if (!found)
+	//		newpolys->InsertNextCell(npts, polysPtsIds);
+	//}
+	//vtkSmartPointer<vtkPolyData> polyDataC = vtkSmartPointer<vtkPolyData>::New();
+	//polyDataC->SetPoints(polyData->GetPoints());
+	//polyDataC->SetPolys(newpolys);
+	int mask[66];
+	memset(mask, 0, 66 * sizeof(int));
+	for (int i = 0; i < 66; i++)
+	{
+		if (example5[i] != 0)
+			mask[i] = 1;
+	}
+	vtkSmartPointer<vtkPolyDataMapper> map1 = vtkSmartPointer<vtkPolyDataMapper>::New();
+	map1->SetInputData(GenerateCTIPrimitivePolydata_CW(normals, example4, false, mask));
+	vtkSmartPointer<vtkActor> act1 = vtkSmartPointer<vtkActor>::New();
+	act1->SetMapper(map1);
+	renderer->AddActor(act1);
 
 	//Start VTK
 	renderer->ResetCamera();
@@ -408,6 +1287,8 @@ void ObjectAggregationLevel2(SURFEL::ObjectGraph *ograph, RVL::SurfelGraph *sgra
 
 int main(int argc, char ** argv)
 {
+	//TestVTK_Plane_z_buffer(2, 640, 480, 581.45624912987f, 543.1221626989097f, 317.2825290065861f, 240.955527515504f, 60, 1.99999, 2.00001);
+	//RenderCTIConvexHull();
 	//testvtkdistance();
 #ifdef RVLPCSEGMENT_DEMO_CREATE_TRAINING_DATA
 	RunSeg2Bench(true);
@@ -581,7 +1462,7 @@ int main(int argc, char ** argv)
 
 			surfels.DetectVertices(&mesh);
 
-			ObjectAggregationLevel2(&objects, &surfels, &mesh);
+			ObjectAggregationLevel2(&objects, &surfels, &mesh, MeshFileName);
 
 			printf("completed.\n");
 		}
