@@ -620,9 +620,14 @@ void ObjectAggregationLevel2(SURFEL::ObjectGraph *ograph, RVL::SurfelGraph *sgra
 	append->SetOutputPointsPrecision(vtkAlgorithm::DesiredOutputPrecision::DEFAULT_PRECISION);
 	vtkSmartPointer<vtkDelaunay3D> d3d = vtkSmartPointer<vtkDelaunay3D>::New();
 	vtkSmartPointer<vtkGeometryFilter> gf = vtkSmartPointer<vtkGeometryFilter>::New();
-	int noPixUpper;
-	int noPixLower;
+	int noPixGreater;
+	int noPixLesser;
+	int noPixLesser5mm;
+	int noPixLesser10mm;
+	int noPixLesser15mm;
 	int noPixMWSupport;
+	int noPixAmbiguousLesser;
+	int noPixAmbiguousGreater;
 	for (int i = 0; i < vtkPCobjectlist.size() - 1; i++)
 	{
 		for (int k = i + 1; k < vtkPCobjectlist.size(); k++)
@@ -644,25 +649,65 @@ void ObjectAggregationLevel2(SURFEL::ObjectGraph *ograph, RVL::SurfelGraph *sgra
 			}
 			//rendering depth
 			renderedDepthImg = GenerateVTKPolyDataDepthImage_Kinect(gf->GetOutput());
+			//erosion
+			//cv::Mat renderedDepthImg_E(480, 640, CV_16UC1, cv::Scalar::all(0));
+			cv::erode(renderedDepthImg, renderedDepthImg, cv::getStructuringElement(cv::MORPH_RECT, cv::Size(21, 21)/*, cv::Point(5, 5)*/));
+			////debug
+			//cv::Mat d1(480, 640, CV_8UC1);
+			//cv::Mat d2(480, 640, CV_8UC1);
+			//double minVal, maxVal;
+			//cv::minMaxLoc(renderedDepthImg, &minVal, &maxVal);
+			//renderedDepthImg.convertTo(d1, CV_8U, -255.0f / maxVal, 255.0f);
+			//cv::imshow("Rendered depth image", d1);
+			//cv::minMaxLoc(renderedDepthImg_E, &minVal, &maxVal);
+			//renderedDepthImg_E.convertTo(d2, CV_8U, -255.0f / maxVal, 255.0f);
+			//cv::imshow("Eroded rendered depth image", d2);
+			//cv::waitKey();
+			//
 			//Running through all pixels that have depth
-			noPixUpper = 0;
-			noPixLower = 0;
+			noPixGreater = 0;
+			noPixLesser = 0;
 			noPixMWSupport = 0;
+			/*noPixLower5mm = 0;
+			noPixLower10mm = 0;
+			noPixLower15mm = 0;*/
+			noPixAmbiguousLesser = 0;
+			noPixAmbiguousGreater = 0;
 			for (int y = 0; y < 480; y++)
 			{
 				for (int x = 0; x < 640; x++)
 				{
-					if (renderedDepthImg.at<uint16_t>(y, x) == 0)
+					if (renderedDepthImg.at<uint16_t>(y, x) == 0) //invalid pixel
 						continue;
-					else if ((renderedDepthImg.at<uint16_t>(y, x) > 0) && (depthImg.at<uint16_t>(y, x) == 0))
+					else if ((renderedDepthImg.at<uint16_t>(y, x) > 0) && (depthImg.at<uint16_t>(y, x) == 0)) //pixel with rendered depth but no actual measurement
 						noPixMWSupport++;
-					else if (renderedDepthImg.at<uint16_t>(y, x) >= depthImg.at<uint16_t>(y, x))
-						noPixUpper++;
-					else 
-						noPixLower++;
+					else if (renderedDepthImg.at<uint16_t>(y, x) >= depthImg.at<uint16_t>(y, x))	//pixel whose rendered depth is grater than actual depth (it is further away)
+					{
+						if (abs(renderedDepthImg.at<uint16_t>(y, x) - depthImg.at<uint16_t>(y, x) <= 10))	// if the difference is less or equal then 10mm it is ambiguous
+						{
+							noPixAmbiguousGreater++;
+							noPixLesser++;
+						}
+						else
+							noPixGreater++;
+					}
+					else //pixel whose rendered depth is lesser than actual depth (it is nearer to the camera)
+					{
+						if (abs(renderedDepthImg.at<uint16_t>(y, x) - depthImg.at<uint16_t>(y, x) <= 10))	// if the difference is less or equal then 10mm it is ambiguous
+							noPixAmbiguousLesser++;
+						/*else*/
+							noPixLesser++;
+						/*if (abs(renderedDepthImg.at<uint16_t>(y, x) - depthImg.at<uint16_t>(y, x)) <= 5)
+							noPixLower5mm++;
+						else if (abs(renderedDepthImg.at<uint16_t>(y, x) - depthImg.at<uint16_t>(y, x)) <= 10)
+							noPixLower10mm++;
+						else if (abs(renderedDepthImg.at<uint16_t>(y, x) - depthImg.at<uint16_t>(y, x)) <= 15)
+							noPixLower15mm++;*/
+					}
 				}
 			}
-			std::cout << std::endl << "Combination " << i << ", " << k << " noPixUpper = " << noPixUpper << ", noPixLower = " << noPixLower << ", noPixMWSupport = " << noPixMWSupport << std::endl;
+			//std::cout << std::endl << "Combination " << i << ", " << k << " noPixUpper = " << noPixUpper << ", noPixLower = " << noPixLower << ", noPixMWSupport = " << noPixMWSupport /*<< " noPixLower5mm = " << noPixLower5mm << ", noPixLower10mm = " << noPixLower10mm << ", noPixLower15mm = " << noPixLower15mm */<< std::endl;
+			std::cout << std::endl << "Combination " << i << ", " << k << " Ratio (greater/lesser)  = " << (float)(noPixGreater) / (float)(noPixLesser) << ", noPixAmbiguousLesser = " << noPixAmbiguousLesser << ", noPixAmbiguousGreater = " << noPixAmbiguousGreater <<std::endl;
 		}
 	}
 
