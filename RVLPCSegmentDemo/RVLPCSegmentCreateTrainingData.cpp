@@ -557,7 +557,10 @@ void DetermineImgAdjDescriptors(Surfel *pSurfel, Mesh *mesh)
 				a[0]++;
 			
 		}
-		a[0] /= (double)boundarySize;
+		if (boundarySize > 0)
+			a[0] /= (double)boundarySize;
+		else
+			a[0] = 0.0f;
 		a[1] = 1.0 - a[0];
 
 		tempN[0] = pSurfel->N[0] - pOtherSurfel->N[0];
@@ -576,7 +579,10 @@ void DetermineImgAdjDescriptors(Surfel *pSurfel, Mesh *mesh)
 				a[2]++;
 
 		}
-		a[2] /= (double)boundarySizeOther;
+		if (boundarySizeOther > 0)
+			a[2] /= (double)boundarySizeOther;
+		else
+			a[2] = 0.0f;
 		a[3] = 1.0 - a[2];
 
 		int p, q;
@@ -616,7 +622,8 @@ void GenerateSSF(SurfelGraph *surfels, std::string filename, int minSurfelSize, 
 	//for surfel
 	for (int i = 0; i < surfels->NodeArray.n; pCurrSurfel++, i++)
 	{
-		if ((pCurrSurfel->ObjectID == -1) || (checkbackground && ((pCurrSurfel->ObjectID == 255) || (pCurrSurfel->ObjectID == 0))) || (pCurrSurfel->size == 1) || (pCurrSurfel->size == 0) || pCurrSurfel->bEdge || pCurrSurfel->size < minSurfelSize)
+		//if ((pCurrSurfel->ObjectID == -1) || (checkbackground && ((pCurrSurfel->ObjectID == 255) || (pCurrSurfel->ObjectID == 0))) || (pCurrSurfel->size == 1) || (pCurrSurfel->size == 0) || pCurrSurfel->bEdge || pCurrSurfel->size < minSurfelSize)
+		if ((checkbackground && ((pCurrSurfel->ObjectID == 255) || (pCurrSurfel->ObjectID == 0))) || (pCurrSurfel->size <= 1) || pCurrSurfel->bEdge)
 			continue;
 
 		//Create element
@@ -925,6 +932,9 @@ cv::Mat GenColoredSegmentationImgFromObjectGraph(SURFEL::ObjectGraph* objects)
 		while (piElement)
 		{
 			currSSFElement = ssf->elements.at(piElement->Idx);
+
+			if (piElement->Idx == 2)
+				int debug = 0;
 
 			pixAff = std::dynamic_pointer_cast<SceneSegFile::FeatureTypeInt>(currSSFElement->features.features.at(SceneSegFile::FeaturesList::PixelAffiliation));
 

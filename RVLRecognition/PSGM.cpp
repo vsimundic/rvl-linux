@@ -2865,6 +2865,8 @@ bool RVL::RECOG::PSGM_::mouseRButtonDownUserFunction(
 
 	if (iCluster >= 0)
 	{
+		printf("Selected segment: %d\n", iCluster);
+
 		pRecognition->PaintCluster(iCluster, pData->selectionColor);
 
 		if (pSurfels->DisplayData.bVertices)

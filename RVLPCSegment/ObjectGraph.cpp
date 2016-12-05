@@ -518,8 +518,8 @@ namespace RVL
 #ifdef RVLPCSEGMENT_GRAPH_WERAGGREGATION_DEBUG
 								fprintf(fp, "new max cost bin index: %d\n", iMaxCost);
 
-								if (iMaxCost == 574)
-									int debug = 0;
+								//if (iMaxCost == 574)
+								//	int debug = 0;
 #endif
 							}
 						}
@@ -600,12 +600,15 @@ ObjectGraph::ObjectGraph()
 {
 	WERSegmentationMinCostDiff = 0.1f;
 	WERSegmentationCostResolution = 0.01f;
+	kCoverage = 0.99f;
+	alpha = 0.5f;
 
 	elementMem = NULL;
 	NodeArray.Element = NULL;
 	EdgeArray.Element = NULL;
 	EdgePtrMem = NULL;
 	objectMap = NULL;
+	objectArray.Element = NULL;
 }
 
 
@@ -616,6 +619,18 @@ ObjectGraph::~ObjectGraph()
 	RVL_DELETE_ARRAY(EdgeArray.Element);
 	RVL_DELETE_ARRAY(EdgePtrMem);
 	RVL_DELETE_ARRAY(objectMap);
+	RVL_DELETE_ARRAY(objectArray.Element);
+}
+
+void ObjectGraph::CreateParamList(CRVLMem *pMem)
+{
+	ParamList.m_pMem = pMem;
+
+	RVLPARAM_DATA *pParamData;
+
+	ParamList.Init();
+
+	pParamData = ParamList.AddParam("ObjectGraph.alpha", RVLPARAM_TYPE_FLOAT, &alpha);
 }
 
 #ifdef RVLSURFEL_IMAGE_ADJACENCY
@@ -667,6 +682,11 @@ void ObjectGraph::Create(SurfelGraph *pSurfels_)
 		pEdgeList = &(pAgNode->EdgeList);
 
 		RVLQLIST_INIT(pEdgeList);
+
+		//if (pSurfel->size < 0)
+		//	int debug = 0;
+
+		pAgNode->size = pSurfel->size;
 	}
 
 	for (iSurfel = 0; iSurfel < pSurfels->NodeArray.n; iSurfel++)
@@ -717,7 +737,7 @@ void ObjectGraph::CreateFromSSF(std::string ssfFileName)
 	//Loading SSF
 	//SSF vars
 	this->ssf = std::make_shared<SceneSegFile::SceneSegFile>("");
-	this->ssf->Load(ssfFileName);
+	this->ssf->Load(ssfFileName);	
 	std::shared_ptr<SceneSegFile::SegFileElement> currSSFElement;
 	std::shared_ptr<SceneSegFile::FeatureGroup> currSSFAdjacencyFeatureGroup;
 	std::shared_ptr<SceneSegFile::FeatureSet> currSSFAdjacencyLink;
@@ -842,6 +862,8 @@ void ObjectGraph::CreateFromSSF(std::string ssfFileName)
 		pEdgeList = &(pAgNode->EdgeList);
 
 		RVLQLIST_INIT(pEdgeList);
+
+		pAgNode->size = ssf->elements.at(iSurfel)->features.features.at(SceneSegFile::FeaturesList::PixelAffiliation)->size;
 	}
 
 	//iSurfel = 0;
@@ -921,7 +943,6 @@ void ObjectGraph::CalculateOverAndUnderSegmentation(int *E, int &N, bool useGTNo
 				GTObjHistogram[iObject * GTHistSize + i] += GTObjHistogram_surfel->data[i];
 			piElement = piElement->pNext;
 		}
-
 	}
 	
 	E[0] = 0;	//Oversegmentation values
@@ -1028,6 +1049,122 @@ void ObjectGraph::WERSegmentation()
 #endif
 
 	GRAPH::WERAggregation<GRAPH::AggregateNode<AgEdge>, AgEdge, GRAPH::EdgePtr2<AgEdge>, float>(*this, objectMap, elementMem, WERSegmentationMinCostDiff, WERSegmentationCostResolution);
+
+	CreateSortedObjectArray();
+
+#ifdef RVLPCSEGMENT_OBJECT_GRAPH_LOG
+	FILE *fpLog = fopen("C:\\RVL\\Debug\\WERAggGraph.txt", "w");
+
+	WriteObjectDataToFile(fpLog);
+
+	fclose(fpLog);
+#endif
+}
+
+void ObjectGraph::CreateSortedObjectArray()
+{
+	// Compute object sizes and determine the number of objects.
+
+	int *objectArray_ = new int[NodeArray.n];
+
+	objectArray.n = 0;
+
+	int nPts = 0;
+
+	int iNode;
+	GRAPH::AggregateNode<AgEdge> *pAgNode, *pElement;
+	QLIST::Index *pElementIdx;
+	int size;
+
+	for (iNode = 0; iNode < NodeArray.n; iNode++)
+	{
+		if (iNode == 1230 || iNode == 786 || iNode == 946)
+			int debug = 0;
+
+		pAgNode = NodeArray.Element + iNode;
+
+		pElementIdx = pAgNode->elementList.pFirst;
+
+		if (pElementIdx)
+		{
+			size = 0;
+
+			while (pElementIdx)
+			{
+				pElement = NodeArray.Element + pElementIdx->Idx;
+
+				size += pElement->size;
+
+				pElementIdx = pElementIdx->pNext;
+			}
+
+			pAgNode->size = size;
+
+			if (size > 0)
+				nPts += size;
+
+			if (size > 1)
+				objectArray_[objectArray.n++] = iNode;
+		}
+	}
+
+	for (iNode = 0; iNode < NodeArray.n; iNode++)
+	{
+		pAgNode = NodeArray.Element + iNode;
+
+		if (pAgNode->elementList.pFirst == NULL)
+			pAgNode->size = 0;
+	}
+
+	RVL_DELETE_ARRAY(objectArray.Element);
+
+	objectArray.Element = new int[objectArray.n];
+
+	int nCoverage = 0;
+
+	bool *bCoverage = new bool[objectArray.n];
+
+	memset(bCoverage, 0, objectArray.n * sizeof(bool));
+
+	float fnPts = (float)nPts;
+
+	int iObject = 0;
+
+	int iiNode, iiMaxObject;
+	int maxObjectSize;
+
+	while ((float)nCoverage / fnPts < kCoverage)
+	{
+		maxObjectSize = 0;
+
+		for (iiNode = 0; iiNode < objectArray.n; iiNode++)
+		{
+			if (bCoverage[iiNode])
+				continue;
+
+			iNode = objectArray_[iiNode];
+
+			pAgNode = NodeArray.Element + iNode;
+
+			if (pAgNode->size > maxObjectSize)
+			{
+				maxObjectSize = pAgNode->size;
+
+				iiMaxObject = iiNode;
+			}
+		}
+
+		objectArray.Element[iObject++] = objectArray_[iiMaxObject];
+
+		bCoverage[iiMaxObject] = true;
+
+		nCoverage += maxObjectSize;
+	}
+
+	objectArray.n = iObject;
+
+	delete[] bCoverage;
+	delete[] objectArray_;
 }
 
 void ObjectGraph::ComputeRelationCosts()
@@ -1037,6 +1174,7 @@ void ObjectGraph::ComputeRelationCosts()
 	QList<GRAPH::EdgePtr2<AgEdge>> *pEdgeList;
 	AgEdge *pEdge;
 	GRAPH::EdgePtr2<AgEdge> *pEdgePtr;
+	ObjectEdgeData edgeData;
 
 	for (iNode = 0; iNode < NodeArray.n; iNode++)
 	{
@@ -1057,7 +1195,7 @@ void ObjectGraph::ComputeRelationCosts()
 				//if (iNode == 15 && iNode_ == 27)
 				//	int debug = 0;
 
-				ComputeRelationCost(pEdge);
+				ComputeRelationCost(pEdge, edgeData);
 			}
 
 			pEdgePtr = pEdgePtr->pNext;
@@ -1065,7 +1203,9 @@ void ObjectGraph::ComputeRelationCosts()
 	}
 }
 
-void ObjectGraph::ComputeRelationCost(AgEdge *pEdge)
+void ObjectGraph::ComputeRelationCost(
+	AgEdge *pEdge,
+	ObjectEdgeData &data)
 {
 	//float scale = 1000.0f;
 	float scale = 1.0f;
@@ -1073,20 +1213,21 @@ void ObjectGraph::ComputeRelationCost(AgEdge *pEdge)
 	float depthStepExtThr = scale * 0.025f;
 	float concaveAngleThr = 45.0f * DEG2RAD;
 	float concaveMinCost = 0.3f;
-	float alpha = 0.5f;
 
 	float f1 = pEdge->desc.cupyDescriptor[0];
 	float f2 = pEdge->desc.cupyDescriptor[1];
 	float f3 = pEdge->desc.cupyDescriptor[2];
 	float f4 = pEdge->desc.cupyDescriptor[3];
 
-	float PContinuous = (f4 <= depthStepIntThr ? 1.0f : (f4 <= depthStepExtThr ? (depthStepExtThr - f4) / (depthStepExtThr - depthStepIntThr) : 0.0f));
+	data.PContinuous = (f4 <= depthStepIntThr ? 1.0f : (f4 <= depthStepExtThr ? (depthStepExtThr - f4) / (depthStepExtThr - depthStepIntThr) : 0.0f));
 
-	float PConvex = (f1 >= 0 ? 1.0f : (f1 >= -concaveAngleThr ? concaveMinCost + (1.0f - concaveMinCost) * (concaveAngleThr + f1) / concaveAngleThr : concaveMinCost));
+	data.PConvex = (f1 >= 0 ? 1.0f : (f1 >= -concaveAngleThr ? concaveMinCost + (1.0f - concaveMinCost) * (concaveAngleThr + f1) / concaveAngleThr : concaveMinCost));
 
-	float PClean = 0.5f + 0.5f * f2;
+	data.PClean = 0.5f + 0.5f * f2;
 
-	pEdge->cost = RVLMIN(PContinuous, RVLMIN(PConvex, PClean));
+	data.P = RVLMIN(data.PContinuous, RVLMIN(data.PConvex, data.PClean));
+
+	pEdge->cost = data.P;
 
 	pEdge->cost -= alpha;
 
@@ -1179,6 +1320,72 @@ void ObjectGraph::WriteSurfelDataToFile(FILE *fp)
 	}
 }
 
+void ObjectGraph::WriteObjectDataToFile(FILE *fp)
+{
+
+}
+
+void ObjectGraph::Debug()
+{
+	int maxnGTObjects = 100;
+	int minSurfelSize = 20;
+
+	int iNode, iNode_;
+	GRAPH::AggregateNode<AgEdge> *pAgNode, *pAgNode_;
+	QList<GRAPH::EdgePtr2<AgEdge>> *pEdgeList;
+	AgEdge *pEdge;
+	GRAPH::EdgePtr2<AgEdge> *pEdgePtr;
+	Surfel *pSurfel, *pSurfel_;
+	ObjectEdgeData edgeData;
+
+	for (iNode = 0; iNode < NodeArray.n; iNode++)
+	{
+		pAgNode = NodeArray.Element + iNode;
+
+		if (pAgNode->size < minSurfelSize)
+			continue;
+
+		pSurfel = pSurfels->NodeArray.Element + iNode;
+
+		if (pSurfel->ObjectID < 0 || pSurfel->ObjectID >= maxnGTObjects)
+			continue;
+
+		pEdgeList = &(pAgNode->EdgeList);
+
+		pEdgePtr = pEdgeList->pFirst;
+
+		while (pEdgePtr)
+		{
+			iNode_ = RVLPCSEGMENT_GRAPH_GET_OPPOSITE_NODE(pEdgePtr);
+
+			pAgNode_ = NodeArray.Element + iNode_;
+
+			if (pAgNode_->size >= minSurfelSize)
+			{
+				if (iNode < iNode_)
+				{
+					pSurfel_ = pSurfels->NodeArray.Element + iNode_;
+
+					if (pSurfel_->ObjectID >= 0 && pSurfel_->ObjectID < maxnGTObjects)
+					{
+						if ((pSurfel->ObjectID > 0 || pSurfel_->ObjectID > 0) && pSurfel->ObjectID != pSurfel_->ObjectID)
+						{						
+							pEdge = pEdgePtr->pEdge;
+
+							ComputeRelationCost(pEdge, edgeData);
+
+							if (edgeData.P > 0.5f)
+								int debug = 0;
+						}
+					}
+				}
+			}
+
+			pEdgePtr = pEdgePtr->pNext;
+		}
+	}
+}
+
 bool RVL::SURFEL::objectKeyPressUserFunction(
 	Mesh *pMesh,
 	SurfelGraph *pSurfels,
@@ -1255,3 +1462,4 @@ bool RVL::SURFEL::objectMouseRButtonDownUserFunction(
 	else
 		return false;
 }
+
