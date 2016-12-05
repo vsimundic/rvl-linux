@@ -44,6 +44,7 @@ namespace RVL
 			vtkSmartPointer<vtkActor> vertices;
 			float normalLen;
 			bool bVertices;
+			bool bFirstKey;
 		};
 
 		struct EdgePtr;

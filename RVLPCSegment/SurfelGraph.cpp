@@ -423,7 +423,8 @@ void SurfelGraph::AssignGroundTruthSegmentation(
 	for (int i = 0; i < NodeArray.n; pCurrSurfel++, i++)
 	{
 		pCurrSurfel->ObjectID = -1;
-		if ((pCurrSurfel->size == 1) || (pCurrSurfel->size == 0) || pCurrSurfel->bEdge || pCurrSurfel->size < minSurfelSize)
+		//if ((pCurrSurfel->size == 1) || (pCurrSurfel->size == 0) || pCurrSurfel->bEdge || pCurrSurfel->size < minSurfelSize)
+		if ((pCurrSurfel->size <= 1) || pCurrSurfel->bEdge)
 			continue;
 		/*pCurrSurfel->ObjectID = DetPrimaryGTObj(pCurrSurfel, GTlabImg, 256);*/ //256 objects because background has label of 255
 		SetPrimaryGTObj(pCurrSurfel, GTlabImg, maxLab + 1); //maxLab + 1 because the last GT object label has to be maxLab and not maxLab - 1
@@ -1261,6 +1262,15 @@ void SURFEL::KeyPressCallback(vtkObject* caller, unsigned long eid, void* client
 	vtkSmartPointer<vtkRenderWindowInteractor> interactor = reinterpret_cast<vtkRenderWindowInteractor*>(caller);
 	SURFEL::DisplayCallbackData *pData = (SURFEL::DisplayCallbackData *)clientdata;
 
+	if (!pData->bFirstKey)
+	{
+		pData->bFirstKey = true;
+
+		return;
+	}
+
+	pData->bFirstKey = false;
+
 	Mesh *pMesh = pData->pMesh;
 
 	vtkSmartPointer<vtkPolyData> pd = pMesh->pPolygonData;
@@ -1366,6 +1376,31 @@ void SURFEL::KeyPressCallback(vtkObject* caller, unsigned long eid, void* client
 			pData->vertices->VisibilityOff();
 
 		bUpdateDisplay = true;
+	}
+	else if (keySym == "F1")
+	{
+		std::cout << "Enter surfel index: ";
+
+		std::string line;
+
+		std::getline(std::cin, line);
+
+		int iSelectedSurfel;
+
+		sscanf(line.data(), "%d", &iSelectedSurfel);
+
+		if (iSelectedSurfel >= 0 && iSelectedSurfel < pData->pSurfels->NodeArray.n)
+		{
+			if (pData->iSelectedSurfel >= 0 && pData->iSelectedSurfel < pData->pSurfels->NodeArray.n)
+				pData->pVisualizer->PaintPointSet(&(pData->pSurfels->NodeArray.Element[pData->iSelectedSurfel].PtList), pMesh->pPolygonData,
+				pData->pSurfels->GetColor(pData->iSelectedSurfel));
+
+			pData->pVisualizer->PaintPointSet(&(pData->pSurfels->NodeArray.Element[iSelectedSurfel].PtList), pMesh->pPolygonData, pData->SelectionColor);
+
+			pData->iSelectedSurfel = iSelectedSurfel;
+
+			bUpdateDisplay = true;
+		}
 	}
 #ifdef RVLMESH_BOUNDARY_DEBUG
 	else if (keySym == "plus")
@@ -1585,6 +1620,7 @@ void SurfelGraph::InitDisplay(
 	DisplayData.iSelectedSurfel = DisplayData.iSelectedSurfel2 = -1;
 	DisplayData.iSelection = 1;
 	DisplayData.bVertices = false;
+	DisplayData.bFirstKey = true;
 
 	pVisualizer->SetMouseRButtonDownCallback(SURFEL::MouseRButtonDown, &DisplayData);
 	pVisualizer->SetKeyPressCallback(SURFEL::KeyPressCallback, &DisplayData);

@@ -3,6 +3,8 @@
 #include <memory>
 #include "SceneSegFile.hpp"
 
+//#define RVLPCSEGMENT_OBJECT_GRAPH_LOG
+
 namespace RVL
 {
 	namespace SURFEL
@@ -30,6 +32,14 @@ namespace RVL
 			bool bObjects;
 		};
 
+		struct ObjectEdgeData
+		{
+			float PContinuous;
+			float PConvex;
+			float PClean;
+			float P;
+		};
+
 		bool objectKeyPressUserFunction(
 			Mesh *pMesh,
 			SurfelGraph *pSurfels,
@@ -48,12 +58,16 @@ namespace RVL
 		public:
 			ObjectGraph();
 			virtual ~ObjectGraph();
+			void CreateParamList(CRVLMem *pMem);
 			void Create(SurfelGraph *pSurfels_);
 			void CreateFromSSF(std::string ssfFileName);	//Filko
 			void CalculateOverAndUnderSegmentation(int *E, int &N, bool useGTNoPix = true,  bool useBackground = true);	//Filko
 			void WERSegmentation();
 			void ComputeRelationCosts();
-			void ComputeRelationCost(AgEdge *pEdge);
+			void ComputeRelationCost(
+				AgEdge *pEdge,
+				ObjectEdgeData &data);
+			void CreateSortedObjectArray();
 			void InitDisplay(
 				Visualizer *pVisualizer,
 				Mesh *pMesh,
@@ -63,8 +77,11 @@ namespace RVL
 				int iObject,
 				unsigned char *color);
 			void WriteSurfelDataToFile(FILE *fp);
+			void WriteObjectDataToFile(FILE *fp);
+			void Debug();
 
 		public:
+			CRVLParameterList ParamList;
 			SurfelGraph *pSurfels;
 			float WERSegmentationMinCostDiff;
 			float WERSegmentationCostResolution;
@@ -72,6 +89,9 @@ namespace RVL
 			int *objectMap;
 			std::shared_ptr<SceneSegFile::SceneSegFile> ssf;	//Filko
 			std::map<int, int> objID2idxMap; //Filko
+			Array<int> objectArray;
+			float kCoverage;
+			float alpha;
 		private:
 			QLIST::Index *elementMem;
 		};
