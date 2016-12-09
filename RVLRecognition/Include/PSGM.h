@@ -3,7 +3,7 @@
 //#define RVLPSGM_NORMAL_HULL
 
 #define RVLRECOGNITION_MODE_PSGM_CREATE_CTIS		2
-
+#include "Eigen\Dense"
 namespace RVL
 {
 	class PSGM;
@@ -96,11 +96,26 @@ namespace RVL
 				float normalLen;
 			};
 
+
+			//Petra
+			struct SegmentMatch
+			{
+				float Eseg;
+				int iCTIs;
+				int iCTIm;
+				int iSS;
+				int iSM;
+				int iM;
+				Eigen::VectorXf t;
+			};
+
 			//VIDOVIC
 			struct MatchInstance
 			{
 				int iScene;
 				int iModel;
+				int iMS;
+				int iSS;
 				float R[9];
 				float t[3];
 				float score;
@@ -147,11 +162,29 @@ namespace RVL
 		void CreateParamList(CRVLMem *pMem);
 		void Interpret(
 			Mesh *pMesh);
-		void InterpretCTIS(
+		
+		//Petra
+		void InterpreteCTIS(
 			Mesh *pMesh);
-		void LoadCTI(std::string filename);
-		void PSGM::ConvexTemplate(
-			Eigen::Matrix<float, 3, 13> *nT);
+		Eigen::MatrixXf MatchInPrimitiveSpace(
+			RECOG::PSGM_::ModelInstance *pCTI,
+			Eigen::MatrixXf QM,
+			Eigen::MatrixXf M,
+			Eigen::VectorXf validS);
+		Eigen::MatrixXf UpdateMatchMatrix(
+			RECOG::PSGM_::ModelInstance *pCTI,
+			RECOG::PSGM_::ModelInstance *pModelInstance,
+			Eigen::MatrixXf e
+			);
+		void VisualizeCTIMatch(
+			float *nT, 
+			float *dM, 
+			float *tM, 
+			float *dS, 
+			int *validS);
+		Eigen::Matrix<float, 3, 66> ConvexTemplatenT();
+		//end Petra
+
 		void InitDisplay(
 			Visualizer *pVisualizer,
 			Mesh *pMesh,
@@ -176,11 +209,19 @@ namespace RVL
 		void SaveModelID(FileSequenceLoader dbLoader); //VIDOVIC
 		void Learn(char *modelSequenceFileName); //VIDOVIC
 		void LoadModelDataBase(); //VIDOVIC
+		void LoadCTI(char * filePath); //VIDOVIC
 		void Match(); //VIDOVIC
 		void MSTransformation(RECOG::PSGM_::ModelInstance *pMModelInstance, RECOG::PSGM_::ModelInstance *pSModelInstance, float *tBestMatch, float *R, float *t); //VIDOVIC
 		void SetNumberOfScenes(int scenesNumber); //VIDOVIC
 		void SaveMatches(); //VIDOVIC
 		void CompareMatchesToGT(ECCVGTLoader *ECCVGT, float scoreThresh, float angleThresh, float distanceThresh, float &precision, float &recall); //VIDOVIC
+		void PSGM::CompareCTIMatchesToGT(
+			ECCVGTLoader *ECCVGT,
+			float scoreThresh,
+			float angleThresh,
+			float distanceThresh,
+			float &precision,
+			float &recall); //Petra
 		void CompareSMIMatchesToGT(ECCVGTLoader *ECCVGT, float scoreThresh, float angleThresh, float distanceThresh, float &precision, float &recall); //VIDOVIC
 	private:
 		void DetectVertices(
@@ -235,6 +276,7 @@ namespace RVL
 		float baseSeparationAngle;
 		float edgeTangentAngle;
 		Array<RECOG::PSGM_::ModelInstance> modelInstanceDB; //VIDOVIC
+		Array<RECOG::PSGM_::ModelInstance> CTI; //VIDOVIC
 		Array<RECOG::PSGM_::MatchInstance> matches; //VIDOVIC
 		RECOG::PSGM_::MatchInstance *pMatches; //VIDOVIC
 		QList<RECOG::PSGM_::MatchInstance> SMImatches; //VIDOVIC

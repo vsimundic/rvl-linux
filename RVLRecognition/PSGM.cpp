@@ -13,12 +13,16 @@
 #include "PlanarSurfelDetector.h"
 #include "RVLRecognition.h"
 #include "PSGM.h"
-#include <Eigen\Eigenvalues>
+#include "Eigen/Eigenvalues"
 #include <random> //VIDOVIC
-#include <Eigen\QR> //PETRA
+#include "Eigen/QR" //PETRA
+#include "Eigen/Dense"
 #include <fstream>
 #include <sstream>
 #include <vector>
+#include <math.h>
+#include <algorithm>
+#include <array>
 
 using namespace RVL;
 
@@ -57,6 +61,7 @@ PSGM::PSGM()
 	modelsInDataBase = NULL; //VIDOVIC
 	sceneMIMatch = NULL; //VIDOVIC
 	modelInstanceDB.n = 0; //VIDOVIC
+	CTI.n = 0; //VIDOVIC
 	nSModelInstances = 0; //VIDOVIC
 
 	nSamples = 20; //VIDOVIC
@@ -89,6 +94,7 @@ PSGM::~PSGM()
 	RVL_DELETE_ARRAY(modelsInDataBase); //VIDOVIC
 	RVL_DELETE_ARRAY(sceneMIMatch); //VIDOVIC
 	RVL_DELETE_ARRAY(matches.Element); //VIDOVIC
+	RVL_DELETE_ARRAY(CTI.Element); //VIDOVIC
 }
 
 void PSGM::CreateParamList(CRVLMem *pMem)
@@ -208,158 +214,491 @@ void PSGM::Interpret(
 }
 
 //PETRA
-namespace Eigen{
-	template<class Matrix>
-	void read_binary(const char* filename, Matrix& matrix){
-		std::ifstream in(filename, ios::in | std::ios::binary);
-		typename Matrix::Index rows = 0, cols = 0;
-		in.read((char*)(&rows), sizeof(typename Matrix::Index));
-		in.read((char*)(&cols), sizeof(typename Matrix::Index));
-		matrix.resize(rows, cols);
-		in.read((char *)matrix.data(), rows*cols*sizeof(typename Matrix::Scalar));
-		in.close();
-	}
-}
-//presumes that a cluster list already exists (segmentation)
-void PSGM::LoadCTI(std::string filename)
+void PSGM::InterpreteCTIS(Mesh *pMesh)
 {
-	std::fstream ctifilestream;
-	ctifilestream.open(filename, std::fstream::in);
-	int idx = 0;
-	int iModel;
-	int iCluster = 0;
-	int oCluster = 0;
-	RECOG::PSGM_::Cluster *pCluster;// = clusters.Element[iCluster];
-	RECOG::PSGM_::ModelInstanceElement *pModelInstanceElement;
-	RECOG::PSGM_::ModelInstance *pModelInstance;// = pCluster->modelInstanceList.pFirst;
-	int i;
-	std::vector<int*> valid;
-	std::vector<float*> d;
-	std::vector<float*> e;
-	QList<RECOG::PSGM_::ModelInstance> *modelInstanceList;
-	while (!ctifilestream.eof()) //for each line
-	{
-		ctifilestream >> iModel;
-		idx++;
-		ctifilestream >> iCluster;
-		idx++;
+	/*
+	//// Create ordered mesh.
+	//pMesh->CreateOrderedMeshFromPolyData();
 
-		//detect new cluster // save ModelInstanceElement
-		if (iCluster != oCluster)
-		{
-			RVL_DELETE_ARRAY(pModelInstance->modelInstance.Element);
-			pModelInstance->modelInstance.Element = new RECOG::PSGM_::ModelInstanceElement[valid.size()];//[pSurfels->NodeArray.n];
-			pModelInstance->modelInstance.n = valid.size();//pSurfels->NodeArray.n;
+	//// Detect surfels.
+	//pSurfels->Init(pMesh);
+	//pSurfelDetector->Init(pMesh, pSurfels, pMem);
+	//printf("Segmentation to surfels...");
+	//pSurfelDetector->Segment(pMesh, pSurfels);
+	//printf("completed.\n");
+	//int nSurfels = pSurfels->NodeArray.n;
+	//printf("No. of surfels = %d\n", nSurfels);
 
-			for (int iModelInstance = 0; iModelInstance < pModelInstance->modelInstance.n; iModelInstance++)
-			{
-				for (i = 0; i < 66; i++)
-				{
-					pModelInstanceElement = pModelInstance->modelInstance.Element + i;
-					pModelInstanceElement->d = d[iModelInstance][i];
-					pModelInstanceElement->valid = valid[iModelInstance][i];
-					pModelInstanceElement->e = e[iModelInstance][i];
-				}
-			}
+	//// Detect vertices.
+	//printf("Detect vertices.\n");
+	//DetectVertices(pMesh);
 
-			//Deref
-			for (i = 0; i < d.size(); i++)
-			{
-				delete [] d[i];
-				delete [] valid[i];
-				delete [] e[i];
-			}
-		}
+	//// Cluster surfels into convex surfaces.
+	//printf("Detect convex clusters.\n");
+	//Clusters();
 
+	//// Fit model.
 
-		pCluster = clusters.Element[iCluster];
-		pModelInstance = new RECOG::PSGM_::ModelInstance;
-		modelInstanceList = &(pCluster->modelInstanceList);
-		RVLQLIST_ADD_ENTRY(modelInstanceList, pModelInstance);
-	
-		for (i = 0; i < 9; i++)
-			ctifilestream >> pModelInstance->R[i];
-		idx += i;
+	//printf("Fit convex template.\n");
 
-		for (i = 0; i < 3; i++)
-			ctifilestream >> pModelInstance->t[i];
-		idx += i;
+	//int nClusters = RVLMIN(clusters.n, nDominantClusters);
 
-		
-		float *pd = new float[66];
-		for (i = 0; i < 66; i++)
-			ctifilestream >> pd[i];
-		d.push_back(pd);
+	//int iCluster;
+	//RECOG::PSGM_::Cluster *pCluster;
+	//RECOG::PSGM_::ModelInstance *pModelInstance;
 
-		int *pValid = new int[66];
-		for (i = 0; i < 66; i++)
-			ctifilestream >> pValid[i];
-		valid.push_back(pValid);
+	//for (iCluster = 0; iCluster < nClusters; iCluster++)
+	//{
+	//	ReferenceFrames(iCluster);
 
-		float *pe = new float[66];
-		for (i = 0; i < 66; i++)
-			ctifilestream >> pe[i];
-		e.push_back(pe);
+	//	pCluster = clusters.Element[iCluster];
 
-		oCluster = iCluster;
-	}
-}
-void PSGM::InterpretCTIS(Mesh *pMesh)
-{
-	// Create ordered mesh.
+	//	pModelInstance = pCluster->modelInstanceList.pFirst;
 
-	pMesh->CreateOrderedMeshFromPolyData();
+	//	while (pModelInstance)
+	//	{
+	//		FitModel(pCluster, pModelInstance);
 
-	// Detect surfels.
+	//		pModelInstance = pModelInstance->pNext;
 
-	pSurfels->Init(pMesh);
+	//		nSModelInstances++; //VIDOVIC
+	//	}
+	//}
+	*/
 
-	pSurfelDetector->Init(pMesh, pSurfels, pMem);
+	//Parameters
+	float scale = 1000.0;
 
-	printf("Segmentation to surfels...");
+	// Load Scene CTI file
+	LoadCTI("D:\\ARP3D\\ECCV_dataset\\pcd_files\\scene3.cti");
 
-	pSurfelDetector->Segment(pMesh, pSurfels);
+	//Load ModelDB
+	LoadModelDataBase();
+	RECOG::PSGM_::ModelInstance *pMCTI;
+	pMCTI = modelInstanceDB.Element;
+	RECOG::PSGM_::ModelInstanceElement *pMIE;
 
-	printf("completed.\n");
-
-	int nSurfels = pSurfels->NodeArray.n;
-
-	printf("No. of surfels = %d\n", nSurfels);
-
-	// Detect vertices.
-
-	printf("Detect vertices.\n");
-
-	DetectVertices(pMesh);
-
-	// Cluster surfels into convex surfaces.
-
-	printf("Detect convex clusters.\n");
-
-	Clusters();
-
-	//load CTI descriptors for each cluster
-
-
-	//match CTI descriptor to model
-	//RVLCTIMatchInPrimitiveSpace:
-	//Load matrix M
+	//Load matrix of primitives M
+	Eigen::Matrix<float, 9, 66> Mt;
 	Eigen::Matrix<float, 66, 9> M;
-	Eigen::read_binary("M.bin", M);
+	
+	char *buffer = new char[594*8];
+	ifstream datafile("D:\\ARP3D\\Matlab_new\\M.bin", ios::in | ios::binary);
+	datafile.read(buffer, 594 * 8);
+	double *a = (double*)buffer;
+	for (int i = 0; i < 9; i++)
+	{
+		for (int j = 0; j < 66; j++)
+		{
+			Mt(i, j) = a[i*66+j];
+		}
+	}
+	M = Mt.transpose();
 
-	Eigen::Matrix<float, 3, 13> nT;
+	//Load matrix QM
+	Eigen::MatrixXf QMt(4056, 9);
+	Eigen::MatrixXf QM(9, 4056);
+
+	buffer = new char[36504 * 8];
+	ifstream datafile2("D:\\ARP3D\\Matlab_new\\Q.bin", ios::in | ios::binary);
+	datafile2.read(buffer, 36504 * 8);
+	a = (double*)buffer;
+	for (int i = 0; i < 4056; i++)
+	{
+		for (int j = 0; j < 9; j++)
+		{
+			QMt(i, j) = a[i * 9 + j];
+		}
+	}
+	QM = QMt.transpose();
+
+	
+	// Matching loop:
+
+	// Load CTI descriptors and valids for each cluster
+	int iMIE, iValid, rows;
+	RECOG::PSGM_::ModelInstance *pCTI;
+	pCTI = CTI.Element;
+	RECOG::PSGM_::ModelInstanceElement *pSIE;
+	Eigen::Matrix<float, 66, 1> dS;	
+	Eigen::Matrix<int, 1, 66> validS; //visibility mask
+	
+	// Calculate number of scene segments
+	int nSS = -1;
+	int br;
+	for (br = 0; br < CTI.n; br++)
+	{
+		if (pCTI->iCluster > nSS)
+			nSS = pCTI->iCluster;
+		pCTI++;
+	}
+	nSS += 1;
 
 
+	//Segment(i) represents number of CTI-s in i-th segment	
+	Eigen::VectorXi segment(nSS);
+	int brojac = 0;
+	int iC;
+	pCTI = CTI.Element;
+	for (int i = 0; i < nSS; i++)
+	{
+		segment(i) = 0;
+		do
+		{
+			segment(i)++;
+			iC = pCTI->iCluster;
+			pCTI++;
+			brojac++;
+		} while (iC == pCTI->iCluster && brojac < CTI.n);
+		
+	}
+
+	// Calculate number of models and model segments in each model
+	int nM = 35; //in future this needs to be loaded from modelDB
+	int nSM = 3; //in future this needs to be loaded from modelDB
+	
+	// List of matches
+	RECOG::PSGM_::SegmentMatch *SMatch = new RECOG::PSGM_::SegmentMatch[nSS*nM*nSM];
+	
+	// Match matrix (each row corresponds to one SS)
+	Eigen::MatrixXf SSMSMatch(nSS, nM + nSM);
+
+	// Set all errors to -1 for future handling
+	for (int i = 0; i < nSS*nM*nSM; i++)
+	{
+		SMatch[i].Eseg = -1;
+	}
+
+	// Loop trough each Scene CTI 
+	// CTI-s are sorted in segments
+	int iCTI = 0;
+	pCTI = CTI.Element;		
+
+	for (int iSS = 0; iSS < nSS; iSS++)
+	{
+		brojac = segment(iSS);
+		while (brojac != 0) 
+		{
+			// Determine the number of rows (rows=iValid) of Mv
+			pSIE = pCTI->modelInstance.Element;
+			rows = 0;
+			for (iMIE = 0; iMIE < 66; iMIE++)
+			{
+  				validS(iMIE) = pSIE->valid;
+				if (validS(iMIE) == 1)
+					rows++;
+				pSIE++;
+			}
+
+			MatchInPrimitiveSpace(pCTI, QM, M, validS);
+			// UpdateMatchMatrix();
+			iCTI++;
+			pCTI++;		
+			brojac--;	
+		}			
+	}
 
 
-	//Match scene MI to model MI
+	// Print Match structure, for debug purpose:
+	/*
+	FILE *f = fopen("D:\\ARP3D\\Smatch.txt", "w");
+	int counter=0;
+	while (counter < nSS*nM*nSM)
+	{
+		fprintf(f, "%f, %d, %d, %d, %d, %d\n", SMatch[counter].Eseg, SMatch[counter].iCTIm, SMatch[counter].iCTIs, SMatch[counter].iSS, SMatch[counter].iSM, SMatch[counter].iM);
+		counter++;
+	}
+	fclose(f);
+	*/
+
+	// Visualization loop:
+	for (int v = 0; v < nSS*nM*nSM; v ++)
+	{
+		if (SMatch[v].Eseg != -1 && SMatch[v].Eseg < 15)
+		{
+			pCTI = CTI.Element + SMatch[v].iCTIs;
+			pSIE = pCTI->modelInstance.Element;
+			for (iMIE = 0; iMIE < 66; iMIE++)
+			{
+				dS(iMIE) = scale * pSIE->d;
+				validS(iMIE) = pSIE->valid;
+				pSIE++;
+			}
+
+			Eigen::MatrixXf nT = ConvexTemplatenT();
+			Eigen::VectorXf dM(66);
+			Eigen::MatrixXf dMt(66,1);
+			pMCTI = modelInstanceDB.Element + SMatch[v].iCTIm;
+			pMIE = pMCTI->modelInstance.Element;
+			for (int k = 0; k < 66; k++)
+			{
+				dM(k) = pMIE->d;
+				pMIE++;
+			}
+			float *pt = SMatch[v].t.data();
+			VisualizeCTIMatch(nT.data(), dM.data(), SMatch[v].t.data(), dS.data(), validS.data());
+		}
+	}
+		
+	//Match with GT:
+	/*
+	QList<RECOG::PSGM_::MatchInstance> MatchesCTI;
+	QList<RECOG::PSGM_::MatchInstance> *pMatchesCTI = &MatchesCTI;
+	RECOG::PSGM_::MatchInstance *pNewMatch;
+	RVLQLIST_INIT(pMatchesCTI);
+
+	//Add new match to QList
+	RVLMEM_ALLOC_STRUCT(pMem, RECOG::PSGM_::MatchInstance, pNewMatch);
+	RVLQLIST_ADD_ENTRY(pMatchesCTI, pNewMatch);
+
+	//Add data to structure
+
+	pNewMatch->iScene = pSMIMatch->iScene;
+
+	pNewMatch->iCluster = pSMIMatch->iCluster;
+
+	pNewMatch->iCRF = pSMIMatch->iCRF;
+
+	pNewMatch->iSMI = pSMIMatch->iSMI;
+
+	pNewMatch->iModel = pSMIMatch->iModel;
+
+	pNewMatch->iMCluster = pSMIMatch->iMCluster;
+
+	pNewMatch->iMMI = pSMIMatch->iMMI;
+
+	for (i = 0; i < 9; i++)
+		pNewMatch->R[i] = pSMIMatch->R[i];
+
+	for (i = 0; i < 3; i++)
+	{
+		pNewMatch->t[i] = pSMIMatch->t[i];
+		pNewMatch->tMatch[i] = pSMIMatch->tMatch[i];
+	}
+
+	pNewMatch->E = pSMIMatch->E;
+
+	pNewMatch->score = pSMIMatch->score;
+
+	pNewMatch->probability1 = pSMIMatch->probability1;
+
+	pNewMatch->probability2 = pSMIMatch->probability2;
+
+	pNewMatch->angle = pSMIMatch->angle;
+
+	pNewMatch->distance = pSMIMatch->distance;
+	*/
+	/*
 	if (mode == RVLRECOGNITION_MODE_RECOGNITION)
 		Match();
-	
+	*/
+
+	delete[] SMatch;
+
 }
 
-void PSGM::ConvexTemplate(Eigen::Matrix<float, 3, 13> *nT)
+Eigen::MatrixXf MatchInPrimitiveSpace(
+	RECOG::PSGM_::ModelInstance *pCTI,
+	Eigen::MatrixXf QM,
+	Eigen::MatrixXf M,
+	Eigen::VectorXf validS)
 {
+	// Translation for visualisation purposes
+	Eigen::MatrixXf t;
+
+	// Search for valids and create dv and Mv
+	RECOG::PSGM_::ModelInstanceElement *pSIE;
+	pSIE = pCTI->modelInstance.Element;
+	Eigen::MatrixXf Mv(rows, 9);
+	Eigen::MatrixXf dv(rows, 1);
+	Eigen::MatrixXf D(CTI.n, rows); //matrix of descriptors
+	int iValid = 0;
+	for (iMIE = 0; iMIE < 66; iMIE++)
+	{
+		dS(iMIE) = scale * pSIE->d;
+		validS(iMIE) = pSIE->valid;
+		if (validS(iMIE) == 1)
+		{
+			dv(iValid) = dS(iMIE);
+			Mv.block<1, 9>(iValid, 0) << M.block<1, 9>(iMIE, 0);
+			iValid++;
+		}
+		pSIE++;
+	}
+
+	// QR decomposition of M
+	Eigen::ColPivHouseholderQR<Eigen::MatrixXf> qr(Mv);
+	Eigen::MatrixXf R_ = qr.matrixQR().triangularView<Eigen::Upper>();
+	Eigen::MatrixXf Q_ = qr.matrixQ(); //householderQ();
+	Eigen::MatrixXf P = qr.colsPermutation();
+	Eigen::MatrixXf Q(iValid, 9), R(9, 9), R_sorted(9, 9);
+
+	for (int x = 0; x < iValid; x++)
+	{
+		for (int y = 0; y < 9; y++)
+		{
+			Q(x, y) = Q_(x, y);
+		}
+	}
+
+	for (int x = 0; x < 9; x++)
+	{
+		for (int y = 0; y < 9; y++)
+		{
+			R(x, y) = R_(x, y);
+		}
+	}
+
+	int m = M.cols();
+	int ms = m - 3;
+	Eigen::MatrixXf q = Q.transpose() * dv;
+	Eigen::MatrixXf Rs(9, ms);
+	Eigen::MatrixXf Rt(9, (m - ms));
+
+	for (int x = 0; x < 9; x++)
+	{
+		for (int y = 0; y < 9; y++)
+		{
+			if (P(y, x) == 1)
+			{
+				R_sorted.block<9, 1>(0, y) = R.block<9, 1>(0, x);
+			}
+		}
+	}
+
+	for (int x = 0; x < 9; x++)
+	{
+		for (int y = 0; y < ms; y++)
+		{
+			Rs(x, y) = R_sorted(x, y);
+		}
+	}
+
+	for (int x = 0; x < 9; x++)
+	{
+		for (int y = 0; y < m - ms; y++)
+		{
+			Rt(x, y) = R_sorted(x, y + ms);
+		}
+	}
+
+	// QR decomposition of Rt
+	Eigen::ColPivHouseholderQR<Eigen::MatrixXf> qrRt(Rt);
+	Eigen::MatrixXf Pt = qrRt.colsPermutation();
+	Eigen::MatrixXf Rt_(3, 3);
+	Eigen::MatrixXf Rt_t(3, 3);
+	Eigen::MatrixXf RRt = qrRt.matrixQR().triangularView<Eigen::Upper>();
+	Eigen::MatrixXf Qt_ = qrRt.matrixQ();
+
+	for (int x = 0; x < 3; x++)
+	{
+		for (int y = 0; y < 3; y++)
+		{
+			if (Pt(y, x) == 1)
+			{
+				Rt_.block<3, 1>(0, y) = RRt.block<3, 1>(0, x);
+			}
+		}
+	}
+	Eigen::MatrixXf Qt = Qt_;
+	Eigen::MatrixXf RT = Rt_;
+	Rt_t = Rt_.transpose();
+
+	if (Rt_.block<1, 3>(2, 0)*Rt_t.block<3, 1>(0, 2) < 1e-20)
+	{
+		RT = Rt_.block<2, 3>(0, 0);
+		Qt = Qt_.block<9, 2>(0, 0);
+	}
+	else
+	{
+		Qt = Qt_.block<9, 3>(0, 0);;
+		RT = Rt_;
+	}
+
+
+	// Match CTI descriptor to model	
+
+	int Mn = QM.cols();
+	Eigen::MatrixXf s(ms, Mn);
+
+	for (int i = 0; i < ms; i++)
+	{
+		for (int j = 0; j < Mn; j++)
+		{
+			s(i, j) = QM(i, j);
+		}
+	}
+
+	Eigen::MatrixXf jed(1, Mn);
+	for (int i = 0; i < Mn; i++)
+	{
+		jed(0, i) = 1;
+	}
+
+	Eigen::MatrixXf es = q * jed - Rs*s;
+	Eigen::MatrixXf t_ = Qt.transpose() * es;
+	Eigen::MatrixXf e = es - Qt * t_;
+	Eigen::VectorXf E(e.cols());
+
+	float *pt_ = t_.data();
+
+	t = RT.inverse()*t_;
+	// Calculate E
+	float sum;
+	int iM, iSM;
+	int var;
+
+
+	// Find smallest E between each Scene segment and each Model segment
+	for (int j = 0; j < e.cols(); j++)
+	{
+		sum = 0;
+		for (int i = 0; i < e.rows(); i++)
+		{
+			sum += e(i, j)*e(i, j);
+		}
+		E(j) = sqrt(sum);
+
+		// Search for matching model parameters
+		pMCTI = modelInstanceDB.Element + j;
+		pMIE = pMCTI->modelInstance.Element;
+		iM = pMCTI->iModel;
+		iSM = pMCTI->iCluster;
+		var = nM*nSM*iSS + nSM*iM + iSM;
+		if (SMatch[var].Eseg == -1 || E(j) < SMatch[var].Eseg)
+		{
+			SMatch[var].Eseg = E(j);
+			SMatch[var].iCTIm = j;
+			SMatch[var].iCTIs = iCTI;
+			SMatch[var].iSM = iSM;
+			SMatch[var].iSS = iSS;
+			SMatch[var].iM = iM;
+			SMatch[var].t = t.block<3, 1>(0, j);
+		}
+}
+
+Eigen::MatrixXf UpdateMatchMatrix(
+	RECOG::PSGM_::ModelInstance *pCTI,
+	RECOG::PSGM_::ModelInstance *pModelInstance,
+	Eigen::MatrixXf e
+	)
+{
+
+}
+
+
+Eigen::Matrix<float, 3, 66> PSGM::ConvexTemplatenT()
+{
+	Eigen::Matrix<float, 3, 13> nT;
+	Eigen::Matrix<float, 3, 11> nT_;
+	Eigen::Matrix<float, 3, 66> nT__;
+	Eigen::Matrix<int, 8, 3> temp1;
+	Eigen::Matrix<float, 3, 1> N;
+	Eigen::Matrix<float, 1, 3> Nt;
+	Eigen::Matrix<float, 1, 1> NtN;
+	Eigen::Matrix<float, 3, 3> R;
+	Eigen::Matrix<int, 1, 66> dT;
+
 	float h, q, sh, ch, sq, cq;
 	float pi = 3.1415;
 	h = pi / 4;
@@ -369,33 +708,389 @@ void PSGM::ConvexTemplate(Eigen::Matrix<float, 3, 13> *nT)
 	sq = sin(q);
 	cq = cos(q);
 
-	for (int i = 0; i < 3; i++)
+	//for (int i = 0; i < 3; i++)
+	//{
+	//	for (int j = 0; j < 13; j++)
+	//	{
+	//		nT[i][j] = 0;
+	//	}
+	//}
+	//memset(nT->data(), 0, 13 * 3 * sizeof(float));
+	nT.Zero();
+	nT(0,0) = 0;
+	nT(1,0) = 0;
+	nT(2,0) = 1;
+	nT(0,1) = 0;
+	nT(1,1) = -ch;
+	nT(2,1) = ch;
+	nT(0,2) = ch;
+	nT(1,2) = 0;
+	nT(2,2) = ch;
+	nT(0,11) = 0;
+	nT(1,11) = ch;
+	nT(2,11) = ch;
+	nT(0,12) = -ch;
+	nT(1,12) = 0;
+	nT(2,12) = ch;
+
+	temp1 << 3, 0, 1, 4, 0, 2, 5, 1, 2, 6, 0, 11, 7, 0, 12, 8, 2, 11, 9, 1, 12, 10, 11, 12;
+	
+	for (int i = 0; i < temp1.rows(); i++) 
 	{
-		for (int j = 0; j < 13; j++)
+		int column1, column2, column3;
+		column1 = temp1(i,1);
+		column2 = temp1(i,2);
+		column3 = temp1(i,0);
+		N << nT(0, column1) + nT(0, column2), nT(1, column1) + nT(1, column2), nT(2, column1) + nT(2, column2);
+		Nt = N.transpose();
+		NtN = Nt*N;
+		nT.block<3, 1>(0, column3) << (N / (sqrt(NtN(0,0)))); // there must be a better way to convert to float
+	}
+
+	R << 0, 0, -1, 1, 0, 0, 0, -1, 0;
+	nT_ = nT.block < 3, 11 > (0,0);
+	nT__.block<3, 11>(0, 0) << nT_;
+	nT__.block<3, 11>(0, 11) << R*nT_;
+	nT__.block<3, 11>(0, 22) << R*R*nT_;
+	nT__.block<3, 11>(0, 33) << -1*nT_;
+	nT__.block<3, 11>(0, 44) << -1*R*nT_;
+	nT__.block<3, 11>(0, 55) << -1*R*R*nT_;
+
+	int nF = nT__.cols(); //how to put this in matrix size
+	dT.Ones();
+	return nT__;
+}
+
+//Generates vtkPolyData object (points and polys) that represenent a single CTI primitive, planeNormals is column wise (all_normals_x_coordinates, all_normals_y_coordinates, all_normals_z_coordinates)
+vtkSmartPointer<vtkPolyData> GenerateCTIPrimitivePolydata_CW(float *planeNormals, float *planeDist, bool centered = false, int *mask = NULL)
+{
+	vtkSmartPointer<vtkPolyData> outPD;
+
+	float *planeDistLocal = planeDist;
+	//center the model
+	if (!centered)
+	{
+		//make copy of original plane dist
+		planeDistLocal = new float[66];
+		memcpy(planeDistLocal, planeDist, 66 * sizeof(float));
+
+		//Finding MIN and MAX for each normal dimension
+		float maxN[3] = { -10, -10, -10 };
+		int maxI[3] = { 0, 0, 0 };
+		float minN[3] = { 10, 10, 10 };
+		int minI[3] = { 0, 0, 0 };
+		for (int i = 0; i < 66; i++)
 		{
-			nT[i][j] = 0;
+			if (planeNormals[i] > maxN[0])
+			{
+				maxN[0] = planeNormals[i];
+				maxI[0] = i;
+			}
+			if (planeNormals[i] < minN[0])
+			{
+				minN[0] = planeNormals[i];
+				minI[0] = i;
+			}
+
+			if (planeNormals[i + 66] > maxN[1])
+			{
+				maxN[1] = planeNormals[i + 66];
+				maxI[1] = i;
+			}
+			if (planeNormals[i + 66] < minN[1])
+			{
+				minN[1] = planeNormals[i + 66];
+				minI[1] = i;
+			}
+
+			if (planeNormals[i + 66 * 2] > maxN[2])
+			{
+				maxN[2] = planeNormals[i + 66 * 2];
+				maxI[2] = i;
+			}
+			if (planeNormals[i + 66 * 2] < minN[2])
+			{
+				minN[2] = planeNormals[i + 66 * 2];
+				minI[2] = i;
+			}
+		}
+		//centering
+		float newexampleTemp[66];
+		float tempV[3];
+		tempV[0] = 0.5 * (planeDistLocal[maxI[0]] - planeDistLocal[minI[0]]);
+		tempV[1] = 0.5 * (planeDistLocal[maxI[1]] - planeDistLocal[minI[1]]);
+		tempV[2] = 0.5 * (planeDistLocal[maxI[2]] - planeDistLocal[minI[2]]);
+		for (int i = 0; i < 66; i++)
+		{
+			newexampleTemp[i] = planeNormals[i] * tempV[0] + planeNormals[i + 66] * tempV[1] + planeNormals[i + 66 * 2] * tempV[2];
+			planeDistLocal[i] -= newexampleTemp[i];
 		}
 	}
 
-	nT[0][0] = 0;
-	nT[1][0] = 0;
-	nT[2][0] = 1;
-	nT[0][1] = 0;
-	nT[1][1] = -ch;
-	nT[2][1] = ch;
-	nT[0][2] = ch;
-	nT[1][2] = 0;
-	nT[2][2] = ch;
-	nT[0][11] = 0;
-	nT[1][11] = ch;
-	nT[2][11] = ch;
-	nT[0][12] = -ch;
-	nT[1][12] = 0;
-	nT[2][12] = ch;
+	//Generiate primitive (convex hull)
+	vtkSmartPointer<vtkHull> hullFilter = vtkSmartPointer<vtkHull>::New();
+	vtkSmartPointer<vtkPoints> points = vtkSmartPointer<vtkPoints>::New();
+	vtkSmartPointer<vtkFloatArray> normalp = vtkSmartPointer<vtkFloatArray>::New();
+	normalp->SetNumberOfComponents(3);
+	for (int i = 0; i < 66; i++)
+	{
+		points->InsertPoint(i, planeNormals[i] * planeDistLocal[i], planeNormals[i + 66] * planeDistLocal[i], planeNormals[i + 66 * 2] * planeDistLocal[i]);
+		normalp->InsertTuple3(i, planeNormals[i], planeNormals[i + 66], planeNormals[i + 66 * 2]);
+	}
+	vtkSmartPointer<vtkPlanes> planes = vtkSmartPointer<vtkPlanes>::New();
+	planes->SetPoints(points);
+	planes->SetNormals(normalp);
+	hullFilter->SetPlanes(planes);
+	vtkSmartPointer<vtkPolyData> hullPD = vtkSmartPointer<vtkPolyData>::New();
+	hullFilter->GenerateHull(hullPD, -500, 500, -500, 500, -500, 500);
+	vtkSmartPointer<vtkPolyData> interPD = hullPD;
+	//If mask exists remove unwanted polygons
+	if (mask)
+	{
+		double n[3];
+		float cosfi;
+		vtkSmartPointer<vtkCellArray> polys = hullPD->GetPolys();
+		vtkSmartPointer<vtkCellArray> newpolys = vtkSmartPointer<vtkCellArray>::New();
+		vtkIdType *polysPtsIds;
+		vtkIdType npts;
+		polys->InitTraversal();
+		//run through all polygons and find planes with the same normal that shuld be in the output
+		for (int i = 0; i < hullPD->GetNumberOfPolys(); i++)
+		{
+			polys->GetNextCell(npts, polysPtsIds);
+			//calculate polygon normal
+			vtkPolygon::ComputeNormal(hullPD->GetPoints(), npts, polysPtsIds, n);
+			//find corresponding normal in normal list
+			for (int k = 0; k < 66; k++)
+			{
+				cosfi = n[0] * planeNormals[k] + n[1] * planeNormals[k + 66] + n[2] * planeNormals[k + 66 * 2];
+				if ((cosfi > 0.9999) && (mask[k] == 1))
+				{
+					newpolys->InsertNextCell(npts, polysPtsIds);
+					break;
+				}
+			}
 
+		}
+		vtkSmartPointer<vtkPolyData> maskedPD = vtkSmartPointer<vtkPolyData>::New();
+		maskedPD->SetPoints(hullPD->GetPoints());
+		maskedPD->SetPolys(newpolys);
+
+		interPD = maskedPD;
+	}
+
+	//clean polydata from unused poimts and degenerate polygons
+	vtkSmartPointer<vtkCleanPolyData> cleanPD = vtkSmartPointer<vtkCleanPolyData>::New();
+	cleanPD->SetInputData(interPD);
+	cleanPD->Update();
+
+	//make copy of the final polydata and send it back
+	outPD = vtkSmartPointer<vtkPolyData>::New();
+	outPD->DeepCopy(cleanPD->GetOutput());
+	return outPD;
+}
+
+//Generates vtkPolyData object (points and polys) that represenent a single CTI primitive, planeNormals is row wise (normal_1_x_coordinate, normal_1_y_coordinate, normal_1_z_coordinate, normal_2_x_coordinate, ...)
+vtkSmartPointer<vtkPolyData> GenerateCTIPrimitivePolydata_RW(float *planeNormals, float *planeDist, bool centered = false, int *mask = NULL)
+{
+	vtkSmartPointer<vtkPolyData> outPD;
+
+	float *planeDistLocal = planeDist;
+	//center the model
+	if (!centered)
+	{
+		//make copy of original plane dist
+		planeDistLocal = new float[66];
+		memcpy(planeDistLocal, planeDist, 66 * sizeof(float));
+
+		//Finding MIN and MAX for each normal dimension
+		float maxN[3] = { -10, -10, -10 };
+		int maxI[3] = { 0, 0, 0 };
+		float minN[3] = { 10, 10, 10 };
+		int minI[3] = { 0, 0, 0 };
+		for (int i = 0; i < 66; i++)
+		{
+			if (planeNormals[i * 3] > maxN[0])
+			{
+				maxN[0] = planeNormals[i * 3];
+				maxI[0] = i;
+			}
+			if (planeNormals[i * 3] < minN[0])
+			{
+				minN[0] = planeNormals[i * 3];
+				minI[0] = i;
+			}
+
+			if (planeNormals[i * 3 + 1] > maxN[1])
+			{
+				maxN[1] = planeNormals[i * 3 + 1];
+				maxI[1] = i;
+			}
+			if (planeNormals[i * 3 + 1] < minN[1])
+			{
+				minN[1] = planeNormals[i * 3 + 1];
+				minI[1] = i;
+			}
+
+			if (planeNormals[i * 3 + 2] > maxN[2])
+			{
+				maxN[2] = planeNormals[i * 3 + 2];
+				maxI[2] = i;
+			}
+			if (planeNormals[i * 3 + 2] < minN[2])
+			{
+				minN[2] = planeNormals[i * 3 + 2];
+				minI[2] = i;
+			}
+		}
+		//centering
+		float newexampleTemp[66];
+		float tempV[3];
+		tempV[0] = 0.5 * (planeDistLocal[maxI[0]] - planeDistLocal[minI[0]]);
+		tempV[1] = 0.5 * (planeDistLocal[maxI[1]] - planeDistLocal[minI[1]]);
+		tempV[2] = 0.5 * (planeDistLocal[maxI[2]] - planeDistLocal[minI[2]]);
+		for (int i = 0; i < 66; i++)
+		{
+			newexampleTemp[i] = planeNormals[i * 3] * tempV[0] + planeNormals[i * 3 + 1] * tempV[1] + planeNormals[i * 3 + 2] * tempV[2];
+			planeDistLocal[i] -= newexampleTemp[i];
+		}
+	}
+
+	//Generiate primitive (convex hull)
+	vtkSmartPointer<vtkHull> hullFilter = vtkSmartPointer<vtkHull>::New();
+	vtkSmartPointer<vtkPoints> points = vtkSmartPointer<vtkPoints>::New();
+	vtkSmartPointer<vtkFloatArray> normalp = vtkSmartPointer<vtkFloatArray>::New();
+	normalp->SetNumberOfComponents(3);
+	for (int i = 0; i < 66; i++)
+	{
+		points->InsertPoint(i, planeNormals[i * 3] * planeDistLocal[i], planeNormals[i * 3 + 1] * planeDistLocal[i], planeNormals[i * 3 + 2] * planeDistLocal[i]);
+		normalp->InsertTuple3(i, planeNormals[i * 3], planeNormals[i * 3 + 1], planeNormals[i * 3 + 2]);
+	}
+	vtkSmartPointer<vtkPlanes> planes = vtkSmartPointer<vtkPlanes>::New();
+	planes->SetPoints(points);
+	planes->SetNormals(normalp);
+	hullFilter->SetPlanes(planes);
+	vtkSmartPointer<vtkPolyData> hullPD = vtkSmartPointer<vtkPolyData>::New();
+	hullFilter->GenerateHull(hullPD, -500, 500, -500, 500, -500, 500);
+	vtkSmartPointer<vtkPolyData> interPD = hullPD;
+	//If mask exists remove unwanted polygons
+	if (mask)
+	{
+		double n[3];
+		float cosfi;
+		vtkSmartPointer<vtkCellArray> polys = hullPD->GetPolys();
+		vtkSmartPointer<vtkCellArray> newpolys = vtkSmartPointer<vtkCellArray>::New();
+		vtkIdType *polysPtsIds;
+		vtkIdType npts;
+		polys->InitTraversal();
+		//run through all polygons and find planes with the same normal that shuld be in the output
+		for (int i = 0; i < hullPD->GetNumberOfPolys(); i++)
+		{
+			polys->GetNextCell(npts, polysPtsIds);
+			//calculate polygon normal
+			vtkPolygon::ComputeNormal(hullPD->GetPoints(), npts, polysPtsIds, n);
+			//find corresponding normal in normal list
+			for (int k = 0; k < 66; k++)
+			{
+				cosfi = n[0] * planeNormals[k * 3] + n[1] * planeNormals[k * 3 * 1] + n[2] * planeNormals[k * 3 + 2];
+				if ((cosfi > 0.9999) && (mask[k] == 1))
+				{
+					newpolys->InsertNextCell(npts, polysPtsIds);
+					break;
+				}
+			}
+
+		}
+		vtkSmartPointer<vtkPolyData> maskedPD = vtkSmartPointer<vtkPolyData>::New();
+		maskedPD->SetPoints(hullPD->GetPoints());
+		maskedPD->SetPolys(newpolys);
+
+		//intermediate
+		interPD = maskedPD;
+	}
+
+	//clean polydata from unused poimts and degenerate polygons
+	vtkSmartPointer<vtkCleanPolyData> cleanPD = vtkSmartPointer<vtkCleanPolyData>::New();
+	cleanPD->SetInputData(interPD);
+	cleanPD->Update();
+
+	//make copy of the final polydata and send it back
+	outPD = vtkSmartPointer<vtkPolyData>::New();
+	outPD->DeepCopy(cleanPD->GetOutput());
+	return outPD;
+}
+
+
+void PSGM::VisualizeCTIMatch(float *nT, float *dM, float *tM, float *dS, int *validS)
+{
+	// Initialize VTK.
+	vtkSmartPointer<vtkRenderer> renderer = vtkSmartPointer<vtkRenderer>::New();
+	vtkSmartPointer<vtkRenderWindow> window = vtkSmartPointer<vtkRenderWindow>::New();
+	vtkSmartPointer<vtkRenderWindowInteractor> interactor = vtkSmartPointer<vtkRenderWindowInteractor>::New();
+	window->AddRenderer(renderer);
+	window->SetSize(800, 600);
+	interactor->SetRenderWindow(window);
+	vtkSmartPointer<vtkInteractorStyleTrackballCamera> style = vtkSmartPointer<vtkInteractorStyleTrackballCamera>::New();
+	interactor->SetInteractorStyle(style);
+	renderer->SetBackground(0.5294, 0.8078, 0.9803);
+
+	//Generate model polydata
+	vtkSmartPointer<vtkPolyData> modelPD = GenerateCTIPrimitivePolydata_RW(nT, dM);
+	if (tM) //if translation exists
+	{
+		float scale = 1000;
+		vtkSmartPointer<vtkTransform> modelT = vtkSmartPointer<vtkTransform>::New();
+		modelT->Translate(tM[0]/scale, tM[1]/scale, tM[2]/scale);
+		vtkSmartPointer<vtkTransformPolyDataFilter> modelTFilter = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
+		modelTFilter->SetTransform(modelT);
+		modelTFilter->SetInputData(modelPD);
+		modelTFilter->Update();
+		vtkSmartPointer<vtkPolyDataMapper> modelMapper = vtkSmartPointer<vtkPolyDataMapper>::New();
+		modelMapper->SetInputConnection(modelTFilter->GetOutputPort());
+		vtkSmartPointer<vtkActor> modelActor = vtkSmartPointer<vtkActor>::New();
+		modelActor->SetMapper(modelMapper);
+		modelActor->GetProperty()->SetColor(0, 1, 0);
+		renderer->AddActor(modelActor);
+	}
+	else
+	{
+		vtkSmartPointer<vtkPolyDataMapper> modelMapper = vtkSmartPointer<vtkPolyDataMapper>::New();
+		modelMapper->SetInputData(modelPD);
+		vtkSmartPointer<vtkActor> modelActor = vtkSmartPointer<vtkActor>::New();
+		modelActor->SetMapper(modelMapper);
+		modelActor->GetProperty()->SetColor(0, 1, 0);
+		renderer->AddActor(modelActor);
+	}
+
+	/*
+	vtkSmartPointer<vtkPolyDataMapper> modelMapper2 = vtkSmartPointer<vtkPolyDataMapper>::New();
+	modelMapper2->SetInputData(modelPD);
+	vtkSmartPointer<vtkActor> modelActor2 = vtkSmartPointer<vtkActor>::New();
+	modelActor2->SetMapper(modelMapper2);
+	modelActor2->GetProperty()->SetColor(1, 0, 0);
+	renderer->AddActor(modelActor2);
+	*/
+	//Generate scene polydata
+	vtkSmartPointer<vtkPolyData> modelSPD = GenerateCTIPrimitivePolydata_RW(nT, dS, false, validS);
+	vtkSmartPointer<vtkPolyDataMapper> modelSMapper = vtkSmartPointer<vtkPolyDataMapper>::New();
+	modelSMapper->SetInputData(modelSPD);
+	vtkSmartPointer<vtkActor> modelSActor = vtkSmartPointer<vtkActor>::New();
+	modelSActor->SetMapper(modelSMapper);
+	modelSActor->GetProperty()->SetColor(0, 0, 1);
+	renderer->AddActor(modelSActor);
+
+
+
+	//Start VTK
+	renderer->ResetCamera();
+	renderer->TwoSidedLightingOff();
+	window->Render();
+	interactor->Start();
 }
 
 //END PETRA
+
+
 
 
 void PSGM::DetectVertices(
@@ -2426,6 +3121,86 @@ void PSGM::LoadModelDataBase()
 	}
 }
 
+void PSGM::LoadCTI(char *filePath)
+{
+	FILE *fp = fopen(filePath, "r");
+
+	char line[1600] = { 0 };
+
+	int iModelInstance, iModelInstanceElement, i;
+
+	RECOG::PSGM_::ModelInstanceElement *pModelInstanceElement;
+	RECOG::PSGM_::ModelInstance *pModelInstance;
+
+	if (fp)
+	{
+		//count number of lines in CTI file
+		while (!feof(fp))
+		{
+			line[0] = '\0';
+
+			fgets(line, 1600, fp);
+
+			if (line[0] == '\0' || line[0] == '\n')
+				continue;
+
+			CTI.n++;
+		}
+
+		rewind(fp);
+
+		CTI.Element = new RECOG::PSGM_::ModelInstance[CTI.n];
+
+		pModelInstance = CTI.Element;
+
+		for (iModelInstance = 0; iModelInstance < CTI.n; iModelInstance++)
+		{
+			pModelInstance->modelInstance.Element = new RECOG::PSGM_::ModelInstanceElement[convexTemplate.n];
+
+			pModelInstance->modelInstance.n = convexTemplate.n;
+
+			fscanf(fp, "%d\t%d\t", &pModelInstance->iModel, &pModelInstance->iCluster);
+
+			for (i = 0; i < 9; i++)
+				fscanf(fp, "%f\t", &pModelInstance->R[i]);
+
+			for (i = 0; i < 3; i++)
+				fscanf(fp, "%f\t", &pModelInstance->t[i]);
+
+			for (iModelInstanceElement = 0; iModelInstanceElement < convexTemplate.n; iModelInstanceElement++)
+			{
+				pModelInstanceElement = pModelInstance->modelInstance.Element + iModelInstanceElement;
+
+				fscanf(fp, "%f\t", &pModelInstanceElement->d);
+			}
+
+			for (iModelInstanceElement = 0; iModelInstanceElement < convexTemplate.n; iModelInstanceElement++)
+			{
+				pModelInstanceElement = pModelInstance->modelInstance.Element + iModelInstanceElement;
+
+				fscanf(fp, "%d\t", &pModelInstanceElement->valid);
+			}
+
+			for (iModelInstanceElement = 0; iModelInstanceElement < convexTemplate.n; iModelInstanceElement++)
+			{
+				pModelInstanceElement = pModelInstance->modelInstance.Element + iModelInstanceElement;
+
+				fscanf(fp, "%f\t", &pModelInstanceElement->e);
+			}
+
+			if (iModelInstance == CTI.n - 1)
+				pModelInstance->pNext = NULL;
+			else
+			{
+				pModelInstance->pNext = pModelInstance + 1;
+				pModelInstance++;
+			}
+		}
+
+		fclose(fp);
+	}
+}
+
 void PSGM::Match()
 {
 	printf("Scene to model match started...\n");
@@ -3092,6 +3867,158 @@ void PSGM::CompareMatchesToGT(
 	fclose(fp2);
 	fclose(fp3);
 }
+
+
+//PETRA
+void PSGM::CompareCTIMatchesToGT(
+	ECCVGTLoader *ECCVGT,
+	float scoreThresh,
+	float angleThresh,
+	float distanceThresh,
+	float &precision,
+	float &recall)
+{
+	int iMatches, iGTS, iGTM, nGTModels;
+
+	int nGTSecenes = ECCVGT->GT.n;
+
+	int TP = 0, FP = 0, FN = 0;
+
+	float R[9], RGT[9], tGT[3], t[3];
+
+	float V[3], theta, distance;
+
+	bool match = false;
+
+	//reset matches pointer!!
+	pMatches = matches.Element;
+
+	RVL::GTInstance *pGT;
+
+	FILE *fp = fopen("RM.txt", "w");
+	FILE *fp2 = fopen("GT_R.txt", "w");
+	FILE *fp3 = fopen("R.txt", "w");
+
+	//Find TP and FP
+	for (iMatches = 0; iMatches < matches.n; iMatches++)
+	{
+		if (pMatches->score < scoreThresh)
+		{
+			match = false;
+
+			for (iGTS = 0; iGTS < nGTSecenes; iGTS++)
+			{
+				pGT = ECCVGT->GT.Element[iGTS].Element;
+
+				nGTModels = ECCVGT->GT.Element[iGTS].n;
+
+				for (iGTM = 0; iGTM < nGTModels; iGTM++)
+				{
+					if (pMatches->iScene == pGT->iScene)
+					{
+						if (pMatches->iModel == pGT->iModel)
+						{
+							RVLSCALEMX3X3(pGT->R, 1000, RGT);
+
+							RVLMXMUL3X3T2(pMatches->R, RGT, R);
+
+							fprintf(fp, "\n");
+
+							for (int i = 0; i < 9; i++)
+								if (i % 3 == 2)
+									fprintf(fp, "%f\n", pMatches->R[i]);
+								else
+									fprintf(fp, "%f\t", pMatches->R[i]);
+
+							fprintf(fp2, "\n");
+
+							for (int i = 0; i < 9; i++)
+								if (i % 3 == 2)
+									fprintf(fp2, "%f\n", pGT->R[i]);
+								else
+									fprintf(fp2, "%f\t", pGT->R[i]);
+
+							fprintf(fp3, "\n");
+
+							for (int i = 0; i < 9; i++)
+								if (i % 3 == 2)
+									fprintf(fp3, "%f\n", R[i]);
+								else
+									fprintf(fp3, "%f\t", R[i]);
+
+							RVLSCALE3VECTOR(pGT->t, 1000, tGT)
+
+								RVLDIF3VECTORS(pMatches->t, tGT, t);
+
+							GetAngleAxis(R, V, theta);
+
+							GetDistance(t, distance);
+
+							fprintf(fp3, "\n%f\t%f\n", theta, distance);
+
+							if ((theta < angleThresh || (theta >(PI - angleThresh) && theta < (PI + angleThresh))) && distance < distanceThresh)
+								//if (distance < distanceThresh)
+							{
+								if (!pGT->matched)
+								{
+									TP++;
+
+									pGT->matched = true;
+								}
+
+								match = true;
+
+								break;
+							}
+						}
+					}
+
+					pGT++;
+				}
+
+				if (match)
+					break;
+			}
+
+			if (!match)
+				FP++;
+		}
+
+		pMatches++;
+	}
+
+	//find FN
+	for (iGTS = 0; iGTS < nGTSecenes; iGTS++)
+	{
+		pGT = ECCVGT->GT.Element[iGTS].Element;
+
+		nGTModels = ECCVGT->GT.Element[iGTS].n;
+
+		for (iGTM = 0; iGTM < nGTModels; iGTM++)
+		{
+			if (!pGT->matched)
+			{
+				FN++;
+				printf("GT Model %d not matched!\n", iGTM);
+			}
+
+			pGT++;
+		}
+	}
+
+	precision = (float)TP / (float)(TP + FP);
+
+	recall = (float)TP / (float)(TP + FN);
+
+	printf("TP: %d\n", TP);
+	printf("FP: %d\n", FP);
+	printf("FN: %d\n", FN);
+
+	fclose(fp);
+	fclose(fp2);
+	fclose(fp3);
+}
+//END PETRA
 
 //UNDER CONSTRUCTION
 void PSGM::CompareSMIMatchesToGT(

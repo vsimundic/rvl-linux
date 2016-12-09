@@ -303,7 +303,7 @@ int main(int argc, char ** argv)
 
 				recognition.SetSceneFileName(filePath);
 				recognition.Interpret(&mesh);
-				recognition.InterpretCTIS(&mesh);
+				//recognition.InterpretCTIS(&mesh);
 
 				printf("Scene %s...finished!\n\n", filePath);
 			}
@@ -382,16 +382,44 @@ int main(int argc, char ** argv)
 
 			while (sceneSequence.GetNextPath(filePath))
 			{
+				
 				printf("Scene %s...\n", filePath);
 
 				mesh.LoadPolyDataFromPLY(filePath);
-
-				recognition.SetSceneFileName(filePath);
-				recognition.Interpret(&mesh);
 				
+				recognition.SetSceneFileName(filePath);
+
+				// Load GT file
+				ECCVGTLoader ECCVGT;
+				ECCVGT.Init(sceneSequence, GTFolder, modelsInDB);
+
+				recognition.Interpret(&mesh);
+				recognition.InterpreteCTIS(&mesh);
+
+				//recognition.LoadCTI("D:\\ARP3D\\ECCV_dataset\\pcd_files\\frame_20111220T111153.549117.cti");
+
+				/*TEST KRETANJA KROZ CTI
+				int nCTI = recognition.CTI.n;
+				recognition.CTI.Element[0];
+
+				recognition.CTI.Element[0].modelInstance.Element[25].d;
+
+				RECOG::PSGM_::ModelInstance *pCTI;
+				pCTI = recognition.CTI.Element;
+
+				//pCTI->modelInstance.Element[0]->d
+
+				RECOG::PSGM_::ModelInstanceElement *pMIE;
+
+				pMIE = pCTI->modelInstance.Element;
+
+				pMIE->d;
+				*/
+
 				printf("Scene %s...finished!\n\n", filePath);
 				
 				// Visualization
+				
 				surfels.NodeColors(SelectionColor);
 				recognition.InitDisplay(&visualizer, &mesh, SelectionColor);
 				recognition.Display();

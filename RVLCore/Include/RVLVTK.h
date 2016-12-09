@@ -40,3 +40,7 @@
 #include "vtkOBJExporter.h"
 #include "vtkPointPicker.h"
 #include "VTKActorObj.h"
+#include "vtkCleanPolyData.h"
+#include "vtkPlanes.h"
+#include "vtkHull.h"
+#include "vtkTransformPolyDataFilter.h"

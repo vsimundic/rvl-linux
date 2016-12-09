@@ -430,7 +430,7 @@ void PlanarSurfelDetector::Segment(
 
 		// Next surfel index
 
-		printf("surfel %d\n", iSurfel);	// debug
+		//printf("surfel %d\n", iSurfel);	// debug
 
 		iSurfel++;
 

@@ -33,6 +33,7 @@ namespace RVL
 	bool GetAngleAxis(float *R, float *V, float &theta);
 	void GetDistance(float *t, float &distance);
 	//END VIDOVIC
+	void PrintMatrix(FILE *fp, double *A, int n, int m);
 
 	void QuickSort(int *Key, int *Index, int n);
 	void RandomColor(unsigned char *color);
