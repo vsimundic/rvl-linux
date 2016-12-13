@@ -68,6 +68,9 @@ namespace RVL
 				AgEdge *pEdge,
 				ObjectEdgeData &data);
 			void CreateSortedObjectArray();
+			void SortElements(
+				GRAPH::AggregateNode<AgEdge> *pAgNode,
+				Array<SortIndex<int>> *pSortedElementIdxArray);
 			void InitDisplay(
 				Visualizer *pVisualizer,
 				Mesh *pMesh,
@@ -92,8 +95,10 @@ namespace RVL
 			Array<int> objectArray;
 			float kCoverage;
 			float alpha;
+			//Array<int> *sortedElementIdxArray;
 		private:
 			QLIST::Index *elementMem;
+			//int *sortedElementIdxMem;
 		};
 	}
 }

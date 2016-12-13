@@ -235,6 +235,30 @@ int main(int argc, char ** argv)
 
 			surfels.DetectVertices(&mesh);
 
+			// Sort surfels in objects.
+
+			Array<SortIndex<int>> sortedElementIdxArray;
+			sortedElementIdxArray.Element = new SortIndex < int >[surfels.NodeArray.n];
+
+			int iObject;
+			GRAPH::AggregateNode<SURFEL::AgEdge> *pObject;
+
+			for (iObject = 0; iObject < objects.NodeArray.n; iObject++)
+			{
+				pObject = objects.NodeArray.Element + iObject;
+
+				if (pObject->elementList.pFirst)
+				{
+					objects.SortElements(pObject, &sortedElementIdxArray);
+
+					// sortedElementIdxArray contains indices of surfels belonging to pObject sorted according to their size.
+				}
+			}
+
+			delete[] sortedElementIdxArray.Element;
+
+			///
+
 			printf("completed.\n");
 		}
 	}

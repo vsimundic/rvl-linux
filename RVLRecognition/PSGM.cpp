@@ -763,24 +763,25 @@ void PSGM::FitModel(
 			//VIDOVIC
 			if (bNormalValidityTest)
 			{
-				if (pVertex->normalHull.n >= 3)
-				{
-					dist = DistanceFromNormalHull(pVertex->normalHull, N_);
+				//if (pVertex->normalHull.n >= 3)
+				//{
+				//	dist = DistanceFromNormalHull(pVertex->normalHull, N_);
 
-					if (dist <= 0.0f)
-					{
-						if (pModelInstanceElement->valid)
-						{
-							if (d > maxdDefinedNormal)
-								maxdDefinedNormal = d;
-						}
-						else
-						{
-							maxdDefinedNormal = d;
-							pModelInstanceElement->valid = true;
-						}
-					}
-				}
+				//	if (dist <= 0.0f)
+				//	{
+				//		if (pModelInstanceElement->valid)
+				//		{
+				//			if (d > maxdDefinedNormal)
+				//				maxdDefinedNormal = d;
+				//		}
+				//		else
+				//		{
+				//			maxdDefinedNormal = d;
+				//			pModelInstanceElement->valid = true;
+				//		}
+				//	}
+				//}
+				pModelInstanceElement->valid = true;
 
 				P = pVertex->P;
 
