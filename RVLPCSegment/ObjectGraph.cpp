@@ -1507,21 +1507,8 @@ bool RVL::SURFEL::objectMouseRButtonDownUserFunction(
 		return false;
 }
 
-template <typename T>
-std::vector<size_t> orderArray(T* values, int size) {
-	std::vector<size_t> indices(size);
-	std::iota(std::begin(indices), std::end(indices), static_cast<size_t>(0));
-	std::sort(begin(indices), end(indices),	[&](size_t a, size_t b) { return values[a] < values[b]; } );
-	return indices;
-}
-
 void ObjectGraph::DetermineObjectConvexityData(float convexThr, float ratioThr)
 {
-	//test sort
-	int a[5] = { 4, 3, 5, 1, 2 };
-	std::vector<size_t> test = orderArray<int>(a, 5);
-	//std::sort(std::begin())
-
 	//Reseting convexity data
 	if (this->additionalObjectData.CHVertexIndices.size())
 		this->additionalObjectData.CHVertexIndices.clear();
@@ -1543,11 +1530,14 @@ void ObjectGraph::DetermineObjectConvexityData(float convexThr, float ratioThr)
 	Surfel *pSurfelIN;
 	float addedSize = 0;
 	bool fail = false;
+	Array<SortIndex<int>> sortedElementIdxArray;
+	sortedElementIdxArray.Element = new SortIndex < int >[this->pSurfels->NodeArray.n];
+	SortIndex<int> *sortedIdx;
 	for (int iObject = 0; iObject < this->NodeArray.n; iObject++)
 	{
 		addedSize = 0;
 		pObject = this->NodeArray.Element + iObject;
-
+		
 		piElement = pObject->elementList.pFirst;
 
 		//check if object
@@ -1558,12 +1548,18 @@ void ObjectGraph::DetermineObjectConvexityData(float convexThr, float ratioThr)
 		if (pObject->size < 20)
 			continue;
 		
-		while (piElement)
+		// Sort surfels in objects.
+		this->SortElements(pObject, &sortedElementIdxArray);
+
+		/*while (piElement)
+		{*/
+		for (int iS = 0; iS < sortedElementIdxArray.n; iS++)
 		{
+			sortedIdx = sortedElementIdxArray.Element + iS;
 			//getting current surfel
-			pSurfel = this->pSurfels->NodeArray.Element + piElement->Idx;
+			pSurfel = this->pSurfels->NodeArray.Element + sortedIdx->idx;//piElement->Idx;
 			//getting current surfel vertex list
-			pSurfelVertexList = this->pSurfels->surfelVertexList.Element + piElement->Idx;
+			pSurfelVertexList = this->pSurfels->surfelVertexList.Element + sortedIdx->idx; //piElement->Idx;
 			
 			fail = false;
 			//runnong through a current list of added object vertices
@@ -1606,7 +1602,7 @@ void ObjectGraph::DetermineObjectConvexityData(float convexThr, float ratioThr)
 					break;
 			}
 			//add fail falg for current surfel
-			this->additionalObjectData.ObjectsSurfelConvexity.at(iObject).insert(std::pair<int, bool>(piElement->Idx, !fail));
+			this->additionalObjectData.ObjectsSurfelConvexity.at(iObject).insert(std::pair<int, bool>(sortedIdx->idx/*piElement->Idx*/, !fail));
 			//if not failed add vertices to list
 			if (!fail)
 			{
@@ -1620,13 +1616,15 @@ void ObjectGraph::DetermineObjectConvexityData(float convexThr, float ratioThr)
 				//update size
 				addedSize += pSurfel->size;
 			}
-			//Next
-			piElement = piElement->pNext;
+			////Next
+			//piElement = piElement->pNext;
 		}
 
 		//check ratio
 		if ((addedSize / (float)pObject->size) < ratioThr)
 			this->additionalObjectData.CHVertexIndices.at(iObject).clear(); //if the ratio is lower than threshold, then empty it's list of vertices
 	}
+	//Deref
+	delete[] sortedElementIdxArray.Element;
 }
 
