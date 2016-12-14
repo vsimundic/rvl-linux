@@ -1578,10 +1578,6 @@ int main(int argc, char ** argv)
 
 			surfels.DetectVertices(&mesh);
 
-			/*objects.DetermineObjectConvexityData();
-
-			ObjectAggregationLevel2(&objects, &surfels, &mesh, MeshFileName);*/
-
 			// Sort surfels in objects.
 
 			Array<SortIndex<int>> sortedElementIdxArray;
@@ -1603,6 +1599,8 @@ int main(int argc, char ** argv)
 			}
 
 			delete[] sortedElementIdxArray.Element;
+
+			///
 
 			printf("completed.\n");
 		}

@@ -104,7 +104,7 @@ namespace RVL
 			Array<int> objectArray;
 			float kCoverage;
 			float alpha;
-			ObjectGraphObjectData additionalObjectData;	//Filko
+			//Array<int> *sortedElementIdxArray;
 		private:
 			QLIST::Index *elementMem;
 		};
