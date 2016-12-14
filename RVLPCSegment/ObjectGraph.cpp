@@ -611,6 +611,8 @@ ObjectGraph::ObjectGraph()
 	EdgePtrMem = NULL;
 	objectMap = NULL;
 	objectArray.Element = NULL;
+	//sortedElementIdxMem = NULL;
+	//Array<int> *sortedElementIdxArray = NULL;
 }
 
 
@@ -622,6 +624,8 @@ ObjectGraph::~ObjectGraph()
 	RVL_DELETE_ARRAY(EdgePtrMem);
 	RVL_DELETE_ARRAY(objectMap);
 	RVL_DELETE_ARRAY(objectArray.Element);
+	//RVL_DELETE_ARRAY(sortedElementIdxMem);
+	//RVL_DELETE_ARRAY(sortedElementIdxArray);
 }
 
 void ObjectGraph::CreateParamList(CRVLMem *pMem)
@@ -652,6 +656,10 @@ void ObjectGraph::Create(SurfelGraph *pSurfels_)
 	elementMem = new QLIST::Index[pSurfels->NodeArray.n];
 	RVL_DELETE_ARRAY(objectMap);
 	objectMap = new int[pSurfels->NodeArray.n];	
+	//RVL_DELETE_ARRAY(sortedElementIdxMem);
+	//sortedElementIdxMem = new int[pSurfels->NodeArray.n];
+	//RVL_DELETE_ARRAY(sortedElementIdxArray);
+	//sortedElementIdxArray = new Array<int>[pSurfels->NodeArray.n];
 
 	QLIST::Index *piElement = elementMem;
 
@@ -1241,6 +1249,36 @@ void ObjectGraph::ComputeRelationCost(
 	//	int debug = 0;
 }
 
+void ObjectGraph::SortElements(
+	GRAPH::AggregateNode<AgEdge> *pAgNode,
+	Array<SortIndex<int>> *pSortedElementIdxArray)
+{
+	pSortedElementIdxArray->n = 0;
+
+	QLIST::Index *pElementIdx = pAgNode->elementList.pFirst;
+	
+	Surfel *pElement;
+	SortIndex<int> *pSortedElementIdx;
+
+	while (pElementIdx)
+	{
+		pElement = pSurfels->NodeArray.Element + pElementIdx->Idx;
+
+		pSortedElementIdx = pSortedElementIdxArray->Element + pSortedElementIdxArray->n;
+
+		pSortedElementIdx->cost = pElement->size;
+		pSortedElementIdx->idx = pElementIdx->Idx;
+
+		pSortedElementIdxArray->n++;
+
+		pElementIdx = pElementIdx->pNext;
+	}
+
+	BubbleSort<SortIndex<int>>(*pSortedElementIdxArray, true);
+}
+
+//===== VISUALIZATION =====
+
 void ObjectGraph::InitDisplay(
 	Visualizer *pVisualizer,
 	Mesh *pMesh,
@@ -1302,6 +1340,8 @@ void ObjectGraph::PaintObject(
 		piElement = piElement->pNext;
 	}
 }
+
+//===== WRITE TO FILE =====
 
 void ObjectGraph::WriteSurfelDataToFile(FILE *fp)
 {
@@ -1387,6 +1427,8 @@ void ObjectGraph::Debug()
 		}
 	}
 }
+
+//===== GLOBAL FUNCTIONS =====
 
 bool RVL::SURFEL::objectKeyPressUserFunction(
 	Mesh *pMesh,
