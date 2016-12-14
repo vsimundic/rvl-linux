@@ -794,9 +794,9 @@ void PSGM::FitModel(
 		}	// for every vertex in the cluster
 
 		//VIDOVIC
-		if (bNormalValidityTest)
-			pModelInstanceElement->e = (pModelInstanceElement->valid ? pModelInstanceElement->d - maxdDefinedNormal : 0.0f);
-		else
+		//if (bNormalValidityTest)
+		//	pModelInstanceElement->e = (pModelInstanceElement->valid ? pModelInstanceElement->d - maxdDefinedNormal : 0.0f);
+		//else
 			pModelInstanceElement->e = 0.0f;
 		//END VIDOVIC
 	}	// for every model instance descriptor element
@@ -945,8 +945,8 @@ bool PSGM::ReferenceFrames(int iCluster)
 			for (piSurfel = iSurfelBuff; piSurfel < piSurfelBuffEnd; piSurfel++)
 				tangentRGData.bParent[*piSurfel] = false;
 
-			if (piSurfelBuffEnd - iSurfelBuff > pCluster->iSurfelArray.n)
-				int debug = 0;
+			//if (piSurfelBuffEnd - iSurfelBuff > pCluster->iSurfelArray.n)
+			//	int debug = 0;
 
 			maxTangentLen = 0;
 			
@@ -1285,7 +1285,7 @@ int RVL::RECOG::PSGM_::ValidTangent(
 	{
 		pData->bParent[iSurfel] = true;
 
-		if (cs < pData->baseSeparationAngle)
+		//if (cs < pData->baseSeparationAngle)
 			pData->bBase[iSurfel] = true;
 
 		return 1;
