@@ -478,6 +478,9 @@ void ObjectAggregationLevel2(SURFEL::ObjectGraph *ograph, RVL::SurfelGraph *sgra
 	{
 		pObject = ograph->NodeArray.Element + iObject;
 
+		if (pObject->size < 20)
+			continue;
+
 		piElement = pObject->elementList.pFirst;
 		
 		//check if object
@@ -485,34 +488,46 @@ void ObjectAggregationLevel2(SURFEL::ObjectGraph *ograph, RVL::SurfelGraph *sgra
 			continue;
 		//
 		pSurfel = sgraph->NodeArray.Element + piElement->Idx;
-		if (pSurfel->size < 20)
-			continue;
+		/*if (pSurfel->size < 20)
+			continue;*/
 
 		points->Reset();// = vtkSmartPointer<vtkPoints>::New();
 		verts->Reset();// = vtkSmartPointer<vtkCellArray>::New();
 		ptIdx = 0;
-		while (piElement)
-		{
-			//current surfel vertex list
-			pSurfelVertexList = sgraph->surfelVertexList.Element + piElement->Idx;
-			qlistelement = pSurfelVertexList->pFirst;
-			while (qlistelement)
-			{
-				rvlvertex = sgraph->vertexArray.Element[qlistelement->Idx];
-				P[0] = rvlvertex->P[0];
-				P[1] = rvlvertex->P[1];
-				P[2] = rvlvertex->P[2];
-				points->InsertNextPoint(P);
-				verts->InsertNextCell(1);
-				verts->InsertCellPoint(ptIdx);
-				ptIdx++;
+		//while (piElement)
+		//{
+		//	//current surfel vertex list
+		//	pSurfelVertexList = sgraph->surfelVertexList.Element + piElement->Idx;
+		//	qlistelement = pSurfelVertexList->pFirst;
+		//	while (qlistelement)
+		//	{
+		//		rvlvertex = sgraph->vertexArray.Element[qlistelement->Idx];
+		//		P[0] = rvlvertex->P[0];
+		//		P[1] = rvlvertex->P[1];
+		//		P[2] = rvlvertex->P[2];
+		//		points->InsertNextPoint(P);
+		//		verts->InsertNextCell(1);
+		//		verts->InsertCellPoint(ptIdx);
+		//		ptIdx++;
 
-				//Next
-				qlistelement = qlistelement->pNext;
-			}
-			
-			//Next
-			piElement = piElement->pNext;
+		//		//Next
+		//		qlistelement = qlistelement->pNext;
+		//	}
+		//	
+		//	//Next
+		//	piElement = piElement->pNext;
+		//}
+
+		for (int i = 0; i < ograph->additionalObjectData.CHVertexIndices.at(iObject).size(); i++)
+		{
+			rvlvertex = sgraph->vertexArray.Element[ograph->additionalObjectData.CHVertexIndices.at(iObject).at(i)];
+			P[0] = rvlvertex->P[0];
+			P[1] = rvlvertex->P[1];
+			P[2] = rvlvertex->P[2];
+			points->InsertNextPoint(P);
+			verts->InsertNextCell(1);
+			verts->InsertCellPoint(ptIdx);
+			ptIdx++;
 		}
 
 		//final object
@@ -527,6 +542,23 @@ void ObjectAggregationLevel2(SURFEL::ObjectGraph *ograph, RVL::SurfelGraph *sgra
 		polyDataC->DeepCopy(clean->GetOutput());
 		vtkPCobjectlist.push_back(polyDataC);
 		std::cout << iObject << " ";
+	}
+
+	//PC visualization
+	vtkSmartPointer<vtkPolyDataMapper> map;
+	vtkSmartPointer<vtkActor> act;
+	srand(time(NULL));
+	for (int i = 0; i < vtkPCobjectlist.size(); i++)
+	{
+		if (vtkPCobjectlist.at(i)->GetNumberOfPoints() == 0)
+			continue;
+		map = vtkSmartPointer<vtkPolyDataMapper>::New();
+		map->SetInputData(vtkPCobjectlist.at(i));
+		act = vtkSmartPointer<vtkActor>::New();
+		act->SetMapper(map);
+		act->GetProperty()->SetPointSize(5);
+		act->GetProperty()->SetColor((double)(rand() % 255) / 255.0, (double)(rand() % 255) / 255.0, (double)(rand() % 255) / 255.0);
+		renderer->AddActor(act);
 	}
 
 	//Testing possible convex hull and checking distance to surface
@@ -610,106 +642,140 @@ void ObjectAggregationLevel2(SURFEL::ObjectGraph *ograph, RVL::SurfelGraph *sgra
 	//	}
 	//}
 
-	//Testing possible convex hull (split objects) by comparing rendered and measured depth images
-	std::string depthImgFileName(MeshFileName);
-	depthImgFileName.erase(depthImgFileName.find_last_of("."));
-	depthImgFileName += "d.png";
-	cv::Mat depthImg = cv::imread(depthImgFileName, cv::ImreadModes::IMREAD_ANYDEPTH);
-	cv::Mat renderedDepthImg;
-	vtkSmartPointer<vtkAppendPolyData> append = vtkSmartPointer<vtkAppendPolyData>::New();
-	append->SetOutputPointsPrecision(vtkAlgorithm::DesiredOutputPrecision::DEFAULT_PRECISION);
-	vtkSmartPointer<vtkDelaunay3D> d3d = vtkSmartPointer<vtkDelaunay3D>::New();
-	vtkSmartPointer<vtkGeometryFilter> gf = vtkSmartPointer<vtkGeometryFilter>::New();
-	int noPixGreater;
-	int noPixLesser;
-	int noPixLesser5mm;
-	int noPixLesser10mm;
-	int noPixLesser15mm;
-	int noPixMWSupport;
-	int noPixAmbiguousLesser;
-	int noPixAmbiguousGreater;
-	for (int i = 0; i < vtkPCobjectlist.size() - 1; i++)
-	{
-		for (int k = i + 1; k < vtkPCobjectlist.size(); k++)
-		{
-			append->RemoveAllInputs(); //from previous iteration
-			//add imputs and merge
-			append->AddInputData(vtkPCobjectlist.at(i));
-			append->AddInputData(vtkPCobjectlist.at(k));
-			append->Update();
-			//run delaunay 3D algorithm and extract geometry
-			d3d->SetInputData(append->GetOutput());
-			d3d->Update();
-			gf->SetInputConnection(d3d->GetOutputPort());
-			gf->Update();
-			if (gf->GetOutput()->GetNumberOfPolys() == 0)
-			{
-				std::cout << std::endl << "Combination " << i << ", " << k << " doesn't have polygons!!" << " Number of points: " << vtkPCobjectlist.at(i)->GetNumberOfPoints() << ", " << vtkPCobjectlist.at(k)->GetNumberOfPoints() << std::endl;
-				continue;
-			}
-			//rendering depth
-			renderedDepthImg = GenerateVTKPolyDataDepthImage_Kinect(gf->GetOutput());
-			//erosion
-			//cv::Mat renderedDepthImg_E(480, 640, CV_16UC1, cv::Scalar::all(0));
-			cv::erode(renderedDepthImg, renderedDepthImg, cv::getStructuringElement(cv::MORPH_RECT, cv::Size(21, 21)/*, cv::Point(5, 5)*/));
-			////debug
-			//cv::Mat d1(480, 640, CV_8UC1);
-			//cv::Mat d2(480, 640, CV_8UC1);
-			//double minVal, maxVal;
-			//cv::minMaxLoc(renderedDepthImg, &minVal, &maxVal);
-			//renderedDepthImg.convertTo(d1, CV_8U, -255.0f / maxVal, 255.0f);
-			//cv::imshow("Rendered depth image", d1);
-			//cv::minMaxLoc(renderedDepthImg_E, &minVal, &maxVal);
-			//renderedDepthImg_E.convertTo(d2, CV_8U, -255.0f / maxVal, 255.0f);
-			//cv::imshow("Eroded rendered depth image", d2);
-			//cv::waitKey();
-			//
-			//Running through all pixels that have depth
-			noPixGreater = 0;
-			noPixLesser = 0;
-			noPixMWSupport = 0;
-			/*noPixLower5mm = 0;
-			noPixLower10mm = 0;
-			noPixLower15mm = 0;*/
-			noPixAmbiguousLesser = 0;
-			noPixAmbiguousGreater = 0;
-			for (int y = 0; y < 480; y++)
-			{
-				for (int x = 0; x < 640; x++)
-				{
-					if (renderedDepthImg.at<uint16_t>(y, x) == 0) //invalid pixel
-						continue;
-					else if ((renderedDepthImg.at<uint16_t>(y, x) > 0) && (depthImg.at<uint16_t>(y, x) == 0)) //pixel with rendered depth but no actual measurement
-						noPixMWSupport++;
-					else if (renderedDepthImg.at<uint16_t>(y, x) >= depthImg.at<uint16_t>(y, x))	//pixel whose rendered depth is grater than actual depth (it is further away)
-					{
-						if (abs(renderedDepthImg.at<uint16_t>(y, x) - depthImg.at<uint16_t>(y, x) <= 10))	// if the difference is less or equal then 10mm it is ambiguous
-						{
-							noPixAmbiguousGreater++;
-							noPixLesser++;
-						}
-						else
-							noPixGreater++;
-					}
-					else //pixel whose rendered depth is lesser than actual depth (it is nearer to the camera)
-					{
-						if (abs(renderedDepthImg.at<uint16_t>(y, x) - depthImg.at<uint16_t>(y, x) <= 10))	// if the difference is less or equal then 10mm it is ambiguous
-							noPixAmbiguousLesser++;
-						/*else*/
-							noPixLesser++;
-						/*if (abs(renderedDepthImg.at<uint16_t>(y, x) - depthImg.at<uint16_t>(y, x)) <= 5)
-							noPixLower5mm++;
-						else if (abs(renderedDepthImg.at<uint16_t>(y, x) - depthImg.at<uint16_t>(y, x)) <= 10)
-							noPixLower10mm++;
-						else if (abs(renderedDepthImg.at<uint16_t>(y, x) - depthImg.at<uint16_t>(y, x)) <= 15)
-							noPixLower15mm++;*/
-					}
-				}
-			}
-			//std::cout << std::endl << "Combination " << i << ", " << k << " noPixUpper = " << noPixUpper << ", noPixLower = " << noPixLower << ", noPixMWSupport = " << noPixMWSupport /*<< " noPixLower5mm = " << noPixLower5mm << ", noPixLower10mm = " << noPixLower10mm << ", noPixLower15mm = " << noPixLower15mm */<< std::endl;
-			std::cout << std::endl << "Combination " << i << ", " << k << " Ratio (greater/lesser)  = " << (float)(noPixGreater) / (float)(noPixLesser) << ", noPixAmbiguousLesser = " << noPixAmbiguousLesser << ", noPixAmbiguousGreater = " << noPixAmbiguousGreater <<std::endl;
-		}
-	}
+	////Testing possible convex hull (split objects) by comparing rendered and measured depth images
+	//std::string depthImgFileName(MeshFileName);
+	//depthImgFileName.erase(depthImgFileName.find_last_of("."));
+	//depthImgFileName += "d.png";
+	//cv::Mat depthImg = cv::imread(depthImgFileName, cv::ImreadModes::IMREAD_ANYDEPTH);
+	//cv::Mat renderedDepthImg;
+	//vtkSmartPointer<vtkAppendPolyData> append = vtkSmartPointer<vtkAppendPolyData>::New();
+	//append->SetOutputPointsPrecision(vtkAlgorithm::DesiredOutputPrecision::DEFAULT_PRECISION);
+	//vtkSmartPointer<vtkDelaunay3D> d3d = vtkSmartPointer<vtkDelaunay3D>::New();
+	//vtkSmartPointer<vtkGeometryFilter> gf = vtkSmartPointer<vtkGeometryFilter>::New();
+	//int noPixGreater;
+	//int noPixLesser;
+	//int noPixLesser5mm;
+	//int noPixLesser10mm;
+	//int noPixLesser15mm;
+	//int noPixMWSupport;
+	//int noPixAmbiguousLesser;
+	//int noPixAmbiguousGreater;
+	//vtkSmartPointer<vtkPolyDataMapper> map;
+	//vtkSmartPointer<vtkActor> act;
+	//bool found = false;
+	//for (int i = 0; i < vtkPCobjectlist.size() - 1; i++)
+	//{
+	//	found = false;
+	//	for (int k = i + 1; k < vtkPCobjectlist.size(); k++)
+	//	{
+	//		append->RemoveAllInputs(); //from previous iteration
+	//		//add imputs and merge
+	//		append->AddInputData(vtkPCobjectlist.at(i));
+	//		append->AddInputData(vtkPCobjectlist.at(k));
+	//		append->Update();
+	//		//run delaunay 3D algorithm and extract geometry
+	//		d3d->SetInputData(append->GetOutput());
+	//		d3d->Update();
+	//		gf->SetInputConnection(d3d->GetOutputPort());
+	//		gf->Update();
+	//		if (gf->GetOutput()->GetNumberOfPolys() == 0)
+	//		{
+	//			std::cout << std::endl << "Combination " << i << ", " << k << " doesn't have polygons!!" << " Number of points: " << vtkPCobjectlist.at(i)->GetNumberOfPoints() << ", " << vtkPCobjectlist.at(k)->GetNumberOfPoints() << std::endl;
+	//			continue;
+	//		}
+	//		//rendering depth
+	//		renderedDepthImg = GenerateVTKPolyDataDepthImage_Kinect(gf->GetOutput());
+	//		//erosion
+	//		//cv::Mat renderedDepthImg_E(480, 640, CV_16UC1, cv::Scalar::all(0));
+	//		cv::erode(renderedDepthImg, renderedDepthImg, cv::getStructuringElement(cv::MORPH_RECT, cv::Size(21, 21)/*, cv::Point(5, 5)*/));
+	//		////debug
+	//		//cv::Mat d1(480, 640, CV_8UC1);
+	//		//cv::Mat d2(480, 640, CV_8UC1);
+	//		//double minVal, maxVal;
+	//		//cv::minMaxLoc(renderedDepthImg, &minVal, &maxVal);
+	//		//renderedDepthImg.convertTo(d1, CV_8U, -255.0f / maxVal, 255.0f);
+	//		//cv::imshow("Rendered depth image", d1);
+	//		//cv::minMaxLoc(renderedDepthImg_E, &minVal, &maxVal);
+	//		//renderedDepthImg_E.convertTo(d2, CV_8U, -255.0f / maxVal, 255.0f);
+	//		//cv::imshow("Eroded rendered depth image", d2);
+	//		//cv::waitKey();
+	//		//
+	//		//Running through all pixels that have depth
+	//		noPixGreater = 0;
+	//		noPixLesser = 0;
+	//		noPixMWSupport = 0;
+	//		/*noPixLower5mm = 0;
+	//		noPixLower10mm = 0;
+	//		noPixLower15mm = 0;*/
+	//		noPixAmbiguousLesser = 0;
+	//		noPixAmbiguousGreater = 0;
+	//		for (int y = 0; y < 480; y++)
+	//		{
+	//			for (int x = 0; x < 640; x++)
+	//			{
+	//				if (renderedDepthImg.at<uint16_t>(y, x) == 0) //invalid pixel
+	//					continue;
+	//				else if ((renderedDepthImg.at<uint16_t>(y, x) > 0) && (depthImg.at<uint16_t>(y, x) == 0)) //pixel with rendered depth but no actual measurement
+	//					noPixMWSupport++;
+	//				else if (renderedDepthImg.at<uint16_t>(y, x) >= depthImg.at<uint16_t>(y, x))	//pixel whose rendered depth is grater than actual depth (it is further away)
+	//				{
+	//					if (abs(renderedDepthImg.at<uint16_t>(y, x) - depthImg.at<uint16_t>(y, x) <= 10))	// if the difference is less or equal then 10mm it is ambiguous
+	//					{
+	//						noPixAmbiguousGreater++;
+	//						noPixLesser++;
+	//					}
+	//					else
+	//						noPixGreater++;
+	//				}
+	//				else //pixel whose rendered depth is lesser than actual depth (it is nearer to the camera)
+	//				{
+	//					if (abs(renderedDepthImg.at<uint16_t>(y, x) - depthImg.at<uint16_t>(y, x) <= 10))	// if the difference is less or equal then 10mm it is ambiguous
+	//						noPixAmbiguousLesser++;
+	//					/*else*/
+	//						noPixLesser++;
+	//					/*if (abs(renderedDepthImg.at<uint16_t>(y, x) - depthImg.at<uint16_t>(y, x)) <= 5)
+	//						noPixLower5mm++;
+	//					else if (abs(renderedDepthImg.at<uint16_t>(y, x) - depthImg.at<uint16_t>(y, x)) <= 10)
+	//						noPixLower10mm++;
+	//					else if (abs(renderedDepthImg.at<uint16_t>(y, x) - depthImg.at<uint16_t>(y, x)) <= 15)
+	//						noPixLower15mm++;*/
+	//				}
+	//			}
+	//		}
+	//		//std::cout << std::endl << "Combination " << i << ", " << k << " noPixUpper = " << noPixUpper << ", noPixLower = " << noPixLower << ", noPixMWSupport = " << noPixMWSupport /*<< " noPixLower5mm = " << noPixLower5mm << ", noPixLower10mm = " << noPixLower10mm << ", noPixLower15mm = " << noPixLower15mm */<< std::endl;
+	//		std::cout << std::endl << "Combination " << i << ", " << k << " Ratio (greater/lesser)  = " << (float)(noPixGreater) / (float)(noPixLesser) << ", noPixAmbiguousLesser = " << noPixAmbiguousLesser << ", noPixAmbiguousGreater = " << noPixAmbiguousGreater <<std::endl;
+	//	
+	//		//For visualization
+	//		if ((noPixGreater > 0) && (noPixLesser > 0) && (((float)(noPixGreater) / (float)(noPixLesser)) > 0.5) && (((float)(noPixGreater) / (float)(noPixLesser)) < 1.0))
+	//		{
+	//			polyData = vtkSmartPointer<vtkPolyData>::New();
+	//			polyData->DeepCopy(gf->GetOutput());
+	//			map = vtkSmartPointer<vtkPolyDataMapper>::New();
+	//			map->SetInputData(polyData);
+	//			act = vtkSmartPointer<vtkActor>::New();
+	//			act->SetMapper(map);
+	//			renderer->AddActor(act);
+	//			found = true;
+	//		}
+	//	}
+	//	if (!found)
+	//	{
+	//		d3d->SetInputData(vtkPCobjectlist.at(i));
+	//		d3d->Update();
+	//		gf->SetInputConnection(d3d->GetOutputPort());
+	//		gf->Update();
+	//		/*if (gf->GetOutput()->GetNumberOfPolys() == 0)
+	//		{*/
+	//			polyData = vtkSmartPointer<vtkPolyData>::New();
+	//			polyData->DeepCopy(gf->GetOutput());
+	//			map = vtkSmartPointer<vtkPolyDataMapper>::New();
+	//			map->SetInputData(polyData);
+	//			act = vtkSmartPointer<vtkActor>::New();
+	//			act->SetMapper(map);
+	//			renderer->AddActor(act);
+	//		//}
+	//	}
+	//}
 
 	////create convex hull for all objects
 	//std::cout << std::endl << "Delaunay 3D + geometry filter! " << std::endl;
@@ -1512,7 +1578,31 @@ int main(int argc, char ** argv)
 
 			surfels.DetectVertices(&mesh);
 
-			ObjectAggregationLevel2(&objects, &surfels, &mesh, MeshFileName);
+			/*objects.DetermineObjectConvexityData();
+
+			ObjectAggregationLevel2(&objects, &surfels, &mesh, MeshFileName);*/
+
+			// Sort surfels in objects.
+
+			Array<SortIndex<int>> sortedElementIdxArray;
+			sortedElementIdxArray.Element = new SortIndex < int >[surfels.NodeArray.n];
+
+			int iObject;
+			GRAPH::AggregateNode<SURFEL::AgEdge> *pObject;
+
+			for (iObject = 0; iObject < objects.NodeArray.n; iObject++)
+			{
+				pObject = objects.NodeArray.Element + iObject;
+
+				if (pObject->elementList.pFirst)
+				{
+					objects.SortElements(pObject, &sortedElementIdxArray);
+
+					// sortedElementIdxArray contains indices of surfels belonging to pObject sorted according to their size.
+				}
+			}
+
+			delete[] sortedElementIdxArray.Element;
 
 			printf("completed.\n");
 		}

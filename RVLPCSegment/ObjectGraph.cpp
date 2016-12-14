@@ -9,6 +9,8 @@
 #include "SurfelGraph.h"
 #include "ObjectGraph.h"
 
+#include <numeric>
+
 /// Move to RVLQListArray.h
 
 #define RVLQLIST_APPEND2(pList, pList2)\
@@ -1461,5 +1463,128 @@ bool RVL::SURFEL::objectMouseRButtonDownUserFunction(
 	}
 	else
 		return false;
+}
+
+template <typename T>
+std::vector<size_t> orderArray(T* values, int size) {
+	std::vector<size_t> indices(size);
+	std::iota(std::begin(indices), std::end(indices), static_cast<size_t>(0));
+	std::sort(begin(indices), end(indices),	[&](size_t a, size_t b) { return values[a] < values[b]; } );
+	return indices;
+}
+
+void ObjectGraph::DetermineObjectConvexityData(float convexThr, float ratioThr)
+{
+	//test sort
+	int a[5] = { 4, 3, 5, 1, 2 };
+	std::vector<size_t> test = orderArray<int>(a, 5);
+	//std::sort(std::begin())
+
+	//Reseting convexity data
+	if (this->additionalObjectData.CHVertexIndices.size())
+		this->additionalObjectData.CHVertexIndices.clear();
+	this->additionalObjectData.CHVertexIndices.resize(this->NodeArray.n); //allocate
+
+	if (this->additionalObjectData.ObjectsSurfelConvexity.size())
+		this->additionalObjectData.ObjectsSurfelConvexity.clear();
+	this->additionalObjectData.ObjectsSurfelConvexity.resize(this->NodeArray.n); //allocate
+	
+	//running through all objects
+	GRAPH::AggregateNode<SURFEL::AgEdge> *pObject;
+	QLIST::Index *piElement;
+	QList<QLIST::Index> *pSurfelVertexList;
+	QList<QLIST::Index> *pSurfelVertexListSurfelIN;
+	QLIST::Index *qlistelement;
+	SURFEL::Vertex * rvlvertex;
+	SURFEL::Vertex * rvlvertexInList;
+	Surfel *pSurfel;
+	Surfel *pSurfelIN;
+	float addedSize = 0;
+	bool fail = false;
+	for (int iObject = 0; iObject < this->NodeArray.n; iObject++)
+	{
+		addedSize = 0;
+		pObject = this->NodeArray.Element + iObject;
+
+		piElement = pObject->elementList.pFirst;
+
+		//check if object
+		if (!piElement)
+			continue;
+		
+		//we are not intrested in objects with size less than 20 points???
+		if (pObject->size < 20)
+			continue;
+		
+		while (piElement)
+		{
+			//getting current surfel
+			pSurfel = this->pSurfels->NodeArray.Element + piElement->Idx;
+			//getting current surfel vertex list
+			pSurfelVertexList = this->pSurfels->surfelVertexList.Element + piElement->Idx;
+			
+			fail = false;
+			//runnong through a current list of added object vertices
+			for (int i = 0; i < this->additionalObjectData.CHVertexIndices.at(iObject).size(); i++)
+			{
+				rvlvertexInList = this->pSurfels->vertexArray.Element[this->additionalObjectData.CHVertexIndices.at(iObject).at(i)];
+				if ((pSurfel->N[0] * rvlvertexInList->P[0] + pSurfel->N[1] * rvlvertexInList->P[1] + pSurfel->N[2] * rvlvertexInList->P[2] + pSurfel->d) > convexThr)
+				{
+					fail = true;
+					break;
+				}
+			}
+			//Check the other direction (if vertex from current surfels is below surfels that were added in CH)
+			for (ObjectsSurfelConvexity_iterator_type iterator = this->additionalObjectData.ObjectsSurfelConvexity.at(iObject).begin(); iterator != this->additionalObjectData.ObjectsSurfelConvexity.at(iObject).end(); iterator++)
+			{
+				//iterator->first = key
+				//iterator->second = value
+				if (iterator->second)	//if surfel was valid
+				{
+					//getting added surfel
+					pSurfelIN = this->pSurfels->NodeArray.Element + iterator->first;
+					//getting current surfel vertex list
+					pSurfelVertexListSurfelIN = this->pSurfels->surfelVertexList.Element + iterator->first;
+					//running through added surfel vertices
+					qlistelement = pSurfelVertexListSurfelIN->pFirst;
+					while (qlistelement)
+					{
+						rvlvertex = this->pSurfels->vertexArray.Element[qlistelement->Idx];
+						if ((pSurfelIN->N[0] * rvlvertex->P[0] + pSurfelIN->N[1] * rvlvertex->P[1] + pSurfelIN->N[2] * rvlvertex->P[2] + pSurfelIN->d) > convexThr)
+						{
+							fail = true;
+							break;
+						}
+						//Next
+						qlistelement = qlistelement->pNext;
+					}
+				}
+
+				if (fail)
+					break;
+			}
+			//add fail falg for current surfel
+			this->additionalObjectData.ObjectsSurfelConvexity.at(iObject).insert(std::pair<int, bool>(piElement->Idx, !fail));
+			//if not failed add vertices to list
+			if (!fail)
+			{
+				qlistelement = pSurfelVertexList->pFirst;
+				while (qlistelement)
+				{
+					this->additionalObjectData.CHVertexIndices.at(iObject).push_back(qlistelement->Idx);
+					//Next
+					qlistelement = qlistelement->pNext;
+				}
+				//update size
+				addedSize += pSurfel->size;
+			}
+			//Next
+			piElement = piElement->pNext;
+		}
+
+		//check ratio
+		if ((addedSize / (float)pObject->size) < ratioThr)
+			this->additionalObjectData.CHVertexIndices.at(iObject).clear(); //if the ratio is lower than threshold, then empty it's list of vertices
+	}
 }
 
