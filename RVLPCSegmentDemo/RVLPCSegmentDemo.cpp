@@ -172,6 +172,9 @@ void RunMainProg(CRVLMem *mem0, CRVLMem *mem, DWORD flags, char *MeshFilePathNam
 	PlanarSurfelDetector detector;
 	Mesh mesh;
 
+	objects.CreateParamList(mem0);
+
+	objects.ParamList.LoadParams("RVLPCSegmentDemo.cfg");
 
 	char *fileExtension = RVLGETFILEEXTENSION(MeshFilePathName);
 
@@ -380,8 +383,6 @@ void RunMainProg(CRVLMem *mem0, CRVLMem *mem, DWORD flags, char *MeshFilePathNam
 	if (detector.pTimer)
 		delete detector.pTimer;
 
-	return 0;
-#endif
-}
+
 
 }
