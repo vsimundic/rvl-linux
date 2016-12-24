@@ -4,7 +4,7 @@
 #define RVLPSGM_MATCH_SATURATION //VIDOVIC
 //#define RVLPSGM_MATCH_SEGMENT_CENTROID //VIDOVIC
 //#define PSGM_CALCULATE_PROBABILITY //Vidovic
-//#define RVLPSGM_EVALUATION_PRINT_INFO //Vidovic
+#define RVLPSGM_EVALUATION_PRINT_INFO //Vidovic
 #define RVLPSGM_MATCH_USING_SEGMENT_GT //Vidovic
 //#define RVLPSGM_SAVE_MATCHES //Vidovic
 
@@ -225,7 +225,8 @@ namespace RVL
 			float angleThresh,
 			float distanceThresh); //VIDOVIC
 		bool PSGM::CompareMatchToSegmentGT(
-			RECOG::PSGM_::MatchInstance *pMatch); //Vidovic
+			RECOG::PSGM_::MatchInstance *pMatch,
+			bool compareSegmentsWithoutGT = true); //Vidovic
 		void PSGM::CountTPandFN(
 			int &TP,
 			int &FN,

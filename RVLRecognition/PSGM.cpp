@@ -4082,7 +4082,8 @@ bool PSGM::CompareMatchToGT(
 }
 
 bool PSGM::CompareMatchToSegmentGT(
-	RECOG::PSGM_::MatchInstance *pMatch)
+	RECOG::PSGM_::MatchInstance *pMatch,
+	bool compareSegmentsWithoutGT)
 {	
 	int iScene = pMatch->iScene;
 	int iSegmentGT = iScene * nDominantClusters + pMatch->iCluster;
@@ -4093,6 +4094,11 @@ bool PSGM::CompareMatchToSegmentGT(
 
 	pGT = pECCVGT->GT.Element[iScene].Element;
 	nGTModels = pECCVGT->GT.Element[iScene].n;
+
+	//eliminate FP from segments without GT
+	if (!compareSegmentsWithoutGT && segmentGT.Element[iSegmentGT].iModel == -1)
+		return true;
+
 
 	//if (pMatch->iModel == segmentGT.Element[iSegmentGT].iModel && pMatch->iMCluster == segmentGT.Element[iSegmentGT].iMSegment)
 	if (pMatch->iModel == segmentGT.Element[iSegmentGT].iModel)
@@ -4276,7 +4282,7 @@ void PSGM::EvaluateMatchesByScore(FILE *fp, FILE *fpLog)
 					if (pMatch && pMatch->score < scoreThresh)
 					{
 					#ifdef RVLPSGM_MATCH_USING_SEGMENT_GT
-						TPMatch = CompareMatchToSegmentGT(pMatch);
+						TPMatch = CompareMatchToSegmentGT(pMatch, false);
 					#else
 						TPMatch = CompareMatchToGT(pMatch, true, 0.0, distanceThresh);
 					#endif
