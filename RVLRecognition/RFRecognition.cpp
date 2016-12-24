@@ -728,7 +728,7 @@ void RFRecognition::CreateDescriptor(
 	{
 		do
 		{
-			iPt = rand() % nMeshPts;
+			iPt = rand() % nMeshPts; 
 
 			pPt = pMesh->NodeArray.Element + iPt;
 

@@ -30,6 +30,13 @@ namespace RVL
 		bool matched;
 	};
 
+	struct SegmentGTInstance{
+		int iScene;
+		int iSSegment;
+		int iModel;
+		int iMSegment;
+	};
+
 	bool GetAngleAxis(float *R, float *V, float &theta);
 	void GetDistance(float *t, float &distance);
 	//END VIDOVIC
