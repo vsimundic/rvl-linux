@@ -220,6 +220,8 @@ void PlanarSurfelDetector::RandomIndices(Array<int> &A)
 	int iPt_;
 	int iTmp;
 
+	//srand(time(NULL)); //VIDOVIC RANDOM TEST
+
 	for (iPt = 0; iPt < A.n; iPt++)
 	{
 #ifdef RVLPLANARSURFELDETECTOR_PSEUDO_RANDOM_DEBUG
