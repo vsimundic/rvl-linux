@@ -302,6 +302,9 @@ int main(int argc, char ** argv)
 				mesh.LoadPolyDataFromPLY(filePath);
 
 				recognition.SetSceneFileName(filePath);
+
+				mem.Clear();
+
 				recognition.Interpret(&mesh);
 
 				printf("Scene %s...finished!\n\n", filePath);

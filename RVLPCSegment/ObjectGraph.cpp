@@ -1517,6 +1517,9 @@ void ObjectGraph::DetermineObjectConvexityData(float convexThr, float ratioThr)
 	if (this->additionalObjectData.ObjectsSurfelConvexity.size())
 		this->additionalObjectData.ObjectsSurfelConvexity.clear();
 	this->additionalObjectData.ObjectsSurfelConvexity.resize(this->NodeArray.n); //allocate
+
+	bool *bVertexInCH = new bool[pSurfels->vertexArray.n];
+	memset(bVertexInCH, 0, pSurfels->vertexArray.n * sizeof(bool));
 	
 	//running through all objects
 	GRAPH::AggregateNode<SURFEL::AgEdge> *pObject;
@@ -1566,7 +1569,7 @@ void ObjectGraph::DetermineObjectConvexityData(float convexThr, float ratioThr)
 			for (int i = 0; i < this->additionalObjectData.CHVertexIndices.at(iObject).size(); i++)
 			{
 				rvlvertexInList = this->pSurfels->vertexArray.Element[this->additionalObjectData.CHVertexIndices.at(iObject).at(i)];
-				if ((pSurfel->N[0] * rvlvertexInList->P[0] + pSurfel->N[1] * rvlvertexInList->P[1] + pSurfel->N[2] * rvlvertexInList->P[2] + pSurfel->d) > convexThr)
+				if ((pSurfel->N[0] * rvlvertexInList->P[0] + pSurfel->N[1] * rvlvertexInList->P[1] + pSurfel->N[2] * rvlvertexInList->P[2] - pSurfel->d) > convexThr)
 				{
 					fail = true;
 					break;
@@ -1588,7 +1591,7 @@ void ObjectGraph::DetermineObjectConvexityData(float convexThr, float ratioThr)
 					while (qlistelement)
 					{
 						rvlvertex = this->pSurfels->vertexArray.Element[qlistelement->Idx];
-						if ((pSurfelIN->N[0] * rvlvertex->P[0] + pSurfelIN->N[1] * rvlvertex->P[1] + pSurfelIN->N[2] * rvlvertex->P[2] + pSurfelIN->d) > convexThr)
+						if ((pSurfelIN->N[0] * rvlvertex->P[0] + pSurfelIN->N[1] * rvlvertex->P[1] + pSurfelIN->N[2] * rvlvertex->P[2] - pSurfelIN->d) > convexThr)
 						{
 							fail = true;
 							break;
@@ -1601,7 +1604,7 @@ void ObjectGraph::DetermineObjectConvexityData(float convexThr, float ratioThr)
 				if (fail)
 					break;
 			}
-			//add fail falg for current surfel
+			//add fail flag for current surfel
 			this->additionalObjectData.ObjectsSurfelConvexity.at(iObject).insert(std::pair<int, bool>(sortedIdx->idx/*piElement->Idx*/, !fail));
 			//if not failed add vertices to list
 			if (!fail)
@@ -1609,7 +1612,12 @@ void ObjectGraph::DetermineObjectConvexityData(float convexThr, float ratioThr)
 				qlistelement = pSurfelVertexList->pFirst;
 				while (qlistelement)
 				{
-					this->additionalObjectData.CHVertexIndices.at(iObject).push_back(qlistelement->Idx);
+					if (!bVertexInCH[qlistelement->Idx])
+					{
+						this->additionalObjectData.CHVertexIndices.at(iObject).push_back(qlistelement->Idx);
+						bVertexInCH[qlistelement->Idx] = true;
+					}
+
 					//Next
 					qlistelement = qlistelement->pNext;
 				}
@@ -1618,13 +1626,17 @@ void ObjectGraph::DetermineObjectConvexityData(float convexThr, float ratioThr)
 			}
 			////Next
 			//piElement = piElement->pNext;
-		}
+		}	// for every surfel belonging to iObject
+
+		for (int i = 0; i < this->additionalObjectData.CHVertexIndices.at(iObject).size(); i++)
+			bVertexInCH[this->additionalObjectData.CHVertexIndices.at(iObject).at(i)] = false;
 
 		//check ratio
 		if ((addedSize / (float)pObject->size) < ratioThr)
 			this->additionalObjectData.CHVertexIndices.at(iObject).clear(); //if the ratio is lower than threshold, then empty it's list of vertices
-	}
+	}	// for every object
 	//Deref
 	delete[] sortedElementIdxArray.Element;
+	delete[] bVertexInCH;
 }
 

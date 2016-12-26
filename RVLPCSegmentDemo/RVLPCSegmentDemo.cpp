@@ -3,7 +3,7 @@
 
 //#include "stdafx.h"
 #include <vtkAutoInit.h>
-VTK_MODULE_INIT(vtkRenderingOpenGL2);
+VTK_MODULE_INIT(vtkRenderingOpenGL);
 VTK_MODULE_INIT(vtkInteractionStyle);
 VTK_MODULE_INIT(vtkRenderingFreeType);
 #include "RVLVTK.h"
@@ -530,27 +530,40 @@ void ObjectAggregationLevel2(SURFEL::ObjectGraph *ograph, RVL::SurfelGraph *sgra
 			ptIdx++;
 		}
 
+		int debug = polyData->GetNumberOfPoints();
+
 		//final object
 		//polyData->cleReset();// = vtkSmartPointer<vtkPolyData>::New();
 		/*polyData->SetPoints(points);
 		polyData->SetVerts(verts);*/
+
+		clean->RemoveAllInputs();
+
 		clean->SetInputData(polyData);
+
+		debug = clean->GetOutput()->GetNumberOfPoints();
+
 		clean->Update();
+
+		debug = clean->GetOutput()->GetNumberOfPoints();
+
 		if (clean->GetOutput()->GetNumberOfPoints() == 0)
 			continue;
 		polyDataC = vtkSmartPointer<vtkPolyData>::New();
 		polyDataC->DeepCopy(clean->GetOutput());
 		vtkPCobjectlist.push_back(polyDataC);
-		std::cout << iObject << " ";
+		std::cout << iObject << " (" << polyDataC->GetNumberOfPoints() << ") ";
 	}
 
 	//PC visualization
 	vtkSmartPointer<vtkPolyDataMapper> map;
 	vtkSmartPointer<vtkActor> act;
 	srand(time(NULL));
+	int nPts;
 	for (int i = 0; i < vtkPCobjectlist.size(); i++)
 	{
-		if (vtkPCobjectlist.at(i)->GetNumberOfPoints() == 0)
+		nPts = vtkPCobjectlist.at(i)->GetNumberOfPoints();
+		if (nPts == 0)
 			continue;
 		map = vtkSmartPointer<vtkPolyDataMapper>::New();
 		map->SetInputData(vtkPCobjectlist.at(i));
@@ -1023,7 +1036,7 @@ int main(int argc, char ** argv)
 			surfels.DetectVertices(&mesh);
 
 			//Filko
-			objects.DetermineObjectConvexityData(0.005, 0.9);
+			objects.DetermineObjectConvexityData(0.005, 0.8);
 			ObjectAggregationLevel2(&objects, &surfels, &mesh, MeshFileName);
 			//
 
