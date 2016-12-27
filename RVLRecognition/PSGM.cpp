@@ -1538,8 +1538,16 @@ void PSGM::SaveModelID(FileSequenceLoader dbLoader)
 	fclose(fp);
 }
 
-void PSGM::Learn(char *modelSequenceFileName)
+void PSGM::Learn(
+	char *modelSequenceFileName,
+	Visualizer *visualizer)
 {
+	unsigned char SelectionColor[3];
+
+	SelectionColor[0] = 0;
+	SelectionColor[1] = 255;
+	SelectionColor[2] = 0;
+
 	FileSequenceLoader modelsLoader;
 	FileSequenceLoader dbLoader;
 
@@ -1591,6 +1599,15 @@ void PSGM::Learn(char *modelSequenceFileName)
 			SaveModelInstances(fp, currentModelID, iCluster);
 
 		dbLoader.AddModel(currentModelID, modelFilePath, modelFileName);
+
+		if (visualizer)
+		{
+			InitDisplay(visualizer, &mesh, SelectionColor);
+			Display();
+			visualizer->Run();
+
+			visualizer->renderer->RemoveAllViewProps();
+		}
 	}
 
 	printf("Model DB creation completed!\n");

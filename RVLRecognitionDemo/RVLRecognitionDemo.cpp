@@ -4,7 +4,7 @@
 //#include "stdafx.h"
 #include <vtkAutoInit.h>
 //VTK_MODULE_INIT(vtkRenderingOpenGL);
-VTK_MODULE_INIT(vtkRenderingOpenGL);
+VTK_MODULE_INIT(vtkRenderingOpenGL2);
 VTK_MODULE_INIT(vtkInteractionStyle);
 VTK_MODULE_INIT(vtkRenderingFreeType);
 #include "RVLVTK.h"
@@ -268,7 +268,9 @@ int main(int argc, char ** argv)
 
 		if (recognition.mode == RVLRECOGNITION_MODE_TRAINING)
 		{
-			recognition.Learn(modelSequenceFileName); //VIDOVIC
+			surfels.NodeColors(SelectionColor);
+
+			recognition.Learn(modelSequenceFileName, &visualizer); //VIDOVIC
 		}
 		else if (recognition.mode == RVLRECOGNITION_MODE_RECOGNITION)
 		{

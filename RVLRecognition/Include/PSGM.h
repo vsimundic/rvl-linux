@@ -164,7 +164,7 @@ namespace RVL
 		void SetSceneFileName(char *sceneFileName_);
 		bool ModelExistInDB(char *modelFileName, FileSequenceLoader dbLoader); //VIDOVIC
 		void SaveModelID(FileSequenceLoader dbLoader); //VIDOVIC
-		void Learn(char *modelSequenceFileName); //VIDOVIC
+		void Learn(char *modelSequenceFileName, Visualizer *visualizer = NULL); //VIDOVIC
 		void LoadModelDataBase(); //VIDOVIC
 		void Match(); //VIDOVIC
 		void MSTransformation(
