@@ -10378,6 +10378,9 @@ void CRVLPlanarSurfaceDetector::SegmentSTRM(CRVLC2D *p2DRegionSet,
 		if(*pp3DPt)
 			break;
 
+	if (!(*pp3DPt))
+		return;
+
 	int Direction = 1;
 
 	int vTop = (pp3DPt - m_Point3DMap) / m_Width;
