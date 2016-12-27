@@ -4331,20 +4331,20 @@ void PSGM::EvaluateMatchesByScore(FILE *fp, FILE *fpLog)
 #endif
 
 			//print to log file
-			fprintf(fpLog, "---------------------------------------------------\n");
-			fprintf(fpLog, "Scene: %d\n", iScene - 1);
-			fprintf(fpLog, "TP: %d\n", TP_);
-			fprintf(fpLog, "FP: %d\n", FP_);
-			fprintf(fpLog, "FN: %d\n", FN_);
-			fprintf(fpLog, "nBestMatches: %d\n", iBestMatches);
-			fprintf(fpLog, "ScoreThresh: %f\n", scoreThresh);
-			fprintf(fpLog, "Precision: %f\n", precision);
-			fprintf(fpLog, "Recall: %f\n", recall);
-			fprintf(fpLog, "...................................................\n");
-			for (iSSegment = 0; iSSegment < nDominantClusters; iSSegment++)
-				if (firstTP[iSSegment] != -1)
-					fprintf(fpLog, "First TP for segment %d is: %d (score = %f)\n", iSSegment, firstTP[iSSegment], firstTPScore[iSSegment]);
-			fprintf(fpLog, "---------------------------------------------------\n\n");
+				fprintf(fpLog, "---------------------------------------------------\n");
+				fprintf(fpLog, "Scene: %d\n", iScene - 1);
+				fprintf(fpLog, "TP: %d\n", TP_);
+				fprintf(fpLog, "FP: %d\n", FP_);
+				fprintf(fpLog, "FN: %d\n", FN_);
+				fprintf(fpLog, "nBestMatches: %d\n", iBestMatches);
+				fprintf(fpLog, "ScoreThresh: %f\n", scoreThresh);
+				fprintf(fpLog, "Precision: %f\n", precision);
+				fprintf(fpLog, "Recall: %f\n", recall);
+				fprintf(fpLog, "...................................................\n");
+				for (iSSegment = 0; iSSegment < nDominantClusters; iSSegment++)
+					if (firstTP[iSSegment] != -1)
+						fprintf(fpLog, "First TP for segment %d is: %d (score = %f)\n", iSSegment, firstTP[iSSegment], firstTPScore[iSSegment]);
+				fprintf(fpLog, "---------------------------------------------------\n\n");
 
 #ifdef RVLPSGM_MATCH_USING_SEGMENT_GT
 			distanceThresh = -1.0;		

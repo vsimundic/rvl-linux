@@ -316,6 +316,7 @@ int main(int argc, char ** argv)
 
 			fclose(fpHypothesisEvaluation);
 			fclose(fpSegmentGT);
+			fclose(fpLog);
 
 			//END VIDOVIC
 
