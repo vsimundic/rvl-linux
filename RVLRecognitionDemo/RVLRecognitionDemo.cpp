@@ -341,8 +341,6 @@ int main(int argc, char ** argv)
 
 			sceneSequence.Init(sceneSequenceFileName);
 
-			//recognition.SetNumberOfScenes(sceneSequence.nFileNames);
-
 			char filePath[200];
 
 			while (sceneSequence.GetNextPath(filePath))
