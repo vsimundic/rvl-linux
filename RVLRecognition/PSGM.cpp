@@ -2182,6 +2182,7 @@ void PSGM::Match()
 						{
 							segmentTP = true;
 							segmentGT.Element[iScene*nDominantClusters + iSCluster].iScene = iScene;
+
 							segmentGT.Element[iScene*nDominantClusters + iSCluster].iSSegment = iSCluster;
 							segmentGT.Element[iScene*nDominantClusters + iSCluster].iModel = pSMIMatch->iModel;
 							segmentGT.Element[iScene*nDominantClusters + iSCluster].iMSegment = pSMIMatch->iMCluster;
@@ -3818,7 +3819,7 @@ void PSGM::SaveSegmentGT(FILE*fp)
 	int iSSegment;
 
 	for (iSSegment = 0; iSSegment < nDominantClusters; iSSegment++)
-		fprintf(fp, "%d\t%d\t%d\t%d\n", segmentGT.Element[iSSegment].iScene, segmentGT.Element[iSSegment].iSSegment, segmentGT.Element[iSSegment].iModel, segmentGT.Element[iSSegment].iMSegment);
+		fprintf(fp, "%d\t%d\t%d\t%d\n", segmentGT.Element[(iScene - 1)*nDominantClusters + iSSegment].iScene, segmentGT.Element[(iScene - 1)*nDominantClusters + iSSegment].iSSegment, segmentGT.Element[(iScene - 1)*nDominantClusters + iSSegment].iModel, segmentGT.Element[(iScene - 1)*nDominantClusters + iSSegment].iMSegment);
 }
 
 void PSGM::ConvexTemplateCentoidID()
