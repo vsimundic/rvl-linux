@@ -190,4 +190,4 @@ ModelManifest.xml
 
 # Project files
 
-*.vcxproj
+*.props

@@ -68,6 +68,7 @@ namespace RVL
 		{
 			QList<QLIST::Index> elementList;
 			QList<EdgePtr2<EdgeType>> EdgeList;
+			int size;
 		};
 	}
 

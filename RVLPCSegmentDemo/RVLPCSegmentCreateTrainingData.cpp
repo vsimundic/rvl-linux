@@ -39,8 +39,10 @@ void CreateParamList(
 	CRVLMem *pMem,
 	char **pMeshFileName,
 	DWORD &flags,
-	bool &bSegmentToObjects);
+	bool &bSegmentToObjects,
+	bool &bObjectAggregationLevel2);
 
+#ifdef RVLSURFEL_IMAGE_ADJACENCY
 //Returns surfels Label ID with most object support
 int DetPrimaryGTObj(Surfel *pSurfel, cv::Mat labGTImg, int noObj)
 {
@@ -72,37 +74,6 @@ int DetPrimaryGTObj(Surfel *pSurfel, cv::Mat labGTImg, int noObj)
 	return objIdx;
 }
 
-//Returns surfels Label ID with most object support
-void SetPrimaryGTObj(Surfel *pSurfel, cv::Mat labGTImg, int noObj)
-{
-	int objIdx = -1;	//default value
-	//Generate histogram of object (pixel) support
-	int *objHist = new int[noObj];
-	memset(objHist, 0, noObj * sizeof(int));
-	RVL::QLIST::Index2 *pt;
-	int x = 0, y = 0;
-	pt = pSurfel->PtList.pFirst;
-	for (int i = 0; i < pSurfel->size; i++)
-	{
-		y = floor(pt->Idx / 640.0);
-		x = floor(pt->Idx - 640.0 * y);
-		objHist[labGTImg.at<cv::Vec3b>(y, x)[0]]++;
-		pt = pt->pNext;
-	}
-	//find max support and set surfel GTObjHist
-	int max = 0;
-	for (int i = 0; i < noObj; i++)
-	{
-		if (objHist[i] > max)
-		{
-			max = objHist[i];
-			objIdx = i;
-		}
-		pSurfel->GTObjHist.push_back(objHist[i]);
-	}
-	delete[] objHist;
-	pSurfel->ObjectID = objIdx;
-}
 //Return shortest distance on the image between some pixel and the pixels on the boundary
 float GetShortestDistanceToBoundary(int x, int y, Array<MeshEdgePtr *> &BoundaryArray)
 {
@@ -586,7 +557,10 @@ void DetermineImgAdjDescriptors(Surfel *pSurfel, Mesh *mesh)
 				a[0]++;
 			
 		}
-		a[0] /= (double)boundarySize;
+		if (boundarySize > 0)
+			a[0] /= (double)boundarySize;
+		else
+			a[0] = 0.0f;
 		a[1] = 1.0 - a[0];
 
 		tempN[0] = pSurfel->N[0] - pOtherSurfel->N[0];
@@ -605,7 +579,10 @@ void DetermineImgAdjDescriptors(Surfel *pSurfel, Mesh *mesh)
 				a[2]++;
 
 		}
-		a[2] /= (double)boundarySizeOther;
+		if (boundarySizeOther > 0)
+			a[2] /= (double)boundarySizeOther;
+		else
+			a[2] = 0.0f;
 		a[3] = 1.0 - a[2];
 
 		int p, q;
@@ -633,7 +610,7 @@ void DetermineImgAdjDescriptors(Surfel *pSurfel, Mesh *mesh)
 }
 
 //Generate scene segmenation file
-void GenerateSSF(SurfelGraph *surfels, std::string filename, int minSurfelSize, bool checkbackground = true)
+void GenerateSSF(SurfelGraph *surfels, std::string filename, int minSurfelSize, bool checkbackground)
 {
 	std::stringstream ss;
 	//SceneSegFile object
@@ -645,7 +622,8 @@ void GenerateSSF(SurfelGraph *surfels, std::string filename, int minSurfelSize, 
 	//for surfel
 	for (int i = 0; i < surfels->NodeArray.n; pCurrSurfel++, i++)
 	{
-		if ((pCurrSurfel->ObjectID == -1) || (checkbackground && ((pCurrSurfel->ObjectID == 255) || (pCurrSurfel->ObjectID == 0))) || (pCurrSurfel->size == 1) || (pCurrSurfel->size == 0) || pCurrSurfel->bEdge || pCurrSurfel->size < minSurfelSize)
+		//if ((pCurrSurfel->ObjectID == -1) || (checkbackground && ((pCurrSurfel->ObjectID == 255) || (pCurrSurfel->ObjectID == 0))) || (pCurrSurfel->size == 1) || (pCurrSurfel->size == 0) || pCurrSurfel->bEdge || pCurrSurfel->size < minSurfelSize)
+		if ((checkbackground && ((pCurrSurfel->ObjectID == 255) || (pCurrSurfel->ObjectID == 0))) || (pCurrSurfel->size <= 1) || pCurrSurfel->bEdge)
 			continue;
 
 		//Create element
@@ -731,10 +709,11 @@ void RunSeg2Bench(bool save)
 
 	DWORD flags = 0x00000000;
 	bool bSegmentToObjects = false;
+	bool bObjectAggregationLevel2 = false;
 
 	CRVLParameterList ParamList;
 
-	CreateParamList(&ParamList, &mem0, &MeshFileName, flags, bSegmentToObjects);
+	CreateParamList(&ParamList, &mem0, &MeshFileName, flags, bSegmentToObjects, bObjectAggregationLevel2);
 
 	ParamList.LoadParams("RVLPCSegmentDemo.cfg");
 
@@ -837,7 +816,7 @@ void RunSeg2Bench(bool save)
 		if ((pCurrSurfel->size == 1) || (pCurrSurfel->size == 0) || pCurrSurfel->bEdge || pCurrSurfel->size < detector.minSurfelSize)
 			continue;
 		/*pCurrSurfel->ObjectID = DetPrimaryGTObj(pCurrSurfel, GTlabImg, 256);*/ //256 objects because background has label of 255
-		SetPrimaryGTObj(pCurrSurfel, GTlabImg, maxLab + 1); //maxLab + 1 because the last GT object label has to be maxLab and not maxLab - 1
+		surfels.SetPrimaryGTObj(pCurrSurfel, GTlabImg, maxLab + 1); //maxLab + 1 because the last GT object label has to be maxLab and not maxLab - 1
 	}
 
 	//Adjacency and its descriptors
@@ -885,6 +864,98 @@ void RunSeg2Bench(bool save)
 	RenderSurfelImgAdjacencyVTK(visualizer.renderer, &surfels, checkbackground);
 	visualizer.Run();
 }
+
+//Generate a colored opencv image based on surfel data from SSF
+cv::Mat GenColoredSurfelImgFromSSF(std::shared_ptr<SceneSegFile::SceneSegFile> ssf)
+{
+	std::shared_ptr<SceneSegFile::SegFileElement> currSSFElement;
+	std::shared_ptr<SceneSegFile::FeatureTypeInt> pixAff;
+
+	cv::Mat coloredSegLab(480, 640, CV_8UC3, cv::Scalar::all(0));
+
+	unsigned char labSegColor[3];
+	int x = 0, y = 0;
+
+	for (int i = 0; i < ssf->elements.size(); i++)
+	{
+		currSSFElement = ssf->elements.at(i);
+
+		pixAff = std::dynamic_pointer_cast<SceneSegFile::FeatureTypeInt>(currSSFElement->features.features.at(SceneSegFile::FeaturesList::PixelAffiliation));
+
+		//Generate surfel color
+		labSegColor[0] = rand() % 255;
+		labSegColor[1] = rand() % 255;
+		labSegColor[2] = rand() % 255;
+
+		//Set pixel colors
+		for (int k = 0; k < pixAff->size; k++)
+		{
+			y = floor(pixAff->data[k] / 640.0);
+			x = floor(pixAff->data[k] - 640.0 * y);
+			coloredSegLab.at<cv::Vec3b>(y, x)[0] = labSegColor[0];
+			coloredSegLab.at<cv::Vec3b>(y, x)[1] = labSegColor[1];
+			coloredSegLab.at<cv::Vec3b>(y, x)[2] = labSegColor[2];
+		}
+
+	}
+	//return image
+	return coloredSegLab;
+}
+
+//Generate a colored opencv image based on surfel data from SSF
+cv::Mat GenColoredSegmentationImgFromObjectGraph(SURFEL::ObjectGraph* objects)
+{
+	std::shared_ptr<SceneSegFile::SceneSegFile> ssf = objects->ssf;
+
+	std::shared_ptr<SceneSegFile::SegFileElement> currSSFElement;
+	std::shared_ptr<SceneSegFile::FeatureTypeInt> pixAff;
+
+	cv::Mat coloredSegLab(480, 640, CV_8UC3, cv::Scalar::all(0));
+
+	GRAPH::AggregateNode<SURFEL::AgEdge> *pObject;
+	QLIST::Index *piElement;
+
+	unsigned char labSegColor[3];
+	int x = 0, y = 0;
+
+	for (int iObject = 0; iObject < objects->NodeArray.n; iObject++)
+	{
+		//Generate surfel color
+		labSegColor[0] = rand() % 255;
+		labSegColor[1] = rand() % 255;
+		labSegColor[2] = rand() % 255;
+
+		pObject = objects->NodeArray.Element + iObject;
+
+		piElement = pObject->elementList.pFirst;
+
+		while (piElement)
+		{
+			currSSFElement = ssf->elements.at(piElement->Idx);
+
+			if (piElement->Idx == 2)
+				int debug = 0;
+
+			pixAff = std::dynamic_pointer_cast<SceneSegFile::FeatureTypeInt>(currSSFElement->features.features.at(SceneSegFile::FeaturesList::PixelAffiliation));
+
+			//Set pixel colors
+			for (int k = 0; k < pixAff->size; k++)
+			{
+				y = floor(pixAff->data[k] / 640.0);
+				x = floor(pixAff->data[k] - 640.0 * y);
+				coloredSegLab.at<cv::Vec3b>(y, x)[0] = labSegColor[0];
+				coloredSegLab.at<cv::Vec3b>(y, x)[1] = labSegColor[1];
+				coloredSegLab.at<cv::Vec3b>(y, x)[2] = labSegColor[2];
+			}
+
+			piElement = piElement->pNext;
+		}
+
+	}
+	//return image
+	return coloredSegLab;
+}
+#endif
 
 //void Seg2Bench()
 //{

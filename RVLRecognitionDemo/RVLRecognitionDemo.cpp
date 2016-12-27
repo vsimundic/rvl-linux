@@ -4,7 +4,7 @@
 //#include "stdafx.h"
 #include <vtkAutoInit.h>
 //VTK_MODULE_INIT(vtkRenderingOpenGL);
-VTK_MODULE_INIT(vtkRenderingOpenGL2);
+VTK_MODULE_INIT(vtkRenderingOpenGL);
 VTK_MODULE_INIT(vtkInteractionStyle);
 VTK_MODULE_INIT(vtkRenderingFreeType);
 #include "RVLVTK.h"
@@ -115,6 +115,8 @@ int main(int argc, char ** argv)
 	// Initialize surfel detection
 
 	SurfelGraph surfels;
+
+	surfels.pMem = &mem;
 
 	surfels.CreateParamList(&mem0);
 
@@ -324,6 +326,35 @@ int main(int argc, char ** argv)
 
 			//recognition.SetSceneFileName(sceneMeshFileName);
 			//recognition.Interpret(&mesh);
+
+			// Visualization
+
+			surfels.NodeColors(SelectionColor);
+			recognition.InitDisplay(&visualizer, &mesh, SelectionColor);
+			recognition.Display();
+			visualizer.Run();
+		}	// if (recognition.mode == RVLRECOGNITION_MODE_RECOGNITION)
+		else if (recognition.mode == RVLRECOGNITION_MODE_PSGM_CREATE_CTIS)
+		{
+			Mesh mesh;
+
+			FileSequenceLoader sceneSequence;
+
+			sceneSequence.Init(sceneSequenceFileName);
+
+			char filePath[200];
+
+			while (sceneSequence.GetNextPath(filePath))
+			{
+				printf("Scene %s...\n", filePath);
+
+				mesh.LoadPolyDataFromPLY(filePath);
+
+				recognition.SetSceneFileName(filePath);
+				recognition.Interpret(&mesh);
+
+				printf("Scene %s...finished!\n\n", filePath);
+			}
 
 			// Visualization
 

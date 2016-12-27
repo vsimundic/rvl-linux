@@ -8,6 +8,8 @@
 #define RVLPSGM_MATCH_USING_SEGMENT_GT //Vidovic
 //#define RVLPSGM_SAVE_MATCHES //Vidovic
 
+#define RVLRECOGNITION_MODE_PSGM_CREATE_CTIS		2
+
 namespace RVL
 {
 	class PSGM;
@@ -16,21 +18,6 @@ namespace RVL
 	{
 		namespace PSGM_
 		{
-			struct NormalHullElement
-			{
-				float N[3];
-				float Nh[3];
-			};
-
-			struct Vertex
-			{
-				float P[3];
-				Array<NormalHullElement> normalHull;
-				Array<int> iSurfelArray;
-				Vertex *pNext;
-				bool bEdge;
-			};
-
 			struct ModelInstanceElement
 			{
 				float d;
@@ -93,12 +80,9 @@ namespace RVL
 				SurfelGraph *pSurfels;
 				Visualizer *pVisualizer;
 				bool bClusters;
-				bool bVertices;
-				vtkSmartPointer<vtkActor> vertices;
-				vtkSmartPointer<vtkActor> referenceFrames;
 				unsigned char selectionColor[3];
 				int iSelectedCluster;
-				float normalLen;
+				vtkSmartPointer<vtkActor> referenceFrames;
 			};
 
 			//VIDOVIC
@@ -169,7 +153,6 @@ namespace RVL
 			unsigned char *selectionColor);
 		void Display();
 		void DisplayModelInstance(Visualizer *pVisualizer);
-		void DisplayVertices();
 		void DisplayClusters();
 		void PaintCluster(
 			int iCluster,
@@ -177,12 +160,8 @@ namespace RVL
 		void PaintClusterVertices(
 			int iCluster,
 			unsigned char *color);
-		void UpdateVertexDisplayLines();
 		void DisplayReferenceFrames();
 		void SetSceneFileName(char *sceneFileName_);
-		void UpdateNormalHull(
-			Array<RECOG::PSGM_::NormalHullElement> &NHull,
-			float *N);
 		bool ModelExistInDB(char *modelFileName, FileSequenceLoader dbLoader); //VIDOVIC
 		void SaveModelID(FileSequenceLoader dbLoader); //VIDOVIC
 		void Learn(char *modelSequenceFileName); //VIDOVIC
@@ -265,8 +244,6 @@ namespace RVL
 			int nValids); //Vidovic
 		void SaveSegmentGT(FILE*fp); //Vidovic
 	private:
-		void DetectVertices(
-			Mesh *pMesh);
 		void Clusters();
 		void CreateTemplate();
 		void FitModel(
@@ -282,7 +259,7 @@ namespace RVL
 			Surfel *pSurfel,
 			int iFirstVertex = 0);
 		float DistanceFromNormalHull(
-			Array<RECOG::PSGM_::NormalHullElement> &NHull,
+			Array<SURFEL::NormalHullElement> &NHull,
 			float *N);
 		void UpdateMeanNormal(
 			float *sumN,
@@ -301,9 +278,6 @@ namespace RVL
 		CRVLMem *pMem;
 		PlanarSurfelDetector *pSurfelDetector;
 		SurfelGraph *pSurfels;
-		QList<RECOG::PSGM_::Vertex> vertexList;
-		Array<RECOG::PSGM_::Vertex *> vertexArray;
-		Array<QList<QLIST::Index>> surfelVertexList;
 		RECOG::PSGM_::DisplayData displayData;
 		Array<RECOG::PSGM_::Cluster *> clusters;
 		int *clusterMap;
@@ -332,17 +306,12 @@ namespace RVL
 		Array <RVL::SegmentGTInstance> segmentGT;
 
 	private:		
-		QLIST::Index *surfelVertexMem;
 		RECOG::PSGM_::Cluster *clusterMem;
 		int *clusterSurfelMem;
 		int *clusterVertexMem;
 		//RECOG::PSGM_::ModelInstanceElement *modelInstanceMem;
-		Array<Array<int>> vertexDisplayLineArray;
-		int *vertexDisplayLineArrayMem;
-		vtkSmartPointer<vtkPolyData> linesPolyData;
 		vtkSmartPointer<vtkPolyData> referenceFramesPolyData;
 		char *sceneFileName;
-		int nVertexSurfelRelations;
 		char *modelDataBase; //VIDOVIC
 		char *modelsInDataBase; //VIDOVIC
 		int nSModelInstances; //VIDOVIC

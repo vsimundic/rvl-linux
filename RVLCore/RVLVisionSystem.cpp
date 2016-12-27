@@ -12,7 +12,7 @@ CRVLVisionSystem::CRVLVisionSystem()
 	m_ImageFileName = NULL;
 
 	m_Mem0Size = 150000000;
-	m_MemSize = 500000000;
+	m_MemSize = 1000000000;
 	m_Mem2Size = 150000000;
 	m_MCMemSize = 10000000;
 
