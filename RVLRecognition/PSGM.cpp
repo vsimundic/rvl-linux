@@ -326,13 +326,18 @@ void PSGM::Clusters()
 			{
 				if (clusterMap[iSurfel] < 0)
 				{
-					pSurfelBuff_->Element[pSurfelBuff_->n++] = iSurfel;
+					pSurfelVertexList = pSurfels->surfelVertexList.Element + iSurfel;
 
-					if (pSurfel->size > maxSurfelSize)
+					if (pSurfelVertexList->pFirst)
 					{
-						maxSurfelSize = pSurfel->size;
+						pSurfelBuff_->Element[pSurfelBuff_->n++] = iSurfel;
 
-						iLargestSurfel = iSurfel;
+						if (pSurfel->size > maxSurfelSize)
+						{
+							maxSurfelSize = pSurfel->size;
+
+							iLargestSurfel = iSurfel;
+						}
 					}
 				}
 			}
@@ -346,6 +351,9 @@ void PSGM::Clusters()
 			break;
 
 		//if (iLargestSurfel == 25)
+		//	int debug = 0;
+
+		//if (clusters.n == 15)
 		//	int debug = 0;
 
 		// Initialize a new cluster.
