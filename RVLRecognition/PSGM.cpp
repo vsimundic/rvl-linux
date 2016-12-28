@@ -72,6 +72,10 @@ PSGM::PSGM()
 	TP = 0;
 	FP = 0;
 	FN = 0;
+
+	matchMatrix.Element = NULL;
+	sortedMatches.Element = NULL;
+	//End Vidovic
 }
 
 
@@ -93,12 +97,19 @@ PSGM::~PSGM()
 	RVL_DELETE_ARRAY(centroidID.Element); //VIDOVIC
 
 	//Vidovic
-	int iCluster, iMsegment;
+	int iSSegment;
 
-	for (iCluster = 0; iCluster < nDominantClusters; iCluster++)
-		RVL_DELETE_ARRAY(matchMatrix.Element[iCluster].Element);
+	if (matchMatrix.Element && sortedMatches.Element)
+	{
+		for (iSSegment = 0; iSSegment < nDominantClusters; iSSegment++)
+		{
+			RVL_DELETE_ARRAY(matchMatrix.Element[iSSegment].Element);
+			RVL_DELETE_ARRAY(sortedMatches.Element[iSSegment].Element);
+		}
+	}
 
 	RVL_DELETE_ARRAY(matchMatrix.Element);
+	RVL_DELETE_ARRAY(sortedMatches.Element)
 
 	pECCVGT->~ECCVGTLoader();
 	//End Vidovic
@@ -2194,7 +2205,7 @@ void PSGM::Match()
 
 						//create SegmentGT
 						TP_ = CompareMatchToGT(pSMIMatch, true, 0.0, distanceThresh);
-
+						
 						if (TP_ && !segmentTP)
 						{
 							segmentTP = true;
@@ -3505,8 +3516,7 @@ bool PSGM::CompareMatchToGT(
 }
 
 bool PSGM::CompareMatchToSegmentGT(
-	RECOG::PSGM_::MatchInstance *pMatch,
-	bool compareSegmentsWithoutGT)
+	RECOG::PSGM_::MatchInstance *pMatch)
 {	
 	int iScene = pMatch->iScene;
 	int iSegmentGT = iScene * nDominantClusters + pMatch->iCluster;
@@ -3517,11 +3527,6 @@ bool PSGM::CompareMatchToSegmentGT(
 
 	pGT = pECCVGT->GT.Element[iScene].Element;
 	nGTModels = pECCVGT->GT.Element[iScene].n;
-
-	//eliminate FP from segments without GT
-	if (!compareSegmentsWithoutGT && segmentGT.Element[iSegmentGT].iModel == -1)
-		return true;
-
 
 	//if (pMatch->iModel == segmentGT.Element[iSegmentGT].iModel && pMatch->iMCluster == segmentGT.Element[iSegmentGT].iMSegment)
 	if (pMatch->iModel == segmentGT.Element[iSegmentGT].iModel)
@@ -3662,7 +3667,7 @@ void PSGM::SortMatchMatrix()
 	}
 }
 
-void PSGM::EvaluateMatchesByScore(FILE *fp, FILE *fpLog)
+void PSGM::EvaluateMatchesByScore(FILE *fp, FILE *fpLog, bool compareSegmentsWithoutGT)
 {
 	float precision, recall;
 	float angleThresh, distanceThresh;
@@ -3678,11 +3683,14 @@ void PSGM::EvaluateMatchesByScore(FILE *fp, FILE *fpLog)
 
 	distanceThresh = 100;
 
-	scoreThreshMin = 200.0;
+	scoreThreshMin = 180.0;
 	scoreThreshMax = 350.0;
 
 	//NEW PR calculation
 	RECOG::PSGM_::MatchInstance *pMatch;
+	RECOG::PSGM_::MatchInstance *pSegmentBestMatch;
+
+	float scoreRatio;
 
 	bool TPMatch;
 
@@ -3696,22 +3704,35 @@ void PSGM::EvaluateMatchesByScore(FILE *fp, FILE *fpLog)
 			{
 				firstTP[iSSegment] = -1;
 
+				iMatch = sortedMatches.Element[iSSegment].Element[0].idx;
+				pSegmentBestMatch = matchMatrix.Element[iSSegment].Element[iMatch];
+
 				for (iMSegment = 0; iMSegment <= iBestMatches; iMSegment++)
 				{
 					iMatch = sortedMatches.Element[iSSegment].Element[iMSegment].idx;
 
 					pMatch = matchMatrix.Element[iSSegment].Element[iMatch];
 
+					scoreRatio = pSegmentBestMatch->score / pMatch->score;
+
 					if (pMatch && pMatch->score < scoreThresh)
 					{
 					#ifdef RVLPSGM_MATCH_USING_SEGMENT_GT
-						TPMatch = CompareMatchToSegmentGT(pMatch, false);
+						TPMatch = CompareMatchToSegmentGT(pMatch);
 					#else
 						TPMatch = CompareMatchToGT(pMatch, true, 0.0, distanceThresh);
 					#endif
 
 						if (!TPMatch)
-							FP_++;
+						{
+							int iSegmentGT = pMatch->iScene * nDominantClusters + pMatch->iCluster;
+
+							//eliminate FP from segments without GT
+							if (!compareSegmentsWithoutGT && segmentGT.Element[iSegmentGT].iModel == -1)
+								continue;
+							else
+								FP_++;
+						}
 						else
 							if (firstTP[iSSegment] == -1)
 							{

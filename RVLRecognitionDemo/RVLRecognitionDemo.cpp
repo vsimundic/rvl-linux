@@ -313,7 +313,7 @@ int main(int argc, char ** argv)
 
 				recognition.SaveSegmentGT(fpSegmentGT);
 
-				recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog);
+				recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, true);
 
 				printf("Scene %s...finished!\n\n", filePath);
 			}

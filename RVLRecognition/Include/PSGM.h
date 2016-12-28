@@ -204,8 +204,7 @@ namespace RVL
 			float angleThresh,
 			float distanceThresh); //VIDOVIC
 		bool PSGM::CompareMatchToSegmentGT(
-			RECOG::PSGM_::MatchInstance *pMatch,
-			bool compareSegmentsWithoutGT = true); //Vidovic
+			RECOG::PSGM_::MatchInstance *pMatch); //Vidovic
 		void PSGM::CountTPandFN(
 			int &TP,
 			int &FN,
@@ -220,7 +219,7 @@ namespace RVL
 		void PSGM::ClearMatchMatrix(); //Vidovic
 		void PSGM::UpdateMatchMatrix(RECOG::PSGM_::MatchInstance *pMatch, float cost); //Vidovic
 		void PSGM::SortMatchMatrix(); //Vidovic
-		void PSGM::EvaluateMatchesByScore(FILE *fp, FILE *fpLog); //Vidovic
+		void PSGM::EvaluateMatchesByScore(FILE *fp, FILE *fpLog, bool compareSegmentsWithoutGT = true); //Vidovic
 		void ConvexTemplateCentoidID(); //VIDOVIC
 		void FillMatch(
 			RECOG::PSGM_::MatchInstance *pMatch,
