@@ -87,6 +87,36 @@ namespace RVL
 		}
 	}
 
+	template <class Type>
+	bool Roots2(Type *p, Type *z)
+	{
+		Type det = p[1] * p[1] - 4.0 * p[0] * p[2];
+
+		if (det < 0.0)
+			return false;
+
+		Type fTmp1 = 2.0 * p[2];
+		Type fTmp2 = -p[1] / fTmp1;
+		Type fTmp3 = sqrt(det) / fTmp1;
+
+		z[0] = fTmp2 - fTmp3;
+		z[1] = fTmp2 + fTmp3;
+
+		return true;
+	}
+
+	template <class Type>
+	bool Eig2(Type *C, Type *eig)
+	{
+		Type p[3];
+
+		p[2] = 1.0;
+		p[1] = -(C[0] + C[3]);
+		p[0] = C[0] * C[3] - C[1] * C[2];
+
+		return RVL::Roots2<Type>(p, eig);
+	}
+
 	//VIDOVIC
 	class FileSequenceLoader
 	{

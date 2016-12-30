@@ -41,6 +41,11 @@ namespace RVL
 				Array<int> iSurfelArray;
 				Array<int> iVertexArray;
 				int size;
+				int boundaryDiscontinuityPerc;
+				float N[3];
+				float normalDistributionStd1;
+				float normalDistributionStd2;
+				bool bValid;
 				QList<RECOG::PSGM_::ModelInstance> modelInstanceList;
 			};
 
@@ -167,6 +172,7 @@ namespace RVL
 		void Learn(char *modelSequenceFileName, Visualizer *visualizer = NULL); //VIDOVIC
 		void LoadModelDataBase(); //VIDOVIC
 		void Match(); //VIDOVIC
+		void WriteClusterNormalDistribution(FILE *fp);
 		void MSTransformation(
 			RECOG::PSGM_::ModelInstance *pMModelInstance,
 			RECOG::PSGM_::ModelInstance *pSModelInstance,
@@ -266,6 +272,9 @@ namespace RVL
 			float *N,
 			float w,
 			float *meanN);
+		void ComputeClusterNormalDistribution(
+			RECOG::PSGM_::Cluster *pCluster);
+		void ComputeClusterBoundaryDiscontinuityPerc(int iCluster);
 		void SaveModelInstances(
 			FILE *fp,
 			int iModel,
@@ -277,6 +286,7 @@ namespace RVL
 		CRVLMem *pMem;
 		PlanarSurfelDetector *pSurfelDetector;
 		SurfelGraph *pSurfels;
+		Mesh *pMesh;
 		RECOG::PSGM_::DisplayData displayData;
 		Array<RECOG::PSGM_::Cluster *> clusters;
 		int *clusterMap;
@@ -291,6 +301,12 @@ namespace RVL
 		float edgeTangentAngle;
 		int nModels; //Vidovic
 		int nMSegments; //Vidovic
+		int minClusterSize;
+		int maxClusterSize;
+		int minSignificantClusterSize;
+		int minClusterBoundaryDiscontinuityPerc;
+		float minClusterNormalDistributionStd;
+		float groundPlaneTolerance;
 		Array<RECOG::PSGM_::ModelInstance> modelInstanceDB; //VIDOVIC
 		Array<RECOG::PSGM_::MatchInstance> matches; //VIDOVIC
 		RECOG::PSGM_::MatchInstance *pMatches; //VIDOVIC

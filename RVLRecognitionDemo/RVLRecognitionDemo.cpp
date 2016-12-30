@@ -344,7 +344,10 @@ int main(int argc, char ** argv)
 
 			sceneSequence.Init(sceneSequenceFileName);
 
+			char *clusterNormalDistributionFileName = NULL;
+
 			char filePath[200];
+			FILE *fpClusterNormalDistribution;
 
 			while (sceneSequence.GetNextPath(filePath))
 			{
@@ -355,8 +358,20 @@ int main(int argc, char ** argv)
 				recognition.SetSceneFileName(filePath);
 				recognition.Interpret(&mesh);
 
+				RVLCopyString(filePath, &clusterNormalDistributionFileName);
+
+				sprintf(RVLGETFILEEXTENSION(clusterNormalDistributionFileName), "seg");
+
+				fpClusterNormalDistribution = fopen(clusterNormalDistributionFileName, "w");
+
+				recognition.WriteClusterNormalDistribution(fpClusterNormalDistribution);
+
+				fclose(fpClusterNormalDistribution);
+
 				printf("Scene %s...finished!\n\n", filePath);
 			}
+
+			RVL_DELETE_ARRAY(clusterNormalDistributionFileName);
 
 			// Visualization
 
