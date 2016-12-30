@@ -50,6 +50,7 @@ void CreateParamList(
 	char **pModelSequenceFileName,	//VIDOVIC
 	char **pModelsInDB,	//VIDOVIC
 	char **pGTFolder,	//VIDOVIC
+	char **pSegmentGTFileName,	//Vidovic
 	DWORD &method,
 	DWORD &flags //VIDOVIC
 	)
@@ -65,6 +66,7 @@ void CreateParamList(
 	pParamData = pParamList->AddParam("ModelSequenceFileName", RVLPARAM_TYPE_STRING, pModelSequenceFileName);	//VIDOVIC
 	pParamData = pParamList->AddParam("ModelsInDataBase", RVLPARAM_TYPE_STRING, pModelsInDB);	//VIDOVIC
 	pParamData = pParamList->AddParam("GTFolder", RVLPARAM_TYPE_STRING, pGTFolder);	//VIDOVIC
+	pParamData = pParamList->AddParam("SegmentGTFileName", RVLPARAM_TYPE_STRING, pSegmentGTFileName);	//Vidovic
 	pParamData = pParamList->AddParam("Recognition.method", RVLPARAM_TYPE_ID, &method);
 	pParamList->AddID(pParamData, "PSGM", RVLRECOGNITION_METHOD_PSGM);
 	pParamList->AddID(pParamData, "RF", RVLRECOGNITION_METHOD_RF); //VIDOVIC
@@ -93,6 +95,7 @@ int main(int argc, char ** argv)
 	char *modelSequenceFileName = NULL; //VIDOVIC
 	char *modelsInDB = NULL; //VIDOVIC
 	char *GTFolder = NULL; //VIDOVIC
+	char *segmentGTFileName = NULL; //Vidovic
 	DWORD method = RVLRECOGNITION_METHOD_PSGM;
 	//DWORD method = RVLRECOGNITION_METHOD_RF; //VIDOVIC
 
@@ -107,10 +110,17 @@ int main(int argc, char ** argv)
 		&modelSequenceFileName,
 		&modelsInDB,
 		&GTFolder,
+		&segmentGTFileName,
 		method,
 		flags);	 //VIDOVIC
 
 	ParamList.LoadParams("RVLRecognitionDemo.cfg");
+
+	if (segmentGTFileName == NULL)
+	{
+		segmentGTFileName = new char[200];
+		segmentGTFileName = "C:\\RVL\\segmentGT.txt";
+	}
 
 	// Initialize surfel detection
 
@@ -292,7 +302,15 @@ int main(int argc, char ** argv)
 			char filePath[200];
 
 			FILE *fpHypothesisEvaluation = fopen("F:\\Projekti\\ARP3D\\compare.txt", "w");
-			FILE *fpSegmentGT = fopen("F:\\Projekti\\ARP3D\\segmentGT.txt", "w");
+
+			FILE *fpSegmentGT = fopen(segmentGTFileName, "r");
+
+			if (fpSegmentGT == NULL)
+			{
+				fpSegmentGT = fopen(segmentGTFileName, "w");
+				recognition.createSegmentGT = true;
+			}
+
 			FILE *fpLog = fopen("F:\\Projekti\\ARP3D\\evaluationLog.txt", "w");
 
 			//Move to some PSGM MatchInit function
@@ -311,7 +329,11 @@ int main(int argc, char ** argv)
 
 				recognition.Interpret(&mesh);
 
-				recognition.SaveSegmentGT(fpSegmentGT);
+				if (recognition.createSegmentGT)
+					recognition.SaveSegmentGT(fpSegmentGT);
+				else
+					recognition.LoadSegmentGT(fpSegmentGT);
+
 
 				recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, true);
 
@@ -393,6 +415,9 @@ int main(int argc, char ** argv)
 
 	if (modelSequenceFileName)
 		delete[] modelSequenceFileName;
+
+	if (segmentGTFileName)
+		delete[] segmentGTFileName;
 
 	//END VIDOVIC
 

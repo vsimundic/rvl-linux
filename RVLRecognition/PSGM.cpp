@@ -2420,16 +2420,19 @@ void PSGM::Match()
 						}
 
 						//create SegmentGT
-						TP_ = CompareMatchToGT(pSMIMatch, true, 0.0, distanceThresh);
-						
-						if (TP_ && !segmentTP)
+						if (createSegmentGT)
 						{
-							segmentTP = true;
-							segmentGT.Element[iScene*nDominantClusters + iSCluster].iScene = iScene;
+							TP_ = CompareMatchToGT(pSMIMatch, true, 0.0, distanceThresh);
 
-							segmentGT.Element[iScene*nDominantClusters + iSCluster].iSSegment = iSCluster;
-							segmentGT.Element[iScene*nDominantClusters + iSCluster].iModel = pSMIMatch->iModel;
-							segmentGT.Element[iScene*nDominantClusters + iSCluster].iMSegment = pSMIMatch->iMCluster;
+							if (TP_ && !segmentTP)
+							{
+								segmentTP = true;
+								segmentGT.Element[iScene*nDominantClusters + iSCluster].iScene = iScene;
+
+								segmentGT.Element[iScene*nDominantClusters + iSCluster].iSSegment = iSCluster;
+								segmentGT.Element[iScene*nDominantClusters + iSCluster].iModel = pSMIMatch->iModel;
+								segmentGT.Element[iScene*nDominantClusters + iSCluster].iMSegment = pSMIMatch->iMCluster;
+							}
 						}
 					}
 					else
@@ -2459,15 +2462,18 @@ void PSGM::Match()
 		}	// for all MI in cluster
 
 		//Scene Segment doesn't have GT instance
-		if (!segmentTP)
+		if (createSegmentGT)
 		{
-			segmentGT.Element[iScene*nDominantClusters + iSCluster].iScene = iScene;
-			segmentGT.Element[iScene*nDominantClusters + iSCluster].iSSegment = iSCluster;
-			segmentGT.Element[iScene*nDominantClusters + iSCluster].iModel = -1;
-			segmentGT.Element[iScene*nDominantClusters + iSCluster].iMSegment = -1;
+			if (!segmentTP)
+			{
+				segmentGT.Element[iScene*nDominantClusters + iSCluster].iScene = iScene;
+				segmentGT.Element[iScene*nDominantClusters + iSCluster].iSSegment = iSCluster;
+				segmentGT.Element[iScene*nDominantClusters + iSCluster].iModel = -1;
+				segmentGT.Element[iScene*nDominantClusters + iSCluster].iMSegment = -1;
+			}
 		}
 
-		if (nDominantClusters < 10)
+		if (clusters.n < 10)
 			printf("\b");
 		else
 			printf("\b\b");
@@ -4258,8 +4264,20 @@ void PSGM::SaveSegmentGT(FILE*fp)
 {
 	int iSSegment;
 
-	for (iSSegment = 0; iSSegment < nDominantClusters; iSSegment++)
+	int nClusters = RVLMIN(clusters.n, nDominantClusters);
+
+	for (iSSegment = 0; iSSegment < nClusters; iSSegment++)
 		fprintf(fp, "%d\t%d\t%d\t%d\n", segmentGT.Element[(iScene - 1)*nDominantClusters + iSSegment].iScene, segmentGT.Element[(iScene - 1)*nDominantClusters + iSSegment].iSSegment, segmentGT.Element[(iScene - 1)*nDominantClusters + iSSegment].iModel, segmentGT.Element[(iScene - 1)*nDominantClusters + iSSegment].iMSegment);
+}
+
+void PSGM::LoadSegmentGT(FILE*fp)
+{
+	int iSSegment;
+
+	int nClusters = RVLMIN(clusters.n, nDominantClusters);
+
+	for (iSSegment = 0; iSSegment < nClusters; iSSegment++)
+		fscanf(fp, "%d\t%d\t%d\t%d\n", &segmentGT.Element[(iScene - 1)*nDominantClusters + iSSegment].iScene, &segmentGT.Element[(iScene - 1)*nDominantClusters + iSSegment].iSSegment, &segmentGT.Element[(iScene - 1)*nDominantClusters + iSSegment].iModel, &segmentGT.Element[(iScene - 1)*nDominantClusters + iSSegment].iMSegment);
 }
 
 void PSGM::ConvexTemplateCentoidID()

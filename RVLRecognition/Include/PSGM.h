@@ -248,6 +248,7 @@ namespace RVL
 			float distanceGT,
 			int nValids); //Vidovic
 		void SaveSegmentGT(FILE*fp); //Vidovic
+		void LoadSegmentGT(FILE*fp); //Vidovic
 	private:
 		void Clusters();
 		void CreateTemplate();
@@ -319,6 +320,7 @@ namespace RVL
 		DWORD scoreCalculation; //VIDOVIC
 		ECCVGTLoader *pECCVGT; //Vidovic
 		Array <RVL::SegmentGTInstance> segmentGT;
+		bool createSegmentGT = false;
 
 	private:		
 		RECOG::PSGM_::Cluster *clusterMem;
