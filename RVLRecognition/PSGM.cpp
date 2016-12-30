@@ -31,6 +31,12 @@ PSGM::PSGM()
 	//edgeTangentAngle = 100.0f;	
 	nModels = 35; //Vidovic
 	nMSegments = 3; //Vidovic
+	minClusterSize = 400;
+	maxClusterSize = 66122;
+	minSignificantClusterSize = 3200;
+	minClusterBoundaryDiscontinuityPerc = 75;
+	minClusterNormalDistributionStd = 0.1f;
+	groundPlaneTolerance = 0.020f;
 
 	convexTemplate.n = 66;
 	convexTemplate.Element = new RECOG::PSGM_::Plane[convexTemplate.n];
@@ -132,12 +138,20 @@ void PSGM::CreateParamList(CRVLMem *pMem)
 	pParamData = ParamList.AddParam("PSGM.SceneMIMatch", RVLPARAM_TYPE_STRING, &sceneMIMatch); //VIDOVIC
 	pParamData = ParamList.AddParam("PSGM.nModels", RVLPARAM_TYPE_INT, &nModels); //Vidovic
 	pParamData = ParamList.AddParam("PSGM.nMSegments", RVLPARAM_TYPE_INT, &nMSegments); //Vidovic
+	pParamData = ParamList.AddParam("PSGM.minClusterSize", RVLPARAM_TYPE_INT, &minClusterSize);
+	pParamData = ParamList.AddParam("PSGM.maxClusterSize", RVLPARAM_TYPE_INT, &maxClusterSize);
+	pParamData = ParamList.AddParam("PSGM.minSignificantClusterSize", RVLPARAM_TYPE_INT, &minSignificantClusterSize);
+	pParamData = ParamList.AddParam("PSGM.minClusterBoundaryDiscontinuityPerc", RVLPARAM_TYPE_INT, &minClusterBoundaryDiscontinuityPerc);
+	pParamData = ParamList.AddParam("PSGM.minClusterNormalDistributionStd", RVLPARAM_TYPE_FLOAT, &minClusterNormalDistributionStd);
+	pParamData = ParamList.AddParam("PSGM.groundPlaneTolerance", RVLPARAM_TYPE_FLOAT, &groundPlaneTolerance);	
 }
 
 void PSGM::Interpret(
-	Mesh *pMesh)
+	Mesh *pMeshIn)
 {
 	// Create ordered mesh.
+
+	pMesh = pMeshIn;
 
 	pMesh->CreateOrderedMeshFromPolyData();
 
@@ -278,6 +292,9 @@ void PSGM::Clusters()
 
 	Array<int> *pSurfelBuff = &surfelBuff1;
 	Array<int> *pSurfelBuff_ = &surfelBuff2;
+
+	int nValidClusters = 0;
+
 	Array<int> *pTmp;
 
 #ifdef RVLPSGM_NORMAL_HULL
@@ -586,6 +603,9 @@ void PSGM::Clusters()
 				pSurfelEdgePtr = pSurfelEdgePtr->pNext;
 			}
 		}	// region growing loop
+
+		if(pCluster->bValid = (pCluster->size >= minClusterSize))
+			nValidClusters++;
 	}	// for each cluster
 
 	delete[] candidateMem;
@@ -596,52 +616,237 @@ void PSGM::Clusters()
 	delete[] NHull.Element;
 #endif
 
-	// Create sorted cluster array.
+	// Sort clusters.
 
-	int maxClusterSize = 0;
-	int size;
+	Array<SortIndex<int>> sortedClusterArray;
+
+	sortedClusterArray.Element = new SortIndex<int>[nValidClusters];
+
+	SortIndex<int> *pSortIndex = sortedClusterArray.Element;
 
 	for (i = 0; i < clusters.n; i++)
 	{
-		size = clusterMem[i].size;
+		pCluster = clusterMem + i;
 
-		if (size > maxClusterSize)
-			maxClusterSize = size;
+		if (pCluster->bValid)
+		{
+			pSortIndex->cost = pCluster->size;
+			pSortIndex->idx = i;
+			pSortIndex++;
+		}
 	}
 
-	int maxnBins = 100000;
+	sortedClusterArray.n = nValidClusters;
 
-	int k = (maxClusterSize < maxnBins ? 1 : maxClusterSize / maxnBins + 1);
+	BubbleSort<SortIndex<int>>(sortedClusterArray, true);
 
-	int *key = new int[clusters.n];
+	// Detect the ground plane and filter all clusters lying on the ground plane.
 
-	for (i = 0; i < clusters.n; i++)
-		key[i] = clusterMem[i].size / k;
+	Array<int> PtArray;
 
-	RVL::QuickSort(key, surfelBuff1.Element, clusters.n);
+	PtArray.Element = new int[pMesh->NodeArray.n];
+
+	bool bGnd = false;
+
+	int *piPt;
+	int iiSurfel;
+	QLIST::Index2 *pPtIdx;
+	MESH::Distribution PtDistribution;
+	float *var;
+	int idx[3];
+	int iTmp;
+	float *NGnd;
+	float dGnd;
+	float eGnd;
+
+	for (i = 0; i < nValidClusters; i++)
+	{
+		iCluster = sortedClusterArray.Element[i].idx;
+
+		pCluster = clusterMem + iCluster;
+
+		if (bGnd)
+		{
+			//ComputeClusterNormalDistribution(pCluster);
+
+			//if (pCluster->normalDistributionStd1 < minClusterNormalDistributionStd && pCluster->normalDistributionStd2 < minClusterNormalDistributionStd)
+			{
+				//if (RVLDOTPRODUCT3(NGnd, pCluster->N) >= 0.95)
+				{
+					for (iiSurfel = 0; iiSurfel < pCluster->iSurfelArray.n; iiSurfel++)
+					{
+						iSurfel = pCluster->iSurfelArray.Element[iiSurfel];
+
+						pSurfel = pSurfels->NodeArray.Element + iSurfel;
+
+						eGnd = RVLDOTPRODUCT3(NGnd, pSurfel->P) - dGnd;
+
+						if (RVLABS(eGnd) > groundPlaneTolerance)
+							break;
+					}
+
+					if (iiSurfel >= pCluster->iSurfelArray.n)
+						pCluster->bValid = false;
+				}
+			}
+		}
+		else
+		{
+			piPt = PtArray.Element;
+
+			for (iiSurfel = 0; iiSurfel < pCluster->iSurfelArray.n; iiSurfel++)
+			{
+				iSurfel = pCluster->iSurfelArray.Element[iiSurfel];
+
+				pSurfel = pSurfels->NodeArray.Element + iSurfel;
+
+				pPtIdx = pSurfel->PtList.pFirst;
+
+				while (pPtIdx)
+				{
+					*(piPt++) = pPtIdx->Idx;
+
+					pPtIdx = pPtIdx->pNext;
+				}
+			}
+
+			PtArray.n = piPt - PtArray.Element;
+
+			pMesh->ComputeDistribution(PtArray, PtDistribution);
+
+			var = PtDistribution.var;
+
+			RVLSORT3DESCEND(var, idx, iTmp);
+
+			if (var[idx[0]] / var[idx[1]] <= 0.0005 && var[idx[0]] / var[idx[2]] <= 0.0005)
+			{
+				pCluster->bValid = false;
+
+				NGnd = PtDistribution.R + 3 * idx[0];
+
+				if (NGnd[2] > 0.0f)
+				{
+					RVLNEGVECT3(NGnd, NGnd);
+				}
+
+				dGnd = RVLDOTPRODUCT3(NGnd, PtDistribution.t);
+
+				bGnd = true;
+			}
+		}
+	}
+
+	delete[] PtArray.Element;
+
+	//// Filter and sort clusters.
+
+	//for (i = 0; i < clusters.n; i++)
+	//{
+	//	pCluster = clusterMem + i;
+
+	//	if (pCluster->bValid)
+	//		ComputeClusterBoundaryDiscontinuityPerc(i);
+	//}
+
+	//for (i = 0; i < clusters.n; i++)
+	//{
+	//	pCluster = clusterMem + i;
+
+	//	if (pCluster->bValid)
+	//	{
+	//		if (pCluster->size <= maxClusterSize)
+	//		{
+	//			ComputeClusterNormalDistribution(pCluster);
+
+	//			if (pCluster->size < minSignificantClusterSize)
+	//			{
+	//				if (pCluster->boundaryDiscontinuityPerc < minClusterBoundaryDiscontinuityPerc)
+	//					if (pCluster->normalDistributionStd1 < minClusterNormalDistributionStd || pCluster->normalDistributionStd2 < minClusterNormalDistributionStd)
+	//						pCluster->bValid = false;
+	//			}
+	//		}
+	//		else
+	//			pCluster->bValid = false;
+	//	}
+	//}
 
 	RVL_DELETE_ARRAY(clusters.Element);
 
-	clusters.Element = new RECOG::PSGM_::Cluster *[clusters.n];
+	clusters.Element = new RECOG::PSGM_::Cluster *[nValidClusters];
 
-	for (i = 0; i < clusters.n; i++)
+	int *clusterIndexMap = new int[clusters.n];
+
+	memset(clusterIndexMap, 0xff, clusters.n * sizeof(int));
+
+	int iCluster_ = 0;
+
+	for (i = 0; i < sortedClusterArray.n; i++)
 	{
-		iCluster = surfelBuff1.Element[clusters.n - i - 1];
-		clusters.Element[i] = clusterMem + iCluster;
-		surfelBuff2.Element[iCluster] = i;
+		iCluster = sortedClusterArray.Element[i].idx;
+
+		pCluster = clusterMem + iCluster;
+
+		if (pCluster->bValid)
+		{
+			clusterIndexMap[iCluster] = iCluster_;
+
+			clusters.Element[iCluster_] = pCluster;
+
+			iCluster_++;
+		}
 	}
+
+	clusters.n = iCluster_;
+
+	//int maxClusterSize_ = 0;
+	//int size;
+
+	//for (i = 0; i < clusters.n; i++)
+	//{
+	//	size = clusterMem[i].size;
+
+	//	if (size > maxClusterSize_)
+	//		maxClusterSize_ = size;
+	//}
+
+	//int maxnBins = 100000;
+
+	//int k = (maxClusterSize_ < maxnBins ? 1 : maxClusterSize_ / maxnBins + 1);
+
+	//int *key = new int[clusters.n];
+
+	//for (i = 0; i < clusters.n; i++)
+	//	key[i] = clusterMem[i].size / k;
+
+	//RVL::QuickSort(key, surfelBuff1.Element, clusters.n);
+
+	//RVL_DELETE_ARRAY(clusters.Element);
+
+	//clusters.Element = new RECOG::PSGM_::Cluster *[clusters.n];
+
+	//for (i = 0; i < clusters.n; i++)
+	//{
+	//	iCluster = surfelBuff1.Element[clusters.n - i - 1];
+	//	clusters.Element[i] = clusterMem + iCluster;
+	//	surfelBuff2.Element[iCluster] = i;
+	//}
+
+	//delete[] key;
 
 	// Update cluster map.	
 
 	for (iSurfel = 0; iSurfel < pSurfels->NodeArray.n; iSurfel++)
 	{
-		if (clusterMap[iSurfel] >= 0)
-			clusterMap[iSurfel] = surfelBuff2.Element[clusterMap[iSurfel]];
+		iCluster = clusterMap[iSurfel];
+
+		if (iCluster >= 0)
+			clusterMap[iSurfel] = clusterIndexMap[iCluster];
 	}
 
+	delete[] clusterIndexMap;
+	delete[] sortedClusterArray.Element;
 	delete[] surfelBuff1.Element;
-	delete[] surfelBuff2.Element;
-	delete[] key;
+	delete[] surfelBuff2.Element;	
 }
 
 void PSGM::CreateTemplate()
@@ -875,6 +1080,9 @@ bool PSGM::ReferenceFrames(int iCluster)
 
 	if (maxSize == 0)
 		return false;
+
+	if (iCluster == 3)
+		int debug = 0;
 
 	int sizeThr = (int)((float)maxSize * kReferenceSurfelSize);
 
@@ -2821,6 +3029,192 @@ void PSGM::Match()
 	SaveMatches();
 	printf("completed!\n\n");
 #endif
+}
+
+void PSGM::ComputeClusterNormalDistribution(
+	RECOG::PSGM_::Cluster *pCluster)
+{
+	float R[9];
+
+	float *X = R;
+	float *Y = R + 3;
+	float *Z = R + 6;
+
+	float *meanN = Z;
+
+	RVLNULL3VECTOR(meanN);
+
+	float wTotal = 0.0f;
+
+	int iiSurfel, iSurfel;
+	Surfel *pSurfel;
+	float *N;
+	float wN[3];
+	float w;
+	float fTmp;
+	float NP[3];
+	float eig[2];
+	int i1, i2, i3;
+
+	for (iiSurfel = 0; iiSurfel < pCluster->iSurfelArray.n; iiSurfel++)
+	{
+		iSurfel = pCluster->iSurfelArray.Element[iiSurfel];
+
+		pSurfel = pSurfels->NodeArray.Element + iSurfel;
+
+		N = pSurfel->N;
+
+		w = (float)(pSurfel->size);
+
+		RVLSCALE3VECTOR(N, w, wN);
+
+		RVLSUM3VECTORS(meanN, wN, meanN);
+
+		wTotal += w;
+	}
+
+	RVLSCALE3VECTOR2(meanN, wTotal, meanN);
+
+	// Define projection reference frame.
+
+	RVLORTHOGONAL3(Z, X, i1, i2, i3, fTmp);
+
+	RVLCROSSPRODUCT3(Z, X, Y);
+
+	// Project surfel normals onto the xy-plane of the projection reference frame and compute covariance matrix.
+
+	float C[4];
+
+	C[0] = C[1] = C[3] = 0.0f;
+
+	for (iiSurfel = 0; iiSurfel < pCluster->iSurfelArray.n; iiSurfel++)
+	{
+		iSurfel = pCluster->iSurfelArray.Element[iiSurfel];
+
+		pSurfel = pSurfels->NodeArray.Element + iSurfel;
+
+		N = pSurfel->N;
+
+		w = (float)(pSurfel->size);
+
+		RVLMULMX3X3VECT(R, N, NP);
+
+		C[0] += (w * NP[0] * NP[0]);
+		C[1] += (w * NP[0] * NP[1]);
+		C[3] += (w * NP[1] * NP[1]);
+	}
+
+	C[0] /= wTotal;
+	C[1] /= wTotal;
+	C[2] = C[1];
+	C[3] /= wTotal;
+
+	// Compute eigenvalues of C.
+
+	Eig2<float>(C, eig);
+
+	// Compute normalDistributionStds.
+
+	pCluster->normalDistributionStd1 = sqrt(eig[0]);
+	pCluster->normalDistributionStd2 = sqrt(eig[1]);
+	RVLCOPY3VECTOR(meanN, pCluster->N);
+}
+
+void PSGM::ComputeClusterBoundaryDiscontinuityPerc(int iCluster)
+{
+	RECOG::PSGM_::Cluster *pCluster = clusterMem + iCluster;
+
+	int nContinuity = 0;
+	int nDiscontinuity = 0;
+
+	int iCluster_, iiSurfel, iSurfel, iSurfel_, iPt, iPt_, iBoundary, iPointEdge;
+	Surfel *pSurfel;
+	Array<MeshEdgePtr *> *pBoundary;
+	MeshEdgePtr *pEdgePtr, *pEdgePtr_;
+	Point *pPt;
+	MeshEdge *pEdge;
+	RECOG::PSGM_::Cluster *pCluster_;
+
+	for (iiSurfel = 0; iiSurfel < pCluster->iSurfelArray.n; iiSurfel++)
+	{
+		iSurfel = pCluster->iSurfelArray.Element[iiSurfel];
+
+		pSurfel = pSurfels->NodeArray.Element + iSurfel;
+
+		for (iBoundary = 0; iBoundary < pSurfel->BoundaryArray.n; iBoundary++)
+		{
+			pBoundary = pSurfel->BoundaryArray.Element + iBoundary;
+
+			for (iPointEdge = 0; iPointEdge < pBoundary->n; iPointEdge++)
+			{
+				pEdgePtr = pBoundary->Element[iPointEdge];
+
+				iPt = RVLPCSEGMENT_GRAPH_GET_NODE(pEdgePtr);
+
+				pPt = pMesh->NodeArray.Element + iPt;
+
+				if (pPt->bBoundary)
+					nDiscontinuity++;
+				else
+				{
+					pEdgePtr_ = pMesh->NodeArray.Element[iPt].EdgeList.pFirst;
+
+					while (pEdgePtr_)
+					{
+						RVLPCSEGMENT_GRAPH_GET_NEIGHBOR(iPt, pEdgePtr_, pEdge, iPt_);
+
+						iSurfel_ = pSurfels->surfelMap[iPt_];
+
+						if (iSurfel_ >= 0 && iSurfel_ < pSurfels->NodeArray.n)
+						{
+							iCluster_ = clusterMap[iSurfel_];
+
+							if (iCluster_ != iCluster && iCluster_ >= 0)
+							{
+								if (iCluster_ >= clusters.n)
+									printf("iCluster_=%d\n", iCluster_);
+
+								pCluster_ = clusterMem + iCluster_;
+
+								if (pCluster_->bValid)
+									break;
+							}
+						}
+
+						pEdgePtr_ = pEdgePtr_->pNext;
+					}
+
+					if (pEdgePtr_)
+						nContinuity++;
+				}
+			}
+		}
+	}
+
+	if (nDiscontinuity == 0)
+		pCluster->boundaryDiscontinuityPerc = 0;
+	else
+		pCluster->boundaryDiscontinuityPerc = 100 * nDiscontinuity / (nContinuity + nDiscontinuity);
+}
+
+void PSGM::WriteClusterNormalDistribution(FILE *fp)
+{
+	int iCluster;
+	RECOG::PSGM_::Cluster *pCluster;
+
+	for (iCluster = 0; iCluster < clusters.n; iCluster++)
+	{
+		pCluster = clusters.Element[iCluster];
+
+		// Write eigenvalues to file.
+
+		fprintf(fp, "%d\t%d\t%d\t%f\t%f\n", 
+			iCluster, 
+			pCluster->boundaryDiscontinuityPerc, 
+			pCluster->size, 
+			pCluster->normalDistributionStd1, 
+			pCluster->normalDistributionStd2);
+	}
 }
 
 void PSGM::MSTransformation(
