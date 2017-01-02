@@ -1430,8 +1430,8 @@ void RFRecognition::FeatureTestPrecisionRecallGraph(char *sceneMeshFileName, cha
 
 	fileLoader.Init(sceneSequenceFileName);
 
-	fpTrue = fopen("C:\\RVL\\Debug\\True_400.txt", "w");
-	fpBestHypothesisError = fopen("C:\\RVL\\Debug\\bestHypothesisError_400.txt", "w");
+	fpTrue = fopen("C:\\RVL\\Debug\\True.txt", "w");
+	fpBestHypothesisError = fopen("C:\\RVL\\Debug\\bestHypothesisError.txt", "w");
 
 	printf("*****************************************************************\n");
 	printf("Ref Model: %s\n", strrchr(sceneMeshFileName, '\\') + 1);
@@ -1470,7 +1470,7 @@ void RFRecognition::FeatureTestPrecisionRecallGraph(char *sceneMeshFileName, cha
 	fclose(fpTrue);
 	fclose(fpBestHypothesisError);
 
-	fpFalse = fopen("C:\\RVL\\Debug\\False_400.txt", "w");
+	fpFalse = fopen("C:\\RVL\\Debug\\False.txt", "w");
 
 	nSceneModels = fileLoader.nFileNames;
 

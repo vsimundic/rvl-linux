@@ -151,7 +151,8 @@ namespace RVL
 		virtual ~PSGM();
 		void CreateParamList(CRVLMem *pMem);
 		void Interpret(
-			Mesh *pMesh);
+			Mesh *pMesh,
+			int iScene = 0);
 		void InitDisplay(
 			Visualizer *pVisualizer,
 			Mesh *pMesh,
@@ -276,6 +277,10 @@ namespace RVL
 		void ComputeClusterNormalDistribution(
 			RECOG::PSGM_::Cluster *pCluster);
 		void ComputeClusterBoundaryDiscontinuityPerc(int iCluster);
+		void AddReferenceFrame(
+			int iCluster,
+			float *R = NULL,
+			float *t = NULL);
 		void SaveModelInstances(
 			FILE *fp,
 			int iModel,
@@ -308,6 +313,8 @@ namespace RVL
 		int minClusterBoundaryDiscontinuityPerc;
 		float minClusterNormalDistributionStd;
 		float groundPlaneTolerance;
+		bool bZeroRFDescriptor;
+		bool bGTRFDescriptors;
 		Array<RECOG::PSGM_::ModelInstance> modelInstanceDB; //VIDOVIC
 		Array<RECOG::PSGM_::MatchInstance> matches; //VIDOVIC
 		RECOG::PSGM_::MatchInstance *pMatches; //VIDOVIC

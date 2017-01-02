@@ -21,6 +21,9 @@ using namespace RVL;
 PSGM::PSGM()
 {
 	mode = RVLRECOGNITION_MODE_RECOGNITION;
+	bZeroRFDescriptor = false;
+	bGTRFDescriptors = false;
+
 	nDominantClusters = 1;
 	kNoise = 1.2f;
 	minInitialSurfelSize = 20;
@@ -58,10 +61,13 @@ PSGM::PSGM()
 	//modelInstanceMem = NULL;
 	sceneFileName = NULL;
 	modelInstanceDB.Element = NULL; //VIDOVIC
+	modelInstanceDB.n = 0; //VIDOVIC
 	modelDataBase = NULL; //VIDOVIC
 	modelsInDataBase = NULL; //VIDOVIC
 	sceneMIMatch = NULL; //VIDOVIC
-	modelInstanceDB.n = 0; //VIDOVIC
+	matchMatrix.Element = NULL;
+	matchMatrix.n = 0;	
+	
 	nSModelInstances = 0; //VIDOVIC
 
 	nSamples = 20; //VIDOVIC
@@ -101,7 +107,7 @@ PSGM::~PSGM()
 	//Vidovic
 	int iCluster, iMsegment;
 
-	for (iCluster = 0; iCluster < nDominantClusters; iCluster++)
+	for (iCluster = 0; iCluster < matchMatrix.n; iCluster++)
 		RVL_DELETE_ARRAY(matchMatrix.Element[iCluster].Element);
 
 	RVL_DELETE_ARRAY(matchMatrix.Element);
@@ -143,11 +149,14 @@ void PSGM::CreateParamList(CRVLMem *pMem)
 	pParamData = ParamList.AddParam("PSGM.minSignificantClusterSize", RVLPARAM_TYPE_INT, &minSignificantClusterSize);
 	pParamData = ParamList.AddParam("PSGM.minClusterBoundaryDiscontinuityPerc", RVLPARAM_TYPE_INT, &minClusterBoundaryDiscontinuityPerc);
 	pParamData = ParamList.AddParam("PSGM.minClusterNormalDistributionStd", RVLPARAM_TYPE_FLOAT, &minClusterNormalDistributionStd);
-	pParamData = ParamList.AddParam("PSGM.groundPlaneTolerance", RVLPARAM_TYPE_FLOAT, &groundPlaneTolerance);	
+	pParamData = ParamList.AddParam("PSGM.groundPlaneTolerance", RVLPARAM_TYPE_FLOAT, &groundPlaneTolerance);
+	pParamData = ParamList.AddParam("PSGM.zeroRFDescriptor", RVLPARAM_TYPE_BOOL, &bZeroRFDescriptor);	
+	pParamData = ParamList.AddParam("PSGM.GTRFDescriptors", RVLPARAM_TYPE_BOOL, &bGTRFDescriptors);
 }
 
 void PSGM::Interpret(
-	Mesh *pMeshIn)
+	Mesh *pMeshIn,
+	int iScene)
 {
 	// Create ordered mesh.
 
@@ -189,15 +198,59 @@ void PSGM::Interpret(
 
 	int nClusters = RVLMIN(clusters.n, nDominantClusters);
 
+	char *GTHFileName = NULL;
+	FILE *fpGTH = NULL;
+
+	if (bGTRFDescriptors)
+	{
+		char *GTHFileName = RVLCreateString(sceneFileName);
+
+		sprintf(GTHFileName + strlen(GTHFileName) - 3, "gth");
+
+		fpGTH = fopen(GTHFileName, "w");
+	}
+
 	int iCluster;
 	RECOG::PSGM_::Cluster *pCluster;
 	RECOG::PSGM_::ModelInstance *pModelInstance;
+	float R[9];
 
 	for (iCluster = 0; iCluster < nClusters; iCluster++)
 	{
-		ReferenceFrames(iCluster);
-
 		pCluster = clusters.Element[iCluster];
+
+		if (bZeroRFDescriptor)
+		{
+			QList<RECOG::PSGM_::ModelInstance> *pModelInstanceList = &(pCluster->modelInstanceList);
+
+			RVLQLIST_INIT(pModelInstanceList);
+
+			AddReferenceFrame(iCluster);
+		}
+		else if (bGTRFDescriptors)
+		{
+			QList<RECOG::PSGM_::ModelInstance> *pModelInstanceList = &(pCluster->modelInstanceList);
+
+			RVLQLIST_INIT(pModelInstanceList);
+
+			Array<GTInstance> *pGT = pECCVGT->GT.Element + iScene;
+
+			int iGTInstance;
+			GTInstance *pGTInstance;
+
+			for (iGTInstance = 0; iGTInstance < pGT->n; iGTInstance++)
+			{
+				pGTInstance = pGT->Element + iGTInstance;
+
+				RVLSCALEMX3X3(pGTInstance->R, 1000.0f, R);
+	
+				AddReferenceFrame(iCluster, R, pGTInstance->t);
+
+				fprintf(fpGTH, "%d\t%d\n", iCluster, pGTInstance->iModel);
+			}
+		}
+		else
+			ReferenceFrames(iCluster);		
 
 		pModelInstance = pCluster->modelInstanceList.pFirst;
 
@@ -233,6 +286,14 @@ void PSGM::Interpret(
 	if (mode == RVLRECOGNITION_MODE_RECOGNITION)
 		Match();
 	//END VIDOVIC
+
+	if (bGTRFDescriptors)
+	{
+		if (fpGTH)
+			fclose(fpGTH);
+
+		RVL_DELETE_ARRAY(GTHFileName);
+	}
 }
 
 void PSGM::Clusters()
@@ -966,6 +1027,7 @@ void PSGM::FitModel(
 	pModelInstance->modelInstance.n = convexTemplate.n;
 
 	float *R = pModelInstance->R;
+	float *t = pModelInstance->t;
 
 	int iModelInstanceElement;
 	RECOG::PSGM_::ModelInstanceElement *pModelInstanceElement;
@@ -988,7 +1050,7 @@ void PSGM::FitModel(
 
 		N = convexTemplate.Element[iModelInstanceElement].N;
 
-		RVLMULMX3X3VECT(R, N, N_);
+		RVLMULMX3X3VECT(R, N, N_);		
 
 		pVertex = pSurfels->vertexArray.Element[pCluster->iVertexArray.Element[0]];
 
@@ -1035,6 +1097,8 @@ void PSGM::FitModel(
 				pModelInstanceElement->valid = true;
 			//END VIDOVIC
 		}	// for every vertex in the cluster
+
+		pModelInstanceElement->d -= RVLDOTPRODUCT3(N_, t);
 
 		//VIDOVIC
 		//if (bNormalValidityTest)
@@ -1356,6 +1420,41 @@ bool PSGM::ReferenceFrames(int iCluster)
 	delete[] iTangentAngleMem;
 
 	return true;
+}
+
+void PSGM::AddReferenceFrame(
+	int iCluster,
+	float *RIn,
+	float *tIn)
+{
+	RECOG::PSGM_::Cluster *pCluster = clusters.Element[iCluster];
+
+	QList<RECOG::PSGM_::ModelInstance> *pModelInstanceList = &(pCluster->modelInstanceList);
+
+	RECOG::PSGM_::ModelInstance *pModelInstance;
+
+	RVLMEM_ALLOC_STRUCT(pMem, RECOG::PSGM_::ModelInstance, pModelInstance);
+	RVLQLIST_ADD_ENTRY(pModelInstanceList, pModelInstance);
+	float *R = pModelInstance->R;
+	float *t = pModelInstance->t;
+
+	if (RIn)
+	{
+		RVLCOPYMX3X3(RIn, R)
+	}		
+	else
+	{
+		RVLUNITMX3(R)
+	}
+
+	if (tIn)
+	{
+		RVLCOPY3VECTOR(tIn, t)
+	}
+	else
+	{
+		RVLNULL3VECTOR(t);
+	}
 }
 
 int RVL::RECOG::PSGM_::ValidTangent(
