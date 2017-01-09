@@ -18,24 +18,6 @@ namespace RVL
 	{
 		namespace PSGM_
 		{
-			struct ModelInstanceElement
-			{
-				float d;
-				float e;
-				bool valid;
-			};
-
-			struct ModelInstance
-			{
-				int iModel; // VIDOVIC
-				int iCluster; // VIDOVIC
-				float R[9];
-				float t[3];
-				float tc[3]; // VIDOVIC
-				Array<ModelInstanceElement> modelInstance;
-				ModelInstance *pNext;
-			};
-
 			struct Cluster
 			{
 				Array<int> iSurfelArray;
@@ -327,6 +309,8 @@ namespace RVL
 		DWORD scoreCalculation; //VIDOVIC
 		ECCVGTLoader *pECCVGT; //Vidovic
 		Array <RVL::SegmentGTInstance> segmentGT;
+		RECOG::CTISet CTISet;
+		RECOG::CTISet MCTISet;
 
 	private:		
 		RECOG::PSGM_::Cluster *clusterMem;

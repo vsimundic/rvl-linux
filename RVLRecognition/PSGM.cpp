@@ -12,6 +12,7 @@
 #include "SurfelGraph.h"
 #include "PlanarSurfelDetector.h"
 #include "RVLRecognition.h"
+#include "CTISet.h"
 #include "PSGM.h"
 #include <Eigen\Eigenvalues>
 #include <random> //VIDOVIC
@@ -1919,85 +1920,87 @@ void PSGM::Learn(char *modelSequenceFileName)
 
 void PSGM::LoadModelDataBase()
 {
-	FILE *fp = fopen(modelDataBase, "r");
+	MCTISet.Load(modelDataBase);
 
-	char line[3000] = {0};
+	//FILE *fp = fopen(modelDataBase, "r");
 
-	int iModelInstance, iModelInstanceElement, i;
+	//char line[3000] = {0};
 
-	RECOG::PSGM_::ModelInstanceElement *pModelInstanceElement;
-	RECOG::PSGM_::ModelInstance *pModelInstance;
+	//int iModelInstance, iModelInstanceElement, i;
 
-	if (fp)
-	{
-		//count number of lines in model DB
-		while (!feof(fp))
-		{
-			line[0] = '\0';
+	//RECOG::PSGM_::ModelInstanceElement *pModelInstanceElement;
+	//RECOG::PSGM_::ModelInstance *pModelInstance;
 
-			fgets(line, 3000, fp);
+	//if (fp)
+	//{
+		////count number of lines in model DB
+		//while (!feof(fp))
+		//{
+		//	line[0] = '\0';
 
-			if (line[0] == '\0' || line[0] == '\n')
-				continue;
+		//	fgets(line, 3000, fp);
 
-			modelInstanceDB.n++;
-		}
+		//	if (line[0] == '\0' || line[0] == '\n')
+		//		continue;
 
-		rewind(fp);
+		//	modelInstanceDB.n++;
+		//}
 
-		modelInstanceDB.Element = new RECOG::PSGM_::ModelInstance[modelInstanceDB.n];
+		//rewind(fp);
 
-		pModelInstance = modelInstanceDB.Element;
+		//modelInstanceDB.Element = new RECOG::PSGM_::ModelInstance[modelInstanceDB.n];
 
-		for (iModelInstance = 0; iModelInstance < modelInstanceDB.n; iModelInstance++)
-		{
-			pModelInstance->modelInstance.Element = new RECOG::PSGM_::ModelInstanceElement[convexTemplate.n];
+		//pModelInstance = modelInstanceDB.Element;
 
-			pModelInstance->modelInstance.n = convexTemplate.n;
+		//for (iModelInstance = 0; iModelInstance < modelInstanceDB.n; iModelInstance++)
+		//{
+		//	pModelInstance->modelInstance.Element = new RECOG::PSGM_::ModelInstanceElement[convexTemplate.n];
 
-			fscanf(fp, "%d\t%d\t", &pModelInstance->iModel, &pModelInstance->iCluster);
+		//	pModelInstance->modelInstance.n = convexTemplate.n;
 
-			for (i = 0; i < 9; i++)
-				fscanf(fp, "%f\t", &pModelInstance->R[i]);
+		//	fscanf(fp, "%d\t%d\t", &pModelInstance->iModel, &pModelInstance->iCluster);
 
-			for (i = 0; i < 3; i++)
-				fscanf(fp, "%f\t", &pModelInstance->t[i]);
+		//	for (i = 0; i < 9; i++)
+		//		fscanf(fp, "%f\t", &pModelInstance->R[i]);
 
-			for (iModelInstanceElement = 0; iModelInstanceElement < convexTemplate.n; iModelInstanceElement++)
-			{
-				pModelInstanceElement = pModelInstance->modelInstance.Element + iModelInstanceElement;
+		//	for (i = 0; i < 3; i++)
+		//		fscanf(fp, "%f\t", &pModelInstance->t[i]);
 
-				fscanf(fp, "%f\t", &pModelInstanceElement->d);
-			}
+		//	for (iModelInstanceElement = 0; iModelInstanceElement < convexTemplate.n; iModelInstanceElement++)
+		//	{
+		//		pModelInstanceElement = pModelInstance->modelInstance.Element + iModelInstanceElement;
 
-			for (iModelInstanceElement = 0; iModelInstanceElement < convexTemplate.n; iModelInstanceElement++)
-			{
-				pModelInstanceElement = pModelInstance->modelInstance.Element + iModelInstanceElement;
+		//		fscanf(fp, "%f\t", &pModelInstanceElement->d);
+		//	}
 
-				fscanf(fp, "%d\t", &pModelInstanceElement->valid);
-			}
+		//	for (iModelInstanceElement = 0; iModelInstanceElement < convexTemplate.n; iModelInstanceElement++)
+		//	{
+		//		pModelInstanceElement = pModelInstance->modelInstance.Element + iModelInstanceElement;
 
-			for (iModelInstanceElement = 0; iModelInstanceElement < convexTemplate.n; iModelInstanceElement++)
-			{
-				pModelInstanceElement = pModelInstance->modelInstance.Element + iModelInstanceElement;
+		//		fscanf(fp, "%d\t", &pModelInstanceElement->valid);
+		//	}
 
-				fscanf(fp, "%f\t", &pModelInstanceElement->e);
-			}
+		//	for (iModelInstanceElement = 0; iModelInstanceElement < convexTemplate.n; iModelInstanceElement++)
+		//	{
+		//		pModelInstanceElement = pModelInstance->modelInstance.Element + iModelInstanceElement;
 
-			for (i = 0; i < 3; i++)
-				fscanf(fp, "%f\t", &pModelInstance->tc[i]);
+		//		fscanf(fp, "%f\t", &pModelInstanceElement->e);
+		//	}
 
-			if (iModelInstance == modelInstanceDB.n - 1)
-				pModelInstance->pNext = NULL;
-			else
-			{
-				pModelInstance->pNext = pModelInstance + 1;
-				pModelInstance++;
-			}
-		}
+		//	for (i = 0; i < 3; i++)
+		//		fscanf(fp, "%f\t", &pModelInstance->tc[i]);
 
-		fclose(fp);
-	}
+		//	if (iModelInstance == modelInstanceDB.n - 1)
+		//		pModelInstance->pNext = NULL;
+		//	else
+		//	{
+		//		pModelInstance->pNext = pModelInstance + 1;
+		//		pModelInstance++;
+		//	}
+		//}
+
+	//	fclose(fp);
+	//}
 }
 
 void PSGM::Match()
@@ -4751,3 +4754,4 @@ bool RVL::RECOG::PSGM_::mouseRButtonDownUserFunction(
 	else
 		return false;
 }
+

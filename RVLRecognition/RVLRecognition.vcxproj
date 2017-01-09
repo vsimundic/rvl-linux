@@ -133,6 +133,7 @@
     <Text Include="ReadMe.txt" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Include\CTISet.h" />
     <ClInclude Include="Include\PSGM.h" />
     <ClInclude Include="Include\RFRecognition.h" />
     <ClInclude Include="Include\RVLMeshNoiser.h" />
@@ -141,6 +142,7 @@
     <ClInclude Include="targetver.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="CTISet.cpp" />
     <ClCompile Include="PSGM.cpp" />
     <ClCompile Include="RFRecognition.cpp" />
     <ClCompile Include="RVLMeshNoiser.cpp" />

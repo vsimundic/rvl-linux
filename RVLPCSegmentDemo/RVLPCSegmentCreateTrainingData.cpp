@@ -609,6 +609,23 @@ void DetermineImgAdjDescriptors(Surfel *pSurfel, Mesh *mesh)
 	
 }
 
+void ComputeRelationFeatures(
+	SurfelGraph *pSurfels, 
+	Mesh *pMesh)
+{
+	pSurfels->ImageAdjacency(pMesh);
+
+	Surfel *pSurfel = pSurfels->NodeArray.Element;
+
+	for (int i = 0; i < pSurfels->NodeArray.n; pSurfel++, i++)
+	{
+		if (pSurfel->size <= 1)
+			continue;
+
+		DetermineImgAdjDescriptors(pSurfel, pMesh);
+	}
+}
+
 //Generate scene segmenation file
 void GenerateSSF(SurfelGraph *surfels, std::string filename, int minSurfelSize, bool checkbackground)
 {
