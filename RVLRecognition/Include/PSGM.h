@@ -18,24 +18,6 @@ namespace RVL
 	{
 		namespace PSGM_
 		{
-			struct ModelInstanceElement
-			{
-				float d;
-				float e;
-				bool valid;
-			};
-
-			struct ModelInstance
-			{
-				int iModel; // VIDOVIC
-				int iCluster; // VIDOVIC
-				float R[9];
-				float t[3];
-				float tc[3]; // VIDOVIC
-				Array<ModelInstanceElement> modelInstance;
-				ModelInstance *pNext;
-			};
-
 			struct Cluster
 			{
 				Array<int> iSurfelArray;
@@ -151,7 +133,8 @@ namespace RVL
 		virtual ~PSGM();
 		void CreateParamList(CRVLMem *pMem);
 		void Interpret(
-			Mesh *pMesh);
+			Mesh *pMesh,
+			int iScene = 0);
 		void InitDisplay(
 			Visualizer *pVisualizer,
 			Mesh *pMesh,
@@ -276,6 +259,10 @@ namespace RVL
 		void ComputeClusterNormalDistribution(
 			RECOG::PSGM_::Cluster *pCluster);
 		void ComputeClusterBoundaryDiscontinuityPerc(int iCluster);
+		void AddReferenceFrame(
+			int iCluster,
+			float *R = NULL,
+			float *t = NULL);
 		void SaveModelInstances(
 			FILE *fp,
 			int iModel,
@@ -308,6 +295,8 @@ namespace RVL
 		int minClusterBoundaryDiscontinuityPerc;
 		float minClusterNormalDistributionStd;
 		float groundPlaneTolerance;
+		bool bZeroRFDescriptor;
+		bool bGTRFDescriptors;
 		Array<RECOG::PSGM_::ModelInstance> modelInstanceDB; //VIDOVIC
 		Array<RECOG::PSGM_::MatchInstance> matches; //VIDOVIC
 		RECOG::PSGM_::MatchInstance *pMatches; //VIDOVIC
@@ -321,6 +310,9 @@ namespace RVL
 		ECCVGTLoader *pECCVGT; //Vidovic
 		Array <RVL::SegmentGTInstance> segmentGT;
 		bool createSegmentGT = false;
+		RECOG::CTISet CTISet;
+		RECOG::CTISet MCTISet;
+
 
 	private:		
 		RECOG::PSGM_::Cluster *clusterMem;

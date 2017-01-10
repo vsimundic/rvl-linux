@@ -12,6 +12,7 @@
 #include "SurfelGraph.h"
 #include "PlanarSurfelDetector.h"
 #include "RVLRecognition.h"
+#include "CTISet.h"
 #include "PSGM.h"
 #include <Eigen\Eigenvalues>
 #include <random> //VIDOVIC
@@ -21,6 +22,9 @@ using namespace RVL;
 PSGM::PSGM()
 {
 	mode = RVLRECOGNITION_MODE_RECOGNITION;
+	bZeroRFDescriptor = false;
+	bGTRFDescriptors = false;
+
 	nDominantClusters = 1;
 	kNoise = 1.2f;
 	minInitialSurfelSize = 20;
@@ -58,10 +62,13 @@ PSGM::PSGM()
 	//modelInstanceMem = NULL;
 	sceneFileName = NULL;
 	modelInstanceDB.Element = NULL; //VIDOVIC
+	modelInstanceDB.n = 0; //VIDOVIC
 	modelDataBase = NULL; //VIDOVIC
 	modelsInDataBase = NULL; //VIDOVIC
 	sceneMIMatch = NULL; //VIDOVIC
-	modelInstanceDB.n = 0; //VIDOVIC
+	matchMatrix.Element = NULL;
+	matchMatrix.n = 0;	
+	
 	nSModelInstances = 0; //VIDOVIC
 
 	nSamples = 20; //VIDOVIC
@@ -154,11 +161,14 @@ void PSGM::CreateParamList(CRVLMem *pMem)
 	pParamData = ParamList.AddParam("PSGM.minSignificantClusterSize", RVLPARAM_TYPE_INT, &minSignificantClusterSize);
 	pParamData = ParamList.AddParam("PSGM.minClusterBoundaryDiscontinuityPerc", RVLPARAM_TYPE_INT, &minClusterBoundaryDiscontinuityPerc);
 	pParamData = ParamList.AddParam("PSGM.minClusterNormalDistributionStd", RVLPARAM_TYPE_FLOAT, &minClusterNormalDistributionStd);
-	pParamData = ParamList.AddParam("PSGM.groundPlaneTolerance", RVLPARAM_TYPE_FLOAT, &groundPlaneTolerance);	
+	pParamData = ParamList.AddParam("PSGM.groundPlaneTolerance", RVLPARAM_TYPE_FLOAT, &groundPlaneTolerance);
+	pParamData = ParamList.AddParam("PSGM.zeroRFDescriptor", RVLPARAM_TYPE_BOOL, &bZeroRFDescriptor);	
+	pParamData = ParamList.AddParam("PSGM.GTRFDescriptors", RVLPARAM_TYPE_BOOL, &bGTRFDescriptors);
 }
 
 void PSGM::Interpret(
-	Mesh *pMeshIn)
+	Mesh *pMeshIn,
+	int iScene)
 {
 	// Create ordered mesh.
 
@@ -200,15 +210,59 @@ void PSGM::Interpret(
 
 	int nClusters = RVLMIN(clusters.n, nDominantClusters);
 
+	char *GTHFileName = NULL;
+	FILE *fpGTH = NULL;
+
+	if (bGTRFDescriptors)
+	{
+		char *GTHFileName = RVLCreateString(sceneFileName);
+
+		sprintf(GTHFileName + strlen(GTHFileName) - 3, "gth");
+
+		fpGTH = fopen(GTHFileName, "w");
+	}
+
 	int iCluster;
 	RECOG::PSGM_::Cluster *pCluster;
 	RECOG::PSGM_::ModelInstance *pModelInstance;
+	float R[9];
 
 	for (iCluster = 0; iCluster < nClusters; iCluster++)
 	{
-		ReferenceFrames(iCluster);
-
 		pCluster = clusters.Element[iCluster];
+
+		if (bZeroRFDescriptor)
+		{
+			QList<RECOG::PSGM_::ModelInstance> *pModelInstanceList = &(pCluster->modelInstanceList);
+
+			RVLQLIST_INIT(pModelInstanceList);
+
+			AddReferenceFrame(iCluster);
+		}
+		else if (bGTRFDescriptors)
+		{
+			QList<RECOG::PSGM_::ModelInstance> *pModelInstanceList = &(pCluster->modelInstanceList);
+
+			RVLQLIST_INIT(pModelInstanceList);
+
+			Array<GTInstance> *pGT = pECCVGT->GT.Element + iScene;
+
+			int iGTInstance;
+			GTInstance *pGTInstance;
+
+			for (iGTInstance = 0; iGTInstance < pGT->n; iGTInstance++)
+			{
+				pGTInstance = pGT->Element + iGTInstance;
+
+				RVLSCALEMX3X3(pGTInstance->R, 1000.0f, R);
+	
+				AddReferenceFrame(iCluster, R, pGTInstance->t);
+
+				fprintf(fpGTH, "%d\t%d\n", iCluster, pGTInstance->iModel);
+			}
+		}
+		else
+			ReferenceFrames(iCluster);		
 
 		pModelInstance = pCluster->modelInstanceList.pFirst;
 
@@ -244,6 +298,14 @@ void PSGM::Interpret(
 	if (mode == RVLRECOGNITION_MODE_RECOGNITION)
 		Match();
 	//END VIDOVIC
+
+	if (bGTRFDescriptors)
+	{
+		if (fpGTH)
+			fclose(fpGTH);
+
+		RVL_DELETE_ARRAY(GTHFileName);
+	}
 }
 
 void PSGM::Clusters()
@@ -977,6 +1039,7 @@ void PSGM::FitModel(
 	pModelInstance->modelInstance.n = convexTemplate.n;
 
 	float *R = pModelInstance->R;
+	float *t = pModelInstance->t;
 
 	int iModelInstanceElement;
 	RECOG::PSGM_::ModelInstanceElement *pModelInstanceElement;
@@ -999,7 +1062,7 @@ void PSGM::FitModel(
 
 		N = convexTemplate.Element[iModelInstanceElement].N;
 
-		RVLMULMX3X3VECT(R, N, N_);
+		RVLMULMX3X3VECT(R, N, N_);		
 
 		pVertex = pSurfels->vertexArray.Element[pCluster->iVertexArray.Element[0]];
 
@@ -1046,6 +1109,8 @@ void PSGM::FitModel(
 				pModelInstanceElement->valid = true;
 			//END VIDOVIC
 		}	// for every vertex in the cluster
+
+		pModelInstanceElement->d -= RVLDOTPRODUCT3(N_, t);
 
 		//VIDOVIC
 		//if (bNormalValidityTest)
@@ -1367,6 +1432,41 @@ bool PSGM::ReferenceFrames(int iCluster)
 	delete[] iTangentAngleMem;
 
 	return true;
+}
+
+void PSGM::AddReferenceFrame(
+	int iCluster,
+	float *RIn,
+	float *tIn)
+{
+	RECOG::PSGM_::Cluster *pCluster = clusters.Element[iCluster];
+
+	QList<RECOG::PSGM_::ModelInstance> *pModelInstanceList = &(pCluster->modelInstanceList);
+
+	RECOG::PSGM_::ModelInstance *pModelInstance;
+
+	RVLMEM_ALLOC_STRUCT(pMem, RECOG::PSGM_::ModelInstance, pModelInstance);
+	RVLQLIST_ADD_ENTRY(pModelInstanceList, pModelInstance);
+	float *R = pModelInstance->R;
+	float *t = pModelInstance->t;
+
+	if (RIn)
+	{
+		RVLCOPYMX3X3(RIn, R)
+	}		
+	else
+	{
+		RVLUNITMX3(R)
+	}
+
+	if (tIn)
+	{
+		RVLCOPY3VECTOR(tIn, t)
+	}
+	else
+	{
+		RVLNULL3VECTOR(t);
+	}
 }
 
 int RVL::RECOG::PSGM_::ValidTangent(
@@ -1848,85 +1948,87 @@ void PSGM::Learn(
 
 void PSGM::LoadModelDataBase()
 {
-	FILE *fp = fopen(modelDataBase, "r");
+	MCTISet.Load(modelDataBase);
 
-	char line[3000] = {0};
+	//FILE *fp = fopen(modelDataBase, "r");
 
-	int iModelInstance, iModelInstanceElement, i;
+	//char line[3000] = {0};
 
-	RECOG::PSGM_::ModelInstanceElement *pModelInstanceElement;
-	RECOG::PSGM_::ModelInstance *pModelInstance;
+	//int iModelInstance, iModelInstanceElement, i;
 
-	if (fp)
-	{
-		//count number of lines in model DB
-		while (!feof(fp))
-		{
-			line[0] = '\0';
+	//RECOG::PSGM_::ModelInstanceElement *pModelInstanceElement;
+	//RECOG::PSGM_::ModelInstance *pModelInstance;
 
-			fgets(line, 3000, fp);
+	//if (fp)
+	//{
+		////count number of lines in model DB
+		//while (!feof(fp))
+		//{
+		//	line[0] = '\0';
 
-			if (line[0] == '\0' || line[0] == '\n')
-				continue;
+		//	fgets(line, 3000, fp);
 
-			modelInstanceDB.n++;
-		}
+		//	if (line[0] == '\0' || line[0] == '\n')
+		//		continue;
 
-		rewind(fp);
+		//	modelInstanceDB.n++;
+		//}
 
-		modelInstanceDB.Element = new RECOG::PSGM_::ModelInstance[modelInstanceDB.n];
+		//rewind(fp);
 
-		pModelInstance = modelInstanceDB.Element;
+		//modelInstanceDB.Element = new RECOG::PSGM_::ModelInstance[modelInstanceDB.n];
 
-		for (iModelInstance = 0; iModelInstance < modelInstanceDB.n; iModelInstance++)
-		{
-			pModelInstance->modelInstance.Element = new RECOG::PSGM_::ModelInstanceElement[convexTemplate.n];
+		//pModelInstance = modelInstanceDB.Element;
 
-			pModelInstance->modelInstance.n = convexTemplate.n;
+		//for (iModelInstance = 0; iModelInstance < modelInstanceDB.n; iModelInstance++)
+		//{
+		//	pModelInstance->modelInstance.Element = new RECOG::PSGM_::ModelInstanceElement[convexTemplate.n];
 
-			fscanf(fp, "%d\t%d\t", &pModelInstance->iModel, &pModelInstance->iCluster);
+		//	pModelInstance->modelInstance.n = convexTemplate.n;
 
-			for (i = 0; i < 9; i++)
-				fscanf(fp, "%f\t", &pModelInstance->R[i]);
+		//	fscanf(fp, "%d\t%d\t", &pModelInstance->iModel, &pModelInstance->iCluster);
 
-			for (i = 0; i < 3; i++)
-				fscanf(fp, "%f\t", &pModelInstance->t[i]);
+		//	for (i = 0; i < 9; i++)
+		//		fscanf(fp, "%f\t", &pModelInstance->R[i]);
 
-			for (iModelInstanceElement = 0; iModelInstanceElement < convexTemplate.n; iModelInstanceElement++)
-			{
-				pModelInstanceElement = pModelInstance->modelInstance.Element + iModelInstanceElement;
+		//	for (i = 0; i < 3; i++)
+		//		fscanf(fp, "%f\t", &pModelInstance->t[i]);
 
-				fscanf(fp, "%f\t", &pModelInstanceElement->d);
-			}
+		//	for (iModelInstanceElement = 0; iModelInstanceElement < convexTemplate.n; iModelInstanceElement++)
+		//	{
+		//		pModelInstanceElement = pModelInstance->modelInstance.Element + iModelInstanceElement;
 
-			for (iModelInstanceElement = 0; iModelInstanceElement < convexTemplate.n; iModelInstanceElement++)
-			{
-				pModelInstanceElement = pModelInstance->modelInstance.Element + iModelInstanceElement;
+		//		fscanf(fp, "%f\t", &pModelInstanceElement->d);
+		//	}
 
-				fscanf(fp, "%d\t", &pModelInstanceElement->valid);
-			}
+		//	for (iModelInstanceElement = 0; iModelInstanceElement < convexTemplate.n; iModelInstanceElement++)
+		//	{
+		//		pModelInstanceElement = pModelInstance->modelInstance.Element + iModelInstanceElement;
 
-			for (iModelInstanceElement = 0; iModelInstanceElement < convexTemplate.n; iModelInstanceElement++)
-			{
-				pModelInstanceElement = pModelInstance->modelInstance.Element + iModelInstanceElement;
+		//		fscanf(fp, "%d\t", &pModelInstanceElement->valid);
+		//	}
 
-				fscanf(fp, "%f\t", &pModelInstanceElement->e);
-			}
+		//	for (iModelInstanceElement = 0; iModelInstanceElement < convexTemplate.n; iModelInstanceElement++)
+		//	{
+		//		pModelInstanceElement = pModelInstance->modelInstance.Element + iModelInstanceElement;
 
-			for (i = 0; i < 3; i++)
-				fscanf(fp, "%f\t", &pModelInstance->tc[i]);
+		//		fscanf(fp, "%f\t", &pModelInstanceElement->e);
+		//	}
 
-			if (iModelInstance == modelInstanceDB.n - 1)
-				pModelInstance->pNext = NULL;
-			else
-			{
-				pModelInstance->pNext = pModelInstance + 1;
-				pModelInstance++;
-			}
-		}
+		//	for (i = 0; i < 3; i++)
+		//		fscanf(fp, "%f\t", &pModelInstance->tc[i]);
 
-		fclose(fp);
-	}
+		//	if (iModelInstance == modelInstanceDB.n - 1)
+		//		pModelInstance->pNext = NULL;
+		//	else
+		//	{
+		//		pModelInstance->pNext = pModelInstance + 1;
+		//		pModelInstance++;
+		//	}
+		//}
+
+	//	fclose(fp);
+	//}
 }
 
 void PSGM::Match()
@@ -4708,3 +4810,4 @@ bool RVL::RECOG::PSGM_::mouseRButtonDownUserFunction(
 	else
 		return false;
 }
+

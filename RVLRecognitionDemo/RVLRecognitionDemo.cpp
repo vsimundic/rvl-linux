@@ -18,6 +18,7 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 #include "RVLRecognition.h"
 #include "RFRecognition.h"
 #include "RVLMeshNoiser.h"
+#include "CTISet.h"
 #include "PSGM.h"
 #include <pcl/common/common.h>
 #include <pcl/PolygonMesh.h>
@@ -366,7 +367,11 @@ int main(int argc, char ** argv)
 
 			sceneSequence.Init(sceneSequenceFileName);
 
+			recognition.pECCVGT->Init(sceneSequence, GTFolder, modelsInDB);
+
 			char *clusterNormalDistributionFileName = NULL;
+
+			int iScene = 0;
 
 			char filePath[200];
 			FILE *fpClusterNormalDistribution;
@@ -378,7 +383,7 @@ int main(int argc, char ** argv)
 				mesh.LoadPolyDataFromPLY(filePath);
 
 				recognition.SetSceneFileName(filePath);
-				recognition.Interpret(&mesh);
+				recognition.Interpret(&mesh, iScene);
 
 				RVLCopyString(filePath, &clusterNormalDistributionFileName);
 
@@ -391,6 +396,8 @@ int main(int argc, char ** argv)
 				fclose(fpClusterNormalDistribution);
 
 				printf("Scene %s...finished!\n\n", filePath);
+
+				iScene++;
 			}
 
 			RVL_DELETE_ARRAY(clusterNormalDistributionFileName);

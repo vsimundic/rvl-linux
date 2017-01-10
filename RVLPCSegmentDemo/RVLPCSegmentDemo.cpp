@@ -986,17 +986,7 @@ int main(int argc, char ** argv)
 		{
 			printf("Computing realtions between adjacent surfels...");
 
-			surfels.ImageAdjacency(&mesh);
-
-			Surfel *pSurfel = surfels.NodeArray.Element;
-
-			for (int i = 0; i < surfels.NodeArray.n; pSurfel++, i++)
-			{
-				if (pSurfel->size <= 1)
-					continue;
-
-				DetermineImgAdjDescriptors(pSurfel, &mesh);
-			}
+			ComputeRelationFeatures(&surfels, &mesh);
 
 			objects.Create(&surfels);
 
