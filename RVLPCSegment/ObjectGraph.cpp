@@ -613,6 +613,7 @@ ObjectGraph::ObjectGraph()
 	objectArray.Element = NULL;
 	//sortedElementIdxMem = NULL;
 	//Array<int> *sortedElementIdxArray = NULL;
+	relationClassifier = RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_NLMC;
 }
 
 
@@ -637,6 +638,10 @@ void ObjectGraph::CreateParamList(CRVLMem *pMem)
 	ParamList.Init();
 
 	pParamData = ParamList.AddParam("ObjectGraph.alpha", RVLPARAM_TYPE_FLOAT, &alpha);
+	pParamData = ParamList.AddParam("ObjectGraph.method", RVLPARAM_TYPE_ID, &relationClassifier);
+	ParamList.AddID(pParamData, "HEURISTIC", RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_HEURISTIC);
+	ParamList.AddID(pParamData, "SVM", RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_SVM);
+	ParamList.AddID(pParamData, "NLMC", RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_NLMC);
 }
 
 #ifdef RVLSURFEL_IMAGE_ADJACENCY
@@ -1229,41 +1234,40 @@ void ObjectGraph::ComputeRelationCost(
 	float f3 = pEdge->desc.cupyDescriptor[2];
 	float f4 = pEdge->desc.cupyDescriptor[3];
 
-	//Cupec
-	//data.PContinuous = (f4 <= depthStepIntThr ? 1.0f : (f4 <= depthStepExtThr ? (depthStepExtThr - f4) / (depthStepExtThr - depthStepIntThr) : 0.0f));
+	switch (relationClassifier){
+	case RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_HEURISTIC:
+		data.PContinuous = (f4 <= depthStepIntThr ? 1.0f : (f4 <= depthStepExtThr ? (depthStepExtThr - f4) / (depthStepExtThr - depthStepIntThr) : 0.0f));
 
-	//data.PConvex = (f1 >= 0 ? 1.0f : (f1 >= -concaveAngleThr ? concaveMinCost + (1.0f - concaveMinCost) * (concaveAngleThr + f1) / concaveAngleThr : concaveMinCost));
+		data.PConvex = (f1 >= 0 ? 1.0f : (f1 >= -concaveAngleThr ? concaveMinCost + (1.0f - concaveMinCost) * (concaveAngleThr + f1) / concaveAngleThr : concaveMinCost));
 
-	//data.PClean = 0.5f + 0.5f * f2;
+		data.PClean = 0.5f + 0.5f * f2;
 
-	//data.P = RVLMIN(data.PContinuous, RVLMIN(data.PConvex, data.PClean));
+		data.P = RVLMIN(data.PContinuous, RVLMIN(data.PConvex, data.PClean));
 
-	//Nyarko - SVM Classification (courtesy of Grbiæ)
-	data.PContinuous = -1.0;
-	data.PConvex = -1.0;
-	data.PClean = -1.0;
-	data.P = this->pSVMClassifier->makeClassification(pEdge->desc.cupyDescriptor, 4);
+		break;
+	case RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_SVM:
+		//Nyarko - SVM Classification (courtesy of Grbiæ)
+		data.PContinuous = -1.0;
+		data.PConvex = -1.0;
+		data.PClean = -1.0;
+		data.P = this->pSVMClassifier->makeClassification(pEdge->desc.cupyDescriptor, 4);
+	case RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_NLMC:
+		//Nyarko - exponential functions + optimization
+		data.PContinuous = -1.0;
+		data.PConvex = -1.0;
+		data.PClean = -1.0;
+		
+		float y1 = 0.809918368068113 / (0.903903357035594 + exp(-(f1 - (-0.578312575550574)) / 0.369035236083353));
+		float y2 = 120.173561176014 / (191.419216478501 + exp(-(f2 - 0.512539837485237) / 170.634944320671));
+		float y3 = 0.840899503394324 / (0.744251572103782 + exp(-(f3 - 0.356242721458920) / 0.321654820477843));
+		float y4 = 3.28709542710274 / (0.776255228658931 + exp(-(f4 - (-0.0188359236813348)) / (-0.0166765498782912)));
 
-	////Nyarko - exponential functions + optimization
-	//data.PContinuous = -1.0;
-	//data.PConvex = -1.0;
-	//data.PClean = -1.0;
+		//Karlo 1
+		//data.P = 0.919702757268570*y1 + 0.577863699653274*y2 + 0.0141310682609543*y3 + 0.835443189905499*y4 - 0.910458015938145;
 
-	//
-	//float y1 = 0.809918368068113 / (0.903903357035594 + exp(-(f1 - (-0.578312575550574)) / 0.369035236083353));
-	//float y2 = 120.173561176014 / (191.419216478501 + exp(-(f2 - 0.512539837485237) / 170.634944320671));
-	//float y3 = 0.840899503394324 / (0.744251572103782 + exp(-(f3 - 0.356242721458920) / 0.321654820477843));
-	//float y4 = 3.28709542710274 / (0.776255228658931 + exp(-(f4 - (-0.0188359236813348)) / (-0.0166765498782912)));
-
-	
-	//Karlo 1
-	//data.P = 0.919702757268570*y1 + 0.577863699653274*y2 + 0.0141310682609543*y3 + 0.835443189905499*y4 - 0.910458015938145;
-
-	//Karlo 2
-	//data.P = 0.844317765926573*y1 + 0.778963337269011*y2 + 0.177692819332776*y3 + 0.582259630958912*y4 - 0.844696779380087;
-
-	
-
+		// Karlo 2
+		data.P = 0.844317765926573*y1 + 0.778963337269011*y2 + 0.177692819332776*y3 + 0.582259630958912*y4 - 0.844696779380087;
+	}
 
 	pEdge->cost = data.P;
 

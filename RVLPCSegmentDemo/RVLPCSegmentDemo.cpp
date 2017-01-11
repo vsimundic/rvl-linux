@@ -3,7 +3,7 @@
 
 //#include "stdafx.h"
 #include <vtkAutoInit.h>
-VTK_MODULE_INIT(vtkRenderingOpenGL2);
+VTK_MODULE_INIT(vtkRenderingOpenGL);
 VTK_MODULE_INIT(vtkInteractionStyle);
 VTK_MODULE_INIT(vtkRenderingFreeType);
 #include "RVLVTK.h"
@@ -44,7 +44,17 @@ using namespace RVL;
 
 #include "RVLPCSegmentCreateTrainingData.h"
 
-void RunMainProg(CRVLMem *mem0, CRVLMem *mem, DWORD flags, char *MeshFilePathName, char *SVMClassifierParamsFileName, bool bObjectAggregationLevel2, bool bSegmentToObjects, bool bSequence, FILE *fp, char *fileName = NULL);
+void RunMainProg(
+	CRVLMem *mem0, 
+	CRVLMem *mem, 
+	DWORD flags, 
+	char *MeshFilePathName, 
+	char *SVMClassifierParamsFileName, 
+	bool bObjectAggregationLevel2, 
+	bool bSegmentToObjects, 
+	bool bSequence, 
+	FILE *fp = NULL, 
+	char *fileName = NULL);
 
 void CreateParamList(
 	CRVLParameterList *pParamList,
@@ -895,10 +905,10 @@ int main(int argc, char ** argv)
 	//DEL START
 	bool bSequence = (SequenceFileName != NULL) ? true : false;
 
-	FILE *fp = fopen(SegmentationResultsFileName, "w");
-	fprintf(fp, "Image\tE0\tE1\tN\n");
+	FILE *fp = (SegmentationResultsFileName ? fopen(SegmentationResultsFileName, "w") : NULL);
 
-
+	if (fp)
+		fprintf(fp, "Image\tE0\tE1\tN\n");
 
 	if (bSequence)
 	{
@@ -948,7 +958,17 @@ int main(int argc, char ** argv)
 #endif
 }
 
-void RunMainProg(CRVLMem *mem0, CRVLMem *mem, DWORD flags, char *MeshFilePathName, char *SVMClassifierParamsFileName, bool bObjectAggregationLevel2, bool bSegmentToObjects, bool bSequence, FILE *fp, char *fileName) //, FILE *fp
+void RunMainProg(
+	CRVLMem *mem0, 
+	CRVLMem *mem, 
+	DWORD flags, 
+	char *MeshFilePathName, 
+	char *SVMClassifierParamsFileName, 
+	bool bObjectAggregationLevel2, 
+	bool bSegmentToObjects, 
+	bool bSequence, 
+	FILE *fp, 
+	char *fileName) //, FILE *fp
 {
 	// Segmentation to surfels.
 
@@ -963,6 +983,12 @@ void RunMainProg(CRVLMem *mem0, CRVLMem *mem, DWORD flags, char *MeshFilePathNam
 
 	objects.ParamList.LoadParams("RVLPCSegmentDemo.cfg");
 
+	if (objects.relationClassifier == RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_SVM)
+	{		
+		std::cout << "Initializing SVM Classifier!" << std::endl;
+		objects.InitSVMClassifier(SVMClassifierParamsFileName);
+	}
+
 	char *fileExtension = RVLGETFILEEXTENSION(MeshFilePathName);
 
 	if (strcmp(fileExtension, "ssf") == 0)
@@ -975,9 +1001,6 @@ void RunMainProg(CRVLMem *mem0, CRVLMem *mem, DWORD flags, char *MeshFilePathNam
 
 		std::cout << "Loading and creating ObjectGraph from " << ssfFileName.data() << "." << std::endl;
 		objects.CreateFromSSF(ssfFileName);
-
-		std::cout << "Initializing SVM Classifier!" << std::endl;
-		objects.InitSVMClassifier(SVMClassifierParamsFileName);
 
 		std::cout << "Compute relation cost!" << std::endl;
 		objects.ComputeRelationCosts();
@@ -1062,9 +1085,6 @@ void RunMainProg(CRVLMem *mem0, CRVLMem *mem, DWORD flags, char *MeshFilePathNam
 
 			objects.Create(&surfels);
 
-			std::cout << "Initializing SVM Classifier!" << std::endl;
-			objects.InitSVMClassifier(SVMClassifierParamsFileName);
-
 			objects.ComputeRelationCosts();
 
 			printf("completed.\n");
@@ -1121,11 +1141,13 @@ void RunMainProg(CRVLMem *mem0, CRVLMem *mem, DWORD flags, char *MeshFilePathNam
 			std::cout << "Oversegmenation error: " << 100.0f * (1 - E[0] / (float)N) << "%" << std::endl;
 			std::cout << "Undersegmenation error: " << 100.0f * E[1] / (float)N << "%" << std::endl;
 
-			fprintf(fp, "%s\t%d\t%d\t%d\n", fileName, E[0], E[1], N);
+			if (fp)
+				fprintf(fp, "%s\t%d\t%d\t%d\n", fileName, E[0], E[1], N);
 
 			if (!bSequence)
 			{
-				fclose(fp);
+				if (fp)
+					fclose(fp);
 
 				//Visualization
 				cv::imshow("Colored surfel image", GenColoredSurfelImgFromSSF(objects.ssf));

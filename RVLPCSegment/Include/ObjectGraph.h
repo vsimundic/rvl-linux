@@ -6,6 +6,10 @@
 
 //#define RVLPCSEGMENT_OBJECT_GRAPH_LOG
 
+#define RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_HEURISTIC	0
+#define RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_SVM			1
+#define RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_NLMC		2
+
 namespace RVL
 {
 	namespace SURFEL
@@ -112,6 +116,7 @@ namespace RVL
 			float alpha;
 			ObjectGraphObjectData additionalObjectData;	//Filko
 			//Array<int> *sortedElementIdxArray;
+			DWORD relationClassifier;
 		private:
 			QLIST::Index *elementMem;
 			//int *sortedElementIdxMem;
