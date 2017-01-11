@@ -18,6 +18,7 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 #include "RVLRecognition.h"
 #include "RFRecognition.h"
 #include "RVLMeshNoiser.h"
+#include "CTISet.h"
 #include "PSGM.h"
 #include <pcl/common/common.h>
 #include <pcl/PolygonMesh.h>
@@ -31,6 +32,8 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 //#define RVL_FEATURE_TEST_SCENE_SEQUENCE
 //#define RVL_FEATURE_TEST_PRECISION_RECALL_GRAPH
 #define RVL_LOAD_SINGLE_MODEL
+//#define PSGM_MATCHES_PROBABILITY_COMPARE
+#define PSGM_MATCHES_SCORE_COMPARE
 
 #define RVLRECOGNITION_DEMO_FLAG_SAVE_PLY			0x00000001
 //END VIDOVIC
@@ -272,28 +275,28 @@ int main(int argc, char ** argv)
 		{
 			recognition.LoadModelDataBase(); //VIDOVIC
 
-			// Load scene mesh from file.
+			recognition.CreateMatchMatrix();
 
 			Mesh mesh;
 
-			//mesh.LoadPolyDataFromPLY(sceneMeshFileName);
-
 			//VIDOVIC
-
-			//ECCVGTLoader TEST
 			FileSequenceLoader sceneSequence;
 
 			sceneSequence.Init(sceneSequenceFileName);
 
-			recognition.SetNumberOfScenes(sceneSequence.nFileNames);
+			recognition.pECCVGT->Init(sceneSequence, GTFolder, modelsInDB);
 
-			ECCVGTLoader ECCVGT;
-
-			ECCVGT.Init(sceneSequence, GTFolder, modelsInDB);
-
-			ECCVGT.SaveGTFile("F:\\Projekti\\ARP3D\\Auxiliary\\Models\\GT.txt");
+			recognition.pECCVGT->SaveGTFile("F:\\Projekti\\ARP3D\\Auxiliary\\Models\\GT.txt");
 
 			char filePath[200];
+
+			FILE *fpHypothesisEvaluation = fopen("F:\\Projekti\\ARP3D\\compare.txt", "w");
+			FILE *fpSegmentGT = fopen("F:\\Projekti\\ARP3D\\segmentGT.txt", "w");
+			FILE *fpLog = fopen("F:\\Projekti\\ARP3D\\evaluationLog.txt", "w");
+
+			//Move to some PSGM MatchInit function
+			recognition.segmentGT.Element = new RVL::SegmentGTInstance[recognition.nDominantClusters * sceneSequence.nFileNames];
+			recognition.segmentGT.n = recognition.nDominantClusters * sceneSequence.nFileNames;
 
 			while (sceneSequence.GetNextPath(filePath))
 			{
@@ -302,56 +305,20 @@ int main(int argc, char ** argv)
 				mesh.LoadPolyDataFromPLY(filePath);
 
 				recognition.SetSceneFileName(filePath);
+
+				mem.Clear();
+
 				recognition.Interpret(&mesh);
+
+				recognition.SaveSegmentGT(fpSegmentGT);
+
+				recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog);
 
 				printf("Scene %s...finished!\n\n", filePath);
 			}
 
-			recognition.SaveMatches();
-
-			float precision, recall;
-			float scoreThresh, angleThresh, distanceThresh;
-
-			scoreThresh = 46.5;
-			angleThresh = PI/4;
-			distanceThresh = 50;
-
-			FILE *fp;
-
-			int graphID = 0;
-
-			fp = fopen("F:\\Projekti\\ARP3D\\compare.txt", "w");
-
-			//for (angleThresh = PI / 4; angleThresh < 3*PI/4; angleThresh += PI / 4)
-			//{
-				for (distanceThresh = 50; distanceThresh <= 100; distanceThresh += 25)
-				{
-					printf("ScoreThresh: %f\t%f\n", angleThresh, distanceThresh);
-
-					for (scoreThresh = 33.0; scoreThresh <= 66; scoreThresh += 0.1)
-					{
-						//recognition.CompareMatchesToGT(&ECCVGT, scoreThresh, angleThresh, distanceThresh, precision, recall);
-
-						recognition.CompareSMIMatchesToGT(&ECCVGT, scoreThresh, angleThresh, distanceThresh, precision, recall);
-
-						ECCVGT.ResetMatchFlag();
-
-						printf("ScoreThresh: %f\n", scoreThresh);
-						printf("Precision: %f\n", precision);
-						printf("Recall: %f\n", recall);
-						printf("\n");
-
-						fprintf(fp, "%d\t%f\t%f\t%f\t%f\t%f\n", graphID, angleThresh, distanceThresh, scoreThresh, precision, recall);
-					}
-
-					graphID++;
-
-				}
-			//}
-
-			fclose(fp);
-
-			recognition.SaveMatches();
+			fclose(fpHypothesisEvaluation);
+			fclose(fpSegmentGT);
 
 			//END VIDOVIC
 
@@ -375,9 +342,14 @@ int main(int argc, char ** argv)
 
 			sceneSequence.Init(sceneSequenceFileName);
 
-			recognition.SetNumberOfScenes(sceneSequence.nFileNames);
+			recognition.pECCVGT->Init(sceneSequence, GTFolder, modelsInDB);
+
+			char *clusterNormalDistributionFileName = NULL;
+
+			int iScene = 0;
 
 			char filePath[200];
+			FILE *fpClusterNormalDistribution;
 
 			while (sceneSequence.GetNextPath(filePath))
 			{
@@ -386,10 +358,24 @@ int main(int argc, char ** argv)
 				mesh.LoadPolyDataFromPLY(filePath);
 
 				recognition.SetSceneFileName(filePath);
-				recognition.Interpret(&mesh);
+				recognition.Interpret(&mesh, iScene);
+
+				RVLCopyString(filePath, &clusterNormalDistributionFileName);
+
+				sprintf(RVLGETFILEEXTENSION(clusterNormalDistributionFileName), "seg");
+
+				fpClusterNormalDistribution = fopen(clusterNormalDistributionFileName, "w");
+
+				recognition.WriteClusterNormalDistribution(fpClusterNormalDistribution);
+
+				fclose(fpClusterNormalDistribution);
 
 				printf("Scene %s...finished!\n\n", filePath);
+
+				iScene++;
 			}
+
+			RVL_DELETE_ARRAY(clusterNormalDistributionFileName);
 
 			// Visualization
 

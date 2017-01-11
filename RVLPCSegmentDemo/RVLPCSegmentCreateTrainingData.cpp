@@ -3,7 +3,7 @@
 
 //#include "stdafx.h"
 #include <vtkAutoInit.h>
-VTK_MODULE_INIT(vtkRenderingOpenGL2);
+VTK_MODULE_INIT(vtkRenderingOpenGL);
 VTK_MODULE_INIT(vtkInteractionStyle);
 VTK_MODULE_INIT(vtkRenderingFreeType);
 #include "RVLVTK.h"
@@ -610,6 +610,23 @@ void DetermineImgAdjDescriptors(Surfel *pSurfel, Mesh *mesh)
 		desc->cupyDescriptor[3] = desc->minDist;
 	}	
 	
+}
+
+void ComputeRelationFeatures(
+	SurfelGraph *pSurfels, 
+	Mesh *pMesh)
+{
+	pSurfels->ImageAdjacency(pMesh);
+
+	Surfel *pSurfel = pSurfels->NodeArray.Element;
+
+	for (int i = 0; i < pSurfels->NodeArray.n; pSurfel++, i++)
+	{
+		if (pSurfel->size <= 1)
+			continue;
+
+		DetermineImgAdjDescriptors(pSurfel, pMesh);
+	}
 }
 
 //Generate scene segmenation file

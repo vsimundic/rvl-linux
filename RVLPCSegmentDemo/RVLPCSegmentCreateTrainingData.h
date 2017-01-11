@@ -13,6 +13,9 @@ void DrawSurfelImgAdjacencyOpenCV(cv::Mat img, SurfelGraph *surfels);
 void RenderSurfelImgAdjacencyVTK(vtkSmartPointer<vtkRenderer> renderer, SurfelGraph *surfels);
 void PreprocessGTLab(cv::Mat GTLabImg, cv::Mat GTDisparityImg);
 void DetermineImgAdjDescriptors(Surfel *pSurfel, Mesh *mesh);
+void ComputeRelationFeatures(
+	SurfelGraph *pSurfels,
+	Mesh *pMesh);
 void GenerateSSF(SurfelGraph *surfels, std::string filename);
 void GenerateSSF(SurfelGraph *surfels, std::string filename, int minSurfelSize, bool checkbackground = true);
 void RunSeg2Bench(bool save = false);

@@ -74,7 +74,7 @@ namespace RVL
 			void Create(SurfelGraph *pSurfels_);
 			void CreateFromSSF(std::string ssfFileName);	//Filko
 			void CalculateOverAndUnderSegmentation(int *E, int &N, bool useGTNoPix = true,  bool useBackground = true);	//Filko
-			void DetermineObjectConvexityData(float convexThr = 0.005, float ratioThr = 0.9);	//Filko
+			void DetermineObjectConvexityData(float convexThr = 0.005, float ratioThr = 0.8);	//Filko
 			void WERSegmentation();
 			void ComputeRelationCosts();
 			void ComputeRelationCost(
