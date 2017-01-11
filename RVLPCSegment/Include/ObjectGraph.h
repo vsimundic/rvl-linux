@@ -53,6 +53,17 @@ namespace RVL
 			int iSelectedSurfel,
 			void *vpData);
 
+		//Filko
+		//Definition of iterator type
+		typedef std::map<int, bool>::iterator ObjectsSurfelConvexity_iterator_type;
+
+		struct ObjectGraphObjectData
+		{
+			std::vector<std::vector<int>> CHVertexIndices;
+			std::vector<std::map<int, bool>> ObjectsSurfelConvexity;
+		};
+		//
+
 		class ObjectGraph :
 			public Graph < GRAPH::AggregateNode<AgEdge>, AgEdge, GRAPH::EdgePtr2<AgEdge> >
 		{
@@ -62,13 +73,17 @@ namespace RVL
 			void CreateParamList(CRVLMem *pMem);
 			void Create(SurfelGraph *pSurfels_);
 			void CreateFromSSF(std::string ssfFileName);	//Filko
-			void CalculateOverAndUnderSegmentation(int *E, int &N, bool useBackground = true);	//Filko
+			void CalculateOverAndUnderSegmentation(int *E, int &N, bool useGTNoPix = true,  bool useBackground = true);	//Filko
+			void DetermineObjectConvexityData(float convexThr = 0.005, float ratioThr = 0.9);	//Filko
 			void WERSegmentation();
 			void ComputeRelationCosts();
 			void ComputeRelationCost(
 				AgEdge *pEdge,
 				ObjectEdgeData &data);
 			void CreateSortedObjectArray();
+			void SortElements(
+				GRAPH::AggregateNode<AgEdge> *pAgNode,
+				Array<SortIndex<int>> *pSortedElementIdxArray);
 			void InitDisplay(
 				Visualizer *pVisualizer,
 				Mesh *pMesh,
@@ -95,8 +110,11 @@ namespace RVL
 			Array<int> objectArray;
 			float kCoverage;
 			float alpha;
+			ObjectGraphObjectData additionalObjectData;	//Filko
+			//Array<int> *sortedElementIdxArray;
 		private:
 			QLIST::Index *elementMem;
+			//int *sortedElementIdxMem;
 		};
 	}
 }
