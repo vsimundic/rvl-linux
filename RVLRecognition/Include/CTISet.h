@@ -40,6 +40,8 @@ namespace RVL
 			//std::vector<std::vector<int>> SegmentCTIs;
 			Array<Array<int>> SegmentCTIs;
 			int *segmentCTIIdxMem;
+			int maxSegmentIdx;
+			int nModels;
 		};
 	}
 }

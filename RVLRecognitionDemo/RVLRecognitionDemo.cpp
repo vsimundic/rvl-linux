@@ -34,6 +34,7 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 #define RVL_LOAD_SINGLE_MODEL
 //#define PSGM_MATCHES_PROBABILITY_COMPARE
 #define PSGM_MATCHES_SCORE_COMPARE
+#define PSGM_LOAD_CTI_FROM_FILE
 
 #define RVLRECOGNITION_DEMO_FLAG_SAVE_PLY			0x00000001
 //END VIDOVIC
@@ -298,11 +299,11 @@ int main(int argc, char ** argv)
 
 			recognition.pECCVGT->Init(sceneSequence, GTFolder, modelsInDB);
 
-			recognition.pECCVGT->SaveGTFile("F:\\Projekti\\ARP3D\\Auxiliary\\Models\\GT.txt");
+			recognition.pECCVGT->SaveGTFile("F:\\Projekti\\ARP3D\\Auxiliary\\Models\\TUW_GT.txt");
 
 			char filePath[200];
 
-			FILE *fpHypothesisEvaluation = fopen("F:\\Projekti\\ARP3D\\compare.txt", "w");
+			FILE *fpHypothesisEvaluation = fopen("F:\\Projekti\\ARP3D\\compare_TNM_Valid.txt", "w");
 
 			FILE *fpSegmentGT = fopen(segmentGTFileName, "r");
 
@@ -318,28 +319,53 @@ int main(int argc, char ** argv)
 			recognition.segmentGT.Element = new RVL::SegmentGTInstance[recognition.nDominantClusters * sceneSequence.nFileNames];
 			recognition.segmentGT.n = recognition.nDominantClusters * sceneSequence.nFileNames;
 
+			char *CTIFileName = NULL;
+
+			bool CTIFromFile = false;
+
+			recognition.pTimer = new CRVLTimer;
+
+			recognition.LoadCompleteSegmentGT(fpSegmentGT);
+
 			while (sceneSequence.GetNextPath(filePath))
 			{
 				printf("Scene %s...\n", filePath);
 
-				mesh.LoadPolyDataFromPLY(filePath);
-
 				recognition.SetSceneFileName(filePath);
+
+#ifdef PSGM_LOAD_CTI_FROM_FILE
+				RVLCopyString(filePath, &CTIFileName);
+
+				sprintf(RVLGETFILEEXTENSION(CTIFileName), "cti");
+
+				recognition.LoadCTI(CTIFileName);
+
+				recognition.Match(true);
+
+				CTIFromFile = true;
+#else
+				mesh.LoadPolyDataFromPLY(filePath);
 
 				mem.Clear();
 
 				recognition.Interpret(&mesh);
+#endif				
 
 				if (recognition.createSegmentGT)
-					recognition.SaveSegmentGT(fpSegmentGT);
-				else
-					recognition.LoadSegmentGT(fpSegmentGT);
+					recognition.SaveSegmentGT(fpSegmentGT, CTIFromFile);
+				//else
+					//recognition.LoadSegmentGT(fpSegmentGT, CTIFromFile);
 
-
-				recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, true);
-
+				recognition.EvaluateMatchesByScore_(fpHypothesisEvaluation, fpLog, 7);
+				
 				printf("Scene %s...finished!\n\n", filePath);
 			}
+
+			RVL_DELETE_ARRAY(CTIFileName);
+
+			RVL_DELETE_ARRAY(recognition.pTimer);
+
+			RVL_DELETE_ARRAY(recognition.segmentGT.Element);
 
 			fclose(fpHypothesisEvaluation);
 			fclose(fpSegmentGT);
@@ -354,10 +380,10 @@ int main(int argc, char ** argv)
 
 			// Visualization
 
-			surfels.NodeColors(SelectionColor);
-			recognition.InitDisplay(&visualizer, &mesh, SelectionColor);
-			recognition.Display();
-			visualizer.Run();
+			//surfels.NodeColors(SelectionColor);
+			//recognition.InitDisplay(&visualizer, &mesh, SelectionColor);
+			//recognition.Display();
+			//visualizer.Run();
 		}	// if (recognition.mode == RVLRECOGNITION_MODE_RECOGNITION)
 		else if (recognition.mode == RVLRECOGNITION_MODE_PSGM_CREATE_CTIS)
 		{

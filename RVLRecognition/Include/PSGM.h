@@ -4,9 +4,11 @@
 #define RVLPSGM_MATCH_SATURATION //VIDOVIC
 //#define RVLPSGM_MATCH_SEGMENT_CENTROID //VIDOVIC
 //#define PSGM_CALCULATE_PROBABILITY //Vidovic
-//#define RVLPSGM_EVALUATION_PRINT_INFO //Vidovic
+#define RVLPSGM_EVALUATION_PRINT_INFO //Vidovic
 #define RVLPSGM_MATCH_USING_SEGMENT_GT //Vidovic
 //#define RVLPSGM_SAVE_MATCHES //Vidovic
+#define RVLPSGM_MATCHES_SIMILARITY_MEASURE			3
+//#define RVLPSGM_RANSAC
 
 #define RVLRECOGNITION_MODE_PSGM_CREATE_CTIS		2
 
@@ -154,7 +156,30 @@ namespace RVL
 		void SaveModelID(FileSequenceLoader dbLoader); //VIDOVIC
 		void Learn(char *modelSequenceFileName, Visualizer *visualizer = NULL); //VIDOVIC
 		void LoadModelDataBase(); //VIDOVIC
-		void Match(); //VIDOVIC
+		//void Match(); //VIDOVIC
+		void Match(bool CTIfromFile = false); //VIDOVIC
+		void MatchRANSAC(
+			RECOG::PSGM_::ModelInstance *pSModelInstance,
+			int startIdx,
+			int endIdx,
+			QList<QLIST::Index> *pISampleCandidateList,
+			Array<QLIST::Index> &iValidSampleCandidate,
+			Array<QLIST::Index> &iValid,
+			Array<QLIST::Index> &iRansacCandidates,
+			Array<QLIST::Index> &iConsensus,
+			Array<QLIST::Index> &iConsensusTemp,
+			Array<Array<float>> *e,
+			Array<Array<float>> *tBestMatch); //VIDOVIC
+		void CalculateScore(
+			Array<Array<float>> *e,
+			Array<QLIST::Index> *iValid,
+			Array<float> *score,
+			int similarityMeasure = 3);
+		void PSGM::UpdateScoreMatchMatrix(
+			RECOG::PSGM_::ModelInstance *pSModelInstance,
+			Array<float> *score); //Vidovic
+		void SortScoreMatchMatrix(bool descending = false); //Vidovic
+		void EvaluateMatchesByScore_(FILE *fp, FILE *fpLog, int nBestSegments = 0); //Vidovic
 		void WriteClusterNormalDistribution(FILE *fp);
 		void MSTransformation(
 			RECOG::PSGM_::ModelInstance *pMModelInstance,
@@ -194,6 +219,10 @@ namespace RVL
 			float distanceThresh); //VIDOVIC
 		bool PSGM::CompareMatchToSegmentGT(
 			RECOG::PSGM_::MatchInstance *pMatch); //Vidovic
+		bool PSGM::CompareMatchToSegmentGT(
+			int iScene,
+			int iSSegment,
+			int iMatchedModel); //Vidovic
 		void PSGM::CountTPandFN(
 			int &TP,
 			int &FN,
@@ -230,8 +259,10 @@ namespace RVL
 			float angleGT,
 			float distanceGT,
 			int nValids); //Vidovic
-		void SaveSegmentGT(FILE*fp); //Vidovic
-		void LoadSegmentGT(FILE*fp); //Vidovic
+		void SaveSegmentGT(FILE*fp, bool CTIFromFile = false); //Vidovic
+		void LoadSegmentGT(FILE*fp, bool CTIFromFile = false); //Vidovic
+		void LoadCompleteSegmentGT(FILE*fp); //Vidovic
+		void LoadCTI(char *fileName); //Vidovic
 	private:
 		void Clusters();
 		void CreateTemplate();
@@ -305,6 +336,7 @@ namespace RVL
 		QList<RECOG::PSGM_::MatchInstance> SSegmentMatches1; //VIDOVIC - probability1
 		QList<RECOG::PSGM_::MatchInstance> SSegmentMatches2; //VIDOVIC - probability2
 		Array<Array<RECOG::PSGM_::MatchInstance *>> matchMatrix;
+		Array<Array<SortIndex<float>>> scoreMatchMatrix;
 		Array<Array<SortIndex<float>>> sortedMatches;
 		DWORD scoreCalculation; //VIDOVIC
 		ECCVGTLoader *pECCVGT; //Vidovic
@@ -312,6 +344,8 @@ namespace RVL
 		bool createSegmentGT = false;
 		RECOG::CTISet CTISet;
 		RECOG::CTISet MCTISet;
+		CRVLTimer *pTimer;
+		FILE *fpTime;
 
 
 	private:		

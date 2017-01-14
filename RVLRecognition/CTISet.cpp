@@ -22,19 +22,21 @@ CTISet::CTISet()
 	SegmentCTIs.Element = NULL;
 	segmentCTIIdxMem = NULL;
 	CTI.n = 0;
+	CTI.Element = NULL;
 }
 
 CTISet::~CTISet()
 {
 	RVL_DELETE_ARRAY(SegmentCTIs.Element);
 	RVL_DELETE_ARRAY(segmentCTIIdxMem);
+	RVL_DELETE_ARRAY(CTI.Element);
 }
 
 void CTISet::Load(char *filePath)
 {
 	FILE *fp = fopen(filePath, "r");
 
-	char line[1600] = { 0 };
+	char line[3000] = { 0 };
 
 	int iModelInstance, iModelInstanceElement, i;
 
@@ -48,7 +50,7 @@ void CTISet::Load(char *filePath)
 		{
 			line[0] = '\0';
 
-			fgets(line, 1600, fp);
+			fgets(line, 3000, fp);
 
 			if (line[0] == '\0' || line[0] == '\n')
 				continue;
@@ -57,6 +59,8 @@ void CTISet::Load(char *filePath)
 		}
 
 		rewind(fp);
+
+		RVL_DELETE_ARRAY(CTI.Element);
 
 		CTI.Element = new RECOG::PSGM_::ModelInstance[CTI.n];
 
@@ -122,13 +126,16 @@ void CTISet::Load(char *filePath)
 	int br;
 	for (br = 0; br < CTI.n; br++)
 	{
-		if (pCTI->iCluster != pCTINext->iCluster && br != CTI.n - 1)
+		if ((pCTI->iCluster != pCTINext->iCluster || pCTI->iModel !=pCTINext->iModel) && br != CTI.n - 1)
 			nS++;
 		pCTI++;
 		pCTINext++;
 	}
 	nS += 1;
 
+	maxSegmentIdx = CTI.Element[br - 1].iCluster;
+
+	nModels = CTI.Element[br - 1].iModel;
 
 	// nCTI(i) represents number of CTI-s in i-th segment	
 	Eigen::VectorXi nCTI(nS);
@@ -145,6 +152,8 @@ void CTISet::Load(char *filePath)
 		while (iM == pCTI->iModel && iC == pCTI->iCluster)
 		{
 			nCTI(i)++;
+
+			int a = nCTI(i);
 			pCTI++;
 			if (pCTI >= pCTIEnd)
 				break;
