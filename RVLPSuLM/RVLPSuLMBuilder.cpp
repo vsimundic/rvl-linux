@@ -3405,10 +3405,11 @@ BOOL CRVLPSuLMBuilder::Create(CRVLPSuLM *pPSuLM,
 
 bool CRVLPSuLMBuilder::GetOdometry(char *ImageFileName,
 								  CRVL3DPose *pPose,
+								  char *extension,
 								  int &iSample0,
 								  unsigned char &command)
 {
-	char *OdometryFileName = RVLCreateFileName(ImageFileName, "-LW.bmp", -1, "-O.txt");
+	char *OdometryFileName = RVLCreateFileName(ImageFileName, extension, -1, "-O.txt");
 
 	FILE *fpOdometry = fopen(OdometryFileName, "r");
 
@@ -3433,7 +3434,7 @@ bool CRVLPSuLMBuilder::GetOdometry(char *ImageFileName,
 
 	pPose->m_Alpha = m_kPan * pan * DEG2RAD;
 	pPose->m_Beta = m_kTilt * (tilt + m_TiltOffset) * DEG2RAD;;			 
-	pPose->m_Theta = roll;
+	pPose->m_Theta = roll * DEG2RAD;
 
 	pPose->UpdateRotLL();
 
@@ -3470,7 +3471,7 @@ CRVLPSuLM *CRVLPSuLMBuilder::Create(
 
 	if(m_Flags2 & RVLPSULMBUILDER_FLAG2_COMPLEX)
 	{
-		if(GetOdometry(m_ImageFileName, &PoseM_M, iSample0, command))
+		if (GetOdometry(m_ImageFileName, &PoseM_M, "-LW.bmp", iSample0, command))
 			bComplex = (command == 'O');
 		else
 			bComplex = false;
@@ -3488,7 +3489,7 @@ CRVLPSuLM *CRVLPSuLMBuilder::Create(
 		{
 			RVLSetFileNumber(m_ImageFileName, "00000-LW.bmp", iSample);
 
-			if(!GetOdometry(m_ImageFileName, &PoseM_M, iSample0, command))
+			if (!GetOdometry(m_ImageFileName, &PoseM_M, "-LW.bmp", iSample0, command))
 			{
 				PoseM_M.m_Alpha = PoseM_M.m_Beta = PoseM_M.m_Theta = 0.0;
 
@@ -12249,7 +12250,7 @@ double CRVLPSuLMBuilder::ConditionalProbabilityTree(CRVLPSuLM *pSPSuLM,
 
 	CRVLMem Mem;
 
-	Mem.Create(nSFeatures * sizeof(RVLPTRCHAIN_ELEMENT));
+	Mem.Create(nSFeatures * sizeof(RVLPTRCHAIN_ELEMENT) + sizeof(BYTE *) + 1);
 
 	CRVLMPtrChain SMMatchList(&Mem);
 
@@ -12937,6 +12938,8 @@ void CRVLPSuLMBuilder::CreateParamList(CRVLMem * pMem)
 	pParamData = m_ParamList.AddParam("PSuLM.Localization.HypothesisGeneration.tHypTol", RVLPARAM_TYPE_DOUBLE, &m_tHypTol);
 	pParamData = m_ParamList.AddParam("PSuLM.Localization.HypothesisGeneration.InitMatchingConstraints", RVLPARAM_TYPE_FLAG, &m_Flags2);
 	m_ParamList.AddID(pParamData, "yes", RVLPSULMBUILDER_FLAG2_HYPGEN_INIT_MATCHING_CONSTRAINTS);
+	pParamData = m_ParamList.AddParam("PSuLM.Localization.HypothesisGeneration.UnconstrainedOrientation", RVLPARAM_TYPE_FLAG, &m_Flags2);
+	m_ParamList.AddID(pParamData, "yes", RVLPSULMBUILDER_FLAG2_UNCONSTRAINED_ORIENTATION);
 	pParamData = m_ParamList.AddParam("PSuLM.Localization.HypothesisGeneration.WideAngle", RVLPARAM_TYPE_FLAG, &m_Flags2);
 	m_ParamList.AddID(pParamData, "yes", RVLPSULMBUILDER_FLAG2_WIDE_ANGLE_HYPOTHESIS_GENERATION);
 	pParamData = m_ParamList.AddParam("PSuLM.Localization.HypothesisGeneration.LastDOFEstimationMethod", RVLPARAM_TYPE_FLAG, &m_Flags);
@@ -13390,6 +13393,11 @@ void CRVLPSuLMBuilder::Hypotheses3(	CRVLPSuLM *pSPSuLM,
 		t = PoseSMInit.m_X;
 		RVLMULMX3X3TVECT(R, t, invtInit);
 	}
+
+	CRVL3DPose PoseSM5DoF;
+	double invt5DoF[3];
+	PoseSM5DoF.m_pData = invt5DoF;
+	PoseSM5DoF.m_C = PoseSMInit.m_C;
 
 	//PoseSM.m_ParamFlags = RVL3DPOSE_PARAM_FLAGS_COV_6D;
 	//double C[3 * 3 * 3];
@@ -14067,11 +14075,34 @@ void CRVLPSuLMBuilder::Hypotheses3(	CRVLPSuLM *pSPSuLM,
 			//if(pM3DSurface->m_Index == 7 && pS3DSurface->m_Index == 1)
  			//	int debug = 0;
 
-			//if(pS3DSurface->Match2(pM3DSurface, pPoseSM, MatchQuality, &MatchData))
-			if(RVL3DPlanarSurfaceEKFUpdate(pS3DSurface, pM3DSurface, pPoseSM, &(pNode->PoseSM), &MatchData))
+			bool bCheckConsistency = true;
+
+			if (m_Flags2 & RVLPSULMBUILDER_FLAG2_UNCONSTRAINED_ORIENTATION)
 			{
-				if(pPNode)
-					pPNode->nFailures = 0;
+				if (pNode->g == 1)
+					bCheckConsistency = false;
+				else if (pNode->g == 2)
+					Compute5DoFPose(pNode, MatchList, PoseSMInit.m_X, &MatchData, &PoseSM5DoF);
+			}
+
+			//if(pS3DSurface->Match2(pM3DSurface, pPoseSM, MatchQuality, &MatchData))
+			if (RVL3DPlanarSurfaceEKFUpdate(pS3DSurface, pM3DSurface, pPoseSM, &(pNode->PoseSM), &MatchData, bCheckConsistency))
+			{
+				// Only for debugging purpose!
+				//
+				//if (pNode->g == 2)
+				//{
+				//	CRVL3DPose dPose;
+				//	RVLMXMUL3X3T1(PoseSM5DoF.m_Rot, pNode->PoseSM.m_Rot, dPose.m_Rot);
+				//	double V[3];
+				//	double q;
+				//	dPose.GetAngleAxis(V, q);
+
+				//	if (pPNode)
+				//		pPNode->nFailures = 0;
+				//}
+				//
+				// END DEBUGGING
 
 				// EKF 
 				
@@ -14104,7 +14135,7 @@ void CRVLPSuLMBuilder::Hypotheses3(	CRVLPSuLM *pSPSuLM,
 #ifdef RVLPSULMBUILDER_HYPOTHESES_DEBUG
 					//if(HypothesisIndex == 113)
 					//	int debug = 0;
-last
+
 					cvSet(pFig2->m_pImage, cvScalar(255, 255, 255));
 
 					int iTextLine = HypothesisDisplay(pFig2, pNode, cvPoint(8, 0), MatchList);
@@ -25070,7 +25101,7 @@ IplImage * CRVLPSuLMBuilder::GetComplexPSuLMRGBImage(char *ImageFileName)
 	{
 		RVLSetFileNumber(ImageFileName_, "00000-LW.bmp", iSample);
 
-		if(!GetOdometry(ImageFileName_, &PoseM_M, iSample0, command))
+		if (!GetOdometry(ImageFileName_, &PoseM_M, "-LW.bmp", iSample0, command))
 			break;
 	
 		pImage_ = cvLoadImage(ImageFileName_);
@@ -26580,4 +26611,110 @@ void CRVLPSuLMBuilder::MatchDiff(
 			fprintf(fp, "p(S%c%d|%c%c%d)=%lf\n", feature, iS, source, feature, iM, pMatch1->cost);
 		}
 	}	// for every mach in MatchArray1
+}
+
+bool CRVLPSuLMBuilder::Compute5DoFPose(
+	RVLPSULM_HG_NODE *pNode,
+	RVLPSULM_MSMATCH_DATA *MatchList,
+	double *tInit,
+	RVLSURFACE_MATCH_ARRAY *pMatchData,
+	CRVL3DPose *pPoseSM)
+{
+	if (pNode->pParent == NULL)
+		return false;
+
+	RVLPSULM_MSMATCH_DATA *pMSMatch1 = MatchList + pNode->pParent->iMatch;
+	RVLPSULM_MSMATCH_DATA *pMSMatch2 = MatchList + pNode->iMatch;
+
+	CRVL3DSurface2 *pM3DSurface1 = (CRVL3DSurface2 *)(pMSMatch1->pMData);
+	CRVL3DSurface2 *pS3DSurface1 = (CRVL3DSurface2 *)(pMSMatch1->pSData);
+	CRVL3DSurface2 *pM3DSurface2 = (CRVL3DSurface2 *)(pMSMatch2->pMData);
+	CRVL3DSurface2 *pS3DSurface2 = (CRVL3DSurface2 *)(pMSMatch2->pSData);
+
+	double *NS1 = pS3DSurface1->m_N;
+	double *NS2 = pS3DSurface2->m_N;
+
+	double csNS = RVLDOTPRODUCT3(NS1, NS2);
+
+	if (RVLABS(csNS) > COS45)
+		return false;
+	
+	double *NM1 = pM3DSurface1->m_N;	
+	double *NM2 = pM3DSurface2->m_N;
+
+	double csNM = RVLDOTPRODUCT3(NM1, NM2);
+
+	if (RVLABS(csNM) > COS45)
+		return false;
+	
+	double dS1 = pS3DSurface1->m_d;
+	double dS2 = pS3DSurface2->m_d;
+	double dM1 = pM3DSurface1->m_d;
+	double dM2 = pM3DSurface2->m_d;
+
+	double fTmp;
+
+	double S[9];
+
+	double *US = S;
+	double *VS = S + 3;
+	double *NS = S + 6;
+
+	RVLCROSSPRODUCT3(NS1, NS2, US);
+	RVLNORM3(US, fTmp);
+
+	RVLCROSSPRODUCT3(NS1, US, VS);
+
+	RVLCOPY3VECTOR(NS1, NS);
+
+	double M[9];
+
+	double *UM = M;
+	double *VM = M + 3;
+	double *NM = M + 6;
+
+	RVLCROSSPRODUCT3(NM1, NM2, UM);
+	RVLNORM3(UM, fTmp);
+
+	RVLCROSSPRODUCT3(NM1, UM, VM);
+
+	RVLCOPY3VECTOR(NM1, NM);
+
+	double *RSM = pPoseSM->m_Rot;
+	double *tSM = pPoseSM->m_X;
+
+	RVLMXMUL3X3T1(UM, US, RSM);
+
+	double VTmp[3];
+
+	double csS = RVLDOTPRODUCT3(NS1, NS2);
+
+	RVLSCALE3VECTOR(NS1, csS, VTmp);
+	RVLDIF3VECTORS(NS2, VTmp, VTmp);
+	
+	double kS = sqrt(RVLDOTPRODUCT3(VTmp, VTmp));
+
+	double csM = RVLDOTPRODUCT3(NM1, NM2);
+
+	RVLSCALE3VECTOR(NM1, csM, VTmp);
+	RVLDIF3VECTORS(NM2, VTmp, VTmp);
+
+	double kM = sqrt(RVLDOTPRODUCT3(VTmp, VTmp));
+
+	double D[3];
+
+	D[0] = RVLDOTPRODUCT3(UM, tInit);
+	D[1] = (dS2 - csS * dS1) / kS - (dM2 - csM * dM1) / kM;
+	D[2] = dS1 - dM1;
+
+	RVLMULMX3X3TVECT(UM, D, tSM);
+
+	pPoseSM->UpdatePTRLL();
+
+	double *invt = (double *)(pPoseSM->m_pData);
+	RVLMULMX3X3TVECT(RSM, tSM, invt);
+
+	RVL3DPlanarSurfaceEKFUpdate(pS3DSurface1, pM3DSurface1, pPoseSM, &(pNode->pParent->PoseSM), pMatchData, false);
+
+	return true;
 }
