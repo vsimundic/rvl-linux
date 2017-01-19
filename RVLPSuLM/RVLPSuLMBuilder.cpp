@@ -12946,6 +12946,7 @@ void CRVLPSuLMBuilder::CreateParamList(CRVLMem * pMem)
 	m_ParamList.AddID(pParamData, "MAX_PEAK_ONLY", RVLPSULMBUILDER_FLAG_LAST_DOF_ESTIMATION_METHOD_MAX_PEAK_ONLY);
 	m_ParamList.AddID(pParamData, "BEST_PEAK_TREE", RVLPSULMBUILDER_FLAG_LAST_DOF_ESTIMATION_METHOD_BEST_PEAK_TREE);
 	m_ParamList.AddID(pParamData, "ALL_PEAKS", RVLPSULMBUILDER_FLAG_LAST_DOF_ESTIMATION_METHOD_ALL_PEAKS);	
+	pParamData = m_ParamList.AddParam("PSuLM.Localization.HypothesisGeneration.maxLastDOFTravelDist", RVLPARAM_TYPE_DOUBLE, &m_maxLastDOFTravelDist);
 
 	pParamData = m_ParamList.AddParam("PSuLM.Localization.HypothesisEvaluation.Method", RVLPARAM_TYPE_FLAG, &m_Flags);
 	m_ParamList.AddID(pParamData, "SM", RVLPSULMBUILDER_FLAG_HYPOTHESIS_EVALUATION_METHOD_SM);
@@ -14076,17 +14077,18 @@ void CRVLPSuLMBuilder::Hypotheses3(	CRVLPSuLM *pSPSuLM,
  			//	int debug = 0;
 
 			bool bCheckConsistency = true;
+			bool b5DoF = true;
 
 			if (m_Flags2 & RVLPSULMBUILDER_FLAG2_UNCONSTRAINED_ORIENTATION)
 			{
 				if (pNode->g == 1)
 					bCheckConsistency = false;
 				else if (pNode->g == 2)
-					Compute5DoFPose(pNode, MatchList, PoseSMInit.m_X, &MatchData, &PoseSM5DoF);
+					b5DoF = Compute5DoFPose(pNode, MatchList, PoseSMInit.m_X, &MatchData, &PoseSM5DoF);
 			}
 
 			//if(pS3DSurface->Match2(pM3DSurface, pPoseSM, MatchQuality, &MatchData))
-			if (RVL3DPlanarSurfaceEKFUpdate(pS3DSurface, pM3DSurface, pPoseSM, &(pNode->PoseSM), &MatchData, bCheckConsistency))
+			if (RVL3DPlanarSurfaceEKFUpdate(pS3DSurface, pM3DSurface, pPoseSM, &(pNode->PoseSM), &MatchData, bCheckConsistency) && b5DoF)
 			{
 				// Only for debugging purpose!
 				//
@@ -14350,10 +14352,16 @@ void CRVLPSuLMBuilder::Hypotheses3(	CRVLPSuLM *pSPSuLM,
 
 					// END BLOCK
 
-					RVLPSuLMHypothesisPoseRefinement(pPoseSM, pNode, MatchList, PoseSMInit.m_C, 5);
+					//RVLPSuLMHypothesisPoseRefinement(pPoseSM, pNode, MatchList, PoseSMInit.m_C, 5);
 
 #ifdef RVLPSULMBUILDER_HYPOTHESES_DEBUG_LOG
 					fprintf(fpLog, "Estimating the last DOF...\n");
+
+					if (((CRVL3DSurface2 *)(MatchList[pNode->iMatch].pMData))->m_Index == 1 &&
+						((CRVL3DSurface2 *)(MatchList[pNode->iMatch].pSData))->m_Index == 13 &&
+						((CRVL3DSurface2 *)(MatchList[pNode->pParent->iMatch].pMData))->m_Index == 0 &&
+						((CRVL3DSurface2 *)(MatchList[pNode->pParent->iMatch].pSData))->m_Index == 6)
+						int debug = 0;
 #endif
 
 #pragma region Estimation of the last DOF

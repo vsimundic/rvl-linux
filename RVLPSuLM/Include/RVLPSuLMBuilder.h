@@ -423,7 +423,7 @@ public:
 	double m_LastDOFLineOverlapThr;		// todo: add to param. list
 	double m_LastDOFLineRotationStD;	// todo: add to param. list
 	double m_LastDOFLineTranslationStD;	// todo: add to param. list
-	double m_maxLastDOFTravelDist;		// todo: add to param. list
+	double m_maxLastDOFTravelDist;
 	double m_LastDOFResolution;			// todo: add to param. list
 	int m_nLastDOFGaussianSamples;		// todo: add to param. list
 	double m_maxLastDOFstdTD;			// todo: add to param. list
