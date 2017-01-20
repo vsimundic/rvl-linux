@@ -35,6 +35,7 @@ namespace RVL
 		int iSSegment;
 		int iModel;
 		int iMSegment;
+		bool valid;
 	};
 
 	bool GetAngleAxis(float *R, float *V, float &theta);
