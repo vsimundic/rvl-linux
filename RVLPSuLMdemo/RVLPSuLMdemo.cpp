@@ -15,7 +15,7 @@
 #ifdef RVLVTK
 //VTK headers
 #include <vtkAutoInit.h>
-VTK_MODULE_INIT(vtkRenderingOpenGL2);
+VTK_MODULE_INIT(vtkRenderingOpenGL);
 VTK_MODULE_INIT(vtkInteractionStyle);
 VTK_MODULE_INIT(vtkRenderingFreeType);//(vtkRenderingFreeTypeOpenGL);
 //#include "RVLVTK.h"
@@ -618,7 +618,7 @@ int main(int argc, char* argv[])
 				
 				do
 				{
-					VS.m_PSuLMBuilder.GetOdometry(VS.m_ImageFileName, &PoseTemp, iTemp, command);
+					VS.m_PSuLMBuilder.GetOdometry(VS.m_ImageFileName, &PoseTemp, "-LW.bmp", iTemp, command);
 
 					VS.Update(bKinect ? 0x00000000 : RVLPSULMBUILDER_CREATEMODEL_IMAGE_FROM_FILE);
 					if (VS.m_PSuLMBuilder.m_nHypotheses > 0)
@@ -650,9 +650,12 @@ int main(int argc, char* argv[])
 			{
 				int iSample0;
 				unsigned char command;
+				char *extension = (VS.m_Flags & RVLSYS_FLAGS_PC ? RVLCreateString("-PC.pcd") : RVLCreateString("-LW.bmp"));				
 
-				if (!VS.m_PSuLMBuilder.GetOdometry(VS.m_ImageFileName, &(VS.m_PoseA0), iSample0, command))
+				if (!VS.m_PSuLMBuilder.GetOdometry(VS.m_ImageFileName, &(VS.m_PoseA0), extension, iSample0, command))
 					VS.m_PoseA0.Reset();
+
+				delete[] extension;
 			}
 
 			VS.Update(bKinect ? 0x00000000 : RVLPSULMBUILDER_CREATEMODEL_IMAGE_FROM_FILE);
