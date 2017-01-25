@@ -21,15 +21,15 @@ CTISet::CTISet()
 {
 	SegmentCTIs.Element = NULL;
 	segmentCTIIdxMem = NULL;
-	CTI.n = 0;
-	CTI.Element = NULL;
+	pCTI.n = 0;
+	pCTI.Element = NULL;
 }
 
 CTISet::~CTISet()
 {
 	RVL_DELETE_ARRAY(SegmentCTIs.Element);
 	RVL_DELETE_ARRAY(segmentCTIIdxMem);
-	RVL_DELETE_ARRAY(CTI.Element);
+	RVL_DELETE_ARRAY(pCTI.Element);
 }
 
 void CTISet::Load(char *filePath)
@@ -42,7 +42,7 @@ void CTISet::Load(char *filePath)
 
 	RECOG::PSGM_::ModelInstanceElement *pModelInstanceElement;
 	RECOG::PSGM_::ModelInstance *pModelInstance;
-	CTI.n = 0;
+	pCTI.n = 0;
 	if (fp)
 	{
 		//count number of lines in CTI file
@@ -55,12 +55,75 @@ void CTISet::Load(char *filePath)
 			if (line[0] == '\0' || line[0] == '\n')
 				continue;
 
-			CTI.n++;
+			pCTI.n++;
 		}
 
 		rewind(fp);
 
-		RVL_DELETE_ARRAY(CTI.Element);
+		QList<RECOG::PSGM_::ModelInstance> *pCTIQlist = &CTI;
+
+		RVLQLIST_INIT(pCTIQlist);
+
+		RECOG::PSGM_::ModelInstance *pQlistEntry;
+
+		//Use Qlist to save CTIs
+		for (iModelInstance = 0; iModelInstance < pCTI.n; iModelInstance++)
+		{
+			pQlistEntry = new RECOG::PSGM_::ModelInstance;
+
+			RVLQLIST_ADD_ENTRY(pCTIQlist, pQlistEntry);
+
+			pQlistEntry->modelInstance.Element = new RECOG::PSGM_::ModelInstanceElement[nT];
+
+			pQlistEntry->modelInstance.n = nT;
+
+			fscanf(fp, "%d\t%d\t", &pQlistEntry->iModel, &pQlistEntry->iCluster);
+
+			for (i = 0; i < 9; i++)
+				fscanf(fp, "%f\t", &pQlistEntry->R[i]);
+
+			for (i = 0; i < 3; i++)
+				fscanf(fp, "%f\t", &pQlistEntry->t[i]);
+
+			for (iModelInstanceElement = 0; iModelInstanceElement < nT; iModelInstanceElement++)
+			{
+				pModelInstanceElement = pQlistEntry->modelInstance.Element + iModelInstanceElement;
+
+				fscanf(fp, "%f\t", &pModelInstanceElement->d);
+			}
+
+			for (iModelInstanceElement = 0; iModelInstanceElement < nT; iModelInstanceElement++)
+			{
+				pModelInstanceElement = pQlistEntry->modelInstance.Element + iModelInstanceElement;
+
+				fscanf(fp, "%d\t", &pModelInstanceElement->valid);
+			}
+
+			for (iModelInstanceElement = 0; iModelInstanceElement < nT; iModelInstanceElement++)
+			{
+				pModelInstanceElement = pQlistEntry->modelInstance.Element + iModelInstanceElement;
+
+				fscanf(fp, "%f\t", &pModelInstanceElement->e);
+			}
+
+			for (i = 0; i < 3; i++)
+				fscanf(fp, "%f\t", &pQlistEntry->tc[i]);
+
+			/*if (iModelInstance == pCTI.n - 1)
+				pModelInstance->pNext = NULL;
+			else
+			{
+				pModelInstance->pNext = pModelInstance + 1;
+				pModelInstance++;
+			}*/
+
+		}
+
+		//COPY QLIST TO ARRAY
+		pCTI.Element = new RECOG::PSGM_::ModelInstance*[pCTI.n];
+
+
+		/*RVL_DELETE_ARRAY(CTI.Element);
 
 		CTI.Element = new RECOG::PSGM_::ModelInstance[CTI.n];
 
@@ -111,11 +174,12 @@ void CTISet::Load(char *filePath)
 				pModelInstance->pNext = pModelInstance + 1;
 				pModelInstance++;
 			}
-		}
+		}*/
 
 		fclose(fp);
 	}
 
+	/*
 	// Calculate number of scene/model segments
 	RECOG::PSGM_::ModelInstance *pCTI;
 	RECOG::PSGM_::ModelInstance *pCTINext;
@@ -179,4 +243,5 @@ void CTISet::Load(char *filePath)
 
 		SegmentCTIs.Element[i].n = iSegmentCTIIdx - SegmentCTIs.Element[i].Element;
 	}
+	*/
 }

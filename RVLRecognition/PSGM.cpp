@@ -89,6 +89,20 @@ PSGM::PSGM()
 	matchMatrix.Element = NULL;
 	sortedMatches.Element = NULL;
 
+	scoreMatchMatrix.Element = NULL;
+	scoreMatchMatrix.n = 0;
+
+	//Arrays allocation for Match function
+	iValidSampleCandidate.Element = new QLIST::Index[convexTemplate.n];
+	
+	iValid.Element = new QLIST::Index[convexTemplate.n];
+	
+	iRansacCandidates.Element = new QLIST::Index[26]; //max 26 planes which satisfy condition
+	
+	iConsensus.Element = new QLIST::Index[convexTemplate.n];
+	
+	iConsensusTemp.Element = new QLIST::Index[convexTemplate.n];
+
 	//fpTime = fopen("C:\\RVL\\MatchTime_WithoutRansac.txt", "w");
 	//End Vidovic
 }
@@ -127,6 +141,29 @@ PSGM::~PSGM()
 	RVL_DELETE_ARRAY(sortedMatches.Element)
 
 	pECCVGT->~ECCVGTLoader();
+
+	//Delete arrays used in Match() function
+	RVL_DELETE_ARRAY(iConsensusTemp.Element);
+
+	RVL_DELETE_ARRAY(iValid.Element);
+
+	RVL_DELETE_ARRAY(iConsensus.Element);
+
+	RVL_DELETE_ARRAY(iRansacCandidates.Element);
+
+	RVL_DELETE_ARRAY(iValidSampleCandidate.Element);
+
+	for (int i = 0; i < MCTISet.pCTI.n; i++)
+	{
+		RVL_DELETE_ARRAY(e.Element[i].Element);
+		RVL_DELETE_ARRAY(tBestMatch.Element[i].Element);
+	}
+
+	RVL_DELETE_ARRAY(e.Element);
+
+	RVL_DELETE_ARRAY(tBestMatch.Element);
+
+	RVL_DELETE_ARRAY(score.Element);
 
 	//fclose(fpTime);
 	//End Vidovic
@@ -1956,6 +1993,26 @@ void PSGM::LoadModelDataBase()
 	MCTISet.nT = convexTemplate.n;
 	MCTISet.Load(modelDataBase);
 
+	//Alocate arrays for Match() function
+	e.Element = new Array<float>[MCTISet.pCTI.n];
+	e.n = MCTISet.pCTI.n;
+
+	tBestMatch.Element = new Array<float>[MCTISet.pCTI.n];
+	tBestMatch.n = MCTISet.pCTI.n;
+
+
+	score.Element = new float[MCTISet.pCTI.n];
+	score.n = MCTISet.pCTI.n;
+
+	for (int i = 0; i < MCTISet.pCTI.n; i++)
+	{
+		e.Element[i].Element = new float[convexTemplate.n];
+		e.Element[i].n = convexTemplate.n;
+
+		tBestMatch.Element[i].Element = new float[3];
+		tBestMatch.Element[i].n = 3;
+	}
+
 	//FILE *fp = fopen(modelDataBase, "r");
 
 	//char line[3000] = {0};
@@ -3192,7 +3249,8 @@ void PSGM::Match(bool CTIfromFile)
 
 	//find sample candidates
 	QList<QLIST::Index> iSampleCandidateList;
-	QList<QLIST::Index> *pISampleCandidateList = &iSampleCandidateList;
+	//QList<QLIST::Index> *pISampleCandidateList = &iSampleCandidateList;
+	pISampleCandidateList = &iSampleCandidateList;
 
 	RVLQLIST_INIT(pISampleCandidateList);
 
@@ -3231,6 +3289,7 @@ void PSGM::Match(bool CTIfromFile)
 	bool breakPrint;
 	bool cluserMatch;
 
+	/*
 	//Arrays allocation
 	Array<QLIST::Index> iValidSampleCandidate;
 	iValidSampleCandidate.Element = new QLIST::Index[convexTemplate.n];
@@ -3267,6 +3326,7 @@ void PSGM::Match(bool CTIfromFile)
 		tBestMatch.Element[i].Element = new float[3];
 		tBestMatch.Element[i].n = 3;
 	}
+	*/
 
 	iMIS = 0;
 
@@ -3275,6 +3335,12 @@ void PSGM::Match(bool CTIfromFile)
 	int iMSegment;
 
 	int maxMSegments = (MCTISet.nModels + 1) * (MCTISet.maxSegmentIdx + 1);
+
+	//delete scoreMatchMatrix	
+	for (iSCluster = 0; iSCluster < scoreMatchMatrix.n; iSCluster++)
+		RVL_DELETE_ARRAY(scoreMatchMatrix.Element[iSCluster].Element);
+
+	RVL_DELETE_ARRAY(scoreMatchMatrix.Element);
 
 	scoreMatchMatrix.Element = new Array<SortIndex<float>>[nClusters];
 	scoreMatchMatrix.n = nClusters;
@@ -3292,7 +3358,7 @@ void PSGM::Match(bool CTIfromFile)
 		}
 	}
 
-	int startIdx = 0, endIdx = MCTISet.CTI.n;
+	int startIdx = 0, endIdx = MCTISet.pCTI.n;
 
 	for (iSCluster = 0; iSCluster < nClusters; iSCluster++)
 	{
@@ -3310,11 +3376,14 @@ void PSGM::Match(bool CTIfromFile)
 			{
 				CTIIdx = CTISet.SegmentCTIs.Element[iSCluster].Element[iSCTI];
 
-				pSModelInstance = &CTISet.CTI.Element[CTIIdx];
+				//pSModelInstance = &CTISet.CTI.Element[CTIIdx];
+				pSModelInstance = CTISet.pCTI.Element[CTIIdx]; //TEST NEW CTI ARRAY!!
 
-				iSRF = iSCTI;				
+				iSRF = iSCTI;		
 
-				MatchRANSAC(
+				//double startTime = pTimer->GetTime();
+
+				/*MatchRANSAC(
 					pSModelInstance,
 					startIdx,
 					endIdx,
@@ -3325,11 +3394,18 @@ void PSGM::Match(bool CTIfromFile)
 					iConsensus,
 					iConsensusTemp,
 					&e,
-					&tBestMatch);
+					&tBestMatch);*/
 
-				CalculateScore(&e, &iValid, &score, RVLPSGM_MATCHES_SIMILARITY_MEASURE);
+				MatchRANSAC(pSModelInstance, startIdx, endIdx);
 
-				UpdateScoreMatchMatrix(pSModelInstance, &score);
+				//double execTime = pTimer->GetTime() - startTime;
+				//printf("Time: %lf\n", execTime);
+
+				//CalculateScore(&e, &iValid, &score, RVLPSGM_MATCHES_SIMILARITY_MEASURE);
+				CalculateScore(RVLPSGM_MATCHES_SIMILARITY_MEASURE);
+
+				//UpdateScoreMatchMatrix(pSModelInstance, &score);
+				UpdateScoreMatchMatrix(pSModelInstance);
 
 				iMIS++;
 
@@ -3347,7 +3423,9 @@ void PSGM::Match(bool CTIfromFile)
 			{
 				iSRF++;
 
-				MatchRANSAC(
+				//double startTime = pTimer->GetTime();
+
+				/*MatchRANSAC(
 					pSModelInstance,
 					startIdx,
 					endIdx,
@@ -3358,11 +3436,18 @@ void PSGM::Match(bool CTIfromFile)
 					iConsensus,
 					iConsensusTemp,
 					&e,
-					&tBestMatch);
+					&tBestMatch);*/
 
-				CalculateScore(&e, &iValid, &score, RVLPSGM_MATCHES_SIMILARITY_MEASURE);
+				MatchRANSAC(pSModelInstance, startIdx, endIdx);
 
-				UpdateScoreMatchMatrix(pSModelInstance, &score);
+				//double execTime = pTimer->GetTime() - startTime;
+				//printf("Time: %lf\n", execTime);
+
+				//CalculateScore(&e, &iValid, &score, RVLPSGM_MATCHES_SIMILARITY_MEASURE);
+				CalculateScore(RVLPSGM_MATCHES_SIMILARITY_MEASURE);
+
+				//UpdateScoreMatchMatrix(pSModelInstance, &score);
+				UpdateScoreMatchMatrix(pSModelInstance);
 
 				iMIS++;
 
@@ -3392,7 +3477,8 @@ void PSGM::Match(bool CTIfromFile)
 	printf("completed.\n");
 
 	int nSMI = iMIS;
-
+	
+	/*
 	RVL_DELETE_ARRAY(iConsensusTemp.Element);
 
 	RVL_DELETE_ARRAY(iValid.Element);
@@ -3414,6 +3500,7 @@ void PSGM::Match(bool CTIfromFile)
 	RVL_DELETE_ARRAY(tBestMatch.Element);
 
 	RVL_DELETE_ARRAY(score.Element);
+	*/
 
 	iScene++;
 
@@ -3429,7 +3516,7 @@ void PSGM::Match(bool CTIfromFile)
 #endif
 }
 
-void PSGM::MatchRANSAC(
+/*void PSGM::MatchRANSAC(
 	RECOG::PSGM_::ModelInstance *pSModelInstance,
 	int startIdx,
 	int endIdx,
@@ -3440,8 +3527,14 @@ void PSGM::MatchRANSAC(
 	Array<QLIST::Index> &iConsensus,
 	Array<QLIST::Index> &iConsensusTemp,
 	Array<Array<float>> *e,
-	Array<Array<float>> *tBestMatch)
+	Array<Array<float>> *tBestMatch)*/
+void PSGM::MatchRANSAC(
+	RECOG::PSGM_::ModelInstance *pSModelInstance,
+	int startIdx,
+	int endIdx)
 {
+	int cntTime;
+
 	float cos45 = cos(PI / 4);
 	float csMinSampleAngleDiff = cos(PI / 4);
 	float minE, minETotal, E, score, SMI_minETotal;
@@ -3470,9 +3563,17 @@ void PSGM::MatchRANSAC(
 
 	int MatchID = 0;
 
+	cntTime = 0;
+
+	float *nTc, *dISMc;
+
+	nTc = new float[3 * convexTemplate.n];
+	dISMc = new float[convexTemplate.n];
+
 	for (iMCTI = startIdx; iMCTI < endIdx; iMCTI++)
 	{
-		pMModelInstance = &MCTISet.CTI.Element[iMCTI];
+		//pMModelInstance = &MCTISet.CTI.Element[iMCTI];
+		pMModelInstance = MCTISet.pCTI.Element[iMCTI];
 
 		//minE = 66.0;
 		minE = 412.5; // for sigma = 2.5^2
@@ -3684,13 +3785,13 @@ void PSGM::MatchRANSAC(
 #else
 			iConsensus.n = iValid.n;
 #endif
-
 			if (iConsensus.n >= 3)
 			{
-				float dISc, dIMc, *nTc, *dISMc;
+				float dISc, dIMc;
+				//float dISc, dIMc, *nTc, *dISMc;
 
-				nTc = new float[3 * iConsensus.n];
-				dISMc = new float[iConsensus.n];
+				//nTc = new float[3 * iConsensus.n];
+				//dISMc = new float[iConsensus.n];
 
 				piConsensus = iConsensus.Element;
 
@@ -3734,12 +3835,12 @@ void PSGM::MatchRANSAC(
 					B(i) = 0;
 					for (j = 0; j < iConsensus.n; j++)
 						B(i) += nTc[i * iConsensus.n + j] * dISMc[j];
-				}
-
-				t = A.colPivHouseholderQr().solve(B);
-
-				delete[] nTc;
-				delete[] dISMc;
+				}				
+				
+				t = A.colPivHouseholderQr().solve(B);				
+								
+				//delete[] nTc;
+				//delete[] dISMc;				
 
 				E = 0;
 
@@ -3751,13 +3852,13 @@ void PSGM::MatchRANSAC(
 
 					dIMvt = pMModelInstance->modelInstance.Element[idx].d + RVLDOTPRODUCT3(t, convexTemplate.Element[idx].N);
 
-					e->Element[iMCTI].Element[idx] = dISv - dIMvt;
+					e.Element[iMCTI].Element[idx] = dISv - dIMvt;
 				}
 
 				for (i = 0; i < 3; i++)
-					tBestMatch->Element[iMCTI].Element[i] = t(i);
+					tBestMatch.Element[iMCTI].Element[i] = t(i);
 
-				MSTransformation(pMModelInstance, pSModelInstance, tBestMatch->Element[iMCTI].Element, R_, t_);
+				MSTransformation(pMModelInstance, pSModelInstance, tBestMatch.Element[iMCTI].Element, R_, t_);
 			}
 			else
 			{
@@ -3767,14 +3868,18 @@ void PSGM::MatchRANSAC(
 			}
 		}
 	}	//for all model MI
+
+	delete[] nTc;
+	delete[] dISMc;
 }
 
-
+/*
 void PSGM::CalculateScore(
 	Array<Array<float>> *e,
 	Array<QLIST::Index> *iValid,
 	Array<float> *score,
-	int similarityMeasure)
+	int similarityMeasure)*/
+void PSGM::CalculateScore(int similarityMeasure)
 {
 	float sigma = 8.0;
 
@@ -3782,7 +3887,7 @@ void PSGM::CalculateScore(
 
 	int iMCTI, iValidPlane, idx;
 
-	int nMCTI = MCTISet.CTI.n;
+	int nMCTI = MCTISet.pCTI.n;
 
 	float fTmp, eTmp, scoreTmp;
 
@@ -3796,16 +3901,16 @@ void PSGM::CalculateScore(
 		{
 			scoreTmp = 0;
 
-			for (iValidPlane = 0; iValidPlane < iValid->n; iValidPlane++)
+			for (iValidPlane = 0; iValidPlane < iValid.n; iValidPlane++)
 			{
-				idx = iValid->Element[iValidPlane].Idx;
+				idx = iValid.Element[iValidPlane].Idx;
 
-				eTmp = e->Element[iMCTI].Element[idx];
+				eTmp = e.Element[iMCTI].Element[idx];
 
 				scoreTmp += eTmp * eTmp;
 			}
 
-			score->Element[iMCTI] = sqrt(scoreTmp / iValid->n);
+			score.Element[iMCTI] = sqrt(scoreTmp / iValid.n);
 		}
 
 		break;
@@ -3813,11 +3918,11 @@ void PSGM::CalculateScore(
 
 		for (iMCTI = 0; iMCTI < nMCTI; iMCTI++)
 		{
-			for (iValidPlane = 0; iValidPlane < iValid->n; iValidPlane++)
+			for (iValidPlane = 0; iValidPlane < iValid.n; iValidPlane++)
 			{
-				idx = iValid->Element[iValidPlane].Idx;
+				idx = iValid.Element[iValidPlane].Idx;
 
-				eTmp = e->Element[iMCTI].Element[idx];
+				eTmp = e.Element[iMCTI].Element[idx];
 
 				fTmp = RVLABS(eTmp);
 
@@ -3828,7 +3933,7 @@ void PSGM::CalculateScore(
 						maxError = fTmp;
 			}
 
-			score->Element[iMCTI] = maxError;
+			score.Element[iMCTI] = maxError;
 		}
 
 		break;
@@ -3838,11 +3943,11 @@ void PSGM::CalculateScore(
 		{
 			scoreTmp = 0;
 
-			for (iValidPlane = 0; iValidPlane < iValid->n; iValidPlane++)
+			for (iValidPlane = 0; iValidPlane < iValid.n; iValidPlane++)
 			{
-				idx = iValid->Element[iValidPlane].Idx;
+				idx = iValid.Element[iValidPlane].Idx;
 
-				eTmp = e->Element[iMCTI].Element[idx];
+				eTmp = e.Element[iMCTI].Element[idx];
 
 				fTmp = eTmp / sigma;
 
@@ -3854,7 +3959,7 @@ void PSGM::CalculateScore(
 					scoreTmp += sigma25;
 			}
 
-			score->Element[iMCTI] = scoreTmp + sigma25 * (66 - iValid->n);
+			score.Element[iMCTI] = scoreTmp + sigma25 * (66 - iValid.n);
 		}
 
 		break;
@@ -3862,18 +3967,18 @@ void PSGM::CalculateScore(
 
 		Array<SortIndex<float>> validErrors;
 
-		validErrors.Element = new SortIndex<float>[iValid->n];
-		validErrors.n = iValid->n;
+		validErrors.Element = new SortIndex<float>[iValid.n];
+		validErrors.n = iValid.n;
 
-		int medianIdx = iValid->n / 2;
+		int medianIdx = iValid.n / 2;
 
 		for (iMCTI = 0; iMCTI < nMCTI; iMCTI++)
 		{
-			for (iValidPlane = 0; iValidPlane < iValid->n; iValidPlane++)
+			for (iValidPlane = 0; iValidPlane < iValid.n; iValidPlane++)
 			{
-				idx = iValid->Element[iValidPlane].Idx;
+				idx = iValid.Element[iValidPlane].Idx;
 
-				eTmp = e->Element[iMCTI].Element[idx];
+				eTmp = e.Element[iMCTI].Element[idx];
 
 				fTmp = RVLABS(eTmp);
 
@@ -3883,25 +3988,25 @@ void PSGM::CalculateScore(
 
 			BubbleSort(validErrors);
 
-			if (iValid->n % 2 == 0)
+			if (iValid.n % 2 == 0)
 				scoreTmp = (validErrors.Element[medianIdx - 1].cost + validErrors.Element[medianIdx].cost) / 2;
 			else
 				scoreTmp = validErrors.Element[medianIdx].cost;
 			
-			score->Element[iMCTI] = scoreTmp;
+			score.Element[iMCTI] = scoreTmp;
 		}
 
 		RVL_DELETE_ARRAY(validErrors.Element);
-
 
 		break;
 	}
 }
 
 
-void PSGM::UpdateScoreMatchMatrix(
+/*void PSGM::UpdateScoreMatchMatrix(
 	RECOG::PSGM_::ModelInstance *pSModelInstance,
-	Array<float> *score)
+	Array<float> *score)*/
+void PSGM::UpdateScoreMatchMatrix(RECOG::PSGM_::ModelInstance *pSModelInstance)
 {
 	int SSegmentIdx = pSModelInstance->iCluster;
 
@@ -3911,11 +4016,12 @@ void PSGM::UpdateScoreMatchMatrix(
 
 	int idx;
 
-	for (iMCTI = 0; iMCTI < MCTISet.CTI.n; iMCTI++)
+	for (iMCTI = 0; iMCTI < MCTISet.pCTI.n; iMCTI++)
 	{
-		scoreTmp = score->Element[iMCTI];
+		scoreTmp = score.Element[iMCTI];
 
-		MSegmentIdx = MCTISet.CTI.Element[iMCTI].iModel * 3 + MCTISet.CTI.Element[iMCTI].iCluster; //CALCULATE MAX NUMBER OF SEGMENTS INSIDE CTI CLASS!!!!
+		//MSegmentIdx = MCTISet.CTI.Element[iMCTI].iModel * 3 + MCTISet.CTI.Element[iMCTI].iCluster; //CALCULATE MAX NUMBER OF SEGMENTS INSIDE CTI CLASS!!!!
+		MSegmentIdx = MCTISet.pCTI.Element[iMCTI]->iModel * 3 + MCTISet.pCTI.Element[iMCTI]->iCluster; //CALCULATE MAX NUMBER OF SEGMENTS INSIDE CTI CLASS!!!! TEST NEW CTI ARRAY!!!
 
 		scoreTmp_ = scoreMatchMatrix.Element[SSegmentIdx].Element[MSegmentIdx].cost;
 
@@ -5213,7 +5319,8 @@ void PSGM::EvaluateMatchesByScore_(
 
 							iCTI = scoreMatchMatrix.Element[iSSegment].Element[iMSegment].idx;
 
-							iMatchedModel = MCTISet.CTI.Element[iCTI].iModel;
+							//iMatchedModel = MCTISet.CTI.Element[iCTI].iModel;
+							iMatchedModel = MCTISet.pCTI.Element[iCTI]->iModel;
 
 							int iSegmentGT = (iScene - 1) * nDominantClusters + iSSegment;
 
@@ -5325,7 +5432,8 @@ void PSGM::EvaluateMatchesByScore_(
 								//Compare to segment GT
 								iCTI = scoreMatchMatrix.Element[iSSegment].Element[iMSegment].idx;
 
-								iMatchedModel = MCTISet.CTI.Element[iCTI].iModel;
+								//iMatchedModel = MCTISet.CTI.Element[iCTI].iModel;
+								iMatchedModel = MCTISet.pCTI.Element[iCTI]->iModel;
 
 								int iSegmentGT = (iScene - 1) * nDominantClusters + iSSegment;
 
@@ -5374,7 +5482,7 @@ void PSGM::EvaluateMatchesByScore_(
 				printf("FP: %d\n", FP_);
 				printf("FN: %d\n", FN_);
 				printf("nBestMatches: %d\n", iBestMatches);
-				printf("ScoreThresh: %f\n", scoreThresh);
+				//printf("ScoreThresh: %f\n", scoreThresh);
 				printf("Precision: %f\n", precision);
 				printf("Recall: %f\n", recall);
 				printf("...................................................\n");
@@ -5391,7 +5499,7 @@ void PSGM::EvaluateMatchesByScore_(
 				fprintf(fpLog, "FP: %d\n", FP_);
 				fprintf(fpLog, "FN: %d\n", FN_);
 				fprintf(fpLog, "nBestMatches: %d\n", iBestMatches);
-				fprintf(fpLog, "ScoreThresh: %f\n", scoreThresh);
+				//fprintf(fpLog, "ScoreThresh: %f\n", scoreThresh);
 				fprintf(fpLog, "Precision: %f\n", precision);
 				fprintf(fpLog, "Recall: %f\n", recall);
 				fprintf(fpLog, "...................................................\n");
@@ -5400,7 +5508,7 @@ void PSGM::EvaluateMatchesByScore_(
 						fprintf(fpLog, "First TP for segment %d is on %d place; Matched with iModel: %d (score = %f)\n", iSSegment, firstTP[iSSegment], firstTPiModel[iSSegment], firstTPScore[iSSegment]);
 				fprintf(fpLog, "---------------------------------------------------\n\n");
 
-				fprintf(fp, "%d\t%d\t%d\t%d\t%d\t%d\t%f\t%f\t%f\t%f\n", graphID, iScene - 1, TP_, FP_, FN_, nBestSegments, scoreThresh, -1.0, precision, recall);
+				fprintf(fp, "%d\t%d\t%d\t%d\t%d\t%d\t%f\t%f\t%f\t%f\n", graphID, iScene - 1, TP_, FP_, FN_, nBestSegments, -1.0, -1.0, precision, recall);
 
 				TP_ = 0; FP_ = 0; FN_ = 0;
 
@@ -5411,21 +5519,8 @@ void PSGM::EvaluateMatchesByScore_(
 
 	}
 
-
-
-
-
-
-
-
 	delete[] firstTP;
 	delete[] firstTPScore;
-
-	//delete scoreMatchMatrix!!??
-	for (iSSegment = 0; iSSegment < nSSegments; iSSegment++)
-		RVL_DELETE_ARRAY(scoreMatchMatrix.Element[iSSegment].Element);
-
-	RVL_DELETE_ARRAY(scoreMatchMatrix.Element);
 }
 
 void PSGM::SaveMatches()

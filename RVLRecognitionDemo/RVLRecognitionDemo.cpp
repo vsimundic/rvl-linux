@@ -303,7 +303,7 @@ int main(int argc, char ** argv)
 
 			char filePath[200];
 
-			FILE *fpHypothesisEvaluation = fopen("F:\\Projekti\\ARP3D\\compare_TNM_Valid.txt", "w");
+			FILE *fpHypothesisEvaluation = fopen("F:\\Projekti\\ARP3D\\compare_TNM_Valid_TMP.txt", "w");
 
 			FILE *fpSegmentGT = fopen(segmentGTFileName, "r");
 
@@ -340,7 +340,7 @@ int main(int argc, char ** argv)
 
 				recognition.LoadCTI(CTIFileName);
 
-				recognition.Match(true);
+				//recognition.Match(true);
 
 				CTIFromFile = true;
 #else
@@ -356,7 +356,7 @@ int main(int argc, char ** argv)
 				//else
 					//recognition.LoadSegmentGT(fpSegmentGT, CTIFromFile);
 
-				recognition.EvaluateMatchesByScore_(fpHypothesisEvaluation, fpLog, 7);
+				//recognition.EvaluateMatchesByScore_(fpHypothesisEvaluation, fpLog, 7);
 				
 				printf("Scene %s...finished!\n\n", filePath);
 			}

@@ -4,7 +4,7 @@
 #define RVLPSGM_MATCH_SATURATION //VIDOVIC
 //#define RVLPSGM_MATCH_SEGMENT_CENTROID //VIDOVIC
 //#define PSGM_CALCULATE_PROBABILITY //Vidovic
-#define RVLPSGM_EVALUATION_PRINT_INFO //Vidovic
+//#define RVLPSGM_EVALUATION_PRINT_INFO //Vidovic
 #define RVLPSGM_MATCH_USING_SEGMENT_GT //Vidovic
 //#define RVLPSGM_SAVE_MATCHES //Vidovic
 #define RVLPSGM_MATCHES_SIMILARITY_MEASURE			3
@@ -31,6 +31,7 @@ namespace RVL
 				float normalDistributionStd2;
 				bool bValid;
 				QList<RECOG::PSGM_::ModelInstance> modelInstanceList;
+				Array<int> iCTI;
 			};
 
 			struct Plane
@@ -158,7 +159,7 @@ namespace RVL
 		void LoadModelDataBase(); //VIDOVIC
 		//void Match(); //VIDOVIC
 		void Match(bool CTIfromFile = false); //VIDOVIC
-		void MatchRANSAC(
+		/*void MatchRANSAC(
 			RECOG::PSGM_::ModelInstance *pSModelInstance,
 			int startIdx,
 			int endIdx,
@@ -169,15 +170,21 @@ namespace RVL
 			Array<QLIST::Index> &iConsensus,
 			Array<QLIST::Index> &iConsensusTemp,
 			Array<Array<float>> *e,
-			Array<Array<float>> *tBestMatch); //VIDOVIC
-		void CalculateScore(
+			Array<Array<float>> *tBestMatch); //VIDOVIC*/
+		void MatchRANSAC(
+			RECOG::PSGM_::ModelInstance *pSModelInstance,
+			int startIdx,
+			int endIdx); //Vidovic
+		/*void CalculateScore(
 			Array<Array<float>> *e,
 			Array<QLIST::Index> *iValid,
 			Array<float> *score,
-			int similarityMeasure = 3);
-		void PSGM::UpdateScoreMatchMatrix(
+			int similarityMeasure = 3);*/
+		void CalculateScore(int similarityMeasure = 3);
+		/*void PSGM::UpdateScoreMatchMatrix(
 			RECOG::PSGM_::ModelInstance *pSModelInstance,
-			Array<float> *score); //Vidovic
+			Array<float> *score); //Vidovic*/
+		void PSGM::UpdateScoreMatchMatrix(RECOG::PSGM_::ModelInstance *pSModelInstance); //Vidovic
 		void SortScoreMatchMatrix(bool descending = false); //Vidovic
 		void EvaluateMatchesByScore_(FILE *fp, FILE *fpLog, int nBestSegments = 0); //Vidovic
 		void WriteClusterNormalDistribution(FILE *fp);
@@ -367,6 +374,15 @@ namespace RVL
 		int TP;
 		int FP;
 		int FN;
+		QList<QLIST::Index> *pISampleCandidateList;
+		Array<QLIST::Index> iValidSampleCandidate;
+		Array<QLIST::Index> iValid;
+		Array<QLIST::Index> iRansacCandidates;
+		Array<QLIST::Index> iConsensus;
+		Array<QLIST::Index> iConsensusTemp;
+		Array<Array<float>> e;
+		Array<Array<float>> tBestMatch;
+		Array<float> score;
 	};
 }
 
