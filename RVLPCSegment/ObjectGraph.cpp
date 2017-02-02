@@ -1557,8 +1557,8 @@ void ObjectGraph::DetermineObjectConvexityData(float convexThr, float ratioThr)
 		this->additionalObjectData.ObjectsSurfelConvexity.clear();
 	this->additionalObjectData.ObjectsSurfelConvexity.resize(this->NodeArray.n); //allocate
 	
-	bool *bVertexInCH = new bool[pSurfels->vertexArray.n];
-	memset(bVertexInCH, 0, pSurfels->vertexArray.n * sizeof(bool));
+	//bool *bVertexInCH = new bool[pSurfels->vertexArray.n];
+	//memset(bVertexInCH, 0, pSurfels->vertexArray.n * sizeof(bool));
 	
 	//running through all objects
 	GRAPH::AggregateNode<SURFEL::AgEdge> *pObject;
@@ -1653,8 +1653,9 @@ void ObjectGraph::DetermineObjectConvexityData(float convexThr, float ratioThr)
 				while (qlistelement)
 				{
 					this->additionalObjectData.CHVertexIndices.at(iObject).insert(qlistelement->Idx);
-						bVertexInCH[qlistelement->Idx] = true;
-					}
+					
+					//bVertexInCH[qlistelement->Idx] = true;
+					//}
 
 					//Next
 					qlistelement = qlistelement->pNext;
@@ -1670,7 +1671,7 @@ void ObjectGraph::DetermineObjectConvexityData(float convexThr, float ratioThr)
 	}	// for every object
 	//Deref
 	delete[] sortedElementIdxArray.Element;
-	delete[] bVertexInCH;
+	//delete[] bVertexInCH;
 }
 
 void ObjectGraph::CalculateObjectsColorHistogram()
