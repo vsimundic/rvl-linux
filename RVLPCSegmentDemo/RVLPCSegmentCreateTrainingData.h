@@ -17,4 +17,5 @@ void GenerateSSF(SurfelGraph *surfels, std::string filename);
 void GenerateSSF(SurfelGraph *surfels, std::string filename, int minSurfelSize, bool checkbackground = true);
 void RunSeg2Bench(bool save = false);
 cv::Mat GenColoredSurfelImgFromSSF(std::shared_ptr<SceneSegFile::SceneSegFile> ssf);
+cv::Mat GenColoredSegmentationImgFromObjectGraph_SSF(SURFEL::ObjectGraph* objects);
 cv::Mat GenColoredSegmentationImgFromObjectGraph(SURFEL::ObjectGraph* objects);

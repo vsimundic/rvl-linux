@@ -23,6 +23,7 @@
 #include "RVLParameterList.h"
 //#include "RVL3DPose.h"
 //#include "RGBDCamera.h"
+#include "RVLColorDescriptor.h"
 
 //struct PIX_ARRAY
 //{

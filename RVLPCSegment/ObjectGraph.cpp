@@ -1551,8 +1551,7 @@ void ObjectGraph::DetermineObjectConvexityData(float convexThr, float ratioThr)
 		// Sort surfels in objects.
 		this->SortElements(pObject, &sortedElementIdxArray);
 
-		/*while (piElement)
-		{*/
+		//Run through surfels
 		for (int iS = 0; iS < sortedElementIdxArray.n; iS++)
 		{
 			sortedIdx = sortedElementIdxArray.Element + iS;
@@ -1563,15 +1562,17 @@ void ObjectGraph::DetermineObjectConvexityData(float convexThr, float ratioThr)
 			
 			fail = false;
 			//runnong through a current list of added object vertices
-			for (int i = 0; i < this->additionalObjectData.CHVertexIndices.at(iObject).size(); i++)
+			for (CHVertexIndices_iterator_type iterator = this->additionalObjectData.CHVertexIndices.at(iObject).begin(); iterator != this->additionalObjectData.CHVertexIndices.at(iObject).end(); iterator++)
 			{
-				rvlvertexInList = this->pSurfels->vertexArray.Element[this->additionalObjectData.CHVertexIndices.at(iObject).at(i)];
-				if ((pSurfel->N[0] * rvlvertexInList->P[0] + pSurfel->N[1] * rvlvertexInList->P[1] + pSurfel->N[2] * rvlvertexInList->P[2] + pSurfel->d) > convexThr)
+				//*iterator = value
+				rvlvertexInList = this->pSurfels->vertexArray.Element[*iterator];
+				if ((pSurfel->N[0] * rvlvertexInList->P[0] + pSurfel->N[1] * rvlvertexInList->P[1] + pSurfel->N[2] * rvlvertexInList->P[2] - pSurfel->d) > convexThr)
 				{
 					fail = true;
 					break;
 				}
 			}
+
 			//Check the other direction (if vertex from current surfels is below surfels that were added in CH)
 			for (ObjectsSurfelConvexity_iterator_type iterator = this->additionalObjectData.ObjectsSurfelConvexity.at(iObject).begin(); iterator != this->additionalObjectData.ObjectsSurfelConvexity.at(iObject).end(); iterator++)
 			{
@@ -1582,13 +1583,13 @@ void ObjectGraph::DetermineObjectConvexityData(float convexThr, float ratioThr)
 					//getting added surfel
 					pSurfelIN = this->pSurfels->NodeArray.Element + iterator->first;
 					//getting current surfel vertex list
-					pSurfelVertexListSurfelIN = this->pSurfels->surfelVertexList.Element + iterator->first;
+					pSurfelVertexListSurfelIN = this->pSurfels->surfelVertexList.Element + sortedIdx->idx;	//CHECK IDX!!!!!!!!sortedIdx->idx!!!!!!!!
 					//running through added surfel vertices
 					qlistelement = pSurfelVertexListSurfelIN->pFirst;
 					while (qlistelement)
 					{
 						rvlvertex = this->pSurfels->vertexArray.Element[qlistelement->Idx];
-						if ((pSurfelIN->N[0] * rvlvertex->P[0] + pSurfelIN->N[1] * rvlvertex->P[1] + pSurfelIN->N[2] * rvlvertex->P[2] + pSurfelIN->d) > convexThr)
+						if ((pSurfelIN->N[0] * rvlvertex->P[0] + pSurfelIN->N[1] * rvlvertex->P[1] + pSurfelIN->N[2] * rvlvertex->P[2] - pSurfelIN->d) > convexThr)
 						{
 							fail = true;
 							break;
@@ -1601,23 +1602,21 @@ void ObjectGraph::DetermineObjectConvexityData(float convexThr, float ratioThr)
 				if (fail)
 					break;
 			}
-			//add fail falg for current surfel
-			this->additionalObjectData.ObjectsSurfelConvexity.at(iObject).insert(std::pair<int, bool>(sortedIdx->idx/*piElement->Idx*/, !fail));
+			//add fail flag for current surfel
+			this->additionalObjectData.ObjectsSurfelConvexity.at(iObject).insert(std::pair<int, bool>(sortedIdx->idx, !fail));
 			//if not failed add vertices to list
 			if (!fail)
 			{
 				qlistelement = pSurfelVertexList->pFirst;
 				while (qlistelement)
 				{
-					this->additionalObjectData.CHVertexIndices.at(iObject).push_back(qlistelement->Idx);
+					this->additionalObjectData.CHVertexIndices.at(iObject).insert(qlistelement->Idx);
 					//Next
 					qlistelement = qlistelement->pNext;
 				}
 				//update size
 				addedSize += pSurfel->size;
 			}
-			////Next
-			//piElement = piElement->pNext;
 		}
 
 		//check ratio
@@ -1626,5 +1625,346 @@ void ObjectGraph::DetermineObjectConvexityData(float convexThr, float ratioThr)
 	}
 	//Deref
 	delete[] sortedElementIdxArray.Element;
+}
+
+void ObjectGraph::CalculateObjectsColorHistogram()
+{
+	//Reseting color descriptor data
+	if (this->additionalObjectData.colordescriptor.size())
+		this->additionalObjectData.colordescriptor.clear();
+	this->additionalObjectData.colordescriptor.resize(this->NodeArray.n); //allocate
+
+	//running through all objects
+	GRAPH::AggregateNode<SURFEL::AgEdge> *pObject;
+	QLIST::Index *piElement;
+	Surfel *pSurfel;
+	for (int iObject = 0; iObject < this->NodeArray.n; iObject++)
+	{
+		pObject = this->NodeArray.Element + iObject;
+
+		piElement = pObject->elementList.pFirst;
+
+		//check if object
+		if (!piElement)
+			continue;
+
+		//we are not intrested in objects with size less than 20 points???
+		if (pObject->size < 20)
+			continue;
+		//Find prototype
+		while (piElement)
+		{
+			pSurfel = pSurfels->NodeArray.Element + piElement->Idx;
+			//check 
+			if (!((pSurfel->size <= 1) || pSurfel->bEdge))
+			{
+				RVLColorDescriptor newDesc(*pSurfel->colordescriptor); //prototype
+				this->additionalObjectData.colordescriptor.at(iObject) = newDesc;
+				break;
+			}
+
+			piElement = piElement->pNext;
+		}
+		//running through object's surfels
+		while (piElement)
+		{
+			pSurfel = pSurfels->NodeArray.Element + piElement->Idx;
+			//check 
+			if (!((pSurfel->size <= 1) || pSurfel->bEdge))
+			{
+				this->additionalObjectData.colordescriptor.at(iObject) += *(pSurfel->colordescriptor);
+			}
+
+			piElement = piElement->pNext;
+		}
+	}
+}
+
+void ObjectGraph::CalculateConvexityRatiosForObjectPair(int firstObject, int secondObject, float& firstRatio, float& secondRatio, float convexThr)
+{
+	GRAPH::AggregateNode<SURFEL::AgEdge> *pFirstObject = this->NodeArray.Element + firstObject;
+	GRAPH::AggregateNode<SURFEL::AgEdge> *pSecondObject = this->NodeArray.Element + secondObject;
+	std::map<int, Surfel*> aggregateObject; //Sorted in ascending order by definition
+	std::map<int, Surfel*>::reverse_iterator aggObjIt;	//Reverse iterator (Descending order)
+	std::map<int, Surfel*>::reverse_iterator aggObjItSec;
+	std::map<int, int> aggregateObjectIdx; //Sorted in ascending order by definition
+	std::map<int, int>::reverse_iterator aggObjIdxId;
+	//Aggregate object
+	QLIST::Index *piElement;
+	Surfel *pSurfel;
+	Surfel *pSurfelIN;
+	//First
+	piElement = pFirstObject->elementList.pFirst;
+	int firstTotal = 0;
+	int keyVal;
+	while (piElement)
+	{
+		pSurfel = pSurfels->NodeArray.Element + piElement->Idx;
+		//check 
+		if (!((pSurfel->size <= 1) || pSurfel->bEdge))
+		{
+			//Find key value (if there are two surfels with same size)
+			keyVal = pSurfel->size;
+			while(aggregateObject.count(keyVal))
+			{
+				keyVal++;
+			}
+			aggregateObject.insert(std::pair<int, Surfel*>(keyVal, pSurfel));
+			aggregateObjectIdx.insert(std::pair<int, int>(keyVal, firstObject));
+			firstTotal += pSurfel->size;
+		}
+
+		piElement = piElement->pNext;
+	}
+	//Second
+	piElement = pSecondObject->elementList.pFirst;
+	int secondTotal = 0;
+	while (piElement)
+	{
+		pSurfel = pSurfels->NodeArray.Element + piElement->Idx;
+		//check 
+		if (!((pSurfel->size <= 1) || pSurfel->bEdge))
+		{
+			//Find key value (if there are two surfels with same size)
+			keyVal = pSurfel->size;
+			while (aggregateObject.count(keyVal))
+			{
+				keyVal++;
+			}
+			aggregateObject.insert(std::pair<int, Surfel*>(keyVal, pSurfel));
+			aggregateObjectIdx.insert(std::pair<int, int>(keyVal, secondObject));
+			secondTotal += pSurfel->size;
+		}
+
+		piElement = piElement->pNext;
+	}
+
+	//Running through added surfels in reverse order
+	QList<QLIST::Index> *pSurfelVertexList;
+	QList<QLIST::Index> *pSurfelVertexListIN;
+	SURFEL::Vertex * rvlvertex;
+	QLIST::Index *qlistelement;
+	int surfelIdx;
+	int surfelIdxOther;
+	bool fail;
+	std::set<int> chVertexIndices;
+	std::set<int>::iterator chVertexIndices_iterator;
+	bool *added = new bool[aggregateObject.size()];
+	memset(added, 0, aggregateObject.size() * sizeof(bool));
+	int currIdx = 0;
+	int currIdxIN = 0;
+	for (aggObjIt = aggregateObject.rbegin(); aggObjIt != aggregateObject.rend(); ++aggObjIt)
+	{
+		//iterator->first = key
+		//iterator->second = value
+
+		//getting current surfel
+		pSurfel = aggObjIt->second;
+		surfelIdx = pSurfel - pSurfels->NodeArray.Element;
+		//std::cout << aggObjIt->first << ", " << pSurfel->size << std::endl;
+		//getting current surfel vertex list
+		pSurfelVertexList = this->pSurfels->surfelVertexList.Element + surfelIdx; //piElement->Idx;
+
+		fail = false;
+		//runnong through a current list of added object vertices
+		for (chVertexIndices_iterator = chVertexIndices.begin(); chVertexIndices_iterator != chVertexIndices.end(); chVertexIndices_iterator++)
+		{
+			//*iterator = value
+			rvlvertex = this->pSurfels->vertexArray.Element[*chVertexIndices_iterator];
+			if ((pSurfel->N[0] * rvlvertex->P[0] + pSurfel->N[1] * rvlvertex->P[1] + pSurfel->N[2] * rvlvertex->P[2] - pSurfel->d) > convexThr)
+			{
+				fail = true;
+				break;
+			}
+		}
+
+		//Check the other direction (if vertex from current surfels is below surfels that were added in CH)
+		currIdxIN = 0;
+		for (aggObjItSec = aggregateObject.rbegin(); aggObjItSec != aggregateObject.rend(); aggObjItSec++)
+		{
+			//iterator->first = key
+			//iterator->second = value
+			if (added[currIdxIN])	//if surfel was valid
+			{
+				//getting added surfel
+				pSurfelIN = aggObjItSec->second;
+				surfelIdxOther = pSurfelIN - pSurfels->NodeArray.Element;
+				//getting current surfel vertex list
+				pSurfelVertexListIN = this->pSurfels->surfelVertexList.Element + surfelIdx;
+				//running through added surfel vertices
+				qlistelement = pSurfelVertexListIN->pFirst;
+				while (qlistelement)
+				{
+					rvlvertex = this->pSurfels->vertexArray.Element[qlistelement->Idx];
+					if ((pSurfelIN->N[0] * rvlvertex->P[0] + pSurfelIN->N[1] * rvlvertex->P[1] + pSurfelIN->N[2] * rvlvertex->P[2] - pSurfelIN->d) > convexThr)
+					{
+						fail = true;
+						break;
+					}
+					//Next
+					qlistelement = qlistelement->pNext;
+				}
+			}
+
+			if (fail)
+				break;
+			currIdxIN++;
+		}
+		//if not failed add vertices to list
+		if (!fail)
+		{
+			qlistelement = pSurfelVertexList->pFirst;
+			while (qlistelement)
+			{
+				chVertexIndices.insert(qlistelement->Idx);
+				//Next
+				qlistelement = qlistelement->pNext;
+			}
+			added[currIdx] = true;
+		}
+		//next surfel
+		currIdx++;
+	}
+
+	//analyze
+	currIdxIN = 0;
+	int firstAdded = 0;
+	int secondAdded = 0;
+	for (aggObjIt = aggregateObject.rbegin(), aggObjIdxId = aggregateObjectIdx.rbegin(); aggObjIdxId != aggregateObjectIdx.rend(); aggObjIt++, aggObjIdxId++)
+	{
+		//iterator->first = key
+		//iterator->second = value
+		if (added[currIdxIN])	//if surfel was valid
+		{
+			if (aggObjIdxId->second == firstObject)
+				firstAdded += aggObjIt->second->size;
+			else
+				secondAdded += aggObjIt->second->size;
+		}
+		currIdxIN++;
+	}
+	firstRatio = (float)firstAdded / firstTotal;
+	secondRatio = (float)secondAdded / secondTotal;
+
+	delete[] added;
+}
+
+void ObjectGraph::ObjectAggregationLevel2_ViaObjectPairConvexity(float convexThr, float ratioThr, int objValidThr, bool verbose)
+{
+	//running through all objects (Generating a list of valid objects)
+	GRAPH::AggregateNode<SURFEL::AgEdge> *pObject;
+	QLIST::Index *piElement;
+	std::vector<int> validObjects;
+	for (int iObject = 0; iObject < this->NodeArray.n; iObject++)
+	{
+		pObject = this->NodeArray.Element + iObject;
+
+		if (pObject->size < objValidThr)
+			continue;
+
+		piElement = pObject->elementList.pFirst;
+
+		//check if object
+		if (!piElement)
+			continue;
+		//
+		validObjects.push_back(iObject);
+	}
+
+	//Generating a list of possible merge pairs
+	float firstRatio = 0;
+	float secondRatio = 0;
+	QList<QLIST::Index> *pSurfelVertexList;
+	QLIST::Index *qlistelement;
+	SURFEL::Vertex * rvlvertex;
+	Surfel *pSurfel;
+	double P[3];
+	int ptIdx = 0;
+	std::vector<std::pair<int, int>> merge_pairs;
+	for (int iObject = 0; iObject < validObjects.size(); iObject++)
+	{
+		for (int iObject2 = iObject + 1; iObject2 < validObjects.size(); iObject2++)
+		{
+			this->CalculateConvexityRatiosForObjectPair(validObjects.at(iObject), validObjects.at(iObject2), firstRatio, secondRatio, convexThr);
+			if (verbose)
+				std::cout << "(" << validObjects.at(iObject) << ", " << validObjects.at(iObject2) << ")" << " = " << firstRatio << ", " << secondRatio << std::endl;
+			if ((firstRatio > ratioThr) && (secondRatio > ratioThr))
+				merge_pairs.push_back(std::make_pair(validObjects.at(iObject), validObjects.at(iObject2)));
+		}
+	}
+
+	//Generating merge clusters (object pairs is in decreasing order)
+	std::map<int, std::set<int>> merge_clusters;
+	std::map<int, std::set<int>>::iterator clustIt;
+	int foundSet = 0;
+	bool inserFirst;
+	for (int i = 0; i < merge_pairs.size(); i++)
+	{
+		foundSet = -1;
+		inserFirst = false;
+		//check if current pair first item is already defined as cluster leader (KEY)
+		if (merge_clusters.count(merge_pairs.at(i).first))
+			foundSet = merge_pairs.at(i).first;
+		else //check if current pair first item is already in some set
+		{
+			for (clustIt = merge_clusters.begin(); clustIt != merge_clusters.end(); clustIt++)
+			{
+				if (clustIt->second.count(merge_pairs.at(i).first))
+				{
+					foundSet = clustIt->first;
+					break;
+				}
+				else if (clustIt->second.count(merge_pairs.at(i).second))
+				{
+					foundSet = clustIt->first;
+					inserFirst = true;
+					break;
+				}
+			}
+		}
+		//if found then put the second element in pair in that set
+		if (foundSet >= 0)
+		{
+			if (inserFirst)
+				merge_clusters.at(foundSet).insert(merge_pairs.at(i).first);
+			else
+				merge_clusters.at(foundSet).insert(merge_pairs.at(i).second);
+		}
+		else //if not found then create new cluster and put second pair element in it (first pair is the KEY of map pair)
+		{
+			merge_clusters.insert(std::pair<int, std::set<int>>(merge_pairs.at(i).first, std::set<int>()));
+			merge_clusters.at(merge_pairs.at(i).first).insert(merge_pairs.at(i).second);
+		}
+	}
+
+	//Running through merge clusters and combining objects
+	std::set<int>::iterator clusterSetIt;
+	GRAPH::AggregateNode<SURFEL::AgEdge> *pNode1;
+	GRAPH::AggregateNode<SURFEL::AgEdge> *pNode2;
+	QList<QLIST::Index> *pElementList1;
+	QList<QLIST::Index> *pElementList2;
+	for (clustIt = merge_clusters.begin(); clustIt != merge_clusters.end(); clustIt++)
+	{
+		pNode1 = this->NodeArray.Element + clustIt->first; //main object is the KEY of cluster while other objects are elements of the set
+
+		pElementList1 = &(pNode1->elementList);
+		for (clusterSetIt = clustIt->second.begin(); clusterSetIt != clustIt->second.end(); clusterSetIt++)
+		{
+			pNode2 = this->NodeArray.Element + *clusterSetIt;	//get second object
+
+			pElementList2 = &(pNode2->elementList);
+
+			// iNode1 <- union of iNode1 and iNode2 
+
+			RVLQLIST_APPEND(pElementList1, pElementList2);	//append their surfels
+
+			// iNode2 <- empty set
+
+			RVLQLIST_INIT(pElementList2);	//reset list
+			if (verbose)
+				std::cout << "Merged: " << clustIt->first << ", " << *clusterSetIt << std::endl;
+		}
+
+	}
 }
 

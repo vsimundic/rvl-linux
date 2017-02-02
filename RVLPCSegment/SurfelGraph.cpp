@@ -2088,3 +2088,28 @@ void SurfelGraph::Save(
 			SaveSurfel(fp, iSurfel);
 }
 
+void SurfelGraph::CalculateSurfelsColorHistograms(cv::Mat img, int colorspace, bool oneDimensional, const int *bindata, bool noBins)
+{
+	//Calculate color histograms for all surfels in surfel graph
+	Surfel *pCurrSurfel = NodeArray.Element;
+	uint8_t colorPts[640 * 480 * 3];
+	for (int s = 0; s < NodeArray.n; pCurrSurfel++, s++)
+	{
+		//check 
+		if ((pCurrSurfel->size <= 1) || pCurrSurfel->bEdge)
+			continue;
+		//create descriptor
+		pCurrSurfel->colordescriptor = new RVLColorDescriptor(colorspace, oneDimensional, bindata, noBins);
+		//run through all surfel pixels and filling array
+		RVL::QLIST::Index2 *pt;
+		pt = pCurrSurfel->PtList.pFirst;
+		for (int i = 0; i < pCurrSurfel->size; i++)
+		{
+			memcpy(&colorPts[i * 3], &img.data[pt->Idx * 3], 3); //Hardcoded for 3-channel images
+			pt = pt->pNext;
+		}
+		//Calculate histogram
+		pCurrSurfel->colordescriptor->InsertArrayIntoHistogram(colorPts, pCurrSurfel->size);
+	}
+
+}

@@ -103,6 +103,7 @@ namespace RVL
 		std::vector<Surfel*> imgAdjacency;	//Filko
 		std::vector<SurfelAdjecencyDescriptors*> imgAdjacencyDescriptors;	//Filko
 		std::vector<int> GTObjHist; //Filko
+		RVLColorDescriptor *colordescriptor; //Filko
 #endif
 	};
 
@@ -185,6 +186,8 @@ namespace RVL
 			char *meshFileName,
 			int minSurfelSize);
 #endif
+		//Filko
+		void CalculateSurfelsColorHistograms(cv::Mat img, int colorspace, bool oneDimensional, const int *bindata, bool noBins);
 
 	public:	
 		CRVLParameterList ParamList;
