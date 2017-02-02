@@ -104,40 +104,6 @@ namespace RVL
 //V = [x y z]'
 #define RVLSET3VECTOR(V, x, y, z)	{V[0] = x; V[1] = y; V[2] = z;}
 
-// RVLQListArray
-
-#define RVLQLIST_GET_NEXT_CIRCULAR(pList, pElement)	{pElement = pElement->pNext; if(!pElement) pElement = pList->pFirst;}
-
-namespace RVL
-{
-	namespace QLIST
-	{
-		template<typename T>
-		void CreatePtrArray(QList<T> *pList, Array<T *> *pArray)
-		{
-			T *pData = pList->pFirst;
-
-			T **ppData_ = pArray->Element;
-
-			while (pData)
-			{
-				*(ppData_++) = pData;
-
-				pData = pData->pNext;
-			}
-
-			pArray->n = ppData_ - pArray->Element;
-		}
-
-		template <typename T> struct Entry
-		{
-			T data;
-			Entry<T> *pNext;
-		};
-	}
-}
-
-
 // RVLMem
 
 #define RVLMEM_SET_FREE(pMem, pFreeMem)		pMem->m_pFreeMem = (unsigned char *)(pFreeMem);

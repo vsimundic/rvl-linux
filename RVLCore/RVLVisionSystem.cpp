@@ -11,6 +11,8 @@ CRVLVisionSystem::CRVLVisionSystem()
 
 	m_ImageFileName = NULL;
 
+	m_SampleStep = 1;
+
 	m_Mem0Size = 150000000;
 	m_MemSize = 1000000000;
 	m_Mem2Size = 150000000;
@@ -67,6 +69,7 @@ void CRVLVisionSystem::CreateParamList()
 	pParamData = m_ParamList.AddParam("VS.maxTilt", RVLPARAM_TYPE_DOUBLE, &(m_LidarParams.maxTilt));
 	pParamData = m_ParamList.AddParam("VS.dTilt", RVLPARAM_TYPE_DOUBLE, &(m_LidarParams.dTilt));
 	pParamData = m_ParamList.AddParam("VS.nPanIn120deg", RVLPARAM_TYPE_INT, &(m_LidarParams.nPanIn120deg));
+	pParamData = m_ParamList.AddParam("VS.SampleStep", RVLPARAM_TYPE_INT, &m_SampleStep);
 }
 
 DWORD CRVLVisionSystem::Init(char *CfgFile2Name)

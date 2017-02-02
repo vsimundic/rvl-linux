@@ -97,6 +97,8 @@
 	Array.n = pData - Array.Element;\
 }
 
+#define RVLQLIST_GET_NEXT_CIRCULAR(pList, pElement)	{pElement = pElement->pNext; if(!pElement) pElement = pList->pFirst;}
+
 struct RVLQLIST	
 {
 	void *pFirst;
@@ -303,6 +305,29 @@ namespace RVL
 
 			pArray->n = pData_ - pArray->Element;
 		}
+
+		template<typename T>
+		void CreatePtrArray(QList<T> *pList, Array<T *> *pArray)
+		{
+			T *pData = pList->pFirst;
+
+			T **ppData_ = pArray->Element;
+
+			while (pData)
+			{
+				*(ppData_++) = pData;
+
+				pData = pData->pNext;
+			}
+
+			pArray->n = ppData_ - pArray->Element;
+		}
+
+		template <typename T> struct Entry
+		{
+			T data;
+			Entry<T> *pNext;
+		};
 
 		template<typename T>
 		void InitListArray(Array<QList<T>> &EmptyListArray, Array<QList<T>> &ListArray)

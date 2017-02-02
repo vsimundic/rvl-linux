@@ -112,6 +112,7 @@
 #define RVLPSULMBUILDER_FLAG2_WIDE_ANGLE_HYPOTHESIS_GENERATION	0x00000400
 #define RVLPSULMBUILDER_FLAG2_IMAGE_FORMAT						0x00000800
 #define RVLPSULMBUILDER_FLAG2_IMAGE_FORMAT_FREIBURG				0x00000800
+#define RVLPSULMBUILDER_FLAG2_UNCONSTRAINED_ORIENTATION			0x00001000		// 1701
 #define RVLPSULMBUILDER_CREATEMODEL_FLAG_PERMANENT				0x00000001
 #define RVLPSULMBUILDER_CREATEMODEL_FROM_IMAGE					0x00000002
 #define RVLPSULMBUILDER_CREATEMODEL_IMAGE_FROM_FILE				0x00000004
@@ -422,7 +423,7 @@ public:
 	double m_LastDOFLineOverlapThr;		// todo: add to param. list
 	double m_LastDOFLineRotationStD;	// todo: add to param. list
 	double m_LastDOFLineTranslationStD;	// todo: add to param. list
-	double m_maxLastDOFTravelDist;		// todo: add to param. list
+	double m_maxLastDOFTravelDist;
 	double m_LastDOFResolution;			// todo: add to param. list
 	int m_nLastDOFGaussianSamples;		// todo: add to param. list
 	double m_maxLastDOFstdTD;			// todo: add to param. list
@@ -764,15 +765,23 @@ public:
 	void MergeSurfaces(CRVLPSuLM *pPSuLM);
 	void MergeLines(CRVLPSuLM *pPSuLM);
 	void UpdateBuffers(CRVLPSuLM *pPSuLM);
-	bool GetOdometry(	char *ImageFileName,
-										CRVL3DPose *pPose,
-										int &iSample0,
-										unsigned char &command);
+	bool GetOdometry(
+		char *ImageFileName,
+		CRVL3DPose *pPose,
+		char *extension,
+		int &iSample0,
+		unsigned char &command);
 	void GetCell(
 		double *X,
 		int & i, 
 		int & j);
 	void InitHypothesisEvaluation3(CRVLPSuLM * pPSuLM);
+	bool Compute5DoFPose(
+		RVLPSULM_HG_NODE *pNode,
+		RVLPSULM_MSMATCH_DATA *MatchList,
+		double *tInit,
+		RVLSURFACE_MATCH_ARRAY *pMatchData,
+		CRVL3DPose *pPoseSM);
 
 private:
 	RVLPSULM_MSMATCH_DATA *HypothesesGetNextNode(	RVLPSULM_HG_NODE* pNode,

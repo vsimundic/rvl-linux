@@ -2615,11 +2615,11 @@ BOOL RVLGetFirstValidFileName(char *FileName, char *Extension, int maxiSample, i
 	return TRUE;	
 }
 
-BOOL RVLGetNextFileName(char *FileName, char *Extension, int maxiSample)
+BOOL RVLGetNextFileName(char *FileName, char *Extension, int maxiSample, int diSample)
 {
 	int iSample = RVLGetFileNumber(FileName, Extension);
 
-	if(!RVLGetFirstValidFileName(FileName, Extension, maxiSample, iSample + 1))
+	if (!RVLGetFirstValidFileName(FileName, Extension, maxiSample, iSample + diSample))
 	{
 		RVLSetFileNumber(FileName, Extension, iSample);
 
