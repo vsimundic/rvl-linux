@@ -50,6 +50,7 @@ public:
 	int m_nPC;
 	double *m_PC;
 	RVLLIDAR_PARAMS m_LidarParams;
+	int m_SampleStep;
 
 public:
 	CRVLVisionSystem();

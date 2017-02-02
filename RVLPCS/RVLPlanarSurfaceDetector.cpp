@@ -17135,13 +17135,16 @@ void CRVLPlanarSurfaceDetector::GetOrgPC(double * PC, int n)
 			if(v >= m_Height)
 				continue;
 
+			r = sqrt(RVLDOTPRODUCT3(X_, X_));
+
+			if (r < 500.0)
+				continue;
+
 			iPix = u + v * m_Width;
 
 			Point3DMap = m_Point3DMap + iFOVExtension * ImageSize;
 
 			p3DPt = Point3DMap[iPix];
-
-			r = sqrt(RVLDOTPRODUCT3(X_, X_));
 
 			if(p3DPt)
 			{

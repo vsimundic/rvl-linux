@@ -2,8 +2,13 @@
 #include "Graph.h"
 #include <memory>
 #include "SceneSegFile.hpp"
+#include "SVMClassifier.h"
 
 //#define RVLPCSEGMENT_OBJECT_GRAPH_LOG
+
+#define RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_HEURISTIC	0
+#define RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_SVM			1
+#define RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_NLMC		2
 
 namespace RVL
 {
@@ -73,7 +78,7 @@ namespace RVL
 			void Create(SurfelGraph *pSurfels_);
 			void CreateFromSSF(std::string ssfFileName);	//Filko
 			void CalculateOverAndUnderSegmentation(int *E, int &N, bool useGTNoPix = true,  bool useBackground = true);	//Filko
-			void DetermineObjectConvexityData(float convexThr = 0.005, float ratioThr = 0.9);	//Filko
+			void DetermineObjectConvexityData(float convexThr = 0.005, float ratioThr = 0.8);	//Filko
 			void WERSegmentation();
 			void ComputeRelationCosts();
 			void ComputeRelationCost(
@@ -93,6 +98,7 @@ namespace RVL
 				unsigned char *color);
 			void WriteSurfelDataToFile(FILE *fp);
 			void WriteObjectDataToFile(FILE *fp);
+			void InitSVMClassifier(char *svmParamsFileName);	//Nyarko
 			void Debug();
 
 		public:
@@ -104,11 +110,13 @@ namespace RVL
 			int *objectMap;
 			std::shared_ptr<SceneSegFile::SceneSegFile> ssf;	//Filko
 			std::map<int, int> objID2idxMap; //Filko
+			SVMClassifier *pSVMClassifier;  //Nyarko
 			Array<int> objectArray;
 			float kCoverage;
 			float alpha;
 			ObjectGraphObjectData additionalObjectData;	//Filko
 			//Array<int> *sortedElementIdxArray;
+			DWORD relationClassifier;
 		private:
 			QLIST::Index *elementMem;
 			//int *sortedElementIdxMem;
