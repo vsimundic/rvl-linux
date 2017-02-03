@@ -25,7 +25,6 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 #include "RGBDCamera.h"
 #include "PCLMeshBuilder.h"
 
-//test za commit
 
 // VIDOVIC
 //#define RVL_COORDINATE_SYSTEM_NOISE_STABILITY_TEST
@@ -258,6 +257,8 @@ int main(int argc, char ** argv)
 
 		recognition.ParamList.LoadParams("RVLRecognitionDemo.cfg");
 
+		recognition.Create();
+
 		recognition.pMem = &mem;
 
 		recognition.pSurfels = &surfels;
@@ -378,7 +379,13 @@ int main(int argc, char ** argv)
 
 			recognition.SetNumberOfScenes(sceneSequence.nFileNames);
 
-			char filePath[200];
+			// Load GT file
+			ECCVGTLoader ECCVGT;
+			ECCVGT.Init(sceneSequence, GTFolder, modelsInDB);
+
+			char filePath[200];		
+
+			int nM = 35, nSM = 3;
 
 			while (sceneSequence.GetNextPath(filePath))
 			{
@@ -389,12 +396,15 @@ int main(int argc, char ** argv)
 				
 				recognition.SetSceneFileName(filePath);
 
-				// Load GT file
-				ECCVGTLoader ECCVGT;
-				ECCVGT.Init(sceneSequence, GTFolder, modelsInDB);
+				//Alokacija prostora za matcheve - TEMP
+				// List of matches
+				recognition.SMatch = new RECOG::PSGM_::SegmentMatch[recognition.nDominantClusters*nM*nSM]; //Petra	
+
+				//Sorted matches
+				recognition.sortedMatches = new SortIndex<float>[recognition.nDominantClusters*nM*nSM]; //Petra
 
 				recognition.Interpret(&mesh);
-				recognition.InterpreteCTIS(&mesh);
+				recognition.InterpreteCTIS(&mesh);				
 
 				//recognition.LoadCTI("D:\\ARP3D\\ECCV_dataset\\pcd_files\\frame_20111220T111153.549117.cti");
 
@@ -416,24 +426,87 @@ int main(int argc, char ** argv)
 				pMIE->d;
 				*/
 
+				//NEW PR calculation
+				RECOG::PSGM_::MatchInstance *pMatch;
+				pMatch = new RECOG::PSGM_::MatchInstance;
+
+				float distanceThresh = 50;
+
+				bool TPMatch;
+
+				int TP = 0, FP = 0, FN = 0;
+				float precision, recall;
+				int eStep;
+				float eThresh;
+				int nSortedMatches = 30;
+
+				int iSSegment, iMSegment;
+
+				for (eStep = 1; eStep <= 100; eStep++)
+				{
+					eThresh = (float)eStep;
+
+					for (iSSegment = 0; iSSegment < recognition.nDominantClusters; iSSegment++)
+					{
+						for (iMSegment = 0; iMSegment < nSortedMatches; iMSegment++)
+						{
+							int idxCTI = recognition.sortedMatches[nM*nSM*iSSegment + iMSegment].idx;
+
+							pMatch->iScene = 0;
+							pMatch->iModel = recognition.SMatch[idxCTI].iM;
+							pMatch->eSeg = recognition.SMatch[idxCTI].Eseg;
+
+							for (int i = 0; i < 3; i++)
+								pMatch->t[i] = recognition.SMatch[idxCTI].t[i];
+
+							if (pMatch->iModel == 24 && iSSegment == 1)
+								int debug2 = 0;
+
+							if ((pMatch->eSeg - eThresh) <= -1.4901161138336505e-009) //because of float precision => 0.1 is represented by 0.100000001
+							{
+								if (eThresh >= 13.5)
+									int debug = 0;
+
+								
+
+								TPMatch = recognition.CompareMatchToGT(pMatch, &ECCVGT, false, 0.0, distanceThresh);
+
+								if (!TPMatch)
+									FP++;
+							}
+						}
+					}
+
+					recognition.CountTPandFN(&ECCVGT, TP, FN, true);
+
+					recognition.CalculatePR(TP, FP, FN, precision, recall);
+
+					ECCVGT.ResetMatchFlag();
+
+					printf("TP: %d\n", TP);
+					printf("FP: %d\n", FP);
+					printf("FN: %d\n", FN);
+					printf("ProbabilityThresh: %f\n", eThresh);
+					printf("Precision: %f\n", precision);
+					printf("Recall: %f\n", recall);
+					printf("\n");
+					//fprintf(fp, "%d\t%f\t%f\t%f\t%f\t%f\n", graphID, angleThresh, distanceThresh, probabilityThresh, precision, recall);
+
+					TP = 0; FP = 0; FN = 0;
+				}
+
 				printf("Scene %s...finished!\n\n", filePath);
 				
 				// Visualization
 				
-				surfels.NodeColors(SelectionColor);
+				/*surfels.NodeColors(SelectionColor);
 				recognition.InitDisplay(&visualizer, &mesh, SelectionColor);
 				recognition.Display();
 				visualizer.Run();
-				visualizer.renderer->RemoveAllViewProps();
+				visualizer.renderer->RemoveAllViewProps();*/
 
 			}
 
-			//// Visualization
-
-			//surfels.NodeColors(SelectionColor);
-			//recognition.InitDisplay(&visualizer, &mesh, SelectionColor);
-			//recognition.Display();
-			//visualizer.Run();
 		}
 	}	// if (method == RVLRECOGNITION_METHOD_PSGM)
 

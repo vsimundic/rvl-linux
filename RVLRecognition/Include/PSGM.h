@@ -6,8 +6,10 @@
 #include "Eigen\Dense"
 namespace RVL
 {
-	class PSGM;
 
+
+	class PSGM;
+	class CTISet;
 	namespace RECOG
 	{
 		namespace PSGM_
@@ -121,6 +123,7 @@ namespace RVL
 				float score;
 				float angle;
 				float distance;
+				float eSeg;
 				MatchInstance *pNext;
 			};
 
@@ -153,12 +156,26 @@ namespace RVL
 				void *vpData);
 		}
 	}
+	class CTISet
+	{
+	public:
+		CTISet();
+		virtual ~CTISet();
+
+		void LoadSMCTI(char * filePath, Array<RECOG::PSGM_::Plane> *convexTemplate);
+
+		Array<RECOG::PSGM_::ModelInstance> CTI;
+		//std::vector<std::vector<int>> SegmentCTIs;
+		Array<Array<int>> SegmentCTIs;
+		int *segmentCTIIdxMem;
+	};
 
 	class PSGM
 	{
 	public:
 		PSGM();
 		virtual ~PSGM();
+		void Create();
 		void CreateParamList(CRVLMem *pMem);
 		void Interpret(
 			Mesh *pMesh);
@@ -166,23 +183,30 @@ namespace RVL
 		//Petra
 		void InterpreteCTIS(
 			Mesh *pMesh);
-		Eigen::MatrixXf MatchInPrimitiveSpace(
-			RECOG::PSGM_::ModelInstance *pCTI,
+		
+		void MatchInPrimitiveSpace(
 			Eigen::MatrixXf QM,
 			Eigen::MatrixXf M,
-			Eigen::VectorXf validS);
-		Eigen::MatrixXf UpdateMatchMatrix(
-			RECOG::PSGM_::ModelInstance *pCTI,
-			RECOG::PSGM_::ModelInstance *pModelInstance,
-			Eigen::MatrixXf e
+			int iCTI
 			);
-		void VisualizeCTIMatch(
+
+		void CTIMatch(
+			Eigen::MatrixXf dM,
+			int iCTI);
+
+		void UpdateMatchMatrix(
+			RECOG::PSGM_::SegmentMatch *SMatch,			
+			int iCTI
+			);
+
+		void VisualizeCTIMatch( //Damir
 			float *nT, 
 			float *dM, 
 			float *tM, 
 			float *dS, 
 			int *validS);
-		Eigen::Matrix<float, 3, 66> ConvexTemplatenT();
+		
+		Eigen::MatrixXf ConvexTemplatenT();
 		//end Petra
 
 		void InitDisplay(
@@ -209,7 +233,7 @@ namespace RVL
 		void SaveModelID(FileSequenceLoader dbLoader); //VIDOVIC
 		void Learn(char *modelSequenceFileName); //VIDOVIC
 		void LoadModelDataBase(); //VIDOVIC
-		void LoadCTI(char * filePath); //VIDOVIC
+		void LoadCTI(char * filePath); //VIDOVIC //Moved to CTISet class
 		void Match(); //VIDOVIC
 		void MSTransformation(RECOG::PSGM_::ModelInstance *pMModelInstance, RECOG::PSGM_::ModelInstance *pSModelInstance, float *tBestMatch, float *R, float *t); //VIDOVIC
 		void SetNumberOfScenes(int scenesNumber); //VIDOVIC
@@ -223,6 +247,10 @@ namespace RVL
 			float &precision,
 			float &recall); //Petra
 		void CompareSMIMatchesToGT(ECCVGTLoader *ECCVGT, float scoreThresh, float angleThresh, float distanceThresh, float &precision, float &recall); //VIDOVIC
+		bool PSGM::CompareMatchToGT(RECOG::PSGM_::MatchInstance *pMatch, ECCVGTLoader *ECCVGT, bool poseCheck, float angleThresh, float distanceThresh); //VIDOVIC
+		void PSGM::CountTPandFN(ECCVGTLoader *ECCVGT, int &TP, int &FN, bool printMatchInfo); //VIDOVIC
+		void PSGM::CalculatePR(int TP, int FP, int FN, float &precision, float &recall); //VIDOVIC
+
 	private:
 		void DetectVertices(
 			Mesh *pMesh);
@@ -280,6 +308,13 @@ namespace RVL
 		Array<RECOG::PSGM_::MatchInstance> matches; //VIDOVIC
 		RECOG::PSGM_::MatchInstance *pMatches; //VIDOVIC
 		QList<RECOG::PSGM_::MatchInstance> SMImatches; //VIDOVIC
+		Eigen::MatrixXf nT; //Petra
+		RECOG::PSGM_::SegmentMatch *SMatch; //Petra
+		SortIndex<float> *sortedMatches; //Petra
+		Eigen::VectorXf E;
+		Eigen::MatrixXf t;
+		CTISet CTIset;
+		CTISet MCTIset;
 
 	private:		
 		QLIST::Index *surfelVertexMem;
@@ -302,5 +337,8 @@ namespace RVL
 		char *sceneMIMatch; //VIDOVIC
 		int iScene; //VIDOVIC
 	};
+
+	
+
 }
 
