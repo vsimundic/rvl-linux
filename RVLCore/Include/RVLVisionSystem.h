@@ -25,6 +25,7 @@ struct RVLLIDAR_PARAMS
 	double maxTilt;
 	double dTilt;
 	int nPanIn120deg;
+	double scale;
 };
 
 class CRVLVisionSystem

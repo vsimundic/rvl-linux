@@ -12,6 +12,7 @@
 #include "SurfelGraph.h"
 #include "PlanarSurfelDetector.h"
 #include "RVLRecognition.h"
+#include "PSGMCommon.h"
 #include "CTISet.h"
 #include "PSGM.h"
 #include <Eigen\Eigenvalues>
@@ -1019,18 +1020,38 @@ void PSGM::CreateTemplate()
 		}
 	}
 
-	// Only for debugging purpose!
+	//// Only for debugging purpose!
 
-	FILE *fp = fopen("convex_template.txt", "w");
+	//FILE *fp = fopen("convex_template.txt", "w");
 
-	for (i = 0; i < convexTemplate.n; i++)
-		fprintf(fp, "%f\t%f\t%f\n", convexTemplate.Element[i].N[0], convexTemplate.Element[i].N[1], convexTemplate.Element[i].N[2]);
+	//for (i = 0; i < convexTemplate.n; i++)
+	//	fprintf(fp, "%f\t%f\t%f\n", convexTemplate.Element[i].N[0], convexTemplate.Element[i].N[1], convexTemplate.Element[i].N[2]);
 
-	fclose(fp);
+	//fclose(fp);
 
-	//
+	////
 
 	delete[] NT;
+}
+
+void PSGM::TemplateMatrix(Array2D<float> A)
+{
+	A.Element = new float[3 * convexTemplate.n];
+	A.w = 3;
+	A.h = convexTemplate.n;
+
+	int i;
+	float *a;
+	float *N;
+
+	for (i = 0; i < convexTemplate.n; i++)
+	{
+		a = A.Element + 3 * i;
+
+		N = convexTemplate.Element[i].N;
+
+		RVLCOPY3VECTOR(N, a);
+	}
 }
 
 void PSGM::FitModel(

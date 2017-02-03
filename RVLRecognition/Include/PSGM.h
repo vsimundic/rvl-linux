@@ -33,22 +33,6 @@ namespace RVL
 				QList<RECOG::PSGM_::ModelInstance> modelInstanceList;
 			};
 
-			struct Plane
-			{
-				float N[3];
-				float d;
-			};
-
-			struct Tangent
-			{
-				float N[3];
-				float V[3];
-				float d;
-				float len;
-				int iVertex[2];
-				bool bMerged;
-			};
-
 			struct TangentRegionGrowingData
 			{
 				RECOG::PSGM_::Plane planeA;
@@ -266,6 +250,7 @@ namespace RVL
 	private:
 		void Clusters();
 		void CreateTemplate();
+		void TemplateMatrix(Array2D<float> A);
 		void FitModel(
 			RECOG::PSGM_::Cluster *pCluster,
 			RECOG::PSGM_::ModelInstance *pModelInstance);

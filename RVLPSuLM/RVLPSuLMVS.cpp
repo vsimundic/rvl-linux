@@ -88,6 +88,8 @@ void CRVLPSuLMVS::Init(char * CfgFile2Name)
 	m_PSuLMBuilder.m_pStereoVision = &m_StereoVision;
 	m_PSuLMBuilder.m_pTimer = m_pTimer;
 	m_PSuLMBuilder.m_pAImage = &m_AImage;
+	
+	m_PSuLMBuilder.m_PCScale = m_LidarParams.scale;
 
 	m_PSuLMBuilder.CreateParamList(&m_Mem0);
 

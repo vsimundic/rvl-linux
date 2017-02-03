@@ -18,6 +18,7 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 #include "RVLRecognition.h"
 #include "RFRecognition.h"
 #include "RVLMeshNoiser.h"
+#include "PSGMCommon.h"
 #include "CTISet.h"
 #include "PSGM.h"
 #include <pcl/common/common.h>

@@ -11,6 +11,7 @@
 #include "SurfelGraph.h"
 #include "PlanarSurfelDetector.h"
 #include "RVLRecognition.h"
+#include "PSGMCommon.h"
 #include "CTISet.h"
 #include <Eigen\Eigenvalues>
 
