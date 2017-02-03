@@ -33,6 +33,9 @@ namespace RVL
 			CTISet();
 			virtual ~CTISet();
 			void Load(char * filePath);
+			void Init();
+			void AddCTI(RECOG::PSGM_::ModelInstance *pCTI_);
+			void CopyCTIsToArray();
 
 		public:
 			int nT;

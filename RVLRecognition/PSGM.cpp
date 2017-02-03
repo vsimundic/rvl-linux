@@ -24,6 +24,7 @@ PSGM::PSGM()
 	mode = RVLRECOGNITION_MODE_RECOGNITION;
 	bZeroRFDescriptor = false;
 	bGTRFDescriptors = false;
+	bMatchRANSAC = false;
 
 	nDominantClusters = 1;
 	kNoise = 1.2f;
@@ -47,12 +48,12 @@ PSGM::PSGM()
 
 	CreateTemplate();
 
-	//VIDOVIC
+	//Vidovic
 	centroidID.n = 6;
 	centroidID.Element = new QLIST::Index[centroidID.n];
 
 	ConvexTemplateCentoidID();
-	//END VIDOVIC
+	//END Vidovic
 
 	clusters.Element = NULL;
 	clusterMap = NULL;
@@ -61,33 +62,21 @@ PSGM::PSGM()
 	clusterVertexMem = NULL;
 	//modelInstanceMem = NULL;
 	sceneFileName = NULL;
-	modelInstanceDB.Element = NULL; //VIDOVIC
-	modelInstanceDB.n = 0; //VIDOVIC
-	modelDataBase = NULL; //VIDOVIC
-	modelsInDataBase = NULL; //VIDOVIC
-	sceneMIMatch = NULL; //VIDOVIC
-	matchMatrix.Element = NULL;
-	matchMatrix.n = 0;	
-	
-	nSModelInstances = 0; //VIDOVIC
+	modelInstanceDB.Element = NULL; //Vidovic
+	modelInstanceDB.n = 0; //Vidovic
+	modelDataBase = NULL; //Vidovic
+	modelsInDataBase = NULL; //Vidovic
+	sceneMIMatch = NULL; //Vidovic	
 
-	nSamples = 20; //VIDOVIC
-	stdNoise = 2; //VIDOVIC
+	//nSamples = 20; //Vidovic
+	stdNoise = 2; //Vidovic
 
-	bNormalValidityTest = true; //VIDOVIC
+	bNormalValidityTest = true; //Vidovic
 
-	matches.Element = NULL; //VIDOVIC
 	iScene = 0;
 
 	//Vidovic
 	pECCVGT = new ECCVGTLoader;
-
-	TP = 0;
-	FP = 0;
-	FN = 0;
-
-	matchMatrix.Element = NULL;
-	sortedMatches.Element = NULL;
 
 	scoreMatchMatrix.Element = NULL;
 	scoreMatchMatrix.n = 0;
@@ -102,6 +91,24 @@ PSGM::PSGM()
 	iConsensus.Element = new QLIST::Index[convexTemplate.n];
 	
 	iConsensusTemp.Element = new QLIST::Index[convexTemplate.n];
+
+	pCTImatchesArray.Element = NULL;
+	pCTImatchesArray.n = 0;
+
+	segmentGT.Element = NULL;
+
+	e.Element = NULL;
+
+	tBestMatch.Element = NULL;
+
+	score.Element = NULL;
+
+	pCTImatchesArray.Element = NULL;
+
+	int iSSegment;
+
+	scoreMatchMatrix.Element = NULL;
+	scoreMatchMatrix.n = 0;
 
 	//fpTime = fopen("C:\\RVL\\MatchTime_WithoutRansac.txt", "w");
 	//End Vidovic
@@ -118,40 +125,29 @@ PSGM::~PSGM()
 	RVL_DELETE_ARRAY(convexTemplate.Element);	
 	//RVL_DELETE_ARRAY(modelInstanceMem);
 	RVL_DELETE_ARRAY(sceneFileName);
-	RVL_DELETE_ARRAY(modelInstanceDB.Element); //VIDOVIC
-	RVL_DELETE_ARRAY(modelDataBase); //VIDOVIC
-	RVL_DELETE_ARRAY(modelsInDataBase); //VIDOVIC
-	RVL_DELETE_ARRAY(sceneMIMatch); //VIDOVIC
-	RVL_DELETE_ARRAY(matches.Element); //VIDOVIC
-	RVL_DELETE_ARRAY(centroidID.Element); //VIDOVIC
+	RVL_DELETE_ARRAY(modelInstanceDB.Element); //Vidovic
+	RVL_DELETE_ARRAY(modelDataBase); //Vidovic
+	RVL_DELETE_ARRAY(modelsInDataBase); //Vidovic
+	RVL_DELETE_ARRAY(sceneMIMatch); //Vidovic
+	RVL_DELETE_ARRAY(centroidID.Element); //Vidovic
+	RVL_DELETE_ARRAY(pCTImatchesArray.Element); //Vidovic
+	RVL_DELETE_ARRAY(segmentGT.Element); //Vidovic
 
 	//Vidovic
 	int iSSegment;
 
-	if (matchMatrix.Element && sortedMatches.Element)
-	{
-		for (iSSegment = 0; iSSegment < nDominantClusters; iSSegment++)
-		{
-			RVL_DELETE_ARRAY(matchMatrix.Element[iSSegment].Element);
-			RVL_DELETE_ARRAY(sortedMatches.Element[iSSegment].Element);
-		}
-	}
-
-	RVL_DELETE_ARRAY(matchMatrix.Element);
-	RVL_DELETE_ARRAY(sortedMatches.Element)
-
 	pECCVGT->~ECCVGTLoader();
 
 	//Delete arrays used in Match() function
-	RVL_DELETE_ARRAY(iConsensusTemp.Element);
+	RVL_DELETE_ARRAY(iValidSampleCandidate.Element);
 
 	RVL_DELETE_ARRAY(iValid.Element);
 
-	RVL_DELETE_ARRAY(iConsensus.Element);
-
 	RVL_DELETE_ARRAY(iRansacCandidates.Element);
 
-	RVL_DELETE_ARRAY(iValidSampleCandidate.Element);
+	RVL_DELETE_ARRAY(iConsensus.Element);
+
+	RVL_DELETE_ARRAY(iConsensusTemp.Element);	
 
 	for (int i = 0; i < MCTISet.pCTI.n; i++)
 	{
@@ -164,6 +160,14 @@ PSGM::~PSGM()
 	RVL_DELETE_ARRAY(tBestMatch.Element);
 
 	RVL_DELETE_ARRAY(score.Element);
+
+	RVL_DELETE_ARRAY(pCTImatchesArray.Element);
+
+	//delete scoreMatchMatrix	
+	for (iSSegment = 0; iSSegment < scoreMatchMatrix.n; iSSegment++)
+		RVL_DELETE_ARRAY(scoreMatchMatrix.Element[iSSegment].Element);
+
+	RVL_DELETE_ARRAY(scoreMatchMatrix.Element);
 
 	//fclose(fpTime);
 	//End Vidovic
@@ -179,7 +183,7 @@ void PSGM::CreateParamList(CRVLMem *pMem)
 
 	pParamData = ParamList.AddParam("Recognition.mode", RVLPARAM_TYPE_ID, &mode);
 	ParamList.AddID(pParamData, "TRAINING", RVLRECOGNITION_MODE_TRAINING);
-	ParamList.AddID(pParamData, "RECOGNITION", RVLRECOGNITION_MODE_RECOGNITION); //VIDOVIC
+	ParamList.AddID(pParamData, "RECOGNITION", RVLRECOGNITION_MODE_RECOGNITION); //Vidovic
 	ParamList.AddID(pParamData, "CREATE_CTIS", RVLRECOGNITION_MODE_PSGM_CREATE_CTIS);
 	pParamData = ParamList.AddParam("PSGM.nDominantClusters", RVLPARAM_TYPE_INT, &nDominantClusters);
 	pParamData = ParamList.AddParam("PSGM.kNoise", RVLPARAM_TYPE_FLOAT, &kNoise);
@@ -189,12 +193,13 @@ void PSGM::CreateParamList(CRVLMem *pMem)
 	pParamData = ParamList.AddParam("PSGM.kReferenceTangentSize", RVLPARAM_TYPE_FLOAT, &kReferenceTangentSize);
 	pParamData = ParamList.AddParam("PSGM.baseSeparationAngle", RVLPARAM_TYPE_FLOAT, &baseSeparationAngle);
 	//pParamData = ParamList.AddParam("PSGM.edgeTangentAngle", RVLPARAM_TYPE_FLOAT, &edgeTangentAngle);
-	pParamData = ParamList.AddParam("ModelDataBase", RVLPARAM_TYPE_STRING, &modelDataBase); //VIDOVIC
-	pParamData = ParamList.AddParam("ModelsInDataBase", RVLPARAM_TYPE_STRING, &modelsInDataBase); //VIDOVIC
-	pParamData = ParamList.AddParam("PSGM.RANSAC.nSamples", RVLPARAM_TYPE_INT, &nSamples); //VIDOVIC
-	pParamData = ParamList.AddParam("PSGM.RANSAC.stdNoise", RVLPARAM_TYPE_INT, &stdNoise); //VIDOVIC
-	pParamData = ParamList.AddParam("PSGM.normalValidityTest", RVLPARAM_TYPE_BOOL, &bNormalValidityTest); //VIDOVIC
-	pParamData = ParamList.AddParam("PSGM.SceneMIMatch", RVLPARAM_TYPE_STRING, &sceneMIMatch); //VIDOVIC
+	pParamData = ParamList.AddParam("ModelDataBase", RVLPARAM_TYPE_STRING, &modelDataBase); //Vidovic
+	pParamData = ParamList.AddParam("ModelsInDataBase", RVLPARAM_TYPE_STRING, &modelsInDataBase); //Vidovic
+	pParamData = ParamList.AddParam("PSGM.Match.RANSAC", RVLPARAM_TYPE_BOOL, &bMatchRANSAC); //Vidovic
+	//pParamData = ParamList.AddParam("PSGM.RANSAC.nSamples", RVLPARAM_TYPE_INT, &nSamples); //Vidovic
+	pParamData = ParamList.AddParam("PSGM.RANSAC.stdNoise", RVLPARAM_TYPE_INT, &stdNoise); //Vidovic
+	pParamData = ParamList.AddParam("PSGM.normalValidityTest", RVLPARAM_TYPE_BOOL, &bNormalValidityTest); //Vidovic
+	pParamData = ParamList.AddParam("PSGM.SceneMIMatch", RVLPARAM_TYPE_STRING, &sceneMIMatch); //Vidovic
 	pParamData = ParamList.AddParam("PSGM.nModels", RVLPARAM_TYPE_INT, &nModels); //Vidovic
 	pParamData = ParamList.AddParam("PSGM.nMSegments", RVLPARAM_TYPE_INT, &nMSegments); //Vidovic
 	pParamData = ParamList.AddParam("PSGM.minClusterSize", RVLPARAM_TYPE_INT, &minClusterSize);
@@ -267,23 +272,28 @@ void PSGM::Interpret(
 	RECOG::PSGM_::ModelInstance *pModelInstance;
 	float R[9];
 
+	//Init CTISet Qlist
+	CTISet.Init();//Vidovic
+
 	for (iCluster = 0; iCluster < nClusters; iCluster++)
 	{
 		pCluster = clusters.Element[iCluster];
 
 		if (bZeroRFDescriptor)
 		{
-			QList<RECOG::PSGM_::ModelInstance> *pModelInstanceList = &(pCluster->modelInstanceList);
+			//QList<RECOG::PSGM_::ModelInstance> *pModelInstanceList = &(pCluster->modelInstanceList); //Vidovic
 
-			RVLQLIST_INIT(pModelInstanceList);
+			//RVLQLIST_INIT(pModelInstanceList); //Vidovic
 
-			AddReferenceFrame(iCluster);
+			//AddReferenceFrame(iCluster); //Vidovic
+
+			AddReferenceFrame();
 		}
 		else if (bGTRFDescriptors)
 		{
-			QList<RECOG::PSGM_::ModelInstance> *pModelInstanceList = &(pCluster->modelInstanceList);
+			//QList<RECOG::PSGM_::ModelInstance> *pModelInstanceList = &(pCluster->modelInstanceList); //Vidovic
 
-			RVLQLIST_INIT(pModelInstanceList);
+			//RVLQLIST_INIT(pModelInstanceList); //Vidovic
 
 			Array<GTInstance> *pGT = pECCVGT->GT.Element + iScene;
 
@@ -296,25 +306,30 @@ void PSGM::Interpret(
 
 				RVLSCALEMX3X3(pGTInstance->R, 1000.0f, R);
 	
-				AddReferenceFrame(iCluster, R, pGTInstance->t);
+				//AddReferenceFrame(iCluster, R, pGTInstance->t); //Vidovic
+
+				AddReferenceFrame(R, pGTInstance->t); //Vidovic
 
 				fprintf(fpGTH, "%d\t%d\n", iCluster, pGTInstance->iModel);
 			}
 		}
 		else
 			ReferenceFrames(iCluster);		
-
-		pModelInstance = pCluster->modelInstanceList.pFirst;
-
-		while (pModelInstance)
-		{
-			FitModel(pCluster, pModelInstance);
-
-			pModelInstance = pModelInstance->pNext;
-
-			nSModelInstances++; //VIDOVIC
-		}
 	}
+
+	//Vidovic
+	pModelInstance = CTISet.CTI.pFirst;
+
+	while (pModelInstance)
+	{
+		FitModel(pModelInstance);
+
+		pModelInstance = pModelInstance->pNext;
+	}
+
+	//Copy CTIs from Qlist to Array
+	CTISet.CopyCTIsToArray();
+	//END Vidovic
 
 	// Save model instances to a file.
 
@@ -326,18 +341,16 @@ void PSGM::Interpret(
 
 	FILE *fp = fopen(PSGModelInstanceFileName, "w");
 
-	for (iCluster = 0; iCluster < nClusters; iCluster++)
-		SaveModelInstances(fp, -1, iCluster);
+	SaveModelInstances(fp); //Vidovic
 
 	fclose(fp);
 
 	delete[] PSGModelInstanceFileName;
 
-	//VIDOVIC
+	//Vidovic
 	//Match scene MI to model MI
 	if (mode == RVLRECOGNITION_MODE_RECOGNITION)
 		Match();
-	//END VIDOVIC
 
 	if (bGTRFDescriptors)
 	{
@@ -1071,7 +1084,7 @@ void PSGM::CreateTemplate()
 }
 
 void PSGM::FitModel(
-	RECOG::PSGM_::Cluster *pCluster,
+	//RECOG::PSGM_::Cluster *pCluster, //Vidovic
 	RECOG::PSGM_::ModelInstance *pModelInstance)
 {
 	RVLMEM_ALLOC_STRUCT_ARRAY(pMem, RECOG::PSGM_::ModelInstanceElement, convexTemplate.n, pModelInstance->modelInstance.Element);
@@ -1090,6 +1103,10 @@ void PSGM::FitModel(
 	float N_[3];
 	float dist;
 	float maxdDefinedNormal;
+
+	int iCluster = pModelInstance->iCluster; //Vidovic
+
+	RECOG::PSGM_::Cluster *pCluster = clusters.Element[iCluster]; //Vidovic
 
 	for (iModelInstanceElement = 0; iModelInstanceElement < convexTemplate.n; iModelInstanceElement++)
 	{
@@ -1117,7 +1134,7 @@ void PSGM::FitModel(
 			if (d > pModelInstanceElement->d)
 				pModelInstanceElement->d = d;
 
-			//VIDOVIC
+			//Vidovic
 			if (bNormalValidityTest)
 			{
 				//if (pVertex->normalHull.n >= 3)
@@ -1147,20 +1164,20 @@ void PSGM::FitModel(
 			}
 			else
 				pModelInstanceElement->valid = true;
-			//END VIDOVIC
+			//END Vidovic
 		}	// for every vertex in the cluster
 
 		pModelInstanceElement->d -= RVLDOTPRODUCT3(N_, t);
 
-		//VIDOVIC
+		//Vidovic
 		//if (bNormalValidityTest)
 		//	pModelInstanceElement->e = (pModelInstanceElement->valid ? pModelInstanceElement->d - maxdDefinedNormal : 0.0f);
 		//else
 			pModelInstanceElement->e = 0.0f;
-		//END VIDOVIC
+		//END Vidovic
 	}	// for every model instance descriptor element
 
-	//calculate segment centroid VIDOVIC
+	//calculate segment centroid - Vidovic
 	int minID, maxID;
 
 	for (i = 0; i < 3; i++)
@@ -1171,8 +1188,7 @@ void PSGM::FitModel(
 		pModelInstance->tc[i] = (pModelInstance->modelInstance.Element[maxID].d - pModelInstance->modelInstance.Element[minID].d) / 2; // PROVJERITI
 	}
 
-	//END calculate segment centroid VIDOVIC
-	//spremiti u tc u MODEL Instance
+	//END calculate segment centroid - Vidovic
 }
 
 bool PSGM::ReferenceFrames(int iCluster)
@@ -1229,9 +1245,9 @@ bool PSGM::ReferenceFrames(int iCluster)
 
 	/// Determine reference frames of model instances. 
 
-	QList<RECOG::PSGM_::ModelInstance> *pModelInstanceList = &(pCluster->modelInstanceList);
+	//QList<RECOG::PSGM_::ModelInstance> *pModelInstanceList = &(pCluster->modelInstanceList); //Vidovic
 
-	RVLQLIST_INIT(pModelInstanceList);
+	//RVLQLIST_INIT(pModelInstanceList); //Vidovic
 
 	float cs = COS45;
 
@@ -1394,9 +1410,13 @@ bool PSGM::ReferenceFrames(int iCluster)
 					{
 						RVLMEM_ALLOC_STRUCT(pMem, RECOG::PSGM_::ModelInstance, pModelInstance);
 
-						RVLQLIST_ADD_ENTRY(pModelInstanceList, pModelInstance);
+						//RVLQLIST_ADD_ENTRY(pModelInstanceList, pModelInstance); Vidovic
 
-						pModelInstance->iCluster = iCluster; //Vidovic ADDED iCluster data to scene MI
+						CTISet.AddCTI(pModelInstance); //Vidovic
+
+						pModelInstance->iCluster = iCluster; //Vidovic - ADDED iCluster data to scene MI
+
+						pModelInstance->iModel = -1; //Vidovic - ADDED iModel data to scene MI
 
 						R = pModelInstance->R;
 
@@ -1477,18 +1497,21 @@ bool PSGM::ReferenceFrames(int iCluster)
 }
 
 void PSGM::AddReferenceFrame(
-	int iCluster,
+	//int iCluster, //Vidovic
 	float *RIn,
 	float *tIn)
 {
-	RECOG::PSGM_::Cluster *pCluster = clusters.Element[iCluster];
+	//RECOG::PSGM_::Cluster *pCluster = clusters.Element[iCluster]; //Vidovic
 
-	QList<RECOG::PSGM_::ModelInstance> *pModelInstanceList = &(pCluster->modelInstanceList);
+	//QList<RECOG::PSGM_::ModelInstance> *pModelInstanceList = &(pCluster->modelInstanceList); //Vidovic
 
 	RECOG::PSGM_::ModelInstance *pModelInstance;
 
 	RVLMEM_ALLOC_STRUCT(pMem, RECOG::PSGM_::ModelInstance, pModelInstance);
-	RVLQLIST_ADD_ENTRY(pModelInstanceList, pModelInstance);
+	//RVLQLIST_ADD_ENTRY(pModelInstanceList, pModelInstance); //Vidovic
+
+	CTISet.AddCTI(pModelInstance); //Vidovic
+
 	float *R = pModelInstance->R;
 	float *t = pModelInstance->t;
 
@@ -1825,22 +1848,20 @@ void PSGM::SetSceneFileName(char *sceneFileName_)
 	RVLCopyString(sceneFileName_, &sceneFileName);
 }
 
+//Vidovic
 void PSGM::SaveModelInstances(
 	FILE *fp,
-	int iModel,
-	int iCluster)
+	int iModel)
 {
-	RECOG::PSGM_::Cluster *pCluster = clusters.Element[iCluster];
-
 	int i;
 	int iModelInstanceElement;
-	RECOG::PSGM_::ModelInstanceElement *pModelInstanceElement;	
+	RECOG::PSGM_::ModelInstanceElement *pModelInstanceElement;
 
-	RECOG::PSGM_::ModelInstance *pModelInstance = pCluster->modelInstanceList.pFirst;
+	RECOG::PSGM_::ModelInstance *pModelInstance = CTISet.CTI.pFirst;
 
 	while (pModelInstance)
 	{
-		fprintf(fp, "%d\t%d\t", iModel, iCluster);
+		fprintf(fp, "%d\t%d\t", iModel, pModelInstance->iCluster);
 
 		for (i = 0; i < 9; i++)
 			fprintf(fp, "%f\t", pModelInstance->R[i]);
@@ -1878,10 +1899,10 @@ void PSGM::SaveModelInstances(
 	}
 }
 
-//VIDOVIC
+
 bool PSGM::ModelExistInDB(char *modelFileName, FileSequenceLoader dbLoader)
 {
-	char *dbFileName = new char[50];
+	char dbFileName[50];
 
 	while (dbLoader.GetNextName(dbFileName))
 		if (!strcmp(modelFileName, dbFileName))
@@ -1889,8 +1910,6 @@ bool PSGM::ModelExistInDB(char *modelFileName, FileSequenceLoader dbLoader)
 
 	return 0;
 }
-
-
 
 void PSGM::SaveModelID(FileSequenceLoader dbLoader)
 {
@@ -1920,8 +1939,8 @@ void PSGM::Learn(
 	FileSequenceLoader modelsLoader;
 	FileSequenceLoader dbLoader;
 
-	char *modelFilePath = new char[200];
-	char *modelFileName = new char[200];
+	char modelFilePath[200];
+	char modelFileName[200];
 
 	Mesh mesh;
 
@@ -1964,8 +1983,7 @@ void PSGM::Learn(
 
 		currentModelID = dbLoader.GetLastModelID() + 1;
 
-		for (iCluster = 0; iCluster < nClusters; iCluster++)
-			SaveModelInstances(fp, currentModelID, iCluster);
+		SaveModelInstances(fp, currentModelID);
 
 		dbLoader.AddModel(currentModelID, modelFilePath, modelFileName);
 
@@ -2012,86 +2030,6 @@ void PSGM::LoadModelDataBase()
 		tBestMatch.Element[i].Element = new float[3];
 		tBestMatch.Element[i].n = 3;
 	}
-
-	//FILE *fp = fopen(modelDataBase, "r");
-
-	//char line[3000] = {0};
-
-	//int iModelInstance, iModelInstanceElement, i;
-
-	//RECOG::PSGM_::ModelInstanceElement *pModelInstanceElement;
-	//RECOG::PSGM_::ModelInstance *pModelInstance;
-
-	//if (fp)
-	//{
-		////count number of lines in model DB
-		//while (!feof(fp))
-		//{
-		//	line[0] = '\0';
-
-		//	fgets(line, 3000, fp);
-
-		//	if (line[0] == '\0' || line[0] == '\n')
-		//		continue;
-
-		//	modelInstanceDB.n++;
-		//}
-
-		//rewind(fp);
-
-		//modelInstanceDB.Element = new RECOG::PSGM_::ModelInstance[modelInstanceDB.n];
-
-		//pModelInstance = modelInstanceDB.Element;
-
-		//for (iModelInstance = 0; iModelInstance < modelInstanceDB.n; iModelInstance++)
-		//{
-		//	pModelInstance->modelInstance.Element = new RECOG::PSGM_::ModelInstanceElement[convexTemplate.n];
-
-		//	pModelInstance->modelInstance.n = convexTemplate.n;
-
-		//	fscanf(fp, "%d\t%d\t", &pModelInstance->iModel, &pModelInstance->iCluster);
-
-		//	for (i = 0; i < 9; i++)
-		//		fscanf(fp, "%f\t", &pModelInstance->R[i]);
-
-		//	for (i = 0; i < 3; i++)
-		//		fscanf(fp, "%f\t", &pModelInstance->t[i]);
-
-		//	for (iModelInstanceElement = 0; iModelInstanceElement < convexTemplate.n; iModelInstanceElement++)
-		//	{
-		//		pModelInstanceElement = pModelInstance->modelInstance.Element + iModelInstanceElement;
-
-		//		fscanf(fp, "%f\t", &pModelInstanceElement->d);
-		//	}
-
-		//	for (iModelInstanceElement = 0; iModelInstanceElement < convexTemplate.n; iModelInstanceElement++)
-		//	{
-		//		pModelInstanceElement = pModelInstance->modelInstance.Element + iModelInstanceElement;
-
-		//		fscanf(fp, "%d\t", &pModelInstanceElement->valid);
-		//	}
-
-		//	for (iModelInstanceElement = 0; iModelInstanceElement < convexTemplate.n; iModelInstanceElement++)
-		//	{
-		//		pModelInstanceElement = pModelInstance->modelInstance.Element + iModelInstanceElement;
-
-		//		fscanf(fp, "%f\t", &pModelInstanceElement->e);
-		//	}
-
-		//	for (i = 0; i < 3; i++)
-		//		fscanf(fp, "%f\t", &pModelInstance->tc[i]);
-
-		//	if (iModelInstance == modelInstanceDB.n - 1)
-		//		pModelInstance->pNext = NULL;
-		//	else
-		//	{
-		//		pModelInstance->pNext = pModelInstance + 1;
-		//		pModelInstance++;
-		//	}
-		//}
-
-	//	fclose(fp);
-	//}
 }
 
 void PSGM::LoadCTI(char *fileName)
@@ -3239,9 +3177,14 @@ void PSGM::Match()
 }
 #endif
 
-void PSGM::Match(bool CTIfromFile)
+void PSGM::Match()
 {
 	printf("Scene to model match started...");
+
+	matchID = 0;
+
+	pCTImatches = &CTImatches;
+	RVLQLIST_INIT(pCTImatches);
 
 	float csMinSampleAngleDiff = cos(PI / 4);
 
@@ -3249,7 +3192,6 @@ void PSGM::Match(bool CTIfromFile)
 
 	//find sample candidates
 	QList<QLIST::Index> iSampleCandidateList;
-	//QList<QLIST::Index> *pISampleCandidateList = &iSampleCandidateList;
 	pISampleCandidateList = &iSampleCandidateList;
 
 	RVLQLIST_INIT(pISampleCandidateList);
@@ -3274,63 +3216,12 @@ void PSGM::Match(bool CTIfromFile)
 	int iMIS;
 	int iSCluster, iSClusterMI;
 
-	int MatchID = 0;
-
-	int nClusters;
-
-	if (CTIfromFile)
-		nClusters = CTISet.maxSegmentIdx + 1;
-	else
-		nClusters = RVLMIN(clusters.n, nDominantClusters);	
+	int nClusters = CTISet.maxSegmentIdx + 1;	
 
 	RECOG::PSGM_::ModelInstance *pSModelInstance;
 	RECOG::PSGM_::ModelInstance *pMModelInstance;
 
-	bool breakPrint;
-	bool cluserMatch;
-
-	/*
-	//Arrays allocation
-	Array<QLIST::Index> iValidSampleCandidate;
-	iValidSampleCandidate.Element = new QLIST::Index[convexTemplate.n];
-
-	Array<QLIST::Index> iValid;
-	iValid.Element = new QLIST::Index[convexTemplate.n];
-
-	Array<QLIST::Index> iRansacCandidates;
-	iRansacCandidates.Element = new QLIST::Index[26]; //max 26 planes which satisfy condition
-
-	Array<QLIST::Index> iConsensus;
-	iConsensus.Element = new QLIST::Index[convexTemplate.n];
-
-	Array<QLIST::Index> iConsensusTemp;
-	iConsensusTemp.Element = new QLIST::Index[convexTemplate.n];
-
-	Array<Array<float>> e;
-	e.Element = new Array<float>[MCTISet.CTI.n];
-	e.n = MCTISet.CTI.n;
-
-	Array<Array<float>> tBestMatch;
-	tBestMatch.Element = new Array<float>[MCTISet.CTI.n];
-	tBestMatch.n = MCTISet.CTI.n;
-
-	Array<float> score;
-	score.Element = new float[MCTISet.CTI.n];
-	score.n = MCTISet.CTI.n;
-
-	for (i = 0; i < MCTISet.CTI.n; i++)
-	{
-		e.Element[i].Element = new float[convexTemplate.n];
-		e.Element[i].n = convexTemplate.n;
-
-		tBestMatch.Element[i].Element = new float[3];
-		tBestMatch.Element[i].n = 3;
-	}
-	*/
-
-	iMIS = 0;
-
-	int iSCTI, CTIIdx, nCTI;
+	int iSCTI, nCTI;
 
 	int iMSegment;
 
@@ -3358,105 +3249,31 @@ void PSGM::Match(bool CTIfromFile)
 		}
 	}
 
+	//used in Match(RECOG::PSGM_::ModelInstance *pSModelInstance, int startIdx, int endIdx);
+	nTc = new float[3 * convexTemplate.n];
+	dISMc = new float[convexTemplate.n];
+
 	int startIdx = 0, endIdx = MCTISet.pCTI.n;
 
 	for (iSCluster = 0; iSCluster < nClusters; iSCluster++)
 	{
-		breakPrint = false; //for DEBUG!
-
-		cluserMatch = false;
-
 		printf("%d/%d", iSCluster + 1, nClusters);
+	
+		nCTI = CTISet.SegmentCTIs.Element[iSCluster].n;
 
-		if (CTIfromFile)
+		for (iSCTI = 0; iSCTI < nCTI; iSCTI++)
 		{
-			nCTI = CTISet.SegmentCTIs.Element[iSCluster].n;
+			CTIIdx = CTISet.SegmentCTIs.Element[iSCluster].Element[iSCTI];
 
-			for (iSCTI = 0; iSCTI < nCTI; iSCTI++)
-			{
-				CTIIdx = CTISet.SegmentCTIs.Element[iSCluster].Element[iSCTI];
+			pSModelInstance = CTISet.pCTI.Element[CTIIdx];	
 
-				//pSModelInstance = &CTISet.CTI.Element[CTIIdx];
-				pSModelInstance = CTISet.pCTI.Element[CTIIdx]; //TEST NEW CTI ARRAY!!
+			Match(pSModelInstance, startIdx, endIdx);
 
-				iSRF = iSCTI;		
+			CalculateScore(RVLPSGM_MATCHES_SIMILARITY_MEASURE);
 
-				//double startTime = pTimer->GetTime();
+			UpdateScoreMatchMatrix(pSModelInstance);
 
-				/*MatchRANSAC(
-					pSModelInstance,
-					startIdx,
-					endIdx,
-					pISampleCandidateList,
-					iValidSampleCandidate,
-					iValid,
-					iRansacCandidates,
-					iConsensus,
-					iConsensusTemp,
-					&e,
-					&tBestMatch);*/
-
-				MatchRANSAC(pSModelInstance, startIdx, endIdx);
-
-				//double execTime = pTimer->GetTime() - startTime;
-				//printf("Time: %lf\n", execTime);
-
-				//CalculateScore(&e, &iValid, &score, RVLPSGM_MATCHES_SIMILARITY_MEASURE);
-				CalculateScore(RVLPSGM_MATCHES_SIMILARITY_MEASURE);
-
-				//UpdateScoreMatchMatrix(pSModelInstance, &score);
-				UpdateScoreMatchMatrix(pSModelInstance);
-
-				iMIS++;
-
-			} // for all MI in cluster
-		}
-		else
-		{
-			pSModelInstance = clusters.Element[iSCluster]->modelInstanceList.pFirst;
-
-			iSRF = -1;
-
-			int nSMI = 0;
-
-			while (pSModelInstance)
-			{
-				iSRF++;
-
-				//double startTime = pTimer->GetTime();
-
-				/*MatchRANSAC(
-					pSModelInstance,
-					startIdx,
-					endIdx,
-					pISampleCandidateList,
-					iValidSampleCandidate,
-					iValid,
-					iRansacCandidates,
-					iConsensus,
-					iConsensusTemp,
-					&e,
-					&tBestMatch);*/
-
-				MatchRANSAC(pSModelInstance, startIdx, endIdx);
-
-				//double execTime = pTimer->GetTime() - startTime;
-				//printf("Time: %lf\n", execTime);
-
-				//CalculateScore(&e, &iValid, &score, RVLPSGM_MATCHES_SIMILARITY_MEASURE);
-				CalculateScore(RVLPSGM_MATCHES_SIMILARITY_MEASURE);
-
-				//UpdateScoreMatchMatrix(pSModelInstance, &score);
-				UpdateScoreMatchMatrix(pSModelInstance);
-
-				iMIS++;
-
-				pSModelInstance = pSModelInstance->pNext;
-
-				nSMI++;
-
-			}	// for all MI in cluster
-		}		
+		} // for all MI in cluster
 		
 		if (nClusters < 10)
 			printf("\b");
@@ -3472,42 +3289,24 @@ void PSGM::Match(bool CTIfromFile)
 
 	}	// for all dominant clusters
 
+	pCTImatchesArray.n = CTISet.pCTI.n * MCTISet.pCTI.n;
+
+	RVL_DELETE_ARRAY(pCTImatchesArray.Element);
+
+	pCTImatchesArray.Element = new RECOG::PSGM_::MatchInstance*[pCTImatchesArray.n];
+
+	QLIST::CreatePtrArray<RECOG::PSGM_::MatchInstance>(pCTImatches, &pCTImatchesArray);
+
 	SortScoreMatchMatrix();
 
 	printf("completed.\n");
 
 	int nSMI = iMIS;
-	
-	/*
-	RVL_DELETE_ARRAY(iConsensusTemp.Element);
 
-	RVL_DELETE_ARRAY(iValid.Element);
-
-	RVL_DELETE_ARRAY(iConsensus.Element);
-
-	RVL_DELETE_ARRAY(iRansacCandidates.Element);
-
-	RVL_DELETE_ARRAY(iValidSampleCandidate.Element);
-
-	for (i = 0; i < MCTISet.CTI.n; i++)
-	{
-		RVL_DELETE_ARRAY(e.Element[i].Element);
-		RVL_DELETE_ARRAY(tBestMatch.Element[i].Element);
-	}
-
-	RVL_DELETE_ARRAY(e.Element);
-
-	RVL_DELETE_ARRAY(tBestMatch.Element);
-
-	RVL_DELETE_ARRAY(score.Element);
-	*/
+	delete[] nTc;
+	delete[] dISMc;
 
 	iScene++;
-
-	//reset GT matches flag
-	pECCVGT->ResetMatchFlag();
-
-	SortMatchMatrix();
 
 #ifdef RVLPSGM_SAVE_MATCHES
 	printf("Saving matches to txt file...");
@@ -3516,25 +3315,11 @@ void PSGM::Match(bool CTIfromFile)
 #endif
 }
 
-/*void PSGM::MatchRANSAC(
-	RECOG::PSGM_::ModelInstance *pSModelInstance,
-	int startIdx,
-	int endIdx,
-	QList<QLIST::Index> *pISampleCandidateList,
-	Array<QLIST::Index> &iValidSampleCandidate,
-	Array<QLIST::Index> &iValid,
-	Array<QLIST::Index> &iRansacCandidates,
-	Array<QLIST::Index> &iConsensus,
-	Array<QLIST::Index> &iConsensusTemp,
-	Array<Array<float>> *e,
-	Array<Array<float>> *tBestMatch)*/
-void PSGM::MatchRANSAC(
+void PSGM::Match(
 	RECOG::PSGM_::ModelInstance *pSModelInstance,
 	int startIdx,
 	int endIdx)
 {
-	int cntTime;
-
 	float cos45 = cos(PI / 4);
 	float csMinSampleAngleDiff = cos(PI / 4);
 	float minE, minETotal, E, score, SMI_minETotal;
@@ -3561,18 +3346,10 @@ void PSGM::MatchRANSAC(
 
 	float R_[9], t_[3];
 
-	int MatchID = 0;
-
-	cntTime = 0;
-
-	float *nTc, *dISMc;
-
-	nTc = new float[3 * convexTemplate.n];
-	dISMc = new float[convexTemplate.n];
+	int nSamples;
 
 	for (iMCTI = startIdx; iMCTI < endIdx; iMCTI++)
 	{
-		//pMModelInstance = &MCTISet.CTI.Element[iMCTI];
 		pMModelInstance = MCTISet.pCTI.Element[iMCTI];
 
 		//minE = 66.0;
@@ -3650,148 +3427,144 @@ void PSGM::MatchRANSAC(
 
 			QLIST::Index *piConsensus = iConsensus.Element;
 
-#ifdef RVLPSGM_RANSAC
-
-			iRansacCandidates.n = 0;
-
-			QLIST::Index *piRansacCandidates = iRansacCandidates.Element;
-
-			//find RANSAC candidates
-			RVLCROSSPRODUCT3(N_, N__, V);
-
-			fTmp = sqrt(RVLDOTPRODUCT3(V, V));
-
-			RVLSCALE3VECTOR2(V, fTmp, V);
-
-			for (i = 0; i < iValidSampleCandidate.n; i++)
+			if (bMatchRANSAC)
 			{
-				ID[0] = iValidSampleCandidate.Element[i].Idx;
+				iRansacCandidates.n = 0;
 
-				fTmp = RVLDOTPRODUCT3(V, convexTemplate.Element[ID[0]].N);
+				QLIST::Index *piRansacCandidates = iRansacCandidates.Element;
 
-				if (RVLABS(fTmp) >= csMinSampleAngleDiff)
+				//find RANSAC candidates
+				RVLCROSSPRODUCT3(N_, N__, V);
+
+				fTmp = sqrt(RVLDOTPRODUCT3(V, V));
+
+				RVLSCALE3VECTOR2(V, fTmp, V);
+
+				for (i = 0; i < iValidSampleCandidate.n; i++)
 				{
-					piRansacCandidates->Idx = ID[0];
+					ID[0] = iValidSampleCandidate.Element[i].Idx;
 
-					piRansacCandidates++;
+					fTmp = RVLDOTPRODUCT3(V, convexTemplate.Element[ID[0]].N);
 
-					nRansacCandidates++;
-				}
-			}
-
-			iRansacCandidates.n = nRansacCandidates;
-
-			std::random_device rd;
-			std::mt19937 eng(rd());
-			std::uniform_int_distribution<> distribution(0, nRansacCandidates);
-
-			nSamples = RVLMIN(13, nRansacCandidates);
-
-			for (iRansac = 0; iRansac < nSamples; iRansac++)
-			{
-				ID[0] = 1; //second plane from convexTemplate
-
-				iSample[1] = distribution(eng);
-
-				ID[1] = iValidSampleCandidate.Element[iSample[1]].Idx;
-
-				float dM[3];
-				float dS[3];
-				float N[9];
-
-				dM[0] = pMModelInstance->modelInstance.Element[0].d;
-				dM[1] = pMModelInstance->modelInstance.Element[ID[0]].d;
-				dM[2] = pMModelInstance->modelInstance.Element[ID[1]].d;
-
-				dS[0] = pSModelInstance->modelInstance.Element[0].d * 1000;
-				dS[1] = pSModelInstance->modelInstance.Element[ID[0]].d * 1000;
-				dS[2] = pSModelInstance->modelInstance.Element[ID[1]].d * 1000;
-
-				RVLCOPYTOCOL3(convexTemplate.Element[0].N, 0, N);
-				RVLCOPYTOCOL3(convexTemplate.Element[ID[0]].N, 1, N);
-				RVLCOPYTOCOL3(convexTemplate.Element[ID[1]].N, 2, N);
-
-				A << N[0], N[3], N[6], N[1], N[4], N[7], N[2], N[5], N[8]; // N'
-				B << dS[0] - dM[0], dS[1] - dM[1], dS[2] - dM[2];
-				t = A.colPivHouseholderQr().solve(B);
-
-				iConsensusTemp.n = 0;
-
-				QLIST::Index *piConsensusTemp = iConsensusTemp.Element;
-
-				E = 0;
-
-				for (i = 0; i < iValid.n; i++)
-				{
-					idx = iValid.Element[i].Idx;
-
-					dISv = pSModelInstance->modelInstance.Element[idx].d * 1000;
-
-					dIMvt = pMModelInstance->modelInstance.Element[idx].d + RVLDOTPRODUCT3(t, convexTemplate.Element[idx].N);
-
-					//fTmp = (dISv - dIMvt) / pPrior;
-					fTmp = (dISv - dIMvt) / sigma;
-
-					//if (fTmp*fTmp < 1)
-#ifdef RVLPSGM_MATCH_SATURATION
-					if (fTmp*fTmp < sigma25)
-						//if (fTmp*fTmp < 1)
+					if (RVLABS(fTmp) >= csMinSampleAngleDiff)
 					{
+						piRansacCandidates->Idx = ID[0];
+
+						piRansacCandidates++;
+
+						nRansacCandidates++;
+					}
+				}
+
+				iRansacCandidates.n = nRansacCandidates;
+
+				std::random_device rd;
+				std::mt19937 eng(rd());
+				std::uniform_int_distribution<> distribution(0, nRansacCandidates);
+
+				nSamples = RVLMIN(13, nRansacCandidates);
+
+				for (iRansac = 0; iRansac < nSamples; iRansac++)
+				{
+					ID[0] = 1; //second plane from convexTemplate
+
+					iSample[1] = distribution(eng);
+
+					ID[1] = iValidSampleCandidate.Element[iSample[1]].Idx;
+
+					float dM[3];
+					float dS[3];
+					float N[9];
+
+					dM[0] = pMModelInstance->modelInstance.Element[0].d;
+					dM[1] = pMModelInstance->modelInstance.Element[ID[0]].d;
+					dM[2] = pMModelInstance->modelInstance.Element[ID[1]].d;
+
+					dS[0] = pSModelInstance->modelInstance.Element[0].d * 1000;
+					dS[1] = pSModelInstance->modelInstance.Element[ID[0]].d * 1000;
+					dS[2] = pSModelInstance->modelInstance.Element[ID[1]].d * 1000;
+
+					RVLCOPYTOCOL3(convexTemplate.Element[0].N, 0, N);
+					RVLCOPYTOCOL3(convexTemplate.Element[ID[0]].N, 1, N);
+					RVLCOPYTOCOL3(convexTemplate.Element[ID[1]].N, 2, N);
+
+					A << N[0], N[3], N[6], N[1], N[4], N[7], N[2], N[5], N[8]; // N'
+					B << dS[0] - dM[0], dS[1] - dM[1], dS[2] - dM[2];
+					t = A.colPivHouseholderQr().solve(B);
+
+					iConsensusTemp.n = 0;
+
+					QLIST::Index *piConsensusTemp = iConsensusTemp.Element;
+
+					E = 0;
+
+					for (i = 0; i < iValid.n; i++)
+					{
+						idx = iValid.Element[i].Idx;
+
+						dISv = pSModelInstance->modelInstance.Element[idx].d * 1000;
+
+						dIMvt = pMModelInstance->modelInstance.Element[idx].d + RVLDOTPRODUCT3(t, convexTemplate.Element[idx].N);
+
+						//fTmp = (dISv - dIMvt) / pPrior;
+						fTmp = (dISv - dIMvt) / sigma;
+
+#ifdef RVLPSGM_MATCH_SATURATION
+						if (fTmp*fTmp < sigma25)
+							//if (fTmp*fTmp < 1)
+						{
+							E += fTmp*fTmp;
+
+							piConsensusTemp->Idx = idx;	//	!!! saved id in original MI array
+							piConsensusTemp->pNext = piConsensusTemp + 1;
+
+							iConsensusTemp.n++;
+
+							piConsensusTemp++;
+						}
+						else
+							E += sigma25;
+						//E += 1;
+#else
 						E += fTmp*fTmp;
 
+						//TREBA LI OVO?
 						piConsensusTemp->Idx = idx;	//	!!! saved id in original MI array
 						piConsensusTemp->pNext = piConsensusTemp + 1;
 
 						iConsensusTemp.n++;
 
 						piConsensusTemp++;
-					}
-					else
-						E += sigma25;
-					//E += 1;
-#else
-					E += fTmp*fTmp;
-
-					//TREBA LI OVO?
-					piConsensusTemp->Idx = idx;	//	!!! saved id in original MI array
-					piConsensusTemp->pNext = piConsensusTemp + 1;
-
-					iConsensusTemp.n++;
-
-					piConsensusTemp++;
 #endif
-				}
+					}
 
-				if (E < minE)
-				{
-					minE = E;
-
-					iConsensus.n = iConsensusTemp.n;
-
-					piConsensusTemp = iConsensusTemp.Element;
-
-					piConsensus = iConsensus.Element;
-
-					for (i = 0; i < iConsensusTemp.n; i++)
+					if (E < minE)
 					{
-						piConsensus->Idx = piConsensusTemp->Idx;
-						piConsensus->pNext = piConsensus + 1;
+						minE = E;
 
-						piConsensus++;
-						piConsensusTemp++;
+						iConsensus.n = iConsensusTemp.n;
+
+						piConsensusTemp = iConsensusTemp.Element;
+
+						piConsensus = iConsensus.Element;
+
+						for (i = 0; i < iConsensusTemp.n; i++)
+						{
+							piConsensus->Idx = piConsensusTemp->Idx;
+							piConsensus->pNext = piConsensus + 1;
+
+							piConsensus++;
+							piConsensusTemp++;
+						}
 					}
 				}
 			}
-#else
-			iConsensus.n = iValid.n;
-#endif
+			else
+				iConsensus.n = iValid.n;
+
 			if (iConsensus.n >= 3)
 			{
 				float dISc, dIMc;
-				//float dISc, dIMc, *nTc, *dISMc;
-
-				//nTc = new float[3 * iConsensus.n];
-				//dISMc = new float[iConsensus.n];
 
 				piConsensus = iConsensus.Element;
 
@@ -3837,12 +3610,11 @@ void PSGM::MatchRANSAC(
 						B(i) += nTc[i * iConsensus.n + j] * dISMc[j];
 				}				
 				
-				t = A.colPivHouseholderQr().solve(B);				
-								
-				//delete[] nTc;
-				//delete[] dISMc;				
+				t = A.colPivHouseholderQr().solve(B);							
 
 				E = 0;
+
+				float eSum = 0;
 
 				for (i = 0; i < iValid.n; i++)
 				{
@@ -3853,12 +3625,38 @@ void PSGM::MatchRANSAC(
 					dIMvt = pMModelInstance->modelInstance.Element[idx].d + RVLDOTPRODUCT3(t, convexTemplate.Element[idx].N);
 
 					e.Element[iMCTI].Element[idx] = dISv - dIMvt;
+
+					eSum += e.Element[iMCTI].Element[idx];
 				}
 
-				for (i = 0; i < 3; i++)
-					tBestMatch.Element[iMCTI].Element[i] = t(i);
+				RVLMEM_ALLOC_STRUCT(pMem, RECOG::PSGM_::MatchInstance, pCTIMatch);
+				RVLQLIST_ADD_ENTRY(pCTImatches, pCTIMatch);
 
-				MSTransformation(pMModelInstance, pSModelInstance, tBestMatch.Element[iMCTI].Element, R_, t_);
+				if (iMCTI == startIdx)
+					pFirstSCTIMatch = pCTIMatch;
+
+				for (i = 0; i < 3; i++)
+				{
+					tBestMatch.Element[iMCTI].Element[i] = t(i);
+					pCTIMatch->tMatch[i] = t(i);
+				}				
+
+				pCTIMatch->ID = matchID++;
+				pCTIMatch->iScene = iScene;
+
+				pCTIMatch->iSCTI = CTIIdx;
+				pCTIMatch->iMCTI = iMCTI;
+
+				pCTIMatch->E = eSum;
+				pCTIMatch->nValids = iValid.n;
+
+				pCTIMatch->probability1 = NAN;
+				pCTIMatch->probability2 = NAN;
+
+				pCTIMatch->angleGT = NAN;
+				pCTIMatch->distanceGT = NAN;
+
+				//MSTransformation(pMModelInstance, pSModelInstance, tBestMatch.Element[iMCTI].Element, R_, t_);
 			}
 			else
 			{
@@ -3868,17 +3666,8 @@ void PSGM::MatchRANSAC(
 			}
 		}
 	}	//for all model MI
-
-	delete[] nTc;
-	delete[] dISMc;
 }
 
-/*
-void PSGM::CalculateScore(
-	Array<Array<float>> *e,
-	Array<QLIST::Index> *iValid,
-	Array<float> *score,
-	int similarityMeasure)*/
 void PSGM::CalculateScore(int similarityMeasure)
 {
 	float sigma = 8.0;
@@ -3892,6 +3681,8 @@ void PSGM::CalculateScore(int similarityMeasure)
 	float fTmp, eTmp, scoreTmp;
 
 	float maxError;
+
+	RECOG::PSGM_::MatchInstance *pCTIMatch_ = pFirstSCTIMatch;
 
 	switch (similarityMeasure)
 	{
@@ -3911,6 +3702,9 @@ void PSGM::CalculateScore(int similarityMeasure)
 			}
 
 			score.Element[iMCTI] = sqrt(scoreTmp / iValid.n);
+
+			pCTIMatch_->score = score.Element[iMCTI];
+			pCTIMatch_ = pCTIMatch_->pNext;
 		}
 
 		break;
@@ -3934,6 +3728,9 @@ void PSGM::CalculateScore(int similarityMeasure)
 			}
 
 			score.Element[iMCTI] = maxError;
+
+			pCTIMatch_->score = score.Element[iMCTI];
+			pCTIMatch_ = pCTIMatch_->pNext;
 		}
 
 		break;
@@ -3960,6 +3757,9 @@ void PSGM::CalculateScore(int similarityMeasure)
 			}
 
 			score.Element[iMCTI] = scoreTmp + sigma25 * (66 - iValid.n);
+
+			pCTIMatch_->score = score.Element[iMCTI];
+			pCTIMatch_ = pCTIMatch_->pNext;
 		}
 
 		break;
@@ -3994,6 +3794,9 @@ void PSGM::CalculateScore(int similarityMeasure)
 				scoreTmp = validErrors.Element[medianIdx].cost;
 			
 			score.Element[iMCTI] = scoreTmp;
+
+			pCTIMatch_->score = score.Element[iMCTI];
+			pCTIMatch_ = pCTIMatch_->pNext;
 		}
 
 		RVL_DELETE_ARRAY(validErrors.Element);
@@ -4002,10 +3805,6 @@ void PSGM::CalculateScore(int similarityMeasure)
 	}
 }
 
-
-/*void PSGM::UpdateScoreMatchMatrix(
-	RECOG::PSGM_::ModelInstance *pSModelInstance,
-	Array<float> *score)*/
 void PSGM::UpdateScoreMatchMatrix(RECOG::PSGM_::ModelInstance *pSModelInstance)
 {
 	int SSegmentIdx = pSModelInstance->iCluster;
@@ -4016,12 +3815,13 @@ void PSGM::UpdateScoreMatchMatrix(RECOG::PSGM_::ModelInstance *pSModelInstance)
 
 	int idx;
 
+	RECOG::PSGM_::MatchInstance *pCTIMatch_ = pFirstSCTIMatch;
+
 	for (iMCTI = 0; iMCTI < MCTISet.pCTI.n; iMCTI++)
 	{
 		scoreTmp = score.Element[iMCTI];
 
-		//MSegmentIdx = MCTISet.CTI.Element[iMCTI].iModel * 3 + MCTISet.CTI.Element[iMCTI].iCluster; //CALCULATE MAX NUMBER OF SEGMENTS INSIDE CTI CLASS!!!!
-		MSegmentIdx = MCTISet.pCTI.Element[iMCTI]->iModel * 3 + MCTISet.pCTI.Element[iMCTI]->iCluster; //CALCULATE MAX NUMBER OF SEGMENTS INSIDE CTI CLASS!!!! TEST NEW CTI ARRAY!!!
+		MSegmentIdx = MCTISet.pCTI.Element[iMCTI]->iModel * (MCTISet.maxSegmentIdx + 1) + MCTISet.pCTI.Element[iMCTI]->iCluster;
 
 		scoreTmp_ = scoreMatchMatrix.Element[SSegmentIdx].Element[MSegmentIdx].cost;
 
@@ -4031,8 +3831,10 @@ void PSGM::UpdateScoreMatchMatrix(RECOG::PSGM_::ModelInstance *pSModelInstance)
 		{
 			scoreMatchMatrix.Element[SSegmentIdx].Element[MSegmentIdx].cost = scoreTmp;
 
-			scoreMatchMatrix.Element[SSegmentIdx].Element[MSegmentIdx].idx = iMCTI;
+			scoreMatchMatrix.Element[SSegmentIdx].Element[MSegmentIdx].idx = pCTIMatch_->ID;
 		}
+
+		pCTIMatch_ = pCTIMatch_->pNext;
 	}
 }
 
@@ -4047,7 +3849,6 @@ void PSGM::SortScoreMatchMatrix(bool descending)
 		BubbleSort<SortIndex<float>>(scoreMatchMatrix.Element[iSSegment], descending);
 	}
 }
-
 
 void PSGM::ComputeClusterNormalDistribution(
 	RECOG::PSGM_::Cluster *pCluster)
@@ -4253,578 +4054,6 @@ void PSGM::MSTransformation(
 	RVLCOMPTRANSF3D(pSModelInstance->R, pSModelInstance->t, R_, t_, R, t);
 }
 
-void PSGM::FillMatch(
-	RECOG::PSGM_::MatchInstance *pMatch,
-	int ID,
-	int iScene,
-	int iSSegment,
-	int iSRF,
-	int iCTIS,
-	int iModel,
-	int iMSegment,
-	int iCTIM,
-	float *R,
-	float *t,
-	float *tMatch,
-	float E,
-	float score,
-	float probability1,
-	float probability2,
-	float angleGT,
-	float distanceGT,
-	int nValids)
-{
-	int i;
-
-	pMatch->ID = ID;
-	pMatch->iScene = iScene;
-	pMatch->iCluster = iSSegment;
-	pMatch->iCRF = iSRF;
-	pMatch->iSMI = iCTIS;
-	pMatch->iModel = iModel;
-	pMatch->iMCluster = iMSegment;
-	pMatch->iMMI = iCTIM;
-	
-	for (i = 0; i < 9; i++)
-		pMatch->R[i] = R[i];
-
-	for (i = 0; i < 3; i++)
-	{
-		pMatch->t[i] = t[i];
-		pMatch->tMatch[i] = tMatch[i];
-	}
-
-	pMatch->E = E;
-	pMatch->score = score;
-	pMatch->probability1 = probability1;
-	pMatch->probability2 = probability2;
-	pMatch->angle = angleGT;
-	pMatch->distance = distanceGT;
-	pMatch->nValids = nValids;
-}
-
-/*
-void PSGM::SetNumberOfScenes(int scenesNumber)
-{
-	matches.Element = new RECOG::PSGM_::MatchInstance[scenesNumber*nDominantClusters];
-	matches.n = 0;
-
-	pMatches = matches.Element;
-}*/
-
-void PSGM::CompareMatchesToGT(
-	ECCVGTLoader *ECCVGT,
-	float scoreThresh,
-	float angleThresh,
-	float distanceThresh,
-	float &precision,
-	float &recall)
-{
-	int iMatches, iGTS, iGTM, nGTModels;
-
-	int nGTSecenes = ECCVGT->GT.n;
-
-	int TP = 0, FP = 0, FN = 0;
-
-	float R[9], RGT[9], tGT[3], t[3];
-		
-	float V[3], theta, distance;
-
-	bool match = false;
-
-	//reset matches pointer!!
-	pMatches = matches.Element;
-
-	RVL::GTInstance *pGT;
-
-	FILE *fp = fopen("RM.txt", "w");
-	FILE *fp2 = fopen("GT_R.txt", "w");
-	FILE *fp3 = fopen("R.txt", "w");
-
-	//Find TP and FP
-	for (iMatches = 0; iMatches < matches.n; iMatches++)
-	{
-		if (pMatches->score < scoreThresh)
-		{
-			match = false;
-
-			for (iGTS = 0; iGTS < nGTSecenes; iGTS++)
-			{				
-				pGT = ECCVGT->GT.Element[iGTS].Element;
-
-				nGTModels = ECCVGT->GT.Element[iGTS].n;
-
-				for (iGTM = 0; iGTM < nGTModels; iGTM++)
-				{
-					if (pMatches->iScene == pGT->iScene)
-					{
-						if (pMatches->iModel == pGT->iModel)
-						{
-							RVLSCALEMX3X3(pGT->R, 1000, RGT);
-
-							RVLMXMUL3X3T2(pMatches->R, RGT, R);
-
-							fprintf(fp, "\n");
-
-							for (int i = 0; i < 9; i++)
-								if (i % 3 == 2)
-									fprintf(fp, "%f\n", pMatches->R[i]);								
-								else
-									fprintf(fp, "%f\t", pMatches->R[i]);
-
-							fprintf(fp2, "\n");
-
-							for (int i = 0; i < 9; i++)
-								if (i % 3 == 2)
-									fprintf(fp2, "%f\n", pGT->R[i]);
-								else
-									fprintf(fp2, "%f\t", pGT->R[i]);
-
-							fprintf(fp3, "\n");
-
-							for (int i = 0; i < 9; i++)
-								if (i % 3 == 2)
-									fprintf(fp3, "%f\n", R[i]);
-								else
-									fprintf(fp3, "%f\t", R[i]);
-
-							RVLSCALE3VECTOR(pGT->t, 1000, tGT)
-
-							RVLDIF3VECTORS(pMatches->t, tGT, t);
-
-							GetAngleAxis(R, V, theta);
-
-							GetDistance(t, distance);
-
-							fprintf(fp3, "\n%f\t%f\n", theta, distance);
-
-							//if ((theta < angleThresh || (theta > (PI - angleThresh) && theta < (PI + angleThresh))) && distance < distanceThresh)
-							if (distance < distanceThresh)
-							{
-								if (!pGT->matched)
-								{
-									TP++;
-
-									pGT->matched = true;
-								}									
-
-								match = true;								
-
-								break;
-							}
-						}
-					}
-
-					pGT++;
-				}
-
-				if (match)
-					break;			
-			}
-
-			if (!match)
-				FP++;
-		}
-
-		pMatches++;
-	}
-
-	//find FN
-	for (iGTS = 0; iGTS < nGTSecenes; iGTS++)
-	{
-		pGT = ECCVGT->GT.Element[iGTS].Element;
-
-		nGTModels = ECCVGT->GT.Element[iGTS].n;
-
-		for (iGTM = 0; iGTM < nGTModels; iGTM++)
-		{
-			if (!pGT->matched)
-			{
-				FN++;
-				printf("GT Model %d not matched!\n", iGTM);
-			}				
-
-			pGT++;
-		}		
-	}
-
-	precision = (float)TP / (float)(TP + FP);
-
-	recall = (float)TP / (float)(TP + FN);
-
-	printf("TP: %d\n", TP);
-	printf("FP: %d\n", FP);
-	printf("FN: %d\n", FN);
-
-	fclose(fp);
-	fclose(fp2);
-	fclose(fp3);
-}
-
-//UNDER CONSTRUCTION
-void PSGM::CompareSMIMatchesToGT(
-	ECCVGTLoader *ECCVGT,
-	float scoreThresh,
-	float angleThresh,
-	float distanceThresh,
-	float &precision,
-	float &recall)
-{
-
-	RVL::GTInstance *pGT;
-
-	int nGTSecenes = ECCVGT->GT.n;
-
-	int TP = 0, FP = 0, FN = 0;
-
-	int iGTS, iGTM, nGTModels;
-
-	float R[9], RGT[9], tGT[3], t[3];
-
-	float V[3], theta, distance;
-
-	bool match, FPmatch;
-
-	QList<RECOG::PSGM_::FPMatch> FPMatchList;
-	QList<RECOG::PSGM_::FPMatch> *pFPMatchList = &FPMatchList;
-
-	RVLQLIST_INIT(pFPMatchList);
-
-	RECOG::PSGM_::FPMatch *pNewFPMatch;
-	RECOG::PSGM_::FPMatch *pFPMatch;
-
-	RECOG::PSGM_::MatchInstance *pSMIMatch = SMImatches.pFirst;
-
-	//find TP and FP
-	while (pSMIMatch)
-	{
-		if (pSMIMatch->score < scoreThresh)
-		{
-			match = false;
-
-			//TP
-			for (iGTS = 0; iGTS < nGTSecenes; iGTS++)
-			{
-				pGT = ECCVGT->GT.Element[iGTS].Element;
-
-				nGTModels = ECCVGT->GT.Element[iGTS].n;
-
-				for (iGTM = 0; iGTM < nGTModels; iGTM++)
-				{
-					if (pSMIMatch->iScene == pGT->iScene)
-					{
-						if (pSMIMatch->iModel == pGT->iModel)
-						{
-							RVLSCALEMX3X3(pGT->R, 1000, RGT);
-
-							RVLMXMUL3X3T2(pSMIMatch->R, RGT, R);
-
-							RVLSCALE3VECTOR(pGT->t, 1000, tGT)
-
-							RVLDIF3VECTORS(pSMIMatch->t, tGT, t);
-
-							GetAngleAxis(R, V, theta);
-
-							GetDistance(t, distance);
-
-							//if ((theta < angleThresh || (theta >(PI - angleThresh) && theta < (PI + angleThresh))) && distance < distanceThresh)
-							if (distance < distanceThresh)
-							{
-								if (!pGT->matched)
-								{
-									TP++;
-
-									pGT->matched = true;
-								}
-
-								match = true;
-
-								break;
-							}
-						}
-					}
-
-					pGT++;
-				}
-
-				if (match)
-					break;
-			}
-
-			//FP
-			if (!match)
-			{
-				FPmatch = false;
-
-				pFPMatch = pFPMatchList->pFirst;
-
-				while (pFPMatch)
-				{
-					if (pSMIMatch->iScene == pFPMatch->iScene)
-					{
-						if (pSMIMatch->iModel == pFPMatch->iModel)
-						{
-							RVLDIF3VECTORS(pSMIMatch->t, pFPMatch->t, t);
-
-							GetDistance(t, distance);
-
-							//printf("distance: %f\n", distance);
-
-							if (distance < distanceThresh)
-							{
-								FPmatch = true;
-
-								//Update FP match cluster
-								RVLSCALE3VECTOR(pFPMatch->t, pFPMatch->n, pFPMatch->t);
-
-								RVLSUM3VECTORS(pSMIMatch->t, pFPMatch->t, pFPMatch->t);
-
-								pFPMatch->n++;
-
-								RVLSCALE3VECTOR2(pFPMatch->t, pFPMatch->n, pFPMatch->t);
-
-								break;
-							}
-						}
-					}
-
-					pFPMatch = pFPMatch->pNext;
-				}
-
-				if (!FPmatch)
-				{
-					//add new cluster to FPMatch list
-					RVLMEM_ALLOC_STRUCT(pMem, RECOG::PSGM_::FPMatch, pNewFPMatch);
-
-					pNewFPMatch->iScene = pSMIMatch->iScene;
-
-					pNewFPMatch->iModel = pSMIMatch->iModel;
-
-					RVLCOPY3VECTOR(pSMIMatch->t, pNewFPMatch->t);
-
-					pNewFPMatch->n = 1;
-
-					RVLQLIST_ADD_ENTRY(pFPMatchList, pNewFPMatch);
-
-					FP++;
-				}
-
-			}
-		}
-
-		pSMIMatch = pSMIMatch->pNext;		
-	}
-
-	//find FN
-	for (iGTS = 0; iGTS < nGTSecenes; iGTS++)
-	{
-		pGT = ECCVGT->GT.Element[iGTS].Element;
-
-		nGTModels = ECCVGT->GT.Element[iGTS].n;
-
-		for (iGTM = 0; iGTM < nGTModels; iGTM++)
-		{
-			if (!pGT->matched)
-			{
-				FN++;
-				printf("GT Model %d not matched on scene %d!\n", iGTM, iGTS);
-			}
-
-			pGT++;
-		}
-	}
-
-	precision = (float)TP / (float)(TP + FP);
-
-	recall = (float)TP / (float)(TP + FN);
-
-	printf("TP: %d\n", TP);
-	printf("FP: %d\n", FP);
-	printf("FN: %d\n", FN);
-}
-
-void PSGM::CompareProbabilityMatchesToGT(
-	ECCVGTLoader *ECCVGT,
-	float probabilityThresh,
-	int probabilityCalculation,
-	bool poseCheck,
-	float angleThresh,
-	float distanceThresh,
-	float &precision,
-	float &recall)
-{
-	RVL::GTInstance *pGT;
-
-	int nGTSecenes = ECCVGT->GT.n;
-
-	int TP = 0, FP = 0, FN = 0;
-
-	int iGTS, iGTM, nGTModels;
-
-	float R[9], R_[9], RGT[9], tGT[3], t[3];
-
-	float V[3], theta, distance;
-
-	bool match;
-
-	RECOG::PSGM_::MatchInstance *pMatch;
-
-	if (probabilityCalculation == 1)
-		pMatch = SSegmentMatches1.pFirst;
-	else
-		pMatch = SSegmentMatches2.pFirst;
-
-	float probability;
-
-	//find TP and FP
-	while (pMatch)
-	{
-		if (probabilityCalculation == 1)
-			probability = pMatch->probability1;
-		else
-			probability = pMatch->probability2;
-
-		//if (probability >= probabilityThresh)
-		if ((probability - probabilityThresh) >= -1.4901161138336505e-009) //because of float precision => 0.1 is represented by 0.100000001
-		{
-			match = false;
-
-			//TP
-			for (iGTS = 0; iGTS < nGTSecenes; iGTS++)
-			{
-				pGT = ECCVGT->GT.Element[iGTS].Element;
-
-				nGTModels = ECCVGT->GT.Element[iGTS].n;
-
-				if (pMatch->iScene == pGT->iScene)
-				{
-					for (iGTM = 0; iGTM < nGTModels; iGTM++, pGT++)
-					{
-						if (pMatch->iModel == pGT->iModel)
-						{
-							//if (pMatch->iCluster == 2 && pMatch->iModel == 32 && probability > 0.97)
-							//	int debug = 0;
-
-							if (pMatch->iCluster == 4 && pMatch->iModel == 22)
-								int debug = 0;
-
-							if (poseCheck)
-							{
-
-								RVLSCALEMX3X3(pGT->R, 1000, RGT);
-
-								RVLMXMUL3X3T2(pMatch->R, RGT, R);
-
-								RVLSCALE3VECTOR(pGT->t, 1000, tGT)
-
-#ifdef RVLPSGM_MATCH_SEGMENT_CENTROID
-									
-								RVLDIFMX3X3(RGT, pMatch->R, R_);
-
-								RVLMULMX3X3VECT(R_, modelInstanceDB.Element[pMatch->iMMI].tc, t);
-
-								RVLSUM3VECTORS(t, tGT, t);
-
-								RVLDIF3VECTORS(t, pMatch->t, t);
-#else if
-								RVLDIF3VECTORS(pMatch->t, tGT, t);
-#endif
-
-								GetAngleAxis(R, V, theta);
-
-								GetDistance(t, distance);
-
-								if (pMatch->iCluster == 2 && pMatch->iModel == 32 && pMatch->probability2 > 0.5)
-									printf("Cluster: %d\nModel: %d\nProbability: %f\nDistance:%f\n\n", pMatch->iCluster, pMatch->iModel, pMatch->probability2, distance);
-
-								if (pMatch->iCluster == 1 && pMatch->iModel == 26 && pMatch->probability2 > 0.5)
-									printf("Cluster: %d\nModel: %d\nProbability: %f\nDistance:%f\n\n", pMatch->iCluster, pMatch->iModel, pMatch->probability2, distance);
-
-								if (pMatch->iCluster == 4 && pMatch->iModel == 1 && pMatch->probability2 > 0.5)
-									printf("Cluster: %d\nModel: %d\nProbability: %f\nDistance:%f\n\n", pMatch->iCluster, pMatch->iModel, pMatch->probability2, distance);
-
-								if (pMatch->iCluster == 5 && pMatch->iModel == 14 && pMatch->probability2 > 0.5)
-									printf("Cluster: %d\nModel: %d\nProbability: %f\nDistance:%f\n\n", pMatch->iCluster, pMatch->iModel, pMatch->probability2, distance);
-								
-
-								//if ((theta < angleThresh || (theta >(PI - angleThresh) && theta < (PI + angleThresh))) && distance < distanceThresh)
-								if (distance < distanceThresh)
-								{
-									if (!pGT->matched)
-									{
-										TP++;
-
-										pGT->matched = true;
-									}
-
-									match = true;
-
-									break;
-								}
-
-							}
-							else
-							{
-								if (!pGT->matched)
-								{
-									TP++;
-
-									pGT->matched = true;
-								}
-
-								match = true;
-
-								break;
-							}
-						}
-					}
-				}
-
-				if (match)
-					break;
-			}
-
-			//FP
-			if (!match)
-				FP++;
-		}
-
-		pMatch = pMatch->pNext;
-	}
-
-	//find FN
-	for (iGTS = 0; iGTS < nGTSecenes; iGTS++)
-	{
-		pGT = ECCVGT->GT.Element[iGTS].Element;
-
-		nGTModels = ECCVGT->GT.Element[iGTS].n;
-
-		for (iGTM = 0; iGTM < nGTModels; iGTM++)
-		{
-			if (!pGT->matched)
-			{
-				FN++;
-				printf("GT Model %d not matched on scene %d!\n", iGTM, iGTS);
-			}
-
-			pGT++;
-		}
-	}
-
-	if (TP + FP > 0)
-		precision = (float)TP / (float)(TP + FP);
-	else
-		precision = 0.0;
-
-	recall = (float)TP / (float)(TP + FN);
-
-	printf("TP: %d\n", TP);
-	printf("FP: %d\n", FP);
-	printf("FN: %d\n", FN);
-
-}
-
-
 //Compare single match to GT
 bool PSGM::CompareMatchToGT(
 	RECOG::PSGM_::MatchInstance *pMatch,
@@ -4844,6 +4073,8 @@ bool PSGM::CompareMatchToGT(
 
 	iGTS = pMatch->iScene;
 
+	int iMCTI, iMatchedModel;
+
 	//TP
 	pGT = pECCVGT->GT.Element[iGTS].Element;
 
@@ -4851,7 +4082,11 @@ bool PSGM::CompareMatchToGT(
 
 	for (iGTM = 0; iGTM < nGTModels; iGTM++, pGT++)
 	{
-		if (pMatch->iModel == pGT->iModel)
+		iMCTI = pMatch->iMCTI;
+
+		iMatchedModel = MCTISet.pCTI.Element[iMCTI]->iModel;
+
+		if (iMatchedModel == pGT->iModel)
 		{
 			if (poseCheck)
 			{
@@ -4881,24 +4116,14 @@ bool PSGM::CompareMatchToGT(
 				//if ((theta < angleThresh || (theta >(PI - angleThresh) && theta < (PI + angleThresh))) && distance < distanceThresh)
 				if (distance < distanceThresh)
 				{
-					//if (!pGT->matched)
-					//{
-						pGT->matched = true;
-						return true;								
-					//}
-
-					//return true; // Za sve TP matcheve vraæa true!! (Moguæe da za jedan GT model bude više TP-ova)
+					pGT->matched = true;
+					return true;								
 				}
 			}
 			else
 			{
-				//if (!pGT->matched)
-				//{
-					pGT->matched = true;
-					return true;							
-				//}
-
-				//return true; // Za sve TP matcheve vraæa true!! (Moguæe da za jedan GT model bude više TP-ova)
+				pGT->matched = true;
+				return true;							
 			}
 		}
 	}
@@ -4910,23 +4135,34 @@ bool PSGM::CompareMatchToGT(
 bool PSGM::CompareMatchToSegmentGT(
 	RECOG::PSGM_::MatchInstance *pMatch)
 {	
+	int iSCTI = pMatch->iSCTI;
+
+	int iSSegment = CTISet.pCTI.Element[iSCTI]->iCluster;
+
 	int iScene = pMatch->iScene;
-	int iSegmentGT = iScene * nDominantClusters + pMatch->iCluster;
+
+	int iSegmentGT = iScene * nDominantClusters + iSSegment;
 
 	int nGTModels, iGTM;
 
 	RVL::GTInstance *pGT;
 
+	int iMCTI, iMatchedModel;
+
 	pGT = pECCVGT->GT.Element[iScene].Element;
 	nGTModels = pECCVGT->GT.Element[iScene].n;
 
+	iMCTI = pMatch->iMCTI;
+
+	iMatchedModel = MCTISet.pCTI.Element[iMCTI]->iModel;
+
 	//if (pMatch->iModel == segmentGT.Element[iSegmentGT].iModel && pMatch->iMCluster == segmentGT.Element[iSegmentGT].iMSegment)
-	if (pMatch->iModel == segmentGT.Element[iSegmentGT].iModel)
+	if (iMatchedModel == segmentGT.Element[iSegmentGT].iModel)
 	{
 		//set GT matched flag
 		for (iGTM = 0; iGTM < nGTModels; iGTM++, pGT++)
 		{
-			if (pMatch->iModel == pGT->iModel)
+			if (iMatchedModel == pGT->iModel)
 				pGT->matched = true;
 		}
 
@@ -4941,8 +4177,6 @@ bool PSGM::CompareMatchToSegmentGT(
 	int iSSegment,
 	int iMatchedModel)
 {
-	//int iScene = pMatch->iScene;
-
 	int iSegmentGT = iScene * nDominantClusters + iSSegment;
 
 	int nGTModels, iGTM;
@@ -4952,7 +4186,6 @@ bool PSGM::CompareMatchToSegmentGT(
 	pGT = pECCVGT->GT.Element[iScene].Element;
 	nGTModels = pECCVGT->GT.Element[iScene].n;
 
-	//if (pMatch->iModel == segmentGT.Element[iSegmentGT].iModel && pMatch->iMCluster == segmentGT.Element[iSegmentGT].iMSegment)
 	if (iMatchedModel == segmentGT.Element[iSegmentGT].iModel)
 	{
 		//set GT matched flag
@@ -4982,34 +4215,29 @@ void PSGM::CountTPandFN(
 
 	int nGTSecenes = pECCVGT->GT.n;
 
-	//find FN
-	//for (iGTS = 0; iGTS < nGTSecenes; iGTS++)
-	//{
-		//pGT = ECCVGT->GT.Element[iGTS].Element;
-		pGT = pECCVGT->GT.Element[iScene-1].Element; //iScene-1 because iScene is incremented in Match()
+	pGT = pECCVGT->GT.Element[iScene-1].Element; //iScene-1 because iScene is incremented in Match()
 
-		nGTModels = pECCVGT->GT.Element[iScene-1].n; //iScene-1 because iScene is incremented in Match()
+	nGTModels = pECCVGT->GT.Element[iScene-1].n; //iScene-1 because iScene is incremented in Match()
 
-		for (iGTM = 0; iGTM < nGTModels; iGTM++)
+	for (iGTM = 0; iGTM < nGTModels; iGTM++)
+	{
+		if (!pGT->matched)
 		{
-			if (!pGT->matched)
-			{
-				FN++;
+			FN++;
 
-				if (printMatchInfo)
-					printf("GT Model %d NOT matched on scene %d!\n", iGTM, iScene - 1);
-			}
-			else
-			{
-				TP++;
-
-				if(printMatchInfo)
-					printf("GT Model %d matched on scene %d!\n", iGTM, iScene - 1);
-			}
-
-			pGT++;
+			if (printMatchInfo)
+				printf("GT Model %d NOT matched on scene %d!\n", iGTM, iScene - 1);
 		}
-	//}
+		else
+		{
+			TP++;
+
+			if(printMatchInfo)
+				printf("GT Model %d matched on scene %d!\n", iGTM, iScene - 1);
+		}
+
+		pGT++;
+	}	
 }
 
 void PSGM::CalculatePR(int TP, int FP, int FN, float &precision, float &recall)
@@ -5023,211 +4251,7 @@ void PSGM::CalculatePR(int TP, int FP, int FN, float &precision, float &recall)
 
 }
 
-void PSGM::CreateMatchMatrix()
-{
-	int iSSegment, iMSegment;
-	
-	matchMatrix.Element = new Array<RECOG::PSGM_::MatchInstance*>[nDominantClusters];
-	matchMatrix.n = nDominantClusters;
-
-	sortedMatches.Element = new Array<SortIndex<float>>[nDominantClusters];
-	sortedMatches.n = nDominantClusters;
-
-	for (iSSegment = 0; iSSegment < nDominantClusters; iSSegment++)
-	{
-		matchMatrix.Element[iSSegment].Element = new RECOG::PSGM_::MatchInstance*[nModels*nMSegments];
-		matchMatrix.Element[iSSegment].n = nModels*nMSegments;
-
-		sortedMatches.Element[iSSegment].Element = new SortIndex<float>[nModels*nMSegments];
-		sortedMatches.Element[iSSegment].n = nModels*nMSegments;
-
-
-		for (iMSegment = 0; iMSegment < nModels*nMSegments; iMSegment++)
-		{
-			matchMatrix.Element[iSSegment].Element[iMSegment] = NULL;
-
-			sortedMatches.Element[iSSegment].Element[iMSegment].idx = iMSegment;
-			sortedMatches.Element[iSSegment].Element[iMSegment].cost = 413; //PROMIJENITI!!
-		}
-	}
-}
-
-void PSGM::ClearMatchMatrix()
-{
-	int iSSegment, iMSegment;
-
-	for (iSSegment = 0; iSSegment < nDominantClusters; iSSegment++)
-		for (iMSegment = 0; iMSegment < nModels*nMSegments; iMSegment++)
-		{
-			matchMatrix.Element[iSSegment].Element[iMSegment] = NULL;
-
-			sortedMatches.Element[iSSegment].Element[iMSegment].idx = iMSegment;
-			sortedMatches.Element[iSSegment].Element[iMSegment].cost = 413; //PROMIJENITI!!
-		}
-
-}
-
-void PSGM::UpdateMatchMatrix(RECOG::PSGM_::MatchInstance *pMatch, float cost)
-{
-	int iModel, iMSegment, iSSegment;
-
-	iModel = pMatch->iModel;
-	iMSegment = pMatch->iMCluster;
-	iSSegment = pMatch->iCluster;
-
-	matchMatrix.Element[iSSegment].Element[iModel*nMSegments+iMSegment] = pMatch;
-
-	sortedMatches.Element[iSSegment].Element[iModel*nMSegments + iMSegment].cost = cost;
-}
-
-void PSGM::SortMatchMatrix()
-{
-	int iSSegment;
-
-	for (iSSegment = 0; iSSegment < nDominantClusters; iSSegment++)
-	{
-		BubbleSort<SortIndex<float>>(sortedMatches.Element[iSSegment]);
-	}
-}
-
-void PSGM::EvaluateMatchesByScore(FILE *fp, FILE *fpLog, bool compareSegmentsWithoutGT)
-{
-	float precision, recall;
-	float angleThresh, distanceThresh;
-	float scoreThreshMin, scoreThreshMax, scoreThresh;
-
-	int graphID = 0;
-	int nBestMatches = 104;
-
-	int *firstTP = new int[nDominantClusters];
-	float *firstTPScore = new float[nDominantClusters];
-
-	int iSSegment, iMSegment, iMatch, iBestMatches;
-
-	distanceThresh = 100;
-
-	scoreThreshMin = 180.0;
-	scoreThreshMax = 350.0;
-
-	//NEW PR calculation
-	RECOG::PSGM_::MatchInstance *pMatch;
-	RECOG::PSGM_::MatchInstance *pSegmentBestMatch;
-
-	float scoreRatio;
-
-	bool TPMatch;
-
-	int TP_ = 0, FP_ = 0, FN_ = 0;
-
-	for (iBestMatches = 0; iBestMatches <= nBestMatches; iBestMatches++)
-	{
-		for (scoreThresh = scoreThreshMin; scoreThresh <= scoreThreshMax; scoreThresh++)
-		{
-			for (iSSegment = 0; iSSegment < nDominantClusters; iSSegment++)
-			{
-				firstTP[iSSegment] = -1;
-
-				iMatch = sortedMatches.Element[iSSegment].Element[0].idx;
-				pSegmentBestMatch = matchMatrix.Element[iSSegment].Element[iMatch];
-
-				for (iMSegment = 0; iMSegment <= iBestMatches; iMSegment++)
-				{
-					iMatch = sortedMatches.Element[iSSegment].Element[iMSegment].idx;
-
-					pMatch = matchMatrix.Element[iSSegment].Element[iMatch];
-
-					scoreRatio = pSegmentBestMatch->score / pMatch->score;
-
-					if (pMatch && pMatch->score < scoreThresh)
-					{
-					#ifdef RVLPSGM_MATCH_USING_SEGMENT_GT
-						TPMatch = CompareMatchToSegmentGT(pMatch);
-					#else
-						TPMatch = CompareMatchToGT(pMatch, true, 0.0, distanceThresh);
-					#endif
-
-						if (!TPMatch)
-						{
-							int iSegmentGT = pMatch->iScene * nDominantClusters + pMatch->iCluster;
-
-							//eliminate FP from segments without GT
-							if (!compareSegmentsWithoutGT && segmentGT.Element[iSegmentGT].iModel == -1)
-								continue;
-							else
-								FP_++;
-						}
-						else
-							if (firstTP[iSSegment] == -1)
-							{
-								firstTP[iSSegment] = iMSegment;
-								firstTPScore[iSSegment] = pMatch->score;
-							}
-					}
-				}
-			}
-
-			#ifdef RVLPSGM_EVALUATION_PRINT_INFO
-				CountTPandFN(TP_, FN_, true);
-			#else
-				CountTPandFN(TP_, FN_, false);
-			#endif
-
-			CalculatePR(TP_, FP_, FN_, precision, recall);
-
-			//TP += TP_;
-			//FP += FP_;
-			//FN += FN_;
-
-			pECCVGT->ResetMatchFlag();
-#ifdef RVLPSGM_EVALUATION_PRINT_INFO
-			printf("---------------------------------------------------\n");
-			printf("Scene: %d\n", iScene - 1);
-			printf("TP: %d\n", TP_);
-			printf("FP: %d\n", FP_);
-			printf("FN: %d\n", FN_);
-			printf("nBestMatches: %d\n", iBestMatches);
-			printf("ScoreThresh: %f\n", scoreThresh);
-			printf("Precision: %f\n", precision);
-			printf("Recall: %f\n", recall);
-			printf("...................................................\n");
-			for (iSSegment = 0; iSSegment < nDominantClusters; iSSegment++)
-				if (firstTP[iSSegment] != -1)
-					printf("First TP for segment %d is: %d (score = %f)\n", iSSegment, firstTP[iSSegment], firstTPScore[iSSegment]);
-			printf("---------------------------------------------------\n\n");
-#endif
-
-			//print to log file
-			fprintf(fpLog, "---------------------------------------------------\n");
-			fprintf(fpLog, "Scene: %d\n", iScene - 1);
-			fprintf(fpLog, "TP: %d\n", TP_);
-			fprintf(fpLog, "FP: %d\n", FP_);
-			fprintf(fpLog, "FN: %d\n", FN_);
-			fprintf(fpLog, "nBestMatches: %d\n", iBestMatches);
-			fprintf(fpLog, "ScoreThresh: %f\n", scoreThresh);
-			fprintf(fpLog, "Precision: %f\n", precision);
-			fprintf(fpLog, "Recall: %f\n", recall);
-			fprintf(fpLog, "...................................................\n");
-			for (iSSegment = 0; iSSegment < nDominantClusters; iSSegment++)
-				if (firstTP[iSSegment] != -1)
-					fprintf(fpLog, "First TP for segment %d is: %d (score = %f)\n", iSSegment, firstTP[iSSegment], firstTPScore[iSSegment]);
-			fprintf(fpLog, "---------------------------------------------------\n\n");
-
-#ifdef RVLPSGM_MATCH_USING_SEGMENT_GT
-			distanceThresh = -1.0;		
-#endif
-			fprintf(fp, "%d\t%d\t%d\t%d\t%d\t%d\t%f\t%f\t%f\t%f\n", graphID, iScene - 1, TP_, FP_, FN_, iBestMatches, scoreThresh, distanceThresh, precision, recall);
-
-			TP_ = 0; FP_ = 0; FN_ = 0;
-
-			graphID++;
-		}
-	}
-
-	delete[] firstTP;
-	delete[] firstTPScore;
-}
-
-void PSGM::EvaluateMatchesByScore_(
+void PSGM::EvaluateMatchesByScore(
 	FILE *fp,
 	FILE *fpLog,
 	int nBestSegments)
@@ -5242,7 +4266,6 @@ void PSGM::EvaluateMatchesByScore_(
 	int nSSegments = scoreMatchMatrix.n;
 
 	int iMSegment;
-	//int nMSegments = MCTISet.SegmentCTIs.n;
 	int nMSegments = (MCTISet.nModels + 1) * (MCTISet.maxSegmentIdx + 1);
 
 	float scoreTmp;
@@ -5268,8 +4291,6 @@ void PSGM::EvaluateMatchesByScore_(
 				maxScore = scoreTmp;
 		}
 
-	//maxScore = 350;
-
 	int iScore, nScoreSteps = 200;
 
 	float scoreThresh;
@@ -5282,45 +4303,41 @@ void PSGM::EvaluateMatchesByScore_(
 
 	int iMatchedModel, iCTI;
 
+	int iMatch;
+
 	int *firstTP = new int[nDominantClusters];
 	float *firstTPScore = new float[nDominantClusters];
 	int *firstTPiModel = new int[nDominantClusters];
 
 	int iBestMatches;
 
+	int iMCTI;
+
 	if (nBestSegments == 0)
 	{
 		scoreThresh = minScore;
 
-		//for (scoreThresh = minScore; scoreThresh <= maxScore; scoreThresh += scoreStep)
 		for (iScore = 0; iScore < nScoreSteps; iScore++)
 		{
 			scoreThresh = minScore + iScore * scoreStep;
 
 			for (iSSegment = 0; iSSegment < nSSegments; iSSegment++)
 			{
-				//int iSegmentGT = (iScene-1) * nDominantClusters + iSSegment;
-
-				//printf("iScene: %d;\tiSSegment: %d\tSEGMENT GT MODEL: %d;\tiSegmentGT: %d\n", (iScene-1), iSSegment, segmentGT.Element[iSegmentGT].iModel, iSegmentGT);
-
 				firstTP[iSSegment] = -1;
 
 				for (iMSegment = 0; iMSegment < nMSegments; iMSegment++)
 				{
-					iCTI = scoreMatchMatrix.Element[iSSegment].Element[iMSegment].idx;
+					iMatch = scoreMatchMatrix.Element[iSSegment].Element[iMSegment].idx;
 
-					if (iCTI != -1)
+					if (iMatch != -1)
 					{
 						scoreTmp = scoreMatchMatrix.Element[iSSegment].Element[iMSegment].cost;
 
 						if (scoreTmp <= scoreThresh)
 						{
 							//Compare to segment GT
-
-							iCTI = scoreMatchMatrix.Element[iSSegment].Element[iMSegment].idx;
-
-							//iMatchedModel = MCTISet.CTI.Element[iCTI].iModel;
-							iMatchedModel = MCTISet.pCTI.Element[iCTI]->iModel;
+							iMCTI = pCTImatchesArray.Element[iMatch]->iMCTI;
+							iMatchedModel = MCTISet.pCTI.Element[iMCTI]->iModel;
 
 							int iSegmentGT = (iScene - 1) * nDominantClusters + iSSegment;
 
@@ -5332,13 +4349,7 @@ void PSGM::EvaluateMatchesByScore_(
 
 							if (!TPMatch)
 							{
-								//int iSegmentGT = (iScene - 1) * nDominantClusters + iSSegment;
-
-								//eliminate FP from segments without GT
-								//if (!segmentGT.Element[iSegmentGT].valid)
-								//	continue;
-								//else
-									FP_++;
+								FP_++;
 							}
 							else
 								if (firstTP[iSSegment] == -1)
@@ -5363,44 +4374,7 @@ void PSGM::EvaluateMatchesByScore_(
 
 			pECCVGT->ResetMatchFlag();
 
-#ifdef RVLPSGM_EVALUATION_PRINT_INFO
-			printf("---------------------------------------------------\n");
-			printf("Scene: %d\n", iScene - 1);
-			printf("TP: %d\n", TP_);
-			printf("FP: %d\n", FP_);
-			printf("FN: %d\n", FN_);
-			printf("ScoreThresh: %f\n", scoreThresh);
-			printf("Precision: %f\n", precision);
-			printf("Recall: %f\n", recall);
-			printf("Min score: %f\n", minScore);
-			printf("Max score: %f\n", maxScore);
-			printf("Score step: %f\n", scoreStep);
-			printf("...................................................\n");
-			for (iSSegment = 0; iSSegment < nSSegments; iSSegment++)
-				if (firstTP[iSSegment] != -1)
-					printf("First TP for segment %d is on %d place; Matched with iModel: %d (score = %f)\n", iSSegment, firstTP[iSSegment], firstTPiModel[iSSegment], firstTPScore[iSSegment]);
-			printf("---------------------------------------------------\n\n");
-#endif
-
-			//print to log file
-			fprintf(fpLog, "---------------------------------------------------\n");
-			fprintf(fpLog, "Scene: %d\n", iScene - 1);
-			fprintf(fpLog, "TP: %d\n", TP_);
-			fprintf(fpLog, "FP: %d\n", FP_);
-			fprintf(fpLog, "FN: %d\n", FN_);
-			fprintf(fpLog, "ScoreThresh: %f\n", scoreThresh);
-			fprintf(fpLog, "Precision: %f\n", precision);
-			fprintf(fpLog, "Recall: %f\n", recall);
-			fprintf(fpLog, "Min score: %f\n", minScore);
-			fprintf(fpLog, "Max score: %f\n", maxScore);
-			fprintf(fpLog, "Score step: %f\n", scoreStep);
-			fprintf(fpLog, "...................................................\n");
-			for (iSSegment = 0; iSSegment < nSSegments; iSSegment++)
-				if (firstTP[iSSegment] != -1)
-					fprintf(fpLog, "First TP for segment %d is on %d place; Matched with iModel: %d (score = %f)\n", iSSegment, firstTP[iSSegment], firstTPiModel[iSSegment], firstTPScore[iSSegment]);
-			fprintf(fpLog, "---------------------------------------------------\n\n");
-
-			fprintf(fp, "%d\t%d\t%d\t%d\t%d\t%d\t%f\t%f\t%f\t%f\n", graphID, iScene - 1, TP_, FP_, FN_, nBestSegments, scoreThresh, -1.0, precision, recall);
+			PrintMatchInfo(fp, fpLog, TP_, FP_, FN_, precision, recall, nSSegments, firstTP, firstTPiModel, firstTPScore, scoreThresh, minScore, maxScore, scoreStep, nBestSegments, -1.0, graphID);
 
 			TP_ = 0; FP_ = 0; FN_ = 0;
 
@@ -5421,19 +4395,17 @@ void PSGM::EvaluateMatchesByScore_(
 
 					for (iMSegment = 0; iMSegment <= iBestMatches; iMSegment++)
 					{
-						iCTI = scoreMatchMatrix.Element[iSSegment].Element[iMSegment].idx;
+						iMatch = scoreMatchMatrix.Element[iSSegment].Element[iMSegment].idx;
 
-						if (iCTI != -1)
+						if (iMatch != -1)
 						{
 							scoreTmp = scoreMatchMatrix.Element[iSSegment].Element[iMSegment].cost;
 
 							//if (scoreTmp <= scoreThresh)
 							//{
 								//Compare to segment GT
-								iCTI = scoreMatchMatrix.Element[iSSegment].Element[iMSegment].idx;
-
-								//iMatchedModel = MCTISet.CTI.Element[iCTI].iModel;
-								iMatchedModel = MCTISet.pCTI.Element[iCTI]->iModel;
+								iMCTI = pCTImatchesArray.Element[iMatch]->iMCTI;
+								iMatchedModel = MCTISet.pCTI.Element[iMCTI]->iModel;
 
 								int iSegmentGT = (iScene - 1) * nDominantClusters + iSSegment;
 
@@ -5445,13 +4417,7 @@ void PSGM::EvaluateMatchesByScore_(
 
 								if (!TPMatch)
 								{
-									//int iSegmentGT = (iScene - 1) * nDominantClusters + iSSegment;
-
-									//eliminate FP from segments without GT
-									//if (!segmentGT.Element[iSegmentGT].valid)
-									//	continue;
-									//else
-										FP_++;
+									FP_++;
 								}
 								else
 									if (firstTP[iSSegment] == -1)
@@ -5475,40 +4441,7 @@ void PSGM::EvaluateMatchesByScore_(
 
 				pECCVGT->ResetMatchFlag();
 
-#ifdef RVLPSGM_EVALUATION_PRINT_INFO
-				printf("---------------------------------------------------\n");
-				printf("Scene: %d\n", iScene - 1);
-				printf("TP: %d\n", TP_);
-				printf("FP: %d\n", FP_);
-				printf("FN: %d\n", FN_);
-				printf("nBestMatches: %d\n", iBestMatches);
-				//printf("ScoreThresh: %f\n", scoreThresh);
-				printf("Precision: %f\n", precision);
-				printf("Recall: %f\n", recall);
-				printf("...................................................\n");
-				for (iSSegment = 0; iSSegment < nSSegments; iSSegment++)
-					if (firstTP[iSSegment] != -1)
-						printf("First TP for segment %d is on %d place; Matched with iModel: %d (score = %f)\n", iSSegment, firstTP[iSSegment], firstTPiModel[iSSegment], firstTPScore[iSSegment]);
-				printf("---------------------------------------------------\n\n");
-#endif
-
-				//print to log file
-				fprintf(fpLog, "---------------------------------------------------\n");
-				fprintf(fpLog, "Scene: %d\n", iScene - 1);
-				fprintf(fpLog, "TP: %d\n", TP_);
-				fprintf(fpLog, "FP: %d\n", FP_);
-				fprintf(fpLog, "FN: %d\n", FN_);
-				fprintf(fpLog, "nBestMatches: %d\n", iBestMatches);
-				//fprintf(fpLog, "ScoreThresh: %f\n", scoreThresh);
-				fprintf(fpLog, "Precision: %f\n", precision);
-				fprintf(fpLog, "Recall: %f\n", recall);
-				fprintf(fpLog, "...................................................\n");
-				for (iSSegment = 0; iSSegment < nSSegments; iSSegment++)
-					if (firstTP[iSSegment] != -1)
-						fprintf(fpLog, "First TP for segment %d is on %d place; Matched with iModel: %d (score = %f)\n", iSSegment, firstTP[iSSegment], firstTPiModel[iSSegment], firstTPScore[iSSegment]);
-				fprintf(fpLog, "---------------------------------------------------\n\n");
-
-				fprintf(fp, "%d\t%d\t%d\t%d\t%d\t%d\t%f\t%f\t%f\t%f\n", graphID, iScene - 1, TP_, FP_, FN_, nBestSegments, -1.0, -1.0, precision, recall);
+				PrintMatchInfo(fp, fpLog, TP_, FP_, FN_, precision, recall, nSSegments, firstTP, firstTPiModel, firstTPScore, -1.0, -1.0, -1.0, -1.0, nBestSegments, iBestMatches, graphID);
 
 				TP_ = 0; FP_ = 0; FN_ = 0;
 
@@ -5521,6 +4454,87 @@ void PSGM::EvaluateMatchesByScore_(
 
 	delete[] firstTP;
 	delete[] firstTPScore;
+	delete[] firstTPiModel;
+}
+
+void PSGM::PrintMatchInfo(
+	FILE *fp,
+	FILE *fpLog,
+	int TP_,
+	int FP_,
+	int FN_,
+	float precision,
+	float recall,
+	int nSSegments,
+	int *firstTP,
+	int *firstTPiModel,
+	float *firstTPScore,
+	float scoreThresh,
+	float minScore,
+	float maxScore,
+	float scoreStep,
+	int nBestSegments,
+	int iBestMatches,
+	int graphID)
+{
+
+	int iSSegment;
+
+#ifdef RVLPSGM_EVALUATION_PRINT_INFO
+	printf("---------------------------------------------------\n");
+	printf("Scene: %d\n", iScene - 1);
+	printf("TP: %d\n", TP_);
+	printf("FP: %d\n", FP_);
+	printf("FN: %d\n", FN_);
+
+	if (nBestSegments)
+		printf("nBestMatches: %d\n", iBestMatches);
+	else
+	{
+		printf("ScoreThresh: %f\n", scoreThresh);
+		printf("Min score: %f\n", minScore);
+		printf("Max score: %f\n", maxScore);
+		printf("Score step: %f\n", scoreStep);
+	}
+
+	printf("Precision: %f\n", precision);
+	printf("Recall: %f\n", recall);
+
+	printf("...................................................\n");
+	for (iSSegment = 0; iSSegment < nSSegments; iSSegment++)
+		if (firstTP[iSSegment] != -1)
+			printf("First TP for segment %d is on %d place; Matched with iModel: %d (score = %f)\n", iSSegment, firstTP[iSSegment], firstTPiModel[iSSegment], firstTPScore[iSSegment]);
+	printf("---------------------------------------------------\n\n");
+#endif
+
+	//print to log file
+	fprintf(fpLog, "---------------------------------------------------\n");
+	fprintf(fpLog, "Scene: %d\n", iScene - 1);
+	fprintf(fpLog, "TP: %d\n", TP_);
+	fprintf(fpLog, "FP: %d\n", FP_);
+	fprintf(fpLog, "FN: %d\n", FN_);
+
+	if (nBestSegments)
+		fprintf(fpLog, "nBestMatches: %d\n", iBestMatches);
+	else
+	{
+		fprintf(fpLog, "ScoreThresh: %f\n", scoreThresh);
+		fprintf(fpLog, "Min score: %f\n", minScore);
+		fprintf(fpLog, "Max score: %f\n", maxScore);
+		fprintf(fpLog, "Score step: %f\n", scoreStep);
+	}
+
+	fprintf(fpLog, "Precision: %f\n", precision);
+	fprintf(fpLog, "Recall: %f\n", recall);
+
+	fprintf(fpLog, "...................................................\n");
+	for (iSSegment = 0; iSSegment < nSSegments; iSSegment++)
+		if (firstTP[iSSegment] != -1)
+			fprintf(fpLog, "First TP for segment %d is on %d place; Matched with iModel: %d (score = %f)\n", iSSegment, firstTP[iSSegment], firstTPiModel[iSSegment], firstTPScore[iSSegment]);
+	fprintf(fpLog, "---------------------------------------------------\n\n");
+
+	fprintf(fp, "%d\t%d\t%d\t%d\t%d\t%d\t%f\t%f\t%f\t%f\n", graphID, iScene - 1, TP_, FP_, FN_, nBestSegments, scoreThresh, -1.0, precision, recall);
+
 }
 
 void PSGM::SaveMatches()
@@ -5530,91 +4544,59 @@ void PSGM::SaveMatches()
 
 	sprintf(matchFileName + strlen(matchFileName) - 3, "smf");
 	
-
-	//fp = fopen("F:\\Projekti\\ARP3D\\Auxiliary\\Models\\SMIMatches.txt", "w");
 	FILE *fp = fopen(matchFileName, "w");
 
-	RECOG::PSGM_::MatchInstance *pSMIMatch = SMImatches.pFirst;
+	RECOG::PSGM_::MatchInstance *pMatch = CTImatches.pFirst;
+
+	RECOG::PSGM_::ModelInstance *pSCTI;
+	RECOG::PSGM_::ModelInstance *pMCTI;
 
 	int i;
 
-	while (pSMIMatch)
+	while (pMatch)
 	{
-		fprintf(fp, "%d\t%d\t%d\t%d\t%d\t%d\t%d\t", pSMIMatch->iScene, pSMIMatch->iCluster, pSMIMatch->iCRF, pSMIMatch->iSMI, pSMIMatch->iModel, pSMIMatch->iMCluster, pSMIMatch->iMMI);
+		fprintf(fp, "%d\t%d\t%d\t", pMatch->iScene, pMatch->iSCTI, pMatch->iMCTI);
 
-		//fprintf(fp2, "%d\t%d\t%d\t%d\t%f\t%f\t%f\t%f\n", iSCluster, bestSRF, bestMatchMIMID, bestMatchModelID, minETotal, tBestMatch[0], tBestMatch[1], tBestMatch[2]);
+		pSCTI = CTISet.pCTI.Element[pMatch->iSCTI];
+		pMCTI = MCTISet.pCTI.Element[pMatch->iMCTI];
+
+		MSTransformation(pMCTI, pSCTI, pMatch->tMatch, pMatch->R, pMatch->t);
 
 		for (i = 0; i < 9; i++)
-			fprintf(fp, "%f\t", pSMIMatch->R[i]);
-
-		//for (i = 0; i < 3; i++)
-		//	fprintf(fp, "%f\t", pSMIMatch->t[i]);
+			fprintf(fp, "%f\t", pMatch->R[i]);
 
 		for (i = 0; i < 3; i++)
-			fprintf(fp, "%f\t", pSMIMatch->tMatch[i]);
+			fprintf(fp, "%f\t", pMatch->tMatch[i]);
 
-		fprintf(fp, "%f\t", pSMIMatch->score);
+		fprintf(fp, "%f\t%f\t%f\t%f\t%f\t%d\n", pMatch->score, pMatch->E, pMatch->probability2, pMatch->angleGT, pMatch->distanceGT, pMatch->nValids);
 
-		fprintf(fp, "%f\t", pSMIMatch->E);
-
-		fprintf(fp, "%f\t", pSMIMatch->probability2);
-
-		fprintf(fp, "%f\t", pSMIMatch->angle);
-
-		fprintf(fp, "%f\t", pSMIMatch->distance);
-
-		fprintf(fp, "%d\n", pSMIMatch->nValids);
-
-		pSMIMatch = pSMIMatch->pNext;
+		pMatch = pMatch->pNext;
 	}
 
 	fclose(fp);
 }
 
-void PSGM::SaveSegmentGT(FILE*fp, bool CTIFromFile)
+void PSGM::SaveSegmentGT(FILE*fp, int iScene)
 {
 	int iSSegment;
 
-	int nClusters;
-
-	if (CTIFromFile)
-		nClusters = CTISet.SegmentCTIs.n;
-	else
-		nClusters = RVLMIN(clusters.n, nDominantClusters);
+	int nClusters = CTISet.SegmentCTIs.n;
 
 	for (iSSegment = 0; iSSegment < nClusters; iSSegment++)
-		fprintf(fp, "%d\t%d\t%d\t%d\t%d\n", segmentGT.Element[(iScene - 1)*nDominantClusters + iSSegment].iScene, segmentGT.Element[(iScene - 1)*nDominantClusters + iSSegment].iSSegment, segmentGT.Element[(iScene - 1)*nDominantClusters + iSSegment].iModel, segmentGT.Element[(iScene - 1)*nDominantClusters + iSSegment].iMSegment, segmentGT.Element[(iScene - 1)*nDominantClusters + iSSegment].valid);
+		fprintf(fp, "%d\t%d\t%d\t%d\t%d\n", segmentGT.Element[iScene*nDominantClusters + iSSegment].iScene, segmentGT.Element[iScene*nDominantClusters + iSSegment].iSSegment, segmentGT.Element[iScene*nDominantClusters + iSSegment].iModel, segmentGT.Element[iScene*nDominantClusters + iSSegment].iMSegment, segmentGT.Element[iScene*nDominantClusters + iSSegment].valid);
 }
 
-void PSGM::LoadSegmentGT(FILE*fp, bool CTIFromFile)
+void PSGM::LoadSegmentGT(FILE*fp, int iScene)
 {
-	int iSSegment;
-
-	int nClusters;
-
-	if (CTIFromFile)
-	{
-		//nClusters = CTISet.SegmentCTIs.n;
-		nClusters = CTISet.maxSegmentIdx + 1;
-	}
-	else
-		nClusters = RVLMIN(clusters.n, nDominantClusters);
-
-	for (iSSegment = 0; iSSegment < nClusters; iSSegment++)
-		fscanf(fp, "%d\t%d\t%d\t%d\t%d\n", &segmentGT.Element[(iScene - 1)*nDominantClusters + iSSegment].iScene, &segmentGT.Element[(iScene - 1)*nDominantClusters + iSSegment].iSSegment, &segmentGT.Element[(iScene - 1)*nDominantClusters + iSSegment].iModel, &segmentGT.Element[(iScene - 1)*nDominantClusters + iSSegment].iMSegment, &segmentGT.Element[(iScene - 1)*nDominantClusters + iSSegment].valid);
-}
-
-
-void PSGM::LoadCompleteSegmentGT(FILE*fp)
-{
-	RVL_DELETE_ARRAY(segmentGT.Element)
-
-	segmentGT.Element = new RVL::SegmentGTInstance[nDominantClusters * 50];
-
 	char line[3000] = { 0 };
 
-	int nLines = 0, iLine;
+	int nLines, iLine;
 
+	nLines = 0;
+
+	int iSSegmentTmp;
+
+	//count number of lines in gt file
 	while (!feof(fp))
 	{
 		line[0] = '\0';
@@ -5629,17 +4611,55 @@ void PSGM::LoadCompleteSegmentGT(FILE*fp)
 
 	rewind(fp);
 
-	int iSceneTmp, iSSegmentTmp;
-
+	//load segment GT for current scene
 	for (iLine = 0; iLine < nLines; iLine++)
 	{
-		fscanf(fp, "%d\t%d\t", &iSceneTmp, &iSSegmentTmp);
+		fscanf(fp, "%d\t", &iSSegmentTmp);
 
-		segmentGT.Element[iSceneTmp*nDominantClusters + iSSegmentTmp].iScene = iSceneTmp;
+		segmentGT.Element[iScene*nDominantClusters + iSSegmentTmp].iScene = iScene;
 
-		segmentGT.Element[iSceneTmp*nDominantClusters + iSSegmentTmp].iSSegment = iSSegmentTmp;
+		segmentGT.Element[iScene*nDominantClusters + iSSegmentTmp].iSSegment = iSSegmentTmp;
 
-		fscanf(fp, "%d\t%d\t%d\n", &segmentGT.Element[iSceneTmp*nDominantClusters + iSSegmentTmp].iModel, &segmentGT.Element[iSceneTmp*nDominantClusters + iSSegmentTmp].iMSegment, &segmentGT.Element[iSceneTmp*nDominantClusters + iSSegmentTmp].valid);		
+		fscanf(fp, "%d\t%d\t%d\n", &segmentGT.Element[iScene*nDominantClusters + iSSegmentTmp].iModel, &segmentGT.Element[iScene*nDominantClusters + iSSegmentTmp].iMSegment, &segmentGT.Element[iScene*nDominantClusters + iSSegmentTmp].valid);
+	}
+}
+
+void PSGM::LoadCompleteSegmentGT(FileSequenceLoader sceneSequence)
+{
+	RVL_DELETE_ARRAY(segmentGT.Element);
+
+	segmentGT.Element = new RVL::SegmentGTInstance[nDominantClusters * sceneSequence.nFileNames];
+	segmentGT.n = nDominantClusters * sceneSequence.nFileNames;
+
+	char filePath[200];
+
+	char *segmentGTFilePath;
+
+	FILE *fp;
+
+	int iSceneTmp = 0;
+
+	while (sceneSequence.GetNextPath(filePath))
+	{
+		//create segment GT file path
+		segmentGTFilePath = RVLCreateFileName(filePath, ".ply", -1, ".sgt", pMem);
+
+		fp = fopen(segmentGTFilePath, "r");
+
+		if (fp)
+		{
+			LoadSegmentGT(fp, iSceneTmp);
+
+			fclose(fp);
+		}
+		else
+		{
+			printf("*****************WARNING****************\n", filePath);
+			printf("Segment GT file is missing for scene:\n%s\n", filePath);
+			printf("****************************************\n", filePath);
+		}
+
+		iSceneTmp++;
 	}
 }
 
@@ -5707,7 +4727,7 @@ void PSGM::ConvexTemplateCentoidID()
 		}
 	}
 }
-//END VIDOVIC
+//END Vidovic
 
 void PSGM::InitDisplay(
 	Visualizer *pVisualizer,
@@ -5895,12 +4915,14 @@ void PSGM::DisplayReferenceFrames()
 
 	colors->SetNumberOfComponents(3);
 
-	int nClusters = RVLMIN(clusters.n, nDominantClusters);
+	//int nClusters = RVLMIN(clusters.n, nDominantClusters); //Vidovic
 
-	RECOG::PSGM_::Cluster *pCluster;
-	int iCluster;
+	//RECOG::PSGM_::Cluster *pCluster; //Vidovic
+	//int iCluster; //Vidovic
 	RECOG::PSGM_::ModelInstance *pModelInstance;
 
+	//Vidovic
+	/*
 	for (iCluster = 0; iCluster < nClusters; iCluster++)
 	{
 		pCluster = clusters.Element[iCluster];
@@ -5931,7 +4953,35 @@ void PSGM::DisplayReferenceFrames()
 
 			pModelInstance = pModelInstance->pNext;
 		}
+	}*/
+
+	pModelInstance = CTISet.CTI.pFirst;
+
+	while (pModelInstance)
+	{
+		pVisualizer->AddReferenceFrame(pts, lines, colors, pModelInstance->R, pModelInstance->t, 10.0);
+
+		//vtkSmartPointer<vtkAxesActor> axes = vtkSmartPointer<vtkAxesActor>::New();
+
+		//axes->SetTotalLength(axesLength, axesLength, axesLength);
+
+		//vtkSmartPointer<vtkPolyDataMapper> mapper = vtkSmartPointer<vtkPolyDataMapper>::New();
+
+		//vtkSmartPointer<vtkTransform> transform = vtkSmartPointer<vtkTransform>::New();
+		//double T[16];
+		//RVLCREATE3DTRANSF(pModelInstance->R, pModelInstance->t, T);
+
+		//transform->SetMatrix(T);
+
+		//axes->SetUserTransform(transform);
+
+		//vtkMatrix4x4 *T_ = axes->GetMatrix();
+
+		//pVisualizer->renderer->AddActor(axes);
+
+		pModelInstance = pModelInstance->pNext;
 	}
+	//END Vidovic
 
 	// Add the points to the polydata container
 	referenceFramesPolyData->SetPoints(pts);

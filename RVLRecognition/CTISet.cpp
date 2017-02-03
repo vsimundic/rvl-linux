@@ -12,7 +12,7 @@
 #include "PlanarSurfelDetector.h"
 #include "RVLRecognition.h"
 #include "CTISet.h"
-#include <Eigen\Eigenvalues>
+//#include <Eigen\Eigenvalues>
 
 using namespace RVL;
 using namespace RECOG;
@@ -30,6 +30,13 @@ CTISet::~CTISet()
 	RVL_DELETE_ARRAY(SegmentCTIs.Element);
 	RVL_DELETE_ARRAY(segmentCTIIdxMem);
 	RVL_DELETE_ARRAY(pCTI.Element);
+}
+
+void CTISet::Init()
+{
+	RVLQLIST_INIT((&CTI));
+
+	pCTI.n = 0;
 }
 
 void CTISet::Load(char *filePath)
@@ -60,9 +67,10 @@ void CTISet::Load(char *filePath)
 
 		rewind(fp);
 
-		QList<RECOG::PSGM_::ModelInstance> *pCTIQlist = &CTI;
+		//QList<RECOG::PSGM_::ModelInstance> *pCTIQlist = &CTI;
 
-		RVLQLIST_INIT(pCTIQlist);
+		//RVLQLIST_INIT(pCTIQlist);
+		RVLQLIST_INIT((&CTI));
 
 		RECOG::PSGM_::ModelInstance *pQlistEntry;
 
@@ -71,7 +79,8 @@ void CTISet::Load(char *filePath)
 		{
 			pQlistEntry = new RECOG::PSGM_::ModelInstance;
 
-			RVLQLIST_ADD_ENTRY(pCTIQlist, pQlistEntry);
+			//RVLQLIST_ADD_ENTRY(pCTIQlist, pQlistEntry);
+			RVLQLIST_ADD_ENTRY((&CTI), pQlistEntry);
 
 			pQlistEntry->modelInstance.Element = new RECOG::PSGM_::ModelInstanceElement[nT];
 
@@ -108,140 +117,103 @@ void CTISet::Load(char *filePath)
 
 			for (i = 0; i < 3; i++)
 				fscanf(fp, "%f\t", &pQlistEntry->tc[i]);
-
-			/*if (iModelInstance == pCTI.n - 1)
-				pModelInstance->pNext = NULL;
-			else
-			{
-				pModelInstance->pNext = pModelInstance + 1;
-				pModelInstance++;
-			}*/
-
 		}
 
-		//COPY QLIST TO ARRAY
-		pCTI.Element = new RECOG::PSGM_::ModelInstance*[pCTI.n];
-
-
-		/*RVL_DELETE_ARRAY(CTI.Element);
-
-		CTI.Element = new RECOG::PSGM_::ModelInstance[CTI.n];
-
-		pModelInstance = CTI.Element;
-
-		for (iModelInstance = 0; iModelInstance < CTI.n; iModelInstance++)
-		{
-			pModelInstance->modelInstance.Element = new RECOG::PSGM_::ModelInstanceElement[nT];
-
-			pModelInstance->modelInstance.n = nT;
-
-			fscanf(fp, "%d\t%d\t", &pModelInstance->iModel, &pModelInstance->iCluster);
-
-			for (i = 0; i < 9; i++)
-				fscanf(fp, "%f\t", &pModelInstance->R[i]);
-
-			for (i = 0; i < 3; i++)
-				fscanf(fp, "%f\t", &pModelInstance->t[i]);
-
-			for (iModelInstanceElement = 0; iModelInstanceElement < nT; iModelInstanceElement++)
-			{
-				pModelInstanceElement = pModelInstance->modelInstance.Element + iModelInstanceElement;
-
-				fscanf(fp, "%f\t", &pModelInstanceElement->d);
-			}
-
-			for (iModelInstanceElement = 0; iModelInstanceElement < nT; iModelInstanceElement++)
-			{
-				pModelInstanceElement = pModelInstance->modelInstance.Element + iModelInstanceElement;
-
-				fscanf(fp, "%d\t", &pModelInstanceElement->valid);
-			}
-
-			for (iModelInstanceElement = 0; iModelInstanceElement < nT; iModelInstanceElement++)
-			{
-				pModelInstanceElement = pModelInstance->modelInstance.Element + iModelInstanceElement;
-
-				fscanf(fp, "%f\t", &pModelInstanceElement->e);
-			}
-
-			for (i = 0; i < 3; i++)
-				fscanf(fp, "%f\t", &pModelInstance->tc[i]);
-
-			if (iModelInstance == CTI.n - 1)
-				pModelInstance->pNext = NULL;
-			else
-			{
-				pModelInstance->pNext = pModelInstance + 1;
-				pModelInstance++;
-			}
-		}*/
+		CopyCTIsToArray();
 
 		fclose(fp);
 	}
+}
 
-	/*
-	// Calculate number of scene/model segments
-	RECOG::PSGM_::ModelInstance *pCTI;
-	RECOG::PSGM_::ModelInstance *pCTINext;
-	pCTI = CTI.Element;
-	pCTINext = pCTI++;
 
-	int nS = 0; //number of scene/model segments
-	int br;
-	for (br = 0; br < CTI.n; br++)
+void CTISet::AddCTI(RECOG::PSGM_::ModelInstance *pCTI_)
+{
+	RVLQLIST_ADD_ENTRY((&CTI), pCTI_);
+
+	pCTI.n++;
+}
+
+void CTISet::CopyCTIsToArray()
+{
+	//Copy Qlist to Array
+	if (pCTI.n > 0)
 	{
-		if ((pCTI->iCluster != pCTINext->iCluster || pCTI->iModel !=pCTINext->iModel) && br != CTI.n - 1)
-			nS++;
-		pCTI++;
-		pCTINext++;
-	}
-	nS += 1;
+		RVL_DELETE_ARRAY(pCTI.Element);
 
-	maxSegmentIdx = CTI.Element[br - 1].iCluster;
+		pCTI.Element = new RECOG::PSGM_::ModelInstance*[pCTI.n];
 
-	nModels = CTI.Element[br - 1].iModel;
+		QLIST::CreatePtrArray<RECOG::PSGM_::ModelInstance>(&CTI, &pCTI);
 
-	// nCTI(i) represents number of CTI-s in i-th segment	
-	Eigen::VectorXi nCTI(nS);
-	int brojac = 0;
-	int iC, iM;
-	pCTI = CTI.Element;
-	RECOG::PSGM_::ModelInstance *pCTIEnd = CTI.Element + CTI.n;
+		// Calculate number of scene/model segments
+		RECOG::PSGM_::ModelInstance *pCTI_;
+		RECOG::PSGM_::ModelInstance *pCTINext;
 
-	for (int i = 0; i < nS; i++)
-	{
-		iM = pCTI->iModel;
-		iC = pCTI->iCluster;
-		nCTI(i) = 0;
-		while (iM == pCTI->iModel && iC == pCTI->iCluster)
+		pCTI_ = CTI.pFirst;
+		pCTINext = pCTI_->pNext;
+
+		int nS = 0; //number of scene/model segments
+
+		maxSegmentIdx = 0;
+
+		for (int i = 0; i < pCTI.n - 1; i++)
 		{
-			nCTI(i)++;
+			if (pCTI_->iCluster != pCTINext->iCluster || pCTI_->iModel != pCTINext->iModel)
+				nS++;
 
-			int a = nCTI(i);
-			pCTI++;
-			if (pCTI >= pCTIEnd)
-				break;
+			pCTI_ = pCTINext;
+			pCTINext = pCTI_->pNext;
+
+			if (pCTI_->iCluster > maxSegmentIdx)
+				maxSegmentIdx = pCTI_->iCluster;
 		}
+
+		nS += 1;
+
+		nModels = pCTI.Element[pCTI.n - 1]->iModel;
+
+		// nCTI(i) represents number of CTI-s in i-th segment	
+		int *nCTI = new int[nS];
+		int iC, iM;
+
+		pCTI_ = CTI.pFirst;
+
+		for (int i = 0; i < nS; i++)
+		{
+			iM = pCTI_->iModel;
+			iC = pCTI_->iCluster;
+
+			nCTI[i] = 0;
+
+			while (pCTI_ && iM == pCTI_->iModel && iC == pCTI_->iCluster)
+			{
+				nCTI[i]++;
+
+				pCTI_ = pCTI_->pNext;
+			}
+		}
+
+		// Creates Array of segments, each segment contains CTI indices in that segment
+		RVL_DELETE_ARRAY(SegmentCTIs.Element);
+		RVL_DELETE_ARRAY(segmentCTIIdxMem);
+
+		SegmentCTIs.Element = new Array<int>[nS];
+		SegmentCTIs.n = nS;
+
+		segmentCTIIdxMem = new int[pCTI.n];
+
+		int *iSegmentCTIIdx = segmentCTIIdxMem;
+		int iCTI = 0;
+
+		for (int i = 0; i < nS; i++)
+		{
+			SegmentCTIs.Element[i].Element = iSegmentCTIIdx;
+
+			for (int j = 0; j < nCTI[i]; j++, iCTI++)
+				*(iSegmentCTIIdx++) = iCTI;
+
+			SegmentCTIs.Element[i].n = nCTI[i];
+		}
+
+		delete[] nCTI;
 	}
-
-	// Creates Array of segments, each segment contains CTI indices in that segment
-	RVL_DELETE_ARRAY(SegmentCTIs.Element);
-	RVL_DELETE_ARRAY(segmentCTIIdxMem);
-	SegmentCTIs.Element = new Array<int>[nS];
-	SegmentCTIs.n = nS;
-	segmentCTIIdxMem = new int[CTI.n];
-
-	int *iSegmentCTIIdx = segmentCTIIdxMem;
-	int iCTI = 0;
-
-	for (int i = 0; i < nS; i++)
-	{
-		SegmentCTIs.Element[i].Element = iSegmentCTIIdx;
-
-		for (int j = 0; j < nCTI(i); j++, iCTI++)
-			*(iSegmentCTIIdx++) = iCTI;
-
-		SegmentCTIs.Element[i].n = iSegmentCTIIdx - SegmentCTIs.Element[i].Element;
-	}
-	*/
 }

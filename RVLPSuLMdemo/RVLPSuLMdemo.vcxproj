@@ -120,7 +120,7 @@
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>RVLCore.lib;RVLPCLTools.lib;RVLPCSegment.lib;RVLRecognition.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>RVLCore.lib;RVLPCS.lib;RVLPSuLM.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>..\x64\Debug;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Console</SubSystem>
