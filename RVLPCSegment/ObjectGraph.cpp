@@ -713,6 +713,9 @@ void ObjectGraph::Create(SurfelGraph *pSurfels_)
 		if (pSurfel->size <= 1)
 			continue;
 
+		if (pSurfel->bEdge)
+			continue;
+
 		pEdgeList = &(pAgNode->EdgeList);
 
 		for (i = 0; i < pSurfel->imgAdjacency.size(); i++)

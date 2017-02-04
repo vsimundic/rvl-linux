@@ -1080,6 +1080,9 @@ void RunMainProg(
 				if (pSurfel->size <= 1)
 					continue;
 
+				if (pSurfel->bEdge)
+					continue;
+
 				DetermineImgAdjDescriptors(pSurfel, &mesh);
 			}
 

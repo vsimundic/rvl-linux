@@ -197,6 +197,9 @@ void SurfelGraph::ImageAdjacency(Mesh *pMesh)
 		if (pSurfel->size <= 1)
 			continue;
 
+		if (pSurfel->bEdge)
+			continue;
+
 		ImageAdjacency(pMesh, iSurfel, surfelIdx, bVisited);
 	}
 
