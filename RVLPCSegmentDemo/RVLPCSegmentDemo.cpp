@@ -3,7 +3,7 @@
 
 //#include "stdafx.h"
 #include <vtkAutoInit.h>
-VTK_MODULE_INIT(vtkRenderingOpenGL);
+VTK_MODULE_INIT(vtkRenderingOpenGL2);
 VTK_MODULE_INIT(vtkInteractionStyle);
 VTK_MODULE_INIT(vtkRenderingFreeType);
 #include "RVLVTK.h"
@@ -477,7 +477,7 @@ void RunMainProg(
 			cv::imshow("Colored surfel image", GenColoredSegmentationImgFromObjectGraph(&objects));
 			cv::waitKey(1);
 			/*VisualizeObjectGraphVertexPointCloud(&objects, 100);*/
-			objects.ObjectAggregationLevel2_ViaObjectPairConvexity(0.015, 0.85, 300, true);
+			objects.ObjectAggregationLevel2_ViaObjectPairConvexity(0.015, 0.85, 0.5, 300, true);
 			cv::imshow("New Colored surfel image", GenColoredSegmentationImgFromObjectGraph(&objects));
 			cv::waitKey(1);
 			////

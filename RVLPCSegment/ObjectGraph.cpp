@@ -638,7 +638,7 @@ void ObjectGraph::CreateParamList(CRVLMem *pMem)
 	ParamList.Init();
 
 	pParamData = ParamList.AddParam("ObjectGraph.alpha", RVLPARAM_TYPE_FLOAT, &alpha);
-	pParamData = ParamList.AddParam("ObjectGraph.method", RVLPARAM_TYPE_ID, &relationClassifier);
+	pParamData = ParamList.AddParam("ObjectGraph.relationClassifier", RVLPARAM_TYPE_ID, &relationClassifier);
 	ParamList.AddID(pParamData, "HEURISTIC", RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_HEURISTIC);
 	ParamList.AddID(pParamData, "SVM", RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_SVM);
 	ParamList.AddID(pParamData, "NLMC", RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_NLMC);
@@ -1896,7 +1896,7 @@ void ObjectGraph::CalculateConvexityRatiosForObjectPair(int firstObject, int sec
 	delete[] added;
 }
 
-void ObjectGraph::ObjectAggregationLevel2_ViaObjectPairConvexity(float convexThr, float ratioThr, int objValidThr, bool verbose)
+void ObjectGraph::ObjectAggregationLevel2_ViaObjectPairConvexity(float convexThr, float ratioThr, float ratioThr2, int objValidThr, bool verbose)
 {
 	//running through all objects (Generating a list of valid objects)
 	GRAPH::AggregateNode<SURFEL::AgEdge> *pObject;
@@ -1943,6 +1943,7 @@ void ObjectGraph::ObjectAggregationLevel2_ViaObjectPairConvexity(float convexThr
 	//Generating merge clusters (object pairs is in decreasing order)
 	std::map<int, std::set<int>> merge_clusters;
 	std::map<int, std::set<int>>::iterator clustIt;
+	std::set<int>::iterator clusterSetIt;
 	int foundSet = 0;
 	bool inserFirst;
 	for (int i = 0; i < merge_pairs.size(); i++)
@@ -1984,8 +1985,88 @@ void ObjectGraph::ObjectAggregationLevel2_ViaObjectPairConvexity(float convexThr
 		}
 	}
 
+	////Checking cluster consistincy if there is are more than two objects in cluster
+	////Helper stuff
+	//struct temp_pair{ int a; int b; float score; static bool sort_desc(temp_pair first, temp_pair second) { return (first.score > second.score); } };
+	////
+	//std::vector<int> cluster;
+	//std::vector<std::vector<temp_pair>> object_links;
+	//std::vector<temp_pair> links;
+	//std::map<int, std::set<int>> merge_clusters_copy = merge_clusters;
+	//float mmatrix[20][20]; //max cluster size of 20 objects
+	//int mmatrix_size;
+	//for (clustIt = merge_clusters_copy.begin(); clustIt != merge_clusters_copy.end(); clustIt++)
+	//{
+	//	if (clustIt->second.size() > 1) //total cluster size is clustIt->second.size() + 1 (clustIt->first is cluster leader)
+	//	{
+	//		//remove this cluster from the list (new cluster or clusters will be added)
+	//		merge_clusters.erase(clustIt->first);
+	//		//setup a cluster
+	//		mmatrix_size = clustIt->second.size() + 1;
+	//		for (int i = 0; i < mmatrix_size; i++)	//reset match matrix
+	//		{
+	//			for (int j = 0; j < mmatrix_size; j++)
+	//				mmatrix[j][i] = 0;
+	//		}
+	//		cluster.clear();	//reset cluster
+	//		cluster.push_back(clustIt->first);
+	//		for (clusterSetIt = clustIt->second.begin(); clusterSetIt != clustIt->second.end(); clusterSetIt++)
+	//			cluster.push_back(*clusterSetIt);
+	//		
+	//		links.clear();
+	//		object_links.clear();
+	//		object_links.resize(cluster.size());
+
+	//		//run through cluster
+	//		for (int iObject = 0; iObject < cluster.size(); iObject++)
+	//		{
+	//			for (int iObject2 = iObject + 1; iObject2 < cluster.size(); iObject2++)
+	//				this->CalculateConvexityRatiosForObjectPair(cluster.at(iObject), cluster.at(iObject2), mmatrix[iObject][iObject2], mmatrix[iObject2][iObject], convexThr);
+	//		}
+
+	//		//analyzing mmatrix and creating links
+	//		for (int i = 0; i < mmatrix_size; i++)
+	//		{
+	//			for (int j = i + 1; j < mmatrix_size; j++)
+	//			{
+	//				if (mmatrix[i][j] < mmatrix[j][i])
+	//				{
+	//					links.push_back(temp_pair());
+	//					links.at(links.size() - 1).a = i;
+	//					links.at(links.size() - 1).b = j;
+	//					links.at(links.size() - 1).score = mmatrix[i][j];
+	//					object_links.at(i).push_back(temp_pair(links.at(links.size() - 1)));
+	//					object_links.at(j).push_back(temp_pair());
+	//					object_links.at(j).at(object_links.at(j).size() - 1).a = j;
+	//					object_links.at(j).at(object_links.at(j).size() - 1).b = i;
+	//					object_links.at(j).at(object_links.at(j).size() - 1).score = mmatrix[i][j];
+	//				}
+	//				else
+	//				{
+	//					links.push_back(temp_pair());
+	//					links.at(links.size() - 1).a = i;
+	//					links.at(links.size() - 1).b = j;
+	//					links.at(links.size() - 1).score = mmatrix[j][i];
+	//					object_links.at(i).push_back(temp_pair(links.at(links.size() - 1)));
+	//					object_links.at(j).push_back(temp_pair());
+	//					object_links.at(j).at(object_links.at(j).size() - 1).a = j;
+	//					object_links.at(j).at(object_links.at(j).size() - 1).b = i;
+	//					object_links.at(j).at(object_links.at(j).size() - 1).score = mmatrix[j][i];
+	//				}
+	//			}
+	//		}
+
+	//		//sorting lists
+	//		std::sort(links.begin(), links.end(), temp_pair::sort_desc);
+	//		for (int i = 0; i < object_links.size(); i++)
+	//			std::sort(object_links.at(i).begin(), object_links.at(i).end(), temp_pair::sort_desc);
+	//		std::cout << "bla";
+	//	}
+	//}
+
+
+
 	//Running through merge clusters and combining objects
-	std::set<int>::iterator clusterSetIt;
 	GRAPH::AggregateNode<SURFEL::AgEdge> *pNode1;
 	GRAPH::AggregateNode<SURFEL::AgEdge> *pNode2;
 	QList<QLIST::Index> *pElementList1;
