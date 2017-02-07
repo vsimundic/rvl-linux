@@ -421,6 +421,9 @@ void RunMainProg(
 				if (pSurfel->size <= 1)
 					continue;
 
+				if (pSurfel->bEdge)
+					continue;
+
 				DetermineImgAdjDescriptors(pSurfel, &mesh);
 			}
 
@@ -474,11 +477,11 @@ void RunMainProg(
 			////Filko
 			//objects.DetermineObjectConvexityData(0.005, 0.5);
 			//ObjectAggregationLevel2(&objects, &surfels, &mesh, MeshFileName);
-			cv::imshow("Colored surfel image", GenColoredSegmentationImgFromObjectGraph(&objects));
+			cv::imshow("Colored object image", GenColoredSegmentationImgFromObjectGraph(&objects));
 			cv::waitKey(1);
 			/*VisualizeObjectGraphVertexPointCloud(&objects, 100);*/
-			objects.ObjectAggregationLevel2_ViaObjectPairConvexity(0.015, 0.85, 0.5, 300, true);
-			cv::imshow("New Colored surfel image", GenColoredSegmentationImgFromObjectGraph(&objects));
+			objects.ObjectAggregationLevel2_ViaObjectPairConvexity(0.015, 0.77, 0.75, 300, true);
+			cv::imshow("New Colored object image", GenColoredSegmentationImgFromObjectGraph(&objects));
 			cv::waitKey(1);
 			////
 
