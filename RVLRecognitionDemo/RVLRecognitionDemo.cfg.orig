@@ -1,0 +1,31 @@
+SceneSequenceFileName: C:\RVL\Samples\TUW_ECCV12\scenes\sceneSequence.txt
+MeshBuilder.sigmaR: 0.002
+MeshBuilder.normalEstR: 0.010
+MeshBuilder.bilateralFilter: no
+SurfelDetector.kPlane: 300.0
+SurfelDetector.kNormal: 4.0
+SurfelDetector.maxRange: 1.5
+SurfelGraph.visualization.edgeFeatureDepth: 0.010
+SurfelGraph.visualization.normalLen: 0.010
+SurfelDetector.kRGB: 0.0
+SurfelDetector.maxAttackSize: 1000
+SurfelDetector.bJoinSmallSurfelsToClosestNeighbors: no
+Save PLY: no
+Recognition.method: PSGM
+Recognition.mode: CREATE_CTIS
+PSGM.nDominantClusters: 100
+PSGM.minInitialSurfelSize: 20
+PSGM.minVertexPerc: 50
+PSGM.kReferenceSurfelSize: 0.04
+PSGM.kReferenceTangentSize: 0.2
+PSGM.baseSeparationAngle: 22.5
+PSGM.kNoise: 5.0
+PSGM.RANSAC.nSamples: 20
+PSGM.RANSAC.stdNoise: 2
+PSGM.normalValidityTest: yes
+PSGM.minClusterSize: 400
+PSGM.groundPlaneTolerance: 0.020
+PSGM.zeroRFDescriptor: no
+PSGM.GTRFDescriptors: no
+
+end

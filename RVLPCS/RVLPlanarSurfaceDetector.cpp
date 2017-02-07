@@ -17137,8 +17137,8 @@ void CRVLPlanarSurfaceDetector::GetOrgPC(double * PC, int n)
 
 			r = sqrt(RVLDOTPRODUCT3(X_, X_));
 
-			if (r < 500.0)
-				continue;
+			//if (r < 500.0)
+			//	continue;
 
 			iPix = u + v * m_Width;
 

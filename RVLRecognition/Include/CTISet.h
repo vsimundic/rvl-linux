@@ -33,10 +33,15 @@ namespace RVL
 			CTISet();
 			virtual ~CTISet();
 			void Load(char * filePath);
+			void Init();
+			void AddCTI(RECOG::PSGM_::ModelInstance *pCTI_);
+			void CopyCTIsToArray();
 
 		public:
 			int nT;
-			Array<RECOG::PSGM_::ModelInstance> CTI;
+			QList<RECOG::PSGM_::ModelInstance> CTI;
+			Array<RECOG::PSGM_::ModelInstance*> pCTI;
+			//Array<RECOG::PSGM_::ModelInstance> CTI;
 			//std::vector<std::vector<int>> SegmentCTIs;
 			Array<Array<int>> SegmentCTIs;
 			int *segmentCTIIdxMem;
