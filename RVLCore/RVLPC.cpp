@@ -1,6 +1,6 @@
 #include "RVLCore.h"
 
-bool RVLPCImport(char *FileName, double **pX, int &n)
+bool RVLPCImport(char *FileName, double **pX, int &n, double scale)
 {
 	FILE *fp = fopen(FileName, "r");
 
@@ -57,9 +57,9 @@ bool RVLPCImport(char *FileName, double **pX, int &n)
 	{
 		fscanf(fp, "%lf %lf %lf\n", X__, X__ + 1, X__ + 2);
 
-		X_[0] = -1000.0 * X__[1];
-		X_[1] = -1000.0 * X__[2];
-		X_[2] = 1000.0 * X__[0];
+		X_[0] = -scale * X__[1];
+		X_[1] = -scale * X__[2];
+		X_[2] = scale * X__[0];
 	}
 
 	fclose(fp);

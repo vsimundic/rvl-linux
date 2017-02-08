@@ -494,7 +494,7 @@ int main(int argc, char* argv[])
 #endif
 		if(VS.m_Flags & RVLSYS_FLAGS_PC)
 		{
-			if(!RVLPCImport(VS.m_ImageFileName, &PC, nPC))
+			if (!RVLPCImport(VS.m_ImageFileName, &PC, nPC, VS.m_LidarParams.scale))
 			{
 				MessageCanNotOpenFile(&GUI, VS.m_ImageFileName);
 
@@ -618,7 +618,7 @@ int main(int argc, char* argv[])
 				
 				do
 				{
-					VS.m_PSuLMBuilder.GetOdometry(VS.m_ImageFileName, &PoseTemp, iTemp, command);
+					VS.m_PSuLMBuilder.GetOdometry(VS.m_ImageFileName, &PoseTemp, "-LW.bmp", iTemp, command);
 
 					VS.Update(bKinect ? 0x00000000 : RVLPSULMBUILDER_CREATEMODEL_IMAGE_FROM_FILE);
 					if (VS.m_PSuLMBuilder.m_nHypotheses > 0)
@@ -650,9 +650,12 @@ int main(int argc, char* argv[])
 			{
 				int iSample0;
 				unsigned char command;
+				char *extension = (VS.m_Flags & RVLSYS_FLAGS_PC ? RVLCreateString("-PC.pcd") : RVLCreateString("-LW.bmp"));				
 
-				if (!VS.m_PSuLMBuilder.GetOdometry(VS.m_ImageFileName, &(VS.m_PoseA0), iSample0, command))
+				if (!VS.m_PSuLMBuilder.GetOdometry(VS.m_ImageFileName, &(VS.m_PoseA0), extension, iSample0, command))
 					VS.m_PoseA0.Reset();
+
+				delete[] extension;
 			}
 
 			VS.Update(bKinect ? 0x00000000 : RVLPSULMBUILDER_CREATEMODEL_IMAGE_FROM_FILE);
@@ -714,7 +717,7 @@ int main(int argc, char* argv[])
 
 					fprintf(VS.m_fpRes, "%d\t%lf\t%lf\t%lf\t%lf\t%lf\t%lf\t%s\n",
 						pHypothesis->pMPSuLM->m_Index,
-						pHypothesis->PoseSM.m_Alpha, pHypothesis->PoseSM.m_Beta, pHypothesis->PoseSM.m_Theta,
+						pHypothesis->PoseSM.m_Alpha * RAD2DEG, pHypothesis->PoseSM.m_Beta * RAD2DEG, pHypothesis->PoseSM.m_Theta * RAD2DEG,
 						pHypothesis->PoseSM.m_X[0], pHypothesis->PoseSM.m_X[1], pHypothesis->PoseSM.m_X[2],
 						VS.m_ImageFileName);
 				}

@@ -140,6 +140,7 @@
     <ClInclude Include="Include\PolygonGraph.h" />
     <ClInclude Include="Include\SceneSegFile.hpp" />
     <ClInclude Include="Include\SurfelGraph.h" />
+    <ClInclude Include="Include\SVMClassifier.h" />
     <ClInclude Include="Include\Util.h" />
     <ClInclude Include="Include\Visualizer.h" />
     <ClInclude Include="stdafx.h" />
@@ -159,6 +160,7 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="SurfelGraph.cpp" />
+    <ClCompile Include="SVMClassifier.cpp" />
     <ClCompile Include="Util.cpp" />
     <ClCompile Include="Visualizer.cpp" />
   </ItemGroup>
