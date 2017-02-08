@@ -80,7 +80,8 @@ namespace RVL
 			void CreateParamList(CRVLMem *pMem);
 			void Create(SurfelGraph *pSurfels_);
 			void CreateFromSSF(std::string ssfFileName);	//Filko
-			void CalculateOverAndUnderSegmentation(int *E, int &N, bool useGTNoPix = true,  bool useBackground = true);	//Filko
+			void CalculateOverAndUnderSegmentation_SSF(int *E, int &N, bool useGTNoPix = true,  bool useBackground = true);	//Filko
+			void CalculateOverAndUnderSegmentation(int *E, int &N, bool useGTNoPix = false, std::string GTlabImgFilename = "", bool useBackground = true);	//Filko
 			void DetermineObjectConvexityData(float convexThr = 0.005, float ratioThr = 0.9);	//Filko
 			void CalculateConvexityRatiosForObjectPair(int firstObject, int secondObject, float& firstRatio, float& secondRatio, float convexThr = 0.005);	//Filko
 			void CalculateObjectsColorHistogram(); //Filko

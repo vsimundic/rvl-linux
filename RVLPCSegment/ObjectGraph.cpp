@@ -923,8 +923,8 @@ void ObjectGraph::CreateFromSSF(std::string ssfFileName)
 	}
 }
 
-//Return 'Ntrue', 'Nfalse' and 'N' needed to calculate oversegmentation (Fos = 1 - Ntrue/N) and undersegmenation (Fus =Nfalse/N) error. The asumption is that the GT object hist bin with the highest values is the correct one!!! 
-void ObjectGraph::CalculateOverAndUnderSegmentation(int *E, int &N, bool useGTNoPix, bool useBackground)
+//Requires that CreateFromSSF be run before this. Return 'Ntrue', 'Nfalse' and 'N' needed to calculate oversegmentation (Fos = 1 - Ntrue/N) and undersegmenation (Fus =Nfalse/N) error. The asumption is that the GT object hist bin with the highest values is the correct one!!! 
+void ObjectGraph::CalculateOverAndUnderSegmentation_SSF(int *E, int &N, bool useGTNoPix, bool useBackground)
 {
 	std::shared_ptr<SceneSegFile::SceneSegFile> ssf = this->ssf;
 	std::shared_ptr<SceneSegFile::SegFileElement> currSSFElement;
@@ -1034,6 +1034,151 @@ void ObjectGraph::CalculateOverAndUnderSegmentation(int *E, int &N, bool useGTNo
 		labelImgFileName.erase(labelImgFileName.find_last_of("."));
 		std::string depthImgFileName = labelImgFileName + "d.png";
 		labelImgFileName += "a.png";
+		//load GT files
+		cv::Mat GTLabImg = cv::imread(labelImgFileName);
+		cv::Mat GTDepthImg = cv::imread(depthImgFileName, cv::ImreadModes::IMREAD_ANYDEPTH);
+		//Count GT object pixels
+		N = 0;
+		for (int y = 0; y < 480; y++)
+		{
+			for (int x = 0; x < 640; x++)
+			{
+				//adding points that have valid label and depth value
+				if ((GTLabImg.at<cv::Vec3b>(y, x)[0] > 0) && GTDepthImg.at<unsigned short>(y, x) > 0)
+					N++;
+			}
+		}
+	}
+
+	//DeRef
+	delete[] GTObjHistogram;
+	delete[] maxObj;
+	delete[] g;
+	delete[] maxBin;
+}
+
+//Must be linked with the ground truth (AssignGroundTruthSegmentation per surfel). Return 'Ntrue', 'Nfalse' and 'N' needed to calculate oversegmentation (Fos = 1 - Ntrue/N) and undersegmenation (Fus =Nfalse/N) error. The asumption is that the GT object hist bin with the highest values is the correct one!!! 
+void ObjectGraph::CalculateOverAndUnderSegmentation(int *E, int &N, bool useGTNoPix, std::string GTlabImgFilename, bool useBackground)
+{
+	//Getting GThist size and initializing GT object histogram;
+	//find a surfel that has defined GTObjHist
+	int GTHistSize;
+	for (int i = 0; i < this->pSurfels->NodeArray.n; i++)
+	{
+		if (this->pSurfels->NodeArray.Element[i].GTObjHist.size() > 0)
+		{
+			GTHistSize = this->pSurfels->NodeArray.Element[i].GTObjHist.size();
+			break;
+		}
+	}
+	int *GTObjHistogram = new int[GTHistSize * this->NodeArray.n];	//GTObject histogam per segmented object
+	memset(GTObjHistogram, 0, GTHistSize * this->NodeArray.n * sizeof(int));
+	int *maxObj = new int[GTHistSize];	//Idx of segmented object per maximum bin
+	memset(maxObj, 0, GTHistSize * sizeof(int));
+	int *g = new int[GTHistSize];	//gama
+	memset(g, 0, GTHistSize * sizeof(int));
+	int *maxBin = new int[this->NodeArray.n];	//maximum bin per segmented object
+	memset(maxBin, 0, this->NodeArray.n * sizeof(int));
+
+	GRAPH::AggregateNode<SURFEL::AgEdge> *pObject;
+	QLIST::Index *piElement;
+	Surfel *pSurfel;
+
+	//Calculating GT object histogram
+	for (int iObject = 0; iObject < this->NodeArray.n; iObject++)
+	{
+		pObject = this->NodeArray.Element + iObject;
+
+		piElement = pObject->elementList.pFirst;
+
+		//check
+		if (!piElement)
+			continue;
+
+		while (piElement)
+		{
+			pSurfel = pSurfels->NodeArray.Element + piElement->Idx;
+			if (pSurfel->GTObjHist.size() != 0)
+			{
+				for (int i = 0; i < GTHistSize; i++)
+					GTObjHistogram[iObject * GTHistSize + i] += pSurfel->GTObjHist.at(i);
+			}
+			piElement = piElement->pNext;
+		}
+	}
+
+	E[0] = 0;	//Oversegmentation values
+	E[1] = 0;	//Undersegmentation values
+	int* ptrGTObjHist;
+	int max = 0;
+
+	int totVal = 0;
+	for (int iObject = 0; iObject < this->NodeArray.n; iObject++)
+	{
+		pObject = this->NodeArray.Element + iObject;
+		//check if object
+		piElement = pObject->elementList.pFirst;
+		if (!piElement)
+			continue;
+		//
+		ptrGTObjHist = &(GTObjHistogram[iObject * GTHistSize]);
+
+		//find max
+		max = 0;
+		maxBin[iObject] = -1;
+		for (int i = 0; i < GTHistSize; i++)
+		{
+			if (ptrGTObjHist[i] > max)
+			{
+				maxBin[iObject] = i;
+				max = ptrGTObjHist[i];
+			}
+		}
+
+		if (max == 0)//invalid object
+			continue;
+
+		//Sum false values
+		for (int i = 0; i < GTHistSize; i++)
+		{
+			if ((i == 0) && !useBackground)
+				continue;
+
+			if (i != maxBin[iObject])
+				E[1] += ptrGTObjHist[i];
+
+			totVal += ptrGTObjHist[i];
+		}
+
+		//Set max segmented object per max bin
+		if (ptrGTObjHist[maxBin[iObject]] > g[maxBin[iObject]])
+		{
+			maxObj[maxBin[iObject]] = iObject;
+			g[maxBin[iObject]] = ptrGTObjHist[maxBin[iObject]];
+		}
+	}
+
+	//Sum positive values
+	for (int i = 0; i < GTHistSize; i++)
+	{
+		if ((i == 0) && !useBackground)
+			continue;
+
+		if (i == maxBin[maxObj[i]])
+			E[0] += GTObjHistogram[maxObj[i] * GTHistSize + i];
+	}
+
+
+	//Final results
+	/*E[0] = 1 - E[0] / totVal;
+	E[1] /= totVal;*/
+	N = totVal;
+
+	if (useGTNoPix)	//Assumption - GT files is in the same directory as the SSF file and has name in format : SSFfilename + a + .png (label image) and SSFfilename + d + .png (depth image)
+	{
+		std::string labelImgFileName = GTlabImgFilename;
+		labelImgFileName.erase(labelImgFileName.find_last_of("."));
+		std::string depthImgFileName = labelImgFileName + "d.png";
 		//load GT files
 		cv::Mat GTLabImg = cv::imread(labelImgFileName);
 		cv::Mat GTDepthImg = cv::imread(depthImgFileName, cv::ImreadModes::IMREAD_ANYDEPTH);
@@ -1717,6 +1862,7 @@ void ObjectGraph::CalculateObjectsColorHistogram()
 			piElement = piElement->pNext;
 		}
 		//running through object's surfels
+		piElement = pObject->elementList.pFirst;
 		while (piElement)
 		{
 			pSurfel = pSurfels->NodeArray.Element + piElement->Idx;

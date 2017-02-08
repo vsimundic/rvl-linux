@@ -484,6 +484,12 @@ void RunMainProg(
 			cv::imshow("New Colored object image", GenColoredSegmentationImgFromObjectGraph(&objects));
 			cv::waitKey(1);
 			////
+			//Evaluation
+			/*int E[2];
+			int N = 0;
+			objects.CalculateOverAndUnderSegmentation(E, N, false, "", false);
+			std::cout << "Oversegmenation error: " << 100.0f * (1 - E[0] / (float)N) << "%" << std::endl;
+			std::cout << "Undersegmenation error: " << 100.0f * E[1] / (float)N << "%" << std::endl;*/
 
 			printf("completed.\n");
 		}
@@ -497,7 +503,7 @@ void RunMainProg(
 			//Evaluation
 			int E[2];
 			int N = 0;
-			objects.CalculateOverAndUnderSegmentation(E, N, false);
+			objects.CalculateOverAndUnderSegmentation_SSF(E, N, false);
 			std::cout << "Oversegmenation error: " << 100.0f * (1 - E[0] / (float)N) << "%" << std::endl;
 			std::cout << "Undersegmenation error: " << 100.0f * E[1] / (float)N << "%" << std::endl;
 
