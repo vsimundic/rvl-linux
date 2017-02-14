@@ -353,6 +353,18 @@ int main(int argc, char ** argv)
 				recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, 7);
 				
 				printf("Scene %s...finished!\n\n", filePath);
+
+				mesh.LoadPolyDataFromPLY(filePath);
+				// Visualization
+
+				//surfels.NodeColors(SelectionColor);
+				visualizer.renderer->RemoveAllViewProps();
+				recognition.InitDisplay(&visualizer, &mesh, SelectionColor);
+				recognition.Display();
+				recognition.AddBestCTIModelsToVisualizer(&visualizer);
+				visualizer.Run();
+
+
 			}
 
 			RVL_DELETE_ARRAY(CTIFileName);

@@ -1077,7 +1077,7 @@ vtkSmartPointer<vtkPolyData> GenerateCTIPrimitivePolydata_CW(float *planeNormals
 }
 
 //Generates vtkPolyData object (points and polys) that represenent a single CTI primitive, planeNormals is row wise (normal_1_x_coordinate, normal_1_y_coordinate, normal_1_z_coordinate, normal_2_x_coordinate, ...)
-vtkSmartPointer<vtkPolyData> GenerateCTIPrimitivePolydata_RW(float *planeNormals, float *planeDist, bool centered = false, int *mask = NULL)
+vtkSmartPointer<vtkPolyData> GenerateCTIPrimitivePolydata_RW(float *planeNormals, float *planeDist, bool centered = false, int *mask = NULL, float *t = NULL)
 {
 	vtkSmartPointer<vtkPolyData> outPD;
 
@@ -1140,6 +1140,8 @@ vtkSmartPointer<vtkPolyData> GenerateCTIPrimitivePolydata_RW(float *planeNormals
 			newexampleTemp[i] = planeNormals[i * 3] * tempV[0] + planeNormals[i * 3 + 1] * tempV[1] + planeNormals[i * 3 + 2] * tempV[2];
 			planeDistLocal[i] -= newexampleTemp[i];
 		}
+		if (t)
+			memcpy(t, tempV, 3 * sizeof(float));
 	}
 
 	//Generiate primitive (convex hull)
@@ -1232,8 +1234,8 @@ void PSGM::VisualizeCTIMatchidx(int iSCTI, int iMCTI)
 	for (int i = 0; i < 66; i++)
 	{
 		validS[i] = pSIE->valid; // visibility mask
-		dS[i] = pSIE->d*1000; // Scene descriptor 
-		dM[i] = pMIE->d; // Model descriptor
+		dS[i] = pSIE->d; // *1000; // Scene descriptor 
+		dM[i] = pMIE->d / 1000; // Model descriptor
 		pSIE++;
 		pMIE++;
 	}
@@ -4276,10 +4278,10 @@ void PSGM::Match()
 
 	SortScoreMatchMatrix();
 
-	//for Visualization purposes:
-	RECOG::PSGM_::MatchInstance *pMatchx = pCTImatches->pFirst;// pCTImatchesArray.Element[1000];
-	VisualizeCTIMatchidx(pMatchx->iSCTI, pMatchx->iMCTI);
-	//end of visualization
+	////for Visualization purposes:
+	//RECOG::PSGM_::MatchInstance *pMatchx = pCTImatchesArray.Element[scoreMatchMatrix.Element[0].Element[0].idx];
+	//VisualizeCTIMatchidx(pMatchx->iSCTI, pMatchx->iMCTI);
+	////end of visualization
 
 	printf("completed.\n");
 
@@ -6106,3 +6108,199 @@ bool RVL::RECOG::PSGM_::mouseRButtonDownUserFunction(
 		return false;
 }
 
+void PSGM::CalculatePose(int iMatch)
+{
+	//int iMatch = scoreMatchMatrix.Element[iSSegment].Element[iMSegment].idx;
+	int iSCTI = pCTImatchesArray.Element[iMatch]->iSCTI;
+	int iMCTI = pCTImatchesArray.Element[iMatch]->iMCTI;
+
+	RVL::RECOG::PSGM_::ModelInstance *pSCTI = CTISet.pCTI.Element[iSCTI];
+	RVL::RECOG::PSGM_::ModelInstance *pMCTI = MCTISet.pCTI.Element[iMCTI];
+
+	MSTransformation(pMCTI, pSCTI, pCTImatchesArray.Element[iMatch]->tMatch, pCTImatchesArray.Element[iMatch]->R, pCTImatchesArray.Element[iMatch]->t);
+}
+
+void PSGM::AddBestCTIModelsToVisualizer(Visualizer *pVisualizer)
+{
+	int bestMatchIdx;
+	float bestScore;
+	RECOG::PSGM_::MatchInstance *pMatch;
+
+	//RECOG::PSGM_::MatchInstance *pMatchx = pCTImatchesArray.Element[scoreMatchMatrix.Element[0].Element[0].idx];
+
+	for (int i = 0; i < scoreMatchMatrix.n; i++)
+	{
+		bestScore = 0;
+		bestMatchIdx = -1;
+		/*for (int j = 0; j < scoreMatchMatrix.Element[i].n; j++)
+		{
+			if (scoreMatchMatrix.Element[i].Element[j].idx < 0)
+				continue;
+			pMatch = pCTImatchesArray.Element[scoreMatchMatrix.Element[i].Element[j].idx];
+			if (pMatch->score > bestScore)
+			{
+				bestMatchIdx = scoreMatchMatrix.Element[i].Element[j].idx;
+				bestScore = pMatch->score;
+			}
+		}*/
+		AddCTIModelToVisualizer(pVisualizer, scoreMatchMatrix.Element[i].Element[0].idx);
+	}
+}
+
+void PSGM::AddCTIModelToVisualizer(Visualizer *pVisualizer, int iMatch)
+{
+	int iMCTI = pCTImatchesArray.Element[iMatch]->iMCTI;
+	int iSCTI = pCTImatchesArray.Element[iMatch]->iSCTI;
+	
+	RECOG::PSGM_::MatchInstance *pMatch = pCTImatchesArray.Element[iMatch];
+	CalculatePose(iMatch);
+
+	Eigen::MatrixXf nT = ConvexTemplatenT();
+
+	RECOG::PSGM_::ModelInstance *pMCTI;
+	RECOG::PSGM_::ModelInstanceElement *pMIE;
+	RECOG::PSGM_::ModelInstance *pSCTI;
+	RECOG::PSGM_::ModelInstanceElement *pSIE;
+	pMCTI = MCTISet.pCTI.Element[iMCTI];
+	pMIE = pMCTI->modelInstance.Element;
+	pSCTI = CTISet.pCTI.Element[iSCTI];
+	pSIE = pSCTI->modelInstance.Element;
+	
+	float *dM = new float[66];
+	float *dS = new float[66];
+	int *validS = new int[66];
+
+	for (int i = 0; i < 66; i++)
+	{
+		dS[i] = pSIE->d; // Scene descriptor
+		validS[i] = pSIE->valid;
+		pSIE++;
+
+		dM[i] = pMIE->d / 1000.0; // Model descriptor
+		pMIE++;
+	}
+
+	////Generate model polydata
+	float t[3];
+	vtkSmartPointer<vtkPolyData> modelPD = GenerateCTIPrimitivePolydata_RW(nT.data(), dM, false, NULL, t);
+	double T_CTIM_M[16], T_M_S[16], T_CTIS_S[16], T_CCTIS_CTIS[16];
+
+	
+
+	T_M_S[0] = pCTImatchesArray.Element[iMatch]->R[0];
+	T_M_S[1] = pCTImatchesArray.Element[iMatch]->R[1];
+	T_M_S[2] = pCTImatchesArray.Element[iMatch]->R[2];
+	T_M_S[3] = pCTImatchesArray.Element[iMatch]->t[0] / 1000.0;
+	T_M_S[4] = pCTImatchesArray.Element[iMatch]->R[3];
+	T_M_S[5] = pCTImatchesArray.Element[iMatch]->R[4];
+	T_M_S[6] = pCTImatchesArray.Element[iMatch]->R[5];
+	T_M_S[7] = pCTImatchesArray.Element[iMatch]->t[1] / 1000.0;
+	T_M_S[8] = pCTImatchesArray.Element[iMatch]->R[6];
+	T_M_S[9] = pCTImatchesArray.Element[iMatch]->R[7];
+	T_M_S[10] = pCTImatchesArray.Element[iMatch]->R[8];
+	T_M_S[11] = pCTImatchesArray.Element[iMatch]->t[2] / 1000.0;
+	T_M_S[12] = 0;
+	T_M_S[13] = 0;
+	T_M_S[14] = 0;
+	T_M_S[15] = 1;
+
+	T_CTIM_M[0] = pMCTI->R[0];
+	T_CTIM_M[1] = pMCTI->R[1];
+	T_CTIM_M[2] = pMCTI->R[2];
+	T_CTIM_M[3] = pMCTI->t[0] / 1000.0;
+	T_CTIM_M[4] = pMCTI->R[3];
+	T_CTIM_M[5] = pMCTI->R[4];
+	T_CTIM_M[6] = pMCTI->R[5];
+	T_CTIM_M[7] = pMCTI->t[1] / 1000.0;
+	T_CTIM_M[8] = pMCTI->R[6];
+	T_CTIM_M[9] = pMCTI->R[7];
+	T_CTIM_M[10] = pMCTI->R[8];
+	T_CTIM_M[11] = pMCTI->t[2] / 1000.0;
+	T_CTIM_M[12] = 0;
+	T_CTIM_M[13] = 0;
+	T_CTIM_M[14] = 0;
+	T_CTIM_M[15] = 1;
+
+	T_CTIS_S[0] = pSCTI->R[0];
+	T_CTIS_S[1] = pSCTI->R[1];
+	T_CTIS_S[2] = pSCTI->R[2];
+	T_CTIS_S[3] = pSCTI->t[0] / 1000.0;
+	T_CTIS_S[4] = pSCTI->R[3];
+	T_CTIS_S[5] = pSCTI->R[4];
+	T_CTIS_S[6] = pSCTI->R[5];
+	T_CTIS_S[7] = pSCTI->t[1] / 1000.0;
+	T_CTIS_S[8] = pSCTI->R[6];
+	T_CTIS_S[9] = pSCTI->R[7];
+	T_CTIS_S[10] = pSCTI->R[8];
+	T_CTIS_S[11] = pSCTI->t[2] / 1000.0;
+	T_CTIS_S[12] = 0;
+	T_CTIS_S[13] = 0;
+	T_CTIS_S[14] = 0;
+	T_CTIS_S[15] = 1;
+
+	T_CCTIS_CTIS[0] = 1;
+	T_CCTIS_CTIS[1] = 0;
+	T_CCTIS_CTIS[2] = 0;
+	T_CCTIS_CTIS[3] = t[0];
+	T_CCTIS_CTIS[4] = 0;
+	T_CCTIS_CTIS[5] = 1;
+	T_CCTIS_CTIS[6] = 0;
+	T_CCTIS_CTIS[7] = t[1];
+	T_CCTIS_CTIS[8] = 0;
+	T_CCTIS_CTIS[9] = 0;
+	T_CCTIS_CTIS[10] = 1;
+	T_CCTIS_CTIS[11] = t[2];
+	T_CCTIS_CTIS[12] = 0;
+	T_CCTIS_CTIS[13] = 0;
+	T_CCTIS_CTIS[14] = 0;
+	T_CCTIS_CTIS[15] = 1;
+
+	vtkSmartPointer<vtkTransform> transform = vtkSmartPointer<vtkTransform>::New();
+
+	transform->SetMatrix(T_CCTIS_CTIS);
+	transform->Concatenate(T_CTIS_S);
+
+
+	//vtkSmartPointer<vtkTransform> transform1 = vtkSmartPointer<vtkTransform>::New();
+	//transform1->SetMatrix(T_CTIM_M);
+
+	//vtkSmartPointer<vtkTransformPolyDataFilter> transformFilter1 = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
+	//transformFilter1->SetInputData(modelPD);
+	//transformFilter1->SetTransform(transform1);
+	//transformFilter1->Update();
+
+	vtkSmartPointer<vtkTransformPolyDataFilter> transformFilter = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
+	transformFilter->SetInputData(modelPD);
+	transformFilter->SetTransform(transform);
+	transformFilter->Update();
+
+	vtkSmartPointer<vtkPolyDataMapper> modelMapper = vtkSmartPointer<vtkPolyDataMapper>::New();
+	//modelMapper->SetInputConnection(transformFilter1->GetOutputPort());
+	modelMapper->SetInputConnection(transformFilter->GetOutputPort());
+
+	vtkSmartPointer<vtkActor> modelActor = vtkSmartPointer<vtkActor>::New();
+	modelActor->SetMapper(modelMapper);
+	modelActor->GetProperty()->SetColor(0, 1, 0);
+	pVisualizer->renderer->AddActor(modelActor);
+	
+
+	//Generate scene polydata
+	vtkSmartPointer<vtkPolyData> modelSPD = GenerateCTIPrimitivePolydata_RW(nT.data(), dS, false, validS, t);
+	vtkSmartPointer<vtkTransform> transform2 = vtkSmartPointer<vtkTransform>::New();
+	transform2->SetMatrix(T_CCTIS_CTIS);
+	transform2->Concatenate(T_CTIS_S);
+	vtkSmartPointer<vtkTransformPolyDataFilter> transformFilter2 = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
+	transformFilter2->SetInputData(modelSPD);
+	transformFilter2->SetTransform(transform2);
+	transformFilter2->Update();
+	vtkSmartPointer<vtkPolyDataMapper> modelMapper2 = vtkSmartPointer<vtkPolyDataMapper>::New();
+	modelMapper2->SetInputConnection(transformFilter2->GetOutputPort());
+	vtkSmartPointer<vtkActor> modelActor2 = vtkSmartPointer<vtkActor>::New();
+	modelActor2->SetMapper(modelMapper2);
+	modelActor2->GetProperty()->SetColor(0, 0, 1);
+	pVisualizer->renderer->AddActor(modelActor2);
+
+	delete[] dM;
+	delete[] dS;
+	delete[] validS;
+}

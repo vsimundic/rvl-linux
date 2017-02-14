@@ -180,6 +180,12 @@ namespace RVL
 		void VisualizeCTIMatchidx( //for a given Scene and Model CTI index, calls visualization (prepares descriptors and visibility mask).
 			int iSCTI,
 			int iMCTI);
+
+		void CalculatePose(int iMatch);
+
+		void AddBestCTIModelsToVisualizer(Visualizer *pVisualizer);
+		
+		void AddCTIModelToVisualizer(Visualizer *pVisualizer, int iMatch);
 		//end Petra
 
 		void InitDisplay(
