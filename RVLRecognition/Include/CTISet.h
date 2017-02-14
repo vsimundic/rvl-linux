@@ -36,17 +36,21 @@ namespace RVL
 			void Init();
 			void AddCTI(RECOG::PSGM_::ModelInstance *pCTI_);
 			void CopyCTIsToArray();
+			//void LoadSMCTI(char * filePath, Array<RECOG::PSGM_::Plane> *convexTemplate); //Petra
 
 		public:
 			int nT;
 			QList<RECOG::PSGM_::ModelInstance> CTI;
 			Array<RECOG::PSGM_::ModelInstance*> pCTI;
-			//Array<RECOG::PSGM_::ModelInstance> CTI;
+			//Array<RECOG::PSGM_::ModelInstance> CTIArr;
 			//std::vector<std::vector<int>> SegmentCTIs;
 			Array<Array<int>> SegmentCTIs;
 			int *segmentCTIIdxMem;
 			int maxSegmentIdx;
 			int nModels;
+
+;
+
 		};
 	}
 }

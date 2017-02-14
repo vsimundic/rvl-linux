@@ -27,6 +27,7 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 #include "RGBDCamera.h"
 #include "PCLMeshBuilder.h"
 
+
 // VIDOVIC
 //#define RVL_COORDINATE_SYSTEM_NOISE_STABILITY_TEST
 //#define RVL_COORDINATE_SYSTEM_NOISE_STABILITY_TEST_DEBUG
@@ -35,7 +36,7 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 #define RVL_LOAD_SINGLE_MODEL
 //#define PSGM_MATCHES_PROBABILITY_COMPARE
 #define PSGM_MATCHES_SCORE_COMPARE
-//#define PSGM_LOAD_CTI_FROM_FILE
+#define PSGM_LOAD_CTI_FROM_FILE
 //#define PSGM_RECOGNITION_VISUALIZE_SCENE
 
 #define RVLRECOGNITION_DEMO_FLAG_SAVE_PLY			0x00000001
@@ -274,6 +275,8 @@ int main(int argc, char ** argv)
 
 		recognition.ParamList.LoadParams("RVLRecognitionDemo_all.cfg");
 
+		//recognition.Create();
+
 		recognition.pMem = &mem;
 
 		recognition.pSurfels = &surfels;
@@ -305,11 +308,17 @@ int main(int argc, char ** argv)
 
 			recognition.pECCVGT->Init(sceneSequence, GTFolder, modelsInDB);
 
-			recognition.pECCVGT->SaveGTFile("F:\\Projekti\\ARP3D\\Auxiliary\\Models\\TUW_GT.txt");			
+			//recognition.pECCVGT->SaveGTFile("D:\\ARP3D\\TUW_GT.txt");			
 
-			FILE *fpHypothesisEvaluation = fopen("F:\\Projekti\\ARP3D\\compare_TNM_Valid_TMP.txt", "w");
+			//FILE *fpHypothesisEvaluation = fopen("D:\\ARP3D\\compare_TNM_Valid_TMP.txt", "w");
 
-			FILE *fpLog = fopen("F:\\Projekti\\ARP3D\\evaluationLog.txt", "w");			
+			//FILE *fpLog = fopen("D:\\ARP3D\\evaluationLog.txt", "w");			
+
+			recognition.pECCVGT->SaveGTFile("C:\\RVL\\ExpRez\\TUW_GT.txt");
+
+			FILE *fpHypothesisEvaluation = fopen("C:\\RVL\\ExpRez\\compare_TNM_Valid_TMP.txt", "w");
+
+			FILE *fpLog = fopen("C:\\RVL\\ExpRez\\evaluationLog.txt", "w");
 
 			recognition.LoadCompleteSegmentGT(sceneSequence);
 
@@ -318,6 +327,7 @@ int main(int argc, char ** argv)
 				printf("Scene %s...\n", filePath);
 
 				recognition.SetSceneFileName(filePath);
+				//recognition.InterpretCTIS(&mesh);
 
 #ifdef PSGM_LOAD_CTI_FROM_FILE
 				RVLCopyString(filePath, &CTIFileName);
@@ -327,6 +337,10 @@ int main(int argc, char ** argv)
 				recognition.LoadCTI(CTIFileName);
 
 				recognition.Match();
+
+				surfels.NodeArray.n = 0;
+
+				recognition.clusters.n = 0;
 #else
 				mesh.LoadPolyDataFromPLY(filePath);
 
@@ -349,6 +363,18 @@ int main(int argc, char ** argv)
 				recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, 7);
 				
 				printf("Scene %s...finished!\n\n", filePath);
+
+				mesh.LoadPolyDataFromPLY(filePath);
+				// Visualization
+
+				//surfels.NodeColors(SelectionColor);
+				visualizer.renderer->RemoveAllViewProps();
+				recognition.InitDisplay(&visualizer, &mesh, SelectionColor);
+				recognition.Display();
+				recognition.AddBestCTIModelsToVisualizer(&visualizer);
+				visualizer.Run();
+
+
 			}
 
 			RVL_DELETE_ARRAY(CTIFileName);
@@ -379,15 +405,48 @@ int main(int argc, char ** argv)
 			char filePath[200];
 			FILE *fpClusterNormalDistribution;
 
+			//char filePath[200];		
+
+			int nM = 35, nSM = 3;
+
 			while (sceneSequence.GetNextPath(filePath))
 			{
+				
 				printf("Scene %s...\n", filePath);
 
 				mesh.LoadPolyDataFromPLY(filePath);
-
+				
 				recognition.SetSceneFileName(filePath);
-				recognition.Interpret(&mesh, iScene);
 
+				//Alokacija prostora za matcheve - TEMP
+				// List of matches
+				recognition.SMatch = new RECOG::PSGM_::SegmentMatch[recognition.nDominantClusters*nM*nSM]; //Petra	
+
+				//Sorted matches
+				recognition.sortedMatches = new SortIndex<float>[recognition.nDominantClusters*nM*nSM]; //Petra
+
+				recognition.Interpret(&mesh, iScene);
+				//recognition.InterpreteCTIS(&mesh);				
+
+				//recognition.LoadCTI("D:\\ARP3D\\ECCV_dataset\\pcd_files\\frame_20111220T111153.549117.cti");
+
+				/*TEST KRETANJA KROZ CTI
+				int nCTI = recognition.CTI.n;
+				recognition.CTI.Element[0];
+
+				recognition.CTI.Element[0].modelInstance.Element[25].d;
+
+				RECOG::PSGM_::ModelInstance *pCTI;
+				pCTI = recognition.CTI.Element;
+
+				//pCTI->modelInstance.Element[0]->d
+
+				RECOG::PSGM_::ModelInstanceElement *pMIE;
+
+				pMIE = pCTI->modelInstance.Element;
+
+				pMIE->d;
+				*/
 				RVLCopyString(filePath, &clusterNormalDistributionFileName);
 
 				sprintf(RVLGETFILEEXTENSION(clusterNormalDistributionFileName), "seg");
@@ -433,4 +492,3 @@ int main(int argc, char ** argv)
 
 	return 0;
 }
-
