@@ -46,9 +46,13 @@ namespace SceneSegFile
 			//Iterating through parameters
 			for (int i = 0; i < this->size; i++)
 				ss << this->data[i] << " ";
-			//removig last 'space'
+
 			std::string tempStr = ss.str();
-			tempStr.erase(tempStr.end() - 1);	//Check?
+
+			if (this->size > 0)
+				//removig last 'space'
+				tempStr.erase(tempStr.end() - 1);	//Check?
+
 			return tempStr;
 		}
 		void SetData(void* data, int size)
@@ -412,6 +416,7 @@ namespace SceneSegFile
 	{
 	public:
 		std::string name;
+		std::string filename;
 		std::vector<std::shared_ptr<SegFileElement>> elements;	//Should probably be a std::map but what kind of ID types to use?
 		SceneSegFile(std::string name) : name(name) {}
 		~SceneSegFile(){}
@@ -576,6 +581,8 @@ namespace SceneSegFile
 			dat << "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n";
 			dat << doc;
 			dat.close();
+
+			this->filename = filename;
 		}
 
 		//Load SceneSegFile from specified filename
@@ -597,6 +604,7 @@ namespace SceneSegFile
 			std::ifstream dat(filename.c_str());
 			if (!dat)
 				return;
+			this->filename = filename;
 
 			//Load whole file to char array
 			std::string str((std::istreambuf_iterator<char>(dat)), std::istreambuf_iterator<char>());

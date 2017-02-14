@@ -220,6 +220,8 @@ void PlanarSurfelDetector::RandomIndices(Array<int> &A)
 	int iPt_;
 	int iTmp;
 
+	//srand(time(NULL)); //VIDOVIC RANDOM TEST
+
 	for (iPt = 0; iPt < A.n; iPt++)
 	{
 #ifdef RVLPLANARSURFELDETECTOR_PSEUDO_RANDOM_DEBUG
@@ -436,9 +438,8 @@ void PlanarSurfelDetector::Segment(
 
 		pSurfel++;
 
-		if (iSurfel == 40)	// debug
 		//if (iSurfel == 85)	// debug
-			int debug = 0;
+		//	int debug = 0;
 			//break;
 	}	// for every vertex
 
@@ -3478,12 +3479,14 @@ void PlanarSurfelDetector::AddToSeed(
 
 		pNewGSeedPt->Idx = iPt_;
 
-		if (iPt_ == 111409)
-			int debug = 0;
+		//if (iPt_ == 111409)
+		//	int debug = 0;
 
 		pNewGSeedPt++;
 	}
 }
+
+// Function DefinePolygon corresponds to the procedure ExpandSegment in ARP3D.TR3
 
 void PlanarSurfelDetector::DefinePolygon(
 	Mesh *pMesh,

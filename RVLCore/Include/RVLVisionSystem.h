@@ -25,6 +25,7 @@ struct RVLLIDAR_PARAMS
 	double maxTilt;
 	double dTilt;
 	int nPanIn120deg;
+	double scale;
 };
 
 class CRVLVisionSystem
@@ -50,6 +51,7 @@ public:
 	int m_nPC;
 	double *m_PC;
 	RVLLIDAR_PARAMS m_LidarParams;
+	int m_SampleStep;
 
 public:
 	CRVLVisionSystem();

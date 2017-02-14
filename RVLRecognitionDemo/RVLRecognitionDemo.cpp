@@ -3,8 +3,8 @@
 
 //#include "stdafx.h"
 #include <vtkAutoInit.h>
-//VTK_MODULE_INIT(vtkRenderingOpenGL);
 VTK_MODULE_INIT(vtkRenderingOpenGL2);
+//VTK_MODULE_INIT(vtkRenderingOpenGL2);
 VTK_MODULE_INIT(vtkInteractionStyle);
 VTK_MODULE_INIT(vtkRenderingFreeType);
 #include "RVLVTK.h"
@@ -18,6 +18,8 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 #include "RVLRecognition.h"
 #include "RFRecognition.h"
 #include "RVLMeshNoiser.h"
+#include "PSGMCommon.h"
+#include "CTISet.h"
 #include "PSGM.h"
 #include <pcl/common/common.h>
 #include <pcl/PolygonMesh.h>
@@ -29,9 +31,13 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 // VIDOVIC
 //#define RVL_COORDINATE_SYSTEM_NOISE_STABILITY_TEST
 //#define RVL_COORDINATE_SYSTEM_NOISE_STABILITY_TEST_DEBUG
-//#define RVL_FEATURE_TEST_SCENE_SEQUENCE
+#define RVL_FEATURE_TEST_SCENE_SEQUENCE
 //#define RVL_FEATURE_TEST_PRECISION_RECALL_GRAPH
 #define RVL_LOAD_SINGLE_MODEL
+//#define PSGM_MATCHES_PROBABILITY_COMPARE
+#define PSGM_MATCHES_SCORE_COMPARE
+#define PSGM_LOAD_CTI_FROM_FILE
+//#define PSGM_RECOGNITION_VISUALIZE_SCENE
 
 #define RVLRECOGNITION_DEMO_FLAG_SAVE_PLY			0x00000001
 //END VIDOVIC
@@ -49,6 +55,7 @@ void CreateParamList(
 	char **pModelSequenceFileName,	//VIDOVIC
 	char **pModelsInDB,	//VIDOVIC
 	char **pGTFolder,	//VIDOVIC
+	char **pSegmentGTFileName,	//Vidovic
 	DWORD &method,
 	DWORD &flags //VIDOVIC
 	)
@@ -64,6 +71,7 @@ void CreateParamList(
 	pParamData = pParamList->AddParam("ModelSequenceFileName", RVLPARAM_TYPE_STRING, pModelSequenceFileName);	//VIDOVIC
 	pParamData = pParamList->AddParam("ModelsInDataBase", RVLPARAM_TYPE_STRING, pModelsInDB);	//VIDOVIC
 	pParamData = pParamList->AddParam("GTFolder", RVLPARAM_TYPE_STRING, pGTFolder);	//VIDOVIC
+	pParamData = pParamList->AddParam("SegmentGTFileName", RVLPARAM_TYPE_STRING, pSegmentGTFileName);	//Vidovic
 	pParamData = pParamList->AddParam("Recognition.method", RVLPARAM_TYPE_ID, &method);
 	pParamList->AddID(pParamData, "PSGM", RVLRECOGNITION_METHOD_PSGM);
 	pParamList->AddID(pParamData, "RF", RVLRECOGNITION_METHOD_RF); //VIDOVIC
@@ -92,6 +100,7 @@ int main(int argc, char ** argv)
 	char *modelSequenceFileName = NULL; //VIDOVIC
 	char *modelsInDB = NULL; //VIDOVIC
 	char *GTFolder = NULL; //VIDOVIC
+	char *segmentGTFileName = NULL; //Vidovic
 	DWORD method = RVLRECOGNITION_METHOD_PSGM;
 	//DWORD method = RVLRECOGNITION_METHOD_RF; //VIDOVIC
 
@@ -106,24 +115,33 @@ int main(int argc, char ** argv)
 		&modelSequenceFileName,
 		&modelsInDB,
 		&GTFolder,
+		&segmentGTFileName,
 		method,
 		flags);	 //VIDOVIC
 
-	ParamList.LoadParams("RVLRecognitionDemo.cfg");
+	ParamList.LoadParams("RVLRecognitionDemo_all.cfg");
+
+	if (segmentGTFileName == NULL)
+	{
+		segmentGTFileName = new char[200];
+		segmentGTFileName = "C:\\RVL\\segmentGT.txt";
+	}
 
 	// Initialize surfel detection
 
 	SurfelGraph surfels;
 
+	surfels.pMem = &mem;
+
 	surfels.CreateParamList(&mem0);
 
-	surfels.ParamList.LoadParams("RVLRecognitionDemo.cfg");
+	surfels.ParamList.LoadParams("RVLRecognitionDemo_all.cfg");
 
 	PlanarSurfelDetector surfelDetector;
 
 	surfelDetector.CreateParamList(&mem0);
 
-	surfelDetector.ParamList.LoadParams("RVLRecognitionDemo.cfg");
+	surfelDetector.ParamList.LoadParams("RVLRecognitionDemo_all.cfg");
 
 	//VIDOVIC
 	//initialize mesh noiser
@@ -255,9 +273,9 @@ int main(int argc, char ** argv)
 
 		recognition.CreateParamList(&mem0);
 
-		recognition.ParamList.LoadParams("RVLRecognitionDemo.cfg");
+		recognition.ParamList.LoadParams("RVLRecognitionDemo_all.cfg");
 
-		recognition.Create();
+		//recognition.Create();
 
 		recognition.pMem = &mem;
 
@@ -267,107 +285,98 @@ int main(int argc, char ** argv)
 
 		if (recognition.mode == RVLRECOGNITION_MODE_TRAINING)
 		{
-			recognition.Learn(modelSequenceFileName); //VIDOVIC
+			surfels.NodeColors(SelectionColor);
+
+			recognition.Learn(modelSequenceFileName, &visualizer); //Vidovic
 		}
 		else if (recognition.mode == RVLRECOGNITION_MODE_RECOGNITION)
 		{
-			recognition.LoadModelDataBase(); //VIDOVIC
-
-			// Load scene mesh from file.
+			recognition.LoadModelDataBase(); //Vidovic
 
 			Mesh mesh;
 
-			//mesh.LoadPolyDataFromPLY(sceneMeshFileName);
+			//Vidovic
+			char filePath[200];			
 
-			//VIDOVIC
+			char *CTIFileName = NULL;
 
-			//ECCVGTLoader TEST
+			recognition.pTimer = new CRVLTimer;
+
 			FileSequenceLoader sceneSequence;
 
 			sceneSequence.Init(sceneSequenceFileName);
 
-			recognition.SetNumberOfScenes(sceneSequence.nFileNames);
+			recognition.pECCVGT->Init(sceneSequence, GTFolder, modelsInDB);
 
-			ECCVGTLoader ECCVGT;
+			recognition.pECCVGT->SaveGTFile("D:\\ARP3D\\TUW_GT.txt");			
 
-			ECCVGT.Init(sceneSequence, GTFolder, modelsInDB);
+			FILE *fpHypothesisEvaluation = fopen("D:\\ARP3D\\compare_TNM_Valid_TMP.txt", "w");
 
-			ECCVGT.SaveGTFile("D:\\ARP3D\\GT.txt");
+			FILE *fpLog = fopen("D:\\ARP3D\\evaluationLog.txt", "w");			
 
-			char filePath[200];
+			recognition.LoadCompleteSegmentGT(sceneSequence);
 
 			while (sceneSequence.GetNextPath(filePath))
 			{
 				printf("Scene %s...\n", filePath);
 
-				mesh.LoadPolyDataFromPLY(filePath);
-
 				recognition.SetSceneFileName(filePath);
-				recognition.Interpret(&mesh);
 				//recognition.InterpretCTIS(&mesh);
 
+#ifdef PSGM_LOAD_CTI_FROM_FILE
+				RVLCopyString(filePath, &CTIFileName);
+
+				sprintf(RVLGETFILEEXTENSION(CTIFileName), "cti");
+
+				recognition.LoadCTI(CTIFileName);
+
+				recognition.Match();
+#else
+				mesh.LoadPolyDataFromPLY(filePath);
+
+				mem.Clear();
+
+				recognition.Interpret(&mesh);
+
+				//recognition.SaveMatches();
+
+	#ifdef PSGM_RECOGNITION_VISUALIZE_SCENE
+				//Visualize currennt scene (close visualizer window by pressing 'q' key)
+				surfels.NodeColors(SelectionColor);
+				recognition.InitDisplay(&visualizer, &mesh, SelectionColor);
+				recognition.Display();
+				visualizer.Run();
+
+				visualizer.renderer->RemoveAllViewProps();
+	#endif
+#endif
+				recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, 7);
+				
 				printf("Scene %s...finished!\n\n", filePath);
+
+				mesh.LoadPolyDataFromPLY(filePath);
+				// Visualization
+
+				//surfels.NodeColors(SelectionColor);
+				visualizer.renderer->RemoveAllViewProps();
+				recognition.InitDisplay(&visualizer, &mesh, SelectionColor);
+				recognition.Display();
+				recognition.AddBestCTIModelsToVisualizer(&visualizer);
+				visualizer.Run();
+
+
 			}
 
-			recognition.SaveMatches();
+			RVL_DELETE_ARRAY(CTIFileName);
 
-			float precision, recall;
-			float scoreThresh, angleThresh, distanceThresh;
+			RVL_DELETE_ARRAY(recognition.pTimer);
 
-			scoreThresh = 46.5;
-			angleThresh = PI/4;
-			distanceThresh = 50;
+			RVL_DELETE_ARRAY(recognition.segmentGT.Element);
 
-			FILE *fp;
+			fclose(fpHypothesisEvaluation);
+			fclose(fpLog);
 
-			int graphID = 0;
-
-			fp = fopen("D:\\ARP3D\\compare.txt", "w");
-
-			//for (angleThresh = PI / 4; angleThresh < 3*PI/4; angleThresh += PI / 4)
-			//{
-				for (distanceThresh = 50; distanceThresh <= 100; distanceThresh += 25)
-				{
-					printf("ScoreThresh: %f\t%f\n", angleThresh, distanceThresh);
-
-					for (scoreThresh = 33.0; scoreThresh <= 66; scoreThresh += 0.1)
-					{
-						//recognition.CompareMatchesToGT(&ECCVGT, scoreThresh, angleThresh, distanceThresh, precision, recall);
-
-						recognition.CompareSMIMatchesToGT(&ECCVGT, scoreThresh, angleThresh, distanceThresh, precision, recall);
-
-						ECCVGT.ResetMatchFlag();
-
-						printf("ScoreThresh: %f\n", scoreThresh);
-						printf("Precision: %f\n", precision);
-						printf("Recall: %f\n", recall);
-						printf("\n");
-
-						fprintf(fp, "%d\t%f\t%f\t%f\t%f\t%f\n", graphID, angleThresh, distanceThresh, scoreThresh, precision, recall);
-					}
-
-					graphID++;
-
-				}
-			//}
-
-			fclose(fp);
-
-			recognition.SaveMatches();
-
-			//END VIDOVIC
-
-			// Scene interpretation.
-
-			//recognition.SetSceneFileName(sceneMeshFileName);
-			//recognition.Interpret(&mesh);
-
-			// Visualization
-
-			surfels.NodeColors(SelectionColor);
-			recognition.InitDisplay(&visualizer, &mesh, SelectionColor);
-			recognition.Display();
-			visualizer.Run();
+			//END Vidovic
 		}	// if (recognition.mode == RVLRECOGNITION_MODE_RECOGNITION)
 		else if (recognition.mode == RVLRECOGNITION_MODE_PSGM_CREATE_CTIS)
 		{
@@ -377,13 +386,16 @@ int main(int argc, char ** argv)
 
 			sceneSequence.Init(sceneSequenceFileName);
 
-			recognition.SetNumberOfScenes(sceneSequence.nFileNames);
+			recognition.pECCVGT->Init(sceneSequence, GTFolder, modelsInDB);
 
-			// Load GT file
-			ECCVGTLoader ECCVGT;
-			ECCVGT.Init(sceneSequence, GTFolder, modelsInDB);
+			char *clusterNormalDistributionFileName = NULL;
 
-			char filePath[200];		
+			int iScene = 0;
+
+			char filePath[200];
+			FILE *fpClusterNormalDistribution;
+
+			//char filePath[200];		
 
 			int nM = 35, nSM = 3;
 
@@ -403,8 +415,8 @@ int main(int argc, char ** argv)
 				//Sorted matches
 				recognition.sortedMatches = new SortIndex<float>[recognition.nDominantClusters*nM*nSM]; //Petra
 
-				recognition.Interpret(&mesh);
-				recognition.InterpreteCTIS(&mesh);				
+				recognition.Interpret(&mesh, iScene);
+				//recognition.InterpreteCTIS(&mesh);				
 
 				//recognition.LoadCTI("D:\\ARP3D\\ECCV_dataset\\pcd_files\\frame_20111220T111153.549117.cti");
 
@@ -425,88 +437,29 @@ int main(int argc, char ** argv)
 
 				pMIE->d;
 				*/
+				RVLCopyString(filePath, &clusterNormalDistributionFileName);
 
-				//NEW PR calculation
-				RECOG::PSGM_::MatchInstance *pMatch;
-				pMatch = new RECOG::PSGM_::MatchInstance;
+				sprintf(RVLGETFILEEXTENSION(clusterNormalDistributionFileName), "seg");
 
-				float distanceThresh = 50;
+				fpClusterNormalDistribution = fopen(clusterNormalDistributionFileName, "w");
 
-				bool TPMatch;
+				recognition.WriteClusterNormalDistribution(fpClusterNormalDistribution);
 
-				int TP = 0, FP = 0, FN = 0;
-				float precision, recall;
-				int eStep;
-				float eThresh;
-				int nSortedMatches = 30;
-
-				int iSSegment, iMSegment;
-
-				for (eStep = 1; eStep <= 100; eStep++)
-				{
-					eThresh = (float)eStep;
-
-					for (iSSegment = 0; iSSegment < recognition.nDominantClusters; iSSegment++)
-					{
-						for (iMSegment = 0; iMSegment < nSortedMatches; iMSegment++)
-						{
-							int idxCTI = recognition.sortedMatches[nM*nSM*iSSegment + iMSegment].idx;
-
-							pMatch->iScene = 0;
-							pMatch->iModel = recognition.SMatch[idxCTI].iM;
-							pMatch->eSeg = recognition.SMatch[idxCTI].Eseg;
-
-							for (int i = 0; i < 3; i++)
-								pMatch->t[i] = recognition.SMatch[idxCTI].t[i];
-
-							if (pMatch->iModel == 24 && iSSegment == 1)
-								int debug2 = 0;
-
-							if ((pMatch->eSeg - eThresh) <= -1.4901161138336505e-009) //because of float precision => 0.1 is represented by 0.100000001
-							{
-								if (eThresh >= 13.5)
-									int debug = 0;
-
-								
-
-								TPMatch = recognition.CompareMatchToGT(pMatch, &ECCVGT, false, 0.0, distanceThresh);
-
-								if (!TPMatch)
-									FP++;
-							}
-						}
-					}
-
-					recognition.CountTPandFN(&ECCVGT, TP, FN, true);
-
-					recognition.CalculatePR(TP, FP, FN, precision, recall);
-
-					ECCVGT.ResetMatchFlag();
-
-					printf("TP: %d\n", TP);
-					printf("FP: %d\n", FP);
-					printf("FN: %d\n", FN);
-					printf("ProbabilityThresh: %f\n", eThresh);
-					printf("Precision: %f\n", precision);
-					printf("Recall: %f\n", recall);
-					printf("\n");
-					//fprintf(fp, "%d\t%f\t%f\t%f\t%f\t%f\n", graphID, angleThresh, distanceThresh, probabilityThresh, precision, recall);
-
-					TP = 0; FP = 0; FN = 0;
-				}
+				fclose(fpClusterNormalDistribution);
 
 				printf("Scene %s...finished!\n\n", filePath);
-				
-				// Visualization
-				
-				/*surfels.NodeColors(SelectionColor);
-				recognition.InitDisplay(&visualizer, &mesh, SelectionColor);
-				recognition.Display();
-				visualizer.Run();
-				visualizer.renderer->RemoveAllViewProps();*/
 
+				iScene++;
 			}
 
+			RVL_DELETE_ARRAY(clusterNormalDistributionFileName);
+
+			// Visualization
+
+			surfels.NodeColors(SelectionColor);
+			recognition.InitDisplay(&visualizer, &mesh, SelectionColor);
+			recognition.Display();
+			visualizer.Run();
 		}
 	}	// if (method == RVLRECOGNITION_METHOD_PSGM)
 
@@ -522,8 +475,10 @@ int main(int argc, char ** argv)
 	if (modelSequenceFileName)
 		delete[] modelSequenceFileName;
 
+	if (segmentGTFileName)
+		delete[] segmentGTFileName;
+
 	//END VIDOVIC
 
 	return 0;
 }
-

@@ -429,7 +429,7 @@ bool CRVLPCSVS::InputFromFile(
 	IplImage *pRGBImage)
 {
 	if (m_Flags & RVLSYS_FLAGS_PC)
-		return RVLPCImport(m_ImageFileName, &m_PC, m_nPC);
+		return RVLPCImport(m_ImageFileName, &m_PC, m_nPC, m_LidarParams.scale);
 	else if (pDepthImage != NULL && pRGBImage != NULL)
 		return InputRGBDImageFromFile(pDepthImage, pRGBImage, "-LW.bmp", "-D.txt");
 	else

@@ -88,6 +88,8 @@ void CRVLPSuLMVS::Init(char * CfgFile2Name)
 	m_PSuLMBuilder.m_pStereoVision = &m_StereoVision;
 	m_PSuLMBuilder.m_pTimer = m_pTimer;
 	m_PSuLMBuilder.m_pAImage = &m_AImage;
+	
+	m_PSuLMBuilder.m_PCScale = m_LidarParams.scale;
 
 	m_PSuLMBuilder.CreateParamList(&m_Mem0);
 
@@ -150,6 +152,9 @@ void CRVLPSuLMVS::Init(char * CfgFile2Name)
 		m_PSuLMBuilder.m_Flags &= ~(RVLPSULMBUILDER_FLAG_MODE | RVLPSULMBUILDER_FLAG_MAPBUILDING);
 		m_PSuLMBuilder.m_Flags2 &= ~RVLPSULMBUILDER_FLAG2_SCENE_FUSION;
 	}
+
+	if (m_Flags2 & RVLPSULMBUILDER_FLAG2_UNCONSTRAINED_ORIENTATION)
+		m_PSuLMBuilder.m_Flags2 |= RVLPSULMBUILDER_FLAG2_HYPGEN_INIT_MATCHING_CONSTRAINTS;
 
 	m_pPSuLM = NULL;
 
@@ -734,7 +739,7 @@ bool CRVLPSuLMVS::Create3DMeshFromComplexPSuLM(char *ImageFileName)
 	{
 		RVLSetFileNumber(m_PSuLMBuilder.m_ImageFileName, "00000-LW.bmp", iSample);
 
-		if(!m_PSuLMBuilder.GetOdometry(m_PSuLMBuilder.m_ImageFileName, &PoseM_M, iSample0, command))
+		if (!m_PSuLMBuilder.GetOdometry(m_PSuLMBuilder.m_ImageFileName, &PoseM_M, "-LW.bmp", iSample0, command))
 		{
 			bOK = false;
 
@@ -1299,7 +1304,7 @@ BOOL CRVLPSuLMVS::GetNextImageFileName(bool bBackwards)
 			return FALSE;
 	}		
 	else
-		return RVLGetNextFileName(m_ImageFileName, "00000-LW.bmp", 10000);
+		return RVLGetNextFileName(m_ImageFileName, "00000-LW.bmp", 10000, m_SampleStep);
 }
 
 BOOL CRVLPSuLMVS::GetFirstValidImageFileName()
