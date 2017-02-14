@@ -3322,7 +3322,7 @@ void PSGM::Match()
 
 	printf("completed.\n");
 
-	int nSMI = iMIS;
+	//int nSMI = iMIS;
 
 	delete[] nTc;
 	delete[] dISMc;
