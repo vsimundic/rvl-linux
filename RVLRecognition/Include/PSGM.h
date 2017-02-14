@@ -291,6 +291,9 @@ namespace RVL
 			//RECOG::PSGM_::Cluster *pCluster, //Vidovic
 			RECOG::PSGM_::ModelInstance *pModelInstance);
 		bool ReferenceFrames(int iCluster);
+		bool ReferenceFrames(
+			RECOG::PSGM_::Cluster *pCluster,
+			int iCluster = -1);
 		bool Inside(
 			int iVertex,
 			RECOG::PSGM_::Cluster *pCluster,

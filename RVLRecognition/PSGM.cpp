@@ -2174,6 +2174,13 @@ bool PSGM::ReferenceFrames(int iCluster)
 {
 	RECOG::PSGM_::Cluster *pCluster = clusters.Element[iCluster];
 
+	ReferenceFrames(pCluster, iCluster);
+}
+
+bool PSGM::ReferenceFrames(
+	RECOG::PSGM_::Cluster *pCluster,
+	int iCluster)
+{
 	// Identify the largest surfel.
 
 	int maxSize = 0;
@@ -2192,8 +2199,8 @@ bool PSGM::ReferenceFrames(int iCluster)
 	if (maxSize == 0)
 		return false;
 
-	if (iCluster == 3)
-		int debug = 0;
+	//if (iCluster == 3)
+	//	int debug = 0;
 
 	int sizeThr = (int)((float)maxSize * kReferenceSurfelSize);
 
