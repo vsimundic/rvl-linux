@@ -2080,8 +2080,8 @@ void PSGM::FitModel(
 	int i;
 	float *N, *P;
 	float N_[3];
-	float dist;
-	float maxdDefinedNormal;
+	//float dist;
+	//float maxdDefinedNormal;
 
 	int iCluster = pModelInstance->iCluster; //Vidovic
 
@@ -2174,7 +2174,7 @@ bool PSGM::ReferenceFrames(int iCluster)
 {
 	RECOG::PSGM_::Cluster *pCluster = clusters.Element[iCluster];
 
-	ReferenceFrames(pCluster, iCluster);
+	return ReferenceFrames(pCluster, iCluster);
 }
 
 bool PSGM::ReferenceFrames(
@@ -2280,11 +2280,14 @@ bool PSGM::ReferenceFrames(
 	int iTangent;
 	float maxTangentLen;
 	RECOG::PSGM_::Tangent *pTangent, *pTangent_;
-	float *R, *Z, *X, *t, *P1, *P2, *X_;
-	float Y[3], P[3];
+	float *R, *Z, *X, *t, *X_;
+	//float *P1, *P2;
+	float Y[3];
+	//float P[3];
 	Eigen::Matrix3f M;
 	Eigen::Vector3f B, t_;
-	float p, q, d;
+	float p, q;
+	//float d;
 	float tangentLenThr;
 	int iLargestTangent;
 	float *X0;
@@ -2930,7 +2933,8 @@ void PSGM::Learn(
 
 	Mesh mesh;
 
-	int iCluster, nClusters, currentModelID;
+	//int iCluster;
+	int nClusters, currentModelID;
 
 	//RVL_DELETE_ARRAY(modelDataBase);
 	//RVL_DELETE_ARRAY(modelsInDataBase);
@@ -4174,7 +4178,8 @@ void PSGM::Match()
 
 	float csMinSampleAngleDiff = cos(PI / 4);
 
-	int iSRF, i;
+	int iSRF;
+	//int i;
 
 	//find sample candidates
 	QList<QLIST::Index> iSampleCandidateList;
@@ -4200,7 +4205,8 @@ void PSGM::Match()
 	}
 
 	int iMIS;
-	int iSCluster, iSClusterMI;
+	int iSCluster;
+	//int iSClusterMI;
 
 	int nClusters = CTISet.maxSegmentIdx + 1;	
 
@@ -6131,7 +6137,7 @@ void PSGM::AddBestCTIModelsToVisualizer(Visualizer *pVisualizer)
 {
 	int bestMatchIdx;
 	float bestScore;
-	RECOG::PSGM_::MatchInstance *pMatch;
+	//RECOG::PSGM_::MatchInstance *pMatch;
 
 	//RECOG::PSGM_::MatchInstance *pMatchx = pCTImatchesArray.Element[scoreMatchMatrix.Element[0].Element[0].idx];
 
@@ -6190,7 +6196,7 @@ void PSGM::AddCTIModelToVisualizer(Visualizer *pVisualizer, int iMatch)
 	////Generate model polydata
 	float t[3];
 	vtkSmartPointer<vtkPolyData> modelPD = GenerateCTIPrimitivePolydata_RW(nT.data(), dM, false, NULL, t);
-	double T_CTIM_M[16], T_M_S[16], T_CTIS_S[16], T_CCTIS_CTIS[16];
+	//double T_CTIM_M[16], T_M_S[16], T_CTIS_S[16], T_CCTIS_CTIS[16];
 
 	float *R_M_S = pCTImatchesArray.Element[iMatch]->R;
 	float *t_M_S_mm = pCTImatchesArray.Element[iMatch]->t;

@@ -153,6 +153,12 @@
     <ClCompile Include="RVLRGBDTools.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="RVLColorDescriptor.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="RVLVTK.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Include\Platform.h">
@@ -327,6 +333,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Include\VTKActorObj.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Include\RVLColorDescriptor.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
