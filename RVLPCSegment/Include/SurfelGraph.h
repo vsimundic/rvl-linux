@@ -79,6 +79,7 @@ namespace RVL
 			bool bEdge;
 		};
 
+
 	}
 
 	struct Surfel
@@ -178,6 +179,13 @@ namespace RVL
 			int iSurfel, 
 			int *surfelIdx,
 			bool *bVisited);	
+		void DetermineImgAdjDescriptors(
+			Surfel *pSurfel,
+			Mesh *mesh);
+		void GenerateSSF(
+			std::string filename,
+			int minSurfelSize,
+			bool checkbackground);
 		void SetPrimaryGTObj(
 			Surfel *pSurfel, 
 			cv::Mat labGTImg, 
@@ -186,6 +194,7 @@ namespace RVL
 			char *meshFileName,
 			int minSurfelSize);
 #endif
+		cv::Mat GenColoredSurfelImgFromSSF(std::shared_ptr<SceneSegFile::SceneSegFile> ssf);
 		//Filko
 		void CalculateSurfelsColorHistograms(cv::Mat img, int colorspace, bool oneDimensional, const int *bindata, bool noBins);
 

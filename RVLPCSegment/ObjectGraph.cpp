@@ -6,6 +6,7 @@
 #include "Graph.h"
 #include "Mesh.h"
 #include "Visualizer.h"
+#include "SceneSegFile.hpp"
 #include "SurfelGraph.h"
 #include "ObjectGraph.h"
 
@@ -2558,3 +2559,50 @@ void ObjectGraph::ObjectAggregationLevel2_ViaObjectPairConvexity(float convexThr
 	}
 }
 
+cv::Mat ObjectGraph::CreateSegmentationImage()
+{
+	cv::Mat coloredSegLab(480, 640, CV_8UC3, cv::Scalar::all(0));
+
+	GRAPH::AggregateNode<SURFEL::AgEdge> *pObject;
+	QLIST::Index *piElement;
+	Surfel *pSurfel;
+	unsigned char labSegColor[3];
+	int x = 0, y = 0;
+	RVL::QLIST::Index2 *pt;
+	srand(time(NULL));
+	for (int iObject = 0; iObject < NodeArray.n; iObject++)
+	{
+		//Generate surfel color
+		labSegColor[0] = rand() % 255;
+		labSegColor[1] = rand() % 255;
+		labSegColor[2] = rand() % 255;
+
+		pObject = NodeArray.Element + iObject;
+
+		piElement = pObject->elementList.pFirst;
+
+		while (piElement)
+		{
+			pSurfel = pSurfels->NodeArray.Element + piElement->Idx;
+			//check 
+			if (!((pSurfel->size <= 1) || pSurfel->bEdge))
+			{
+				pt = pSurfel->PtList.pFirst;
+				//Set pixel colors
+				for (int k = 0; k < pSurfel->size; k++)
+				{
+					y = floor(pt->Idx / 640.0);
+					x = floor(pt->Idx - 640.0 * y);
+					coloredSegLab.at<cv::Vec3b>(y, x)[0] = labSegColor[0];
+					coloredSegLab.at<cv::Vec3b>(y, x)[1] = labSegColor[1];
+					coloredSegLab.at<cv::Vec3b>(y, x)[2] = labSegColor[2];
+					pt = pt->pNext;
+				}
+			}
+			piElement = piElement->pNext;
+		}
+
+	}
+	//return image
+	return coloredSegLab;
+}

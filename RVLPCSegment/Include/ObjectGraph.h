@@ -106,6 +106,7 @@ namespace RVL
 			void WriteSurfelDataToFile(FILE *fp);
 			void WriteObjectDataToFile(FILE *fp);
 			void InitSVMClassifier(char *svmParamsFileName);	//Nyarko
+			cv::Mat CreateSegmentationImage();
 			void Debug();
 
 		public:
