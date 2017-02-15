@@ -490,6 +490,12 @@ void RunMainProg(
 			objects.CalculateOverAndUnderSegmentation(E, N, false, "", false);
 			std::cout << "Oversegmenation error: " << 100.0f * (1 - E[0] / (float)N) << "%" << std::endl;
 			std::cout << "Undersegmenation error: " << 100.0f * E[1] / (float)N << "%" << std::endl;*/
+			//save label image
+			/*std::string imgFileName(fileName);
+			imgFileName.erase(imgFileName.find_last_of("."));
+			imgFileName += "OGLabels.png";
+			objects.SaveSegmentationLabelImg(imgFileName);*/
+
 
 			printf("completed.\n");
 		}
