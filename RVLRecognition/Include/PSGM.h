@@ -186,6 +186,7 @@ namespace RVL
 		void EvaluateMatchesByScore(
 			FILE *fp,
 			FILE *fpLog,
+			FILE *fpPoseError,
 			int nBestSegments = 0); //Vidovic
 		void WriteClusterNormalDistribution(FILE *fp);
 		void MSTransformation(
@@ -225,6 +226,16 @@ namespace RVL
 			int iScene); //Vidovic
 		void LoadCompleteSegmentGT(FileSequenceLoader sceneSequence); //Vidovic
 		void LoadCTI(char *fileName); //Vidovic
+		bool PoseCheck(
+			RVL::GTInstance *pGT,
+			RECOG::PSGM_::MatchInstance *pMatch,
+			float distanceThresh,
+			float angleThresh,
+			FILE *fpLog = NULL); //Vidovic
+		void FindGTInstance(
+			RVL::GTInstance **pGT,
+			int iScene,
+			int iModel);
 	private:
 		void Clusters();
 		void CreateTemplate();

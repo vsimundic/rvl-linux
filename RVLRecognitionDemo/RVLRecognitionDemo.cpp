@@ -35,7 +35,7 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 //#define PSGM_MATCHES_PROBABILITY_COMPARE
 #define PSGM_MATCHES_SCORE_COMPARE
 //#define PSGM_LOAD_CTI_FROM_FILE
-//#define PSGM_RECOGNITION_VISUALIZE_SCENE
+#define PSGM_RECOGNITION_VISUALIZE_SCENE
 
 #define RVLRECOGNITION_DEMO_FLAG_SAVE_PLY			0x00000001
 //END VIDOVIC
@@ -308,7 +308,9 @@ int main(int argc, char ** argv)
 
 			FILE *fpHypothesisEvaluation = fopen("F:\\Projekti\\ARP3D\\compare_TNM_Valid_TMP.txt", "w");
 
-			FILE *fpLog = fopen("F:\\Projekti\\ARP3D\\evaluationLog.txt", "w");			
+			FILE *fpLog = fopen("F:\\Projekti\\ARP3D\\evaluationLog.txt", "w");
+
+			FILE *fpPoseError = fopen("F:\\Projekti\\ARP3D\\PoseError.txt", "w");
 
 			recognition.LoadCompleteSegmentGT(sceneSequence);
 
@@ -345,7 +347,7 @@ int main(int argc, char ** argv)
 				visualizer.renderer->RemoveAllViewProps();
 	#endif
 #endif
-				recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, 7);
+				recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, fpPoseError, 7);
 				
 				printf("Scene %s...finished!\n\n", filePath);
 			}
@@ -358,6 +360,7 @@ int main(int argc, char ** argv)
 
 			fclose(fpHypothesisEvaluation);
 			fclose(fpLog);
+			fclose(fpPoseError);
 
 			//END Vidovic
 		}	// if (recognition.mode == RVLRECOGNITION_MODE_RECOGNITION)

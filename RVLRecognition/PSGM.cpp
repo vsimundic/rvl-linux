@@ -3213,7 +3213,6 @@ void PSGM::Match()
 		pPlane++;
 	}
 
-	int iMIS;
 	int iSCluster, iSClusterMI;
 
 	int nClusters = CTISet.maxSegmentIdx + 1;	
@@ -3300,8 +3299,6 @@ void PSGM::Match()
 	SortScoreMatchMatrix();
 
 	printf("completed.\n");
-
-	int nSMI = iMIS;
 
 	delete[] nTc;
 	delete[] dISMc;
@@ -4240,6 +4237,97 @@ void PSGM::CountTPandFN(
 	}	
 }
 
+bool PSGM::PoseCheck(
+	RVL::GTInstance *pGT,
+	RECOG::PSGM_::MatchInstance *pMatch,
+	float distanceThresh,
+	float angleThresh,
+	FILE *fpLog)
+{
+	//float R[9], R_[9], RGT[9], tGT[3], t[3];
+	float R[9], R_[9], RGT[9], tGT[3], t[3];
+
+	float V[3], theta, distance;
+
+	float zGT[3], z[3];
+
+	float thetaZ;
+
+	RVLSCALEMX3X3(pGT->R, 1000, RGT);
+
+	RVLMXMUL3X3T2(pMatch->R, RGT, R);
+
+	RVLSCALE3VECTOR(pGT->t, 1000, tGT)
+
+		/*
+#ifdef RVLPSGM_MATCH_SEGMENT_CENTROID
+
+	RVLDIFMX3X3(RGT, pMatch->R, R_);
+
+	RVLMULMX3X3VECT(R_, modelInstanceDB.Element[pMatch->iMMI].tc, t);
+
+	RVLSUM3VECTORS(t, tGT, t);
+
+	RVLDIF3VECTORS(t, pMatch->t, t);
+#else if
+	RVLDIF3VECTORS(pMatch->t, tGT, t);
+#endif
+	*/
+
+	RVLDIF3VECTORS(pMatch->t, tGT, t);
+
+	GetAngleAxis(R, V, theta);
+
+	GetDistance(t, distance);
+
+	zGT[0] = RGT[2];
+	zGT[1] = RGT[5];
+	zGT[2] = RGT[8];
+
+	z[0] = pMatch->R[2];
+	z[1] = pMatch->R[5];
+	z[2] = pMatch->R[8];
+
+	thetaZ = RVLDOTPRODUCT3(zGT, z);
+
+	//if ((theta < angleThresh || (theta >(PI - angleThresh) && theta < (PI + angleThresh))) && distance < distanceThresh)
+	//if (distance < distanceThresh && theta < angleThresh)
+	if (distance < distanceThresh && thetaZ > angleThresh)
+	{
+		return true;
+	}
+	else
+	{
+		if (fpLog)
+		{
+			//fprintf(fpLog, "%d\t%d\t%d\t%d\t%f\t%f\n", pMatch->iScene, MCTISet.pCTI.Element[pMatch->iMCTI]->iModel, MCTISet.pCTI.Element[pMatch->iMCTI]->iCluster, CTISet.pCTI.Element[pMatch->iSCTI]->iCluster, distance, theta);
+			fprintf(fpLog, "%d\t%d\t%d\t%d\t%f\t%f\n", pMatch->iScene, MCTISet.pCTI.Element[pMatch->iMCTI]->iModel, MCTISet.pCTI.Element[pMatch->iMCTI]->iCluster, CTISet.pCTI.Element[pMatch->iSCTI]->iCluster, distance, acos(thetaZ)*180/PI);
+		}
+
+		return false;
+	}
+}
+
+void PSGM::FindGTInstance(
+	RVL::GTInstance **pGT,
+	int iScene,
+	int iModel)
+{
+	int nGTModels, iGTM;
+
+	RVL::GTInstance *pGT_ = *pGT;
+
+	pGT_ = pECCVGT->GT.Element[iScene].Element;
+
+	nGTModels = pECCVGT->GT.Element[iScene].n;
+
+	for (iGTM = 0; iGTM < nGTModels; iGTM++, pGT_++)
+		if (pGT_->iModel == iModel)
+			break;
+
+	*pGT = pGT_;
+}
+
 void PSGM::CalculatePR(int TP, int FP, int FN, float &precision, float &recall)
 {
 	if (TP + FP > 0)
@@ -4254,6 +4342,7 @@ void PSGM::CalculatePR(int TP, int FP, int FN, float &precision, float &recall)
 void PSGM::EvaluateMatchesByScore(
 	FILE *fp,
 	FILE *fpLog,
+	FILE *fpPoseError,
 	int nBestSegments)
 {
 	float precision, recall;
@@ -4271,6 +4360,8 @@ void PSGM::EvaluateMatchesByScore(
 	float scoreTmp;
 
 	int idx;
+
+	float cos30 = sqrt(3) / 2;
 
 	//scoreMatchMatrix is sorted
 	minScore = scoreMatchMatrix.Element[0].Element[0].cost;
@@ -4297,7 +4388,7 @@ void PSGM::EvaluateMatchesByScore(
 
 	float scoreStep = (maxScore - minScore) / nScoreSteps;
 
-	bool TPMatch;
+	bool TPMatch, poseMatch;
 
 	int TP_ = 0, FP_ = 0, FN_ = 0;
 
@@ -4311,7 +4402,14 @@ void PSGM::EvaluateMatchesByScore(
 
 	int iBestMatches;
 
-	int iMCTI;
+	int iMCTI, iSCTI;
+
+	RECOG::PSGM_::ModelInstance *pSCTI;
+	RECOG::PSGM_::ModelInstance *pMCTI;
+
+	RVL::GTInstance *pGT = NULL;
+
+	float R_[9], t_[3];
 
 	if (nBestSegments == 0)
 	{
@@ -4413,19 +4511,39 @@ void PSGM::EvaluateMatchesByScore(
 								if (!segmentGT.Element[iSegmentGT].valid)
 									TPMatch = false;
 								else
+								{
 									TPMatch = CompareMatchToSegmentGT((iScene - 1), iSSegment, iMatchedModel);
+								}
 
 								if (!TPMatch)
 								{
 									FP_++;
 								}
 								else
+								{
 									if (firstTP[iSSegment] == -1)
 									{
 										firstTP[iSSegment] = iMSegment;
 										firstTPScore[iSSegment] = scoreTmp;
 										firstTPiModel[iSSegment] = iMatchedModel;
+									}	
+
+									//check pose of TP segment matches
+									if (iBestMatches == nBestSegments - 1)
+									{
+										iSCTI = pCTImatchesArray.Element[iMatch]->iSCTI;
+
+										pSCTI = CTISet.pCTI.Element[iSCTI];
+										pMCTI = MCTISet.pCTI.Element[iMCTI];
+
+										MSTransformation(pMCTI, pSCTI, pCTImatchesArray.Element[iMatch]->tMatch, pCTImatchesArray.Element[iMatch]->R, pCTImatchesArray.Element[iMatch]->t);
+
+										FindGTInstance(&pGT, pCTImatchesArray.Element[iMatch]->iScene, iMatchedModel);
+
+										//poseMatch = PoseCheck(pGT, pCTImatchesArray.Element[iMatch], 50.0, PI / 6, fpPoseError);
+										poseMatch = PoseCheck(pGT, pCTImatchesArray.Element[iMatch], 50.0, cos30, fpPoseError);
 									}
+								}
 							//}
 						}
 					}
@@ -4439,7 +4557,7 @@ void PSGM::EvaluateMatchesByScore(
 
 				CalculatePR(TP_, FP_, FN_, precision, recall);
 
-				pECCVGT->ResetMatchFlag();
+				//pECCVGT->ResetMatchFlag();
 
 				PrintMatchInfo(fp, fpLog, TP_, FP_, FN_, precision, recall, nSSegments, firstTP, firstTPiModel, firstTPScore, -1.0, -1.0, -1.0, -1.0, nBestSegments, iBestMatches, graphID);
 
