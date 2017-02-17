@@ -1,4 +1,5 @@
 #pragma once
+#include "RVLVTK.h"
 
 //#define RVLPSGM_NORMAL_HULL
 #define RVLPSGM_MATCH_SATURATION //VIDOVIC
@@ -183,9 +184,12 @@ namespace RVL
 
 		void CalculatePose(int iMatch);
 
-		void AddBestCTIModelsToVisualizer(Visualizer *pVisualizer);
+		typedef void(*ICPfunction)(vtkSmartPointer<vtkPolyData>, vtkSmartPointer<vtkPolyData>, float *, int, float, int);
+
+		void AddBestCTIModelsToVisualizer(Visualizer *pVisualizer, bool align, ICPfunction ICPFunction, int ICPvariant);
 		
-		void AddCTIModelToVisualizer(Visualizer *pVisualizer, int iMatch);
+		void AddCTIModelToVisualizer(Visualizer *pVisualizer, int iMatch, bool align, ICPfunction ICPFunction, int ICPvariant);
+		
 		//end Petra
 
 		void InitDisplay(

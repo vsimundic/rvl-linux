@@ -5749,6 +5749,9 @@ void PSGM::InitDisplay(
 	pSurfels->DisplayData.vpUserFunctionData = &displayData;
 
 	pSurfels->InitDisplay(pVisualizer, pMesh, pSurfelDetector);
+	
+	//Is this the best place for this????????
+	this->pMesh = pMesh;
 }
 
 void PSGM::Display()
@@ -6133,7 +6136,8 @@ void PSGM::CalculatePose(int iMatch)
 	MSTransformation(pMCTI, pSCTI, pCTImatchesArray.Element[iMatch]->tMatch, pCTImatchesArray.Element[iMatch]->R, pCTImatchesArray.Element[iMatch]->t);
 }
 
-void PSGM::AddBestCTIModelsToVisualizer(Visualizer *pVisualizer)
+
+void PSGM::AddBestCTIModelsToVisualizer(Visualizer *pVisualizer, bool align, RVL::PSGM::ICPfunction ICPFunction, int ICPvariant)
 {
 	int bestMatchIdx;
 	float bestScore;
@@ -6156,11 +6160,11 @@ void PSGM::AddBestCTIModelsToVisualizer(Visualizer *pVisualizer)
 				bestScore = pMatch->score;
 			}
 		}*/
-		AddCTIModelToVisualizer(pVisualizer, scoreMatchMatrix.Element[i].Element[0].idx);
+		AddCTIModelToVisualizer(pVisualizer, scoreMatchMatrix.Element[i].Element[0].idx, align, ICPFunction, ICPvariant);
 	}
 }
 
-void PSGM::AddCTIModelToVisualizer(Visualizer *pVisualizer, int iMatch)
+void PSGM::AddCTIModelToVisualizer(Visualizer *pVisualizer, int iMatch, bool align, RVL::PSGM::ICPfunction ICPFunction, int ICPvariant)
 {
 	int iMCTI = pCTImatchesArray.Element[iMatch]->iMCTI;
 	int iSCTI = pCTImatchesArray.Element[iMatch]->iSCTI;
@@ -6193,7 +6197,7 @@ void PSGM::AddCTIModelToVisualizer(Visualizer *pVisualizer, int iMatch)
 		pMIE++;
 	}
 
-	////Generate model polydata
+	//Generate model polydata
 	float t[3];
 	vtkSmartPointer<vtkPolyData> modelPD = GenerateCTIPrimitivePolydata_RW(nT.data(), dM, false, NULL, t);
 	//double T_CTIM_M[16], T_M_S[16], T_CTIS_S[16], T_CCTIS_CTIS[16];
@@ -6218,7 +6222,6 @@ void PSGM::AddCTIModelToVisualizer(Visualizer *pVisualizer, int iMatch)
 
 	//Generate scene polydata
 	vtkSmartPointer<vtkPolyData> modelSPD = GenerateCTIPrimitivePolydata_RW(nT.data(), dS, false, validS, t);
-
 	vtkSmartPointer<vtkTransform> transform = vtkSmartPointer<vtkTransform>::New();
 
 	//transform->SetMatrix(T_CCTIS_CTIS);
@@ -6247,15 +6250,6 @@ void PSGM::AddCTIModelToVisualizer(Visualizer *pVisualizer, int iMatch)
 	transformFilter->SetTransform(transform);
 	transformFilter->Update();
 
-	vtkSmartPointer<vtkPolyDataMapper> modelMapper = vtkSmartPointer<vtkPolyDataMapper>::New();
-	//modelMapper->SetInputConnection(transformFilter1->GetOutputPort());
-	modelMapper->SetInputConnection(transformFilter->GetOutputPort());
-
-	vtkSmartPointer<vtkActor> modelActor = vtkSmartPointer<vtkActor>::New();
-	modelActor->SetMapper(modelMapper);
-	modelActor->GetProperty()->SetColor(0, 1, 0);
-	pVisualizer->renderer->AddActor(modelActor);
-	
 	vtkSmartPointer<vtkTransform> transform2 = vtkSmartPointer<vtkTransform>::New();
 	//transform2->SetMatrix(T_CCTIS_CTIS);
 	//transform2->Concatenate(T_CTIS_S);
@@ -6264,6 +6258,61 @@ void PSGM::AddCTIModelToVisualizer(Visualizer *pVisualizer, int iMatch)
 	transformFilter2->SetInputData(modelSPD);
 	transformFilter2->SetTransform(transform2);
 	transformFilter2->Update();
+
+	vtkSmartPointer<vtkTransformPolyDataFilter> transformFilterICP;
+	if (align)
+	{
+		vtkSmartPointer<vtkTriangleFilter> modelSamplerTriangleFilter = vtkSmartPointer<vtkTriangleFilter>::New();
+		modelSamplerTriangleFilter->SetInputConnection(transformFilter->GetOutputPort());
+		modelSamplerTriangleFilter->Update();
+		vtkSmartPointer<vtkPolyDataPointSampler> modelSampler = vtkSmartPointer<vtkPolyDataPointSampler>::New();
+		modelSampler->SetInputConnection(modelSamplerTriangleFilter->GetOutputPort());
+		modelSampler->SetDistance(0.005);
+		modelSampler->Update();
+		
+
+		vtkSmartPointer<vtkPolyData> modelSamplerPD = modelSampler->GetOutput();
+
+		vtkSmartPointer<vtkTriangleFilter> sceneSamplerTriangleFilter = vtkSmartPointer<vtkTriangleFilter>::New(); //Creates triangles from polygons (Samples doesn't work with polygons)
+		sceneSamplerTriangleFilter->SetInputConnection(transformFilter2->GetOutputPort());
+		sceneSamplerTriangleFilter->Update();
+		vtkSmartPointer<vtkPolyDataPointSampler> sceneSampler = vtkSmartPointer<vtkPolyDataPointSampler>::New();
+		sceneSampler->SetInputConnection(sceneSamplerTriangleFilter->GetOutputPort());
+		sceneSampler->SetDistance(0.005);
+		sceneSampler->Update();
+
+		vtkSmartPointer<vtkPolyData> sceneSamplerPD = sceneSampler->GetOutput();
+
+		float icpT[16];
+		double icpTd[16];
+		//ICPFunction(transformFilter->GetOutput(), pMesh->pPolygonData, icpT, 10, 0.05);
+		ICPFunction(modelSamplerPD, sceneSamplerPD, icpT, 20, 0.02, ICPvariant);
+		for (int i = 0; i < 16; i++)
+		{
+			icpTd[i] = icpT[i];
+		}
+		vtkSmartPointer<vtkTransform> transformICP = vtkSmartPointer<vtkTransform>::New();
+		transformICP->SetMatrix(icpTd);
+
+		transformFilterICP = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
+		transformFilterICP->SetInputConnection(modelSampler->GetOutputPort());
+		transformFilterICP->SetTransform(transformICP);
+		transformFilterICP->Update();
+	}
+
+	vtkSmartPointer<vtkPolyDataMapper> modelMapper = vtkSmartPointer<vtkPolyDataMapper>::New();
+	//modelMapper->SetInputConnection(transformFilter1->GetOutputPort());
+	if (align)
+		modelMapper->SetInputConnection(transformFilterICP->GetOutputPort());
+	else 
+		modelMapper->SetInputConnection(transformFilter->GetOutputPort());
+
+	vtkSmartPointer<vtkActor> modelActor = vtkSmartPointer<vtkActor>::New();
+	modelActor->SetMapper(modelMapper);
+	modelActor->GetProperty()->SetColor(0, 1, 0);
+	pVisualizer->renderer->AddActor(modelActor);
+	
+	
 	vtkSmartPointer<vtkPolyDataMapper> modelMapper2 = vtkSmartPointer<vtkPolyDataMapper>::New();
 	modelMapper2->SetInputConnection(transformFilter2->GetOutputPort());
 	vtkSmartPointer<vtkActor> modelActor2 = vtkSmartPointer<vtkActor>::New();

@@ -11,4 +11,24 @@ namespace RVL
 	void PCLSavePLY(
 		char *FileName,
 		pcl::PolygonMesh &mesh);
+
+	//Petra:
+	class PCLICPVariants
+	{
+	public: 
+		enum{Point_to_point = 1,
+			 Point_to_plane, //not implemented yet
+			 Point_to_point_nonlinear,
+			 GeneralizedICP //recommended
+			};
+	};
+
+	//Returns Transformation matrix between source and destination point clouds:
+	void PCLICP(
+		vtkSmartPointer<vtkPolyData> pdSource,
+		vtkSmartPointer<vtkPolyData> pdDestination,
+		float *T,
+		int maxIterations,
+		float maxCorrespondenceDist,
+		int ICPvariant);
 }
