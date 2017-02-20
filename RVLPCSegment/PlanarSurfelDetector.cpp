@@ -11,6 +11,7 @@
 //#include "RGBDCamera.h"
 #include "Mesh.h"
 #include "Visualizer.h"
+#include "SceneSegFile.hpp"
 #include "SurfelGraph.h"
 #include "PlanarSurfelDetector.h"
 
@@ -431,6 +432,8 @@ void PlanarSurfelDetector::Segment(
 #endif
 
 		// Next surfel index
+
+		//printf("surfel %d\n", iSurfel);	// debug
 
 		iSurfel++;
 

@@ -46,6 +46,7 @@ CRVLPSuLMBuilder::CRVLPSuLMBuilder(void)
 
 	// parameters
 
+	m_PCScale = 1000.0;
 	m_CellSize = 16;				// pix
 	m_uTol = m_CellSize;			// halfpix
 	m_dqTol = 6;					// halfpix
@@ -1193,7 +1194,7 @@ BOOL CRVLPSuLMBuilder::Create(CRVLPSuLM *pPSuLM,
 
 				int nPC;
 
-				if(!RVLPCImport(pPSuLM->m_FileName, &PC, nPC))
+				if(!RVLPCImport(pPSuLM->m_FileName, &PC, nPC, m_PCScale))
 					return FALSE;
 
 				ExecTime = m_pTimer->GetTime() - StartTime;

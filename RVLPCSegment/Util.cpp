@@ -138,6 +138,20 @@ void RVL::GetDistance(float *t, float &distance)
 	distance = sqrt(t[0] * t[0] + t[1] * t[1] + t[2] * t[2]);
 }
 
+void RVL::PrintMatrix(FILE *fp, double *A, int n, int m)
+{
+	double *pA = A;
+
+	int i, j;
+
+	for(i = 0; i < n; i++)
+	{
+		for(j = 0; j < m; j++, pA++)
+			fprintf(fp, "%lf\t", *pA);
+
+		fprintf(fp, "\n");
+	}
+}
 
 FileSequenceLoader::FileSequenceLoader()
 {

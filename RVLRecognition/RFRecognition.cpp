@@ -8,6 +8,7 @@
 #include <Eigen\Eigenvalues>
 #include "Mesh.h"
 #include "Visualizer.h"
+#include "SceneSegFile.hpp"
 #include "SurfelGraph.h"
 #include "PlanarSurfelDetector.h"
 #include "RVLMeshNoiser.h" //VIDOVIC

@@ -494,7 +494,7 @@ int main(int argc, char* argv[])
 #endif
 		if(VS.m_Flags & RVLSYS_FLAGS_PC)
 		{
-			if(!RVLPCImport(VS.m_ImageFileName, &PC, nPC))
+			if (!RVLPCImport(VS.m_ImageFileName, &PC, nPC, VS.m_LidarParams.scale))
 			{
 				MessageCanNotOpenFile(&GUI, VS.m_ImageFileName);
 
@@ -717,7 +717,7 @@ int main(int argc, char* argv[])
 
 					fprintf(VS.m_fpRes, "%d\t%lf\t%lf\t%lf\t%lf\t%lf\t%lf\t%s\n",
 						pHypothesis->pMPSuLM->m_Index,
-						pHypothesis->PoseSM.m_Alpha, pHypothesis->PoseSM.m_Beta, pHypothesis->PoseSM.m_Theta,
+						pHypothesis->PoseSM.m_Alpha * RAD2DEG, pHypothesis->PoseSM.m_Beta * RAD2DEG, pHypothesis->PoseSM.m_Theta * RAD2DEG,
 						pHypothesis->PoseSM.m_X[0], pHypothesis->PoseSM.m_X[1], pHypothesis->PoseSM.m_X[2],
 						VS.m_ImageFileName);
 				}

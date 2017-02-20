@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <math.h>
 #include <string.h>
+#include <memory>
 #include "opencv2\opencv.hpp"
 #define _CRT_SECURE_NO_WARNINGS 
 #include "RVLConst.h"
@@ -23,6 +24,7 @@
 #include "RVLParameterList.h"
 //#include "RVL3DPose.h"
 //#include "RGBDCamera.h"
+#include "RVLColorDescriptor.h"
 
 //struct PIX_ARRAY
 //{

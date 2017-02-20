@@ -4,6 +4,12 @@
 
 namespace RVL
 {
+	bool LoadMesh(
+		void *vpMeshBuilder,
+		char *FileName,
+		Mesh *pMesh,
+		bool bSavePLY);
+
 	class PCLMeshBuilder
 	{
 	public:
@@ -22,6 +28,10 @@ namespace RVL
 			pcl::PointCloud<pcl::PointXYZRGBA>::Ptr PC,
 			pcl::PolygonMesh &PCLMesh,
 			bool bSavePLY);
+		bool Load(
+			char *FileName,
+			Mesh *pMesh,
+			bool bSavePLY);
 
 	public:
 		DWORD flags;
@@ -29,7 +39,9 @@ namespace RVL
 		double sigmaR;
 		double normalEstR;		
 		CRVLParameterList ParamList;
-	private:
+		pcl::PointCloud<pcl::PointXYZRGBA>::Ptr PC;
+		pcl::PolygonMesh PCLMesh;
+	private:				
 		pcl::PointCloud<pcl::PointXYZRGBA> FPC;
 		pcl::PointCloud<pcl::Normal> N;
 		//pcl::FastBilateralFilter<pcl::PointXYZRGBA> bilateralFilter;

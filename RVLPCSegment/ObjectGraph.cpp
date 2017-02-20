@@ -6,10 +6,12 @@
 #include "Graph.h"
 #include "Mesh.h"
 #include "Visualizer.h"
+#include "SceneSegFile.hpp"
 #include "SurfelGraph.h"
 #include "ObjectGraph.h"
 
 #include <numeric>
+#include <queue>
 
 /// Move to RVLQListArray.h
 
@@ -638,7 +640,7 @@ void ObjectGraph::CreateParamList(CRVLMem *pMem)
 	ParamList.Init();
 
 	pParamData = ParamList.AddParam("ObjectGraph.alpha", RVLPARAM_TYPE_FLOAT, &alpha);
-	pParamData = ParamList.AddParam("ObjectGraph.method", RVLPARAM_TYPE_ID, &relationClassifier);
+	pParamData = ParamList.AddParam("ObjectGraph.relationClassifier", RVLPARAM_TYPE_ID, &relationClassifier);
 	ParamList.AddID(pParamData, "HEURISTIC", RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_HEURISTIC);
 	ParamList.AddID(pParamData, "SVM", RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_SVM);
 	ParamList.AddID(pParamData, "NLMC", RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_NLMC);
@@ -711,6 +713,9 @@ void ObjectGraph::Create(SurfelGraph *pSurfels_)
 		pAgNode = NodeArray.Element + iSurfel;
 
 		if (pSurfel->size <= 1)
+			continue;
+
+		if (pSurfel->bEdge)
 			continue;
 
 		pEdgeList = &(pAgNode->EdgeList);
@@ -919,8 +924,8 @@ void ObjectGraph::CreateFromSSF(std::string ssfFileName)
 	}
 }
 
-//Return 'Ntrue', 'Nfalse' and 'N' needed to calculate oversegmentation (Fos = 1 - Ntrue/N) and undersegmenation (Fus =Nfalse/N) error. The asumption is that the GT object hist bin with the highest values is the correct one!!! 
-void ObjectGraph::CalculateOverAndUnderSegmentation(int *E, int &N, bool useGTNoPix, bool useBackground)
+//Requires that CreateFromSSF be run before this. Return 'Ntrue', 'Nfalse' and 'N' needed to calculate oversegmentation (Fos = 1 - Ntrue/N) and undersegmenation (Fus =Nfalse/N) error. The asumption is that the GT object hist bin with the highest values is the correct one!!! 
+void ObjectGraph::CalculateOverAndUnderSegmentation_SSF(int *E, int &N, bool useGTNoPix, bool useBackground)
 {
 	std::shared_ptr<SceneSegFile::SceneSegFile> ssf = this->ssf;
 	std::shared_ptr<SceneSegFile::SegFileElement> currSSFElement;
@@ -1030,6 +1035,151 @@ void ObjectGraph::CalculateOverAndUnderSegmentation(int *E, int &N, bool useGTNo
 		labelImgFileName.erase(labelImgFileName.find_last_of("."));
 		std::string depthImgFileName = labelImgFileName + "d.png";
 		labelImgFileName += "a.png";
+		//load GT files
+		cv::Mat GTLabImg = cv::imread(labelImgFileName);
+		cv::Mat GTDepthImg = cv::imread(depthImgFileName, cv::ImreadModes::IMREAD_ANYDEPTH);
+		//Count GT object pixels
+		N = 0;
+		for (int y = 0; y < 480; y++)
+		{
+			for (int x = 0; x < 640; x++)
+			{
+				//adding points that have valid label and depth value
+				if ((GTLabImg.at<cv::Vec3b>(y, x)[0] > 0) && GTDepthImg.at<unsigned short>(y, x) > 0)
+					N++;
+			}
+		}
+	}
+
+	//DeRef
+	delete[] GTObjHistogram;
+	delete[] maxObj;
+	delete[] g;
+	delete[] maxBin;
+}
+
+//Must be linked with the ground truth (AssignGroundTruthSegmentation per surfel). Return 'Ntrue', 'Nfalse' and 'N' needed to calculate oversegmentation (Fos = 1 - Ntrue/N) and undersegmenation (Fus =Nfalse/N) error. The asumption is that the GT object hist bin with the highest values is the correct one!!! 
+void ObjectGraph::CalculateOverAndUnderSegmentation(int *E, int &N, bool useGTNoPix, std::string GTlabImgFilename, bool useBackground)
+{
+	//Getting GThist size and initializing GT object histogram;
+	//find a surfel that has defined GTObjHist
+	int GTHistSize;
+	for (int i = 0; i < this->pSurfels->NodeArray.n; i++)
+	{
+		if (this->pSurfels->NodeArray.Element[i].GTObjHist.size() > 0)
+		{
+			GTHistSize = this->pSurfels->NodeArray.Element[i].GTObjHist.size();
+			break;
+		}
+	}
+	int *GTObjHistogram = new int[GTHistSize * this->NodeArray.n];	//GTObject histogam per segmented object
+	memset(GTObjHistogram, 0, GTHistSize * this->NodeArray.n * sizeof(int));
+	int *maxObj = new int[GTHistSize];	//Idx of segmented object per maximum bin
+	memset(maxObj, 0, GTHistSize * sizeof(int));
+	int *g = new int[GTHistSize];	//gama
+	memset(g, 0, GTHistSize * sizeof(int));
+	int *maxBin = new int[this->NodeArray.n];	//maximum bin per segmented object
+	memset(maxBin, 0, this->NodeArray.n * sizeof(int));
+
+	GRAPH::AggregateNode<SURFEL::AgEdge> *pObject;
+	QLIST::Index *piElement;
+	Surfel *pSurfel;
+
+	//Calculating GT object histogram
+	for (int iObject = 0; iObject < this->NodeArray.n; iObject++)
+	{
+		pObject = this->NodeArray.Element + iObject;
+
+		piElement = pObject->elementList.pFirst;
+
+		//check
+		if (!piElement)
+			continue;
+
+		while (piElement)
+		{
+			pSurfel = pSurfels->NodeArray.Element + piElement->Idx;
+			if (pSurfel->GTObjHist.size() != 0)
+			{
+				for (int i = 0; i < GTHistSize; i++)
+					GTObjHistogram[iObject * GTHistSize + i] += pSurfel->GTObjHist.at(i);
+			}
+			piElement = piElement->pNext;
+		}
+	}
+
+	E[0] = 0;	//Oversegmentation values
+	E[1] = 0;	//Undersegmentation values
+	int* ptrGTObjHist;
+	int max = 0;
+
+	int totVal = 0;
+	for (int iObject = 0; iObject < this->NodeArray.n; iObject++)
+	{
+		pObject = this->NodeArray.Element + iObject;
+		//check if object
+		piElement = pObject->elementList.pFirst;
+		if (!piElement)
+			continue;
+		//
+		ptrGTObjHist = &(GTObjHistogram[iObject * GTHistSize]);
+
+		//find max
+		max = 0;
+		maxBin[iObject] = -1;
+		for (int i = 0; i < GTHistSize; i++)
+		{
+			if (ptrGTObjHist[i] > max)
+			{
+				maxBin[iObject] = i;
+				max = ptrGTObjHist[i];
+			}
+		}
+
+		if (max == 0)//invalid object
+			continue;
+
+		//Sum false values
+		for (int i = 0; i < GTHistSize; i++)
+		{
+			if ((i == 0) && !useBackground)
+				continue;
+
+			if (i != maxBin[iObject])
+				E[1] += ptrGTObjHist[i];
+
+			totVal += ptrGTObjHist[i];
+		}
+
+		//Set max segmented object per max bin
+		if (ptrGTObjHist[maxBin[iObject]] > g[maxBin[iObject]])
+		{
+			maxObj[maxBin[iObject]] = iObject;
+			g[maxBin[iObject]] = ptrGTObjHist[maxBin[iObject]];
+		}
+	}
+
+	//Sum positive values
+	for (int i = 0; i < GTHistSize; i++)
+	{
+		if ((i == 0) && !useBackground)
+			continue;
+
+		if (i == maxBin[maxObj[i]])
+			E[0] += GTObjHistogram[maxObj[i] * GTHistSize + i];
+	}
+
+
+	//Final results
+	/*E[0] = 1 - E[0] / totVal;
+	E[1] /= totVal;*/
+	N = totVal;
+
+	if (useGTNoPix)	//Assumption - GT files is in the same directory as the SSF file and has name in format : SSFfilename + a + .png (label image) and SSFfilename + d + .png (depth image)
+	{
+		std::string labelImgFileName = GTlabImgFilename;
+		labelImgFileName.erase(labelImgFileName.find_last_of("."));
+		std::string depthImgFileName = labelImgFileName + "d.png";
 		//load GT files
 		cv::Mat GTLabImg = cv::imread(labelImgFileName);
 		cv::Mat GTDepthImg = cv::imread(depthImgFileName, cv::ImreadModes::IMREAD_ANYDEPTH);
@@ -1236,13 +1386,13 @@ void ObjectGraph::ComputeRelationCost(
 
 	switch (relationClassifier){
 	case RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_HEURISTIC:
-		data.PContinuous = (f4 <= depthStepIntThr ? 1.0f : (f4 <= depthStepExtThr ? (depthStepExtThr - f4) / (depthStepExtThr - depthStepIntThr) : 0.0f));
+	data.PContinuous = (f4 <= depthStepIntThr ? 1.0f : (f4 <= depthStepExtThr ? (depthStepExtThr - f4) / (depthStepExtThr - depthStepIntThr) : 0.0f));
 
-		data.PConvex = (f1 >= 0 ? 1.0f : (f1 >= -concaveAngleThr ? concaveMinCost + (1.0f - concaveMinCost) * (concaveAngleThr + f1) / concaveAngleThr : concaveMinCost));
+	data.PConvex = (f1 >= 0 ? 1.0f : (f1 >= -concaveAngleThr ? concaveMinCost + (1.0f - concaveMinCost) * (concaveAngleThr + f1) / concaveAngleThr : concaveMinCost));
 
-		data.PClean = 0.5f + 0.5f * f2;
+	data.PClean = 0.5f + 0.5f * f2;
 
-		data.P = RVLMIN(data.PContinuous, RVLMIN(data.PConvex, data.PClean));
+	data.P = RVLMIN(data.PContinuous, RVLMIN(data.PConvex, data.PClean));
 
 		break;
 	case RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_SVM:
@@ -1556,9 +1706,9 @@ void ObjectGraph::DetermineObjectConvexityData(float convexThr, float ratioThr)
 	if (this->additionalObjectData.ObjectsSurfelConvexity.size())
 		this->additionalObjectData.ObjectsSurfelConvexity.clear();
 	this->additionalObjectData.ObjectsSurfelConvexity.resize(this->NodeArray.n); //allocate
-
-	bool *bVertexInCH = new bool[pSurfels->vertexArray.n];
-	memset(bVertexInCH, 0, pSurfels->vertexArray.n * sizeof(bool));
+	
+	//bool *bVertexInCH = new bool[pSurfels->vertexArray.n];
+	//memset(bVertexInCH, 0, pSurfels->vertexArray.n * sizeof(bool));
 	
 	//running through all objects
 	GRAPH::AggregateNode<SURFEL::AgEdge> *pObject;
@@ -1593,8 +1743,7 @@ void ObjectGraph::DetermineObjectConvexityData(float convexThr, float ratioThr)
 		// Sort surfels in objects.
 		this->SortElements(pObject, &sortedElementIdxArray);
 
-		/*while (piElement)
-		{*/
+		//Run through surfels
 		for (int iS = 0; iS < sortedElementIdxArray.n; iS++)
 		{
 			sortedIdx = sortedElementIdxArray.Element + iS;
@@ -1605,15 +1754,17 @@ void ObjectGraph::DetermineObjectConvexityData(float convexThr, float ratioThr)
 			
 			fail = false;
 			//runnong through a current list of added object vertices
-			for (int i = 0; i < this->additionalObjectData.CHVertexIndices.at(iObject).size(); i++)
+			for (CHVertexIndices_iterator_type iterator = this->additionalObjectData.CHVertexIndices.at(iObject).begin(); iterator != this->additionalObjectData.CHVertexIndices.at(iObject).end(); iterator++)
 			{
-				rvlvertexInList = this->pSurfels->vertexArray.Element[this->additionalObjectData.CHVertexIndices.at(iObject).at(i)];
+				//*iterator = value
+				rvlvertexInList = this->pSurfels->vertexArray.Element[*iterator];
 				if ((pSurfel->N[0] * rvlvertexInList->P[0] + pSurfel->N[1] * rvlvertexInList->P[1] + pSurfel->N[2] * rvlvertexInList->P[2] - pSurfel->d) > convexThr)
 				{
 					fail = true;
 					break;
 				}
 			}
+
 			//Check the other direction (if vertex from current surfels is below surfels that were added in CH)
 			for (ObjectsSurfelConvexity_iterator_type iterator = this->additionalObjectData.ObjectsSurfelConvexity.at(iObject).begin(); iterator != this->additionalObjectData.ObjectsSurfelConvexity.at(iObject).end(); iterator++)
 			{
@@ -1624,7 +1775,7 @@ void ObjectGraph::DetermineObjectConvexityData(float convexThr, float ratioThr)
 					//getting added surfel
 					pSurfelIN = this->pSurfels->NodeArray.Element + iterator->first;
 					//getting current surfel vertex list
-					pSurfelVertexListSurfelIN = this->pSurfels->surfelVertexList.Element + iterator->first;
+					pSurfelVertexListSurfelIN = this->pSurfels->surfelVertexList.Element + sortedIdx->idx;	//CHECK IDX!!!!!!!!sortedIdx->idx!!!!!!!!
 					//running through added surfel vertices
 					qlistelement = pSurfelVertexListSurfelIN->pFirst;
 					while (qlistelement)
@@ -1644,18 +1795,17 @@ void ObjectGraph::DetermineObjectConvexityData(float convexThr, float ratioThr)
 					break;
 			}
 			//add fail flag for current surfel
-			this->additionalObjectData.ObjectsSurfelConvexity.at(iObject).insert(std::pair<int, bool>(sortedIdx->idx/*piElement->Idx*/, !fail));
+			this->additionalObjectData.ObjectsSurfelConvexity.at(iObject).insert(std::pair<int, bool>(sortedIdx->idx, !fail));
 			//if not failed add vertices to list
 			if (!fail)
 			{
 				qlistelement = pSurfelVertexList->pFirst;
 				while (qlistelement)
 				{
-					if (!bVertexInCH[qlistelement->Idx])
-					{
-						this->additionalObjectData.CHVertexIndices.at(iObject).push_back(qlistelement->Idx);
-						bVertexInCH[qlistelement->Idx] = true;
-					}
+					this->additionalObjectData.CHVertexIndices.at(iObject).insert(qlistelement->Idx);
+					
+					//bVertexInCH[qlistelement->Idx] = true;
+					//}
 
 					//Next
 					qlistelement = qlistelement->pNext;
@@ -1663,12 +1813,7 @@ void ObjectGraph::DetermineObjectConvexityData(float convexThr, float ratioThr)
 				//update size
 				addedSize += pSurfel->size;
 			}
-			////Next
-			//piElement = piElement->pNext;
-		}	// for every surfel belonging to iObject
-
-		for (int i = 0; i < this->additionalObjectData.CHVertexIndices.at(iObject).size(); i++)
-			bVertexInCH[this->additionalObjectData.CHVertexIndices.at(iObject).at(i)] = false;
+		}
 
 		//check ratio
 		if ((addedSize / (float)pObject->size) < ratioThr)
@@ -1676,6 +1821,788 @@ void ObjectGraph::DetermineObjectConvexityData(float convexThr, float ratioThr)
 	}	// for every object
 	//Deref
 	delete[] sortedElementIdxArray.Element;
-	delete[] bVertexInCH;
+	//delete[] bVertexInCH;
 }
 
+void ObjectGraph::CalculateObjectsColorHistogram()
+{
+	//Reseting color descriptor data
+	if (this->additionalObjectData.colordescriptor.size())
+		this->additionalObjectData.colordescriptor.clear();
+	this->additionalObjectData.colordescriptor.resize(this->NodeArray.n); //allocate
+
+	//running through all objects
+	GRAPH::AggregateNode<SURFEL::AgEdge> *pObject;
+	QLIST::Index *piElement;
+	Surfel *pSurfel;
+	for (int iObject = 0; iObject < this->NodeArray.n; iObject++)
+	{
+		pObject = this->NodeArray.Element + iObject;
+
+		piElement = pObject->elementList.pFirst;
+
+		//check if object
+		if (!piElement)
+			continue;
+
+		//we are not intrested in objects with size less than 20 points???
+		if (pObject->size < 20)
+			continue;
+		//Find prototype
+		while (piElement)
+		{
+			pSurfel = pSurfels->NodeArray.Element + piElement->Idx;
+			//check 
+			if (!((pSurfel->size <= 1) || pSurfel->bEdge))
+			{
+				RVLColorDescriptor newDesc(*pSurfel->colordescriptor); //prototype
+				this->additionalObjectData.colordescriptor.at(iObject) = newDesc;
+				break;
+			}
+
+			piElement = piElement->pNext;
+		}
+		//running through object's surfels
+		piElement = pObject->elementList.pFirst;
+		while (piElement)
+		{
+			pSurfel = pSurfels->NodeArray.Element + piElement->Idx;
+			//check 
+			if (!((pSurfel->size <= 1) || pSurfel->bEdge))
+			{
+				this->additionalObjectData.colordescriptor.at(iObject) += *(pSurfel->colordescriptor);
+			}
+
+			piElement = piElement->pNext;
+		}
+	}
+}
+
+void ObjectGraph::CalculateConvexityRatiosForObjectPair(int firstObject, int secondObject, float& firstRatio, float& secondRatio, float convexThr)
+{
+	GRAPH::AggregateNode<SURFEL::AgEdge> *pFirstObject = this->NodeArray.Element + firstObject;
+	GRAPH::AggregateNode<SURFEL::AgEdge> *pSecondObject = this->NodeArray.Element + secondObject;
+	std::map<int, Surfel*> aggregateObject; //Sorted in ascending order by definition
+	std::map<int, Surfel*>::reverse_iterator aggObjIt;	//Reverse iterator (Descending order)
+	std::map<int, Surfel*>::reverse_iterator aggObjItSec;
+	std::map<int, int> aggregateObjectIdx; //Sorted in ascending order by definition
+	std::map<int, int>::reverse_iterator aggObjIdxId;
+	//Aggregate object
+	QLIST::Index *piElement;
+	Surfel *pSurfel;
+	Surfel *pSurfelIN;
+	//First
+	piElement = pFirstObject->elementList.pFirst;
+	int firstTotal = 0;
+	int keyVal;
+	while (piElement)
+	{
+		pSurfel = pSurfels->NodeArray.Element + piElement->Idx;
+		//check 
+		if (!((pSurfel->size <= 1) || pSurfel->bEdge))
+		{
+			//Find key value (if there are two surfels with same size)
+			keyVal = pSurfel->size;
+			while(aggregateObject.count(keyVal))
+			{
+				keyVal++;
+			}
+			aggregateObject.insert(std::pair<int, Surfel*>(keyVal, pSurfel));
+			aggregateObjectIdx.insert(std::pair<int, int>(keyVal, firstObject));
+			firstTotal += pSurfel->size;
+		}
+
+		piElement = piElement->pNext;
+	}
+	//Second
+	piElement = pSecondObject->elementList.pFirst;
+	int secondTotal = 0;
+	while (piElement)
+	{
+		pSurfel = pSurfels->NodeArray.Element + piElement->Idx;
+		//check 
+		if (!((pSurfel->size <= 1) || pSurfel->bEdge))
+		{
+			//Find key value (if there are two surfels with same size)
+			keyVal = pSurfel->size;
+			while (aggregateObject.count(keyVal))
+			{
+				keyVal++;
+			}
+			aggregateObject.insert(std::pair<int, Surfel*>(keyVal, pSurfel));
+			aggregateObjectIdx.insert(std::pair<int, int>(keyVal, secondObject));
+			secondTotal += pSurfel->size;
+		}
+
+		piElement = piElement->pNext;
+	}
+
+	//Running through added surfels in reverse order
+	QList<QLIST::Index> *pSurfelVertexList;
+	QList<QLIST::Index> *pSurfelVertexListIN;
+	SURFEL::Vertex * rvlvertex;
+	QLIST::Index *qlistelement;
+	int surfelIdx;
+	int surfelIdxOther;
+	bool fail;
+	std::set<int> chVertexIndices;
+	std::set<int>::iterator chVertexIndices_iterator;
+	bool *added = new bool[aggregateObject.size()];
+	memset(added, 0, aggregateObject.size() * sizeof(bool));
+	int currIdx = 0;
+	int currIdxIN = 0;
+	for (aggObjIt = aggregateObject.rbegin(); aggObjIt != aggregateObject.rend(); ++aggObjIt)
+	{
+		//iterator->first = key
+		//iterator->second = value
+
+		//getting current surfel
+		pSurfel = aggObjIt->second;
+		surfelIdx = pSurfel - pSurfels->NodeArray.Element;
+		//std::cout << aggObjIt->first << ", " << pSurfel->size << std::endl;
+		//getting current surfel vertex list
+		pSurfelVertexList = this->pSurfels->surfelVertexList.Element + surfelIdx; //piElement->Idx;
+
+		fail = false;
+		//runnong through a current list of added object vertices
+		for (chVertexIndices_iterator = chVertexIndices.begin(); chVertexIndices_iterator != chVertexIndices.end(); chVertexIndices_iterator++)
+		{
+			//*iterator = value
+			rvlvertex = this->pSurfels->vertexArray.Element[*chVertexIndices_iterator];
+			if ((pSurfel->N[0] * rvlvertex->P[0] + pSurfel->N[1] * rvlvertex->P[1] + pSurfel->N[2] * rvlvertex->P[2] - pSurfel->d) > convexThr)
+			{
+				fail = true;
+				break;
+			}
+		}
+
+		//Check the other direction (if vertex from current surfels is below surfels that were added in CH)
+		currIdxIN = 0;
+		for (aggObjItSec = aggregateObject.rbegin(); aggObjItSec != aggregateObject.rend(); aggObjItSec++)
+		{
+			//iterator->first = key
+			//iterator->second = value
+			if (added[currIdxIN])	//if surfel was valid
+			{
+				//getting added surfel
+				pSurfelIN = aggObjItSec->second;
+				surfelIdxOther = pSurfelIN - pSurfels->NodeArray.Element;
+				//getting current surfel vertex list
+				pSurfelVertexListIN = this->pSurfels->surfelVertexList.Element + surfelIdx;
+				//running through added surfel vertices
+				qlistelement = pSurfelVertexListIN->pFirst;
+				while (qlistelement)
+				{
+					rvlvertex = this->pSurfels->vertexArray.Element[qlistelement->Idx];
+					if ((pSurfelIN->N[0] * rvlvertex->P[0] + pSurfelIN->N[1] * rvlvertex->P[1] + pSurfelIN->N[2] * rvlvertex->P[2] - pSurfelIN->d) > convexThr)
+					{
+						fail = true;
+						break;
+					}
+					//Next
+					qlistelement = qlistelement->pNext;
+				}
+			}
+
+			if (fail)
+				break;
+			currIdxIN++;
+		}
+		//if not failed add vertices to list
+		if (!fail)
+		{
+			qlistelement = pSurfelVertexList->pFirst;
+			while (qlistelement)
+			{
+				chVertexIndices.insert(qlistelement->Idx);
+				//Next
+				qlistelement = qlistelement->pNext;
+			}
+			added[currIdx] = true;
+		}
+		//next surfel
+		currIdx++;
+	}
+
+	//analyze
+	currIdxIN = 0;
+	int firstAdded = 0;
+	int secondAdded = 0;
+	for (aggObjIt = aggregateObject.rbegin(), aggObjIdxId = aggregateObjectIdx.rbegin(); aggObjIdxId != aggregateObjectIdx.rend(); aggObjIt++, aggObjIdxId++)
+	{
+		//iterator->first = key
+		//iterator->second = value
+		if (added[currIdxIN])	//if surfel was valid
+		{
+			if (aggObjIdxId->second == firstObject)
+				firstAdded += aggObjIt->second->size;
+			else
+				secondAdded += aggObjIt->second->size;
+		}
+		currIdxIN++;
+	}
+	firstRatio = (float)firstAdded / firstTotal;
+	secondRatio = (float)secondAdded / secondTotal;
+
+	delete[] added;
+}
+
+//Different version of same thing?
+//void ObjectGraph::ObjectAggregationLevel2_ViaObjectPairConvexity(float convexThr, float ratioThr, float ratioThr2, int objValidThr, bool verbose)
+//{
+//	//running through all objects (Generating a list of valid objects)
+//	GRAPH::AggregateNode<SURFEL::AgEdge> *pObject;
+//	QLIST::Index *piElement;
+//	std::vector<int> validObjects;
+//	for (int iObject = 0; iObject < this->NodeArray.n; iObject++)
+//	{
+//		pObject = this->NodeArray.Element + iObject;
+//
+//		if (pObject->size < objValidThr)
+//			continue;
+//
+//		piElement = pObject->elementList.pFirst;
+//
+//		//check if object
+//		if (!piElement)
+//			continue;
+//		//
+//		validObjects.push_back(iObject);
+//	}
+//
+//	//Helper stuff
+//	struct temp_pair{ int a; int b; float score; static bool sort_desc(temp_pair first, temp_pair second) { return (first.score > second.score); } };
+//	//
+//	//Generating a list of possible merge pairs
+//	float firstRatio = 0;
+//	float secondRatio = 0;
+//	QList<QLIST::Index> *pSurfelVertexList;
+//	QLIST::Index *qlistelement;
+//	SURFEL::Vertex * rvlvertex;
+//	Surfel *pSurfel;
+//	double P[3];
+//	int ptIdx = 0;
+//	std::vector<temp_pair> merge_pairs;
+//	std::map<std::string, float> min_convexity_values;
+//	std::stringstream ss;
+//	float minValue;
+//	for (int iObject = 0; iObject < validObjects.size(); iObject++)
+//	{
+//		for (int iObject2 = iObject + 1; iObject2 < validObjects.size(); iObject2++)
+//		{
+//			this->CalculateConvexityRatiosForObjectPair(validObjects.at(iObject), validObjects.at(iObject2), firstRatio, secondRatio, convexThr);
+//			if (verbose)
+//				std::cout << "(" << validObjects.at(iObject) << ", " << validObjects.at(iObject2) << ")" << " = " << firstRatio << ", " << secondRatio << std::endl;
+//			//Adding all connections (via min values)
+//			if (firstRatio < secondRatio)
+//				minValue = firstRatio;
+//			else
+//				minValue = secondRatio;
+//			ss.clear();
+//			ss.str("");
+//			ss << validObjects.at(iObject) << "_" << validObjects.at(iObject2);	//one way
+//			min_convexity_values.insert(std::pair<std::string, float>(ss.str(), minValue));
+//			ss.clear();
+//			ss.str("");
+//			ss << validObjects.at(iObject2) << "_" << validObjects.at(iObject);	//other way
+//			min_convexity_values.insert(std::pair<std::string, float>(ss.str(), minValue));
+//			if ((firstRatio > ratioThr) && (secondRatio > ratioThr))
+//			{
+//				merge_pairs.push_back(temp_pair());
+//				merge_pairs.at(merge_pairs.size() - 1).a = validObjects.at(iObject);
+//				merge_pairs.at(merge_pairs.size() - 1).b = validObjects.at(iObject2);
+//				merge_pairs.at(merge_pairs.size() - 1).score = minValue;
+//			}
+//		}
+//	}
+//	//sort links
+//	std::sort(merge_pairs.begin(), merge_pairs.end(), temp_pair::sort_desc);
+//
+//	//Generating merge clusters (object pairs is in decreasing order)
+//	std::map<int, std::set<int>> merge_clusters;
+//	std::map<int, std::set<int>>::iterator clustIt;
+//	std::set<int>::iterator clusterSetIt;
+//	int foundSet = 0;
+//	bool insertFirst;
+//	bool keyfound;
+//	bool passedcheck;
+//	for (int i = 0; i < merge_pairs.size(); i++)
+//	{
+//		foundSet = -1;
+//		insertFirst = false;
+//		keyfound = false;
+//		passedcheck = true;
+//		//if both are keys then continue???
+//		if (merge_clusters.count(merge_pairs.at(i).a) && merge_clusters.count(merge_pairs.at(i).b))
+//		{
+//			continue;
+//		}
+//		else if (merge_clusters.count(merge_pairs.at(i).a))//check if current pair first item is already defined as cluster leader (KEY)
+//		{
+//			foundSet = merge_pairs.at(i).a;
+//			keyfound = true;
+//		}
+//		else if (merge_clusters.count(merge_pairs.at(i).b))
+//		{
+//			foundSet = merge_pairs.at(i).b;
+//			keyfound = true;
+//			insertFirst = true;
+//		}
+//		else //check if current pair first (or second???) item is already in some set //CHAINING!!!
+//		{
+//			for (clustIt = merge_clusters.begin(); clustIt != merge_clusters.end(); clustIt++)
+//			{
+//				if (clustIt->second.count(merge_pairs.at(i).a))
+//				{
+//					foundSet = clustIt->first;
+//					break;
+//				}
+//				else if (clustIt->second.count(merge_pairs.at(i).b))
+//				{
+//					foundSet = clustIt->first;
+//					insertFirst = true;
+//					break;
+//				}
+//			}
+//		}
+//		//if found then put the second element in pair in that set
+//		if (foundSet >= 0)
+//		{
+//			//check if the insert element supports connections with other members (according to ratioThr2)
+//			if (keyfound)
+//			{
+//				for (clusterSetIt = merge_clusters.at(foundSet).begin(); clusterSetIt != merge_clusters.at(foundSet).end(); clusterSetIt++)
+//				{
+//					ss.clear();
+//					ss.str("");
+//					if (insertFirst)
+//						ss << merge_pairs.at(i).a << "_" << *clusterSetIt;
+//					else
+//						ss << merge_pairs.at(i).b << "_" << *clusterSetIt;
+//					if (min_convexity_values.at(ss.str()) < ratioThr2)
+//					{
+//						passedcheck = false;
+//						break;
+//					}
+//				}
+//			}
+//			else
+//			{
+//				//ckeck against the key
+//				ss.clear();
+//				ss.str("");
+//				ss << merge_pairs.at(i).a << "_" << merge_pairs.at(i).b;
+//				if (min_convexity_values.at(ss.str()) < ratioThr2)
+//					passedcheck = false;
+//				else //check against other in set
+//				{
+//					for (clusterSetIt = merge_clusters.at(foundSet).begin(); clusterSetIt != merge_clusters.at(foundSet).end(); clusterSetIt++)
+//					{
+//						if (insertFirst && (merge_pairs.at(i).a == *clusterSetIt))
+//							continue;
+//						else if (!insertFirst && (merge_pairs.at(i).b == *clusterSetIt))
+//							continue;
+//						ss.clear();
+//						ss.str("");
+//						if (insertFirst)
+//							ss << merge_pairs.at(i).a << "_" << *clusterSetIt;
+//						else
+//							ss << merge_pairs.at(i).b << "_" << *clusterSetIt;
+//						if (min_convexity_values.at(ss.str()) < ratioThr2)
+//						{
+//							passedcheck = false;
+//							break;
+//						}
+//					}
+//				}
+//			}
+//			//continue
+//			if (passedcheck)
+//			{
+//				if (insertFirst)
+//					merge_clusters.at(foundSet).insert(merge_pairs.at(i).a);
+//				else
+//					merge_clusters.at(foundSet).insert(merge_pairs.at(i).b);
+//			}
+//		}
+//		else //if not found then create new cluster and put second pair element in it (first pair is the KEY of map pair)
+//		{
+//			merge_clusters.insert(std::pair<int, std::set<int>>(merge_pairs.at(i).a, std::set<int>()));
+//			merge_clusters.at(merge_pairs.at(i).a).insert(merge_pairs.at(i).b);
+//		}
+//	}
+//
+//	//Running through merge clusters and combining objects
+//	GRAPH::AggregateNode<SURFEL::AgEdge> *pNode1;
+//	GRAPH::AggregateNode<SURFEL::AgEdge> *pNode2;
+//	QList<QLIST::Index> *pElementList1;
+//	QList<QLIST::Index> *pElementList2;
+//	for (clustIt = merge_clusters.begin(); clustIt != merge_clusters.end(); clustIt++)
+//	{
+//		pNode1 = this->NodeArray.Element + clustIt->first; //main object is the KEY of cluster while other objects are elements of the set
+//
+//		pElementList1 = &(pNode1->elementList);
+//		for (clusterSetIt = clustIt->second.begin(); clusterSetIt != clustIt->second.end(); clusterSetIt++)
+//		{
+//			pNode2 = this->NodeArray.Element + *clusterSetIt;	//get second object
+//
+//			pElementList2 = &(pNode2->elementList);
+//
+//			// iNode1 <- union of iNode1 and iNode2 
+//
+//			RVLQLIST_APPEND(pElementList1, pElementList2);	//append their surfels
+//
+//			// iNode2 <- empty set
+//
+//			RVLQLIST_INIT(pElementList2);	//reset list
+//			if (verbose)
+//				std::cout << "Merged: " << clustIt->first << ", " << *clusterSetIt << std::endl;
+//		}
+//
+//	}
+//}
+
+void ObjectGraph::ObjectAggregationLevel2_ViaObjectPairConvexity(float convexThr, float ratioThr, float ratioThr2, int objValidThr, bool verbose)
+{
+	//running through all objects (Generating a list of valid objects)
+	GRAPH::AggregateNode<SURFEL::AgEdge> *pObject;
+	QLIST::Index *piElement;
+	std::vector<int> validObjects;
+	for (int iObject = 0; iObject < this->NodeArray.n; iObject++)
+	{
+		pObject = this->NodeArray.Element + iObject;
+
+		if (pObject->size < objValidThr)
+			continue;
+
+		piElement = pObject->elementList.pFirst;
+
+		//check if object
+		if (!piElement)
+			continue;
+		//
+		validObjects.push_back(iObject);
+	}
+
+	//Generating a list of possible merge pairs
+	float firstRatio = 0;
+	float secondRatio = 0;
+	QList<QLIST::Index> *pSurfelVertexList;
+	QLIST::Index *qlistelement;
+	SURFEL::Vertex * rvlvertex;
+	Surfel *pSurfel;
+	double P[3];
+	int ptIdx = 0;
+	std::vector<std::pair<int, int>> merge_pairs;
+	std::map<std::string, float> min_convexity_values;
+	std::stringstream ss;
+	float minValue;
+	for (int iObject = 0; iObject < validObjects.size(); iObject++)
+	{
+		for (int iObject2 = iObject + 1; iObject2 < validObjects.size(); iObject2++)
+		{
+			this->CalculateConvexityRatiosForObjectPair(validObjects.at(iObject), validObjects.at(iObject2), firstRatio, secondRatio, convexThr);
+			if (verbose)
+				std::cout << "(" << validObjects.at(iObject) << ", " << validObjects.at(iObject2) << ")" << " = " << firstRatio << ", " << secondRatio << std::endl;
+			if ((firstRatio > ratioThr) && (secondRatio > ratioThr))
+				merge_pairs.push_back(std::make_pair(validObjects.at(iObject), validObjects.at(iObject2)));
+			//Adding all connections (via min values)
+			if (firstRatio < secondRatio)
+				minValue = firstRatio;
+			else
+				minValue = secondRatio;
+			ss.clear();
+			ss.str("");
+			ss << validObjects.at(iObject) << "_" << validObjects.at(iObject2);	//one way
+			min_convexity_values.insert(std::pair<std::string, float>(ss.str(), minValue));
+			ss.clear();
+			ss.str("");
+			ss << validObjects.at(iObject2) << "_" << validObjects.at(iObject);	//other way
+			min_convexity_values.insert(std::pair<std::string, float>(ss.str(), minValue));
+		}
+	}
+
+	//Generating merge clusters (object pairs is in decreasing order)
+	std::map<int, std::set<int>> merge_clusters;
+	std::map<int, std::set<int>>::iterator clustIt;
+	std::set<int>::iterator clusterSetIt;
+	int foundSet = 0;
+	bool insertFirst;
+	bool intersection;
+	int secondSet = 0;
+	for (int i = 0; i < merge_pairs.size(); i++)
+	{
+		foundSet = -1;
+		secondSet = -1;
+		insertFirst = false;
+		intersection = false;
+		//check if current pair first item is already defined as cluster leader (KEY)
+		if (merge_clusters.count(merge_pairs.at(i).first))
+		{
+			foundSet = merge_pairs.at(i).first;
+			//check for intersection 
+			for (clustIt = merge_clusters.begin(); clustIt != merge_clusters.end(); clustIt++)
+			{
+				if (clustIt->second.count(merge_pairs.at(i).second))
+				{
+					secondSet = clustIt->first;
+					intersection = true;
+					break;
+				}
+			}
+		}
+		else //check if current pair first (or second???) item is already in some set //CHAINING!!!
+		{
+			for (clustIt = merge_clusters.begin(); clustIt != merge_clusters.end(); clustIt++)
+			{
+				if (clustIt->second.count(merge_pairs.at(i).first))
+				{
+					foundSet = clustIt->first;
+					break;
+				}
+				else if (clustIt->second.count(merge_pairs.at(i).second))
+				{
+					foundSet = clustIt->first;
+					insertFirst = true;
+					break;
+				}
+			}
+		}
+		if (intersection) //If intersection then clusters need to be merged
+		{
+			merge_clusters.at(foundSet).insert(secondSet);
+			//merge second cluster into first cluster
+			for (clusterSetIt = merge_clusters.at(secondSet).begin(); clusterSetIt != merge_clusters.at(secondSet).end(); clusterSetIt++)
+				merge_clusters.at(foundSet).insert(*clusterSetIt);
+			//remove the second set
+			merge_clusters.erase(secondSet);
+		}
+		else if (foundSet >= 0) //if found then put the second element in pair in that set
+		{
+
+			if (insertFirst)
+				merge_clusters.at(foundSet).insert(merge_pairs.at(i).first);
+			else
+				merge_clusters.at(foundSet).insert(merge_pairs.at(i).second);
+		}
+		else //if not found then create new cluster and put second pair element in it (first pair is the KEY of map pair)
+		{
+			merge_clusters.insert(std::pair<int, std::set<int>>(merge_pairs.at(i).first, std::set<int>()));
+			merge_clusters.at(merge_pairs.at(i).first).insert(merge_pairs.at(i).second);
+		}
+	}
+
+	//Checking cluster consistincy if there is are more than two objects in cluster
+	//Helper stuff
+	struct temp_pair{ int a; int b; float score; static bool sort_desc(temp_pair first, temp_pair second) { return (first.score > second.score); } };
+	//
+	std::vector<int> inputcluster;
+	std::vector<int> inputcluster_label;
+	std::queue<int> fifo;
+	std::vector<std::vector<temp_pair>> object_links;
+	std::vector<std::vector<int>> newclusters;
+	std::map<int, std::set<int>> merge_clusters_copy = merge_clusters;
+	int label = 0;
+	int currObj;
+	bool fail;
+	int startObj;
+	float startObjScore;
+	float score;
+	for (clustIt = merge_clusters_copy.begin(); clustIt != merge_clusters_copy.end(); clustIt++)
+	{
+		if (clustIt->second.size() > 1) //total cluster size is clustIt->second.size() + 1 (clustIt->first is cluster leader)
+		{
+			//remove this cluster from the list (new cluster or clusters will be added)
+			merge_clusters.erase(clustIt->first);
+			//setup a cluster
+			inputcluster.clear();	//reset cluster
+			inputcluster.push_back(clustIt->first);
+			for (clusterSetIt = clustIt->second.begin(); clusterSetIt != clustIt->second.end(); clusterSetIt++)
+				inputcluster.push_back(*clusterSetIt);
+
+			//run through cluster and find the object woth the best connection
+			startObj = 0;
+			startObjScore = 0.0;
+			for (int iObject = 0; iObject < inputcluster.size(); iObject++)
+			{
+				for (int iObject2 = iObject + 1; iObject2 < inputcluster.size(); iObject2++)
+				{
+					ss.clear();
+					ss.str("");
+					ss << inputcluster.at(iObject) << "_" << inputcluster.at(iObject2);
+					score = min_convexity_values.at(ss.str());
+					if (score > startObjScore)
+					{
+						startObj = iObject;
+						startObjScore = score;
+					}
+
+				}
+			}
+
+			//swap the best and whoever is the first
+			std::swap(inputcluster.front(), *(std::find(inputcluster.begin(), inputcluster.end(), inputcluster.at(startObj))));
+
+			//run through cluster and set object links
+			object_links.clear();
+			object_links.resize(inputcluster.size());
+			for (int iObject = 0; iObject < inputcluster.size(); iObject++)
+			{
+				for (int iObject2 = iObject + 1; iObject2 < inputcluster.size(); iObject2++)
+				{
+					ss.clear();
+					ss.str("");
+					ss << inputcluster.at(iObject) << "_" << inputcluster.at(iObject2);
+					
+					object_links.at(iObject).push_back(temp_pair());
+					object_links.at(iObject).at(object_links.at(iObject).size() - 1).a = iObject;
+					object_links.at(iObject).at(object_links.at(iObject).size() - 1).b = iObject2;
+					object_links.at(iObject).at(object_links.at(iObject).size() - 1).score = min_convexity_values.at(ss.str());
+					object_links.at(iObject2).push_back(temp_pair());
+					object_links.at(iObject2).at(object_links.at(iObject2).size() - 1).a = iObject2;
+					object_links.at(iObject2).at(object_links.at(iObject2).size() - 1).b = iObject;
+					object_links.at(iObject2).at(object_links.at(iObject2).size() - 1).score = min_convexity_values.at(ss.str());
+				}
+			}
+			//sort generated lists
+			for (int i = 0; i < object_links.size(); i++)
+				std::sort(object_links.at(i).begin(), object_links.at(i).end(), temp_pair::sort_desc);
+
+			//We are going to label objects per new clusters (greedy region growing)
+			inputcluster_label.clear();
+			inputcluster_label.resize(inputcluster.size(), -1);
+			label = 0;
+			for (int i = 0; i < inputcluster.size(); i++) //for each object
+			{
+				if (inputcluster_label.at(i) != -1)	//if it is already labeled, continue
+					continue;
+				fifo.push(i); //
+				inputcluster_label.at(i) = label; //current cluster label
+				while (fifo.size())	//while fifo have elements
+				{
+					currObj = fifo.front(); //current element
+					fifo.pop();
+					for (int l = 0; l < object_links.at(currObj).size(); l++)	//check links for current object
+					{
+						if (inputcluster_label.at(object_links.at(currObj).at(l).b) != -1)	//check if the object at the other side of link is labeled
+							continue;
+						//check the score for the other members of the current (labeled) cluster
+						fail = false;
+						for (int k = 0; k < inputcluster.size(); k++)
+						{
+							if (inputcluster_label.at(k) != label) //look for the same label as current cluster
+								continue;
+							ss.clear();
+							ss.str("");
+							ss << inputcluster.at(k) << "_" << inputcluster.at(object_links.at(currObj).at(l).b);
+							if (min_convexity_values.at(ss.str()) < ratioThr2) //if the score is smaller against any currently labeled member then break
+							{
+								fail = true;
+								break;
+							}
+						}
+						if (fail)//got to the next link
+							continue;
+						inputcluster_label.at(object_links.at(currObj).at(l).b) = label; //if everything has passed then label the object
+						fifo.push(object_links.at(i).at(l).b);	//push it to fifo so it's links can be analyzed
+					}
+				}
+				label++; //current cluster finished, go to next
+			}
+
+			//compiling new clusters based on labels
+			newclusters.resize(label);
+			for (int i = 0; i < inputcluster_label.size(); i++)
+				newclusters.at(inputcluster_label.at(i)).push_back(inputcluster.at(i));
+
+			//Adding new clusters that have more than one member
+			for (int i = 0; i < newclusters.size(); i++)
+			{
+				if (newclusters.at(i).size() < 2)
+					continue;
+				merge_clusters.insert(std::pair<int, std::set<int>>(newclusters.at(i).at(0), std::set<int>()));
+				for (int j = 1; j < newclusters.at(i).size(); j++)
+					merge_clusters.at(newclusters.at(i).at(0)).insert(newclusters.at(i).at(j));
+			}
+		}
+	}
+
+
+
+	//Running through merge clusters and combining objects
+	GRAPH::AggregateNode<SURFEL::AgEdge> *pNode1;
+	GRAPH::AggregateNode<SURFEL::AgEdge> *pNode2;
+	QList<QLIST::Index> *pElementList1;
+	QList<QLIST::Index> *pElementList2;
+	for (clustIt = merge_clusters.begin(); clustIt != merge_clusters.end(); clustIt++)
+	{
+		pNode1 = this->NodeArray.Element + clustIt->first; //main object is the KEY of cluster while other objects are elements of the set
+
+		pElementList1 = &(pNode1->elementList);
+		for (clusterSetIt = clustIt->second.begin(); clusterSetIt != clustIt->second.end(); clusterSetIt++)
+		{
+			pNode2 = this->NodeArray.Element + *clusterSetIt;	//get second object
+
+			pElementList2 = &(pNode2->elementList);
+
+			// iNode1 <- union of iNode1 and iNode2 
+
+			RVLQLIST_APPEND(pElementList1, pElementList2);	//append their surfels
+
+			// iNode2 <- empty set
+
+			RVLQLIST_INIT(pElementList2);	//reset list
+			if (verbose)
+				std::cout << "Merged: " << clustIt->first << ", " << *clusterSetIt << std::endl;
+		}
+
+	}
+}
+
+cv::Mat ObjectGraph::CreateSegmentationImage()
+{
+	cv::Mat coloredSegLab(480, 640, CV_8UC3, cv::Scalar::all(0));
+
+	GRAPH::AggregateNode<SURFEL::AgEdge> *pObject;
+	QLIST::Index *piElement;
+	Surfel *pSurfel;
+	unsigned char labSegColor[3];
+	int x = 0, y = 0;
+	RVL::QLIST::Index2 *pt;
+	srand(time(NULL));
+	for (int iObject = 0; iObject < NodeArray.n; iObject++)
+	{
+		//Generate surfel color
+		labSegColor[0] = rand() % 255;
+		labSegColor[1] = rand() % 255;
+		labSegColor[2] = rand() % 255;
+
+		pObject = NodeArray.Element + iObject;
+
+		piElement = pObject->elementList.pFirst;
+
+		while (piElement)
+		{
+			pSurfel = pSurfels->NodeArray.Element + piElement->Idx;
+			//check 
+			if (!((pSurfel->size <= 1) || pSurfel->bEdge))
+			{
+				pt = pSurfel->PtList.pFirst;
+				//Set pixel colors
+				for (int k = 0; k < pSurfel->size; k++)
+				{
+					y = floor(pt->Idx / 640.0);
+					x = floor(pt->Idx - 640.0 * y);
+					coloredSegLab.at<cv::Vec3b>(y, x)[0] = labSegColor[0];
+					coloredSegLab.at<cv::Vec3b>(y, x)[1] = labSegColor[1];
+					coloredSegLab.at<cv::Vec3b>(y, x)[2] = labSegColor[2];
+					pt = pt->pNext;
+				}
+			}
+			piElement = piElement->pNext;
+		}
+
+	}
+	//return image
+	return coloredSegLab;
+}

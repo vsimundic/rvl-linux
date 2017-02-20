@@ -3,6 +3,7 @@
 #include <memory>
 #include "SceneSegFile.hpp"
 #include "SVMClassifier.h"
+#include <set>
 
 //#define RVLPCSEGMENT_OBJECT_GRAPH_LOG
 
@@ -60,11 +61,13 @@ namespace RVL
 		//Filko
 		//Definition of iterator type
 		typedef std::map<int, bool>::iterator ObjectsSurfelConvexity_iterator_type;
-
+		typedef std::set<int>::iterator CHVertexIndices_iterator_type;
+		//
 		struct ObjectGraphObjectData
 		{
-			std::vector<std::vector<int>> CHVertexIndices;
+			std::vector<std::set<int>> CHVertexIndices;
 			std::vector<std::map<int, bool>> ObjectsSurfelConvexity;
+			std::vector<RVLColorDescriptor> colordescriptor;
 		};
 		//
 
@@ -77,8 +80,12 @@ namespace RVL
 			void CreateParamList(CRVLMem *pMem);
 			void Create(SurfelGraph *pSurfels_);
 			void CreateFromSSF(std::string ssfFileName);	//Filko
-			void CalculateOverAndUnderSegmentation(int *E, int &N, bool useGTNoPix = true,  bool useBackground = true);	//Filko
-			void DetermineObjectConvexityData(float convexThr = 0.005, float ratioThr = 0.8);	//Filko
+			void CalculateOverAndUnderSegmentation_SSF(int *E, int &N, bool useGTNoPix = true,  bool useBackground = true);	//Filko
+			void CalculateOverAndUnderSegmentation(int *E, int &N, bool useGTNoPix = false, std::string GTlabImgFilename = "", bool useBackground = true);	//Filko
+			void DetermineObjectConvexityData(float convexThr = 0.005, float ratioThr = 0.9);	//Filko
+			void CalculateConvexityRatiosForObjectPair(int firstObject, int secondObject, float& firstRatio, float& secondRatio, float convexThr = 0.005);	//Filko
+			void CalculateObjectsColorHistogram(); //Filko
+			void ObjectAggregationLevel2_ViaObjectPairConvexity(float convexThr, float ratioThr, float ratioThr2, int objValidThr = 300, bool verbose = false); //Filko - NOT OPTIMIZED!!!!
 			void WERSegmentation();
 			void ComputeRelationCosts();
 			void ComputeRelationCost(
@@ -99,6 +106,7 @@ namespace RVL
 			void WriteSurfelDataToFile(FILE *fp);
 			void WriteObjectDataToFile(FILE *fp);
 			void InitSVMClassifier(char *svmParamsFileName);	//Nyarko
+			cv::Mat CreateSegmentationImage();
 			void Debug();
 
 		public:

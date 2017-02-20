@@ -14,7 +14,7 @@ CRVLVisionSystem::CRVLVisionSystem()
 	m_SampleStep = 1;
 
 	m_Mem0Size = 150000000;
-	m_MemSize = 1000000000;
+	m_MemSize = 1200000000;
 	m_Mem2Size = 150000000;
 	m_MCMemSize = 10000000;
 
@@ -25,6 +25,7 @@ CRVLVisionSystem::CRVLVisionSystem()
 	m_LidarParams.maxTilt = 24.0;
 	m_LidarParams.dTilt = 0.2;
 	m_LidarParams.nPanIn120deg = 1024;
+	m_LidarParams.scale = 1000.0;
 }
 
 CRVLVisionSystem::~CRVLVisionSystem()
@@ -69,6 +70,7 @@ void CRVLVisionSystem::CreateParamList()
 	pParamData = m_ParamList.AddParam("VS.maxTilt", RVLPARAM_TYPE_DOUBLE, &(m_LidarParams.maxTilt));
 	pParamData = m_ParamList.AddParam("VS.dTilt", RVLPARAM_TYPE_DOUBLE, &(m_LidarParams.dTilt));
 	pParamData = m_ParamList.AddParam("VS.nPanIn120deg", RVLPARAM_TYPE_INT, &(m_LidarParams.nPanIn120deg));
+	pParamData = m_ParamList.AddParam("VS.PCScale", RVLPARAM_TYPE_DOUBLE, &(m_LidarParams.scale));
 	pParamData = m_ParamList.AddParam("VS.SampleStep", RVLPARAM_TYPE_INT, &m_SampleStep);
 }
 

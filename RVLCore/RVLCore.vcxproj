@@ -170,6 +170,7 @@
     <ClCompile Include="RVLCamera.cpp" />
     <ClCompile Include="RVLChain.cpp" />
     <ClCompile Include="RVLClass.cpp" />
+    <ClCompile Include="RVLColorDescriptor.cpp" />
     <ClCompile Include="RVLDelaunay.cpp" />
     <ClCompile Include="RVLDisplayVector.cpp" />
     <ClCompile Include="RVLEDT.cpp" />
@@ -194,6 +195,7 @@
     <ClCompile Include="RVLTimer.cpp" />
     <ClCompile Include="RVLUtil.cpp" />
     <ClCompile Include="RVLVisionSystem.cpp" />
+    <ClCompile Include="RVLVTK.cpp" />
     <ClCompile Include="RVLVTKRenderer.cpp" />
     <ClCompile Include="RVLWChain.cpp" />
   </ItemGroup>
@@ -223,6 +225,7 @@
     <ClInclude Include="Include\RVLCamera.h" />
     <ClInclude Include="Include\RVLChain.h" />
     <ClInclude Include="Include\RVLClass.h" />
+    <ClInclude Include="Include\RVLColorDescriptor.h" />
     <ClInclude Include="Include\RVLConst.h" />
     <ClInclude Include="Include\RVLCore.h" />
     <ClInclude Include="Include\RVLCore2.h" />
