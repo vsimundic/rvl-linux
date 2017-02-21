@@ -2973,6 +2973,9 @@ void PSGM::Learn(
 
 		currentModelID = dbLoader.GetLastModelID() + 1;
 
+		//Add vtkPolyData to vtkModelDB
+		vtkModelDB.insert(std::make_pair(currentModelID, mesh.pPolygonData));
+
 		SaveModelInstances(fp, currentModelID);
 
 		dbLoader.AddModel(currentModelID, modelFilePath, modelFileName);
@@ -2993,6 +2996,39 @@ void PSGM::Learn(
 		SaveModelID(dbLoader);
 
 	fclose(fp);
+}
+
+
+void PSGM::LoadModelMeshDB(char *modelSequenceFileName)
+{
+	FileSequenceLoader modelsLoader;
+
+	char modelFilePath[200];
+	char modelFileName[200];
+
+	Mesh mesh;
+
+	int nClusters, currentModelID = 0;
+
+	if (!modelsInDataBase)
+		modelsInDataBase = "DBModels.txt";
+
+	modelsLoader.Init(modelSequenceFileName);
+
+	printf("Starting VTK Model DB creation.\n");
+	while (modelsLoader.GetNext(modelFilePath, modelFileName))
+	{
+		printf("\Loading VTK model %s to DB!\n", modelFileName);
+
+		mesh.LoadPolyDataFromPLY(modelFilePath);
+
+		//Add vtkPolyData to vtkModelDB
+		vtkModelDB.insert(std::make_pair(currentModelID, mesh.pPolygonData));
+
+		currentModelID++;
+	}
+
+	printf("VTK Model DB creation completed!\n");
 }
 
 
@@ -6166,14 +6202,12 @@ void PSGM::AddBestCTIModelsToVisualizer(Visualizer *pVisualizer, bool align, RVL
 
 void PSGM::AddCTIModelToVisualizer(Visualizer *pVisualizer, int iMatch, bool align, RVL::PSGM::ICPfunction ICPFunction, int ICPvariant)
 {
+	//Setting indices:
 	int iMCTI = pCTImatchesArray.Element[iMatch]->iMCTI;
 	int iSCTI = pCTImatchesArray.Element[iMatch]->iSCTI;
+	int iCluster, iModel;
 	
-	RECOG::PSGM_::MatchInstance *pMatch = pCTImatchesArray.Element[iMatch];
-	CalculatePose(iMatch);
-
-	Eigen::MatrixXf nT = ConvexTemplatenT();
-
+	//Getting scene and model pointers:
 	RECOG::PSGM_::ModelInstance *pMCTI;
 	RECOG::PSGM_::ModelInstanceElement *pMIE;
 	RECOG::PSGM_::ModelInstance *pSCTI;
@@ -6182,26 +6216,35 @@ void PSGM::AddCTIModelToVisualizer(Visualizer *pVisualizer, int iMatch, bool ali
 	pMIE = pMCTI->modelInstance.Element;
 	pSCTI = CTISet.pCTI.Element[iSCTI];
 	pSIE = pSCTI->modelInstance.Element;
+
+	iCluster = pSCTI->iCluster;
+	iModel = pMCTI->iModel;
 	
+	//Setting descriptors:
 	float *dM = new float[66];
 	float *dS = new float[66];
 	int *validS = new int[66];
 
 	for (int i = 0; i < 66; i++)
 	{
-		dS[i] = pSIE->d; // Scene descriptor
+		dS[i] = pSIE->d; // Filling scene descriptor
 		validS[i] = pSIE->valid;
 		pSIE++;
 
-		dM[i] = pMIE->d / 1000.0; // Model descriptor
+		dM[i] = pMIE->d / 1000.0; // Filling model descriptor
 		pMIE++;
 	}
+
+	//Getting match pointer and calculating pose:
+	RECOG::PSGM_::MatchInstance *pMatch = pCTImatchesArray.Element[iMatch];
+	CalculatePose(iMatch);
+	Eigen::MatrixXf nT = ConvexTemplatenT();
 
 	//Generate model polydata
 	float t[3];
 	vtkSmartPointer<vtkPolyData> modelPD = GenerateCTIPrimitivePolydata_RW(nT.data(), dM, false, NULL, t);
-	//double T_CTIM_M[16], T_M_S[16], T_CTIS_S[16], T_CCTIS_CTIS[16];
-
+	
+	//Getting transform from centered (model) CTI polygon data to scene (T_CCTIM_S)
 	float *R_M_S = pCTImatchesArray.Element[iMatch]->R;
 	float *t_M_S_mm = pCTImatchesArray.Element[iMatch]->t;
 	float t_M_S[3];
@@ -6211,116 +6254,253 @@ void PSGM::AddCTIModelToVisualizer(Visualizer *pVisualizer, int iMatch, bool ali
 	float R_CTIM_S[9], t_CTIM_S[3];
 
 	RVLCOMPTRANSF3D(R_M_S, t_M_S, R_CTIM_M, t_CTIM_M, R_CTIM_S, t_CTIM_S);
-
 	float t_CCTIM_S[3];
-
 	RVLTRANSF3(t, R_CTIM_S, t_CTIM_S, t_CCTIM_S);
-
 	double T_CCTIM_S[16];
-
 	RVLHTRANSFMX(pSCTI->R, t_CCTIM_S, T_CCTIM_S);
 
-	//Generate scene polydata
+	//Generate scene CTI polydata
 	vtkSmartPointer<vtkPolyData> modelSPD = GenerateCTIPrimitivePolydata_RW(nT.data(), dS, false, validS, t);
-	vtkSmartPointer<vtkTransform> transform = vtkSmartPointer<vtkTransform>::New();
-
-	//transform->SetMatrix(T_CCTIS_CTIS);
-	//transform->Concatenate(T_CTIS_S);
-
+	
+	//Getting transform from centered (scene) CTI polygon data to scene (T_CCTIS_S)
 	float t_CCTIS_S[3];
-
 	RVLTRANSF3(t, pSCTI->R, pSCTI->t, t_CCTIS_S)
-
 	double T_CCTIS_S[16];
-
 	RVLHTRANSFMX(pSCTI->R, t_CCTIS_S, T_CCTIS_S);
 
-	transform->SetMatrix(T_CCTIM_S);
+	//PLY Model transformation
+	double T_M_S[16];
+	RVLHTRANSFMX(R_M_S, t_M_S, T_M_S);
+	vtkSmartPointer<vtkTransform> transform = vtkSmartPointer<vtkTransform>::New();
+	transform->SetMatrix(T_M_S); //when transforming PLY models to scene
+	//transform->SetMatrix(T_CCTIM_S); //when transforming CTI convex hull to scene
 
-	//vtkSmartPointer<vtkTransform> transform1 = vtkSmartPointer<vtkTransform>::New();
-	//transform1->SetMatrix(T_CTIM_M);
+	//Scaling PLY model to meters
+	vtkSmartPointer<vtkTransform> transformScale = vtkSmartPointer<vtkTransform>::New();
+	transformScale->Scale(0.001, 0.001, 0.001);
+	vtkSmartPointer<vtkTransformPolyDataFilter> transformFilterScale = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
+	transformFilterScale->SetInputData(vtkModelDB.at(iModel));
+	transformFilterScale->SetTransform(transformScale);
+	transformFilterScale->Update();
 
-	//vtkSmartPointer<vtkTransformPolyDataFilter> transformFilter1 = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
-	//transformFilter1->SetInputData(modelPD);
-	//transformFilter1->SetTransform(transform1);
-	//transformFilter1->Update();
-
+	//Transforming PLY model or CTI convex hull model to scene
 	vtkSmartPointer<vtkTransformPolyDataFilter> transformFilter = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
-	transformFilter->SetInputData(modelPD);
+	//transformFilter->SetInputData(modelPD); //model CTI convex hull
+	transformFilter->SetInputConnection(transformFilterScale->GetOutputPort()); //PLY model
 	transformFilter->SetTransform(transform);
 	transformFilter->Update();
 
+	//Transforming scene CTI convex hull
 	vtkSmartPointer<vtkTransform> transform2 = vtkSmartPointer<vtkTransform>::New();
-	//transform2->SetMatrix(T_CCTIS_CTIS);
-	//transform2->Concatenate(T_CTIS_S);
 	transform2->SetMatrix(T_CCTIS_S);
 	vtkSmartPointer<vtkTransformPolyDataFilter> transformFilter2 = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
 	transformFilter2->SetInputData(modelSPD);
 	transformFilter2->SetTransform(transform2);
 	transformFilter2->Update();
 
+	//Aligning point clouds (if required) 
 	vtkSmartPointer<vtkTransformPolyDataFilter> transformFilterICP;
-	if (align)
+	if (align) 
 	{
-		vtkSmartPointer<vtkTriangleFilter> modelSamplerTriangleFilter = vtkSmartPointer<vtkTriangleFilter>::New();
-		modelSamplerTriangleFilter->SetInputConnection(transformFilter->GetOutputPort());
-		modelSamplerTriangleFilter->Update();
-		vtkSmartPointer<vtkPolyDataPointSampler> modelSampler = vtkSmartPointer<vtkPolyDataPointSampler>::New();
-		modelSampler->SetInputConnection(modelSamplerTriangleFilter->GetOutputPort());
-		modelSampler->SetDistance(0.005);
-		modelSampler->Update();
-		
+		//Sampling filter for model polydata
+		//vtkSmartPointer<vtkTriangleFilter> modelSamplerTriangleFilter = vtkSmartPointer<vtkTriangleFilter>::New();
+		//modelSamplerTriangleFilter->SetInputConnection(transformFilter->GetOutputPort());
+		//modelSamplerTriangleFilter->Update();
+		//vtkSmartPointer<vtkPolyDataPointSampler> modelSampler = vtkSmartPointer<vtkPolyDataPointSampler>::New();
+		//modelSampler->SetInputConnection(modelSamplerTriangleFilter->GetOutputPort());
+		//modelSampler->SetDistance(0.005);
+		//modelSampler->Update();
+		//vtkSmartPointer<vtkPolyData> modelSamplerPD = modelSampler->GetOutput();
 
-		vtkSmartPointer<vtkPolyData> modelSamplerPD = modelSampler->GetOutput();
+		//Sampling filter for scene polydata
+		//vtkSmartPointer<vtkTriangleFilter> sceneSamplerTriangleFilter = vtkSmartPointer<vtkTriangleFilter>::New(); //Creates triangles from polygons (Samples don't work with polygons)
+		//sceneSamplerTriangleFilter->SetInputConnection(transformFilter2->GetOutputPort());
+		//sceneSamplerTriangleFilter->Update();
+		//vtkSmartPointer<vtkPolyDataPointSampler> sceneSampler = vtkSmartPointer<vtkPolyDataPointSampler>::New();
+		//sceneSampler->SetInputConnection(sceneSamplerTriangleFilter->GetOutputPort());
+		//sceneSampler->SetDistance(0.005);
+		//sceneSampler->Update();
+		//vtkSmartPointer<vtkPolyData> sceneSamplerPD = sceneSampler->GetOutput();
 
-		vtkSmartPointer<vtkTriangleFilter> sceneSamplerTriangleFilter = vtkSmartPointer<vtkTriangleFilter>::New(); //Creates triangles from polygons (Samples doesn't work with polygons)
-		sceneSamplerTriangleFilter->SetInputConnection(transformFilter2->GetOutputPort());
-		sceneSamplerTriangleFilter->Update();
-		vtkSmartPointer<vtkPolyDataPointSampler> sceneSampler = vtkSmartPointer<vtkPolyDataPointSampler>::New();
-		sceneSampler->SetInputConnection(sceneSamplerTriangleFilter->GetOutputPort());
-		sceneSampler->SetDistance(0.005);
-		sceneSampler->Update();
 
-		vtkSmartPointer<vtkPolyData> sceneSamplerPD = sceneSampler->GetOutput();
-
+		vtkSmartPointer<vtkPolyData> scenePD = GetSceneModelPC(iCluster); //Generate scene model pointcloud
+		//Aligning pointcluds (using PCL ICP)
 		float icpT[16];
 		double icpTd[16];
-		//ICPFunction(transformFilter->GetOutput(), pMesh->pPolygonData, icpT, 10, 0.05);
-		ICPFunction(modelSamplerPD, sceneSamplerPD, icpT, 20, 0.02, ICPvariant);
+		double fitnessScore;
+		ICPFunction(transformFilter->GetOutput(), scenePD, icpT, 20, 0.02, ICPvariant, &fitnessScore);
 		for (int i = 0; i < 16; i++)
 		{
 			icpTd[i] = icpT[i];
 		}
+
+		//Transforming model polydata to ICP pose
 		vtkSmartPointer<vtkTransform> transformICP = vtkSmartPointer<vtkTransform>::New();
 		transformICP->SetMatrix(icpTd);
-
 		transformFilterICP = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
-		transformFilterICP->SetInputConnection(modelSampler->GetOutputPort());
+		transformFilterICP->SetInputConnection(transformFilter->GetOutputPort());
 		transformFilterICP->SetTransform(transformICP);
 		transformFilterICP->Update();
 	}
 
+	//Mapper and actor for model
 	vtkSmartPointer<vtkPolyDataMapper> modelMapper = vtkSmartPointer<vtkPolyDataMapper>::New();
-	//modelMapper->SetInputConnection(transformFilter1->GetOutputPort());
 	if (align)
 		modelMapper->SetInputConnection(transformFilterICP->GetOutputPort());
 	else 
 		modelMapper->SetInputConnection(transformFilter->GetOutputPort());
-
 	vtkSmartPointer<vtkActor> modelActor = vtkSmartPointer<vtkActor>::New();
 	modelActor->SetMapper(modelMapper);
 	modelActor->GetProperty()->SetColor(0, 1, 0);
 	pVisualizer->renderer->AddActor(modelActor);
 	
-	
+	//Mapper and actor for scene
 	vtkSmartPointer<vtkPolyDataMapper> modelMapper2 = vtkSmartPointer<vtkPolyDataMapper>::New();
 	modelMapper2->SetInputConnection(transformFilter2->GetOutputPort());
 	vtkSmartPointer<vtkActor> modelActor2 = vtkSmartPointer<vtkActor>::New();
 	modelActor2->SetMapper(modelMapper2);
 	modelActor2->GetProperty()->SetColor(0, 0, 1);
-	pVisualizer->renderer->AddActor(modelActor2);
+	//pVisualizer->renderer->AddActor(modelActor2);
 
 	delete[] dM;
 	delete[] dS;
 	delete[] validS;
+}
+
+vtkSmartPointer<vtkPolyData> PSGM::GetSceneModelPC(int iCluster)
+{
+
+	RECOG::PSGM_::Cluster *pCluster;
+	Surfel *pSurfel;
+	RVL::QLIST::Index2 *pt;
+	//RECOG::PSGM_::ModelInstance *pModelInstance;
+	vtkSmartPointer<vtkPoints> points = vtkSmartPointer<vtkPoints>::New();
+	//points->SetDataTypeToDouble();
+	vtkSmartPointer<vtkCellArray> verts = vtkSmartPointer<vtkCellArray>::New();
+	int ptIdx = 0;
+	pCluster = clusters.Element[iCluster];
+	for (int i = 0; i < pCluster->iSurfelArray.n; i++)
+	{
+		pSurfel = &this->pSurfels->NodeArray.Element[pCluster->iSurfelArray.Element[i]];
+		pt = pSurfel->PtList.pFirst;
+		//Set pixel colors
+		for (int k = 0; k < pSurfel->size; k++)
+		{
+			points->InsertNextPoint(this->pMesh->NodeArray.Element[pt->Idx].P);
+			verts->InsertNextCell(1);
+			verts->InsertCellPoint(ptIdx);
+			ptIdx++;
+			pt = pt->pNext;
+		}
+	}
+
+	vtkSmartPointer<vtkPolyData> PD = vtkSmartPointer<vtkPolyData>::New();
+	PD->SetPoints(points);
+	PD->SetVerts(verts);
+	return PD;
+}
+
+void PSGM::CalculateICPCost(RVL::PSGM::ICPfunction ICPFunction, int ICPvariant) //under construction
+{
+//	int iMatch;
+//	int iMCTI, iSCTI, iCluster, iModel;
+//
+//	RECOG::PSGM_::ModelInstance *pMCTI;
+//	RECOG::PSGM_::ModelInstanceElement *pMIE;
+//	RECOG::PSGM_::ModelInstance *pSCTI;
+//	RECOG::PSGM_::ModelInstanceElement *pSIE;
+//
+//	RECOG::PSGM_::MatchInstance *pMatch;
+//	//RECOG::PSGM_::MatchInstance *pMatchx = pCTImatchesArray.Element[scoreMatchMatrix.Element[0].Element[0].idx];
+//
+//	for (int i = 0; i < scoreMatchMatrix.n; i++)
+//	{
+//		for (int j = 0; j < 7; j++)
+//		{
+//			iMatch = scoreMatchMatrix.Element[i].Element[j].idx;
+//			
+//			//Setting indices:
+//			iMCTI = pCTImatchesArray.Element[iMatch]->iMCTI;
+//			iSCTI = pCTImatchesArray.Element[iMatch]->iSCTI;
+//	
+//			//Getting scene and model pointers:
+//			pMCTI = MCTISet.pCTI.Element[iMCTI];
+//			pMIE = pMCTI->modelInstance.Element;
+//			pSCTI = CTISet.pCTI.Element[iSCTI];
+//			pSIE = pSCTI->modelInstance.Element;
+//
+//			iCluster = pSCTI->iCluster;
+//			iModel = pMCTI->iModel;
+//
+//			//Getting match pointer and calculating pose:
+//			pMatch = pCTImatchesArray.Element[iMatch];
+//			CalculatePose(iMatch);
+//
+//			//Getting transform from centered (model) CTI polygon data to scene (T_CCTIM_S)
+//			float *R_M_S = pMatch->R;
+//			float *t_M_S_mm = pMatch->t;
+//			float t_M_S[3];
+//			RVLSCALE3VECTOR2(t_M_S_mm, 1000.0f, t_M_S);
+//			
+//
+//			//PLY Model transformation
+//			double T_M_S[16];
+//			RVLHTRANSFMX(R_M_S, t_M_S, T_M_S);
+//			vtkSmartPointer<vtkTransform> transform = vtkSmartPointer<vtkTransform>::New();
+//			transform->SetMatrix(T_M_S); //when transforming PLY models to scene
+//			//transform->SetMatrix(T_CCTIM_S); //when transforming CTI convex hull to scene
+//
+//			//Scaling PLY model to meters
+//			vtkSmartPointer<vtkTransform> transformScale = vtkSmartPointer<vtkTransform>::New();
+//			transformScale->Scale(0.001, 0.001, 0.001);
+//			vtkSmartPointer<vtkTransformPolyDataFilter> transformFilterScale = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
+//			transformFilterScale->SetInputData(vtkModelDB.at(iModel));
+//			transformFilterScale->SetTransform(transformScale);
+//			transformFilterScale->Update();
+//
+//			//Transforming PLY model or CTI convex hull model to scene
+//			vtkSmartPointer<vtkTransformPolyDataFilter> transformFilter = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
+//			//transformFilter->SetInputData(modelPD); //model CTI convex hull
+//			transformFilter->SetInputConnection(transformFilterScale->GetOutputPort()); //PLY model
+//			transformFilter->SetTransform(transform);
+//			transformFilter->Update();
+//
+//			
+//			//Sampling filter for model polydata
+//			//vtkSmartPointer<vtkTriangleFilter> modelSamplerTriangleFilter = vtkSmartPointer<vtkTriangleFilter>::New();
+//			//modelSamplerTriangleFilter->SetInputConnection(transformFilter->GetOutputPort());
+//			//modelSamplerTriangleFilter->Update();
+//			//vtkSmartPointer<vtkPolyDataPointSampler> modelSampler = vtkSmartPointer<vtkPolyDataPointSampler>::New();
+//			//modelSampler->SetInputConnection(modelSamplerTriangleFilter->GetOutputPort());
+//			//modelSampler->SetDistance(0.005);
+//			//modelSampler->Update();
+//			//vtkSmartPointer<vtkPolyData> modelSamplerPD = modelSampler->GetOutput();
+//
+//			//Sampling filter for scene polydata
+//			//vtkSmartPointer<vtkTriangleFilter> sceneSamplerTriangleFilter = vtkSmartPointer<vtkTriangleFilter>::New(); //Creates triangles from polygons (Samples don't work with polygons)
+//			//sceneSamplerTriangleFilter->SetInputConnection(transformFilter2->GetOutputPort());
+//			//sceneSamplerTriangleFilter->Update();
+//			//vtkSmartPointer<vtkPolyDataPointSampler> sceneSampler = vtkSmartPointer<vtkPolyDataPointSampler>::New();
+//			//sceneSampler->SetInputConnection(sceneSamplerTriangleFilter->GetOutputPort());
+//			//sceneSampler->SetDistance(0.005);
+//			//sceneSampler->Update();
+//			//vtkSmartPointer<vtkPolyData> sceneSamplerPD = sceneSampler->GetOutput();
+//
+//
+//			vtkSmartPointer<vtkPolyData> scenePD = GetSceneModelPC(iCluster); //Generate scene model pointcloud
+//			//Aligning pointcluds (using PCL ICP)
+//			float icpT[16];
+//			double icpTd[16];
+//			double fitnessScore;
+//			ICPFunction(transformFilter->GetOutput(), scenePD, icpT, 20, 0.02, ICPvariant, &fitnessScore);
+//			for (int i = 0; i < 16; i++)
+//			{
+//				icpTd[i] = icpT[i];
+//			}
+//
+//
+//			
+//		}
+//		
+//	}
 }

@@ -39,7 +39,8 @@ void RVL::PCLICP(
 	float *T,
 	int maxIterations,
 	float maxCorrespondenceDist,
-	int ICPvariant)
+	int ICPvariant,
+	double *fitnessScore)
 {
 	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_source(new pcl::PointCloud<pcl::PointXYZ>);
 	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_destination(new pcl::PointCloud<pcl::PointXYZ>);
@@ -87,6 +88,7 @@ void RVL::PCLICP(
 		icp.setInputTarget(cloud_destination);
 		pcl::PointCloud<pcl::PointXYZ> Final;
 		icp.align(Final);
+		*fitnessScore = icp.getFitnessScore();
 
 		Ticp = icp.getFinalTransformation().transpose();
 	}
@@ -101,6 +103,7 @@ void RVL::PCLICP(
 		icp_nl.setInputTarget(cloud_destination);
 		pcl::PointCloud<pcl::PointXYZ> Final;
 		icp_nl.align(Final);
+		*fitnessScore = icp_nl.getFitnessScore();
 
 		Ticp = icp_nl.getFinalTransformation().transpose();
 
@@ -114,7 +117,8 @@ void RVL::PCLICP(
 		gicp.setInputTarget(cloud_destination);
 		pcl::PointCloud<pcl::PointXYZ> Final;
 		gicp.align(Final);
-
+		*fitnessScore = gicp.getFitnessScore();
+		
 		Ticp = gicp.getFinalTransformation().transpose();
 
 	}
@@ -127,6 +131,7 @@ void RVL::PCLICP(
 		icp_plane.setInputTarget(cloud_destination);
 		pcl::PointCloud<pcl::PointXYZ> Final;
 		icp_plane.align(Final);
+		*fitnessScore = icp_plane.getFitnessScore();
 
 		Ticp = icp_plane.getFinalTransformation().transpose();*/
 

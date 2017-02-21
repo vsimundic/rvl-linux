@@ -36,7 +36,7 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 #define RVL_LOAD_SINGLE_MODEL
 //#define PSGM_MATCHES_PROBABILITY_COMPARE
 #define PSGM_MATCHES_SCORE_COMPARE
-#define PSGM_LOAD_CTI_FROM_FILE
+//#define PSGM_LOAD_CTI_FROM_FILE
 //#define PSGM_RECOGNITION_VISUALIZE_SCENE
 
 #define RVLRECOGNITION_DEMO_FLAG_SAVE_PLY			0x00000001
@@ -293,6 +293,8 @@ int main(int argc, char ** argv)
 		{
 			recognition.LoadModelDataBase(); //Vidovic
 
+			recognition.LoadModelMeshDB(modelSequenceFileName);
+
 			Mesh mesh;
 
 			//Vidovic
@@ -372,7 +374,7 @@ int main(int argc, char ** argv)
 				recognition.InitDisplay(&visualizer, &mesh, SelectionColor);
 				
 				recognition.Display();
-				recognition.AddBestCTIModelsToVisualizer(&visualizer, false, PCLICP, PCLICPVariants::GeneralizedICP);
+				recognition.AddBestCTIModelsToVisualizer(&visualizer, true, PCLICP, PCLICPVariants::GeneralizedICP);
 				visualizer.Run();
 
 

@@ -30,5 +30,6 @@ namespace RVL
 		float *T,
 		int maxIterations,
 		float maxCorrespondenceDist,
-		int ICPvariant);
+		int ICPvariant,
+		double *fitnessScore);
 }
