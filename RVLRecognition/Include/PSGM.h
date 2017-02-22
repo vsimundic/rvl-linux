@@ -95,9 +95,8 @@ namespace RVL
 				int nValids;
 				float eSeg;
 				// Petra
-				float cost_ICP; 
-				float R_ICP[9];
-				float t_ICP[3];
+				double cost_ICP; 
+				float T_ICP[16];
 				// end Petra
 				MatchInstance *pNext;
 			};

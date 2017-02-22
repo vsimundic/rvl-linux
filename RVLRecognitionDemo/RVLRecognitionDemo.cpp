@@ -374,7 +374,8 @@ int main(int argc, char ** argv)
 				recognition.InitDisplay(&visualizer, &mesh, SelectionColor);
 				
 				recognition.Display();
-				recognition.AddBestCTIModelsToVisualizer(&visualizer, true, PCLICP, PCLICPVariants::GeneralizedICP);
+				recognition.CalculateICPCost(PCLICP, PCLICPVariants::GeneralizedICP);
+				//recognition.AddBestCTIModelsToVisualizer(&visualizer, true, PCLICP, PCLICPVariants::GeneralizedICP);
 				visualizer.Run();
 
 
