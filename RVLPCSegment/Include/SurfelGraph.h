@@ -135,6 +135,10 @@ namespace RVL
 			int iSurfel,
 			unsigned char *Color);
 		void DisplayEdgeFeatures();
+		void DisplayForegroundEdges(
+			Visualizer *pVisualizer,
+			Mesh *pMesh,
+			unsigned char *Color);
 		void Init(Mesh *pMesh);
 		void Clear();
 		unsigned char * GetColor(int iSurfel);

@@ -83,6 +83,7 @@ namespace RVL
 		bool bBoundary;					// true if the point is on the image boundary, on a depth discontinuity contur or on the boundary of a region of undefined depth,
 										// i.e. if there is a boundary edge connected to this point.
 		bool bValid;
+		bool bForeground;
 	};
 
 	struct OrientedPoint
@@ -265,6 +266,9 @@ namespace RVL
 			vtkSmartPointer<vtkPolyData> pPolygonData;
 			float normalEstimationRadius;
 			int nBoundaryPts;
+			bool bOrganizedPC;
+			int width;
+			int height;
 
 #ifdef RVLMESH_BOUNDARY_DEBUG		
 			int debugState;

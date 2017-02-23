@@ -1,4 +1,5 @@
 #pragma once
+#include "RVLVTK.h"
 
 //#define RVLPSGM_NORMAL_HULL
 #define RVLPSGM_MATCH_SATURATION //VIDOVIC
@@ -93,6 +94,11 @@ namespace RVL
 				float distanceGT;
 				int nValids;
 				float eSeg;
+				// Petra
+				float cost_ICP; 
+				float R_ICP[9];
+				float t_ICP[3];
+				// end Petra
 				MatchInstance *pNext;
 			};
 
@@ -183,9 +189,17 @@ namespace RVL
 
 		void CalculatePose(int iMatch);
 
-		void AddBestCTIModelsToVisualizer(Visualizer *pVisualizer);
+		typedef void(*ICPfunction)(vtkSmartPointer<vtkPolyData>, vtkSmartPointer<vtkPolyData>, float *, int, float, int, double*);
+
+		void AddBestCTIModelsToVisualizer(Visualizer *pVisualizer, bool align, ICPfunction ICPFunction, int ICPvariant);
 		
-		void AddCTIModelToVisualizer(Visualizer *pVisualizer, int iMatch);
+		void AddCTIModelToVisualizer(Visualizer *pVisualizer, int iMatch, bool align, ICPfunction ICPFunction, int ICPvariant);
+		
+		void LoadModelMeshDB(char *modelSequenceFileName);
+
+		vtkSmartPointer<vtkPolyData> GetSceneModelPC(int iCluster);
+
+		void CalculateICPCost(RVL::PSGM::ICPfunction ICPFunction, int ICPvariant);
 		//end Petra
 
 		void InitDisplay(
@@ -373,6 +387,7 @@ namespace RVL
 		Eigen::MatrixXf t;
 		RECOG::CTISet CTIset;
 		RECOG::CTISet MCTIset;
+		std::map<int, vtkSmartPointer<vtkPolyData>> vtkModelDB;
 
 
 	private:		

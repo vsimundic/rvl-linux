@@ -1,6 +1,7 @@
 #pragma once
 
 #define RVLPCLMESHBUILDER_FLAG_BILATERAL_FILTER		0x00000001
+#define RVLPCLMESHBUILDER_FLAG_ORGANIZED_PC			0x00000002
 
 namespace RVL
 {
@@ -38,6 +39,8 @@ namespace RVL
 		double sigmaS;
 		double sigmaR;
 		double normalEstR;		
+		int width;
+		int height;
 		CRVLParameterList ParamList;
 		pcl::PointCloud<pcl::PointXYZRGBA>::Ptr PC;
 		pcl::PolygonMesh PCLMesh;

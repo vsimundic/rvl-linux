@@ -1381,11 +1381,11 @@ void SurfelGraph::Display(
 	int *ColorScale,
 	unsigned char *ColorOffset)
 {
-	//unsigned char HardEdgeColor[3];
+	unsigned char MarkColor[3];
 
-	//HardEdgeColor[0] = 0;
-	//HardEdgeColor[1] = 255;
-	//HardEdgeColor[2] = 0;
+	MarkColor[0] = 0;
+	MarkColor[1] = 255;
+	MarkColor[2] = 0;
 
 	int iSurfel;
 	Surfel *pSurfel;
@@ -1418,7 +1418,8 @@ void SurfelGraph::Display(
 			pVisualizer->PaintPointSet(&(pSurfel->PtList), pMesh->pPolygonData, color);
 		}
 		
-		//DisplayHardEdges(pVisualizer, pMesh, iSurfel, HardEdgeColor);
+		//DisplayHardEdges(pVisualizer, pMesh, iSurfel, MarkColor);
+		DisplayForegroundEdges(pVisualizer, pMesh, MarkColor);
 	}
 }
 
@@ -2079,6 +2080,36 @@ void SurfelGraph::DisplayEdgeFeatures()
 	DisplayData.edgeFeatures->SetMapper(mapper);
 
 	pVisualizer->renderer->AddActor(DisplayData.edgeFeatures);
+}
+
+void SurfelGraph::DisplayForegroundEdges(
+	Visualizer *pVisualizer,
+	Mesh *pMesh,
+	unsigned char *Color)
+{
+	QLIST::Entry<Array<MeshEdgePtr *>> *pBoundary = BoundaryList.pFirst;
+
+	int i;
+	int iPt;
+	Point *pPt;
+	MeshEdgePtr *pEdgePtr;
+
+	while (pBoundary)
+	{
+		for (i = 0; i < pBoundary->data.n; i++)
+		{
+			pEdgePtr = pBoundary->data.Element[i];
+
+			iPt = RVLPCSEGMENT_GRAPH_GET_NODE(pEdgePtr);
+
+			pPt = pMesh->NodeArray.Element + iPt;
+
+			if (pPt->bForeground)
+				pVisualizer->PaintPoint(iPt, pMesh->pPolygonData, Color);
+		}
+
+		pBoundary = pBoundary->pNext;
+	}
 }
 
 void SurfelGraph::DisplayVertices()

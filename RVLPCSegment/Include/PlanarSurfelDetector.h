@@ -162,6 +162,12 @@ namespace RVL
 			PlanarSurfelDetector *pPSD;
 		};
 
+		struct Interval
+		{
+			float min;
+			float max;
+		};
+
 		int RegionGrowingOperation(
 			int iNode,
 			int iNode_,
@@ -580,6 +586,8 @@ namespace RVL
 		float maxEdgeFeatureConcavity;
 		float maxRange;
 		int maxAttackSize;
+		int edgeClassHalfWinSize;
+		float edgeClassDepthDiscontinuityThr;
 		bool bJoinSmallSurfelsToClosestNeighbors;
 		unsigned char *mProcessed;
 		CRVLTimer *pTimer;
@@ -618,6 +626,8 @@ namespace RVL
 		float dLineCut;
 		QList<QLIST::Index> lineCutBuff;
 #endif
+		PSD::Interval *edgeClassDepthOccupancy;
+		Array<int> iEdgeClassDepthOccupancyBin;
 		FILE *fpDebugPts;
 		FILE *fpDebugEdges;
 	};
