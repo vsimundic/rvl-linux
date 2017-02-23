@@ -4,6 +4,7 @@
 #include "SceneSegFile.hpp"
 #include "SVMClassifier.h"
 #include <set>
+#include "opencv2\opencv.hpp"
 
 //#define RVLPCSEGMENT_OBJECT_GRAPH_LOG
 
@@ -86,6 +87,7 @@ namespace RVL
 			void CalculateConvexityRatiosForObjectPair(int firstObject, int secondObject, float& firstRatio, float& secondRatio, float convexThr = 0.005);	//Filko
 			void CalculateObjectsColorHistogram(); //Filko
 			void ObjectAggregationLevel2_ViaObjectPairConvexity(float convexThr, float ratioThr, float ratioThr2, int objValidThr = 300, bool verbose = false); //Filko - NOT OPTIMIZED!!!!
+			void SaveSegmentationLabelImg(std::string filename); //Filko
 			void WERSegmentation();
 			void ComputeRelationCosts();
 			void ComputeRelationCost(

@@ -2606,3 +2606,56 @@ cv::Mat ObjectGraph::CreateSegmentationImage()
 	//return image
 	return coloredSegLab;
 }
+void ObjectGraph::SaveSegmentationLabelImg(std::string filename)
+{
+	cv::Mat labelImg(480, 640, CV_8UC1, cv::Scalar::all(0));
+
+	GRAPH::AggregateNode<SURFEL::AgEdge> *pObject;
+	QLIST::Index *piElement;
+	Surfel *pSurfel;
+	int x = 0, y = 0;
+	RVL::QLIST::Index2 *pt;
+	unsigned char objLabel = 1;
+	bool increment = false;
+	//For all objects
+	for (int iObject = 0; iObject < this->NodeArray.n; iObject++)
+	{
+
+		pObject = this->NodeArray.Element + iObject;
+
+		piElement = pObject->elementList.pFirst;
+
+		//check if object
+		if (!piElement)
+			continue;
+		//
+
+		//for all object's surfels
+		increment = false;
+		while (piElement)
+		{
+			pSurfel = this->pSurfels->NodeArray.Element + piElement->Idx;
+			//check 
+			if (!((pSurfel->size <= 1) || pSurfel->bEdge))
+			{
+				pt = pSurfel->PtList.pFirst;
+				//for all surfel's points
+				for (int k = 0; k < pSurfel->size; k++)
+				{
+					y = floor(pt->Idx / 640.0);
+					x = floor(pt->Idx - 640.0 * y);
+					labelImg.at<unsigned char>(y, x) = objLabel;
+					pt = pt->pNext;
+				}
+				increment = true; //Just in cease all elements of the object are edges
+			}
+			piElement = piElement->pNext;
+		}
+		//increment object label
+		if (increment)
+			objLabel++; //What if the number of objects is above 255???
+	}
+
+	//Save image (preferable as png)
+	cv::imwrite(filename, labelImg);
+}
