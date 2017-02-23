@@ -1142,8 +1142,8 @@ void ObjectGraph::CalculateOverAndUnderSegmentation(int *E, int &N, bool useGTNo
 		//Sum false values
 		for (int i = 0; i < GTHistSize; i++)
 		{
-			if ((i == 0) && !useBackground)
-				continue;
+			//if ((i == 0) && !useBackground)
+			//	continue;
 
 			if (i != maxBin[iObject])
 				E[1] += ptrGTObjHist[i];

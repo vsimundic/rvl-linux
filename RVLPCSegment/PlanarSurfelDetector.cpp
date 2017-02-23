@@ -4353,6 +4353,9 @@ void PlanarSurfelDetector::Boundaries(
 
 				while (pPt_->bBoundary && pSurfels->edgeMap[iPt_] < 0)
 				{
+					//if (iPt_ == 253686)
+					//	int debug = 0;
+
 					pSurfels->edgeMap[iPt_] = 0;
 
 					pEdgePtr = pPt_->EdgeList.pFirst;
@@ -4363,147 +4366,153 @@ void PlanarSurfelDetector::Boundaries(
 
 					if (pMesh->bOrganizedPC)
 					{
-						u0 = iPt_ % pMesh->width;
-						v0 = iPt_ / pMesh->width;
 						d0 = pPt_->P[2];
 
-						s11 = 1; 
-						s12 = 0;
-						s21 = 0;
-						s22 = 1;
-
-						for(i = 0; i < 4; i++)
+						if (d0 <= maxRange)
 						{
-							for (q2 = -edgeClassHalfWinSize; q2 < edgeClassHalfWinSize; q2++)
+							u0 = iPt_ % pMesh->width;
+							v0 = iPt_ / pMesh->width;
+
+							s11 = 1;
+							s12 = 0;
+							s21 = 0;
+							s22 = 1;
+
+							for (i = 0; i < 4; i++)
 							{
-								q = 0;
-
-								dq = (q2 >= 0 ? 1 : -1);
-
-								de = 2 * dq * q2;
-
-								e = de - edgeClassHalfWinSize;
-
-								for (p = 1; p <= edgeClassHalfWinSize; p++)
+								for (q2 = -edgeClassHalfWinSize; q2 < edgeClassHalfWinSize; q2++)
 								{
-									if (e > 0)
+									q = 0;
+
+									dq = (q2 >= 0 ? 1 : -1);
+
+									de = 2 * dq * q2;
+
+									e = de - edgeClassHalfWinSize;
+
+									for (p = 1; p <= edgeClassHalfWinSize; p++)
 									{
-										q += dq;
+										if (e > 0)
+										{
+											q += dq;
 
-										e -= k;
-									}
+											e -= k;
+										}
 
-									e += de;
+										e += de;
 
-									u = u0 + s11 * p + s12 * q;
-									v = v0 + s21 * p + s22 * q;
+										u = u0 + s11 * p + s12 * q;
+										v = v0 + s21 * p + s22 * q;
 
-									if (u < 0)
-										break;
+										if (u < 0)
+											break;
 
-									if (u >= pMesh->width)
-										break;
+										if (u >= pMesh->width)
+											break;
 
-									if (v < 0)
-										break;
+										if (v < 0)
+											break;
 
-									if (v >= pMesh->height)
-										break;
+										if (v >= pMesh->height)
+											break;
 
+										iPt__ = u + v * pMesh->width;
+										pPt__ = pMesh->NodeArray.Element + iPt__;
+										d = pPt__->P[2];
+
+										if (d > 0.0f)
+										{
+											if (d - d0 >= edgeClassDepthDiscontinuityThr)
+											{
+												pPt_->bForeground = true;
+
+												q2 = edgeClassHalfWinSize;
+												i = 3;
+											}
+
+											p = edgeClassHalfWinSize;
+										}
+									}	// for (p = 1; p <= edgeClassHalfWinSize; p++)
+								}	// for (q2 = -edgeClassHalfWinSize; q2 < edgeClassHalfWinSize; q2++)
+
+								s11_ = -s21;
+								s12_ = -s22;
+								s21 = s11;
+								s22 = s12;
+								s11 = s11_;
+								s12 = s12_;
+							}	// for(i = 0; i < 4; i++)
+#ifdef NEVER
+							uMin_ = u0 - edgeClassHalfWinSize;
+							uMax_ = u0 + edgeClassHalfWinSize;
+							vMin_ = v0 - edgeClassHalfWinSize;
+							vMax_ = v0 + edgeClassHalfWinSize;
+
+							RVLCROPRECT(0, uMax, 0, vMax, uMin_, uMax_, vMin_, vMax_);
+
+							iEdgeClassDepthOccupancyBin.n = 0;
+
+							for (v = vMin_; v <= vMax_; v++)
+							{
+								for (u = uMin_; u <= uMax_; u++)
+								{
 									iPt__ = u + v * pMesh->width;
 									pPt__ = pMesh->NodeArray.Element + iPt__;
 									d = pPt__->P[2];
 
 									if (d > 0.0f && d <= maxRange)
 									{
-										if (d - d0 >= edgeClassDepthDiscontinuityThr)
+										iBin = (int)(d / edgeClassDepthOccupancyBinSize);
+
+										if (edgeClassDepthOccupancy[iBin].min < 1e-10)
 										{
-											pPt_->bForeground = true;
+											edgeClassDepthOccupancy[iBin].min = edgeClassDepthOccupancy[iBin].max = d;
 
-											p = q2 = edgeClassHalfWinSize;
-											i = 3;
+											iEdgeClassDepthOccupancyBin.Element[iEdgeClassDepthOccupancyBin.n++] = iBin;
 										}
-									}
-								}	// for (p = 1; p <= edgeClassHalfWinSize; p++)
-							}	// for (q2 = -edgeClassHalfWinSize; q2 < edgeClassHalfWinSize; q2++)
-
-							s11_ = -s21;
-							s12_ = -s22;
-							s21 = s11;
-							s22 = s12;
-							s11 = s11_;
-							s12 = s12_;
-						}	// for(i = 0; i < 4; i++)
-#ifdef NEVER
-						uMin_ = u0 - edgeClassHalfWinSize;
-						uMax_ = u0 + edgeClassHalfWinSize;
-						vMin_ = v0 - edgeClassHalfWinSize;
-						vMax_ = v0 + edgeClassHalfWinSize;
-
-						RVLCROPRECT(0, uMax, 0, vMax, uMin_, uMax_, vMin_, vMax_);
-
-						iEdgeClassDepthOccupancyBin.n = 0;
-
-						for (v = vMin_; v <= vMax_; v++)
-						{
-							for (u = uMin_; u <= uMax_; u++)
-							{
-								iPt__ = u + v * pMesh->width;
-								pPt__ = pMesh->NodeArray.Element + iPt__;
-								d = pPt__->P[2];
-								
-								if (d > 0.0f && d <= maxRange)
-								{
-									iBin = (int)(d / edgeClassDepthOccupancyBinSize);
-									
-									if (edgeClassDepthOccupancy[iBin].min < 1e-10)
-									{
-										edgeClassDepthOccupancy[iBin].min = edgeClassDepthOccupancy[iBin].max = d;
-
-										iEdgeClassDepthOccupancyBin.Element[iEdgeClassDepthOccupancyBin.n++] = iBin;
-									}
-									else
-									{
-										if (d < edgeClassDepthOccupancy[iBin].min)
-											edgeClassDepthOccupancy[iBin].min = d;
-										else if (d > edgeClassDepthOccupancy[iBin].max)
-											edgeClassDepthOccupancy[iBin].max = d;
+										else
+										{
+											if (d < edgeClassDepthOccupancy[iBin].min)
+												edgeClassDepthOccupancy[iBin].min = d;
+											else if (d > edgeClassDepthOccupancy[iBin].max)
+												edgeClassDepthOccupancy[iBin].max = d;
+										}
 									}
 								}
 							}
-						}
 
-						d = pPt__->P[2];
+							d = pPt__->P[2];
 
-						bForeground = true;
+							bForeground = true;
 
-						iBin = (int)(d / edgeClassDepthOccupancyBinSize);
+							iBin = (int)(d / edgeClassDepthOccupancyBinSize);
 
-						iBin_ = iBin;
-
-						while (bForeground)
-						{
-							iBin__ = iBin_;
-
-							iBin_--;
-
-							if (edgeClassDepthOccupancy[iBin__].min < 1e-10)
-								break;
-
-							if (edgeClassDepthOccupancy[iBin_].max - edgeClassDepthOccupancy[iBin__].min > edgeClassDepthDiscontinuityThr)
-								bForeground = false;
-						}
-
-						if (bForeground)
-						{
 							iBin_ = iBin;
 
 							while (bForeground)
 							{
-								// ... not completed
+								iBin__ = iBin_;
+
+								iBin_--;
+
+								if (edgeClassDepthOccupancy[iBin__].min < 1e-10)
+									break;
+
+								if (edgeClassDepthOccupancy[iBin_].max - edgeClassDepthOccupancy[iBin__].min > edgeClassDepthDiscontinuityThr)
+									bForeground = false;
 							}
-						}
+
+							if (bForeground)
+							{
+								iBin_ = iBin;
+
+								while (bForeground)
+								{
+									// ... not completed
+								}
+							}
 #endif
+						}
 					}	// if (pMesh->bOrganizedPC)
 
 					///
