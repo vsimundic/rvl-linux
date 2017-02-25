@@ -4321,7 +4321,7 @@ void PlanarSurfelDetector::Boundaries(
 	int u, v;
 	int u0, v0;
 	//int uMin_, uMax_, vMin_, vMax_;
-	float d, d0;
+	float d, d0, dd;
 	//int iBin, iBin_, iBin__;
 	bool bForeground;
 	int e, de, p, q, q2, dq;
@@ -4422,13 +4422,12 @@ void PlanarSurfelDetector::Boundaries(
 
 										if (d > 0.0f)
 										{
-											if (d - d0 >= edgeClassDepthDiscontinuityThr)
-											{
-												pPt_->bForeground = true;
+											dd = d - d0;
 
-												q2 = edgeClassHalfWinSize;
-												i = 3;
-											}
+											if (dd >= edgeClassDepthDiscontinuityThr)
+												pPt_->flags |= RVLMESH_POINT_FLAG_FOREGROUND;
+											else if (dd <= -edgeClassDepthDiscontinuityThr)
+												pPt_->flags |= RVLMESH_POINT_FLAG_BACKGROUND;
 
 											p = edgeClassHalfWinSize;
 										}
@@ -4757,6 +4756,8 @@ int PlanarSurfelDetector::CreateEdgeFeatures(
 	Array<MeshEdgePtr *> *pEdgePtArray;
 	bool bPtProjectionOutOfLineSegment;
 	//int iPointEdge_;
+	int nForeground, nBackground;
+	BYTE edgeClass;
 
 	while (pSegmentEndpoint2)
 	{
@@ -4820,8 +4821,8 @@ int PlanarSurfelDetector::CreateEdgeFeatures(
 
 			iPt = RVLPCSEGMENT_GRAPH_GET_NODE(pEdgePtr);
 
-			if (iPt == 153453)
-				int debug = 0;
+			//if (iPt == 153453)
+			//	int debug = 0;
 
 			pPt = pMesh->NodeArray.Element + iPt;
 
@@ -4893,31 +4894,9 @@ int PlanarSurfelDetector::CreateEdgeFeatures(
 		}
 		else // If all points in the interval [pSegmentEndpoint1->idx, pSegmentEndpoint2->idx] are within the tolerance eThr from the plane (NE, dE)
 		{
-			// Create new edge feature.
+			// Compute the number of foreground/background points.
 
-			pEdgeFeature = pSurfels->NodeArray.Element + iNewFeature_;
-
-			pEdgeFeature->bEdge = true;
-
-			N = pEdgeFeature->N;
-
-			RVLCOPY3VECTOR(NE, N);
-
-			pEdgeFeature->d = dE;
-
-			P_ = pEdgeFeature->P;
-
-			RVLCOPY3VECTOR(P1, P_);
-
-			V_ = pEdgeFeature->V;
-
-			RVLCOPY3VECTOR(V, V_);
-
-			pEdgeFeature->physicalSize = l;
-
-			pEdgeFeature->size = pSegmentEndpoint2->Idx - pSegmentEndpoint1->Idx;
-
-			// Assign points to the new edge feature.
+			nForeground = nBackground = 0;
 
 			iPointEdge = pSegmentEndpoint1->Idx;
 
@@ -4927,22 +4906,71 @@ int PlanarSurfelDetector::CreateEdgeFeatures(
 
 				iPt = RVLPCSEGMENT_GRAPH_GET_NODE(pEdgePtr);
 
-				pSurfels->edgeMap[iPt] = iNewFeature_;
+				pPt = pMesh->NodeArray.Element + iPt;
+
+				edgeClass = (pPt->flags & RVLMESH_POINT_FLAG_EDGE_CLASS);
+
+				if (edgeClass == RVLMESH_POINT_FLAG_FOREGROUND)
+					nForeground++;
+				else if (edgeClass == RVLMESH_POINT_FLAG_BACKGROUND)
+					nBackground++;
 
 				iPointEdge = (iPointEdge + 1) % pBoundary->n;
 			}
 
-			RVLMEM_ALLOC_STRUCT(pMem, Array<MeshEdgePtr *>, pEdgePtArray);
+			if (nForeground > 0 && nForeground > nBackground)
+			{
+				// Create new edge feature.
 
-			pEdgePtArray->Element = pBoundary->Element + pSegmentEndpoint1->Idx;
-			pEdgePtArray->n = pEdgeFeature->size;
+				pEdgeFeature = pSurfels->NodeArray.Element + iNewFeature_;
 
-			pEdgeFeature->BoundaryArray.Element = pEdgePtArray;
-			pEdgeFeature->BoundaryArray.n = 1;
+				pEdgeFeature->bEdge = true;
 
-			//
+				N = pEdgeFeature->N;
 
-			iNewFeature_++;
+				RVLCOPY3VECTOR(NE, N);
+
+				pEdgeFeature->d = dE;
+
+				P_ = pEdgeFeature->P;
+
+				RVLCOPY3VECTOR(P1, P_);
+
+				V_ = pEdgeFeature->V;
+
+				RVLCOPY3VECTOR(V, V_);
+
+				pEdgeFeature->physicalSize = l;
+
+				pEdgeFeature->size = pSegmentEndpoint2->Idx - pSegmentEndpoint1->Idx;
+
+				// Assign points to the new edge feature.
+
+				iPointEdge = pSegmentEndpoint1->Idx;
+
+				while (iPointEdge != pSegmentEndpoint2->Idx)
+				{
+					pEdgePtr = pBoundary->Element[iPointEdge];
+
+					iPt = RVLPCSEGMENT_GRAPH_GET_NODE(pEdgePtr);
+
+					pSurfels->edgeMap[iPt] = iNewFeature_;
+
+					iPointEdge = (iPointEdge + 1) % pBoundary->n;
+				}
+
+				RVLMEM_ALLOC_STRUCT(pMem, Array<MeshEdgePtr *>, pEdgePtArray);
+
+				pEdgePtArray->Element = pBoundary->Element + pSegmentEndpoint1->Idx;
+				pEdgePtArray->n = pEdgeFeature->size;
+
+				pEdgeFeature->BoundaryArray.Element = pEdgePtArray;
+				pEdgeFeature->BoundaryArray.n = 1;
+
+				//
+
+				iNewFeature_++;
+			}
 
 			// (pSegmentEndpoint1, pSegmentEndpoint2) <- (pSegmentEndpoint2, pSegmentEndpoint2->pNext)
 

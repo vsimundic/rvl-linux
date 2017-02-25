@@ -1,5 +1,9 @@
 #pragma once
 
+#define RVLMESH_POINT_FLAG_FOREGROUND		0x01
+#define RVLMESH_POINT_FLAG_BACKGROUND		0x02
+#define RVLMESH_POINT_FLAG_EDGE_CLASS		0x03
+
 //#define RVLMESH_BOUNDARY_DEBUG
 
 // Input:  mesh pMesh, 
@@ -83,7 +87,7 @@ namespace RVL
 		bool bBoundary;					// true if the point is on the image boundary, on a depth discontinuity contur or on the boundary of a region of undefined depth,
 										// i.e. if there is a boundary edge connected to this point.
 		bool bValid;
-		bool bForeground;
+		BYTE flags;
 	};
 
 	struct OrientedPoint

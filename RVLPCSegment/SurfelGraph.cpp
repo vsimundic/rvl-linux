@@ -1387,6 +1387,12 @@ void SurfelGraph::Display(
 	MarkColor[1] = 255;
 	MarkColor[2] = 0;
 
+	unsigned char MarkColor2[3];
+
+	MarkColor2[0] = 255;
+	MarkColor2[1] = 0;
+	MarkColor2[2] = 0;
+
 	int iSurfel;
 	Surfel *pSurfel;
 	unsigned char color[3];
@@ -1419,8 +1425,10 @@ void SurfelGraph::Display(
 		}
 		
 		//DisplayHardEdges(pVisualizer, pMesh, iSurfel, MarkColor);
-		DisplayForegroundEdges(pVisualizer, pMesh, MarkColor);
+		DisplayForegroundAndBackgroundEdges(pVisualizer, pMesh, MarkColor, MarkColor2);
 	}
+
+	DisplayEdgeFeatures();
 }
 
 //VTK Render window right mouse button press callback
@@ -2082,10 +2090,11 @@ void SurfelGraph::DisplayEdgeFeatures()
 	pVisualizer->renderer->AddActor(DisplayData.edgeFeatures);
 }
 
-void SurfelGraph::DisplayForegroundEdges(
+void SurfelGraph::DisplayForegroundAndBackgroundEdges(
 	Visualizer *pVisualizer,
 	Mesh *pMesh,
-	unsigned char *Color)
+	unsigned char *ForegroundColor,
+	unsigned char *BackgroundColor)
 {
 	QLIST::Entry<Array<MeshEdgePtr *>> *pBoundary = BoundaryList.pFirst;
 
@@ -2093,6 +2102,7 @@ void SurfelGraph::DisplayForegroundEdges(
 	int iPt;
 	Point *pPt;
 	MeshEdgePtr *pEdgePtr;
+	BYTE edgeClass;
 
 	while (pBoundary)
 	{
@@ -2104,8 +2114,12 @@ void SurfelGraph::DisplayForegroundEdges(
 
 			pPt = pMesh->NodeArray.Element + iPt;
 
-			if (pPt->bForeground)
-				pVisualizer->PaintPoint(iPt, pMesh->pPolygonData, Color);
+			edgeClass = (pPt->flags & RVLMESH_POINT_FLAG_EDGE_CLASS);
+
+			if (edgeClass == RVLMESH_POINT_FLAG_FOREGROUND)
+				pVisualizer->PaintPoint(iPt, pMesh->pPolygonData, ForegroundColor);
+			else if (edgeClass == RVLMESH_POINT_FLAG_BACKGROUND)
+				pVisualizer->PaintPoint(iPt, pMesh->pPolygonData, BackgroundColor);
 		}
 
 		pBoundary = pBoundary->pNext;

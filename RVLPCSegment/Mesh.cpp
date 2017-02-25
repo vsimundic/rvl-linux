@@ -118,7 +118,7 @@ bool Mesh::CreateOrderedMeshFromPolyData()
 		pointData->GetTupleValue(iPt, pPt->P);
 		normalPointData->GetTupleValue(iPt, pPt->N);
 		RVLNORM3(pPt->N, fTmp);
-		pPt->bForeground = false;
+		pPt->flags = 0x00;
 	}
 
 	// maxnPolygonVertices <- max. no. of vertices per polygon

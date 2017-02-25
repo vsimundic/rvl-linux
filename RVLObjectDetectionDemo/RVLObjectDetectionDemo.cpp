@@ -179,7 +179,10 @@ int main(int argc, char ** argv)
 			}
 			else
 #endif
-				objectDetector.pSurfels->Display(&visualizer, &(objectDetector.mesh));
+			{
+				int colorScale[] = {25, 25, 25};
+				objectDetector.pSurfels->Display(&visualizer, &(objectDetector.mesh), -1, NULL, colorScale);
+			}				
 
 			//detector.DisplaySoftEdges(&visualizer, &mesh, &surfels, SelectionColor);
 			visualizer.Run();
