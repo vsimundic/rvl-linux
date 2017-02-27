@@ -2,9 +2,11 @@
 
 #define RVLSURFEL_IMAGE_ADJACENCY //FILKO usporava debug :)
 
-#define RVLSURFEL_DISPLAY_MODE_SURFELS			0
-#define RVLSURFEL_DISPLAY_MODE_BOUNDARY			1
-#define RVLSURFEL_DISPLAY_MODE_NEIGHBOR_PAIR	2
+#define RVLSURFEL_DISPLAY_MODE_SURFELS					0
+#define RVLSURFEL_DISPLAY_MODE_BOUNDARY					1
+#define RVLSURFEL_DISPLAY_MODE_NEIGHBOR_PAIR			2
+#define RVLSURFEL_DISPLAY_MODE_FOREGROUND_BACKGROUND	3
+#define RVLSURFEL_DISPLAY_MODE_CONVEX_CONCAVE			4
 
 #define RVLSURFEL_EDGE_FLAG_HARD				0x01
 #define RVLSURFEL_EDGE_FLAG_CONVEX				0x02
@@ -35,6 +37,10 @@ namespace RVL
 			bool(*keyPressUserFunction)(Mesh *pMesh, SurfelGraph *pSurfels, std::string &key, void *vpData);
 			int  mode;
 			unsigned char SelectionColor[3];
+			unsigned char ForegroundColor[3];
+			unsigned char BackgroundColor[3];
+			unsigned char ConvexColor[3];
+			unsigned char ConcaveColor[3];
 			int iSelectedSurfel;
 			int iSelectedSurfel2;
 			int iSelection;
@@ -137,9 +143,10 @@ namespace RVL
 		void DisplayEdgeFeatures();
 		void DisplayForegroundAndBackgroundEdges(
 			Visualizer *pVisualizer,
-			Mesh *pMesh,
-			unsigned char *ForegroundColor,
-			unsigned char *BackgroundColor);
+			Mesh *pMesh);
+		void DisplayConvexAndConcaveEdges(
+			Visualizer *pVisualizer,
+			Mesh *pMesh);
 		void Init(Mesh *pMesh);
 		void Clear();
 		unsigned char * GetColor(int iSurfel);

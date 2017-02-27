@@ -172,17 +172,14 @@ int main(int argc, char ** argv)
 			objectDetector.pSurfels->InitDisplay(&visualizer, &(objectDetector.mesh), objectDetector.pSurfelDetector);
 
 #ifdef RVLSURFEL_IMAGE_ADJACENCY
-			if (objectDetector.bSegmentToObjects)
-			{
-				objectDetector.pObjects->InitDisplay(&visualizer, &(objectDetector.mesh), SelectionColor);
-				objectDetector.pObjects->Display();
-			}
-			else
+			//if (objectDetector.bSegmentToObjects)
+			//{
+			//	objectDetector.pObjects->InitDisplay(&visualizer, &(objectDetector.mesh), SelectionColor);
+			//	objectDetector.pObjects->Display();
+			//}
+			//else
 #endif
-			{
-				int colorScale[] = {25, 25, 25};
-				objectDetector.pSurfels->Display(&visualizer, &(objectDetector.mesh), -1, NULL, colorScale);
-			}				
+				objectDetector.pSurfels->Display(&visualizer, &(objectDetector.mesh));
 
 			//detector.DisplaySoftEdges(&visualizer, &mesh, &surfels, SelectionColor);
 			visualizer.Run();

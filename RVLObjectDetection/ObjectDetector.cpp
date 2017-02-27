@@ -179,8 +179,8 @@ void ObjectDetector::DetectObjects(char *MeshFilePathName)
 				if (pSurfel->size <= 1)
 					continue;
 
-				if (pSurfel->bEdge)
-					continue;
+				//if (pSurfel->bEdge)
+				//	continue;
 
 				pSurfels->DetermineImgAdjDescriptors(pSurfel, &mesh);
 			}
