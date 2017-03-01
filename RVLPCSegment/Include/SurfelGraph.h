@@ -1,7 +1,5 @@
 #pragma once
 
-//#define RVLSURFEL_IMAGE_ADJACENCY //FILKO
-
 #define RVLSURFEL_DISPLAY_MODE_SURFELS			0
 #define RVLSURFEL_DISPLAY_MODE_BOUNDARY			1
 #define RVLSURFEL_DISPLAY_MODE_NEIGHBOR_PAIR	2
@@ -104,8 +102,9 @@ namespace RVL
 		std::vector<Surfel*> imgAdjacency;	//Filko
 		std::vector<SurfelAdjecencyDescriptors*> imgAdjacencyDescriptors;	//Filko
 		std::vector<int> GTObjHist; //Filko
-		RVLColorDescriptor *colordescriptor; //Filko
 #endif
+		RVLColorDescriptor *colordescriptor; //Filko
+
 	};
 
 	class SurfelGraph : public Graph < Surfel, MeshEdge, MeshEdgePtr >
@@ -196,7 +195,9 @@ namespace RVL
 #endif
 		cv::Mat GenColoredSurfelImgFromSSF(std::shared_ptr<SceneSegFile::SceneSegFile> ssf);
 		//Filko
+#ifdef RVLSURFEL_IMAGE_ADJACENCY //Vidovic
 		void CalculateSurfelsColorHistograms(cv::Mat img, int colorspace, bool oneDimensional, const int *bindata, bool noBins);
+#endif
 
 	public:	
 		CRVLParameterList ParamList;

@@ -5449,12 +5449,31 @@ void PSGM::EvaluateMatchesByScore(
 								FP_++;
 							}
 							else
+							{
 								if (firstTP[iSSegment] == -1)
 								{
 									firstTP[iSSegment] = iMSegment;
 									firstTPScore[iSSegment] = scoreTmp;
 									firstTPiModel[iSSegment] = iMatchedModel;
 								}
+
+								//check pose of TP segment matches
+								if (iScore == nScoreSteps - 1)
+								{
+									iSCTI = pCTImatchesArray.Element[iMatch]->iSCTI;
+
+									pSCTI = CTISet.pCTI.Element[iSCTI];
+									pMCTI = MCTISet.pCTI.Element[iMCTI];
+
+									MSTransformation(pMCTI, pSCTI, pCTImatchesArray.Element[iMatch]->tMatch, pCTImatchesArray.Element[iMatch]->R, pCTImatchesArray.Element[iMatch]->t);
+
+									FindGTInstance(&pGT, pCTImatchesArray.Element[iMatch]->iScene, iMatchedModel);
+
+									//poseMatch = PoseCheck(pGT, pCTImatchesArray.Element[iMatch], 50.0, PI / 6, fpPoseError);
+									poseMatch = PoseCheck(pGT, pCTImatchesArray.Element[iMatch], 50.0, cos30, fpPoseError);
+								}
+								
+							}
 						}
 					}
 				}
@@ -6253,29 +6272,65 @@ void PSGM::CalculatePose(int iMatch)
 
 void PSGM::AddBestCTIModelsToVisualizer(Visualizer *pVisualizer)
 {
-	int bestMatchIdx;
-	float bestScore;
-	//RECOG::PSGM_::MatchInstance *pMatch;
+	//int bestMatchIdx;
+	//float bestScore;
+	////RECOG::PSGM_::MatchInstance *pMatch;
 
-	//RECOG::PSGM_::MatchInstance *pMatchx = pCTImatchesArray.Element[scoreMatchMatrix.Element[0].Element[0].idx];
+	////RECOG::PSGM_::MatchInstance *pMatchx = pCTImatchesArray.Element[scoreMatchMatrix.Element[0].Element[0].idx];
 
-	for (int i = 0; i < scoreMatchMatrix.n; i++)
+	//for (int i = 0; i < scoreMatchMatrix.n; i++)
+	//{
+	//	bestScore = 0;
+	//	bestMatchIdx = -1;
+	//	/*for (int j = 0; j < scoreMatchMatrix.Element[i].n; j++)
+	//	{
+	//		if (scoreMatchMatrix.Element[i].Element[j].idx < 0)
+	//			continue;
+	//		pMatch = pCTImatchesArray.Element[scoreMatchMatrix.Element[i].Element[j].idx];
+	//		if (pMatch->score > bestScore)
+	//		{
+	//			bestMatchIdx = scoreMatchMatrix.Element[i].Element[j].idx;
+	//			bestScore = pMatch->score;
+	//		}
+	//	}*/
+	//	AddCTIModelToVisualizer(pVisualizer, scoreMatchMatrix.Element[i].Element[0].idx);
+	//}
+
+	int iSSegment, iMSegment;
+	int iMatch, iMCTI, iMatchedModel;
+
+	bool TPMatch;
+
+	for (iSSegment = 0; iSSegment < scoreMatchMatrix.n; iSSegment++)
 	{
-		bestScore = 0;
-		bestMatchIdx = -1;
-		/*for (int j = 0; j < scoreMatchMatrix.Element[i].n; j++)
+		for (iMSegment = 0; iMSegment < scoreMatchMatrix.Element[iSSegment].n; iMSegment++)
 		{
-			if (scoreMatchMatrix.Element[i].Element[j].idx < 0)
-				continue;
-			pMatch = pCTImatchesArray.Element[scoreMatchMatrix.Element[i].Element[j].idx];
-			if (pMatch->score > bestScore)
+			//Compare to segment GT
+			iMatch = scoreMatchMatrix.Element[iSSegment].Element[iMSegment].idx;
+
+			if (iMatch != -1)
 			{
-				bestMatchIdx = scoreMatchMatrix.Element[i].Element[j].idx;
-				bestScore = pMatch->score;
+				iMCTI = pCTImatchesArray.Element[iMatch]->iMCTI;
+				iMatchedModel = MCTISet.pCTI.Element[iMCTI]->iModel;
+
+				int iSegmentGT = (iScene - 1) * nDominantClusters + iSSegment;
+
+				//eliminate FP from segments without GT
+				if (!segmentGT.Element[iSegmentGT].valid)
+					TPMatch = false;
+				else
+					TPMatch = CompareMatchToSegmentGT((iScene - 1), iSSegment, iMatchedModel);
+				//End compare to segment GT
+
+				if (TPMatch)
+				{
+					AddCTIModelToVisualizer(pVisualizer, iMatch);
+					break;
+				}
 			}
-		}*/
-		AddCTIModelToVisualizer(pVisualizer, scoreMatchMatrix.Element[i].Element[0].idx);
+		}
 	}
+
 }
 
 void PSGM::AddCTIModelToVisualizer(Visualizer *pVisualizer, int iMatch)

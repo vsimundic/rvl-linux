@@ -81,10 +81,14 @@ namespace RVL
 			void Create(SurfelGraph *pSurfels_);
 			void CreateFromSSF(std::string ssfFileName);	//Filko
 			void CalculateOverAndUnderSegmentation_SSF(int *E, int &N, bool useGTNoPix = true,  bool useBackground = true);	//Filko
+#ifdef RVLSURFEL_IMAGE_ADJACENCY //Vidovic
 			void CalculateOverAndUnderSegmentation(int *E, int &N, bool useGTNoPix = false, std::string GTlabImgFilename = "", bool useBackground = true);	//Filko
+#endif
 			void DetermineObjectConvexityData(float convexThr = 0.005, float ratioThr = 0.9);	//Filko
 			void CalculateConvexityRatiosForObjectPair(int firstObject, int secondObject, float& firstRatio, float& secondRatio, float convexThr = 0.005);	//Filko
+#ifdef RVLSURFEL_COLOR_HISTOGRAM //Vidovic
 			void CalculateObjectsColorHistogram(); //Filko
+#endif
 			void ObjectAggregationLevel2_ViaObjectPairConvexity(float convexThr, float ratioThr, float ratioThr2, int objValidThr = 300, bool verbose = false); //Filko - NOT OPTIMIZED!!!!
 			void WERSegmentation();
 			void ComputeRelationCosts();

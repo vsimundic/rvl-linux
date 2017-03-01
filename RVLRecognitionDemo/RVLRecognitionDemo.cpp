@@ -3,8 +3,8 @@
 
 //#include "stdafx.h"
 #include <vtkAutoInit.h>
-VTK_MODULE_INIT(vtkRenderingOpenGL);
-//VTK_MODULE_INIT(vtkRenderingOpenGL2);
+//VTK_MODULE_INIT(vtkRenderingOpenGL);
+VTK_MODULE_INIT(vtkRenderingOpenGL2);
 VTK_MODULE_INIT(vtkInteractionStyle);
 VTK_MODULE_INIT(vtkRenderingFreeType);
 #include "RVLVTK.h"
@@ -13,6 +13,7 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 #include "Graph.h"
 #include "Mesh.h"
 #include "Visualizer.h"
+#include "SceneSegFile.hpp"
 #include "SurfelGraph.h"
 #include "PlanarSurfelDetector.h"
 #include "RVLRecognition.h"
@@ -318,7 +319,7 @@ int main(int argc, char ** argv)
 
 			//FILE *fpLog = fopen("F:\\Projekti\\ARP3D\\evaluationLog.txt", "w");
 
-			//FILE *fpPoseError = fopen("F:\\Projekti\\ARP3D\\PoseError.txt", "w");
+			FILE *fpPoseError = fopen("F:\\Projekti\\ARP3D\\PoseError.txt", "w");
 
 			FILE *fpHypothesisEvaluation = fopen("C:\\RVL\\ExpRez\\compare_TNM_Valid_TMP.txt", "w");
 
@@ -356,12 +357,12 @@ int main(int argc, char ** argv)
 
 	#ifdef PSGM_RECOGNITION_VISUALIZE_SCENE
 				//Visualize currennt scene (close visualizer window by pressing 'q' key)
+				visualizer.renderer->RemoveAllViewProps();
 				surfels.NodeColors(SelectionColor);
 				recognition.InitDisplay(&visualizer, &mesh, SelectionColor);
 				recognition.Display();
+				recognition.AddBestCTIModelsToVisualizer(&visualizer);
 				visualizer.Run();
-
-				visualizer.renderer->RemoveAllViewProps();
 	#endif
 #endif
 				recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, fpPoseError, 7);
@@ -372,11 +373,11 @@ int main(int argc, char ** argv)
 				// Visualization
 
 				//surfels.NodeColors(SelectionColor);
-				visualizer.renderer->RemoveAllViewProps();
-				recognition.InitDisplay(&visualizer, &mesh, SelectionColor);
-				recognition.Display();
-				recognition.AddBestCTIModelsToVisualizer(&visualizer);
-				visualizer.Run();
+				//visualizer.renderer->RemoveAllViewProps();
+				//recognition.InitDisplay(&visualizer, &mesh, SelectionColor);
+				//recognition.Display();
+				//recognition.AddBestCTIModelsToVisualizer(&visualizer);
+				//visualizer.Run();
 
 
 			}

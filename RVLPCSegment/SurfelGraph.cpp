@@ -2334,6 +2334,7 @@ void SurfelGraph::Save(
 			SaveSurfel(fp, iSurfel);
 }
 
+#ifdef RVLSURFEL_IMAGE_ADJACENCY //Vidovic
 void SurfelGraph::CalculateSurfelsColorHistograms(cv::Mat img, int colorspace, bool oneDimensional, const int *bindata, bool noBins)
 {
 	//Calculate color histograms for all surfels in surfel graph
@@ -2359,3 +2360,4 @@ void SurfelGraph::CalculateSurfelsColorHistograms(cv::Mat img, int colorspace, b
 	}
 
 }
+#endif
