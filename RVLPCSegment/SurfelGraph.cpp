@@ -39,6 +39,7 @@ SurfelGraph::SurfelGraph()
 	vertexDisplayLineArray.Element = NULL;
 	vertexDisplayLineArrayMem = NULL;
 
+	DisplayData.mode = RVLSURFEL_DISPLAY_MODE_SURFELS;
 	DisplayData.mouseRButtonDownUserFunction = NULL;
 	DisplayData.keyPressUserFunction = NULL;
 	DisplayData.edgeFeatureDepth = 0.01f;
@@ -1982,6 +1983,15 @@ void SurfelGraph::Display(
 	int *ColorScale,
 	unsigned char *ColorOffset)
 {
+	Figure *pFig;
+
+	if (pVisualizer->b2D)
+	{
+		pFig = pVisualizer->OpenFigure("Segmentation");
+
+		memset(pFig->pImage->imageData, 0, pFig->pImage->imageSize * sizeof(char));
+	}
+
 	unsigned char MarkColor[3];
 
 	MarkColor[0] = 0;
@@ -2003,7 +2013,7 @@ void SurfelGraph::Display(
 		color_ = nodeColor + 3 * iSurfel;
 
 		if (iSurfel == iSelectedSurfel)
-			pVisualizer->PaintPointSet(&(pSurfel->PtList), pMesh->pPolygonData, SelectionColor);
+			pVisualizer->PaintPointSet(&(pSurfel->PtList), pMesh->pPolygonData, SelectionColor, pFig);
 		else
 		{
 			RVLCOPY3VECTOR(color_, color);
@@ -2022,16 +2032,16 @@ void SurfelGraph::Display(
 				RVLSUM3VECTORS(color, ColorOffset, color);
 			}
 
-			pVisualizer->PaintPointSet(&(pSurfel->PtList), pMesh->pPolygonData, color);
+			pVisualizer->PaintPointSet(&(pSurfel->PtList), pMesh->pPolygonData, color, pFig);
 		}
 		
 		//DisplayHardEdges(pVisualizer, pMesh, iSurfel, MarkColor);
-
-		if (DisplayData.mode == RVLSURFEL_DISPLAY_MODE_FOREGROUND_BACKGROUND)
-			DisplayForegroundAndBackgroundEdges(pVisualizer, pMesh);
-		else if (DisplayData.mode == RVLSURFEL_DISPLAY_MODE_CONVEX_CONCAVE)
-			DisplayConvexAndConcaveEdges(pVisualizer, pMesh);
 	}
+
+	if (DisplayData.mode == RVLSURFEL_DISPLAY_MODE_FOREGROUND_BACKGROUND)
+		DisplayForegroundAndBackgroundEdges(pVisualizer, pMesh);
+	else if (DisplayData.mode == RVLSURFEL_DISPLAY_MODE_CONVEX_CONCAVE)
+		DisplayConvexAndConcaveEdges(pVisualizer, pMesh);
 
 	DisplayEdgeFeatures();
 }
@@ -2469,8 +2479,6 @@ void SurfelGraph::InitDisplay(
 	Mesh *pMesh,
 	void *vpDetector)
 {
-	pVisualizer->SetMesh(pMesh);
-
 	DisplayData.pMesh = pMesh;
 	DisplayData.pSurfels = this;
 	DisplayData.pVisualizer = pVisualizer;
@@ -2484,8 +2492,22 @@ void SurfelGraph::InitDisplay(
 	DisplayData.bVertices = false;
 	DisplayData.bFirstKey = true;
 
-	pVisualizer->SetMouseRButtonDownCallback(SURFEL::MouseRButtonDown, &DisplayData);
-	pVisualizer->SetKeyPressCallback(SURFEL::KeyPressCallback, &DisplayData);
+	if (pVisualizer->b3D)
+	{
+		pVisualizer->SetMesh(pMesh);
+		pVisualizer->SetMouseRButtonDownCallback(SURFEL::MouseRButtonDown, &DisplayData);
+		pVisualizer->SetKeyPressCallback(SURFEL::KeyPressCallback, &DisplayData);
+	}
+
+	if (!pMesh->bOrganizedPC)
+		pVisualizer->b2D = false;
+
+	if (pVisualizer->b2D)
+	{
+		Figure *pFig = pVisualizer->OpenFigure("Segmentation");
+
+		pFig->pImage = cvCreateImage(cvSize(pMesh->width, pMesh->height), IPL_DEPTH_8U, 3);
+	}
 }
 
 
@@ -2549,27 +2571,33 @@ void SurfelGraph::DisplayEdgeFeatures()
 {
 	Visualizer *pVisualizer = DisplayData.pVisualizer;
 
-	// Create the polydata where we will store all the geometric data
-	DisplayData.edgeFeaturesPolyData = vtkSmartPointer<vtkPolyData>::New();
+	vtkSmartPointer<vtkPoints> pts;
+	vtkSmartPointer<vtkCellArray> polyLines;
 
-	// Create a vtkPoints container and store the points in it
-	vtkSmartPointer<vtkPoints> pts = vtkSmartPointer<vtkPoints>::New();
+	if (pVisualizer->b3D)
+	{
+		// Create the polydata where we will store all the geometric data
+		DisplayData.edgeFeaturesPolyData = vtkSmartPointer<vtkPolyData>::New();
 
-	//// Create a cell array to store the lines in and add the lines to it
-	vtkSmartPointer<vtkCellArray> polyLines = vtkSmartPointer<vtkCellArray>::New();
+		// Create a vtkPoints container and store the points in it
+		pts = vtkSmartPointer<vtkPoints>::New();
+
+		//// Create a cell array to store the lines in and add the lines to it
+		polyLines = vtkSmartPointer<vtkCellArray>::New();
 
 #ifdef NEVER
-	// Create colors.
-	vtkSmartPointer<vtkUnsignedCharArray> colors =
-		vtkSmartPointer<vtkUnsignedCharArray>::New();	
+		// Create colors.
+		vtkSmartPointer<vtkUnsignedCharArray> colors =
+			vtkSmartPointer<vtkUnsignedCharArray>::New();	
 
-	colors->SetNumberOfComponents(3);
+		colors->SetNumberOfComponents(3);
 
-	unsigned char red[3] = { 255, 0, 0 };
+		unsigned char red[3] = { 255, 0, 0 };
 
-	colors->InsertNextTupleValue(red);
+		colors->InsertNextTupleValue(red);
 #endif
-	///
+		///
+	}
 
 	// Determine the total number of edge features.
 
@@ -2583,7 +2611,10 @@ void SurfelGraph::DisplayEdgeFeatures()
 
 	// Allocate polyline pointers.
 
-	vtkSmartPointer<vtkPolyLine> *polyLine = new vtkSmartPointer<vtkPolyLine>[nEdgeFeatures];
+	vtkSmartPointer<vtkPolyLine> *polyLine;
+
+	if (pVisualizer->b3D)
+		polyLine = new vtkSmartPointer<vtkPolyLine>[nEdgeFeatures];
 
 	//
 
@@ -2641,60 +2672,70 @@ void SurfelGraph::DisplayEdgeFeatures()
 
 		RVLCOPY3VECTOR(P1, P);
 
-		pts->InsertNextPoint(P);
+		if (pVisualizer->b3D)
+			pts->InsertNextPoint(P);
 
 		RVLCOPY3VECTOR(P2, P);
 
-		pts->InsertNextPoint(P);
+		if (pVisualizer->b3D)
+			pts->InsertNextPoint(P);
 
 		RVLCOPY3VECTOR(P4, P);
 
-		pts->InsertNextPoint(P);
+		if (pVisualizer->b3D)
+			pts->InsertNextPoint(P);
 
 		RVLCOPY3VECTOR(P3, P);
 
-		pts->InsertNextPoint(P);
+		if (pVisualizer->b3D)
+			pts->InsertNextPoint(P);
 
 		// Create rectangle P1-P2-P3-P4.
 
-		polyLine[iEdgeFeature] = vtkSmartPointer<vtkPolyLine>::New();
+		if (pVisualizer->b3D)
+		{
+			polyLine[iEdgeFeature] = vtkSmartPointer<vtkPolyLine>::New();
 
-		polyLine[iEdgeFeature]->GetPointIds()->SetNumberOfIds(5);
+			polyLine[iEdgeFeature]->GetPointIds()->SetNumberOfIds(5);
 
-		for (i = 0; i < 4; i++)
-			polyLine[iEdgeFeature]->GetPointIds()->SetId(i, 4 * iEdgeFeature + i);
+			for (i = 0; i < 4; i++)
+				polyLine[iEdgeFeature]->GetPointIds()->SetId(i, 4 * iEdgeFeature + i);
 
-		polyLine[iEdgeFeature]->GetPointIds()->SetId(4, 4 * iEdgeFeature);
+			polyLine[iEdgeFeature]->GetPointIds()->SetId(4, 4 * iEdgeFeature);
 
-		// Add polyline to polyLines.
+			// Add polyline to polyLines.
 
-		polyLines->InsertNextCell(polyLine[iEdgeFeature]);
+			polyLines->InsertNextCell(polyLine[iEdgeFeature]);
 
-		// Assign color to polyline.
+			// Assign color to polyline.
 
-		//colors->InsertNextTupleValue(red);
+			//colors->InsertNextTupleValue(red);
+		}
 
 		iEdgeFeature++;
 	}
 
-	// Add the points to the polydata container
-	DisplayData.edgeFeaturesPolyData->SetPoints(pts);
+	if (pVisualizer->b3D)
+	{
+		// Add the points to the polydata container
+		DisplayData.edgeFeaturesPolyData->SetPoints(pts);
 
-	// Add the lines to the polydata container
-	DisplayData.edgeFeaturesPolyData->SetLines(polyLines);
+		// Add the lines to the polydata container
+		DisplayData.edgeFeaturesPolyData->SetLines(polyLines);
 
-	// Color the lines.
-	//DisplayData.edgeFeaturesPolyData->GetCellData()->SetScalars(colors);
+		// Color the lines.
+		//DisplayData.edgeFeaturesPolyData->GetCellData()->SetScalars(colors);
 
-	// Setup the visualization pipeline
-	vtkSmartPointer<vtkPolyDataMapper> mapper =	vtkSmartPointer<vtkPolyDataMapper>::New();
+		// Setup the visualization pipeline
+		vtkSmartPointer<vtkPolyDataMapper> mapper = vtkSmartPointer<vtkPolyDataMapper>::New();
 
-	mapper->SetInputData(DisplayData.edgeFeaturesPolyData);
+		mapper->SetInputData(DisplayData.edgeFeaturesPolyData);
 
-	DisplayData.edgeFeatures = vtkSmartPointer<vtkActor>::New();
-	DisplayData.edgeFeatures->SetMapper(mapper);
+		DisplayData.edgeFeatures = vtkSmartPointer<vtkActor>::New();
+		DisplayData.edgeFeatures->SetMapper(mapper);
 
-	pVisualizer->renderer->AddActor(DisplayData.edgeFeatures);
+		pVisualizer->renderer->AddActor(DisplayData.edgeFeatures);
+	}
 }
 
 void SurfelGraph::DisplayForegroundAndBackgroundEdges(
@@ -2735,6 +2776,8 @@ void SurfelGraph::DisplayConvexAndConcaveEdges(
 	Visualizer *pVisualizer,
 	Mesh *pMesh)
 {
+	Figure *pFig = pVisualizer->OpenFigure("Segmentation");
+
 	int iSurfel, iSurfel_, iSurfel__;
 	int i;
 	int iPt, iPt_;
@@ -2817,9 +2860,9 @@ void SurfelGraph::DisplayConvexAndConcaveEdges(
 								pDescriptor = pSurfel->imgAdjacencyDescriptors.at(i);
 
 								if (pDescriptor->cupyDescriptor[0] > 0)
-									pVisualizer->PaintPoint(iPt, pMesh->pPolygonData, DisplayData.ConvexColor);
+									pVisualizer->PaintPoint(iPt, pMesh->pPolygonData, DisplayData.ConvexColor, pFig);
 								else if (pDescriptor->cupyDescriptor[0] < 0)
-									pVisualizer->PaintPoint(iPt, pMesh->pPolygonData, DisplayData.ConcaveColor);
+									pVisualizer->PaintPoint(iPt, pMesh->pPolygonData, DisplayData.ConcaveColor, pFig);
 
 								break;
 							}

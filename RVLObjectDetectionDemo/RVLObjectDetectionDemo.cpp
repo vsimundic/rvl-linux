@@ -34,7 +34,9 @@ void CreateParamList(
 	CRVLMem *pMem,
 	char **pMeshFileName,
 	char **pSequenceFileName,
-	char **pSegmentationResultsFileName)
+	char **pSegmentationResultsFileName,
+	bool &b3DVisualization,
+	bool &b2DVisualization)
 {
 	pParamList->m_pMem = pMem;
 
@@ -45,6 +47,8 @@ void CreateParamList(
 	pParamData = pParamList->AddParam("MeshFileName", RVLPARAM_TYPE_STRING, pMeshFileName);
 	pParamData = pParamList->AddParam("SequenceFileName", RVLPARAM_TYPE_STRING, pSequenceFileName);
 	pParamData = pParamList->AddParam("SegmentationResultsFileName", RVLPARAM_TYPE_STRING, pSegmentationResultsFileName);
+	pParamData = pParamList->AddParam("Visualization.3D", RVLPARAM_TYPE_BOOL, &b3DVisualization);
+	pParamData = pParamList->AddParam("Visualization.2D", RVLPARAM_TYPE_BOOL, &b2DVisualization);
 }
 
 int main(int argc, char ** argv)
@@ -66,10 +70,11 @@ int main(int argc, char ** argv)
 	char *MeshFileName = NULL;
 	char *SequenceFileName = NULL;
 	char *SegmentationResultsFileName = NULL;
+	bool b3DVisualization, b2DVisualization;
 
 	CRVLParameterList ParamList;
 
-	CreateParamList(&ParamList, &mem0, &MeshFileName, &SequenceFileName, &SegmentationResultsFileName);
+	CreateParamList(&ParamList, &mem0, &MeshFileName, &SequenceFileName, &SegmentationResultsFileName, b3DVisualization, b2DVisualization);
 
 	ParamList.LoadParams(cfgFileName);
 
@@ -167,6 +172,9 @@ int main(int argc, char ** argv)
 			objectDetector.pSurfels->NodeColors(SelectionColor);
 
 			Visualizer visualizer;
+
+			visualizer.b2D = b2DVisualization;
+			visualizer.b3D = b3DVisualization;
 
 			visualizer.Create();
 			objectDetector.pSurfels->InitDisplay(&visualizer, &(objectDetector.mesh), objectDetector.pSurfelDetector);

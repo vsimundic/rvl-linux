@@ -133,6 +133,8 @@
     <Text Include="ReadMe.txt" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Include\DisplayVector.h" />
+    <ClInclude Include="Include\Figure.h" />
     <ClInclude Include="Include\Graph.h" />
     <ClInclude Include="Include\Mesh.h" />
     <ClInclude Include="Include\ObjectGraph.h" />
@@ -147,6 +149,8 @@
     <ClInclude Include="targetver.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="DisplayVector.cpp" />
+    <ClCompile Include="Figure.cpp" />
     <ClCompile Include="Graph.cpp" />
     <ClCompile Include="Mesh.cpp" />
     <ClCompile Include="ObjectGraph.cpp" />

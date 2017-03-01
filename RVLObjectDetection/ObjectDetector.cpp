@@ -102,9 +102,9 @@ void ObjectDetector::CreateParamList()
 	ParamList.AddID(pParamData, "yes", RVLOBJECTDETECTION_FLAG_SAVE_SSF);
 	pParamData = ParamList.AddParam("Segmentation GT", RVLPARAM_TYPE_FLAG, &flags);
 	ParamList.AddID(pParamData, "yes", RVLOBJECTDETECTION_FLAG_SEGMENTATION_GT);
-	pParamData = ParamList.AddParam("SegmentToObjects", RVLPARAM_TYPE_BOOL, &bSegmentToObjects);
-	pParamData = ParamList.AddParam("ObjectAggregationLevel2", RVLPARAM_TYPE_BOOL, &bObjectAggregationLevel2);
-	pParamData = ParamList.AddParam("SVMClassifierParamsFileName", RVLPARAM_TYPE_STRING, SVMClassifierParamsFileName);
+	pParamData = ParamList.AddParam("ObjectDetector.SegmentToObjects", RVLPARAM_TYPE_BOOL, &bSegmentToObjects);
+	pParamData = ParamList.AddParam("ObjectDetector.ObjectAggregationLevel2", RVLPARAM_TYPE_BOOL, &bObjectAggregationLevel2);
+	pParamData = ParamList.AddParam("ObjectDetector.SVMClassifierParamsFileName", RVLPARAM_TYPE_STRING, SVMClassifierParamsFileName);
 }
 
 void ObjectDetector::DetectObjects(char *MeshFilePathName)
