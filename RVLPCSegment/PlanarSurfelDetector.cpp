@@ -5598,7 +5598,7 @@ void PlanarSurfelDetector::JoinSmallSurfelsToClosestNeighbors(
 
 	for (iSurfel = 0; iSurfel < pSurfels->NodeArray.n; iSurfel++, pSurfel++)
 	{
-		//if (iSurfel == 8145)
+		//if (iSurfel == 28)
 		//	int debug = 0;
 
 		if (pSurfel->size > 0 && pSurfel->size < minSurfelSize)

@@ -100,7 +100,7 @@ void ObjectDetector::CreateParamList()
 	ParamList.AddID(pParamData, "yes", RVLOBJECTDETECTION_FLAG_SAVE_PLY);
 	pParamData = ParamList.AddParam("Save SSF", RVLPARAM_TYPE_FLAG, &flags);
 	ParamList.AddID(pParamData, "yes", RVLOBJECTDETECTION_FLAG_SAVE_SSF);
-	pParamData = ParamList.AddParam("Segmentation GT", RVLPARAM_TYPE_FLAG, &flags);
+	pParamData = ParamList.AddParam("ObjectDetector.Segmentation GT", RVLPARAM_TYPE_FLAG, &flags);
 	ParamList.AddID(pParamData, "yes", RVLOBJECTDETECTION_FLAG_SEGMENTATION_GT);
 	pParamData = ParamList.AddParam("ObjectDetector.SegmentToObjects", RVLPARAM_TYPE_BOOL, &bSegmentToObjects);
 	pParamData = ParamList.AddParam("ObjectDetector.ObjectAggregationLevel2", RVLPARAM_TYPE_BOOL, &bObjectAggregationLevel2);
@@ -260,20 +260,21 @@ void ObjectDetector::Evaluate(
 	char *fileName)
 {
 #ifdef RVLSURFEL_IMAGE_ADJACENCY
-	if (bSurfelsFromSSF)
+	if (bSegmentToObjects)
 	{
-		if (bSegmentToObjects)
-		{
-			//Evaluation
-			int E[2];
-			int N = 0;
-			pObjects->CalculateOverAndUnderSegmentation_SSF(E, N, false);
-			std::cout << "Oversegmenation error: " << 100.0f * (1 - E[0] / (float)N) << "%" << std::endl;
-			std::cout << "Undersegmenation error: " << 100.0f * E[1] / (float)N << "%" << std::endl;
+		int E[2];
+		int N = 0;
 
-			if (fp)
-				fprintf(fp, "%s\t%d\t%d\t%d\n", fileName, E[0], E[1], N);
-		}
+		if (bSurfelsFromSSF)
+			pObjects->CalculateOverAndUnderSegmentation_SSF(E, N, true, false);
+		else
+			pObjects->CalculateOverAndUnderSegmentation(E, N, true, std::string(fileName), false);
+
+		std::cout << "Oversegmenation error: " << 100.0f * (1 - E[0] / (float)N) << "%" << std::endl;
+		std::cout << "Undersegmenation error: " << 100.0f * E[1] / (float)N << "%" << std::endl;
+
+		if (fp)
+			fprintf(fp, "%s\t%d\t%d\t%d\n", fileName, E[0], E[1], N);
 	}
 #endif
 }

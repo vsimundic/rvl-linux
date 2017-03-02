@@ -13,6 +13,9 @@
 #include <numeric>
 #include <queue>
 
+//#define RVLPCSEGMENT_OBJECT_GRAPH_LOG
+//#define RVLPCSEGMENT_OBJECT_GRAPH_EVALUATION_LOG
+
 /// Move to RVLQListArray.h
 
 #define RVLQLIST_APPEND2(pList, pList2)\
@@ -25,6 +28,7 @@
 
 /// Move to Graph.h
 
+//#define RVLPCSEGMENT_GRAPH_WERAGGREGATION_DEBUG
 //#define RVLPCSEGMENT_GRAPH_WERAGGREGATION_DETAILED_DEBUG
 
 namespace RVL
@@ -996,8 +1000,8 @@ void ObjectGraph::CalculateOverAndUnderSegmentation_SSF(int *E, int &N, bool use
 		//Sum false values
 		for (int i = 0; i < GTHistSize; i++)
 		{
-			if ((i == 0) && !useBackground)
-				continue;
+			//if ((i == 0) && !useBackground)
+			//	continue;
 
 			if (i != maxBin[iObject])
 				E[1] += ptrGTObjHist[i];
@@ -1059,7 +1063,12 @@ void ObjectGraph::CalculateOverAndUnderSegmentation_SSF(int *E, int &N, bool use
 }
 
 //Must be linked with the ground truth (AssignGroundTruthSegmentation per surfel). Return 'Ntrue', 'Nfalse' and 'N' needed to calculate oversegmentation (Fos = 1 - Ntrue/N) and undersegmenation (Fus =Nfalse/N) error. The asumption is that the GT object hist bin with the highest values is the correct one!!! 
-void ObjectGraph::CalculateOverAndUnderSegmentation(int *E, int &N, bool useGTNoPix, std::string GTlabImgFilename, bool useBackground)
+void ObjectGraph::CalculateOverAndUnderSegmentation(
+	int *E, 
+	int &N, 
+	bool useGTNoPix, 
+	std::string imageFileName, 
+	bool useBackground)
 {
 	//Getting GThist size and initializing GT object histogram;
 	//find a surfel that has defined GTObjHist
@@ -1072,6 +1081,11 @@ void ObjectGraph::CalculateOverAndUnderSegmentation(int *E, int &N, bool useGTNo
 			break;
 		}
 	}
+
+#ifdef RVLPCSEGMENT_OBJECT_GRAPH_EVALUATION_LOG
+	FILE *fp = fopen("C:\\RVL\\ExpRez\\SegmentationToGT.txt", "w");
+#endif
+
 	int *GTObjHistogram = new int[GTHistSize * this->NodeArray.n];	//GTObject histogam per segmented object
 	memset(GTObjHistogram, 0, GTHistSize * this->NodeArray.n * sizeof(int));
 	int *maxObj = new int[GTHistSize];	//Idx of segmented object per maximum bin
@@ -1106,6 +1120,28 @@ void ObjectGraph::CalculateOverAndUnderSegmentation(int *E, int &N, bool useGTNo
 			}
 			piElement = piElement->pNext;
 		}
+
+#ifdef RVLPCSEGMENT_OBJECT_GRAPH_EVALUATION_LOG
+		int nPtsTotal = 0;
+
+		for (int i = 0; i < GTHistSize; i++)
+			nPtsTotal += GTObjHistogram[iObject * GTHistSize + i];
+
+		if (nPtsTotal > 0)
+		{
+			fprintf(fp, "S %d: #P: %d\n", iObject, nPtsTotal);
+
+			fprintf(fp, "-----------------------------\n");
+
+			float fnPtsTotal = (float)nPtsTotal;
+
+			for (int i = 0; i < GTHistSize; i++)
+				fprintf(fp, "GTO %d: #IP: %d, perc: %lf\n", i, GTObjHistogram[iObject * GTHistSize + i], (float)GTObjHistogram[iObject * GTHistSize + i] / fnPtsTotal * 100.0f);
+
+			fprintf(fp, "\n");
+		}
+#endif
+
 	}
 
 	E[0] = 0;	//Oversegmentation values
@@ -1177,9 +1213,11 @@ void ObjectGraph::CalculateOverAndUnderSegmentation(int *E, int &N, bool useGTNo
 
 	if (useGTNoPix)	//Assumption - GT files is in the same directory as the SSF file and has name in format : SSFfilename + a + .png (label image) and SSFfilename + d + .png (depth image)
 	{
-		std::string labelImgFileName = GTlabImgFilename;
-		labelImgFileName.erase(labelImgFileName.find_last_of("."));
-		std::string depthImgFileName = labelImgFileName + "d.png";
+		std::string imageName = imageFileName;
+		imageName.erase(imageName.find_last_of("."));
+		std::string depthImgFileName = imageName + "d.png";
+		std::string labelImgFileName = imageName + "a.png";
+
 		//load GT files
 		cv::Mat GTLabImg = cv::imread(labelImgFileName);
 		cv::Mat GTDepthImg = cv::imread(depthImgFileName, cv::ImreadModes::IMREAD_ANYDEPTH);
@@ -1195,6 +1233,10 @@ void ObjectGraph::CalculateOverAndUnderSegmentation(int *E, int &N, bool useGTNo
 			}
 		}
 	}
+
+#ifdef RVLPCSEGMENT_OBJECT_GRAPH_EVALUATION_LOG
+	fclose(fp);
+#endif
 
 	//DeRef
 	delete[] GTObjHistogram;
@@ -1689,6 +1731,8 @@ bool RVL::SURFEL::objectMouseRButtonDownUserFunction(
 		pObjects->PaintObject(iObject, pData->selectionColor);
 
 		pData->iSelectedObject = iObject;
+
+		printf("Slected object: %d\n", iObject);
 
 		return true;
 	}
@@ -2606,6 +2650,55 @@ cv::Mat ObjectGraph::CreateSegmentationImage()
 	//return image
 	return coloredSegLab;
 }
+
+cv::Mat ObjectGraph::CreateSegmentationImageFromSSF()
+{
+	std::shared_ptr<SceneSegFile::SegFileElement> currSSFElement;
+	std::shared_ptr<SceneSegFile::FeatureTypeInt> pixAff;
+
+	cv::Mat coloredSegLab(480, 640, CV_8UC3, cv::Scalar::all(0));
+
+	GRAPH::AggregateNode<SURFEL::AgEdge> *pObject;
+	QLIST::Index *piElement;
+	unsigned char labSegColor[3];
+	int x = 0, y = 0;
+	RVL::QLIST::Index2 *pt;
+	srand(time(NULL));
+
+	for (int iObject = 0; iObject < NodeArray.n; iObject++)
+	{
+		//Generate object color
+		labSegColor[0] = rand() % 255;
+		labSegColor[1] = rand() % 255;
+		labSegColor[2] = rand() % 255;
+
+		pObject = NodeArray.Element + iObject;
+
+		piElement = pObject->elementList.pFirst;
+
+		while (piElement)
+		{
+			currSSFElement = ssf->elements.at(piElement->Idx);
+
+			pixAff = std::dynamic_pointer_cast<SceneSegFile::FeatureTypeInt>(currSSFElement->features.features.at(SceneSegFile::FeaturesList::PixelAffiliation));
+
+			for (int k = 0; k < pixAff->size; k++)
+			{
+				y = floor(pixAff->data[k] / 640.0);
+				x = floor(pixAff->data[k] - 640.0 * y);
+				coloredSegLab.at<cv::Vec3b>(y, x)[0] = labSegColor[0];
+				coloredSegLab.at<cv::Vec3b>(y, x)[1] = labSegColor[1];
+				coloredSegLab.at<cv::Vec3b>(y, x)[2] = labSegColor[2];
+			}
+
+			piElement = piElement->pNext;
+		}
+
+	}
+	//return image
+	return coloredSegLab;
+}
+
 void ObjectGraph::SaveSegmentationLabelImg(std::string filename)
 {
 	cv::Mat labelImg(480, 640, CV_8UC1, cv::Scalar::all(0));

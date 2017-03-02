@@ -223,6 +223,9 @@ void SurfelGraph::ImageAdjacency(
 {
 	Surfel *pSurfel = NodeArray.Element + iSurfel;
 
+	if (pSurfel->BoundaryArray.n == 0)
+		return;
+
 	//find largest boundary (most probable outer boundary)
 	int boundary = 0;
 	int boundarySize = 0;

@@ -154,7 +154,7 @@ int main(int argc, char ** argv)
 			{
 				//Visualization
 				cv::imshow("Colored surfel image", objectDetector.pSurfels->GenColoredSurfelImgFromSSF(objectDetector.pObjects->ssf));
-				cv::imshow("Colored segmentation image", objectDetector.pObjects->CreateSegmentationImage());
+				cv::imshow("Colored segmentation image", objectDetector.pObjects->CreateSegmentationImageFromSSF());
 				cv::waitKey();
 			}
 		}
@@ -180,14 +180,24 @@ int main(int argc, char ** argv)
 			objectDetector.pSurfels->InitDisplay(&visualizer, &(objectDetector.mesh), objectDetector.pSurfelDetector);
 
 #ifdef RVLSURFEL_IMAGE_ADJACENCY
-			//if (objectDetector.bSegmentToObjects)
-			//{
-			//	objectDetector.pObjects->InitDisplay(&visualizer, &(objectDetector.mesh), SelectionColor);
-			//	objectDetector.pObjects->Display();
-			//}
-			//else
+			if (objectDetector.bSegmentToObjects)
+			{
+				objectDetector.pObjects->InitDisplay(&visualizer, &(objectDetector.mesh), SelectionColor);
+				objectDetector.pObjects->Display();
+			}
+			else
 #endif
 				objectDetector.pSurfels->Display(&visualizer, &(objectDetector.mesh));
+
+#ifdef RVLSURFEL_IMAGE_ADJACENCY
+			if (objectDetector.bSegmentToObjects)
+			{
+				std::string segmentationImageFileName(MeshFileName);
+				segmentationImageFileName.erase(segmentationImageFileName.find_last_of("."));
+				segmentationImageFileName += "OGLabels.png";
+				objectDetector.pObjects->SaveSegmentationLabelImg(segmentationImageFileName);
+			}
+#endif
 
 			//detector.DisplaySoftEdges(&visualizer, &mesh, &surfels, SelectionColor);
 			visualizer.Run();
