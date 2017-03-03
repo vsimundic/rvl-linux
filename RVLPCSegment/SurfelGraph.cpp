@@ -14,6 +14,46 @@
 //#include <Eigen\Eigenvalues>
 
 //#define RVLSURFELGRAPH_VERTEX_DETECTION_NEW
+#define RVLSURFELGRAPH_IMAGE_ADJACENCY_NEW
+
+// Move to RVL3DTools.h.
+
+#define RVL_PROJECT_3DPOINT_TO_PLANE(PSrc, N, d, PTgt)\
+{\
+	fTmp = RVLDOTPRODUCT3(N, PSrc) - d;\
+	RVLSCALE3VECTOR(N, fTmp, PTgt);\
+	RVLDIF3VECTORS(PSrc, PTgt, PTgt);\
+}
+
+///
+
+#define RVLSURFELGRAPH_IMAGE_ADJACENCY_ADD_CONNECTION(pSurfel, pOtherSurfel, iOtherSurfel, surfelIdx, dist, nImageAdjacencyRelations, pMem, desc, bVisited, bNeighbor)\
+{\
+	if (surfelIdx[iOtherSurfel] < 0)\
+	{\
+		bNeighbor = true;\
+		nImageAdjacencyRelations++;\
+		RVLMEM_ALLOC_STRUCT(pMem, SurfelAdjecencyDescriptors, desc);\
+		desc->minDist = dist;\
+		desc->cupyDescriptor[0] = 0.0;\
+		desc->cupyDescriptor[1] = 0.0;\
+		desc->cupyDescriptor[2] = 0.0;\
+		desc->cupyDescriptor[3] = 0.0;\
+		desc->commonBoundaryLength = 0;\
+		surfelIdx[iOtherSurfel] = pSurfel->imgAdjacency.size();\
+		pSurfel->imgAdjacency.push_back(pOtherSurfel);\
+		pSurfel->imgAdjacencyDescriptors.push_back(desc);\
+		pOtherSurfel->imgAdjacency.push_back(pSurfel);\
+		pOtherSurfel->imgAdjacencyDescriptors.push_back(desc);\
+	}\
+	else\
+	{\
+		desc = pSurfel->imgAdjacencyDescriptors.at(surfelIdx[iOtherSurfel]);\
+		if (dist < desc->minDist)\
+			desc->minDist = dist;\
+	}\
+	bVisited[iOtherSurfel] = true;\
+}
 
 using namespace RVL;
 using namespace SURFEL;
@@ -253,6 +293,9 @@ void SurfelGraph::ImageAdjacency(
 		surfelIdx[iOtherSurfel] = i;
 	}
 
+	float *N = pSurfel->N;
+	float d = pSurfel->d;
+
 	//run through edges
 	Array<MeshEdgePtr *> BoundaryArray = pSurfel->BoundaryArray.Element[boundary];
 	MeshEdgePtr *pCurrEdge;
@@ -260,10 +303,19 @@ void SurfelGraph::ImageAdjacency(
 	SurfelAdjecencyDescriptors *desc;
 	int iBoundary, iPointEdge;
 	int iPt, iPt2, x, y;
-	double tempDist;
+	float dist;
 	Point *pPt, *pPt2;
-	float *P, *P2;
+	float *P, *P2, *N2;
+	float P_[3], P2_[3];
 	float dP[3];
+	MeshEdgePtr *pEdgePtr;
+	bool bNeighbor;
+	float fTmp;
+	float V[3];
+#ifdef RVLSURFELGRAPH_IMAGE_ADJACENCY_NEW
+	float minDist;
+	int iNeighbor;
+#endif
 
 	for (iPointEdge = 0; iPointEdge < BoundaryArray.n; iPointEdge++)
 	{
@@ -275,72 +327,107 @@ void SurfelGraph::ImageAdjacency(
 
 		P = pPt->P;
 
-		y = floor(iPt / 640.0);
-		x = floor(iPt - 640.0 * y);
+		RVL_PROJECT_3DPOINT_TO_PLANE(P, N, d, P_);
 
-		//Running through point neighbourhood
-		for (int yy = y - imageAdjacencyThr; yy < y + imageAdjacencyThr; yy++)
+		bNeighbor = false;
+
+#ifdef RVLSURFELGRAPH_IMAGE_ADJACENCY_NEW
+		pEdgePtr = pPt->EdgeList.pFirst;
+
+		while (pEdgePtr)
 		{
-			if ((yy < 0) || (yy >= 480))
-				continue;
-			for (int xx = x - imageAdjacencyThr; xx < x + imageAdjacencyThr; xx++)
+			iPt2 = RVLPCSEGMENT_GRAPH_GET_OPPOSITE_NODE(pEdgePtr);
+
+			iOtherSurfel = surfelMap[iPt2];
+
+			if (iOtherSurfel >= 0 && iOtherSurfel < NodeArray.n)
 			{
-				if ((xx < 0) || (xx >= 640))
-					continue;
-				iPt2 = yy * 640 + xx;
-				pPt2 = pMesh->NodeArray.Element + iPt2;
-				P2 = pPt2->P;
-				iOtherSurfel = surfelMap[iPt2];
-
-				if (iOtherSurfel < 0 || iOtherSurfel >= NodeArray.n)
-					continue;
-
 				pOtherSurfel = NodeArray.Element + iOtherSurfel;	//surfel owner of the pixel
-				
+
 				if ((pOtherSurfel->size < 640 * 480) && (pOtherSurfel->size > 1) && (iOtherSurfel != iSurfel))
 				{
-					if (surfelIdx[iOtherSurfel] < 0)
-					{
-						nImageAdjacencyRelations++;
+					pPt2 = pMesh->NodeArray.Element + iPt2;
 
-						//calculate min dist
-						//preallocate the adjacency descriptor for future use
-						RVLMEM_ALLOC_STRUCT(pMem, SurfelAdjecencyDescriptors, desc);
+					P2 = pPt2->P;
 
-						RVLDIF3VECTORS(P2, P, dP);
+					N2 = pOtherSurfel->N;
 
-						desc->minDist = RVLDOTPRODUCT3(dP, dP);
-						desc->cupyDescriptor[0] = 0.0;
-						desc->cupyDescriptor[1] = 0.0;
-						desc->cupyDescriptor[2] = 0.0;
-						desc->cupyDescriptor[3] = 0.0;
-						desc->commonBoundaryLength = 0;
+					RVL_PROJECT_3DPOINT_TO_PLANE(P2, N2, pOtherSurfel->d, P2_);
 
-						surfelIdx[iOtherSurfel] = pSurfel->imgAdjacency.size();
+					RVLDIF3VECTORS(P2_, P_, dP);
 
-						pSurfel->imgAdjacency.push_back(pOtherSurfel);	//push surfel pointer on the list
-						pSurfel->imgAdjacencyDescriptors.push_back(desc);	//push descriptor on the list
+					dist = RVLDOTPRODUCT3(dP, dP);
 
-						pOtherSurfel->imgAdjacency.push_back(pSurfel);
-						pOtherSurfel->imgAdjacencyDescriptors.push_back(desc);
-
-						//push to other surfel
-					}
-					else
-					{
-						desc = pSurfel->imgAdjacencyDescriptors.at(surfelIdx[iOtherSurfel]);	//get related descriptor
-
-						RVLDIF3VECTORS(P2, P, dP);
-
-						tempDist = RVLDOTPRODUCT3(dP, dP);
-						if (tempDist < desc->minDist)	//update if the new one is smaller
-							desc->minDist = tempDist;
-					}
-
-					bVisited[iOtherSurfel] = true;
+					RVLSURFELGRAPH_IMAGE_ADJACENCY_ADD_CONNECTION(pSurfel, pOtherSurfel, iOtherSurfel, surfelIdx, dist, nImageAdjacencyRelations, pMem, desc, bVisited, bNeighbor);
 				}
 			}
-		}	//Running through point neighbourhood
+
+			pEdgePtr = pEdgePtr->pNext;
+		}
+
+		if (!bNeighbor)
+		{
+			minDist = 0.0f;
+			iNeighbor = -1;
+#endif
+
+			y = floor(iPt / 640.0);
+			x = floor(iPt - 640.0 * y);
+
+			//Running through point neighbourhood
+			for (int yy = y - imageAdjacencyThr; yy < y + imageAdjacencyThr; yy++)
+			{
+				if ((yy < 0) || (yy >= 480))
+					continue;
+				for (int xx = x - imageAdjacencyThr; xx < x + imageAdjacencyThr; xx++)
+				{
+					if ((xx < 0) || (xx >= 640))
+						continue;
+					iPt2 = yy * 640 + xx;
+
+					iOtherSurfel = surfelMap[iPt2];
+
+					if (iOtherSurfel < 0 || iOtherSurfel >= NodeArray.n)
+						continue;
+
+					pOtherSurfel = NodeArray.Element + iOtherSurfel;	//surfel owner of the pixel
+
+					if ((pOtherSurfel->size < 640 * 480) && (pOtherSurfel->size > 1) && (iOtherSurfel != iSurfel))
+					{
+						pPt2 = pMesh->NodeArray.Element + iPt2;
+
+						P2 = pPt2->P;
+
+						N2 = pOtherSurfel->N;
+
+						RVL_PROJECT_3DPOINT_TO_PLANE(P2, N2, pOtherSurfel->d, P2_);
+
+						RVLDIF3VECTORS(P2_, P_, dP);
+
+						dist = RVLDOTPRODUCT3(dP, dP);
+
+#ifdef RVLSURFELGRAPH_IMAGE_ADJACENCY_NEW
+						if(iNeighbor < 0 || dist < minDist)
+						{
+							minDist = dist;
+							iNeighbor = iOtherSurfel;
+						}							
+#else
+						RVLSURFELGRAPH_IMAGE_ADJACENCY_ADD_CONNECTION(pSurfel, pOtherSurfel, iOtherSurfel, surfelIdx, dist, nImageAdjacencyRelations, pMem, desc, bVisited, bNeighbor);
+#endif
+					}
+				}
+			}	//Running through point neighbourhood
+
+#ifdef RVLSURFELGRAPH_IMAGE_ADJACENCY_NEW
+			if (iNeighbor >= 0)
+			{
+				pOtherSurfel = NodeArray.Element + iNeighbor;
+
+				RVLSURFELGRAPH_IMAGE_ADJACENCY_ADD_CONNECTION(pSurfel, pOtherSurfel, iNeighbor, surfelIdx, minDist, nImageAdjacencyRelations, pMem, desc, bVisited, bNeighbor);
+			}
+		}	// if (!bNeighbor)
+#endif
 
 		// Identify adjacent edge features.
 
@@ -350,35 +437,9 @@ void SurfelGraph::ImageAdjacency(
 
 			if (iOtherSurfel >= 0 && iOtherSurfel < NodeArray.n)
 			{
-				if (surfelIdx[iOtherSurfel] < 0)
-				{
-					nImageAdjacencyRelations++;
+				pOtherSurfel = NodeArray.Element + iOtherSurfel;	//surfel owner of the pixel
 
-					//calculate min dist
-					//preallocate the adjacency descriptor for future use
-					RVLMEM_ALLOC_STRUCT(pMem, SurfelAdjecencyDescriptors, desc);
-
-					desc->cupyDescriptor[0] = 0.0;
-					desc->cupyDescriptor[1] = 0.0;
-					desc->cupyDescriptor[2] = 0.0;
-					desc->cupyDescriptor[3] = 0.0;
-					desc->commonBoundaryLength = 0;
-					desc->minDist = 0.0;
-
-					surfelIdx[iOtherSurfel] = pSurfel->imgAdjacency.size();
-
-					pOtherSurfel = NodeArray.Element + iOtherSurfel;	//surfel owner of the pixel
-
-					pSurfel->imgAdjacency.push_back(pOtherSurfel);	//push surfel pointer on the list
-					pSurfel->imgAdjacencyDescriptors.push_back(desc);	//push descriptor on the list
-
-					pOtherSurfel->imgAdjacency.push_back(pSurfel);
-					pOtherSurfel->imgAdjacencyDescriptors.push_back(desc);
-
-					//push to other surfel
-				}
-
-				bVisited[iOtherSurfel] = true;
+				RVLSURFELGRAPH_IMAGE_ADJACENCY_ADD_CONNECTION(pSurfel, pOtherSurfel, iOtherSurfel, surfelIdx, 0.0f, nImageAdjacencyRelations, pMem, desc, bVisited, bNeighbor);
 			}
 		}
 
