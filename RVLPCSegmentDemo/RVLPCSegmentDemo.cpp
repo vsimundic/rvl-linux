@@ -33,6 +33,9 @@ using namespace RVL;
 #include "RVLPCSegmentCreateTrainingData.h"
 
 void RunMainProg(
+	SurfelGraph &surfels,
+	PlanarSurfelDetector &detector,
+	SURFEL::ObjectGraph &objects,
 	CRVLMem *mem0, 
 	CRVLMem *mem, 
 	DWORD flags, 
@@ -243,6 +246,34 @@ int main(int argc, char ** argv)
 	if (flags & RVLPCSEGMENT_DEMO_FLAG_SAVE_SSF)
 		flags |= RVLPCSEGMENT_DEMO_FLAG_SEGMENTATION_GT;
 
+	SurfelGraph surfels;
+
+	surfels.pMem = &mem;
+
+	surfels.CreateParamList(&mem0);
+
+	surfels.ParamList.LoadParams("RVLPCSegmentDemo.cfg");
+
+	PlanarSurfelDetector detector;
+
+	detector.CreateParamList(&mem0);
+
+	detector.ParamList.LoadParams("RVLPCSegmentDemo.cfg");
+
+	detector.pTimer = new CRVLTimer;
+
+	SURFEL::ObjectGraph objects;
+
+	objects.CreateParamList(&mem0);
+
+	objects.ParamList.LoadParams("RVLPCSegmentDemo.cfg");
+
+	if (objects.relationClassifier == RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_SVM)
+	{
+		std::cout << "Initializing SVM Classifier!" << std::endl;
+		objects.InitSVMClassifier(SVMClassifierParamsFileName);
+	}
+
 	//DEL START
 	bool bSequence = (SequenceFileName != NULL) ? true : false;
 
@@ -266,7 +297,7 @@ int main(int argc, char ** argv)
 
 			printf("Scene %s...\n", fileName);
 
-			RunMainProg(&mem0, &mem, flags, filePath, SVMClassifierParamsFileName, bObjectAggregationLevel2, bSegmentToObjects, bSequence, fp, fileName);
+			RunMainProg(surfels, detector, objects, &mem0, &mem, flags, filePath, SVMClassifierParamsFileName, bObjectAggregationLevel2, bSegmentToObjects, bSequence, fp, fileName);
 
 			printf("Scene %s...finished!\n\n", fileName);
 		}
@@ -277,10 +308,12 @@ int main(int argc, char ** argv)
 	else
 	{
 		//Run single file
-		RunMainProg(&mem0, &mem, flags, MeshFileName, SVMClassifierParamsFileName, bObjectAggregationLevel2, bSegmentToObjects, bSequence, fp, MeshFileName);
+		RunMainProg(surfels, detector, objects, &mem0, &mem, flags, MeshFileName, SVMClassifierParamsFileName, bObjectAggregationLevel2, bSegmentToObjects, bSequence, fp, MeshFileName);
 	}
 
-
+	// free memory
+	if (detector.pTimer)
+		delete detector.pTimer;
 
 	//DEL END
 	if (MeshFileName)
@@ -300,6 +333,9 @@ int main(int argc, char ** argv)
 }
 
 void RunMainProg(
+	SurfelGraph &surfels,
+	PlanarSurfelDetector &detector,
+	SURFEL::ObjectGraph &objects,
 	CRVLMem *mem0, 
 	CRVLMem *mem, 
 	DWORD flags, 
@@ -315,22 +351,9 @@ void RunMainProg(
 
 	bool bSurfelsFromSSF = false;
 
-	SurfelGraph surfels;
-	SURFEL::ObjectGraph objects;
-	PlanarSurfelDetector detector;
-	Mesh mesh;
-
-	objects.CreateParamList(mem0);
-
-	objects.ParamList.LoadParams("RVLPCSegmentDemo.cfg");
-
-	if (objects.relationClassifier == RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_SVM)
-	{		
-		std::cout << "Initializing SVM Classifier!" << std::endl;
-		objects.InitSVMClassifier(SVMClassifierParamsFileName);
-	}
-
 	char *fileExtension = RVLGETFILEEXTENSION(MeshFilePathName);
+
+	Mesh mesh;
 
 	if (strcmp(fileExtension, "ssf") == 0)
 	{
@@ -372,23 +395,11 @@ void RunMainProg(
 		else
 			printf("ERROR: Mesh can't be created!\n");
 
-		// Segment mesh to surfels.		
-
-		surfels.pMem = mem;
+		// Segment mesh to surfels.				
 
 		surfels.Init(&mesh);
 
-		surfels.CreateParamList(mem0);
-
-		surfels.ParamList.LoadParams("RVLPCSegmentDemo.cfg");		
-
-		detector.CreateParamList(mem0);
-
-		detector.ParamList.LoadParams("RVLPCSegmentDemo.cfg");
-
-		detector.Init(&mesh, &surfels, mem);
-
-		detector.pTimer = new CRVLTimer;
+		detector.Init(&mesh, &surfels, mem);		
 
 		printf("Segmentation to surfels... ");
 
@@ -424,7 +435,7 @@ void RunMainProg(
 				if (pSurfel->bEdge)
 					continue;
 
-				DetermineImgAdjDescriptors(pSurfel, &mesh);
+				surfels.DetermineImgAdjDescriptors(pSurfel, &mesh);
 			}
 
 			objects.Create(&surfels);
@@ -443,7 +454,7 @@ void RunMainProg(
 			ssfFileName += ".ssf";
 
 			std::cout << "Saving SSF!" << std::endl;
-			GenerateSSF(&surfels, ssfFileName, detector.minSurfelSize, false);
+			surfels.GenerateSSF(ssfFileName, detector.minSurfelSize, false);
 			std::cout << "Saved!" << std::endl;
 		}
 #endif
@@ -477,12 +488,12 @@ void RunMainProg(
 			////Filko
 			//objects.DetermineObjectConvexityData(0.005, 0.5);
 			//ObjectAggregationLevel2(&objects, &surfels, &mesh, MeshFileName);
-			cv::imshow("Colored object image", GenColoredSegmentationImgFromObjectGraph(&objects));
+			cv::imshow("Colored object image", objects.CreateSegmentationImage());
 			cv::waitKey(1);
 			//VisualizeObjectGraphVertexPointCloud(&objects, 100);
 			objects.DetermineObjectConvexityData(0.015, 0.1);
 			objects.ObjectAggregationLevel2_ViaObjectPairConvexity(0.015, 0.77, 0.75, 300, true);
-			cv::imshow("New Colored object image", GenColoredSegmentationImgFromObjectGraph(&objects));
+			cv::imshow("New Colored object image", objects.CreateSegmentationImage());
 			cv::waitKey(1);
 			////
 			//Evaluation
@@ -523,8 +534,8 @@ void RunMainProg(
 					fclose(fp);
 
 				//Visualization
-				cv::imshow("Colored surfel image", GenColoredSurfelImgFromSSF(objects.ssf));
-				cv::imshow("Colored segmentation image", GenColoredSegmentationImgFromObjectGraph(&objects));
+				cv::imshow("Colored surfel image", surfels.GenColoredSurfelImgFromSSF(objects.ssf));
+				cv::imshow("Colored segmentation image", objects.CreateSegmentationImage());
 			cv::waitKey();
 		}
 
@@ -565,11 +576,4 @@ void RunMainProg(
 
 		}
 	}
-
-	// free memory
-	if (detector.pTimer)
-		delete detector.pTimer;
-
-
-
 }

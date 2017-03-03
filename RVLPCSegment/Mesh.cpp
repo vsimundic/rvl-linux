@@ -18,6 +18,7 @@ using namespace RVL;
 Mesh::Mesh()
 {
 	normalEstimationRadius = 10.0f;
+	bOrganizedPC = false;
 #ifdef RVLMESH_BOUNDARY_DEBUG
 	debugState = 1;
 #endif
@@ -117,6 +118,7 @@ bool Mesh::CreateOrderedMeshFromPolyData()
 		pointData->GetTupleValue(iPt, pPt->P);
 		normalPointData->GetTupleValue(iPt, pPt->N);
 		RVLNORM3(pPt->N, fTmp);
+		pPt->flags = 0x00;
 	}
 
 	// maxnPolygonVertices <- max. no. of vertices per polygon
@@ -537,11 +539,11 @@ bool Mesh::CreateOrderedMeshFromPolyData()
 			pVertexEdgeIdx = pVertexEdgeIdx->pNext;
 		}
 
-		if (nEdges < 2)
-			int debug = 0;
+		//if (nEdges < 2)
+		//	int debug = 0;
 
-		if (nBoundaryEdges > 2)
-			int debug = 0;
+		//if (nBoundaryEdges > 2)
+		//	int debug = 0;
 
 		// If no boundary edge is connected to vertex pPt, then the first edge in its edge list can be any edge connected to it.
 

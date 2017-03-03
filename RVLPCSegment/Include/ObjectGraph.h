@@ -6,11 +6,10 @@
 #include <set>
 #include "opencv2\opencv.hpp"
 
-//#define RVLPCSEGMENT_OBJECT_GRAPH_LOG
-
 #define RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_HEURISTIC	0
 #define RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_SVM			1
 #define RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_NLMC		2
+#define RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_NLMC2		3
 
 namespace RVL
 {
@@ -112,6 +111,8 @@ namespace RVL
 			void WriteSurfelDataToFile(FILE *fp);
 			void WriteObjectDataToFile(FILE *fp);
 			void InitSVMClassifier(char *svmParamsFileName);	//Nyarko
+			cv::Mat CreateSegmentationImage();
+			cv::Mat CreateSegmentationImageFromSSF();
 			void Debug();
 
 		public:

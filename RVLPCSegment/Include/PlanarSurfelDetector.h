@@ -14,7 +14,7 @@
 #define RVLPLANARSURFELDETECTOR_POLYGONALIZE_BOUNDARY
 //#define RVLPLANARSURFELDETECTOR_POLYGONALIZE_BOUNDARY_2
 
-//#define RVLPLANARSURFELDETECTOR_PSEUDO_RANDOM_DEBUG
+#define RVLPLANARSURFELDETECTOR_PSEUDO_RANDOM_DEBUG //RANDOM DATOTEKA
 //#define RVLPLANARSURFELDETECTOR_CONNECTED_COMPONENT_DEBUG
 //#define RVLPLANARSURFELDETECTOR_G_REGION_DEBUG
 //#define RVLPLANARSURFELDETECTOR_EDGE_BOUNDARY_DEBUG
@@ -160,6 +160,12 @@ namespace RVL
 			unsigned char *edgeFlags;
 			int *map;
 			PlanarSurfelDetector *pPSD;
+		};
+
+		struct Interval
+		{
+			float min;
+			float max;
 		};
 
 		int RegionGrowingOperation(
@@ -580,6 +586,8 @@ namespace RVL
 		float maxEdgeFeatureConcavity;
 		float maxRange;
 		int maxAttackSize;
+		int edgeClassHalfWinSize;
+		float edgeClassDepthDiscontinuityThr;
 		bool bJoinSmallSurfelsToClosestNeighbors;
 		unsigned char *mProcessed;
 		CRVLTimer *pTimer;
@@ -618,6 +626,8 @@ namespace RVL
 		float dLineCut;
 		QList<QLIST::Index> lineCutBuff;
 #endif
+		PSD::Interval *edgeClassDepthOccupancy;
+		Array<int> iEdgeClassDepthOccupancyBin;
 		FILE *fpDebugPts;
 		FILE *fpDebugEdges;
 	};

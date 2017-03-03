@@ -20,64 +20,79 @@ Visualizer::Visualizer()
 	normalLength = 1.0;
 	bNormals = false;
 	bNormalsVisible = false;
+	b3D = true;
+	b2D = false;
 }
 
 
 Visualizer::~Visualizer()
 {
+	int iFig;
+	Figure *pFig;
+
+	for (iFig = 0; iFig < figures.size(); iFig++)
+	{
+		pFig = figures.at(iFig);
+
+		delete pFig;
+	}
 }
 
 
 void Visualizer::Create()
 {
 	// Initialize VTK.
-	renderer = vtkSmartPointer<vtkRenderer>::New();
-	window = vtkSmartPointer<vtkRenderWindow>::New();
-	interactor = vtkSmartPointer<vtkRenderWindowInteractor>::New();
-	window->AddRenderer(renderer);
-	window->SetSize(800, 600);
-	interactor->SetRenderWindow(window);
-	style = vtkSmartPointer<vtkInteractorStyleTrackballCamera>::New();
-	interactor->SetInteractorStyle(style);
-	renderer->SetBackground(0.5294, 0.8078, 0.9803);
 
-	////Mapper
-	//map = vtkSmartPointer<vtkPolyDataMapper>::New();
-	//map->SetInputData(pd);		// outside
-	////map->SetInputConnection(polyDataNormals->GetOutputPort());
-	//map->InterpolateScalarsBeforeMappingOff();
+	if (b3D)
+	{
+		renderer = vtkSmartPointer<vtkRenderer>::New();
+		window = vtkSmartPointer<vtkRenderWindow>::New();
+		interactor = vtkSmartPointer<vtkRenderWindowInteractor>::New();
+		window->AddRenderer(renderer);
+		window->SetSize(800, 600);
+		interactor->SetRenderWindow(window);
+		style = vtkSmartPointer<vtkInteractorStyleTrackballCamera>::New();
+		interactor->SetInteractorStyle(style);
+		renderer->SetBackground(0.5294, 0.8078, 0.9803);
 
-	////Actor
-	//actor = vtkSmartPointer<vtkActor>::New();
-	//actor->SetMapper(map);
+		////Mapper
+		//map = vtkSmartPointer<vtkPolyDataMapper>::New();
+		//map->SetInputData(pd);		// outside
+		////map->SetInputConnection(polyDataNormals->GetOutputPort());
+		//map->InterpolateScalarsBeforeMappingOff();
 
-	////Insert actor
-	//renderer->AddActor(actor);
+		////Actor
+		//actor = vtkSmartPointer<vtkActor>::New();
+		//actor->SetMapper(map);
 
-	//Point picker
-	pointPicker = vtkSmartPointer<vtkPointPicker>::New();
-	interactor->SetPicker(pointPicker);
+		////Insert actor
+		//renderer->AddActor(actor);
 
-	////Text
-	text = vtkSmartPointer<vtkCornerAnnotation>::New();
-	text->SetLinearFontScaleFactor(2);
-	text->SetNonlinearFontScaleFactor(1);
-	text->SetMaximumFontSize(15);
-	//text->SetText(0, "Text...");
-	text->GetTextProperty()->SetColor(1, 1, 0);
-	renderer->AddViewProp(text);
+		//Point picker
+		pointPicker = vtkSmartPointer<vtkPointPicker>::New();
+		interactor->SetPicker(pointPicker);
 
-	////Keypress callback
-	//keypressCallback = vtkSmartPointer<vtkCallbackCommand>::New();
-	//keypressCallback->SetCallback(KeyPressCallback);
-	//keypressCallback->SetClientData(&DisplayData);
-	//interactor->AddObserver(vtkCommand::KeyPressEvent, keypressCallback);
+		////Text
+		text = vtkSmartPointer<vtkCornerAnnotation>::New();
+		text->SetLinearFontScaleFactor(2);
+		text->SetNonlinearFontScaleFactor(1);
+		text->SetMaximumFontSize(15);
+		//text->SetText(0, "Text...");
+		text->GetTextProperty()->SetColor(1, 1, 0);
+		renderer->AddViewProp(text);
 
-	////RightMouseButton callback
-	//mouseRButtonDownCallback = vtkSmartPointer<vtkCallbackCommand>::New();
-	//mouseRButtonDownCallback->SetCallback(MouseRButtonDown);
-	//mouseRButtonDownCallback->SetClientData(&DisplayData);
-	//interactor->AddObserver(vtkCommand::RightButtonPressEvent, mouseRButtonDownCallback);
+		////Keypress callback
+		//keypressCallback = vtkSmartPointer<vtkCallbackCommand>::New();
+		//keypressCallback->SetCallback(KeyPressCallback);
+		//keypressCallback->SetClientData(&DisplayData);
+		//interactor->AddObserver(vtkCommand::KeyPressEvent, keypressCallback);
+
+		////RightMouseButton callback
+		//mouseRButtonDownCallback = vtkSmartPointer<vtkCallbackCommand>::New();
+		//mouseRButtonDownCallback->SetCallback(MouseRButtonDown);
+		//mouseRButtonDownCallback->SetClientData(&DisplayData);
+		//interactor->AddObserver(vtkCommand::RightButtonPressEvent, mouseRButtonDownCallback);
+	}
 }
 
 
@@ -251,39 +266,92 @@ void Visualizer::SetText(char * textIn)
 
 void Visualizer::Run()
 {
-	//Rendering
+	if (b3D)
+	{
+		//Rendering
 
-	renderer->ResetCamera();
-	window->Render();
+		renderer->ResetCamera();
+		window->Render();
 
-	//Start interactor //Need a way to stop it!
-	window->GetInteractor()->Start();
+		//Start interactor //Need a way to stop it!
+		window->GetInteractor()->Start();
+	}
+
+	if (b2D)
+	{
+		int iFig;
+
+		for (iFig = 0; iFig < figures.size(); iFig++)
+			ShowFigure(figures.at(iFig));
+
+		cv::waitKey();
+	}
 }
 
 void Visualizer::PaintPoint(
 	int iPt,
 	vtkSmartPointer<vtkPolyData> &pd,
-	unsigned char *Color)
+	unsigned char *Color,
+	Figure *pFig)
 {
-	vtkSmartPointer<vtkUnsignedCharArray> rgbPointData = rgbPointData->SafeDownCast(pd->GetPointData()->GetArray("RGB"));
+	if (b3D)
+	{
+		vtkSmartPointer<vtkUnsignedCharArray> rgbPointData = rgbPointData->SafeDownCast(pd->GetPointData()->GetArray("RGB"));
 
-	rgbPointData->SetTupleValue(iPt, Color);
+		rgbPointData->SetTupleValue(iPt, Color);
+	}
+
+	if (b2D)
+	{
+		int width = pFig->pImage->width;
+
+		int widthStep = pFig->pImage->widthStep;
+
+		char *pPixArray = pFig->pImage->imageData;
+
+		int u, v;
+		char *pPix;
+
+		RVLVISUALIZER_SET_PIXEL_COLOR2(pPixArray, iPt, width, widthStep, Color, u, v, pPix);
+	}
 }
 
 void Visualizer::PaintPointSet(
 	QList<QLIST::Index2> *piPtList,
 	vtkSmartPointer<vtkPolyData> &pd,
-	unsigned char *Color)
+	unsigned char *Color,
+	Figure *pFig)
 {
 	vtkSmartPointer<vtkUnsignedCharArray> rgbPointData;
 
-	rgbPointData = rgbPointData->SafeDownCast(pd->GetPointData()->GetArray("RGB"));
+	if (b3D)
+		rgbPointData = rgbPointData->SafeDownCast(pd->GetPointData()->GetArray("RGB"));
+
+	int widthStep;
+	char *pPixArray;
+	int width;
+	
+	if (b2D)
+	{
+		width = pFig->pImage->width;
+
+		widthStep = pFig->pImage->widthStep;
+
+		pPixArray = pFig->pImage->imageData;
+	}
+
+	int u, v;
+	char *pPix;
 
 	QLIST::Index2 *pPtIdx = piPtList->pFirst;
 
 	while (pPtIdx)
 	{
-		rgbPointData->SetTupleValue(pPtIdx->Idx, Color);
+		if (b3D)
+			rgbPointData->SetTupleValue(pPtIdx->Idx, Color);
+
+		if (b2D)
+			RVLVISUALIZER_SET_PIXEL_COLOR2(pPixArray, pPtIdx->Idx, width, widthStep, Color, u, v, pPix);
 
 		pPtIdx = pPtIdx->pNext;
 	}
@@ -292,17 +360,39 @@ void Visualizer::PaintPointSet(
 void Visualizer::PaintPointSet(
 	QList<QLIST::Index> *piPtList,
 	vtkSmartPointer<vtkPolyData> &pd,
-	unsigned char *Color)
+	unsigned char *Color,
+	Figure *pFig)
 {
 	vtkSmartPointer<vtkUnsignedCharArray> rgbPointData;
 
-	rgbPointData = rgbPointData->SafeDownCast(pd->GetPointData()->GetArray("RGB"));
+	if (b3D)
+		rgbPointData = rgbPointData->SafeDownCast(pd->GetPointData()->GetArray("RGB"));
+
+	int widthStep;
+	char *pPixArray;
+	int width;
+
+	if (b2D)
+	{
+		width = pFig->pImage->width;
+
+		widthStep = pFig->pImage->widthStep;
+
+		pPixArray = pFig->pImage->imageData;
+	}
+
+	int u, v;
+	char *pPix;
 
 	QLIST::Index *pPtIdx = piPtList->pFirst;
 
 	while (pPtIdx)
 	{
-		rgbPointData->SetTupleValue(pPtIdx->Idx, Color);
+		if (b3D)
+			rgbPointData->SetTupleValue(pPtIdx->Idx, Color);
+
+		if (b2D)
+			RVLVISUALIZER_SET_PIXEL_COLOR2(pPixArray, pPtIdx->Idx, width, widthStep, Color, u, v, pPix);
 
 		pPtIdx = pPtIdx->pNext;
 	}
@@ -311,16 +401,39 @@ void Visualizer::PaintPointSet(
 void Visualizer::PaintPointSet(
 	Array<int> *piPtArray,
 	vtkSmartPointer<vtkPolyData> &pd,
-	unsigned char *Color)
+	unsigned char *Color,
+	Figure *pFig)
 {
 	vtkSmartPointer<vtkUnsignedCharArray> rgbPointData;
 
-	rgbPointData = rgbPointData->SafeDownCast(pd->GetPointData()->GetArray("RGB"));
+	if (b3D)
+		rgbPointData = rgbPointData->SafeDownCast(pd->GetPointData()->GetArray("RGB"));
+
+	int widthStep;
+	char *pPixArray;
+	int width;
+
+	if (b2D)
+	{
+		width = pFig->pImage->width;
+
+		widthStep = pFig->pImage->widthStep;
+
+		pPixArray = pFig->pImage->imageData;
+	}
 
 	int i;
+	int u, v;
+	char *pPix;
 
 	for (i = 0; i < piPtArray->n; i++)
-		rgbPointData->SetTupleValue(piPtArray->Element[i], Color);
+	{
+		if (b3D)
+			rgbPointData->SetTupleValue(piPtArray->Element[i], Color);
+
+		if (b2D)
+			RVLVISUALIZER_SET_PIXEL_COLOR2(pPixArray, piPtArray->Element[i], width, widthStep, Color, u, v, pPix);
+	}		
 }
 
 void Visualizer::AddReferenceFrame(
@@ -403,4 +516,45 @@ void Visualizer::AddReferenceFrame(
 	lines->InsertNextCell(zAxis);
 
 	colors->InsertNextTupleValue(blue);
+}
+
+Figure *Visualizer::OpenFigure(
+	char *ImageName,
+	int memSize)
+{
+	Figure *pFig;
+
+	int iFig;
+
+	for (iFig = 0; iFig < figures.size(); iFig++)
+	{
+		pFig = figures.at(iFig);
+
+		if (strcmp(ImageName, pFig->name) == 0)
+			return pFig;
+	}
+
+	pFig = new Figure;
+
+	pFig->Create(memSize);
+
+	figures.push_back(pFig);
+
+	pFig->vpVisualizer = this;
+
+	pFig->name = RVLCreateString(ImageName);
+
+	return pFig;
+}
+
+void Visualizer::ShowFigure(char *imageName)
+{
+	Figure *pFig = OpenFigure(imageName);
+
+	ShowFigure(pFig);
+}
+
+void Visualizer::ShowFigure(Figure *pFig)
+{
+	cvShowImage(pFig->name, pFig->pImage);
 }
