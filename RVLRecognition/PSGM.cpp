@@ -212,6 +212,10 @@ void PSGM::CreateParamList(CRVLMem *pMem)
 	pParamData = ParamList.AddParam("PSGM.groundPlaneTolerance", RVLPARAM_TYPE_FLOAT, &groundPlaneTolerance);
 	pParamData = ParamList.AddParam("PSGM.zeroRFDescriptor", RVLPARAM_TYPE_BOOL, &bZeroRFDescriptor);	
 	pParamData = ParamList.AddParam("PSGM.GTRFDescriptors", RVLPARAM_TYPE_BOOL, &bGTRFDescriptors);
+	pParamData = ParamList.AddParam("PSGM.Visualization.hypothesisVisualizationMode", RVLPARAM_TYPE_ID, &(displayData.hypothesisVisualizationMode));
+	ParamList.AddID(pParamData, "CTI", RVLPSGM_HYPOTHESIS_VISUALIZATION_MODE_CTI);
+	ParamList.AddID(pParamData, "PLY", RVLPSGM_HYPOTHESIS_VISUALIZATION_MODE_PLY);
+
 }
 
 void PSGM::Interpret(
@@ -2999,7 +3003,7 @@ void PSGM::Learn(
 }
 
 
-void PSGM::LoadModelMeshDB(char *modelSequenceFileName)
+void PSGM::LoadModelMeshDB(char *modelSequenceFileName, bool decimate, float decimatePercent)
 {
 	FileSequenceLoader modelsLoader;
 
@@ -3021,10 +3025,37 @@ void PSGM::LoadModelMeshDB(char *modelSequenceFileName)
 		printf("\Loading VTK model %s to DB!\n", modelFileName);
 
 		mesh.LoadPolyDataFromPLY(modelFilePath);
+		vtkSmartPointer<vtkDecimatePro> decimate = vtkSmartPointer<vtkDecimatePro>::New();
+		//mesh.pPolygonData->Print(std::cout);
 
-		//Add vtkPolyData to vtkModelDB
-		vtkModelDB.insert(std::make_pair(currentModelID, mesh.pPolygonData));
-
+		if (decimate) //subsampling the model to reduce number of points and fasten the process
+		{
+			decimate->SetInputData(mesh.pPolygonData);
+			decimate->SetTargetReduction(decimatePercent);
+			decimate->Update();
+			//decimate->GetOutput()->Print(std::cout);
+		}
+		
+		//Calculate normals
+		vtkSmartPointer<vtkPolyDataNormals> normalsFilter = vtkSmartPointer<vtkPolyDataNormals>::New();
+		normalsFilter->ComputePointNormalsOn();
+		normalsFilter->SplittingOff();
+		if (decimate)
+			normalsFilter->SetInputConnection(decimate->GetOutputPort());
+		else
+			normalsFilter->SetInputData(mesh.pPolygonData);
+		normalsFilter->Update();
+		//normalsFilter->GetOutput()->Print(std::cout);
+		/*vtkSmartPointer<vtkCleanPolyData> cleanFilter = vtkSmartPointer<vtkCleanPolyData>::New();
+		cleanFilter->SetInputConnection(normalsFilter->GetOutputPort());
+		cleanFilter->PointMergingOn();
+		cleanFilter->SetAbsoluteTolerance(0.03);
+		cleanFilter->ToleranceIsAbsoluteOn();
+		cleanFilter->Update();*/
+		//cleanFilter->GetOutput()->Print(std::cout);
+		
+		//Add vtkPolyData to vtkModelDB:
+		vtkModelDB.insert(std::make_pair(currentModelID, normalsFilter->GetOutput()));
 		currentModelID++;
 	}
 
@@ -6173,7 +6204,7 @@ void PSGM::CalculatePose(int iMatch)
 }
 
 
-void PSGM::AddBestCTIModelsToVisualizer(Visualizer *pVisualizer, bool align, RVL::PSGM::ICPfunction ICPFunction, int ICPvariant)
+void PSGM::AddModelsToVisualizer(Visualizer *pVisualizer, bool align, RVL::PSGM::ICPfunction ICPFunction, int ICPvariant, void *kdTreePtr)
 {
 	int bestMatchIdx;
 	float bestScore;
@@ -6196,11 +6227,12 @@ void PSGM::AddBestCTIModelsToVisualizer(Visualizer *pVisualizer, bool align, RVL
 				bestScore = pMatch->score;
 			}
 		}*/
-		AddCTIModelToVisualizer(pVisualizer, scoreMatchMatrix.Element[i].Element[0].idx, align, ICPFunction, ICPvariant);
+		if (scoreMatchMatrix.Element[i].Element[0].idx != -1)
+			AddOneModelToVisualizer(pVisualizer, scoreMatchMatrix.Element[i].Element[0].idx, align, ICPFunction, ICPvariant, kdTreePtr);
 	}
 }
 
-void PSGM::AddCTIModelToVisualizer(Visualizer *pVisualizer, int iMatch, bool align, RVL::PSGM::ICPfunction ICPFunction, int ICPvariant)
+void PSGM::AddOneModelToVisualizer(Visualizer *pVisualizer, int iMatch, bool align, RVL::PSGM::ICPfunction ICPFunction, int ICPvariant, void *kdTreePtr)
 {
 	//Setting indices:
 	int iMCTI = pCTImatchesArray.Element[iMatch]->iMCTI;
@@ -6268,12 +6300,16 @@ void PSGM::AddCTIModelToVisualizer(Visualizer *pVisualizer, int iMatch, bool ali
 	double T_CCTIS_S[16];
 	RVLHTRANSFMX(pSCTI->R, t_CCTIS_S, T_CCTIS_S);
 
+
 	//PLY Model transformation
 	double T_M_S[16];
 	RVLHTRANSFMX(R_M_S, t_M_S, T_M_S);
 	vtkSmartPointer<vtkTransform> transform = vtkSmartPointer<vtkTransform>::New();
-	transform->SetMatrix(T_M_S); //when transforming PLY models to scene
-	//transform->SetMatrix(T_CCTIM_S); //when transforming CTI convex hull to scene
+	if (displayData.hypothesisVisualizationMode == RVLPSGM_HYPOTHESIS_VISUALIZATION_MODE_PLY)
+		transform->SetMatrix(T_M_S); //when transforming PLY models to scene
+
+	if (displayData.hypothesisVisualizationMode == RVLPSGM_HYPOTHESIS_VISUALIZATION_MODE_CTI)
+		transform->SetMatrix(T_CCTIM_S); //when transforming CTI convex hull to scene
 
 	//Scaling PLY model to meters
 	vtkSmartPointer<vtkTransform> transformScale = vtkSmartPointer<vtkTransform>::New();
@@ -6285,8 +6321,10 @@ void PSGM::AddCTIModelToVisualizer(Visualizer *pVisualizer, int iMatch, bool ali
 
 	//Transforming PLY model or CTI convex hull model to scene
 	vtkSmartPointer<vtkTransformPolyDataFilter> transformFilter = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
-	//transformFilter->SetInputData(modelPD); //model CTI convex hull
-	transformFilter->SetInputConnection(transformFilterScale->GetOutputPort()); //PLY model
+	if (displayData.hypothesisVisualizationMode == RVLPSGM_HYPOTHESIS_VISUALIZATION_MODE_CTI)
+		transformFilter->SetInputData(modelPD); //model CTI convex hull
+	if (displayData.hypothesisVisualizationMode == RVLPSGM_HYPOTHESIS_VISUALIZATION_MODE_PLY)
+		transformFilter->SetInputConnection(transformFilterScale->GetOutputPort()); //PLY model
 	transformFilter->SetTransform(transform);
 	transformFilter->Update();
 
@@ -6322,13 +6360,22 @@ void PSGM::AddCTIModelToVisualizer(Visualizer *pVisualizer, int iMatch, bool ali
 		//sceneSampler->Update();
 		//vtkSmartPointer<vtkPolyData> sceneSamplerPD = sceneSampler->GetOutput();
 
+		/*vtkSmartPointer<vtkCleanPolyData> cleanFilter = vtkSmartPointer<vtkCleanPolyData>::New();
+		cleanFilter->SetInputConnection(transformFilter->GetOutputPort());
+		cleanFilter->PointMergingOn();
+		cleanFilter->SetAbsoluteTolerance(0.005);
+		cleanFilter->ToleranceIsAbsoluteOn();
+		cleanFilter->Update();*/
 
-		vtkSmartPointer<vtkPolyData> scenePD = GetSceneModelPC(iCluster); //Generate scene model pointcloud
+
+		//vtkSmartPointer<vtkPolyData> scenePD = GetSceneModelPC(iCluster); //Generate scene model pointcloud
 		//Aligning pointcluds (using PCL ICP)
 		float icpT[16];
 		double icpTd[16];
 		double fitnessScore;
-		ICPFunction(transformFilter->GetOutput(), scenePD, icpT, 20, 0.02, ICPvariant, &fitnessScore);
+
+		vtkSmartPointer<vtkPolyData> visiblePD = GetVisiblePart(transformFilter->GetOutput()); //Generate visible scene model pointcloud
+		ICPFunction(visiblePD, /*this->pMesh->pPolygonData*/this->segmentN_PD.at(iCluster), icpT, 30, 0.01, ICPvariant, &fitnessScore, kdTreePtr);
 		for (int i = 0; i < 16; i++)
 		{
 			icpTd[i] = icpT[i];
@@ -6338,7 +6385,8 @@ void PSGM::AddCTIModelToVisualizer(Visualizer *pVisualizer, int iMatch, bool ali
 		vtkSmartPointer<vtkTransform> transformICP = vtkSmartPointer<vtkTransform>::New();
 		transformICP->SetMatrix(icpTd);
 		transformFilterICP = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
-		transformFilterICP->SetInputConnection(transformFilter->GetOutputPort());
+		transformFilterICP->SetInputData(visiblePD);
+		//transformFilterICP->SetInputConnection(transformFilter->GetOutputPort());
 		transformFilterICP->SetTransform(transformICP);
 		transformFilterICP->Update();
 	}
@@ -6352,6 +6400,7 @@ void PSGM::AddCTIModelToVisualizer(Visualizer *pVisualizer, int iMatch, bool ali
 	vtkSmartPointer<vtkActor> modelActor = vtkSmartPointer<vtkActor>::New();
 	modelActor->SetMapper(modelMapper);
 	modelActor->GetProperty()->SetColor(0, 1, 0);
+	modelActor->GetProperty()->SetPointSize(3);
 	pVisualizer->renderer->AddActor(modelActor);
 	
 	//Mapper and actor for scene
@@ -6375,6 +6424,8 @@ vtkSmartPointer<vtkPolyData> PSGM::GetSceneModelPC(int iCluster)
 	RVL::QLIST::Index2 *pt;
 	//RECOG::PSGM_::ModelInstance *pModelInstance;
 	vtkSmartPointer<vtkPoints> points = vtkSmartPointer<vtkPoints>::New();
+	vtkSmartPointer<vtkFloatArray> normals = vtkSmartPointer<vtkFloatArray>::New();
+	normals->SetNumberOfComponents(3);
 	//points->SetDataTypeToDouble();
 	vtkSmartPointer<vtkCellArray> verts = vtkSmartPointer<vtkCellArray>::New();
 	int ptIdx = 0;
@@ -6383,10 +6434,11 @@ vtkSmartPointer<vtkPolyData> PSGM::GetSceneModelPC(int iCluster)
 	{
 		pSurfel = &this->pSurfels->NodeArray.Element[pCluster->iSurfelArray.Element[i]];
 		pt = pSurfel->PtList.pFirst;
-		//Set pixel colors
+
 		for (int k = 0; k < pSurfel->size; k++)
 		{
 			points->InsertNextPoint(this->pMesh->NodeArray.Element[pt->Idx].P);
+			normals->InsertNextTuple(this->pMesh->NodeArray.Element[pt->Idx].N);
 			verts->InsertNextCell(1);
 			verts->InsertCellPoint(ptIdx);
 			ptIdx++;
@@ -6396,11 +6448,12 @@ vtkSmartPointer<vtkPolyData> PSGM::GetSceneModelPC(int iCluster)
 
 	vtkSmartPointer<vtkPolyData> PD = vtkSmartPointer<vtkPolyData>::New();
 	PD->SetPoints(points);
+	PD->GetPointData()->SetNormals(normals);
 	PD->SetVerts(verts);
 	return PD;
 }
 
-void PSGM::CalculateICPCost(RVL::PSGM::ICPfunction ICPFunction, int ICPvariant) 
+void PSGM::CalculateICPCost(RVL::PSGM::ICPfunction ICPFunction, int ICPvariant, void *kdTreePtr)
 {
 	int iMatch;
 	int iMCTI, iSCTI, iCluster, iModel;
@@ -6492,7 +6545,7 @@ void PSGM::CalculateICPCost(RVL::PSGM::ICPfunction ICPFunction, int ICPvariant)
 			//Aligning pointcluds (using PCL ICP)
 			float icpT[16];
 			double fitnessScore;
-			ICPFunction(transformFilter->GetOutput(), scenePD, icpT, 20, 0.02, ICPvariant, &fitnessScore);
+			ICPFunction(transformFilter->GetOutput(), scenePD, icpT, 20, 0.02, ICPvariant, &fitnessScore, kdTreePtr);
 
 			pMatch->cost_ICP = fitnessScore;
 			memcpy(pMatch->T_ICP, icpT, 16 * sizeof(float));
@@ -6500,4 +6553,44 @@ void PSGM::CalculateICPCost(RVL::PSGM::ICPfunction ICPFunction, int ICPvariant)
 		}
 		
 	}
+}
+
+vtkSmartPointer<vtkPolyData> PSGM::GetVisiblePart(vtkSmartPointer<vtkPolyData> PD)
+{
+	vtkSmartPointer<vtkPoints> visiblePoints = vtkSmartPointer<vtkPoints>::New();
+	vtkSmartPointer<vtkFloatArray> visibleNormals = vtkSmartPointer<vtkFloatArray>::New();
+	visibleNormals->SetNumberOfComponents(3);
+	//points->SetDataTypeToDouble();
+	vtkSmartPointer<vtkCellArray> verts = vtkSmartPointer<vtkCellArray>::New();
+	vtkSmartPointer<vtkPolyData> visiblePD = vtkSmartPointer<vtkPolyData>::New();
+
+	vtkSmartPointer<vtkPoints> pdPoints = PD->GetPoints();
+	vtkSmartPointer<vtkFloatArray> normals = vtkFloatArray::SafeDownCast(PD->GetPointData()->GetNormals());
+	double *point;
+	float normal[3];
+	int ptIdx = 0;
+
+	if (!normals.GetPointer()) //check if mode does not have normals 
+	{
+		printf("Invalid input model. Doesn't have normals.\n");
+		return NULL;
+	}
+
+	for (int i = 0; i < pdPoints->GetNumberOfPoints(); i++)
+	{
+		point = pdPoints->GetPoint(i);
+		normals->GetTupleValue(i, normal);
+		if ((point[0] * normal[0] + point[1] * normal[1] + point[2] * normal[2]) < 0) //cheks the scalar product, must be negative
+		{
+			visiblePoints->InsertNextPoint(point);
+			visibleNormals->InsertNextTuple(normal);
+			verts->InsertNextCell(1);
+			verts->InsertCellPoint(ptIdx);
+			ptIdx++;
+		}
+	}
+	visiblePD->SetPoints(visiblePoints);
+	visiblePD->GetPointData()->SetNormals(visibleNormals);
+	visiblePD->SetVerts(verts);
+	return visiblePD;
 }

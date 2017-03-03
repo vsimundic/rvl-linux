@@ -12,6 +12,9 @@
 //#define RVLPSGM_RANSAC
 
 #define RVLRECOGNITION_MODE_PSGM_CREATE_CTIS		2
+
+#define RVLPSGM_HYPOTHESIS_VISUALIZATION_MODE_CTI		0
+#define RVLPSGM_HYPOTHESIS_VISUALIZATION_MODE_PLY		1
 #include "Eigen\Dense"
 namespace RVL
 {
@@ -59,6 +62,7 @@ namespace RVL
 				unsigned char selectionColor[3];
 				int iSelectedCluster;
 				vtkSmartPointer<vtkActor> referenceFrames;
+				DWORD hypothesisVisualizationMode;
 			};
 
 
@@ -188,17 +192,19 @@ namespace RVL
 
 		void CalculatePose(int iMatch);
 
-		typedef void(*ICPfunction)(vtkSmartPointer<vtkPolyData>, vtkSmartPointer<vtkPolyData>, float *, int, float, int, double*);
+		typedef void(*ICPfunction)(vtkSmartPointer<vtkPolyData>, vtkSmartPointer<vtkPolyData>, float*, int, float, int, double*, void*);
 
-		void AddBestCTIModelsToVisualizer(Visualizer *pVisualizer, bool align, ICPfunction ICPFunction, int ICPvariant);
+		void AddModelsToVisualizer(Visualizer *pVisualizer, bool align, ICPfunction ICPFunction, int ICPvariant, void *kdTreePtr = NULL);
 		
-		void AddCTIModelToVisualizer(Visualizer *pVisualizer, int iMatch, bool align, ICPfunction ICPFunction, int ICPvariant);
+		void AddOneModelToVisualizer(Visualizer *pVisualizer, int iMatch, bool align, ICPfunction ICPFunction, int ICPvariant, void *kdTreePtr = NULL);
 		
-		void LoadModelMeshDB(char *modelSequenceFileName);
+		void LoadModelMeshDB(char *modelSequenceFileName, bool decimate=false, float decimatePercent=0.4);
 
 		vtkSmartPointer<vtkPolyData> GetSceneModelPC(int iCluster);
 
-		void CalculateICPCost(RVL::PSGM::ICPfunction ICPFunction, int ICPvariant);
+		void CalculateICPCost(RVL::PSGM::ICPfunction ICPFunction, int ICPvariant, void *kdTreePtr = NULL); 
+
+		static vtkSmartPointer<vtkPolyData> GetVisiblePart(vtkSmartPointer<vtkPolyData> PD); // Models are reduced to only the visible part (using angle between normals) which improves ICP 
 		//end Petra
 
 		void InitDisplay(
@@ -387,6 +393,7 @@ namespace RVL
 		RECOG::CTISet CTIset;
 		RECOG::CTISet MCTIset;
 		std::map<int, vtkSmartPointer<vtkPolyData>> vtkModelDB;
+		std::map<int, vtkSmartPointer<vtkPolyData>> segmentN_PD; //neighbourhood
 
 
 	private:		
