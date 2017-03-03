@@ -1,5 +1,22 @@
 #pragma once
 
+#include "Figure.h"
+
+#define RVLVISUALIZER_SET_PIXEL_COLOR(pPixArray, u, v, widthStep, color, pPix)\
+{\
+	pPix = pPixArray + 3 * u + v * widthStep;\
+	*(pPix++) = color[0];\
+	*(pPix++) = color[1];\
+	*pPix = color[2];\
+}
+
+#define RVLVISUALIZER_SET_PIXEL_COLOR2(pPixArray, iPix, width, widthStep, color, u, v, pPix)\
+{\
+	u = iPix % width;\
+	v = iPix / width;\
+	RVLVISUALIZER_SET_PIXEL_COLOR(pPixArray, u, v, widthStep, color, pPix);\
+}
+
 namespace RVL
 {
 	class Visualizer
@@ -23,19 +40,23 @@ namespace RVL
 		void PaintPoint(
 			int iPt,
 			vtkSmartPointer<vtkPolyData> &pd,
-			unsigned char *Color);
+			unsigned char *Color,
+			Figure *pFig = NULL);
 		void PaintPointSet(
 			QList<QLIST::Index2> *piPtList,
 			vtkSmartPointer<vtkPolyData> &pd,
-			unsigned char *Color);
+			unsigned char *Color,
+			Figure *pFig = NULL);
 		void PaintPointSet(
 			QList<QLIST::Index> *piPtList,
 			vtkSmartPointer<vtkPolyData> &pd,
-			unsigned char *Color);
+			unsigned char *Color,
+			Figure *pFig = NULL);
 		void PaintPointSet(
 			Array<int> *piPtArray,
 			vtkSmartPointer<vtkPolyData> &pd,
-			unsigned char *Color);
+			unsigned char *Color,
+			Figure *pFig = NULL);
 		void AddReferenceFrame(
 			vtkSmartPointer<vtkPoints> &pts,
 			vtkSmartPointer<vtkCellArray> &lines,
@@ -43,8 +64,14 @@ namespace RVL
 			float *R,
 			float *t,
 			double size);
+		Figure *OpenFigure(
+			char *ImageName,
+			int memSize = 5000000);
+		void ShowFigure(char *imageName);
+		void ShowFigure(Figure *pFig);
 
 	public:
+		CRVLMem *pMem;
 		vtkSmartPointer<vtkRenderer> renderer;
 		vtkSmartPointer<vtkRenderWindow> window;
 		vtkSmartPointer<vtkRenderWindowInteractor> interactor;
@@ -59,6 +86,9 @@ namespace RVL
 		double normalLength;
 		bool bNormals;
 		bool bNormalsVisible;
+		bool b3D;
+		bool b2D;
+		std::vector<Figure *> figures;
 	};
 }
 

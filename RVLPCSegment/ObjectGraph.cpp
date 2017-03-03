@@ -6,11 +6,15 @@
 #include "Graph.h"
 #include "Mesh.h"
 #include "Visualizer.h"
+#include "SceneSegFile.hpp"
 #include "SurfelGraph.h"
 #include "ObjectGraph.h"
 
 #include <numeric>
 #include <queue>
+
+//#define RVLPCSEGMENT_OBJECT_GRAPH_LOG
+//#define RVLPCSEGMENT_OBJECT_GRAPH_EVALUATION_LOG
 
 /// Move to RVLQListArray.h
 
@@ -24,6 +28,7 @@
 
 /// Move to Graph.h
 
+//#define RVLPCSEGMENT_GRAPH_WERAGGREGATION_DEBUG
 //#define RVLPCSEGMENT_GRAPH_WERAGGREGATION_DETAILED_DEBUG
 
 namespace RVL
@@ -643,6 +648,7 @@ void ObjectGraph::CreateParamList(CRVLMem *pMem)
 	ParamList.AddID(pParamData, "HEURISTIC", RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_HEURISTIC);
 	ParamList.AddID(pParamData, "SVM", RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_SVM);
 	ParamList.AddID(pParamData, "NLMC", RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_NLMC);
+	ParamList.AddID(pParamData, "NLMC2", RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_NLMC2);
 }
 
 #ifdef RVLSURFEL_IMAGE_ADJACENCY
@@ -722,6 +728,10 @@ void ObjectGraph::Create(SurfelGraph *pSurfels_)
 		for (i = 0; i < pSurfel->imgAdjacency.size(); i++)
 		{
 			pSurfel_ = pSurfel->imgAdjacency.at(i);
+
+			if (pSurfel_->bEdge)
+				continue;
+
 			pDesc = pSurfel->imgAdjacencyDescriptors.at(i);
 
 			iSurfel_ = pSurfel_ - pSurfels->NodeArray.Element;
@@ -995,8 +1005,8 @@ void ObjectGraph::CalculateOverAndUnderSegmentation_SSF(int *E, int &N, bool use
 		//Sum false values
 		for (int i = 0; i < GTHistSize; i++)
 		{
-			if ((i == 0) && !useBackground)
-				continue;
+			//if ((i == 0) && !useBackground)
+			//	continue;
 
 			if (i != maxBin[iObject])
 				E[1] += ptrGTObjHist[i];
@@ -1058,7 +1068,12 @@ void ObjectGraph::CalculateOverAndUnderSegmentation_SSF(int *E, int &N, bool use
 }
 
 //Must be linked with the ground truth (AssignGroundTruthSegmentation per surfel). Return 'Ntrue', 'Nfalse' and 'N' needed to calculate oversegmentation (Fos = 1 - Ntrue/N) and undersegmenation (Fus =Nfalse/N) error. The asumption is that the GT object hist bin with the highest values is the correct one!!! 
-void ObjectGraph::CalculateOverAndUnderSegmentation(int *E, int &N, bool useGTNoPix, std::string GTlabImgFilename, bool useBackground)
+void ObjectGraph::CalculateOverAndUnderSegmentation(
+	int *E, 
+	int &N, 
+	bool useGTNoPix, 
+	std::string imageFileName, 
+	bool useBackground)
 {
 	//Getting GThist size and initializing GT object histogram;
 	//find a surfel that has defined GTObjHist
@@ -1071,6 +1086,11 @@ void ObjectGraph::CalculateOverAndUnderSegmentation(int *E, int &N, bool useGTNo
 			break;
 		}
 	}
+
+#ifdef RVLPCSEGMENT_OBJECT_GRAPH_EVALUATION_LOG
+	FILE *fp = fopen("C:\\RVL\\ExpRez\\SegmentationToGT.txt", "w");
+#endif
+
 	int *GTObjHistogram = new int[GTHistSize * this->NodeArray.n];	//GTObject histogam per segmented object
 	memset(GTObjHistogram, 0, GTHistSize * this->NodeArray.n * sizeof(int));
 	int *maxObj = new int[GTHistSize];	//Idx of segmented object per maximum bin
@@ -1105,6 +1125,28 @@ void ObjectGraph::CalculateOverAndUnderSegmentation(int *E, int &N, bool useGTNo
 			}
 			piElement = piElement->pNext;
 		}
+
+#ifdef RVLPCSEGMENT_OBJECT_GRAPH_EVALUATION_LOG
+		int nPtsTotal = 0;
+
+		for (int i = 0; i < GTHistSize; i++)
+			nPtsTotal += GTObjHistogram[iObject * GTHistSize + i];
+
+		if (nPtsTotal > 0)
+		{
+			fprintf(fp, "S %d: #P: %d\n", iObject, nPtsTotal);
+
+			fprintf(fp, "-----------------------------\n");
+
+			float fnPtsTotal = (float)nPtsTotal;
+
+			for (int i = 0; i < GTHistSize; i++)
+				fprintf(fp, "GTO %d: #IP: %d, perc: %lf\n", i, GTObjHistogram[iObject * GTHistSize + i], (float)GTObjHistogram[iObject * GTHistSize + i] / fnPtsTotal * 100.0f);
+
+			fprintf(fp, "\n");
+		}
+#endif
+
 	}
 
 	E[0] = 0;	//Oversegmentation values
@@ -1141,8 +1183,8 @@ void ObjectGraph::CalculateOverAndUnderSegmentation(int *E, int &N, bool useGTNo
 		//Sum false values
 		for (int i = 0; i < GTHistSize; i++)
 		{
-			if ((i == 0) && !useBackground)
-				continue;
+			//if ((i == 0) && !useBackground)
+			//	continue;
 
 			if (i != maxBin[iObject])
 				E[1] += ptrGTObjHist[i];
@@ -1176,9 +1218,11 @@ void ObjectGraph::CalculateOverAndUnderSegmentation(int *E, int &N, bool useGTNo
 
 	if (useGTNoPix)	//Assumption - GT files is in the same directory as the SSF file and has name in format : SSFfilename + a + .png (label image) and SSFfilename + d + .png (depth image)
 	{
-		std::string labelImgFileName = GTlabImgFilename;
-		labelImgFileName.erase(labelImgFileName.find_last_of("."));
-		std::string depthImgFileName = labelImgFileName + "d.png";
+		std::string imageName = imageFileName;
+		imageName.erase(imageName.find_last_of("."));
+		std::string depthImgFileName = imageName + "d.png";
+		std::string labelImgFileName = imageName + "a.png";
+
 		//load GT files
 		cv::Mat GTLabImg = cv::imread(labelImgFileName);
 		cv::Mat GTDepthImg = cv::imread(depthImgFileName, cv::ImreadModes::IMREAD_ANYDEPTH);
@@ -1194,6 +1238,10 @@ void ObjectGraph::CalculateOverAndUnderSegmentation(int *E, int &N, bool useGTNo
 			}
 		}
 	}
+
+#ifdef RVLPCSEGMENT_OBJECT_GRAPH_EVALUATION_LOG
+	fclose(fp);
+#endif
 
 	//DeRef
 	delete[] GTObjHistogram;
@@ -1383,15 +1431,17 @@ void ObjectGraph::ComputeRelationCost(
 	float f3 = pEdge->desc.cupyDescriptor[2];
 	float f4 = pEdge->desc.cupyDescriptor[3];
 
+	float y1, y2, y3, y4;
+
 	switch (relationClassifier){
 	case RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_HEURISTIC:
-	data.PContinuous = (f4 <= depthStepIntThr ? 1.0f : (f4 <= depthStepExtThr ? (depthStepExtThr - f4) / (depthStepExtThr - depthStepIntThr) : 0.0f));
+		data.PContinuous = (f4 <= depthStepIntThr ? 1.0f : (f4 <= depthStepExtThr ? (depthStepExtThr - f4) / (depthStepExtThr - depthStepIntThr) : 0.0f));
 
-	data.PConvex = (f1 >= 0 ? 1.0f : (f1 >= -concaveAngleThr ? concaveMinCost + (1.0f - concaveMinCost) * (concaveAngleThr + f1) / concaveAngleThr : concaveMinCost));
+		data.PConvex = (f1 >= 0 ? 1.0f : (f1 >= -concaveAngleThr ? concaveMinCost + (1.0f - concaveMinCost) * (concaveAngleThr + f1) / concaveAngleThr : concaveMinCost));
 
-	data.PClean = 0.5f + 0.5f * f2;
+		data.PClean = 0.5f + 0.5f * f2;
 
-	data.P = RVLMIN(data.PContinuous, RVLMIN(data.PConvex, data.PClean));
+		data.P = RVLMIN(data.PContinuous, RVLMIN(data.PConvex, data.PClean));
 
 		break;
 	case RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_SVM:
@@ -1400,22 +1450,33 @@ void ObjectGraph::ComputeRelationCost(
 		data.PConvex = -1.0;
 		data.PClean = -1.0;
 		data.P = this->pSVMClassifier->makeClassification(pEdge->desc.cupyDescriptor, 4);
+
+		break;
 	case RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_NLMC:
 		//Nyarko - exponential functions + optimization
 		data.PContinuous = -1.0;
 		data.PConvex = -1.0;
 		data.PClean = -1.0;
 		
-		float y1 = 0.809918368068113 / (0.903903357035594 + exp(-(f1 - (-0.578312575550574)) / 0.369035236083353));
-		float y2 = 120.173561176014 / (191.419216478501 + exp(-(f2 - 0.512539837485237) / 170.634944320671));
-		float y3 = 0.840899503394324 / (0.744251572103782 + exp(-(f3 - 0.356242721458920) / 0.321654820477843));
-		float y4 = 3.28709542710274 / (0.776255228658931 + exp(-(f4 - (-0.0188359236813348)) / (-0.0166765498782912)));
+		y1 = 0.809918368068113 / (0.903903357035594 + exp(-(f1 - (-0.578312575550574)) / 0.369035236083353));
+		y2 = 120.173561176014 / (191.419216478501 + exp(-(f2 - 0.512539837485237) / 170.634944320671));
+		y3 = 0.840899503394324 / (0.744251572103782 + exp(-(f3 - 0.356242721458920) / 0.321654820477843));
+		y4 = 3.28709542710274 / (0.776255228658931 + exp(-(f4 - (-0.0188359236813348)) / (-0.0166765498782912)));
 
 		//Karlo 1
 		//data.P = 0.919702757268570*y1 + 0.577863699653274*y2 + 0.0141310682609543*y3 + 0.835443189905499*y4 - 0.910458015938145;
 
 		// Karlo 2
 		data.P = 0.844317765926573*y1 + 0.778963337269011*y2 + 0.177692819332776*y3 + 0.582259630958912*y4 - 0.844696779380087;
+
+		break;
+	case RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_NLMC2:
+		data.PContinuous = 3.28709542710274 / (0.776255228658931 + exp(-(f4 - (-0.0188359236813348)) / (-0.0166765498782912)));
+		data.PConvex = 0.809918368068113 / (0.903903357035594 + exp(-(f1 - (-0.578312575550574)) / 0.369035236083353));
+		data.PClean = 0.840899503394324 / (0.744251572103782 + exp(-(f3 - 0.356242721458920) / 0.321654820477843));
+
+		data.P = RVLMIN(data.PContinuous, data.PConvex);
+		//data.P = RVLMIN(data.PContinuous, RVLMIN(data.PConvex, data.PClean));
 	}
 
 	pEdge->cost = data.P;
@@ -1688,6 +1749,8 @@ bool RVL::SURFEL::objectMouseRButtonDownUserFunction(
 		pObjects->PaintObject(iObject, pData->selectionColor);
 
 		pData->iSelectedObject = iObject;
+
+		printf("Slected object: %d\n", iObject);
 
 		return true;
 	}
@@ -2556,6 +2619,102 @@ void ObjectGraph::ObjectAggregationLevel2_ViaObjectPairConvexity(float convexThr
 		}
 
 	}
+}
+
+cv::Mat ObjectGraph::CreateSegmentationImage()
+{
+	cv::Mat coloredSegLab(480, 640, CV_8UC3, cv::Scalar::all(0));
+
+	GRAPH::AggregateNode<SURFEL::AgEdge> *pObject;
+	QLIST::Index *piElement;
+	Surfel *pSurfel;
+	unsigned char labSegColor[3];
+	int x = 0, y = 0;
+	RVL::QLIST::Index2 *pt;
+	srand(time(NULL));
+	for (int iObject = 0; iObject < NodeArray.n; iObject++)
+	{
+		//Generate surfel color
+		labSegColor[0] = rand() % 255;
+		labSegColor[1] = rand() % 255;
+		labSegColor[2] = rand() % 255;
+
+		pObject = NodeArray.Element + iObject;
+
+		piElement = pObject->elementList.pFirst;
+
+		while (piElement)
+		{
+			pSurfel = pSurfels->NodeArray.Element + piElement->Idx;
+			//check 
+			if (!((pSurfel->size <= 1) || pSurfel->bEdge))
+			{
+				pt = pSurfel->PtList.pFirst;
+				//Set pixel colors
+				for (int k = 0; k < pSurfel->size; k++)
+				{
+					y = floor(pt->Idx / 640.0);
+					x = floor(pt->Idx - 640.0 * y);
+					coloredSegLab.at<cv::Vec3b>(y, x)[0] = labSegColor[0];
+					coloredSegLab.at<cv::Vec3b>(y, x)[1] = labSegColor[1];
+					coloredSegLab.at<cv::Vec3b>(y, x)[2] = labSegColor[2];
+					pt = pt->pNext;
+				}
+			}
+			piElement = piElement->pNext;
+		}
+
+	}
+	//return image
+	return coloredSegLab;
+}
+
+cv::Mat ObjectGraph::CreateSegmentationImageFromSSF()
+{
+	std::shared_ptr<SceneSegFile::SegFileElement> currSSFElement;
+	std::shared_ptr<SceneSegFile::FeatureTypeInt> pixAff;
+
+	cv::Mat coloredSegLab(480, 640, CV_8UC3, cv::Scalar::all(0));
+
+	GRAPH::AggregateNode<SURFEL::AgEdge> *pObject;
+	QLIST::Index *piElement;
+	unsigned char labSegColor[3];
+	int x = 0, y = 0;
+	RVL::QLIST::Index2 *pt;
+	srand(time(NULL));
+
+	for (int iObject = 0; iObject < NodeArray.n; iObject++)
+	{
+		//Generate object color
+		labSegColor[0] = rand() % 255;
+		labSegColor[1] = rand() % 255;
+		labSegColor[2] = rand() % 255;
+
+		pObject = NodeArray.Element + iObject;
+
+		piElement = pObject->elementList.pFirst;
+
+		while (piElement)
+		{
+			currSSFElement = ssf->elements.at(piElement->Idx);
+
+			pixAff = std::dynamic_pointer_cast<SceneSegFile::FeatureTypeInt>(currSSFElement->features.features.at(SceneSegFile::FeaturesList::PixelAffiliation));
+
+			for (int k = 0; k < pixAff->size; k++)
+			{
+				y = floor(pixAff->data[k] / 640.0);
+				x = floor(pixAff->data[k] - 640.0 * y);
+				coloredSegLab.at<cv::Vec3b>(y, x)[0] = labSegColor[0];
+				coloredSegLab.at<cv::Vec3b>(y, x)[1] = labSegColor[1];
+				coloredSegLab.at<cv::Vec3b>(y, x)[2] = labSegColor[2];
+			}
+
+			piElement = piElement->pNext;
+		}
+
+	}
+	//return image
+	return coloredSegLab;
 }
 
 void ObjectGraph::SaveSegmentationLabelImg(std::string filename)

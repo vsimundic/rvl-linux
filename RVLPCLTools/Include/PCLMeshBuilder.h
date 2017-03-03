@@ -1,9 +1,16 @@
 #pragma once
 
 #define RVLPCLMESHBUILDER_FLAG_BILATERAL_FILTER		0x00000001
+#define RVLPCLMESHBUILDER_FLAG_ORGANIZED_PC			0x00000002
 
 namespace RVL
 {
+	bool LoadMesh(
+		void *vpMeshBuilder,
+		char *FileName,
+		Mesh *pMesh,
+		bool bSavePLY);
+
 	class PCLMeshBuilder
 	{
 	public:
@@ -22,14 +29,22 @@ namespace RVL
 			pcl::PointCloud<pcl::PointXYZRGBA>::Ptr PC,
 			pcl::PolygonMesh &PCLMesh,
 			bool bSavePLY);
+		bool Load(
+			char *FileName,
+			Mesh *pMesh,
+			bool bSavePLY);
 
 	public:
 		DWORD flags;
 		double sigmaS;
 		double sigmaR;
 		double normalEstR;		
+		int width;
+		int height;
 		CRVLParameterList ParamList;
-	private:
+		pcl::PointCloud<pcl::PointXYZRGBA>::Ptr PC;
+		pcl::PolygonMesh PCLMesh;
+	private:				
 		pcl::PointCloud<pcl::PointXYZRGBA> FPC;
 		pcl::PointCloud<pcl::Normal> N;
 		//pcl::FastBilateralFilter<pcl::PointXYZRGBA> bilateralFilter;

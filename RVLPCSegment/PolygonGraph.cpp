@@ -30,7 +30,7 @@ void PolygonGraph::UpdateConvex(
 	float *N,
 	float d)
 {
-	int iP;
+	//int iP;
 
 	GRAPH::EdgePtr<MESH::PolygonEdge> *pEdgePtr = pPolygon->EdgeList.pFirst;
 

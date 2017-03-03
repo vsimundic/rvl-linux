@@ -12,6 +12,17 @@
 	TgtColor[2] = (unsigned char)((int)(SrcColor[2]) * scale[2] / 100);\
 }
 #define RVLGETFILEEXTENSION(FileName)	(strrchr(FileName, '.') + 1)
+#define RVLCROPRECT(minx, maxx, miny, maxy, left, right, top, bottom)\
+{\
+	if(top < miny)\
+		top = miny;\
+	if (bottom > maxy)\
+		bottom = maxy;\
+	if (left < minx)\
+		left = minx;\
+	if(right > maxx)\
+		right = maxx;\
+}
 
 namespace RVL
 {
@@ -41,6 +52,7 @@ namespace RVL
 	bool GetAngleAxis(float *R, float *V, float &theta);
 	void GetDistance(float *t, float &distance);
 	//END VIDOVIC
+	void PrintMatrix(FILE *fp, double *A, int n, int m);
 
 	void QuickSort(int *Key, int *Index, int n);
 	void RandomColor(unsigned char *color);

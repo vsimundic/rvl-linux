@@ -2,9 +2,11 @@
 
 #define RVLSURFEL_IMAGE_ADJACENCY //FILKO usporava debug :)
 
-#define RVLSURFEL_DISPLAY_MODE_SURFELS			0
-#define RVLSURFEL_DISPLAY_MODE_BOUNDARY			1
-#define RVLSURFEL_DISPLAY_MODE_NEIGHBOR_PAIR	2
+#define RVLSURFEL_DISPLAY_MODE_SURFELS					0
+#define RVLSURFEL_DISPLAY_MODE_BOUNDARY					1
+#define RVLSURFEL_DISPLAY_MODE_NEIGHBOR_PAIR			2
+#define RVLSURFEL_DISPLAY_MODE_FOREGROUND_BACKGROUND	3
+#define RVLSURFEL_DISPLAY_MODE_CONVEX_CONCAVE			4
 
 #define RVLSURFEL_EDGE_FLAG_HARD				0x01
 #define RVLSURFEL_EDGE_FLAG_CONVEX				0x02
@@ -35,6 +37,10 @@ namespace RVL
 			bool(*keyPressUserFunction)(Mesh *pMesh, SurfelGraph *pSurfels, std::string &key, void *vpData);
 			int  mode;
 			unsigned char SelectionColor[3];
+			unsigned char ForegroundColor[3];
+			unsigned char BackgroundColor[3];
+			unsigned char ConvexColor[3];
+			unsigned char ConcaveColor[3];
 			int iSelectedSurfel;
 			int iSelectedSurfel2;
 			int iSelection;
@@ -78,6 +84,7 @@ namespace RVL
 			Vertex *pNext;
 			bool bEdge;
 		};
+
 
 	}
 
@@ -134,6 +141,12 @@ namespace RVL
 			int iSurfel,
 			unsigned char *Color);
 		void DisplayEdgeFeatures();
+		void DisplayForegroundAndBackgroundEdges(
+			Visualizer *pVisualizer,
+			Mesh *pMesh);
+		void DisplayConvexAndConcaveEdges(
+			Visualizer *pVisualizer,
+			Mesh *pMesh);
 		void Init(Mesh *pMesh);
 		void Clear();
 		unsigned char * GetColor(int iSurfel);
@@ -178,6 +191,13 @@ namespace RVL
 			int iSurfel, 
 			int *surfelIdx,
 			bool *bVisited);	
+		void DetermineImgAdjDescriptors(
+			Surfel *pSurfel,
+			Mesh *mesh);
+		void GenerateSSF(
+			std::string filename,
+			int minSurfelSize,
+			bool checkbackground);
 		void SetPrimaryGTObj(
 			Surfel *pSurfel, 
 			cv::Mat labGTImg, 
@@ -186,6 +206,7 @@ namespace RVL
 			char *meshFileName,
 			int minSurfelSize);
 #endif
+		cv::Mat GenColoredSurfelImgFromSSF(std::shared_ptr<SceneSegFile::SceneSegFile> ssf);
 		//Filko
 		void CalculateSurfelsColorHistograms(cv::Mat img, int colorspace, bool oneDimensional, const int *bindata, bool noBins);
 

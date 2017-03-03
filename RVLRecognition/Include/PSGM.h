@@ -1,4 +1,5 @@
 #pragma once
+#include "RVLVTK.h"
 
 //#define RVLPSGM_NORMAL_HULL
 #define RVLPSGM_MATCH_SATURATION //VIDOVIC
@@ -6,16 +7,18 @@
 //#define PSGM_CALCULATE_PROBABILITY //Vidovic
 #define RVLPSGM_EVALUATION_PRINT_INFO //Vidovic
 #define RVLPSGM_MATCH_USING_SEGMENT_GT //Vidovic
-//#define RVLPSGM_SAVE_MATCHES //Vidovic
+#define RVLPSGM_SAVE_MATCHES //Vidovic
 #define RVLPSGM_MATCHES_SIMILARITY_MEASURE			3
 //#define RVLPSGM_RANSAC
 
 #define RVLRECOGNITION_MODE_PSGM_CREATE_CTIS		2
-
+#include "Eigen\Dense"
 namespace RVL
 {
-	class PSGM;
 
+
+	class PSGM;
+	class CTISet;
 	namespace RECOG
 	{
 		namespace PSGM_
@@ -58,6 +61,19 @@ namespace RVL
 				vtkSmartPointer<vtkActor> referenceFrames;
 			};
 
+
+			//Petra
+			struct SegmentMatch
+			{
+				float Eseg;
+				int iCTIs;
+				int iCTIm;
+				int iSS;
+				int iSM;
+				int iM;
+				Eigen::VectorXf t;
+			};
+
 			//VIDOVIC
 			struct MatchInstance
 			{
@@ -65,6 +81,8 @@ namespace RVL
 				int iScene;
 				int iSCTI;
 				int iMCTI;
+				int iMS;
+				int iSS;
 				float R[9];
 				float t[3];
 				float tMatch[3];
@@ -75,6 +93,12 @@ namespace RVL
 				float angleGT;
 				float distanceGT;
 				int nValids;
+				float eSeg;
+				// Petra
+				float cost_ICP; 
+				float R_ICP[9];
+				float t_ICP[3];
+				// end Petra
 				MatchInstance *pNext;
 			};
 
@@ -107,16 +131,77 @@ namespace RVL
 				void *vpData);
 		}
 	}
+	//class CTISet
+	//{
+	//public:
+	//	CTISet();
+	//	virtual ~CTISet();
+
+	//	void LoadSMCTI(char * filePath, Array<RECOG::PSGM_::Plane> *convexTemplate);
+
+	//	Array<RECOG::PSGM_::ModelInstance> CTI;
+	//	//std::vector<std::vector<int>> SegmentCTIs;
+	//	Array<Array<int>> SegmentCTIs;
+	//	int *segmentCTIIdxMem;
+	//};
 
 	class PSGM
 	{
 	public:
 		PSGM();
 		virtual ~PSGM();
+		//void Create();
 		void CreateParamList(CRVLMem *pMem);
 		void Interpret(
 			Mesh *pMesh,
 			int iScene = 0);
+		
+		//Petra
+		void InterpreteCTIS(
+			Mesh *pMesh);
+		
+		void MatchInPrimitiveSpace(
+			Eigen::MatrixXf QM,
+			Eigen::MatrixXf M,
+			int iCTI
+			);
+
+		void CTIMatch(
+			Eigen::MatrixXf dM,
+			int iCTI);
+
+		void UpdateMatchMatrix(
+			RECOG::PSGM_::SegmentMatch *SMatch,			
+			int iCTI
+			);
+
+		void VisualizeCTIMatch( //Damir
+			float *nT, 
+			float *dM, 
+			float *dS, 
+			int *validS);
+		
+		Eigen::MatrixXf ConvexTemplatenT();
+
+		void VisualizeCTIMatchidx( //for a given Scene and Model CTI index, calls visualization (prepares descriptors and visibility mask).
+			int iSCTI,
+			int iMCTI);
+
+		void CalculatePose(int iMatch);
+
+		typedef void(*ICPfunction)(vtkSmartPointer<vtkPolyData>, vtkSmartPointer<vtkPolyData>, float *, int, float, int, double*);
+
+		void AddBestCTIModelsToVisualizer(Visualizer *pVisualizer, bool align, ICPfunction ICPFunction, int ICPvariant);
+		
+		void AddCTIModelToVisualizer(Visualizer *pVisualizer, int iMatch, bool align, ICPfunction ICPFunction, int ICPvariant);
+		
+		void LoadModelMeshDB(char *modelSequenceFileName);
+
+		vtkSmartPointer<vtkPolyData> GetSceneModelPC(int iCluster);
+
+		void CalculateICPCost(RVL::PSGM::ICPfunction ICPFunction, int ICPvariant);
+		//end Petra
+
 		void InitDisplay(
 			Visualizer *pVisualizer,
 			Mesh *pMesh,
@@ -209,6 +294,9 @@ namespace RVL
 			int iScene); //Vidovic
 		void LoadCompleteSegmentGT(FileSequenceLoader sceneSequence); //Vidovic
 		void LoadCTI(char *fileName); //Vidovic
+		bool PSGM::CompareMatchToGT(RECOG::PSGM_::MatchInstance *pMatch, ECCVGTLoader *ECCVGT, bool poseCheck, float angleThresh, float distanceThresh); //VIDOVIC
+		void PSGM::CountTPandFN(ECCVGTLoader *ECCVGT, int &TP, int &FN, bool printMatchInfo); //VIDOVIC
+
 	private:
 		void Clusters();
 		void CreateTemplate();
@@ -217,6 +305,9 @@ namespace RVL
 			//RECOG::PSGM_::Cluster *pCluster, //Vidovic
 			RECOG::PSGM_::ModelInstance *pModelInstance);
 		bool ReferenceFrames(int iCluster);
+		bool ReferenceFrames(
+			RECOG::PSGM_::Cluster *pCluster,
+			int iCluster = -1);
 		bool Inside(
 			int iVertex,
 			RECOG::PSGM_::Cluster *pCluster,
@@ -289,6 +380,14 @@ namespace RVL
 		RECOG::CTISet MCTISet;
 		CRVLTimer *pTimer;
 		FILE *fpTime;
+		Eigen::MatrixXf nT; //Petra
+		RECOG::PSGM_::SegmentMatch *SMatch; //Petra
+		SortIndex<float> *sortedMatches; //Petra
+		Eigen::VectorXf E;
+		Eigen::MatrixXf t;
+		RECOG::CTISet CTIset;
+		RECOG::CTISet MCTIset;
+		std::map<int, vtkSmartPointer<vtkPolyData>> vtkModelDB;
 
 
 	private:		
@@ -323,5 +422,7 @@ namespace RVL
 		float *dISMc; //Vidovic
 		int CTIIdx; //Vidovic
 	};
-}
 
+	
+
+}

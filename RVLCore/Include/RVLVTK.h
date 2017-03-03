@@ -40,6 +40,8 @@
 #include "vtkConeSource.h"
 #include "vtkOBJExporter.h"
 #include "vtkPointPicker.h"
+#include "VTKActor.h"
+#include "vtkTransformPolyDataFilter.h"
 #include "VTKActorObj.h"
 #include "vtkSphereSource.h"
 #include "vtkCubeSource.h"
@@ -56,6 +58,7 @@
 #include "vtkHull.h"
 #include "vtkPlanes.h"
 #include "vtkPlaneSource.h"
+#include "vtkPolyDataPointSampler.h"
 
 #include "opencv2\opencv.hpp"
 
