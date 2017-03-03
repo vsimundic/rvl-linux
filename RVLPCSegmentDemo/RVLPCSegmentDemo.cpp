@@ -479,7 +479,8 @@ void RunMainProg(
 			//ObjectAggregationLevel2(&objects, &surfels, &mesh, MeshFileName);
 			cv::imshow("Colored object image", GenColoredSegmentationImgFromObjectGraph(&objects));
 			cv::waitKey(1);
-			/*VisualizeObjectGraphVertexPointCloud(&objects, 100);*/
+			//VisualizeObjectGraphVertexPointCloud(&objects, 100);
+			objects.DetermineObjectConvexityData(0.015, 0.1);
 			objects.ObjectAggregationLevel2_ViaObjectPairConvexity(0.015, 0.77, 0.75, 300, true);
 			cv::imshow("New Colored object image", GenColoredSegmentationImgFromObjectGraph(&objects));
 			cv::waitKey(1);
