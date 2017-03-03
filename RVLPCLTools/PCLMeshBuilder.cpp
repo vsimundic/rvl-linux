@@ -169,13 +169,17 @@ void PCLMeshBuilder::CreateParamList(CRVLMem *pMem)
 	pParamData = ParamList.AddParam("MeshBuilder.normalEstR", RVLPARAM_TYPE_DOUBLE, &normalEstR);
 	pParamData = ParamList.AddParam("MeshBuilder.bilateralFilter", RVLPARAM_TYPE_FLAG, &flags);
 	ParamList.AddID(pParamData, "yes", RVLPCLMESHBUILDER_FLAG_BILATERAL_FILTER);
+	pParamData = ParamList.AddParam("MeshBuilder.organizedPC", RVLPARAM_TYPE_FLAG, &flags);
+	ParamList.AddID(pParamData, "yes", RVLPCLMESHBUILDER_FLAG_ORGANIZED_PC);
+	pParamData = ParamList.AddParam("MeshBuilder.width", RVLPARAM_TYPE_INT, &width);
+	pParamData = ParamList.AddParam("MeshBuilder.height", RVLPARAM_TYPE_INT, &height);
 }
 
 bool PCLMeshBuilder::Load(
 	char *FileName,
 	Mesh *pMesh,
-	pcl::PointCloud<pcl::PointXYZRGBA>::Ptr PC,
-	pcl::PolygonMesh &PCLMesh,
+	pcl::PointCloud<pcl::PointXYZRGBA>::Ptr PC_,
+	pcl::PolygonMesh &PCLMesh_,
 	bool bSavePLY)
 {
 	char *fileExtension = RVLGETFILEEXTENSION(FileName);
@@ -185,7 +189,7 @@ bool PCLMeshBuilder::Load(
 	else
 	{
 		if (strcmp(fileExtension, "pcd") == 0)
-			PCLLoadPCD(FileName, PC);
+			PCLLoadPCD(FileName, PC_);
 		else if (strcmp(fileExtension, "bmp") == 0)
 		{
 			char *depthFileName = RVLCreateString(FileName);
@@ -207,7 +211,7 @@ bool PCLMeshBuilder::Load(
 
 			printf("Creating point cloud from RGB-D image.\n");
 
-			camera.GetPointCloud(&depthImage, RGBImage, PC);
+			camera.GetPointCloud(&depthImage, RGBImage, PC_);
 
 			delete[] depthFileName;
 			delete[] depthImage.Element;
@@ -223,7 +227,7 @@ bool PCLMeshBuilder::Load(
 
 		printf("Creating organized PCL mesh from point cloud...");
 
-		CreateMesh(PC, PCLMesh);
+		CreateMesh(PC_, PCLMesh_);
 
 		printf("completed.\n");
 
@@ -235,7 +239,7 @@ bool PCLMeshBuilder::Load(
 
 			printf("Saving mesh to %s...", PLYFileName);
 
-			PCLSavePLY(PLYFileName, PCLMesh);
+			PCLSavePLY(PLYFileName, PCLMesh_);
 
 			printf("completed.\n");
 
@@ -243,10 +247,19 @@ bool PCLMeshBuilder::Load(
 		}
 
 		vtkSmartPointer<vtkPolyData> pd = vtkSmartPointer<vtkPolyData>::New();
-		PCLMeshToPolygonData(PCLMesh, pd);
+		PCLMeshToPolygonData(PCLMesh_, pd);
 		pMesh->pPolygonData = vtkSmartPointer<vtkPolyData>::New();
 		pMesh->pPolygonData->DeepCopy(pd);
 	}
+
+	if (flags & RVLPCLMESHBUILDER_FLAG_ORGANIZED_PC)
+	{
+		pMesh->bOrganizedPC = true;
+		pMesh->width = width;
+		pMesh->height = height;
+	}
+	else
+		pMesh->bOrganizedPC = false;
 
 	printf("Creating ordered mesh from PCL mesh...");
 
@@ -255,4 +268,15 @@ bool PCLMeshBuilder::Load(
 	printf("completed.\n");
 
 	return true;
+}
+
+bool RVL::LoadMesh(
+	void *vpMeshBuilder,
+	char *FileName,
+	Mesh *pMesh,
+	bool bSavePLY)
+{
+	PCLMeshBuilder *pMeshBuilder = (PCLMeshBuilder *)vpMeshBuilder;
+
+	return pMeshBuilder->Load(FileName, pMesh, pMeshBuilder->PC, pMeshBuilder->PCLMesh, bSavePLY);
 }

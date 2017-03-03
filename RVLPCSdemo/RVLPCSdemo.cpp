@@ -10,6 +10,14 @@ VTK_MODULE_INIT(vtkInteractionStyle);
 VTK_MODULE_INIT(vtkRenderingFreeType);
 #include "RVLCore.h"
 #include "RVLPCS.h"
+#include "Util.h"
+#include "Graph.h"
+#include "Mesh.h"
+#include <pcl/common/common.h>
+#include <pcl/PolygonMesh.h>
+#include "RGBDCamera.h"
+
+using namespace RVL;
 
 int main(int argc, char* argv[])
 {
@@ -22,6 +30,14 @@ int main(int argc, char* argv[])
 	VS.CreateParamList();
 
 	VS.Init("RVLPCSdemo.cfg");
+
+	// Create RGB-D camera.
+
+	//RGBDCamera camera;
+
+	// Create point cloud.
+
+	//pcl::PointCloud<pcl::PointXYZRGBA>::Ptr PC(new pcl::PointCloud<pcl::PointXYZRGBA>(320, 240));
 
 	// create GUI
 
@@ -76,6 +92,12 @@ int main(int argc, char* argv[])
 
 			return 0;
 		}
+
+		//Array2D<short int> depthImage;
+
+		//depthImage.Element = pDepthImage->Disparity;
+
+		//camera.GetPointCloud(&depthImage, GUI.m_pRGBImage, PC);
 
 		if (GUI.m_bRecord)
 		{

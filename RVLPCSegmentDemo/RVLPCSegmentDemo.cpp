@@ -435,7 +435,7 @@ void RunMainProg(
 				if (pSurfel->bEdge)
 					continue;
 
-				DetermineImgAdjDescriptors(pSurfel, &mesh);
+				surfels.DetermineImgAdjDescriptors(pSurfel, &mesh);
 			}
 
 			objects.Create(&surfels);
@@ -454,7 +454,7 @@ void RunMainProg(
 			ssfFileName += ".ssf";
 
 			std::cout << "Saving SSF!" << std::endl;
-			GenerateSSF(&surfels, ssfFileName, detector.minSurfelSize, false);
+			surfels.GenerateSSF(ssfFileName, detector.minSurfelSize, false);
 			std::cout << "Saved!" << std::endl;
 		}
 #endif
@@ -488,11 +488,11 @@ void RunMainProg(
 			////Filko
 			//objects.DetermineObjectConvexityData(0.005, 0.5);
 			//ObjectAggregationLevel2(&objects, &surfels, &mesh, MeshFileName);
-			cv::imshow("Colored object image", GenColoredSegmentationImgFromObjectGraph(&objects));
+			cv::imshow("Colored object image", objects.CreateSegmentationImage());
 			cv::waitKey(1);
 			/*VisualizeObjectGraphVertexPointCloud(&objects, 100);*/
 			objects.ObjectAggregationLevel2_ViaObjectPairConvexity(0.015, 0.77, 0.75, 300, true);
-			cv::imshow("New Colored object image", GenColoredSegmentationImgFromObjectGraph(&objects));
+			cv::imshow("New Colored object image", objects.CreateSegmentationImage());
 			cv::waitKey(1);
 			////
 			//Evaluation
@@ -501,6 +501,12 @@ void RunMainProg(
 			objects.CalculateOverAndUnderSegmentation(E, N, false, "", false);
 			std::cout << "Oversegmenation error: " << 100.0f * (1 - E[0] / (float)N) << "%" << std::endl;
 			std::cout << "Undersegmenation error: " << 100.0f * E[1] / (float)N << "%" << std::endl;*/
+			//save label image
+			/*std::string imgFileName(fileName);
+			imgFileName.erase(imgFileName.find_last_of("."));
+			imgFileName += "OGLabels.png";
+			objects.SaveSegmentationLabelImg(imgFileName);*/
+
 
 			printf("completed.\n");
 		}
@@ -527,8 +533,8 @@ void RunMainProg(
 					fclose(fp);
 
 				//Visualization
-				cv::imshow("Colored surfel image", GenColoredSurfelImgFromSSF(objects.ssf));
-				cv::imshow("Colored segmentation image", GenColoredSegmentationImgFromObjectGraph(&objects));
+				cv::imshow("Colored surfel image", surfels.GenColoredSurfelImgFromSSF(objects.ssf));
+				cv::imshow("Colored segmentation image", objects.CreateSegmentationImage());
 			cv::waitKey();
 		}
 

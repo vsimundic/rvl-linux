@@ -4,12 +4,12 @@
 #include "SceneSegFile.hpp"
 #include "SVMClassifier.h"
 #include <set>
-
-//#define RVLPCSEGMENT_OBJECT_GRAPH_LOG
+#include "opencv2\opencv.hpp"
 
 #define RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_HEURISTIC	0
 #define RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_SVM			1
 #define RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_NLMC		2
+#define RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_NLMC2		3
 
 namespace RVL
 {
@@ -86,6 +86,7 @@ namespace RVL
 			void CalculateConvexityRatiosForObjectPair(int firstObject, int secondObject, float& firstRatio, float& secondRatio, float convexThr = 0.005);	//Filko
 			void CalculateObjectsColorHistogram(); //Filko
 			void ObjectAggregationLevel2_ViaObjectPairConvexity(float convexThr, float ratioThr, float ratioThr2, int objValidThr = 300, bool verbose = false); //Filko - NOT OPTIMIZED!!!!
+			void SaveSegmentationLabelImg(std::string filename); //Filko
 			void WERSegmentation();
 			void ComputeRelationCosts();
 			void ComputeRelationCost(
@@ -106,6 +107,8 @@ namespace RVL
 			void WriteSurfelDataToFile(FILE *fp);
 			void WriteObjectDataToFile(FILE *fp);
 			void InitSVMClassifier(char *svmParamsFileName);	//Nyarko
+			cv::Mat CreateSegmentationImage();
+			cv::Mat CreateSegmentationImageFromSSF();
 			void Debug();
 
 		public:
