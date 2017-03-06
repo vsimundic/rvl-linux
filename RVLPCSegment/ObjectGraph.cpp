@@ -1990,7 +1990,7 @@ void ObjectGraph::DetermineObjectConvexityData(float convexThr, float minDiffFli
 			this->additionalObjectData.CHVertexIndices.at(iObject) = CHVertexIndicesOtherDir;
 			this->additionalObjectData.ObjectsSurfelConvexity.at(iObject) = ObjectsSurfelConvexityOtherDir;
 			//Set multiplier to -1
-			this->additionalObjectData.convexityMultipliers.at(iObject) = -1.0;
+			//this->additionalObjectData.convexityMultipliers.at(iObject) = -1.0;
 		}
 	}	// for every object
 	//Deref
@@ -2058,12 +2058,12 @@ void ObjectGraph::CalculateConvexityRatiosForObjectPair(int firstObject, int sec
 	GRAPH::AggregateNode<SURFEL::AgEdge> *pSecondObject = this->NodeArray.Element + secondObject;
 
 	//Heuristic mumbo-jumbo
-	if (((this->additionalObjectData.convexityMultipliers.at(firstObject) == -1) || (this->additionalObjectData.convexityMultipliers.at(secondObject) == -1)) && !CheckIfNeighbours(firstObject, secondObject))
+	/*if (((this->additionalObjectData.convexityMultipliers.at(firstObject) == -1) || (this->additionalObjectData.convexityMultipliers.at(secondObject) == -1)) && !CheckIfNeighbours(firstObject, secondObject))
 	{
 		firstRatio = 0.0;
 		secondRatio = 0.0;
 		return;
-	}
+	}*/
 	std::map<int, Surfel*> aggregateObject; //Sorted in ascending order by definition
 	std::map<int, Surfel*>::reverse_iterator aggObjIt;	//Reverse iterator (Descending order)
 	std::map<int, Surfel*>::reverse_iterator aggObjItSec;
