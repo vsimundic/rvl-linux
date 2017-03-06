@@ -493,18 +493,21 @@ void RunMainProg(
 			//ObjectAggregationLevel2(&objects, &surfels, &mesh, MeshFileName);
 			cv::imshow("Colored object image", objects.CreateSegmentationImage());
 			cv::waitKey(1);
-			VisualizeObjectGraphVertexPointCloud(&objects, 100);
-			objects.DetermineObjectConvexityData(0.015, 0.1);
+			//VisualizeObjectGraphVertexPointCloud(&objects, 100);
+			objects.DetermineObjectConvexityData(0.015, 0.15, true);
 			objects.ObjectAggregationLevel2_ViaObjectPairConvexity(0.015, 0.77, 0.75, 300, true);
 			cv::imshow("New Colored object image", objects.CreateSegmentationImage());
 			cv::waitKey(1);
 			////
 			//Evaluation
-			/*int E[2];
+			int E[2];
 			int N = 0;
-			objects.CalculateOverAndUnderSegmentation(E, N, false, "", false);
+			//std::string gtImgFileName(fileName);
+			//gtImgFileName.erase(gtImgFileName.find_last_of("."));
+			//gtImgFileName += "a.png";
+			objects.CalculateOverAndUnderSegmentation(E, N, true, fileName, false);
 			std::cout << "Oversegmenation error: " << 100.0f * (1 - E[0] / (float)N) << "%" << std::endl;
-			std::cout << "Undersegmenation error: " << 100.0f * E[1] / (float)N << "%" << std::endl;*/
+			std::cout << "Undersegmenation error: " << 100.0f * E[1] / (float)N << "%" << std::endl;
 			//save label image
 			/*std::string imgFileName(fileName);
 			imgFileName.erase(imgFileName.find_last_of("."));

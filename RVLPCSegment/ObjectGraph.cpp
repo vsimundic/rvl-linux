@@ -1758,7 +1758,7 @@ bool RVL::SURFEL::objectMouseRButtonDownUserFunction(
 		return false;
 }
 
-void ObjectGraph::DetermineObjectConvexityData(float convexThr, float minDiffFlipReq)
+void ObjectGraph::DetermineObjectConvexityData(float convexThr, float minDiffFlipReq, bool setflip)
 {
 	//Reseting convexity data
 	if (this->additionalObjectData.CHVertexIndices.size())
@@ -1990,7 +1990,9 @@ void ObjectGraph::DetermineObjectConvexityData(float convexThr, float minDiffFli
 			this->additionalObjectData.CHVertexIndices.at(iObject) = CHVertexIndicesOtherDir;
 			this->additionalObjectData.ObjectsSurfelConvexity.at(iObject) = ObjectsSurfelConvexityOtherDir;
 			//Set multiplier to -1
-			//this->additionalObjectData.convexityMultipliers.at(iObject) = -1.0;
+			if (setflip)
+				this->additionalObjectData.convexityMultipliers.at(iObject) = -1.0;
+			//std::cout << "Object " << iObject << " is concave!" << std::endl;
 		}
 	}	// for every object
 	//Deref
@@ -2058,12 +2060,12 @@ void ObjectGraph::CalculateConvexityRatiosForObjectPair(int firstObject, int sec
 	GRAPH::AggregateNode<SURFEL::AgEdge> *pSecondObject = this->NodeArray.Element + secondObject;
 
 	//Heuristic mumbo-jumbo
-	/*if (((this->additionalObjectData.convexityMultipliers.at(firstObject) == -1) || (this->additionalObjectData.convexityMultipliers.at(secondObject) == -1)) && !CheckIfNeighbours(firstObject, secondObject))
+	if (((this->additionalObjectData.convexityMultipliers.at(firstObject) == -1) || (this->additionalObjectData.convexityMultipliers.at(secondObject) == -1)) && !CheckIfNeighbours(firstObject, secondObject))
 	{
 		firstRatio = 0.0;
 		secondRatio = 0.0;
 		return;
-	}*/
+	}
 	std::map<int, Surfel*> aggregateObject; //Sorted in ascending order by definition
 	std::map<int, Surfel*>::reverse_iterator aggObjIt;	//Reverse iterator (Descending order)
 	std::map<int, Surfel*>::reverse_iterator aggObjItSec;
@@ -2697,6 +2699,7 @@ void ObjectGraph::ObjectAggregationLevel2_ViaObjectPairConvexity(float convexThr
 			}
 
 			//compiling new clusters based on labels
+			newclusters.clear();
 			newclusters.resize(label);
 			for (int i = 0; i < inputcluster_label.size(); i++)
 				newclusters.at(inputcluster_label.at(i)).push_back(inputcluster.at(i));
