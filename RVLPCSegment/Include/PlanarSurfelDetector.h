@@ -589,6 +589,7 @@ namespace RVL
 		int edgeClassHalfWinSize;
 		float edgeClassDepthDiscontinuityThr;
 		bool bJoinSmallSurfelsToClosestNeighbors;
+		bool bNormalConstraintInSecondInitRG;
 		unsigned char *mProcessed;
 		CRVLTimer *pTimer;
 #ifdef RVLPLANARSURFELDETECTOR_EDGE_BOUNDARY_DEBUG

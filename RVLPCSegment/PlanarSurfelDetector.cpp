@@ -32,6 +32,7 @@ PlanarSurfelDetector::PlanarSurfelDetector()
 	maxRange = 5000.0f;
 	maxAttackSize = 1000;
 	bJoinSmallSurfelsToClosestNeighbors = false;
+	bNormalConstraintInSecondInitRG = false;
 	edgeClassHalfWinSize = 5;
 	edgeClassDepthDiscontinuityThr = 0.01f;
 
@@ -207,6 +208,7 @@ void PlanarSurfelDetector::CreateParamList(CRVLMem *pMem)
 	pParamData = ParamList.AddParam("SurfelDetector.bJoinSmallSurfelsToClosestNeighbors", RVLPARAM_TYPE_BOOL, &bJoinSmallSurfelsToClosestNeighbors);
 	pParamData = ParamList.AddParam("SurfelDetector.edgeClassHalfWinSize", RVLPARAM_TYPE_INT, &edgeClassHalfWinSize);
 	pParamData = ParamList.AddParam("SurfelDetector.edgeClassDepthDiscontinuityThr", RVLPARAM_TYPE_FLOAT, &edgeClassDepthDiscontinuityThr);
+	pParamData = ParamList.AddParam("SurfelDetector.normalConstraintInSecondInitRG", RVLPARAM_TYPE_BOOL, &bNormalConstraintInSecondInitRG);
 }
 
 void PlanarSurfelDetector::RandomIndices(Array<int> &A)
@@ -734,7 +736,7 @@ void PlanarSurfelDetector::PlanarRegionGrowing(
 
 	//data.kNormal2 = 0.0f;
 	//data.kNormal2 = 4.0f;
-	regionGrowingData.kNormal2 = kNormal * kNormal;
+	regionGrowingData.kNormal2 = (bNormalConstraintInSecondInitRG ? kNormal * kNormal : 0.0f);
 
 	piPtFetch = piPtPut = regionGrowingData.iPtBuff2;
 

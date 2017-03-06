@@ -879,18 +879,20 @@ void SurfelGraph::DetectVertices(
 	Point *pPt, *pPt_;
 	//Point *pPt_;
 	QList<QLIST::Index> *pSurfelVertexList;
-	float *N;
+	float *N, *P_;
 	//float *N1, *N2;
 	//float N2_[3], VTmp[3];
 	//float fTmp;
 	int nPlanarFeatures, nEdgeFeatures;
 	int nFeatures, iFeature, iFeature_, iFeature__;
-	int iF[3];
+	int iF[3], iP[3];
 	int iEdgeFeature, iEdgeFeature_, iEdgeFeature__;
 	bool bSmallestIndex;
 	Surfel *pSurfel_, *pEdgeFeature;
 	bool bCycleCompleted;
 	int i, j;
+	float P[3];
+	float fnFeatures;
 
 	for (iSurfel = 0; iSurfel < NodeArray.n; iSurfel++)
 	{
@@ -923,8 +925,8 @@ void SurfelGraph::DetectVertices(
 
 				bVisited[iPt] = true;
 
-				if (iPt == 305811)
-					int debug = 0;
+				//if (iPt == 305811)
+				//	int debug = 0;
 
 				pPt = pMesh->NodeArray.Element + iPt;
 
@@ -959,12 +961,27 @@ void SurfelGraph::DetectVertices(
 								iF[0] = iFeature;
 								iF[1] = iFeature__;
 								iF[2] = iFeature_;
+								iP[0] = iPt;
+								iP[1] = iPt__;
+								iP[2] = iPt_;
+
+								RVLNULL3VECTOR(P);
 
 								for (i = 0; i < 3; i++)
 								{
 									if (iF[i] >= 0)
+									{
+										P_ = pMesh->NodeArray.Element[iP[i]].P;
+
+										RVLSUM3VECTORS(P, P_, P);
+
 										nFeatures++;
+									}
 								}
+
+								fnFeatures = (float)nFeatures;
+
+								RVLSCALE3VECTOR2(P, fnFeatures, P);
 
 								// Create vertex.
 
@@ -972,7 +989,7 @@ void SurfelGraph::DetectVertices(
 
 								//pVertex->bEdge = pPt->bBoundary;
 
-								RVLCOPY3VECTOR(pPt->P, pVertex->P);
+								RVLCOPY3VECTOR(P, pVertex->P);
 
 								RVLMEM_ALLOC_STRUCT_ARRAY(pMem, int, nFeatures, pVertex->iSurfelArray.Element);
 
