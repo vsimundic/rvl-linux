@@ -179,14 +179,14 @@ int main(int argc, char ** argv)
 			visualizer.Create();
 			objectDetector.pSurfels->InitDisplay(&visualizer, &(objectDetector.mesh), objectDetector.pSurfelDetector);
 
-#ifdef RVLSURFEL_IMAGE_ADJACENCY
-			if (objectDetector.bSegmentToObjects)
-			{
-				objectDetector.pObjects->InitDisplay(&visualizer, &(objectDetector.mesh), SelectionColor);
-				objectDetector.pObjects->Display();
-			}
-			else
-#endif
+//#ifdef RVLSURFEL_IMAGE_ADJACENCY
+//			if (objectDetector.bSegmentToObjects)
+//			{
+//				objectDetector.pObjects->InitDisplay(&visualizer, &(objectDetector.mesh), SelectionColor);
+//				objectDetector.pObjects->Display();
+//			}
+//			else
+//#endif
 				objectDetector.pSurfels->Display(&visualizer, &(objectDetector.mesh));
 
 #ifdef RVLSURFEL_IMAGE_ADJACENCY

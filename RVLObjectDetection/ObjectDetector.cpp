@@ -192,6 +192,10 @@ void ObjectDetector::DetectObjects(char *MeshFilePathName)
 			printf("completed.\n");
 
 			pObjects->Debug();
+
+			// Detect vertices.
+
+			pSurfels->DetectVertices(&mesh);
 		}
 
 		if (flags & RVLOBJECTDETECTION_FLAG_SAVE_SSF)
@@ -220,7 +224,7 @@ void ObjectDetector::DetectObjects(char *MeshFilePathName)
 		{
 			printf("Aggregating objects (LEVEL 2)... ");
 
-			pSurfels->DetectVertices(&mesh);
+			//pSurfels->DetectVertices(&mesh);
 
 			//Generate color histograms for surfels
 			/*std::string imgFileName(MeshFileName);
