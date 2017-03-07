@@ -487,30 +487,32 @@ int main(int argc, char ** argv)
 
 				QueryPerformanceCounter((LARGE_INTEGER *)&ctr1_);
 
-				pcl::PointCloud<pcl::PointXYZINormal>::Ptr cloud_destination(new pcl::PointCloud<pcl::PointXYZINormal>);
-				//creating destination cloud
-				cloud_destination->width = mesh.NodeArray.n;
-				cloud_destination->height = 1;
-				cloud_destination->is_dense = false;
-				cloud_destination->points.resize(cloud_destination->width * cloud_destination->height);
+				//pcl::PointCloud<pcl::PointXYZINormal>::Ptr cloud_destination(new pcl::PointCloud<pcl::PointXYZINormal>);
+				////creating destination cloud
+				//cloud_destination->width = mesh.NodeArray.n;
+				//cloud_destination->height = 1;
+				//cloud_destination->is_dense = false;
+				//cloud_destination->points.resize(cloud_destination->width * cloud_destination->height);
 
-				for (int i = 0; i < mesh.NodeArray.n; i++)
-				{
-					cloud_destination->points[i].x = mesh.NodeArray.Element[i].P[0];
-					cloud_destination->points[i].y = mesh.NodeArray.Element[i].P[1];
-					cloud_destination->points[i].z = mesh.NodeArray.Element[i].P[2];
+				//for (int i = 0; i < mesh.NodeArray.n; i++)
+				//{
+				//	cloud_destination->points[i].x = mesh.NodeArray.Element[i].P[0];
+				//	cloud_destination->points[i].y = mesh.NodeArray.Element[i].P[1];
+				//	cloud_destination->points[i].z = mesh.NodeArray.Element[i].P[2];
 
-					cloud_destination->points[i].normal_x = mesh.NodeArray.Element[i].N[0];
-					cloud_destination->points[i].normal_y = mesh.NodeArray.Element[i].N[1];
-					cloud_destination->points[i].normal_z = mesh.NodeArray.Element[i].N[2];
-				}
+				//	cloud_destination->points[i].normal_x = mesh.NodeArray.Element[i].N[0];
+				//	cloud_destination->points[i].normal_y = mesh.NodeArray.Element[i].N[1];
+				//	cloud_destination->points[i].normal_z = mesh.NodeArray.Element[i].N[2];
+				//}
 
-				pcl::search::KdTree<pcl::PointXYZINormal>::Ptr kdtree = boost::make_shared<pcl::search::KdTree<pcl::PointXYZINormal>>((new pcl::search::KdTree<pcl::PointXYZINormal>));
-				kdtree->setInputCloud(cloud_destination); //using this doesn't really improve anything
+				//pcl::search::KdTree<pcl::PointXYZINormal>::Ptr kdtree = boost::make_shared<pcl::search::KdTree<pcl::PointXYZINormal>>((new pcl::search::KdTree<pcl::PointXYZINormal>));
+				//kdtree->setInputCloud(cloud_destination); //using this doesn't really improve anything
 
 				//recognition.CalculateICPCost(PCLICP, PCLICPVariants::Point_to_plane, &kdtree);
 				GenerateSegmentNeighbourhood(&recognition, 0.1);
-				recognition.AddModelsToVisualizer(&visualizer, true, PCLICP, PCLICPVariants::Point_to_plane, NULL/*&kdtree*/);
+
+				recognition.CalculateNNCost(PCLICP, PCLICPVariants::Point_to_plane);
+				//recognition.AddModelsToVisualizer(&visualizer, false, PCLICP, PCLICPVariants::Point_to_plane, NULL/*&kdtree*/);
 
 				QueryPerformanceCounter((LARGE_INTEGER *)&ctr2_);
 				QueryPerformanceFrequency((LARGE_INTEGER *)&freq_);

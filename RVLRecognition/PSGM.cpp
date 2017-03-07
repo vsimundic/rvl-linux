@@ -18,6 +18,7 @@
 #include "PSGM.h"
 #include <Eigen\Eigenvalues>
 #include <random> //VIDOVIC
+#include <nanoflann.hpp>
 
 using namespace RVL;
 using namespace RECOG;
@@ -6207,6 +6208,8 @@ void PSGM::CalculatePose(int iMatch)
 
 void PSGM::AddModelsToVisualizer(Visualizer *pVisualizer, bool align, RVL::PSGM::ICPfunction ICPFunction, int ICPvariant, void *kdTreePtr)
 {
+	printf("Visualization:\n\n");
+
 	int bestMatchIdx;
 	float bestScore;
 	//RECOG::PSGM_::MatchInstance *pMatch;
@@ -6228,6 +6231,15 @@ void PSGM::AddModelsToVisualizer(Visualizer *pVisualizer, bool align, RVL::PSGM:
 				bestScore = pMatch->score;
 			}
 		}*/
+
+		for (int j = 0; j < 30; j++)
+		{
+			int iMatch = scoreMatchMatrix.Element[i].Element[j].idx;
+			int iMCTI = pCTImatchesArray.Element[iMatch]->iMCTI;
+			RECOG::PSGM_::ModelInstance *pMCTI = MCTISet.pCTI.Element[iMCTI];
+			printf("S %d, M %d\n", i, pMCTI->iModel);
+		}			
+
 		if (scoreMatchMatrix.Element[i].Element[0].idx != -1)
 			AddOneModelToVisualizer(pVisualizer, scoreMatchMatrix.Element[i].Element[0].idx, align, ICPFunction, ICPvariant, kdTreePtr);
 	}
@@ -6594,4 +6606,164 @@ vtkSmartPointer<vtkPolyData> PSGM::GetVisiblePart(vtkSmartPointer<vtkPolyData> P
 	visiblePD->GetPointData()->SetNormals(visibleNormals);
 	visiblePD->SetVerts(verts);
 	return visiblePD;
+}
+
+void PSGM::CalculateNNCost(RVL::PSGM::ICPfunction ICPFunction, int ICPvariant)
+{
+	int iMatch;
+	int iMCTI, iSCTI, iCluster, iModel;
+
+	RECOG::PSGM_::ModelInstance *pMCTI;
+	RECOG::PSGM_::ModelInstanceElement *pMIE;
+	RECOG::PSGM_::ModelInstance *pSCTI;
+	RECOG::PSGM_::ModelInstanceElement *pSIE;
+
+	RECOG::PSGM_::MatchInstance *pMatch;
+	//RECOG::PSGM_::MatchInstance *pMatchx = pCTImatchesArray.Element[scoreMatchMatrix.Element[0].Element[0].idx];
+
+	for (int i = 0; i < scoreMatchMatrix.n; i++)
+	{
+		for (int j = 0; j < 7; j++)
+		{
+			iMatch = scoreMatchMatrix.Element[i].Element[j].idx;
+
+			//Setting indices:
+			iMCTI = pCTImatchesArray.Element[iMatch]->iMCTI;
+			iSCTI = pCTImatchesArray.Element[iMatch]->iSCTI;
+
+			//Getting scene and model pointers:
+			pMCTI = MCTISet.pCTI.Element[iMCTI];
+			pMIE = pMCTI->modelInstance.Element;
+			pSCTI = CTISet.pCTI.Element[iSCTI];
+			pSIE = pSCTI->modelInstance.Element;
+
+			iCluster = pSCTI->iCluster;
+			iModel = pMCTI->iModel;
+
+			//Getting match pointer and calculating pose:
+			pMatch = pCTImatchesArray.Element[iMatch];
+			CalculatePose(iMatch);
+
+			//Getting transform from centered (model) CTI polygon data to scene (T_CCTIM_S)
+			float *R_M_S = pMatch->R;
+			float *t_M_S_mm = pMatch->t;
+			float t_M_S[3];
+			RVLSCALE3VECTOR2(t_M_S_mm, 1000.0f, t_M_S);
+
+
+			//PLY Model transformation
+			double T_M_S[16];
+			RVLHTRANSFMX(R_M_S, t_M_S, T_M_S);
+			vtkSmartPointer<vtkTransform> transform = vtkSmartPointer<vtkTransform>::New();
+			transform->SetMatrix(T_M_S); //when transforming PLY models to scene
+			//transform->SetMatrix(T_CCTIM_S); //when transforming CTI convex hull to scene
+
+			//Scaling PLY model to meters
+			vtkSmartPointer<vtkTransform> transformScale = vtkSmartPointer<vtkTransform>::New();
+			transformScale->Scale(0.001, 0.001, 0.001);
+			vtkSmartPointer<vtkTransformPolyDataFilter> transformFilterScale = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
+			transformFilterScale->SetInputData(vtkModelDB.at(iModel));
+			transformFilterScale->SetTransform(transformScale);
+			transformFilterScale->Update();
+
+			//Transforming PLY model or CTI convex hull model to scene
+			vtkSmartPointer<vtkTransformPolyDataFilter> transformFilter = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
+			//transformFilter->SetInputData(modelPD); //model CTI convex hull
+			transformFilter->SetInputConnection(transformFilterScale->GetOutputPort()); //PLY model
+			transformFilter->SetTransform(transform);
+			transformFilter->Update();
+
+
+			//Sampling filter for model polydata
+			//vtkSmartPointer<vtkTriangleFilter> modelSamplerTriangleFilter = vtkSmartPointer<vtkTriangleFilter>::New();
+			//modelSamplerTriangleFilter->SetInputConnection(transformFilter->GetOutputPort());
+			//modelSamplerTriangleFilter->Update();
+			//vtkSmartPointer<vtkPolyDataPointSampler> modelSampler = vtkSmartPointer<vtkPolyDataPointSampler>::New();
+			//modelSampler->SetInputConnection(modelSamplerTriangleFilter->GetOutputPort());
+			//modelSampler->SetDistance(0.005);
+			//modelSampler->Update();
+			//vtkSmartPointer<vtkPolyData> modelSamplerPD = modelSampler->GetOutput();
+
+			//Sampling filter for scene polydata
+			//vtkSmartPointer<vtkTriangleFilter> sceneSamplerTriangleFilter = vtkSmartPointer<vtkTriangleFilter>::New(); //Creates triangles from polygons (Samples don't work with polygons)
+			//sceneSamplerTriangleFilter->SetInputConnection(transformFilter2->GetOutputPort());
+			//sceneSamplerTriangleFilter->Update();
+			//vtkSmartPointer<vtkPolyDataPointSampler> sceneSampler = vtkSmartPointer<vtkPolyDataPointSampler>::New();
+			//sceneSampler->SetInputConnection(sceneSamplerTriangleFilter->GetOutputPort());
+			//sceneSampler->SetDistance(0.005);
+			//sceneSampler->Update();
+			//vtkSmartPointer<vtkPolyData> sceneSamplerPD = sceneSampler->GetOutput();
+
+
+			vtkSmartPointer<vtkPolyData> visiblePD = GetVisiblePart(transformFilter->GetOutput()); //Generate visible scene model pointcloud
+			//Aligning pointcluds (using PCL ICP)
+			float icpT[16];
+			double icpTd[16];
+			double fitnessScore;
+			
+			ICPFunction(visiblePD, /*this->pMesh->pPolygonData*/this->segmentN_PD.at(iCluster), icpT, 30, 0.01, ICPvariant, &fitnessScore, NULL);
+			for (int i = 0; i < 16; i++)
+			{
+				icpTd[i] = icpT[i];
+			}
+			//Transforming model polydata to ICP pose
+			vtkSmartPointer<vtkTransform> transformICP = vtkSmartPointer<vtkTransform>::New();
+			transformICP->SetMatrix(icpTd);
+			vtkSmartPointer<vtkTransformPolyDataFilter> transformFilterICP = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
+			transformFilterICP->SetInputData(visiblePD);
+			//transformFilterICP->SetInputConnection(transformFilter->GetOutputPort());
+			transformFilterICP->SetTransform(transformICP);
+			transformFilterICP->Update();
+
+			pMatch->cost_NN = NNCost(iCluster, transformFilterICP->GetOutput());
+
+		}
+	}
+}
+
+float PSGM::NNCost(int iCluster, vtkSmartPointer<vtkPolyData> targetPD)
+{
+	vtkSmartPointer<vtkPolyData> sourcePD = GetSceneModelPC(iCluster); //Generate scene model pointcloud
+	NanoFlannPointCloud<float> targetPC;
+	vtkSmartPointer<vtkPoints> pdPoints = targetPD->GetPoints();
+	targetPC.pts.resize(pdPoints->GetNumberOfPoints());
+	double *point;
+
+	for (int i = 0; i < pdPoints->GetNumberOfPoints(); i++)
+	{
+		point = pdPoints->GetPoint(i);
+		targetPC.pts.at(i).x = point[0];
+		targetPC.pts.at(i).y = point[1];
+		targetPC.pts.at(i).z = point[2];
+	}
+
+	nanoflann::KDTreeSingleIndexAdaptor<nanoflann::L2_Simple_Adaptor<float, NanoFlannPointCloud<float> >, NanoFlannPointCloud<float>, 3> index(3 /*dim*/, targetPC, nanoflann::KDTreeSingleIndexAdaptorParams(10 /* max leaf */));
+	index.buildIndex();
+
+	vtkSmartPointer<vtkPoints> sourcePoints = sourcePD->GetPoints();
+	float pointF[3];
+
+	std::vector<size_t>   ret_index(1);
+	std::vector<float> out_dist_sqr(1);
+	float costNN=0;
+	int br = 0;
+	int i;
+	for (i = 0; i < sourcePoints->GetNumberOfPoints(); i++)
+	{
+		point = sourcePoints->GetPoint(i);
+		pointF[0] = point[0];
+		pointF[1] = point[1];
+		pointF[2] = point[2];
+		
+		index.knnSearch(pointF, 1, &ret_index[0], &out_dist_sqr[0]);
+		if (sqrt(out_dist_sqr.at(0)) > 0.01)
+		{
+			costNN += 0.01;
+			br++;
+		}
+		else costNN += sqrt(out_dist_sqr.at(0));
+	}
+
+	float meanCost = costNN / i;
+	return costNN;
 }
