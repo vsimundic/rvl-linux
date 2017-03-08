@@ -132,13 +132,22 @@ int main(int argc, char ** argv)
 
 			printf("Scene %s...\n", fileName);
 
-			objectDetector.DetectObjects(fileName);
+			objectDetector.DetectObjects(filePath);
 
 			printf("Scene %s...finished!\n\n", fileName);
 
-			objectDetector.Evaluate(fp, fileName);
+			objectDetector.Evaluate(fp, filePath);
+
+#ifdef RVLSURFEL_IMAGE_ADJACENCY
+			if (objectDetector.bSegmentToObjects)
+			{
+				std::string segmentationImageFileName(filePath);
+				segmentationImageFileName.erase(segmentationImageFileName.find_last_of("."));
+				segmentationImageFileName += "OGLabels.png";
+				objectDetector.pObjects->SaveSegmentationLabelImg(segmentationImageFileName);
+			}
+#endif
 		}
-		fclose(fp);
 		system("pause");
 	}
 	else

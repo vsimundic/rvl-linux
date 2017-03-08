@@ -13,6 +13,7 @@
 #define RVLPLANARSURFELDETECTOR_PLANE_INTERSECTION
 #define RVLPLANARSURFELDETECTOR_POLYGONALIZE_BOUNDARY
 //#define RVLPLANARSURFELDETECTOR_POLYGONALIZE_BOUNDARY_2
+#define RVLPLANARSURFELDETECTOR_LIMITED_DEPTH_UNCONSTRAINED_RG
 
 #define RVLPLANARSURFELDETECTOR_PSEUDO_RANDOM_DEBUG //RANDOM DATOTEKA
 //#define RVLPLANARSURFELDETECTOR_CONNECTED_COMPONENT_DEBUG
@@ -122,6 +123,8 @@ namespace RVL
 		int iSurfel;
 		int *surfelMap;
 		int *buffer;
+		int *depthMap;
+		unsigned int *unconstrainedNormalDepthMap;
 #ifndef RVLPLANARSURFELDETECTOR_SURFELS_CONNECTED
 #ifndef RVLPLANARSURFELDETECTOR_DIST_COST
 		float *costMap;
@@ -140,6 +143,8 @@ namespace RVL
 		int *iBoundaryPtBuff;
 		Array<int> surfelPtArray;
 		int *iSurfelSeed;
+		bool bLimitedDepthUnconstrainedRG;
+		int maxUnconstrainedNormalDepth;
 	};
 
 	namespace PSD
@@ -586,10 +591,12 @@ namespace RVL
 		float maxEdgeFeatureConcavity;
 		float maxRange;
 		int maxAttackSize;
+		int maxUnconstrainedNormalDepth;
 		int edgeClassHalfWinSize;
 		float edgeClassDepthDiscontinuityThr;
 		bool bJoinSmallSurfelsToClosestNeighbors;
 		bool bNormalConstraintInSecondInitRG;
+		bool bLimitedDepthUnconstrainedNormalRG;
 		unsigned char *mProcessed;
 		CRVLTimer *pTimer;
 #ifdef RVLPLANARSURFELDETECTOR_EDGE_BOUNDARY_DEBUG
@@ -608,6 +615,7 @@ namespace RVL
 		CRVLMem Mem2B;
 		int *map;
 		unsigned int *distanceMap;
+		unsigned int *unconstrainedNormalDepthMap;
 		MESH::PointEdge *PointEdgeBuff;
 		QLIST::Index *BoundaryMem;
 		unsigned int *cutCostMap;

@@ -31,8 +31,10 @@ PlanarSurfelDetector::PlanarSurfelDetector()
 	maxEdgeFeatureConcavity = 0.010f;
 	maxRange = 5000.0f;
 	maxAttackSize = 1000;
+	maxUnconstrainedNormalDepth = 7;
 	bJoinSmallSurfelsToClosestNeighbors = false;
 	bNormalConstraintInSecondInitRG = false;
+	bLimitedDepthUnconstrainedNormalRG = false;
 	edgeClassHalfWinSize = 5;
 	edgeClassDepthDiscontinuityThr = 0.01f;
 
@@ -40,6 +42,7 @@ PlanarSurfelDetector::PlanarSurfelDetector()
 	//iPtBuff = NULL;
 	map = NULL;
 	distanceMap = NULL;
+	unconstrainedNormalDepthMap = NULL;
 	PointEdgeBuff = NULL;
 	BoundaryMem = NULL;
 	cutCostMap = NULL;
@@ -112,6 +115,10 @@ void PlanarSurfelDetector::Init(
 
 	memset(distanceMap, 0xff, nPts * sizeof(unsigned int));
 
+	unconstrainedNormalDepthMap = new unsigned int[nPts];
+
+	//memset(unconstrainedNormalDepthMap, 0xff, nPts * sizeof(unsigned int));
+
 	//iPtBuff = new int[2 * nPts];
 
 	regionGrowingData.distThr = surfelDistThr * surfelDistThr;
@@ -123,6 +130,9 @@ void PlanarSurfelDetector::Init(
 	regionGrowingData.buffer = map;
 	regionGrowingData.costMap = regionGrowingData.costBuffer = NULL;
 	regionGrowingData.GID = nPts;
+	regionGrowingData.bLimitedDepthUnconstrainedRG = false;
+	regionGrowingData.unconstrainedNormalDepthMap = unconstrainedNormalDepthMap;
+	regionGrowingData.maxUnconstrainedNormalDepth = maxUnconstrainedNormalDepth;
 
 	BoundaryMem = new QLIST::Index[nPts];
 
@@ -170,6 +180,7 @@ void PlanarSurfelDetector::DeallocateMemory()
 	//RVL_DELETE_ARRAY(iPtBuff);
 	RVL_DELETE_ARRAY(map);
 	RVL_DELETE_ARRAY(distanceMap);
+	RVL_DELETE_ARRAY(unconstrainedNormalDepthMap);
 	RVL_DELETE_ARRAY(PointEdgeBuff);
 	RVL_DELETE_ARRAY(BoundaryMem);
 	RVL_DELETE_ARRAY(cutCostMap);
@@ -209,6 +220,8 @@ void PlanarSurfelDetector::CreateParamList(CRVLMem *pMem)
 	pParamData = ParamList.AddParam("SurfelDetector.edgeClassHalfWinSize", RVLPARAM_TYPE_INT, &edgeClassHalfWinSize);
 	pParamData = ParamList.AddParam("SurfelDetector.edgeClassDepthDiscontinuityThr", RVLPARAM_TYPE_FLOAT, &edgeClassDepthDiscontinuityThr);
 	pParamData = ParamList.AddParam("SurfelDetector.normalConstraintInSecondInitRG", RVLPARAM_TYPE_BOOL, &bNormalConstraintInSecondInitRG);
+	pParamData = ParamList.AddParam("SurfelDetector.LimitedDepthUnconstrainedNormalRG", RVLPARAM_TYPE_BOOL, &bLimitedDepthUnconstrainedNormalRG);
+	pParamData = ParamList.AddParam("SurfelDetector.maxAttackSize", RVLPARAM_TYPE_INT, &maxUnconstrainedNormalDepth);
 }
 
 void PlanarSurfelDetector::RandomIndices(Array<int> &A)
@@ -317,11 +330,33 @@ int PSD::RegionGrowingOperation(
 	
 		if ((costRGB = pData->kRGB2 * eRGB) <= pData->distThr)
 		{
-			if ((costN = pData->kNormal2 * eN) <= pData->distThr)
-			{
-				if ((costP = pData->kPlane2 * eP) <= pData->distThr)
-				{					
-					if(pData->mode == RVLPLANARSURFELDETECTOR_REGIONGROWING_MODE_FIND_CLOSEST_INLIER)
+			if ((costP = pData->kPlane2 * eP) <= pData->distThr)
+			{				
+				bool bNormalOK = ((costN = pData->kNormal2 * eN) <= pData->distThr);
+
+				if (pData->bLimitedDepthUnconstrainedRG)
+				{
+					unsigned int unconstrainedNormalDepthParent = pData->unconstrainedNormalDepthMap[iNode_];
+
+					if (unconstrainedNormalDepthParent >= pData->maxUnconstrainedNormalDepth)
+						bNormalOK = false;
+					else if (unconstrainedNormalDepthParent > 0)
+					{
+						bNormalOK = true;
+
+						pData->unconstrainedNormalDepthMap[iNode] = unconstrainedNormalDepthParent + 1;
+					}
+					else
+					{
+						pData->unconstrainedNormalDepthMap[iNode] = (bNormalOK ? 0 : 1);
+
+						bNormalOK = true;
+					}
+				}
+
+				if (bNormalOK)
+				{
+					if (pData->mode == RVLPLANARSURFELDETECTOR_REGIONGROWING_MODE_FIND_CLOSEST_INLIER)
 					{
 						pData->iPtSeed = iNode;
 
@@ -357,8 +392,8 @@ int PSD::RegionGrowingOperation(
 							return 1;	// iNode belongs to G.
 						}
 					} // if (pData->mode == RVLPLANARSURFELDETECTOR_REGIONGROWING_MODE_SURFEL_DETECTION || pData->mode == RVLPLANARSURFELDETECTOR_REGIONGROWING_MODE_ATTACK)
-				}	// if ((costP = pData->kPlane2 * eP) <= pData->distThr)
-			}	// if ((costN = pData->kNormal2 * eN) <= pData->distThr)
+				}	// if(bNormalOK)
+			}	// if ((costP = pData->kPlane2 * eP) <= pData->distThr)
 		}	// if ((costRGB = pData->kRGB2 * eRGB) <= pData->distThr)
 
 		if (pData->mode == RVLPLANARSURFELDETECTOR_REGIONGROWING_MODE_FIND_CLOSEST_INLIER)
@@ -645,6 +680,7 @@ void PlanarSurfelDetector::PlanarRegionGrowing(
 	regionGrowingData.iSurfel = iSurfel;
 	regionGrowingData.mode = RVLPLANARSURFELDETECTOR_REGIONGROWING_MODE_SURFEL_DETECTION;
 	regionGrowingData.kNormal2 = kNormal * kNormal;
+	regionGrowingData.bLimitedDepthUnconstrainedRG = false;
 
 	int *piPtBuffEnd = RegionGrowing<Mesh, Point, MeshEdge, MeshEdgePtr, PlanarSurfelDetectorRegionGrowingData, PSD::RegionGrowingOperation>(pMesh, &regionGrowingData, piPtFetch, piPtPut);
 
@@ -738,6 +774,8 @@ void PlanarSurfelDetector::PlanarRegionGrowing(
 	//data.kNormal2 = 4.0f;
 	regionGrowingData.kNormal2 = (bNormalConstraintInSecondInitRG ? kNormal * kNormal : 0.0f);
 
+	regionGrowingData.unconstrainedNormalDepthMap[iPtSeed] = 0;
+
 	piPtFetch = piPtPut = regionGrowingData.iPtBuff2;
 
 	*(piPtPut++) = iPtSeed;
@@ -750,6 +788,7 @@ void PlanarSurfelDetector::PlanarRegionGrowing(
 	regionGrowingData.dSize = 1;
 	regionGrowingData.maxSize = pMesh->NodeArray.n;
 	regionGrowingData.iAttackedSurfel = iSurfel;
+	regionGrowingData.bLimitedDepthUnconstrainedRG = bLimitedDepthUnconstrainedNormalRG;
 
 	int *piPtBuff2End = RegionGrowing<Mesh, Point, MeshEdge, MeshEdgePtr, PlanarSurfelDetectorRegionGrowingData, PSD::RegionGrowingOperation>(pMesh, &regionGrowingData, piPtFetch, piPtPut);
 
@@ -872,9 +911,9 @@ void PlanarSurfelDetector::DefineBoundaryTest(
 
 	// debugging
 
-	for (int i = 0; i < nPts; i++)
-		if (map[i] != -1 || distanceMap[i] != 0xffffffff)
-			int debug = 0;
+	//for (int i = 0; i < nPts; i++)
+	//	if (map[i] != -1 || distanceMap[i] != 0xffffffff)
+	//		int debug = 0;
 
 	/////
 }
@@ -1011,6 +1050,8 @@ void PlanarSurfelDetector::DefineBoundary(
 	{
 		// Attack B-surfel by W-surfel using G_ as the seed. The resulting G-region is stored in G_.
 
+		data.bLimitedDepthUnconstrainedRG = false;
+
 		GRegion(pMesh, pSurfels, data, iSurfel_, iSurfel, G_, GBnd, WBnd, bPrevW, false);
 
 		// Reset map and distanceMap elements on the boundary of new B-surfel (after the attack).
@@ -1098,6 +1139,8 @@ void PlanarSurfelDetector::DefineBoundary(
 	//QLIST::CopyToArray(GSeedListArray.Element + iSurfel, &G);
 
 	int nSeed = G.n;
+
+	data.bLimitedDepthUnconstrainedRG = bLimitedDepthUnconstrainedNormalRG;
 
 	bool bW_ = GRegion(pMesh, pSurfels, data, iSurfel, iSurfel_, G, GBnd, WBnd, bPrevW);
 
@@ -3424,6 +3467,7 @@ void PlanarSurfelDetector::GetNeighbors(
 
 	regionGrowingData.mode = RVLPLANARSURFELDETECTOR_REGIONGROWING_MODE_ATTACK;
 	regionGrowingData.iSurfel = 0;
+	regionGrowingData.bLimitedDepthUnconstrainedRG = bLimitedDepthUnconstrainedNormalRG;
 
 	MeshEdgePtr *pEdgePtr;
 	int iPt, iPt_;
@@ -4265,6 +4309,7 @@ void PlanarSurfelDetector::GetAttackSeed(
 	data.pTemplate = pSurfel_;
 	data.surfelMap = pSurfels->surfelMap;
 	data.buffer = map;
+	data.bLimitedDepthUnconstrainedRG = false;
 
 	int *piGPt = G.Element;
 
