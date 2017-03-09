@@ -28,7 +28,7 @@
 
 /// Move to Graph.h
 
-//#define RVLPCSEGMENT_GRAPH_WERAGGREGATION_DEBUG
+#define RVLPCSEGMENT_GRAPH_WERAGGREGATION_DEBUG
 //#define RVLPCSEGMENT_GRAPH_WERAGGREGATION_DETAILED_DEBUG
 
 namespace RVL
@@ -488,6 +488,9 @@ namespace RVL
 						// pRefEdge->cost <- pRefEdge->cost + pEdge13->cost
 
 						pRefEdge->cost += pEdge13->cost;
+						
+						if (pEdge13->distance < pRefEdge->distance)
+							pRefEdge->distance = pEdge13->distance;
 
 						if (pRefEdge->cost > 0)
 						{
@@ -742,6 +745,7 @@ void ObjectGraph::Create(SurfelGraph *pSurfels_)
 				pEdge->iVertex[1] = iSurfel_;
 				pEdge->desc = *pDesc;
 				pEdge->cost = 0.0f;
+				pEdge->distance = pDesc->minDist;
 				pEdge->idx = pEdge - EdgeArray.Element;
 				pEdgePtr->pEdge = pEdge;
 				RVLQLIST_ADD_ENTRY2(pEdgeList, pEdgePtr);
