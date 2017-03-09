@@ -22,6 +22,7 @@ namespace RVL
 			int idx;
 			SurfelAdjecencyDescriptors desc;
 			float cost;
+			float distance;
 			AgEdge *pNext;
 		};
 

@@ -22,6 +22,7 @@ namespace RVL
 		double cupyDescriptor[4];
 		double minDist;
 		int commonBoundaryLength;
+		double avgDist;
 	};
 
 	namespace SURFEL
