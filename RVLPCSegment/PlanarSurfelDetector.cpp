@@ -117,6 +117,8 @@ void PlanarSurfelDetector::Init(
 
 	unconstrainedNormalDepthMap = new unsigned int[nPts];
 
+	memset(unconstrainedNormalDepthMap, 0, nPts * sizeof(unsigned int));
+
 	//memset(unconstrainedNormalDepthMap, 0xff, nPts * sizeof(unsigned int));
 
 	//iPtBuff = new int[2 * nPts];

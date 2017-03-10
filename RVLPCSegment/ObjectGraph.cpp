@@ -14,7 +14,7 @@
 #include <queue>
 
 //#define RVLPCSEGMENT_OBJECT_GRAPH_LOG
-#define RVLPCSEGMENT_OBJECT_GRAPH_EVALUATION_LOG
+//#define RVLPCSEGMENT_OBJECT_GRAPH_EVALUATION_LOG
 
 /// Move to RVLQListArray.h
 
@@ -28,7 +28,7 @@
 
 /// Move to Graph.h
 
-#define RVLPCSEGMENT_GRAPH_WERAGGREGATION_DEBUG
+//#define RVLPCSEGMENT_GRAPH_WERAGGREGATION_DEBUG
 //#define RVLPCSEGMENT_GRAPH_WERAGGREGATION_DETAILED_DEBUG
 
 namespace RVL
@@ -726,6 +726,9 @@ void ObjectGraph::Create(SurfelGraph *pSurfels_)
 		if (pSurfel->bEdge)
 			continue;
 
+		if (pSurfel->BoundaryArray.n == 0)
+			continue;
+
 		pEdgeList = &(pAgNode->EdgeList);
 
 		for (i = 0; i < pSurfel->imgAdjacency.size(); i++)
@@ -733,6 +736,9 @@ void ObjectGraph::Create(SurfelGraph *pSurfels_)
 			pSurfel_ = pSurfel->imgAdjacency.at(i);
 
 			if (pSurfel_->bEdge)
+				continue;
+
+			if (pSurfel_->BoundaryArray.n == 0)
 				continue;
 
 			pDesc = pSurfel->imgAdjacencyDescriptors.at(i);
@@ -1492,7 +1498,8 @@ void ObjectGraph::ComputeRelationCost(
 	float scale = 1.0f;
 	float depthStepIntThr = scale * 0.005f;
 	float depthStepExtThr = scale * 0.025f;
-	float concaveAngleThr = 45.0f * DEG2RAD;
+	float concaveAngleIntThr = 0.0f * DEG2RAD;
+	float concaveAngleExtThr = 45.0f * DEG2RAD;
 	float concaveMinCost = 0.3f;
 
 	float f1 = pEdge->desc.cupyDescriptor[0];
@@ -1506,9 +1513,10 @@ void ObjectGraph::ComputeRelationCost(
 	case RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_HEURISTIC:
 		data.PContinuous = (f4 <= depthStepIntThr ? 1.0f : (f4 <= depthStepExtThr ? (depthStepExtThr - f4) / (depthStepExtThr - depthStepIntThr) : 0.0f));
 
-		data.PConvex = (f1 >= 0 ? 1.0f : (f1 >= -concaveAngleThr ? concaveMinCost + (1.0f - concaveMinCost) * (concaveAngleThr + f1) / concaveAngleThr : concaveMinCost));
+		data.PConvex = (f1 >= -concaveAngleIntThr ? 1.0f : (f1 >= -concaveAngleExtThr ? concaveMinCost + (1.0f - concaveMinCost) * (concaveAngleExtThr + f1) / (concaveAngleExtThr - concaveAngleIntThr) : concaveMinCost));
 
-		data.PClean = 0.5f + 0.5f * f2;
+		//data.PClean = 0.5f + 0.5f * f2;
+		data.PClean = (RVLABS(f1) >= concaveAngleIntThr ? (f3 >= 0.5 ? 2.0f * (f3 - 0.5f) : 0.0f) : 1.0f);
 
 		data.P = RVLMIN(data.PContinuous, RVLMIN(data.PConvex, data.PClean));
 

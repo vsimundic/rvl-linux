@@ -17,6 +17,8 @@
 #define RVLSURFELGRAPH_IMAGE_ADJACENCY_NEW
 #define RVLSURFELGRAPH_DISPLAY_VERTICES
 
+//#define RVLSURFELGRAPH_DEBUG_RELATION_DESCRIPTOR
+
 // Move to RVL3DTools.h.
 
 #define RVL_PROJECT_3DPOINT_TO_PLANE(PSrc, N, d, PTgt)\
@@ -516,12 +518,19 @@ void SurfelGraph::DetermineImgAdjDescriptors(
 	double dN[3], V[3], dP[3];
 	double dOffset;
 	float *N_, *P, *P_;
-	float A, dA, dx, y, y_;
+	float A, dA, x, x_, y, y_;
 
 	for (int i = 0; i < pSurfel->imgAdjacency.size(); i++)
 	{
 		//Get other surfel
 		pOtherSurfel = pSurfel->imgAdjacency.at(i);
+
+#ifdef RVLSURFELGRAPH_DEBUG_RELATION_DESCRIPTOR
+		bool bDebug = (pSurfel - NodeArray.Element == 28 && pOtherSurfel - NodeArray.Element == 133);
+
+		if (bDebug)
+			int debug = 0;
+#endif
 
 		if (pOtherSurfel->BoundaryArray.n == 0)
 			continue;
@@ -547,6 +556,22 @@ void SurfelGraph::DetermineImgAdjDescriptors(
 		}
 		else
 		{
+#ifdef RVLSURFELGRAPH_DEBUG_RELATION_DESCRIPTOR
+			bool bDebug = (pSurfel - NodeArray.Element == 28 && pOtherSurfel - NodeArray.Element == 133);
+
+			FILE *fpDebug;
+
+			if (bDebug)
+			{
+				fpDebug = fopen("C:\\RVL\\Debug\\planes.txt", "w");
+
+				fprintf(fpDebug, "%f\t%f\t%f\t%f\n", pSurfel->N[0], pSurfel->N[1], pSurfel->N[2], pSurfel->d);
+				fprintf(fpDebug, "%f\t%f\t%f\t%f\n", pOtherSurfel->N[0], pOtherSurfel->N[1], pOtherSurfel->N[2], pOtherSurfel->d);
+
+				fclose(fpDebug);
+			}
+#endif
+
 			//get other boundary
 			int boundaryOther = 0;
 			int boundarySizeOther = 0;
@@ -566,6 +591,11 @@ void SurfelGraph::DetermineImgAdjDescriptors(
 
 			memset(a, 0, 4 * sizeof(double));
 
+#ifdef RVLSURFELGRAPH_DEBUG_RELATION_DESCRIPTOR
+			if (bDebug)
+				fpDebug = fopen("C:\\RVL\\Debug\\surfel1.txt", "w");
+#endif
+
 			dN[0] = pOtherSurfel->N[0] - pSurfel->N[0];
 			dN[1] = pOtherSurfel->N[1] - pSurfel->N[1];
 			dN[2] = pOtherSurfel->N[2] - pSurfel->N[2];
@@ -576,6 +606,7 @@ void SurfelGraph::DetermineImgAdjDescriptors(
 			pCurrEdge = BoundaryArray.Element[BoundaryArray.n - 1];
 			iPt = RVLPCSEGMENT_GRAPH_GET_NODE(pCurrEdge);
 			P_ = mesh->NodeArray.Element[iPt].P;
+			x_ = RVLDOTPRODUCT3(P_, V);
 			y_ = RVLDOTPRODUCT3(dN, P_) - dOffset;			
 			for (iPointEdge = 0; iPointEdge < BoundaryArray.n; iPointEdge++)
 			{
@@ -590,13 +621,20 @@ void SurfelGraph::DetermineImgAdjDescriptors(
 
 				RVLDIF3VECTORS(P, P_, dP);
 
-				dx = RVLDOTPRODUCT3(dP, V);
+				x = RVLDOTPRODUCT3(P, V);
 
 				y = RVLDOTPRODUCT3(dN, P) - dOffset;
 
-				dA = 0.5f * (y + y_) * dx;
+#ifdef RVLSURFELGRAPH_DEBUG_RELATION_DESCRIPTOR
+				if (bDebug)
+					fprintf(fpDebug, "%f\t%f\t%f\t%f\t%f\n", P[0], P[1], P[2], x, y);
+#endif
+
+				dA = 0.5f * (y + y_) * (x - x_);
 
 				P_ = P;
+
+				x_ = x;
 
 				y_ = y;
 
@@ -605,6 +643,12 @@ void SurfelGraph::DetermineImgAdjDescriptors(
 				if (y <= 0.0f)
 					a[0] += dA;
 			}
+
+#ifdef RVLSURFELGRAPH_DEBUG_RELATION_DESCRIPTOR
+			if (bDebug)
+				fclose(fpDebug);
+#endif
+
 			//if (boundarySize > 0)
 			//	a[0] /= (double)boundarySize;
 			//else
@@ -613,6 +657,11 @@ void SurfelGraph::DetermineImgAdjDescriptors(
 			a[0] = (A > 0.0f ? a[0] / A : 0.0f);
 
 			a[1] = 1.0 - a[0];
+
+#ifdef RVLSURFELGRAPH_DEBUG_RELATION_DESCRIPTOR
+			if (bDebug)
+				fpDebug = fopen("C:\\RVL\\Debug\\surfel2.txt", "w");
+#endif
 
 			dN[0] = pSurfel->N[0] - pOtherSurfel->N[0];
 			dN[1] = pSurfel->N[1] - pOtherSurfel->N[1];
@@ -624,6 +673,7 @@ void SurfelGraph::DetermineImgAdjDescriptors(
 			pCurrEdge = BoundaryArray.Element[BoundaryArray.n - 1];
 			iPt = RVLPCSEGMENT_GRAPH_GET_NODE(pCurrEdge);
 			P_ = mesh->NodeArray.Element[iPt].P;
+			x_ = RVLDOTPRODUCT3(P_, V);
 			y_ = RVLDOTPRODUCT3(dN, P_) - dOffset;			
 			for (iPointEdge = 0; iPointEdge < BoundaryArray.n; iPointEdge++)
 			{
@@ -638,13 +688,20 @@ void SurfelGraph::DetermineImgAdjDescriptors(
 
 				RVLDIF3VECTORS(P, P_, dP);
 
-				dx = RVLDOTPRODUCT3(dP, V);
+				x = RVLDOTPRODUCT3(P, V);
 
 				y = RVLDOTPRODUCT3(dN, P) - dOffset;
 
-				dA = 0.5f * (y + y_) * dx;
+#ifdef RVLSURFELGRAPH_DEBUG_RELATION_DESCRIPTOR
+				if (bDebug)
+					fprintf(fpDebug, "%f\t%f\t%f\t%f\t%f\n", P[0], P[1], P[2], x, y);
+#endif
+
+				dA = 0.5f * (y + y_) * (x - x_);
 
 				P_ = P;
+
+				x_ = x;
 
 				y_ = y;
 
@@ -653,6 +710,12 @@ void SurfelGraph::DetermineImgAdjDescriptors(
 				if (y <= 0.0f)
 					a[2] += dA;
 			}
+
+#ifdef RVLSURFELGRAPH_DEBUG_RELATION_DESCRIPTOR
+			if (bDebug)
+				fclose(fpDebug);
+#endif
+
 			//if (boundarySizeOther > 0)
 			//	a[2] /= (double)boundarySizeOther;
 			//else
@@ -682,7 +745,8 @@ void SurfelGraph::DetermineImgAdjDescriptors(
 			desc->cupyDescriptor[0] = (3 - 2 * p) * acos(pSurfel->N[0] * pOtherSurfel->N[0] + pSurfel->N[1] * pOtherSurfel->N[1] + pSurfel->N[2] * pOtherSurfel->N[2]);	//(3 - 2*p)*acos(n_i*n_j)
 			desc->cupyDescriptor[1] = a[(q - 1) * 2 + (p - 1)];
 			desc->cupyDescriptor[2] = a[((3 - q) - 1) * 2 + (p - 1)];
-			desc->cupyDescriptor[3] = desc->avgDist;
+			//desc->cupyDescriptor[3] = desc->avgDist;
+			desc->cupyDescriptor[3] = desc->minDist;
 		}
 	}
 }
