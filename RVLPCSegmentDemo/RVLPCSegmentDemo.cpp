@@ -2,6 +2,7 @@
 //
 
 //#include "stdafx.h"
+#include "SceneSegFile.hpp"
 #include <vtkAutoInit.h>
 VTK_MODULE_INIT(vtkRenderingOpenGL2);
 VTK_MODULE_INIT(vtkInteractionStyle);
@@ -109,6 +110,7 @@ void VisualizeObjectGraphVertexPointCloud(SURFEL::ObjectGraph *ograph, int sizeT
 	double P[3];
 	unsigned char rgb[3];
 	srand(time(NULL));
+	int objVertexNo = 0;
 	for (int iObject = 0; iObject < ograph->NodeArray.n; iObject++)
 	{
 		pObject = ograph->NodeArray.Element + iObject;
@@ -126,6 +128,7 @@ void VisualizeObjectGraphVertexPointCloud(SURFEL::ObjectGraph *ograph, int sizeT
 		rgb[1] = rand() % 255;
 		rgb[2] = rand() % 255;
 		//All surfels and points
+		objVertexNo = 0;
 		while (piElement)
 		{
 			pSurfel = ograph->pSurfels->NodeArray.Element + piElement->Idx;
@@ -137,18 +140,18 @@ void VisualizeObjectGraphVertexPointCloud(SURFEL::ObjectGraph *ograph, int sizeT
 				//running through added surfel vertices
 				qlistelement = pSurfelVertexList->pFirst;
 				while (qlistelement)
-		{
+				{
 					rvlvertex = ograph->pSurfels->vertexArray.Element[qlistelement->Idx];
 					
-			P[0] = rvlvertex->P[0];
-			P[1] = rvlvertex->P[1];
-			P[2] = rvlvertex->P[2];
-			points->InsertNextPoint(P);
-			verts->InsertNextCell(1);
-			verts->InsertCellPoint(ptIdx);
+					P[0] = rvlvertex->P[0];
+					P[1] = rvlvertex->P[1];
+					P[2] = rvlvertex->P[2];
+					points->InsertNextPoint(P);
+					verts->InsertNextCell(1);
+					verts->InsertCellPoint(ptIdx);
 					rgbs->InsertNextTupleValue(rgb);
-			ptIdx++;
-
+					ptIdx++;
+					objVertexNo++;
 					//Next
 					qlistelement = qlistelement->pNext;
 				}
@@ -156,7 +159,7 @@ void VisualizeObjectGraphVertexPointCloud(SURFEL::ObjectGraph *ograph, int sizeT
 
 			piElement = piElement->pNext;
 		}
-
+		std::cout << "Object " << iObject << " has " << objVertexNo << " vertices!" << std::endl;
 	}
 
 	pd->SetPoints(points);
@@ -166,8 +169,8 @@ void VisualizeObjectGraphVertexPointCloud(SURFEL::ObjectGraph *ograph, int sizeT
 	mapper->SetInputData(pd);
 	vtkSmartPointer<vtkActor> act = vtkSmartPointer<vtkActor>::New();
 	act->SetMapper(mapper);
-		act->GetProperty()->SetPointSize(5);
-		renderer->AddActor(act);
+	act->GetProperty()->SetPointSize(5);
+	renderer->AddActor(act);
 	//Start VTK
 	renderer->ResetCamera();
 	window->Render();
@@ -490,17 +493,21 @@ void RunMainProg(
 			//ObjectAggregationLevel2(&objects, &surfels, &mesh, MeshFileName);
 			cv::imshow("Colored object image", objects.CreateSegmentationImage());
 			cv::waitKey(1);
-			/*VisualizeObjectGraphVertexPointCloud(&objects, 100);*/
+			//VisualizeObjectGraphVertexPointCloud(&objects, 100);
+			objects.DetermineObjectConvexityData(0.015, 0.15, true);
 			objects.ObjectAggregationLevel2_ViaObjectPairConvexity(0.015, 0.77, 0.75, 300, true);
 			cv::imshow("New Colored object image", objects.CreateSegmentationImage());
 			cv::waitKey(1);
 			////
 			//Evaluation
-			/*int E[2];
+			int E[2];
 			int N = 0;
-			objects.CalculateOverAndUnderSegmentation(E, N, false, "", false);
+			//std::string gtImgFileName(fileName);
+			//gtImgFileName.erase(gtImgFileName.find_last_of("."));
+			//gtImgFileName += "a.png";
+			objects.CalculateOverAndUnderSegmentation(E, N, true, fileName, false);
 			std::cout << "Oversegmenation error: " << 100.0f * (1 - E[0] / (float)N) << "%" << std::endl;
-			std::cout << "Undersegmenation error: " << 100.0f * E[1] / (float)N << "%" << std::endl;*/
+			std::cout << "Undersegmenation error: " << 100.0f * E[1] / (float)N << "%" << std::endl;
 			//save label image
 			/*std::string imgFileName(fileName);
 			imgFileName.erase(imgFileName.find_last_of("."));

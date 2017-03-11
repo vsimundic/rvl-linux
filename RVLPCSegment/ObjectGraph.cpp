@@ -1835,7 +1835,7 @@ bool RVL::SURFEL::objectMouseRButtonDownUserFunction(
 		return false;
 }
 
-void ObjectGraph::DetermineObjectConvexityData(float convexThr, float ratioThr)
+void ObjectGraph::DetermineObjectConvexityData(float convexThr, float minDiffFlipReq, bool setflip)
 {
 	//Reseting convexity data
 	if (this->additionalObjectData.CHVertexIndices.size())
@@ -1845,6 +1845,10 @@ void ObjectGraph::DetermineObjectConvexityData(float convexThr, float ratioThr)
 	if (this->additionalObjectData.ObjectsSurfelConvexity.size())
 		this->additionalObjectData.ObjectsSurfelConvexity.clear();
 	this->additionalObjectData.ObjectsSurfelConvexity.resize(this->NodeArray.n); //allocate
+
+	if (this->additionalObjectData.convexityMultipliers.size())
+		this->additionalObjectData.convexityMultipliers.clear();
+	this->additionalObjectData.convexityMultipliers.resize(this->NodeArray.n, 1.0); //allocate
 	
 	//bool *bVertexInCH = new bool[pSurfels->vertexArray.n];
 	//memset(bVertexInCH, 0, pSurfels->vertexArray.n * sizeof(bool));
@@ -1864,9 +1868,14 @@ void ObjectGraph::DetermineObjectConvexityData(float convexThr, float ratioThr)
 	Array<SortIndex<int>> sortedElementIdxArray;
 	sortedElementIdxArray.Element = new SortIndex < int >[this->pSurfels->NodeArray.n];
 	SortIndex<int> *sortedIdx;
+	std::set<int> CHVertexIndicesDefDir;
+	std::map<int, bool> ObjectsSurfelConvexityDefDir;
+	std::set<int> CHVertexIndicesOtherDir;
+	std::map<int, bool> ObjectsSurfelConvexityOtherDir;
+	float defDirRatio;
+	float otherDirRatio;
 	for (int iObject = 0; iObject < this->NodeArray.n; iObject++)
 	{
-		addedSize = 0;
 		pObject = this->NodeArray.Element + iObject;
 		
 		piElement = pObject->elementList.pFirst;
@@ -1882,18 +1891,30 @@ void ObjectGraph::DetermineObjectConvexityData(float convexThr, float ratioThr)
 		// Sort surfels in objects.
 		this->SortElements(pObject, &sortedElementIdxArray);
 
+		//Reseting temp vars
+		CHVertexIndicesDefDir.clear();
+		ObjectsSurfelConvexityDefDir.clear();
+		CHVertexIndicesOtherDir.clear();
+		ObjectsSurfelConvexityOtherDir.clear();
+
+		//Check the convexity in default direction first (normal)
+
 		//Run through surfels
+		addedSize = 0;
 		for (int iS = 0; iS < sortedElementIdxArray.n; iS++)
 		{
 			sortedIdx = sortedElementIdxArray.Element + iS;
 			//getting current surfel
 			pSurfel = this->pSurfels->NodeArray.Element + sortedIdx->idx;//piElement->Idx;
+			//check if edge
+			if (pSurfel->bEdge)
+				continue;
 			//getting current surfel vertex list
 			pSurfelVertexList = this->pSurfels->surfelVertexList.Element + sortedIdx->idx; //piElement->Idx;
 			
 			fail = false;
 			//runnong through a current list of added object vertices
-			for (CHVertexIndices_iterator_type iterator = this->additionalObjectData.CHVertexIndices.at(iObject).begin(); iterator != this->additionalObjectData.CHVertexIndices.at(iObject).end(); iterator++)
+			for (CHVertexIndices_iterator_type iterator = CHVertexIndicesDefDir.begin(); iterator != CHVertexIndicesDefDir.end(); iterator++)
 			{
 				//*iterator = value
 				rvlvertexInList = this->pSurfels->vertexArray.Element[*iterator];
@@ -1905,7 +1926,7 @@ void ObjectGraph::DetermineObjectConvexityData(float convexThr, float ratioThr)
 			}
 
 			//Check the other direction (if vertex from current surfels is below surfels that were added in CH)
-			for (ObjectsSurfelConvexity_iterator_type iterator = this->additionalObjectData.ObjectsSurfelConvexity.at(iObject).begin(); iterator != this->additionalObjectData.ObjectsSurfelConvexity.at(iObject).end(); iterator++)
+			for (ObjectsSurfelConvexity_iterator_type iterator = ObjectsSurfelConvexityDefDir.begin(); iterator != ObjectsSurfelConvexityDefDir.end(); iterator++)
 			{
 				//iterator->first = key
 				//iterator->second = value
@@ -1933,18 +1954,16 @@ void ObjectGraph::DetermineObjectConvexityData(float convexThr, float ratioThr)
 				if (fail)
 					break;
 			}
+
 			//add fail flag for current surfel
-			this->additionalObjectData.ObjectsSurfelConvexity.at(iObject).insert(std::pair<int, bool>(sortedIdx->idx, !fail));
+			ObjectsSurfelConvexityDefDir.insert(std::pair<int, bool>(sortedIdx->idx, !fail));
 			//if not failed add vertices to list
 			if (!fail)
 			{
 				qlistelement = pSurfelVertexList->pFirst;
 				while (qlistelement)
 				{
-					this->additionalObjectData.CHVertexIndices.at(iObject).insert(qlistelement->Idx);
-					
-					//bVertexInCH[qlistelement->Idx] = true;
-					//}
+					CHVertexIndicesDefDir.insert(qlistelement->Idx);
 
 					//Next
 					qlistelement = qlistelement->pNext;
@@ -1954,9 +1973,104 @@ void ObjectGraph::DetermineObjectConvexityData(float convexThr, float ratioThr)
 			}
 		}
 
-		//check ratio
-		if ((addedSize / (float)pObject->size) < ratioThr)
-			this->additionalObjectData.CHVertexIndices.at(iObject).clear(); //if the ratio is lower than threshold, then empty it's list of vertices
+		//ratio
+		defDirRatio = addedSize / (float)pObject->size;
+		//if ((addedSize / (float)pObject->size) < ratioThr)
+		//	this->additionalObjectData.CHVertexIndices.at(iObject).clear(); //if the ratio is lower than threshold, then empty it's list of vertices
+
+		//Check convexity in the other direction (normal)
+		//Run through surfels
+		addedSize = 0;
+		for (int iS = 0; iS < sortedElementIdxArray.n; iS++)
+		{
+			sortedIdx = sortedElementIdxArray.Element + iS;
+			//getting current surfel
+			pSurfel = this->pSurfels->NodeArray.Element + sortedIdx->idx;//piElement->Idx;
+			//check if edge
+			if (pSurfel->bEdge)
+				continue;
+			//getting current surfel vertex list
+			pSurfelVertexList = this->pSurfels->surfelVertexList.Element + sortedIdx->idx; //piElement->Idx;
+
+			fail = false;
+			//runnong through a current list of added object vertices
+			for (CHVertexIndices_iterator_type iterator = CHVertexIndicesOtherDir.begin(); iterator != CHVertexIndicesOtherDir.end(); iterator++)
+			{
+				//*iterator = value
+				rvlvertexInList = this->pSurfels->vertexArray.Element[*iterator];
+				if (((-1)*pSurfel->N[0] * rvlvertexInList->P[0] + (-1)*pSurfel->N[1] * rvlvertexInList->P[1] + (-1)*pSurfel->N[2] * rvlvertexInList->P[2] - (-1)*pSurfel->d) > convexThr)
+				{
+					fail = true;
+					break;
+				}
+			}
+
+			//Check the other direction (if vertex from current surfels is below surfels that were added in CH)
+			for (ObjectsSurfelConvexity_iterator_type iterator = ObjectsSurfelConvexityOtherDir.begin(); iterator != ObjectsSurfelConvexityOtherDir.end(); iterator++)
+			{
+				//iterator->first = key
+				//iterator->second = value
+				if (iterator->second)	//if surfel was valid
+				{
+					//getting added surfel
+					pSurfelIN = this->pSurfels->NodeArray.Element + iterator->first;
+					//getting current surfel vertex list
+					pSurfelVertexListSurfelIN = this->pSurfels->surfelVertexList.Element + sortedIdx->idx;	//CHECK IDX!!!!!!!!sortedIdx->idx!!!!!!!!
+					//running through added surfel vertices
+					qlistelement = pSurfelVertexListSurfelIN->pFirst;
+					while (qlistelement)
+					{
+						rvlvertex = this->pSurfels->vertexArray.Element[qlistelement->Idx];
+						if (((-1)*pSurfelIN->N[0] * rvlvertex->P[0] + (-1)*pSurfelIN->N[1] * rvlvertex->P[1] + (-1)*pSurfelIN->N[2] * rvlvertex->P[2] - (-1)*pSurfelIN->d) > convexThr)
+						{
+							fail = true;
+							break;
+						}
+						//Next
+						qlistelement = qlistelement->pNext;
+					}
+				}
+
+				if (fail)
+					break;
+			}
+
+			//add fail flag for current surfel
+			ObjectsSurfelConvexityOtherDir.insert(std::pair<int, bool>(sortedIdx->idx, !fail));
+			//if not failed add vertices to list
+			if (!fail)
+			{
+				qlistelement = pSurfelVertexList->pFirst;
+				while (qlistelement)
+				{
+					CHVertexIndicesOtherDir.insert(qlistelement->Idx);
+
+					//Next
+					qlistelement = qlistelement->pNext;
+				}
+				//update size
+				addedSize += pSurfel->size;
+			}
+		}
+
+		//ratio
+		otherDirRatio = addedSize / (float)pObject->size;
+
+		//Determine which direction to use
+		if ((defDirRatio > otherDirRatio) || ((otherDirRatio - defDirRatio) < minDiffFlipReq))
+		{
+			this->additionalObjectData.CHVertexIndices.at(iObject) = CHVertexIndicesDefDir;
+			this->additionalObjectData.ObjectsSurfelConvexity.at(iObject) = ObjectsSurfelConvexityDefDir;
+		}
+		else
+		{
+			this->additionalObjectData.CHVertexIndices.at(iObject) = CHVertexIndicesOtherDir;
+			this->additionalObjectData.ObjectsSurfelConvexity.at(iObject) = ObjectsSurfelConvexityOtherDir;
+			//Set multiplier to -1
+			if (setflip)
+				this->additionalObjectData.convexityMultipliers.at(iObject) = -1.0;
+			//std::cout << "Object " << iObject << " is concave!" << std::endl;
+		}
 	}	// for every object
 	//Deref
 	delete[] sortedElementIdxArray.Element;
@@ -2021,6 +2135,14 @@ void ObjectGraph::CalculateConvexityRatiosForObjectPair(int firstObject, int sec
 {
 	GRAPH::AggregateNode<SURFEL::AgEdge> *pFirstObject = this->NodeArray.Element + firstObject;
 	GRAPH::AggregateNode<SURFEL::AgEdge> *pSecondObject = this->NodeArray.Element + secondObject;
+
+	//Heuristic mumbo-jumbo
+	if (((this->additionalObjectData.convexityMultipliers.at(firstObject) == -1) || (this->additionalObjectData.convexityMultipliers.at(secondObject) == -1)) && !CheckIfNeighbours(firstObject, secondObject))
+	{
+		firstRatio = 0.0;
+		secondRatio = 0.0;
+		return;
+	}
 	std::map<int, Surfel*> aggregateObject; //Sorted in ascending order by definition
 	std::map<int, Surfel*>::reverse_iterator aggObjIt;	//Reverse iterator (Descending order)
 	std::map<int, Surfel*>::reverse_iterator aggObjItSec;
@@ -2090,6 +2212,8 @@ void ObjectGraph::CalculateConvexityRatiosForObjectPair(int firstObject, int sec
 	memset(added, 0, aggregateObject.size() * sizeof(bool));
 	int currIdx = 0;
 	int currIdxIN = 0;
+	float currmultiplier = 0.0;
+	float currmultiplierIN = 0.0;
 	for (aggObjIt = aggregateObject.rbegin(); aggObjIt != aggregateObject.rend(); ++aggObjIt)
 	{
 		//iterator->first = key
@@ -2097,6 +2221,7 @@ void ObjectGraph::CalculateConvexityRatiosForObjectPair(int firstObject, int sec
 
 		//getting current surfel
 		pSurfel = aggObjIt->second;
+		currmultiplier = (this->additionalObjectData.convexityMultipliers.at(aggregateObjectIdx.at(aggObjIt->first)));
 		surfelIdx = pSurfel - pSurfels->NodeArray.Element;
 		//std::cout << aggObjIt->first << ", " << pSurfel->size << std::endl;
 		//getting current surfel vertex list
@@ -2108,7 +2233,7 @@ void ObjectGraph::CalculateConvexityRatiosForObjectPair(int firstObject, int sec
 		{
 			//*iterator = value
 			rvlvertex = this->pSurfels->vertexArray.Element[*chVertexIndices_iterator];
-			if ((pSurfel->N[0] * rvlvertex->P[0] + pSurfel->N[1] * rvlvertex->P[1] + pSurfel->N[2] * rvlvertex->P[2] - pSurfel->d) > convexThr)
+			if ((currmultiplier * pSurfel->N[0] * rvlvertex->P[0] + currmultiplier * pSurfel->N[1] * rvlvertex->P[1] + currmultiplier * pSurfel->N[2] * rvlvertex->P[2] - currmultiplier * pSurfel->d) > convexThr)
 			{
 				fail = true;
 				break;
@@ -2125,6 +2250,7 @@ void ObjectGraph::CalculateConvexityRatiosForObjectPair(int firstObject, int sec
 			{
 				//getting added surfel
 				pSurfelIN = aggObjItSec->second;
+				currmultiplierIN = (this->additionalObjectData.convexityMultipliers.at(aggregateObjectIdx.at(aggObjItSec->first)));
 				surfelIdxOther = pSurfelIN - pSurfels->NodeArray.Element;
 				//getting current surfel vertex list
 				pSurfelVertexListIN = this->pSurfels->surfelVertexList.Element + surfelIdx;
@@ -2133,7 +2259,7 @@ void ObjectGraph::CalculateConvexityRatiosForObjectPair(int firstObject, int sec
 				while (qlistelement)
 				{
 					rvlvertex = this->pSurfels->vertexArray.Element[qlistelement->Idx];
-					if ((pSurfelIN->N[0] * rvlvertex->P[0] + pSurfelIN->N[1] * rvlvertex->P[1] + pSurfelIN->N[2] * rvlvertex->P[2] - pSurfelIN->d) > convexThr)
+					if ((currmultiplierIN * pSurfelIN->N[0] * rvlvertex->P[0] + currmultiplierIN * pSurfelIN->N[1] * rvlvertex->P[1] + currmultiplierIN * pSurfelIN->N[2] * rvlvertex->P[2] - currmultiplierIN * pSurfelIN->d) > convexThr)
 					{
 						fail = true;
 						break;
@@ -2650,6 +2776,7 @@ void ObjectGraph::ObjectAggregationLevel2_ViaObjectPairConvexity(float convexThr
 			}
 
 			//compiling new clusters based on labels
+			newclusters.clear();
 			newclusters.resize(label);
 			for (int i = 0; i < inputcluster_label.size(); i++)
 				newclusters.at(inputcluster_label.at(i)).push_back(inputcluster.at(i));
@@ -2846,4 +2973,59 @@ void ObjectGraph::SaveSegmentationLabelImg(std::string filename)
 
 	//Save image (preferable as png)
 	cv::imwrite(filename, labelImg);
+}
+
+bool ObjectGraph::CheckObjectUniformity(int objectIdx, int minSurfelSize, float uniThr)
+{
+	bool uni = false;
+	GRAPH::AggregateNode<SURFEL::AgEdge> *pObject = this->NodeArray.Element + objectIdx;
+	QLIST::Index *piElement;
+	Surfel *pSurfel;
+	//Determine average surfel size for surfels above required size
+	float sumSize = 0;
+	int noSurfels = 0;
+	piElement = pObject->elementList.pFirst;
+	while (piElement)
+	{
+		pSurfel = this->pSurfels->NodeArray.Element + piElement->Idx;
+		//check 
+		if (!((pSurfel->size < minSurfelSize) || pSurfel->bEdge))
+		{
+			sumSize += pSurfel->size;
+			noSurfels++;
+		}
+		piElement = piElement->pNext;
+	}
+	float avgSize = sumSize / noSurfels;
+
+	//Determine the sum of differences compared to avg size
+	float uniSum = 0;
+	piElement = pObject->elementList.pFirst;
+	while (piElement)
+	{
+		pSurfel = this->pSurfels->NodeArray.Element + piElement->Idx;
+		//check 
+		if (!((pSurfel->size < minSurfelSize) || pSurfel->bEdge))
+			uniSum += abs(avgSize - pSurfel->size);
+		piElement = piElement->pNext;
+	}
+	std::cout << "Object " << objectIdx << " uniformity: " << uniSum / sumSize << std::endl;
+	return uni;
+}
+
+bool ObjectGraph::CheckIfNeighbours(int iObject1, int iObject2)
+{
+	//Get pointers to object
+	GRAPH::AggregateNode<SURFEL::AgEdge> *pObject1 = this->NodeArray.Element + iObject1;
+	GRAPH::AggregateNode<SURFEL::AgEdge> *pObject2 = this->NodeArray.Element + iObject2; //It is not needed
+	GRAPH::EdgePtr2<SURFEL::AgEdge> *edgeElement;
+	edgeElement = pObject1->EdgeList.pFirst;
+	//Running through object edges
+	while (edgeElement)
+	{
+		if (RVLPCSEGMENT_GRAPH_GET_OPPOSITE_NODE(edgeElement) == iObject2) //If the index correspondes to other object then they are neighbours
+			return true;
+		edgeElement = edgeElement->pNext;
+	}
+	return false; //if the function has not finished earlier then they are not neighbours
 }
