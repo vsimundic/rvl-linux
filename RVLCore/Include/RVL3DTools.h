@@ -423,7 +423,7 @@
 }
 #define RVLCONVTOINT3(Src, Tgt) Tgt[0] = (int)Src[0]; Tgt[1] = (int)Src[1]; Tgt[2] = (int)Src[2];
 #define RVLCONVTOUCHAR3(Src, Tgt) Tgt[0] = (unsigned char)Src[0]; Tgt[1] = (unsigned char)Src[1]; Tgt[2] = (unsigned char)Src[2];
-#define RVLSORT3DESCEND(Vect3, idx, tmp)\
+#define RVLSORT3ASCEND(Vect3, idx, tmp)\
 {\
 	if(Vect3[0] <= Vect3[1])\
 			{\

@@ -96,14 +96,16 @@ namespace RVL
 		Array<Array<MeshEdgePtr *>> PolygonBoundaryArray;
 		float P[3];		// centroid
 		float N[3];		// normal
+		float R[9];		// rotation matrix (orientation of the camera RF w.r.t. surfel RF)
 		float d;		// plane offset
 		int RGB[3];		// average color
 		float P0[3];	// central point
 		float V[3];
+		int size;
 		float r0;		// distance 
+		float r1, r2;	// radii of the approximating ellipse
 		QList<SURFEL::EdgePtr> EdgeList;
 		Surfel *pNext;
-		int size;
 		float physicalSize;
 		bool bEdge;
 		int ObjectID;	//Filko
@@ -128,6 +130,9 @@ namespace RVL
 		void UpdateNormalHull(
 			Array<SURFEL::NormalHullElement> &NHull,
 			float *N);
+		float Distance(
+			Surfel *pSurfel,
+			float *P);
 		void NodeColors(unsigned char *SelectionColor);
 		void Display(
 			Visualizer *pVisualizer,
