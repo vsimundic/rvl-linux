@@ -138,21 +138,28 @@ void SURFEL::ComputeParameters(
 	int idx[3];
 	int iTmp;
 
-	RVLSORT3DESCEND(var, idx, iTmp);
+	RVLSORT3ASCEND(var, idx, iTmp);
 
 	float *N = pSurfel->N;
 	float *N_ = distribution.R + 3 * idx[0];
 
 	RVLCOPY3VECTOR(N_, N);
 
-	if (RVLDOTPRODUCT3(pPt->N, N) > 0.0)
+	if (RVLDOTPRODUCT3(pPt->N, N) < 0.0)
 	{
-		RVLCOPY3VECTOR(N, pSurfel->N)
+		RVLNEGVECT3(N, N);
 	}
-	else
-	{
-		RVLNEGVECT3(N, pSurfel->N)
-	}
+
+	float *X = pSurfel->R;
+	float *Y = pSurfel->R + 3;
+	float *Z = pSurfel->R + 6;
+
+	float *X_ = distribution.R + 3 * idx[2];
+
+	RVLCOPY3VECTOR(X_, X);
+	RVLCOPY3VECTOR(N, Z);
+
+	RVLCROSSPRODUCT3(Z, X, Y);
 
 	float *P = pSurfel->P;
 	float *P_ = distribution.t;
@@ -171,6 +178,8 @@ void SURFEL::ComputeParameters(
 	RVLCOPY3VECTOR(pPt->P, P0);
 
 	pSurfel->r0 = pSurfel->d / RVLDOTPRODUCT3(N, P0);
+	pSurfel->r1 = sqrt(distribution.var[idx[2]]);
+	pSurfel->r2 = sqrt(distribution.var[idx[1]]);
 }
 
 void SURFEL::CreateFromPoint(
@@ -526,7 +535,7 @@ void SurfelGraph::DetermineImgAdjDescriptors(
 		pOtherSurfel = pSurfel->imgAdjacency.at(i);
 
 #ifdef RVLSURFELGRAPH_DEBUG_RELATION_DESCRIPTOR
-		bool bDebug = (pSurfel - NodeArray.Element == 28 && pOtherSurfel - NodeArray.Element == 133);
+		bool bDebug = (pSurfel - NodeArray.Element == 5 && pOtherSurfel - NodeArray.Element == 9);
 
 		if (bDebug)
 			int debug = 0;
@@ -557,8 +566,6 @@ void SurfelGraph::DetermineImgAdjDescriptors(
 		else
 		{
 #ifdef RVLSURFELGRAPH_DEBUG_RELATION_DESCRIPTOR
-			bool bDebug = (pSurfel - NodeArray.Element == 28 && pOtherSurfel - NodeArray.Element == 133);
-
 			FILE *fpDebug;
 
 			if (bDebug)
@@ -1803,6 +1810,36 @@ void SurfelGraph::UpdateNormalHull(
 
 	RVLCOPY3VECTOR(N, N_);
 	RVLSCALE3VECTOR2(Nh, fTmp, Nh_);
+}
+
+float SurfelGraph::Distance(
+	Surfel *pSurfel,
+	float *P)
+{
+	// Project P onto the surfel plane.
+
+	float P_[3];
+
+	float *P0 = pSurfel->P;
+
+	RVLDIF3VECTORS(P, P0, P_);	
+
+	float *R = pSurfel->R;
+
+	float PF[3];
+
+	RVLMULMX3X3VECT(R, P_, PF);
+
+	float r = PF[0] / pSurfel->r1;
+	r *= r;
+	float fTmp = PF[1] / pSurfel->r2;
+	fTmp *= fTmp;
+	r += fTmp;
+	
+	if (r < 1.0f)
+		return PF[2];
+	else
+		return PF[2] / sqrt(r);
 }
 
 void SurfelGraph::NodeColors(unsigned char *SelectionColor)
