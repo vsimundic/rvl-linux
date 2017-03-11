@@ -14,7 +14,7 @@
 #include <queue>
 
 //#define RVLPCSEGMENT_OBJECT_GRAPH_LOG
-//#define RVLPCSEGMENT_OBJECT_GRAPH_EVALUATION_LOG
+#define RVLPCSEGMENT_OBJECT_GRAPH_EVALUATION_LOG
 
 /// Move to RVLQListArray.h
 
@@ -1516,7 +1516,7 @@ void ObjectGraph::ComputeRelationCost(
 		data.PConvex = (f1 >= -concaveAngleIntThr ? 1.0f : (f1 >= -concaveAngleExtThr ? concaveMinCost + (1.0f - concaveMinCost) * (concaveAngleExtThr + f1) / (concaveAngleExtThr - concaveAngleIntThr) : concaveMinCost));
 
 		//data.PClean = 0.5f + 0.5f * f2;
-		data.PClean = (RVLABS(f1) >= concaveAngleIntThr ? (f3 >= 0.5 ? 2.0f * (f3 - 0.5f) : 0.0f) : 1.0f);
+		data.PClean = (RVLABS(f1) >= 20.0f * DEG2RAD ? (f3 >= 0.5 ? 2.0f * (f3 - 0.5f) : 0.0f) : 1.0f);
 
 		data.P = RVLMIN(data.PContinuous, RVLMIN(data.PConvex, data.PClean));
 
