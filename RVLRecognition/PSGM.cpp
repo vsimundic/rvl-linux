@@ -1802,7 +1802,7 @@ void PSGM::Clusters()
 
 			var = PtDistribution.var;
 
-			RVLSORT3DESCEND(var, idx, iTmp);
+			RVLSORT3ASCEND(var, idx, iTmp);
 
 			if (var[idx[0]] / var[idx[1]] <= 0.0005 && var[idx[0]] / var[idx[2]] <= 0.0005)
 			{
