@@ -132,13 +132,22 @@ int main(int argc, char ** argv)
 
 			printf("Scene %s...\n", fileName);
 
-			objectDetector.DetectObjects(fileName);
+			objectDetector.DetectObjects(filePath);
 
 			printf("Scene %s...finished!\n\n", fileName);
 
-			objectDetector.Evaluate(fp, fileName);
+			objectDetector.Evaluate(fp, filePath);
+
+#ifdef RVLSURFEL_IMAGE_ADJACENCY
+			if (objectDetector.bSegmentToObjects)
+			{
+				std::string segmentationImageFileName(filePath);
+				segmentationImageFileName.erase(segmentationImageFileName.find_last_of("."));
+				segmentationImageFileName += "OGLabels.png";
+				objectDetector.pObjects->SaveSegmentationLabelImg(segmentationImageFileName);
+			}
+#endif
 		}
-		fclose(fp);
 		system("pause");
 	}
 	else
@@ -179,14 +188,14 @@ int main(int argc, char ** argv)
 			visualizer.Create();
 			objectDetector.pSurfels->InitDisplay(&visualizer, &(objectDetector.mesh), objectDetector.pSurfelDetector);
 
-//#ifdef RVLSURFEL_IMAGE_ADJACENCY
-//			if (objectDetector.bSegmentToObjects)
-//			{
-//				objectDetector.pObjects->InitDisplay(&visualizer, &(objectDetector.mesh), SelectionColor);
-//				objectDetector.pObjects->Display();
-//			}
-//			else
-//#endif
+#ifdef RVLSURFEL_IMAGE_ADJACENCY
+			if (objectDetector.bSegmentToObjects)
+			{
+				objectDetector.pObjects->InitDisplay(&visualizer, &(objectDetector.mesh), SelectionColor);
+				objectDetector.pObjects->Display();
+			}
+			else
+#endif
 				objectDetector.pSurfels->Display(&visualizer, &(objectDetector.mesh));
 
 #ifdef RVLSURFEL_IMAGE_ADJACENCY

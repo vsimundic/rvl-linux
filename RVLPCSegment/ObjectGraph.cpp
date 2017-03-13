@@ -14,7 +14,7 @@
 #include <queue>
 
 //#define RVLPCSEGMENT_OBJECT_GRAPH_LOG
-//#define RVLPCSEGMENT_OBJECT_GRAPH_EVALUATION_LOG
+#define RVLPCSEGMENT_OBJECT_GRAPH_EVALUATION_LOG
 
 /// Move to RVLQListArray.h
 
@@ -488,6 +488,9 @@ namespace RVL
 						// pRefEdge->cost <- pRefEdge->cost + pEdge13->cost
 
 						pRefEdge->cost += pEdge13->cost;
+						
+						if (pEdge13->distance < pRefEdge->distance)
+							pRefEdge->distance = pEdge13->distance;
 
 						if (pRefEdge->cost > 0)
 						{
@@ -723,6 +726,9 @@ void ObjectGraph::Create(SurfelGraph *pSurfels_)
 		if (pSurfel->bEdge)
 			continue;
 
+		if (pSurfel->BoundaryArray.n == 0)
+			continue;
+
 		pEdgeList = &(pAgNode->EdgeList);
 
 		for (i = 0; i < pSurfel->imgAdjacency.size(); i++)
@@ -730,6 +736,9 @@ void ObjectGraph::Create(SurfelGraph *pSurfels_)
 			pSurfel_ = pSurfel->imgAdjacency.at(i);
 
 			if (pSurfel_->bEdge)
+				continue;
+
+			if (pSurfel_->BoundaryArray.n == 0)
 				continue;
 
 			pDesc = pSurfel->imgAdjacencyDescriptors.at(i);
@@ -742,6 +751,7 @@ void ObjectGraph::Create(SurfelGraph *pSurfels_)
 				pEdge->iVertex[1] = iSurfel_;
 				pEdge->desc = *pDesc;
 				pEdge->cost = 0.0f;
+				pEdge->distance = pDesc->minDist;
 				pEdge->idx = pEdge - EdgeArray.Element;
 				pEdgePtr->pEdge = pEdge;
 				RVLQLIST_ADD_ENTRY2(pEdgeList, pEdgePtr);
@@ -1089,7 +1099,49 @@ void ObjectGraph::CalculateOverAndUnderSegmentation(
 
 #ifdef RVLPCSEGMENT_OBJECT_GRAPH_EVALUATION_LOG
 	FILE *fp = fopen("C:\\RVL\\ExpRez\\SegmentationToGT.txt", "w");
+
+	int *nObjectPts = new int[GTHistSize];
+
+	memset(nObjectPts, 0, GTHistSize * sizeof(int));
 #endif
+
+	if (useGTNoPix)	//Assumption - GT files is in the same directory as the SSF file and has name in format : SSFfilename + a + .png (label image) and SSFfilename + d + .png (depth image)
+	{
+		std::string imageName = imageFileName;
+		imageName.erase(imageName.find_last_of("."));
+		std::string depthImgFileName = imageName + "d.png";
+		std::string labelImgFileName = imageName + "a.png";
+
+		//load GT files
+		cv::Mat GTLabImg = cv::imread(labelImgFileName);
+		cv::Mat GTDepthImg = cv::imread(depthImgFileName, cv::ImreadModes::IMREAD_ANYDEPTH);
+		//Count GT object pixels
+		N = 0;
+
+		int GTLabel;
+
+		for (int y = 0; y < 480; y++)
+		{
+			for (int x = 0; x < 640; x++)
+			{
+				//adding points that have valid label and depth value
+
+				GTLabel = (int)GTLabImg.at<cv::Vec3b>(y, x)[0];
+
+				//if ((GTLabel > 0) && GTDepthImg.at<unsigned short>(y, x) > 0)
+				if (GTLabel > 0)
+				{
+#ifdef RVLPCSEGMENT_OBJECT_GRAPH_EVALUATION_LOG
+					nObjectPts[GTLabel]++;
+#endif
+					N++;
+				}					
+			}
+		}
+#ifdef RVLPCSEGMENT_OBJECT_GRAPH_EVALUATION_LOG
+		fprintf(fp, "Total #GTPts: %d\n\n", N);
+#endif
+	}
 
 	int *GTObjHistogram = new int[GTHistSize * this->NodeArray.n];	//GTObject histogam per segmented object
 	memset(GTObjHistogram, 0, GTHistSize * this->NodeArray.n * sizeof(int));
@@ -1126,33 +1178,40 @@ void ObjectGraph::CalculateOverAndUnderSegmentation(
 			piElement = piElement->pNext;
 		}
 
-#ifdef RVLPCSEGMENT_OBJECT_GRAPH_EVALUATION_LOG
-		int nPtsTotal = 0;
-
-		for (int i = 0; i < GTHistSize; i++)
-			nPtsTotal += GTObjHistogram[iObject * GTHistSize + i];
-
-		if (nPtsTotal > 0)
-		{
-			fprintf(fp, "S %d: #P: %d\n", iObject, nPtsTotal);
-
-			fprintf(fp, "-----------------------------\n");
-
-			float fnPtsTotal = (float)nPtsTotal;
-
-			for (int i = 0; i < GTHistSize; i++)
-				fprintf(fp, "GTO %d: #IP: %d, perc: %lf\n", i, GTObjHistogram[iObject * GTHistSize + i], (float)GTObjHistogram[iObject * GTHistSize + i] / fnPtsTotal * 100.0f);
-
-			fprintf(fp, "\n");
-		}
-#endif
+//#ifdef RVLPCSEGMENT_OBJECT_GRAPH_EVALUATION_LOG
+//		int nPtsTotal = 0;
+//
+//		for (int i = 0; i < GTHistSize; i++)
+//			nPtsTotal += GTObjHistogram[iObject * GTHistSize + i];
+//
+//		if (nPtsTotal > 0)
+//		{
+//			fprintf(fp, "S %d: #P: %d\n", iObject, nPtsTotal);
+//
+//			fprintf(fp, "-----------------------------\n");
+//
+//			float fnPtsTotal = (float)nPtsTotal;
+//
+//			for (int i = 0; i < GTHistSize; i++)
+//				fprintf(fp, "GTO %d: #IP: %d, perc: %lf\n", i, GTObjHistogram[iObject * GTHistSize + i], (float)GTObjHistogram[iObject * GTHistSize + i] / fnPtsTotal * 100.0f);
+//
+//			fprintf(fp, "\n");
+//		}
+//#endif
 
 	}
+
+#ifdef RVLPCSEGMENT_OBJECT_GRAPH_EVALUATION_LOG
+	fprintf(fp, "Undersegmentation\n");
+	fprintf(fp, "-----------------------------\n");
+#endif
 
 	E[0] = 0;	//Oversegmentation values
 	E[1] = 0;	//Undersegmentation values
 	int* ptrGTObjHist;
 	int max = 0;
+
+	int intersection;
 
 	int totVal = 0;
 	for (int iObject = 0; iObject < this->NodeArray.n; iObject++)
@@ -1170,10 +1229,12 @@ void ObjectGraph::CalculateOverAndUnderSegmentation(
 		maxBin[iObject] = -1;
 		for (int i = 0; i < GTHistSize; i++)
 		{
-			if (ptrGTObjHist[i] > max)
+			intersection = ptrGTObjHist[i];
+
+			if (intersection > max)
 			{
 				maxBin[iObject] = i;
-				max = ptrGTObjHist[i];
+				max = intersection;
 			}
 		}
 
@@ -1186,10 +1247,21 @@ void ObjectGraph::CalculateOverAndUnderSegmentation(
 			//if ((i == 0) && !useBackground)
 			//	continue;
 
-			if (i != maxBin[iObject])
-				E[1] += ptrGTObjHist[i];
+			intersection = ptrGTObjHist[i];
 
-			totVal += ptrGTObjHist[i];
+			if (i != maxBin[iObject])
+			{				
+				if (intersection > 0)
+				{
+					E[1] += intersection;
+
+#ifdef RVLPCSEGMENT_OBJECT_GRAPH_EVALUATION_LOG
+					fprintf(fp, "S %d GTO %d: #Pts: %d, perc: %lf\n", iObject, i, intersection, (float)intersection / (float)N * 100.0f);
+#endif
+				}
+			}
+
+			totVal += intersection;
 		}
 
 		//Set max segmented object per max bin
@@ -1200,47 +1272,50 @@ void ObjectGraph::CalculateOverAndUnderSegmentation(
 		}
 	}
 
+#ifdef RVLPCSEGMENT_OBJECT_GRAPH_EVALUATION_LOG
+	fprintf(fp, "\n");
+	fprintf(fp, "Oversegmentation\n");
+	fprintf(fp, "-----------------------------\n");
+#endif
+
 	//Sum positive values
 	for (int i = 0; i < GTHistSize; i++)
 	{
+#ifdef RVLPCSEGMENT_OBJECT_GRAPH_EVALUATION_LOG
+		fprintf(fp, "GTO %d (%d pts): ", i, nObjectPts[i]);
+#endif
 		if ((i == 0) && !useBackground)
 			continue;
 
 		if (i == maxBin[maxObj[i]])
-			E[0] += GTObjHistogram[maxObj[i] * GTHistSize + i];
+		{
+			intersection = GTObjHistogram[maxObj[i] * GTHistSize + i];
+
+			E[0] += intersection;
+
+#ifdef RVLPCSEGMENT_OBJECT_GRAPH_EVALUATION_LOG
+			fprintf(fp, "S %d #Pts: %d, perc: %lf, error perc: %lf\n", maxObj[i], intersection, (float)intersection / (float)nObjectPts[i] * 100.0f,
+				(float)(nObjectPts[i] - intersection) / (float)N * 100.0f);
+#endif
+		}
+#ifdef RVLPCSEGMENT_OBJECT_GRAPH_EVALUATION_LOG
+		else
+			fprintf(fp, "S - #Pts: %d, perc: %lf, error perc: %lf\n", 0, 0.0, (float)nObjectPts[i] / (float)N * 100.0f);
+#endif
 	}
 
 
 	//Final results
 	/*E[0] = 1 - E[0] / totVal;
 	E[1] /= totVal;*/
-	N = totVal;
 
-	if (useGTNoPix)	//Assumption - GT files is in the same directory as the SSF file and has name in format : SSFfilename + a + .png (label image) and SSFfilename + d + .png (depth image)
-	{
-		std::string imageName = imageFileName;
-		imageName.erase(imageName.find_last_of("."));
-		std::string depthImgFileName = imageName + "d.png";
-		std::string labelImgFileName = imageName + "a.png";
-
-		//load GT files
-		cv::Mat GTLabImg = cv::imread(labelImgFileName);
-		cv::Mat GTDepthImg = cv::imread(depthImgFileName, cv::ImreadModes::IMREAD_ANYDEPTH);
-		//Count GT object pixels
-		N = 0;
-		for (int y = 0; y < 480; y++)
-		{
-			for (int x = 0; x < 640; x++)
-			{
-				//adding points that have valid label and depth value
-				if ((GTLabImg.at<cv::Vec3b>(y, x)[0] > 0) && GTDepthImg.at<unsigned short>(y, x) > 0)
-					N++;
-			}
-		}
-	}
+	if (!useGTNoPix)
+		N = totVal;
 
 #ifdef RVLPCSEGMENT_OBJECT_GRAPH_EVALUATION_LOG
 	fclose(fp);
+
+	delete[] nObjectPts;
 #endif
 
 	//DeRef
@@ -1423,7 +1498,8 @@ void ObjectGraph::ComputeRelationCost(
 	float scale = 1.0f;
 	float depthStepIntThr = scale * 0.005f;
 	float depthStepExtThr = scale * 0.025f;
-	float concaveAngleThr = 45.0f * DEG2RAD;
+	float concaveAngleIntThr = 0.0f * DEG2RAD;
+	float concaveAngleExtThr = 45.0f * DEG2RAD;
 	float concaveMinCost = 0.3f;
 
 	float f1 = pEdge->desc.cupyDescriptor[0];
@@ -1437,9 +1513,10 @@ void ObjectGraph::ComputeRelationCost(
 	case RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_HEURISTIC:
 		data.PContinuous = (f4 <= depthStepIntThr ? 1.0f : (f4 <= depthStepExtThr ? (depthStepExtThr - f4) / (depthStepExtThr - depthStepIntThr) : 0.0f));
 
-		data.PConvex = (f1 >= 0 ? 1.0f : (f1 >= -concaveAngleThr ? concaveMinCost + (1.0f - concaveMinCost) * (concaveAngleThr + f1) / concaveAngleThr : concaveMinCost));
+		data.PConvex = (f1 >= -concaveAngleIntThr ? 1.0f : (f1 >= -concaveAngleExtThr ? concaveMinCost + (1.0f - concaveMinCost) * (concaveAngleExtThr + f1) / (concaveAngleExtThr - concaveAngleIntThr) : concaveMinCost));
 
-		data.PClean = 0.5f + 0.5f * f2;
+		//data.PClean = 0.5f + 0.5f * f2;
+		data.PClean = (RVLABS(f1) >= 20.0f * DEG2RAD ? (f3 >= 0.5 ? 2.0f * (f3 - 0.5f) : 0.0f) : 1.0f);
 
 		data.P = RVLMIN(data.PContinuous, RVLMIN(data.PConvex, data.PClean));
 

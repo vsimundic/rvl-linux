@@ -242,6 +242,7 @@ void ObjectDetector::DetectObjects(char *MeshFilePathName)
 			cv::imshow("Colored object image", pObjects->CreateSegmentationImage());
 			cv::waitKey(1);
 			/*VisualizeObjectGraphVertexPointCloud(&objects, 100);*/
+			pObjects->DetermineObjectConvexityData(0.015, 0.15);
 			pObjects->ObjectAggregationLevel2_ViaObjectPairConvexity(0.015, 0.77, 0.75, 300, true);
 			cv::imshow("New Colored object image", pObjects->CreateSegmentationImage());
 			cv::waitKey(1);
