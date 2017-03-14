@@ -614,6 +614,9 @@ ObjectGraph::ObjectGraph()
 	kCoverage = 0.99f;
 	alpha = 0.5f;
 
+	nValidObjects = -1;
+	sortedObjectArray.n = -1;
+
 	elementMem = NULL;
 	NodeArray.Element = NULL;
 	EdgeArray.Element = NULL;
@@ -622,6 +625,7 @@ ObjectGraph::ObjectGraph()
 	objectArray.Element = NULL;
 	//sortedElementIdxMem = NULL;
 	//Array<int> *sortedElementIdxArray = NULL;
+	sortedObjectArray.Element = NULL;
 	relationClassifier = RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_NLMC;
 }
 
@@ -636,6 +640,7 @@ ObjectGraph::~ObjectGraph()
 	RVL_DELETE_ARRAY(objectArray.Element);
 	//RVL_DELETE_ARRAY(sortedElementIdxMem);
 	//RVL_DELETE_ARRAY(sortedElementIdxArray);
+	RVL_DELETE_ARRAY(sortedObjectArray.Element);
 }
 
 void ObjectGraph::CreateParamList(CRVLMem *pMem)
@@ -3028,4 +3033,67 @@ bool ObjectGraph::CheckIfNeighbours(int iObject1, int iObject2)
 		edgeElement = edgeElement->pNext;
 	}
 	return false; //if the function has not finished earlier then they are not neighbours
+}
+
+void ObjectGraph::SortObjects()
+{
+	if (nValidObjects < 0)
+		CountValidObjects();
+
+	sortedObjectArray.Element = new SortIndex<int>[nValidObjects];
+
+	SortIndex<int> *pSortIndex = sortedObjectArray.Element;
+
+	int iObject;
+	GRAPH::AggregateNode<SURFEL::AgEdge> *pObject;
+	QLIST::Index *piElement;
+
+	for (iObject = 0; iObject < NodeArray.n; iObject++)
+	{
+		pObject = NodeArray.Element + iObject;
+
+		piElement = pObject->elementList.pFirst;
+
+		//check if object
+		if (!piElement)
+			continue;
+
+		//we are not intrested in objects with size less than 20 points???
+		if (pObject->size < 20)
+			continue;
+
+		pSortIndex->cost = pObject->size;
+		pSortIndex->idx = iObject;
+		pSortIndex++;
+	}
+
+	sortedObjectArray.n = nValidObjects;
+
+	BubbleSort<SortIndex<int>>(sortedObjectArray, true);
+}
+
+void ObjectGraph::CountValidObjects()
+{
+	nValidObjects = 0;
+
+	int iObject;
+	GRAPH::AggregateNode<SURFEL::AgEdge> *pObject;
+	QLIST::Index *piElement;
+
+	for (iObject = 0; iObject < NodeArray.n; iObject++)
+	{
+		pObject = NodeArray.Element + iObject;
+
+		piElement = pObject->elementList.pFirst;
+
+		//check if object
+		if (!piElement)
+			continue;
+
+		//we are not intrested in objects with size less than 20 points???
+		if (pObject->size < 20)
+			continue;
+
+		nValidObjects++;
+	}
 }

@@ -9,6 +9,7 @@
 #include "Visualizer.h"
 #include "SceneSegFile.hpp"
 #include "SurfelGraph.h"
+#include "ObjectGraph.h"
 #include "PlanarSurfelDetector.h"
 #include "ObjectGraph.h"
 #include "RVLRecognition.h"
@@ -27,6 +28,7 @@ ObjectDetector::ObjectDetector()
 	flags = 0x00000000;
 	bSegmentToObjects = false;
 	bObjectAggregationLevel2 = false;
+	bCTIBasedObjectAggregation = false;
 
 	pSurfels = NULL;
 	pSurfelDetector = NULL;
@@ -86,6 +88,18 @@ void ObjectDetector::Init()
 		std::cout << "Initializing SVM Classifier!" << std::endl;
 		pObjects->InitSVMClassifier(SVMClassifierParamsFileName);
 	}
+
+	pPSGM = new PSGM;
+
+	pPSGM->CreateParamList(pMem0);
+
+	pPSGM->ParamList.LoadParams(cfgFileName);
+
+	pPSGM->pMem = pMem;
+
+	pPSGM->pSurfels = pSurfels;
+
+	pPSGM->pSurfelDetector = pSurfelDetector;
 }
 
 void ObjectDetector::CreateParamList()
@@ -105,6 +119,7 @@ void ObjectDetector::CreateParamList()
 	pParamData = ParamList.AddParam("ObjectDetector.SegmentToObjects", RVLPARAM_TYPE_BOOL, &bSegmentToObjects);
 	pParamData = ParamList.AddParam("ObjectDetector.ObjectAggregationLevel2", RVLPARAM_TYPE_BOOL, &bObjectAggregationLevel2);
 	pParamData = ParamList.AddParam("ObjectDetector.SVMClassifierParamsFileName", RVLPARAM_TYPE_STRING, SVMClassifierParamsFileName);
+	pParamData = ParamList.AddParam("ObjectDetector.CTIBasedObjectAggregation", RVLPARAM_TYPE_BOOL, &bCTIBasedObjectAggregation);
 }
 
 void ObjectDetector::DetectObjects(char *MeshFilePathName)
@@ -242,6 +257,8 @@ void ObjectDetector::DetectObjects(char *MeshFilePathName)
 			cv::imshow("Colored object image", pObjects->CreateSegmentationImage());
 			cv::waitKey(1);
 			/*VisualizeObjectGraphVertexPointCloud(&objects, 100);*/
+			if (bCTIBasedObjectAggregation)
+
 			pObjects->DetermineObjectConvexityData(0.015, 0.15);
 			pObjects->ObjectAggregationLevel2_ViaObjectPairConvexity(0.015, 0.77, 0.75, 300, true);
 			cv::imshow("New Colored object image", pObjects->CreateSegmentationImage());

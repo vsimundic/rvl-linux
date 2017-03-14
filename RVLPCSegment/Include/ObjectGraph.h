@@ -101,6 +101,8 @@ namespace RVL
 			void SortElements(
 				GRAPH::AggregateNode<AgEdge> *pAgNode,
 				Array<SortIndex<int>> *pSortedElementIdxArray);
+			void SortObjects();
+			void CountValidObjects();
 			void InitDisplay(
 				Visualizer *pVisualizer,
 				Mesh *pMesh,
@@ -132,6 +134,8 @@ namespace RVL
 			ObjectGraphObjectData additionalObjectData;	//Filko
 			//Array<int> *sortedElementIdxArray;
 			DWORD relationClassifier;
+			Array<SortIndex<int>> sortedObjectArray;
+			int nValidObjects;
 		private:
 			QLIST::Index *elementMem;
 			//int *sortedElementIdxMem;

@@ -15,6 +15,7 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 #include "Visualizer.h"
 #include "SceneSegFile.hpp"
 #include "SurfelGraph.h"
+#include "ObjectGraph.h"
 #include "PlanarSurfelDetector.h"
 #include "RVLRecognition.h"
 #include "RFRecognition.h"

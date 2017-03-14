@@ -27,9 +27,11 @@ namespace RVL
 		bool bSegmentToObjects;
 		bool bObjectAggregationLevel2;
 		bool bSurfelsFromSSF;
+		bool bCTIBasedObjectAggregation;
 		SurfelGraph *pSurfels;
 		PlanarSurfelDetector *pSurfelDetector;
 		SURFEL::ObjectGraph *pObjects;
+		PSGM *pPSGM;
 		Mesh mesh;
 		char *cfgFileName;
 		void *vpMeshBuilder;

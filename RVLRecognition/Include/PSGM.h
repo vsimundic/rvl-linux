@@ -15,8 +15,6 @@
 #include "Eigen\Dense"
 namespace RVL
 {
-
-
 	class PSGM;
 	class CTISet;
 	namespace RECOG
@@ -129,7 +127,7 @@ namespace RVL
 				int iSelectedPt,
 				int iSelectedSurfel,
 				void *vpData);
-		}
+		}	// namespace PSGM_
 	}
 	//class CTISet
 	//{
@@ -230,6 +228,12 @@ namespace RVL
 			RECOG::PSGM_::ModelInstance *pSModelInstance,
 			int startIdx,
 			int endIdx); //Vidovic
+		bool IsFlat(
+			Array<int> SurfelArray,
+			float *N,
+			float &d,
+			Array<int> PtArray);
+		bool DetectGroundPlane(SURFEL::ObjectGraph *pObjects);
 		void PrintMatchInfo(
 			FILE *fp,
 			FILE *fpLog,
@@ -388,7 +392,8 @@ namespace RVL
 		RECOG::CTISet CTIset;
 		RECOG::CTISet MCTIset;
 		std::map<int, vtkSmartPointer<vtkPolyData>> vtkModelDB;
-
+		float NGnd[3];
+		float dGnd;
 
 	private:		
 		RECOG::PSGM_::Cluster *clusterMem;

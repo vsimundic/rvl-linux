@@ -11,6 +11,7 @@
 #include "Visualizer.h"
 #include "SceneSegFile.hpp"
 #include "SurfelGraph.h"
+#include "ObjectGraph.h"
 #include "PlanarSurfelDetector.h"
 #include "RVLRecognition.h"
 #include "PSGMCommon.h"
@@ -1778,44 +1779,9 @@ void PSGM::Clusters()
 		}
 		else
 		{
-			piPt = PtArray.Element;
-
-			for (iiSurfel = 0; iiSurfel < pCluster->iSurfelArray.n; iiSurfel++)
-			{
-				iSurfel = pCluster->iSurfelArray.Element[iiSurfel];
-
-				pSurfel = pSurfels->NodeArray.Element + iSurfel;
-
-				pPtIdx = pSurfel->PtList.pFirst;
-
-				while (pPtIdx)
-				{
-					*(piPt++) = pPtIdx->Idx;
-
-					pPtIdx = pPtIdx->pNext;
-				}
-			}
-
-			PtArray.n = piPt - PtArray.Element;
-
-			pMesh->ComputeDistribution(PtArray, PtDistribution);
-
-			var = PtDistribution.var;
-
-			RVLSORT3ASCEND(var, idx, iTmp);
-
-			if (var[idx[0]] / var[idx[1]] <= 0.0005 && var[idx[0]] / var[idx[2]] <= 0.0005)
+			if (IsFlat(pCluster->iSurfelArray, NGnd, dGnd, PtArray))
 			{
 				pCluster->bValid = false;
-
-				NGnd = PtDistribution.R + 3 * idx[0];
-
-				if (NGnd[2] > 0.0f)
-				{
-					RVLNEGVECT3(NGnd, NGnd);
-				}
-
-				dGnd = RVLDOTPRODUCT3(NGnd, PtDistribution.t);
 
 				bGnd = true;
 			}
@@ -6504,4 +6470,101 @@ void PSGM::CalculateICPCost(RVL::PSGM::ICPfunction ICPFunction, int ICPvariant) 
 //		}
 //		
 //	}
+}
+
+bool PSGM::IsFlat(
+	Array<int> surfelArray,
+	float *N,
+	float &d,
+	Array<int> PtArray)
+{
+	MESH::Distribution PtDistribution;
+
+	int *piPt = PtArray.Element;
+
+	int iSurfel, iiSurfel;
+	Surfel *pSurfel;
+	QLIST::Index2 *pPtIdx;
+
+	for (iiSurfel = 0; iiSurfel < surfelArray.n; iiSurfel++)
+	{
+		iSurfel = surfelArray.Element[iiSurfel];
+
+		pSurfel = pSurfels->NodeArray.Element + iSurfel;
+
+		pPtIdx = pSurfel->PtList.pFirst;
+
+		while (pPtIdx)
+		{
+			*(piPt++) = pPtIdx->Idx;
+
+			pPtIdx = pPtIdx->pNext;
+		}
+	}
+
+	PtArray.n = piPt - PtArray.Element;
+
+	pMesh->ComputeDistribution(PtArray, PtDistribution);
+
+	float *var = PtDistribution.var;
+
+	int idx[3];
+	int iTmp;
+
+	RVLSORT3ASCEND(var, idx, iTmp);
+
+	if (var[idx[0]] / var[idx[1]] <= 0.0005 && var[idx[0]] / var[idx[2]] <= 0.0005)
+	{
+		N = PtDistribution.R + 3 * idx[0];
+
+		if (N[2] > 0.0f)
+		{
+			RVLNEGVECT3(N, N);
+		}
+
+		d = RVLDOTPRODUCT3(N, PtDistribution.t);
+	}
+	else
+		return false;
+}
+
+bool PSGM::DetectGroundPlane(SURFEL::ObjectGraph *pObjects)
+{
+	if (pObjects->sortedObjectArray.n < 0)
+		pObjects->SortObjects();
+
+	Array<int> PtArray;
+
+	PtArray.Element = new int[pMesh->NodeArray.n];
+
+	Array<int> iSurfelArray;
+
+	iSurfelArray.Element = new int[pSurfels->NodeArray.n];
+
+	bool bGnd = false;
+
+	int i;
+	int iObject;
+	GRAPH::AggregateNode<SURFEL::AgEdge> *pObject;
+
+	for (i = 0; i < pObjects->sortedObjectArray.n; i++)
+	{
+		iObject = pObjects->sortedObjectArray.Element[i].idx;
+
+		pObject = pObjects->NodeArray.Element + iObject;
+
+		QLIST::CopyToArray(&(pObject->elementList), &iSurfelArray);
+
+		if (IsFlat(iSurfelArray, NGnd, dGnd, PtArray))
+		{
+			bGnd = true;
+
+			break;
+		}			
+	}
+
+	delete[] PtArray.Element;
+	delete[] iSurfelArray.Element;
+
+	return bGnd;
 }
