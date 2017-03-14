@@ -1365,8 +1365,8 @@ void ObjectGraph::CreateSortedObjectArray()
 
 	for (iNode = 0; iNode < NodeArray.n; iNode++)
 	{
-		if (iNode == 1230 || iNode == 786 || iNode == 946)
-			int debug = 0;
+		//if (iNode == 1230 || iNode == 786 || iNode == 946)
+		//	int debug = 0;
 
 		pAgNode = NodeArray.Element + iNode;
 

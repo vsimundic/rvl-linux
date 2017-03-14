@@ -8,6 +8,8 @@
 #define RVLSURFEL_DISPLAY_MODE_FOREGROUND_BACKGROUND	3
 #define RVLSURFEL_DISPLAY_MODE_CONVEX_CONCAVE			4
 
+#define RVLSURFEL_DISPLAY_VERTEX_NORMAL_HULL
+
 #define RVLSURFEL_EDGE_FLAG_HARD				0x01
 #define RVLSURFEL_EDGE_FLAG_CONVEX				0x02
 
@@ -84,6 +86,8 @@ namespace RVL
 			Array<int> iSurfelArray;
 			Vertex *pNext;
 			bool bEdge;
+			BYTE type;
+			float VTX[3];
 		};
 
 
@@ -239,6 +243,7 @@ namespace RVL
 		Array<SURFEL::Vertex *> vertexArray;
 		Array<QList<QLIST::Index>> surfelVertexList;
 		int nVertexSurfelRelations;
+		float TIVertexToleranceAngle;
 	private:
 		unsigned char *nodeColor;
 		QLIST::Index *surfelVertexMem;

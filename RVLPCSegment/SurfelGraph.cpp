@@ -67,6 +67,7 @@ using namespace SURFEL;
 SurfelGraph::SurfelGraph()
 {
 	imageAdjacencyThr = 6;
+	TIVertexToleranceAngle = 22.5f;		// deg
 
 	PtMem = NULL;
 	surfelBndMem = NULL;
@@ -260,8 +261,8 @@ void SurfelGraph::ImageAdjacency(Mesh *pMesh)
 		if (pSurfel->size <= 1)
 			continue;
 
-		if (pSurfel->bEdge)
-			continue;
+		//if (pSurfel->bEdge)
+		//	continue;
 
 		ImageAdjacency(pMesh, iSurfel, surfelIdx, bVisited);
 	}
@@ -342,69 +343,56 @@ void SurfelGraph::ImageAdjacency(
 
 		P = pPt->P;
 
-		RVL_PROJECT_3DPOINT_TO_PLANE(P, N, d, P_);
+		if (pSurfel->bEdge)
+		{
+			pEdgePtr = pPt->EdgeList.pFirst;
 
-		bNeighbor = false;
+			while (pEdgePtr)
+			{
+				iPt2 = RVLPCSEGMENT_GRAPH_GET_OPPOSITE_NODE(pEdgePtr);
+
+				pPt2 = pMesh->NodeArray.Element + iPt2;
+
+				if (pPt2->bBoundary)
+				{
+					iOtherSurfel = edgeMap[iPt2];
+
+					if (iOtherSurfel >= 0 && iOtherSurfel < NodeArray.n && iOtherSurfel != iSurfel)
+					{
+						pOtherSurfel = NodeArray.Element + iOtherSurfel;	//surfel owner of the pixel
+
+						P2 = pPt2->P;
+
+						RVLDIF3VECTORS(P2, P, dP);
+
+						dist = sqrt(RVLDOTPRODUCT3(dP, dP));
+
+						RVLSURFELGRAPH_IMAGE_ADJACENCY_ADD_CONNECTION(pSurfel, pOtherSurfel, iOtherSurfel, surfelIdx, dist, nImageAdjacencyRelations, pMem, desc, bVisited, bNeighbor);
+					}
+				}
+
+				pEdgePtr = pEdgePtr->pNext;
+			}
+		}
+		else
+		{		
+			P = pPt->P;
+
+			RVL_PROJECT_3DPOINT_TO_PLANE(P, N, d, P_);
+
+			bNeighbor = false;
 
 #ifdef RVLSURFELGRAPH_IMAGE_ADJACENCY_NEW
-		pEdgePtr = pPt->EdgeList.pFirst;
+			pEdgePtr = pPt->EdgeList.pFirst;
 
-		while (pEdgePtr)
-		{
-			iPt2 = RVLPCSEGMENT_GRAPH_GET_OPPOSITE_NODE(pEdgePtr);
-
-			iOtherSurfel = surfelMap[iPt2];
-
-			if (iOtherSurfel >= 0 && iOtherSurfel < NodeArray.n)
+			while (pEdgePtr)
 			{
-				pOtherSurfel = NodeArray.Element + iOtherSurfel;	//surfel owner of the pixel
+				iPt2 = RVLPCSEGMENT_GRAPH_GET_OPPOSITE_NODE(pEdgePtr);
 
-				if ((pOtherSurfel->size < 640 * 480) && (pOtherSurfel->size > 1) && (iOtherSurfel != iSurfel))
+				iOtherSurfel = surfelMap[iPt2];
+
+				if (iOtherSurfel >= 0 && iOtherSurfel < NodeArray.n)
 				{
-					pPt2 = pMesh->NodeArray.Element + iPt2;
-
-					P2 = pPt2->P;
-
-					N2 = pOtherSurfel->N;
-
-					RVL_PROJECT_3DPOINT_TO_PLANE(P2, N2, pOtherSurfel->d, P2_);
-
-					RVLDIF3VECTORS(P2_, P_, dP);
-
-					dist = sqrt(RVLDOTPRODUCT3(dP, dP));
-
-					RVLSURFELGRAPH_IMAGE_ADJACENCY_ADD_CONNECTION(pSurfel, pOtherSurfel, iOtherSurfel, surfelIdx, dist, nImageAdjacencyRelations, pMem, desc, bVisited, bNeighbor);
-				}
-			}
-
-			pEdgePtr = pEdgePtr->pNext;
-		}
-
-		if (!bNeighbor)
-		{
-			minDist = 0.0f;
-			iNeighbor = -1;
-#endif
-
-			y = floor(iPt / 640.0);
-			x = floor(iPt - 640.0 * y);
-
-			//Running through point neighbourhood
-			for (int yy = y - imageAdjacencyThr; yy < y + imageAdjacencyThr; yy++)
-			{
-				if ((yy < 0) || (yy >= 480))
-					continue;
-				for (int xx = x - imageAdjacencyThr; xx < x + imageAdjacencyThr; xx++)
-				{
-					if ((xx < 0) || (xx >= 640))
-						continue;
-					iPt2 = yy * 640 + xx;
-
-					iOtherSurfel = surfelMap[iPt2];
-
-					if (iOtherSurfel < 0 || iOtherSurfel >= NodeArray.n)
-						continue;
-
 					pOtherSurfel = NodeArray.Element + iOtherSurfel;	//surfel owner of the pixel
 
 					if ((pOtherSurfel->size < 640 * 480) && (pOtherSurfel->size > 1) && (iOtherSurfel != iSurfel))
@@ -421,42 +409,90 @@ void SurfelGraph::ImageAdjacency(
 
 						dist = sqrt(RVLDOTPRODUCT3(dP, dP));
 
-#ifdef RVLSURFELGRAPH_IMAGE_ADJACENCY_NEW
-						if(iNeighbor < 0 || dist < minDist)
-						{
-							minDist = dist;
-							iNeighbor = iOtherSurfel;
-						}							
-#else
 						RVLSURFELGRAPH_IMAGE_ADJACENCY_ADD_CONNECTION(pSurfel, pOtherSurfel, iOtherSurfel, surfelIdx, dist, nImageAdjacencyRelations, pMem, desc, bVisited, bNeighbor);
-#endif
 					}
 				}
-			}	//Running through point neighbourhood
 
-#ifdef RVLSURFELGRAPH_IMAGE_ADJACENCY_NEW
-			if (iNeighbor >= 0)
-			{
-				pOtherSurfel = NodeArray.Element + iNeighbor;
-
-				RVLSURFELGRAPH_IMAGE_ADJACENCY_ADD_CONNECTION(pSurfel, pOtherSurfel, iNeighbor, surfelIdx, minDist, nImageAdjacencyRelations, pMem, desc, bVisited, bNeighbor);
+				pEdgePtr = pEdgePtr->pNext;
 			}
-		}	// if (!bNeighbor)
+
+			if (!bNeighbor)
+			{
+				minDist = 0.0f;
+				iNeighbor = -1;
 #endif
 
-		// Identify adjacent edge features.
+				y = floor(iPt / 640.0);
+				x = floor(iPt - 640.0 * y);
 
-		if (pPt->bBoundary)
-		{
-			iOtherSurfel = edgeMap[iPt];
+				//Running through point neighbourhood
+				for (int yy = y - imageAdjacencyThr; yy < y + imageAdjacencyThr; yy++)
+				{
+					if ((yy < 0) || (yy >= 480))
+						continue;
+					for (int xx = x - imageAdjacencyThr; xx < x + imageAdjacencyThr; xx++)
+					{
+						if ((xx < 0) || (xx >= 640))
+							continue;
+						iPt2 = yy * 640 + xx;
 
-			if (iOtherSurfel >= 0 && iOtherSurfel < NodeArray.n)
+						iOtherSurfel = surfelMap[iPt2];
+
+						if (iOtherSurfel < 0 || iOtherSurfel >= NodeArray.n)
+							continue;
+
+						pOtherSurfel = NodeArray.Element + iOtherSurfel;	//surfel owner of the pixel
+
+						if ((pOtherSurfel->size < 640 * 480) && (pOtherSurfel->size > 1) && (iOtherSurfel != iSurfel))
+						{
+							pPt2 = pMesh->NodeArray.Element + iPt2;
+
+							P2 = pPt2->P;
+
+							N2 = pOtherSurfel->N;
+
+							RVL_PROJECT_3DPOINT_TO_PLANE(P2, N2, pOtherSurfel->d, P2_);
+
+							RVLDIF3VECTORS(P2_, P_, dP);
+
+							dist = sqrt(RVLDOTPRODUCT3(dP, dP));
+
+#ifdef RVLSURFELGRAPH_IMAGE_ADJACENCY_NEW
+							if (iNeighbor < 0 || dist < minDist)
+							{
+								minDist = dist;
+								iNeighbor = iOtherSurfel;
+							}
+#else
+							RVLSURFELGRAPH_IMAGE_ADJACENCY_ADD_CONNECTION(pSurfel, pOtherSurfel, iOtherSurfel, surfelIdx, dist, nImageAdjacencyRelations, pMem, desc, bVisited, bNeighbor);
+#endif
+						}
+					}
+				}	//Running through point neighbourhood
+
+#ifdef RVLSURFELGRAPH_IMAGE_ADJACENCY_NEW
+				if (iNeighbor >= 0)
+				{
+					pOtherSurfel = NodeArray.Element + iNeighbor;
+
+					RVLSURFELGRAPH_IMAGE_ADJACENCY_ADD_CONNECTION(pSurfel, pOtherSurfel, iNeighbor, surfelIdx, minDist, nImageAdjacencyRelations, pMem, desc, bVisited, bNeighbor);
+				}
+			}	// if (!bNeighbor)
+#endif
+			// Identify adjacent edge features.
+
+			if (pPt->bBoundary)
 			{
-				pOtherSurfel = NodeArray.Element + iOtherSurfel;	//surfel owner of the pixel
+				iOtherSurfel = edgeMap[iPt];
 
-				RVLSURFELGRAPH_IMAGE_ADJACENCY_ADD_CONNECTION(pSurfel, pOtherSurfel, iOtherSurfel, surfelIdx, 0.0f, nImageAdjacencyRelations, pMem, desc, bVisited, bNeighbor);
+				if (iOtherSurfel >= 0 && iOtherSurfel < NodeArray.n)
+				{
+					pOtherSurfel = NodeArray.Element + iOtherSurfel;	//surfel owner of the pixel
+
+					RVLSURFELGRAPH_IMAGE_ADJACENCY_ADD_CONNECTION(pSurfel, pOtherSurfel, iOtherSurfel, surfelIdx, 0.0f, nImageAdjacencyRelations, pMem, desc, bVisited, bNeighbor);
+				}
 			}
-		}
+		}	// if (!pSurfel->bEdge)
 
 		// Reset bVisited and compute the common boundary length of all neighboring surfels.
 
@@ -548,20 +584,96 @@ void SurfelGraph::DetermineImgAdjDescriptors(
 		if ((desc->cupyDescriptor[0] + desc->cupyDescriptor[1] + desc->cupyDescriptor[2] + desc->cupyDescriptor[3]) != 0.0)
 			continue; //this adjacancy descriptor has already been set, probably by other surfel
 
+		N_ = pOtherSurfel->N;
+
 		if (pOtherSurfel->bEdge)
 		{
-			N_ = pOtherSurfel->N;			
+			if (pSurfel->bEdge)
+			{
+				a[0] = 0.0f;
 
-			RVLCROSSPRODUCT3(N, N_, dN);
+				RVLDIF3VECTORS(N_, N, dN);
 
-			desc->cupyDescriptor[0] = acos(RVLDOTPRODUCT3(N, N_));
+				dOffset = pOtherSurfel->d - pSurfel->d;
 
-			if (RVLDOTPRODUCT3(dN, pOtherSurfel->V) < 0.0f)
-				desc->cupyDescriptor[0] = -desc->cupyDescriptor[0];
+				BoundaryArray = pSurfel->BoundaryArray.Element[boundary];
 
-			desc->cupyDescriptor[1] = 1.0f;
-			desc->cupyDescriptor[2] = 1.0f;
-			desc->cupyDescriptor[3] = 0.0f;
+				for (iPointEdge = 0; iPointEdge < BoundaryArray.n; iPointEdge++)
+				{
+					pCurrEdge = BoundaryArray.Element[iPointEdge];
+
+					iPt = RVLPCSEGMENT_GRAPH_GET_NODE(pCurrEdge);
+
+					P = mesh->NodeArray.Element[iPt].P;
+
+					if (RVLDOTPRODUCT3(dN, P) - dOffset <= 0.0)
+						a[0]++;
+				}
+
+				a[0] /= (double)(BoundaryArray.n);
+
+				a[1] = 1.0 - a[0];
+
+				RVLNEGVECT3(dN, dN);
+
+				dOffset = -dOffset;
+
+				a[2] = 0.0f;
+
+				BoundaryArray = pOtherSurfel->BoundaryArray.Element[0];
+
+				for (iPointEdge = 0; iPointEdge < BoundaryArray.n; iPointEdge++)
+				{
+					pCurrEdge = BoundaryArray.Element[iPointEdge];
+
+					iPt = RVLPCSEGMENT_GRAPH_GET_NODE(pCurrEdge);
+
+					P = mesh->NodeArray.Element[iPt].P;
+
+					if (RVLDOTPRODUCT3(dN, P) - dOffset <= 0.0)
+						a[2]++;
+				}
+
+				a[2] /= (double)(BoundaryArray.n);
+
+				a[3] = 1.0 - a[2];
+
+				int p, q;
+				double tempm = 0;
+				//argmax_l(max_i(a_i_l))
+				for (int pp = 0; pp < 4; pp++)
+				{
+					if (a[pp] > tempm)
+					{
+						p = pp;
+						tempm = a[pp];
+					}
+				}
+
+				p = (p % 2 == 0) ? 1 : 2;
+				//argmax_i(a_i_p)
+				q = (a[p - 1] > a[2 + p - 1]) ? 1 : 2;
+
+				//get and update descriptor
+				desc->cupyDescriptor[0] = (3 - 2 * p) * acos(RVLDOTPRODUCT3(N, N_));	//(3 - 2*p)*acos(n_i*n_j)
+				desc->cupyDescriptor[1] = a[(q - 1) * 2 + (p - 1)];
+				desc->cupyDescriptor[2] = a[((3 - q) - 1) * 2 + (p - 1)];
+				//desc->cupyDescriptor[3] = desc->avgDist;
+				desc->cupyDescriptor[3] = desc->minDist;
+			}
+			else
+			{
+				RVLCROSSPRODUCT3(N, N_, dN);
+
+				desc->cupyDescriptor[0] = acos(RVLDOTPRODUCT3(N, N_));
+
+				if (RVLDOTPRODUCT3(dN, pOtherSurfel->V) < 0.0f)
+					desc->cupyDescriptor[0] = -desc->cupyDescriptor[0];
+
+				desc->cupyDescriptor[1] = 1.0f;
+				desc->cupyDescriptor[2] = 1.0f;
+				desc->cupyDescriptor[3] = 0.0f;
+			}
 		}
 		else
 		{
@@ -990,6 +1102,10 @@ void SurfelGraph::DetectVertices(
 
 	memset(bVisited, 0, pMesh->NodeArray.n * sizeof(bool));
 
+	float q = TIVertexToleranceAngle * DEG2RAD;
+	float cq = cos(q);
+	float sq = sin(q);
+
 	//float csEdgeTangentAngle = cos(edgeTangentAngle * DEG2RAD);
 	//float snEdgeTangentAngle = sqrt(1.0f - csEdgeTangentAngle * csEdgeTangentAngle);
 
@@ -1012,7 +1128,7 @@ void SurfelGraph::DetectVertices(
 	Point *pPt, *pPt_;
 	//Point *pPt_;
 	QList<QLIST::Index> *pSurfelVertexList;
-	float *N, *P_;
+	float *N, *P_, *N1, *N2;
 	//float *N1, *N2;
 	//float N2_[3], VTmp[3];
 	//float fTmp;
@@ -1021,11 +1137,14 @@ void SurfelGraph::DetectVertices(
 	int iF[3], iP[3];
 	int iEdgeFeature, iEdgeFeature_, iEdgeFeature__;
 	bool bSmallestIndex;
-	Surfel *pSurfel_, *pEdgeFeature;
+	Surfel *pSurfel_, *pEdgeFeature, *pFeature, *pFeature_, *pFeature__, *pF;
 	bool bCycleCompleted;
 	int i, j;
-	float P[3];
+	float *P;
 	float fnFeatures;
+	BYTE bConvex[3];
+	float VTmp[3], N3[3];
+	float fTmp;
 
 	for (iSurfel = 0; iSurfel < NodeArray.n; iSurfel++)
 	{
@@ -1056,14 +1175,19 @@ void SurfelGraph::DetectVertices(
 				if (bVisited[iPt])
 					continue;
 
-				bVisited[iPt] = true;
-
-				//if (iPt == 305811)
-				//	int debug = 0;
-
 				pPt = pMesh->NodeArray.Element + iPt;
 
 				iFeature = (pPt->bBoundary ? edgeMap[iPt] : iSurfel);
+
+				if (iFeature < 0)
+					continue;
+
+				bVisited[iPt] = true;
+
+				if (iPt == 304364)
+					int debug = 0;
+
+				pFeature = NodeArray.Element + iFeature;
 
 				iFeature__ = iFeature;
 
@@ -1089,6 +1213,44 @@ void SurfelGraph::DetectVertices(
 							{
 								//// Determine convex/concave edges.
 
+								RVLNULL3VECTOR(bConvex);
+								
+								pFeature_ = (iFeature_ >= 0 ? NodeArray.Element + iFeature_ : NULL);
+								pFeature__ = (iFeature__ >= 0 ? NodeArray.Element + iFeature__ : NULL);
+
+								for (i = 0; i < pFeature->imgAdjacency.size(); i++)
+								{
+									pF = pFeature->imgAdjacency.at(i);
+
+									if (pF == pFeature_)
+										bConvex[2] = (pFeature->imgAdjacencyDescriptors.at(i)->cupyDescriptor[0] >= 0);
+									else if (pF == pFeature__)
+										bConvex[0] = (pFeature->imgAdjacencyDescriptors.at(i)->cupyDescriptor[0] >= 0);
+								}
+
+								if (pFeature_ == NULL)
+								{
+									pF = pFeature_;
+									pFeature_ = pFeature__;
+									pFeature__ = pF;
+								}
+								
+								for (i = 0; i < pFeature_->imgAdjacency.size(); i++)
+								{
+									pF = pFeature_->imgAdjacency.at(i);
+
+									if (pF == pFeature__)
+										bConvex[1] = (pFeature_->imgAdjacencyDescriptors.at(i)->cupyDescriptor[0] >= 0);
+								}
+
+								// Create vertex.
+
+								RVLMEM_ALLOC_STRUCT(pMem, Vertex, pVertex);
+
+								// Compute vertex position.
+
+								P = pVertex->P;
+
 								nFeatures = 0;
 
 								iF[0] = iFeature;
@@ -1112,38 +1274,61 @@ void SurfelGraph::DetectVertices(
 									}
 								}
 
+								nVertexSurfelRelations += nFeatures;
+
 								fnFeatures = (float)nFeatures;
 
 								RVLSCALE3VECTOR2(P, fnFeatures, P);
 
-								// Create vertex.
+								// Classify vertex.
 
-								RVLMEM_ALLOC_STRUCT(pMem, Vertex, pVertex);
+								pVertex->type = bConvex[0] + bConvex[1] + bConvex[2];
 
-								//pVertex->bEdge = pPt->bBoundary;
-
-								RVLCOPY3VECTOR(P, pVertex->P);
+								// Fill iSurfelArray 
 
 								RVLMEM_ALLOC_STRUCT_ARRAY(pMem, int, nFeatures, pVertex->iSurfelArray.Element);
 
 								pVertex->iSurfelArray.n = nFeatures;
 
-								RVLMEM_ALLOC_STRUCT_ARRAY(pMem, NormalHullElement, nFeatures, pVertex->normalHull.Element);
-
-								nVertexSurfelRelations += nFeatures;
-
-								pVertex->normalHull.n = 0;
-
 								j = 0;
 
 								for (i = 0; i < 3; i++)
-								{
 									if (iF[i] >= 0)
-									{
 										pVertex->iSurfelArray.Element[j++] = iF[i];
+								
+								// Determine normal hull.
 
-										UpdateNormalHull(pVertex->normalHull, NodeArray.Element[iF[i]].N);
-									}
+								RVLMEM_ALLOC_STRUCT_ARRAY(pMem, NormalHullElement, (pVertex->type == 1 ? 4 : nFeatures), pVertex->normalHull.Element);
+
+								pVertex->normalHull.n = 0;
+
+								if (pVertex->type == 1)
+								{
+									for (i = 0; i < 3; i++)
+										if (bConvex[i])
+											break;
+
+									N1 = NodeArray.Element[iF[i]].N;
+									N2 = NodeArray.Element[iF[(i + 1) % 3]].N;
+
+									UpdateNormalHull(pVertex->normalHull, N1);
+									UpdateNormalHull(pVertex->normalHull, N2);
+
+									RVLCROSSPRODUCT3(N1, N2, VTmp);
+									RVLNORM3(VTmp, fTmp);
+									RVLSCALE3VECTOR(VTmp, sq, VTmp);
+									RVLSCALE3VECTOR(N1, cq, N3);
+									RVLSUM3VECTORS(VTmp, N3, N3);
+									UpdateNormalHull(pVertex->normalHull, N3);
+									RVLSCALE3VECTOR(N2, cq, N3);
+									RVLSUM3VECTORS(VTmp, N3, N3);
+									UpdateNormalHull(pVertex->normalHull, N3);
+								}
+								else
+								{
+									for (i = 0; i < 3; i++)
+										if (iF[i] >= 0)
+											UpdateNormalHull(pVertex->normalHull, NodeArray.Element[iF[i]].N);										
 								}
 
 								// Add vertex to the vertex list.
@@ -2854,6 +3039,7 @@ void SurfelGraph::DisplayVertices()
 	double P0[3], P[3], V[3];
 	Surfel *pSurfel;
 	int iSurfel;
+	int i;
 
 	Vertex *pVertex = vertexList.pFirst;
 
@@ -2861,6 +3047,13 @@ void SurfelGraph::DisplayVertices()
 	{
 		RVLCOPY3VECTOR(pVertex->P, P0);
 
+#ifdef RVLSURFEL_DISPLAY_VERTEX_NORMAL_HULL
+		for(i = 0; i < pVertex->normalHull.n; i++)
+		{
+			pts->InsertNextPoint(P0);
+
+			RVLSCALE3VECTOR(pVertex->normalHull.Element[i].N, lineLength, V);
+#else
 		for (iSurfel = 0; iSurfel < pVertex->iSurfelArray.n; iSurfel++)
 		{
 			pSurfel = NodeArray.Element + pVertex->iSurfelArray.Element[iSurfel];
@@ -2868,7 +3061,7 @@ void SurfelGraph::DisplayVertices()
 			pts->InsertNextPoint(P0);
 
 			RVLSCALE3VECTOR(pSurfel->N, lineLength, V);
-
+#endif
 			RVLSUM3VECTORS(P0, V, P);
 
 			pts->InsertNextPoint(P);
@@ -2892,7 +3085,7 @@ void SurfelGraph::DisplayVertices()
 
 	colors->SetNumberOfComponents(3);
 
-	unsigned char red[3] = { 255, 0, 0 };
+	unsigned char color[5][3] = { { 255, 0, 255 }, { 255, 0, 0 }, { 255, 128, 0 }, { 0, 255, 0 }, {128, 128, 128}};
 
 	int nLines = iLine;
 
@@ -2916,11 +3109,19 @@ void SurfelGraph::DisplayVertices()
 	{
 		pVertex = vertexArray.Element[iVertex];
 
+#ifdef RVLSURFEL_DISPLAY_VERTEX_NORMAL_HULL
+		vertexDisplayLineArray.Element[iVertex].n = pVertex->normalHull.n;
+#else
 		vertexDisplayLineArray.Element[iVertex].n = pVertex->iSurfelArray.n;
+#endif
 
 		vertexDisplayLineArray.Element[iVertex].Element = pVertexDisplayLineIdx;
 
+#ifdef RVLSURFEL_DISPLAY_VERTEX_NORMAL_HULL
+		for (i = 0; i < pVertex->normalHull.n; i++)
+#else
 		for (iSurfel = 0; iSurfel < pVertex->iSurfelArray.n; iSurfel++)
+#endif
 		{
 			line[iLine] = vtkSmartPointer<vtkLine>::New();
 
@@ -2929,7 +3130,10 @@ void SurfelGraph::DisplayVertices()
 
 			lines->InsertNextCell(line[iLine]);
 
-			colors->InsertNextTupleValue(red);
+			if (pVertex->iSurfelArray.n >= 3)
+				colors->InsertNextTupleValue(color[pVertex->type]);
+			else
+				colors->InsertNextTupleValue(color[4]);
 
 			*(pVertexDisplayLineIdx++) = iLine;
 
