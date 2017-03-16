@@ -68,6 +68,7 @@ SurfelGraph::SurfelGraph()
 {
 	imageAdjacencyThr = 6;
 	TIVertexToleranceAngle = 22.5f;		// deg
+	edgeDepth = 20;
 
 	PtMem = NULL;
 	surfelBndMem = NULL;
@@ -113,6 +114,7 @@ void SurfelGraph::CreateParamList(CRVLMem *pMem)
 
 	pParamData = ParamList.AddParam("SurfelGraph.visualization.edgeFeatureDepth", RVLPARAM_TYPE_FLOAT, &(DisplayData.edgeFeatureDepth));
 	pParamData = ParamList.AddParam("SurfelGraph.visualization.normalLen", RVLPARAM_TYPE_FLOAT, &(DisplayData.normalLen));
+	pParamData = ParamList.AddParam("SurfelGraph.edgeDepth", RVLPARAM_TYPE_INT, &edgeDepth);
 }
 
 void SurfelGraph::InitGetNeighborsBoundaryAndSize()

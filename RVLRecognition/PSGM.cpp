@@ -6498,6 +6498,9 @@ bool PSGM::IsFlat(
 
 		pSurfel = pSurfels->NodeArray.Element + iSurfel;
 
+		if (pSurfel->bEdge)
+			continue;
+
 		pPtIdx = pSurfel->PtList.pFirst;
 
 		while (pPtIdx)
@@ -6509,6 +6512,9 @@ bool PSGM::IsFlat(
 	}
 
 	PtArray.n = piPt - PtArray.Element;
+
+	if (PtArray.n == 0)
+		return false;
 
 	pMesh->ComputeDistribution(PtArray, PtDistribution);
 

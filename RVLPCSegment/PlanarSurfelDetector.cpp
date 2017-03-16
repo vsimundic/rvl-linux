@@ -4793,13 +4793,21 @@ int PlanarSurfelDetector::CreateEdgeFeatures(
 
 	float eThr = 2.0f / kPlane;
 
+	float R_[9];
+
+	float *X = R_;
+	float *Y = R_ + 3;
+	float *Z = R_ + 6;
+
+	float r2 = 0.0005f * (float)(pSurfels->edgeDepth);
+
 	int iPointEdge3;
 	Point *pPt1, *pPt2;
 	float *P1, *P2, *P_, *V_;
 	float dP[3], NE[3], V[3], Q[3];
 	float dE, e, maxe, maxe_;
 	float fTmp;
-	float *N;
+	float *N, *R;
 	Surfel *pEdgeFeature;
 	float l, s;
 	Array<MeshEdgePtr *> *pEdgePtArray;
@@ -4993,6 +5001,9 @@ int PlanarSurfelDetector::CreateEdgeFeatures(
 
 				pEdgeFeature->size = pSegmentEndpoint2->Idx - pSegmentEndpoint1->Idx;
 
+				if (pEdgeFeature->size < 0)
+					pEdgeFeature->size += pBoundary->n;
+
 				// Assign points to the new edge feature.
 
 				iPointEdge = pSegmentEndpoint1->Idx;
@@ -5013,8 +5024,25 @@ int PlanarSurfelDetector::CreateEdgeFeatures(
 				pEdgePtArray->Element = pBoundary->Element + pSegmentEndpoint1->Idx;
 				pEdgePtArray->n = pEdgeFeature->size;
 
+				pEdgeFeature->size *= pSurfels->edgeDepth;
+
+				if (pEdgeFeature->size < 0)
+					int debug = 0;
+
 				pEdgeFeature->BoundaryArray.Element = pEdgePtArray;
 				pEdgeFeature->BoundaryArray.n = 1;
+
+				// Compute other edge feature parameters.
+
+				R = pEdgeFeature->R;
+
+				RVLCOPY3VECTOR(N, Z);
+				RVLCOPY3VECTOR(V, X);
+				RVLCROSSPRODUCT3(Z, X, Y);
+				RVLCOPYMX3X3T(R_, R);
+
+				pEdgeFeature->r1 = 0.5f * l;
+				pEdgeFeature->r2 = r2;
 
 				//
 

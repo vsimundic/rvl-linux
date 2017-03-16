@@ -244,6 +244,7 @@ namespace RVL
 		Array<QList<QLIST::Index>> surfelVertexList;
 		int nVertexSurfelRelations;
 		float TIVertexToleranceAngle;
+		int edgeDepth;
 	private:
 		unsigned char *nodeColor;
 		QLIST::Index *surfelVertexMem;

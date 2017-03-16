@@ -13,6 +13,8 @@
 #include <numeric>
 #include <queue>
 
+//#define RVLPCSEGMENT_OBJECT_GRAPH_IGNORE_EDGES
+
 //#define RVLPCSEGMENT_OBJECT_GRAPH_LOG
 #define RVLPCSEGMENT_OBJECT_GRAPH_EVALUATION_LOG
 
@@ -728,8 +730,10 @@ void ObjectGraph::Create(SurfelGraph *pSurfels_)
 		if (pSurfel->size <= 1)
 			continue;
 
+#ifdef RVLPCSEGMENT_OBJECT_GRAPH_IGNORE_EDGES
 		if (pSurfel->bEdge)
 			continue;
+#endif
 
 		if (pSurfel->BoundaryArray.n == 0)
 			continue;
@@ -740,8 +744,10 @@ void ObjectGraph::Create(SurfelGraph *pSurfels_)
 		{
 			pSurfel_ = pSurfel->imgAdjacency.at(i);
 
+#ifdef RVLPCSEGMENT_OBJECT_GRAPH_IGNORE_EDGES
 			if (pSurfel_->bEdge)
 				continue;
+#endif
 
 			if (pSurfel_->BoundaryArray.n == 0)
 				continue;
