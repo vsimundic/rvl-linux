@@ -416,17 +416,17 @@ int main(int argc, char ** argv)
 
 			recognition.pECCVGT->Init(sceneSequence, GTFolder, modelsInDB);
 
-			recognition.pECCVGT->SaveGTFile("D:\\ARP3D\\TUW_GT.txt");			
+			//recognition.pECCVGT->SaveGTFile("D:\\ARP3D\\TUW_GT.txt");			
 
-			FILE *fpHypothesisEvaluation = fopen("D:\\ARP3D\\compare_TNM_Valid_TMP.txt", "w");
+			//FILE *fpHypothesisEvaluation = fopen("D:\\ARP3D\\compare_TNM_Valid_TMP.txt", "w");
 
-			FILE *fpLog = fopen("D:\\ARP3D\\evaluationLog.txt", "w");			
+			//FILE *fpLog = fopen("D:\\ARP3D\\evaluationLog.txt", "w");			
 
-			//recognition.pECCVGT->SaveGTFile("C:\\RVL\\ExpRez\\TUW_GT.txt");
+			recognition.pECCVGT->SaveGTFile("C:\\RVL\\ExpRez\\TUW_GT.txt");
 
-			//FILE *fpHypothesisEvaluation = fopen("C:\\RVL\\ExpRez\\compare_TNM_Valid_TMP.txt", "w");
+			FILE *fpHypothesisEvaluation = fopen("C:\\RVL\\ExpRez\\compare_TNM_Valid_TMP.txt", "w");
 
-			//FILE *fpLog = fopen("C:\\RVL\\ExpRez\\evaluationLog.txt", "w");
+			FILE *fpLog = fopen("C:\\RVL\\ExpRez\\evaluationLog.txt", "w");
 
 			recognition.LoadCompleteSegmentGT(sceneSequence);
 

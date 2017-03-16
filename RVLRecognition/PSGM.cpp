@@ -331,7 +331,7 @@ void PSGM::Interpret(
 
 	while (pModelInstance)
 	{
-		pCluster = clusters.Element[iCluster];
+		pCluster = clusters.Element[pModelInstance->iCluster];
 
 		FitModel(pCluster->iVertexArray, pModelInstance);
 
@@ -1740,7 +1740,7 @@ void PSGM::Clusters()
 
 	PtArray.Element = new int[pMesh->NodeArray.n];
 
-	bool bGnd = false;
+	bGnd = false;
 
 	int *piPt;
 	int iiSurfel;
@@ -1749,8 +1749,6 @@ void PSGM::Clusters()
 	float *var;
 	int idx[3];
 	int iTmp;
-	float *NGnd;
-	float dGnd;
 	float eGnd;
 
 	for (i = 0; i < nValidClusters; i++)
@@ -6598,6 +6596,9 @@ void PSGM::CalculateNNCost(RVL::PSGM::ICPfunction ICPFunction, int ICPvariant)
 		for (int j = 0; j < 7; j++)
 		{
 			iMatch = scoreMatchMatrix.Element[i].Element[j].idx;
+
+			if (iMatch < 0)
+				continue;
 
 			//Setting indices:
 			iMCTI = pCTImatchesArray.Element[iMatch]->iMCTI;
