@@ -17,7 +17,7 @@
 #define RVLSURFELGRAPH_IMAGE_ADJACENCY_NEW
 #define RVLSURFELGRAPH_DISPLAY_VERTICES
 
-//#define RVLSURFELGRAPH_DEBUG_RELATION_DESCRIPTOR
+#define RVLSURFELGRAPH_DEBUG_RELATION_DESCRIPTOR
 
 // Move to RVL3DTools.h.
 
@@ -363,6 +363,9 @@ void SurfelGraph::ImageAdjacency(
 					{
 						pOtherSurfel = NodeArray.Element + iOtherSurfel;	//surfel owner of the pixel
 
+						if (iSurfel == 719 && iOtherSurfel == 846 || iSurfel == 846 && iOtherSurfel == 719)
+							int debug = 0;
+
 						P2 = pPt2->P;
 
 						RVLDIF3VECTORS(P2, P, dP);
@@ -573,7 +576,7 @@ void SurfelGraph::DetermineImgAdjDescriptors(
 		pOtherSurfel = pSurfel->imgAdjacency.at(i);
 
 #ifdef RVLSURFELGRAPH_DEBUG_RELATION_DESCRIPTOR
-		bool bDebug = (pSurfel - NodeArray.Element == 5 && pOtherSurfel - NodeArray.Element == 9);
+		bool bDebug = (pSurfel - NodeArray.Element == 719 && pOtherSurfel - NodeArray.Element == 846);
 
 		if (bDebug)
 			int debug = 0;

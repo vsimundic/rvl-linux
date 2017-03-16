@@ -156,7 +156,7 @@ int main(int argc, char ** argv)
 
 		objectDetector.Evaluate(fp, MeshFileName);
 
-		objectDetector.CTIs();
+		//objectDetector.CTIs();
 
 #ifdef RVLSURFEL_IMAGE_ADJACENCY
 		if (objectDetector.bSurfelsFromSSF)

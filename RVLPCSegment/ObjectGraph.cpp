@@ -15,8 +15,8 @@
 
 //#define RVLPCSEGMENT_OBJECT_GRAPH_IGNORE_EDGES
 
-//#define RVLPCSEGMENT_OBJECT_GRAPH_LOG
-#define RVLPCSEGMENT_OBJECT_GRAPH_EVALUATION_LOG
+//#define RVLPCSEGMENT_OBJECT_GRAPH_LOG					// Currently is not used for anything!
+//#define RVLPCSEGMENT_OBJECT_GRAPH_EVALUATION_LOG
 
 /// Move to RVLQListArray.h
 
@@ -1350,13 +1350,13 @@ void ObjectGraph::WERSegmentation()
 
 	CreateSortedObjectArray();
 
-#ifdef RVLPCSEGMENT_OBJECT_GRAPH_LOG
-	FILE *fpLog = fopen("C:\\RVL\\Debug\\WERAggGraph.txt", "w");
-
-	WriteObjectDataToFile(fpLog);
-
-	fclose(fpLog);
-#endif
+//#ifdef RVLPCSEGMENT_OBJECT_GRAPH_LOG
+//	FILE *fpLog = fopen("C:\\RVL\\Debug\\WERAggGraph.txt", "w");
+//
+//	WriteObjectDataToFile(fpLog);
+//
+//	fclose(fpLog);
+//#endif
 }
 
 void ObjectGraph::CreateSortedObjectArray()

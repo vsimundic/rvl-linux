@@ -4815,6 +4815,8 @@ int PlanarSurfelDetector::CreateEdgeFeatures(
 	//int iPointEdge_;
 	int nForeground, nBackground;
 	BYTE edgeClass;
+	MeshEdgePtr **pEdgePtrPtrArray;
+	int nTmp;
 
 	while (pSegmentEndpoint2)
 	{
@@ -4999,11 +5001,6 @@ int PlanarSurfelDetector::CreateEdgeFeatures(
 
 				pEdgeFeature->physicalSize = l;
 
-				pEdgeFeature->size = pSegmentEndpoint2->Idx - pSegmentEndpoint1->Idx;
-
-				if (pEdgeFeature->size < 0)
-					pEdgeFeature->size += pBoundary->n;
-
 				// Assign points to the new edge feature.
 
 				iPointEdge = pSegmentEndpoint1->Idx;
@@ -5019,18 +5016,36 @@ int PlanarSurfelDetector::CreateEdgeFeatures(
 					iPointEdge = (iPointEdge + 1) % pBoundary->n;
 				}
 
+				// Determine boundary.
+
 				RVLMEM_ALLOC_STRUCT(pMem, Array<MeshEdgePtr *>, pEdgePtArray);
 
-				pEdgePtArray->Element = pBoundary->Element + pSegmentEndpoint1->Idx;
-				pEdgePtArray->n = pEdgeFeature->size;
-
-				pEdgeFeature->size *= pSurfels->edgeDepth;
-
-				if (pEdgeFeature->size < 0)
-					int debug = 0;
-
-				pEdgeFeature->BoundaryArray.Element = pEdgePtArray;
 				pEdgeFeature->BoundaryArray.n = 1;
+				pEdgeFeature->BoundaryArray.Element = pEdgePtArray;
+
+				if (pSegmentEndpoint2->Idx >= pSegmentEndpoint1->Idx)
+				{
+					pEdgePtArray->Element = pBoundary->Element + pSegmentEndpoint1->Idx;
+					pEdgePtArray->n = pSegmentEndpoint2->Idx - pSegmentEndpoint1->Idx;					
+				}
+				else
+				{
+					pEdgePtArray->n = pSegmentEndpoint2->Idx - pSegmentEndpoint1->Idx + pBoundary->n;
+
+					RVLMEM_ALLOC_STRUCT_ARRAY(pMem, MeshEdgePtr *, pEdgePtArray->n, pEdgePtrPtrArray);
+
+					pEdgePtArray->Element = pEdgePtrPtrArray;
+
+					nTmp = pBoundary->n - pSegmentEndpoint1->Idx;
+
+					memcpy(pEdgePtrPtrArray, pBoundary->Element + pSegmentEndpoint1->Idx, nTmp * sizeof(MeshEdgePtr *));
+
+					pEdgePtrPtrArray += nTmp;
+
+					memcpy(pEdgePtrPtrArray, pBoundary->Element, pSegmentEndpoint2->Idx * sizeof(MeshEdgePtr *));
+				}	
+
+				pEdgeFeature->size = pEdgePtArray->n * pSurfels->edgeDepth;
 
 				// Compute other edge feature parameters.
 
