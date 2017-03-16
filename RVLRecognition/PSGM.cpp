@@ -326,7 +326,9 @@ void PSGM::Interpret(
 
 	while (pModelInstance)
 	{
-		FitModel(pModelInstance);
+		pCluster = clusters.Element[iCluster];
+
+		FitModel(pCluster->iVertexArray, pModelInstance);
 
 		pModelInstance = pModelInstance->pNext;
 	}
@@ -2030,7 +2032,7 @@ void PSGM::TemplateMatrix(Array2D<float> A)
 }
 
 void PSGM::FitModel(
-	//RECOG::PSGM_::Cluster *pCluster, //Vidovic
+	Array<int> iVertexArray,
 	RECOG::PSGM_::ModelInstance *pModelInstance)
 {
 	RVLMEM_ALLOC_STRUCT_ARRAY(pMem, RECOG::PSGM_::ModelInstanceElement, convexTemplate.n, pModelInstance->modelInstance.Element);
@@ -2050,10 +2052,6 @@ void PSGM::FitModel(
 	//float dist;
 	//float maxdDefinedNormal;
 
-	int iCluster = pModelInstance->iCluster; //Vidovic
-
-	RECOG::PSGM_::Cluster *pCluster = clusters.Element[iCluster]; //Vidovic
-
 	for (iModelInstanceElement = 0; iModelInstanceElement < convexTemplate.n; iModelInstanceElement++)
 	{
 		//if (iModelInstanceElement == 33)
@@ -2067,13 +2065,13 @@ void PSGM::FitModel(
 
 		RVLMULMX3X3VECT(R, N, N_);		
 
-		pVertex = pSurfels->vertexArray.Element[pCluster->iVertexArray.Element[0]];
+		pVertex = pSurfels->vertexArray.Element[iVertexArray.Element[0]];
 
 		pModelInstanceElement->d = RVLDOTPRODUCT3(N_, pVertex->P);
 
-		for (i = 0; i < pCluster->iVertexArray.n; i++)
+		for (i = 0; i < iVertexArray.n; i++)
 		{
-			pVertex = pSurfels->vertexArray.Element[pCluster->iVertexArray.Element[i]];
+			pVertex = pSurfels->vertexArray.Element[iVertexArray.Element[i]];
 
 			d = RVLDOTPRODUCT3(N_, pVertex->P);
 
@@ -2804,16 +2802,16 @@ void PSGM::SetSceneFileName(char *sceneFileName_)
 	RVLCopyString(sceneFileName_, &sceneFileName);
 }
 
-//Vidovic
-void PSGM::SaveModelInstances(
+void PSGM::SaveCTIs(
 	FILE *fp,
+	RECOG::CTISet *pCTISet,
 	int iModel)
 {
 	int i;
 	int iModelInstanceElement;
 	RECOG::PSGM_::ModelInstanceElement *pModelInstanceElement;
 
-	RECOG::PSGM_::ModelInstance *pModelInstance = CTISet.CTI.pFirst;
+	RECOG::PSGM_::ModelInstance *pModelInstance = pCTISet->CTI.pFirst;
 
 	while (pModelInstance)
 	{
@@ -2853,6 +2851,14 @@ void PSGM::SaveModelInstances(
 
 		pModelInstance = pModelInstance->pNext;
 	}
+}
+
+//Vidovic
+void PSGM::SaveModelInstances(
+	FILE *fp,
+	int iModel)
+{
+	SaveCTIs(fp, &CTISet, iModel);
 }
 
 
@@ -6510,25 +6516,32 @@ bool PSGM::IsFlat(
 
 	int idx[3];
 	int iTmp;
+	float *N_;
 
 	RVLSORT3ASCEND(var, idx, iTmp);
 
 	if (var[idx[0]] / var[idx[1]] <= 0.0005 && var[idx[0]] / var[idx[2]] <= 0.0005)
 	{
-		N = PtDistribution.R + 3 * idx[0];
+		N_ = PtDistribution.R + 3 * idx[0];
 
-		if (N[2] > 0.0f)
+		if (N_[2] > 0.0f)
 		{
-			RVLNEGVECT3(N, N);
+			RVLNEGVECT3(N_, N);
+		}
+		else
+		{
+			RVLCOPY3VECTOR(N_, N);
 		}
 
-		d = RVLDOTPRODUCT3(N, PtDistribution.t);
+		d = RVLDOTPRODUCT3(N_, PtDistribution.t);
+
+		return true;
 	}
 	else
 		return false;
 }
 
-bool PSGM::DetectGroundPlane(SURFEL::ObjectGraph *pObjects)
+void PSGM::DetectGroundPlane(SURFEL::ObjectGraph *pObjects)
 {
 	if (pObjects->sortedObjectArray.n < 0)
 		pObjects->SortObjects();
@@ -6541,7 +6554,9 @@ bool PSGM::DetectGroundPlane(SURFEL::ObjectGraph *pObjects)
 
 	iSurfelArray.Element = new int[pSurfels->NodeArray.n];
 
-	bool bGnd = false;
+	bGnd = false;
+
+	iGndObject = -1;
 
 	int i;
 	int iObject;
@@ -6557,6 +6572,8 @@ bool PSGM::DetectGroundPlane(SURFEL::ObjectGraph *pObjects)
 
 		if (IsFlat(iSurfelArray, NGnd, dGnd, PtArray))
 		{
+			iGndObject = iObject;
+
 			bGnd = true;
 
 			break;
@@ -6565,6 +6582,242 @@ bool PSGM::DetectGroundPlane(SURFEL::ObjectGraph *pObjects)
 
 	delete[] PtArray.Element;
 	delete[] iSurfelArray.Element;
+}
 
-	return bGnd;
+bool PSGM::GravityReferenceFrame(
+	QList<QLIST::Index> surfelList,
+	float *RGC)
+{
+	if (!bGnd)
+		return false;
+
+	QLIST::Index *piSurfel = surfelList.pFirst;
+
+	if (piSurfel == NULL)
+		return false;
+
+	float RCG[9];
+
+	float *XGC = RCG;
+	float *YGC = RCG + 3;
+	float *ZGC = RCG + 6;
+
+	RVLCOPY3VECTOR(NGnd, ZGC);
+
+	float ZSkew[9];
+
+	RVLSKEW(ZGC, ZSkew);
+
+	bool bFirst = true;
+	
+	float J[6];
+
+	float *Jx = J;
+	float *Jy = J + 3;
+
+	int iSurfel;
+	float *N, *R, *X, *Y;
+	Surfel *pSurfel;
+	float U[3], V[3];
+	float lenV, fTmp;
+	float A[9], B[9], CV[9];
+	float stdx, stdy, varv, kx, ky, minVarv;	
+
+	while (piSurfel)
+	{
+		iSurfel = piSurfel->Idx;
+
+		pSurfel = pSurfels->NodeArray.Element + iSurfel;
+
+		/// Computation of varv according to ARP3D.TR11.
+
+		N = pSurfel->N;
+
+		R = pSurfel->R;
+
+		X = R;
+
+		Y = R + 3;
+
+		stdx = 1.0f / pSurfel->r1;
+
+		stdy = 1.0f / pSurfel->r2;
+
+		// V <- NGnd x N
+		RVLCROSSPRODUCT3(ZGC, N, V);
+
+		// V <- V / || V ||
+		// lenV <- || V ||
+		RVLNORM3(V, lenV);
+
+		kx = stdx / lenV;
+		ky = stdy / lenV;
+
+		// A <- V * V'
+		RVLVECTCOV3(V, A);
+		RVLCOMPLETESIMMX3(A);
+		
+		// B <- (I - A) * [NGnd]x
+		RVLMXMUL3X3(A, ZSkew, B);
+		RVLDIFMX3X3(ZSkew, B, B);
+
+		// J <- (B * [X Y])'
+		RVLMULMX3X3VECT(B, X, Jx);
+		RVLMULMX3X3VECT(B, Y, Jy);
+
+		// J <- stdx * J / lenV
+		RVLSCALE3VECTOR(Jx, kx, Jx);
+		RVLSCALE3VECTOR(Jy, ky, Jy);
+
+		// CV <- J * J'
+		RVLVECTCOV3(Jx, A);
+		RVLVECTCOV3(Jy, B);
+		RVLSUMMX3X3UT(A, B, CV);
+		
+		// U <- NGnd x V / || NGnd x V ||
+		RVLCROSSPRODUCT3(ZGC, V, U);
+		RVLNORM3(U, fTmp);
+
+		// varv <- U' * CV * U
+		varv = RVLCOV3DTRANSFTO1D(CV, U);
+		
+		///
+
+		if (bFirst || varv < minVarv)
+		{
+			minVarv = varv;
+
+			RVLCOPY3VECTOR(V, XGC);
+			RVLCOPY3VECTOR(U, YGC);
+
+			bFirst = false;
+		}
+
+		piSurfel = piSurfel->pNext;
+	}
+
+	RVLCOPYMX3X3T(RCG, RGC);
+
+	return true;
+}
+
+void PSGM::CTIs(
+	QList<QLIST::Index> surfelList,
+	Array<int> iVertexArray,
+	int iModel,
+	int iCluster,
+	RECOG::CTISet *pCTISet,
+	CRVLMem *pMem)
+{
+	float RGC[9];
+
+	if (!GravityReferenceFrame(surfelList, RGC))
+		return;
+
+	RECOG::PSGM_::ModelInstance *pCTI;
+
+	RVLMEM_ALLOC_STRUCT(pMem, RECOG::PSGM_::ModelInstance, pCTI);
+
+	pCTISet->AddCTI(pCTI);
+
+	float *R = pCTI->R;
+
+	RVLCOPYMX3X3(RGC, R);
+
+	float *t = pCTI->t;
+
+	RVLNULL3VECTOR(t);
+
+	pCTI->iCluster = iCluster;
+	pCTI->iModel = iModel;
+
+	FitModel(iVertexArray, pCTI);
+}
+
+void PSGM::GetVertices(
+	QList<QLIST::Index> surfelList,
+	Array<int> *piVertexArray,
+	int *&piVertexIdxMem,
+	bool *bVertexAssigned)
+{
+	piVertexArray->Element = piVertexIdxMem;
+
+	int iSurfel;
+	QList<QLIST::Index> *pSurfelVertexList;
+	QLIST::Index *pVertexIdx;
+
+	QLIST::Index *piSurfel = surfelList.pFirst;
+
+	while (piSurfel)
+	{
+		iSurfel = piSurfel->Idx;
+
+		pSurfelVertexList = pSurfels->surfelVertexList.Element + iSurfel;
+
+		pVertexIdx = pSurfelVertexList->pFirst;
+
+		while (pVertexIdx)
+		{
+			if (!bVertexAssigned[pVertexIdx->Idx])
+			{
+				*(piVertexIdxMem++) = pVertexIdx->Idx;
+
+				bVertexAssigned[pVertexIdx->Idx] = true;
+			}
+
+			pVertexIdx = pVertexIdx->pNext;
+		}
+
+		piSurfel = piSurfel->pNext;
+	}
+
+	piVertexArray->n = piVertexIdxMem - piVertexArray->Element;
+
+	int i;
+
+	for (i = 0; i < piVertexArray->n; i++)
+		bVertexAssigned[piVertexArray->Element[i]] = false;
+}
+
+void PSGM::CTIs(
+	SURFEL::ObjectGraph *pObjects,
+	RECOG::CTISet *pCTISet)
+{
+	pCTISet->Init();
+
+	DetectGroundPlane(pObjects);
+
+	if (!bGnd)
+		return;
+
+	int *iVertexMem = new int[pSurfels->nVertexSurfelRelations];
+
+	bool *bVertexAssigned = new bool[pSurfels->NodeArray.n];
+
+	memset(bVertexAssigned, 0, pSurfels->NodeArray.n * sizeof(bool));
+
+	int i, iObject;
+	GRAPH::AggregateNode<SURFEL::AgEdge> *pObject;
+	Array<int> iVertexArray;
+	int *piVertexMem;
+
+	for (i = 0; i < pObjects->sortedObjectArray.n; i++)
+	{
+		iObject = pObjects->sortedObjectArray.Element[i].idx;
+
+		if (iObject != iGndObject)
+		{
+			pObject = pObjects->NodeArray.Element + iObject;
+
+			piVertexMem = iVertexMem;
+
+			GetVertices(pObject->elementList, &iVertexArray, piVertexMem, bVertexAssigned);
+
+			if (iVertexArray.n >= 3)
+				CTIs(pObject->elementList, iVertexArray, -1, iObject, pCTISet, pMem);
+		}
+	}
+
+	delete[] iVertexMem;
+	delete[] bVertexAssigned;
 }

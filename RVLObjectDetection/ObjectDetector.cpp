@@ -211,6 +211,10 @@ void ObjectDetector::DetectObjects(char *MeshFilePathName)
 			// Detect vertices.
 
 			pSurfels->DetectVertices(&mesh);
+
+			// Assign mesh to PSGM.
+
+			pPSGM->pMesh = &mesh;
 		}
 
 		if (flags & RVLOBJECTDETECTION_FLAG_SAVE_SSF)
@@ -299,4 +303,15 @@ void ObjectDetector::Evaluate(
 			fprintf(fp, "%s\t%d\t%d\t%d\n", fileName, E[0], E[1], N);
 	}
 #endif
+}
+
+void ObjectDetector::CTIs()
+{
+	pPSGM->CTIs(pObjects, &(pPSGM->CTISet));
+
+	FILE *fp = fopen("CTIs.txt", "w");
+
+	pPSGM->SaveCTIs(fp, &(pPSGM->CTISet));
+
+	fclose(fp);
 }

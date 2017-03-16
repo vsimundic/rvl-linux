@@ -17,6 +17,7 @@ namespace RVL
 		void Evaluate(
 			FILE *fp,
 			char *fileName);
+		void CTIs();
 		
 	public:
 		DWORD flags;

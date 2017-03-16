@@ -48,9 +48,6 @@ namespace RVL
 			int *segmentCTIIdxMem;
 			int maxSegmentIdx;
 			int nModels;
-
-;
-
 		};
 	}
 }

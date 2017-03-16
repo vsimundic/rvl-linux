@@ -233,7 +233,25 @@ namespace RVL
 			float *N,
 			float &d,
 			Array<int> PtArray);
-		bool DetectGroundPlane(SURFEL::ObjectGraph *pObjects);
+		void DetectGroundPlane(SURFEL::ObjectGraph *pObjects);
+		bool GravityReferenceFrame(
+			QList<QLIST::Index> surfelList,
+			float *RGC);
+		void CTIs(
+			QList<QLIST::Index> surfelList,
+			Array<int> iVertexArray,
+			int iModel,
+			int iCluster,
+			RECOG::CTISet *pCTISet,
+			CRVLMem *pMem);
+		void CTIs(
+			SURFEL::ObjectGraph *pObjects,
+			RECOG::CTISet *pCTISet);
+		void GetVertices(
+			QList<QLIST::Index> surfelList,
+			Array<int> *piVertexArray,
+			int *&iVertexIdxMem,
+			bool *bVertexAssigned);
 		void PrintMatchInfo(
 			FILE *fp,
 			FILE *fpLog,
@@ -300,13 +318,17 @@ namespace RVL
 		void LoadCTI(char *fileName); //Vidovic
 		bool PSGM::CompareMatchToGT(RECOG::PSGM_::MatchInstance *pMatch, ECCVGTLoader *ECCVGT, bool poseCheck, float angleThresh, float distanceThresh); //VIDOVIC
 		void PSGM::CountTPandFN(ECCVGTLoader *ECCVGT, int &TP, int &FN, bool printMatchInfo); //VIDOVIC
+		void SaveCTIs(
+			FILE *fp,
+			RECOG::CTISet *pCTISet,
+			int iModel = -1);
 
 	private:
 		void Clusters();
 		void CreateTemplate();
 		void TemplateMatrix(Array2D<float> A);
 		void FitModel(
-			//RECOG::PSGM_::Cluster *pCluster, //Vidovic
+			Array<int> iVertexArray,
 			RECOG::PSGM_::ModelInstance *pModelInstance);
 		bool ReferenceFrames(int iCluster);
 		bool ReferenceFrames(
@@ -370,6 +392,7 @@ namespace RVL
 		bool bZeroRFDescriptor;
 		bool bGTRFDescriptors;
 		bool bMatchRANSAC; //Vidovic
+		bool bGnd;
 		Array<RECOG::PSGM_::ModelInstance> modelInstanceDB; //Vidovic
 		QList<RECOG::PSGM_::MatchInstance> CTImatches; //Vidovic
 		Array<RECOG::PSGM_::MatchInstance*> pCTImatchesArray; //Vidovic
@@ -394,6 +417,7 @@ namespace RVL
 		std::map<int, vtkSmartPointer<vtkPolyData>> vtkModelDB;
 		float NGnd[3];
 		float dGnd;
+		int iGndObject;
 
 	private:		
 		RECOG::PSGM_::Cluster *clusterMem;

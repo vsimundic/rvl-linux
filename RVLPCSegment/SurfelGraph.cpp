@@ -179,8 +179,8 @@ void SURFEL::ComputeParameters(
 	RVLCOPY3VECTOR(pPt->P, P0);
 
 	pSurfel->r0 = pSurfel->d / RVLDOTPRODUCT3(N, P0);
-	pSurfel->r1 = sqrt(distribution.var[idx[2]]);
-	pSurfel->r2 = sqrt(distribution.var[idx[1]]);
+	pSurfel->r1 = 2.0f * sqrt(distribution.var[idx[2]]);
+	pSurfel->r2 = 2.0f * sqrt(distribution.var[idx[1]]);
 }
 
 void SURFEL::CreateFromPoint(
