@@ -136,7 +136,8 @@ namespace RVL
 			float *N);
 		float Distance(
 			Surfel *pSurfel,
-			float *P);
+			float *P,
+			bool bUncertainty = false);
 		void NodeColors(unsigned char *SelectionColor);
 		void Display(
 			Visualizer *pVisualizer,

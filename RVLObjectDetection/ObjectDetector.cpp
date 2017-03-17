@@ -26,6 +26,11 @@ ObjectDetector::ObjectDetector()
 	cfgFileName = NULL;
 
 	flags = 0x00000000;
+
+	convexityThr = 0.010f;
+	convexityRatioThr1 = 0.77f;
+	convexityRatioThr2 = 0.75f;
+
 	bSegmentToObjects = false;
 	bObjectAggregationLevel2 = false;
 	bCTIBasedObjectAggregation = false;
@@ -120,6 +125,9 @@ void ObjectDetector::CreateParamList()
 	pParamData = ParamList.AddParam("ObjectDetector.ObjectAggregationLevel2", RVLPARAM_TYPE_BOOL, &bObjectAggregationLevel2);
 	pParamData = ParamList.AddParam("ObjectDetector.SVMClassifierParamsFileName", RVLPARAM_TYPE_STRING, SVMClassifierParamsFileName);
 	pParamData = ParamList.AddParam("ObjectDetector.CTIBasedObjectAggregation", RVLPARAM_TYPE_BOOL, &bCTIBasedObjectAggregation);
+	pParamData = ParamList.AddParam("ObjectDetector.convexityThr", RVLPARAM_TYPE_FLOAT, &convexityThr);
+	pParamData = ParamList.AddParam("ObjectDetector.convexityRatioThr1", RVLPARAM_TYPE_FLOAT, &convexityRatioThr1);
+	pParamData = ParamList.AddParam("ObjectDetector.convexityRatioThr2", RVLPARAM_TYPE_FLOAT, &convexityRatioThr2);
 }
 
 void ObjectDetector::DetectObjects(char *MeshFilePathName)
@@ -261,10 +269,10 @@ void ObjectDetector::DetectObjects(char *MeshFilePathName)
 			cv::imshow("Colored object image", pObjects->CreateSegmentationImage());
 			cv::waitKey(1);
 			/*VisualizeObjectGraphVertexPointCloud(&objects, 100);*/
-			if (bCTIBasedObjectAggregation)
+			//if (bCTIBasedObjectAggregation)
 
-			pObjects->DetermineObjectConvexityData(0.015, 0.15);
-			pObjects->ObjectAggregationLevel2_ViaObjectPairConvexity(0.015, 0.77, 0.75, 300, true);
+			pObjects->DetermineObjectConvexityData(convexityThr, 0.15);
+			pObjects->ObjectAggregationLevel2_ViaObjectPairConvexity(convexityThr, convexityRatioThr1, convexityRatioThr2, 300, true);
 			cv::imshow("New Colored object image", pObjects->CreateSegmentationImage());
 			cv::waitKey(1);
 			////

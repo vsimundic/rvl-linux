@@ -25,6 +25,9 @@ namespace RVL
 		CRVLMem *pMem0;
 		CRVLMem *pMem;
 		char *SVMClassifierParamsFileName;
+		float convexityThr;
+		float convexityRatioThr1;
+		float convexityRatioThr2;
 		bool bSegmentToObjects;
 		bool bObjectAggregationLevel2;
 		bool bSurfelsFromSSF;

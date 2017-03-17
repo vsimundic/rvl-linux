@@ -5054,7 +5054,7 @@ int PlanarSurfelDetector::CreateEdgeFeatures(
 				RVLCOPY3VECTOR(N, Z);
 				RVLCOPY3VECTOR(V, X);
 				RVLCROSSPRODUCT3(Z, X, Y);
-				RVLCOPYMX3X3T(R_, R);
+				RVLCOPYMX3X3(R_, R);
 
 				pEdgeFeature->r1 = 0.5f * l;
 				pEdgeFeature->r2 = r2;

@@ -2004,32 +2004,46 @@ void SurfelGraph::UpdateNormalHull(
 
 float SurfelGraph::Distance(
 	Surfel *pSurfel,
-	float *P)
+	float *P,
+	bool bUncertainty)
 {
-	// Project P onto the surfel plane.
+	if (bUncertainty)
+	{
+		// PF <- transformation of P into the surfel RF
 
-	float P_[3];
+		float P_[3];
 
-	float *P0 = pSurfel->P;
+		float *P0 = pSurfel->P;
 
-	RVLDIF3VECTORS(P, P0, P_);	
+		RVLDIF3VECTORS(P, P0, P_);
 
-	float *R = pSurfel->R;
+		float *R = pSurfel->R;
 
-	float PF[3];
+		float PF[3];
 
-	RVLMULMX3X3VECT(R, P_, PF);
+		RVLMULMX3X3VECT(R, P_, PF);
 
-	float r = PF[0] / pSurfel->r1;
-	r *= r;
-	float fTmp = PF[1] / pSurfel->r2;
-	fTmp *= fTmp;
-	r += fTmp;
-	
-	if (r < 1.0f)
-		return PF[2];
+		// r <- Mahalanobis distance of PF w.r.t. the ellipsoid approximation of surfel
+
+		float r = PF[0] / pSurfel->r1;
+		r *= r;
+		float fTmp = PF[1] / pSurfel->r2;
+		fTmp *= fTmp;
+		r += fTmp;
+
+		// Distance computation.
+
+		if (r < 1.0f)
+			return PF[2];
+		else
+			return PF[2] / sqrt(r);
+	}
 	else
-		return PF[2] / sqrt(r);
+	{
+		float *N = pSurfel->N;
+
+		return (RVLDOTPRODUCT3(N, P) - pSurfel->d);
+	}
 }
 
 void SurfelGraph::NodeColors(unsigned char *SelectionColor)

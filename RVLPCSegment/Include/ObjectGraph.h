@@ -136,6 +136,8 @@ namespace RVL
 			DWORD relationClassifier;
 			Array<SortIndex<int>> sortedObjectArray;
 			int nValidObjects;
+			bool bObjectAggregationLevel2Uncertainty;
+			bool bObjectAggregationLevel2Edges;
 		private:
 			QLIST::Index *elementMem;
 			//int *sortedElementIdxMem;
