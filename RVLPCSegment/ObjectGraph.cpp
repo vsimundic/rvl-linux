@@ -14,7 +14,7 @@
 #include <queue>
 
 //#define RVLPCSEGMENT_OBJECT_GRAPH_LOG
-#define RVLPCSEGMENT_OBJECT_GRAPH_EVALUATION_LOG
+//#define RVLPCSEGMENT_OBJECT_GRAPH_EVALUATION_LOG
 
 /// Move to RVLQListArray.h
 
@@ -1835,7 +1835,7 @@ bool RVL::SURFEL::objectMouseRButtonDownUserFunction(
 		return false;
 }
 
-void ObjectGraph::DetermineObjectConvexityData(float convexThr, float minDiffFlipReq, bool setflip)
+void ObjectGraph::DetermineObjectConvexityData(float convexThr, float minDiffFlipReq, bool setflip, bool verbose)
 {
 	//Reseting convexity data
 	if (this->additionalObjectData.CHVertexIndices.size())
@@ -2068,7 +2068,11 @@ void ObjectGraph::DetermineObjectConvexityData(float convexThr, float minDiffFli
 			this->additionalObjectData.ObjectsSurfelConvexity.at(iObject) = ObjectsSurfelConvexityOtherDir;
 			//Set multiplier to -1
 			if (setflip)
+			{
 				this->additionalObjectData.convexityMultipliers.at(iObject) = -1.0;
+				if (verbose)
+					std::cout << "Object " << iObject << " flipped!" << std::endl;
+			}
 			//std::cout << "Object " << iObject << " is concave!" << std::endl;
 		}
 	}	// for every object
