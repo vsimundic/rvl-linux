@@ -13,6 +13,7 @@ namespace RVL
 				float d;
 				float e;
 				bool valid;
+				int iVertex;
 			};
 
 			struct ModelInstance

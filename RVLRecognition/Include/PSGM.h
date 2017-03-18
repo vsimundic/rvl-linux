@@ -387,7 +387,8 @@ namespace RVL
 		void TemplateMatrix(Array2D<float> A);
 		void FitModel(
 			Array<int> iVertexArray,
-			RECOG::PSGM_::ModelInstance *pModelInstance);
+			RECOG::PSGM_::ModelInstance *pModelInstance,
+			bool bMemAllocated = false);
 		bool ReferenceFrames(int iCluster);
 		bool ReferenceFrames(
 			RECOG::PSGM_::Cluster *pCluster,

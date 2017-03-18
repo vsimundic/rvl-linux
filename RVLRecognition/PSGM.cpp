@@ -2040,9 +2040,11 @@ void PSGM::TemplateMatrix(Array2D<float> A)
 
 void PSGM::FitModel(
 	Array<int> iVertexArray,
-	RECOG::PSGM_::ModelInstance *pModelInstance)
+	RECOG::PSGM_::ModelInstance *pModelInstance,
+	bool bMemAllocated)
 {
-	RVLMEM_ALLOC_STRUCT_ARRAY(pMem, RECOG::PSGM_::ModelInstanceElement, convexTemplate.n, pModelInstance->modelInstance.Element);
+	if (!bMemAllocated)
+		RVLMEM_ALLOC_STRUCT_ARRAY(pMem, RECOG::PSGM_::ModelInstanceElement, convexTemplate.n, pModelInstance->modelInstance.Element);
 
 	pModelInstance->modelInstance.n = convexTemplate.n;
 
@@ -2058,6 +2060,7 @@ void PSGM::FitModel(
 	float N_[3];
 	//float dist;
 	//float maxdDefinedNormal;
+	int iVertex;
 
 	for (iModelInstanceElement = 0; iModelInstanceElement < convexTemplate.n; iModelInstanceElement++)
 	{
@@ -2072,51 +2075,61 @@ void PSGM::FitModel(
 
 		RVLMULMX3X3VECT(R, N, N_);		
 
-		pVertex = pSurfels->vertexArray.Element[iVertexArray.Element[0]];
+		iVertex = iVertexArray.Element[0];
+
+		pVertex = pSurfels->vertexArray.Element[iVertex];
 
 		pModelInstanceElement->d = RVLDOTPRODUCT3(N_, pVertex->P);
+		pModelInstanceElement->iVertex = 0;
 
 		for (i = 0; i < iVertexArray.n; i++)
 		{
-			pVertex = pSurfels->vertexArray.Element[iVertexArray.Element[i]];
+			iVertex = iVertexArray.Element[i];
+
+			pVertex = pSurfels->vertexArray.Element[iVertex];
 
 			d = RVLDOTPRODUCT3(N_, pVertex->P);
 
 			if (d > pModelInstanceElement->d)
-				pModelInstanceElement->d = d;
-
-			//Vidovic
-			if (bNormalValidityTest)
 			{
-				//if (pVertex->normalHull.n >= 3)
-				//{
-				//	dist = DistanceFromNormalHull(pVertex->normalHull, N_);
-
-				//	if (dist <= 0.0f)
-				//	{
-				//		if (pModelInstanceElement->valid)
-				//		{
-				//			if (d > maxdDefinedNormal)
-				//				maxdDefinedNormal = d;
-				//		}
-				//		else
-				//		{
-				//			maxdDefinedNormal = d;
-				//			pModelInstanceElement->valid = true;
-				//		}
-				//	}
-				//}
-				pModelInstanceElement->valid = true;
-
-				P = pVertex->P;
-
-				if (RVLDOTPRODUCT3(N_, P) >= 0.0f)
-					pModelInstanceElement->valid = false;
+				pModelInstanceElement->d = d;
+				pModelInstanceElement->iVertex = iVertex;
 			}
-			else
-				pModelInstanceElement->valid = true;
-			//END Vidovic
-		}	// for every vertex in the cluster
+		}
+
+		//Vidovic
+		if (bNormalValidityTest)
+		{
+			//if (pVertex->normalHull.n >= 3)
+			//{
+			//	dist = DistanceFromNormalHull(pVertex->normalHull, N_);
+
+			//	if (dist <= 0.0f)
+			//	{
+			//		if (pModelInstanceElement->valid)
+			//		{
+			//			if (d > maxdDefinedNormal)
+			//				maxdDefinedNormal = d;
+			//		}
+			//		else
+			//		{
+			//			maxdDefinedNormal = d;
+			//			pModelInstanceElement->valid = true;
+			//		}
+			//	}
+			//}
+			pModelInstanceElement->valid = true;
+
+			pVertex = pSurfels->vertexArray.Element[pModelInstanceElement->iVertex];
+
+			P = pVertex->P;
+
+			if (RVLDOTPRODUCT3(N_, P) >= 0.0f)
+				pModelInstanceElement->valid = false;
+		}
+		else
+			pModelInstanceElement->valid = true;
+		//END Vidovic
 
 		pModelInstanceElement->d -= RVLDOTPRODUCT3(N_, t);
 
@@ -2124,7 +2137,7 @@ void PSGM::FitModel(
 		//if (bNormalValidityTest)
 		//	pModelInstanceElement->e = (pModelInstanceElement->valid ? pModelInstanceElement->d - maxdDefinedNormal : 0.0f);
 		//else
-			pModelInstanceElement->e = 0.0f;
+		pModelInstanceElement->e = 0.0f;
 		//END Vidovic
 	}	// for every model instance descriptor element
 
@@ -7105,62 +7118,274 @@ float PSGM::Symmetry(
 	int iObject1,
 	int iObject2)
 {
-	GRAPH::AggregateNode<SURFEL::AgEdge> *pObject1 = pObjects->NodeArray.Element + iObject1;
-	GRAPH::AggregateNode<SURFEL::AgEdge> *pObject2 = pObjects->NodeArray.Element + iObject2;
+	int iObject[2];
+
+	iObject[0] = iObject1;
+	iObject[1] = iObject2;
+
+	GRAPH::AggregateNode<SURFEL::AgEdge> *pObject[2];
+	
+	pObject[0] = pObjects->NodeArray.Element + iObject[0];
+	pObject[1] = pObjects->NodeArray.Element + iObject[1];
 
 	// Union of surfels of iObject1 and iObject2.
 
-	QList<QLIST::Index> *pSurfelList1 = &(pObject1->elementList);
-	QList<QLIST::Index> *pSurfelList2 = &(pObject2->elementList);
+	QList<QLIST::Index> *pSurfelList[2];
 
-	QLIST::Index **ppNext = pSurfelList1->ppNext;			
+	pSurfelList[0] = &(pObject[0]->elementList);
+	pSurfelList[1] = &(pObject[1]->elementList);
 
-	RVLQLIST_APPEND(pSurfelList1, pSurfelList2);
+	QLIST::Index **ppNext = pSurfelList[0]->ppNext;			
+
+	RVLQLIST_APPEND(pSurfelList[0], pSurfelList[1]);
+
+	// Compute gravity RF.
 
 	float RGC[9];
 
-	bool bGRF = GravityReferenceFrame(*pSurfelList1, RGC);
+	bool bGRF = GravityReferenceFrame(*pSurfelList[0], RGC);
 
-	pSurfelList1->ppNext = ppNext;
+	// Split back the surfel lists of iObject1 and iObject2.
+
+	pSurfelList[0]->ppNext = ppNext;
 	*ppNext = NULL;
+
+	// If no gravity RF is created, then stop the procedure.
 
 	if (!bGRF)
 		return 0.0f;
 
 	int *piVertexMem = iVertexMem;
 
-	Array<int> iVertexArray1;
+	int i;
+	RECOG::PSGM_::ModelInstance CTI[2];
+	Array<int> iVertexArray[2];
+	float *R, *t;
 
-	GetVertices(*pSurfelList1, &iVertexArray1, piVertexMem);
+	for (i = 0; i < 2; i++)
+	{
+		// iVertexArray[i] <- vertices of iObject[i]
 
-	Array<int> iVertexArray2;
+		GetVertices(*pSurfelList[i], &iVertexArray[i], piVertexMem);
 
-	GetVertices(*pSurfelList2, &iVertexArray2, piVertexMem);
+		// CTI[i] <- CTI of iObject[i]	
+
+		R = CTI[i].R;
+
+		RVLCOPYMX3X3(RGC, R);
+
+		t = CTI[i].t;
+
+		RVLNULL3VECTOR(t);
+
+		CTI[i].modelInstance.Element = new RECOG::PSGM_::ModelInstanceElement[convexTemplate.n];
+
+		FitModel(iVertexArray[i], CTI + i, false);
+	}
+
+	int nVertices2 = iVertexArray[1].n;
+
+	// Determine convex hull.
+
+	int *hull = new int[convexTemplate.n];
+	
+	RECOG::PSGM_::ModelInstanceElement *pCTIElement1 = CTI[0].modelInstance.Element;
+	RECOG::PSGM_::ModelInstanceElement *pCTIElement2 = CTI[1].modelInstance.Element;
+
+	int hull_;
+
+	for (i = 0; i < convexTemplate.n; i++, pCTIElement1++, pCTIElement2++)
+	{
+		hull_ = -1;
+
+		if (pCTIElement1->valid)
+			hull_ = 0;
+		
+		if (pCTIElement2->valid)
+		{
+			if (hull_ > 0)
+			{
+				if (pCTIElement2->d > pCTIElement1->d)
+					hull_ = 1;
+			}
+			else
+				hull_ = 1;
+		}
+
+		hull[i] = hull_;
+	}
+
+	// Transform convex template to gravity RF.
+
+	Array<RECOG::PSGM_::Plane> convexTemplateC;
+
+	convexTemplateC.Element = new RECOG::PSGM_::Plane[convexTemplate.n];
+
+	float *N, *NC;
+
+	for (i = 0; i < convexTemplate.n; i++)
+	{
+		N = convexTemplate.Element[i].N;
+
+		NC = convexTemplateC.Element[i].N;
+
+		RVLMULMX3X3VECT(RGC, N, NC);
+	}
+
+	/// Identify the symmetry plane.
+
+	int nSymmetryPlanes = convexTemplate.n / 2;
+
+	//BYTE *bVisible = new BYTE[nSymmetryPlanes];
+	
+	Array<SortIndex<float>> e;
+
+	e.Element = new SortIndex<float>[convexTemplate.n];
+
+	float *w = new float[convexTemplate.n];
+
+	float *P2RMem = new float[3 * iVertexArray[1].n];
+
+	int iSymmetryPlane;
+	float *NSymmetryPlaneG, *P;
+	float NSymmetryPlaneC[3], P_[3];
+	float k, d, absk;
+	int iVertex;
+	float *P2R;
+	int j, l;
+	float dMax;
+	float sumw, halfSumw, t_;
+
+	for (iSymmetryPlane = 0; iSymmetryPlane < nSymmetryPlanes; iSymmetryPlane++)
+	{
+		NSymmetryPlaneG = convexTemplate.Element[iSymmetryPlane].N;
+
+		RVLMULMX3X3VECT(RGC, N, NSymmetryPlaneC);
+
+		// Compute mirror images of all vertices of iObject2.
+
+		P2R = P2RMem;
+
+		for (i = 0; i < nVertices2; i++, P2R += 3)
+		{
+			iVertex = iVertexArray[1].Element[i];
+
+			P = pSurfels->vertexArray.Element[iVertex]->P;
+
+			d = 2.0f * RVLDOTPRODUCT3(P, NSymmetryPlaneC);
+
+			RVLSCALE3VECTOR(NSymmetryPlaneC, d, P2R);
+
+			RVLDIF3VECTORS(P, P2R, P2R);
+		}
+
+		//memset(bVisible, 0, nSymmetryPlanes * sizeof(BYTE));
+		
+		// For every element of CTI of iObject1 identify the corresponding tangent to mirror images of the vertices of iObject2.
+
+		l = 0;
+
+		sumw = 0.0f;
+
+		pCTIElement1 = CTI[0].modelInstance.Element;
+
+		for (i = 0; i < convexTemplate.n; i++, pCTIElement1++)
+		{
+			if (!pCTIElement1->valid)
+				continue;
+
+			N = convexTemplateC.Element[i].N;			
+
+			//if (i < nSymmetryPlanes)
+			//{
+			//	k = RVLDOTPRODUCT3(NSymmetryPlaneG, N);
+
+			//	bVisible[i] = (k > 0.0f ? 1 : -1);
+			//}
+			//else
+			//{
+			//	if (bVisible[i - nSymmetryPlanes] > 0)
+			//		continue;
+			//}
+
+			k = RVLDOTPRODUCT3(NSymmetryPlaneG, N);
+
+			absk = RVLABS(k);
+
+			if (absk > 1e-10)
+			{
+				P2R = P2RMem;
+
+				dMax = RVLDOTPRODUCT3(N, P2R);
+
+				for (j = 1; j < nVertices2; j++, P2R += 3)
+				{
+					d = RVLDOTPRODUCT3(N, P2R);
+
+					if (d > dMax)
+						dMax = d;
+				}
+
+				w[l] = absk;
+				sumw += absk;
+				e.Element[l].cost = (dMax - pCTIElement1->d) / k;
+				e.Element[l].idx = l;
+
+				l++;
+			}
+		}
+
+		// Compute optimal symmetry plane offset as the weighted median of e with weights w.
+
+		if (l > 0)
+		{
+			BubbleSort<SortIndex<float>>(e);
+
+			halfSumw = 0.5f * sumw;
+
+			sumw = 0.0f;
+
+			for (i = 0; i < l & sumw < halfSumw; i++)
+				sumw += w[e.Element[i].idx];
+
+			t_ = e.Element[i].cost;
+		}
+	}	// for each symmetry plane
+
+	///
+
+	// Save the results to a file. 
 
 	FILE *fp = fopen("symmetry.txt", "w");
 
 	PrintMatrix<float>(fp, RGC, 3, 3);
 
-	fprintf(fp, "%d\t%d\t0\t\n", iVertexArray1.n, iVertexArray2.n);
+	fprintf(fp, "%d\t%d\t0\t\n", iVertexArray[0].n, iVertexArray[1].n);
 
-	int i;
+	int j;
 	SURFEL::Vertex *pVertex;
 
-	for (i = 0; i < iVertexArray1.n; i++)
+	for (j = 0; j < 2; j++)
 	{
-		pVertex = pSurfels->vertexArray.Element[iVertexArray1.Element[i]];
+		for (i = 0; i < iVertexArray[j].n; i++)
+		{
+			pVertex = pSurfels->vertexArray.Element[iVertexArray[j].Element[i]];
 
-		fprintf(fp, "%f\t%f\t%f\t\n", pVertex->P[0], pVertex->P[1], pVertex->P[2]);
-	}
-
-	for (i = 0; i < iVertexArray2.n; i++)
-	{
-		pVertex = pSurfels->vertexArray.Element[iVertexArray2.Element[i]];
-
-		fprintf(fp, "%f\t%f\t%f\t\n", pVertex->P[0], pVertex->P[1], pVertex->P[2]);
+			fprintf(fp, "%f\t%f\t%f\t\n", pVertex->P[0], pVertex->P[1], pVertex->P[2]);
+		}
 	}
 
 	fclose(fp);
+
+	// Free memory.
+
+	delete[] CTI[0].modelInstance.Element;
+	delete[] CTI[1].modelInstance.Element;
+	delete[] hull;
+	//delete[] bVisible;
+	delete[] P2RMem;
+	delete[] e.Element;
+	delete[] w;
 }
 
 void PSGM::InitSymmetry(SURFEL::ObjectGraph *pObjects)
