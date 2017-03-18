@@ -6,6 +6,17 @@
 
 namespace RVL
 {
+	class ObjectDetector;
+
+	namespace OBJECT_DETECTION
+	{
+		void Symmetry(
+			SURFEL::ObjectGraph *pObjects, 
+			int iObject1, 
+			int iObject2, 
+			void *vpData);
+	}
+
 	class ObjectDetector
 	{
 	public:
@@ -32,6 +43,7 @@ namespace RVL
 		bool bObjectAggregationLevel2;
 		bool bSurfelsFromSSF;
 		bool bCTIBasedObjectAggregation;
+		bool bConcaveObjectAggregation;
 		SurfelGraph *pSurfels;
 		PlanarSurfelDetector *pSurfelDetector;
 		SURFEL::ObjectGraph *pObjects;

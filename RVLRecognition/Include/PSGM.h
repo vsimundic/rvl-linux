@@ -303,8 +303,13 @@ namespace RVL
 		void GetVertices(
 			QList<QLIST::Index> surfelList,
 			Array<int> *piVertexArray,
-			int *&iVertexIdxMem,
-			bool *bVertexAssigned);
+			int *&piVertexIdxMem);
+		float Symmetry(
+			SURFEL::ObjectGraph *pObjects,
+			int iObject1,
+			int iObject2);
+		void InitSymmetry(SURFEL::ObjectGraph *pObjects);
+		void FreeSymmetry();
 		void PrintMatchInfo(
 			FILE *fp,
 			FILE *fpLog,
@@ -478,6 +483,8 @@ namespace RVL
 		RECOG::PSGM_::Cluster *clusterMem;
 		int *clusterSurfelMem;
 		int *clusterVertexMem;
+		int *iVertexMem;
+		bool *bVertexAssigned;
 		//RECOG::PSGM_::ModelInstanceElement *modelInstanceMem;
 		vtkSmartPointer<vtkPolyData> referenceFramesPolyData;
 		char *sceneFileName;

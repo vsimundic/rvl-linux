@@ -576,7 +576,7 @@ void SurfelGraph::DetermineImgAdjDescriptors(
 		pOtherSurfel = pSurfel->imgAdjacency.at(i);
 
 #ifdef RVLSURFELGRAPH_DEBUG_RELATION_DESCRIPTOR
-		bool bDebug = (pSurfel - NodeArray.Element == 719 && pOtherSurfel - NodeArray.Element == 846);
+		bool bDebug = (pSurfel - NodeArray.Element == 75 && pOtherSurfel - NodeArray.Element == 382);
 
 		if (bDebug)
 			int debug = 0;
@@ -869,8 +869,8 @@ void SurfelGraph::DetermineImgAdjDescriptors(
 			desc->cupyDescriptor[0] = (3 - 2 * p) * acos(pSurfel->N[0] * pOtherSurfel->N[0] + pSurfel->N[1] * pOtherSurfel->N[1] + pSurfel->N[2] * pOtherSurfel->N[2]);	//(3 - 2*p)*acos(n_i*n_j)
 			desc->cupyDescriptor[1] = a[(q - 1) * 2 + (p - 1)];
 			desc->cupyDescriptor[2] = a[((3 - q) - 1) * 2 + (p - 1)];
-			//desc->cupyDescriptor[3] = desc->avgDist;
-			desc->cupyDescriptor[3] = desc->minDist;
+			desc->cupyDescriptor[3] = desc->avgDist;
+			//desc->cupyDescriptor[3] = desc->minDist;
 		}
 	}
 }

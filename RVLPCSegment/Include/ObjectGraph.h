@@ -138,6 +138,9 @@ namespace RVL
 			int nValidObjects;
 			bool bObjectAggregationLevel2Uncertainty;
 			bool bObjectAggregationLevel2Edges;
+			void(*objectAggregationLevel2Criterion)(ObjectGraph *pObjects, int iObject1, int iObject2, void *vpData);
+			void *vpObjectAggregationLevel2CriterionData;
+
 		private:
 			QLIST::Index *elementMem;
 			//int *sortedElementIdxMem;

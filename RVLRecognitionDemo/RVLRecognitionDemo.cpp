@@ -513,7 +513,7 @@ int main(int argc, char ** argv)
 				GenerateSegmentNeighbourhood(&recognition, 0.1);
 
 				recognition.CalculateNNCost(PCLICP, PCLICPVariants::Point_to_plane);
-				//recognition.AddModelsToVisualizer(&visualizer, false, PCLICP, PCLICPVariants::Point_to_plane, NULL/*&kdtree*/);
+				recognition.AddModelsToVisualizer(&visualizer, false, PCLICP, PCLICPVariants::Point_to_plane, NULL/*&kdtree*/);
 
 				QueryPerformanceCounter((LARGE_INTEGER *)&ctr2_);
 				QueryPerformanceFrequency((LARGE_INTEGER *)&freq_);

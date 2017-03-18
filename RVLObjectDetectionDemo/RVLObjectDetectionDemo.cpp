@@ -145,6 +145,9 @@ int main(int argc, char ** argv)
 				segmentationImageFileName.erase(segmentationImageFileName.find_last_of("."));
 				segmentationImageFileName += "OGLabels.png";
 				objectDetector.pObjects->SaveSegmentationLabelImg(segmentationImageFileName);
+
+				cv::imshow("Segmentation", objectDetector.pObjects->CreateSegmentationImage());
+				cv::waitKey();
 			}
 #endif
 		}

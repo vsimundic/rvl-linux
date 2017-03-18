@@ -1532,7 +1532,8 @@ void ObjectGraph::ComputeRelationCost(
 		data.PConvex = (f1 >= -concaveAngleIntThr ? 1.0f : (f1 >= -concaveAngleExtThr ? concaveMinCost + (1.0f - concaveMinCost) * (concaveAngleExtThr + f1) / (concaveAngleExtThr - concaveAngleIntThr) : concaveMinCost));
 
 		//data.PClean = 0.5f + 0.5f * f2;
-		data.PClean = (RVLABS(f1) >= 20.0f * DEG2RAD ? (f3 >= 0.5 ? 2.0f * (f3 - 0.5f) : 0.0f) : 1.0f);
+		//data.PClean = (RVLABS(f1) >= 20.0f * DEG2RAD ? (f3 >= 0.5 ? 2.0f * (f3 - 0.5f) : 0.0f) : 1.0f);
+		data.PClean = (RVLABS(f1) >= 20.0f * DEG2RAD ? (f2 >= 0.5 ? 2.0f * (f2 - 0.5f) : 0.0f) : 1.0f);
 
 		data.P = RVLMIN(data.PContinuous, RVLMIN(data.PConvex, data.PClean));
 
@@ -2608,6 +2609,8 @@ void ObjectGraph::ObjectAggregationLevel2_ViaObjectPairConvexity(float convexThr
 			ss.str("");
 			ss << validObjects.at(iObject2) << "_" << validObjects.at(iObject);	//other way
 			min_convexity_values.insert(std::pair<std::string, float>(ss.str(), minValue));
+
+			objectAggregationLevel2Criterion(this, validObjects.at(iObject), validObjects.at(iObject2), vpObjectAggregationLevel2CriterionData);
 		}
 	}
 

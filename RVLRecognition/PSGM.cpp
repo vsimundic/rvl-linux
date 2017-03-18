@@ -65,6 +65,8 @@ PSGM::PSGM()
 	clusterMem = NULL;
 	clusterSurfelMem = NULL;
 	clusterVertexMem = NULL;
+	iVertexMem = NULL;
+	bVertexAssigned = NULL;
 	//modelInstanceMem = NULL;
 	sceneFileName = NULL;
 	modelInstanceDB.Element = NULL; //Vidovic
@@ -127,6 +129,8 @@ PSGM::~PSGM()
 	RVL_DELETE_ARRAY(clusterMem);
 	RVL_DELETE_ARRAY(clusterSurfelMem);
 	RVL_DELETE_ARRAY(clusterVertexMem);
+	RVL_DELETE_ARRAY(iVertexMem);
+	RVL_DELETE_ARRAY(bVertexAssigned);
 	RVL_DELETE_ARRAY(convexTemplate.Element);	
 	//RVL_DELETE_ARRAY(modelInstanceMem);
 	RVL_DELETE_ARRAY(sceneFileName);
@@ -6205,6 +6209,10 @@ void PSGM::AddModelsToVisualizer(Visualizer *pVisualizer, bool align, RVL::PSGM:
 		for (int j = 0; j < 30; j++)
 		{
 			int iMatch = scoreMatchMatrix.Element[i].Element[j].idx;
+
+			if (iMatch < 0)
+				continue;
+
 			int iMCTI = pCTImatchesArray.Element[iMatch]->iMCTI;
 			RECOG::PSGM_::ModelInstance *pMCTI = MCTISet.pCTI.Element[iMCTI];
 			printf("S %d, M %d\n", i, pMCTI->iModel);
@@ -7006,8 +7014,7 @@ void PSGM::CTIs(
 void PSGM::GetVertices(
 	QList<QLIST::Index> surfelList,
 	Array<int> *piVertexArray,
-	int *&piVertexIdxMem,
-	bool *bVertexAssigned)
+	int *&piVertexIdxMem)
 {
 	piVertexArray->Element = piVertexIdxMem;
 
@@ -7059,9 +7066,11 @@ void PSGM::CTIs(
 	if (!bGnd)
 		return;
 
-	int *iVertexMem = new int[pSurfels->nVertexSurfelRelations];
+	iVertexMem = new int[pSurfels->nVertexSurfelRelations];
 
-	bool *bVertexAssigned = new bool[pSurfels->NodeArray.n];
+	int *piNextVertex = iVertexMem;
+
+	bVertexAssigned = new bool[pSurfels->NodeArray.n];
 
 	memset(bVertexAssigned, 0, pSurfels->NodeArray.n * sizeof(bool));
 
@@ -7080,13 +7089,98 @@ void PSGM::CTIs(
 
 			piVertexMem = iVertexMem;
 
-			GetVertices(pObject->elementList, &iVertexArray, piVertexMem, bVertexAssigned);
+			GetVertices(pObject->elementList, &iVertexArray, piNextVertex);
 
 			if (iVertexArray.n >= 3)
 				CTIs(pObject->elementList, iVertexArray, -1, iObject, pCTISet, pMem);
 		}
 	}
 
+	delete[] iVertexMem;
+	delete[] bVertexAssigned;
+}
+
+float PSGM::Symmetry(
+	SURFEL::ObjectGraph *pObjects,
+	int iObject1,
+	int iObject2)
+{
+	GRAPH::AggregateNode<SURFEL::AgEdge> *pObject1 = pObjects->NodeArray.Element + iObject1;
+	GRAPH::AggregateNode<SURFEL::AgEdge> *pObject2 = pObjects->NodeArray.Element + iObject2;
+
+	// Union of surfels of iObject1 and iObject2.
+
+	QList<QLIST::Index> *pSurfelList1 = &(pObject1->elementList);
+	QList<QLIST::Index> *pSurfelList2 = &(pObject2->elementList);
+
+	QLIST::Index **ppNext = pSurfelList1->ppNext;			
+
+	RVLQLIST_APPEND(pSurfelList1, pSurfelList2);
+
+	float RGC[9];
+
+	bool bGRF = GravityReferenceFrame(*pSurfelList1, RGC);
+
+	pSurfelList1->ppNext = ppNext;
+	*ppNext = NULL;
+
+	if (!bGRF)
+		return 0.0f;
+
+	int *piVertexMem = iVertexMem;
+
+	Array<int> iVertexArray1;
+
+	GetVertices(*pSurfelList1, &iVertexArray1, piVertexMem);
+
+	Array<int> iVertexArray2;
+
+	GetVertices(*pSurfelList2, &iVertexArray2, piVertexMem);
+
+	FILE *fp = fopen("symmetry.txt", "w");
+
+	PrintMatrix<float>(fp, RGC, 3, 3);
+
+	fprintf(fp, "%d\t%d\t0\t\n", iVertexArray1.n, iVertexArray2.n);
+
+	int i;
+	SURFEL::Vertex *pVertex;
+
+	for (i = 0; i < iVertexArray1.n; i++)
+	{
+		pVertex = pSurfels->vertexArray.Element[iVertexArray1.Element[i]];
+
+		fprintf(fp, "%f\t%f\t%f\t\n", pVertex->P[0], pVertex->P[1], pVertex->P[2]);
+	}
+
+	for (i = 0; i < iVertexArray2.n; i++)
+	{
+		pVertex = pSurfels->vertexArray.Element[iVertexArray2.Element[i]];
+
+		fprintf(fp, "%f\t%f\t%f\t\n", pVertex->P[0], pVertex->P[1], pVertex->P[2]);
+	}
+
+	fclose(fp);
+}
+
+void PSGM::InitSymmetry(SURFEL::ObjectGraph *pObjects)
+{
+	DetectGroundPlane(pObjects);
+
+	if (!bGnd)
+		return;
+
+	iVertexMem = new int[pSurfels->nVertexSurfelRelations];
+
+	int *piNextVertex = iVertexMem;
+
+	bVertexAssigned = new bool[pSurfels->NodeArray.n];
+
+	memset(bVertexAssigned, 0, pSurfels->NodeArray.n * sizeof(bool));
+}
+
+void PSGM::FreeSymmetry()
+{
 	delete[] iVertexMem;
 	delete[] bVertexAssigned;
 }

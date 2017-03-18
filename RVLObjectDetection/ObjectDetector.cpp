@@ -34,6 +34,7 @@ ObjectDetector::ObjectDetector()
 	bSegmentToObjects = false;
 	bObjectAggregationLevel2 = false;
 	bCTIBasedObjectAggregation = false;
+	bConcaveObjectAggregation = false;
 
 	pSurfels = NULL;
 	pSurfelDetector = NULL;
@@ -94,6 +95,9 @@ void ObjectDetector::Init()
 		pObjects->InitSVMClassifier(SVMClassifierParamsFileName);
 	}
 
+	pObjects->objectAggregationLevel2Criterion = OBJECT_DETECTION::Symmetry;
+	pObjects->vpObjectAggregationLevel2CriterionData = this;
+
 	pPSGM = new PSGM;
 
 	pPSGM->CreateParamList(pMem0);
@@ -128,6 +132,7 @@ void ObjectDetector::CreateParamList()
 	pParamData = ParamList.AddParam("ObjectDetector.convexityThr", RVLPARAM_TYPE_FLOAT, &convexityThr);
 	pParamData = ParamList.AddParam("ObjectDetector.convexityRatioThr1", RVLPARAM_TYPE_FLOAT, &convexityRatioThr1);
 	pParamData = ParamList.AddParam("ObjectDetector.convexityRatioThr2", RVLPARAM_TYPE_FLOAT, &convexityRatioThr2);
+	pParamData = ParamList.AddParam("ObjectGraph.concaveObjectAggregation", RVLPARAM_TYPE_BOOL, &bConcaveObjectAggregation);
 }
 
 void ObjectDetector::DetectObjects(char *MeshFilePathName)
@@ -270,9 +275,10 @@ void ObjectDetector::DetectObjects(char *MeshFilePathName)
 			cv::waitKey(1);
 			/*VisualizeObjectGraphVertexPointCloud(&objects, 100);*/
 			//if (bCTIBasedObjectAggregation)
-
-			pObjects->DetermineObjectConvexityData(convexityThr, 0.15);
-			pObjects->ObjectAggregationLevel2_ViaObjectPairConvexity(convexityThr, convexityRatioThr1, convexityRatioThr2, 300, true);
+			pPSGM->InitSymmetry(pObjects);
+			pObjects->DetermineObjectConvexityData(convexityThr, 0.15, bConcaveObjectAggregation);
+			pObjects->ObjectAggregationLevel2_ViaObjectPairConvexity(convexityThr, convexityRatioThr1, convexityRatioThr2, 300);
+			pPSGM->FreeSymmetry();
 			cv::imshow("New Colored object image", pObjects->CreateSegmentationImage());
 			cv::waitKey(1);
 			////
@@ -322,4 +328,15 @@ void ObjectDetector::CTIs()
 	pPSGM->SaveCTIs(fp, &(pPSGM->CTISet));
 
 	fclose(fp);
+}
+
+void OBJECT_DETECTION::Symmetry(
+	SURFEL::ObjectGraph *pObjects,
+	int iObject1,
+	int iObject2,
+	void *vpData)
+{
+	ObjectDetector *pObjectDetector = (ObjectDetector *)vpData;
+
+	pObjectDetector->pPSGM->Symmetry(pObjects, iObject1, iObject2);
 }
