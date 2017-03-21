@@ -1637,7 +1637,7 @@ void ObjectGraph::InitDisplay(
 	pSurfels->DisplayData.mouseRButtonDownUserFunction = &objectMouseRButtonDownUserFunction;
 	pSurfels->DisplayData.vpUserFunctionData = &displayData;
 
-	pSurfels->InitDisplay(pVisualizer, pMesh, NULL);
+	pSurfels->InitDisplay(pVisualizer, pMesh, NULL, false);
 
 	displayData.bObjects = true;
 }
@@ -2626,7 +2626,7 @@ void ObjectGraph::ObjectAggregationLevel2_ViaObjectPairConvexity(float convexThr
 			ss << validObjects.at(iObject2) << "_" << validObjects.at(iObject);	//other way
 			min_convexity_values.insert(std::pair<std::string, float>(ss.str(), minValue));
 
-			objectAggregationLevel2Criterion(this, validObjects.at(iObject), validObjects.at(iObject2), vpObjectAggregationLevel2CriterionData);
+			//objectAggregationLevel2Criterion(this, validObjects.at(iObject), validObjects.at(iObject2), vpObjectAggregationLevel2CriterionData);
 		}
 	}
 

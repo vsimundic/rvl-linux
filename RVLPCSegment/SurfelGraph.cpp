@@ -183,6 +183,8 @@ void SURFEL::ComputeParameters(
 	pSurfel->r0 = pSurfel->d / RVLDOTPRODUCT3(N, P0);
 	pSurfel->r1 = 2.0f * sqrt(distribution.var[idx[2]]);
 	pSurfel->r2 = 2.0f * sqrt(distribution.var[idx[1]]);
+
+	pSurfel->flags |= RVLSURFEL_FLAG_RF;
 }
 
 void SURFEL::CreateFromPoint(
@@ -2644,7 +2646,8 @@ unsigned char * SurfelGraph::GetColor(int iSurfel)
 void SurfelGraph::InitDisplay(
 	Visualizer *pVisualizer,
 	Mesh *pMesh,
-	void *vpDetector)
+	void *vpDetector,
+	bool bCallbackFunctions)
 {
 	DisplayData.pMesh = pMesh;
 	DisplayData.pSurfels = this;
@@ -2662,8 +2665,11 @@ void SurfelGraph::InitDisplay(
 	if (pVisualizer->b3D)
 	{
 		pVisualizer->SetMesh(pMesh);
-		pVisualizer->SetMouseRButtonDownCallback(SURFEL::MouseRButtonDown, &DisplayData);
-		pVisualizer->SetKeyPressCallback(SURFEL::KeyPressCallback, &DisplayData);
+		if (bCallbackFunctions)
+		{
+			pVisualizer->SetMouseRButtonDownCallback(SURFEL::MouseRButtonDown, &DisplayData);
+			pVisualizer->SetKeyPressCallback(SURFEL::KeyPressCallback, &DisplayData);
+		}
 	}
 
 	if (!pMesh->bOrganizedPC)

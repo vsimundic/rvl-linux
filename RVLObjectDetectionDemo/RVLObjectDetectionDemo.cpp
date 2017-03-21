@@ -212,6 +212,11 @@ int main(int argc, char ** argv)
 				objectDetector.pObjects->SaveSegmentationLabelImg(segmentationImageFileName);
 			}
 #endif
+			RECOG::CTISet CTIs;
+
+			objectDetector.pPSGM->CTIs(objectDetector.pObjects, &CTIs);
+
+			objectDetector.pPSGM->DisplayCTIs(&visualizer, &CTIs);
 
 			//detector.DisplaySoftEdges(&visualizer, &mesh, &surfels, SelectionColor);
 			visualizer.Run();
