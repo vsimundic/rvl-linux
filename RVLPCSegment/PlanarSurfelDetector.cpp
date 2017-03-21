@@ -474,6 +474,8 @@ void PlanarSurfelDetector::Segment(
 
 		pSurfel->bEdge = false;
 
+		pSurfel->flags = 0x00;
+
 		regionGrowingData.buffer = regionGrowingBuffer;
 
 		PlanarRegionGrowing(pMesh, pSurfels, iPtSeed, iSurfel);
@@ -4987,6 +4989,8 @@ int PlanarSurfelDetector::CreateEdgeFeatures(
 				pEdgeFeature = pSurfels->NodeArray.Element + iNewFeature_;
 
 				pEdgeFeature->bEdge = true;
+
+				pEdgeFeature->flags = RVLSURFEL_FLAG_RF;
 
 				N = pEdgeFeature->N;
 

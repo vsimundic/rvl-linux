@@ -48,10 +48,14 @@ PSGM::PSGM()
 	minClusterNormalDistributionStd = 0.1f;
 	groundPlaneTolerance = 0.020f;
 
-	convexTemplate.n = 66;
-	convexTemplate.Element = new RECOG::PSGM_::Plane[convexTemplate.n];
+	convexTemplate66.n = 66;
+	convexTemplate66.Element = new RECOG::PSGM_::Plane[convexTemplate66.n];
 
-	CreateTemplate();
+	CreateTemplate66();
+
+	convexTemplate = convexTemplate66;
+
+	CreateTemplateBox();
 
 	//Vidovic
 	centroidID.n = 6;
@@ -136,7 +140,8 @@ PSGM::~PSGM()
 	RVL_DELETE_ARRAY(clusterVertexMem);
 	RVL_DELETE_ARRAY(iVertexMem);
 	RVL_DELETE_ARRAY(bVertexAssigned);
-	RVL_DELETE_ARRAY(convexTemplate.Element);	
+	RVL_DELETE_ARRAY(convexTemplate66.Element);
+	RVL_DELETE_ARRAY(convexTemplateBox.Element);
 	//RVL_DELETE_ARRAY(modelInstanceMem);
 	RVL_DELETE_ARRAY(sceneFileName);
 	RVL_DELETE_ARRAY(modelInstanceDB.Element); //Vidovic
@@ -1928,7 +1933,7 @@ void PSGM::Clusters()
 	delete[] surfelBuff2.Element;	
 }
 
-void PSGM::CreateTemplate()
+void PSGM::CreateTemplate66()
 {
 	float h = 0.25f * PI;
 	float q = 0.5f * h;
@@ -1992,7 +1997,7 @@ void PSGM::CreateTemplate()
 	{
 		for (j = 0; j < 11; j++)
 		{
-			pPlane = convexTemplate.Element + 11 * i + j;
+			pPlane = convexTemplate66.Element + 11 * i + j;
 
 			N = pPlane->N;
 
@@ -2034,6 +2039,38 @@ void PSGM::CreateTemplate()
 	////
 
 	delete[] NT;
+}
+
+void PSGM::CreateTemplateBox()
+{
+	convexTemplateBox.n = 6;
+	convexTemplateBox.Element = new RECOG::PSGM_::Plane[convexTemplateBox.n];
+
+	float *N;
+
+	N = convexTemplateBox.Element[0].N;
+	N[0] = 0.0f; N[1] = 0.0f; N[2] = 1.0f;
+	convexTemplateBox.Element[0].d = 1.0;
+
+	N = convexTemplateBox.Element[1].N;
+	N[0] = -1.0f; N[1] = 0.0f; N[2] = 0.0f;
+	convexTemplateBox.Element[1].d = 1.0;
+
+	N = convexTemplateBox.Element[2].N;
+	N[0] = 0.0f; N[1] = -1.0f; N[2] = 0.0f;
+	convexTemplateBox.Element[2].d = 1.0;
+
+	N = convexTemplateBox.Element[3].N;
+	N[0] = 0.0f; N[1] = 0.0f; N[2] = -1.0f;
+	convexTemplateBox.Element[3].d = 1.0;
+
+	N = convexTemplateBox.Element[4].N;
+	N[0] = 1.0f; N[1] = 0.0f; N[2] = 0.0f;
+	convexTemplateBox.Element[4].d = 1.0;
+
+	N = convexTemplateBox.Element[5].N;
+	N[0] = 0.0f; N[1] = 1.0f; N[2] = 0.0f;
+	convexTemplateBox.Element[5].d = 1.0;
 }
 
 void PSGM::TemplateMatrix(Array2D<float> A)
@@ -6221,6 +6258,94 @@ void PSGM::DisplayModelInstance(Visualizer *pVisualizer)
 	pVisualizer->renderer->AddActor(pVisualizer->actor);
 }
 
+void PSGM::DisplayCTIs(
+	Visualizer *pVisualizer,
+	RECOG::CTISet *pCTISet,
+	Array<int> *pCTIArray)
+{
+	Array<int> CTIArray;
+	int i;
+
+	if (pCTIArray)
+		CTIArray = *pCTIArray;
+	else
+	{
+		CTIArray.Element = new int[pCTISet->pCTI.n];
+		CTIArray.n = pCTISet->pCTI.n;
+
+		for (i = 0; i < pCTISet->pCTI.n; i++)
+			CTIArray.Element[i] = i;
+	}
+
+	RECOG::PSGM_::ModelInstance *pCTI;
+
+	for (i = 0; i < CTIArray.n; i++)
+	{
+		pCTI = pCTISet->pCTI.Element[CTIArray.Element[i]];
+
+		DisplayCTI(pVisualizer, pCTI);
+	}
+
+	RVL_DELETE_ARRAY(CTIArray.Element);
+}
+
+void PSGM::DisplayCTI(
+	Visualizer *pVisualizer,
+	RECOG::PSGM_::ModelInstance *pCTI)
+{
+	float *N = new float[3 * convexTemplate.n];
+
+	float *N_ = N;
+
+	float *d = new float[convexTemplate.n];
+
+	int i;
+	float *N__;
+
+	for (i = 0; i < convexTemplate.n; i++, N_ += 3)
+	{
+		N__ = convexTemplate.Element[i].N;
+
+		RVLCOPY3VECTOR(N__, N_);
+
+		d[i] = pCTI->modelInstance.Element[i].d;
+	}
+	
+	float tCTIc_CTI[3];
+
+	vtkSmartPointer<vtkPolyData> modelPD = GenerateCTIPrimitivePolydata_RW(N, d, false, NULL, tCTIc_CTI);
+
+	float *RCTI_S = pCTI->R;
+	float *tCTI_S = pCTI->t;
+	
+	float tCTIc_S[3];
+
+	RVLTRANSF3(tCTIc_CTI, RCTI_S, tCTI_S, tCTIc_S);
+
+	double T[16];
+
+	RVLHTRANSFMX(RCTI_S, tCTIc_S, T);
+
+	vtkSmartPointer<vtkTransform> transform = vtkSmartPointer<vtkTransform>::New();
+	transform->SetMatrix(T);
+
+	vtkSmartPointer<vtkTransformPolyDataFilter> transformFilter = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
+	transformFilter->SetInputData(modelPD);
+
+	transformFilter->SetTransform(transform);
+	transformFilter->Update();
+
+	vtkSmartPointer<vtkPolyDataMapper> modelMapper = vtkSmartPointer<vtkPolyDataMapper>::New();
+	modelMapper->SetInputConnection(transformFilter->GetOutputPort());
+	vtkSmartPointer<vtkActor> modelActor = vtkSmartPointer<vtkActor>::New();
+	modelActor->SetMapper(modelMapper);
+	modelActor->GetProperty()->SetColor(0, 1, 0);
+	pVisualizer->renderer->AddActor(modelActor);
+
+	delete[] N;
+	delete[] d;
+}
+
 void PSGM::PaintCluster(
 	int iCluster,
 	unsigned char *color)
@@ -7468,72 +7593,78 @@ bool PSGM::GravityReferenceFrame(
 
 		pSurfel = pSurfels->NodeArray.Element + iSurfel;
 
-		/// Computation of varv according to ARP3D.TR11.
-
-		N = pSurfel->N;
-
-		R = pSurfel->R;
-
-		X = R;
-
-		Y = R + 3;
-
-		stdx = 1.0f / pSurfel->r1;
-
-		stdy = 1.0f / pSurfel->r2;
-
-		// V <- NGnd x N
-		RVLCROSSPRODUCT3(ZGC, N, V);
-
-		// V <- V / || V ||
-		// lenV <- || V ||
-		RVLNORM3(V, lenV);
-
-		kx = stdx / lenV;
-		ky = stdy / lenV;
-
-		// A <- V * V'
-		RVLVECTCOV3(V, A);
-		RVLCOMPLETESIMMX3(A);
-		
-		// B <- (I - A) * [NGnd]x
-		RVLMXMUL3X3(A, ZSkew, B);
-		RVLDIFMX3X3(ZSkew, B, B);
-
-		// J <- (B * [X Y])'
-		RVLMULMX3X3VECT(B, X, Jx);
-		RVLMULMX3X3VECT(B, Y, Jy);
-
-		// J <- stdx * J / lenV
-		RVLSCALE3VECTOR(Jx, kx, Jx);
-		RVLSCALE3VECTOR(Jy, ky, Jy);
-
-		// CV <- J * J'
-		RVLVECTCOV3(Jx, A);
-		RVLVECTCOV3(Jy, B);
-		RVLSUMMX3X3UT(A, B, CV);
-		
-		// U <- NGnd x V / || NGnd x V ||
-		RVLCROSSPRODUCT3(ZGC, V, U);
-		RVLNORM3(U, fTmp);
-
-		// varv <- U' * CV * U
-		varv = RVLCOV3DTRANSFTO1D(CV, U);
-		
-		///
-
-		if (bFirst || varv < minVarv)
+		if (pSurfel->flags & RVLSURFEL_FLAG_RF)
 		{
-			minVarv = varv;
+			/// Computation of varv according to ARP3D.TR11.
 
-			RVLCOPY3VECTOR(V, XGC);
-			RVLCOPY3VECTOR(U, YGC);
+			N = pSurfel->N;
 
-			bFirst = false;
-		}
+			R = pSurfel->R;
+
+			X = R;
+
+			Y = R + 3;
+
+			stdx = 1.0f / pSurfel->r1;
+
+			stdy = 1.0f / pSurfel->r2;
+
+			// V <- NGnd x N
+			RVLCROSSPRODUCT3(ZGC, N, V);
+
+			// V <- V / || V ||
+			// lenV <- || V ||
+			RVLNORM3(V, lenV);
+
+			kx = stdx / lenV;
+			ky = stdy / lenV;
+
+			// A <- V * V'
+			RVLVECTCOV3(V, A);
+			RVLCOMPLETESIMMX3(A);
+
+			// B <- (I - A) * [NGnd]x
+			RVLMXMUL3X3(A, ZSkew, B);
+			RVLDIFMX3X3(ZSkew, B, B);
+
+			// J <- (B * [X Y])'
+			RVLMULMX3X3VECT(B, X, Jx);
+			RVLMULMX3X3VECT(B, Y, Jy);
+
+			// J <- stdx * J / lenV
+			RVLSCALE3VECTOR(Jx, kx, Jx);
+			RVLSCALE3VECTOR(Jy, ky, Jy);
+
+			// CV <- J * J'
+			RVLVECTCOV3(Jx, A);
+			RVLVECTCOV3(Jy, B);
+			RVLSUMMX3X3UT(A, B, CV);
+
+			// U <- NGnd x V / || NGnd x V ||
+			RVLCROSSPRODUCT3(ZGC, V, U);
+			RVLNORM3(U, fTmp);
+
+			// varv <- U' * CV * U
+			varv = RVLCOV3DTRANSFTO1D(CV, U);
+
+			///
+
+			if (bFirst || varv < minVarv)
+			{
+				minVarv = varv;
+
+				RVLCOPY3VECTOR(V, XGC);
+				RVLCOPY3VECTOR(U, YGC);
+
+				bFirst = false;
+			}
+		}	// if (pSurfel->flags & RVLSURFEL_FLAG_RF)
 
 		piSurfel = piSurfel->pNext;
-	}
+	}	// for every surfel in surfelList
+
+	if (bFirst)
+		return false;
 
 	RVLCOPYMX3X3T(RCG, RGC);
 
@@ -7657,6 +7788,8 @@ void PSGM::CTIs(
 				CTIs(pObject->elementList, iVertexArray, -1, iObject, pCTISet, pMem);
 		}
 	}
+
+	pCTISet->CopyCTIsToArray();
 
 	delete[] iVertexMem;
 	delete[] bVertexAssigned;

@@ -424,11 +424,11 @@ int main(int argc, char ** argv)
 
 			//FILE *fpLog = fopen("D:\\ARP3D\\evaluationLog.txt", "w");			
 
-			FILE *fpPoseError = fopen("D:\\ARP3D\\poseError.txt", "w");
+			FILE *fpPoseError = fopen("C:\\RVL\\ExpRez\\poseError.txt", "w");
 
-			FILE *fpnotFirstInfo = fopen("D:\\ARP3D\\notFirstInfo.txt", "w");
+			FILE *fpnotFirstInfo = fopen("C:\\RVL\\ExpRez\\notFirstInfo.txt", "w");
 
-			FILE *fpnotFirstPoseErr = fopen("D:\\ARP3D\\notFirstInfo.txt", "w");
+			FILE *fpnotFirstPoseErr = fopen("C:\\RVL\\ExpRez\\notFirstInfo.txt", "w");
 
 			//recognition.pECCVGT->SaveGTFile("C:\\RVL\\ExpRez\\TUW_GT.txt");
 

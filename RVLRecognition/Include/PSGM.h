@@ -278,6 +278,13 @@ namespace RVL
 		void Display();
 		void DisplayModelInstance(Visualizer *pVisualizer);
 		void DisplayClusters();
+		void DisplayCTIs(
+			Visualizer *pVisualizer,
+			RECOG::CTISet *pCTISet,
+			Array<int> *pCTIArray = NULL);
+		void DisplayCTI(
+			Visualizer *pVisualizer,
+			RECOG::PSGM_::ModelInstance *pCTI);
 		void PaintCluster(
 			int iCluster,
 			unsigned char *color);
@@ -422,7 +429,8 @@ namespace RVL
 
 	private:
 		void Clusters();
-		void CreateTemplate();
+		void CreateTemplate66();
+		void CreateTemplateBox();
 		void TemplateMatrix(Array2D<float> A);
 		void FitModel(
 			Array<int> iVertexArray,
@@ -473,6 +481,8 @@ namespace RVL
 		int nDominantClusters;
 		float kNoise;
 		Array<RECOG::PSGM_::Plane> convexTemplate;
+		Array<RECOG::PSGM_::Plane> convexTemplate66;
+		Array<RECOG::PSGM_::Plane> convexTemplateBox;
 		int minInitialSurfelSize;
 		int minVertexPerc;
 		float kReferenceSurfelSize;

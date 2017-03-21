@@ -12,6 +12,7 @@
 
 #define RVLSURFEL_EDGE_FLAG_HARD				0x01
 #define RVLSURFEL_EDGE_FLAG_CONVEX				0x02
+#define RVLSURFEL_FLAG_RF						0x04
 
 #define RVLSURFEL_VERSION_0		0
 
@@ -167,7 +168,8 @@ namespace RVL
 		void InitDisplay(
 			Visualizer *pVisualizer,
 			Mesh *pMesh,
-			void *vpDetector);
+			void *vpDetector,
+			bool bCallbackFunctions = true);
 		void DisplaySurfelBoundary(
 			Visualizer *pVisualizer, 
 			Mesh * pMesh, 
