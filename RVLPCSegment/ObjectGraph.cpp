@@ -1881,6 +1881,7 @@ void ObjectGraph::DetermineObjectConvexityData(float convexThr, float minDiffFli
 	Surfel *pSurfel;
 	Surfel *pSurfelIN;
 	float addedSize = 0;
+	int totalSize;
 	bool fail = false;
 	Array<SortIndex<int>> sortedElementIdxArray;
 	sortedElementIdxArray.Element = new SortIndex < int >[this->pSurfels->NodeArray.n];
@@ -1904,6 +1905,9 @@ void ObjectGraph::DetermineObjectConvexityData(float convexThr, float minDiffFli
 		//we are not intrested in objects with size less than 20 points???
 		if (pObject->size < 20)
 			continue;
+
+		if (iObject == 37 || iObject == 54)
+			int debug = 0;
 		
 		// Sort surfels in objects.
 		this->SortElements(pObject, &sortedElementIdxArray);
@@ -1918,6 +1922,7 @@ void ObjectGraph::DetermineObjectConvexityData(float convexThr, float minDiffFli
 
 		//Run through surfels
 		addedSize = 0;
+		totalSize = 0;
 		for (int iS = 0; iS < sortedElementIdxArray.n; iS++)
 		{
 			sortedIdx = sortedElementIdxArray.Element + iS;
@@ -1927,6 +1932,9 @@ void ObjectGraph::DetermineObjectConvexityData(float convexThr, float minDiffFli
 			if (!bObjectAggregationLevel2Edges)
 				if (pSurfel->bEdge)
 					continue;
+
+			totalSize += pSurfel->size;
+
 			//getting current surfel vertex list
 			pSurfelVertexList = this->pSurfels->surfelVertexList.Element + sortedIdx->idx; //piElement->Idx;
 			
@@ -1994,13 +2002,14 @@ void ObjectGraph::DetermineObjectConvexityData(float convexThr, float minDiffFli
 		}
 
 		//ratio
-		defDirRatio = addedSize / (float)pObject->size;
+		defDirRatio = addedSize / (float)totalSize;
 		//if ((addedSize / (float)pObject->size) < ratioThr)
 		//	this->additionalObjectData.CHVertexIndices.at(iObject).clear(); //if the ratio is lower than threshold, then empty it's list of vertices
 
 		//Check convexity in the other direction (normal)
 		//Run through surfels
 		addedSize = 0;
+		totalSize = 0;
 		for (int iS = 0; iS < sortedElementIdxArray.n; iS++)
 		{
 			sortedIdx = sortedElementIdxArray.Element + iS;
@@ -2010,6 +2019,9 @@ void ObjectGraph::DetermineObjectConvexityData(float convexThr, float minDiffFli
 			if (!bObjectAggregationLevel2Edges)
 				if (pSurfel->bEdge)
 					continue;
+
+			totalSize += pSurfel->size;
+
 			//getting current surfel vertex list
 			pSurfelVertexList = this->pSurfels->surfelVertexList.Element + sortedIdx->idx; //piElement->Idx;
 
@@ -2077,7 +2089,7 @@ void ObjectGraph::DetermineObjectConvexityData(float convexThr, float minDiffFli
 		}
 
 		//ratio
-		otherDirRatio = addedSize / (float)pObject->size;
+		otherDirRatio = addedSize / (float)totalSize;
 
 		//Determine which direction to use
 		if ((defDirRatio > otherDirRatio) || ((otherDirRatio - defDirRatio) < minDiffFlipReq))

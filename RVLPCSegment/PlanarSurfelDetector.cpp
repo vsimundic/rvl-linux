@@ -4598,11 +4598,13 @@ void PlanarSurfelDetector::EdgeFetures(
 {
 	int iEdgeFeature = pSurfels->NodeArray.n;
 
+	int nOcclusionEdges = 0;
+
 	QLIST::Entry<Array<MeshEdgePtr *>> *pBoundary = pSurfels->BoundaryList.pFirst;
 
 	while (pBoundary)
 	{
-		iEdgeFeature += CreateEdgeFeatures(pMesh, pSurfels, &(pBoundary->data), iEdgeFeature);
+		iEdgeFeature += CreateEdgeFeatures(pMesh, pSurfels, &(pBoundary->data), iEdgeFeature, nOcclusionEdges);
 
 		pBoundary = pBoundary->pNext;
 	}
@@ -4614,7 +4616,8 @@ int PlanarSurfelDetector::CreateEdgeFeatures(
 	Mesh *pMesh,
 	SurfelGraph *pSurfels,
 	Array<MeshEdgePtr *> *pBoundary,
-	int iNewFeature)
+	int iNewFeature,
+	int &nOcclusionEdges)
 {
 	if (pBoundary->n < minEdgeFeatureSize)
 		return 0;
@@ -5063,6 +5066,23 @@ int PlanarSurfelDetector::CreateEdgeFeatures(
 
 				iNewFeature_++;
 			}
+			//else
+			//{
+			//	nOcclusionEdges++;
+
+			//	iPointEdge = pSegmentEndpoint1->Idx;
+
+			//	while (iPointEdge != pSegmentEndpoint2->Idx)
+			//	{
+			//		pEdgePtr = pBoundary->Element[iPointEdge];
+
+			//		iPt = RVLPCSEGMENT_GRAPH_GET_NODE(pEdgePtr);
+
+			//		pSurfels->edgeMap[iPt] = -nOcclusionEdges;
+
+			//		iPointEdge = (iPointEdge + 1) % pBoundary->n;
+			//	}
+			//}
 
 			// (pSegmentEndpoint1, pSegmentEndpoint2) <- (pSegmentEndpoint2, pSegmentEndpoint2->pNext)
 

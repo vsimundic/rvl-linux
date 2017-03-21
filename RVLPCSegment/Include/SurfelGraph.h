@@ -112,6 +112,7 @@ namespace RVL
 		Surfel *pNext;
 		float physicalSize;
 		bool bEdge;
+		BYTE flags;
 		int ObjectID;	//Filko
 #ifdef 	RVLSURFEL_IMAGE_ADJACENCY
 		std::vector<Surfel*> imgAdjacency;	//Filko

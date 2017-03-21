@@ -115,6 +115,14 @@ namespace RVL
 			};
 			//END Vidovic
 
+			struct SymmetryMatch
+			{
+				float d;
+				float w;
+				bool bw0;
+				int iCTIElement;
+			};
+
 			int ValidTangent(
 				int iSurfel,
 				int iSurfel_,
@@ -475,10 +483,10 @@ namespace RVL
 		RECOG::CTISet MCTIset;
 		std::map<int, vtkSmartPointer<vtkPolyData>> vtkModelDB;
 		std::map<int, vtkSmartPointer<vtkPolyData>> segmentN_PD; //neighbourhood
-
 		float NGnd[3];
 		float dGnd;
 		int iGndObject;
+		float symmetryMatchThr;
 
 	private:		
 		RECOG::PSGM_::Cluster *clusterMem;
