@@ -8,6 +8,8 @@
 #define RVLSURFEL_DISPLAY_MODE_FOREGROUND_BACKGROUND	3
 #define RVLSURFEL_DISPLAY_MODE_CONVEX_CONCAVE			4
 
+#define RVLSURFEL_DISPLAY_VERTEX_NORMAL_HULL
+
 #define RVLSURFEL_EDGE_FLAG_HARD				0x01
 #define RVLSURFEL_EDGE_FLAG_CONVEX				0x02
 
@@ -84,6 +86,8 @@ namespace RVL
 			Array<int> iSurfelArray;
 			Vertex *pNext;
 			bool bEdge;
+			BYTE type;
+			float VTX[3];
 		};
 
 
@@ -108,6 +112,7 @@ namespace RVL
 		Surfel *pNext;
 		float physicalSize;
 		bool bEdge;
+		BYTE flags;
 		int ObjectID;	//Filko
 #ifdef 	RVLSURFEL_IMAGE_ADJACENCY
 		std::vector<Surfel*> imgAdjacency;	//Filko
@@ -132,7 +137,8 @@ namespace RVL
 			float *N);
 		float Distance(
 			Surfel *pSurfel,
-			float *P);
+			float *P,
+			bool bUncertainty = false);
 		void NodeColors(unsigned char *SelectionColor);
 		void Display(
 			Visualizer *pVisualizer,
@@ -148,9 +154,6 @@ namespace RVL
 			unsigned char *Color);
 		void DisplayEdgeFeatures();
 		void DisplayForegroundAndBackgroundEdges(
-			Visualizer *pVisualizer,
-			Mesh *pMesh);
-		void DisplayConvexAndConcaveEdges(
 			Visualizer *pVisualizer,
 			Mesh *pMesh);
 		void Init(Mesh *pMesh);
@@ -211,10 +214,13 @@ namespace RVL
 		void AssignGroundTruthSegmentation(
 			char *meshFileName,
 			int minSurfelSize);
+		void CalculateSurfelsColorHistograms(cv::Mat img, int colorspace, bool oneDimensional, const int *bindata, bool noBins);
+		void DisplayConvexAndConcaveEdges(
+			Visualizer *pVisualizer,
+			Mesh *pMesh);
 #endif
 		cv::Mat GenColoredSurfelImgFromSSF(std::shared_ptr<SceneSegFile::SceneSegFile> ssf);
 		//Filko
-		void CalculateSurfelsColorHistograms(cv::Mat img, int colorspace, bool oneDimensional, const int *bindata, bool noBins);
 
 	public:	
 		CRVLParameterList ParamList;
@@ -239,6 +245,8 @@ namespace RVL
 		Array<SURFEL::Vertex *> vertexArray;
 		Array<QList<QLIST::Index>> surfelVertexList;
 		int nVertexSurfelRelations;
+		float TIVertexToleranceAngle;
+		int edgeDepth;
 	private:
 		unsigned char *nodeColor;
 		QLIST::Index *surfelVertexMem;

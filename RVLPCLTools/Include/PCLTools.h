@@ -17,7 +17,7 @@ namespace RVL
 	{
 	public: 
 		enum{Point_to_point = 1,
-			 Point_to_plane, //not implemented yet
+			 Point_to_plane, 
 			 Point_to_point_nonlinear,
 			 GeneralizedICP //recommended
 			};
@@ -31,5 +31,6 @@ namespace RVL
 		int maxIterations,
 		float maxCorrespondenceDist,
 		int ICPvariant,
-		double *fitnessScore);
+		double *fitnessScore,
+		void *kdTreePtr=NULL);
 }
