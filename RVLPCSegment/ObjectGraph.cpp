@@ -1093,6 +1093,7 @@ void ObjectGraph::CalculateOverAndUnderSegmentation_SSF(int *E, int &N, bool use
 	delete[] maxBin;
 }
 
+#ifdef RVLSURFEL_IMAGE_ADJACENCY
 //Must be linked with the ground truth (AssignGroundTruthSegmentation per surfel). Return 'Ntrue', 'Nfalse' and 'N' needed to calculate oversegmentation (Fos = 1 - Ntrue/N) and undersegmenation (Fus =Nfalse/N) error. The asumption is that the GT object hist bin with the highest values is the correct one!!! 
 void ObjectGraph::CalculateOverAndUnderSegmentation(
 	int *E, 
@@ -1340,6 +1341,7 @@ void ObjectGraph::CalculateOverAndUnderSegmentation(
 	delete[] g;
 	delete[] maxBin;
 }
+#endif
 
 void ObjectGraph::WERSegmentation()
 {
@@ -2112,6 +2114,7 @@ void ObjectGraph::DetermineObjectConvexityData(float convexThr, float minDiffFli
 	//delete[] bVertexInCH;
 }
 
+#ifdef RVLSURFEL_IMAGE_ADJACENCY
 void ObjectGraph::CalculateObjectsColorHistogram()
 {
 	//Reseting color descriptor data
@@ -2165,6 +2168,7 @@ void ObjectGraph::CalculateObjectsColorHistogram()
 		}
 	}
 }
+#endif
 
 void ObjectGraph::CalculateConvexityRatiosForObjectPair(int firstObject, int secondObject, float& firstRatio, float& secondRatio, float convexThr)
 {

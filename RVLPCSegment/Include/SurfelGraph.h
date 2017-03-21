@@ -156,9 +156,6 @@ namespace RVL
 		void DisplayForegroundAndBackgroundEdges(
 			Visualizer *pVisualizer,
 			Mesh *pMesh);
-		void DisplayConvexAndConcaveEdges(
-			Visualizer *pVisualizer,
-			Mesh *pMesh);
 		void Init(Mesh *pMesh);
 		void Clear();
 		unsigned char * GetColor(int iSurfel);
@@ -217,10 +214,13 @@ namespace RVL
 		void AssignGroundTruthSegmentation(
 			char *meshFileName,
 			int minSurfelSize);
+		void CalculateSurfelsColorHistograms(cv::Mat img, int colorspace, bool oneDimensional, const int *bindata, bool noBins);
+		void DisplayConvexAndConcaveEdges(
+			Visualizer *pVisualizer,
+			Mesh *pMesh);
 #endif
 		cv::Mat GenColoredSurfelImgFromSSF(std::shared_ptr<SceneSegFile::SceneSegFile> ssf);
 		//Filko
-		void CalculateSurfelsColorHistograms(cv::Mat img, int colorspace, bool oneDimensional, const int *bindata, bool noBins);
 
 	public:	
 		CRVLParameterList ParamList;
