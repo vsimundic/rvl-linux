@@ -1816,8 +1816,10 @@ void SurfelGraph::Display(
 
 	if (DisplayData.mode == RVLSURFEL_DISPLAY_MODE_FOREGROUND_BACKGROUND)
 		DisplayForegroundAndBackgroundEdges(pVisualizer, pMesh);
+#ifdef RVLSURFEL_IMAGE_ADJACENCY
 	else if (DisplayData.mode == RVLSURFEL_DISPLAY_MODE_CONVEX_CONCAVE)
 		DisplayConvexAndConcaveEdges(pVisualizer, pMesh);
+#endif
 
 	DisplayEdgeFeatures();
 
@@ -2553,6 +2555,7 @@ void SurfelGraph::DisplayForegroundAndBackgroundEdges(
 	}
 }
 
+#ifdef RVLSURFEL_IMAGE_ADJACENCY
 void SurfelGraph::DisplayConvexAndConcaveEdges(
 	Visualizer *pVisualizer,
 	Mesh *pMesh)
@@ -2654,6 +2657,7 @@ void SurfelGraph::DisplayConvexAndConcaveEdges(
 		}
 	}
 }
+#endif
 
 void SurfelGraph::DisplayVertices()
 {
@@ -2908,6 +2912,7 @@ void SurfelGraph::Save(
 			SaveSurfel(fp, iSurfel);
 }
 
+#ifdef RVLSURFEL_IMAGE_ADJACENCY
 void SurfelGraph::CalculateSurfelsColorHistograms(cv::Mat img, int colorspace, bool oneDimensional, const int *bindata, bool noBins)
 {
 	//Calculate color histograms for all surfels in surfel graph
@@ -2933,3 +2938,4 @@ void SurfelGraph::CalculateSurfelsColorHistograms(cv::Mat img, int colorspace, b
 	}
 
 }
+#endif

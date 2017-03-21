@@ -84,6 +84,7 @@ void CreateParamList(
 
 void GenerateSegmentNeighbourhood(PSGM * psgm, double radius)
 {
+	psgm->segmentN_PD.clear();
 	pcl::PointCloud<pcl::PointXYZINormal>::Ptr cloud_destination(new pcl::PointCloud<pcl::PointXYZINormal>);
 	//creating PCL point cloud
 	cloud_destination->width = psgm->pMesh->NodeArray.n;
@@ -182,6 +183,7 @@ void GenerateSegmentNeighbourhood(PSGM * psgm, double radius)
 		psgm->segmentN_PD.insert(std::make_pair(iCluster, cleanFilter->GetOutput()));
 	}
 	delete[] centroids;
+	
 }
 
 int main(int argc, char ** argv)
@@ -421,6 +423,12 @@ int main(int argc, char ** argv)
 
 			FILE *fpLog = fopen("D:\\ARP3D\\evaluationLog.txt", "w");
 
+			FILE *fpPoseError = fopen("D:\\ARP3D\\poseError.txt", "w");
+
+			FILE *fpnotFirstInfo = fopen("D:\\ARP3D\\notFirstInfo.txt", "w");
+
+			FILE *fpnotFirstPoseErr = fopen("D:\\ARP3D\\notFirstInfo.txt", "w");
+
 			//recognition.pECCVGT->SaveGTFile("C:\\RVL\\ExpRez\\TUW_GT.txt");
 
 			//FILE *fpHypothesisEvaluation = fopen("C:\\RVL\\ExpRez\\compare_TNM_Valid_TMP.txt", "w");
@@ -472,17 +480,18 @@ int main(int argc, char ** argv)
 				visualizer.renderer->RemoveAllViewProps();
 #endif
 #endif
-				recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, 7);
+				//Evaluate CTI match
+				//recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, 7);
 
 				printf("Scene %s...finished!\n\n", filePath);
 
 				mesh.LoadPolyDataFromPLY(filePath);
-				// Visualization
+
 
 				//surfels.NodeColors(SelectionColor);
+				
 				visualizer.renderer->RemoveAllViewProps();
 				recognition.InitDisplay(&visualizer, &mesh, SelectionColor);
-
 				recognition.Display();
 
 				QueryPerformanceCounter((LARGE_INTEGER *)&ctr1_);
@@ -510,10 +519,11 @@ int main(int argc, char ** argv)
 
 				//recognition.CalculateICPCost(PCLICP, PCLICPVariants::Point_to_plane, &kdtree);
 				GenerateSegmentNeighbourhood(&recognition, 0.1);
-
-				recognition.CalculateNNCost(PCLICP, PCLICPVariants::Point_to_plane);
-				//recognition.AddModelsToVisualizer(&visualizer, false, PCLICP, PCLICPVariants::Point_to_plane, NULL/*&kdtree*/);
-
+				recognition.CalculateNNCost(&visualizer, PCLICP, PCLICPVariants::Point_to_plane);
+			
+				//evaluate ICP
+				recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, fpPoseError, fpnotFirstInfo, fpnotFirstPoseErr, 7, true);
+				//recognition.AddModelsToVisualizer(&visualizer, true, PCLICP, PCLICPVariants::Point_to_plane, NULL/*&kdtree*/);
 				QueryPerformanceCounter((LARGE_INTEGER *)&ctr2_);
 				QueryPerformanceFrequency((LARGE_INTEGER *)&freq_);
 				float timevalueICP = (ctr2_.QuadPart - ctr1_.QuadPart) * 1000.0 / freq_.QuadPart;
@@ -639,8 +649,9 @@ int main(int argc, char ** argv)
 	if (modelSequenceFileName)
 		delete[] modelSequenceFileName;
 
-	if (segmentGTFileName)
-		delete[] segmentGTFileName;
+	
+	//if (segmentGTFileName)
+	//	delete[] segmentGTFileName;
 
 	//END VIDOVIC
 

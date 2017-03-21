@@ -101,7 +101,11 @@ namespace RVL
 				float eSeg;
 				// Petra
 				double cost_ICP; 
-				float T_ICP[16];
+				float T_ICP[16]; //transformation between current and ICP pose
+				float RICP_[9]; //transformation between current and ICP pose
+				float tICP_[3]; //transformation between current and ICP pose
+				float RICP[9]; //Pose after ICP
+				float tICP[3]; //Pose after ICP
 				double cost_NN;
 				// end Petra
 				MatchInstance *pNext;
@@ -238,9 +242,15 @@ namespace RVL
 
 		typedef void(*ICPfunction)(vtkSmartPointer<vtkPolyData>, vtkSmartPointer<vtkPolyData>, float*, int, float, int, double*, void*);
 
-		void AddModelsToVisualizer(Visualizer *pVisualizer, bool align, ICPfunction ICPFunction, int ICPvariant, void *kdTreePtr = NULL);
+		//For a given scene segment adds desired ranked hypotheses to visualizer:
+		void AddModelsToVisualizer(Visualizer *pVisualizer, bool align, ICPfunction ICPFunction, int ICPvariant, void *kdTreePtr = NULL); 
 		
-		void AddOneModelToVisualizer(Visualizer *pVisualizer, int iMatch, bool align, ICPfunction ICPFunction, int ICPvariant, void *kdTreePtr = NULL);
+		//Runs ICP for a hypotheses chosen in "AddModelsToVisualizer" and visualizes it (not recomended, rather use AddOneModelToVisualizer):
+		void AddOneModelToVisualizerICP(Visualizer *pVisualizer, int iMatch, bool align, ICPfunction ICPFunction, int ICPvariant, void *kdTreePtr = NULL);
+
+		//Recomended,
+		//Visualizes chosen hypotheses 0-6 for each segment on the scene, activated when pressed "c":
+		void AddOneModelToVisualizer(Visualizer *pVisualizer, int iMatch, int iRank, bool align);
 		
 		void LoadModelMeshDB(char *modelSequenceFileName, bool decimate=false, float decimatePercent=0.4);
 
@@ -250,7 +260,7 @@ namespace RVL
 
 		static vtkSmartPointer<vtkPolyData> GetVisiblePart(vtkSmartPointer<vtkPolyData> PD); // Models are reduced to only the visible part (using angle between normals) which improves ICP. 
 
-		void CalculateNNCost(RVL::PSGM::ICPfunction ICPFunction, int ICPvariant); // For each pair of scene segment and visible part of the matched model, calls NNCost.
+		void CalculateNNCost(Visualizer *pVisualizer, RVL::PSGM::ICPfunction ICPFunction, int ICPvariant); // For each pair of scene segment and visible part of the matched model, calls NNCost.
 
 		float NNCost(int iCluster, vtkSmartPointer<vtkPolyData> targetPD); // Calculates cost based on sum of distances between scene segment points and their nearest neighbours in visible part of the matched model.
 		//end Petra
@@ -308,7 +318,11 @@ namespace RVL
 		void EvaluateMatchesByScore(
 			FILE *fp,
 			FILE *fpLog,
-			int nBestSegments = 0); //Vidovic
+			FILE *fpPoseError,
+			FILE *fpnotFirstInfo,
+			FILE *fpnotFirstPoseErr,
+			int nBestSegments = 0,
+			bool evaluateICP = false); //Vidovic
 		void WriteClusterNormalDistribution(FILE *fp);
 		void MSTransformation(
 			RECOG::PSGM_::ModelInstance *pMModelInstance,
@@ -347,8 +361,25 @@ namespace RVL
 			int iScene); //Vidovic
 		void LoadCompleteSegmentGT(FileSequenceLoader sceneSequence); //Vidovic
 		void LoadCTI(char *fileName); //Vidovic
+		bool PoseCheck(
+			RVL::GTInstance *pGT,
+			RECOG::PSGM_::MatchInstance *pMatch,
+			float distanceThresh,
+			float angleThresh,
+			FILE *fpLog = NULL,
+			FILE *fpnotFirstPoseErr = NULL,
+			bool evaluateICP = false); //Vidovic
+		void FindGTInstance(
+			RVL::GTInstance **pGT,
+			int iScene,
+			int iModel);
 		bool PSGM::CompareMatchToGT(RECOG::PSGM_::MatchInstance *pMatch, ECCVGTLoader *ECCVGT, bool poseCheck, float angleThresh, float distanceThresh); //VIDOVIC
 		void PSGM::CountTPandFN(ECCVGTLoader *ECCVGT, int &TP, int &FN, bool printMatchInfo); //VIDOVIC
+		void CreateScoreMatchMatrixICP();
+		void FindMinMaxInScoreMatchMatrix(
+			float &min,
+			float &max,
+			Array<Array<SortIndex<float>>> &scoreMatchMatrix_);
 
 	private:
 		void Clusters();
@@ -426,6 +457,7 @@ namespace RVL
 		//QList<RECOG::PSGM_::MatchInstance> SSegmentMatches1; //Vidovic - probability1
 		//QList<RECOG::PSGM_::MatchInstance> SSegmentMatches2; //Vidovic - probability2
 		Array<Array<SortIndex<float>>> scoreMatchMatrix;
+		Array<Array<SortIndex<float>>> scoreMatchMatrixICP;
 		DWORD scoreCalculation; //Vidovic - TO DO (Implement read from cfg file)
 		ECCVGTLoader *pECCVGT; //Vidovic
 		Array <RVL::SegmentGTInstance> segmentGT;
@@ -442,6 +474,12 @@ namespace RVL
 		RECOG::CTISet MCTIset;
 		std::map<int, vtkSmartPointer<vtkPolyData>> vtkModelDB;
 		std::map<int, vtkSmartPointer<vtkPolyData>> segmentN_PD; //neighbourhood
+
+		float NGnd[3];
+		float dGnd;
+		
+		//Petra & Ivan
+		double *icpTMatrix;
 
 
 	private:		
@@ -475,6 +513,8 @@ namespace RVL
 		float *nTc; //Vidovic
 		float *dISMc; //Vidovic
 		int CTIIdx; //Vidovic
+		int nBestMatches; //n best matches for each scene segment
+		
 	};
 
 	
