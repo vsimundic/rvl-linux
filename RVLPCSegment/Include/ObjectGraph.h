@@ -11,6 +11,9 @@
 #define RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_NLMC		2
 #define RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_NLMC2		3
 
+#define RVLPCSEGMENT_OBJECT_AGGREGATION_LEVEL2_METHOD_CONVEXITY		0
+#define RVLPCSEGMENT_OBJECT_AGGREGATION_LEVEL2_METHOD_SYMMETRY		1
+
 namespace RVL
 {
 	namespace SURFEL
@@ -134,6 +137,7 @@ namespace RVL
 			ObjectGraphObjectData additionalObjectData;	//Filko
 			//Array<int> *sortedElementIdxArray;
 			DWORD relationClassifier;
+			DWORD objectAggregationLevel2Method;
 			Array<SortIndex<int>> sortedObjectArray;
 			int nValidObjects;
 			bool bObjectAggregationLevel2Uncertainty;

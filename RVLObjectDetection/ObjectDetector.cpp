@@ -275,7 +275,8 @@ void ObjectDetector::DetectObjects(char *MeshFilePathName)
 			cv::waitKey(1);
 			/*VisualizeObjectGraphVertexPointCloud(&objects, 100);*/
 			//if (bCTIBasedObjectAggregation)
-			pPSGM->InitSymmetry(pObjects);
+			if (pObjects->objectAggregationLevel2Method == RVLPCSEGMENT_OBJECT_AGGREGATION_LEVEL2_METHOD_SYMMETRY)
+				pPSGM->InitSymmetry(pObjects);
 			pObjects->DetermineObjectConvexityData(convexityThr, 0.15, bConcaveObjectAggregation);
 			pObjects->ObjectAggregationLevel2_ViaObjectPairConvexity(convexityThr, convexityRatioThr1, convexityRatioThr2, 300);
 			pPSGM->FreeSymmetry();

@@ -1112,7 +1112,7 @@ vtkSmartPointer<vtkPolyData> GenerateCTIPrimitivePolydata_CW(float *planeNormals
 }
 
 //Generates vtkPolyData object (points and polys) that represenent a single CTI primitive, planeNormals is row wise (normal_1_x_coordinate, normal_1_y_coordinate, normal_1_z_coordinate, normal_2_x_coordinate, ...)
-vtkSmartPointer<vtkPolyData> GenerateCTIPrimitivePolydata_RW(float *planeNormals, float *planeDist, bool centered = false, int *mask = NULL, float *t = NULL)
+vtkSmartPointer<vtkPolyData> GenerateCTIPrimitivePolydata_RW(float *planeNormals, float *planeDist, int nPlanes, bool centered = false, int *mask = NULL, float *t = NULL)
 {
 	vtkSmartPointer<vtkPolyData> outPD;
 
@@ -1121,15 +1121,15 @@ vtkSmartPointer<vtkPolyData> GenerateCTIPrimitivePolydata_RW(float *planeNormals
 	if (!centered)
 	{
 		//make copy of original plane dist
-		planeDistLocal = new float[66];
-		memcpy(planeDistLocal, planeDist, 66 * sizeof(float));
+		planeDistLocal = new float[nPlanes];
+		memcpy(planeDistLocal, planeDist, nPlanes * sizeof(float));
 
 		//Finding MIN and MAX for each normal dimension
 		float maxN[3] = { -10, -10, -10 };
 		int maxI[3] = { 0, 0, 0 };
 		float minN[3] = { 10, 10, 10 };
 		int minI[3] = { 0, 0, 0 };
-		for (int i = 0; i < 66; i++)
+		for (int i = 0; i < nPlanes; i++)
 		{
 			if (planeNormals[i * 3] > maxN[0])
 			{
@@ -1165,15 +1165,15 @@ vtkSmartPointer<vtkPolyData> GenerateCTIPrimitivePolydata_RW(float *planeNormals
 			}
 		}
 		//centering
-		float newexampleTemp[66];
+		float newexampleTemp;
 		float tempV[3];
 		tempV[0] = 0.5 * (planeDistLocal[maxI[0]] - planeDistLocal[minI[0]]);
 		tempV[1] = 0.5 * (planeDistLocal[maxI[1]] - planeDistLocal[minI[1]]);
 		tempV[2] = 0.5 * (planeDistLocal[maxI[2]] - planeDistLocal[minI[2]]);
-		for (int i = 0; i < 66; i++)
+		for (int i = 0; i < nPlanes; i++)
 		{
-			newexampleTemp[i] = planeNormals[i * 3] * tempV[0] + planeNormals[i * 3 + 1] * tempV[1] + planeNormals[i * 3 + 2] * tempV[2];
-			planeDistLocal[i] -= newexampleTemp[i];
+			newexampleTemp = planeNormals[i * 3] * tempV[0] + planeNormals[i * 3 + 1] * tempV[1] + planeNormals[i * 3 + 2] * tempV[2];
+			planeDistLocal[i] -= newexampleTemp;
 		}
 		if (t)
 			memcpy(t, tempV, 3 * sizeof(float));
@@ -1184,7 +1184,7 @@ vtkSmartPointer<vtkPolyData> GenerateCTIPrimitivePolydata_RW(float *planeNormals
 	vtkSmartPointer<vtkPoints> points = vtkSmartPointer<vtkPoints>::New();
 	vtkSmartPointer<vtkFloatArray> normalp = vtkSmartPointer<vtkFloatArray>::New();
 	normalp->SetNumberOfComponents(3);
-	for (int i = 0; i < 66; i++)
+	for (int i = 0; i < nPlanes; i++)
 	{
 		points->InsertPoint(i, planeNormals[i * 3] * planeDistLocal[i], planeNormals[i * 3 + 1] * planeDistLocal[i], planeNormals[i * 3 + 2] * planeDistLocal[i]);
 		normalp->InsertTuple3(i, planeNormals[i * 3], planeNormals[i * 3 + 1], planeNormals[i * 3 + 2]);
@@ -1213,7 +1213,7 @@ vtkSmartPointer<vtkPolyData> GenerateCTIPrimitivePolydata_RW(float *planeNormals
 			//calculate polygon normal
 			vtkPolygon::ComputeNormal(hullPD->GetPoints(), npts, polysPtsIds, n);
 			//find corresponding normal in normal list
-			for (int k = 0; k < 66; k++)
+			for (int k = 0; k < nPlanes; k++)
 			{
 				cosfi = n[0] * planeNormals[k * 3] + n[1] * planeNormals[k * 3 * 1] + n[2] * planeNormals[k * 3 + 2];
 				if ((cosfi > 0.9999) && (mask[k] == 1))
@@ -1240,6 +1240,7 @@ vtkSmartPointer<vtkPolyData> GenerateCTIPrimitivePolydata_RW(float *planeNormals
 	//make copy of the final polydata and send it back
 	outPD = vtkSmartPointer<vtkPolyData>::New();
 	outPD->DeepCopy(cleanPD->GetOutput());
+
 	return outPD;
 }
 
@@ -1298,7 +1299,7 @@ void PSGM::VisualizeCTIMatch(float *nT, float *dM, float *dS, int *validS)
 	renderer->SetBackground(0.5294, 0.8078, 0.9803);
 
 	//Generate model polydata
-	vtkSmartPointer<vtkPolyData> modelPD = GenerateCTIPrimitivePolydata_RW(nT, dM);
+	vtkSmartPointer<vtkPolyData> modelPD = GenerateCTIPrimitivePolydata_RW(nT, dM, 66);
 	/*if (tM) //if translation exists
 	{
 		float scale = 1;
@@ -1334,7 +1335,7 @@ void PSGM::VisualizeCTIMatch(float *nT, float *dM, float *dS, int *validS)
 	renderer->AddActor(modelActor2);
 	*/
 	//Generate scene polydata
-	vtkSmartPointer<vtkPolyData> modelSPD = GenerateCTIPrimitivePolydata_RW(nT, dS, false, validS);
+	vtkSmartPointer<vtkPolyData> modelSPD = GenerateCTIPrimitivePolydata_RW(nT, dS, 66, false, validS);
 	vtkSmartPointer<vtkPolyDataMapper> modelSMapper = vtkSmartPointer<vtkPolyDataMapper>::New();
 	modelSMapper->SetInputData(modelSPD);
 	vtkSmartPointer<vtkActor> modelSActor = vtkSmartPointer<vtkActor>::New();
@@ -6313,7 +6314,7 @@ void PSGM::DisplayCTI(
 	
 	float tCTIc_CTI[3];
 
-	vtkSmartPointer<vtkPolyData> modelPD = GenerateCTIPrimitivePolydata_RW(N, d, false, NULL, tCTIc_CTI);
+	vtkSmartPointer<vtkPolyData> modelPD = GenerateCTIPrimitivePolydata_RW(N, d, convexTemplate.n, false, NULL, tCTIc_CTI);
 
 	float *RCTI_S = pCTI->R;
 	float *tCTI_S = pCTI->t;
@@ -6712,7 +6713,7 @@ void PSGM::AddOneModelToVisualizer(Visualizer *pVisualizer, int iMatch, int iRan
 
 	//Generate model polydata
 	float t[3];
-	vtkSmartPointer<vtkPolyData> modelPD = GenerateCTIPrimitivePolydata_RW(nT.data(), dM, false, NULL, t);
+	vtkSmartPointer<vtkPolyData> modelPD = GenerateCTIPrimitivePolydata_RW(nT.data(), dM, 66, false, NULL, t);
 
 	//Getting transform from centered (model) CTI polygon data to scene (T_CCTIM_S)
 	float *R_M_S = pCTImatchesArray.Element[iMatch]->R;
@@ -6730,7 +6731,7 @@ void PSGM::AddOneModelToVisualizer(Visualizer *pVisualizer, int iMatch, int iRan
 	RVLHTRANSFMX(pSCTI->R, t_CCTIM_S, T_CCTIM_S);
 
 	//Generate scene CTI polydata
-	vtkSmartPointer<vtkPolyData> modelSPD = GenerateCTIPrimitivePolydata_RW(nT.data(), dS, false, validS, t);
+	vtkSmartPointer<vtkPolyData> modelSPD = GenerateCTIPrimitivePolydata_RW(nT.data(), dS, 66, false, validS, t);
 
 	//Getting transform from centered (scene) CTI polygon data to scene (T_CCTIS_S)
 	float t_CCTIS_S[3];
@@ -6894,7 +6895,7 @@ void PSGM::AddOneModelToVisualizerICP(Visualizer *pVisualizer, int iMatch, bool 
 
 	//Generate model polydata
 	float t[3];
-	vtkSmartPointer<vtkPolyData> modelPD = GenerateCTIPrimitivePolydata_RW(nT.data(), dM, false, NULL, t);
+	vtkSmartPointer<vtkPolyData> modelPD = GenerateCTIPrimitivePolydata_RW(nT.data(), dM, 66, false, NULL, t);
 	
 	//Getting transform from centered (model) CTI polygon data to scene (T_CCTIM_S)
 	float *R_M_S = pCTImatchesArray.Element[iMatch]->R;
@@ -6912,7 +6913,7 @@ void PSGM::AddOneModelToVisualizerICP(Visualizer *pVisualizer, int iMatch, bool 
 	RVLHTRANSFMX(pSCTI->R, t_CCTIM_S, T_CCTIM_S);
 
 	//Generate scene CTI polydata
-	vtkSmartPointer<vtkPolyData> modelSPD = GenerateCTIPrimitivePolydata_RW(nT.data(), dS, false, validS, t);
+	vtkSmartPointer<vtkPolyData> modelSPD = GenerateCTIPrimitivePolydata_RW(nT.data(), dS, 66, false, validS, t);
 	
 	//Getting transform from centered (scene) CTI polygon data to scene (T_CCTIS_S)
 	float t_CCTIS_S[3];

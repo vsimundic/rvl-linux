@@ -214,9 +214,11 @@ int main(int argc, char ** argv)
 #endif
 			RECOG::CTISet CTIs;
 
-			objectDetector.pPSGM->CTIs(objectDetector.pObjects, &CTIs);
+			//objectDetector.pPSGM->convexTemplate = objectDetector.pPSGM->convexTemplateBox;
 
-			objectDetector.pPSGM->DisplayCTIs(&visualizer, &CTIs);
+			//objectDetector.pPSGM->CTIs(objectDetector.pObjects, &CTIs);
+
+			//objectDetector.pPSGM->DisplayCTIs(&visualizer, &CTIs);
 
 			//detector.DisplaySoftEdges(&visualizer, &mesh, &surfels, SelectionColor);
 			visualizer.Run();

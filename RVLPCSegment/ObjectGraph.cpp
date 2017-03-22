@@ -632,6 +632,7 @@ ObjectGraph::ObjectGraph()
 	//Array<int> *sortedElementIdxArray = NULL;
 	sortedObjectArray.Element = NULL;
 	relationClassifier = RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_NLMC;
+	objectAggregationLevel2Method = RVLPCSEGMENT_OBJECT_AGGREGATION_LEVEL2_METHOD_CONVEXITY;
 }
 
 
@@ -664,6 +665,9 @@ void ObjectGraph::CreateParamList(CRVLMem *pMem)
 	ParamList.AddID(pParamData, "NLMC2", RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_NLMC2);
 	pParamData = ParamList.AddParam("ObjectGraph.objectAggregationLevel2.uncertainty", RVLPARAM_TYPE_BOOL, &bObjectAggregationLevel2Uncertainty);
 	pParamData = ParamList.AddParam("ObjectGraph.objectAggregationLevel2.edges", RVLPARAM_TYPE_BOOL, &bObjectAggregationLevel2Edges);
+	pParamData = ParamList.AddParam("ObjectGraph.objectAggregationLevel2.method", RVLPARAM_TYPE_ID, &objectAggregationLevel2Method);
+	ParamList.AddID(pParamData, "CONVEXITY", RVLPCSEGMENT_OBJECT_AGGREGATION_LEVEL2_METHOD_CONVEXITY);
+	ParamList.AddID(pParamData, "SYMMETRY", RVLPCSEGMENT_OBJECT_AGGREGATION_LEVEL2_METHOD_SYMMETRY);
 }
 
 #ifdef RVLSURFEL_IMAGE_ADJACENCY
@@ -1908,8 +1912,8 @@ void ObjectGraph::DetermineObjectConvexityData(float convexThr, float minDiffFli
 		if (pObject->size < 20)
 			continue;
 
-		if (iObject == 37 || iObject == 54)
-			int debug = 0;
+		//if (iObject == 37 || iObject == 54)
+		//	int debug = 0;
 		
 		// Sort surfels in objects.
 		this->SortElements(pObject, &sortedElementIdxArray);
@@ -2607,26 +2611,31 @@ void ObjectGraph::ObjectAggregationLevel2_ViaObjectPairConvexity(float convexThr
 	{
 		for (int iObject2 = iObject + 1; iObject2 < validObjects.size(); iObject2++)
 		{
-			this->CalculateConvexityRatiosForObjectPair(validObjects.at(iObject), validObjects.at(iObject2), firstRatio, secondRatio, convexThr);
-			if (verbose)
-				std::cout << "(" << validObjects.at(iObject) << ", " << validObjects.at(iObject2) << ")" << " = " << firstRatio << ", " << secondRatio << std::endl;
-			if ((firstRatio > ratioThr) && (secondRatio > ratioThr))
-				merge_pairs.push_back(std::make_pair(validObjects.at(iObject), validObjects.at(iObject2)));
-			//Adding all connections (via min values)
-			if (firstRatio < secondRatio)
-				minValue = firstRatio;
-			else
-				minValue = secondRatio;
-			ss.clear();
-			ss.str("");
-			ss << validObjects.at(iObject) << "_" << validObjects.at(iObject2);	//one way
-			min_convexity_values.insert(std::pair<std::string, float>(ss.str(), minValue));
-			ss.clear();
-			ss.str("");
-			ss << validObjects.at(iObject2) << "_" << validObjects.at(iObject);	//other way
-			min_convexity_values.insert(std::pair<std::string, float>(ss.str(), minValue));
-
-			//objectAggregationLevel2Criterion(this, validObjects.at(iObject), validObjects.at(iObject2), vpObjectAggregationLevel2CriterionData);
+			if (objectAggregationLevel2Method == RVLPCSEGMENT_OBJECT_AGGREGATION_LEVEL2_METHOD_CONVEXITY)
+			{
+				this->CalculateConvexityRatiosForObjectPair(validObjects.at(iObject), validObjects.at(iObject2), firstRatio, secondRatio, convexThr);
+				if (verbose)
+					std::cout << "(" << validObjects.at(iObject) << ", " << validObjects.at(iObject2) << ")" << " = " << firstRatio << ", " << secondRatio << std::endl;
+				if ((firstRatio > ratioThr) && (secondRatio > ratioThr))
+					merge_pairs.push_back(std::make_pair(validObjects.at(iObject), validObjects.at(iObject2)));
+				//Adding all connections (via min values)
+				if (firstRatio < secondRatio)
+					minValue = firstRatio;
+				else
+					minValue = secondRatio;
+				ss.clear();
+				ss.str("");
+				ss << validObjects.at(iObject) << "_" << validObjects.at(iObject2);	//one way
+				min_convexity_values.insert(std::pair<std::string, float>(ss.str(), minValue));
+				ss.clear();
+				ss.str("");
+				ss << validObjects.at(iObject2) << "_" << validObjects.at(iObject);	//other way
+				min_convexity_values.insert(std::pair<std::string, float>(ss.str(), minValue));
+			}
+			else if (objectAggregationLevel2Method == RVLPCSEGMENT_OBJECT_AGGREGATION_LEVEL2_METHOD_SYMMETRY)
+			{
+				objectAggregationLevel2Criterion(this, validObjects.at(iObject), validObjects.at(iObject2), vpObjectAggregationLevel2CriterionData);
+			}				
 		}
 	}
 
