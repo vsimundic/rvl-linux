@@ -361,7 +361,7 @@ int main(int argc, char ** argv)
 				surfels.NodeColors(SelectionColor);
 				recognition.InitDisplay(&visualizer, &mesh, SelectionColor);
 				recognition.Display();
-				recognition.AddBestCTIModelsToVisualizer(&visualizer);
+				//recognition.AddBestCTIModelsToVisualizer(&visualizer);
 				visualizer.Run();
 	#endif
 #endif
