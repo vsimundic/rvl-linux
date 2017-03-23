@@ -9,6 +9,7 @@
 #include "Visualizer.h"
 #include "SceneSegFile.hpp"
 #include "SurfelGraph.h"
+#include "ObjectGraph.h"
 #include "PlanarSurfelDetector.h"
 #include "ObjectGraph.h"
 #include "RVLRecognition.h"
@@ -25,8 +26,15 @@ ObjectDetector::ObjectDetector()
 	cfgFileName = NULL;
 
 	flags = 0x00000000;
+
+	convexityThr = 0.010f;
+	convexityRatioThr1 = 0.77f;
+	convexityRatioThr2 = 0.75f;
+
 	bSegmentToObjects = false;
 	bObjectAggregationLevel2 = false;
+	bCTIBasedObjectAggregation = false;
+	bConcaveObjectAggregation = false;
 
 	pSurfels = NULL;
 	pSurfelDetector = NULL;
@@ -86,6 +94,21 @@ void ObjectDetector::Init()
 		std::cout << "Initializing SVM Classifier!" << std::endl;
 		pObjects->InitSVMClassifier(SVMClassifierParamsFileName);
 	}
+
+	pObjects->objectAggregationLevel2Criterion = OBJECT_DETECTION::Symmetry;
+	pObjects->vpObjectAggregationLevel2CriterionData = this;
+
+	pPSGM = new PSGM;
+
+	pPSGM->CreateParamList(pMem0);
+
+	pPSGM->ParamList.LoadParams(cfgFileName);
+
+	pPSGM->pMem = pMem;
+
+	pPSGM->pSurfels = pSurfels;
+
+	pPSGM->pSurfelDetector = pSurfelDetector;
 }
 
 void ObjectDetector::CreateParamList()
@@ -105,6 +128,11 @@ void ObjectDetector::CreateParamList()
 	pParamData = ParamList.AddParam("ObjectDetector.SegmentToObjects", RVLPARAM_TYPE_BOOL, &bSegmentToObjects);
 	pParamData = ParamList.AddParam("ObjectDetector.ObjectAggregationLevel2", RVLPARAM_TYPE_BOOL, &bObjectAggregationLevel2);
 	pParamData = ParamList.AddParam("ObjectDetector.SVMClassifierParamsFileName", RVLPARAM_TYPE_STRING, SVMClassifierParamsFileName);
+	pParamData = ParamList.AddParam("ObjectDetector.CTIBasedObjectAggregation", RVLPARAM_TYPE_BOOL, &bCTIBasedObjectAggregation);
+	pParamData = ParamList.AddParam("ObjectDetector.convexityThr", RVLPARAM_TYPE_FLOAT, &convexityThr);
+	pParamData = ParamList.AddParam("ObjectDetector.convexityRatioThr1", RVLPARAM_TYPE_FLOAT, &convexityRatioThr1);
+	pParamData = ParamList.AddParam("ObjectDetector.convexityRatioThr2", RVLPARAM_TYPE_FLOAT, &convexityRatioThr2);
+	pParamData = ParamList.AddParam("ObjectGraph.concaveObjectAggregation", RVLPARAM_TYPE_BOOL, &bConcaveObjectAggregation);
 }
 
 void ObjectDetector::DetectObjects(char *MeshFilePathName)
@@ -196,6 +224,10 @@ void ObjectDetector::DetectObjects(char *MeshFilePathName)
 			// Detect vertices.
 
 			pSurfels->DetectVertices(&mesh);
+
+			// Assign mesh to PSGM.
+
+			pPSGM->pMesh = &mesh;
 		}
 
 		if (flags & RVLOBJECTDETECTION_FLAG_SAVE_SSF)
@@ -242,8 +274,11 @@ void ObjectDetector::DetectObjects(char *MeshFilePathName)
 			cv::imshow("Colored object image", pObjects->CreateSegmentationImage());
 			cv::waitKey(1);
 			/*VisualizeObjectGraphVertexPointCloud(&objects, 100);*/
-			pObjects->DetermineObjectConvexityData(0.015, 0.15, true, true);
-			pObjects->ObjectAggregationLevel2_ViaObjectPairConvexity(0.007, 0.77, 0.75, 300, true);
+			//if (bCTIBasedObjectAggregation)
+			pPSGM->InitSymmetry(pObjects);
+			pObjects->DetermineObjectConvexityData(convexityThr, 0.15, bConcaveObjectAggregation);
+			pObjects->ObjectAggregationLevel2_ViaObjectPairConvexity(convexityThr, convexityRatioThr1, convexityRatioThr2, 300);
+			pPSGM->FreeSymmetry();
 			cv::imshow("New Colored object image", pObjects->CreateSegmentationImage());
 			cv::waitKey(1);
 			////
@@ -282,4 +317,26 @@ void ObjectDetector::Evaluate(
 			fprintf(fp, "%s\t%d\t%d\t%d\n", fileName, E[0], E[1], N);
 	}
 #endif
+}
+
+void ObjectDetector::CTIs()
+{
+	pPSGM->CTIs(pObjects, &(pPSGM->CTISet));
+
+	FILE *fp = fopen("CTIs.txt", "w");
+
+	pPSGM->SaveCTIs(fp, &(pPSGM->CTISet));
+
+	fclose(fp);
+}
+
+void OBJECT_DETECTION::Symmetry(
+	SURFEL::ObjectGraph *pObjects,
+	int iObject1,
+	int iObject2,
+	void *vpData)
+{
+	ObjectDetector *pObjectDetector = (ObjectDetector *)vpData;
+
+	pObjectDetector->pPSGM->Symmetry(pObjects, iObject1, iObject2);
 }

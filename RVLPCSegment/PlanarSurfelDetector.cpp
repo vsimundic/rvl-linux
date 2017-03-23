@@ -474,6 +474,8 @@ void PlanarSurfelDetector::Segment(
 
 		pSurfel->bEdge = false;
 
+		pSurfel->flags = 0x00;
+
 		regionGrowingData.buffer = regionGrowingBuffer;
 
 		PlanarRegionGrowing(pMesh, pSurfels, iPtSeed, iSurfel);
@@ -4598,11 +4600,13 @@ void PlanarSurfelDetector::EdgeFetures(
 {
 	int iEdgeFeature = pSurfels->NodeArray.n;
 
+	int nOcclusionEdges = 0;
+
 	QLIST::Entry<Array<MeshEdgePtr *>> *pBoundary = pSurfels->BoundaryList.pFirst;
 
 	while (pBoundary)
 	{
-		iEdgeFeature += CreateEdgeFeatures(pMesh, pSurfels, &(pBoundary->data), iEdgeFeature);
+		iEdgeFeature += CreateEdgeFeatures(pMesh, pSurfels, &(pBoundary->data), iEdgeFeature, nOcclusionEdges);
 
 		pBoundary = pBoundary->pNext;
 	}
@@ -4614,7 +4618,8 @@ int PlanarSurfelDetector::CreateEdgeFeatures(
 	Mesh *pMesh,
 	SurfelGraph *pSurfels,
 	Array<MeshEdgePtr *> *pBoundary,
-	int iNewFeature)
+	int iNewFeature,
+	int &nOcclusionEdges)
 {
 	if (pBoundary->n < minEdgeFeatureSize)
 		return 0;
@@ -4793,13 +4798,21 @@ int PlanarSurfelDetector::CreateEdgeFeatures(
 
 	float eThr = 2.0f / kPlane;
 
+	float R_[9];
+
+	float *X = R_;
+	float *Y = R_ + 3;
+	float *Z = R_ + 6;
+
+	float r2 = 0.0005f * (float)(pSurfels->edgeDepth);
+
 	int iPointEdge3;
 	Point *pPt1, *pPt2;
 	float *P1, *P2, *P_, *V_;
 	float dP[3], NE[3], V[3], Q[3];
 	float dE, e, maxe, maxe_;
 	float fTmp;
-	float *N;
+	float *N, *R;
 	Surfel *pEdgeFeature;
 	float l, s;
 	Array<MeshEdgePtr *> *pEdgePtArray;
@@ -4807,6 +4820,8 @@ int PlanarSurfelDetector::CreateEdgeFeatures(
 	//int iPointEdge_;
 	int nForeground, nBackground;
 	BYTE edgeClass;
+	MeshEdgePtr **pEdgePtrPtrArray;
+	int nTmp;
 
 	while (pSegmentEndpoint2)
 	{
@@ -4975,6 +4990,8 @@ int PlanarSurfelDetector::CreateEdgeFeatures(
 
 				pEdgeFeature->bEdge = true;
 
+				pEdgeFeature->flags = RVLSURFEL_FLAG_RF;
+
 				N = pEdgeFeature->N;
 
 				RVLCOPY3VECTOR(NE, N);
@@ -4991,8 +5008,6 @@ int PlanarSurfelDetector::CreateEdgeFeatures(
 
 				pEdgeFeature->physicalSize = l;
 
-				pEdgeFeature->size = pSegmentEndpoint2->Idx - pSegmentEndpoint1->Idx;
-
 				// Assign points to the new edge feature.
 
 				iPointEdge = pSegmentEndpoint1->Idx;
@@ -5008,18 +5023,70 @@ int PlanarSurfelDetector::CreateEdgeFeatures(
 					iPointEdge = (iPointEdge + 1) % pBoundary->n;
 				}
 
+				// Determine boundary.
+
 				RVLMEM_ALLOC_STRUCT(pMem, Array<MeshEdgePtr *>, pEdgePtArray);
 
-				pEdgePtArray->Element = pBoundary->Element + pSegmentEndpoint1->Idx;
-				pEdgePtArray->n = pEdgeFeature->size;
-
-				pEdgeFeature->BoundaryArray.Element = pEdgePtArray;
 				pEdgeFeature->BoundaryArray.n = 1;
+				pEdgeFeature->BoundaryArray.Element = pEdgePtArray;
+
+				if (pSegmentEndpoint2->Idx >= pSegmentEndpoint1->Idx)
+				{
+					pEdgePtArray->Element = pBoundary->Element + pSegmentEndpoint1->Idx;
+					pEdgePtArray->n = pSegmentEndpoint2->Idx - pSegmentEndpoint1->Idx;					
+				}
+				else
+				{
+					pEdgePtArray->n = pSegmentEndpoint2->Idx - pSegmentEndpoint1->Idx + pBoundary->n;
+
+					RVLMEM_ALLOC_STRUCT_ARRAY(pMem, MeshEdgePtr *, pEdgePtArray->n, pEdgePtrPtrArray);
+
+					pEdgePtArray->Element = pEdgePtrPtrArray;
+
+					nTmp = pBoundary->n - pSegmentEndpoint1->Idx;
+
+					memcpy(pEdgePtrPtrArray, pBoundary->Element + pSegmentEndpoint1->Idx, nTmp * sizeof(MeshEdgePtr *));
+
+					pEdgePtrPtrArray += nTmp;
+
+					memcpy(pEdgePtrPtrArray, pBoundary->Element, pSegmentEndpoint2->Idx * sizeof(MeshEdgePtr *));
+				}	
+
+				pEdgeFeature->size = pEdgePtArray->n * pSurfels->edgeDepth;
+
+				// Compute other edge feature parameters.
+
+				R = pEdgeFeature->R;
+
+				RVLCOPY3VECTOR(N, Z);
+				RVLCOPY3VECTOR(V, X);
+				RVLCROSSPRODUCT3(Z, X, Y);
+				RVLCOPYMX3X3(R_, R);
+
+				pEdgeFeature->r1 = 0.5f * l;
+				pEdgeFeature->r2 = r2;
 
 				//
 
 				iNewFeature_++;
 			}
+			//else
+			//{
+			//	nOcclusionEdges++;
+
+			//	iPointEdge = pSegmentEndpoint1->Idx;
+
+			//	while (iPointEdge != pSegmentEndpoint2->Idx)
+			//	{
+			//		pEdgePtr = pBoundary->Element[iPointEdge];
+
+			//		iPt = RVLPCSEGMENT_GRAPH_GET_NODE(pEdgePtr);
+
+			//		pSurfels->edgeMap[iPt] = -nOcclusionEdges;
+
+			//		iPointEdge = (iPointEdge + 1) % pBoundary->n;
+			//	}
+			//}
 
 			// (pSegmentEndpoint1, pSegmentEndpoint2) <- (pSegmentEndpoint2, pSegmentEndpoint2->pNext)
 

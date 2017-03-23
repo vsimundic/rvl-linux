@@ -360,7 +360,8 @@ namespace RVL
 			Mesh *pMesh,
 			SurfelGraph *pSurfels,
 			Array<MeshEdgePtr *> *pBoundary,
-			int iNewFeature);
+			int iNewFeature,
+			int &nOcclusionEdges);
 		void DeallocateMemory();
 		void CutPropagation(
 			Mesh *pMesh,

@@ -185,6 +185,9 @@ int main(int argc, char ** argv)
 				segmentationImageFileName.erase(segmentationImageFileName.find_last_of("."));
 				segmentationImageFileName += "OGLabels.png";
 				objectDetector.pObjects->SaveSegmentationLabelImg(segmentationImageFileName);
+
+				cv::imshow("Segmentation", objectDetector.pObjects->CreateSegmentationImage());
+				cv::waitKey();
 			}
 #endif
 		}
@@ -195,6 +198,8 @@ int main(int argc, char ** argv)
 		objectDetector.DetectObjects(MeshFileName);
 
 		objectDetector.Evaluate(fp, MeshFileName);
+
+		//objectDetector.CTIs();
 
 #ifdef RVLSURFEL_IMAGE_ADJACENCY
 		if (objectDetector.bSurfelsFromSSF)
@@ -248,6 +253,11 @@ int main(int argc, char ** argv)
 				objectDetector.pObjects->SaveSegmentationLabelImg(segmentationImageFileName);
 			}
 #endif
+			RECOG::CTISet CTIs;
+
+			objectDetector.pPSGM->CTIs(objectDetector.pObjects, &CTIs);
+
+			objectDetector.pPSGM->DisplayCTIs(&visualizer, &CTIs);
 
 			//detector.DisplaySoftEdges(&visualizer, &mesh, &surfels, SelectionColor);
 			visualizer.Run();

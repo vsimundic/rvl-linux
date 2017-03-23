@@ -1,6 +1,7 @@
 // RVLRecognitionDemo.cpp : Defines the entry point for the console application.
 //
-
+#include <Windows.h>
+#include <ctime>
 //#include "stdafx.h"
 #include <vtkAutoInit.h>
 VTK_MODULE_INIT(vtkRenderingOpenGL2);
@@ -15,6 +16,7 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 #include "Visualizer.h"
 #include "SceneSegFile.hpp"
 #include "SurfelGraph.h"
+#include "ObjectGraph.h"
 #include "PlanarSurfelDetector.h"
 #include "RVLRecognition.h"
 #include "RFRecognition.h"
@@ -23,6 +25,7 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 #include "CTISet.h"
 #include "PSGM.h"
 #include <pcl/common/common.h>
+#include <pcl/registration/registration.h>
 #include <pcl/PolygonMesh.h>
 #include "PCLTools.h"
 #include "RGBDCamera.h"
@@ -78,6 +81,110 @@ void CreateParamList(
 	pParamList->AddID(pParamData, "RF", RVLRECOGNITION_METHOD_RF); //VIDOVIC
 	pParamData = pParamList->AddParam("Save PLY", RVLPARAM_TYPE_ID, &flags); //VIDOVIC
 	pParamList->AddID(pParamData, "yes", RVLRECOGNITION_DEMO_FLAG_SAVE_PLY); //VIDOVIC
+}
+
+void GenerateSegmentNeighbourhood(PSGM * psgm, double radius)
+{
+	psgm->segmentN_PD.clear();
+	pcl::PointCloud<pcl::PointXYZINormal>::Ptr cloud_destination(new pcl::PointCloud<pcl::PointXYZINormal>);
+	//creating PCL point cloud
+	cloud_destination->width = psgm->pMesh->NodeArray.n;
+	cloud_destination->height = 1;
+	cloud_destination->is_dense = false;
+	cloud_destination->points.resize(cloud_destination->width * cloud_destination->height);
+
+	for (int i = 0; i <psgm->pMesh->NodeArray.n; i++)
+	{
+		cloud_destination->points[i].x = psgm->pMesh->NodeArray.Element[i].P[0];
+		cloud_destination->points[i].y = psgm->pMesh->NodeArray.Element[i].P[1];
+		cloud_destination->points[i].z = psgm->pMesh->NodeArray.Element[i].P[2];
+
+		cloud_destination->points[i].normal_x = psgm->pMesh->NodeArray.Element[i].N[0];
+		cloud_destination->points[i].normal_y = psgm->pMesh->NodeArray.Element[i].N[1];
+		cloud_destination->points[i].normal_z = psgm->pMesh->NodeArray.Element[i].N[2];
+	}
+
+	pcl::search::KdTree<pcl::PointXYZINormal>::Ptr kdtree = boost::make_shared<pcl::search::KdTree<pcl::PointXYZINormal>>((new pcl::search::KdTree<pcl::PointXYZINormal>));
+	kdtree->setInputCloud(cloud_destination);
+
+	RECOG::PSGM_::Cluster *pCluster;
+	Surfel *pSurfel;
+	RVL::QLIST::Index2 *pt;
+
+	//Finding centroids
+	float *centroids = new float[3 * psgm->clusters.n];
+	memset(centroids, 0, 3 * psgm->clusters.n*sizeof(float));
+	int noPts;
+	for (int iCluster = 0; iCluster < psgm->clusters.n; iCluster++)
+	{
+		pCluster = psgm->clusters.Element[iCluster];
+		noPts = 0;
+		for (int i = 0; i < pCluster->iSurfelArray.n; i++)
+		{
+			pSurfel = &psgm->pSurfels->NodeArray.Element[pCluster->iSurfelArray.Element[i]];
+			pt = pSurfel->PtList.pFirst;
+			for (int k = 0; k < pSurfel->size; k++)
+			{
+				centroids[3 * iCluster] += psgm->pMesh->NodeArray.Element[pt->Idx].P[0];
+				centroids[3 * iCluster + 1] += psgm->pMesh->NodeArray.Element[pt->Idx].P[1];
+				centroids[3 * iCluster + 2] += psgm->pMesh->NodeArray.Element[pt->Idx].P[2];
+				noPts++;
+				pt = pt->pNext;
+			}
+		}
+		centroids[3 * iCluster] /= noPts;
+		centroids[3 * iCluster + 1] /= noPts;
+		centroids[3 * iCluster + 2] /= noPts;
+	}
+
+	std::vector<int> pointIdxRadiusSearch; //to store index of surrounding points
+	std::vector<float> pointRadiusSquaredDistance; // to store distance to surrounding points
+	pcl::PointXYZINormal searchPoint;
+	vtkSmartPointer<vtkPoints> points;
+	vtkSmartPointer<vtkFloatArray> normals;
+	vtkSmartPointer<vtkCellArray> verts;
+	vtkSmartPointer<vtkPolyData> PD;
+	int ptIdx = 0;
+	for (int iCluster = 0; iCluster < psgm->clusters.n; iCluster++)
+	{
+		points = vtkSmartPointer<vtkPoints>::New();
+		normals = vtkSmartPointer<vtkFloatArray>::New();
+		normals->SetNumberOfComponents(3);
+		verts = vtkSmartPointer<vtkCellArray>::New();
+		searchPoint.x = centroids[3 * iCluster];
+		searchPoint.y = centroids[3 * iCluster + 1];
+		searchPoint.z = centroids[3 * iCluster + 2];
+
+		pointIdxRadiusSearch.clear();
+		pointRadiusSquaredDistance.clear();
+		kdtree->radiusSearch(searchPoint, radius, pointIdxRadiusSearch, pointRadiusSquaredDistance);
+		ptIdx = 0;
+		for (int i = 0; i < pointIdxRadiusSearch.size(); i++)
+		{
+			points->InsertNextPoint(cloud_destination->points[pointIdxRadiusSearch.at(i)].x, cloud_destination->points[pointIdxRadiusSearch.at(i)].y, cloud_destination->points[pointIdxRadiusSearch.at(i)].z);
+			normals->InsertNextTuple(cloud_destination->points[pointIdxRadiusSearch.at(i)].normal);
+			verts->InsertNextCell(1);
+			verts->InsertCellPoint(ptIdx);
+			ptIdx++;
+		}
+
+		PD = vtkSmartPointer<vtkPolyData>::New();
+		PD->SetPoints(points);
+		PD->GetPointData()->SetNormals(normals);
+		PD->SetVerts(verts);
+
+		//subsampling the scene:
+		vtkSmartPointer<vtkCleanPolyData> cleanFilter = vtkSmartPointer<vtkCleanPolyData>::New();
+		cleanFilter->SetInputData(PD);
+		cleanFilter->PointMergingOn();
+		cleanFilter->SetAbsoluteTolerance(0.005);
+		cleanFilter->ToleranceIsAbsoluteOn();
+		cleanFilter->Update();
+
+		psgm->segmentN_PD.insert(std::make_pair(iCluster, cleanFilter->GetOutput()));
+	}
+	delete[] centroids;
+	
 }
 
 int main(int argc, char ** argv)
@@ -294,12 +401,12 @@ int main(int argc, char ** argv)
 		{
 			recognition.LoadModelDataBase(); //Vidovic
 
-			recognition.LoadModelMeshDB(modelSequenceFileName);
+			recognition.LoadModelMeshDB(modelSequenceFileName, true, 0.4);
 
 			Mesh mesh;
 
 			//Vidovic
-			char filePath[200];			
+			char filePath[200];
 
 			char *CTIFileName = NULL;
 
@@ -311,22 +418,33 @@ int main(int argc, char ** argv)
 
 			recognition.pECCVGT->Init(sceneSequence, GTFolder, modelsInDB);
 
-			recognition.pECCVGT->SaveGTFile("D:\\ARP3D\\TUW_GT.txt");			
+			//recognition.pECCVGT->SaveGTFile("D:\\ARP3D\\TUW_GT.txt");			
 
-			FILE *fpHypothesisEvaluation = fopen("D:\\ARP3D\\compare_TNM_Valid_TMP.txt", "w");
+			//FILE *fpHypothesisEvaluation = fopen("D:\\ARP3D\\compare_TNM_Valid_TMP.txt", "w");
 
-			FILE *fpLog = fopen("D:\\ARP3D\\evaluationLog.txt", "w");			
+			//FILE *fpLog = fopen("D:\\ARP3D\\evaluationLog.txt", "w");			
+
+			FILE *fpPoseError = fopen("C:\\RVL\\ExpRez\\poseError.txt", "w");
+
+			FILE *fpnotFirstInfo = fopen("C:\\RVL\\ExpRez\\notFirstInfo.txt", "w");
+
+			FILE *fpnotFirstPoseErr = fopen("C:\\RVL\\ExpRez\\notFirstInfo.txt", "w");
 
 			//recognition.pECCVGT->SaveGTFile("C:\\RVL\\ExpRez\\TUW_GT.txt");
 
-			//FILE *fpHypothesisEvaluation = fopen("C:\\RVL\\ExpRez\\compare_TNM_Valid_TMP.txt", "w");
+			FILE *fpHypothesisEvaluation = fopen("C:\\RVL\\ExpRez\\compare_TNM_Valid_TMP.txt", "w");
 
-			//FILE *fpLog = fopen("C:\\RVL\\ExpRez\\evaluationLog.txt", "w");
+			FILE *fpLog = fopen("C:\\RVL\\ExpRez\\evaluationLog.txt", "w");
 
 			recognition.LoadCompleteSegmentGT(sceneSequence);
 
+			LARGE_INTEGER ctr1, ctr2, freq;
+			LARGE_INTEGER ctr1_, ctr2_, freq_;
+
 			while (sceneSequence.GetNextPath(filePath))
 			{
+				QueryPerformanceCounter((LARGE_INTEGER *)&ctr1);
+
 				printf("Scene %s...\n", filePath);
 
 				recognition.SetSceneFileName(filePath);
@@ -353,7 +471,7 @@ int main(int argc, char ** argv)
 
 				//recognition.SaveMatches();
 
-	#ifdef PSGM_RECOGNITION_VISUALIZE_SCENE
+#ifdef PSGM_RECOGNITION_VISUALIZE_SCENE
 				//Visualize currennt scene (close visualizer window by pressing 'q' key)
 				surfels.NodeColors(SelectionColor);
 				recognition.InitDisplay(&visualizer, &mesh, SelectionColor);
@@ -361,21 +479,62 @@ int main(int argc, char ** argv)
 				visualizer.Run();
 
 				visualizer.renderer->RemoveAllViewProps();
-	#endif
 #endif
-				recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, 7);
-				
+#endif
+				//Evaluate CTI match
+				//recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, 7);
+
 				printf("Scene %s...finished!\n\n", filePath);
 
 				mesh.LoadPolyDataFromPLY(filePath);
-				// Visualization
+
 
 				//surfels.NodeColors(SelectionColor);
+				
 				visualizer.renderer->RemoveAllViewProps();
 				recognition.InitDisplay(&visualizer, &mesh, SelectionColor);
-				
 				recognition.Display();
-				recognition.AddBestCTIModelsToVisualizer(&visualizer, true, PCLICP, PCLICPVariants::GeneralizedICP);
+
+				QueryPerformanceCounter((LARGE_INTEGER *)&ctr1_);
+
+				//pcl::PointCloud<pcl::PointXYZINormal>::Ptr cloud_destination(new pcl::PointCloud<pcl::PointXYZINormal>);
+				////creating destination cloud
+				//cloud_destination->width = mesh.NodeArray.n;
+				//cloud_destination->height = 1;
+				//cloud_destination->is_dense = false;
+				//cloud_destination->points.resize(cloud_destination->width * cloud_destination->height);
+
+				//for (int i = 0; i < mesh.NodeArray.n; i++)
+				//{
+				//	cloud_destination->points[i].x = mesh.NodeArray.Element[i].P[0];
+				//	cloud_destination->points[i].y = mesh.NodeArray.Element[i].P[1];
+				//	cloud_destination->points[i].z = mesh.NodeArray.Element[i].P[2];
+
+				//	cloud_destination->points[i].normal_x = mesh.NodeArray.Element[i].N[0];
+				//	cloud_destination->points[i].normal_y = mesh.NodeArray.Element[i].N[1];
+				//	cloud_destination->points[i].normal_z = mesh.NodeArray.Element[i].N[2];
+				//}
+
+				//pcl::search::KdTree<pcl::PointXYZINormal>::Ptr kdtree = boost::make_shared<pcl::search::KdTree<pcl::PointXYZINormal>>((new pcl::search::KdTree<pcl::PointXYZINormal>));
+				//kdtree->setInputCloud(cloud_destination); //using this doesn't really improve anything
+
+				//recognition.CalculateICPCost(PCLICP, PCLICPVariants::Point_to_plane, &kdtree);
+				GenerateSegmentNeighbourhood(&recognition, 0.1);
+				recognition.CalculateNNCost(&visualizer, PCLICP, PCLICPVariants::Point_to_plane);
+
+				//evaluate ICP
+				recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, fpPoseError, fpnotFirstInfo, fpnotFirstPoseErr, 7, true);
+				//recognition.AddModelsToVisualizer(&visualizer, true, PCLICP, PCLICPVariants::Point_to_plane, NULL/*&kdtree*/);
+				QueryPerformanceCounter((LARGE_INTEGER *)&ctr2_);
+				QueryPerformanceFrequency((LARGE_INTEGER *)&freq_);
+				float timevalueICP = (ctr2_.QuadPart - ctr1_.QuadPart) * 1000.0 / freq_.QuadPart;
+
+
+				QueryPerformanceCounter((LARGE_INTEGER *)&ctr2);
+				QueryPerformanceFrequency((LARGE_INTEGER *)&freq);
+				float timevalue = (ctr2.QuadPart - ctr1.QuadPart) * 1000.0 / freq.QuadPart;
+				std::cout << "Ukupno vrijeme: " << timevalue << std::endl;
+				std::cout << "ICP vrijeme: " << timevalueICP << std::endl;
 				visualizer.Run();
 
 
@@ -415,11 +574,11 @@ int main(int argc, char ** argv)
 
 			while (sceneSequence.GetNextPath(filePath))
 			{
-				
+
 				printf("Scene %s...\n", filePath);
 
 				mesh.LoadPolyDataFromPLY(filePath);
-				
+
 				recognition.SetSceneFileName(filePath);
 
 				//Alokacija prostora za matcheve - TEMP
@@ -474,7 +633,7 @@ int main(int argc, char ** argv)
 			recognition.Display();
 			visualizer.Run();
 
-		
+
 
 		}
 	}	// if (method == RVLRECOGNITION_METHOD_PSGM)
@@ -491,8 +650,9 @@ int main(int argc, char ** argv)
 	if (modelSequenceFileName)
 		delete[] modelSequenceFileName;
 
-	if (segmentGTFileName)
-		delete[] segmentGTFileName;
+	
+	//if (segmentGTFileName)
+	//	delete[] segmentGTFileName;
 
 	//END VIDOVIC
 

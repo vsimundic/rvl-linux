@@ -6,6 +6,17 @@
 
 namespace RVL
 {
+	class ObjectDetector;
+
+	namespace OBJECT_DETECTION
+	{
+		void Symmetry(
+			SURFEL::ObjectGraph *pObjects, 
+			int iObject1, 
+			int iObject2, 
+			void *vpData);
+	}
+
 	class ObjectDetector
 	{
 	public:
@@ -17,6 +28,7 @@ namespace RVL
 		void Evaluate(
 			FILE *fp,
 			char *fileName);
+		void CTIs();
 		
 	public:
 		DWORD flags;
@@ -24,12 +36,18 @@ namespace RVL
 		CRVLMem *pMem0;
 		CRVLMem *pMem;
 		char *SVMClassifierParamsFileName;
+		float convexityThr;
+		float convexityRatioThr1;
+		float convexityRatioThr2;
 		bool bSegmentToObjects;
 		bool bObjectAggregationLevel2;
 		bool bSurfelsFromSSF;
+		bool bCTIBasedObjectAggregation;
+		bool bConcaveObjectAggregation;
 		SurfelGraph *pSurfels;
 		PlanarSurfelDetector *pSurfelDetector;
 		SURFEL::ObjectGraph *pObjects;
+		PSGM *pPSGM;
 		Mesh mesh;
 		char *cfgFileName;
 		void *vpMeshBuilder;
