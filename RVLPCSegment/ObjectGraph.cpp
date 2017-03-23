@@ -1516,7 +1516,7 @@ void ObjectGraph::ComputeRelationCost(
 		data.PConvex = (f1 >= -concaveAngleIntThr ? 1.0f : (f1 >= -concaveAngleExtThr ? concaveMinCost + (1.0f - concaveMinCost) * (concaveAngleExtThr + f1) / (concaveAngleExtThr - concaveAngleIntThr) : concaveMinCost));
 
 		//data.PClean = 0.5f + 0.5f * f2;
-		data.PClean = (RVLABS(f1) >= 20.0f * DEG2RAD ? (f3 >= 0.5 ? 2.0f * (f3 - 0.5f) : 0.0f) : 1.0f);
+		data.PClean = (RVLABS(f1) >= 20.0f * DEG2RAD ? (f2 >= 0.5 ? 2.0f * (f2 - 0.5f) : 0.0f) : 1.0f);
 
 		data.P = RVLMIN(data.PContinuous, RVLMIN(data.PConvex, data.PClean));
 
@@ -1864,6 +1864,7 @@ void ObjectGraph::DetermineObjectConvexityData(float convexThr, float minDiffFli
 	Surfel *pSurfel;
 	Surfel *pSurfelIN;
 	float addedSize = 0;
+	float objectSize = 0;
 	bool fail = false;
 	Array<SortIndex<int>> sortedElementIdxArray;
 	sortedElementIdxArray.Element = new SortIndex < int >[this->pSurfels->NodeArray.n];
@@ -1901,6 +1902,7 @@ void ObjectGraph::DetermineObjectConvexityData(float convexThr, float minDiffFli
 
 		//Run through surfels
 		addedSize = 0;
+		objectSize = 0;
 		for (int iS = 0; iS < sortedElementIdxArray.n; iS++)
 		{
 			sortedIdx = sortedElementIdxArray.Element + iS;
@@ -1909,6 +1911,7 @@ void ObjectGraph::DetermineObjectConvexityData(float convexThr, float minDiffFli
 			//check if edge
 			if (pSurfel->bEdge)
 				continue;
+			objectSize += pSurfel->size;
 			//getting current surfel vertex list
 			pSurfelVertexList = this->pSurfels->surfelVertexList.Element + sortedIdx->idx; //piElement->Idx;
 			
@@ -1974,7 +1977,7 @@ void ObjectGraph::DetermineObjectConvexityData(float convexThr, float minDiffFli
 		}
 
 		//ratio
-		defDirRatio = addedSize / (float)pObject->size;
+		defDirRatio = addedSize / objectSize;// (float)pObject->size;
 		//if ((addedSize / (float)pObject->size) < ratioThr)
 		//	this->additionalObjectData.CHVertexIndices.at(iObject).clear(); //if the ratio is lower than threshold, then empty it's list of vertices
 
@@ -2054,7 +2057,7 @@ void ObjectGraph::DetermineObjectConvexityData(float convexThr, float minDiffFli
 		}
 
 		//ratio
-		otherDirRatio = addedSize / (float)pObject->size;
+		otherDirRatio = addedSize / objectSize;// (float)pObject->size;
 
 		//Determine which direction to use
 		if ((defDirRatio > otherDirRatio) || ((otherDirRatio - defDirRatio) < minDiffFlipReq))
@@ -2070,11 +2073,11 @@ void ObjectGraph::DetermineObjectConvexityData(float convexThr, float minDiffFli
 			if (setflip)
 			{
 				this->additionalObjectData.convexityMultipliers.at(iObject) = -1.0;
-				if (verbose)
-					std::cout << "Object " << iObject << " flipped!" << std::endl;
 			}
 			//std::cout << "Object " << iObject << " is concave!" << std::endl;
 		}
+		if (verbose)
+			std::cout << "Object " << iObject << "has convexity ratios (" << defDirRatio << ", " << otherDirRatio << ") therfore multiplier is: " << this->additionalObjectData.convexityMultipliers.at(iObject) << std::endl;
 	}	// for every object
 	//Deref
 	delete[] sortedElementIdxArray.Element;

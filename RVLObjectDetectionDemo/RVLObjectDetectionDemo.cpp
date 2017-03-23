@@ -26,6 +26,8 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 #include "PCLTools.h"
 #include "RGBDCamera.h"
 #include "PCLMeshBuilder.h"
+#include "vtkOBBTree.h"
+#include "vtkLine.h"
 
 using namespace RVL;
 
@@ -49,6 +51,44 @@ void CreateParamList(
 	pParamData = pParamList->AddParam("SegmentationResultsFileName", RVLPARAM_TYPE_STRING, pSegmentationResultsFileName);
 	pParamData = pParamList->AddParam("Visualization.3D", RVLPARAM_TYPE_BOOL, &b3DVisualization);
 	pParamData = pParamList->AddParam("Visualization.2D", RVLPARAM_TYPE_BOOL, &b2DVisualization);
+}
+
+void VisualizeSurfelNormals(Visualizer *vis, SurfelGraph* pSurfels)
+{
+	Surfel *pSurfel;
+	vtkSmartPointer<vtkPoints> points = vtkSmartPointer<vtkPoints>::New();
+	points->SetDataTypeToDouble();
+	vtkSmartPointer<vtkFloatArray> normals = vtkSmartPointer<vtkFloatArray>::New();
+	normals->SetNumberOfComponents(3);
+	normals->SetName("Normals");
+	for (int i = 0; i < pSurfels->NodeArray.n; i++)
+	{
+		pSurfel = pSurfels->NodeArray.Element + i;
+		if ((pSurfel->size < 2) || pSurfel->bEdge)
+			continue;
+
+		points->InsertNextPoint(pSurfel->P);
+		normals->InsertNextTuple(pSurfel->N);
+	}
+	vtkSmartPointer<vtkPolyData> pd = vtkSmartPointer<vtkPolyData>::New();
+	pd->SetPoints(points);
+	pd->GetPointData()->AddArray(normals);
+	pd->GetPointData()->SetActiveNormals("Normals");
+
+	vtkSmartPointer<vtkArrowSource> arrowSource = vtkSmartPointer<vtkArrowSource>::New();
+
+	vtkSmartPointer<vtkGlyph3D> glyph3D = vtkSmartPointer<vtkGlyph3D>::New();
+	glyph3D->SetSourceConnection(arrowSource->GetOutputPort());
+	glyph3D->SetVectorModeToUseNormal();
+	glyph3D->SetInputData(pd);
+	glyph3D->SetScaleFactor(0.03);
+	glyph3D->Update();
+
+	vtkSmartPointer<vtkPolyDataMapper> mapper =	vtkSmartPointer<vtkPolyDataMapper>::New();
+	mapper->SetInputConnection(glyph3D->GetOutputPort());
+	vtkSmartPointer<vtkActor> actor = vtkSmartPointer<vtkActor>::New();
+	actor->SetMapper(mapper);
+	vis->renderer->AddActor(actor);
 }
 
 int main(int argc, char ** argv)
@@ -179,7 +219,7 @@ int main(int argc, char ** argv)
 			SelectionColor[2] = 0;
 
 			objectDetector.pSurfels->NodeColors(SelectionColor);
-
+			
 			Visualizer visualizer;
 
 			visualizer.b2D = b2DVisualization;
@@ -187,7 +227,8 @@ int main(int argc, char ** argv)
 
 			visualizer.Create();
 			objectDetector.pSurfels->InitDisplay(&visualizer, &(objectDetector.mesh), objectDetector.pSurfelDetector);
-
+			//VisualizeSurfelNormals(&visualizer, objectDetector.pSurfels);
+			//VisualizeSurfelOBB(&visualizer, objectDetector.pObjects, &objectDetector.mesh);
 #ifdef RVLSURFEL_IMAGE_ADJACENCY
 			if (objectDetector.bSegmentToObjects)
 			{
