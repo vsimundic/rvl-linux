@@ -4,12 +4,12 @@
 #include "SceneSegFile.hpp"
 #include "SVMClassifier.h"
 #include <set>
-
-//#define RVLPCSEGMENT_OBJECT_GRAPH_LOG
+#include "opencv2\opencv.hpp"
 
 #define RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_HEURISTIC	0
 #define RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_SVM			1
 #define RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_NLMC		2
+#define RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_NLMC2		3
 
 namespace RVL
 {
@@ -22,6 +22,7 @@ namespace RVL
 			int idx;
 			SurfelAdjecencyDescriptors desc;
 			float cost;
+			float distance;
 			AgEdge *pNext;
 		};
 
@@ -68,6 +69,8 @@ namespace RVL
 			std::vector<std::set<int>> CHVertexIndices;
 			std::vector<std::map<int, bool>> ObjectsSurfelConvexity;
 			std::vector<RVLColorDescriptor> colordescriptor;
+			std::vector<float> convexityMultipliers;
+			std::vector<std::vector<float>> bbDistances;
 		};
 		//
 
@@ -84,12 +87,15 @@ namespace RVL
 #ifdef RVLSURFEL_IMAGE_ADJACENCY //Vidovic
 			void CalculateOverAndUnderSegmentation(int *E, int &N, bool useGTNoPix = false, std::string GTlabImgFilename = "", bool useBackground = true);	//Filko
 #endif
-			void DetermineObjectConvexityData(float convexThr = 0.005, float ratioThr = 0.9);	//Filko
+			void DetermineObjectConvexityData(float convexThr = 0.005, float minDiffFlipReq = 0.1, bool setflip = false);	//Filko
 			void CalculateConvexityRatiosForObjectPair(int firstObject, int secondObject, float& firstRatio, float& secondRatio, float convexThr = 0.005);	//Filko
 #ifdef RVLSURFEL_COLOR_HISTOGRAM //Vidovic
 			void CalculateObjectsColorHistogram(); //Filko
 #endif
 			void ObjectAggregationLevel2_ViaObjectPairConvexity(float convexThr, float ratioThr, float ratioThr2, int objValidThr = 300, bool verbose = false); //Filko - NOT OPTIMIZED!!!!
+			void SaveSegmentationLabelImg(std::string filename); //Filko
+			bool CheckObjectUniformity(int objectIdx, int minSurfelSize, float uniThr); //Filko
+			bool CheckIfNeighbours(int iObject1, int iObject2);	//Filko
 			void WERSegmentation();
 			void ComputeRelationCosts();
 			void ComputeRelationCost(
@@ -99,6 +105,8 @@ namespace RVL
 			void SortElements(
 				GRAPH::AggregateNode<AgEdge> *pAgNode,
 				Array<SortIndex<int>> *pSortedElementIdxArray);
+			void SortObjects();
+			void CountValidObjects();
 			void InitDisplay(
 				Visualizer *pVisualizer,
 				Mesh *pMesh,
@@ -111,6 +119,7 @@ namespace RVL
 			void WriteObjectDataToFile(FILE *fp);
 			void InitSVMClassifier(char *svmParamsFileName);	//Nyarko
 			cv::Mat CreateSegmentationImage();
+			cv::Mat CreateSegmentationImageFromSSF();
 			void Debug();
 
 		public:
@@ -129,6 +138,13 @@ namespace RVL
 			ObjectGraphObjectData additionalObjectData;	//Filko
 			//Array<int> *sortedElementIdxArray;
 			DWORD relationClassifier;
+			Array<SortIndex<int>> sortedObjectArray;
+			int nValidObjects;
+			bool bObjectAggregationLevel2Uncertainty;
+			bool bObjectAggregationLevel2Edges;
+			void(*objectAggregationLevel2Criterion)(ObjectGraph *pObjects, int iObject1, int iObject2, void *vpData);
+			void *vpObjectAggregationLevel2CriterionData;
+
 		private:
 			QLIST::Index *elementMem;
 			//int *sortedElementIdxMem;

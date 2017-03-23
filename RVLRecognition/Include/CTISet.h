@@ -13,6 +13,7 @@ namespace RVL
 				float d;
 				float e;
 				bool valid;
+				int iVertex;
 			};
 
 			struct ModelInstance
@@ -48,9 +49,6 @@ namespace RVL
 			int *segmentCTIIdxMem;
 			int maxSegmentIdx;
 			int nModels;
-
-;
-
 		};
 	}
 }

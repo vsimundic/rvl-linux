@@ -1,11 +1,18 @@
 #pragma once
 
-#define RVLSURFEL_DISPLAY_MODE_SURFELS			0
-#define RVLSURFEL_DISPLAY_MODE_BOUNDARY			1
-#define RVLSURFEL_DISPLAY_MODE_NEIGHBOR_PAIR	2
+#define RVLSURFEL_IMAGE_ADJACENCY //FILKO usporava debug :)
+
+#define RVLSURFEL_DISPLAY_MODE_SURFELS					0
+#define RVLSURFEL_DISPLAY_MODE_BOUNDARY					1
+#define RVLSURFEL_DISPLAY_MODE_NEIGHBOR_PAIR			2
+#define RVLSURFEL_DISPLAY_MODE_FOREGROUND_BACKGROUND	3
+#define RVLSURFEL_DISPLAY_MODE_CONVEX_CONCAVE			4
+
+#define RVLSURFEL_DISPLAY_VERTEX_NORMAL_HULL
 
 #define RVLSURFEL_EDGE_FLAG_HARD				0x01
 #define RVLSURFEL_EDGE_FLAG_CONVEX				0x02
+#define RVLSURFEL_FLAG_RF						0x04
 
 #define RVLSURFEL_VERSION_0		0
 
@@ -18,6 +25,7 @@ namespace RVL
 		double cupyDescriptor[4];
 		double minDist;
 		int commonBoundaryLength;
+		double avgDist;
 	};
 
 	namespace SURFEL
@@ -33,6 +41,10 @@ namespace RVL
 			bool(*keyPressUserFunction)(Mesh *pMesh, SurfelGraph *pSurfels, std::string &key, void *vpData);
 			int  mode;
 			unsigned char SelectionColor[3];
+			unsigned char ForegroundColor[3];
+			unsigned char BackgroundColor[3];
+			unsigned char ConvexColor[3];
+			unsigned char ConcaveColor[3];
 			int iSelectedSurfel;
 			int iSelectedSurfel2;
 			int iSelection;
@@ -75,6 +87,8 @@ namespace RVL
 			Array<int> iSurfelArray;
 			Vertex *pNext;
 			bool bEdge;
+			BYTE type;
+			float VTX[3];
 		};
 
 
@@ -87,24 +101,26 @@ namespace RVL
 		Array<Array<MeshEdgePtr *>> PolygonBoundaryArray;
 		float P[3];		// centroid
 		float N[3];		// normal
+		float R[9];		// rotation matrix (orientation of the camera RF w.r.t. surfel RF)
 		float d;		// plane offset
 		int RGB[3];		// average color
 		float P0[3];	// central point
 		float V[3];
+		int size;
 		float r0;		// distance 
+		float r1, r2;	// radii of the approximating ellipse
 		QList<SURFEL::EdgePtr> EdgeList;
 		Surfel *pNext;
-		int size;
 		float physicalSize;
 		bool bEdge;
+		BYTE flags;
 		int ObjectID;	//Filko
 #ifdef 	RVLSURFEL_IMAGE_ADJACENCY
 		std::vector<Surfel*> imgAdjacency;	//Filko
 		std::vector<SurfelAdjecencyDescriptors*> imgAdjacencyDescriptors;	//Filko
 		std::vector<int> GTObjHist; //Filko
-#endif
 		RVLColorDescriptor *colordescriptor; //Filko
-
+#endif
 	};
 
 	class SurfelGraph : public Graph < Surfel, MeshEdge, MeshEdgePtr >
@@ -120,6 +136,10 @@ namespace RVL
 		void UpdateNormalHull(
 			Array<SURFEL::NormalHullElement> &NHull,
 			float *N);
+		float Distance(
+			Surfel *pSurfel,
+			float *P,
+			bool bUncertainty = false);
 		void NodeColors(unsigned char *SelectionColor);
 		void Display(
 			Visualizer *pVisualizer,
@@ -134,6 +154,9 @@ namespace RVL
 			int iSurfel,
 			unsigned char *Color);
 		void DisplayEdgeFeatures();
+		void DisplayForegroundAndBackgroundEdges(
+			Visualizer *pVisualizer,
+			Mesh *pMesh);
 		void Init(Mesh *pMesh);
 		void Clear();
 		unsigned char * GetColor(int iSurfel);
@@ -145,7 +168,8 @@ namespace RVL
 		void InitDisplay(
 			Visualizer *pVisualizer,
 			Mesh *pMesh,
-			void *vpDetector);
+			void *vpDetector,
+			bool bCallbackFunctions = true);
 		void DisplaySurfelBoundary(
 			Visualizer *pVisualizer, 
 			Mesh * pMesh, 
@@ -192,6 +216,9 @@ namespace RVL
 		void AssignGroundTruthSegmentation(
 			char *meshFileName,
 			int minSurfelSize);
+		void DisplayConvexAndConcaveEdges(
+			Visualizer *pVisualizer,
+			Mesh *pMesh);
 #endif
 		cv::Mat GenColoredSurfelImgFromSSF(std::shared_ptr<SceneSegFile::SceneSegFile> ssf);
 		//Filko
@@ -222,6 +249,8 @@ namespace RVL
 		Array<SURFEL::Vertex *> vertexArray;
 		Array<QList<QLIST::Index>> surfelVertexList;
 		int nVertexSurfelRelations;
+		float TIVertexToleranceAngle;
+		int edgeDepth;
 	private:
 		unsigned char *nodeColor;
 		QLIST::Index *surfelVertexMem;

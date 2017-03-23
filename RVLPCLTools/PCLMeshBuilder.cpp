@@ -169,6 +169,10 @@ void PCLMeshBuilder::CreateParamList(CRVLMem *pMem)
 	pParamData = ParamList.AddParam("MeshBuilder.normalEstR", RVLPARAM_TYPE_DOUBLE, &normalEstR);
 	pParamData = ParamList.AddParam("MeshBuilder.bilateralFilter", RVLPARAM_TYPE_FLAG, &flags);
 	ParamList.AddID(pParamData, "yes", RVLPCLMESHBUILDER_FLAG_BILATERAL_FILTER);
+	pParamData = ParamList.AddParam("MeshBuilder.organizedPC", RVLPARAM_TYPE_FLAG, &flags);
+	ParamList.AddID(pParamData, "yes", RVLPCLMESHBUILDER_FLAG_ORGANIZED_PC);
+	pParamData = ParamList.AddParam("MeshBuilder.width", RVLPARAM_TYPE_INT, &width);
+	pParamData = ParamList.AddParam("MeshBuilder.height", RVLPARAM_TYPE_INT, &height);
 }
 
 bool PCLMeshBuilder::Load(
@@ -247,6 +251,15 @@ bool PCLMeshBuilder::Load(
 		pMesh->pPolygonData = vtkSmartPointer<vtkPolyData>::New();
 		pMesh->pPolygonData->DeepCopy(pd);
 	}
+
+	if (flags & RVLPCLMESHBUILDER_FLAG_ORGANIZED_PC)
+	{
+		pMesh->bOrganizedPC = true;
+		pMesh->width = width;
+		pMesh->height = height;
+	}
+	else
+		pMesh->bOrganizedPC = false;
 
 	printf("Creating ordered mesh from PCL mesh...");
 

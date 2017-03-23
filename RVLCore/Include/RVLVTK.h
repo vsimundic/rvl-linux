@@ -58,6 +58,8 @@
 #include "vtkHull.h"
 #include "vtkPlanes.h"
 #include "vtkPlaneSource.h"
+#include "vtkPolyDataPointSampler.h"
+#include "vtkDecimatePro.h"
 
 #include "opencv2\opencv.hpp"
 

@@ -3,7 +3,7 @@
 
 //#include "stdafx.h"
 #include <vtkAutoInit.h>
-VTK_MODULE_INIT(vtkRenderingOpenGL);
+VTK_MODULE_INIT(vtkRenderingOpenGL2);
 VTK_MODULE_INIT(vtkInteractionStyle);
 VTK_MODULE_INIT(vtkRenderingFreeType);
 #include "RVLVTK.h"
@@ -34,7 +34,9 @@ void CreateParamList(
 	CRVLMem *pMem,
 	char **pMeshFileName,
 	char **pSequenceFileName,
-	char **pSegmentationResultsFileName)
+	char **pSegmentationResultsFileName,
+	bool &b3DVisualization,
+	bool &b2DVisualization)
 {
 	pParamList->m_pMem = pMem;
 
@@ -45,6 +47,8 @@ void CreateParamList(
 	pParamData = pParamList->AddParam("MeshFileName", RVLPARAM_TYPE_STRING, pMeshFileName);
 	pParamData = pParamList->AddParam("SequenceFileName", RVLPARAM_TYPE_STRING, pSequenceFileName);
 	pParamData = pParamList->AddParam("SegmentationResultsFileName", RVLPARAM_TYPE_STRING, pSegmentationResultsFileName);
+	pParamData = pParamList->AddParam("Visualization.3D", RVLPARAM_TYPE_BOOL, &b3DVisualization);
+	pParamData = pParamList->AddParam("Visualization.2D", RVLPARAM_TYPE_BOOL, &b2DVisualization);
 }
 
 int main(int argc, char ** argv)
@@ -66,10 +70,11 @@ int main(int argc, char ** argv)
 	char *MeshFileName = NULL;
 	char *SequenceFileName = NULL;
 	char *SegmentationResultsFileName = NULL;
+	bool b3DVisualization, b2DVisualization;
 
 	CRVLParameterList ParamList;
 
-	CreateParamList(&ParamList, &mem0, &MeshFileName, &SequenceFileName, &SegmentationResultsFileName);
+	CreateParamList(&ParamList, &mem0, &MeshFileName, &SequenceFileName, &SegmentationResultsFileName, b3DVisualization, b2DVisualization);
 
 	ParamList.LoadParams(cfgFileName);
 
@@ -127,13 +132,25 @@ int main(int argc, char ** argv)
 
 			printf("Scene %s...\n", fileName);
 
-			objectDetector.DetectObjects(fileName);
+			objectDetector.DetectObjects(filePath);
 
 			printf("Scene %s...finished!\n\n", fileName);
 
-			objectDetector.Evaluate(fp, fileName);
+			objectDetector.Evaluate(fp, filePath);
+
+#ifdef RVLSURFEL_IMAGE_ADJACENCY
+			if (objectDetector.bSegmentToObjects)
+			{
+				std::string segmentationImageFileName(filePath);
+				segmentationImageFileName.erase(segmentationImageFileName.find_last_of("."));
+				segmentationImageFileName += "OGLabels.png";
+				objectDetector.pObjects->SaveSegmentationLabelImg(segmentationImageFileName);
+
+				cv::imshow("Segmentation", objectDetector.pObjects->CreateSegmentationImage());
+				cv::waitKey();
+			}
+#endif
 		}
-		fclose(fp);
 		system("pause");
 	}
 	else
@@ -142,6 +159,8 @@ int main(int argc, char ** argv)
 
 		objectDetector.Evaluate(fp, MeshFileName);
 
+		//objectDetector.CTIs();
+
 #ifdef RVLSURFEL_IMAGE_ADJACENCY
 		if (objectDetector.bSurfelsFromSSF)
 		{
@@ -149,7 +168,7 @@ int main(int argc, char ** argv)
 			{
 				//Visualization
 				cv::imshow("Colored surfel image", objectDetector.pSurfels->GenColoredSurfelImgFromSSF(objectDetector.pObjects->ssf));
-				cv::imshow("Colored segmentation image", objectDetector.pObjects->CreateSegmentationImage());
+				cv::imshow("Colored segmentation image", objectDetector.pObjects->CreateSegmentationImageFromSSF());
 				cv::waitKey();
 			}
 		}
@@ -168,6 +187,9 @@ int main(int argc, char ** argv)
 
 			Visualizer visualizer;
 
+			visualizer.b2D = b2DVisualization;
+			visualizer.b3D = b3DVisualization;
+
 			visualizer.Create();
 			objectDetector.pSurfels->InitDisplay(&visualizer, &(objectDetector.mesh), objectDetector.pSurfelDetector);
 
@@ -180,6 +202,21 @@ int main(int argc, char ** argv)
 			else
 #endif
 				objectDetector.pSurfels->Display(&visualizer, &(objectDetector.mesh));
+
+#ifdef RVLSURFEL_IMAGE_ADJACENCY
+			if (objectDetector.bSegmentToObjects)
+			{
+				std::string segmentationImageFileName(MeshFileName);
+				segmentationImageFileName.erase(segmentationImageFileName.find_last_of("."));
+				segmentationImageFileName += "OGLabels.png";
+				objectDetector.pObjects->SaveSegmentationLabelImg(segmentationImageFileName);
+			}
+#endif
+			RECOG::CTISet CTIs;
+
+			objectDetector.pPSGM->CTIs(objectDetector.pObjects, &CTIs);
+
+			objectDetector.pPSGM->DisplayCTIs(&visualizer, &CTIs);
 
 			//detector.DisplaySoftEdges(&visualizer, &mesh, &surfels, SelectionColor);
 			visualizer.Run();

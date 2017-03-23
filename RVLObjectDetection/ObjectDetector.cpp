@@ -9,6 +9,7 @@
 #include "Visualizer.h"
 #include "SceneSegFile.hpp"
 #include "SurfelGraph.h"
+#include "ObjectGraph.h"
 #include "PlanarSurfelDetector.h"
 #include "ObjectGraph.h"
 #include "RVLRecognition.h"
@@ -25,8 +26,15 @@ ObjectDetector::ObjectDetector()
 	cfgFileName = NULL;
 
 	flags = 0x00000000;
+
+	convexityThr = 0.010f;
+	convexityRatioThr1 = 0.77f;
+	convexityRatioThr2 = 0.75f;
+
 	bSegmentToObjects = false;
 	bObjectAggregationLevel2 = false;
+	bCTIBasedObjectAggregation = false;
+	bConcaveObjectAggregation = false;
 
 	pSurfels = NULL;
 	pSurfelDetector = NULL;
@@ -86,6 +94,21 @@ void ObjectDetector::Init()
 		std::cout << "Initializing SVM Classifier!" << std::endl;
 		pObjects->InitSVMClassifier(SVMClassifierParamsFileName);
 	}
+
+	pObjects->objectAggregationLevel2Criterion = OBJECT_DETECTION::Symmetry;
+	pObjects->vpObjectAggregationLevel2CriterionData = this;
+
+	pPSGM = new PSGM;
+
+	pPSGM->CreateParamList(pMem0);
+
+	pPSGM->ParamList.LoadParams(cfgFileName);
+
+	pPSGM->pMem = pMem;
+
+	pPSGM->pSurfels = pSurfels;
+
+	pPSGM->pSurfelDetector = pSurfelDetector;
 }
 
 void ObjectDetector::CreateParamList()
@@ -100,11 +123,16 @@ void ObjectDetector::CreateParamList()
 	ParamList.AddID(pParamData, "yes", RVLOBJECTDETECTION_FLAG_SAVE_PLY);
 	pParamData = ParamList.AddParam("Save SSF", RVLPARAM_TYPE_FLAG, &flags);
 	ParamList.AddID(pParamData, "yes", RVLOBJECTDETECTION_FLAG_SAVE_SSF);
-	pParamData = ParamList.AddParam("Segmentation GT", RVLPARAM_TYPE_FLAG, &flags);
+	pParamData = ParamList.AddParam("ObjectDetector.Segmentation GT", RVLPARAM_TYPE_FLAG, &flags);
 	ParamList.AddID(pParamData, "yes", RVLOBJECTDETECTION_FLAG_SEGMENTATION_GT);
-	pParamData = ParamList.AddParam("SegmentToObjects", RVLPARAM_TYPE_BOOL, &bSegmentToObjects);
-	pParamData = ParamList.AddParam("ObjectAggregationLevel2", RVLPARAM_TYPE_BOOL, &bObjectAggregationLevel2);
-	pParamData = ParamList.AddParam("SVMClassifierParamsFileName", RVLPARAM_TYPE_STRING, SVMClassifierParamsFileName);
+	pParamData = ParamList.AddParam("ObjectDetector.SegmentToObjects", RVLPARAM_TYPE_BOOL, &bSegmentToObjects);
+	pParamData = ParamList.AddParam("ObjectDetector.ObjectAggregationLevel2", RVLPARAM_TYPE_BOOL, &bObjectAggregationLevel2);
+	pParamData = ParamList.AddParam("ObjectDetector.SVMClassifierParamsFileName", RVLPARAM_TYPE_STRING, SVMClassifierParamsFileName);
+	pParamData = ParamList.AddParam("ObjectDetector.CTIBasedObjectAggregation", RVLPARAM_TYPE_BOOL, &bCTIBasedObjectAggregation);
+	pParamData = ParamList.AddParam("ObjectDetector.convexityThr", RVLPARAM_TYPE_FLOAT, &convexityThr);
+	pParamData = ParamList.AddParam("ObjectDetector.convexityRatioThr1", RVLPARAM_TYPE_FLOAT, &convexityRatioThr1);
+	pParamData = ParamList.AddParam("ObjectDetector.convexityRatioThr2", RVLPARAM_TYPE_FLOAT, &convexityRatioThr2);
+	pParamData = ParamList.AddParam("ObjectGraph.concaveObjectAggregation", RVLPARAM_TYPE_BOOL, &bConcaveObjectAggregation);
 }
 
 void ObjectDetector::DetectObjects(char *MeshFilePathName)
@@ -179,8 +207,8 @@ void ObjectDetector::DetectObjects(char *MeshFilePathName)
 				if (pSurfel->size <= 1)
 					continue;
 
-				if (pSurfel->bEdge)
-					continue;
+				//if (pSurfel->bEdge)
+				//	continue;
 
 				pSurfels->DetermineImgAdjDescriptors(pSurfel, &mesh);
 			}
@@ -192,6 +220,14 @@ void ObjectDetector::DetectObjects(char *MeshFilePathName)
 			printf("completed.\n");
 
 			pObjects->Debug();
+
+			// Detect vertices.
+
+			pSurfels->DetectVertices(&mesh);
+
+			// Assign mesh to PSGM.
+
+			pPSGM->pMesh = &mesh;
 		}
 
 		if (flags & RVLOBJECTDETECTION_FLAG_SAVE_SSF)
@@ -220,7 +256,7 @@ void ObjectDetector::DetectObjects(char *MeshFilePathName)
 		{
 			printf("Aggregating objects (LEVEL 2)... ");
 
-			pSurfels->DetectVertices(&mesh);
+			//pSurfels->DetectVertices(&mesh);
 
 			//Generate color histograms for surfels
 			/*std::string imgFileName(MeshFileName);
@@ -238,7 +274,11 @@ void ObjectDetector::DetectObjects(char *MeshFilePathName)
 			cv::imshow("Colored object image", pObjects->CreateSegmentationImage());
 			cv::waitKey(1);
 			/*VisualizeObjectGraphVertexPointCloud(&objects, 100);*/
-			pObjects->ObjectAggregationLevel2_ViaObjectPairConvexity(0.015, 0.77, 0.75, 300, true);
+			//if (bCTIBasedObjectAggregation)
+			pPSGM->InitSymmetry(pObjects);
+			pObjects->DetermineObjectConvexityData(convexityThr, 0.15, bConcaveObjectAggregation);
+			pObjects->ObjectAggregationLevel2_ViaObjectPairConvexity(convexityThr, convexityRatioThr1, convexityRatioThr2, 300);
+			pPSGM->FreeSymmetry();
 			cv::imshow("New Colored object image", pObjects->CreateSegmentationImage());
 			cv::waitKey(1);
 			////
@@ -260,20 +300,43 @@ void ObjectDetector::Evaluate(
 	char *fileName)
 {
 #ifdef RVLSURFEL_IMAGE_ADJACENCY
-	if (bSurfelsFromSSF)
+	if (bSegmentToObjects)
 	{
-		if (bSegmentToObjects)
-		{
-			//Evaluation
-			int E[2];
-			int N = 0;
-			pObjects->CalculateOverAndUnderSegmentation_SSF(E, N, false);
-			std::cout << "Oversegmenation error: " << 100.0f * (1 - E[0] / (float)N) << "%" << std::endl;
-			std::cout << "Undersegmenation error: " << 100.0f * E[1] / (float)N << "%" << std::endl;
+		int E[2];
+		int N = 0;
 
-			if (fp)
-				fprintf(fp, "%s\t%d\t%d\t%d\n", fileName, E[0], E[1], N);
-		}
+		if (bSurfelsFromSSF)
+			pObjects->CalculateOverAndUnderSegmentation_SSF(E, N, true, false);
+		else
+			pObjects->CalculateOverAndUnderSegmentation(E, N, true, std::string(fileName), false);
+
+		std::cout << "Oversegmenation error: " << 100.0f * (1 - E[0] / (float)N) << "%" << std::endl;
+		std::cout << "Undersegmenation error: " << 100.0f * E[1] / (float)N << "%" << std::endl;
+
+		if (fp)
+			fprintf(fp, "%s\t%d\t%d\t%d\n", fileName, E[0], E[1], N);
 	}
 #endif
+}
+
+void ObjectDetector::CTIs()
+{
+	pPSGM->CTIs(pObjects, &(pPSGM->CTISet));
+
+	FILE *fp = fopen("CTIs.txt", "w");
+
+	pPSGM->SaveCTIs(fp, &(pPSGM->CTISet));
+
+	fclose(fp);
+}
+
+void OBJECT_DETECTION::Symmetry(
+	SURFEL::ObjectGraph *pObjects,
+	int iObject1,
+	int iObject2,
+	void *vpData)
+{
+	ObjectDetector *pObjectDetector = (ObjectDetector *)vpData;
+
+	pObjectDetector->pPSGM->Symmetry(pObjects, iObject1, iObject2);
 }

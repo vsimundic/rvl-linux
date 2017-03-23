@@ -13,6 +13,11 @@
 #include <numeric>
 #include <queue>
 
+//#define RVLPCSEGMENT_OBJECT_GRAPH_IGNORE_EDGES
+
+//#define RVLPCSEGMENT_OBJECT_GRAPH_LOG					// Currently is not used for anything!
+//#define RVLPCSEGMENT_OBJECT_GRAPH_EVALUATION_LOG
+
 /// Move to RVLQListArray.h
 
 #define RVLQLIST_APPEND2(pList, pList2)\
@@ -25,6 +30,7 @@
 
 /// Move to Graph.h
 
+//#define RVLPCSEGMENT_GRAPH_WERAGGREGATION_DEBUG
 //#define RVLPCSEGMENT_GRAPH_WERAGGREGATION_DETAILED_DEBUG
 
 namespace RVL
@@ -484,6 +490,9 @@ namespace RVL
 						// pRefEdge->cost <- pRefEdge->cost + pEdge13->cost
 
 						pRefEdge->cost += pEdge13->cost;
+						
+						if (pEdge13->distance < pRefEdge->distance)
+							pRefEdge->distance = pEdge13->distance;
 
 						if (pRefEdge->cost > 0)
 						{
@@ -607,6 +616,12 @@ ObjectGraph::ObjectGraph()
 	kCoverage = 0.99f;
 	alpha = 0.5f;
 
+	bObjectAggregationLevel2Uncertainty = false;
+	bObjectAggregationLevel2Edges = false;
+
+	nValidObjects = -1;
+	sortedObjectArray.n = -1;
+
 	elementMem = NULL;
 	NodeArray.Element = NULL;
 	EdgeArray.Element = NULL;
@@ -615,6 +630,7 @@ ObjectGraph::ObjectGraph()
 	objectArray.Element = NULL;
 	//sortedElementIdxMem = NULL;
 	//Array<int> *sortedElementIdxArray = NULL;
+	sortedObjectArray.Element = NULL;
 	relationClassifier = RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_NLMC;
 }
 
@@ -629,6 +645,7 @@ ObjectGraph::~ObjectGraph()
 	RVL_DELETE_ARRAY(objectArray.Element);
 	//RVL_DELETE_ARRAY(sortedElementIdxMem);
 	//RVL_DELETE_ARRAY(sortedElementIdxArray);
+	RVL_DELETE_ARRAY(sortedObjectArray.Element);
 }
 
 void ObjectGraph::CreateParamList(CRVLMem *pMem)
@@ -644,6 +661,9 @@ void ObjectGraph::CreateParamList(CRVLMem *pMem)
 	ParamList.AddID(pParamData, "HEURISTIC", RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_HEURISTIC);
 	ParamList.AddID(pParamData, "SVM", RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_SVM);
 	ParamList.AddID(pParamData, "NLMC", RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_NLMC);
+	ParamList.AddID(pParamData, "NLMC2", RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_NLMC2);
+	pParamData = ParamList.AddParam("ObjectGraph.objectAggregationLevel2.uncertainty", RVLPARAM_TYPE_BOOL, &bObjectAggregationLevel2Uncertainty);
+	pParamData = ParamList.AddParam("ObjectGraph.objectAggregationLevel2.edges", RVLPARAM_TYPE_BOOL, &bObjectAggregationLevel2Edges);
 }
 
 #ifdef RVLSURFEL_IMAGE_ADJACENCY
@@ -715,7 +735,12 @@ void ObjectGraph::Create(SurfelGraph *pSurfels_)
 		if (pSurfel->size <= 1)
 			continue;
 
+#ifdef RVLPCSEGMENT_OBJECT_GRAPH_IGNORE_EDGES
 		if (pSurfel->bEdge)
+			continue;
+#endif
+
+		if (pSurfel->BoundaryArray.n == 0)
 			continue;
 
 		pEdgeList = &(pAgNode->EdgeList);
@@ -723,6 +748,15 @@ void ObjectGraph::Create(SurfelGraph *pSurfels_)
 		for (i = 0; i < pSurfel->imgAdjacency.size(); i++)
 		{
 			pSurfel_ = pSurfel->imgAdjacency.at(i);
+
+#ifdef RVLPCSEGMENT_OBJECT_GRAPH_IGNORE_EDGES
+			if (pSurfel_->bEdge)
+				continue;
+#endif
+
+			if (pSurfel_->BoundaryArray.n == 0)
+				continue;
+
 			pDesc = pSurfel->imgAdjacencyDescriptors.at(i);
 
 			iSurfel_ = pSurfel_ - pSurfels->NodeArray.Element;
@@ -733,6 +767,7 @@ void ObjectGraph::Create(SurfelGraph *pSurfels_)
 				pEdge->iVertex[1] = iSurfel_;
 				pEdge->desc = *pDesc;
 				pEdge->cost = 0.0f;
+				pEdge->distance = pDesc->minDist;
 				pEdge->idx = pEdge - EdgeArray.Element;
 				pEdgePtr->pEdge = pEdge;
 				RVLQLIST_ADD_ENTRY2(pEdgeList, pEdgePtr);
@@ -996,8 +1031,8 @@ void ObjectGraph::CalculateOverAndUnderSegmentation_SSF(int *E, int &N, bool use
 		//Sum false values
 		for (int i = 0; i < GTHistSize; i++)
 		{
-			if ((i == 0) && !useBackground)
-				continue;
+			//if ((i == 0) && !useBackground)
+			//	continue;
 
 			if (i != maxBin[iObject])
 				E[1] += ptrGTObjHist[i];
@@ -1060,7 +1095,12 @@ void ObjectGraph::CalculateOverAndUnderSegmentation_SSF(int *E, int &N, bool use
 
 #ifdef RVLSURFEL_IMAGE_ADJACENCY
 //Must be linked with the ground truth (AssignGroundTruthSegmentation per surfel). Return 'Ntrue', 'Nfalse' and 'N' needed to calculate oversegmentation (Fos = 1 - Ntrue/N) and undersegmenation (Fus =Nfalse/N) error. The asumption is that the GT object hist bin with the highest values is the correct one!!! 
-void ObjectGraph::CalculateOverAndUnderSegmentation(int *E, int &N, bool useGTNoPix, std::string GTlabImgFilename, bool useBackground)
+void ObjectGraph::CalculateOverAndUnderSegmentation(
+	int *E, 
+	int &N, 
+	bool useGTNoPix, 
+	std::string imageFileName, 
+	bool useBackground)
 {
 	//Getting GThist size and initializing GT object histogram;
 	//find a surfel that has defined GTObjHist
@@ -1073,6 +1113,53 @@ void ObjectGraph::CalculateOverAndUnderSegmentation(int *E, int &N, bool useGTNo
 			break;
 		}
 	}
+
+#ifdef RVLPCSEGMENT_OBJECT_GRAPH_EVALUATION_LOG
+	FILE *fp = fopen("C:\\RVL\\ExpRez\\SegmentationToGT.txt", "w");
+
+	int *nObjectPts = new int[GTHistSize];
+
+	memset(nObjectPts, 0, GTHistSize * sizeof(int));
+#endif
+
+	if (useGTNoPix)	//Assumption - GT files is in the same directory as the SSF file and has name in format : SSFfilename + a + .png (label image) and SSFfilename + d + .png (depth image)
+	{
+		std::string imageName = imageFileName;
+		imageName.erase(imageName.find_last_of("."));
+		std::string depthImgFileName = imageName + "d.png";
+		std::string labelImgFileName = imageName + "a.png";
+
+		//load GT files
+		cv::Mat GTLabImg = cv::imread(labelImgFileName);
+		cv::Mat GTDepthImg = cv::imread(depthImgFileName, cv::ImreadModes::IMREAD_ANYDEPTH);
+		//Count GT object pixels
+		N = 0;
+
+		int GTLabel;
+
+		for (int y = 0; y < 480; y++)
+		{
+			for (int x = 0; x < 640; x++)
+			{
+				//adding points that have valid label and depth value
+
+				GTLabel = (int)GTLabImg.at<cv::Vec3b>(y, x)[0];
+
+				//if ((GTLabel > 0) && GTDepthImg.at<unsigned short>(y, x) > 0)
+				if (GTLabel > 0)
+				{
+#ifdef RVLPCSEGMENT_OBJECT_GRAPH_EVALUATION_LOG
+					nObjectPts[GTLabel]++;
+#endif
+					N++;
+				}					
+			}
+		}
+#ifdef RVLPCSEGMENT_OBJECT_GRAPH_EVALUATION_LOG
+		fprintf(fp, "Total #GTPts: %d\n\n", N);
+#endif
+	}
+
 	int *GTObjHistogram = new int[GTHistSize * this->NodeArray.n];	//GTObject histogam per segmented object
 	memset(GTObjHistogram, 0, GTHistSize * this->NodeArray.n * sizeof(int));
 	int *maxObj = new int[GTHistSize];	//Idx of segmented object per maximum bin
@@ -1107,12 +1194,41 @@ void ObjectGraph::CalculateOverAndUnderSegmentation(int *E, int &N, bool useGTNo
 			}
 			piElement = piElement->pNext;
 		}
+
+//#ifdef RVLPCSEGMENT_OBJECT_GRAPH_EVALUATION_LOG
+//		int nPtsTotal = 0;
+//
+//		for (int i = 0; i < GTHistSize; i++)
+//			nPtsTotal += GTObjHistogram[iObject * GTHistSize + i];
+//
+//		if (nPtsTotal > 0)
+//		{
+//			fprintf(fp, "S %d: #P: %d\n", iObject, nPtsTotal);
+//
+//			fprintf(fp, "-----------------------------\n");
+//
+//			float fnPtsTotal = (float)nPtsTotal;
+//
+//			for (int i = 0; i < GTHistSize; i++)
+//				fprintf(fp, "GTO %d: #IP: %d, perc: %lf\n", i, GTObjHistogram[iObject * GTHistSize + i], (float)GTObjHistogram[iObject * GTHistSize + i] / fnPtsTotal * 100.0f);
+//
+//			fprintf(fp, "\n");
+//		}
+//#endif
+
 	}
+
+#ifdef RVLPCSEGMENT_OBJECT_GRAPH_EVALUATION_LOG
+	fprintf(fp, "Undersegmentation\n");
+	fprintf(fp, "-----------------------------\n");
+#endif
 
 	E[0] = 0;	//Oversegmentation values
 	E[1] = 0;	//Undersegmentation values
 	int* ptrGTObjHist;
 	int max = 0;
+
+	int intersection;
 
 	int totVal = 0;
 	for (int iObject = 0; iObject < this->NodeArray.n; iObject++)
@@ -1130,10 +1246,12 @@ void ObjectGraph::CalculateOverAndUnderSegmentation(int *E, int &N, bool useGTNo
 		maxBin[iObject] = -1;
 		for (int i = 0; i < GTHistSize; i++)
 		{
-			if (ptrGTObjHist[i] > max)
+			intersection = ptrGTObjHist[i];
+
+			if (intersection > max)
 			{
 				maxBin[iObject] = i;
-				max = ptrGTObjHist[i];
+				max = intersection;
 			}
 		}
 
@@ -1143,13 +1261,24 @@ void ObjectGraph::CalculateOverAndUnderSegmentation(int *E, int &N, bool useGTNo
 		//Sum false values
 		for (int i = 0; i < GTHistSize; i++)
 		{
-			if ((i == 0) && !useBackground)
-				continue;
+			//if ((i == 0) && !useBackground)
+			//	continue;
+
+			intersection = ptrGTObjHist[i];
 
 			if (i != maxBin[iObject])
-				E[1] += ptrGTObjHist[i];
+			{				
+				if (intersection > 0)
+				{
+					E[1] += intersection;
 
-			totVal += ptrGTObjHist[i];
+#ifdef RVLPCSEGMENT_OBJECT_GRAPH_EVALUATION_LOG
+					fprintf(fp, "S %d GTO %d: #Pts: %d, perc: %lf\n", iObject, i, intersection, (float)intersection / (float)N * 100.0f);
+#endif
+				}
+			}
+
+			totVal += intersection;
 		}
 
 		//Set max segmented object per max bin
@@ -1160,42 +1289,51 @@ void ObjectGraph::CalculateOverAndUnderSegmentation(int *E, int &N, bool useGTNo
 		}
 	}
 
+#ifdef RVLPCSEGMENT_OBJECT_GRAPH_EVALUATION_LOG
+	fprintf(fp, "\n");
+	fprintf(fp, "Oversegmentation\n");
+	fprintf(fp, "-----------------------------\n");
+#endif
+
 	//Sum positive values
 	for (int i = 0; i < GTHistSize; i++)
 	{
+#ifdef RVLPCSEGMENT_OBJECT_GRAPH_EVALUATION_LOG
+		fprintf(fp, "GTO %d (%d pts): ", i, nObjectPts[i]);
+#endif
 		if ((i == 0) && !useBackground)
 			continue;
 
 		if (i == maxBin[maxObj[i]])
-			E[0] += GTObjHistogram[maxObj[i] * GTHistSize + i];
+		{
+			intersection = GTObjHistogram[maxObj[i] * GTHistSize + i];
+
+			E[0] += intersection;
+
+#ifdef RVLPCSEGMENT_OBJECT_GRAPH_EVALUATION_LOG
+			fprintf(fp, "S %d #Pts: %d, perc: %lf, error perc: %lf\n", maxObj[i], intersection, (float)intersection / (float)nObjectPts[i] * 100.0f,
+				(float)(nObjectPts[i] - intersection) / (float)N * 100.0f);
+#endif
+		}
+#ifdef RVLPCSEGMENT_OBJECT_GRAPH_EVALUATION_LOG
+		else
+			fprintf(fp, "S - #Pts: %d, perc: %lf, error perc: %lf\n", 0, 0.0, (float)nObjectPts[i] / (float)N * 100.0f);
+#endif
 	}
 
 
 	//Final results
 	/*E[0] = 1 - E[0] / totVal;
 	E[1] /= totVal;*/
-	N = totVal;
 
-	if (useGTNoPix)	//Assumption - GT files is in the same directory as the SSF file and has name in format : SSFfilename + a + .png (label image) and SSFfilename + d + .png (depth image)
-	{
-		std::string labelImgFileName = GTlabImgFilename;
-		labelImgFileName.erase(labelImgFileName.find_last_of("."));
-		std::string depthImgFileName = labelImgFileName + "d.png";
-		//load GT files
-		cv::Mat GTLabImg = cv::imread(labelImgFileName);
-		cv::Mat GTDepthImg = cv::imread(depthImgFileName, cv::ImreadModes::IMREAD_ANYDEPTH);
-		//Count GT object pixels
-		N = 0;
-		for (int y = 0; y < 480; y++)
-		{
-			for (int x = 0; x < 640; x++)
-			{
-				//adding points that have valid label and depth value
-				if ((GTLabImg.at<cv::Vec3b>(y, x)[0] > 0) && GTDepthImg.at<unsigned short>(y, x) > 0)
-					N++;
-			}
-		}
-	}
+	if (!useGTNoPix)
+		N = totVal;
+
+#ifdef RVLPCSEGMENT_OBJECT_GRAPH_EVALUATION_LOG
+	fclose(fp);
+
+	delete[] nObjectPts;
+#endif
 
 	//DeRef
 	delete[] GTObjHistogram;
@@ -1219,13 +1357,13 @@ void ObjectGraph::WERSegmentation()
 
 	CreateSortedObjectArray();
 
-#ifdef RVLPCSEGMENT_OBJECT_GRAPH_LOG
-	FILE *fpLog = fopen("C:\\RVL\\Debug\\WERAggGraph.txt", "w");
-
-	WriteObjectDataToFile(fpLog);
-
-	fclose(fpLog);
-#endif
+//#ifdef RVLPCSEGMENT_OBJECT_GRAPH_LOG
+//	FILE *fpLog = fopen("C:\\RVL\\Debug\\WERAggGraph.txt", "w");
+//
+//	WriteObjectDataToFile(fpLog);
+//
+//	fclose(fpLog);
+//#endif
 }
 
 void ObjectGraph::CreateSortedObjectArray()
@@ -1245,8 +1383,8 @@ void ObjectGraph::CreateSortedObjectArray()
 
 	for (iNode = 0; iNode < NodeArray.n; iNode++)
 	{
-		if (iNode == 1230 || iNode == 786 || iNode == 946)
-			int debug = 0;
+		//if (iNode == 1230 || iNode == 786 || iNode == 946)
+		//	int debug = 0;
 
 		pAgNode = NodeArray.Element + iNode;
 
@@ -1378,7 +1516,8 @@ void ObjectGraph::ComputeRelationCost(
 	float scale = 1.0f;
 	float depthStepIntThr = scale * 0.005f;
 	float depthStepExtThr = scale * 0.025f;
-	float concaveAngleThr = 45.0f * DEG2RAD;
+	float concaveAngleIntThr = 0.0f * DEG2RAD;
+	float concaveAngleExtThr = 45.0f * DEG2RAD;
 	float concaveMinCost = 0.3f;
 
 	float f1 = pEdge->desc.cupyDescriptor[0];
@@ -1386,15 +1525,19 @@ void ObjectGraph::ComputeRelationCost(
 	float f3 = pEdge->desc.cupyDescriptor[2];
 	float f4 = pEdge->desc.cupyDescriptor[3];
 
+	float y1, y2, y3, y4;
+
 	switch (relationClassifier){
 	case RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_HEURISTIC:
-	data.PContinuous = (f4 <= depthStepIntThr ? 1.0f : (f4 <= depthStepExtThr ? (depthStepExtThr - f4) / (depthStepExtThr - depthStepIntThr) : 0.0f));
+		data.PContinuous = (f4 <= depthStepIntThr ? 1.0f : (f4 <= depthStepExtThr ? (depthStepExtThr - f4) / (depthStepExtThr - depthStepIntThr) : 0.0f));
 
-	data.PConvex = (f1 >= 0 ? 1.0f : (f1 >= -concaveAngleThr ? concaveMinCost + (1.0f - concaveMinCost) * (concaveAngleThr + f1) / concaveAngleThr : concaveMinCost));
+		data.PConvex = (f1 >= -concaveAngleIntThr ? 1.0f : (f1 >= -concaveAngleExtThr ? concaveMinCost + (1.0f - concaveMinCost) * (concaveAngleExtThr + f1) / (concaveAngleExtThr - concaveAngleIntThr) : concaveMinCost));
 
-	data.PClean = 0.5f + 0.5f * f2;
+		//data.PClean = 0.5f + 0.5f * f2;
+		//data.PClean = (RVLABS(f1) >= 20.0f * DEG2RAD ? (f3 >= 0.5 ? 2.0f * (f3 - 0.5f) : 0.0f) : 1.0f);
+		data.PClean = (RVLABS(f1) >= 20.0f * DEG2RAD ? (f2 >= 0.5 ? 2.0f * (f2 - 0.5f) : 0.0f) : 1.0f);
 
-	data.P = RVLMIN(data.PContinuous, RVLMIN(data.PConvex, data.PClean));
+		data.P = RVLMIN(data.PContinuous, RVLMIN(data.PConvex, data.PClean));
 
 		break;
 	case RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_SVM:
@@ -1403,22 +1546,33 @@ void ObjectGraph::ComputeRelationCost(
 		data.PConvex = -1.0;
 		data.PClean = -1.0;
 		data.P = this->pSVMClassifier->makeClassification(pEdge->desc.cupyDescriptor, 4);
+
+		break;
 	case RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_NLMC:
 		//Nyarko - exponential functions + optimization
 		data.PContinuous = -1.0;
 		data.PConvex = -1.0;
 		data.PClean = -1.0;
 		
-		float y1 = 0.809918368068113 / (0.903903357035594 + exp(-(f1 - (-0.578312575550574)) / 0.369035236083353));
-		float y2 = 120.173561176014 / (191.419216478501 + exp(-(f2 - 0.512539837485237) / 170.634944320671));
-		float y3 = 0.840899503394324 / (0.744251572103782 + exp(-(f3 - 0.356242721458920) / 0.321654820477843));
-		float y4 = 3.28709542710274 / (0.776255228658931 + exp(-(f4 - (-0.0188359236813348)) / (-0.0166765498782912)));
+		y1 = 0.809918368068113 / (0.903903357035594 + exp(-(f1 - (-0.578312575550574)) / 0.369035236083353));
+		y2 = 120.173561176014 / (191.419216478501 + exp(-(f2 - 0.512539837485237) / 170.634944320671));
+		y3 = 0.840899503394324 / (0.744251572103782 + exp(-(f3 - 0.356242721458920) / 0.321654820477843));
+		y4 = 3.28709542710274 / (0.776255228658931 + exp(-(f4 - (-0.0188359236813348)) / (-0.0166765498782912)));
 
 		//Karlo 1
 		//data.P = 0.919702757268570*y1 + 0.577863699653274*y2 + 0.0141310682609543*y3 + 0.835443189905499*y4 - 0.910458015938145;
 
 		// Karlo 2
 		data.P = 0.844317765926573*y1 + 0.778963337269011*y2 + 0.177692819332776*y3 + 0.582259630958912*y4 - 0.844696779380087;
+
+		break;
+	case RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_NLMC2:
+		data.PContinuous = 3.28709542710274 / (0.776255228658931 + exp(-(f4 - (-0.0188359236813348)) / (-0.0166765498782912)));
+		data.PConvex = 0.809918368068113 / (0.903903357035594 + exp(-(f1 - (-0.578312575550574)) / 0.369035236083353));
+		data.PClean = 0.840899503394324 / (0.744251572103782 + exp(-(f3 - 0.356242721458920) / 0.321654820477843));
+
+		data.P = RVLMIN(data.PContinuous, data.PConvex);
+		//data.P = RVLMIN(data.PContinuous, RVLMIN(data.PConvex, data.PClean));
 	}
 
 	pEdge->cost = data.P;
@@ -1483,7 +1637,7 @@ void ObjectGraph::InitDisplay(
 	pSurfels->DisplayData.mouseRButtonDownUserFunction = &objectMouseRButtonDownUserFunction;
 	pSurfels->DisplayData.vpUserFunctionData = &displayData;
 
-	pSurfels->InitDisplay(pVisualizer, pMesh, NULL);
+	pSurfels->InitDisplay(pVisualizer, pMesh, NULL, false);
 
 	displayData.bObjects = true;
 }
@@ -1692,13 +1846,15 @@ bool RVL::SURFEL::objectMouseRButtonDownUserFunction(
 
 		pData->iSelectedObject = iObject;
 
+		printf("Slected object: %d\n", iObject);
+
 		return true;
 	}
 	else
 		return false;
 }
 
-void ObjectGraph::DetermineObjectConvexityData(float convexThr, float ratioThr)
+void ObjectGraph::DetermineObjectConvexityData(float convexThr, float minDiffFlipReq, bool setflip)
 {
 	//Reseting convexity data
 	if (this->additionalObjectData.CHVertexIndices.size())
@@ -1708,6 +1864,10 @@ void ObjectGraph::DetermineObjectConvexityData(float convexThr, float ratioThr)
 	if (this->additionalObjectData.ObjectsSurfelConvexity.size())
 		this->additionalObjectData.ObjectsSurfelConvexity.clear();
 	this->additionalObjectData.ObjectsSurfelConvexity.resize(this->NodeArray.n); //allocate
+
+	if (this->additionalObjectData.convexityMultipliers.size())
+		this->additionalObjectData.convexityMultipliers.clear();
+	this->additionalObjectData.convexityMultipliers.resize(this->NodeArray.n, 1.0); //allocate
 	
 	//bool *bVertexInCH = new bool[pSurfels->vertexArray.n];
 	//memset(bVertexInCH, 0, pSurfels->vertexArray.n * sizeof(bool));
@@ -1723,13 +1883,19 @@ void ObjectGraph::DetermineObjectConvexityData(float convexThr, float ratioThr)
 	Surfel *pSurfel;
 	Surfel *pSurfelIN;
 	float addedSize = 0;
+	int totalSize;
 	bool fail = false;
 	Array<SortIndex<int>> sortedElementIdxArray;
 	sortedElementIdxArray.Element = new SortIndex < int >[this->pSurfels->NodeArray.n];
 	SortIndex<int> *sortedIdx;
+	std::set<int> CHVertexIndicesDefDir;
+	std::map<int, bool> ObjectsSurfelConvexityDefDir;
+	std::set<int> CHVertexIndicesOtherDir;
+	std::map<int, bool> ObjectsSurfelConvexityOtherDir;
+	float defDirRatio;
+	float otherDirRatio;
 	for (int iObject = 0; iObject < this->NodeArray.n; iObject++)
 	{
-		addedSize = 0;
 		pObject = this->NodeArray.Element + iObject;
 		
 		piElement = pObject->elementList.pFirst;
@@ -1741,26 +1907,47 @@ void ObjectGraph::DetermineObjectConvexityData(float convexThr, float ratioThr)
 		//we are not intrested in objects with size less than 20 points???
 		if (pObject->size < 20)
 			continue;
+
+		if (iObject == 37 || iObject == 54)
+			int debug = 0;
 		
 		// Sort surfels in objects.
 		this->SortElements(pObject, &sortedElementIdxArray);
 
+		//Reseting temp vars
+		CHVertexIndicesDefDir.clear();
+		ObjectsSurfelConvexityDefDir.clear();
+		CHVertexIndicesOtherDir.clear();
+		ObjectsSurfelConvexityOtherDir.clear();
+
+		//Check the convexity in default direction first (normal)
+
 		//Run through surfels
+		addedSize = 0;
+		totalSize = 0;
 		for (int iS = 0; iS < sortedElementIdxArray.n; iS++)
 		{
 			sortedIdx = sortedElementIdxArray.Element + iS;
 			//getting current surfel
 			pSurfel = this->pSurfels->NodeArray.Element + sortedIdx->idx;//piElement->Idx;
+			//check if edge
+			if (!bObjectAggregationLevel2Edges)
+				if (pSurfel->bEdge)
+					continue;
+
+			totalSize += pSurfel->size;
+
 			//getting current surfel vertex list
 			pSurfelVertexList = this->pSurfels->surfelVertexList.Element + sortedIdx->idx; //piElement->Idx;
 			
 			fail = false;
 			//runnong through a current list of added object vertices
-			for (CHVertexIndices_iterator_type iterator = this->additionalObjectData.CHVertexIndices.at(iObject).begin(); iterator != this->additionalObjectData.CHVertexIndices.at(iObject).end(); iterator++)
+			for (CHVertexIndices_iterator_type iterator = CHVertexIndicesDefDir.begin(); iterator != CHVertexIndicesDefDir.end(); iterator++)
 			{
 				//*iterator = value
 				rvlvertexInList = this->pSurfels->vertexArray.Element[*iterator];
-				if ((pSurfel->N[0] * rvlvertexInList->P[0] + pSurfel->N[1] * rvlvertexInList->P[1] + pSurfel->N[2] * rvlvertexInList->P[2] - pSurfel->d) > convexThr)
+				//if ((pSurfel->N[0] * rvlvertexInList->P[0] + pSurfel->N[1] * rvlvertexInList->P[1] + pSurfel->N[2] * rvlvertexInList->P[2] - pSurfel->d) > convexThr)
+				if (pSurfels->Distance(pSurfel, rvlvertexInList->P, bObjectAggregationLevel2Uncertainty) > convexThr)
 				{
 					fail = true;
 					break;
@@ -1768,7 +1955,7 @@ void ObjectGraph::DetermineObjectConvexityData(float convexThr, float ratioThr)
 			}
 
 			//Check the other direction (if vertex from current surfels is below surfels that were added in CH)
-			for (ObjectsSurfelConvexity_iterator_type iterator = this->additionalObjectData.ObjectsSurfelConvexity.at(iObject).begin(); iterator != this->additionalObjectData.ObjectsSurfelConvexity.at(iObject).end(); iterator++)
+			for (ObjectsSurfelConvexity_iterator_type iterator = ObjectsSurfelConvexityDefDir.begin(); iterator != ObjectsSurfelConvexityDefDir.end(); iterator++)
 			{
 				//iterator->first = key
 				//iterator->second = value
@@ -1783,7 +1970,8 @@ void ObjectGraph::DetermineObjectConvexityData(float convexThr, float ratioThr)
 					while (qlistelement)
 					{
 						rvlvertex = this->pSurfels->vertexArray.Element[qlistelement->Idx];
-						if ((pSurfelIN->N[0] * rvlvertex->P[0] + pSurfelIN->N[1] * rvlvertex->P[1] + pSurfelIN->N[2] * rvlvertex->P[2] - pSurfelIN->d) > convexThr)
+						//if ((pSurfelIN->N[0] * rvlvertex->P[0] + pSurfelIN->N[1] * rvlvertex->P[1] + pSurfelIN->N[2] * rvlvertex->P[2] - pSurfelIN->d) > convexThr)
+						if (pSurfels->Distance(pSurfelIN, rvlvertex->P, bObjectAggregationLevel2Uncertainty) > convexThr)
 						{
 							fail = true;
 							break;
@@ -1796,18 +1984,16 @@ void ObjectGraph::DetermineObjectConvexityData(float convexThr, float ratioThr)
 				if (fail)
 					break;
 			}
+
 			//add fail flag for current surfel
-			this->additionalObjectData.ObjectsSurfelConvexity.at(iObject).insert(std::pair<int, bool>(sortedIdx->idx, !fail));
+			ObjectsSurfelConvexityDefDir.insert(std::pair<int, bool>(sortedIdx->idx, !fail));
 			//if not failed add vertices to list
 			if (!fail)
 			{
 				qlistelement = pSurfelVertexList->pFirst;
 				while (qlistelement)
 				{
-					this->additionalObjectData.CHVertexIndices.at(iObject).insert(qlistelement->Idx);
-					
-					//bVertexInCH[qlistelement->Idx] = true;
-					//}
+					CHVertexIndicesDefDir.insert(qlistelement->Idx);
 
 					//Next
 					qlistelement = qlistelement->pNext;
@@ -1817,9 +2003,111 @@ void ObjectGraph::DetermineObjectConvexityData(float convexThr, float ratioThr)
 			}
 		}
 
-		//check ratio
-		if ((addedSize / (float)pObject->size) < ratioThr)
-			this->additionalObjectData.CHVertexIndices.at(iObject).clear(); //if the ratio is lower than threshold, then empty it's list of vertices
+		//ratio
+		defDirRatio = addedSize / (float)totalSize;
+		//if ((addedSize / (float)pObject->size) < ratioThr)
+		//	this->additionalObjectData.CHVertexIndices.at(iObject).clear(); //if the ratio is lower than threshold, then empty it's list of vertices
+
+		//Check convexity in the other direction (normal)
+		//Run through surfels
+		addedSize = 0;
+		totalSize = 0;
+		for (int iS = 0; iS < sortedElementIdxArray.n; iS++)
+		{
+			sortedIdx = sortedElementIdxArray.Element + iS;
+			//getting current surfel
+			pSurfel = this->pSurfels->NodeArray.Element + sortedIdx->idx;//piElement->Idx;
+			//check if edge
+			if (!bObjectAggregationLevel2Edges)
+				if (pSurfel->bEdge)
+					continue;
+
+			totalSize += pSurfel->size;
+
+			//getting current surfel vertex list
+			pSurfelVertexList = this->pSurfels->surfelVertexList.Element + sortedIdx->idx; //piElement->Idx;
+
+			fail = false;
+			//runnong through a current list of added object vertices
+			for (CHVertexIndices_iterator_type iterator = CHVertexIndicesOtherDir.begin(); iterator != CHVertexIndicesOtherDir.end(); iterator++)
+			{
+				//*iterator = value
+				rvlvertexInList = this->pSurfels->vertexArray.Element[*iterator];
+				//if (((-1)*pSurfel->N[0] * rvlvertexInList->P[0] + (-1)*pSurfel->N[1] * rvlvertexInList->P[1] + (-1)*pSurfel->N[2] * rvlvertexInList->P[2] - (-1)*pSurfel->d) > convexThr)
+				if (-pSurfels->Distance(pSurfel, rvlvertexInList->P, bObjectAggregationLevel2Uncertainty) > convexThr)
+				{
+					fail = true;
+					break;
+				}
+			}
+
+			//Check the other direction (if vertex from current surfels is below surfels that were added in CH)
+			for (ObjectsSurfelConvexity_iterator_type iterator = ObjectsSurfelConvexityOtherDir.begin(); iterator != ObjectsSurfelConvexityOtherDir.end(); iterator++)
+			{
+				//iterator->first = key
+				//iterator->second = value
+				if (iterator->second)	//if surfel was valid
+				{
+					//getting added surfel
+					pSurfelIN = this->pSurfels->NodeArray.Element + iterator->first;
+					//getting current surfel vertex list
+					pSurfelVertexListSurfelIN = this->pSurfels->surfelVertexList.Element + sortedIdx->idx;	//CHECK IDX!!!!!!!!sortedIdx->idx!!!!!!!!
+					//running through added surfel vertices
+					qlistelement = pSurfelVertexListSurfelIN->pFirst;
+					while (qlistelement)
+					{
+						rvlvertex = this->pSurfels->vertexArray.Element[qlistelement->Idx];
+						//if (((-1)*pSurfelIN->N[0] * rvlvertex->P[0] + (-1)*pSurfelIN->N[1] * rvlvertex->P[1] + (-1)*pSurfelIN->N[2] * rvlvertex->P[2] - (-1)*pSurfelIN->d) > convexThr)
+						if (-pSurfels->Distance(pSurfelIN, rvlvertex->P, bObjectAggregationLevel2Uncertainty) > convexThr)
+						{
+							fail = true;
+							break;
+						}
+						//Next
+						qlistelement = qlistelement->pNext;
+					}
+				}
+
+				if (fail)
+					break;
+			}
+
+			//add fail flag for current surfel
+			ObjectsSurfelConvexityOtherDir.insert(std::pair<int, bool>(sortedIdx->idx, !fail));
+			//if not failed add vertices to list
+			if (!fail)
+			{
+				qlistelement = pSurfelVertexList->pFirst;
+				while (qlistelement)
+				{
+					CHVertexIndicesOtherDir.insert(qlistelement->Idx);
+
+					//Next
+					qlistelement = qlistelement->pNext;
+				}
+				//update size
+				addedSize += pSurfel->size;
+			}
+		}
+
+		//ratio
+		otherDirRatio = addedSize / (float)totalSize;
+
+		//Determine which direction to use
+		if ((defDirRatio > otherDirRatio) || ((otherDirRatio - defDirRatio) < minDiffFlipReq))
+		{
+			this->additionalObjectData.CHVertexIndices.at(iObject) = CHVertexIndicesDefDir;
+			this->additionalObjectData.ObjectsSurfelConvexity.at(iObject) = ObjectsSurfelConvexityDefDir;
+		}
+		else
+		{
+			this->additionalObjectData.CHVertexIndices.at(iObject) = CHVertexIndicesOtherDir;
+			this->additionalObjectData.ObjectsSurfelConvexity.at(iObject) = ObjectsSurfelConvexityOtherDir;
+			//Set multiplier to -1
+			if (setflip)
+				this->additionalObjectData.convexityMultipliers.at(iObject) = -1.0;
+			//std::cout << "Object " << iObject << " is concave!" << std::endl;
+		}
 	}	// for every object
 	//Deref
 	delete[] sortedElementIdxArray.Element;
@@ -1886,6 +2174,14 @@ void ObjectGraph::CalculateConvexityRatiosForObjectPair(int firstObject, int sec
 {
 	GRAPH::AggregateNode<SURFEL::AgEdge> *pFirstObject = this->NodeArray.Element + firstObject;
 	GRAPH::AggregateNode<SURFEL::AgEdge> *pSecondObject = this->NodeArray.Element + secondObject;
+
+	//Heuristic mumbo-jumbo
+	if (((this->additionalObjectData.convexityMultipliers.at(firstObject) == -1) || (this->additionalObjectData.convexityMultipliers.at(secondObject) == -1)) && !CheckIfNeighbours(firstObject, secondObject))
+	{
+		firstRatio = 0.0;
+		secondRatio = 0.0;
+		return;
+	}
 	std::map<int, Surfel*> aggregateObject; //Sorted in ascending order by definition
 	std::map<int, Surfel*>::reverse_iterator aggObjIt;	//Reverse iterator (Descending order)
 	std::map<int, Surfel*>::reverse_iterator aggObjItSec;
@@ -1903,7 +2199,7 @@ void ObjectGraph::CalculateConvexityRatiosForObjectPair(int firstObject, int sec
 	{
 		pSurfel = pSurfels->NodeArray.Element + piElement->Idx;
 		//check 
-		if (!((pSurfel->size <= 1) || pSurfel->bEdge))
+		if (!((pSurfel->size <= 1) || (!bObjectAggregationLevel2Edges && pSurfel->bEdge)))
 		{
 			//Find key value (if there are two surfels with same size)
 			keyVal = pSurfel->size;
@@ -1925,7 +2221,7 @@ void ObjectGraph::CalculateConvexityRatiosForObjectPair(int firstObject, int sec
 	{
 		pSurfel = pSurfels->NodeArray.Element + piElement->Idx;
 		//check 
-		if (!((pSurfel->size <= 1) || pSurfel->bEdge))
+		if (!((pSurfel->size <= 1) || (!bObjectAggregationLevel2Edges && pSurfel->bEdge)))
 		{
 			//Find key value (if there are two surfels with same size)
 			keyVal = pSurfel->size;
@@ -1955,6 +2251,8 @@ void ObjectGraph::CalculateConvexityRatiosForObjectPair(int firstObject, int sec
 	memset(added, 0, aggregateObject.size() * sizeof(bool));
 	int currIdx = 0;
 	int currIdxIN = 0;
+	float currmultiplier = 0.0;
+	float currmultiplierIN = 0.0;
 	for (aggObjIt = aggregateObject.rbegin(); aggObjIt != aggregateObject.rend(); ++aggObjIt)
 	{
 		//iterator->first = key
@@ -1962,6 +2260,7 @@ void ObjectGraph::CalculateConvexityRatiosForObjectPair(int firstObject, int sec
 
 		//getting current surfel
 		pSurfel = aggObjIt->second;
+		currmultiplier = (this->additionalObjectData.convexityMultipliers.at(aggregateObjectIdx.at(aggObjIt->first)));
 		surfelIdx = pSurfel - pSurfels->NodeArray.Element;
 		//std::cout << aggObjIt->first << ", " << pSurfel->size << std::endl;
 		//getting current surfel vertex list
@@ -1973,7 +2272,8 @@ void ObjectGraph::CalculateConvexityRatiosForObjectPair(int firstObject, int sec
 		{
 			//*iterator = value
 			rvlvertex = this->pSurfels->vertexArray.Element[*chVertexIndices_iterator];
-			if ((pSurfel->N[0] * rvlvertex->P[0] + pSurfel->N[1] * rvlvertex->P[1] + pSurfel->N[2] * rvlvertex->P[2] - pSurfel->d) > convexThr)
+			//if ((currmultiplier * pSurfel->N[0] * rvlvertex->P[0] + currmultiplier * pSurfel->N[1] * rvlvertex->P[1] + currmultiplier * pSurfel->N[2] * rvlvertex->P[2] - currmultiplier * pSurfel->d) > convexThr)
+			if (currmultiplier * pSurfels->Distance(pSurfel, rvlvertex->P, bObjectAggregationLevel2Uncertainty) > convexThr)
 			{
 				fail = true;
 				break;
@@ -1990,6 +2290,7 @@ void ObjectGraph::CalculateConvexityRatiosForObjectPair(int firstObject, int sec
 			{
 				//getting added surfel
 				pSurfelIN = aggObjItSec->second;
+				currmultiplierIN = (this->additionalObjectData.convexityMultipliers.at(aggregateObjectIdx.at(aggObjItSec->first)));
 				surfelIdxOther = pSurfelIN - pSurfels->NodeArray.Element;
 				//getting current surfel vertex list
 				pSurfelVertexListIN = this->pSurfels->surfelVertexList.Element + surfelIdx;
@@ -1998,7 +2299,8 @@ void ObjectGraph::CalculateConvexityRatiosForObjectPair(int firstObject, int sec
 				while (qlistelement)
 				{
 					rvlvertex = this->pSurfels->vertexArray.Element[qlistelement->Idx];
-					if ((pSurfelIN->N[0] * rvlvertex->P[0] + pSurfelIN->N[1] * rvlvertex->P[1] + pSurfelIN->N[2] * rvlvertex->P[2] - pSurfelIN->d) > convexThr)
+					//if ((currmultiplierIN * pSurfelIN->N[0] * rvlvertex->P[0] + currmultiplierIN * pSurfelIN->N[1] * rvlvertex->P[1] + currmultiplierIN * pSurfelIN->N[2] * rvlvertex->P[2] - currmultiplierIN * pSurfelIN->d) > convexThr)
+					if (currmultiplier * pSurfels->Distance(pSurfelIN, rvlvertex->P, bObjectAggregationLevel2Uncertainty) > convexThr)
 					{
 						fail = true;
 						break;
@@ -2323,6 +2625,8 @@ void ObjectGraph::ObjectAggregationLevel2_ViaObjectPairConvexity(float convexThr
 			ss.str("");
 			ss << validObjects.at(iObject2) << "_" << validObjects.at(iObject);	//other way
 			min_convexity_values.insert(std::pair<std::string, float>(ss.str(), minValue));
+
+			//objectAggregationLevel2Criterion(this, validObjects.at(iObject), validObjects.at(iObject2), vpObjectAggregationLevel2CriterionData);
 		}
 	}
 
@@ -2515,6 +2819,7 @@ void ObjectGraph::ObjectAggregationLevel2_ViaObjectPairConvexity(float convexThr
 			}
 
 			//compiling new clusters based on labels
+			newclusters.clear();
 			newclusters.resize(label);
 			for (int i = 0; i < inputcluster_label.size(); i++)
 				newclusters.at(inputcluster_label.at(i)).push_back(inputcluster.at(i));
@@ -2609,4 +2914,224 @@ cv::Mat ObjectGraph::CreateSegmentationImage()
 	}
 	//return image
 	return coloredSegLab;
+}
+
+cv::Mat ObjectGraph::CreateSegmentationImageFromSSF()
+{
+	std::shared_ptr<SceneSegFile::SegFileElement> currSSFElement;
+	std::shared_ptr<SceneSegFile::FeatureTypeInt> pixAff;
+
+	cv::Mat coloredSegLab(480, 640, CV_8UC3, cv::Scalar::all(0));
+
+	GRAPH::AggregateNode<SURFEL::AgEdge> *pObject;
+	QLIST::Index *piElement;
+	unsigned char labSegColor[3];
+	int x = 0, y = 0;
+	RVL::QLIST::Index2 *pt;
+	srand(time(NULL));
+
+	for (int iObject = 0; iObject < NodeArray.n; iObject++)
+	{
+		//Generate object color
+		labSegColor[0] = rand() % 255;
+		labSegColor[1] = rand() % 255;
+		labSegColor[2] = rand() % 255;
+
+		pObject = NodeArray.Element + iObject;
+
+		piElement = pObject->elementList.pFirst;
+
+		while (piElement)
+		{
+			currSSFElement = ssf->elements.at(piElement->Idx);
+
+			pixAff = std::dynamic_pointer_cast<SceneSegFile::FeatureTypeInt>(currSSFElement->features.features.at(SceneSegFile::FeaturesList::PixelAffiliation));
+
+			for (int k = 0; k < pixAff->size; k++)
+			{
+				y = floor(pixAff->data[k] / 640.0);
+				x = floor(pixAff->data[k] - 640.0 * y);
+				coloredSegLab.at<cv::Vec3b>(y, x)[0] = labSegColor[0];
+				coloredSegLab.at<cv::Vec3b>(y, x)[1] = labSegColor[1];
+				coloredSegLab.at<cv::Vec3b>(y, x)[2] = labSegColor[2];
+			}
+
+			piElement = piElement->pNext;
+		}
+
+	}
+	//return image
+	return coloredSegLab;
+}
+
+void ObjectGraph::SaveSegmentationLabelImg(std::string filename)
+{
+	cv::Mat labelImg(480, 640, CV_8UC1, cv::Scalar::all(0));
+
+	GRAPH::AggregateNode<SURFEL::AgEdge> *pObject;
+	QLIST::Index *piElement;
+	Surfel *pSurfel;
+	int x = 0, y = 0;
+	RVL::QLIST::Index2 *pt;
+	unsigned char objLabel = 1;
+	bool increment = false;
+	//For all objects
+	for (int iObject = 0; iObject < this->NodeArray.n; iObject++)
+	{
+
+		pObject = this->NodeArray.Element + iObject;
+
+		piElement = pObject->elementList.pFirst;
+
+		//check if object
+		if (!piElement)
+			continue;
+		//
+
+		//for all object's surfels
+		increment = false;
+		while (piElement)
+		{
+			pSurfel = this->pSurfels->NodeArray.Element + piElement->Idx;
+			//check 
+			if (!((pSurfel->size <= 1) || pSurfel->bEdge))
+			{
+				pt = pSurfel->PtList.pFirst;
+				//for all surfel's points
+				for (int k = 0; k < pSurfel->size; k++)
+				{
+					y = floor(pt->Idx / 640.0);
+					x = floor(pt->Idx - 640.0 * y);
+					labelImg.at<unsigned char>(y, x) = objLabel;
+					pt = pt->pNext;
+				}
+				increment = true; //Just in cease all elements of the object are edges
+			}
+			piElement = piElement->pNext;
+		}
+		//increment object label
+		if (increment)
+			objLabel++; //What if the number of objects is above 255???
+	}
+
+	//Save image (preferable as png)
+	cv::imwrite(filename, labelImg);
+}
+
+bool ObjectGraph::CheckObjectUniformity(int objectIdx, int minSurfelSize, float uniThr)
+{
+	bool uni = false;
+	GRAPH::AggregateNode<SURFEL::AgEdge> *pObject = this->NodeArray.Element + objectIdx;
+	QLIST::Index *piElement;
+	Surfel *pSurfel;
+	//Determine average surfel size for surfels above required size
+	float sumSize = 0;
+	int noSurfels = 0;
+	piElement = pObject->elementList.pFirst;
+	while (piElement)
+	{
+		pSurfel = this->pSurfels->NodeArray.Element + piElement->Idx;
+		//check 
+		if (!((pSurfel->size < minSurfelSize) || pSurfel->bEdge))
+		{
+			sumSize += pSurfel->size;
+			noSurfels++;
+		}
+		piElement = piElement->pNext;
+	}
+	float avgSize = sumSize / noSurfels;
+
+	//Determine the sum of differences compared to avg size
+	float uniSum = 0;
+	piElement = pObject->elementList.pFirst;
+	while (piElement)
+	{
+		pSurfel = this->pSurfels->NodeArray.Element + piElement->Idx;
+		//check 
+		if (!((pSurfel->size < minSurfelSize) || pSurfel->bEdge))
+			uniSum += abs(avgSize - pSurfel->size);
+		piElement = piElement->pNext;
+	}
+	std::cout << "Object " << objectIdx << " uniformity: " << uniSum / sumSize << std::endl;
+	return uni;
+}
+
+bool ObjectGraph::CheckIfNeighbours(int iObject1, int iObject2)
+{
+	//Get pointers to object
+	GRAPH::AggregateNode<SURFEL::AgEdge> *pObject1 = this->NodeArray.Element + iObject1;
+	GRAPH::AggregateNode<SURFEL::AgEdge> *pObject2 = this->NodeArray.Element + iObject2; //It is not needed
+	GRAPH::EdgePtr2<SURFEL::AgEdge> *edgeElement;
+	edgeElement = pObject1->EdgeList.pFirst;
+	//Running through object edges
+	while (edgeElement)
+	{
+		if (RVLPCSEGMENT_GRAPH_GET_OPPOSITE_NODE(edgeElement) == iObject2) //If the index correspondes to other object then they are neighbours
+			return true;
+		edgeElement = edgeElement->pNext;
+	}
+	return false; //if the function has not finished earlier then they are not neighbours
+}
+
+void ObjectGraph::SortObjects()
+{
+	if (nValidObjects < 0)
+		CountValidObjects();
+
+	sortedObjectArray.Element = new SortIndex<int>[nValidObjects];
+
+	SortIndex<int> *pSortIndex = sortedObjectArray.Element;
+
+	int iObject;
+	GRAPH::AggregateNode<SURFEL::AgEdge> *pObject;
+	QLIST::Index *piElement;
+
+	for (iObject = 0; iObject < NodeArray.n; iObject++)
+	{
+		pObject = NodeArray.Element + iObject;
+
+		piElement = pObject->elementList.pFirst;
+
+		//check if object
+		if (!piElement)
+			continue;
+
+		//we are not intrested in objects with size less than 20 points???
+		if (pObject->size < 20)
+			continue;
+
+		pSortIndex->cost = pObject->size;
+		pSortIndex->idx = iObject;
+		pSortIndex++;
+	}
+
+	sortedObjectArray.n = nValidObjects;
+
+	BubbleSort<SortIndex<int>>(sortedObjectArray, true);
+}
+
+void ObjectGraph::CountValidObjects()
+{
+	nValidObjects = 0;
+
+	int iObject;
+	GRAPH::AggregateNode<SURFEL::AgEdge> *pObject;
+	QLIST::Index *piElement;
+
+	for (iObject = 0; iObject < NodeArray.n; iObject++)
+	{
+		pObject = NodeArray.Element + iObject;
+
+		piElement = pObject->elementList.pFirst;
+
+		//check if object
+		if (!piElement)
+			continue;
+
+		//we are not intrested in objects with size less than 20 points???
+		if (pObject->size < 20)
+			continue;
+
+		nValidObjects++;
+	}
 }

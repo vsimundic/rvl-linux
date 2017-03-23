@@ -31,12 +31,18 @@ PlanarSurfelDetector::PlanarSurfelDetector()
 	maxEdgeFeatureConcavity = 0.010f;
 	maxRange = 5000.0f;
 	maxAttackSize = 1000;
+	maxUnconstrainedNormalDepth = 7;
 	bJoinSmallSurfelsToClosestNeighbors = false;
+	bNormalConstraintInSecondInitRG = false;
+	bLimitedDepthUnconstrainedNormalRG = false;
+	edgeClassHalfWinSize = 5;
+	edgeClassDepthDiscontinuityThr = 0.01f;
 
 	pMem = NULL;
 	//iPtBuff = NULL;
 	map = NULL;
 	distanceMap = NULL;
+	unconstrainedNormalDepthMap = NULL;
 	PointEdgeBuff = NULL;
 	BoundaryMem = NULL;
 	cutCostMap = NULL;
@@ -48,6 +54,9 @@ PlanarSurfelDetector::PlanarSurfelDetector()
 	neighborMem = NULL;
 	GSeedListArray.Element = NULL;
 	pTimer = NULL;
+	edgeClassDepthOccupancy = NULL;
+	iEdgeClassDepthOccupancyBin.Element = NULL;
+
 
 #ifdef RVLPLANARSURFELDETECTOR_DEBUG
 	iPtBuffDebug = NULL;
@@ -106,6 +115,12 @@ void PlanarSurfelDetector::Init(
 
 	memset(distanceMap, 0xff, nPts * sizeof(unsigned int));
 
+	unconstrainedNormalDepthMap = new unsigned int[nPts];
+
+	memset(unconstrainedNormalDepthMap, 0, nPts * sizeof(unsigned int));
+
+	//memset(unconstrainedNormalDepthMap, 0xff, nPts * sizeof(unsigned int));
+
 	//iPtBuff = new int[2 * nPts];
 
 	regionGrowingData.distThr = surfelDistThr * surfelDistThr;
@@ -117,6 +132,9 @@ void PlanarSurfelDetector::Init(
 	regionGrowingData.buffer = map;
 	regionGrowingData.costMap = regionGrowingData.costBuffer = NULL;
 	regionGrowingData.GID = nPts;
+	regionGrowingData.bLimitedDepthUnconstrainedRG = false;
+	regionGrowingData.unconstrainedNormalDepthMap = unconstrainedNormalDepthMap;
+	regionGrowingData.maxUnconstrainedNormalDepth = maxUnconstrainedNormalDepth;
 
 	BoundaryMem = new QLIST::Index[nPts];
 
@@ -149,6 +167,14 @@ void PlanarSurfelDetector::Init(
 	memset(edgeFlags, 0, nEdges * sizeof(unsigned char));
 
 	cutPropagationBuffMem = new QLIST::Index[2 * nEdges];
+
+	//int nEdgeClassDepthOccupancyBins = (int)floor(maxRange / (0.5f * edgeClassDepthDiscontinuityThr)) + 1;
+
+	//edgeClassDepthOccupancy = new PSD::Interval[nEdgeClassDepthOccupancyBins];
+
+	//memset(edgeClassDepthOccupancy, 0, nEdgeClassDepthOccupancyBins * sizeof(PSD::Interval));
+
+	//iEdgeClassDepthOccupancyBin.Element = new int[nEdgeClassDepthOccupancyBins];
 }
 
 void PlanarSurfelDetector::DeallocateMemory()
@@ -156,6 +182,7 @@ void PlanarSurfelDetector::DeallocateMemory()
 	//RVL_DELETE_ARRAY(iPtBuff);
 	RVL_DELETE_ARRAY(map);
 	RVL_DELETE_ARRAY(distanceMap);
+	RVL_DELETE_ARRAY(unconstrainedNormalDepthMap);
 	RVL_DELETE_ARRAY(PointEdgeBuff);
 	RVL_DELETE_ARRAY(BoundaryMem);
 	RVL_DELETE_ARRAY(cutCostMap);
@@ -166,6 +193,8 @@ void PlanarSurfelDetector::DeallocateMemory()
 	RVL_DELETE_ARRAY(GSeedMem);
 	RVL_DELETE_ARRAY(GSeedListArray.Element);
 	RVL_DELETE_ARRAY(neighborMem);
+	RVL_DELETE_ARRAY(edgeClassDepthOccupancy);
+	RVL_DELETE_ARRAY(iEdgeClassDepthOccupancyBin.Element);
 
 	Mem2A.Free();
 	Mem2B.Free();
@@ -190,6 +219,11 @@ void PlanarSurfelDetector::CreateParamList(CRVLMem *pMem)
 	pParamData = ParamList.AddParam("SurfelDetector.maxEdgeFeatureConcavity", RVLPARAM_TYPE_FLOAT, &maxEdgeFeatureConcavity);
 	pParamData = ParamList.AddParam("SurfelDetector.maxAttackSize", RVLPARAM_TYPE_INT, &maxAttackSize);
 	pParamData = ParamList.AddParam("SurfelDetector.bJoinSmallSurfelsToClosestNeighbors", RVLPARAM_TYPE_BOOL, &bJoinSmallSurfelsToClosestNeighbors);
+	pParamData = ParamList.AddParam("SurfelDetector.edgeClassHalfWinSize", RVLPARAM_TYPE_INT, &edgeClassHalfWinSize);
+	pParamData = ParamList.AddParam("SurfelDetector.edgeClassDepthDiscontinuityThr", RVLPARAM_TYPE_FLOAT, &edgeClassDepthDiscontinuityThr);
+	pParamData = ParamList.AddParam("SurfelDetector.normalConstraintInSecondInitRG", RVLPARAM_TYPE_BOOL, &bNormalConstraintInSecondInitRG);
+	pParamData = ParamList.AddParam("SurfelDetector.LimitedDepthUnconstrainedNormalRG", RVLPARAM_TYPE_BOOL, &bLimitedDepthUnconstrainedNormalRG);
+	pParamData = ParamList.AddParam("SurfelDetector.maxAttackSize", RVLPARAM_TYPE_INT, &maxUnconstrainedNormalDepth);
 }
 
 void PlanarSurfelDetector::RandomIndices(Array<int> &A)
@@ -298,11 +332,33 @@ int PSD::RegionGrowingOperation(
 	
 		if ((costRGB = pData->kRGB2 * eRGB) <= pData->distThr)
 		{
-			if ((costN = pData->kNormal2 * eN) <= pData->distThr)
-			{
-				if ((costP = pData->kPlane2 * eP) <= pData->distThr)
-				{					
-					if(pData->mode == RVLPLANARSURFELDETECTOR_REGIONGROWING_MODE_FIND_CLOSEST_INLIER)
+			if ((costP = pData->kPlane2 * eP) <= pData->distThr)
+			{				
+				bool bNormalOK = ((costN = pData->kNormal2 * eN) <= pData->distThr);
+
+				if (pData->bLimitedDepthUnconstrainedRG)
+				{
+					unsigned int unconstrainedNormalDepthParent = pData->unconstrainedNormalDepthMap[iNode_];
+
+					if (unconstrainedNormalDepthParent >= pData->maxUnconstrainedNormalDepth)
+						bNormalOK = false;
+					else if (unconstrainedNormalDepthParent > 0)
+					{
+						bNormalOK = true;
+
+						pData->unconstrainedNormalDepthMap[iNode] = unconstrainedNormalDepthParent + 1;
+					}
+					else
+					{
+						pData->unconstrainedNormalDepthMap[iNode] = (bNormalOK ? 0 : 1);
+
+						bNormalOK = true;
+					}
+				}
+
+				if (bNormalOK)
+				{
+					if (pData->mode == RVLPLANARSURFELDETECTOR_REGIONGROWING_MODE_FIND_CLOSEST_INLIER)
 					{
 						pData->iPtSeed = iNode;
 
@@ -338,8 +394,8 @@ int PSD::RegionGrowingOperation(
 							return 1;	// iNode belongs to G.
 						}
 					} // if (pData->mode == RVLPLANARSURFELDETECTOR_REGIONGROWING_MODE_SURFEL_DETECTION || pData->mode == RVLPLANARSURFELDETECTOR_REGIONGROWING_MODE_ATTACK)
-				}	// if ((costP = pData->kPlane2 * eP) <= pData->distThr)
-			}	// if ((costN = pData->kNormal2 * eN) <= pData->distThr)
+				}	// if(bNormalOK)
+			}	// if ((costP = pData->kPlane2 * eP) <= pData->distThr)
 		}	// if ((costRGB = pData->kRGB2 * eRGB) <= pData->distThr)
 
 		if (pData->mode == RVLPLANARSURFELDETECTOR_REGIONGROWING_MODE_FIND_CLOSEST_INLIER)
@@ -417,6 +473,8 @@ void PlanarSurfelDetector::Segment(
 			continue;
 
 		pSurfel->bEdge = false;
+
+		pSurfel->flags = 0x00;
 
 		regionGrowingData.buffer = regionGrowingBuffer;
 
@@ -626,6 +684,7 @@ void PlanarSurfelDetector::PlanarRegionGrowing(
 	regionGrowingData.iSurfel = iSurfel;
 	regionGrowingData.mode = RVLPLANARSURFELDETECTOR_REGIONGROWING_MODE_SURFEL_DETECTION;
 	regionGrowingData.kNormal2 = kNormal * kNormal;
+	regionGrowingData.bLimitedDepthUnconstrainedRG = false;
 
 	int *piPtBuffEnd = RegionGrowing<Mesh, Point, MeshEdge, MeshEdgePtr, PlanarSurfelDetectorRegionGrowingData, PSD::RegionGrowingOperation>(pMesh, &regionGrowingData, piPtFetch, piPtPut);
 
@@ -717,7 +776,9 @@ void PlanarSurfelDetector::PlanarRegionGrowing(
 
 	//data.kNormal2 = 0.0f;
 	//data.kNormal2 = 4.0f;
-	regionGrowingData.kNormal2 = kNormal * kNormal;
+	regionGrowingData.kNormal2 = (bNormalConstraintInSecondInitRG ? kNormal * kNormal : 0.0f);
+
+	regionGrowingData.unconstrainedNormalDepthMap[iPtSeed] = 0;
 
 	piPtFetch = piPtPut = regionGrowingData.iPtBuff2;
 
@@ -731,6 +792,7 @@ void PlanarSurfelDetector::PlanarRegionGrowing(
 	regionGrowingData.dSize = 1;
 	regionGrowingData.maxSize = pMesh->NodeArray.n;
 	regionGrowingData.iAttackedSurfel = iSurfel;
+	regionGrowingData.bLimitedDepthUnconstrainedRG = bLimitedDepthUnconstrainedNormalRG;
 
 	int *piPtBuff2End = RegionGrowing<Mesh, Point, MeshEdge, MeshEdgePtr, PlanarSurfelDetectorRegionGrowingData, PSD::RegionGrowingOperation>(pMesh, &regionGrowingData, piPtFetch, piPtPut);
 
@@ -853,9 +915,9 @@ void PlanarSurfelDetector::DefineBoundaryTest(
 
 	// debugging
 
-	for (int i = 0; i < nPts; i++)
-		if (map[i] != -1 || distanceMap[i] != 0xffffffff)
-			int debug = 0;
+	//for (int i = 0; i < nPts; i++)
+	//	if (map[i] != -1 || distanceMap[i] != 0xffffffff)
+	//		int debug = 0;
 
 	/////
 }
@@ -992,6 +1054,8 @@ void PlanarSurfelDetector::DefineBoundary(
 	{
 		// Attack B-surfel by W-surfel using G_ as the seed. The resulting G-region is stored in G_.
 
+		data.bLimitedDepthUnconstrainedRG = false;
+
 		GRegion(pMesh, pSurfels, data, iSurfel_, iSurfel, G_, GBnd, WBnd, bPrevW, false);
 
 		// Reset map and distanceMap elements on the boundary of new B-surfel (after the attack).
@@ -1079,6 +1143,8 @@ void PlanarSurfelDetector::DefineBoundary(
 	//QLIST::CopyToArray(GSeedListArray.Element + iSurfel, &G);
 
 	int nSeed = G.n;
+
+	data.bLimitedDepthUnconstrainedRG = bLimitedDepthUnconstrainedNormalRG;
 
 	bool bW_ = GRegion(pMesh, pSurfels, data, iSurfel, iSurfel_, G, GBnd, WBnd, bPrevW);
 
@@ -3405,6 +3471,7 @@ void PlanarSurfelDetector::GetNeighbors(
 
 	regionGrowingData.mode = RVLPLANARSURFELDETECTOR_REGIONGROWING_MODE_ATTACK;
 	regionGrowingData.iSurfel = 0;
+	regionGrowingData.bLimitedDepthUnconstrainedRG = bLimitedDepthUnconstrainedNormalRG;
 
 	MeshEdgePtr *pEdgePtr;
 	int iPt, iPt_;
@@ -4246,6 +4313,7 @@ void PlanarSurfelDetector::GetAttackSeed(
 	data.pTemplate = pSurfel_;
 	data.surfelMap = pSurfels->surfelMap;
 	data.buffer = map;
+	data.bLimitedDepthUnconstrainedRG = false;
 
 	int *piGPt = G.Element;
 
@@ -4287,12 +4355,28 @@ void PlanarSurfelDetector::Boundaries(
 
 	MeshEdgePtr **ppEdgePtr = pSurfels->BndMem;
 
-	int iDebug = 0;
+	//int iDebug = 0;
 
-	int iPt, iPt_;
+	//float edgeClassDepthOccupancyBinSize = edgeClassDepthDiscontinuityThr;
+
+	//int uMax = pMesh->width - 1;
+	//int vMax = pMesh->height - 1;
+
+	int k = 2 * edgeClassHalfWinSize;
+
+	int i;
+	int iPt, iPt_, iPt__;
 	QLIST::Entry<Array<MeshEdgePtr *>> *pBoundary;
-	Point *pPt, *pPt_;
+	Point *pPt, *pPt_, *pPt__;
 	MeshEdgePtr *pEdgePtr;
+	int u, v;
+	int u0, v0;
+	//int uMin_, uMax_, vMin_, vMax_;
+	float d, d0, dd;
+	//int iBin, iBin_, iBin__;
+	bool bForeground;
+	int e, de, p, q, q2, dq;
+	int s11, s12, s21, s22, s11_, s12_;
 
 	for (iPt = 0; iPt < pMesh->NodeArray.n; iPt++)
 	{
@@ -4320,11 +4404,168 @@ void PlanarSurfelDetector::Boundaries(
 
 				while (pPt_->bBoundary && pSurfels->edgeMap[iPt_] < 0)
 				{
+					//if (iPt_ == 253686)
+					//	int debug = 0;
+
 					pSurfels->edgeMap[iPt_] = 0;
 
 					pEdgePtr = pPt_->EdgeList.pFirst;
 
 					*(ppEdgePtr++) = pEdgePtr;
+
+					// Classify edge point to foreground/background.
+
+					if (pMesh->bOrganizedPC)
+					{
+						d0 = pPt_->P[2];
+
+						if (d0 <= maxRange)
+						{
+							u0 = iPt_ % pMesh->width;
+							v0 = iPt_ / pMesh->width;
+
+							s11 = 1;
+							s12 = 0;
+							s21 = 0;
+							s22 = 1;
+
+							for (i = 0; i < 4; i++)
+							{
+								for (q2 = -edgeClassHalfWinSize; q2 < edgeClassHalfWinSize; q2++)
+								{
+									q = 0;
+
+									dq = (q2 >= 0 ? 1 : -1);
+
+									de = 2 * dq * q2;
+
+									e = de - edgeClassHalfWinSize;
+
+									for (p = 1; p <= edgeClassHalfWinSize; p++)
+									{
+										if (e > 0)
+										{
+											q += dq;
+
+											e -= k;
+										}
+
+										e += de;
+
+										u = u0 + s11 * p + s12 * q;
+										v = v0 + s21 * p + s22 * q;
+
+										if (u < 0)
+											break;
+
+										if (u >= pMesh->width)
+											break;
+
+										if (v < 0)
+											break;
+
+										if (v >= pMesh->height)
+											break;
+
+										iPt__ = u + v * pMesh->width;
+										pPt__ = pMesh->NodeArray.Element + iPt__;
+										d = pPt__->P[2];
+
+										if (d > 0.0f)
+										{
+											dd = d - d0;
+
+											if (dd >= edgeClassDepthDiscontinuityThr)
+												pPt_->flags |= RVLMESH_POINT_FLAG_FOREGROUND;
+											else if (dd <= -edgeClassDepthDiscontinuityThr)
+												pPt_->flags |= RVLMESH_POINT_FLAG_BACKGROUND;
+
+											p = edgeClassHalfWinSize;
+										}
+									}	// for (p = 1; p <= edgeClassHalfWinSize; p++)
+								}	// for (q2 = -edgeClassHalfWinSize; q2 < edgeClassHalfWinSize; q2++)
+
+								s11_ = -s21;
+								s12_ = -s22;
+								s21 = s11;
+								s22 = s12;
+								s11 = s11_;
+								s12 = s12_;
+							}	// for(i = 0; i < 4; i++)
+#ifdef NEVER
+							uMin_ = u0 - edgeClassHalfWinSize;
+							uMax_ = u0 + edgeClassHalfWinSize;
+							vMin_ = v0 - edgeClassHalfWinSize;
+							vMax_ = v0 + edgeClassHalfWinSize;
+
+							RVLCROPRECT(0, uMax, 0, vMax, uMin_, uMax_, vMin_, vMax_);
+
+							iEdgeClassDepthOccupancyBin.n = 0;
+
+							for (v = vMin_; v <= vMax_; v++)
+							{
+								for (u = uMin_; u <= uMax_; u++)
+								{
+									iPt__ = u + v * pMesh->width;
+									pPt__ = pMesh->NodeArray.Element + iPt__;
+									d = pPt__->P[2];
+
+									if (d > 0.0f && d <= maxRange)
+									{
+										iBin = (int)(d / edgeClassDepthOccupancyBinSize);
+
+										if (edgeClassDepthOccupancy[iBin].min < 1e-10)
+										{
+											edgeClassDepthOccupancy[iBin].min = edgeClassDepthOccupancy[iBin].max = d;
+
+											iEdgeClassDepthOccupancyBin.Element[iEdgeClassDepthOccupancyBin.n++] = iBin;
+										}
+										else
+										{
+											if (d < edgeClassDepthOccupancy[iBin].min)
+												edgeClassDepthOccupancy[iBin].min = d;
+											else if (d > edgeClassDepthOccupancy[iBin].max)
+												edgeClassDepthOccupancy[iBin].max = d;
+										}
+									}
+								}
+							}
+
+							d = pPt__->P[2];
+
+							bForeground = true;
+
+							iBin = (int)(d / edgeClassDepthOccupancyBinSize);
+
+							iBin_ = iBin;
+
+							while (bForeground)
+							{
+								iBin__ = iBin_;
+
+								iBin_--;
+
+								if (edgeClassDepthOccupancy[iBin__].min < 1e-10)
+									break;
+
+								if (edgeClassDepthOccupancy[iBin_].max - edgeClassDepthOccupancy[iBin__].min > edgeClassDepthDiscontinuityThr)
+									bForeground = false;
+							}
+
+							if (bForeground)
+							{
+								iBin_ = iBin;
+
+								while (bForeground)
+								{
+									// ... not completed
+								}
+							}
+#endif
+						}
+					}	// if (pMesh->bOrganizedPC)
+
+					///
 
 					iPt_ = RVLPCSEGMENT_GRAPH_GET_OPPOSITE_NODE(pEdgePtr);
 
@@ -4332,14 +4573,14 @@ void PlanarSurfelDetector::Boundaries(
 					//	int debug = 0;
 
 					pPt_ = pMesh->NodeArray.Element + iPt_;
-				}
+				}	// while (pPt_->bBoundary && pSurfels->edgeMap[iPt_] < 0)
 
 				pBoundary->data.n = ppEdgePtr - pBoundary->data.Element;
 
-				iDebug++;
-			}
-		}
-	}
+				//iDebug++;
+			}	// if (pSurfels->edgeMap[iPt] < 0)
+		}	// if (pPt->bBoundary)
+	}	// for (iPt = 0; iPt < pMesh->NodeArray.n; iPt++)
 
 	MeshEdgePtr **pBndMemEnd = ppEdgePtr;
 
@@ -4359,11 +4600,13 @@ void PlanarSurfelDetector::EdgeFetures(
 {
 	int iEdgeFeature = pSurfels->NodeArray.n;
 
+	int nOcclusionEdges = 0;
+
 	QLIST::Entry<Array<MeshEdgePtr *>> *pBoundary = pSurfels->BoundaryList.pFirst;
 
 	while (pBoundary)
 	{
-		iEdgeFeature += CreateEdgeFeatures(pMesh, pSurfels, &(pBoundary->data), iEdgeFeature);
+		iEdgeFeature += CreateEdgeFeatures(pMesh, pSurfels, &(pBoundary->data), iEdgeFeature, nOcclusionEdges);
 
 		pBoundary = pBoundary->pNext;
 	}
@@ -4375,7 +4618,8 @@ int PlanarSurfelDetector::CreateEdgeFeatures(
 	Mesh *pMesh,
 	SurfelGraph *pSurfels,
 	Array<MeshEdgePtr *> *pBoundary,
-	int iNewFeature)
+	int iNewFeature,
+	int &nOcclusionEdges)
 {
 	if (pBoundary->n < minEdgeFeatureSize)
 		return 0;
@@ -4554,18 +4798,30 @@ int PlanarSurfelDetector::CreateEdgeFeatures(
 
 	float eThr = 2.0f / kPlane;
 
+	float R_[9];
+
+	float *X = R_;
+	float *Y = R_ + 3;
+	float *Z = R_ + 6;
+
+	float r2 = 0.0005f * (float)(pSurfels->edgeDepth);
+
 	int iPointEdge3;
 	Point *pPt1, *pPt2;
 	float *P1, *P2, *P_, *V_;
 	float dP[3], NE[3], V[3], Q[3];
 	float dE, e, maxe, maxe_;
 	float fTmp;
-	float *N;
+	float *N, *R;
 	Surfel *pEdgeFeature;
 	float l, s;
 	Array<MeshEdgePtr *> *pEdgePtArray;
 	bool bPtProjectionOutOfLineSegment;
 	//int iPointEdge_;
+	int nForeground, nBackground;
+	BYTE edgeClass;
+	MeshEdgePtr **pEdgePtrPtrArray;
+	int nTmp;
 
 	while (pSegmentEndpoint2)
 	{
@@ -4629,8 +4885,8 @@ int PlanarSurfelDetector::CreateEdgeFeatures(
 
 			iPt = RVLPCSEGMENT_GRAPH_GET_NODE(pEdgePtr);
 
-			if (iPt == 153453)
-				int debug = 0;
+			//if (iPt == 153453)
+			//	int debug = 0;
 
 			pPt = pMesh->NodeArray.Element + iPt;
 
@@ -4702,31 +4958,9 @@ int PlanarSurfelDetector::CreateEdgeFeatures(
 		}
 		else // If all points in the interval [pSegmentEndpoint1->idx, pSegmentEndpoint2->idx] are within the tolerance eThr from the plane (NE, dE)
 		{
-			// Create new edge feature.
+			// Compute the number of foreground/background points.
 
-			pEdgeFeature = pSurfels->NodeArray.Element + iNewFeature_;
-
-			pEdgeFeature->bEdge = true;
-
-			N = pEdgeFeature->N;
-
-			RVLCOPY3VECTOR(NE, N);
-
-			pEdgeFeature->d = dE;
-
-			P_ = pEdgeFeature->P;
-
-			RVLCOPY3VECTOR(P1, P_);
-
-			V_ = pEdgeFeature->V;
-
-			RVLCOPY3VECTOR(V, V_);
-
-			pEdgeFeature->physicalSize = l;
-
-			pEdgeFeature->size = pSegmentEndpoint2->Idx - pSegmentEndpoint1->Idx;
-
-			// Assign points to the new edge feature.
+			nForeground = nBackground = 0;
 
 			iPointEdge = pSegmentEndpoint1->Idx;
 
@@ -4736,22 +4970,123 @@ int PlanarSurfelDetector::CreateEdgeFeatures(
 
 				iPt = RVLPCSEGMENT_GRAPH_GET_NODE(pEdgePtr);
 
-				pSurfels->edgeMap[iPt] = iNewFeature_;
+				pPt = pMesh->NodeArray.Element + iPt;
+
+				edgeClass = (pPt->flags & RVLMESH_POINT_FLAG_EDGE_CLASS);
+
+				if (edgeClass == RVLMESH_POINT_FLAG_FOREGROUND)
+					nForeground++;
+				else if (edgeClass == RVLMESH_POINT_FLAG_BACKGROUND)
+					nBackground++;
 
 				iPointEdge = (iPointEdge + 1) % pBoundary->n;
 			}
 
-			RVLMEM_ALLOC_STRUCT(pMem, Array<MeshEdgePtr *>, pEdgePtArray);
+			if (nForeground > 0 && nForeground > nBackground)
+			{
+				// Create new edge feature.
 
-			pEdgePtArray->Element = pBoundary->Element + pSegmentEndpoint1->Idx;
-			pEdgePtArray->n = pEdgeFeature->size;
+				pEdgeFeature = pSurfels->NodeArray.Element + iNewFeature_;
 
-			pEdgeFeature->BoundaryArray.Element = pEdgePtArray;
-			pEdgeFeature->BoundaryArray.n = 1;
+				pEdgeFeature->bEdge = true;
 
-			//
+				pEdgeFeature->flags = RVLSURFEL_FLAG_RF;
 
-			iNewFeature_++;
+				N = pEdgeFeature->N;
+
+				RVLCOPY3VECTOR(NE, N);
+
+				pEdgeFeature->d = dE;
+
+				P_ = pEdgeFeature->P;
+
+				RVLCOPY3VECTOR(P1, P_);
+
+				V_ = pEdgeFeature->V;
+
+				RVLCOPY3VECTOR(V, V_);
+
+				pEdgeFeature->physicalSize = l;
+
+				// Assign points to the new edge feature.
+
+				iPointEdge = pSegmentEndpoint1->Idx;
+
+				while (iPointEdge != pSegmentEndpoint2->Idx)
+				{
+					pEdgePtr = pBoundary->Element[iPointEdge];
+
+					iPt = RVLPCSEGMENT_GRAPH_GET_NODE(pEdgePtr);
+
+					pSurfels->edgeMap[iPt] = iNewFeature_;
+
+					iPointEdge = (iPointEdge + 1) % pBoundary->n;
+				}
+
+				// Determine boundary.
+
+				RVLMEM_ALLOC_STRUCT(pMem, Array<MeshEdgePtr *>, pEdgePtArray);
+
+				pEdgeFeature->BoundaryArray.n = 1;
+				pEdgeFeature->BoundaryArray.Element = pEdgePtArray;
+
+				if (pSegmentEndpoint2->Idx >= pSegmentEndpoint1->Idx)
+				{
+					pEdgePtArray->Element = pBoundary->Element + pSegmentEndpoint1->Idx;
+					pEdgePtArray->n = pSegmentEndpoint2->Idx - pSegmentEndpoint1->Idx;					
+				}
+				else
+				{
+					pEdgePtArray->n = pSegmentEndpoint2->Idx - pSegmentEndpoint1->Idx + pBoundary->n;
+
+					RVLMEM_ALLOC_STRUCT_ARRAY(pMem, MeshEdgePtr *, pEdgePtArray->n, pEdgePtrPtrArray);
+
+					pEdgePtArray->Element = pEdgePtrPtrArray;
+
+					nTmp = pBoundary->n - pSegmentEndpoint1->Idx;
+
+					memcpy(pEdgePtrPtrArray, pBoundary->Element + pSegmentEndpoint1->Idx, nTmp * sizeof(MeshEdgePtr *));
+
+					pEdgePtrPtrArray += nTmp;
+
+					memcpy(pEdgePtrPtrArray, pBoundary->Element, pSegmentEndpoint2->Idx * sizeof(MeshEdgePtr *));
+				}	
+
+				pEdgeFeature->size = pEdgePtArray->n * pSurfels->edgeDepth;
+
+				// Compute other edge feature parameters.
+
+				R = pEdgeFeature->R;
+
+				RVLCOPY3VECTOR(N, Z);
+				RVLCOPY3VECTOR(V, X);
+				RVLCROSSPRODUCT3(Z, X, Y);
+				RVLCOPYMX3X3(R_, R);
+
+				pEdgeFeature->r1 = 0.5f * l;
+				pEdgeFeature->r2 = r2;
+
+				//
+
+				iNewFeature_++;
+			}
+			//else
+			//{
+			//	nOcclusionEdges++;
+
+			//	iPointEdge = pSegmentEndpoint1->Idx;
+
+			//	while (iPointEdge != pSegmentEndpoint2->Idx)
+			//	{
+			//		pEdgePtr = pBoundary->Element[iPointEdge];
+
+			//		iPt = RVLPCSEGMENT_GRAPH_GET_NODE(pEdgePtr);
+
+			//		pSurfels->edgeMap[iPt] = -nOcclusionEdges;
+
+			//		iPointEdge = (iPointEdge + 1) % pBoundary->n;
+			//	}
+			//}
 
 			// (pSegmentEndpoint1, pSegmentEndpoint2) <- (pSegmentEndpoint2, pSegmentEndpoint2->pNext)
 
@@ -5379,7 +5714,7 @@ void PlanarSurfelDetector::JoinSmallSurfelsToClosestNeighbors(
 
 	for (iSurfel = 0; iSurfel < pSurfels->NodeArray.n; iSurfel++, pSurfel++)
 	{
-		//if (iSurfel == 8145)
+		//if (iSurfel == 28)
 		//	int debug = 0;
 
 		if (pSurfel->size > 0 && pSurfel->size < minSurfelSize)
