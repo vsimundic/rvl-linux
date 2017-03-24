@@ -314,8 +314,9 @@ namespace RVL
 		void DetectGroundPlane(SURFEL::ObjectGraph *pObjects);
 		bool GravityReferenceFrame(
 			QList<QLIST::Index> surfelList,
-			float *RGC);
-		void CTIs(
+			float *RGC,
+			float &varX);
+		int CTIs(
 			QList<QLIST::Index> surfelList,
 			Array<int> iVertexArray,
 			int iModel,
@@ -325,16 +326,11 @@ namespace RVL
 		void CTIs(
 			SURFEL::ObjectGraph *pObjects,
 			RECOG::CTISet *pCTISet);
-		void GetVertices(
-			QList<QLIST::Index> surfelList,
-			Array<int> *piVertexArray,
-			int *&piVertexIdxMem);
 		float Symmetry(
 			SURFEL::ObjectGraph *pObjects,
 			int iObject1,
-			int iObject2);
-		void InitSymmetry(SURFEL::ObjectGraph *pObjects);
-		void FreeSymmetry();
+			int iObject2,
+			RECOG::CTISet *pCTIs);
 		void PrintMatchInfo(
 			FILE *fp,
 			FILE *fpLog,
@@ -539,8 +535,6 @@ namespace RVL
 		RECOG::PSGM_::Cluster *clusterMem;
 		int *clusterSurfelMem;
 		int *clusterVertexMem;
-		int *iVertexMem;
-		bool *bVertexAssigned;
 		//RECOG::PSGM_::ModelInstanceElement *modelInstanceMem;
 		vtkSmartPointer<vtkPolyData> referenceFramesPolyData;
 		char *sceneFileName;

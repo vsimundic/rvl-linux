@@ -69,8 +69,6 @@ PSGM::PSGM()
 	clusterMem = NULL;
 	clusterSurfelMem = NULL;
 	clusterVertexMem = NULL;
-	iVertexMem = NULL;
-	bVertexAssigned = NULL;
 	//modelInstanceMem = NULL;
 	sceneFileName = NULL;
 	modelInstanceDB.Element = NULL; //Vidovic
@@ -128,6 +126,8 @@ PSGM::PSGM()
 
 	//fpTime = fopen("C:\\RVL\\MatchTime_WithoutRansac.txt", "w");
 	//End Vidovic
+
+	bGnd = false;
 }
 
 
@@ -138,8 +138,6 @@ PSGM::~PSGM()
 	RVL_DELETE_ARRAY(clusterMem);
 	RVL_DELETE_ARRAY(clusterSurfelMem);
 	RVL_DELETE_ARRAY(clusterVertexMem);
-	RVL_DELETE_ARRAY(iVertexMem);
-	RVL_DELETE_ARRAY(bVertexAssigned);
 	RVL_DELETE_ARRAY(convexTemplate66.Element);
 	RVL_DELETE_ARRAY(convexTemplateBox.Element);
 	//RVL_DELETE_ARRAY(modelInstanceMem);
@@ -7523,17 +7521,14 @@ void PSGM::DetectGroundPlane(SURFEL::ObjectGraph *pObjects)
 
 	iGndObject = -1;
 
-	int i;
 	int iObject;
-	GRAPH::AggregateNode<SURFEL::AgEdge> *pObject;
+	SURFEL::Object *pObject;
 
-	for (i = 0; i < pObjects->sortedObjectArray.n; i++)
+	for (iObject = 0; iObject < pObjects->objectArray.n; iObject++)
 	{
-		iObject = pObjects->sortedObjectArray.Element[i].idx;
+		pObject = pObjects->objectArray.Element + iObject;
 
-		pObject = pObjects->NodeArray.Element + iObject;
-
-		QLIST::CopyToArray(&(pObject->elementList), &iSurfelArray);
+		QLIST::CopyToArray(&(pObject->surfelList), &iSurfelArray);
 
 		if (IsFlat(iSurfelArray, NGnd, dGnd, PtArray))
 		{
@@ -7551,7 +7546,8 @@ void PSGM::DetectGroundPlane(SURFEL::ObjectGraph *pObjects)
 
 bool PSGM::GravityReferenceFrame(
 	QList<QLIST::Index> surfelList,
-	float *RGC)
+	float *RGC,
+	float &varX)
 {
 	if (!bGnd)
 		return false;
@@ -7669,10 +7665,12 @@ bool PSGM::GravityReferenceFrame(
 
 	RVLCOPYMX3X3T(RCG, RGC);
 
+	varX = minVarv;
+
 	return true;
 }
 
-void PSGM::CTIs(
+int PSGM::CTIs(
 	QList<QLIST::Index> surfelList,
 	Array<int> iVertexArray,
 	int iModel,
@@ -7681,9 +7679,10 @@ void PSGM::CTIs(
 	CRVLMem *pMem)
 {
 	float RGC[9];
+	float varX;
 
-	if (!GravityReferenceFrame(surfelList, RGC))
-		return;
+	if (!GravityReferenceFrame(surfelList, RGC, varX))
+		return 0;
 
 	RECOG::PSGM_::ModelInstance *pCTI;
 
@@ -7699,54 +7698,14 @@ void PSGM::CTIs(
 
 	RVLNULL3VECTOR(t);
 
+	pCTI->varX = varX;
+
 	pCTI->iCluster = iCluster;
 	pCTI->iModel = iModel;
 
 	FitModel(iVertexArray, pCTI);
-}
 
-void PSGM::GetVertices(
-	QList<QLIST::Index> surfelList,
-	Array<int> *piVertexArray,
-	int *&piVertexIdxMem)
-{
-	piVertexArray->Element = piVertexIdxMem;
-
-	int iSurfel;
-	QList<QLIST::Index> *pSurfelVertexList;
-	QLIST::Index *pVertexIdx;
-
-	QLIST::Index *piSurfel = surfelList.pFirst;
-
-	while (piSurfel)
-	{
-		iSurfel = piSurfel->Idx;
-
-		pSurfelVertexList = pSurfels->surfelVertexList.Element + iSurfel;
-
-		pVertexIdx = pSurfelVertexList->pFirst;
-
-		while (pVertexIdx)
-		{
-			if (!bVertexAssigned[pVertexIdx->Idx])
-			{
-				*(piVertexIdxMem++) = pVertexIdx->Idx;
-
-				bVertexAssigned[pVertexIdx->Idx] = true;
-			}
-
-			pVertexIdx = pVertexIdx->pNext;
-		}
-
-		piSurfel = piSurfel->pNext;
-	}
-
-	piVertexArray->n = piVertexIdxMem - piVertexArray->Element;
-
-	int i;
-
-	for (i = 0; i < piVertexArray->n; i++)
-		bVertexAssigned[piVertexArray->Element[i]] = false;
+	return 1;
 }
 
 void PSGM::CTIs(
@@ -7760,85 +7719,119 @@ void PSGM::CTIs(
 	if (!bGnd)
 		return;
 
-	iVertexMem = new int[pSurfels->nVertexSurfelRelations];
+	RVL_DELETE_ARRAY(pCTISet->SegmentCTIs.Element);
 
-	int *piNextVertex = iVertexMem;
+	pCTISet->SegmentCTIs.Element = new Array<int>[pObjects->objectArray.n];
+	pCTISet->SegmentCTIs.n = pObjects->objectArray.n;
 
-	bVertexAssigned = new bool[pSurfels->NodeArray.n];
+	int iObject;
+	SURFEL::Object *pObject;
 
-	memset(bVertexAssigned, 0, pSurfels->NodeArray.n * sizeof(bool));
-
-	int i, iObject;
-	GRAPH::AggregateNode<SURFEL::AgEdge> *pObject;
-	Array<int> iVertexArray;
-	int *piVertexMem;
-
-	for (i = 0; i < pObjects->sortedObjectArray.n; i++)
+	for (iObject = 0; iObject < pObjects->objectArray.n; iObject++)
 	{
-		iObject = pObjects->sortedObjectArray.Element[i].idx;
-
 		if (iObject != iGndObject)
 		{
-			pObject = pObjects->NodeArray.Element + iObject;
+			pObject = pObjects->objectArray.Element + iObject;
 
-			piVertexMem = iVertexMem;
-
-			GetVertices(pObject->elementList, &iVertexArray, piNextVertex);
-
-			if (iVertexArray.n >= 3)
-				CTIs(pObject->elementList, iVertexArray, -1, iObject, pCTISet, pMem);
+			if (pObject->iVertexArray.n >= 3)
+				pCTISet->SegmentCTIs.Element[iObject].n = CTIs(pObject->surfelList, pObject->iVertexArray, -1, iObject, pCTISet, pMem);
+			else
+				pCTISet->SegmentCTIs.Element[iObject].n = 0;			
 		}
+		else
+			pCTISet->SegmentCTIs.Element[iObject].n = 0;
 	}
 
-	pCTISet->CopyCTIsToArray();
+	RVL_DELETE_ARRAY(pCTISet->segmentCTIIdxMem);
 
-	delete[] iVertexMem;
-	delete[] bVertexAssigned;
+	pCTISet->segmentCTIIdxMem = new int[pCTISet->pCTI.n];
+
+	int *iSegmentCTIIdx = pCTISet->segmentCTIIdxMem;
+
+	RVL_DELETE_ARRAY(pCTISet->pCTI.Element);
+
+	pCTISet->pCTI.Element = new RECOG::PSGM_::ModelInstance*[pCTISet->pCTI.n];
+
+	QLIST::CreatePtrArray<RECOG::PSGM_::ModelInstance>(&(pCTISet->CTI), &(pCTISet->pCTI));
+
+	for (iObject = 0; iObject < pObjects->objectArray.n; iObject++)
+	{
+		if (pCTISet->SegmentCTIs.Element[iObject].n > 0)
+		{
+			pCTISet->SegmentCTIs.Element[iObject].Element = iSegmentCTIIdx;
+
+			iSegmentCTIIdx += pCTISet->SegmentCTIs.Element[iObject].n;
+
+			pCTISet->SegmentCTIs.Element[iObject].n = 0;
+		}
+		else
+			pCTISet->SegmentCTIs.Element[iObject].Element = NULL;
+	}
+
+	int iCTI;
+
+	for (iCTI = 0; iCTI < pCTISet->pCTI.n; iCTI++)
+	{
+		iObject = pCTISet->pCTI.Element[iCTI]->iCluster;
+
+		pCTISet->SegmentCTIs.Element[iObject].Element[pCTISet->SegmentCTIs.Element[iObject].n++] = iCTI;
+	}
 }
 
 float PSGM::Symmetry(
 	SURFEL::ObjectGraph *pObjects,
 	int iObject1,
-	int iObject2)
+	int iObject2,
+	RECOG::CTISet *pCTIs)
 {
-	bool bDebug = (iObject1 == 37 && iObject2 == 54 || iObject1 == 54 && iObject2 == 37);
+	//bool bDebug = (iObject1 == 37 && iObject2 == 54 || iObject1 == 54 && iObject2 == 37);
+
+	bool bDebug = false;
 
 	int iObject[2];
 
 	iObject[0] = iObject1;
 	iObject[1] = iObject2;
 
-	GRAPH::AggregateNode<SURFEL::AgEdge> *pObject[2];
+	SURFEL::Object *pObject[2];
 	
-	pObject[0] = pObjects->NodeArray.Element + iObject[0];
-	pObject[1] = pObjects->NodeArray.Element + iObject[1];
+	pObject[0] = pObjects->objectArray.Element + iObject[0];
+	pObject[1] = pObjects->objectArray.Element + iObject[1];
 
-	// Union of surfels of iObject1 and iObject2.
+	// Select the better RF.
 
-	QList<QLIST::Index> *pSurfelList[2];
+	float *RGC = NULL;
 
-	pSurfelList[0] = &(pObject[0]->elementList);
-	pSurfelList[1] = &(pObject[1]->elementList);
+	float varX = 0.0f;
 
-	QLIST::Index **ppNext = pSurfelList[0]->ppNext;			
+	int iObject1_ = -1;
 
-	RVLQLIST_APPEND(pSurfelList[0], pSurfelList[1]);
+	RECOG::PSGM_::ModelInstance *pCTI;
+	int i;
 
-	// Compute gravity RF.
+	for (i = 0; i < 2; i++)
+	{
+		if (pCTIs->SegmentCTIs.Element[iObject[i]].n > 0)
+		{
+			pCTI = pCTIs->pCTI.Element[pCTIs->SegmentCTIs.Element[iObject[i]].Element[0]];
 
-	float RGC[9];
+			if (RGC == NULL || pCTI->varX < varX)
+			{
+				RGC = pCTI->R;
 
-	bool bGRF = GravityReferenceFrame(*pSurfelList[0], RGC);
+				varX = pCTI->varX;
 
-	// Split back the surfel lists of iObject1 and iObject2.
+				iObject1_ = i;
+			}
+		}
+	}
 
-	pSurfelList[0]->ppNext = ppNext;
-	*ppNext = NULL;
-
-	// If no gravity RF is created, then stop the procedure.
-
-	if (!bGRF)
+	if (RGC == NULL)
 		return 0.0f;
+
+	int iObject2_ = 1 - iObject1_;
+
+	// Select symmetry planes from convexTemplate.
 
 	int nHalfConvexTemplate = convexTemplate.n / 2;
 
@@ -7848,7 +7841,6 @@ float PSGM::Symmetry(
 
 	iSymmetryPlanes.n = 0;
 
-	int i;
 	float *N;
 
 	for (i = 0; i < nHalfConvexTemplate; i++)
@@ -7858,35 +7850,19 @@ float PSGM::Symmetry(
 		if (RVLABS(N[2]) < 1e-10)
 			iSymmetryPlanes.Element[iSymmetryPlanes.n++] = i;
 	}
-
-	int *piVertexMem = iVertexMem;
+	
+	// 
 
 	Array<int> iVertexArray[2];
 
-	for (i = 0; i < 2; i++)
-		GetVertices(*pSurfelList[i], &iVertexArray[i], piVertexMem);
-
-	RECOG::PSGM_::ModelInstance CTI1;
-	
-	float *R, *t;
-
-	// CTI1 <- CTI of iObject1	
-
-	R = CTI1.R;
-
-	RVLCOPYMX3X3(RGC, R);
-
-	t = CTI1.t;
-
-	RVLNULL3VECTOR(t);
-
-	CTI1.modelInstance.Element = new RECOG::PSGM_::ModelInstanceElement[convexTemplate.n];
-
-	FitModel(iVertexArray[0], &CTI1, true);
+	iVertexArray[0] = pObject[iObject1_]->iVertexArray;
+	iVertexArray[1] = pObject[iObject2_]->iVertexArray;
 
 	int nVertices2 = iVertexArray[1].n;
 
-	RECOG::PSGM_::ModelInstanceElement *pCTIElement1 = CTI1.modelInstance.Element;
+	pCTI = pCTIs->pCTI.Element[pCTIs->SegmentCTIs.Element[iObject[iObject1_]].Element[0]];
+
+	//RECOG::PSGM_::ModelInstanceElement *pCTIElement1 = CTI1.modelInstance.Element;
 
 	// Determine convex hull.
 
@@ -7963,6 +7939,7 @@ float PSGM::Symmetry(
 	float e;
 	int iBestSymmetryPlane;
 	float dBestSymmetryPlane;
+	RECOG::PSGM_::ModelInstanceElement *pCTIElement1;
 
 	for (iSymmetryPlane = 0; iSymmetryPlane < iSymmetryPlanes.n; iSymmetryPlane++)
 	{
@@ -7997,7 +7974,7 @@ float PSGM::Symmetry(
 
 		sumw = 0.0f;
 
-		pCTIElement1 = CTI1.modelInstance.Element;
+		pCTIElement1 = pCTI->modelInstance.Element;
 
 		for (i = 0; i < convexTemplate.n; i++, pCTIElement1++)
 		{
@@ -8097,7 +8074,7 @@ float PSGM::Symmetry(
 		{
 			pSymmetryMatch = symmetryMatch.Element + i;
 
-			e = (pSymmetryMatch->d + pSymmetryMatch->w * t_ - CTI1.modelInstance.Element[pSymmetryMatch->iCTIElement].d) / symmetryMatchThr;
+			e = (pSymmetryMatch->d + pSymmetryMatch->w * t_ - pCTI->modelInstance.Element[pSymmetryMatch->iCTIElement].d) / symmetryMatchThr;
 
 			e *= e;
 
@@ -8150,32 +8127,13 @@ float PSGM::Symmetry(
 
 	// Free memory.
 
-	delete[] CTI1.modelInstance.Element;
 	//delete[] bVisible;
 	delete[] P2RMem;
 	delete[] symmetryMatch.Element;
 	delete[] iSymmetryPlanes.Element;
 	delete[] sortedSymmatryMatchIdx.Element;
-}
 
-void PSGM::InitSymmetry(SURFEL::ObjectGraph *pObjects)
-{
-	DetectGroundPlane(pObjects);
+	// Return the symmetry score.
 
-	if (!bGnd)
-		return;
-
-	iVertexMem = new int[pSurfels->nVertexSurfelRelations];
-
-	int *piNextVertex = iVertexMem;
-
-	bVertexAssigned = new bool[pSurfels->NodeArray.n];
-
-	memset(bVertexAssigned, 0, pSurfels->NodeArray.n * sizeof(bool));
-}
-
-void PSGM::FreeSymmetry()
-{
-	delete[] iVertexMem;
-	delete[] bVertexAssigned;
+	return maxSymmetryScore;
 }

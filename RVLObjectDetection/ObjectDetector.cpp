@@ -275,11 +275,11 @@ void ObjectDetector::DetectObjects(char *MeshFilePathName)
 			cv::waitKey(1);
 			/*VisualizeObjectGraphVertexPointCloud(&objects, 100);*/
 			//if (bCTIBasedObjectAggregation)
+			pObjects->GetVertices();			
 			if (pObjects->objectAggregationLevel2Method == RVLPCSEGMENT_OBJECT_AGGREGATION_LEVEL2_METHOD_SYMMETRY)
-				pPSGM->InitSymmetry(pObjects);
+				pPSGM->CTIs(pObjects, &CTIs);
 			pObjects->DetermineObjectConvexityData(convexityThr, 0.15, bConcaveObjectAggregation);
-			pObjects->ObjectAggregationLevel2_ViaObjectPairConvexity(convexityThr, convexityRatioThr1, convexityRatioThr2, 300);
-			pPSGM->FreeSymmetry();
+			pObjects->ObjectAggregationLevel2_ViaObjectPairConvexity(convexityThr, convexityRatioThr1, convexityRatioThr2, pObjects->minObjectSize);
 			cv::imshow("New Colored object image", pObjects->CreateSegmentationImage());
 			cv::waitKey(1);
 			////
@@ -320,15 +320,38 @@ void ObjectDetector::Evaluate(
 #endif
 }
 
-void ObjectDetector::CTIs()
+void ObjectDetector::BoundingBox(
+	int iObject1,
+	int iObject2,
+	float &a,
+	float &b,
+	float &c)
 {
-	pPSGM->CTIs(pObjects, &(pPSGM->CTISet));
+	SURFEL::Object *pObject[2];
 
-	FILE *fp = fopen("CTIs.txt", "w");
+	pObject[0] = pObjects->objectArray.Element + iObject1;
+	pObject[1] = pObjects->objectArray.Element + iObject2;
 
-	pPSGM->SaveCTIs(fp, &(pPSGM->CTISet));
+	Array<int> iVertexArray;
 
-	fclose(fp);
+	iVertexArray.n = pObject[0]->iVertexArray.n + pObject[1]->iVertexArray.n;
+	iVertexArray.Element = new int[iVertexArray.n];
+
+	int *piVertex = iVertexArray.Element;
+
+	int i, j;
+
+	for (i = 0; i < 2; i++)
+		for (j = 0; j < pObject[i]->iVertexArray.n; j++, piVertex++)
+			*(piVertex++) = pObject[i]->iVertexArray.Element[j];
+
+	Array<RECOG::PSGM_::Plane> convexTemplateTmp = pPSGM->convexTemplate;
+
+	pPSGM->convexTemplate = pPSGM->convexTemplateBox;
+
+	pPSGM->convexTemplate = convexTemplateTmp;
+
+	delete[] iVertexArray.Element;
 }
 
 void OBJECT_DETECTION::Symmetry(
@@ -339,5 +362,9 @@ void OBJECT_DETECTION::Symmetry(
 {
 	ObjectDetector *pObjectDetector = (ObjectDetector *)vpData;
 
-	pObjectDetector->pPSGM->Symmetry(pObjects, iObject1, iObject2);
+	float symmetryScore = pObjectDetector->pPSGM->Symmetry(pObjects, iObject1, iObject2, &(pObjectDetector->CTIs));
+
+	if (pObjectDetector->pObjects->fpSymmetry)
+		fprintf(pObjectDetector->pObjects->fpSymmetry, "%d\t%d\t%f\n", iObject1, iObject2, symmetryScore);
 }
+

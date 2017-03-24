@@ -31,6 +31,15 @@ namespace RVL
 
 		class ObjectGraph;
 
+		struct Object
+		{
+			int iNode;
+			QList<QLIST::Index> surfelList;
+			Array<int> iVertexArray;
+			Array<int> CTIs;
+			float varGRF;
+		};
+
 		struct ObjectDisplayData
 		{
 			Mesh *pMesh;
@@ -100,12 +109,13 @@ namespace RVL
 			void ComputeRelationCost(
 				AgEdge *pEdge,
 				ObjectEdgeData &data);
-			void CreateSortedObjectArray();
+			//void CreateSortedObjectArray();
 			void SortElements(
 				GRAPH::AggregateNode<AgEdge> *pAgNode,
 				Array<SortIndex<int>> *pSortedElementIdxArray);
 			void SortObjects();
 			void CountValidObjects();
+			void GetVertices();
 			void InitDisplay(
 				Visualizer *pVisualizer,
 				Mesh *pMesh,
@@ -131,7 +141,7 @@ namespace RVL
 			std::shared_ptr<SceneSegFile::SceneSegFile> ssf;	//Filko
 			std::map<int, int> objID2idxMap; //Filko
 			SVMClassifier *pSVMClassifier;  //Nyarko
-			Array<int> objectArray;
+			//Array<int> objectArray;
 			float kCoverage;
 			float alpha;
 			ObjectGraphObjectData additionalObjectData;	//Filko
@@ -139,11 +149,16 @@ namespace RVL
 			DWORD relationClassifier;
 			DWORD objectAggregationLevel2Method;
 			Array<SortIndex<int>> sortedObjectArray;
+			Array<SURFEL::Object> objectArray;
+			int *iObjectAssignedToNode;
+			int *objectVertexIdxMem;
 			int nValidObjects;
 			bool bObjectAggregationLevel2Uncertainty;
 			bool bObjectAggregationLevel2Edges;
 			void(*objectAggregationLevel2Criterion)(ObjectGraph *pObjects, int iObject1, int iObject2, void *vpData);
 			void *vpObjectAggregationLevel2CriterionData;
+			FILE *fpSymmetry;
+			int minObjectSize;
 
 		private:
 			QLIST::Index *elementMem;
