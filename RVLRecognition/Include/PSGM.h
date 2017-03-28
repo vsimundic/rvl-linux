@@ -123,7 +123,7 @@ namespace RVL
 			{
 				float d;
 				float w;
-				bool bw0;
+				bool b;
 				int iCTIElement;
 			};
 
@@ -330,7 +330,8 @@ namespace RVL
 			SURFEL::ObjectGraph *pObjects,
 			int iObject1,
 			int iObject2,
-			RECOG::CTISet *pCTIs);
+			RECOG::CTISet *pCTIs,
+			Array<RECOG::PSGM_::SymmetryMatch> &symmetryMatch);
 		void PrintMatchInfo(
 			FILE *fp,
 			FILE *fpLog,
@@ -563,7 +564,7 @@ namespace RVL
 		float *dISMc; //Vidovic
 		int CTIIdx; //Vidovic
 		int nBestMatches; //n best matches for each scene segment
-		
+		int debug1, debug2;
 	};
 
 	

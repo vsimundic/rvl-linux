@@ -362,9 +362,45 @@ void OBJECT_DETECTION::Symmetry(
 {
 	ObjectDetector *pObjectDetector = (ObjectDetector *)vpData;
 
-	float symmetryScore = pObjectDetector->pPSGM->Symmetry(pObjects, iObject1, iObject2, &(pObjectDetector->CTIs));
+	Array<RECOG::PSGM_::SymmetryMatch> symmetryMatch;
+
+	symmetryMatch.Element = new RECOG::PSGM_::SymmetryMatch[pObjectDetector->pPSGM->convexTemplate.n];
+
+	float symmetryScore = pObjectDetector->pPSGM->Symmetry(pObjects, iObject1, iObject2, &(pObjectDetector->CTIs), symmetryMatch);
 
 	if (pObjectDetector->pObjects->fpSymmetry)
-		fprintf(pObjectDetector->pObjects->fpSymmetry, "%d\t%d\t%f\n", iObject1, iObject2, symmetryScore);
+	{
+		Array<int> iCTIArray = pObjectDetector->CTIs.SegmentCTIs.Element[iObject1];
+
+		if (iCTIArray.n > 0)
+		{
+			fprintf(pObjectDetector->pObjects->fpSymmetry, "%d\t%d\t%f\t", iObject1, iObject2, symmetryScore);
+
+			bool *b = new bool[pObjectDetector->pPSGM->convexTemplate.n];
+
+			memset(b, 0, pObjectDetector->pPSGM->convexTemplate.n * sizeof(bool));
+
+			int i;
+
+			for (i = 0; i < symmetryMatch.n; i++)
+				b[symmetryMatch.Element[i].iCTIElement] = true;
+
+			int iCTI = iCTIArray.Element[0];
+
+			RECOG::PSGM_::ModelInstance *pCTI = pObjectDetector->CTIs.pCTI.Element[iCTI];
+
+			for (i = 0; i < pObjectDetector->pPSGM->convexTemplate.n; i++)
+				fprintf(pObjectDetector->pObjects->fpSymmetry, "%f\t", pCTI->modelInstance.Element[i].d);
+
+			for (i = 0; i < pObjectDetector->pPSGM->convexTemplate.n; i++)
+				fprintf(pObjectDetector->pObjects->fpSymmetry, "%d\t", (int)b[i]);
+
+			fprintf(pObjectDetector->pObjects->fpSymmetry, "\n");
+
+			delete[] b;
+		}
+	}	
+
+	delete[] symmetryMatch.Element;
 }
 

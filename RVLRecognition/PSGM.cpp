@@ -243,6 +243,8 @@ void PSGM::CreateParamList(CRVLMem *pMem)
 	ParamList.AddID(pParamData, "CTI", RVLPSGM_HYPOTHESIS_VISUALIZATION_MODE_CTI);
 	ParamList.AddID(pParamData, "PLY", RVLPSGM_HYPOTHESIS_VISUALIZATION_MODE_PLY);
 	pParamData = ParamList.AddParam("PSGM.symmetryMatchThr", RVLPARAM_TYPE_FLOAT, &symmetryMatchThr);
+	pParamData = ParamList.AddParam("PSGM.debug1", RVLPARAM_TYPE_INT, &debug1);
+	pParamData = ParamList.AddParam("PSGM.debug2", RVLPARAM_TYPE_INT, &debug2);
 }
 
 void PSGM::Interpret(
@@ -7782,11 +7784,15 @@ float PSGM::Symmetry(
 	SURFEL::ObjectGraph *pObjects,
 	int iObject1,
 	int iObject2,
-	RECOG::CTISet *pCTIs)
+	RECOG::CTISet *pCTIs,
+	Array<RECOG::PSGM_::SymmetryMatch> &symmetryMatch)
 {
-	//bool bDebug = (iObject1 == 37 && iObject2 == 54 || iObject1 == 54 && iObject2 == 37);
+	bool bDebug = (iObject1 == debug1 && iObject2 == debug2 || iObject1 == debug2 && iObject2 == debug1);
 
-	bool bDebug = false;
+	if (bDebug)
+		int debug = 0;
+
+	//bool bDebug = false;
 
 	int iObject[2];
 
@@ -7833,17 +7839,15 @@ float PSGM::Symmetry(
 
 	// Select symmetry planes from convexTemplate.
 
-	int nHalfConvexTemplate = convexTemplate.n / 2;
-
 	Array<int> iSymmetryPlanes;
 
-	iSymmetryPlanes.Element = new int[nHalfConvexTemplate];
+	iSymmetryPlanes.Element = new int[convexTemplate.n];
 
 	iSymmetryPlanes.n = 0;
 
 	float *N;
 
-	for (i = 0; i < nHalfConvexTemplate; i++)
+	for (i = 0; i < convexTemplate.n; i++)
 	{
 		N = convexTemplate.Element[i].N;
 
@@ -7912,9 +7916,9 @@ float PSGM::Symmetry(
 
 	//BYTE *bVisible = new BYTE[nSymmetryPlanes];
 	
-	Array<RECOG::PSGM_::SymmetryMatch> symmetryMatch;
+	Array<RECOG::PSGM_::SymmetryMatch> symmetryMatch_;
 
-	symmetryMatch.Element = new RECOG::PSGM_::SymmetryMatch[convexTemplate.n];
+	symmetryMatch_.Element = new RECOG::PSGM_::SymmetryMatch[convexTemplate.n];
 
 	Array<SortIndex<float>> sortedSymmatryMatchIdx;
 
@@ -7942,6 +7946,7 @@ float PSGM::Symmetry(
 	RECOG::PSGM_::ModelInstanceElement *pCTIElement1;
 
 	for (iSymmetryPlane = 0; iSymmetryPlane < iSymmetryPlanes.n; iSymmetryPlane++)
+	//iSymmetryPlane = 15;
 	{
 		NSymmetryPlaneG = convexTemplate.Element[iSymmetryPlanes.Element[iSymmetryPlane]].N;
 
@@ -7968,7 +7973,7 @@ float PSGM::Symmetry(
 		
 		// For every element of CTI of iObject1 identify the corresponding tangent to mirror images of the vertices of iObject2.
 
-		symmetryMatch.n = 0;
+		symmetryMatch_.n = 0;
 
 		sortedSymmatryMatchIdx.n = 0;
 
@@ -7995,59 +8000,60 @@ float PSGM::Symmetry(
 			//		continue;
 			//}
 
-			fTmp = 2.0f * RVLDOTPRODUCT3(NC, NSymmetryPlaneC);
+			k = RVLDOTPRODUCT3(NSymmetryPlaneC, NC);
 
-			RVLSCALE3VECTOR(NSymmetryPlaneC, fTmp, NR);
-
-			RVLDIF3VECTORS(NC, NR, NR);
-
-			P = pSurfels->vertexArray.Element[pCTIElement1->iVertex]->P;
-
-			P2R = P2RMem;
-
-			dMax = RVLDOTPRODUCT3(NC, P2R);
-
-			jBest = 0;
-
-			for (j = 1; j < nVertices2; j++, P2R += 3)
+			if (k > -1e-6)
 			{
-				d = RVLDOTPRODUCT3(NC, P2R);
+				fTmp = 2.0f * k;
 
-				if (d > dMax)
+				RVLSCALE3VECTOR(NSymmetryPlaneC, fTmp, NR);
+
+				RVLDIF3VECTORS(NC, NR, NR);
+
+				P2R = P2RMem;
+
+				dMax = RVLDOTPRODUCT3(NC, P2R);
+
+				jBest = 0;
+
+				for (j = 1; j < nVertices2; j++, P2R += 3)
 				{
-					dMax = d;
+					d = RVLDOTPRODUCT3(NC, P2R);
 
-					jBest = j;
-				}
-			}
+					if (d > dMax)
+					{
+						dMax = d;
 
-			iVertex = iVertexArray[1].Element[jBest];
-
-			P = pSurfels->vertexArray.Element[iVertex]->P;
-
-			if (RVLDOTPRODUCT3(P, NR) < 0.0f)
-			{
-				k = RVLDOTPRODUCT3(NSymmetryPlaneC, NC);
-
-				absk = RVLABS(k);
-
-				pSymmetryMatch = symmetryMatch.Element + symmetryMatch.n;
-
-				pSymmetryMatch->d = dMax;
-				pSymmetryMatch->w = absk;
-				pSymmetryMatch->iCTIElement = i;
-				pSymmetryMatch->bw0 = (absk < 1e-6);	// normal of the CTI element is not parallel to the symmetry plane
-
-				if (!pSymmetryMatch->bw0)
-				{
-					sortedSymmatryMatchIdx.Element[sortedSymmatryMatchIdx.n].cost = (dMax - pCTIElement1->d) / k;
-					sortedSymmatryMatchIdx.Element[sortedSymmatryMatchIdx.n].idx = symmetryMatch.n;
-					sortedSymmatryMatchIdx.n++;
-					sumw += absk;
+						jBest = j;
+					}
 				}
 
-				symmetryMatch.n++;
-			}
+				//iVertex = iVertexArray[1].Element[jBest];
+
+				//P = pSurfels->vertexArray.Element[iVertex]->P;
+
+				//if (RVLDOTPRODUCT3(P, NR) < 0.0f)
+				{
+					absk = RVLABS(k);
+
+					pSymmetryMatch = symmetryMatch_.Element + symmetryMatch_.n;
+
+					pSymmetryMatch->d = dMax;
+					pSymmetryMatch->w = k;
+					pSymmetryMatch->iCTIElement = i;
+					pSymmetryMatch->b = (absk > 1e-6);	// normal of the CTI element is not parallel to the symmetry plane
+
+					if (pSymmetryMatch->b)
+					{
+						sortedSymmatryMatchIdx.Element[sortedSymmatryMatchIdx.n].cost = (pCTIElement1->d - dMax) / k;
+						sortedSymmatryMatchIdx.Element[sortedSymmatryMatchIdx.n].idx = symmetryMatch_.n;
+						sortedSymmatryMatchIdx.n++;
+						sumw += absk;
+					}
+
+					symmetryMatch_.n++;
+				}
+			}	// if (NSymmetryPlaneC' * NC > -1e-6)
 		}	// for every element of convexTemplate
 
 		// Compute optimal symmetry plane offset.
@@ -8061,25 +8067,38 @@ float PSGM::Symmetry(
 			sumw = 0.0f;
 
 			for (i = 0; i < sortedSymmatryMatchIdx.n && sumw < halfSumw; i++)
-				sumw += symmetryMatch.Element[sortedSymmatryMatchIdx.Element[i].idx].w;
+			{
+				k = symmetryMatch_.Element[sortedSymmatryMatchIdx.Element[i].idx].w;
 
+				sumw += RVLABS(k);
+			}
+				
 			t_ = sortedSymmatryMatchIdx.Element[i].cost;
 		}
 
-		// Compute symmetry score.
+		// Compute symmetry score.		
 
 		symmetryScore = 0.0f;
 
-		for (i = 0; i < symmetryMatch.n; i++)
+		for (i = 0; i < symmetryMatch_.n; i++)
 		{
-			pSymmetryMatch = symmetryMatch.Element + i;
+			pSymmetryMatch = symmetryMatch_.Element + i;
 
 			e = (pSymmetryMatch->d + pSymmetryMatch->w * t_ - pCTI->modelInstance.Element[pSymmetryMatch->iCTIElement].d) / symmetryMatchThr;
 
 			e *= e;
 
 			if (e < 1.0f)
-				symmetryScore += (1.0f - e);
+			{
+				e = 1.0f - e;
+
+				symmetryScore += e;
+
+				pSymmetryMatch->w = e;
+				pSymmetryMatch->b = true;
+			}
+			else
+				pSymmetryMatch->b = false;
 		}
 
 		if (symmetryScore > maxSymmetryScore)
@@ -8088,7 +8107,13 @@ float PSGM::Symmetry(
 
 			iBestSymmetryPlane = iSymmetryPlane;
 
-			dBestSymmetryPlane = 0.5f * t_;
+			dBestSymmetryPlane = -0.5f * t_;
+
+			symmetryMatch.n = 0;
+
+			for (i = 0; i < symmetryMatch_.n; i++)
+				if (symmetryMatch_.Element[i].b)
+					symmetryMatch.Element[symmetryMatch.n++] = symmetryMatch_.Element[i];
 		}
 	}	// for each symmetry plane
 
@@ -8103,6 +8128,8 @@ float PSGM::Symmetry(
 		PrintMatrix<float>(fp, RGC, 3, 3);
 
 		NSymmetryPlaneG = convexTemplate.Element[iSymmetryPlanes.Element[iBestSymmetryPlane]].N;
+
+		//NSymmetryPlaneG = convexTemplate.Element[22].N;
 
 		RVLMULMX3X3VECT(RGC, NSymmetryPlaneG, NSymmetryPlaneC);
 
@@ -8129,7 +8156,7 @@ float PSGM::Symmetry(
 
 	//delete[] bVisible;
 	delete[] P2RMem;
-	delete[] symmetryMatch.Element;
+	delete[] symmetryMatch_.Element;
 	delete[] iSymmetryPlanes.Element;
 	delete[] sortedSymmatryMatchIdx.Element;
 
