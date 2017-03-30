@@ -28,7 +28,10 @@ namespace RVL
 		void Evaluate(
 			FILE *fp,
 			char *fileName);
-		void CTIs();
+		void BoundingBox(
+			int iObject1,
+			int iObject2,
+			RECOG::PSGM_::ModelInstance *pBoundingBox);
 		
 	public:
 		DWORD flags;
@@ -55,6 +58,7 @@ namespace RVL
 			char *FileName,
 			Mesh *pMesh,
 			bool bSavePLY);
+		RECOG::CTISet CTIs;
 	};
 }
 

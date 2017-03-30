@@ -10,6 +10,8 @@
 #define RVLPSGM_SAVE_MATCHES //Vidovic
 #define RVLPSGM_MATCHES_SIMILARITY_MEASURE			3
 //#define RVLPSGM_RANSAC
+//#define RVLPSGM_ICP
+
 
 #define RVLRECOGNITION_MODE_PSGM_CREATE_CTIS		2
 
@@ -123,7 +125,7 @@ namespace RVL
 			{
 				float d;
 				float w;
-				bool bw0;
+				bool b;
 				int iCTIElement;
 			};
 
@@ -314,8 +316,9 @@ namespace RVL
 		void DetectGroundPlane(SURFEL::ObjectGraph *pObjects);
 		bool GravityReferenceFrame(
 			QList<QLIST::Index> surfelList,
-			float *RGC);
-		void CTIs(
+			float *RGC,
+			float &varX);
+		int CTIs(
 			QList<QLIST::Index> surfelList,
 			Array<int> iVertexArray,
 			int iModel,
@@ -325,16 +328,16 @@ namespace RVL
 		void CTIs(
 			SURFEL::ObjectGraph *pObjects,
 			RECOG::CTISet *pCTISet);
-		void GetVertices(
-			QList<QLIST::Index> surfelList,
-			Array<int> *piVertexArray,
-			int *&piVertexIdxMem);
+		void FitModel(
+			Array<int> iVertexArray,
+			RECOG::PSGM_::ModelInstance *pModelInstance,
+			bool bMemAllocated = false);
 		float Symmetry(
 			SURFEL::ObjectGraph *pObjects,
 			int iObject1,
-			int iObject2);
-		void InitSymmetry(SURFEL::ObjectGraph *pObjects);
-		void FreeSymmetry();
+			int iObject2,
+			RECOG::CTISet *pCTIs,
+			Array<RECOG::PSGM_::SymmetryMatch> &symmetryMatch);
 		void PrintMatchInfo(
 			FILE *fp,
 			FILE *fpLog,
@@ -426,16 +429,13 @@ namespace RVL
 			FILE *fp,
 			RECOG::CTISet *pCTISet,
 			int iModel = -1);
+		void RVLPSGInstanceMesh(Eigen::MatrixXf nI, float *dI);
 
 	private:
 		void Clusters();
 		void CreateTemplate66();
 		void CreateTemplateBox();
 		void TemplateMatrix(Array2D<float> A);
-		void FitModel(
-			Array<int> iVertexArray,
-			RECOG::PSGM_::ModelInstance *pModelInstance,
-			bool bMemAllocated = false);
 		bool ReferenceFrames(int iCluster);
 		bool ReferenceFrames(
 			RECOG::PSGM_::Cluster *pCluster,
@@ -467,6 +467,7 @@ namespace RVL
 		void SaveModelInstances(
 			FILE *fp,
 			int iModel = - 1);
+		void PrintCTIMeshFaces(FILE *fp, Eigen::MatrixXi F, Eigen::MatrixXi Fn, int n, Eigen::MatrixXi nP);
 
 	public:
 		CRVLParameterList ParamList;
@@ -539,8 +540,6 @@ namespace RVL
 		RECOG::PSGM_::Cluster *clusterMem;
 		int *clusterSurfelMem;
 		int *clusterVertexMem;
-		int *iVertexMem;
-		bool *bVertexAssigned;
 		//RECOG::PSGM_::ModelInstanceElement *modelInstanceMem;
 		vtkSmartPointer<vtkPolyData> referenceFramesPolyData;
 		char *sceneFileName;
@@ -569,7 +568,11 @@ namespace RVL
 		float *dISMc; //Vidovic
 		int CTIIdx; //Vidovic
 		int nBestMatches; //n best matches for each scene segment
-		
+		int debug1, debug2;
+		//For InstanceMesh:
+		Eigen::MatrixXf P; //points list
+		Eigen::MatrixXi F; //faces list (polygones)
+		Eigen::MatrixXi Edges; //Edges
 	};
 
 	

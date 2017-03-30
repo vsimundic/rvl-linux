@@ -399,9 +399,16 @@ int main(int argc, char ** argv)
 		}
 		else if (recognition.mode == RVLRECOGNITION_MODE_RECOGNITION)
 		{
+			Eigen::MatrixXf nI = recognition.ConvexTemplatenT();
+			float dI[66];
+			for (int i = 0; i < 66; i++) dI[i] = 1;
+			recognition.RVLPSGInstanceMesh(nI, dI);
+
 			recognition.LoadModelDataBase(); //Vidovic
 
+#ifdef RVLPSGM_ICP
 			recognition.LoadModelMeshDB(modelSequenceFileName, true, 0.4);
+#endif
 
 			Mesh mesh;
 
@@ -497,6 +504,7 @@ int main(int argc, char ** argv)
 
 				QueryPerformanceCounter((LARGE_INTEGER *)&ctr1_);
 
+#ifdef RVLPSGM_ICP
 				//pcl::PointCloud<pcl::PointXYZINormal>::Ptr cloud_destination(new pcl::PointCloud<pcl::PointXYZINormal>);
 				////creating destination cloud
 				//cloud_destination->width = mesh.NodeArray.n;
@@ -524,6 +532,9 @@ int main(int argc, char ** argv)
 
 				//evaluate ICP
 				recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, fpPoseError, fpnotFirstInfo, fpnotFirstPoseErr, 7, true);
+#else
+				recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, fpPoseError, fpnotFirstInfo, fpnotFirstPoseErr, 7);
+#endif
 				//recognition.AddModelsToVisualizer(&visualizer, true, PCLICP, PCLICPVariants::Point_to_plane, NULL/*&kdtree*/);
 				QueryPerformanceCounter((LARGE_INTEGER *)&ctr2_);
 				QueryPerformanceFrequency((LARGE_INTEGER *)&freq_);
@@ -658,3 +669,4 @@ int main(int argc, char ** argv)
 
 	return 0;
 }
+
