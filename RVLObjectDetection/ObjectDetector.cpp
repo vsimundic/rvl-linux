@@ -276,8 +276,7 @@ void ObjectDetector::DetectObjects(char *MeshFilePathName)
 			/*VisualizeObjectGraphVertexPointCloud(&objects, 100);*/
 			//if (bCTIBasedObjectAggregation)
 			pObjects->GetVertices();			
-			if (pObjects->objectAggregationLevel2Method == RVLPCSEGMENT_OBJECT_AGGREGATION_LEVEL2_METHOD_SYMMETRY)
-				pPSGM->CTIs(pObjects, &CTIs);
+			pPSGM->CTIs(pObjects, &CTIs);
 			pObjects->DetermineObjectConvexityData(convexityThr, 0.15, bConcaveObjectAggregation);
 			pObjects->ObjectAggregationLevel2_ViaObjectPairConvexity(convexityThr, convexityRatioThr1, convexityRatioThr2, pObjects->minObjectSize);
 			cv::imshow("New Colored object image", pObjects->CreateSegmentationImage());
@@ -323,14 +322,56 @@ void ObjectDetector::Evaluate(
 void ObjectDetector::BoundingBox(
 	int iObject1,
 	int iObject2,
-	float &a,
-	float &b,
-	float &c)
+	RECOG::PSGM_::ModelInstance *pBoundingBox)
 {
+	if (!pPSGM->bGnd)
+		return;
+
+	if (CTIs.SegmentCTIs.n <= iObject1 && CTIs.SegmentCTIs.n <= iObject2)
+		return;
+
+	int iObject[2];
+
+	iObject[0] = iObject1;
+	iObject[1] = iObject2;
+
 	SURFEL::Object *pObject[2];
 
 	pObject[0] = pObjects->objectArray.Element + iObject1;
 	pObject[1] = pObjects->objectArray.Element + iObject2;
+
+	float *R_ = NULL;
+
+	float varX = 0.0;
+
+	int i, j;
+	int iCTI;
+	RECOG::PSGM_::ModelInstance *pCTI;
+
+	for (i = 0; i < 2; i++)
+		if (CTIs.SegmentCTIs.Element[iObject[i]].n > 0)
+		{
+			iCTI = CTIs.SegmentCTIs.Element[iObject[i]].Element[0];
+
+			pCTI = CTIs.pCTI.Element[iCTI];
+
+			if (R_ == NULL || pCTI->varX < varX)
+			{
+				varX = pCTI->varX;
+				R_ = pCTI->R;
+			}
+		}
+
+	if (R_ == NULL)
+		return;
+
+	float *R = pBoundingBox->R;
+
+	RVLCOPYMX3X3(R_, R);
+
+	float *t = pBoundingBox->t;
+
+	RVLNULL3VECTOR(t);
 
 	Array<int> iVertexArray;
 
@@ -339,15 +380,15 @@ void ObjectDetector::BoundingBox(
 
 	int *piVertex = iVertexArray.Element;
 
-	int i, j;
-
 	for (i = 0; i < 2; i++)
-		for (j = 0; j < pObject[i]->iVertexArray.n; j++, piVertex++)
+		for (j = 0; j < pObject[i]->iVertexArray.n; j++)
 			*(piVertex++) = pObject[i]->iVertexArray.Element[j];
 
 	Array<RECOG::PSGM_::Plane> convexTemplateTmp = pPSGM->convexTemplate;
 
 	pPSGM->convexTemplate = pPSGM->convexTemplateBox;
+
+	pPSGM->FitModel(iVertexArray, pBoundingBox, true);
 
 	pPSGM->convexTemplate = convexTemplateTmp;
 

@@ -31,9 +31,7 @@ namespace RVL
 		void BoundingBox(
 			int iObject1,
 			int iObject2,
-			float &a,
-			float &b,
-			float &c);
+			RECOG::PSGM_::ModelInstance *pBoundingBox);
 		
 	public:
 		DWORD flags;

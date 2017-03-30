@@ -10,6 +10,8 @@
 #define RVLPSGM_SAVE_MATCHES //Vidovic
 #define RVLPSGM_MATCHES_SIMILARITY_MEASURE			3
 //#define RVLPSGM_RANSAC
+//#define RVLPSGM_ICP
+
 
 #define RVLRECOGNITION_MODE_PSGM_CREATE_CTIS		2
 
@@ -326,6 +328,10 @@ namespace RVL
 		void CTIs(
 			SURFEL::ObjectGraph *pObjects,
 			RECOG::CTISet *pCTISet);
+		void FitModel(
+			Array<int> iVertexArray,
+			RECOG::PSGM_::ModelInstance *pModelInstance,
+			bool bMemAllocated = false);
 		float Symmetry(
 			SURFEL::ObjectGraph *pObjects,
 			int iObject1,
@@ -423,16 +429,13 @@ namespace RVL
 			FILE *fp,
 			RECOG::CTISet *pCTISet,
 			int iModel = -1);
+		void RVLPSGInstanceMesh(Eigen::MatrixXf nI, float *dI);
 
 	private:
 		void Clusters();
 		void CreateTemplate66();
 		void CreateTemplateBox();
 		void TemplateMatrix(Array2D<float> A);
-		void FitModel(
-			Array<int> iVertexArray,
-			RECOG::PSGM_::ModelInstance *pModelInstance,
-			bool bMemAllocated = false);
 		bool ReferenceFrames(int iCluster);
 		bool ReferenceFrames(
 			RECOG::PSGM_::Cluster *pCluster,
@@ -464,6 +467,7 @@ namespace RVL
 		void SaveModelInstances(
 			FILE *fp,
 			int iModel = - 1);
+		void PrintCTIMeshFaces(FILE *fp, Eigen::MatrixXi F, Eigen::MatrixXi Fn, int n, Eigen::MatrixXi nP);
 
 	public:
 		CRVLParameterList ParamList;
@@ -565,6 +569,10 @@ namespace RVL
 		int CTIIdx; //Vidovic
 		int nBestMatches; //n best matches for each scene segment
 		int debug1, debug2;
+		//For InstanceMesh:
+		Eigen::MatrixXf P; //points list
+		Eigen::MatrixXi F; //faces list (polygones)
+		Eigen::MatrixXi Edges; //Edges
 	};
 
 	
