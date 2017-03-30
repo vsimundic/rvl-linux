@@ -224,10 +224,6 @@ void ObjectDetector::DetectObjects(char *MeshFilePathName)
 			// Detect vertices.
 
 			pSurfels->DetectVertices(&mesh);
-
-			// Assign mesh to PSGM.
-
-			pPSGM->pMesh = &mesh;
 		}
 
 		if (flags & RVLOBJECTDETECTION_FLAG_SAVE_SSF)
@@ -275,8 +271,12 @@ void ObjectDetector::DetectObjects(char *MeshFilePathName)
 			cv::waitKey(1);
 			/*VisualizeObjectGraphVertexPointCloud(&objects, 100);*/
 			//if (bCTIBasedObjectAggregation)
-			pObjects->GetVertices();			
+			pObjects->GetVertices();	
+			pPSGM->Init(&mesh);
 			pPSGM->CTIs(pObjects, &CTIs);
+			pPSGM->convexTemplate = pPSGM->convexTemplateBox;
+			pPSGM->CTIs(pObjects, &boundingBoxes);
+			pPSGM->convexTemplate = pPSGM->convexTemplate66;
 			pObjects->DetermineObjectConvexityData(convexityThr, 0.15, bConcaveObjectAggregation);
 			pObjects->ObjectAggregationLevel2_ViaObjectPairConvexity(convexityThr, convexityRatioThr1, convexityRatioThr2, pObjects->minObjectSize);
 			cv::imshow("New Colored object image", pObjects->CreateSegmentationImage());

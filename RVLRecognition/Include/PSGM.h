@@ -211,6 +211,7 @@ namespace RVL
 		virtual ~PSGM();
 		//void Create();
 		void CreateParamList(CRVLMem *pMem);
+		void Init(Mesh *pMesh);
 		void Interpret(
 			Mesh *pMesh,
 			int iScene = 0);
