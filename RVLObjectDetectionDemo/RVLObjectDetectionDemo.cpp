@@ -186,7 +186,7 @@ int main(int argc, char ** argv)
 				segmentationImageFileName += "OGLabels.png";
 				objectDetector.pObjects->SaveSegmentationLabelImg(segmentationImageFileName);
 
-				cv::imshow("Segmentation", objectDetector.pObjects->CreateSegmentationImage());
+				//cv::imshow("Segmentation", objectDetector.pObjects->CreateSegmentationImage());
 				cv::waitKey();
 			}
 #endif
@@ -233,7 +233,7 @@ int main(int argc, char ** argv)
 			visualizer.Create();
 			objectDetector.pSurfels->InitDisplay(&visualizer, &(objectDetector.mesh), objectDetector.pSurfelDetector);
 			//VisualizeSurfelNormals(&visualizer, objectDetector.pSurfels);
-			//VisualizeSurfelOBB(&visualizer, objectDetector.pObjects, &objectDetector.mesh);
+
 #ifdef RVLSURFEL_IMAGE_ADJACENCY
 			if (objectDetector.bSegmentToObjects)
 			{
@@ -255,9 +255,9 @@ int main(int argc, char ** argv)
 #endif
 			RECOG::CTISet CTIs;
 
-			objectDetector.pPSGM->CTIs(objectDetector.pObjects, &CTIs);
+			//objectDetector.pPSGM->CTIs(objectDetector.pObjects, &CTIs);
 
-			objectDetector.pPSGM->DisplayCTIs(&visualizer, &CTIs);
+			//objectDetector.pPSGM->DisplayCTIs(&visualizer, &CTIs);
 
 			//detector.DisplaySoftEdges(&visualizer, &mesh, &surfels, SelectionColor);
 			visualizer.Run();

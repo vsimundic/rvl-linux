@@ -92,6 +92,7 @@ namespace RVL
 			void SaveSegmentationLabelImg(std::string filename); //Filko
 			bool CheckObjectUniformity(int objectIdx, int minSurfelSize, float uniThr); //Filko
 			bool CheckIfNeighbours(int iObject1, int iObject2);	//Filko
+			void RenderConvexityPos(int iObjectSurf, int iObjectVert, Mesh *pMeshScene);	//Filko
 			void WERSegmentation();
 			void ComputeRelationCosts();
 			void ComputeRelationCost(
@@ -140,6 +141,7 @@ namespace RVL
 			bool bObjectAggregationLevel2Edges;
 			void(*objectAggregationLevel2Criterion)(ObjectGraph *pObjects, int iObject1, int iObject2, void *vpData);
 			void *vpObjectAggregationLevel2CriterionData;
+			Mesh *pMesh; //FIlko
 
 		private:
 			QLIST::Index *elementMem;

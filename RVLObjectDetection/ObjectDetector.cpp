@@ -275,10 +275,11 @@ void ObjectDetector::DetectObjects(char *MeshFilePathName)
 			cv::waitKey(1);
 			/*VisualizeObjectGraphVertexPointCloud(&objects, 100);*/
 			//if (bCTIBasedObjectAggregation)
-			pPSGM->InitSymmetry(pObjects);
-			pObjects->DetermineObjectConvexityData(convexityThr, 0.15, bConcaveObjectAggregation);
-			pObjects->ObjectAggregationLevel2_ViaObjectPairConvexity(convexityThr, convexityRatioThr1, convexityRatioThr2, 300);
-			pPSGM->FreeSymmetry();
+			//pPSGM->InitSymmetry(pObjects);
+			pObjects->pMesh = &mesh;
+			pObjects->DetermineObjectConvexityData(convexityThr, 0.15, bConcaveObjectAggregation, true);
+			pObjects->ObjectAggregationLevel2_ViaObjectPairConvexity(convexityThr, convexityRatioThr1, convexityRatioThr2, 300, true);
+			//pPSGM->FreeSymmetry();
 			cv::imshow("New Colored object image", pObjects->CreateSegmentationImage());
 			cv::waitKey(1);
 			////

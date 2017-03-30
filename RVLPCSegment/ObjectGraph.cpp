@@ -2171,6 +2171,8 @@ void ObjectGraph::CalculateObjectsColorHistogram()
 
 void ObjectGraph::CalculateConvexityRatiosForObjectPair(int firstObject, int secondObject, float& firstRatio, float& secondRatio, float convexThr)
 {
+	//if ((firstObject == 60) && (secondObject == 484))	//60, 484 za test 57
+	//	RenderConvexityPos(secondObject, firstObject, this->pMesh);
 	GRAPH::AggregateNode<SURFEL::AgEdge> *pFirstObject = this->NodeArray.Element + firstObject;
 	GRAPH::AggregateNode<SURFEL::AgEdge> *pSecondObject = this->NodeArray.Element + secondObject;
 
@@ -2299,7 +2301,7 @@ void ObjectGraph::CalculateConvexityRatiosForObjectPair(int firstObject, int sec
 				{
 					rvlvertex = this->pSurfels->vertexArray.Element[qlistelement->Idx];
 					//if ((currmultiplierIN * pSurfelIN->N[0] * rvlvertex->P[0] + currmultiplierIN * pSurfelIN->N[1] * rvlvertex->P[1] + currmultiplierIN * pSurfelIN->N[2] * rvlvertex->P[2] - currmultiplierIN * pSurfelIN->d) > convexThr)
-					if (currmultiplier * pSurfels->Distance(pSurfelIN, rvlvertex->P, bObjectAggregationLevel2Uncertainty) > convexThr)
+					if (currmultiplierIN * pSurfels->Distance(pSurfelIN, rvlvertex->P, bObjectAggregationLevel2Uncertainty) > convexThr)
 					{
 						fail = true;
 						break;
@@ -3133,4 +3135,115 @@ void ObjectGraph::CountValidObjects()
 
 		nValidObjects++;
 	}
+}
+
+void ObjectGraph::RenderConvexityPos(int iObjectSurf, int iObjectVert, Mesh *pMeshScene)
+{
+	// Initialize VTK.
+	vtkSmartPointer<vtkRenderer> renderer = vtkSmartPointer<vtkRenderer>::New();;
+	vtkSmartPointer<vtkRenderWindow> window = vtkSmartPointer<vtkRenderWindow>::New();
+	vtkSmartPointer<vtkRenderWindowInteractor> interactor = vtkSmartPointer<vtkRenderWindowInteractor>::New();
+	window->AddRenderer(renderer);
+	window->SetSize(800, 600);
+	interactor->SetRenderWindow(window);
+	vtkSmartPointer<vtkInteractorStyleTrackballCamera> style = vtkSmartPointer<vtkInteractorStyleTrackballCamera>::New();
+	interactor->SetInteractorStyle(style);
+	renderer->SetBackground(0.5294, 0.8078, 0.9803);
+
+	//
+	//Get pointers to objects
+	GRAPH::AggregateNode<SURFEL::AgEdge> *pObjectSurf = this->NodeArray.Element + iObjectSurf;
+	GRAPH::AggregateNode<SURFEL::AgEdge> *pObjectVert = this->NodeArray.Element + iObjectVert;
+
+	//Adding planes (surfels for pObjectSurf)
+	QLIST::Index *piElement;
+	Surfel *pSurfel;
+	QList<QLIST::Index> *pSurfelVertexList;
+	SURFEL::Vertex * rvlvertex;
+	QLIST::Index *qlistelement;
+	//first surfel
+	piElement = pObjectSurf->elementList.pFirst;
+	while (piElement)
+	{
+		pSurfel = this->pSurfels->NodeArray.Element + piElement->Idx;
+		//check 
+		if (!((pSurfel->size <= 1) || pSurfel->bEdge))
+		{
+			//Creating plan and adding actor
+			vtkSmartPointer<vtkPlaneSource> plane = vtkSmartPointer<vtkPlaneSource>::New();
+			plane->SetOrigin(0.0, 0.0, 0.0);
+			plane->SetPoint1(pSurfel->size / (float)pObjectSurf->size, 0.0, 0.0);
+			plane->SetPoint2(0.0, pSurfel->size / (float)pObjectSurf->size, 0.0);
+			plane->SetNormal(pSurfel->N[0], pSurfel->N[1], pSurfel->N[2]);
+			plane->SetCenter(pSurfel->P[0], pSurfel->P[1], pSurfel->P[2]);
+			//plane->Push(pSurfel->d);
+			plane->SetResolution(5, 5);
+			vtkSmartPointer<vtkPolyDataMapper> mapper = vtkSmartPointer<vtkPolyDataMapper>::New();
+			mapper->SetInputConnection(plane->GetOutputPort());
+			vtkSmartPointer<vtkActor> act = vtkSmartPointer<vtkActor>::New();
+			act->SetMapper(mapper);
+			renderer->AddActor(act);				
+		}
+		piElement = piElement->pNext;
+	}
+
+	//Adding points (vertices for pObjectVert)
+	int ptIdx = 0;
+	//first surfel
+	piElement = pObjectVert->elementList.pFirst;
+	while (piElement)
+	{
+		pSurfel = this->pSurfels->NodeArray.Element + piElement->Idx;
+		//check 
+		if (!((pSurfel->size <= 1) || pSurfel->bEdge))
+		{
+			vtkSmartPointer<vtkPolyData> pd = vtkSmartPointer<vtkPolyData>::New();
+			vtkSmartPointer<vtkPoints> points = vtkSmartPointer<vtkPoints>::New();
+			points->SetDataTypeToFloat();
+			vtkSmartPointer<vtkCellArray> verts = vtkSmartPointer<vtkCellArray>::New();
+
+			//getting current surfel vertex list
+			pSurfelVertexList = this->pSurfels->surfelVertexList.Element + piElement->Idx;
+			//running through added surfel vertices
+			qlistelement = pSurfelVertexList->pFirst;
+			ptIdx = 0;
+			while (qlistelement)
+			{
+				rvlvertex = this->pSurfels->vertexArray.Element[qlistelement->Idx];
+				points->InsertNextPoint(rvlvertex->P);
+				verts->InsertNextCell(1);
+				verts->InsertCellPoint(ptIdx);
+				ptIdx++;
+				//Next
+				qlistelement = qlistelement->pNext;
+			}
+
+			//Adding actor
+			pd->SetPoints(points);
+			pd->SetVerts(verts);
+			vtkSmartPointer<vtkPolyDataMapper> mapper = vtkSmartPointer<vtkPolyDataMapper>::New();
+			mapper->SetInputData(pd);
+			vtkSmartPointer<vtkActor> act = vtkSmartPointer<vtkActor>::New();
+			act->SetMapper(mapper);
+			act->GetProperty()->SetPointSize(5);
+			renderer->AddActor(act);
+		}
+
+		piElement = piElement->pNext;
+	}
+
+	//Add scene
+	if (pMeshScene)
+	{
+		vtkSmartPointer<vtkPolyDataMapper> mapper = vtkSmartPointer<vtkPolyDataMapper>::New();
+		mapper->SetInputData(pMeshScene->pPolygonData);
+		vtkSmartPointer<vtkActor> act = vtkSmartPointer<vtkActor>::New();
+		act->SetMapper(mapper);
+		renderer->AddActor(act);
+	}
+
+	//Start VTK
+	renderer->ResetCamera();
+	window->Render();
+	interactor->Start();
 }
