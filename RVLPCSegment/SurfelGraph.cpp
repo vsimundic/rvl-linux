@@ -86,6 +86,8 @@ SurfelGraph::SurfelGraph()
 	vertexArray.Element = NULL;
 	vertexDisplayLineArray.Element = NULL;
 	vertexDisplayLineArrayMem = NULL;
+	bVertexAssigned = NULL;
+	iVertexMem = NULL;
 
 	DisplayData.mode = RVLSURFEL_DISPLAY_MODE_SURFELS;
 	DisplayData.mouseRButtonDownUserFunction = NULL;
@@ -1125,6 +1127,8 @@ void SurfelGraph::Clear()
 	RVL_DELETE_ARRAY(surfelVertexMem);
 	RVL_DELETE_ARRAY(vertexDisplayLineArray.Element);
 	RVL_DELETE_ARRAY(vertexDisplayLineArrayMem);
+	RVL_DELETE_ARRAY(bVertexAssigned);
+	RVL_DELETE_ARRAY(iVertexMem);
 }
 
 #ifdef RVLSURFELGRAPH_VERTEX_DETECTION_NEW	// New version
@@ -2086,6 +2090,50 @@ float SurfelGraph::Distance(
 
 		return (RVLDOTPRODUCT3(N, P) - pSurfel->d);
 	}
+}
+
+void SurfelGraph::GetVertices(
+	QList<QLIST::Index> surfelList,
+	Array<int> *piVertexArray,
+	int *&piVertexIdxMem)
+{
+	piVertexArray->Element = piVertexIdxMem;
+
+	int iSurfel;
+	QList<QLIST::Index> *pSurfelVertexList;
+	QLIST::Index *pVertexIdx;
+
+	QLIST::Index *piSurfel = surfelList.pFirst;
+
+	while (piSurfel)
+	{
+		iSurfel = piSurfel->Idx;
+
+		pSurfelVertexList = surfelVertexList.Element + iSurfel;
+
+		pVertexIdx = pSurfelVertexList->pFirst;
+
+		while (pVertexIdx)
+		{
+			if (!bVertexAssigned[pVertexIdx->Idx])
+			{
+				*(piVertexIdxMem++) = pVertexIdx->Idx;
+
+				bVertexAssigned[pVertexIdx->Idx] = true;
+			}
+
+			pVertexIdx = pVertexIdx->pNext;
+		}
+
+		piSurfel = piSurfel->pNext;
+	}
+
+	piVertexArray->n = piVertexIdxMem - piVertexArray->Element;
+
+	int i;
+
+	for (i = 0; i < piVertexArray->n; i++)
+		bVertexAssigned[piVertexArray->Element[i]] = false;
 }
 
 void SurfelGraph::NodeColors(unsigned char *SelectionColor)

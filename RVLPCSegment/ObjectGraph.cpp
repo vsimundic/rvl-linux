@@ -17,6 +17,7 @@
 
 //#define RVLPCSEGMENT_OBJECT_GRAPH_LOG					// Currently is not used for anything!
 //#define RVLPCSEGMENT_OBJECT_GRAPH_EVALUATION_LOG
+#define RVLPCSEGMENT_OBJECT_GRAPH_SYMMETRY_LOG
 
 /// Move to RVLQListArray.h
 
@@ -615,6 +616,7 @@ ObjectGraph::ObjectGraph()
 	WERSegmentationCostResolution = 0.01f;
 	kCoverage = 0.99f;
 	alpha = 0.5f;
+	minObjectSize = 300;
 
 	bObjectAggregationLevel2Uncertainty = false;
 	bObjectAggregationLevel2Edges = false;
@@ -627,11 +629,18 @@ ObjectGraph::ObjectGraph()
 	EdgeArray.Element = NULL;
 	EdgePtrMem = NULL;
 	objectMap = NULL;
-	objectArray.Element = NULL;
+	//objectArray.Element = NULL;
 	//sortedElementIdxMem = NULL;
 	//Array<int> *sortedElementIdxArray = NULL;
 	sortedObjectArray.Element = NULL;
+	objectArray.Element = NULL;
+	objectVertexIdxMem = NULL;
+	iObjectAssignedToNode = NULL;
+
+	fpSymmetry = NULL;
+
 	relationClassifier = RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_NLMC;
+	objectAggregationLevel2Method = RVLPCSEGMENT_OBJECT_AGGREGATION_LEVEL2_METHOD_CONVEXITY;
 }
 
 
@@ -642,10 +651,13 @@ ObjectGraph::~ObjectGraph()
 	RVL_DELETE_ARRAY(EdgeArray.Element);
 	RVL_DELETE_ARRAY(EdgePtrMem);
 	RVL_DELETE_ARRAY(objectMap);
-	RVL_DELETE_ARRAY(objectArray.Element);
+	//RVL_DELETE_ARRAY(objectArray.Element);
 	//RVL_DELETE_ARRAY(sortedElementIdxMem);
 	//RVL_DELETE_ARRAY(sortedElementIdxArray);
 	RVL_DELETE_ARRAY(sortedObjectArray.Element);
+	RVL_DELETE_ARRAY(objectArray.Element);
+	RVL_DELETE_ARRAY(objectVertexIdxMem);
+	RVL_DELETE_ARRAY(iObjectAssignedToNode);
 }
 
 void ObjectGraph::CreateParamList(CRVLMem *pMem)
@@ -664,6 +676,10 @@ void ObjectGraph::CreateParamList(CRVLMem *pMem)
 	ParamList.AddID(pParamData, "NLMC2", RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_NLMC2);
 	pParamData = ParamList.AddParam("ObjectGraph.objectAggregationLevel2.uncertainty", RVLPARAM_TYPE_BOOL, &bObjectAggregationLevel2Uncertainty);
 	pParamData = ParamList.AddParam("ObjectGraph.objectAggregationLevel2.edges", RVLPARAM_TYPE_BOOL, &bObjectAggregationLevel2Edges);
+	pParamData = ParamList.AddParam("ObjectGraph.objectAggregationLevel2.method", RVLPARAM_TYPE_ID, &objectAggregationLevel2Method);
+	ParamList.AddID(pParamData, "CONVEXITY", RVLPCSEGMENT_OBJECT_AGGREGATION_LEVEL2_METHOD_CONVEXITY);
+	ParamList.AddID(pParamData, "SYMMETRY", RVLPCSEGMENT_OBJECT_AGGREGATION_LEVEL2_METHOD_SYMMETRY);
+	pParamData = ParamList.AddParam("ObjectGraph.minObjectSize", RVLPARAM_TYPE_INT, &minObjectSize);
 }
 
 #ifdef RVLSURFEL_IMAGE_ADJACENCY
@@ -1355,31 +1371,13 @@ void ObjectGraph::WERSegmentation()
 
 	GRAPH::WERAggregation<GRAPH::AggregateNode<AgEdge>, AgEdge, GRAPH::EdgePtr2<AgEdge>, float>(*this, objectMap, elementMem, WERSegmentationMinCostDiff, WERSegmentationCostResolution);
 
-	CreateSortedObjectArray();
+	sortedObjectArray.n = -1;
+	nValidObjects = -1;
 
-//#ifdef RVLPCSEGMENT_OBJECT_GRAPH_LOG
-//	FILE *fpLog = fopen("C:\\RVL\\Debug\\WERAggGraph.txt", "w");
-//
-//	WriteObjectDataToFile(fpLog);
-//
-//	fclose(fpLog);
-//#endif
-}
-
-void ObjectGraph::CreateSortedObjectArray()
-{
-	// Compute object sizes and determine the number of objects.
-
-	int *objectArray_ = new int[NodeArray.n];
-
-	objectArray.n = 0;
-
-	int nPts = 0;
-
+	int size;
 	int iNode;
 	GRAPH::AggregateNode<AgEdge> *pAgNode, *pElement;
 	QLIST::Index *pElementIdx;
-	int size;
 
 	for (iNode = 0; iNode < NodeArray.n; iNode++)
 	{
@@ -1404,73 +1402,125 @@ void ObjectGraph::CreateSortedObjectArray()
 			}
 
 			pAgNode->size = size;
-
-			if (size > 0)
-				nPts += size;
-
-			if (size > 1)
-				objectArray_[objectArray.n++] = iNode;
 		}
 	}
 
-	for (iNode = 0; iNode < NodeArray.n; iNode++)
-	{
-		pAgNode = NodeArray.Element + iNode;
+	//CreateSortedObjectArray();
 
-		if (pAgNode->elementList.pFirst == NULL)
-			pAgNode->size = 0;
+//#ifdef RVLPCSEGMENT_OBJECT_GRAPH_LOG
+//	FILE *fpLog = fopen("C:\\RVL\\Debug\\WERAggGraph.txt", "w");
+//
+//	WriteObjectDataToFile(fpLog);
+//
+//	fclose(fpLog);
+//#endif
 	}
 
-	RVL_DELETE_ARRAY(objectArray.Element);
-
-	objectArray.Element = new int[objectArray.n];
-
-	int nCoverage = 0;
-
-	bool *bCoverage = new bool[objectArray.n];
-
-	memset(bCoverage, 0, objectArray.n * sizeof(bool));
-
-	float fnPts = (float)nPts;
-
-	int iObject = 0;
-
-	int iiNode, iiMaxObject;
-	int maxObjectSize;
-
-	while ((float)nCoverage / fnPts < kCoverage)
-	{
-		maxObjectSize = 0;
-
-		for (iiNode = 0; iiNode < objectArray.n; iiNode++)
-		{
-			if (bCoverage[iiNode])
-				continue;
-
-			iNode = objectArray_[iiNode];
-
-			pAgNode = NodeArray.Element + iNode;
-
-			if (pAgNode->size > maxObjectSize)
-			{
-				maxObjectSize = pAgNode->size;
-
-				iiMaxObject = iiNode;
-			}
-		}
-
-		objectArray.Element[iObject++] = objectArray_[iiMaxObject];
-
-		bCoverage[iiMaxObject] = true;
-
-		nCoverage += maxObjectSize;
-	}
-
-	objectArray.n = iObject;
-
-	delete[] bCoverage;
-	delete[] objectArray_;
-}
+//void ObjectGraph::CreateSortedObjectArray()
+//{
+//	// Compute object sizes and determine the number of objects.
+//
+//	int *objectArray_ = new int[NodeArray.n];
+//
+//	objectArray.n = 0;
+//
+//	int nPts = 0;
+//
+//	int iNode;
+//	GRAPH::AggregateNode<AgEdge> *pAgNode, *pElement;
+//	QLIST::Index *pElementIdx;
+//	int size;
+//
+//	for (iNode = 0; iNode < NodeArray.n; iNode++)
+//	{
+//		//if (iNode == 1230 || iNode == 786 || iNode == 946)
+//		//	int debug = 0;
+//
+//		pAgNode = NodeArray.Element + iNode;
+//
+//		pElementIdx = pAgNode->elementList.pFirst;
+//
+//		if (pElementIdx)
+//		{
+//			size = 0;
+//
+//			while (pElementIdx)
+//			{
+//				pElement = NodeArray.Element + pElementIdx->Idx;
+//
+//				size += pElement->size;
+//
+//				pElementIdx = pElementIdx->pNext;
+//			}
+//
+//			pAgNode->size = size;
+//
+//			if (size > 0)
+//				nPts += size;
+//
+//			if (size > 1)
+//				objectArray_[objectArray.n++] = iNode;
+//		}
+//	}
+//
+//	for (iNode = 0; iNode < NodeArray.n; iNode++)
+//	{
+//		pAgNode = NodeArray.Element + iNode;
+//
+//		if (pAgNode->elementList.pFirst == NULL)
+//			pAgNode->size = 0;
+//	}
+//
+//	RVL_DELETE_ARRAY(objectArray.Element);
+//
+//	objectArray.Element = new int[objectArray.n];
+//
+//	int nCoverage = 0;
+//
+//	bool *bCoverage = new bool[objectArray.n];
+//
+//	memset(bCoverage, 0, objectArray.n * sizeof(bool));
+//
+//	float fnPts = (float)nPts;
+//
+//	int iObject = 0;
+//
+//	int iiNode, iiMaxObject;
+//	int maxObjectSize;
+//
+//	while ((float)nCoverage / fnPts < kCoverage)
+//	{
+//		maxObjectSize = 0;
+//
+//		for (iiNode = 0; iiNode < objectArray.n; iiNode++)
+//		{
+//			if (bCoverage[iiNode])
+//				continue;
+//
+//			iNode = objectArray_[iiNode];
+//
+//			pAgNode = NodeArray.Element + iNode;
+//
+//			if (pAgNode->size > maxObjectSize)
+//			{
+//				maxObjectSize = pAgNode->size;
+//
+//				iiMaxObject = iiNode;
+//			}
+//		}
+//
+//		objectArray.Element[iObject++] = objectArray_[iiMaxObject];
+//
+//		bCoverage[iiMaxObject] = true;
+//
+//		nCoverage += maxObjectSize;
+//	}
+//
+//	objectArray.n = iObject;
+//
+//	delete[] bCoverage;
+//	delete[] objectArray_;
+//}
 
 void ObjectGraph::ComputeRelationCosts()
 {
@@ -1846,7 +1896,7 @@ bool RVL::SURFEL::objectMouseRButtonDownUserFunction(
 
 		pData->iSelectedObject = iObject;
 
-		printf("Slected object: %d\n", iObject);
+		printf("Selected object: %d (node %d)\n", pObjects->iObjectAssignedToNode[iObject], iObject);
 
 		return true;
 	}
@@ -1907,7 +1957,7 @@ void ObjectGraph::DetermineObjectConvexityData(float convexThr, float minDiffFli
 		//we are not intrested in objects with size less than 20 points???
 		if (pObject->size < 20)
 			continue;
-		
+
 		// Sort surfels in objects.
 		this->SortElements(pObject, &sortedElementIdxArray);
 
@@ -1929,8 +1979,8 @@ void ObjectGraph::DetermineObjectConvexityData(float convexThr, float minDiffFli
 			pSurfel = this->pSurfels->NodeArray.Element + sortedIdx->idx;//piElement->Idx;
 			//check if edge
 			if (!bObjectAggregationLevel2Edges)
-			if (pSurfel->bEdge)
-				continue;
+				if (pSurfel->bEdge)
+					continue;
 
 			totalSize += pSurfel->size;
 
@@ -2016,8 +2066,8 @@ void ObjectGraph::DetermineObjectConvexityData(float convexThr, float minDiffFli
 			pSurfel = this->pSurfels->NodeArray.Element + sortedIdx->idx;//piElement->Idx;
 			//check if edge
 			if (!bObjectAggregationLevel2Edges)
-			if (pSurfel->bEdge)
-				continue;
+				if (pSurfel->bEdge)
+					continue;
 
 			totalSize += pSurfel->size;
 
@@ -2571,6 +2621,11 @@ void ObjectGraph::CalculateConvexityRatiosForObjectPair(int firstObject, int sec
 
 void ObjectGraph::ObjectAggregationLevel2_ViaObjectPairConvexity(float convexThr, float ratioThr, float ratioThr2, int objValidThr, bool verbose)
 {
+#ifdef RVLPCSEGMENT_OBJECT_GRAPH_SYMMETRY_LOG
+	if (objectAggregationLevel2Method == RVLPCSEGMENT_OBJECT_AGGREGATION_LEVEL2_METHOD_SYMMETRY) 
+		fpSymmetry = fopen("symmetries.txt", "w");
+#endif
+
 	//running through all objects (Generating a list of valid objects)
 	GRAPH::AggregateNode<SURFEL::AgEdge> *pObject;
 	QLIST::Index *piElement;
@@ -2604,10 +2659,13 @@ void ObjectGraph::ObjectAggregationLevel2_ViaObjectPairConvexity(float convexThr
 	std::map<std::string, float> min_convexity_values;
 	std::stringstream ss;
 	float minValue;
+	int iObject1_, iObject2_;
 	for (int iObject = 0; iObject < validObjects.size(); iObject++)
 	{
 		for (int iObject2 = iObject + 1; iObject2 < validObjects.size(); iObject2++)
 		{
+			if (objectAggregationLevel2Method == RVLPCSEGMENT_OBJECT_AGGREGATION_LEVEL2_METHOD_CONVEXITY)
+			{
 			this->CalculateConvexityRatiosForObjectPair(validObjects.at(iObject), validObjects.at(iObject2), firstRatio, secondRatio, convexThr);
 			if (verbose)
 				std::cout << "(" << validObjects.at(iObject) << ", " << validObjects.at(iObject2) << ")" << " = " << firstRatio << ", " << secondRatio << std::endl;
@@ -2626,10 +2684,25 @@ void ObjectGraph::ObjectAggregationLevel2_ViaObjectPairConvexity(float convexThr
 			ss.str("");
 			ss << validObjects.at(iObject2) << "_" << validObjects.at(iObject);	//other way
 			min_convexity_values.insert(std::pair<std::string, float>(ss.str(), minValue));
+			}
+			else if (objectAggregationLevel2Method == RVLPCSEGMENT_OBJECT_AGGREGATION_LEVEL2_METHOD_SYMMETRY)
+			{
+				iObject1_ = iObjectAssignedToNode[validObjects.at(iObject)];
+				iObject2_ = iObjectAssignedToNode[validObjects.at(iObject2)];
 
-			//objectAggregationLevel2Criterion(this, validObjects.at(iObject), validObjects.at(iObject2), vpObjectAggregationLevel2CriterionData);
+				objectAggregationLevel2Criterion(this, iObject1_, iObject2_, vpObjectAggregationLevel2CriterionData);
+			}				
 		}
+		}
+
+#ifdef RVLPCSEGMENT_OBJECT_GRAPH_SYMMETRY_LOG
+	if (fpSymmetry)
+	{
+		fclose(fpSymmetry);
+
+		fpSymmetry = NULL;
 	}
+#endif
 
 	//Generating merge clusters (object pairs is in decreasing order)
 	std::map<int, std::set<int>> merge_clusters;
@@ -3083,6 +3156,8 @@ void ObjectGraph::SortObjects()
 
 	SortIndex<int> *pSortIndex = sortedObjectArray.Element;
 
+	int minSize = RVLMAX(20, minObjectSize);
+
 	int iObject;
 	GRAPH::AggregateNode<SURFEL::AgEdge> *pObject;
 	QLIST::Index *piElement;
@@ -3098,7 +3173,7 @@ void ObjectGraph::SortObjects()
 			continue;
 
 		//we are not intrested in objects with size less than 20 points???
-		if (pObject->size < 20)
+		if (pObject->size < minSize)
 			continue;
 
 		pSortIndex->cost = pObject->size;
@@ -3109,11 +3184,36 @@ void ObjectGraph::SortObjects()
 	sortedObjectArray.n = nValidObjects;
 
 	BubbleSort<SortIndex<int>>(sortedObjectArray, true);
+
+	RVL_DELETE_ARRAY(objectArray.Element);
+
+	objectArray.Element = new Object[sortedObjectArray.n];
+	objectArray.n = sortedObjectArray.n;
+
+	RVL_DELETE_ARRAY(iObjectAssignedToNode);
+
+	iObjectAssignedToNode = new int[NodeArray.n];
+
+	memset(iObjectAssignedToNode, 0xff, NodeArray.n * sizeof(int));
+
+	Object *pObject_;
+
+	for (iObject = 0; iObject < objectArray.n; iObject++)
+	{
+		pObject_ = objectArray.Element + iObject;
+
+		pObject_->iNode = sortedObjectArray.Element[iObject].idx;
+		pObject_->surfelList = NodeArray.Element[pObject_->iNode].elementList;
+
+		iObjectAssignedToNode[pObject_->iNode] = iObject;
+	}
 }
 
 void ObjectGraph::CountValidObjects()
 {
 	nValidObjects = 0;
+
+	int minSize = RVLMAX(20, minObjectSize);
 
 	int iObject;
 	GRAPH::AggregateNode<SURFEL::AgEdge> *pObject;
@@ -3130,7 +3230,7 @@ void ObjectGraph::CountValidObjects()
 			continue;
 
 		//we are not intrested in objects with size less than 20 points???
-		if (pObject->size < 20)
+		if (pObject->size < minSize)
 			continue;
 
 		nValidObjects++;

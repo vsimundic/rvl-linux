@@ -224,10 +224,6 @@ void ObjectDetector::DetectObjects(char *MeshFilePathName)
 			// Detect vertices.
 
 			pSurfels->DetectVertices(&mesh);
-
-			// Assign mesh to PSGM.
-
-			pPSGM->pMesh = &mesh;
 		}
 
 		if (flags & RVLOBJECTDETECTION_FLAG_SAVE_SSF)
@@ -275,11 +271,15 @@ void ObjectDetector::DetectObjects(char *MeshFilePathName)
 			cv::waitKey(1);
 			/*VisualizeObjectGraphVertexPointCloud(&objects, 100);*/
 			//if (bCTIBasedObjectAggregation)
-			//pPSGM->InitSymmetry(pObjects);
+			pObjects->GetVertices();	
+			pPSGM->Init(&mesh);
+			pPSGM->CTIs(pObjects, &CTIs);
+			pPSGM->convexTemplate = pPSGM->convexTemplateBox;
+			pPSGM->CTIs(pObjects, &boundingBoxes);
+			pPSGM->convexTemplate = pPSGM->convexTemplate66;
 			pObjects->pMesh = &mesh;
-			pObjects->DetermineObjectConvexityData(convexityThr, 0.15, bConcaveObjectAggregation, true);
-			pObjects->ObjectAggregationLevel2_ViaObjectPairConvexity(convexityThr, convexityRatioThr1, convexityRatioThr2, 300, true);
-			//pPSGM->FreeSymmetry();
+			pObjects->DetermineObjectConvexityData(convexityThr, 0.15, bConcaveObjectAggregation);
+			pObjects->ObjectAggregationLevel2_ViaObjectPairConvexity(convexityThr, convexityRatioThr1, convexityRatioThr2, pObjects->minObjectSize);
 			cv::imshow("New Colored object image", pObjects->CreateSegmentationImage());
 			cv::waitKey(1);
 			////
@@ -320,15 +320,80 @@ void ObjectDetector::Evaluate(
 #endif
 }
 
-void ObjectDetector::CTIs()
+void ObjectDetector::BoundingBox(
+	int iObject1,
+	int iObject2,
+	RECOG::PSGM_::ModelInstance *pBoundingBox)
 {
-	pPSGM->CTIs(pObjects, &(pPSGM->CTISet));
+	if (!pPSGM->bGnd)
+		return;
 
-	FILE *fp = fopen("CTIs.txt", "w");
+	if (CTIs.SegmentCTIs.n <= iObject1 && CTIs.SegmentCTIs.n <= iObject2)
+		return;
 
-	pPSGM->SaveCTIs(fp, &(pPSGM->CTISet));
+	int iObject[2];
 
-	fclose(fp);
+	iObject[0] = iObject1;
+	iObject[1] = iObject2;
+
+	SURFEL::Object *pObject[2];
+
+	pObject[0] = pObjects->objectArray.Element + iObject1;
+	pObject[1] = pObjects->objectArray.Element + iObject2;
+
+	float *R_ = NULL;
+
+	float varX = 0.0;
+
+	int i, j;
+	int iCTI;
+	RECOG::PSGM_::ModelInstance *pCTI;
+
+	for (i = 0; i < 2; i++)
+		if (CTIs.SegmentCTIs.Element[iObject[i]].n > 0)
+		{
+			iCTI = CTIs.SegmentCTIs.Element[iObject[i]].Element[0];
+
+			pCTI = CTIs.pCTI.Element[iCTI];
+
+			if (R_ == NULL || pCTI->varX < varX)
+			{
+				varX = pCTI->varX;
+				R_ = pCTI->R;
+			}
+		}
+
+	if (R_ == NULL)
+		return;
+
+	float *R = pBoundingBox->R;
+
+	RVLCOPYMX3X3(R_, R);
+
+	float *t = pBoundingBox->t;
+
+	RVLNULL3VECTOR(t);
+
+	Array<int> iVertexArray;
+
+	iVertexArray.n = pObject[0]->iVertexArray.n + pObject[1]->iVertexArray.n;
+	iVertexArray.Element = new int[iVertexArray.n];
+
+	int *piVertex = iVertexArray.Element;
+
+	for (i = 0; i < 2; i++)
+		for (j = 0; j < pObject[i]->iVertexArray.n; j++)
+			*(piVertex++) = pObject[i]->iVertexArray.Element[j];
+
+	Array<RECOG::PSGM_::Plane> convexTemplateTmp = pPSGM->convexTemplate;
+
+	pPSGM->convexTemplate = pPSGM->convexTemplateBox;
+
+	pPSGM->FitModel(iVertexArray, pBoundingBox, true);
+
+	pPSGM->convexTemplate = convexTemplateTmp;
+
+	delete[] iVertexArray.Element;
 }
 
 void OBJECT_DETECTION::Symmetry(
@@ -339,5 +404,45 @@ void OBJECT_DETECTION::Symmetry(
 {
 	ObjectDetector *pObjectDetector = (ObjectDetector *)vpData;
 
-	pObjectDetector->pPSGM->Symmetry(pObjects, iObject1, iObject2);
+	Array<RECOG::PSGM_::SymmetryMatch> symmetryMatch;
+
+	symmetryMatch.Element = new RECOG::PSGM_::SymmetryMatch[pObjectDetector->pPSGM->convexTemplate.n];
+
+	float symmetryScore = pObjectDetector->pPSGM->Symmetry(pObjects, iObject1, iObject2, &(pObjectDetector->CTIs), symmetryMatch);
+
+	if (pObjectDetector->pObjects->fpSymmetry)
+	{
+		Array<int> iCTIArray = pObjectDetector->CTIs.SegmentCTIs.Element[iObject1];
+
+		if (iCTIArray.n > 0)
+		{
+			fprintf(pObjectDetector->pObjects->fpSymmetry, "%d\t%d\t%f\t", iObject1, iObject2, symmetryScore);
+
+			bool *b = new bool[pObjectDetector->pPSGM->convexTemplate.n];
+
+			memset(b, 0, pObjectDetector->pPSGM->convexTemplate.n * sizeof(bool));
+
+			int i;
+
+			for (i = 0; i < symmetryMatch.n; i++)
+				b[symmetryMatch.Element[i].iCTIElement] = true;
+
+			int iCTI = iCTIArray.Element[0];
+
+			RECOG::PSGM_::ModelInstance *pCTI = pObjectDetector->CTIs.pCTI.Element[iCTI];
+
+			for (i = 0; i < pObjectDetector->pPSGM->convexTemplate.n; i++)
+				fprintf(pObjectDetector->pObjects->fpSymmetry, "%f\t", pCTI->modelInstance.Element[i].d);
+
+			for (i = 0; i < pObjectDetector->pPSGM->convexTemplate.n; i++)
+				fprintf(pObjectDetector->pObjects->fpSymmetry, "%d\t", (int)b[i]);
+
+			fprintf(pObjectDetector->pObjects->fpSymmetry, "\n");
+
+			delete[] b;
+		}
+	}	
+
+	delete[] symmetryMatch.Element;
 }
+

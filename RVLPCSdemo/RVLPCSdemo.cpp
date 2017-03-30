@@ -5,7 +5,7 @@
 #include <stdio.h>
 #include <time.h>
 #include <vtkAutoInit.h>
-VTK_MODULE_INIT(vtkRenderingOpenGL);
+VTK_MODULE_INIT(vtkRenderingOpenGL2);
 VTK_MODULE_INIT(vtkInteractionStyle);
 VTK_MODULE_INIT(vtkRenderingFreeType);
 #include "RVLCore.h"
@@ -33,7 +33,8 @@ int main(int argc, char* argv[])
 
 	// Create RGB-D camera.
 
-	//RGBDCamera camera;
+	//RGBDCamera camera;						 //Radocaj
+	//Array2D<short int> depthImage;         //Radocaj
 
 	// Create point cloud.
 
@@ -111,6 +112,16 @@ int main(int argc, char* argv[])
 			t = clock();				
 
 			VS.Segment();
+
+			//pcl::PointCloud<pcl::PointXYZRGBA>::Ptr PC(new pcl::PointCloud<pcl::PointXYZRGBA>(320, 240)); //Radocaj
+			//depthImage.Element = pDepthImage->Disparity; //Radocaj
+			//depthImage.w = pDepthImage->Width; //Radocaj
+			//depthImage.h = pDepthImage->Height; //Radocaj
+			//camera.depthFu *= 0.5; //Radocaj
+			//camera.depthFv *= 0.5; //Radocaj
+			//camera.depthUc *= 0.5; //Radocaj
+			//camera.depthVc *= 0.5; //Radocaj
+			//camera.GetPointCloud(&depthImage, GUI.m_pRGBImage, PC);//Radocaj
 
 			t = clock() - t;
 
