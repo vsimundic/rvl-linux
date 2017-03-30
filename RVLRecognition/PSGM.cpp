@@ -249,6 +249,13 @@ void PSGM::CreateParamList(CRVLMem *pMem)
 	pParamData = ParamList.AddParam("PSGM.debug2", RVLPARAM_TYPE_INT, &debug2);
 }
 
+void PSGM::Init(Mesh *pMesh_)
+{
+	pMesh = pMesh_;
+
+	bGnd = false;
+}
+
 void PSGM::Interpret(
 	Mesh *pMeshIn,
 	int iScene)
@@ -7740,7 +7747,8 @@ void PSGM::CTIs(
 {
 	pCTISet->Init();
 
-	DetectGroundPlane(pObjects);
+	if (!bGnd)
+		DetectGroundPlane(pObjects);
 
 	if (!bGnd)
 		return;

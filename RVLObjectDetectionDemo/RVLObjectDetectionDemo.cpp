@@ -210,25 +210,29 @@ int main(int argc, char ** argv)
 				objectDetector.pObjects->SaveSegmentationLabelImg(segmentationImageFileName);
 			}
 #endif
+			// DEMO: common bounding box of objects 9 and 19.
+
+			//RECOG::PSGM_::ModelInstance boundingBox;
+
+			//boundingBox.modelInstance.Element = new RECOG::PSGM_::ModelInstanceElement[66];
+
+			//objectDetector.BoundingBox(9, 19, &boundingBox);
+
 			//objectDetector.pPSGM->convexTemplate = objectDetector.pPSGM->convexTemplateBox;
 
-			//objectDetector.pPSGM->CTIs(objectDetector.pObjects, &(objectDetector.CTIs));
+			//objectDetector.pPSGM->DisplayCTI(&visualizer, &boundingBox);
 
-			//objectDetector.pPSGM->DisplayCTIs(&visualizer, &(objectDetector.CTIs));
+			//objectDetector.pPSGM->convexTemplate = objectDetector.pPSGM->convexTemplate66;
 
-			RECOG::PSGM_::ModelInstance boundingBox;
+			//delete[] boundingBox.modelInstance.Element;
 
-			boundingBox.modelInstance.Element = new RECOG::PSGM_::ModelInstanceElement[66];
-
-			objectDetector.BoundingBox(9, 19, &boundingBox);
+			// END DEMO
 
 			objectDetector.pPSGM->convexTemplate = objectDetector.pPSGM->convexTemplateBox;
 
-			objectDetector.pPSGM->DisplayCTI(&visualizer, &boundingBox);
+			objectDetector.pPSGM->DisplayCTIs(&visualizer, &(objectDetector.boundingBoxes));
 
 			objectDetector.pPSGM->convexTemplate = objectDetector.pPSGM->convexTemplate66;
-
-			delete[] boundingBox.modelInstance.Element;
 
 			//detector.DisplaySoftEdges(&visualizer, &mesh, &surfels, SelectionColor);
 			visualizer.Run();

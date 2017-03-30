@@ -59,6 +59,7 @@ namespace RVL
 			Mesh *pMesh,
 			bool bSavePLY);
 		RECOG::CTISet CTIs;
+		RECOG::CTISet boundingBoxes;
 	};
 }
 
