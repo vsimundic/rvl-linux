@@ -399,10 +399,10 @@ int main(int argc, char ** argv)
 		}
 		else if (recognition.mode == RVLRECOGNITION_MODE_RECOGNITION)
 		{
-			Eigen::MatrixXf nI = recognition.ConvexTemplatenT();
-			float dI[66];
-			for (int i = 0; i < 66; i++) dI[i] = 1;
-			recognition.RVLPSGInstanceMesh(nI, dI);
+			//Eigen::MatrixXf nI = recognition.ConvexTemplatenT();
+			//float dI[66];
+			//for (int i = 0; i < 66; i++) dI[i] = 1;
+			//recognition.RVLPSGInstanceMesh(nI, dI);
 
 			recognition.LoadModelDataBase(); //Vidovic
 
