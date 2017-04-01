@@ -40,6 +40,7 @@ ObjectDetector::ObjectDetector()
 	pSurfelDetector = NULL;
 	pObjects = NULL;
 	vpMeshBuilder = NULL;
+	pPSGM = NULL;
 }
 
 
@@ -53,6 +54,9 @@ ObjectDetector::~ObjectDetector()
 
 	if (pObjects)
 		delete pObjects;
+
+	if (pPSGM)
+		delete pPSGM;
 
 	RVL_DELETE_ARRAY(cfgFileName);
 	RVL_DELETE_ARRAY(SVMClassifierParamsFileName);

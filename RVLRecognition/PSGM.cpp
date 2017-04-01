@@ -4382,7 +4382,7 @@ void PSGM::Match()
 
 			Match(pSModelInstance, startIdx, endIdx);
 
-			CalculateScore(RVLPSGM_MATCHES_SIMILARITY_MEASURE);
+			CalculateScore(RVLPSGM_MATCH_SIMILARITY_MEASURE_MEAN_SATURATED_SQUARE_DISTANCE);
 
 			UpdateScoreMatchMatrix(pSModelInstance);
 
@@ -4806,7 +4806,7 @@ void PSGM::CalculateScore(int similarityMeasure)
 
 	switch (similarityMeasure)
 	{
-	case 1: //mean square error
+	case RVLPSGM_MATCH_SIMILARITY_MEASURE_MEAN_SQUARE_DISTANCE: //mean square error
 
 		for (iMCTI = 0; iMCTI < nMCTI; iMCTI++)
 		{
@@ -4828,7 +4828,7 @@ void PSGM::CalculateScore(int similarityMeasure)
 		}
 
 		break;
-	case 2: //maximum absolute error
+	case RVLPSGM_MATCH_SIMILARITY_MEASURE_MAX_ABS_DISTANCE: //maximum absolute error
 
 		for (iMCTI = 0; iMCTI < nMCTI; iMCTI++)
 		{
@@ -4854,7 +4854,7 @@ void PSGM::CalculateScore(int similarityMeasure)
 		}
 
 		break;
-	case 3: //saturated square error
+	case RVLPSGM_MATCH_SIMILARITY_MEASURE_SATURATED_SQUARE_DISTANCE_INVISIBILITY_PENAL: //saturated square error
 
 		for (iMCTI = 0; iMCTI < nMCTI; iMCTI++)
 		{
@@ -4877,6 +4877,34 @@ void PSGM::CalculateScore(int similarityMeasure)
 			}
 
 			score.Element[iMCTI] = scoreTmp + sigma25 * (66 - iValid.n);
+
+			pCTIMatch_->score = score.Element[iMCTI];
+			pCTIMatch_ = pCTIMatch_->pNext;
+		}
+
+		break;
+	case RVLPSGM_MATCH_SIMILARITY_MEASURE_MEAN_SATURATED_SQUARE_DISTANCE:
+		for (iMCTI = 0; iMCTI < nMCTI; iMCTI++)
+		{
+			scoreTmp = 0;
+
+			for (iValidPlane = 0; iValidPlane < iValid.n; iValidPlane++)
+			{
+				idx = iValid.Element[iValidPlane].Idx;
+
+				eTmp = e.Element[iMCTI].Element[idx];
+
+				fTmp = eTmp / sigma;
+
+				if (fTmp * fTmp < sigma25)
+				{
+					scoreTmp += fTmp * fTmp;
+				}
+				else
+					scoreTmp += sigma25;
+			}
+
+			score.Element[iMCTI] = scoreTmp / iValid.n;
 
 			pCTIMatch_->score = score.Element[iMCTI];
 			pCTIMatch_ = pCTIMatch_->pNext;
@@ -7506,7 +7534,7 @@ bool PSGM::IsFlat(
 	if (PtArray.n == 0)
 		return false;
 
-	pMesh->ComputeDistribution(PtArray, PtDistribution);
+	pMesh->ComputeDistributionDouble(PtArray, PtDistribution);
 
 	float *var = PtDistribution.var;
 
@@ -7516,7 +7544,7 @@ bool PSGM::IsFlat(
 
 	RVLSORT3ASCEND(var, idx, iTmp);
 
-	if (var[idx[0]] / var[idx[1]] <= 0.001)
+	if (var[idx[0]] / var[idx[1]] <= 0.0005)
 	{
 		N_ = PtDistribution.R + 3 * idx[0];
 
@@ -7529,7 +7557,7 @@ bool PSGM::IsFlat(
 			RVLCOPY3VECTOR(N_, N);
 		}
 
-		d = RVLDOTPRODUCT3(N_, PtDistribution.t);
+		d = RVLDOTPRODUCT3(N, PtDistribution.t);
 
 		return true;
 	}
