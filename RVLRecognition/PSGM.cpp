@@ -21,6 +21,8 @@
 #include <random> //VIDOVIC
 #include <nanoflann.hpp>
 
+//#define RVLPSGM_CTIMESH_DEBUG
+
 using namespace RVL;
 using namespace RECOG;
 
@@ -69,8 +71,6 @@ PSGM::PSGM()
 	clusterMem = NULL;
 	clusterSurfelMem = NULL;
 	clusterVertexMem = NULL;
-	iVertexMem = NULL;
-	bVertexAssigned = NULL;
 	//modelInstanceMem = NULL;
 	sceneFileName = NULL;
 	modelInstanceDB.Element = NULL; //Vidovic
@@ -128,6 +128,8 @@ PSGM::PSGM()
 
 	//fpTime = fopen("C:\\RVL\\MatchTime_WithoutRansac.txt", "w");
 	//End Vidovic
+
+	bGnd = false;
 }
 
 
@@ -138,8 +140,6 @@ PSGM::~PSGM()
 	RVL_DELETE_ARRAY(clusterMem);
 	RVL_DELETE_ARRAY(clusterSurfelMem);
 	RVL_DELETE_ARRAY(clusterVertexMem);
-	RVL_DELETE_ARRAY(iVertexMem);
-	RVL_DELETE_ARRAY(bVertexAssigned);
 	RVL_DELETE_ARRAY(convexTemplate66.Element);
 	RVL_DELETE_ARRAY(convexTemplateBox.Element);
 	//RVL_DELETE_ARRAY(modelInstanceMem);
@@ -245,6 +245,15 @@ void PSGM::CreateParamList(CRVLMem *pMem)
 	ParamList.AddID(pParamData, "CTI", RVLPSGM_HYPOTHESIS_VISUALIZATION_MODE_CTI);
 	ParamList.AddID(pParamData, "PLY", RVLPSGM_HYPOTHESIS_VISUALIZATION_MODE_PLY);
 	pParamData = ParamList.AddParam("PSGM.symmetryMatchThr", RVLPARAM_TYPE_FLOAT, &symmetryMatchThr);
+	pParamData = ParamList.AddParam("PSGM.debug1", RVLPARAM_TYPE_INT, &debug1);
+	pParamData = ParamList.AddParam("PSGM.debug2", RVLPARAM_TYPE_INT, &debug2);
+}
+
+void PSGM::Init(Mesh *pMesh_)
+{
+	pMesh = pMesh_;
+
+	bGnd = false;
 }
 
 void PSGM::Interpret(
@@ -1112,7 +1121,7 @@ vtkSmartPointer<vtkPolyData> GenerateCTIPrimitivePolydata_CW(float *planeNormals
 }
 
 //Generates vtkPolyData object (points and polys) that represenent a single CTI primitive, planeNormals is row wise (normal_1_x_coordinate, normal_1_y_coordinate, normal_1_z_coordinate, normal_2_x_coordinate, ...)
-vtkSmartPointer<vtkPolyData> GenerateCTIPrimitivePolydata_RW(float *planeNormals, float *planeDist, bool centered = false, int *mask = NULL, float *t = NULL)
+vtkSmartPointer<vtkPolyData> GenerateCTIPrimitivePolydata_RW(float *planeNormals, float *planeDist, int nPlanes, bool centered = false, int *mask = NULL, float *t = NULL)
 {
 	vtkSmartPointer<vtkPolyData> outPD;
 
@@ -1121,15 +1130,15 @@ vtkSmartPointer<vtkPolyData> GenerateCTIPrimitivePolydata_RW(float *planeNormals
 	if (!centered)
 	{
 		//make copy of original plane dist
-		planeDistLocal = new float[66];
-		memcpy(planeDistLocal, planeDist, 66 * sizeof(float));
+		planeDistLocal = new float[nPlanes];
+		memcpy(planeDistLocal, planeDist, nPlanes * sizeof(float));
 
 		//Finding MIN and MAX for each normal dimension
 		float maxN[3] = { -10, -10, -10 };
 		int maxI[3] = { 0, 0, 0 };
 		float minN[3] = { 10, 10, 10 };
 		int minI[3] = { 0, 0, 0 };
-		for (int i = 0; i < 66; i++)
+		for (int i = 0; i < nPlanes; i++)
 		{
 			if (planeNormals[i * 3] > maxN[0])
 			{
@@ -1165,15 +1174,15 @@ vtkSmartPointer<vtkPolyData> GenerateCTIPrimitivePolydata_RW(float *planeNormals
 			}
 		}
 		//centering
-		float newexampleTemp[66];
+		float newexampleTemp;
 		float tempV[3];
 		tempV[0] = 0.5 * (planeDistLocal[maxI[0]] - planeDistLocal[minI[0]]);
 		tempV[1] = 0.5 * (planeDistLocal[maxI[1]] - planeDistLocal[minI[1]]);
 		tempV[2] = 0.5 * (planeDistLocal[maxI[2]] - planeDistLocal[minI[2]]);
-		for (int i = 0; i < 66; i++)
+		for (int i = 0; i < nPlanes; i++)
 		{
-			newexampleTemp[i] = planeNormals[i * 3] * tempV[0] + planeNormals[i * 3 + 1] * tempV[1] + planeNormals[i * 3 + 2] * tempV[2];
-			planeDistLocal[i] -= newexampleTemp[i];
+			newexampleTemp = planeNormals[i * 3] * tempV[0] + planeNormals[i * 3 + 1] * tempV[1] + planeNormals[i * 3 + 2] * tempV[2];
+			planeDistLocal[i] -= newexampleTemp;
 		}
 		if (t)
 			memcpy(t, tempV, 3 * sizeof(float));
@@ -1184,7 +1193,7 @@ vtkSmartPointer<vtkPolyData> GenerateCTIPrimitivePolydata_RW(float *planeNormals
 	vtkSmartPointer<vtkPoints> points = vtkSmartPointer<vtkPoints>::New();
 	vtkSmartPointer<vtkFloatArray> normalp = vtkSmartPointer<vtkFloatArray>::New();
 	normalp->SetNumberOfComponents(3);
-	for (int i = 0; i < 66; i++)
+	for (int i = 0; i < nPlanes; i++)
 	{
 		points->InsertPoint(i, planeNormals[i * 3] * planeDistLocal[i], planeNormals[i * 3 + 1] * planeDistLocal[i], planeNormals[i * 3 + 2] * planeDistLocal[i]);
 		normalp->InsertTuple3(i, planeNormals[i * 3], planeNormals[i * 3 + 1], planeNormals[i * 3 + 2]);
@@ -1213,7 +1222,7 @@ vtkSmartPointer<vtkPolyData> GenerateCTIPrimitivePolydata_RW(float *planeNormals
 			//calculate polygon normal
 			vtkPolygon::ComputeNormal(hullPD->GetPoints(), npts, polysPtsIds, n);
 			//find corresponding normal in normal list
-			for (int k = 0; k < 66; k++)
+			for (int k = 0; k < nPlanes; k++)
 			{
 				cosfi = n[0] * planeNormals[k * 3] + n[1] * planeNormals[k * 3 * 1] + n[2] * planeNormals[k * 3 + 2];
 				if ((cosfi > 0.9999) && (mask[k] == 1))
@@ -1240,6 +1249,7 @@ vtkSmartPointer<vtkPolyData> GenerateCTIPrimitivePolydata_RW(float *planeNormals
 	//make copy of the final polydata and send it back
 	outPD = vtkSmartPointer<vtkPolyData>::New();
 	outPD->DeepCopy(cleanPD->GetOutput());
+
 	return outPD;
 }
 
@@ -1298,7 +1308,7 @@ void PSGM::VisualizeCTIMatch(float *nT, float *dM, float *dS, int *validS)
 	renderer->SetBackground(0.5294, 0.8078, 0.9803);
 
 	//Generate model polydata
-	vtkSmartPointer<vtkPolyData> modelPD = GenerateCTIPrimitivePolydata_RW(nT, dM);
+	vtkSmartPointer<vtkPolyData> modelPD = GenerateCTIPrimitivePolydata_RW(nT, dM, 66);
 	/*if (tM) //if translation exists
 	{
 		float scale = 1;
@@ -1334,7 +1344,7 @@ void PSGM::VisualizeCTIMatch(float *nT, float *dM, float *dS, int *validS)
 	renderer->AddActor(modelActor2);
 	*/
 	//Generate scene polydata
-	vtkSmartPointer<vtkPolyData> modelSPD = GenerateCTIPrimitivePolydata_RW(nT, dS, false, validS);
+	vtkSmartPointer<vtkPolyData> modelSPD = GenerateCTIPrimitivePolydata_RW(nT, dS, 66, false, validS);
 	vtkSmartPointer<vtkPolyDataMapper> modelSMapper = vtkSmartPointer<vtkPolyDataMapper>::New();
 	modelSMapper->SetInputData(modelSPD);
 	vtkSmartPointer<vtkActor> modelSActor = vtkSmartPointer<vtkActor>::New();
@@ -4372,7 +4382,7 @@ void PSGM::Match()
 
 			Match(pSModelInstance, startIdx, endIdx);
 
-			CalculateScore(RVLPSGM_MATCHES_SIMILARITY_MEASURE);
+			CalculateScore(RVLPSGM_MATCH_SIMILARITY_MEASURE_MEAN_SATURATED_SQUARE_DISTANCE);
 
 			UpdateScoreMatchMatrix(pSModelInstance);
 
@@ -4798,7 +4808,7 @@ void PSGM::CalculateScore(int similarityMeasure)
 
 	switch (similarityMeasure)
 	{
-	case 1: //mean square error
+	case RVLPSGM_MATCH_SIMILARITY_MEASURE_MEAN_SQUARE_DISTANCE: //mean square error
 
 		for (iMCTI = 0; iMCTI < nMCTI; iMCTI++)
 		{
@@ -4820,7 +4830,7 @@ void PSGM::CalculateScore(int similarityMeasure)
 		}
 
 		break;
-	case 2: //maximum absolute error
+	case RVLPSGM_MATCH_SIMILARITY_MEASURE_MAX_ABS_DISTANCE: //maximum absolute error
 
 		for (iMCTI = 0; iMCTI < nMCTI; iMCTI++)
 		{
@@ -4846,7 +4856,7 @@ void PSGM::CalculateScore(int similarityMeasure)
 		}
 
 		break;
-	case 3: //saturated square error
+	case RVLPSGM_MATCH_SIMILARITY_MEASURE_SATURATED_SQUARE_DISTANCE_INVISIBILITY_PENAL: //saturated square error
 
 		for (iMCTI = 0; iMCTI < nMCTI; iMCTI++)
 		{
@@ -4875,7 +4885,35 @@ void PSGM::CalculateScore(int similarityMeasure)
 		}
 
 		break;
-	case 4: //median of absolute error
+	case RVLPSGM_MATCH_SIMILARITY_MEASURE_MEAN_SATURATED_SQUARE_DISTANCE:
+		for (iMCTI = 0; iMCTI < nMCTI; iMCTI++)
+		{
+			scoreTmp = 0;
+
+			for (iValidPlane = 0; iValidPlane < iValid.n; iValidPlane++)
+			{
+				idx = iValid.Element[iValidPlane].Idx;
+
+				eTmp = e.Element[iMCTI].Element[idx];
+
+				fTmp = eTmp / sigma;
+
+				if (fTmp * fTmp < sigma25)
+				{
+					scoreTmp += fTmp * fTmp;
+				}
+				else
+					scoreTmp += sigma25;
+			}
+
+			score.Element[iMCTI] = scoreTmp / iValid.n;
+
+			pCTIMatch_->score = score.Element[iMCTI];
+			pCTIMatch_ = pCTIMatch_->pNext;
+		}
+
+		break;
+	default: //median of absolute error
 
 		Array<SortIndex<float>> validErrors;
 
@@ -4912,35 +4950,6 @@ void PSGM::CalculateScore(int similarityMeasure)
 		}
 
 		RVL_DELETE_ARRAY(validErrors.Element);
-
-		break;
-	default:  //average saturated square error for valid planes
-
-		for (iMCTI = 0; iMCTI < nMCTI; iMCTI++)
-		{
-			scoreTmp = 0;
-
-			for (iValidPlane = 0; iValidPlane < iValid.n; iValidPlane++)
-			{
-				idx = iValid.Element[iValidPlane].Idx;
-
-				eTmp = e.Element[iMCTI].Element[idx];
-
-				fTmp = eTmp / sigma;
-
-				if (fTmp * fTmp < sigma25)
-				{
-					scoreTmp += fTmp * fTmp;
-				}
-				else
-					scoreTmp += sigma25;
-			}
-
-			score.Element[iMCTI] = scoreTmp / iValid.n;
-
-			pCTIMatch_->score = score.Element[iMCTI];
-			pCTIMatch_ = pCTIMatch_->pNext;
-		}
 
 		break;
 	}
@@ -6344,7 +6353,7 @@ void PSGM::DisplayCTI(
 	
 	float tCTIc_CTI[3];
 
-	vtkSmartPointer<vtkPolyData> modelPD = GenerateCTIPrimitivePolydata_RW(N, d, false, NULL, tCTIc_CTI);
+	vtkSmartPointer<vtkPolyData> modelPD = GenerateCTIPrimitivePolydata_RW(N, d, convexTemplate.n, false, NULL, tCTIc_CTI);
 
 	float *RCTI_S = pCTI->R;
 	float *tCTI_S = pCTI->t;
@@ -6578,7 +6587,7 @@ bool RVL::RECOG::PSGM_::keyPressUserFunction(
 			std::cout << "Enter hypothesis rank, 0-6: ";
 			std::getline(std::cin, line);
 			sscanf(line.data(), "%d", &iHypothesesRank);
-		} while (iHypothesesRank < 0 || iHypothesesRank > 6);
+		} while (iHypothesesRank < 0 || iHypothesesRank > 20);
 
 		//delete visualized ICP matches from the scene:
 		pVisualizer->renderer->RemoveAllViewProps();
@@ -6586,6 +6595,7 @@ bool RVL::RECOG::PSGM_::keyPressUserFunction(
 		pVisualizer->SetMesh(pMesh);
 		pRecognition->Display();
 
+#ifdef RVLPSGM_ICP
 		for (int i = 0; i < pRecognition->scoreMatchMatrixICP.n; i++)
 		{
 			if (pRecognition->scoreMatchMatrixICP.Element[i].Element[iHypothesesRank].idx != -1)
@@ -6593,6 +6603,16 @@ bool RVL::RECOG::PSGM_::keyPressUserFunction(
 				//visualize new ICP matches on the scene
 				pRecognition->AddOneModelToVisualizer(pVisualizer, pRecognition->scoreMatchMatrixICP.Element[i].Element[iHypothesesRank].idx, iHypothesesRank, true);
 			}
+		}
+#else
+		for (int i = 0; i < pRecognition->scoreMatchMatrix.n; i++)
+		{
+			if (pRecognition->scoreMatchMatrix.Element[i].Element[iHypothesesRank].idx != -1)
+			{
+				//visualize new matches on the scene
+				pRecognition->AddOneModelToVisualizer(pVisualizer, pRecognition->scoreMatchMatrix.Element[i].Element[iHypothesesRank].idx, iHypothesesRank, false);
+			}
+#endif
 		}
 		return true;
 	}
@@ -6744,7 +6764,7 @@ void PSGM::AddOneModelToVisualizer(Visualizer *pVisualizer, int iMatch, int iRan
 
 	//Generate model polydata
 	float t[3];
-	vtkSmartPointer<vtkPolyData> modelPD = GenerateCTIPrimitivePolydata_RW(nT.data(), dM, false, NULL, t);
+	vtkSmartPointer<vtkPolyData> modelPD = GenerateCTIPrimitivePolydata_RW(nT.data(), dM, 66, false, NULL, t);
 
 	//Getting transform from centered (model) CTI polygon data to scene (T_CCTIM_S)
 	float *R_M_S = pCTImatchesArray.Element[iMatch]->R;
@@ -6762,7 +6782,7 @@ void PSGM::AddOneModelToVisualizer(Visualizer *pVisualizer, int iMatch, int iRan
 	RVLHTRANSFMX(pSCTI->R, t_CCTIM_S, T_CCTIM_S);
 
 	//Generate scene CTI polydata
-	vtkSmartPointer<vtkPolyData> modelSPD = GenerateCTIPrimitivePolydata_RW(nT.data(), dS, false, validS, t);
+	vtkSmartPointer<vtkPolyData> modelSPD = GenerateCTIPrimitivePolydata_RW(nT.data(), dS, 66, false, validS, t);
 
 	//Getting transform from centered (scene) CTI polygon data to scene (T_CCTIS_S)
 	float t_CCTIS_S[3];
@@ -6775,12 +6795,16 @@ void PSGM::AddOneModelToVisualizer(Visualizer *pVisualizer, int iMatch, int iRan
 	double T_M_S[16];
 	RVLHTRANSFMX(R_M_S, t_M_S, T_M_S);
 	vtkSmartPointer<vtkTransform> transform = vtkSmartPointer<vtkTransform>::New();
+
+#ifdef RVLPSGM_ICP
 	if (displayData.hypothesisVisualizationMode == RVLPSGM_HYPOTHESIS_VISUALIZATION_MODE_PLY)
 		transform->SetMatrix(T_M_S); //when transforming PLY models to scene
+#endif
 
 	if (displayData.hypothesisVisualizationMode == RVLPSGM_HYPOTHESIS_VISUALIZATION_MODE_CTI)
 		transform->SetMatrix(T_CCTIM_S); //when transforming CTI convex hull to scene
 
+#ifdef RVLPSGM_ICP
 	//Scaling PLY model to meters
 	vtkSmartPointer<vtkTransform> transformScale = vtkSmartPointer<vtkTransform>::New();
 	transformScale->Scale(0.001, 0.001, 0.001);
@@ -6788,13 +6812,16 @@ void PSGM::AddOneModelToVisualizer(Visualizer *pVisualizer, int iMatch, int iRan
 	transformFilterScale->SetInputData(vtkModelDB.at(iModel));
 	transformFilterScale->SetTransform(transformScale);
 	transformFilterScale->Update();
+#endif
 
 	//Transforming PLY model or CTI convex hull model to scene
 	vtkSmartPointer<vtkTransformPolyDataFilter> transformFilter = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
 	if (displayData.hypothesisVisualizationMode == RVLPSGM_HYPOTHESIS_VISUALIZATION_MODE_CTI)
 		transformFilter->SetInputData(modelPD); //model CTI convex hull
+#ifdef RVLPSGM_ICP
 	if (displayData.hypothesisVisualizationMode == RVLPSGM_HYPOTHESIS_VISUALIZATION_MODE_PLY)
 		transformFilter->SetInputConnection(transformFilterScale->GetOutputPort()); //PLY model
+#endif
 
 	transformFilter->SetTransform(transform);
 	transformFilter->Update();
@@ -6807,6 +6834,7 @@ void PSGM::AddOneModelToVisualizer(Visualizer *pVisualizer, int iMatch, int iRan
 	transformFilter2->SetTransform(transform2);
 	transformFilter2->Update();
 
+#ifdef RVLPSGM_ICP
 	//Aligning point clouds (if required) 
 	vtkSmartPointer<vtkTransformPolyDataFilter> transformFilterICP;
 	if (align)
@@ -6856,13 +6884,16 @@ void PSGM::AddOneModelToVisualizer(Visualizer *pVisualizer, int iMatch, int iRan
 		//transformFilterICP->SetInputConnection(transformFilter->GetOutputPort());
 		transformFilterICP->SetTransform(transformICP);
 		transformFilterICP->Update();
-		}			
+		}		
+#endif
 
 	//Mapper and actor for model
 	vtkSmartPointer<vtkPolyDataMapper> modelMapper = vtkSmartPointer<vtkPolyDataMapper>::New();
+#ifdef RVLPSGM_ICP
 	if (align)
 		modelMapper->SetInputConnection(transformFilterICP->GetOutputPort());
 	else
+#endif
 		modelMapper->SetInputConnection(transformFilter->GetOutputPort());
 	vtkSmartPointer<vtkActor> modelActor = vtkSmartPointer<vtkActor>::New();
 	modelActor->SetMapper(modelMapper);
@@ -6876,7 +6907,7 @@ void PSGM::AddOneModelToVisualizer(Visualizer *pVisualizer, int iMatch, int iRan
 	vtkSmartPointer<vtkActor> modelActor2 = vtkSmartPointer<vtkActor>::New();
 	modelActor2->SetMapper(modelMapper2);
 	modelActor2->GetProperty()->SetColor(0, 0, 1);
-	//pVisualizer->renderer->AddActor(modelActor2);
+	pVisualizer->renderer->AddActor(modelActor2);
 
 	delete[] dM;
 	delete[] dS;
@@ -6926,7 +6957,7 @@ void PSGM::AddOneModelToVisualizerICP(Visualizer *pVisualizer, int iMatch, bool 
 
 	//Generate model polydata
 	float t[3];
-	vtkSmartPointer<vtkPolyData> modelPD = GenerateCTIPrimitivePolydata_RW(nT.data(), dM, false, NULL, t);
+	vtkSmartPointer<vtkPolyData> modelPD = GenerateCTIPrimitivePolydata_RW(nT.data(), dM, 66, false, NULL, t);
 	
 	//Getting transform from centered (model) CTI polygon data to scene (T_CCTIM_S)
 	float *R_M_S = pCTImatchesArray.Element[iMatch]->R;
@@ -6944,7 +6975,7 @@ void PSGM::AddOneModelToVisualizerICP(Visualizer *pVisualizer, int iMatch, bool 
 	RVLHTRANSFMX(pSCTI->R, t_CCTIM_S, T_CCTIM_S);
 
 	//Generate scene CTI polydata
-	vtkSmartPointer<vtkPolyData> modelSPD = GenerateCTIPrimitivePolydata_RW(nT.data(), dS, false, validS, t);
+	vtkSmartPointer<vtkPolyData> modelSPD = GenerateCTIPrimitivePolydata_RW(nT.data(), dS, 66, false, validS, t);
 	
 	//Getting transform from centered (scene) CTI polygon data to scene (T_CCTIS_S)
 	float t_CCTIS_S[3];
@@ -7062,7 +7093,7 @@ void PSGM::AddOneModelToVisualizerICP(Visualizer *pVisualizer, int iMatch, bool 
 	vtkSmartPointer<vtkActor> modelActor2 = vtkSmartPointer<vtkActor>::New();
 	modelActor2->SetMapper(modelMapper2);
 	modelActor2->GetProperty()->SetColor(0, 0, 1);
-	//pVisualizer->renderer->AddActor(modelActor2);
+	pVisualizer->renderer->AddActor(modelActor2);
 
 	delete[] dM;
 	delete[] dS;
@@ -7506,7 +7537,7 @@ bool PSGM::IsFlat(
 	if (PtArray.n == 0)
 		return false;
 
-	pMesh->ComputeDistribution(PtArray, PtDistribution);
+	pMesh->ComputeDistributionDouble(PtArray, PtDistribution);
 
 	float *var = PtDistribution.var;
 
@@ -7516,7 +7547,7 @@ bool PSGM::IsFlat(
 
 	RVLSORT3ASCEND(var, idx, iTmp);
 
-	if (var[idx[0]] / var[idx[1]] <= 0.001)
+	if (var[idx[0]] / var[idx[1]] <= 0.0005)
 	{
 		N_ = PtDistribution.R + 3 * idx[0];
 
@@ -7529,7 +7560,7 @@ bool PSGM::IsFlat(
 			RVLCOPY3VECTOR(N_, N);
 		}
 
-		d = RVLDOTPRODUCT3(N_, PtDistribution.t);
+		d = RVLDOTPRODUCT3(N, PtDistribution.t);
 
 		return true;
 	}
@@ -7554,17 +7585,14 @@ void PSGM::DetectGroundPlane(SURFEL::ObjectGraph *pObjects)
 
 	iGndObject = -1;
 
-	int i;
 	int iObject;
-	GRAPH::AggregateNode<SURFEL::AgEdge> *pObject;
+	SURFEL::Object *pObject;
 
-	for (i = 0; i < pObjects->sortedObjectArray.n; i++)
+	for (iObject = 0; iObject < pObjects->objectArray.n; iObject++)
 	{
-		iObject = pObjects->sortedObjectArray.Element[i].idx;
+		pObject = pObjects->objectArray.Element + iObject;
 
-		pObject = pObjects->NodeArray.Element + iObject;
-
-		QLIST::CopyToArray(&(pObject->elementList), &iSurfelArray);
+		QLIST::CopyToArray(&(pObject->surfelList), &iSurfelArray);
 
 		if (IsFlat(iSurfelArray, NGnd, dGnd, PtArray))
 		{
@@ -7582,7 +7610,8 @@ void PSGM::DetectGroundPlane(SURFEL::ObjectGraph *pObjects)
 
 bool PSGM::GravityReferenceFrame(
 	QList<QLIST::Index> surfelList,
-	float *RGC)
+	float *RGC,
+	float &varX)
 {
 	if (!bGnd)
 		return false;
@@ -7700,10 +7729,12 @@ bool PSGM::GravityReferenceFrame(
 
 	RVLCOPYMX3X3T(RCG, RGC);
 
+	varX = minVarv;
+
 	return true;
 }
 
-void PSGM::CTIs(
+int PSGM::CTIs(
 	QList<QLIST::Index> surfelList,
 	Array<int> iVertexArray,
 	int iModel,
@@ -7712,9 +7743,10 @@ void PSGM::CTIs(
 	CRVLMem *pMem)
 {
 	float RGC[9];
+	float varX;
 
-	if (!GravityReferenceFrame(surfelList, RGC))
-		return;
+	if (!GravityReferenceFrame(surfelList, RGC, varX))
+		return 0;
 
 	RECOG::PSGM_::ModelInstance *pCTI;
 
@@ -7730,54 +7762,14 @@ void PSGM::CTIs(
 
 	RVLNULL3VECTOR(t);
 
+	pCTI->varX = varX;
+
 	pCTI->iCluster = iCluster;
 	pCTI->iModel = iModel;
 
 	FitModel(iVertexArray, pCTI);
-}
 
-void PSGM::GetVertices(
-	QList<QLIST::Index> surfelList,
-	Array<int> *piVertexArray,
-	int *&piVertexIdxMem)
-{
-	piVertexArray->Element = piVertexIdxMem;
-
-	int iSurfel;
-	QList<QLIST::Index> *pSurfelVertexList;
-	QLIST::Index *pVertexIdx;
-
-	QLIST::Index *piSurfel = surfelList.pFirst;
-
-	while (piSurfel)
-	{
-		iSurfel = piSurfel->Idx;
-
-		pSurfelVertexList = pSurfels->surfelVertexList.Element + iSurfel;
-
-		pVertexIdx = pSurfelVertexList->pFirst;
-
-		while (pVertexIdx)
-		{
-			if (!bVertexAssigned[pVertexIdx->Idx])
-			{
-				*(piVertexIdxMem++) = pVertexIdx->Idx;
-
-				bVertexAssigned[pVertexIdx->Idx] = true;
-			}
-
-			pVertexIdx = pVertexIdx->pNext;
-		}
-
-		piSurfel = piSurfel->pNext;
-	}
-
-	piVertexArray->n = piVertexIdxMem - piVertexArray->Element;
-
-	int i;
-
-	for (i = 0; i < piVertexArray->n; i++)
-		bVertexAssigned[piVertexArray->Element[i]] = false;
+	return 1;
 }
 
 void PSGM::CTIs(
@@ -7786,138 +7778,158 @@ void PSGM::CTIs(
 {
 	pCTISet->Init();
 
-	DetectGroundPlane(pObjects);
+	if (!bGnd)
+		DetectGroundPlane(pObjects);
 
 	if (!bGnd)
 		return;
 
-	iVertexMem = new int[pSurfels->nVertexSurfelRelations];
+	RVL_DELETE_ARRAY(pCTISet->SegmentCTIs.Element);
 
-	int *piNextVertex = iVertexMem;
+	pCTISet->SegmentCTIs.Element = new Array<int>[pObjects->objectArray.n];
+	pCTISet->SegmentCTIs.n = pObjects->objectArray.n;
 
-	bVertexAssigned = new bool[pSurfels->NodeArray.n];
+	int iObject;
+	SURFEL::Object *pObject;
 
-	memset(bVertexAssigned, 0, pSurfels->NodeArray.n * sizeof(bool));
-
-	int i, iObject;
-	GRAPH::AggregateNode<SURFEL::AgEdge> *pObject;
-	Array<int> iVertexArray;
-	int *piVertexMem;
-
-	for (i = 0; i < pObjects->sortedObjectArray.n; i++)
+	for (iObject = 0; iObject < pObjects->objectArray.n; iObject++)
 	{
-		iObject = pObjects->sortedObjectArray.Element[i].idx;
-
 		if (iObject != iGndObject)
 		{
-			pObject = pObjects->NodeArray.Element + iObject;
+			pObject = pObjects->objectArray.Element + iObject;
 
-			piVertexMem = iVertexMem;
-
-			GetVertices(pObject->elementList, &iVertexArray, piNextVertex);
-
-			if (iVertexArray.n >= 3)
-				CTIs(pObject->elementList, iVertexArray, -1, iObject, pCTISet, pMem);
+			if (pObject->iVertexArray.n >= 3)
+				pCTISet->SegmentCTIs.Element[iObject].n = CTIs(pObject->surfelList, pObject->iVertexArray, -1, iObject, pCTISet, pMem);
+			else
+				pCTISet->SegmentCTIs.Element[iObject].n = 0;			
 		}
+		else
+			pCTISet->SegmentCTIs.Element[iObject].n = 0;
 	}
 
-	pCTISet->CopyCTIsToArray();
+	RVL_DELETE_ARRAY(pCTISet->segmentCTIIdxMem);
 
-	delete[] iVertexMem;
-	delete[] bVertexAssigned;
+	pCTISet->segmentCTIIdxMem = new int[pCTISet->pCTI.n];
+
+	int *iSegmentCTIIdx = pCTISet->segmentCTIIdxMem;
+
+	RVL_DELETE_ARRAY(pCTISet->pCTI.Element);
+
+	pCTISet->pCTI.Element = new RECOG::PSGM_::ModelInstance*[pCTISet->pCTI.n];
+
+	QLIST::CreatePtrArray<RECOG::PSGM_::ModelInstance>(&(pCTISet->CTI), &(pCTISet->pCTI));
+
+	for (iObject = 0; iObject < pObjects->objectArray.n; iObject++)
+	{
+		if (pCTISet->SegmentCTIs.Element[iObject].n > 0)
+		{
+			pCTISet->SegmentCTIs.Element[iObject].Element = iSegmentCTIIdx;
+
+			iSegmentCTIIdx += pCTISet->SegmentCTIs.Element[iObject].n;
+
+			pCTISet->SegmentCTIs.Element[iObject].n = 0;
+		}
+		else
+			pCTISet->SegmentCTIs.Element[iObject].Element = NULL;
+	}
+
+	int iCTI;
+
+	for (iCTI = 0; iCTI < pCTISet->pCTI.n; iCTI++)
+	{
+		iObject = pCTISet->pCTI.Element[iCTI]->iCluster;
+
+		pCTISet->SegmentCTIs.Element[iObject].Element[pCTISet->SegmentCTIs.Element[iObject].n++] = iCTI;
+	}
 }
 
 float PSGM::Symmetry(
 	SURFEL::ObjectGraph *pObjects,
 	int iObject1,
-	int iObject2)
+	int iObject2,
+	RECOG::CTISet *pCTIs,
+	Array<RECOG::PSGM_::SymmetryMatch> &symmetryMatch)
 {
-	bool bDebug = (iObject1 == 37 && iObject2 == 54 || iObject1 == 54 && iObject2 == 37);
+	bool bDebug = (iObject1 == debug1 && iObject2 == debug2 || iObject1 == debug2 && iObject2 == debug1);
+
+	if (bDebug)
+		int debug = 0;
+
+	//bool bDebug = false;
 
 	int iObject[2];
 
 	iObject[0] = iObject1;
 	iObject[1] = iObject2;
 
-	GRAPH::AggregateNode<SURFEL::AgEdge> *pObject[2];
+	SURFEL::Object *pObject[2];
 	
-	pObject[0] = pObjects->NodeArray.Element + iObject[0];
-	pObject[1] = pObjects->NodeArray.Element + iObject[1];
+	pObject[0] = pObjects->objectArray.Element + iObject[0];
+	pObject[1] = pObjects->objectArray.Element + iObject[1];
 
-	// Union of surfels of iObject1 and iObject2.
+	// Select the better RF.
 
-	QList<QLIST::Index> *pSurfelList[2];
+	float *RGC = NULL;
 
-	pSurfelList[0] = &(pObject[0]->elementList);
-	pSurfelList[1] = &(pObject[1]->elementList);
+	float varX = 0.0f;
 
-	QLIST::Index **ppNext = pSurfelList[0]->ppNext;			
+	int iObject1_ = -1;
 
-	RVLQLIST_APPEND(pSurfelList[0], pSurfelList[1]);
+	RECOG::PSGM_::ModelInstance *pCTI;
+	int i;
 
-	// Compute gravity RF.
+	for (i = 0; i < 2; i++)
+	{
+		if (pCTIs->SegmentCTIs.Element[iObject[i]].n > 0)
+		{
+			pCTI = pCTIs->pCTI.Element[pCTIs->SegmentCTIs.Element[iObject[i]].Element[0]];
 
-	float RGC[9];
+			if (RGC == NULL || pCTI->varX < varX)
+			{
+				RGC = pCTI->R;
 
-	bool bGRF = GravityReferenceFrame(*pSurfelList[0], RGC);
+				varX = pCTI->varX;
 
-	// Split back the surfel lists of iObject1 and iObject2.
+				iObject1_ = i;
+			}
+		}
+	}
 
-	pSurfelList[0]->ppNext = ppNext;
-	*ppNext = NULL;
-
-	// If no gravity RF is created, then stop the procedure.
-
-	if (!bGRF)
+	if (RGC == NULL)
 		return 0.0f;
 
-	int nHalfConvexTemplate = convexTemplate.n / 2;
+	int iObject2_ = 1 - iObject1_;
+
+	// Select symmetry planes from convexTemplate.
 
 	Array<int> iSymmetryPlanes;
 
-	iSymmetryPlanes.Element = new int[nHalfConvexTemplate];
+	iSymmetryPlanes.Element = new int[convexTemplate.n];
 
 	iSymmetryPlanes.n = 0;
 
-	int i;
 	float *N;
 
-	for (i = 0; i < nHalfConvexTemplate; i++)
+	for (i = 0; i < convexTemplate.n; i++)
 	{
 		N = convexTemplate.Element[i].N;
 
 		if (RVLABS(N[2]) < 1e-10)
 			iSymmetryPlanes.Element[iSymmetryPlanes.n++] = i;
 	}
-
-	int *piVertexMem = iVertexMem;
+	
+	// 
 
 	Array<int> iVertexArray[2];
 
-	for (i = 0; i < 2; i++)
-		GetVertices(*pSurfelList[i], &iVertexArray[i], piVertexMem);
-
-	RECOG::PSGM_::ModelInstance CTI1;
-	
-	float *R, *t;
-
-	// CTI1 <- CTI of iObject1	
-
-	R = CTI1.R;
-
-	RVLCOPYMX3X3(RGC, R);
-
-	t = CTI1.t;
-
-	RVLNULL3VECTOR(t);
-
-	CTI1.modelInstance.Element = new RECOG::PSGM_::ModelInstanceElement[convexTemplate.n];
-
-	FitModel(iVertexArray[0], &CTI1, true);
+	iVertexArray[0] = pObject[iObject1_]->iVertexArray;
+	iVertexArray[1] = pObject[iObject2_]->iVertexArray;
 
 	int nVertices2 = iVertexArray[1].n;
 
-	RECOG::PSGM_::ModelInstanceElement *pCTIElement1 = CTI1.modelInstance.Element;
+	pCTI = pCTIs->pCTI.Element[pCTIs->SegmentCTIs.Element[iObject[iObject1_]].Element[0]];
+
+	//RECOG::PSGM_::ModelInstanceElement *pCTIElement1 = CTI1.modelInstance.Element;
 
 	// Determine convex hull.
 
@@ -7967,9 +7979,9 @@ float PSGM::Symmetry(
 
 	//BYTE *bVisible = new BYTE[nSymmetryPlanes];
 	
-	Array<RECOG::PSGM_::SymmetryMatch> symmetryMatch;
+	Array<RECOG::PSGM_::SymmetryMatch> symmetryMatch_;
 
-	symmetryMatch.Element = new RECOG::PSGM_::SymmetryMatch[convexTemplate.n];
+	symmetryMatch_.Element = new RECOG::PSGM_::SymmetryMatch[convexTemplate.n];
 
 	Array<SortIndex<float>> sortedSymmatryMatchIdx;
 
@@ -7994,8 +8006,10 @@ float PSGM::Symmetry(
 	float e;
 	int iBestSymmetryPlane;
 	float dBestSymmetryPlane;
+	RECOG::PSGM_::ModelInstanceElement *pCTIElement1;
 
 	for (iSymmetryPlane = 0; iSymmetryPlane < iSymmetryPlanes.n; iSymmetryPlane++)
+	//iSymmetryPlane = 15;
 	{
 		NSymmetryPlaneG = convexTemplate.Element[iSymmetryPlanes.Element[iSymmetryPlane]].N;
 
@@ -8022,13 +8036,13 @@ float PSGM::Symmetry(
 		
 		// For every element of CTI of iObject1 identify the corresponding tangent to mirror images of the vertices of iObject2.
 
-		symmetryMatch.n = 0;
+		symmetryMatch_.n = 0;
 
 		sortedSymmatryMatchIdx.n = 0;
 
 		sumw = 0.0f;
 
-		pCTIElement1 = CTI1.modelInstance.Element;
+		pCTIElement1 = pCTI->modelInstance.Element;
 
 		for (i = 0; i < convexTemplate.n; i++, pCTIElement1++)
 		{
@@ -8049,59 +8063,60 @@ float PSGM::Symmetry(
 			//		continue;
 			//}
 
-			fTmp = 2.0f * RVLDOTPRODUCT3(NC, NSymmetryPlaneC);
+			k = RVLDOTPRODUCT3(NSymmetryPlaneC, NC);
 
-			RVLSCALE3VECTOR(NSymmetryPlaneC, fTmp, NR);
-
-			RVLDIF3VECTORS(NC, NR, NR);
-
-			P = pSurfels->vertexArray.Element[pCTIElement1->iVertex]->P;
-
-			P2R = P2RMem;
-
-			dMax = RVLDOTPRODUCT3(NC, P2R);
-
-			jBest = 0;
-
-			for (j = 1; j < nVertices2; j++, P2R += 3)
+			if (k > -1e-6)
 			{
-				d = RVLDOTPRODUCT3(NC, P2R);
+				fTmp = 2.0f * k;
 
-				if (d > dMax)
+				RVLSCALE3VECTOR(NSymmetryPlaneC, fTmp, NR);
+
+				RVLDIF3VECTORS(NC, NR, NR);
+
+				P2R = P2RMem;
+
+				dMax = RVLDOTPRODUCT3(NC, P2R);
+
+				jBest = 0;
+
+				for (j = 1; j < nVertices2; j++, P2R += 3)
 				{
-					dMax = d;
+					d = RVLDOTPRODUCT3(NC, P2R);
 
-					jBest = j;
-				}
-			}
+					if (d > dMax)
+					{
+						dMax = d;
 
-			iVertex = iVertexArray[1].Element[jBest];
-
-			P = pSurfels->vertexArray.Element[iVertex]->P;
-
-			if (RVLDOTPRODUCT3(P, NR) < 0.0f)
-			{
-				k = RVLDOTPRODUCT3(NSymmetryPlaneC, NC);
-
-				absk = RVLABS(k);
-
-				pSymmetryMatch = symmetryMatch.Element + symmetryMatch.n;
-
-				pSymmetryMatch->d = dMax;
-				pSymmetryMatch->w = absk;
-				pSymmetryMatch->iCTIElement = i;
-				pSymmetryMatch->bw0 = (absk < 1e-6);	// normal of the CTI element is not parallel to the symmetry plane
-
-				if (!pSymmetryMatch->bw0)
-				{
-					sortedSymmatryMatchIdx.Element[sortedSymmatryMatchIdx.n].cost = (dMax - pCTIElement1->d) / k;
-					sortedSymmatryMatchIdx.Element[sortedSymmatryMatchIdx.n].idx = symmetryMatch.n;
-					sortedSymmatryMatchIdx.n++;
-					sumw += absk;
+						jBest = j;
+					}
 				}
 
-				symmetryMatch.n++;
-			}
+				//iVertex = iVertexArray[1].Element[jBest];
+
+				//P = pSurfels->vertexArray.Element[iVertex]->P;
+
+				//if (RVLDOTPRODUCT3(P, NR) < 0.0f)
+				{
+					absk = RVLABS(k);
+
+					pSymmetryMatch = symmetryMatch_.Element + symmetryMatch_.n;
+
+					pSymmetryMatch->d = dMax;
+					pSymmetryMatch->w = k;
+					pSymmetryMatch->iCTIElement = i;
+					pSymmetryMatch->b = (absk > 1e-6);	// normal of the CTI element is not parallel to the symmetry plane
+
+					if (pSymmetryMatch->b)
+					{
+						sortedSymmatryMatchIdx.Element[sortedSymmatryMatchIdx.n].cost = (pCTIElement1->d - dMax) / k;
+						sortedSymmatryMatchIdx.Element[sortedSymmatryMatchIdx.n].idx = symmetryMatch_.n;
+						sortedSymmatryMatchIdx.n++;
+						sumw += absk;
+					}
+
+					symmetryMatch_.n++;
+				}
+			}	// if (NSymmetryPlaneC' * NC > -1e-6)
 		}	// for every element of convexTemplate
 
 		// Compute optimal symmetry plane offset.
@@ -8115,25 +8130,38 @@ float PSGM::Symmetry(
 			sumw = 0.0f;
 
 			for (i = 0; i < sortedSymmatryMatchIdx.n && sumw < halfSumw; i++)
-				sumw += symmetryMatch.Element[sortedSymmatryMatchIdx.Element[i].idx].w;
+			{
+				k = symmetryMatch_.Element[sortedSymmatryMatchIdx.Element[i].idx].w;
 
+				sumw += RVLABS(k);
+			}
+				
 			t_ = sortedSymmatryMatchIdx.Element[i].cost;
 		}
 
-		// Compute symmetry score.
+		// Compute symmetry score.		
 
 		symmetryScore = 0.0f;
 
-		for (i = 0; i < symmetryMatch.n; i++)
+		for (i = 0; i < symmetryMatch_.n; i++)
 		{
-			pSymmetryMatch = symmetryMatch.Element + i;
+			pSymmetryMatch = symmetryMatch_.Element + i;
 
-			e = (pSymmetryMatch->d + pSymmetryMatch->w * t_ - CTI1.modelInstance.Element[pSymmetryMatch->iCTIElement].d) / symmetryMatchThr;
+			e = (pSymmetryMatch->d + pSymmetryMatch->w * t_ - pCTI->modelInstance.Element[pSymmetryMatch->iCTIElement].d) / symmetryMatchThr;
 
 			e *= e;
 
 			if (e < 1.0f)
-				symmetryScore += (1.0f - e);
+			{
+				e = 1.0f - e;
+
+				symmetryScore += e;
+
+				pSymmetryMatch->w = e;
+				pSymmetryMatch->b = true;
+			}
+			else
+				pSymmetryMatch->b = false;
 		}
 
 		if (symmetryScore > maxSymmetryScore)
@@ -8142,7 +8170,13 @@ float PSGM::Symmetry(
 
 			iBestSymmetryPlane = iSymmetryPlane;
 
-			dBestSymmetryPlane = 0.5f * t_;
+			dBestSymmetryPlane = -0.5f * t_;
+
+			symmetryMatch.n = 0;
+
+			for (i = 0; i < symmetryMatch_.n; i++)
+				if (symmetryMatch_.Element[i].b)
+					symmetryMatch.Element[symmetryMatch.n++] = symmetryMatch_.Element[i];
 		}
 	}	// for each symmetry plane
 
@@ -8157,6 +8191,8 @@ float PSGM::Symmetry(
 		PrintMatrix<float>(fp, RGC, 3, 3);
 
 		NSymmetryPlaneG = convexTemplate.Element[iSymmetryPlanes.Element[iBestSymmetryPlane]].N;
+
+		//NSymmetryPlaneG = convexTemplate.Element[22].N;
 
 		RVLMULMX3X3VECT(RGC, NSymmetryPlaneG, NSymmetryPlaneC);
 
@@ -8181,32 +8217,497 @@ float PSGM::Symmetry(
 
 	// Free memory.
 
-	delete[] CTI1.modelInstance.Element;
 	//delete[] bVisible;
 	delete[] P2RMem;
-	delete[] symmetryMatch.Element;
+	delete[] symmetryMatch_.Element;
 	delete[] iSymmetryPlanes.Element;
 	delete[] sortedSymmatryMatchIdx.Element;
+
+	// Return the symmetry score.
+
+	return maxSymmetryScore;
 }
 
-void PSGM::InitSymmetry(SURFEL::ObjectGraph *pObjects)
+void PSGM::RVLPSGInstanceMesh(Eigen::MatrixXf nI, float *dI)
 {
-	DetectGroundPlane(pObjects);
+#ifdef RVLPSGM_CTIMESH_DEBUG
+	FILE *fp = fopen("CTIMeshDebug.txt", "w");
+#endif
 
-	if (!bGnd)
-		return;
+	//transform nI and dI to Eigen:
+	Eigen::MatrixXf nIE = nI;
+	Eigen::MatrixXf dIE(1, 66);
 
-	iVertexMem = new int[pSurfels->nVertexSurfelRelations];
+	//if nI was an array
+	//Eigen::MatrixXf nIE(3, 66);
+	//int br = 0;
+	//for (int i = 0; i < 3; i++)
+	//{
+	//	for (int j = 0; j < 66; j++)
+	//	{
+	//		nIE(i, j) = nI[br];
+	//		br++;
+	//	}
+	//}
+	for (int i = 0; i < 66; i++)
+	{
+		dIE(0, i) = dI[i];
+	}
 
-	int *piNextVertex = iVertexMem;
+	float noise = 1e-6;
+	int nF = nIE.cols();
+	float halfCubeSize;
 
-	bVertexAssigned = new bool[pSurfels->NodeArray.n];
+	float max, min;
+	max = dIE.maxCoeff();
+	min = dIE.minCoeff();
+	if (min<0 && min*-1 > max)
+		max = min;
+	halfCubeSize = max*1.1;
 
-	memset(bVertexAssigned, 0, pSurfels->NodeArray.n * sizeof(bool));
+	P.resize(3, 8);
+	P << 1, 1, -1, -1, 1, 1, -1, -1, 1, -1, 1, -1, 1, -1, 1, -1, 1, 1, 1, 1, -1, -1, -1, -1;
+	P = halfCubeSize*P;
+
+	Eigen::MatrixXi Premoved = Eigen::MatrixXi::Zero(1, P.cols());//list of removed vertices
+	Eigen::MatrixXi nP = Eigen::MatrixXi::Ones(nF + 6, 1);
+	nP = 4 * nP;
+
+	F = Eigen::MatrixXi::Zero(nF + 6, 66 * 66);
+	//F.block<6, 4>(0, 0) << 1, 3, 4, 2, 3, 7, 8, 4, 2, 4, 8, 6, 5, 6, 8, 7, 1, 2, 6, 5, 1, 5, 7, 3;
+	F.block<6, 4>(0, 0) << 0, 2, 3, 1, 2, 6, 7, 3, 1, 3, 7, 5, 4, 5, 7, 6, 0, 1, 5, 4, 0, 4, 6, 2;
+
+
+	Eigen::MatrixXi E = Eigen::MatrixXi::Ones(nF + 6, nF + 6);
+	E *= -1;
+	Eigen::MatrixXi Fn = Eigen::MatrixXi::Zero(nF + 6, 66 * 66);
+
+	int iP1, iP2;
+	int l;
+	int br2;
+	int NextCirc, PrevCirc;
+	for (int i_ = 0; i_ < 6; i_++) //for every face
+	{
+		int i, j;
+		i = i_;
+		for (int k = 0; k < 4; k++)
+		{
+			NextCirc = (k + 1) % 4;
+			iP1 = F(i, k);
+			iP2 = F(i, NextCirc);
+
+			for (int j_ = i_ + 1; j_ < 6; j_++)
+			{
+				j = j_;
+				l = -1;
+				for (int iF = 0; iF < nP(j); iF++) //find(F(j,:)==iP1)
+				{
+					if (F(j, iF) == iP1)
+					{
+						l = iF;
+						break;
+					}
+				}
+				if (l >= 0)
+				{
+					PrevCirc = (l + 3) % 4;
+					if (F(j, PrevCirc) == iP2)
+					{
+						E(i, j) = iP1;
+						E(j, i) = iP2;
+						Fn(i, k) = j;
+						Fn(j, PrevCirc) = i;
+					}
+				}
+			}
+		}
+	}
+
+#ifdef RVLPSGM_CTIMESH_DEBUG
+	PrintCTIMeshFaces(fp, F, Fn, 6, nP);
+
+	fprintf(fp, "\n\n\n");
+
+	fclose(fp);
+#endif
+
+	Eigen::MatrixXi iNewVertices;
+	Eigen::MatrixXi iNeighbors;
+	Eigen::MatrixXf N;
+	Eigen::MatrixXf dCut, dCutSorted;
+	float d, d_;
+	int nCut;
+	Eigen::MatrixXf Temp;
+	Eigen::MatrixXf Tempnext;
+	Eigen::MatrixXf Temp2;
+	for (int i = 0; i < nF; i++) //for every face
+	{
+		printf("%d\n", i);
+
+#ifdef RVLPSGM_CTIMESH_DEBUG
+		fprintf(fp, "i = %d\n\n\n", i);
+#endif
+		iNewVertices.resize(0, 0);
+		iNeighbors.resize(0, 0);
+		N = nIE.block<3, 1>(0, i); //normal of the i-th face
+		d = dIE(0, i); //distance of the i-th face
+		dCut = Eigen::MatrixXf::Zero(P.cols(), 1);
+		dCutSorted = Eigen::MatrixXf::Zero(P.cols(), 1);
+		nCut = 0;
+
+
+		for (int k = 0; k < 8; k++)
+		{
+			Temp = N.transpose()*P.block<3, 1>(0, k);
+			d_ = Temp(0, 0) - d;
+			if (d_ > 0)
+			{
+				nCut += 1;
+				dCut(nCut, 0) = d_;
+			}
+		}
+
+		//Bubble sort:
+		float temp;
+		for (int idCut = 0; idCut < nCut; idCut++)
+		{
+			for (int jdCut = 0; jdCut < nCut; jdCut++)
+			{
+				if (dCut(jdCut, 0)>dCut(jdCut + 1, 0))
+				{
+					temp = dCut(jdCut, 0);
+					dCut(jdCut, 0) = dCut(jdCut + 1, 0);
+					dCut(jdCut + 1, 0) = temp;
+				}
+			}
+		}
+
+		float dCorr = 0;
+		for (int k = 0; k < nCut; k++)
+		{
+			if (dCut(k, 0) - dCorr < noise)
+				dCorr = dCut(k, 0);
+
+		}
+		d += dCorr;
+
+		Eigen::MatrixXi F_;//j-th face
+		Eigen::MatrixXi Fn_;//neighbors of F_
+		Eigen::MatrixXf P_; //position vector of vector iP
+		Eigen::MatrixXf Pnext;//position vector of vertex iPNext
+		int nP_; //number of vertices od F_
+		int iP; // k-th vertex of F_
+		int iPNext; //next vertex
+		Eigen::MatrixXf dP;
+		int L; //neighbor of F_ on the opposite side of edge iP-iPNext
+
+		int iPolygon, iVertex;
+		int iPNew, iPNewVertex, iFNewVertex;
+		float s;
+
+
+		for (int j = 0; j <= i + 5; j++) //for every previously considered face
+		{
+			F_ = F.block(j, 0, 1, F.cols());
+			Fn_ = Fn.block(j, 0, 1, Fn.cols());
+			int ff = F(j, 0);
+			int k = 0;
+			nP_ = nP(j, 0);
+
+			for (int k_ = 0; k_ < nP_; k_++)
+			{
+				int p = P.cols();
+				iP = F_(0, k_);
+				P_ = P.block(0, iP, P.rows(), 1);
+
+
+				if (k_ == nP_ - 1) NextCirc = 0;
+				else NextCirc = k_ % (nP_)+1;
+
+				iPNext = F_(0, NextCirc);
+				Pnext = P.block(0, iPNext, P.rows(), 1);
+
+				dP.resize(P.rows(), 1);
+				dP = Pnext - P_;
+
+				L = Fn_(0, k_);
+
+				Temp = N.transpose()*P_;
+				Tempnext = N.transpose()*Pnext;
+
+				if (i == 1 && j == 2)
+					int debug = 1;
+
+
+				if (Temp(0, 0) > d) //if iP is over new plane
+				{
+					if (Premoved(0, iP) == 0)
+						Premoved(0, iP) = 1; //vertex iP is removed
+
+					iPolygon = j;
+					iVertex = k;
+
+					//Remove Vertex from Polygon:
+					for (int iF = 0; iF < (nP(iPolygon) - 1 - iVertex); iF++)
+					{
+						F(iPolygon, iVertex + iF) = F(iPolygon, iVertex + iF + 1);
+						Fn(iPolygon, iVertex + iF) = Fn(iPolygon, iVertex + iF + 1);
+					}
+					nP(iPolygon) = nP(iPolygon) - 1;
+#ifdef RVLPSGM_CTIMESH_DEBUG
+					fp = fopen("CTIMeshDebug.txt", "a");
+
+					fprintf(fp, "j = %d, k_ = %d\n\n", j, k_);
+
+					PrintCTIMeshFaces(fp, F, Fn, i + 7, nP);
+
+					fprintf(fp, "\n\n\n");
+
+					fclose(fp);
+#endif
+
+					if (Tempnext(0, 0) > d)
+					{
+						E(L, j) = -1;
+						E(j, L) = -1;
+						k -= 1;
+					}
+					else
+					{
+						if (E(j, L) == iP) //Vertex is not updated
+						{
+							//Add new vertex
+							Temp = N.transpose()*P_;
+							Temp2 = N.transpose()*dP;
+							s = (d - Temp(0, 0)) / Temp2(0, 0);
+							Eigen::MatrixXf Ptemp = P;
+							P.resize(P.rows(), P.cols() + 1);
+							P.block(0, 0, Ptemp.rows(), Ptemp.cols()) = Ptemp;
+							Eigen::Vector3f col = P_ + s*dP;
+							P.col(P.cols() - 1) = col;
+							iPNew = P.cols() - 1;
+
+							Eigen::MatrixXi Premovedtemp = Premoved;
+							Premoved.resize(1, Premoved.cols() + 1);
+							Premoved.block(0, 0, Premovedtemp.rows(), Premovedtemp.cols()) = Premovedtemp;
+							Premoved(0, Premoved.cols() - 1) = 0;
+							E(j, L) = iPNew;
+						}
+						else
+							iPNew = E(j, L);
+
+						iPolygon = j;
+						iVertex = k;
+						iPNewVertex = iPNew;
+						iFNewVertex = L;
+						//Add new Vertex to Polygon:
+						Eigen::MatrixXi Ftemp = F;
+						Eigen::MatrixXi Fntemp = Fn;
+						for (int iF = 0; iF < (nP(iPolygon) - iVertex); iF++)
+						{
+							F(iPolygon, iVertex + iF + 1) = Ftemp(iPolygon, iVertex + iF);
+							Fn(iPolygon, iVertex + iF + 1) = Fntemp(iPolygon, iVertex + iF);
+						}
+						F(iPolygon, iVertex) = iPNewVertex;
+						Fn(iPolygon, iVertex) = iFNewVertex;
+						nP(iPolygon) = nP(iPolygon) + 1;
+#ifdef RVLPSGM_CTIMESH_DEBUG
+						fp = fopen("CTIMeshDebug.txt", "a");
+
+						fprintf(fp, "j = %d, k_ = %d\n\n", j, k_);
+
+						PrintCTIMeshFaces(fp, F, Fn, i + 7, nP);
+
+						fprintf(fp, "\n\n\n");
+
+						fclose(fp);
+#endif
+
+						Eigen::MatrixXi iNewVerticestemp = iNewVertices;
+						iNewVertices.resize(1, iNewVertices.cols() + 1);
+						iNewVertices.block(0, 0, iNewVerticestemp.rows(), iNewVerticestemp.cols()) = iNewVerticestemp;
+						iNewVertices(0, iNewVertices.cols() - 1) = iPNew;
+
+
+						Eigen::MatrixXi iNeighborstemp = iNeighbors;
+						iNeighbors.resize(1, iNeighbors.cols() + 1);
+						iNeighbors.block(0, 0, iNeighborstemp.rows(), iNeighborstemp.cols()) = iNeighborstemp;
+						iNeighbors(0, iNeighbors.cols() - 1) = j;
+
+						E((i + 6), j) = iPNew;
+					}
+				}
+
+				else if (Tempnext(0, 0) > d)
+				{
+					if (E(L, j) == iPNext) //Vertex is not updated
+					{
+						Temp = N.transpose()*P_;
+						Temp2 = N.transpose()*dP;
+						s = (d - Temp(0, 0)) / Temp2(0, 0);
+
+
+						Eigen::MatrixXf Ptemp = P;
+						P.resize(P.rows(), P.cols() + 1);
+						P.block(0, 0, Ptemp.rows(), Ptemp.cols()) = Ptemp;
+						Eigen::Vector3f col = P_ + s*dP;
+						P.col(P.cols() - 1) = col;
+						iPNew = P.cols() - 1;
+
+						Eigen::MatrixXi Premovedtemp = Premoved;
+						Premoved.resize(1, Premoved.cols() + 1);
+						Premoved.block(0, 0, Premovedtemp.rows(), Premovedtemp.cols()) = Premovedtemp;
+						Premoved(0, Premoved.cols() - 1) = 0;
+
+						E(L, j) = iPNew;
+					}
+					else
+						iPNew = E(L, j);
+
+					iPolygon = j;
+					iVertex = k + 1;
+					iPNewVertex = iPNew;
+					iFNewVertex = i + 6;
+					//Add new Vertex to Polygon:
+					Eigen::MatrixXi Ftemp = F;
+					Eigen::MatrixXi Fntemp = Fn;
+					for (int iF = 0; iF < (nP(iPolygon) - iVertex); iF++)
+					{
+						F(iPolygon, iVertex + iF + 1) = Ftemp(iPolygon, iVertex + iF);
+						Fn(iPolygon, iVertex + iF + 1) = Fntemp(iPolygon, iVertex + iF);
+					}
+					F(iPolygon, iVertex) = iPNewVertex;
+					Fn(iPolygon, iVertex) = iFNewVertex;
+					nP(iPolygon) = nP(iPolygon) + 1;
+#ifdef RVLPSGM_CTIMESH_DEBUG
+					fp = fopen("CTIMeshDebug.txt", "a");
+
+					fprintf(fp, "j = %d, k_ = %d\n\n", j, k_);
+
+					PrintCTIMeshFaces(fp, F, Fn, i + 7, nP);
+
+					fprintf(fp, "\n\n\n");
+
+					fclose(fp);
+#endif
+
+					E(j, i + 6) = iPNew;
+					k = k + 1;
+				}
+				k = k + 1;
+			}
+
+#ifdef RVLPSGM_CTIMESH_DEBUG
+			fp = fopen("CTIMeshDebug.txt", "a");
+
+			fprintf(fp, "j = %d\n\n", j);
+
+			PrintCTIMeshFaces(fp, F, Fn, i + 7, nP);
+
+			fprintf(fp, "\n\n\n");
+
+			fclose(fp);
+#endif
+		}	 //for every previously considered face
+		int iNeighbor;
+		nP(i + 6) = iNewVertices.cols(); //rows
+
+		int m;
+		if (nP(i + 6) > 0)
+		{
+			Eigen::MatrixXi F_;
+			Eigen::MatrixXi Fn_;
+			m = 0;
+			while (1)
+			{
+				Eigen::MatrixXi F_temp = F_;
+				F_.resize(1, F_.cols() + 1);
+				F_.block(0, 0, F_temp.rows(), F_temp.cols()) = F_temp;
+				F_(0, F_.cols() - 1) = iNewVertices(m);
+
+				int iN = iNeighbors(0, m);
+				iNeighbor = iNeighbors(0, m);
+
+
+				Eigen::MatrixXi Fn_temp = Fn_;
+				Fn_.resize(1, Fn_.cols() + 1);
+				Fn_.block(0, 0, Fn_temp.rows(), Fn_temp.cols()) = Fn_temp;
+				Fn_(0, Fn_.cols() - 1) = iNeighbor;
+
+
+				iPNext = E(iNeighbor, (i + 6));
+				int iNV;
+				for (iNV = 0; iNV < iNewVertices.cols(); iNV++)
+				{
+					int a = iPNext;
+					int b = iNewVertices(iNV);
+					if (iNewVertices(iNV) == iPNext)
+					{
+						m = iNV;
+						break;
+					}
+				}
+				if (m == 0)
+					break;
+			}
+
+			for (int iF = 0; iF < F_.cols(); iF++)
+			{
+				F((i + 6), iF) = F_(0, iF);
+				Fn((i + 6), iF) = Fn_(0, iF);
+			}
+
+		}
+
+#ifdef RVLPSGM_CTIMESH_DEBUG
+		fp = fopen("CTIMeshDebug.txt", "a");
+
+		PrintCTIMeshFaces(fp, F, Fn, i + 7, nP);
+
+		fprintf(fp, "\n\n\n");
+
+		fclose(fp);
+#endif
+	}	 //for every face
+	int mF = F.cols();
+
+	for (int i = 0; i < F.rows(); i++)
+	{
+		for (int iF = 0; iF < mF; iF++)
+			F(i, nP(i) + 1 + iF) = 0;
+	}
+
+	Eigen::MatrixXi Ffinal = F.block((F.rows() - 6), F.cols(), 6, 0);
+	Edges = E;
+
+#ifdef RVLPSGM_CTIMESH_DEBUG
+	fclose(fp);
+#endif
 }
 
-void PSGM::FreeSymmetry()
+void PSGM::PrintCTIMeshFaces(FILE *fp, Eigen::MatrixXi F, Eigen::MatrixXi Fn, int n, Eigen::MatrixXi nP)
 {
-	delete[] iVertexMem;
-	delete[] bVertexAssigned;
+	fprintf(fp, "F:\n");
+
+	for (int i = 0; i < n; i++)
+	{
+		for (int j = 0; j < nP(i); j++)
+			fprintf(fp, "%d\t", F(i, j));
+
+		fprintf(fp, "\n");
+	}
+
+	fprintf(fp, "\n");
+
+	fprintf(fp, "Fn:\n");
+
+	for (int i = 0; i < n; i++)
+	{
+		for (int j = 0; j < nP(i); j++)
+			fprintf(fp, "%d\t", Fn(i, j));
+
+		fprintf(fp, "\n");
+	}
+
+	fprintf(fp, "\n");
 }

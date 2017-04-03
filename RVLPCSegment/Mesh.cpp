@@ -710,6 +710,68 @@ void Mesh::ComputeDistribution(
 	distribution.var[2] = var_[2].real();
 }
 
+void Mesh::ComputeDistributionDouble(
+	Array<int> &PtArray,
+	MESH::Distribution &distribution)
+{
+	Moments<double> moments;
+
+	InitMoments<double>(moments);
+
+	int RGB[3];
+
+	RVLNULL3VECTOR(RGB);
+
+	int i;
+	Point *pPt;
+	double P[3];
+
+	for (i = 0; i < PtArray.n; i++)
+	{
+		pPt = NodeArray.Element + PtArray.Element[i];
+		
+		RVLCOPY3VECTOR(pPt->P, P);
+
+		UpdateMoments<double>(moments, P);
+
+		RVLSUM3VECTORS(RGB, pPt->RGB, RGB);
+	}
+
+	double C[9];
+	double t[3];
+
+	GetCovMatrix3<double>(&moments, C, t);
+
+	RVLCOPY3VECTOR(t, distribution.t);
+
+	RVLSCALE3VECTOR2(RGB, moments.n, distribution.RGB);
+
+	//Eigen::EigenSolver<Eigen::Matrix3f> eigenSolver(Eigen::Map<Eigen::Matrix3f>(C));
+	Eigen::EigenSolver<Eigen::Matrix3d> eigenSolver;
+
+	eigenSolver.compute(Eigen::Map<Eigen::Matrix3d>(C));
+
+	Eigen::Matrix3d R = eigenSolver.pseudoEigenvectors();
+
+	distribution.R[0] = R(0, 0);
+	distribution.R[1] = R(1, 0);
+	distribution.R[2] = R(2, 0);
+	distribution.R[3] = R(0, 1);
+	distribution.R[4] = R(1, 1);
+	distribution.R[5] = R(2, 1);
+	distribution.R[6] = R(0, 2);
+	distribution.R[7] = R(1, 2);
+	distribution.R[8] = R(2, 2);
+
+	//Eigen::Map<Eigen::Vector3f>(distribution.var) = eigenSolver.eigenvalues();
+
+	Eigen::Vector3cd var_ = eigenSolver.eigenvalues();
+
+	distribution.var[0] = var_[0].real();
+	distribution.var[1] = var_[1].real();
+	distribution.var[2] = var_[2].real();
+}
+
 // Input:  list of point indices pInPtList,
 //         array map such that all points i in pInPtList have the same value map[i],
 //         ptr. pPtIdx to the first element of pInPtList which is searched; the elements preceding this pointer are not searched.

@@ -159,8 +159,6 @@ int main(int argc, char ** argv)
 
 		objectDetector.Evaluate(fp, MeshFileName);
 
-		//objectDetector.CTIs();
-
 #ifdef RVLSURFEL_IMAGE_ADJACENCY
 		if (objectDetector.bSurfelsFromSSF)
 		{
@@ -212,11 +210,29 @@ int main(int argc, char ** argv)
 				objectDetector.pObjects->SaveSegmentationLabelImg(segmentationImageFileName);
 			}
 #endif
-			RECOG::CTISet CTIs;
+			// DEMO: common bounding box of objects 9 and 19.
 
-			objectDetector.pPSGM->CTIs(objectDetector.pObjects, &CTIs);
+			//RECOG::PSGM_::ModelInstance boundingBox;
 
-			objectDetector.pPSGM->DisplayCTIs(&visualizer, &CTIs);
+			//boundingBox.modelInstance.Element = new RECOG::PSGM_::ModelInstanceElement[66];
+
+			//objectDetector.BoundingBox(9, 19, &boundingBox);
+
+			//objectDetector.pPSGM->convexTemplate = objectDetector.pPSGM->convexTemplateBox;
+
+			//objectDetector.pPSGM->DisplayCTI(&visualizer, &boundingBox);
+
+			//objectDetector.pPSGM->convexTemplate = objectDetector.pPSGM->convexTemplate66;
+
+			//delete[] boundingBox.modelInstance.Element;
+
+			// END DEMO
+
+			objectDetector.pPSGM->convexTemplate = objectDetector.pPSGM->convexTemplateBox;
+
+			objectDetector.pPSGM->DisplayCTIs(&visualizer, &(objectDetector.boundingBoxes));
+
+			objectDetector.pPSGM->convexTemplate = objectDetector.pPSGM->convexTemplate66;
 
 			//detector.DisplaySoftEdges(&visualizer, &mesh, &surfels, SelectionColor);
 			visualizer.Run();
@@ -235,4 +251,3 @@ int main(int argc, char ** argv)
 
 	return 0;
 }
-

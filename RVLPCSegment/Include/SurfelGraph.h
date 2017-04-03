@@ -140,6 +140,10 @@ namespace RVL
 			Surfel *pSurfel,
 			float *P,
 			bool bUncertainty = false);
+		void GetVertices(
+			QList<QLIST::Index> surfelList,
+			Array<int> *piVertexArray,
+			int *&piVertexIdxMem);
 		void NodeColors(unsigned char *SelectionColor);
 		void Display(
 			Visualizer *pVisualizer,
@@ -224,7 +228,6 @@ namespace RVL
 		cv::Mat GenColoredSurfelImgFromSSF(std::shared_ptr<SceneSegFile::SceneSegFile> ssf);
 		//Filko
 
-
 	public:	
 		CRVLParameterList ParamList;
 		int nMeshVertices;
@@ -250,6 +253,8 @@ namespace RVL
 		int nVertexSurfelRelations;
 		float TIVertexToleranceAngle;
 		int edgeDepth;
+		bool *bVertexAssigned;
+		int *iVertexMem;
 	private:
 		unsigned char *nodeColor;
 		QLIST::Index *surfelVertexMem;

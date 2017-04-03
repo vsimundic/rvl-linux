@@ -23,6 +23,7 @@ namespace RVL
 				float R[9];
 				float t[3];
 				float tc[3]; // VIDOVIC
+				float varX;
 				Array<ModelInstanceElement> modelInstance;
 				ModelInstance *pNext;
 			};
@@ -52,5 +53,3 @@ namespace RVL
 		};
 	}
 }
-
-

@@ -8,8 +8,14 @@
 #define RVLPSGM_EVALUATION_PRINT_INFO //Vidovic
 #define RVLPSGM_MATCH_USING_SEGMENT_GT //Vidovic
 #define RVLPSGM_SAVE_MATCHES //Vidovic
-#define RVLPSGM_MATCHES_SIMILARITY_MEASURE			5	//1-mean square error; 2-maximum absolute error; 3-saturated square error; 4-median of absolute error; default: average saturated square error for valid planes
+#define RVLPSGM_MATCH_SIMILARITY_MEASURE_MEAN_SQUARE_DISTANCE									1
+#define RVLPSGM_MATCH_SIMILARITY_MEASURE_MAX_ABS_DISTANCE										2
+#define RVLPSGM_MATCH_SIMILARITY_MEASURE_SATURATED_SQUARE_DISTANCE_INVISIBILITY_PENAL			3
+#define RVLPSGM_MATCH_SIMILARITY_MEASURE_MEAN_SATURATED_SQUARE_DISTANCE							4
+#define RVLPSGM_MATCH_SIMILARITY_MEASURE_MEDIAN_ABS_DISTANCE									5
 //#define RVLPSGM_RANSAC
+//#define RVLPSGM_ICP
+
 
 #define RVLRECOGNITION_MODE_PSGM_CREATE_CTIS		2
 
@@ -123,10 +129,10 @@ namespace RVL
 			{
 				float d;
 				float w;
-				bool bw0;
+				bool b;
 				int iCTIElement;
 			};
-
+			
 			int ValidTangent(
 				int iSurfel,
 				int iSurfel_,
@@ -209,6 +215,7 @@ namespace RVL
 		virtual ~PSGM();
 		//void Create();
 		void CreateParamList(CRVLMem *pMem);
+		void Init(Mesh *pMesh);
 		void Interpret(
 			Mesh *pMesh,
 			int iScene = 0);
@@ -314,8 +321,9 @@ namespace RVL
 		void DetectGroundPlane(SURFEL::ObjectGraph *pObjects);
 		bool GravityReferenceFrame(
 			QList<QLIST::Index> surfelList,
-			float *RGC);
-		void CTIs(
+			float *RGC,
+			float &varX);
+		int CTIs(
 			QList<QLIST::Index> surfelList,
 			Array<int> iVertexArray,
 			int iModel,
@@ -325,16 +333,16 @@ namespace RVL
 		void CTIs(
 			SURFEL::ObjectGraph *pObjects,
 			RECOG::CTISet *pCTISet);
-		void GetVertices(
-			QList<QLIST::Index> surfelList,
-			Array<int> *piVertexArray,
-			int *&piVertexIdxMem);
+		void FitModel(
+			Array<int> iVertexArray,
+			RECOG::PSGM_::ModelInstance *pModelInstance,
+			bool bMemAllocated = false);
 		float Symmetry(
 			SURFEL::ObjectGraph *pObjects,
 			int iObject1,
-			int iObject2);
-		void InitSymmetry(SURFEL::ObjectGraph *pObjects);
-		void FreeSymmetry();
+			int iObject2,
+			RECOG::CTISet *pCTIs,
+			Array<RECOG::PSGM_::SymmetryMatch> &symmetryMatch);
 		void PrintMatchInfo(
 			FILE *fp,
 			FILE *fpLog,
@@ -426,16 +434,13 @@ namespace RVL
 			FILE *fp,
 			RECOG::CTISet *pCTISet,
 			int iModel = -1);
+		void RVLPSGInstanceMesh(Eigen::MatrixXf nI, float *dI);
 
 	private:
 		void Clusters();
 		void CreateTemplate66();
 		void CreateTemplateBox();
 		void TemplateMatrix(Array2D<float> A);
-		void FitModel(
-			Array<int> iVertexArray,
-			RECOG::PSGM_::ModelInstance *pModelInstance,
-			bool bMemAllocated = false);
 		bool ReferenceFrames(int iCluster);
 		bool ReferenceFrames(
 			RECOG::PSGM_::Cluster *pCluster,
@@ -467,6 +472,7 @@ namespace RVL
 		void SaveModelInstances(
 			FILE *fp,
 			int iModel = - 1);
+		void PrintCTIMeshFaces(FILE *fp, Eigen::MatrixXi F, Eigen::MatrixXi Fn, int n, Eigen::MatrixXi nP);
 
 	public:
 		CRVLParameterList ParamList;
@@ -539,8 +545,6 @@ namespace RVL
 		RECOG::PSGM_::Cluster *clusterMem;
 		int *clusterSurfelMem;
 		int *clusterVertexMem;
-		int *iVertexMem;
-		bool *bVertexAssigned;
 		//RECOG::PSGM_::ModelInstanceElement *modelInstanceMem;
 		vtkSmartPointer<vtkPolyData> referenceFramesPolyData;
 		char *sceneFileName;
@@ -569,7 +573,11 @@ namespace RVL
 		float *dISMc; //Vidovic
 		int CTIIdx; //Vidovic
 		int nBestMatches; //n best matches for each scene segment
-		
+		int debug1, debug2;
+		//For InstanceMesh:
+		Eigen::MatrixXf P; //points list
+		Eigen::MatrixXi F; //faces list (polygones)
+		Eigen::MatrixXi Edges; //Edges
 	};
 
 	

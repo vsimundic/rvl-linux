@@ -11,6 +11,9 @@
 #define RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_NLMC		2
 #define RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_NLMC2		3
 
+#define RVLPCSEGMENT_OBJECT_AGGREGATION_LEVEL2_METHOD_CONVEXITY		0
+#define RVLPCSEGMENT_OBJECT_AGGREGATION_LEVEL2_METHOD_SYMMETRY		1
+
 namespace RVL
 {
 	namespace SURFEL
@@ -27,6 +30,15 @@ namespace RVL
 		};
 
 		class ObjectGraph;
+
+		struct Object
+		{
+			int iNode;
+			QList<QLIST::Index> surfelList;
+			Array<int> iVertexArray;
+			Array<int> CTIs;
+			float varGRF;
+		};
 
 		struct ObjectDisplayData
 		{
@@ -84,14 +96,10 @@ namespace RVL
 			void Create(SurfelGraph *pSurfels_);
 			void CreateFromSSF(std::string ssfFileName);	//Filko
 			void CalculateOverAndUnderSegmentation_SSF(int *E, int &N, bool useGTNoPix = true,  bool useBackground = true);	//Filko
-#ifdef RVLSURFEL_IMAGE_ADJACENCY //Vidovic
 			void CalculateOverAndUnderSegmentation(int *E, int &N, bool useGTNoPix = false, std::string GTlabImgFilename = "", bool useBackground = true);	//Filko
-#endif
 			void DetermineObjectConvexityData(float convexThr = 0.005, float minDiffFlipReq = 0.1, bool setflip = false);	//Filko
 			void CalculateConvexityRatiosForObjectPair(int firstObject, int secondObject, float& firstRatio, float& secondRatio, float convexThr = 0.005);	//Filko
-#ifdef RVLSURFEL_COLOR_HISTOGRAM //Vidovic
 			void CalculateObjectsColorHistogram(); //Filko
-#endif
 			void ObjectAggregationLevel2_ViaObjectPairConvexity(float convexThr, float ratioThr, float ratioThr2, int objValidThr = 300, bool verbose = false); //Filko - NOT OPTIMIZED!!!!
 			void SaveSegmentationLabelImg(std::string filename); //Filko
 			bool CheckObjectUniformity(int objectIdx, int minSurfelSize, float uniThr); //Filko
@@ -101,12 +109,13 @@ namespace RVL
 			void ComputeRelationCost(
 				AgEdge *pEdge,
 				ObjectEdgeData &data);
-			void CreateSortedObjectArray();
+			//void CreateSortedObjectArray();
 			void SortElements(
 				GRAPH::AggregateNode<AgEdge> *pAgNode,
 				Array<SortIndex<int>> *pSortedElementIdxArray);
 			void SortObjects();
 			void CountValidObjects();
+			void GetVertices();
 			void InitDisplay(
 				Visualizer *pVisualizer,
 				Mesh *pMesh,
@@ -132,18 +141,24 @@ namespace RVL
 			std::shared_ptr<SceneSegFile::SceneSegFile> ssf;	//Filko
 			std::map<int, int> objID2idxMap; //Filko
 			SVMClassifier *pSVMClassifier;  //Nyarko
-			Array<int> objectArray;
+			//Array<int> objectArray;
 			float kCoverage;
 			float alpha;
 			ObjectGraphObjectData additionalObjectData;	//Filko
 			//Array<int> *sortedElementIdxArray;
 			DWORD relationClassifier;
+			DWORD objectAggregationLevel2Method;
 			Array<SortIndex<int>> sortedObjectArray;
+			Array<SURFEL::Object> objectArray;
+			int *iObjectAssignedToNode;
+			int *objectVertexIdxMem;
 			int nValidObjects;
 			bool bObjectAggregationLevel2Uncertainty;
 			bool bObjectAggregationLevel2Edges;
 			void(*objectAggregationLevel2Criterion)(ObjectGraph *pObjects, int iObject1, int iObject2, void *vpData);
 			void *vpObjectAggregationLevel2CriterionData;
+			FILE *fpSymmetry;
+			int minObjectSize;
 
 		private:
 			QLIST::Index *elementMem;
@@ -151,4 +166,3 @@ namespace RVL
 		};
 	}
 }
-
