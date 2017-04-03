@@ -4792,6 +4792,8 @@ void PSGM::CalculateScore(int similarityMeasure)
 
 	float maxError;
 
+	int medianIdx;
+
 	RECOG::PSGM_::MatchInstance *pCTIMatch_ = pFirstSCTIMatch;
 
 	switch (similarityMeasure)
@@ -4873,14 +4875,14 @@ void PSGM::CalculateScore(int similarityMeasure)
 		}
 
 		break;
-	default: //median of absolute error
+	case 4: //median of absolute error
 
 		Array<SortIndex<float>> validErrors;
 
 		validErrors.Element = new SortIndex<float>[iValid.n];
 		validErrors.n = iValid.n;
 
-		int medianIdx = iValid.n / 2;
+		medianIdx = iValid.n / 2;
 
 		for (iMCTI = 0; iMCTI < nMCTI; iMCTI++)
 		{
@@ -4910,6 +4912,35 @@ void PSGM::CalculateScore(int similarityMeasure)
 		}
 
 		RVL_DELETE_ARRAY(validErrors.Element);
+
+		break;
+	default:  //average saturated square error for valid planes
+
+		for (iMCTI = 0; iMCTI < nMCTI; iMCTI++)
+		{
+			scoreTmp = 0;
+
+			for (iValidPlane = 0; iValidPlane < iValid.n; iValidPlane++)
+			{
+				idx = iValid.Element[iValidPlane].Idx;
+
+				eTmp = e.Element[iMCTI].Element[idx];
+
+				fTmp = eTmp / sigma;
+
+				if (fTmp * fTmp < sigma25)
+				{
+					scoreTmp += fTmp * fTmp;
+				}
+				else
+					scoreTmp += sigma25;
+			}
+
+			score.Element[iMCTI] = scoreTmp / iValid.n;
+
+			pCTIMatch_->score = score.Element[iMCTI];
+			pCTIMatch_ = pCTIMatch_->pNext;
+		}
 
 		break;
 	}
@@ -6551,7 +6582,8 @@ bool RVL::RECOG::PSGM_::keyPressUserFunction(
 
 		//delete visualized ICP matches from the scene:
 		pVisualizer->renderer->RemoveAllViewProps();
-		pRecognition->InitDisplay(pVisualizer, pMesh, SelectionColor);
+		//pRecognition->InitDisplay(pVisualizer, pMesh, SelectionColor);
+		pVisualizer->SetMesh(pMesh);
 		pRecognition->Display();
 
 		for (int i = 0; i < pRecognition->scoreMatchMatrixICP.n; i++)

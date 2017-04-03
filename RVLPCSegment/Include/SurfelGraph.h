@@ -216,15 +216,14 @@ namespace RVL
 		void AssignGroundTruthSegmentation(
 			char *meshFileName,
 			int minSurfelSize);
+		void CalculateSurfelsColorHistograms(cv::Mat img, int colorspace, bool oneDimensional, const int *bindata, bool noBins);
 		void DisplayConvexAndConcaveEdges(
 			Visualizer *pVisualizer,
 			Mesh *pMesh);
 #endif
 		cv::Mat GenColoredSurfelImgFromSSF(std::shared_ptr<SceneSegFile::SceneSegFile> ssf);
 		//Filko
-#ifdef RVLSURFEL_IMAGE_ADJACENCY //Vidovic
-		void CalculateSurfelsColorHistograms(cv::Mat img, int colorspace, bool oneDimensional, const int *bindata, bool noBins);
-#endif
+
 
 	public:	
 		CRVLParameterList ParamList;

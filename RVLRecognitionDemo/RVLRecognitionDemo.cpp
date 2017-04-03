@@ -479,7 +479,6 @@ int main(int argc, char ** argv)
 				visualizer.Run();
 
 				visualizer.renderer->RemoveAllViewProps();
-	#endif
 #endif
 #endif
 				//Evaluate CTI match

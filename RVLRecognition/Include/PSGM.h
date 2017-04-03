@@ -8,7 +8,7 @@
 #define RVLPSGM_EVALUATION_PRINT_INFO //Vidovic
 #define RVLPSGM_MATCH_USING_SEGMENT_GT //Vidovic
 #define RVLPSGM_SAVE_MATCHES //Vidovic
-#define RVLPSGM_MATCHES_SIMILARITY_MEASURE			3
+#define RVLPSGM_MATCHES_SIMILARITY_MEASURE			5	//1-mean square error; 2-maximum absolute error; 3-saturated square error; 4-median of absolute error; default: average saturated square error for valid planes
 //#define RVLPSGM_RANSAC
 
 #define RVLRECOGNITION_MODE_PSGM_CREATE_CTIS		2
