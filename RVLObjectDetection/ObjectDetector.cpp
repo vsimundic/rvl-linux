@@ -53,8 +53,9 @@ ObjectDetector::~ObjectDetector()
 
 	if (pObjects)
 		delete pObjects;
-
+	
 	RVL_DELETE_ARRAY(cfgFileName);
+
 	RVL_DELETE_ARRAY(SVMClassifierParamsFileName);
 }
 
@@ -272,16 +273,19 @@ void ObjectDetector::DetectObjects(char *MeshFilePathName)
 			/*VisualizeObjectGraphVertexPointCloud(&objects, 100);*/
 			//if (bCTIBasedObjectAggregation)
 			pObjects->GetVertices();	
-			pPSGM->Init(&mesh);
-			pPSGM->CTIs(pObjects, &CTIs);
-			pPSGM->convexTemplate = pPSGM->convexTemplateBox;
-			pPSGM->CTIs(pObjects, &boundingBoxes);
-			pPSGM->convexTemplate = pPSGM->convexTemplate66;
+			//pPSGM->Init(&mesh);
+			//pPSGM->CTIs(pObjects, &CTIs);
+			//pPSGM->convexTemplate = pPSGM->convexTemplateBox;
+			//pPSGM->CTIs(pObjects, &boundingBoxes);
+			//pPSGM->convexTemplate = pPSGM->convexTemplate66;
 			pObjects->pMesh = &mesh;
 			pObjects->DetermineObjectConvexityData(convexityThr, 0.15, bConcaveObjectAggregation);
+			pObjects->vpObjectAggregationLevel2CriterionData = this;
+			pObjects->ExtFuncCheckIfWithinVolume = &RVL::ObjectDetector::CheckIfWithinCTIBoundingBox;
 			pObjects->ObjectAggregationLevel2_ViaObjectPairConvexity(convexityThr, convexityRatioThr1, convexityRatioThr2, pObjects->minObjectSize);
 			cv::imshow("New Colored object image", pObjects->CreateSegmentationImage());
 			cv::waitKey(1);
+
 			////
 			//Evaluation
 			/*int E[2];
@@ -444,5 +448,27 @@ void OBJECT_DETECTION::Symmetry(
 	}	
 
 	delete[] symmetryMatch.Element;
+}
+
+bool ObjectDetector::CheckIfWithinCTIBoundingBox(void * odObj, int iObject1, int iObject2, float dimThr)
+{
+	ObjectDetector * od = (ObjectDetector*)odObj;
+	//Generate CTI bounding box
+	RECOG::PSGM_::ModelInstance boundingBox;
+	boundingBox.modelInstance.Element = new RECOG::PSGM_::ModelInstanceElement[6];
+	od->BoundingBox(od->pObjects->iObjectAssignedToNode[iObject1], od->pObjects->iObjectAssignedToNode[iObject2], &boundingBox);
+
+	//Determine bounding box dimensions
+	float dims[3];
+	dims[0] = abs(boundingBox.modelInstance.Element[4].d + boundingBox.modelInstance.Element[1].d); //"X"
+	dims[1] = abs(boundingBox.modelInstance.Element[5].d + boundingBox.modelInstance.Element[2].d); //"Y"
+	dims[2] = abs(boundingBox.modelInstance.Element[0].d + boundingBox.modelInstance.Element[3].d); //"Z"
+
+	if ((dims[0] < dimThr) && (dims[1] < dimThr) && (dims[2] < dimThr))
+		return true;
+	else
+		return false;
+
+	delete[] boundingBox.modelInstance.Element;
 }
 

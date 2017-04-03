@@ -82,7 +82,7 @@ namespace RVL
 			std::vector<std::map<int, bool>> ObjectsSurfelConvexity;
 			std::vector<RVLColorDescriptor> colordescriptor;
 			std::vector<float> convexityMultipliers;
-			std::vector<std::vector<float>> bbDistances;
+			//std::vector<std::vector<float>> bbDistances;
 		};
 		//
 
@@ -100,11 +100,13 @@ namespace RVL
 			void DetermineObjectConvexityData(float convexThr = 0.005, float minDiffFlipReq = 0.1, bool setflip = false, bool verbose = false);	//Filko
 			void CalculateConvexityRatiosForObjectPair(int firstObject, int secondObject, float& firstRatio, float& secondRatio, float convexThr = 0.005);	//Filko
 			void CalculateObjectsColorHistogram(); //Filko
+			bool(*ExtFuncCheckIfWithinVolume)(void*, int, int, float);	//Filko
 			void ObjectAggregationLevel2_ViaObjectPairConvexity(float convexThr, float ratioThr, float ratioThr2, int objValidThr = 300, bool verbose = false); //Filko - NOT OPTIMIZED!!!!
 			void SaveSegmentationLabelImg(std::string filename); //Filko
 			bool CheckObjectUniformity(int objectIdx, int minSurfelSize, float uniThr); //Filko
 			bool CheckIfNeighbours(int iObject1, int iObject2);	//Filko
 			void RenderConvexityPos(int iObjectSurf, int iObjectVert, Mesh *pMeshScene);	//Filko
+			
 			void WERSegmentation();
 			void ComputeRelationCosts();
 			void ComputeRelationCost(

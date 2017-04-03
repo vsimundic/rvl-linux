@@ -32,6 +32,7 @@ namespace RVL
 			int iObject1,
 			int iObject2,
 			RECOG::PSGM_::ModelInstance *pBoundingBox);
+		static bool CheckIfWithinCTIBoundingBox(void * odObj, int iObject1, int iObject2, float dimThr = 0.30);	//Filko
 		
 	public:
 		DWORD flags;

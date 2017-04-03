@@ -641,6 +641,8 @@ ObjectGraph::ObjectGraph()
 
 	relationClassifier = RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_NLMC;
 	objectAggregationLevel2Method = RVLPCSEGMENT_OBJECT_AGGREGATION_LEVEL2_METHOD_CONVEXITY;
+
+	ExtFuncCheckIfWithinVolume = NULL;
 }
 
 
@@ -2666,24 +2668,32 @@ void ObjectGraph::ObjectAggregationLevel2_ViaObjectPairConvexity(float convexThr
 		{
 			if (objectAggregationLevel2Method == RVLPCSEGMENT_OBJECT_AGGREGATION_LEVEL2_METHOD_CONVEXITY)
 			{
-			this->CalculateConvexityRatiosForObjectPair(validObjects.at(iObject), validObjects.at(iObject2), firstRatio, secondRatio, convexThr);
-			if (verbose)
-				std::cout << "(" << validObjects.at(iObject) << ", " << validObjects.at(iObject2) << ")" << " = " << firstRatio << ", " << secondRatio << std::endl;
-			if ((firstRatio > ratioThr) && (secondRatio > ratioThr))
-				merge_pairs.push_back(std::make_pair(validObjects.at(iObject), validObjects.at(iObject2)));
-			//Adding all connections (via min values)
-			if (firstRatio < secondRatio)
-				minValue = firstRatio;
-			else
-				minValue = secondRatio;
-			ss.clear();
-			ss.str("");
-			ss << validObjects.at(iObject) << "_" << validObjects.at(iObject2);	//one way
-			min_convexity_values.insert(std::pair<std::string, float>(ss.str(), minValue));
-			ss.clear();
-			ss.str("");
-			ss << validObjects.at(iObject2) << "_" << validObjects.at(iObject);	//other way
-			min_convexity_values.insert(std::pair<std::string, float>(ss.str(), minValue));
+				//if external function for checking if objects are within volume is defined
+				//Only objects within specified volume within each otherwill be considered
+				if (ExtFuncCheckIfWithinVolume)
+				{
+					//Check if within volume
+					if (!ExtFuncCheckIfWithinVolume(vpObjectAggregationLevel2CriterionData, validObjects.at(iObject), validObjects.at(iObject2), 0.30))	//HARDCODED THRESHOLD?????
+						continue;
+				}
+				this->CalculateConvexityRatiosForObjectPair(validObjects.at(iObject), validObjects.at(iObject2), firstRatio, secondRatio, convexThr);
+				if (verbose)
+					std::cout << "(" << validObjects.at(iObject) << ", " << validObjects.at(iObject2) << ")" << " = " << firstRatio << ", " << secondRatio << std::endl;
+				if ((firstRatio > ratioThr) && (secondRatio > ratioThr))
+					merge_pairs.push_back(std::make_pair(validObjects.at(iObject), validObjects.at(iObject2)));
+				//Adding all connections (via min values)
+				if (firstRatio < secondRatio)
+					minValue = firstRatio;
+				else
+					minValue = secondRatio;
+				ss.clear();
+				ss.str("");
+				ss << validObjects.at(iObject) << "_" << validObjects.at(iObject2);	//one way
+				min_convexity_values.insert(std::pair<std::string, float>(ss.str(), minValue));
+				ss.clear();
+				ss.str("");
+				ss << validObjects.at(iObject2) << "_" << validObjects.at(iObject);	//other way
+				min_convexity_values.insert(std::pair<std::string, float>(ss.str(), minValue));
 			}
 			else if (objectAggregationLevel2Method == RVLPCSEGMENT_OBJECT_AGGREGATION_LEVEL2_METHOD_SYMMETRY)
 			{
@@ -2693,7 +2703,7 @@ void ObjectGraph::ObjectAggregationLevel2_ViaObjectPairConvexity(float convexThr
 				objectAggregationLevel2Criterion(this, iObject1_, iObject2_, vpObjectAggregationLevel2CriterionData);
 			}				
 		}
-		}
+	}
 
 #ifdef RVLPCSEGMENT_OBJECT_GRAPH_SYMMETRY_LOG
 	if (fpSymmetry)
@@ -2812,7 +2822,10 @@ void ObjectGraph::ObjectAggregationLevel2_ViaObjectPairConvexity(float convexThr
 					ss.clear();
 					ss.str("");
 					ss << inputcluster.at(iObject) << "_" << inputcluster.at(iObject2);
-					score = min_convexity_values.at(ss.str());
+					if (min_convexity_values.count(ss.str()))
+						score = min_convexity_values.at(ss.str());
+					else
+						score = 0.0;
 					if (score > startObjScore)
 					{
 						startObj = iObject;
@@ -2839,11 +2852,17 @@ void ObjectGraph::ObjectAggregationLevel2_ViaObjectPairConvexity(float convexThr
 					object_links.at(iObject).push_back(temp_pair());
 					object_links.at(iObject).at(object_links.at(iObject).size() - 1).a = iObject;
 					object_links.at(iObject).at(object_links.at(iObject).size() - 1).b = iObject2;
-					object_links.at(iObject).at(object_links.at(iObject).size() - 1).score = min_convexity_values.at(ss.str());
+					if (min_convexity_values.count(ss.str()))
+						object_links.at(iObject).at(object_links.at(iObject).size() - 1).score = min_convexity_values.at(ss.str());
+					else
+						object_links.at(iObject).at(object_links.at(iObject).size() - 1).score = 0.0;
 					object_links.at(iObject2).push_back(temp_pair());
 					object_links.at(iObject2).at(object_links.at(iObject2).size() - 1).a = iObject2;
 					object_links.at(iObject2).at(object_links.at(iObject2).size() - 1).b = iObject;
-					object_links.at(iObject2).at(object_links.at(iObject2).size() - 1).score = min_convexity_values.at(ss.str());
+					if (min_convexity_values.count(ss.str()))
+						object_links.at(iObject2).at(object_links.at(iObject2).size() - 1).score = min_convexity_values.at(ss.str());
+					else
+						object_links.at(iObject2).at(object_links.at(iObject2).size() - 1).score = 0.0;
 				}
 			}
 			//sort generated lists
@@ -2877,7 +2896,11 @@ void ObjectGraph::ObjectAggregationLevel2_ViaObjectPairConvexity(float convexThr
 							ss.clear();
 							ss.str("");
 							ss << inputcluster.at(k) << "_" << inputcluster.at(object_links.at(currObj).at(l).b);
-							if (min_convexity_values.at(ss.str()) < ratioThr2) //if the score is smaller against any currently labeled member then break
+							if (min_convexity_values.count(ss.str()))
+								score = min_convexity_values.at(ss.str());
+							else
+								score = 0.0;
+							if (score < ratioThr2) //if the score is smaller against any currently labeled member then break
 							{
 								fail = true;
 								break;
@@ -3235,6 +3258,34 @@ void ObjectGraph::CountValidObjects()
 
 		nValidObjects++;
 	}
+}
+
+void ObjectGraph::GetVertices()
+{
+	if (sortedObjectArray.n < 0)
+		SortObjects();
+
+	pSurfels->bVertexAssigned = new bool[pSurfels->NodeArray.n];
+
+	memset(pSurfels->bVertexAssigned, 0, pSurfels->NodeArray.n * sizeof(bool));
+
+	RVL_DELETE_ARRAY(pSurfels->iVertexMem);
+
+	pSurfels->iVertexMem = new int[pSurfels->nVertexSurfelRelations];
+
+	int *piNextVertex = pSurfels->iVertexMem;
+
+	int iObject;
+	Object *pObject;
+
+	for (iObject = 0; iObject < objectArray.n; iObject++)
+	{
+		pObject = objectArray.Element + iObject;
+
+		pSurfels->GetVertices(NodeArray.Element[pObject->iNode].elementList, &(pObject->iVertexArray), piNextVertex);
+	}
+
+	delete[] pSurfels->bVertexAssigned;
 }
 
 void ObjectGraph::RenderConvexityPos(int iObjectSurf, int iObjectVert, Mesh *pMeshScene)

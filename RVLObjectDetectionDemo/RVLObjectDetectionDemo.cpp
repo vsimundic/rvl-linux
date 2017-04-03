@@ -187,7 +187,7 @@ int main(int argc, char ** argv)
 				objectDetector.pObjects->SaveSegmentationLabelImg(segmentationImageFileName);
 
 				//cv::imshow("Segmentation", objectDetector.pObjects->CreateSegmentationImage());
-				cv::waitKey();
+				cv::waitKey(1);
 			}
 #endif
 		}
@@ -207,7 +207,7 @@ int main(int argc, char ** argv)
 				//Visualization
 				cv::imshow("Colored surfel image", objectDetector.pSurfels->GenColoredSurfelImgFromSSF(objectDetector.pObjects->ssf));
 				cv::imshow("Colored segmentation image", objectDetector.pObjects->CreateSegmentationImageFromSSF());
-				cv::waitKey();
+				cv::waitKey(1);
 			}
 		}
 		else
