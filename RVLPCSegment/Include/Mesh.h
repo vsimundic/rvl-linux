@@ -123,6 +123,9 @@ namespace RVL
 			void ComputeDistribution(
 				Array<int> &PtArray,
 				MESH::Distribution &distribution);
+			void ComputeDistributionDouble(
+				Array<int> &PtArray,
+				MESH::Distribution &distribution);
 			bool FindBoundaryEdge(
 				QList<QLIST::Index> *pInPtList,
 				QLIST::Index *&pPtIdx,

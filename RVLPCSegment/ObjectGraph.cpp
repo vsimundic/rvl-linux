@@ -3265,9 +3265,9 @@ void ObjectGraph::GetVertices()
 	if (sortedObjectArray.n < 0)
 		SortObjects();
 
-	pSurfels->bVertexAssigned = new bool[pSurfels->NodeArray.n];
+	pSurfels->bVertexAssigned = new bool[pSurfels->vertexArray.n];
 
-	memset(pSurfels->bVertexAssigned, 0, pSurfels->NodeArray.n * sizeof(bool));
+	memset(pSurfels->bVertexAssigned, 0, pSurfels->vertexArray.n * sizeof(bool));
 
 	RVL_DELETE_ARRAY(pSurfels->iVertexMem);
 
@@ -3286,6 +3286,8 @@ void ObjectGraph::GetVertices()
 	}
 
 	delete[] pSurfels->bVertexAssigned;
+
+	pSurfels->bVertexAssigned = NULL;
 }
 
 void ObjectGraph::RenderConvexityPos(int iObjectSurf, int iObjectVert, Mesh *pMeshScene)

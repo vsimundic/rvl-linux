@@ -4382,7 +4382,7 @@ void PSGM::Match()
 
 			Match(pSModelInstance, startIdx, endIdx);
 
-			CalculateScore(RVLPSGM_MATCHES_SIMILARITY_MEASURE);
+			CalculateScore(RVLPSGM_MATCH_SIMILARITY_MEASURE_MEAN_SATURATED_SQUARE_DISTANCE);
 
 			UpdateScoreMatchMatrix(pSModelInstance);
 
@@ -4806,7 +4806,7 @@ void PSGM::CalculateScore(int similarityMeasure)
 
 	switch (similarityMeasure)
 	{
-	case 1: //mean square error
+	case RVLPSGM_MATCH_SIMILARITY_MEASURE_MEAN_SQUARE_DISTANCE: //mean square error
 
 		for (iMCTI = 0; iMCTI < nMCTI; iMCTI++)
 		{
@@ -4828,7 +4828,7 @@ void PSGM::CalculateScore(int similarityMeasure)
 		}
 
 		break;
-	case 2: //maximum absolute error
+	case RVLPSGM_MATCH_SIMILARITY_MEASURE_MAX_ABS_DISTANCE: //maximum absolute error
 
 		for (iMCTI = 0; iMCTI < nMCTI; iMCTI++)
 		{
@@ -4854,7 +4854,7 @@ void PSGM::CalculateScore(int similarityMeasure)
 		}
 
 		break;
-	case 3: //saturated square error
+	case RVLPSGM_MATCH_SIMILARITY_MEASURE_SATURATED_SQUARE_DISTANCE_INVISIBILITY_PENAL: //saturated square error
 
 		for (iMCTI = 0; iMCTI < nMCTI; iMCTI++)
 		{
@@ -4877,6 +4877,34 @@ void PSGM::CalculateScore(int similarityMeasure)
 			}
 
 			score.Element[iMCTI] = scoreTmp + sigma25 * (66 - iValid.n);
+
+			pCTIMatch_->score = score.Element[iMCTI];
+			pCTIMatch_ = pCTIMatch_->pNext;
+		}
+
+		break;
+	case RVLPSGM_MATCH_SIMILARITY_MEASURE_MEAN_SATURATED_SQUARE_DISTANCE:
+		for (iMCTI = 0; iMCTI < nMCTI; iMCTI++)
+		{
+			scoreTmp = 0;
+
+			for (iValidPlane = 0; iValidPlane < iValid.n; iValidPlane++)
+			{
+				idx = iValid.Element[iValidPlane].Idx;
+
+				eTmp = e.Element[iMCTI].Element[idx];
+
+				fTmp = eTmp / sigma;
+
+				if (fTmp * fTmp < sigma25)
+				{
+					scoreTmp += fTmp * fTmp;
+				}
+				else
+					scoreTmp += sigma25;
+			}
+
+			score.Element[iMCTI] = scoreTmp / iValid.n;
 
 			pCTIMatch_->score = score.Element[iMCTI];
 			pCTIMatch_ = pCTIMatch_->pNext;
@@ -6853,7 +6881,7 @@ void PSGM::AddOneModelToVisualizer(Visualizer *pVisualizer, int iMatch, int iRan
 		//transformFilterICP->SetInputConnection(transformFilter->GetOutputPort());
 		transformFilterICP->SetTransform(transformICP);
 		transformFilterICP->Update();
-		}			
+		}		
 #endif
 
 	//Mapper and actor for model
@@ -7506,7 +7534,7 @@ bool PSGM::IsFlat(
 	if (PtArray.n == 0)
 		return false;
 
-	pMesh->ComputeDistribution(PtArray, PtDistribution);
+	pMesh->ComputeDistributionDouble(PtArray, PtDistribution);
 
 	float *var = PtDistribution.var;
 
@@ -7516,7 +7544,7 @@ bool PSGM::IsFlat(
 
 	RVLSORT3ASCEND(var, idx, iTmp);
 
-	if (var[idx[0]] / var[idx[1]] <= 0.001)
+	if (var[idx[0]] / var[idx[1]] <= 0.0005)
 	{
 		N_ = PtDistribution.R + 3 * idx[0];
 
@@ -7529,7 +7557,7 @@ bool PSGM::IsFlat(
 			RVLCOPY3VECTOR(N_, N);
 		}
 
-		d = RVLDOTPRODUCT3(N_, PtDistribution.t);
+		d = RVLDOTPRODUCT3(N, PtDistribution.t);
 
 		return true;
 	}
@@ -7762,19 +7790,19 @@ void PSGM::CTIs(
 	SURFEL::Object *pObject;
 
 	for (iObject = 0; iObject < pObjects->objectArray.n; iObject++)
-		{
+	{
 		if (iObject != iGndObject)
-			{
+		{
 			pObject = pObjects->objectArray.Element + iObject;
 
 			if (pObject->iVertexArray.n >= 3)
 				pCTISet->SegmentCTIs.Element[iObject].n = CTIs(pObject->surfelList, pObject->iVertexArray, -1, iObject, pCTISet, pMem);
 			else
 				pCTISet->SegmentCTIs.Element[iObject].n = 0;			
-			}
+		}
 		else
 			pCTISet->SegmentCTIs.Element[iObject].n = 0;
-		}
+	}
 
 	RVL_DELETE_ARRAY(pCTISet->segmentCTIIdxMem);
 
@@ -7809,7 +7837,7 @@ void PSGM::CTIs(
 		iObject = pCTISet->pCTI.Element[iCTI]->iCluster;
 
 		pCTISet->SegmentCTIs.Element[iObject].Element[pCTISet->SegmentCTIs.Element[iObject].n++] = iCTI;
-}
+	}
 }
 
 float PSGM::Symmetry(
@@ -7832,7 +7860,7 @@ float PSGM::Symmetry(
 	iObject[1] = iObject2;
 
 	SURFEL::Object *pObject[2];
-
+	
 	pObject[0] = pObjects->objectArray.Element + iObject[0];
 	pObject[1] = pObjects->objectArray.Element + iObject[1];
 
@@ -7886,7 +7914,7 @@ float PSGM::Symmetry(
 		if (RVLABS(N[2]) < 1e-10)
 			iSymmetryPlanes.Element[iSymmetryPlanes.n++] = i;
 	}
-
+	
 	// 
 
 	Array<int> iVertexArray[2];
@@ -8038,53 +8066,53 @@ float PSGM::Symmetry(
 			{
 				fTmp = 2.0f * k;
 
-			RVLSCALE3VECTOR(NSymmetryPlaneC, fTmp, NR);
+				RVLSCALE3VECTOR(NSymmetryPlaneC, fTmp, NR);
 
-			RVLDIF3VECTORS(NC, NR, NR);
+				RVLDIF3VECTORS(NC, NR, NR);
 
-			P2R = P2RMem;
+				P2R = P2RMem;
 
-			dMax = RVLDOTPRODUCT3(NC, P2R);
+				dMax = RVLDOTPRODUCT3(NC, P2R);
 
-			jBest = 0;
+				jBest = 0;
 
-			for (j = 1; j < nVertices2; j++, P2R += 3)
-			{
-				d = RVLDOTPRODUCT3(NC, P2R);
-
-				if (d > dMax)
+				for (j = 1; j < nVertices2; j++, P2R += 3)
 				{
-					dMax = d;
+					d = RVLDOTPRODUCT3(NC, P2R);
 
-					jBest = j;
+					if (d > dMax)
+					{
+						dMax = d;
+
+						jBest = j;
+					}
 				}
-			}
 
 				//iVertex = iVertexArray[1].Element[jBest];
 
 				//P = pSurfels->vertexArray.Element[iVertex]->P;
 
 				//if (RVLDOTPRODUCT3(P, NR) < 0.0f)
-			{
-				absk = RVLABS(k);
+				{
+					absk = RVLABS(k);
 
 					pSymmetryMatch = symmetryMatch_.Element + symmetryMatch_.n;
 
-				pSymmetryMatch->d = dMax;
+					pSymmetryMatch->d = dMax;
 					pSymmetryMatch->w = k;
-				pSymmetryMatch->iCTIElement = i;
+					pSymmetryMatch->iCTIElement = i;
 					pSymmetryMatch->b = (absk > 1e-6);	// normal of the CTI element is not parallel to the symmetry plane
 
 					if (pSymmetryMatch->b)
-				{
+					{
 						sortedSymmatryMatchIdx.Element[sortedSymmatryMatchIdx.n].cost = (pCTIElement1->d - dMax) / k;
 						sortedSymmatryMatchIdx.Element[sortedSymmatryMatchIdx.n].idx = symmetryMatch_.n;
-					sortedSymmatryMatchIdx.n++;
-					sumw += absk;
-				}
+						sortedSymmatryMatchIdx.n++;
+						sumw += absk;
+					}
 
 					symmetryMatch_.n++;
-			}
+				}
 			}	// if (NSymmetryPlaneC' * NC > -1e-6)
 		}	// for every element of convexTemplate
 
@@ -8104,11 +8132,11 @@ float PSGM::Symmetry(
 
 				sumw += RVLABS(k);
 			}
-
+				
 			t_ = sortedSymmatryMatchIdx.Element[i].cost;
 		}
 
-		// Compute symmetry score.
+		// Compute symmetry score.		
 
 		symmetryScore = 0.0f;
 
@@ -8290,7 +8318,7 @@ void PSGM::RVLPSGInstanceMesh(Eigen::MatrixXf nI, float *dI)
 				}
 			}
 		}
-}
+	}
 
 #ifdef RVLPSGM_CTIMESH_DEBUG
 	PrintCTIMeshFaces(fp, F, Fn, 6, nP);
@@ -8641,7 +8669,7 @@ void PSGM::RVLPSGInstanceMesh(Eigen::MatrixXf nI, float *dI)
 	int mF = F.cols();
 
 	for (int i = 0; i < F.rows(); i++)
-{
+	{
 		for (int iF = 0; iF < mF; iF++)
 			F(i, nP(i) + 1 + iF) = 0;
 	}
@@ -8664,14 +8692,14 @@ void PSGM::PrintCTIMeshFaces(FILE *fp, Eigen::MatrixXi F, Eigen::MatrixXi Fn, in
 			fprintf(fp, "%d\t", F(i, j));
 
 		fprintf(fp, "\n");
-}
+	}
 
 	fprintf(fp, "\n");
 
 	fprintf(fp, "Fn:\n");
 
 	for (int i = 0; i < n; i++)
-{
+	{
 		for (int j = 0; j < nP(i); j++)
 			fprintf(fp, "%d\t", Fn(i, j));
 
