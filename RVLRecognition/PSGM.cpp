@@ -5830,8 +5830,8 @@ void PSGM::EvaluateMatchesByScore(
 						{
 									if (firstTP[iSSegment] == -1)
 									{
-								if (iSSegment == 2)
-									printf("iMatch: %d, iMatchedModel: %d", iMatch, iMatchedModel);
+								//if (iSSegment == 2)
+									//printf("iMatch: %d, iMatchedModel: %d", iMatch, iMatchedModel);
 
 										firstTP[iSSegment] = iMSegment;
 										firstTPScore[iSSegment] = scoreTmp;
@@ -6612,8 +6612,9 @@ bool RVL::RECOG::PSGM_::keyPressUserFunction(
 				//visualize new matches on the scene
 				pRecognition->AddOneModelToVisualizer(pVisualizer, pRecognition->scoreMatchMatrix.Element[i].Element[iHypothesesRank].idx, iHypothesesRank, false);
 			}
-#endif
 		}
+#endif
+		
 		return true;
 	}
 
