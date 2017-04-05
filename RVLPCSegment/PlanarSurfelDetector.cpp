@@ -15,6 +15,8 @@
 #include "SurfelGraph.h"
 #include "PlanarSurfelDetector.h"
 
+#define RVLPLANARSURFELDETECTOR_OCCLUSION_EDGES
+
 using namespace RVL;
 
 PlanarSurfelDetector::PlanarSurfelDetector()
@@ -4600,7 +4602,7 @@ void PlanarSurfelDetector::EdgeFetures(
 {
 	int iEdgeFeature = pSurfels->NodeArray.n;
 
-	int nOcclusionEdges = 0;
+	int nOcclusionEdges = 1;
 
 	QLIST::Entry<Array<MeshEdgePtr *>> *pBoundary = pSurfels->BoundaryList.pFirst;
 
@@ -5069,24 +5071,29 @@ int PlanarSurfelDetector::CreateEdgeFeatures(
 				//
 
 				iNewFeature_++;
+			}	// if (nForeground > 0 && nForeground > nBackground)
+#ifdef RVLPLANARSURFELDETECTOR_OCCLUSION_EDGES
+			else
+			{
+				nOcclusionEdges++;
+
+				iPointEdge = pSegmentEndpoint1->Idx;
+
+				while (iPointEdge != pSegmentEndpoint2->Idx)
+				{
+					pEdgePtr = pBoundary->Element[iPointEdge];
+
+					iPt = RVLPCSEGMENT_GRAPH_GET_NODE(pEdgePtr);
+
+					if (iPt / 640 == 460)
+						int debug = 0;
+
+					pSurfels->edgeMap[iPt] = -nOcclusionEdges;
+
+					iPointEdge = (iPointEdge + 1) % pBoundary->n;
+				}
 			}
-			//else
-			//{
-			//	nOcclusionEdges++;
-
-			//	iPointEdge = pSegmentEndpoint1->Idx;
-
-			//	while (iPointEdge != pSegmentEndpoint2->Idx)
-			//	{
-			//		pEdgePtr = pBoundary->Element[iPointEdge];
-
-			//		iPt = RVLPCSEGMENT_GRAPH_GET_NODE(pEdgePtr);
-
-			//		pSurfels->edgeMap[iPt] = -nOcclusionEdges;
-
-			//		iPointEdge = (iPointEdge + 1) % pBoundary->n;
-			//	}
-			//}
+#endif
 
 			// (pSegmentEndpoint1, pSegmentEndpoint2) <- (pSegmentEndpoint2, pSegmentEndpoint2->pNext)
 

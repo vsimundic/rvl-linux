@@ -465,7 +465,7 @@ namespace RVL
 		void ComputeClusterNormalDistribution(
 			RECOG::PSGM_::Cluster *pCluster);
 		void ComputeClusterBoundaryDiscontinuityPerc(int iCluster);
-		void AddReferenceFrame(
+		RECOG::PSGM_::ModelInstance *AddReferenceFrame(
 			//int iCluster, //Vidovic
 			float *R = NULL,
 			float *t = NULL);
