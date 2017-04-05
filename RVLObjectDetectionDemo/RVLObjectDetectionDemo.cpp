@@ -146,11 +146,12 @@ int main(int argc, char ** argv)
 				segmentationImageFileName += "OGLabels.png";
 				objectDetector.pObjects->SaveSegmentationLabelImg(segmentationImageFileName);
 
-				cv::imshow("Segmentation", objectDetector.pObjects->CreateSegmentationImage());
-				cv::waitKey();
+				//cv::imshow("Segmentation", objectDetector.pObjects->CreateSegmentationImage());
+				//cv::waitKey();
 			}
 #endif
 		}
+		printf("Sequence completed.\n");
 		system("pause");
 	}
 	else

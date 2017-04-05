@@ -1254,9 +1254,9 @@ void SurfelGraph::DetectVertices(
 										pF = pFeature_[0]->imgAdjacency.at(i);
 
 										if (pF == pFeature_[1])
-											bConvex[2] = (pFeature_[0]->imgAdjacencyDescriptors.at(i)->cupyDescriptor[0] >= 0);
-										else if (pF == pFeature_[2])
 											bConvex[0] = (pFeature_[0]->imgAdjacencyDescriptors.at(i)->cupyDescriptor[0] >= 0);
+										else if (pF == pFeature_[2])
+											bConvex[2] = (pFeature_[0]->imgAdjacencyDescriptors.at(i)->cupyDescriptor[0] >= 0);
 									}
 
 									if (pFeature_[1])
@@ -1328,8 +1328,8 @@ void SurfelGraph::DetectVertices(
 											if (bConvex[i])
 												break;
 
-										N1 = NodeArray.Element[iF[i]].N;
-										N2 = NodeArray.Element[iF[(i + 1) % 3]].N;
+										N1 = pFeature_[i]->N;
+										N2 = pFeature_[(i + 1) % 3]->N;
 
 										UpdateNormalHull(pVertex->normalHull, N1);
 										UpdateNormalHull(pVertex->normalHull, N2);
