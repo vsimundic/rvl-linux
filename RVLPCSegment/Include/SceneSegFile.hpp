@@ -981,6 +981,7 @@ namespace SceneSegFile
 			PixelAffiliation,	//int
 			GTObjHistogram,	//int
 			CommonBoundaryLength,	//int
+			FalseSegmentationCost,	//int
 		};
 	};
 

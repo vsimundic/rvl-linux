@@ -21,7 +21,8 @@ namespace SceneSegFile
 		{ FeaturesList::SameGTObject, "SameGTObject" },
 		{ FeaturesList::PixelAffiliation, "PixelAffiliation" },
 		{ FeaturesList::GTObjHistogram, "GTObjHistogram" },
-		{ FeaturesList::CommonBoundaryLength, "CommonBoundaryLength" }
+		{ FeaturesList::CommonBoundaryLength, "CommonBoundaryLength" },
+		{ FeaturesList::FalseSegmentationCost, "FalseSegmentationCost" }
 	};
 
 	SceneSegFile* GenerateTestSceneSegFile()
