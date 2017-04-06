@@ -140,6 +140,106 @@ void ObjectDetector::CreateParamList()
 	pParamData = ParamList.AddParam("ObjectGraph.concaveObjectAggregation", RVLPARAM_TYPE_BOOL, &bConcaveObjectAggregation);
 }
 
+void SmoothMesh(vtkSmartPointer<vtkPolyData> pd, int noIter)
+{
+	//Bilateral filtring
+	vtkSmartPointer<vtkPolyData> norPD = pd;
+	norPD->BuildLinks();
+	vtkSmartPointer<vtkFloatArray> norNormalData = vtkFloatArray::SafeDownCast(norPD->GetPointData()->GetNormals());
+	vtkSmartPointer<vtkPoints> norPts = norPD->GetPoints();
+	int noPts = norPts->GetNumberOfPoints();
+	float sumW = 0.0;
+	float sumPts[3];
+	float sumNorm[3];
+	int noCells = 0;
+	vtkSmartPointer<vtkIdList> ptCells = vtkSmartPointer<vtkIdList>::New();
+	vtkSmartPointer<vtkIdList> ptCellPts = vtkSmartPointer<vtkIdList>::New();
+	vtkSmartPointer<vtkPoints> pointsCpy = vtkSmartPointer<vtkPoints>::New();	//points copy where new coordinates will go
+	pointsCpy->SetDataTypeToFloat();
+	pointsCpy->SetNumberOfPoints(640 * 480);
+	//pointsCpy->DeepCopy(points);
+	vtkSmartPointer<vtkFloatArray> normalsCpy = vtkSmartPointer<vtkFloatArray>::New();	//point normals copy
+	normalsCpy->SetNumberOfComponents(3);
+	normalsCpy->SetNumberOfTuples(640 * 480);
+	int ptID = 0;
+	float tempDist2 = 0.0;
+	float tempL1 = 0.0;
+	float tempW = 0.0;
+	float currNor[3];
+	float tempNor[3];
+	float newPt[3];
+	float newNor[3];
+	double currPt[3];
+	double pt1[3];
+	for (int it = 0; it < noIter; it++)
+	{
+		for (int i = 0; i < noPts; i++)
+		{
+			norPts->GetPoint(i, currPt);
+			if ((currPt[0] <= -1.0) && (currPt[1] <= -1.0) && (currPt[2] <= -1.0))
+			{
+				pointsCpy->SetPoint(i, -1.0, -1.0, -1.0);
+				continue;
+			}
+			norNormalData->GetTupleValue(i, currNor);
+			norPD->GetPointCells(i, ptCells);
+			sumPts[0] = 0.0; sumPts[1] = 0.0; sumPts[2] = 0.0;
+			sumNorm[0] = 0.0; sumNorm[1] = 0.0; sumNorm[2] = 0.0;
+			sumW = 0.0;
+			noCells = ptCells->GetNumberOfIds();
+			for (int j = 0; j < noCells; j++)
+			{
+				ptCellPts->Reset();
+				norPD->GetCellPoints(ptCells->GetId(j), ptCellPts);
+				for (int k = 0; k < 3; k++)
+				{
+					ptID = ptCellPts->GetId(k);
+					if (ptID != i)
+					{
+						norPts->GetPoint(ptID, pt1);
+						norNormalData->GetTupleValue(ptID, tempNor);
+						//calculate distance
+						tempDist2 = sqrt(vtkMath::Distance2BetweenPoints(currPt, pt1));
+						//calculate L1 normals norm
+						tempL1 = abs(currNor[0] - tempNor[0]) + abs(currNor[1] - tempNor[1]) + abs(currNor[2] - tempNor[2]);
+						//calculate weight
+						tempW = exp(tempDist2) * exp(tempL1);
+						//calculate sum weight and sum point coordinates and sum normals
+						sumW += tempW;
+						sumPts[0] += tempW * pt1[0];
+						sumPts[1] += tempW * pt1[1];
+						sumPts[2] += tempW * pt1[2];
+						sumNorm[0] += tempW * tempNor[0];
+						sumNorm[1] += tempW * tempNor[1];
+						sumNorm[2] += tempW * tempNor[2];
+					}
+				}
+			}
+			//calculate new point coordinates and new normals
+			if (sumW == 0.0)
+			{
+				pointsCpy->SetPoint(i, currPt);
+				normalsCpy->SetTuple(i, currNor);
+			}
+			else
+			{
+				newPt[0] = sumPts[0] / sumW;
+				newPt[1] = sumPts[1] / sumW;
+				newPt[2] = sumPts[2] / sumW;
+				newNor[0] = sumNorm[0] / sumW;
+				newNor[1] = sumNorm[1] / sumW;
+				newNor[2] = sumNorm[2] / sumW;
+				pointsCpy->SetPoint(i, newPt);
+				normalsCpy->SetTuple(i, newNor);
+			}
+		}
+		norPD->SetPoints(pointsCpy);
+		//norPD->Print(cout);
+		norPD->GetPointData()->SetNormals(normalsCpy);
+		std::cout << "Iteration " << it << " finished!" << std::endl;
+	}
+}
+
 void ObjectDetector::DetectObjects(char *MeshFilePathName)
 {
 	// Segmentation to surfels.
@@ -174,6 +274,8 @@ void ObjectDetector::DetectObjects(char *MeshFilePathName)
 			printf("Mesh created.\n");
 		else
 			printf("ERROR: Mesh can't be created!\n");
+
+		//SmoothMesh(mesh.pPolygonData, 10);
 
 		// Segment mesh to surfels.				
 
@@ -277,16 +379,16 @@ void ObjectDetector::DetectObjects(char *MeshFilePathName)
 			/*VisualizeObjectGraphVertexPointCloud(&objects, 100);*/
 			//if (bCTIBasedObjectAggregation)
 			pObjects->GetVertices();	
-			//pPSGM->Init(&mesh);
+			pPSGM->Init(&mesh);
 			//pPSGM->CTIs(pObjects, &CTIs);
-			//pPSGM->convexTemplate = pPSGM->convexTemplateBox;
-			//pPSGM->CTIs(pObjects, &boundingBoxes);
+			pPSGM->convexTemplate = pPSGM->convexTemplateBox;
+			pPSGM->CTIs(pObjects, &boundingBoxes);
 			//pPSGM->convexTemplate = pPSGM->convexTemplate66;
 			pObjects->pMesh = &mesh;
-			pObjects->DetermineObjectConvexityData(convexityThr, 0.15, bConcaveObjectAggregation);
+			pObjects->DetermineObjectConvexityData(convexityThr, 0.15, bConcaveObjectAggregation, true);
 			pObjects->vpObjectAggregationLevel2CriterionData = this;
 			pObjects->ExtFuncCheckIfWithinVolume = &RVL::ObjectDetector::CheckIfWithinCTIBoundingBox;
-			pObjects->ObjectAggregationLevel2_ViaObjectPairConvexity(convexityThr, convexityRatioThr1, convexityRatioThr2, pObjects->minObjectSize);
+			pObjects->ObjectAggregationLevel2_ViaObjectPairConvexity(convexityThr, convexityRatioThr1, convexityRatioThr2, pObjects->minObjectSize, true);
 			cv::imshow("New Colored object image", pObjects->CreateSegmentationImage());
 			cv::waitKey(1);
 
@@ -336,7 +438,7 @@ void ObjectDetector::BoundingBox(
 	if (!pPSGM->bGnd)
 		return;
 
-	if (CTIs.SegmentCTIs.n <= iObject1 && CTIs.SegmentCTIs.n <= iObject2)
+	if (boundingBoxes.SegmentCTIs.n <= iObject1 && boundingBoxes.SegmentCTIs.n <= iObject2)
 		return;
 
 	int iObject[2];
@@ -358,11 +460,11 @@ void ObjectDetector::BoundingBox(
 	RECOG::PSGM_::ModelInstance *pCTI;
 
 	for (i = 0; i < 2; i++)
-		if (CTIs.SegmentCTIs.Element[iObject[i]].n > 0)
+		if (boundingBoxes.SegmentCTIs.Element[iObject[i]].n > 0)
 		{
-			iCTI = CTIs.SegmentCTIs.Element[iObject[i]].Element[0];
+			iCTI = boundingBoxes.SegmentCTIs.Element[iObject[i]].Element[0];
 
-			pCTI = CTIs.pCTI.Element[iCTI];
+			pCTI = boundingBoxes.pCTI.Element[iCTI];
 
 			if (R_ == NULL || pCTI->varX < varX)
 			{

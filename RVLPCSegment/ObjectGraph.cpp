@@ -2223,7 +2223,7 @@ void ObjectGraph::CalculateObjectsColorHistogram()
 
 void ObjectGraph::CalculateConvexityRatiosForObjectPair(int firstObject, int secondObject, float& firstRatio, float& secondRatio, float convexThr)
 {
-	//if ((firstObject == 60) && (secondObject == 484))	//60, 484 za test 57
+	//if ((firstObject == 5) && (secondObject == 10))	//60, 484 za test 57
 	//	RenderConvexityPos(secondObject, firstObject, this->pMesh);
 	GRAPH::AggregateNode<SURFEL::AgEdge> *pFirstObject = this->NodeArray.Element + firstObject;
 	GRAPH::AggregateNode<SURFEL::AgEdge> *pSecondObject = this->NodeArray.Element + secondObject;

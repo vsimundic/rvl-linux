@@ -61,6 +61,10 @@
 #include "vtkPolyDataPointSampler.h"
 #include "vtkDecimatePro.h"
 #include "vtkOutlineSource.h"
+#include "vtkSmoothPolyDataFilter.h"
+#include "vtkWindowedSincPolyDataFilter.h"
+#include "vtkFeatureEdges.h"
+#include "vtkExtractEdges.h"
 
 #include "opencv2\opencv.hpp"
 
