@@ -982,6 +982,7 @@ namespace SceneSegFile
 			GTObjHistogram,	//int
 			CommonBoundaryLength,	//int
 			Vertices3D, //float
+			FalseSegmentationCost,	//int
 		};
 	};
 

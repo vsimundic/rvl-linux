@@ -581,6 +581,8 @@ int main(int argc, char ** argv)
 
 			//char filePath[200];		
 
+			///
+
 			int nM = 35, nSM = 3;
 
 			while (sceneSequence.GetNextPath(filePath))
@@ -634,18 +636,22 @@ int main(int argc, char ** argv)
 				printf("Scene %s...finished!\n\n", filePath);
 
 				iScene++;
+
+			// Visualization
+			surfels.NodeColors(SelectionColor);
+				visualizer.renderer->RemoveAllViewProps();								
+			recognition.InitDisplay(&visualizer, &mesh, SelectionColor);
+			recognition.Display();
+			visualizer.Run();
 			}
 
 			RVL_DELETE_ARRAY(clusterNormalDistributionFileName);
 
 			// Visualization
-			surfels.NodeColors(SelectionColor);
-			recognition.InitDisplay(&visualizer, &mesh, SelectionColor);
-			recognition.Display();
-			visualizer.Run();
-
-
-
+			//surfels.NodeColors(SelectionColor);
+			//recognition.InitDisplay(&visualizer, &mesh, SelectionColor);
+			//recognition.Display();
+			//visualizer.Run();
 		}
 	}	// if (method == RVLRECOGNITION_METHOD_PSGM)
 

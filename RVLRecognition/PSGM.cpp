@@ -331,7 +331,9 @@ void PSGM::Interpret(
 
 			//AddReferenceFrame(iCluster); //Vidovic
 
-			AddReferenceFrame();
+			pModelInstance = AddReferenceFrame();
+
+			pModelInstance->iCluster = iCluster;
 		}
 		else if (bGTRFDescriptors)
 		{
@@ -352,7 +354,9 @@ void PSGM::Interpret(
 	
 				//AddReferenceFrame(iCluster, R, pGTInstance->t); //Vidovic
 
-				AddReferenceFrame(R, pGTInstance->t); //Vidovic
+				pModelInstance = AddReferenceFrame(R, pGTInstance->t); //Vidovic
+
+				pModelInstance->iCluster = iCluster;
 
 				fprintf(fpGTH, "%d\t%d\n", iCluster, pGTInstance->iModel);
 			}
@@ -1810,7 +1814,7 @@ void PSGM::Clusters()
 
 						eGnd = RVLDOTPRODUCT3(NGnd, pSurfel->P) - dGnd;
 
-						if (RVLABS(eGnd) > groundPlaneTolerance)
+						if (eGnd > groundPlaneTolerance)
 							break;
 					}
 
@@ -2535,7 +2539,7 @@ bool PSGM::ReferenceFrames(
 	return true;
 }
 
-void PSGM::AddReferenceFrame(
+RECOG::PSGM_::ModelInstance * PSGM::AddReferenceFrame(
 	//int iCluster, //Vidovic
 	float *RIn,
 	float *tIn)
@@ -2571,6 +2575,8 @@ void PSGM::AddReferenceFrame(
 	{
 		RVLNULL3VECTOR(t);
 	}
+
+	return pModelInstance;
 }
 
 int RVL::RECOG::PSGM_::ValidTangent(
@@ -6178,8 +6184,13 @@ void PSGM::InitDisplay(
 	RVLCOPY3VECTOR(selectionColor, displayData.selectionColor);
 	displayData.iSelectedCluster = -1;
 
+	if (pSurfels->DisplayData.keyPressUserFunction == NULL)
 	pSurfels->DisplayData.keyPressUserFunction = &RECOG::PSGM_::keyPressUserFunction;
+
+	if (pSurfels->DisplayData.mouseRButtonDownUserFunction == NULL)
 	pSurfels->DisplayData.mouseRButtonDownUserFunction = &RECOG::PSGM_::mouseRButtonDownUserFunction;
+
+	if (pSurfels->DisplayData.vpUserFunctionData == NULL)
 	pSurfels->DisplayData.vpUserFunctionData = &displayData;
 
 	pSurfels->InitDisplay(pVisualizer, pMesh, pSurfelDetector);

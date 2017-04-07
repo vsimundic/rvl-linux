@@ -92,6 +92,7 @@ SurfelGraph::SurfelGraph()
 	DisplayData.mode = RVLSURFEL_DISPLAY_MODE_SURFELS;
 	DisplayData.mouseRButtonDownUserFunction = NULL;
 	DisplayData.keyPressUserFunction = NULL;
+	DisplayData.vpUserFunctionData = NULL;
 	DisplayData.edgeFeatureDepth = 0.01f;
 	DisplayData.normalLen = 10.0f;
 	RVLSET3VECTOR(DisplayData.ForegroundColor, 0, 255, 0);
@@ -879,6 +880,66 @@ void SurfelGraph::DetermineImgAdjDescriptors(
 	}
 }
 
+void SurfelGraph::SplitAndMergeError(
+	Surfel *pCurrSurfel,
+	Surfel *pOtherSurfel,
+	int nGTObjects,
+	int &splitError,
+	int &mergeError)
+{
+	int iGTObject, GTObjectSize, GTObjectSize_, commonGTObjectSize;
+	int iRefSurfel, mergeCost, splitCost, maxOtherGTObjectSize;
+	Surfel *pOtherSurfel_;
+
+	int nTotal = 0;
+	int maxCommonGTObjectSize = 0;
+	int maxGTObjectSize = 0;
+
+	for (iGTObject = 0; iGTObject < nGTObjects; iGTObject++)
+	{
+		GTObjectSize = pCurrSurfel->GTObjHist.at(iGTObject);
+		if (GTObjectSize > maxGTObjectSize)
+		{
+			maxGTObjectSize = GTObjectSize;
+			iRefSurfel = 0;
+		}
+		GTObjectSize_ = pOtherSurfel->GTObjHist.at(iGTObject);
+		if (GTObjectSize_ > maxGTObjectSize)
+		{
+			maxGTObjectSize = GTObjectSize_;
+			iRefSurfel = 1;
+		}
+		commonGTObjectSize = GTObjectSize + GTObjectSize_;
+		nTotal += commonGTObjectSize;
+		if (commonGTObjectSize > maxCommonGTObjectSize)
+			maxCommonGTObjectSize = commonGTObjectSize;
+	}
+
+	mergeError = nTotal - maxCommonGTObjectSize;
+
+	pOtherSurfel_ = (iRefSurfel == 0 ? pOtherSurfel : pCurrSurfel);
+
+	if (pCurrSurfel->ObjectID == pOtherSurfel->ObjectID)
+	{
+		maxOtherGTObjectSize = 0;
+
+		for (iGTObject = 0; iGTObject < nGTObjects; iGTObject++)
+		{
+			if (iGTObject != pOtherSurfel_->ObjectID)
+			{
+				GTObjectSize_ = pOtherSurfel_->GTObjHist.at(iGTObject);
+
+				if (GTObjectSize_ > maxOtherGTObjectSize)
+					maxOtherGTObjectSize = GTObjectSize_;
+			}
+		}
+	}
+	else
+		maxOtherGTObjectSize = pOtherSurfel_->GTObjHist.at(pOtherSurfel_->ObjectID);
+
+	splitError = nTotal - maxGTObjectSize - maxOtherGTObjectSize;
+}
+
 //Generate scene segmenation file
 void SurfelGraph::GenerateSSF(
 	std::string filename, 
@@ -892,6 +953,8 @@ void SurfelGraph::GenerateSSF(
 
 	Surfel *pCurrSurfel = NodeArray.Element;
 	Surfel *pOtherSurfel;
+	int nGTObjects;
+	int splitError, mergeError, falseClassificationCost;
 	QLIST::Index *qlistelementVertex;
 	SURFEL::Vertex * rvlvertex;
 	QList<QLIST::Index> *pSurfelVertexList;
@@ -928,8 +991,9 @@ void SurfelGraph::GenerateSSF(
 		surfel->features.AddFeature(SceneSegFile::FeaturesList::PixelAffiliation, SceneSegFile::FeaturesDictionary::dictionary.at(SceneSegFile::FeaturesList::PixelAffiliation), "int");
 		surfel->features.SetFeatureData<int>(SceneSegFile::FeaturesList::PixelAffiliation, pixelIndices, pCurrSurfel->size);
 		//GTObjHistogram
-		int *GTObjHist = new int[pCurrSurfel->GTObjHist.size()];
-		for (int i = 0; i < pCurrSurfel->GTObjHist.size(); i++)
+		nGTObjects = pCurrSurfel->GTObjHist.size();
+		int *GTObjHist = new int[nGTObjects];
+		for (int i = 0; i < nGTObjects; i++)
 			GTObjHist[i] = pCurrSurfel->GTObjHist[i];
 		surfel->features.AddFeature(SceneSegFile::FeaturesList::GTObjHistogram, SceneSegFile::FeaturesDictionary::dictionary.at(SceneSegFile::FeaturesList::GTObjHistogram), "int");
 		surfel->features.SetFeatureData<int>(SceneSegFile::FeaturesList::GTObjHistogram, GTObjHist, pCurrSurfel->GTObjHist.size());
@@ -979,6 +1043,10 @@ void SurfelGraph::GenerateSSF(
 		for (int i = 0; i < pCurrSurfel->imgAdjacency.size(); i++)
 		{
 			pOtherSurfel = pCurrSurfel->imgAdjacency.at(i);
+
+			if (pOtherSurfel->size <= 1 || pOtherSurfel->bEdge)
+				continue;
+
 			//feature group's feature set
 			adjFeatureGroup->AddFeatureSet(pOtherSurfel - NodeArray.Element, SceneSegFile::FeatureSetsDictionary::dictionary.at(SceneSegFile::FeatureSetsList::AdjacencyNode), true);
 			std::shared_ptr<SceneSegFile::FeatureSet> adjFeatureSet = adjFeatureGroup->featureSets.at(pOtherSurfel - NodeArray.Element);
@@ -993,6 +1061,11 @@ void SurfelGraph::GenerateSSF(
 			//CommonBoundaryLenght
 			adjFeatureSet->AddFeature(SceneSegFile::FeaturesList::CommonBoundaryLength, SceneSegFile::FeaturesDictionary::dictionary.at(SceneSegFile::FeaturesList::CommonBoundaryLength), "int");
 			adjFeatureSet->CopyFeatureData<int>(SceneSegFile::FeaturesList::CommonBoundaryLength, &pCurrSurfel->imgAdjacencyDescriptors.at(i)->commonBoundaryLength, 1);
+			//Cost of false classification
+			SplitAndMergeError(pCurrSurfel, pOtherSurfel, nGTObjects, splitError, mergeError);
+			falseClassificationCost = (sameGTObj ? splitError : mergeError);
+			adjFeatureSet->AddFeature(SceneSegFile::FeaturesList::FalseSegmentationCost, SceneSegFile::FeaturesDictionary::dictionary.at(SceneSegFile::FeaturesList::FalseSegmentationCost), "int");
+			adjFeatureSet->CopyFeatureData<int>(SceneSegFile::FeaturesList::FalseSegmentationCost, &falseClassificationCost, 1);
 		}
 	}
 
@@ -1188,7 +1261,9 @@ void SurfelGraph::DetectVertices(
 	int iF[3], iP[3];
 	int iEdgeFeature, iEdgeFeature_, iEdgeFeature__;
 	bool bSmallestIndex;
-	Surfel *pSurfel_, *pEdgeFeature, *pFeature, *pFeature_, *pFeature__, *pF;
+	Surfel *pSurfel_, *pEdgeFeature, *pFeature, *pF;
+	Surfel *pFeature_[3];
+	int iiF;
 	bool bCycleCompleted;
 	int i, j;
 	float *P;
@@ -1223,6 +1298,9 @@ void SurfelGraph::DetectVertices(
 
 				iPt = RVLPCSEGMENT_GRAPH_GET_NODE(pEdgePtr);
 
+				//if (iPt == 296509)
+				//	int debug = 0;
+
 				if (bVisited[iPt])
 					continue;
 
@@ -1230,15 +1308,15 @@ void SurfelGraph::DetectVertices(
 
 				iFeature = (pPt->bBoundary ? edgeMap[iPt] : iSurfel);
 
-				if (iFeature < 0)
+				if (iFeature == -1)
 					continue;
 
 				bVisited[iPt] = true;
 
-				if (iPt == 304364)
-					int debug = 0;
+				//if (iPt / 640 == 304364)
+				//	int debug = 0;
 
-				pFeature = NodeArray.Element + iFeature;
+				pFeature = (iFeature >= 0 ? NodeArray.Element + iFeature : NULL);
 
 				iFeature__ = iFeature;
 
@@ -1262,36 +1340,46 @@ void SurfelGraph::DetectVertices(
 						{
 							if (iFeature__ != iFeature && iFeature__ != iFeature_)
 							{
+								//if (iFeature_ == 161 || iFeature__ == 161)
+								//	int debug = 0;
+
+								iF[0] = iFeature;
+								iF[1] = iFeature__;
+								iF[2] = iFeature_;
+
 								//// Determine convex/concave edges.
+
+								pFeature_[0] = pFeature_[1] = pFeature_[2] = NULL;
+
+								iiF = 0;
+
+								for (i = 0; i < 3; i++)
+									if (iF[i] >= 0)
+										pFeature_[iiF++] = NodeArray.Element + iF[i];
 
 								RVLNULL3VECTOR(bConvex);
 								
-								pFeature_ = (iFeature_ >= 0 ? NodeArray.Element + iFeature_ : NULL);
-								pFeature__ = (iFeature__ >= 0 ? NodeArray.Element + iFeature__ : NULL);
-
-								for (i = 0; i < pFeature->imgAdjacency.size(); i++)
+								if (pFeature_[0])
 								{
-									pF = pFeature->imgAdjacency.at(i);
+									for (i = 0; i < pFeature_[0]->imgAdjacency.size(); i++)
+								{
+										pF = pFeature_[0]->imgAdjacency.at(i);
 
-									if (pF == pFeature_)
-										bConvex[2] = (pFeature->imgAdjacencyDescriptors.at(i)->cupyDescriptor[0] >= 0);
-									else if (pF == pFeature__)
-										bConvex[0] = (pFeature->imgAdjacencyDescriptors.at(i)->cupyDescriptor[0] >= 0);
+										if (pF == pFeature_[1])
+											bConvex[0] = (pFeature_[0]->imgAdjacencyDescriptors.at(i)->cupyDescriptor[0] >= 0);
+										else if (pF == pFeature_[2])
+											bConvex[2] = (pFeature_[0]->imgAdjacencyDescriptors.at(i)->cupyDescriptor[0] >= 0);
 								}
 
-								if (pFeature_ == NULL)
+									if (pFeature_[1])
 								{
-									pF = pFeature_;
-									pFeature_ = pFeature__;
-									pFeature__ = pF;
-								}
-								
-								for (i = 0; i < pFeature_->imgAdjacency.size(); i++)
+										for (i = 0; i < pFeature_[1]->imgAdjacency.size(); i++)
 								{
-									pF = pFeature_->imgAdjacency.at(i);
+											pF = pFeature_[1]->imgAdjacency.at(i);
 
-									if (pF == pFeature__)
-										bConvex[1] = (pFeature_->imgAdjacencyDescriptors.at(i)->cupyDescriptor[0] >= 0);
+											if (pF == pFeature_[2])
+												bConvex[1] = (pFeature_[1]->imgAdjacencyDescriptors.at(i)->cupyDescriptor[0] >= 0);
+										}
 								}
 
 								// Create vertex.
@@ -1304,9 +1392,6 @@ void SurfelGraph::DetectVertices(
 
 								nFeatures = 0;
 
-								iF[0] = iFeature;
-								iF[1] = iFeature__;
-								iF[2] = iFeature_;
 								iP[0] = iPt;
 								iP[1] = iPt__;
 								iP[2] = iPt_;
@@ -1315,31 +1400,27 @@ void SurfelGraph::DetectVertices(
 
 								for (i = 0; i < 3; i++)
 								{
-									if (iF[i] >= 0)
-									{
 										P_ = pMesh->NodeArray.Element[iP[i]].P;
 
 										RVLSUM3VECTORS(P, P_, P);
 
+										if (iF[i] >= 0)
 										nFeatures++;
 									}
-								}
+
+									pVertex->iSurfelArray.n = nFeatures;
 
 								nVertexSurfelRelations += nFeatures;
 
-								fnFeatures = (float)nFeatures;
-
-								RVLSCALE3VECTOR2(P, fnFeatures, P);
+									RVLSCALE3VECTOR2(P, 3.0f, P);
 
 								// Classify vertex.
 
-								pVertex->type = bConvex[0] + bConvex[1] + bConvex[2];
+									pVertex->type = (nFeatures >= 2 ? bConvex[0] + bConvex[1] + bConvex[2] : 4);
 
 								// Fill iSurfelArray 
 
 								RVLMEM_ALLOC_STRUCT_ARRAY(pMem, int, nFeatures, pVertex->iSurfelArray.Element);
-
-								pVertex->iSurfelArray.n = nFeatures;
 
 								j = 0;
 
@@ -1349,9 +1430,9 @@ void SurfelGraph::DetectVertices(
 								
 								// Determine normal hull.
 
-								RVLMEM_ALLOC_STRUCT_ARRAY(pMem, NormalHullElement, (pVertex->type == 1 ? 4 : nFeatures), pVertex->normalHull.Element);
+									pVertex->normalHull.n = 0;
 
-								pVertex->normalHull.n = 0;
+								RVLMEM_ALLOC_STRUCT_ARRAY(pMem, NormalHullElement, (pVertex->type == 1 ? 4 : nFeatures), pVertex->normalHull.Element);
 
 								if (pVertex->type == 1)
 								{
@@ -1359,8 +1440,8 @@ void SurfelGraph::DetectVertices(
 										if (bConvex[i])
 											break;
 
-									N1 = NodeArray.Element[iF[i]].N;
-									N2 = NodeArray.Element[iF[(i + 1) % 3]].N;
+										N1 = pFeature_[i]->N;
+										N2 = pFeature_[(i + 1) % 3]->N;
 
 									UpdateNormalHull(pVertex->normalHull, N1);
 									UpdateNormalHull(pVertex->normalHull, N2);
@@ -1387,6 +1468,7 @@ void SurfelGraph::DetectVertices(
 								RVLQLIST_ADD_ENTRY(pVertexList, pVertex);
 
 								nVertices++;
+								}
 
 							}	// if (iFeature__ != iFeature && iFeature__ != iFeature_)
 
@@ -3043,9 +3125,8 @@ void SurfelGraph::DisplayConvexAndConcaveEdges(
 	int iSurfel, iSurfel_, iSurfel__;
 	int i;
 	int iPt, iPt_;
-	Point *pPt, *pPt_;
+	Point *pPt;
 	MeshEdgePtr *pEdgePtr, *pEdgePtr_;
-	BYTE edgeClass;
 	QList<MeshEdgePtr> *pEdgeList;
 	Surfel *pSurfel, *pSurfel_;
 	int iBoundary, iPointEdge;
@@ -3154,8 +3235,6 @@ void SurfelGraph::DisplayVertices()
 	int iLine = 0;
 
 	double P0[3], P[3], V[3];
-	Surfel *pSurfel;
-	int iSurfel;
 	int i;
 
 	Vertex *pVertex = vertexList.pFirst;

@@ -241,10 +241,11 @@ int main(int argc, char ** argv)
 				objectDetector.pObjects->SaveSegmentationLabelImg(segmentationImageFileName);
 
 				//cv::imshow("Segmentation", objectDetector.pObjects->CreateSegmentationImage());
-				cv::waitKey(1);
+				//cv::waitKey();
 			}
 #endif
 		}
+		printf("Sequence completed.\n");
 		system("pause");
 	}
 	else
