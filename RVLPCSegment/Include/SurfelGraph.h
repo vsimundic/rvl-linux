@@ -213,6 +213,12 @@ namespace RVL
 			std::string filename,
 			int minSurfelSize,
 			bool checkbackground);
+		void SplitAndMergeError(
+			Surfel *pCurrentSurfel,
+			Surfel *pOtherSurfel,
+			int nGTObjects,
+			int &splitError,
+			int &mergeError);
 		void SetPrimaryGTObj(
 			Surfel *pSurfel, 
 			cv::Mat labGTImg, 

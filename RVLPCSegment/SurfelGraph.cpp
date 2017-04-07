@@ -880,6 +880,66 @@ void SurfelGraph::DetermineImgAdjDescriptors(
 	}
 }
 
+void SurfelGraph::SplitAndMergeError(
+	Surfel *pCurrSurfel,
+	Surfel *pOtherSurfel,
+	int nGTObjects,
+	int &splitError,
+	int &mergeError)
+{
+	int iGTObject, GTObjectSize, GTObjectSize_, commonGTObjectSize;
+	int iRefSurfel, mergeCost, splitCost, maxOtherGTObjectSize;
+	Surfel *pOtherSurfel_;
+
+	int nTotal = 0;
+	int maxCommonGTObjectSize = 0;
+	int maxGTObjectSize = 0;
+
+	for (iGTObject = 0; iGTObject < nGTObjects; iGTObject++)
+	{
+		GTObjectSize = pCurrSurfel->GTObjHist.at(iGTObject);
+		if (GTObjectSize > maxGTObjectSize)
+		{
+			maxGTObjectSize = GTObjectSize;
+			iRefSurfel = 0;
+		}
+		GTObjectSize_ = pOtherSurfel->GTObjHist.at(iGTObject);
+		if (GTObjectSize_ > maxGTObjectSize)
+		{
+			maxGTObjectSize = GTObjectSize_;
+			iRefSurfel = 1;
+		}
+		commonGTObjectSize = GTObjectSize + GTObjectSize_;
+		nTotal += commonGTObjectSize;
+		if (commonGTObjectSize > maxCommonGTObjectSize)
+			maxCommonGTObjectSize = commonGTObjectSize;
+	}
+
+	mergeError = nTotal - maxCommonGTObjectSize;
+
+	pOtherSurfel_ = (iRefSurfel == 0 ? pOtherSurfel : pCurrSurfel);
+
+	if (pCurrSurfel->ObjectID == pOtherSurfel->ObjectID)
+	{
+		maxOtherGTObjectSize = 0;
+
+		for (iGTObject = 0; iGTObject < nGTObjects; iGTObject++)
+		{
+			if (iGTObject != pOtherSurfel_->ObjectID)
+			{
+				GTObjectSize_ = pOtherSurfel_->GTObjHist.at(iGTObject);
+
+				if (GTObjectSize_ > maxOtherGTObjectSize)
+					maxOtherGTObjectSize = GTObjectSize_;
+			}
+		}
+	}
+	else
+		maxOtherGTObjectSize = pOtherSurfel_->GTObjHist.at(pOtherSurfel_->ObjectID);
+
+	splitError = nTotal - maxGTObjectSize - maxOtherGTObjectSize;
+}
+
 //Generate scene segmenation file
 void SurfelGraph::GenerateSSF(
 	std::string filename, 
@@ -893,6 +953,8 @@ void SurfelGraph::GenerateSSF(
 
 	Surfel *pCurrSurfel = NodeArray.Element;
 	Surfel *pOtherSurfel;
+	int nGTObjects;
+	int splitError, mergeError, falseClassificationCost;
 	//for surfel
 	for (int i = 0; i < NodeArray.n; pCurrSurfel++, i++)
 	{
@@ -926,8 +988,9 @@ void SurfelGraph::GenerateSSF(
 		surfel->features.AddFeature(SceneSegFile::FeaturesList::PixelAffiliation, SceneSegFile::FeaturesDictionary::dictionary.at(SceneSegFile::FeaturesList::PixelAffiliation), "int");
 		surfel->features.SetFeatureData<int>(SceneSegFile::FeaturesList::PixelAffiliation, pixelIndices, pCurrSurfel->size);
 		//GTObjHistogram
-		int *GTObjHist = new int[pCurrSurfel->GTObjHist.size()];
-		for (int i = 0; i < pCurrSurfel->GTObjHist.size(); i++)
+		nGTObjects = pCurrSurfel->GTObjHist.size();
+		int *GTObjHist = new int[nGTObjects];
+		for (int i = 0; i < nGTObjects; i++)
 			GTObjHist[i] = pCurrSurfel->GTObjHist[i];
 		surfel->features.AddFeature(SceneSegFile::FeaturesList::GTObjHistogram, SceneSegFile::FeaturesDictionary::dictionary.at(SceneSegFile::FeaturesList::GTObjHistogram), "int");
 		surfel->features.SetFeatureData<int>(SceneSegFile::FeaturesList::GTObjHistogram, GTObjHist, pCurrSurfel->GTObjHist.size());
@@ -940,6 +1003,10 @@ void SurfelGraph::GenerateSSF(
 		for (int i = 0; i < pCurrSurfel->imgAdjacency.size(); i++)
 		{
 			pOtherSurfel = pCurrSurfel->imgAdjacency.at(i);
+
+			if (pOtherSurfel->size <= 1 || pOtherSurfel->bEdge)
+				continue;
+
 			//feature group's feature set
 			adjFeatureGroup->AddFeatureSet(pOtherSurfel - NodeArray.Element, SceneSegFile::FeatureSetsDictionary::dictionary.at(SceneSegFile::FeatureSetsList::AdjacencyNode), true);
 			std::shared_ptr<SceneSegFile::FeatureSet> adjFeatureSet = adjFeatureGroup->featureSets.at(pOtherSurfel - NodeArray.Element);
@@ -954,6 +1021,11 @@ void SurfelGraph::GenerateSSF(
 			//CommonBoundaryLenght
 			adjFeatureSet->AddFeature(SceneSegFile::FeaturesList::CommonBoundaryLength, SceneSegFile::FeaturesDictionary::dictionary.at(SceneSegFile::FeaturesList::CommonBoundaryLength), "int");
 			adjFeatureSet->CopyFeatureData<int>(SceneSegFile::FeaturesList::CommonBoundaryLength, &pCurrSurfel->imgAdjacencyDescriptors.at(i)->commonBoundaryLength, 1);
+			//Cost of false classification
+			SplitAndMergeError(pCurrSurfel, pOtherSurfel, nGTObjects, splitError, mergeError);
+			falseClassificationCost = (sameGTObj ? splitError : mergeError);
+			adjFeatureSet->AddFeature(SceneSegFile::FeaturesList::FalseSegmentationCost, SceneSegFile::FeaturesDictionary::dictionary.at(SceneSegFile::FeaturesList::FalseSegmentationCost), "int");
+			adjFeatureSet->CopyFeatureData<int>(SceneSegFile::FeaturesList::FalseSegmentationCost, &falseClassificationCost, 1);
 		}
 	}
 
@@ -1254,9 +1326,9 @@ void SurfelGraph::DetectVertices(
 										pF = pFeature_[0]->imgAdjacency.at(i);
 
 										if (pF == pFeature_[1])
-											bConvex[2] = (pFeature_[0]->imgAdjacencyDescriptors.at(i)->cupyDescriptor[0] >= 0);
-										else if (pF == pFeature_[2])
 											bConvex[0] = (pFeature_[0]->imgAdjacencyDescriptors.at(i)->cupyDescriptor[0] >= 0);
+										else if (pF == pFeature_[2])
+											bConvex[2] = (pFeature_[0]->imgAdjacencyDescriptors.at(i)->cupyDescriptor[0] >= 0);
 									}
 
 									if (pFeature_[1])
@@ -1328,8 +1400,8 @@ void SurfelGraph::DetectVertices(
 											if (bConvex[i])
 												break;
 
-										N1 = NodeArray.Element[iF[i]].N;
-										N2 = NodeArray.Element[iF[(i + 1) % 3]].N;
+										N1 = pFeature_[i]->N;
+										N2 = pFeature_[(i + 1) % 3]->N;
 
 										UpdateNormalHull(pVertex->normalHull, N1);
 										UpdateNormalHull(pVertex->normalHull, N2);
