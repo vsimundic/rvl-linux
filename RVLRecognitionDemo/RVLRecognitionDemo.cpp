@@ -496,7 +496,7 @@ int main(int argc, char ** argv)
 				mesh.LoadPolyDataFromPLY(filePath);
 
 
-				//surfels.NodeColors(SelectionColor);
+				surfels.NodeColors(SelectionColor);
 				
 				visualizer.renderer->RemoveAllViewProps();
 				recognition.InitDisplay(&visualizer, &mesh, SelectionColor);

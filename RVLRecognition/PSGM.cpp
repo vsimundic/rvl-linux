@@ -4344,7 +4344,8 @@ void PSGM::Match()
 
 	int iMSegment;
 
-	int maxMSegments = (MCTISet.nModels + 1) * (MCTISet.maxSegmentIdx + 1);
+	//int maxMSegments = (MCTISet.nModels + 1) * (MCTISet.maxSegmentIdx + 1);
+	int maxMSegments = (MCTISet.nModels) * (MCTISet.maxSegmentIdx + 1);
 
 	//delete scoreMatchMatrix	
 	for (iSCluster = 0; iSCluster < scoreMatchMatrix.n; iSCluster++)
@@ -5010,7 +5011,8 @@ void PSGM::CreateScoreMatchMatrixICP()
 {
 	int nClusters = CTISet.maxSegmentIdx + 1;
 
-	int maxMSegments = (MCTISet.nModels + 1) * (MCTISet.maxSegmentIdx + 1);
+	//int maxMSegments = (MCTISet.nModels + 1) * (MCTISet.maxSegmentIdx + 1);
+	int maxMSegments = (MCTISet.nModels) * (MCTISet.maxSegmentIdx + 1);
 
 	int iSCluster, iMSegment;
 
@@ -5623,7 +5625,8 @@ void PSGM::EvaluateMatchesByScore(
 	int nSSegments = CTISet.SegmentCTIs.n;
 
 	int iMSegment;
-	int nMSegments = (MCTISet.nModels + 1) * (MCTISet.maxSegmentIdx + 1);
+	//int nMSegments = (MCTISet.nModels + 1) * (MCTISet.maxSegmentIdx + 1);
+	int nMSegments = (MCTISet.nModels) * (MCTISet.maxSegmentIdx + 1);
 
 	float scoreTmp;
 
@@ -6752,7 +6755,7 @@ void PSGM::AddOneModelToVisualizer(Visualizer *pVisualizer, int iMatch, int iRan
 	iModel = pMCTI->iModel;
 
 	//For a chosen hypothesis, prints which scene segment is matched to which model
-	printf("SSegment: %d\tMatchedModel: %d\n", iCluster, iModel);
+	printf("SSegment: %d\tMatchedModel: %d (score: %f)\n", iCluster, iModel, scoreMatchMatrix.Element[iCluster].Element[iRank].cost);
 
 	//Setting descriptors:
 	float *dM = new float[66];
