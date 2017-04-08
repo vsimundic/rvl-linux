@@ -231,7 +231,7 @@ void PlanarSurfelDetector::CreateParamList(CRVLMem *pMem)
 void PlanarSurfelDetector::RandomIndices(Array<int> &A)
 {
 #ifdef RVLPLANARSURFELDETECTOR_PSEUDO_RANDOM_DEBUG
-	FILE *fp = fopen("C:\\RVL\\pseudorandom1000000.dat", "rb");
+	FILE *fp = fopen("..\\pseudorandom1000000.dat", "rb");
 
 	int *iRnd = new int[A.n];
 

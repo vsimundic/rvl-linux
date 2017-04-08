@@ -59,6 +59,7 @@ ObjectDetector::~ObjectDetector()
 		delete pPSGM;
 
 	RVL_DELETE_ARRAY(cfgFileName);
+
 	RVL_DELETE_ARRAY(SVMClassifierParamsFileName);
 }
 
@@ -139,6 +140,347 @@ void ObjectDetector::CreateParamList()
 	pParamData = ParamList.AddParam("ObjectGraph.concaveObjectAggregation", RVLPARAM_TYPE_BOOL, &bConcaveObjectAggregation);
 }
 
+void SmoothMesh(Mesh* pMesh, int noIter)
+{
+	//Bilateral filtring
+	vtkSmartPointer<vtkPolyData> norPD = pMesh->pPolygonData;
+	norPD->BuildLinks();
+	vtkSmartPointer<vtkFloatArray> norNormalData = vtkFloatArray::SafeDownCast(norPD->GetPointData()->GetNormals());
+	vtkSmartPointer<vtkPoints> norPts = norPD->GetPoints();
+	int noPts = norPts->GetNumberOfPoints();
+	float sumW = 0.0;
+	float sumPts[3];
+	float sumNorm[3];
+	int noCells = 0;
+	vtkSmartPointer<vtkIdList> ptCells = vtkSmartPointer<vtkIdList>::New();
+	vtkSmartPointer<vtkIdList> ptCellPts = vtkSmartPointer<vtkIdList>::New();
+	vtkSmartPointer<vtkPoints> pointsCpy = vtkSmartPointer<vtkPoints>::New();	//points copy where new coordinates will go
+	pointsCpy->SetDataTypeToFloat();
+	pointsCpy->SetNumberOfPoints(640 * 480);
+	//pointsCpy->DeepCopy(points);
+	vtkSmartPointer<vtkFloatArray> normalsCpy = vtkSmartPointer<vtkFloatArray>::New();	//point normals copy
+	normalsCpy->SetNumberOfComponents(3);
+	normalsCpy->SetNumberOfTuples(640 * 480);
+	int ptID = 0;
+	float tempDist2 = 0.0;
+	float tempL1 = 0.0;
+	float tempW = 0.0;
+	float currNor[3];
+	float tempNor[3];
+	float newPt[3];
+	float newNor[3];
+	double currPt[3];
+	double pt1[3];
+	for (int it = 0; it < noIter; it++)
+	{
+		for (int i = 0; i < noPts; i++)
+		{
+			norPts->GetPoint(i, currPt);
+			if ((currPt[0] <= -1.0) && (currPt[1] <= -1.0) && (currPt[2] <= -1.0))
+			{
+				pointsCpy->SetPoint(i, -1.0, -1.0, -1.0);
+				continue;
+			}
+			norNormalData->GetTupleValue(i, currNor);
+			norPD->GetPointCells(i, ptCells);
+			sumPts[0] = 0.0; sumPts[1] = 0.0; sumPts[2] = 0.0;
+			sumNorm[0] = 0.0; sumNorm[1] = 0.0; sumNorm[2] = 0.0;
+			sumW = 0.0;
+			noCells = ptCells->GetNumberOfIds();
+			for (int j = 0; j < noCells; j++)
+			{
+				ptCellPts->Reset();
+				norPD->GetCellPoints(ptCells->GetId(j), ptCellPts);
+				for (int k = 0; k < 3; k++)
+				{
+					ptID = ptCellPts->GetId(k);
+					if (ptID != i)
+					{
+						norPts->GetPoint(ptID, pt1);
+						norNormalData->GetTupleValue(ptID, tempNor);
+						//calculate distance
+						tempDist2 = sqrt(vtkMath::Distance2BetweenPoints(currPt, pt1));
+						//calculate L1 normals norm
+						tempL1 = abs(currNor[0] - tempNor[0]) + abs(currNor[1] - tempNor[1]) + abs(currNor[2] - tempNor[2]);
+						//calculate weight
+						tempW = exp(tempDist2) * exp(tempL1);
+						//calculate sum weight and sum point coordinates and sum normals
+						sumW += tempW;
+						sumPts[0] += tempW * pt1[0];
+						sumPts[1] += tempW * pt1[1];
+						sumPts[2] += tempW * pt1[2];
+						sumNorm[0] += tempW * tempNor[0];
+						sumNorm[1] += tempW * tempNor[1];
+						sumNorm[2] += tempW * tempNor[2];
+					}
+				}
+			}
+			//calculate new point coordinates and new normals
+			if (sumW == 0.0)
+			{
+				pointsCpy->SetPoint(i, currPt);
+				normalsCpy->SetTuple(i, currNor);
+			}
+			else
+			{
+				newPt[0] = sumPts[0] / sumW;
+				newPt[1] = sumPts[1] / sumW;
+				newPt[2] = sumPts[2] / sumW;
+				newNor[0] = sumNorm[0] / sumW;
+				newNor[1] = sumNorm[1] / sumW;
+				newNor[2] = sumNorm[2] / sumW;
+				pointsCpy->SetPoint(i, newPt);
+				normalsCpy->SetTuple(i, newNor);
+			}
+		}
+		norPD->SetPoints(pointsCpy);
+		//norPD->Print(cout);
+		norPD->GetPointData()->SetNormals(normalsCpy);
+		std::cout << "Iteration " << it << " finished!" << std::endl;
+	}
+
+	//Updating mesh point and normal data;
+	//pMesh->pPolygonData = normalsFilter->GetOutput();
+	//vtkSmartPointer<vtkPoints> pdPoints = normalsFilter->GetOutput()->GetPoints();
+	//vtkSmartPointer<vtkFloatArray> normals = vtkFloatArray::SafeDownCast(normalsFilter->GetOutput()->GetPointData()->GetNormals());
+	int noPoints = pointsCpy->GetNumberOfPoints();
+	//float normal[3];
+	Point* currPoint;
+	double currPointD[3];
+	for (int i = 0; i < noPoints; i++)
+	{
+		currPoint = pMesh->NodeArray.Element + i;
+		pointsCpy->GetPoint(i, currPointD);
+		normalsCpy->GetTupleValue(i, currPoint->N);
+		currPoint->P[0] = currPointD[0];
+		currPoint->P[1] = currPointD[1];
+		currPoint->P[2] = currPointD[2];
+	}
+}
+
+void LaplaceSmooting(Mesh *pMesh, int noIter)
+{
+	//get a copy of pPolygonData points (destination points for first iteration)
+	vtkSmartPointer<vtkPoints> pointsSource = pMesh->pPolygonData->GetPoints();
+	vtkSmartPointer<vtkPoints> pointsDestination = vtkSmartPointer<vtkPoints>::New();
+	pointsDestination->DeepCopy(pMesh->pPolygonData->GetPoints());
+	vtkSmartPointer<vtkPoints> pointsTemp;
+	//Calculate cotangent weights for each point to point edge
+	/*std::vector<std::vector<float>> neighboorhoodCoTangentW;
+	neighboorhoodCoTangentW.resize(pMesh->NodeArray.n);*/
+	//std::vector<std::vector<bool>> neighboorhoodBoundary;
+	//neighboorhoodBoundary.resize(pMesh->NodeArray.n);
+
+	Point* currPoint;
+	double currPointD[3];
+	Point* currEdgePoint;
+	double currEdgePointD[3];
+	Point* nextEdgePoint;
+	double nextEdgePointD[3];
+	Point* prevEdgePoint;
+	double prevEdgePointD[3];
+	double destCurrPointD[3];
+	MeshEdge* pEdge;
+	MeshEdgePtr* pEdgePtr;
+	int othersideIdx;
+	int noPointEdges = 0;
+	int neighbourPoints[20]; //assumption: there is maximum 20 edges for any point
+	bool boundaryEdges[20];
+	float neighboorhoodCoTangentW[20];
+	//Running for all points
+	float v1[3], v2[3], v3[3], v4[3];
+	int id_curr, id_prev, id_next;
+	float cotan1 = 0.0f;
+	float cotan2 = 0.0f;
+	float v1v2Dot;
+	float v1v2Cross[3];
+	float v3v4Dot;
+	float v3v4Cross[3];
+	float cog[3];
+	float sum;
+	float norm;
+	for (int iter = 0; iter < noIter; iter++)
+	{
+		for (int idx = 0; idx < pMesh->NodeArray.n; idx++)
+		{
+			//current point and edge list
+			currPoint = pMesh->NodeArray.Element + idx;
+			if ((currPoint->P[0] == 0.0) && (currPoint->P[1] == 0.0) && (currPoint->P[2] == 0.0))
+				continue;
+			pointsSource->GetPoint(idx, currPointD);
+			pEdgePtr = currPoint->EdgeList.pFirst;
+			noPointEdges = 0;
+			while (pEdgePtr)
+			{
+				RVLPCSEGMENT_GRAPH_GET_NEIGHBOR(idx, pEdgePtr, pEdge, othersideIdx);	//get the other side index and point
+				nextEdgePoint = pMesh->NodeArray.Element + othersideIdx;
+				neighbourPoints[noPointEdges] = othersideIdx;	//set other side index as in the neighbourhood
+				if ((noPointEdges == 0) || (pEdgePtr->pNext == NULL))	//Check if that edge is boundary
+					boundaryEdges[noPointEdges] = true;
+				else
+					boundaryEdges[noPointEdges] = false;
+
+				noPointEdges++;
+				pEdgePtr = pEdgePtr->pNext;
+			}
+
+			//calculating cotangent weight
+			for (id_curr = 0; id_curr < noPointEdges; id_curr++)
+			{
+				id_next = (id_curr + 1) >= noPointEdges ? 0 : id_curr + 1;
+				id_prev = (id_curr - 1) >= 0 ? (id_curr - 1) : noPointEdges - 1;
+
+				/*currEdgePoint = pMesh->NodeArray.Element + neighbourPoints[id_curr];
+				nextEdgePoint = pMesh->NodeArray.Element + neighbourPoints[id_next];
+				prevEdgePoint = pMesh->NodeArray.Element + neighbourPoints[id_prev];
+				v1[0] = currPoint->P[0] - prevEdgePoint->P[0];
+				v1[1] = currPoint->P[1] - prevEdgePoint->P[1];
+				v1[2] = currPoint->P[2] - prevEdgePoint->P[2];
+				v2[0] = currEdgePoint->P[0] - prevEdgePoint->P[0];
+				v2[1] = currEdgePoint->P[1] - prevEdgePoint->P[1];
+				v2[2] = currEdgePoint->P[2] - prevEdgePoint->P[2];
+				v3[0] = currPoint->P[0] - nextEdgePoint->P[0];
+				v3[1] = currPoint->P[1] - nextEdgePoint->P[1];
+				v3[2] = currPoint->P[2] - nextEdgePoint->P[2];
+				v4[0] = currEdgePoint->P[0] - nextEdgePoint->P[0];
+				v4[1] = currEdgePoint->P[1] - nextEdgePoint->P[1];
+				v4[2] = currEdgePoint->P[2] - nextEdgePoint->P[2];*/
+				pointsSource->GetPoint(neighbourPoints[id_curr], currEdgePointD);
+				pointsSource->GetPoint(neighbourPoints[id_next], nextEdgePointD);
+				pointsSource->GetPoint(neighbourPoints[id_prev], prevEdgePointD);
+				v1[0] = currPointD[0] - prevEdgePointD[0];
+				v1[1] = currPointD[1] - prevEdgePointD[1];
+				v1[2] = currPointD[2] - prevEdgePointD[2];
+				v2[0] = currEdgePointD[0] - prevEdgePointD[0];
+				v2[1] = currEdgePointD[1] - prevEdgePointD[1];
+				v2[2] = currEdgePointD[2] - prevEdgePointD[2];
+				v3[0] = currPointD[0] - nextEdgePointD[0];
+				v3[1] = currPointD[1] - nextEdgePointD[1];
+				v3[2] = currPointD[2] - nextEdgePointD[2];
+				v4[0] = currEdgePointD[0] - nextEdgePointD[0];
+				v4[1] = currEdgePointD[1] - nextEdgePointD[1];
+				v4[2] = currEdgePointD[2] - nextEdgePointD[2];
+
+				/*const Vec3 v1 = c_pos - geom.vertex(id_prev);
+				const Vec3 v2 = geom.vertex(id_curr) - geom.vertex(id_prev);
+				const Vec3 v3 = c_pos - geom.vertex(id_next);
+				const Vec3 v4 = geom.vertex(id_curr) - geom.vertex(id_next);*/
+
+				// wij = (cot(alpha) + cot(beta)),
+				// for boundary edge, there is only one such edge
+				// If the mesh is not a water-tight closed volume
+				// we must check for edges lying on the sides of wholes
+				cotan1 = 0.0;
+				cotan2 = 0.0;
+				if (!boundaryEdges[id_curr])
+				{
+					// general case: not a boundary
+					v1v2Dot = RVLDOTPRODUCT3(v1, v2);
+					RVLCROSSPRODUCT3(v1, v2, v1v2Cross);
+					norm = RVLDOTPRODUCT3(v1v2Cross, v1v2Cross);
+					cotan1 = v1v2Dot / sqrt(norm);
+					v3v4Dot = RVLDOTPRODUCT3(v3, v4);
+					RVLCROSSPRODUCT3(v3, v4, v3v4Cross);
+					norm = RVLDOTPRODUCT3(v3v4Cross, v3v4Cross);
+					cotan2 = v3v4Dot / sqrt(norm);
+					/*cotan1 = (v1.dot(v2)) / (v1.cross(v2)).norm();
+					cotan2 = (v3.dot(v4)) / (v3.cross(v4)).norm();*/
+				}
+				else // boundary edge, only have one such angle
+				{
+					if (id_next == id_prev)
+					{
+						// two angles are the same, e.g. corner of a square
+						v1v2Dot = RVLDOTPRODUCT3(v1, v2);
+						RVLCROSSPRODUCT3(v1, v2, v1v2Cross);
+						norm = RVLDOTPRODUCT3(v1v2Cross, v1v2Cross);
+						cotan1 = v1v2Dot / sqrt(norm);
+						//cotan1 = (v1.dot(v2)) / (v1.cross(v2)).norm();
+					}
+					else
+					{
+						// find the angle not on the boundary
+						if (!boundaryEdges[id_next])
+						{
+							v3v4Dot = RVLDOTPRODUCT3(v3, v4);
+							RVLCROSSPRODUCT3(v3, v4, v3v4Cross);
+							norm = RVLDOTPRODUCT3(v3v4Cross, v3v4Cross);
+							cotan2 = v3v4Dot / sqrt(norm);
+							//cotan2 = (v3.dot(v4)) / (v3.cross(v4)).norm();
+						}
+						else
+						{
+							v1v2Dot = RVLDOTPRODUCT3(v1, v2);
+							RVLCROSSPRODUCT3(v1, v2, v1v2Cross);
+							norm = RVLDOTPRODUCT3(v1v2Cross, v1v2Cross);
+							cotan1 = v1v2Dot / sqrt(norm);
+							//cotan1 = (v1.dot(v2)) / (v1.cross(v2)).norm();
+						}
+					}
+				}
+
+				//neighboorhoodCoTangentW.at(i).push_back(cotan1 + cotan2);
+				neighboorhoodCoTangentW[id_curr] = cotan1 + cotan2;
+			}
+
+			//Calculating new point position
+			cog[0] = 0.0;
+			cog[1] = 0.0;
+			cog[2] = 0.0;
+			sum = 0.0;
+			for (int id_curr = 0; id_curr < noPointEdges; id_curr++)
+			{
+				//float w = _cotan_weights[i][n];
+				//cog += src_vertices[neigh] * w;
+				//sum += w;
+				pointsSource->GetPoint(neighbourPoints[id_curr], currEdgePointD);
+				cog[0] += currEdgePointD[0] * neighboorhoodCoTangentW[id_curr];
+				cog[1] += currEdgePointD[1] * neighboorhoodCoTangentW[id_curr];
+				cog[2] += currEdgePointD[2] * neighboorhoodCoTangentW[id_curr];
+				sum += neighboorhoodCoTangentW[id_curr];
+			}
+			//float t = smooth_factors[i];
+			//dst_vertices[i] = (cog / sum) * t + src_vertices[i] * (1.f - t);
+			destCurrPointD[0] = (cog[0] / sum) * 1 + currPointD[0] * 1;
+			destCurrPointD[1] = (cog[1] / sum) * 1 + currPointD[1] * 1;
+			destCurrPointD[2] = (cog[2] / sum) * 1 + currPointD[2] * 1;
+			pointsDestination->SetPoint(idx, destCurrPointD);
+		}
+		//Swap source and distination
+		pointsTemp = pointsSource;
+		pointsSource = pointsDestination;
+		pointsDestination = pointsTemp;
+		std::cout << "Laplace smoothing: Finished " << iter << " iteration!" << std::endl;
+	}
+
+	//setting final points (? is this needed ?)
+	pMesh->pPolygonData->SetPoints(pointsSource);
+
+	//Recalculating normals
+	vtkSmartPointer<vtkPolyDataNormals> normalsFilter = vtkSmartPointer<vtkPolyDataNormals>::New();
+	normalsFilter->SetInputData(pMesh->pPolygonData);
+	normalsFilter->ComputeCellNormalsOff();
+	normalsFilter->ComputePointNormalsOn();
+	normalsFilter->SplittingOff();
+	normalsFilter->Update();
+
+	//Updating mesh point and normal data;
+	pMesh->pPolygonData = normalsFilter->GetOutput();
+	vtkSmartPointer<vtkPoints> pdPoints = normalsFilter->GetOutput()->GetPoints();
+	vtkSmartPointer<vtkFloatArray> normals = vtkFloatArray::SafeDownCast(normalsFilter->GetOutput()->GetPointData()->GetNormals());
+	int noPoints = pdPoints->GetNumberOfPoints();
+	//float normal[3];
+	for (int i = 0; i < noPoints; i++)
+	{
+		currPoint = pMesh->NodeArray.Element + i;
+		pdPoints->GetPoint(i, currPointD);
+		normals->GetTupleValue(i, currPoint->N);
+		currPoint->P[0] = currPointD[0];
+		currPoint->P[1] = currPointD[1];
+		currPoint->P[2] = currPointD[2];
+	}
+}
+
 void ObjectDetector::DetectObjects(char *MeshFilePathName)
 {
 	// Segmentation to surfels.
@@ -173,6 +515,8 @@ void ObjectDetector::DetectObjects(char *MeshFilePathName)
 			printf("Mesh created.\n");
 		else
 			printf("ERROR: Mesh can't be created!\n");
+
+		//SmoothMesh(&mesh, 30);
 
 		// Segment mesh to surfels.				
 
@@ -277,14 +621,18 @@ void ObjectDetector::DetectObjects(char *MeshFilePathName)
 			//if (bCTIBasedObjectAggregation)
 			pObjects->GetVertices();	
 			pPSGM->Init(&mesh);
-			pPSGM->CTIs(pObjects, &CTIs);
+			//pPSGM->CTIs(pObjects, &CTIs);
 			pPSGM->convexTemplate = pPSGM->convexTemplateBox;
 			pPSGM->CTIs(pObjects, &boundingBoxes);
-			pPSGM->convexTemplate = pPSGM->convexTemplate66;
-			pObjects->DetermineObjectConvexityData(convexityThr, 0.15, bConcaveObjectAggregation);
-			pObjects->ObjectAggregationLevel2_ViaObjectPairConvexity(convexityThr, convexityRatioThr1, convexityRatioThr2, pObjects->minObjectSize);
+			//pPSGM->convexTemplate = pPSGM->convexTemplate66;
+			pObjects->pMesh = &mesh;
+			pObjects->DetermineObjectConvexityData(convexityThr, 0.15, bConcaveObjectAggregation, true);
+			pObjects->vpObjectAggregationLevel2CriterionData = this;
+			pObjects->ExtFuncCheckIfWithinVolume = &RVL::ObjectDetector::CheckIfWithinCTIBoundingBox;
+			pObjects->ObjectAggregationLevel2_ViaObjectPairConvexity(convexityThr, convexityRatioThr1, convexityRatioThr2, pObjects->minObjectSize, true);
 			cv::imshow("New Colored object image", pObjects->CreateSegmentationImage());
 			cv::waitKey(1);
+
 			////
 			//Evaluation
 			/*int E[2];
@@ -331,7 +679,7 @@ void ObjectDetector::BoundingBox(
 	if (!pPSGM->bGnd)
 		return;
 
-	if (CTIs.SegmentCTIs.n <= iObject1 && CTIs.SegmentCTIs.n <= iObject2)
+	if (boundingBoxes.SegmentCTIs.n <= iObject1 && boundingBoxes.SegmentCTIs.n <= iObject2)
 		return;
 
 	int iObject[2];
@@ -353,11 +701,11 @@ void ObjectDetector::BoundingBox(
 	RECOG::PSGM_::ModelInstance *pCTI;
 
 	for (i = 0; i < 2; i++)
-		if (CTIs.SegmentCTIs.Element[iObject[i]].n > 0)
+		if (boundingBoxes.SegmentCTIs.Element[iObject[i]].n > 0)
 		{
-			iCTI = CTIs.SegmentCTIs.Element[iObject[i]].Element[0];
+			iCTI = boundingBoxes.SegmentCTIs.Element[iObject[i]].Element[0];
 
-			pCTI = CTIs.pCTI.Element[iCTI];
+			pCTI = boundingBoxes.pCTI.Element[iCTI];
 
 			if (R_ == NULL || pCTI->varX < varX)
 			{
@@ -447,5 +795,27 @@ void OBJECT_DETECTION::Symmetry(
 	}	
 
 	delete[] symmetryMatch.Element;
+}
+
+bool ObjectDetector::CheckIfWithinCTIBoundingBox(void * odObj, int iObject1, int iObject2, float dimThr)
+{
+	ObjectDetector * od = (ObjectDetector*)odObj;
+	//Generate CTI bounding box
+	RECOG::PSGM_::ModelInstance boundingBox;
+	boundingBox.modelInstance.Element = new RECOG::PSGM_::ModelInstanceElement[6];
+	od->BoundingBox(od->pObjects->iObjectAssignedToNode[iObject1], od->pObjects->iObjectAssignedToNode[iObject2], &boundingBox);
+
+	//Determine bounding box dimensions
+	float dims[3];
+	dims[0] = abs(boundingBox.modelInstance.Element[4].d + boundingBox.modelInstance.Element[1].d); //"X"
+	dims[1] = abs(boundingBox.modelInstance.Element[5].d + boundingBox.modelInstance.Element[2].d); //"Y"
+	dims[2] = abs(boundingBox.modelInstance.Element[0].d + boundingBox.modelInstance.Element[3].d); //"Z"
+
+	if ((dims[0] < dimThr) && (dims[1] < dimThr) && (dims[2] < dimThr))
+		return true;
+	else
+		return false;
+
+	delete[] boundingBox.modelInstance.Element;
 }
 

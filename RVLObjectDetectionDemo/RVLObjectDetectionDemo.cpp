@@ -26,6 +26,8 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 #include "PCLTools.h"
 #include "RGBDCamera.h"
 #include "PCLMeshBuilder.h"
+#include "vtkOBBTree.h"
+#include "vtkLine.h"
 
 using namespace RVL;
 
@@ -49,6 +51,98 @@ void CreateParamList(
 	pParamData = pParamList->AddParam("SegmentationResultsFileName", RVLPARAM_TYPE_STRING, pSegmentationResultsFileName);
 	pParamData = pParamList->AddParam("Visualization.3D", RVLPARAM_TYPE_BOOL, &b3DVisualization);
 	pParamData = pParamList->AddParam("Visualization.2D", RVLPARAM_TYPE_BOOL, &b2DVisualization);
+}
+
+//void VisualizeSurfelNormals(Visualizer *vis, SurfelGraph* pSurfels)
+//{
+//	Surfel *pSurfel;
+//	vtkSmartPointer<vtkPoints> points = vtkSmartPointer<vtkPoints>::New();
+//	points->SetDataTypeToDouble();
+//	vtkSmartPointer<vtkFloatArray> normals = vtkSmartPointer<vtkFloatArray>::New();
+//	normals->SetNumberOfComponents(3);
+//	normals->SetName("Normals");
+//	for (int i = 0; i < pSurfels->NodeArray.n; i++)
+//	{
+//		pSurfel = pSurfels->NodeArray.Element + i;
+//		if ((pSurfel->size < 2) || pSurfel->bEdge)
+//			continue;
+//
+//		points->InsertNextPoint(pSurfel->P);
+//		normals->InsertNextTuple(pSurfel->N);
+//	}
+//	vtkSmartPointer<vtkPolyData> pd = vtkSmartPointer<vtkPolyData>::New();
+//	pd->SetPoints(points);
+//	pd->GetPointData()->AddArray(normals);
+//	pd->GetPointData()->SetActiveNormals("Normals");
+//
+//	vtkSmartPointer<vtkArrowSource> arrowSource = vtkSmartPointer<vtkArrowSource>::New();
+//
+//	vtkSmartPointer<vtkGlyph3D> glyph3D = vtkSmartPointer<vtkGlyph3D>::New();
+//	glyph3D->SetSourceConnection(arrowSource->GetOutputPort());
+//	glyph3D->SetVectorModeToUseNormal();
+//	glyph3D->SetInputData(pd);
+//	glyph3D->SetScaleFactor(0.03);
+//	glyph3D->Update();
+//
+//	vtkSmartPointer<vtkPolyDataMapper> mapper =	vtkSmartPointer<vtkPolyDataMapper>::New();
+//	mapper->SetInputConnection(glyph3D->GetOutputPort());
+//	vtkSmartPointer<vtkActor> actor = vtkSmartPointer<vtkActor>::New();
+//	actor->SetMapper(mapper);
+//	vis->renderer->AddActor(actor);
+//}
+
+void MeshSmoothTest(vtkSmartPointer<vtkPolyData> pd)
+{
+	// Initialize VTK.
+	vtkSmartPointer<vtkRenderer> renderer = vtkSmartPointer<vtkRenderer>::New();;
+	vtkSmartPointer<vtkRenderWindow> window = vtkSmartPointer<vtkRenderWindow>::New();
+	vtkSmartPointer<vtkRenderWindowInteractor> interactor = vtkSmartPointer<vtkRenderWindowInteractor>::New();
+	window->AddRenderer(renderer);
+	window->SetSize(800, 600);
+	interactor->SetRenderWindow(window);
+	vtkSmartPointer<vtkInteractorStyleTrackballCamera> style = vtkSmartPointer<vtkInteractorStyleTrackballCamera>::New();
+	interactor->SetInteractorStyle(style);
+	renderer->SetBackground(0.5294, 0.8078, 0.9803);
+
+	//vtkSmartPointer<vtkSmoothPolyDataFilter> smoothFilter = vtkSmartPointer<vtkSmoothPolyDataFilter>::New();
+	//smoothFilter->SetInputData(pd);
+	//smoothFilter->SetNumberOfIterations(30);
+	//smoothFilter->SetRelaxationFactor(1.0);
+	////smoothFilter->FeatureEdgeSmoothingOn();
+	////smoothFilter->SetFeatureAngle(45);
+	////smoothFilter->SetEdgeAngle(60);
+	//smoothFilter->BoundarySmoothingOn();
+	//smoothFilter->Update();
+
+	vtkSmartPointer<vtkWindowedSincPolyDataFilter> smoother = vtkSmartPointer<vtkWindowedSincPolyDataFilter>::New();
+	smoother->SetInputData(pd);
+	smoother->SetNumberOfIterations(30);
+	smoother->BoundarySmoothingOn();
+	//smoother->FeatureEdgeSmoothingOn();
+	//smoother->SetFeatureAngle(60.0);
+	/*smoother->SetPassBand(0.1);
+	smoother->NonManifoldSmoothingOn();
+	smoother->NormalizeCoordinatesOn();*/
+	smoother->Update();
+
+
+	vtkSmartPointer<vtkPolyDataMapper> mapper = vtkSmartPointer<vtkPolyDataMapper>::New();
+	mapper->SetInputConnection(smoother->GetOutputPort());
+	vtkSmartPointer<vtkActor> act = vtkSmartPointer<vtkActor>::New();
+	act->SetMapper(mapper);
+	renderer->AddActor(act);
+
+	//Start VTK
+	renderer->ResetCamera();
+	window->Render();
+	interactor->Start();
+}
+
+template <class T>
+inline void hash_combine(std::size_t& seed, const T& v)
+{
+	std::hash<T> hasher;
+	seed ^= hasher(v) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
 }
 
 int main(int argc, char ** argv)
@@ -156,6 +250,7 @@ int main(int argc, char ** argv)
 	}
 	else
 	{
+
 		objectDetector.DetectObjects(MeshFileName);
 
 		objectDetector.Evaluate(fp, MeshFileName);
@@ -168,7 +263,7 @@ int main(int argc, char ** argv)
 				//Visualization
 				cv::imshow("Colored surfel image", objectDetector.pSurfels->GenColoredSurfelImgFromSSF(objectDetector.pObjects->ssf));
 				cv::imshow("Colored segmentation image", objectDetector.pObjects->CreateSegmentationImageFromSSF());
-				cv::waitKey();
+				cv::waitKey(1);
 			}
 		}
 		else
@@ -190,7 +285,7 @@ int main(int argc, char ** argv)
 			visualizer.b3D = b3DVisualization;
 
 			visualizer.Create();
-			
+
 #ifdef RVLSURFEL_IMAGE_ADJACENCY
 			if (objectDetector.bSegmentToObjects)
 			{
@@ -203,7 +298,7 @@ int main(int argc, char ** argv)
 				objectDetector.pSurfels->InitDisplay(&visualizer, &(objectDetector.mesh), objectDetector.pSurfelDetector);
 				objectDetector.pSurfels->Display(&visualizer, &(objectDetector.mesh));
 			}
-				
+
 #ifdef RVLSURFEL_IMAGE_ADJACENCY
 			if (objectDetector.bSegmentToObjects)
 			{
@@ -231,11 +326,11 @@ int main(int argc, char ** argv)
 
 			// END DEMO
 
-			objectDetector.pPSGM->convexTemplate = objectDetector.pPSGM->convexTemplateBox;
+			/*objectDetector.pPSGM->convexTemplate = objectDetector.pPSGM->convexTemplateBox;
 
 			objectDetector.pPSGM->DisplayCTIs(&visualizer, &(objectDetector.boundingBoxes));
 
-			objectDetector.pPSGM->convexTemplate = objectDetector.pPSGM->convexTemplate66;
+			objectDetector.pPSGM->convexTemplate = objectDetector.pPSGM->convexTemplate66;*/
 
 			//detector.DisplaySoftEdges(&visualizer, &mesh, &surfels, SelectionColor);
 			visualizer.Run();

@@ -641,6 +641,8 @@ ObjectGraph::ObjectGraph()
 
 	relationClassifier = RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_NLMC;
 	objectAggregationLevel2Method = RVLPCSEGMENT_OBJECT_AGGREGATION_LEVEL2_METHOD_CONVEXITY;
+
+	ExtFuncCheckIfWithinVolume = NULL;
 }
 
 
@@ -1414,7 +1416,7 @@ void ObjectGraph::WERSegmentation()
 //
 //	fclose(fpLog);
 //#endif
-}
+	}
 
 //void ObjectGraph::CreateSortedObjectArray()
 //{
@@ -1904,7 +1906,7 @@ bool RVL::SURFEL::objectMouseRButtonDownUserFunction(
 		return false;
 }
 
-void ObjectGraph::DetermineObjectConvexityData(float convexThr, float minDiffFlipReq, bool setflip)
+void ObjectGraph::DetermineObjectConvexityData(float convexThr, float minDiffFlipReq, bool setflip, bool verbose)
 {
 	//Reseting convexity data
 	if (this->additionalObjectData.CHVertexIndices.size())
@@ -1958,9 +1960,6 @@ void ObjectGraph::DetermineObjectConvexityData(float convexThr, float minDiffFli
 		if (pObject->size < 20)
 			continue;
 
-		//if (iObject == 37 || iObject == 54)
-		//	int debug = 0;
-		
 		// Sort surfels in objects.
 		this->SortElements(pObject, &sortedElementIdxArray);
 
@@ -2158,6 +2157,8 @@ void ObjectGraph::DetermineObjectConvexityData(float convexThr, float minDiffFli
 				this->additionalObjectData.convexityMultipliers.at(iObject) = -1.0;
 			//std::cout << "Object " << iObject << " is concave!" << std::endl;
 		}
+		if (verbose)
+			std::cout << "Object " << iObject << "has convexity ratios (" << defDirRatio << ", " << otherDirRatio << ") therfore multiplier is: " << this->additionalObjectData.convexityMultipliers.at(iObject) << std::endl;
 	}	// for every object
 	//Deref
 	delete[] sortedElementIdxArray.Element;
@@ -2222,6 +2223,8 @@ void ObjectGraph::CalculateObjectsColorHistogram()
 
 void ObjectGraph::CalculateConvexityRatiosForObjectPair(int firstObject, int secondObject, float& firstRatio, float& secondRatio, float convexThr)
 {
+	//if ((firstObject == 5) && (secondObject == 10))	//60, 484 za test 57
+	//	RenderConvexityPos(secondObject, firstObject, this->pMesh);
 	GRAPH::AggregateNode<SURFEL::AgEdge> *pFirstObject = this->NodeArray.Element + firstObject;
 	GRAPH::AggregateNode<SURFEL::AgEdge> *pSecondObject = this->NodeArray.Element + secondObject;
 
@@ -2665,6 +2668,14 @@ void ObjectGraph::ObjectAggregationLevel2_ViaObjectPairConvexity(float convexThr
 		{
 			if (objectAggregationLevel2Method == RVLPCSEGMENT_OBJECT_AGGREGATION_LEVEL2_METHOD_CONVEXITY)
 			{
+				//if external function for checking if objects are within volume is defined
+				//Only objects within specified volume within each otherwill be considered
+				if (ExtFuncCheckIfWithinVolume)
+				{
+					//Check if within volume
+					if (!ExtFuncCheckIfWithinVolume(vpObjectAggregationLevel2CriterionData, validObjects.at(iObject), validObjects.at(iObject2), 0.30))	//HARDCODED THRESHOLD?????
+						continue;
+				}
 				this->CalculateConvexityRatiosForObjectPair(validObjects.at(iObject), validObjects.at(iObject2), firstRatio, secondRatio, convexThr);
 				if (verbose)
 					std::cout << "(" << validObjects.at(iObject) << ", " << validObjects.at(iObject2) << ")" << " = " << firstRatio << ", " << secondRatio << std::endl;
@@ -2811,7 +2822,10 @@ void ObjectGraph::ObjectAggregationLevel2_ViaObjectPairConvexity(float convexThr
 					ss.clear();
 					ss.str("");
 					ss << inputcluster.at(iObject) << "_" << inputcluster.at(iObject2);
-					score = min_convexity_values.at(ss.str());
+					if (min_convexity_values.count(ss.str()))
+						score = min_convexity_values.at(ss.str());
+					else
+						score = 0.0;
 					if (score > startObjScore)
 					{
 						startObj = iObject;
@@ -2838,11 +2852,17 @@ void ObjectGraph::ObjectAggregationLevel2_ViaObjectPairConvexity(float convexThr
 					object_links.at(iObject).push_back(temp_pair());
 					object_links.at(iObject).at(object_links.at(iObject).size() - 1).a = iObject;
 					object_links.at(iObject).at(object_links.at(iObject).size() - 1).b = iObject2;
-					object_links.at(iObject).at(object_links.at(iObject).size() - 1).score = min_convexity_values.at(ss.str());
+					if (min_convexity_values.count(ss.str()))
+						object_links.at(iObject).at(object_links.at(iObject).size() - 1).score = min_convexity_values.at(ss.str());
+					else
+						object_links.at(iObject).at(object_links.at(iObject).size() - 1).score = 0.0;
 					object_links.at(iObject2).push_back(temp_pair());
 					object_links.at(iObject2).at(object_links.at(iObject2).size() - 1).a = iObject2;
 					object_links.at(iObject2).at(object_links.at(iObject2).size() - 1).b = iObject;
-					object_links.at(iObject2).at(object_links.at(iObject2).size() - 1).score = min_convexity_values.at(ss.str());
+					if (min_convexity_values.count(ss.str()))
+						object_links.at(iObject2).at(object_links.at(iObject2).size() - 1).score = min_convexity_values.at(ss.str());
+					else
+						object_links.at(iObject2).at(object_links.at(iObject2).size() - 1).score = 0.0;
 				}
 			}
 			//sort generated lists
@@ -2876,7 +2896,11 @@ void ObjectGraph::ObjectAggregationLevel2_ViaObjectPairConvexity(float convexThr
 							ss.clear();
 							ss.str("");
 							ss << inputcluster.at(k) << "_" << inputcluster.at(object_links.at(currObj).at(l).b);
-							if (min_convexity_values.at(ss.str()) < ratioThr2) //if the score is smaller against any currently labeled member then break
+							if (min_convexity_values.count(ss.str()))
+								score = min_convexity_values.at(ss.str());
+							else
+								score = 0.0;
+							if (score < ratioThr2) //if the score is smaller against any currently labeled member then break
 							{
 								fail = true;
 								break;
@@ -3264,4 +3288,115 @@ void ObjectGraph::GetVertices()
 	delete[] pSurfels->bVertexAssigned;
 
 	pSurfels->bVertexAssigned = NULL;
+}
+
+void ObjectGraph::RenderConvexityPos(int iObjectSurf, int iObjectVert, Mesh *pMeshScene)
+{
+	// Initialize VTK.
+	vtkSmartPointer<vtkRenderer> renderer = vtkSmartPointer<vtkRenderer>::New();;
+	vtkSmartPointer<vtkRenderWindow> window = vtkSmartPointer<vtkRenderWindow>::New();
+	vtkSmartPointer<vtkRenderWindowInteractor> interactor = vtkSmartPointer<vtkRenderWindowInteractor>::New();
+	window->AddRenderer(renderer);
+	window->SetSize(800, 600);
+	interactor->SetRenderWindow(window);
+	vtkSmartPointer<vtkInteractorStyleTrackballCamera> style = vtkSmartPointer<vtkInteractorStyleTrackballCamera>::New();
+	interactor->SetInteractorStyle(style);
+	renderer->SetBackground(0.5294, 0.8078, 0.9803);
+
+	//
+	//Get pointers to objects
+	GRAPH::AggregateNode<SURFEL::AgEdge> *pObjectSurf = this->NodeArray.Element + iObjectSurf;
+	GRAPH::AggregateNode<SURFEL::AgEdge> *pObjectVert = this->NodeArray.Element + iObjectVert;
+
+	//Adding planes (surfels for pObjectSurf)
+	QLIST::Index *piElement;
+	Surfel *pSurfel;
+	QList<QLIST::Index> *pSurfelVertexList;
+	SURFEL::Vertex * rvlvertex;
+	QLIST::Index *qlistelement;
+	//first surfel
+	piElement = pObjectSurf->elementList.pFirst;
+	while (piElement)
+	{
+		pSurfel = this->pSurfels->NodeArray.Element + piElement->Idx;
+		//check 
+		if (!((pSurfel->size <= 1) || pSurfel->bEdge))
+		{
+			//Creating plan and adding actor
+			vtkSmartPointer<vtkPlaneSource> plane = vtkSmartPointer<vtkPlaneSource>::New();
+			plane->SetOrigin(0.0, 0.0, 0.0);
+			plane->SetPoint1(pSurfel->size / (float)pObjectSurf->size, 0.0, 0.0);
+			plane->SetPoint2(0.0, pSurfel->size / (float)pObjectSurf->size, 0.0);
+			plane->SetNormal(pSurfel->N[0], pSurfel->N[1], pSurfel->N[2]);
+			plane->SetCenter(pSurfel->P[0], pSurfel->P[1], pSurfel->P[2]);
+			//plane->Push(pSurfel->d);
+			plane->SetResolution(5, 5);
+			vtkSmartPointer<vtkPolyDataMapper> mapper = vtkSmartPointer<vtkPolyDataMapper>::New();
+			mapper->SetInputConnection(plane->GetOutputPort());
+			vtkSmartPointer<vtkActor> act = vtkSmartPointer<vtkActor>::New();
+			act->SetMapper(mapper);
+			renderer->AddActor(act);				
+		}
+		piElement = piElement->pNext;
+	}
+
+	//Adding points (vertices for pObjectVert)
+	int ptIdx = 0;
+	//first surfel
+	piElement = pObjectVert->elementList.pFirst;
+	while (piElement)
+	{
+		pSurfel = this->pSurfels->NodeArray.Element + piElement->Idx;
+		//check 
+		if (!((pSurfel->size <= 1) || pSurfel->bEdge))
+		{
+			vtkSmartPointer<vtkPolyData> pd = vtkSmartPointer<vtkPolyData>::New();
+			vtkSmartPointer<vtkPoints> points = vtkSmartPointer<vtkPoints>::New();
+			points->SetDataTypeToFloat();
+			vtkSmartPointer<vtkCellArray> verts = vtkSmartPointer<vtkCellArray>::New();
+
+			//getting current surfel vertex list
+			pSurfelVertexList = this->pSurfels->surfelVertexList.Element + piElement->Idx;
+			//running through added surfel vertices
+			qlistelement = pSurfelVertexList->pFirst;
+			ptIdx = 0;
+			while (qlistelement)
+			{
+				rvlvertex = this->pSurfels->vertexArray.Element[qlistelement->Idx];
+				points->InsertNextPoint(rvlvertex->P);
+				verts->InsertNextCell(1);
+				verts->InsertCellPoint(ptIdx);
+				ptIdx++;
+				//Next
+				qlistelement = qlistelement->pNext;
+			}
+
+			//Adding actor
+			pd->SetPoints(points);
+			pd->SetVerts(verts);
+			vtkSmartPointer<vtkPolyDataMapper> mapper = vtkSmartPointer<vtkPolyDataMapper>::New();
+			mapper->SetInputData(pd);
+			vtkSmartPointer<vtkActor> act = vtkSmartPointer<vtkActor>::New();
+			act->SetMapper(mapper);
+			act->GetProperty()->SetPointSize(5);
+			renderer->AddActor(act);
+		}
+
+		piElement = piElement->pNext;
+	}
+
+	//Add scene
+	if (pMeshScene)
+	{
+		vtkSmartPointer<vtkPolyDataMapper> mapper = vtkSmartPointer<vtkPolyDataMapper>::New();
+		mapper->SetInputData(pMeshScene->pPolygonData);
+		vtkSmartPointer<vtkActor> act = vtkSmartPointer<vtkActor>::New();
+		act->SetMapper(mapper);
+		renderer->AddActor(act);
+	}
+
+	//Start VTK
+	renderer->ResetCamera();
+	window->Render();
+	interactor->Start();
 }
