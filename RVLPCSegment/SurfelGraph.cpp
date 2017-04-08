@@ -95,6 +95,7 @@ SurfelGraph::SurfelGraph()
 	DisplayData.vpUserFunctionData = NULL;
 	DisplayData.edgeFeatureDepth = 0.01f;
 	DisplayData.normalLen = 10.0f;
+	DisplayData.bCallbackFunctionsDefined = false;
 	RVLSET3VECTOR(DisplayData.ForegroundColor, 0, 255, 0);
 	RVLSET3VECTOR(DisplayData.BackgroundColor, 255, 0, 0);
 	RVLSET3VECTOR(DisplayData.ConvexColor, 0, 255, 0);
@@ -2797,8 +2798,14 @@ void SurfelGraph::InitDisplay(
 		pVisualizer->SetMesh(pMesh);
 		if (bCallbackFunctions)
 		{
-			pVisualizer->SetMouseRButtonDownCallback(SURFEL::MouseRButtonDown, &DisplayData);
-			pVisualizer->SetKeyPressCallback(SURFEL::KeyPressCallback, &DisplayData);
+			if (!DisplayData.bCallbackFunctionsDefined)
+			{
+				pVisualizer->SetMouseRButtonDownCallback(SURFEL::MouseRButtonDown, &DisplayData);
+				pVisualizer->SetKeyPressCallback(SURFEL::KeyPressCallback, &DisplayData);
+
+				DisplayData.bCallbackFunctionsDefined = true;
+			}
+
 		}
 	}
 

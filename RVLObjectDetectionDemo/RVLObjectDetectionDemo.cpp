@@ -190,8 +190,7 @@ int main(int argc, char ** argv)
 			visualizer.b3D = b3DVisualization;
 
 			visualizer.Create();
-			objectDetector.pSurfels->InitDisplay(&visualizer, &(objectDetector.mesh), objectDetector.pSurfelDetector);
-
+			
 #ifdef RVLSURFEL_IMAGE_ADJACENCY
 			if (objectDetector.bSegmentToObjects)
 			{
@@ -200,8 +199,11 @@ int main(int argc, char ** argv)
 			}
 			else
 #endif
+			{
+				objectDetector.pSurfels->InitDisplay(&visualizer, &(objectDetector.mesh), objectDetector.pSurfelDetector);
 				objectDetector.pSurfels->Display(&visualizer, &(objectDetector.mesh));
-
+			}
+				
 #ifdef RVLSURFEL_IMAGE_ADJACENCY
 			if (objectDetector.bSegmentToObjects)
 			{

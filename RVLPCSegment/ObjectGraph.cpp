@@ -1687,7 +1687,7 @@ void ObjectGraph::InitDisplay(
 	pSurfels->DisplayData.mouseRButtonDownUserFunction = &objectMouseRButtonDownUserFunction;
 	pSurfels->DisplayData.vpUserFunctionData = &displayData;
 
-	pSurfels->InitDisplay(pVisualizer, pMesh, NULL, false);
+	pSurfels->InitDisplay(pVisualizer, pMesh, NULL);
 
 	displayData.bObjects = true;
 }
