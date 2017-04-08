@@ -130,6 +130,7 @@ PSGM::PSGM()
 	//End Vidovic
 
 	bGnd = false;
+	bBoundingPlanes = false;
 }
 
 
@@ -254,6 +255,7 @@ void PSGM::Init(Mesh *pMesh_)
 	pMesh = pMesh_;
 
 	bGnd = false;
+	bBoundingPlanes = false;
 }
 
 void PSGM::Interpret(
@@ -2211,14 +2213,18 @@ void PSGM::FitModel(
 	}	// for every model instance descriptor element
 
 	//calculate segment centroid - Vidovic
-	int minID, maxID;
 
-	for (i = 0; i < 3; i++)
+	if (bBoundingPlanes)
 	{
-		minID = centroidID.Element[i * 2].Idx;
-		maxID = centroidID.Element[i * 2 + 1].Idx;
-			
-		pModelInstance->tc[i] = (pModelInstance->modelInstance.Element[maxID].d - pModelInstance->modelInstance.Element[minID].d) / 2; // PROVJERITI
+		int minID, maxID;
+
+		for (i = 0; i < 3; i++)
+		{
+			minID = centroidID.Element[i * 2].Idx;
+			maxID = centroidID.Element[i * 2 + 1].Idx;
+
+			pModelInstance->tc[i] = (pModelInstance->modelInstance.Element[maxID].d - pModelInstance->modelInstance.Element[minID].d) / 2; // PROVJERITI
+		}
 	}
 
 	//END calculate segment centroid - Vidovic
@@ -6165,6 +6171,8 @@ void PSGM::ConvexTemplateCentoidID()
 			centroidID.Element[5].Idx = iPlane;
 		}
 	}
+
+	bBoundingPlanes = true;
 }
 //END Vidovic
 
