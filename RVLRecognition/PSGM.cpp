@@ -6183,9 +6183,9 @@ void PSGM::InitDisplay(
 	displayData.pVisualizer = pVisualizer;	
 	RVLCOPY3VECTOR(selectionColor, displayData.selectionColor);
 	displayData.iSelectedCluster = -1;
-	pSurfels->DisplayData.keyPressUserFunction = &RECOG::PSGM_::keyPressUserFunction;
-	pSurfels->DisplayData.mouseRButtonDownUserFunction = &RECOG::PSGM_::mouseRButtonDownUserFunction;
-	pSurfels->DisplayData.vpUserFunctionData = &displayData;
+		pSurfels->DisplayData.keyPressUserFunction = &RECOG::PSGM_::keyPressUserFunction;
+		pSurfels->DisplayData.mouseRButtonDownUserFunction = &RECOG::PSGM_::mouseRButtonDownUserFunction;
+		pSurfels->DisplayData.vpUserFunctionData = &displayData;
 
 	pSurfels->InitDisplay(pVisualizer, pMesh, pSurfelDetector);
 	
