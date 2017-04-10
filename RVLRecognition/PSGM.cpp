@@ -4390,6 +4390,7 @@ void PSGM::Match()
 			Match(pSModelInstance, startIdx, endIdx);
 
 			CalculateScore(RVLPSGM_MATCH_SIMILARITY_MEASURE_MEAN_SATURATED_SQUARE_DISTANCE);
+			//CalculateScore(RVLPSGM_MATCH_SIMILARITY_MEASURE_SATURATED_SQUARE_DISTANCE_INVISIBILITY_PENAL);			
 
 			UpdateScoreMatchMatrix(pSModelInstance);
 
