@@ -130,6 +130,7 @@ PSGM::PSGM()
 	//End Vidovic
 
 	bGnd = false;
+	bBoundingPlanes = false;
 }
 
 
@@ -254,6 +255,7 @@ void PSGM::Init(Mesh *pMesh_)
 	pMesh = pMesh_;
 
 	bGnd = false;
+	bBoundingPlanes = false;
 }
 
 void PSGM::Interpret(
@@ -2211,14 +2213,18 @@ void PSGM::FitModel(
 	}	// for every model instance descriptor element
 
 	//calculate segment centroid - Vidovic
-	int minID, maxID;
 
-	for (i = 0; i < 3; i++)
+	if (bBoundingPlanes)
 	{
-		minID = centroidID.Element[i * 2].Idx;
-		maxID = centroidID.Element[i * 2 + 1].Idx;
-			
-		pModelInstance->tc[i] = (pModelInstance->modelInstance.Element[maxID].d - pModelInstance->modelInstance.Element[minID].d) / 2; // PROVJERITI
+		int minID, maxID;
+
+		for (i = 0; i < 3; i++)
+		{
+			minID = centroidID.Element[i * 2].Idx;
+			maxID = centroidID.Element[i * 2 + 1].Idx;
+
+			pModelInstance->tc[i] = (pModelInstance->modelInstance.Element[maxID].d - pModelInstance->modelInstance.Element[minID].d) / 2; // PROVJERITI
+		}
 	}
 
 	//END calculate segment centroid - Vidovic
@@ -6171,6 +6177,8 @@ void PSGM::ConvexTemplateCentoidID()
 			centroidID.Element[5].Idx = iPlane;
 		}
 	}
+
+	bBoundingPlanes = true;
 }
 //END Vidovic
 
@@ -6189,14 +6197,8 @@ void PSGM::InitDisplay(
 	displayData.pVisualizer = pVisualizer;	
 	RVLCOPY3VECTOR(selectionColor, displayData.selectionColor);
 	displayData.iSelectedCluster = -1;
-
-	if (pSurfels->DisplayData.keyPressUserFunction == NULL)
 		pSurfels->DisplayData.keyPressUserFunction = &RECOG::PSGM_::keyPressUserFunction;
-
-	if (pSurfels->DisplayData.mouseRButtonDownUserFunction == NULL)
 		pSurfels->DisplayData.mouseRButtonDownUserFunction = &RECOG::PSGM_::mouseRButtonDownUserFunction;
-
-	if (pSurfels->DisplayData.vpUserFunctionData == NULL)
 		pSurfels->DisplayData.vpUserFunctionData = &displayData;
 
 	pSurfels->InitDisplay(pVisualizer, pMesh, pSurfelDetector);
@@ -6567,19 +6569,19 @@ bool RVL::RECOG::PSGM_::keyPressUserFunction(
 		{
 			pSurfels->Display(pVisualizer, pMesh);
 
-			if (pSurfels->DisplayData.bVertices)
-			{
-				if (pData->iSelectedCluster >= 0)
-				{
-					unsigned char color[3];
+			//if (pSurfels->DisplayData.bVertices)
+			//{
+			//	if (pData->iSelectedCluster >= 0)
+			//	{
+			//		unsigned char color[3];
 
-					RVLSET3VECTOR(color, 255, 0, 0);
+			//		RVLSET3VECTOR(color, 255, 0, 0);
 
-					pRecognition->PaintClusterVertices(pData->iSelectedCluster, color);
+			//		pRecognition->PaintClusterVertices(pData->iSelectedCluster, color);
 
-					pSurfels->UpdateVertexDisplayLines();
-				}
-			}
+			//		pSurfels->UpdateVertexDisplayLines();
+			//	}
+			//}
 
 			pData->iSelectedCluster = -1;
 		}

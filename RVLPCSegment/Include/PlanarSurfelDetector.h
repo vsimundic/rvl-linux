@@ -355,13 +355,18 @@ namespace RVL
 			SurfelGraph *pSurfels);
 		void EdgeFetures(
 			Mesh *pMesh,
-			SurfelGraph *pSurfels);
+			SurfelGraph *pSurfels,
+			QList<SURFEL::Edge> *pSEdgeList,
+			int &nSEdges);
 		int CreateEdgeFeatures(
 			Mesh *pMesh,
 			SurfelGraph *pSurfels,
 			Array<MeshEdgePtr *> *pBoundary,
 			int iNewFeature,
-			int &nOcclusionEdges);
+			int &nOcclusionEdges,
+			QList<SURFEL::Edge> *pSEdgeList,
+			int &nSEdges,
+			CRVLMem *pMem);
 		void DeallocateMemory();
 		void CutPropagation(
 			Mesh *pMesh,

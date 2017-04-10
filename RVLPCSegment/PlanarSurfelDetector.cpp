@@ -231,7 +231,7 @@ void PlanarSurfelDetector::CreateParamList(CRVLMem *pMem)
 void PlanarSurfelDetector::RandomIndices(Array<int> &A)
 {
 #ifdef RVLPLANARSURFELDETECTOR_PSEUDO_RANDOM_DEBUG
-	FILE *fp = fopen("C:\\RVL\\pseudorandom1000000.dat", "rb");
+	FILE *fp = fopen("..\\pseudorandom1000000.dat", "rb");
 
 	int *iRnd = new int[A.n];
 
@@ -584,7 +584,7 @@ void PlanarSurfelDetector::Segment(
 
 	// Detect edge features.
 
-	EdgeFetures(pMesh, pSurfels);
+	EdgeFetures(pMesh, pSurfels, &SEdgeList, nSEdges);
 
 	// Create surfel edge array.
 
@@ -4598,7 +4598,9 @@ void PlanarSurfelDetector::Boundaries(
 
 void PlanarSurfelDetector::EdgeFetures(
 	Mesh *pMesh,
-	SurfelGraph *pSurfels)
+	SurfelGraph *pSurfels,
+	QList<SURFEL::Edge> *pSEdgeList,
+	int &nSEdges)
 {
 	int iEdgeFeature = pSurfels->NodeArray.n;
 
@@ -4608,7 +4610,8 @@ void PlanarSurfelDetector::EdgeFetures(
 
 	while (pBoundary)
 	{
-		iEdgeFeature += CreateEdgeFeatures(pMesh, pSurfels, &(pBoundary->data), iEdgeFeature, nOcclusionEdges);
+		iEdgeFeature += CreateEdgeFeatures(pMesh, pSurfels, &(pBoundary->data), iEdgeFeature, nOcclusionEdges, pSEdgeList, 
+			nSEdges, pMem);
 
 		pBoundary = pBoundary->pNext;
 	}
@@ -4621,7 +4624,10 @@ int PlanarSurfelDetector::CreateEdgeFeatures(
 	SurfelGraph *pSurfels,
 	Array<MeshEdgePtr *> *pBoundary,
 	int iNewFeature,
-	int &nOcclusionEdges)
+	int &nOcclusionEdges,
+	QList<SURFEL::Edge> *pSEdgeList,
+	int &nSEdges,
+	CRVLMem *pMem)
 {
 	if (pBoundary->n < minEdgeFeatureSize)
 		return 0;
@@ -4815,15 +4821,19 @@ int PlanarSurfelDetector::CreateEdgeFeatures(
 	float dE, e, maxe, maxe_;
 	float fTmp;
 	float *N, *R;
+	SURFEL::Edge *pSEdge;
 	Surfel *pEdgeFeature;
 	float l, s;
 	Array<MeshEdgePtr *> *pEdgePtArray;
+	QList<SURFEL::EdgePtr> *pSEdgeList_;
 	bool bPtProjectionOutOfLineSegment;
 	//int iPointEdge_;
 	int nForeground, nBackground;
 	BYTE edgeClass;
 	MeshEdgePtr **pEdgePtrPtrArray;
 	int nTmp;
+	int iSurfel;
+	Surfel *pSurfel;
 
 	while (pSegmentEndpoint2)
 	{
@@ -5011,6 +5021,11 @@ int PlanarSurfelDetector::CreateEdgeFeatures(
 				pEdgeFeature->physicalSize = l;
 
 				// Assign points to the new edge feature.
+				// Connect the new edge feature to the neighboring surfels.
+
+				pSEdgeList_ = &(pEdgeFeature->EdgeList);
+
+				RVLQLIST_INIT(pSEdgeList_);
 
 				iPointEdge = pSegmentEndpoint1->Idx;
 
@@ -5022,7 +5037,39 @@ int PlanarSurfelDetector::CreateEdgeFeatures(
 
 					pSurfels->edgeMap[iPt] = iNewFeature_;
 
+					iSurfel = pSurfels->surfelMap[iPt];
+
+					if (iSurfel >= 0 && iSurfel < pMesh->NodeArray.n)
+					{
+						pSurfel = pSurfels->NodeArray.Element + iSurfel;
+
+						if (pSurfel->size > 1)
+						{
+							if (pSurfels->neighborEdge[iSurfel] == NULL)
+							{
+								pSEdge = ConnectNodes<Surfel, SURFEL::Edge, SURFEL::EdgePtr>(iSurfel, iNewFeature_, pSurfels->NodeArray, pMem);
+
+								RVLQLIST_ADD_ENTRY(pSEdgeList, pSEdge);
+
+								nSEdges++;
+
+								pSurfels->neighborEdge[iSurfel] = pSEdge;
+							}
+						}
+					}
+
 					iPointEdge = (iPointEdge + 1) % pBoundary->n;
+				}
+
+				SURFEL::EdgePtr *pSEdgePtr = pEdgeFeature->EdgeList.pFirst;
+
+				while (pSEdgePtr)
+				{
+					RVLPCSEGMENT_GRAPH_GET_NEIGHBOR(iNewFeature_, pSEdgePtr, pSEdge, iSurfel);
+
+					pSurfels->neighborEdge[iSurfel] = NULL;
+
+					pSEdgePtr = pSEdgePtr->pNext;
 				}
 
 				// Determine boundary.

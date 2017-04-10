@@ -79,18 +79,24 @@ void CreateParamList(
 	pParamData = pParamList->AddParam("SegmentationResultsFileName", RVLPARAM_TYPE_STRING, pSegmentationResultsFileName);
 }
 
-void VisualizeObjectGraphVertexPointCloud(SURFEL::ObjectGraph *ograph, int sizeThr)
+void VisualizeObjectGraphVertexPointCloud(SURFEL::ObjectGraph *ograph, int sizeThr, int pointSize = 5, vtkSmartPointer<vtkRenderer> externalRenderer = NULL)
 {
 	// Initialize VTK.
-	vtkSmartPointer<vtkRenderer> renderer = vtkSmartPointer<vtkRenderer>::New();
-	vtkSmartPointer<vtkRenderWindow> window = vtkSmartPointer<vtkRenderWindow>::New();
-	vtkSmartPointer<vtkRenderWindowInteractor> interactor = vtkSmartPointer<vtkRenderWindowInteractor>::New();
+	vtkSmartPointer<vtkRenderer> renderer;
+	vtkSmartPointer<vtkRenderWindow> window;
+	vtkSmartPointer<vtkRenderWindowInteractor> interactor;
+	if (!externalRenderer.GetPointer())
+	{
+		renderer = vtkSmartPointer<vtkRenderer>::New();
+		window = vtkSmartPointer<vtkRenderWindow>::New();
+		interactor = vtkSmartPointer<vtkRenderWindowInteractor>::New();
 	window->AddRenderer(renderer);
 	window->SetSize(800, 600);
 	interactor->SetRenderWindow(window);
 	vtkSmartPointer<vtkInteractorStyleTrackballCamera> style = vtkSmartPointer<vtkInteractorStyleTrackballCamera>::New();
 	interactor->SetInteractorStyle(style);
 	renderer->SetBackground(0.5294, 0.8078, 0.9803);
+	}
 
 	//VTK objects
 	vtkSmartPointer<vtkPolyData> pd = vtkSmartPointer<vtkPolyData>::New();
@@ -169,12 +175,19 @@ void VisualizeObjectGraphVertexPointCloud(SURFEL::ObjectGraph *ograph, int sizeT
 	mapper->SetInputData(pd);
 	vtkSmartPointer<vtkActor> act = vtkSmartPointer<vtkActor>::New();
 	act->SetMapper(mapper);
-	act->GetProperty()->SetPointSize(5);
+	act->GetProperty()->SetPointSize(pointSize);
+	if (externalRenderer.GetPointer())
+	{
+		externalRenderer->AddActor(act);
+	}
+	else
+	{
 	renderer->AddActor(act);
 	//Start VTK
 	renderer->ResetCamera();
 	window->Render();
 	interactor->Start();
+}
 }
 
 void TestCHMatching(SURFEL::ObjectGraph *objects)
@@ -494,8 +507,8 @@ void RunMainProg(
 			cv::imshow("Colored object image", objects.CreateSegmentationImage());
 			cv::waitKey(1);
 			//VisualizeObjectGraphVertexPointCloud(&objects, 100);
-			objects.DetermineObjectConvexityData(0.015, 0.15, true);
-			objects.ObjectAggregationLevel2_ViaObjectPairConvexity(0.015, 0.77, 0.75, 300, true);
+			objects.DetermineObjectConvexityData(0.015, 0.15, false);
+			//objects.ObjectAggregationLevel2_ViaObjectPairConvexity(0.015, 0.77, 0.75, 300, true);
 			cv::imshow("New Colored object image", objects.CreateSegmentationImage());
 			cv::waitKey(1);
 			////
@@ -571,6 +584,7 @@ void RunMainProg(
 		if (bSegmentToObjects)
 		{
 			objects.InitDisplay(&visualizer, &mesh, SelectionColor);
+			//VisualizeObjectGraphVertexPointCloud(&objects, 100, 10, visualizer.renderer);
 			objects.Display();
 		}
 		else

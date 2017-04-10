@@ -132,7 +132,7 @@ namespace RVL
 				bool b;
 				int iCTIElement;
 			};
-			
+
 			int ValidTangent(
 				int iSurfel,
 				int iSurfel_,
@@ -553,6 +553,7 @@ namespace RVL
 		//int nSamples; //RANSAC //Vidovic
 		int stdNoise; //RANSAC //Vidovic
 		bool bNormalValidityTest; // Vidovic
+		bool bBoundingPlanes;
 		char *sceneMIMatch; //Vidovic
 		int iScene; //Vidovic
 		Array<QLIST::Index> centroidID; //Vidovic

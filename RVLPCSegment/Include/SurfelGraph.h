@@ -39,6 +39,7 @@ namespace RVL
 			void *vpUserFunctionData;
 			bool(*mouseRButtonDownUserFunction)(Mesh *pMesh, SurfelGraph *pSurfels, int iSelectedPt, int iSelectedSurfel, void *vpData);
 			bool(*keyPressUserFunction)(Mesh *pMesh, SurfelGraph *pSurfels, std::string &key, void *vpData);
+			bool bCallbackFunctionsDefined;
 			int  mode;
 			unsigned char SelectionColor[3];
 			unsigned char ForegroundColor[3];

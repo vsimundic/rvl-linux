@@ -95,6 +95,7 @@ SurfelGraph::SurfelGraph()
 	DisplayData.vpUserFunctionData = NULL;
 	DisplayData.edgeFeatureDepth = 0.01f;
 	DisplayData.normalLen = 10.0f;
+	DisplayData.bCallbackFunctionsDefined = false;
 	RVLSET3VECTOR(DisplayData.ForegroundColor, 0, 255, 0);
 	RVLSET3VECTOR(DisplayData.BackgroundColor, 255, 0, 0);
 	RVLSET3VECTOR(DisplayData.ConvexColor, 0, 255, 0);
@@ -955,6 +956,9 @@ void SurfelGraph::GenerateSSF(
 	Surfel *pOtherSurfel;
 	int nGTObjects;
 	int splitError, mergeError, falseClassificationCost;
+	QLIST::Index *qlistelementVertex;
+	SURFEL::Vertex * rvlvertex;
+	QList<QLIST::Index> *pSurfelVertexList;
 	//for surfel
 	for (int i = 0; i < NodeArray.n; pCurrSurfel++, i++)
 	{
@@ -994,6 +998,43 @@ void SurfelGraph::GenerateSSF(
 			GTObjHist[i] = pCurrSurfel->GTObjHist[i];
 		surfel->features.AddFeature(SceneSegFile::FeaturesList::GTObjHistogram, SceneSegFile::FeaturesDictionary::dictionary.at(SceneSegFile::FeaturesList::GTObjHistogram), "int");
 		surfel->features.SetFeatureData<int>(SceneSegFile::FeaturesList::GTObjHistogram, GTObjHist, pCurrSurfel->GTObjHist.size());
+		//Vertices
+		if (this->surfelVertexList.Element)
+		{
+			//getting current surfel vertex list
+			pSurfelVertexList = this->surfelVertexList.Element + (pCurrSurfel - this->NodeArray.Element);
+			//running through added surfel vertices
+			qlistelementVertex = pSurfelVertexList->pFirst;
+			int noVertices = 0;
+			//find out how many vertices there are
+			while (qlistelementVertex)
+			{
+				noVertices++;
+				//Next
+				qlistelementVertex = qlistelementVertex->pNext;
+			}
+			if (noVertices > 0)
+			{
+				//add vertices
+				float *vertices = new float[noVertices * 3];
+				int iVert = 0;
+				qlistelementVertex = pSurfelVertexList->pFirst;
+				while (qlistelementVertex)
+				{
+					rvlvertex = this->vertexArray.Element[qlistelementVertex->Idx];
+
+					vertices[iVert * 3] = rvlvertex->P[0];
+					vertices[iVert * 3 + 1] = rvlvertex->P[1];
+					vertices[iVert * 3 + 2] = rvlvertex->P[2];
+					iVert++;
+					//Next
+					qlistelementVertex = qlistelementVertex->pNext;
+				}
+				surfel->features.AddFeature(SceneSegFile::FeaturesList::Vertices3D, SceneSegFile::FeaturesDictionary::dictionary.at(SceneSegFile::FeaturesList::Vertices3D), "float");
+				surfel->features.SetFeatureData<float>(SceneSegFile::FeaturesList::Vertices3D, vertices, noVertices * 3);
+			}
+		}
+
 		//Add feature groups
 		//Adjacency group
 		surfel->AddFeatureGroup(SceneSegFile::FeatureGroupsList::AdjacencyFeatureGroup, SceneSegFile::FeatureGroupsDictionary::dictionary.at(SceneSegFile::FeatureGroupsList::AdjacencyFeatureGroup));
@@ -2797,8 +2838,14 @@ void SurfelGraph::InitDisplay(
 		pVisualizer->SetMesh(pMesh);
 		if (bCallbackFunctions)
 		{
+			if (!DisplayData.bCallbackFunctionsDefined)
+			{
 			pVisualizer->SetMouseRButtonDownCallback(SURFEL::MouseRButtonDown, &DisplayData);
 			pVisualizer->SetKeyPressCallback(SURFEL::KeyPressCallback, &DisplayData);
+
+				DisplayData.bCallbackFunctionsDefined = true;
+			}
+
 		}
 	}
 
