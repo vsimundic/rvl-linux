@@ -480,7 +480,8 @@ int main(int argc, char ** argv)
 
 				recognition.clusters.n = 0;
 #else
-				mesh.LoadPolyDataFromPLY(filePath);
+				//mesh.LoadPolyDataFromPLY(filePath);
+				LoadMesh(&meshBuilder, filePath, &mesh, false);
 
 				mem.Clear();
 
@@ -504,11 +505,10 @@ int main(int argc, char ** argv)
 				printf("Scene %s...finished!\n\n", filePath);
 
 				//mesh.LoadPolyDataFromPLY(filePath);
-				LoadMesh(&meshBuilder, filePath, &mesh, false);
+				//LoadMesh(&meshBuilder, filePath, &mesh, false);
 
-				//surfels.NodeColors(SelectionColor);
-				
-				visualizer.renderer->RemoveAllViewProps();
+				surfels.NodeColors(SelectionColor);				
+				//visualizer.renderer->RemoveAllViewProps();
 				recognition.InitDisplay(&visualizer, &mesh, SelectionColor);
 				recognition.Display();
 
