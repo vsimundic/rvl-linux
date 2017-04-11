@@ -4395,8 +4395,8 @@ void PSGM::Match()
 
 			Match(pSModelInstance, startIdx, endIdx);
 
-			CalculateScore(RVLPSGM_MATCH_SIMILARITY_MEASURE_MEAN_SATURATED_SQUARE_DISTANCE);
-			//CalculateScore(RVLPSGM_MATCH_SIMILARITY_MEASURE_SATURATED_SQUARE_DISTANCE_INVISIBILITY_PENAL);			
+			//CalculateScore(RVLPSGM_MATCH_SIMILARITY_MEASURE_MEAN_SATURATED_SQUARE_DISTANCE);
+			CalculateScore(RVLPSGM_MATCH_SIMILARITY_MEASURE_SATURATED_SQUARE_DISTANCE_INVISIBILITY_PENAL);			
 
 			UpdateScoreMatchMatrix(pSModelInstance);
 
@@ -6604,7 +6604,7 @@ bool RVL::RECOG::PSGM_::keyPressUserFunction(
 			std::cout << "Enter hypothesis rank, 0-6: ";
 			std::getline(std::cin, line);
 			sscanf(line.data(), "%d", &iHypothesesRank);
-		} while (iHypothesesRank < 0 || iHypothesesRank > 20);
+		} while (iHypothesesRank < 0 || iHypothesesRank > 25);
 
 		//delete visualized ICP matches from the scene:
 		pVisualizer->renderer->RemoveAllViewProps();
@@ -6628,6 +6628,8 @@ bool RVL::RECOG::PSGM_::keyPressUserFunction(
 			{
 				//visualize new matches on the scene
 				pRecognition->AddOneModelToVisualizer(pVisualizer, pRecognition->scoreMatchMatrix.Element[i].Element[iHypothesesRank].idx, iHypothesesRank, false);
+
+				//printf("CTI %d\n", pRecognition->pCTImatchesArray.Element[pRecognition->scoreMatchMatrix.Element[i].Element[iHypothesesRank].idx]->iSCTI);
 			}
 		}
 #endif
