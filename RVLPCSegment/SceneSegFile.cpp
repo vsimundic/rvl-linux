@@ -22,8 +22,7 @@ namespace SceneSegFile
 		{ FeaturesList::PixelAffiliation, "PixelAffiliation" },
 		{ FeaturesList::GTObjHistogram, "GTObjHistogram" },
 		{ FeaturesList::CommonBoundaryLength, "CommonBoundaryLength" },
-		{ FeaturesList::Vertices3D, "Vertices3D" }
-		{ FeaturesList::CommonBoundaryLength, "CommonBoundaryLength" },
+		{ FeaturesList::Vertices3D, "Vertices3D" },
 		{ FeaturesList::FalseSegmentationCost, "FalseSegmentationCost" }
 	};
 
