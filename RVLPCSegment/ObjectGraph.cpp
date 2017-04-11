@@ -2784,7 +2784,7 @@ void ObjectGraph::ObjectAggregationLevel2_ViaObjectPairConvexity(float convexThr
 		}
 	}
 
-	//Checking cluster consistincy if there is are more than two objects in cluster
+	//Checking cluster consistincy if there are more than two objects in cluster
 	//Helper stuff
 	struct temp_pair{ int a; int b; float score; static bool sort_desc(temp_pair first, temp_pair second) { return (first.score > second.score); } };
 	//
