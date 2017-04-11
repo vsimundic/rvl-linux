@@ -2717,70 +2717,214 @@ void ObjectGraph::ObjectAggregationLevel2_ViaObjectPairConvexity(float convexThr
 	//Generating merge clusters (object pairs is in decreasing order)
 	std::map<int, std::set<int>> merge_clusters;
 	std::map<int, std::set<int>>::iterator clustIt;
+	std::map<int, std::set<int>>::iterator clustIt2;
 	std::set<int>::iterator clusterSetIt;
-	int foundSet = 0;
-	bool insertFirst;
-	bool intersection;
-	int secondSet = 0;
+	//int foundSet = 0;
+	//bool insertFirst;
+	//bool intersection;
+	//int secondSet = 0;
+	//for (int i = 0; i < merge_pairs.size(); i++)
+	//{
+	//	foundSet = -1;
+	//	secondSet = -1;
+	//	insertFirst = false;
+	//	intersection = false;
+	//	//check if current pair first item is already defined as cluster leader (KEY)
+	//	if (merge_clusters.count(merge_pairs.at(i).first))
+	//	{
+	//		foundSet = merge_pairs.at(i).first;
+	//		//check for intersection 
+	//		for (clustIt = merge_clusters.begin(); clustIt != merge_clusters.end(); clustIt++)
+	//		{
+	//			if (clustIt->second.count(merge_pairs.at(i).second))
+	//			{
+	//				secondSet = clustIt->first;
+	//				intersection = true;
+	//				break;
+	//			}
+	//		}
+	//	}
+	//	else //check if current pair first (or second???) item is already in some set //CHAINING!!!
+	//	{
+	//		for (clustIt = merge_clusters.begin(); clustIt != merge_clusters.end(); clustIt++)
+	//		{
+	//			if (clustIt->second.count(merge_pairs.at(i).first))
+	//			{
+	//				foundSet = clustIt->first;
+	//				break;
+	//			}
+	//			else if (clustIt->second.count(merge_pairs.at(i).second))
+	//			{
+	//				foundSet = clustIt->first;
+	//				insertFirst = true;
+	//				break;
+	//			}
+	//		}
+	//	}
+	//	if (intersection) //If intersection then clusters need to be merged
+	//	{
+	//		merge_clusters.at(foundSet).insert(secondSet);
+	//		//merge second cluster into first cluster
+	//		for (clusterSetIt = merge_clusters.at(secondSet).begin(); clusterSetIt != merge_clusters.at(secondSet).end(); clusterSetIt++)
+	//			merge_clusters.at(foundSet).insert(*clusterSetIt);
+	//		//remove the second set
+	//		merge_clusters.erase(secondSet);
+	//	}
+	//	else if (foundSet >= 0) //if found then put the second element in pair in that set
+	//	{
+
+	//		if (insertFirst)
+	//			merge_clusters.at(foundSet).insert(merge_pairs.at(i).first);
+	//		else
+	//			merge_clusters.at(foundSet).insert(merge_pairs.at(i).second);
+	//	}
+	//	else //if not found then create new cluster and put second pair element in it (first pair is the KEY of map pair)
+	//	{
+	//		merge_clusters.insert(std::pair<int, std::set<int>>(merge_pairs.at(i).first, std::set<int>()));
+	//		merge_clusters.at(merge_pairs.at(i).first).insert(merge_pairs.at(i).second);
+	//	}
+	//}
+
+	bool firstIntoSecond;
+	bool secondCL;
+	bool secondIntoFirst;
+	bool firstCL;
+	bool mergeClusters;
+	int mergeInto = -1;
+	int mergeFrom = -1;
+	int first = -1;
+	int second = -1;
 	for (int i = 0; i < merge_pairs.size(); i++)
 	{
-		foundSet = -1;
-		secondSet = -1;
-		insertFirst = false;
-		intersection = false;
+		firstIntoSecond = false;
+		secondCL = false;
+		secondIntoFirst = false;
+		firstCL = false;
+		mergeClusters = false;
+		mergeInto = -1;
+		mergeFrom = -1;
+		first = merge_pairs.at(i).first;
+		second = merge_pairs.at(i).second;
 		//check if current pair first item is already defined as cluster leader (KEY)
-		if (merge_clusters.count(merge_pairs.at(i).first))
+		if (merge_clusters.count(first))
 		{
-			foundSet = merge_pairs.at(i).first;
-			//check for intersection 
+			firstCL = true;
+			//check if second is cluster leader (IT IS NOT POSSIBLE SINCE THE LIST IS ORDERED!!!)
 			for (clustIt = merge_clusters.begin(); clustIt != merge_clusters.end(); clustIt++)
 			{
-				if (clustIt->second.count(merge_pairs.at(i).second))
+				if (merge_clusters.count(second))
 				{
-					secondSet = clustIt->first;
-					intersection = true;
+					secondCL = true;
+					mergeInto = first;
+					mergeFrom = second;
+					mergeClusters = true;
 					break;
 				}
 			}
+			//If second is not cluster leader
+			if (!secondCL)
+			{
+				//Check if second is in some other cluster in order to merge them
+				for (clustIt = merge_clusters.begin(); clustIt != merge_clusters.end(); clustIt++)
+				{
+					if (clustIt->second.count(second))
+					{
+						mergeInto = first;
+						mergeFrom = clustIt->first;
+						mergeClusters = true;
+						break;
+					}
+				}
+			}
+			if (!mergeClusters) // if clusters are not to be merged than just add second to first's cluster
+				secondIntoFirst = true;
 		}
-		else //check if current pair first (or second???) item is already in some set //CHAINING!!!
+		else //First is not cluster leader
 		{
+			//Check if second is cluster leader
 			for (clustIt = merge_clusters.begin(); clustIt != merge_clusters.end(); clustIt++)
 			{
-				if (clustIt->second.count(merge_pairs.at(i).first))
+				if (merge_clusters.count(second))
 				{
-					foundSet = clustIt->first;
-					break;
-				}
-				else if (clustIt->second.count(merge_pairs.at(i).second))
-				{
-					foundSet = clustIt->first;
-					insertFirst = true;
+					secondCL = true;
 					break;
 				}
 			}
-		}
-		if (intersection) //If intersection then clusters need to be merged
-		{
-			merge_clusters.at(foundSet).insert(secondSet);
-			//merge second cluster into first cluster
-			for (clusterSetIt = merge_clusters.at(secondSet).begin(); clusterSetIt != merge_clusters.at(secondSet).end(); clusterSetIt++)
-				merge_clusters.at(foundSet).insert(*clusterSetIt);
-			//remove the second set
-			merge_clusters.erase(secondSet);
-		}
-		else if (foundSet >= 0) //if found then put the second element in pair in that set
-		{
+			if (secondCL)	//second is cluster leader
+			{
+				//check if first is in some cluster in order to merge with second0s cluster
+				for (clustIt = merge_clusters.begin(); clustIt != merge_clusters.end(); clustIt++)
+				{
+					if (clustIt->second.count(first))
+					{
+						mergeInto = second;
+						mergeFrom = clustIt->first;
+						mergeClusters = true;
+						break;
+					}
+				}
+				if (!mergeClusters) //first is not in any cluster therefore just add first into second's cluster
+					firstIntoSecond = true;
+			}
+			else //Second is also not cluster leader
+			{
+				//check if first is already in some other cluster (SHOULD NOT BE POSSIBLE)
+				for (clustIt = merge_clusters.begin(); clustIt != merge_clusters.end(); clustIt++)
+				{
+					if (clustIt->second.count(first))
+					{
+						mergeInto = clustIt->first;
+						secondIntoFirst = true;
+						break;
+					}
+				}
+				//check if second is already in some cluster
+				for (clustIt = merge_clusters.begin(); clustIt != merge_clusters.end(); clustIt++)
+				{
+					if (clustIt->second.count(second))
+					{
+						mergeFrom = clustIt->first;	//mergeFrom will be used if first is added into second's cluster
+						firstIntoSecond = true;
+						break;
+					}
+				}
+				if (firstIntoSecond && secondIntoFirst)	//If they are both in som other clusters then merge clusters
+					mergeClusters = true;
+			}
 
-			if (insertFirst)
-				merge_clusters.at(foundSet).insert(merge_pairs.at(i).first);
-			else
-				merge_clusters.at(foundSet).insert(merge_pairs.at(i).second);
+			
 		}
-		else //if not found then create new cluster and put second pair element in it (first pair is the KEY of map pair)
+		if (mergeClusters)	//if something is going to be merged
 		{
-			merge_clusters.insert(std::pair<int, std::set<int>>(merge_pairs.at(i).first, std::set<int>()));
-			merge_clusters.at(merge_pairs.at(i).first).insert(merge_pairs.at(i).second);
+			if (mergeInto == mergeFrom)	//Already part of the same cluster
+				continue;
+			merge_clusters.at(mergeInto).insert(mergeFrom);
+			//merge second cluster into first cluster
+			for (clusterSetIt = merge_clusters.at(mergeFrom).begin(); clusterSetIt != merge_clusters.at(mergeFrom).end(); clusterSetIt++)
+				merge_clusters.at(mergeInto).insert(*clusterSetIt);
+			//remove the second set
+			merge_clusters.erase(mergeFrom);
+		}
+		else if (secondIntoFirst && (mergeInto >= 0)) //Add second into cluster where first is already located
+		{
+			merge_clusters.at(mergeInto).insert(second);
+		}
+		else if (firstIntoSecond && (mergeFrom >= 0))	//Add first into cluster where second is already found
+		{
+			merge_clusters.at(mergeFrom).insert(first);
+		}
+		else if (secondIntoFirst) //Add second into first's cluster
+		{
+			merge_clusters.at(first).insert(second);
+		}
+		else if (firstIntoSecond) //Add first into second's cluster
+		{
+			merge_clusters.at(second).insert(first);
+		}
+		else  //Create new cluster with first as leader (KEY)
+		{
+			merge_clusters.insert(std::pair<int, std::set<int>>(first, std::set<int>()));
+			merge_clusters.at(first).insert(second);
 		}
 	}
 
