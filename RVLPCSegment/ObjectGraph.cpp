@@ -2221,7 +2221,16 @@ void ObjectGraph::CalculateObjectsColorHistogram()
 }
 #endif
 
-void ObjectGraph::CalculateConvexityRatiosForObjectPair(int firstObject, int secondObject, float& firstRatio, float& secondRatio, float convexThr)
+void ObjectGraph::FlattenVertex(const float * P, float * Pc, const float * N, float d)
+{
+	float ntpd;
+	ntpd = P[0] * N[0] + P[1] * N[1] + P[2] * N[2] - d;
+	Pc[0] = P[0] - ntpd * N[0];
+	Pc[1] = P[1] - ntpd * N[1];
+	Pc[2] = P[2] - ntpd * N[2];
+}
+
+void ObjectGraph::CalculateConvexityRatiosForObjectPair(int firstObject, int secondObject, float& firstRatio, float& secondRatio, float convexThr, bool useFlatten)
 {
 	//if ((firstObject == 5) && (secondObject == 10))	//60, 484 za test 57
 	//	RenderConvexityPos(secondObject, firstObject, this->pMesh);
@@ -2244,6 +2253,7 @@ void ObjectGraph::CalculateConvexityRatiosForObjectPair(int firstObject, int sec
 	QLIST::Index *piElement;
 	Surfel *pSurfel;
 	Surfel *pSurfelIN;
+	Surfel *pSurfelTemp;
 	//First
 	piElement = pFirstObject->elementList.pFirst;
 	int firstTotal = 0;
@@ -2256,7 +2266,7 @@ void ObjectGraph::CalculateConvexityRatiosForObjectPair(int firstObject, int sec
 		{
 			//Find key value (if there are two surfels with same size)
 			keyVal = pSurfel->size;
-			while(aggregateObject.count(keyVal))
+			while (aggregateObject.count(keyVal))
 			{
 				keyVal++;
 			}
@@ -2298,14 +2308,17 @@ void ObjectGraph::CalculateConvexityRatiosForObjectPair(int firstObject, int sec
 	int surfelIdx;
 	int surfelIdxOther;
 	bool fail;
-	std::set<int> chVertexIndices;
-	std::set<int>::iterator chVertexIndices_iterator;
+	std::vector<int> chVertexIndices;
+	std::vector<int> chVertexIndicesSurfelIdx;
+	//std::set<int>::iterator chVertexIndices_iterator;
 	bool *added = new bool[aggregateObject.size()];
 	memset(added, 0, aggregateObject.size() * sizeof(bool));
 	int currIdx = 0;
 	int currIdxIN = 0;
 	float currmultiplier = 0.0;
 	float currmultiplierIN = 0.0;
+	float fP[3];
+	float *fPu;
 	for (aggObjIt = aggregateObject.rbegin(); aggObjIt != aggregateObject.rend(); ++aggObjIt)
 	{
 		//iterator->first = key
@@ -2321,12 +2334,20 @@ void ObjectGraph::CalculateConvexityRatiosForObjectPair(int firstObject, int sec
 
 		fail = false;
 		//runnong through a current list of added object vertices
-		for (chVertexIndices_iterator = chVertexIndices.begin(); chVertexIndices_iterator != chVertexIndices.end(); chVertexIndices_iterator++)
+		for (int i = 0; i < chVertexIndices.size(); i++)
 		{
 			//*iterator = value
-			rvlvertex = this->pSurfels->vertexArray.Element[*chVertexIndices_iterator];
+			rvlvertex = this->pSurfels->vertexArray.Element[chVertexIndices.at(i)];
+			if (useFlatten)
+			{
+				pSurfelTemp = pSurfels->NodeArray.Element + chVertexIndicesSurfelIdx.at(i);
+				FlattenVertex(rvlvertex->P, fP, pSurfelTemp->N, pSurfelTemp->d);
+				fPu = fP;
+			}
+			else
+				fPu = rvlvertex->P;
 			//if ((currmultiplier * pSurfel->N[0] * rvlvertex->P[0] + currmultiplier * pSurfel->N[1] * rvlvertex->P[1] + currmultiplier * pSurfel->N[2] * rvlvertex->P[2] - currmultiplier * pSurfel->d) > convexThr)
-			if (currmultiplier * pSurfels->Distance(pSurfel, rvlvertex->P, bObjectAggregationLevel2Uncertainty) > convexThr)
+			if (currmultiplier * pSurfels->Distance(pSurfel, fPu, bObjectAggregationLevel2Uncertainty) > convexThr)
 			{
 				fail = true;
 				break;
@@ -2352,8 +2373,15 @@ void ObjectGraph::CalculateConvexityRatiosForObjectPair(int firstObject, int sec
 				while (qlistelement)
 				{
 					rvlvertex = this->pSurfels->vertexArray.Element[qlistelement->Idx];
+					if (useFlatten)
+					{
+						FlattenVertex(rvlvertex->P, fP, pSurfel->N, pSurfel->d);
+						fPu = fP;
+					}
+					else
+						fPu = rvlvertex->P;
 					//if ((currmultiplierIN * pSurfelIN->N[0] * rvlvertex->P[0] + currmultiplierIN * pSurfelIN->N[1] * rvlvertex->P[1] + currmultiplierIN * pSurfelIN->N[2] * rvlvertex->P[2] - currmultiplierIN * pSurfelIN->d) > convexThr)
-					if (currmultiplierIN * pSurfels->Distance(pSurfelIN, rvlvertex->P, bObjectAggregationLevel2Uncertainty) > convexThr)
+					if (currmultiplierIN * pSurfels->Distance(pSurfelIN, fPu, bObjectAggregationLevel2Uncertainty) > convexThr)
 					{
 						fail = true;
 						break;
@@ -2373,7 +2401,8 @@ void ObjectGraph::CalculateConvexityRatiosForObjectPair(int firstObject, int sec
 			qlistelement = pSurfelVertexList->pFirst;
 			while (qlistelement)
 			{
-				chVertexIndices.insert(qlistelement->Idx);
+				chVertexIndices.push_back(qlistelement->Idx);
+				chVertexIndicesSurfelIdx.push_back(surfelIdx);
 				//Next
 				qlistelement = qlistelement->pNext;
 			}
@@ -2676,7 +2705,7 @@ void ObjectGraph::ObjectAggregationLevel2_ViaObjectPairConvexity(float convexThr
 					if (!ExtFuncCheckIfWithinVolume(vpObjectAggregationLevel2CriterionData, validObjects.at(iObject), validObjects.at(iObject2), 0.30))	//HARDCODED THRESHOLD?????
 						continue;
 				}
-				this->CalculateConvexityRatiosForObjectPair(validObjects.at(iObject), validObjects.at(iObject2), firstRatio, secondRatio, convexThr);
+				this->CalculateConvexityRatiosForObjectPair(validObjects.at(iObject), validObjects.at(iObject2), firstRatio, secondRatio, convexThr, false);
 				if (verbose)
 					std::cout << "(" << validObjects.at(iObject) << ", " << validObjects.at(iObject2) << ")" << " = " << firstRatio << ", " << secondRatio << std::endl;
 				if ((firstRatio > ratioThr) && (secondRatio > ratioThr))
@@ -3102,10 +3131,12 @@ void ObjectGraph::ObjectAggregationLevel2_ViaObjectPairConvexity(float convexThr
 			// iNode2 <- empty set
 
 			RVLQLIST_INIT(pElementList2);	//reset list
+
+			//Update object size
 			if (verbose)
 				std::cout << "Merged: " << clustIt->first << ", " << *clusterSetIt << std::endl;
 		}
-
+		//Update objectMap for pElementList1
 	}
 }
 

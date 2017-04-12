@@ -581,7 +581,7 @@ void SurfelGraph::DetermineImgAdjDescriptors(
 		pOtherSurfel = pSurfel->imgAdjacency.at(i);
 
 #ifdef RVLSURFELGRAPH_DEBUG_RELATION_DESCRIPTOR
-		bool bDebug = (pSurfel - NodeArray.Element == 75 && pOtherSurfel - NodeArray.Element == 382);
+		bool bDebug = false;// (pSurfel - NodeArray.Element == 75 && pOtherSurfel - NodeArray.Element == 382);
 
 		if (bDebug)
 			int debug = 0;
