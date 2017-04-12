@@ -3053,7 +3053,7 @@ void ObjectGraph::ObjectAggregationLevel2_ViaObjectPairConvexity(float convexThr
 						if (fail)//got to the next link
 							continue;
 						inputcluster_label.at(object_links.at(currObj).at(l).b) = label; //if everything has passed then label the object
-						fifo.push(object_links.at(i).at(l).b);	//push it to fifo so it's links can be analyzed
+						fifo.push(object_links.at(currObj).at(l).b);	//push it to fifo so it's links can be analyzed
 					}
 				}
 				label++; //current cluster finished, go to next
