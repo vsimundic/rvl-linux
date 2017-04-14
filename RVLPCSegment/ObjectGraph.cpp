@@ -3124,6 +3124,14 @@ void ObjectGraph::ObjectAggregationLevel2_ViaObjectPairConvexity(float convexThr
 
 			pElementList2 = &(pNode2->elementList);
 
+			//Update objectMap
+			piElement = pElementList2->pFirst;
+			while (piElement)
+			{
+				this->objectMap[piElement->Idx] = clustIt->first;
+				piElement = piElement->pNext;
+			}
+
 			// iNode1 <- union of iNode1 and iNode2 
 
 			RVLQLIST_APPEND(pElementList1, pElementList2);	//append their surfels
@@ -3133,10 +3141,10 @@ void ObjectGraph::ObjectAggregationLevel2_ViaObjectPairConvexity(float convexThr
 			RVLQLIST_INIT(pElementList2);	//reset list
 
 			//Update object size
+			pNode1->size += pNode2->size;
 			if (verbose)
 				std::cout << "Merged: " << clustIt->first << ", " << *clusterSetIt << std::endl;
 		}
-		//Update objectMap for pElementList1
 	}
 }
 
@@ -3574,4 +3582,132 @@ void ObjectGraph::RenderConvexityPos(int iObjectSurf, int iObjectVert, Mesh *pMe
 	renderer->ResetCamera();
 	window->Render();
 	interactor->Start();
+}
+
+void ObjectGraph::MergeSmallObjects(int sizeThr, float maxDistThr, bool verbose)
+{
+	//Determine a list of neighbours and distances for each small object
+	GRAPH::AggregateNode<SURFEL::AgEdge> *pObject;
+	GRAPH::AggregateNode<SURFEL::AgEdge> *pOtherObject;
+	Surfel *pSurfel;
+	int surfelIdx;
+	Surfel *pOtherSurfel;
+	int otherSurfelIdx;
+	QLIST::Index *piElement;
+	std::vector<int> validObjects;
+	std::map<int, std::map<int, float>> objectNeighbourhood;
+	std::map<int, std::map<int, float>>::iterator objectIt;
+	std::map<int, float>::iterator objectNeighboorIt;
+	//For each object
+	for (int iObject = 0; iObject < this->NodeArray.n; iObject++)
+	{
+		pObject = this->NodeArray.Element + iObject;
+
+		if (pObject->size > sizeThr)
+			continue;
+
+		piElement = pObject->elementList.pFirst;
+
+		//check if object
+		if (!piElement)
+			continue;
+		//
+		objectNeighbourhood.insert(std::make_pair(iObject, std::map<int, float>()));
+		//For each object surfel look at adjacent surfel and chech if they are owned by different object
+		while (piElement)
+		{
+			pSurfel = this->pSurfels->NodeArray.Element + piElement->Idx;
+			surfelIdx = piElement->Idx;
+			//check 
+			if (!((pSurfel->size <= 1) || pSurfel->bEdge))
+			{
+				//Running through its adjacency
+				for (int i = 0; i < pSurfel->imgAdjacency.size(); i++)
+				{
+					pOtherSurfel = pSurfel->imgAdjacency.at(i);
+					otherSurfelIdx = pOtherSurfel - this->pSurfels->NodeArray.Element;
+					//Check if current and other surfel is owned by different object, if yes add to the list, if it is already there update min distance
+					if (this->objectMap[surfelIdx] != this->objectMap[otherSurfelIdx])
+					{
+						//check if the size of the found object is greater than minimum
+						pOtherObject = this->NodeArray.Element + this->objectMap[otherSurfelIdx];
+						if (pOtherObject->size <= sizeThr)
+							continue;
+						//check if it exists
+						if (objectNeighbourhood.at(iObject).count(this->objectMap[otherSurfelIdx]))
+						{
+							//check if update of minimum distance is required
+							if (objectNeighbourhood.at(iObject).at(this->objectMap[otherSurfelIdx]) > pSurfel->imgAdjacencyDescriptors.at(i)->minDist)
+								objectNeighbourhood.at(iObject).at(this->objectMap[otherSurfelIdx]) = pSurfel->imgAdjacencyDescriptors.at(i)->minDist;
+						}
+						else //add
+							objectNeighbourhood.at(iObject).insert(std::make_pair(this->objectMap[otherSurfelIdx], pSurfel->imgAdjacencyDescriptors.at(i)->minDist));
+					}
+				}
+			}
+
+			piElement = piElement->pNext;
+		}
+	}
+
+	//Merge object to its closest and largest neighbour
+	QList<QLIST::Index> *pElementList1;
+	QList<QLIST::Index> *pElementList2;
+	float dist = 10000000;
+	int size = 0;
+	int chosenOtherObject;
+	for (objectIt = objectNeighbourhood.begin(); objectIt != objectNeighbourhood.end(); objectIt++)
+	{
+		//first = key, second = value
+		pObject = this->NodeArray.Element + objectIt->first;
+		pElementList1 = &pObject->elementList;
+		//run through neighbourhood and find min size
+		dist = 10000000;
+		chosenOtherObject = -1;
+		size = 0;
+		for (objectNeighboorIt = objectIt->second.begin(); objectNeighboorIt != objectIt->second.end(); objectNeighboorIt++)
+		{
+			//find largest object whose distance is lower than specified
+			pOtherObject = this->NodeArray.Element + objectNeighboorIt->first;
+			if (objectNeighboorIt->second > maxDistThr)
+				continue;
+			if (pOtherObject->size < size)
+				continue;
+			if (objectNeighboorIt->second < dist)
+			{
+				dist = objectNeighboorIt->second;
+				size = pOtherObject->size;
+				chosenOtherObject = objectNeighboorIt->first;
+			}
+		}
+
+		//check if merege is apropriate
+		if ((chosenOtherObject >= 0) && (dist <= maxDistThr))
+		{
+			pOtherObject = this->NodeArray.Element + chosenOtherObject;
+			pElementList2 = &pOtherObject->elementList;
+			
+			//Update objectMap
+			piElement = pElementList1->pFirst;
+			while (piElement)
+			{
+				this->objectMap[piElement->Idx] = chosenOtherObject;
+				piElement = piElement->pNext;
+			}
+
+			// iNode1 <- union of iNode1 and iNode2 
+
+			RVLQLIST_APPEND(pElementList2, pElementList1);	//append their surfels
+
+			// iNode2 <- empty set
+
+			RVLQLIST_INIT(pElementList1);	//reset list
+
+			//Update object size
+			pOtherObject->size += pObject->size;
+			if (verbose)
+				std::cout << "Merged: " << objectIt->first << " into " << chosenOtherObject << std::endl;
+		}
+	}
+
 }

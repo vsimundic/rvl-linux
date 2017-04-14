@@ -794,7 +794,7 @@ void ObjectDetector::DetectObjects(char *MeshFilePathName)
 			////Filko
 			//objects.DetermineObjectConvexityData(0.005, 0.5);
 			//ObjectAggregationLevel2(&objects, &surfels, &mesh, MeshFileName);
-			cv::imshow("Colored object image", pObjects->CreateSegmentationImage());
+			cv::imshow("Level1", pObjects->CreateSegmentationImage());
 			cv::waitKey(1);
 			/*VisualizeObjectGraphVertexPointCloud(&objects, 100);*/
 			//if (bCTIBasedObjectAggregation)
@@ -805,11 +805,13 @@ void ObjectDetector::DetectObjects(char *MeshFilePathName)
 			pPSGM->CTIs(pObjects, &boundingBoxes);
 			//pPSGM->convexTemplate = pPSGM->convexTemplate66;
 			pObjects->pMesh = &mesh;
-			pObjects->DetermineObjectConvexityData(convexityThr, 0.15, bConcaveObjectAggregation, false);
+			pObjects->DetermineObjectConvexityData(convexityThr, 0.15, bConcaveObjectAggregation, true);
 			pObjects->vpObjectAggregationLevel2CriterionData = this;
 			pObjects->ExtFuncCheckIfWithinVolume = &RVL::ObjectDetector::CheckIfWithinCTIBoundingBox;
-			pObjects->ObjectAggregationLevel2_ViaObjectPairConvexity(convexityThr, convexityRatioThr1, convexityRatioThr2, pObjects->minObjectSize, false);
-			cv::imshow("New Colored object image", pObjects->CreateSegmentationImage());
+			pObjects->ObjectAggregationLevel2_ViaObjectPairConvexity(convexityThr, convexityRatioThr1, convexityRatioThr2, pObjects->minObjectSize, true);
+			cv::imshow("Level2", pObjects->CreateSegmentationImage());
+			pObjects->MergeSmallObjects(1000, 0.02, true);
+			cv::imshow("level2 + merge small objects", pObjects->CreateSegmentationImage());
 			cv::waitKey(1);
 
 			////
