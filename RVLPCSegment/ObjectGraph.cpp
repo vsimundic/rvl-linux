@@ -18,6 +18,7 @@
 //#define RVLPCSEGMENT_OBJECT_GRAPH_LOG					// Currently is not used for anything!
 //#define RVLPCSEGMENT_OBJECT_GRAPH_EVALUATION_LOG
 #define RVLPCSEGMENT_OBJECT_GRAPH_SYMMETRY_LOG
+#define RVLPCSEGMENT_OBJECT_GRAPH_OBJECT_AGGREGATION_LEVEL2_GREEDY_GROUPING2
 
 /// Move to RVLQListArray.h
 
@@ -2786,12 +2787,23 @@ void ObjectGraph::ObjectAggregationLevel2_ViaObjectPairConvexity(float convexThr
 
 	//Checking cluster consistincy if there are more than two objects in cluster
 	//Helper stuff
-	struct temp_pair{ int a; int b; float score; static bool sort_desc(temp_pair first, temp_pair second) { return (first.score > second.score); } };
+	struct temp_pair{ int a; int b; float score;  static bool sort_desc(temp_pair first, temp_pair second) { return (first.score > second.score); } };
 	//
-	std::vector<int> inputcluster;
-	std::vector<int> inputcluster_label;
+#ifdef RVLPCSEGMENT_OBJECT_GRAPH_OBJECT_AGGREGATION_LEVEL2_GREEDY_GROUPING2
+	int *objectLinkIdx;
+	std::vector<temp_pair> objectLinkQueue;
+	temp_pair link;
+	int nObjects;
+	int iFirstOpenLink;
+	int iLink, iLink_;
+	std::vector<int> aggregate;
+	int iGroupedObject;
+#else
 	std::queue<int> fifo;
 	std::vector<std::vector<temp_pair>> object_links;
+#endif
+	std::vector<int> inputcluster;
+	std::vector<int> inputcluster_label;
 	std::vector<std::vector<int>> newclusters;
 	std::map<int, std::set<int>> merge_clusters_copy = merge_clusters;
 	int label = 0;
@@ -2806,13 +2818,132 @@ void ObjectGraph::ObjectAggregationLevel2_ViaObjectPairConvexity(float convexThr
 		{
 			//remove this cluster from the list (new cluster or clusters will be added)
 			merge_clusters.erase(clustIt->first);
+
 			//setup a cluster
 			inputcluster.clear();	//reset cluster
 			inputcluster.push_back(clustIt->first);
 			for (clusterSetIt = clustIt->second.begin(); clusterSetIt != clustIt->second.end(); clusterSetIt++)
 				inputcluster.push_back(*clusterSetIt);
 
-			//run through cluster and find the object woth the best connection
+#ifdef RVLPCSEGMENT_OBJECT_GRAPH_OBJECT_AGGREGATION_LEVEL2_GREEDY_GROUPING2
+			nObjects = inputcluster.size();
+
+			objectLinkIdx = new int[nObjects * nObjects];
+
+			objectLinkQueue.clear();
+			objectLinkQueue.resize((nObjects * (nObjects - 1)) / 2);
+
+			iLink = 0;
+
+			for (int iObject = 0; iObject < nObjects; iObject++)
+			{
+				for (int iObject2 = iObject + 1; iObject2 < nObjects; iObject2++, iLink++)
+				{
+					link.a = iObject;
+					link.b = iObject2;
+					ss.clear();
+					ss.str("");
+					ss << inputcluster.at(iObject) << "_" << inputcluster.at(iObject2);
+					link.score = (min_convexity_values.count(ss.str()) ? min_convexity_values.at(ss.str()) : 0.0);
+
+					objectLinkQueue.at(iLink) = link;
+				}
+			}
+
+			std::sort(objectLinkQueue.begin(), objectLinkQueue.end(), temp_pair::sort_desc);
+
+			for (iLink = 0; iLink < objectLinkQueue.size(); iLink++)
+			{
+				link = objectLinkQueue.at(iLink);
+
+				objectLinkIdx[link.a + link.b * nObjects] = objectLinkIdx[link.b + link.a * nObjects] = iLink;
+			}
+
+			inputcluster_label.clear();
+			inputcluster_label.resize(nObjects, -1);
+
+			label = 0;
+
+			iFirstOpenLink = 0;
+
+			iLink = 0;
+
+			while (iLink < objectLinkQueue.size())	// while there are ungrouped objects in the cluster
+			{
+				link = objectLinkQueue.at(iLink);
+
+				if (inputcluster_label.at(link.a) != -1 || inputcluster_label.at(link.b) != -1)
+				{
+					iLink++;
+
+					continue;
+				}
+
+				aggregate.clear();
+				aggregate.push_back(link.a);
+
+				inputcluster_label.at(link.a) = label;
+
+				iLink_ = iFirstOpenLink = iLink;
+
+				while (iLink_ < objectLinkQueue.size())	// while there are open links
+				{
+					link = objectLinkQueue.at(iLink_);
+
+					if (inputcluster_label.at(link.a) == label && inputcluster_label.at(link.b) == -1)
+						iObject1_ = link.b;
+					else if (inputcluster_label.at(link.b) == label && inputcluster_label.at(link.a) == -1)
+						iObject1_ = link.a;
+					else if (inputcluster_label.at(link.a) == -1 && inputcluster_label.at(link.b) == -1)
+					{
+						iLink_++;
+
+						continue;
+					}
+					else
+					{
+						iFirstOpenLink++;
+
+						iLink_ = iFirstOpenLink;
+
+						continue;
+					}
+
+					for (iGroupedObject = 0; iGroupedObject < aggregate.size(); iGroupedObject++)
+					{
+						iObject2_ = aggregate.at(iGroupedObject);
+
+						if (objectLinkQueue.at(objectLinkIdx[iObject1_ + iObject2_ * nObjects]).score < ratioThr2)
+							break;
+					}
+
+					if (iGroupedObject == aggregate.size())
+					{
+						inputcluster_label.at(iObject1_) = label;
+
+						aggregate.push_back(iObject1_);
+
+						iLink_ = iFirstOpenLink;
+					}
+					else
+					{
+						inputcluster_label.at(iObject1_) = -2;
+
+						iLink_++;
+					}
+				}	// while there are open links
+
+				for (iObject1_ = 0; iObject1_ < inputcluster_label.size(); iObject1_++)
+					if (inputcluster_label.at(iObject1_) == -2)
+						inputcluster_label.at(iObject1_) = -1;
+
+				label++;
+			}	// while there are ungrouped objects in the cluster
+
+			delete[] objectLinkIdx;
+#else
+
+			//run through cluster and find the object with the best connection
 			startObj = 0;
 			startObjScore = 0.0;
 			for (int iObject = 0; iObject < inputcluster.size(); iObject++)
@@ -2914,12 +3045,18 @@ void ObjectGraph::ObjectAggregationLevel2_ViaObjectPairConvexity(float convexThr
 				}
 				label++; //current cluster finished, go to next
 			}
+#endif
 
 			//compiling new clusters based on labels
 			newclusters.clear();
 			newclusters.resize(label);
 			for (int i = 0; i < inputcluster_label.size(); i++)
-				newclusters.at(inputcluster_label.at(i)).push_back(inputcluster.at(i));
+				if (inputcluster_label.at(i) >= 0)
+					newclusters.at(inputcluster_label.at(i)).push_back(inputcluster.at(i));
+
+			//for (int i = 0; i < newclusters.size(); i++)
+			//	if (newclusters.at(i).size() >= 3)
+			//		printf("%d segments grouped.\n", newclusters.at(i).size());
 
 			//Adding new clusters that have more than one member
 			for (int i = 0; i < newclusters.size(); i++)
@@ -2930,10 +3067,8 @@ void ObjectGraph::ObjectAggregationLevel2_ViaObjectPairConvexity(float convexThr
 				for (int j = 1; j < newclusters.at(i).size(); j++)
 					merge_clusters.at(newclusters.at(i).at(0)).insert(newclusters.at(i).at(j));
 			}
-		}
-	}
-
-
+		}	// if cluster has three or more segments
+	}	// for every cluster
 
 	//Running through merge clusters and combining objects
 	GRAPH::AggregateNode<SURFEL::AgEdge> *pNode1;
