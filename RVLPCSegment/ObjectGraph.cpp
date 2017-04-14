@@ -2222,7 +2222,16 @@ void ObjectGraph::CalculateObjectsColorHistogram()
 }
 #endif
 
-void ObjectGraph::CalculateConvexityRatiosForObjectPair(int firstObject, int secondObject, float& firstRatio, float& secondRatio, float convexThr)
+void ObjectGraph::FlattenVertex(const float * P, float * Pc, const float * N, float d)
+{
+	float ntpd;
+	ntpd = P[0] * N[0] + P[1] * N[1] + P[2] * N[2] - d;
+	Pc[0] = P[0] - ntpd * N[0];
+	Pc[1] = P[1] - ntpd * N[1];
+	Pc[2] = P[2] - ntpd * N[2];
+}
+
+void ObjectGraph::CalculateConvexityRatiosForObjectPair(int firstObject, int secondObject, float& firstRatio, float& secondRatio, float convexThr, bool useFlatten)
 {
 	//if ((firstObject == 5) && (secondObject == 10))	//60, 484 za test 57
 	//	RenderConvexityPos(secondObject, firstObject, this->pMesh);
@@ -2245,6 +2254,7 @@ void ObjectGraph::CalculateConvexityRatiosForObjectPair(int firstObject, int sec
 	QLIST::Index *piElement;
 	Surfel *pSurfel;
 	Surfel *pSurfelIN;
+	Surfel *pSurfelTemp;
 	//First
 	piElement = pFirstObject->elementList.pFirst;
 	int firstTotal = 0;
@@ -2257,7 +2267,7 @@ void ObjectGraph::CalculateConvexityRatiosForObjectPair(int firstObject, int sec
 		{
 			//Find key value (if there are two surfels with same size)
 			keyVal = pSurfel->size;
-			while(aggregateObject.count(keyVal))
+			while (aggregateObject.count(keyVal))
 			{
 				keyVal++;
 			}
@@ -2299,14 +2309,17 @@ void ObjectGraph::CalculateConvexityRatiosForObjectPair(int firstObject, int sec
 	int surfelIdx;
 	int surfelIdxOther;
 	bool fail;
-	std::set<int> chVertexIndices;
-	std::set<int>::iterator chVertexIndices_iterator;
+	std::vector<int> chVertexIndices;
+	std::vector<int> chVertexIndicesSurfelIdx;
+	//std::set<int>::iterator chVertexIndices_iterator;
 	bool *added = new bool[aggregateObject.size()];
 	memset(added, 0, aggregateObject.size() * sizeof(bool));
 	int currIdx = 0;
 	int currIdxIN = 0;
 	float currmultiplier = 0.0;
 	float currmultiplierIN = 0.0;
+	float fP[3];
+	float *fPu;
 	for (aggObjIt = aggregateObject.rbegin(); aggObjIt != aggregateObject.rend(); ++aggObjIt)
 	{
 		//iterator->first = key
@@ -2322,12 +2335,20 @@ void ObjectGraph::CalculateConvexityRatiosForObjectPair(int firstObject, int sec
 
 		fail = false;
 		//runnong through a current list of added object vertices
-		for (chVertexIndices_iterator = chVertexIndices.begin(); chVertexIndices_iterator != chVertexIndices.end(); chVertexIndices_iterator++)
+		for (int i = 0; i < chVertexIndices.size(); i++)
 		{
 			//*iterator = value
-			rvlvertex = this->pSurfels->vertexArray.Element[*chVertexIndices_iterator];
+			rvlvertex = this->pSurfels->vertexArray.Element[chVertexIndices.at(i)];
+			if (useFlatten)
+			{
+				pSurfelTemp = pSurfels->NodeArray.Element + chVertexIndicesSurfelIdx.at(i);
+				FlattenVertex(rvlvertex->P, fP, pSurfelTemp->N, pSurfelTemp->d);
+				fPu = fP;
+			}
+			else
+				fPu = rvlvertex->P;
 			//if ((currmultiplier * pSurfel->N[0] * rvlvertex->P[0] + currmultiplier * pSurfel->N[1] * rvlvertex->P[1] + currmultiplier * pSurfel->N[2] * rvlvertex->P[2] - currmultiplier * pSurfel->d) > convexThr)
-			if (currmultiplier * pSurfels->Distance(pSurfel, rvlvertex->P, bObjectAggregationLevel2Uncertainty) > convexThr)
+			if (currmultiplier * pSurfels->Distance(pSurfel, fPu, bObjectAggregationLevel2Uncertainty) > convexThr)
 			{
 				fail = true;
 				break;
@@ -2353,8 +2374,15 @@ void ObjectGraph::CalculateConvexityRatiosForObjectPair(int firstObject, int sec
 				while (qlistelement)
 				{
 					rvlvertex = this->pSurfels->vertexArray.Element[qlistelement->Idx];
+					if (useFlatten)
+					{
+						FlattenVertex(rvlvertex->P, fP, pSurfel->N, pSurfel->d);
+						fPu = fP;
+					}
+					else
+						fPu = rvlvertex->P;
 					//if ((currmultiplierIN * pSurfelIN->N[0] * rvlvertex->P[0] + currmultiplierIN * pSurfelIN->N[1] * rvlvertex->P[1] + currmultiplierIN * pSurfelIN->N[2] * rvlvertex->P[2] - currmultiplierIN * pSurfelIN->d) > convexThr)
-					if (currmultiplierIN * pSurfels->Distance(pSurfelIN, rvlvertex->P, bObjectAggregationLevel2Uncertainty) > convexThr)
+					if (currmultiplierIN * pSurfels->Distance(pSurfelIN, fPu, bObjectAggregationLevel2Uncertainty) > convexThr)
 					{
 						fail = true;
 						break;
@@ -2374,7 +2402,8 @@ void ObjectGraph::CalculateConvexityRatiosForObjectPair(int firstObject, int sec
 			qlistelement = pSurfelVertexList->pFirst;
 			while (qlistelement)
 			{
-				chVertexIndices.insert(qlistelement->Idx);
+				chVertexIndices.push_back(qlistelement->Idx);
+				chVertexIndicesSurfelIdx.push_back(surfelIdx);
 				//Next
 				qlistelement = qlistelement->pNext;
 			}
@@ -2677,7 +2706,7 @@ void ObjectGraph::ObjectAggregationLevel2_ViaObjectPairConvexity(float convexThr
 					if (!ExtFuncCheckIfWithinVolume(vpObjectAggregationLevel2CriterionData, validObjects.at(iObject), validObjects.at(iObject2), 0.30))	//HARDCODED THRESHOLD?????
 						continue;
 				}
-				this->CalculateConvexityRatiosForObjectPair(validObjects.at(iObject), validObjects.at(iObject2), firstRatio, secondRatio, convexThr);
+				this->CalculateConvexityRatiosForObjectPair(validObjects.at(iObject), validObjects.at(iObject2), firstRatio, secondRatio, convexThr, false);
 				if (verbose)
 					std::cout << "(" << validObjects.at(iObject) << ", " << validObjects.at(iObject2) << ")" << " = " << firstRatio << ", " << secondRatio << std::endl;
 				if ((firstRatio > ratioThr) && (secondRatio > ratioThr))
@@ -2718,70 +2747,214 @@ void ObjectGraph::ObjectAggregationLevel2_ViaObjectPairConvexity(float convexThr
 	//Generating merge clusters (object pairs is in decreasing order)
 	std::map<int, std::set<int>> merge_clusters;
 	std::map<int, std::set<int>>::iterator clustIt;
+	std::map<int, std::set<int>>::iterator clustIt2;
 	std::set<int>::iterator clusterSetIt;
-	int foundSet = 0;
-	bool insertFirst;
-	bool intersection;
-	int secondSet = 0;
+	//int foundSet = 0;
+	//bool insertFirst;
+	//bool intersection;
+	//int secondSet = 0;
+	//for (int i = 0; i < merge_pairs.size(); i++)
+	//{
+	//	foundSet = -1;
+	//	secondSet = -1;
+	//	insertFirst = false;
+	//	intersection = false;
+	//	//check if current pair first item is already defined as cluster leader (KEY)
+	//	if (merge_clusters.count(merge_pairs.at(i).first))
+	//	{
+	//		foundSet = merge_pairs.at(i).first;
+	//		//check for intersection 
+	//		for (clustIt = merge_clusters.begin(); clustIt != merge_clusters.end(); clustIt++)
+	//		{
+	//			if (clustIt->second.count(merge_pairs.at(i).second))
+	//			{
+	//				secondSet = clustIt->first;
+	//				intersection = true;
+	//				break;
+	//			}
+	//		}
+	//	}
+	//	else //check if current pair first (or second???) item is already in some set //CHAINING!!!
+	//	{
+	//		for (clustIt = merge_clusters.begin(); clustIt != merge_clusters.end(); clustIt++)
+	//		{
+	//			if (clustIt->second.count(merge_pairs.at(i).first))
+	//			{
+	//				foundSet = clustIt->first;
+	//				break;
+	//			}
+	//			else if (clustIt->second.count(merge_pairs.at(i).second))
+	//			{
+	//				foundSet = clustIt->first;
+	//				insertFirst = true;
+	//				break;
+	//			}
+	//		}
+	//	}
+	//	if (intersection) //If intersection then clusters need to be merged
+	//	{
+	//		merge_clusters.at(foundSet).insert(secondSet);
+	//		//merge second cluster into first cluster
+	//		for (clusterSetIt = merge_clusters.at(secondSet).begin(); clusterSetIt != merge_clusters.at(secondSet).end(); clusterSetIt++)
+	//			merge_clusters.at(foundSet).insert(*clusterSetIt);
+	//		//remove the second set
+	//		merge_clusters.erase(secondSet);
+	//	}
+	//	else if (foundSet >= 0) //if found then put the second element in pair in that set
+	//	{
+
+	//		if (insertFirst)
+	//			merge_clusters.at(foundSet).insert(merge_pairs.at(i).first);
+	//		else
+	//			merge_clusters.at(foundSet).insert(merge_pairs.at(i).second);
+	//	}
+	//	else //if not found then create new cluster and put second pair element in it (first pair is the KEY of map pair)
+	//	{
+	//		merge_clusters.insert(std::pair<int, std::set<int>>(merge_pairs.at(i).first, std::set<int>()));
+	//		merge_clusters.at(merge_pairs.at(i).first).insert(merge_pairs.at(i).second);
+	//	}
+	//}
+
+	bool firstIntoSecond;
+	bool secondCL;
+	bool secondIntoFirst;
+	bool firstCL;
+	bool mergeClusters;
+	int mergeInto = -1;
+	int mergeFrom = -1;
+	int first = -1;
+	int second = -1;
 	for (int i = 0; i < merge_pairs.size(); i++)
 	{
-		foundSet = -1;
-		secondSet = -1;
-		insertFirst = false;
-		intersection = false;
+		firstIntoSecond = false;
+		secondCL = false;
+		secondIntoFirst = false;
+		firstCL = false;
+		mergeClusters = false;
+		mergeInto = -1;
+		mergeFrom = -1;
+		first = merge_pairs.at(i).first;
+		second = merge_pairs.at(i).second;
 		//check if current pair first item is already defined as cluster leader (KEY)
-		if (merge_clusters.count(merge_pairs.at(i).first))
+		if (merge_clusters.count(first))
 		{
-			foundSet = merge_pairs.at(i).first;
-			//check for intersection 
+			firstCL = true;
+			//check if second is cluster leader (IT IS NOT POSSIBLE SINCE THE LIST IS ORDERED!!!)
 			for (clustIt = merge_clusters.begin(); clustIt != merge_clusters.end(); clustIt++)
 			{
-				if (clustIt->second.count(merge_pairs.at(i).second))
+				if (merge_clusters.count(second))
 				{
-					secondSet = clustIt->first;
-					intersection = true;
+					secondCL = true;
+					mergeInto = first;
+					mergeFrom = second;
+					mergeClusters = true;
 					break;
 				}
 			}
+			//If second is not cluster leader
+			if (!secondCL)
+			{
+				//Check if second is in some other cluster in order to merge them
+				for (clustIt = merge_clusters.begin(); clustIt != merge_clusters.end(); clustIt++)
+				{
+					if (clustIt->second.count(second))
+					{
+						mergeInto = first;
+						mergeFrom = clustIt->first;
+						mergeClusters = true;
+						break;
+					}
+				}
+			}
+			if (!mergeClusters) // if clusters are not to be merged than just add second to first's cluster
+				secondIntoFirst = true;
 		}
-		else //check if current pair first (or second???) item is already in some set //CHAINING!!!
+		else //First is not cluster leader
 		{
+			//Check if second is cluster leader
 			for (clustIt = merge_clusters.begin(); clustIt != merge_clusters.end(); clustIt++)
 			{
-				if (clustIt->second.count(merge_pairs.at(i).first))
+				if (merge_clusters.count(second))
 				{
-					foundSet = clustIt->first;
-					break;
-				}
-				else if (clustIt->second.count(merge_pairs.at(i).second))
-				{
-					foundSet = clustIt->first;
-					insertFirst = true;
+					secondCL = true;
 					break;
 				}
 			}
-		}
-		if (intersection) //If intersection then clusters need to be merged
-		{
-			merge_clusters.at(foundSet).insert(secondSet);
-			//merge second cluster into first cluster
-			for (clusterSetIt = merge_clusters.at(secondSet).begin(); clusterSetIt != merge_clusters.at(secondSet).end(); clusterSetIt++)
-				merge_clusters.at(foundSet).insert(*clusterSetIt);
-			//remove the second set
-			merge_clusters.erase(secondSet);
-		}
-		else if (foundSet >= 0) //if found then put the second element in pair in that set
-		{
+			if (secondCL)	//second is cluster leader
+			{
+				//check if first is in some cluster in order to merge with second0s cluster
+				for (clustIt = merge_clusters.begin(); clustIt != merge_clusters.end(); clustIt++)
+				{
+					if (clustIt->second.count(first))
+					{
+						mergeInto = second;
+						mergeFrom = clustIt->first;
+						mergeClusters = true;
+						break;
+					}
+				}
+				if (!mergeClusters) //first is not in any cluster therefore just add first into second's cluster
+					firstIntoSecond = true;
+			}
+			else //Second is also not cluster leader
+			{
+				//check if first is already in some other cluster (SHOULD NOT BE POSSIBLE)
+				for (clustIt = merge_clusters.begin(); clustIt != merge_clusters.end(); clustIt++)
+				{
+					if (clustIt->second.count(first))
+					{
+						mergeInto = clustIt->first;
+						secondIntoFirst = true;
+						break;
+					}
+				}
+				//check if second is already in some cluster
+				for (clustIt = merge_clusters.begin(); clustIt != merge_clusters.end(); clustIt++)
+				{
+					if (clustIt->second.count(second))
+					{
+						mergeFrom = clustIt->first;	//mergeFrom will be used if first is added into second's cluster
+						firstIntoSecond = true;
+						break;
+					}
+				}
+				if (firstIntoSecond && secondIntoFirst)	//If they are both in som other clusters then merge clusters
+					mergeClusters = true;
+			}
 
-			if (insertFirst)
-				merge_clusters.at(foundSet).insert(merge_pairs.at(i).first);
-			else
-				merge_clusters.at(foundSet).insert(merge_pairs.at(i).second);
+			
 		}
-		else //if not found then create new cluster and put second pair element in it (first pair is the KEY of map pair)
+		if (mergeClusters)	//if something is going to be merged
 		{
-			merge_clusters.insert(std::pair<int, std::set<int>>(merge_pairs.at(i).first, std::set<int>()));
-			merge_clusters.at(merge_pairs.at(i).first).insert(merge_pairs.at(i).second);
+			if (mergeInto == mergeFrom)	//Already part of the same cluster
+				continue;
+			merge_clusters.at(mergeInto).insert(mergeFrom);
+			//merge second cluster into first cluster
+			for (clusterSetIt = merge_clusters.at(mergeFrom).begin(); clusterSetIt != merge_clusters.at(mergeFrom).end(); clusterSetIt++)
+				merge_clusters.at(mergeInto).insert(*clusterSetIt);
+			//remove the second set
+			merge_clusters.erase(mergeFrom);
+		}
+		else if (secondIntoFirst && (mergeInto >= 0)) //Add second into cluster where first is already located
+		{
+			merge_clusters.at(mergeInto).insert(second);
+		}
+		else if (firstIntoSecond && (mergeFrom >= 0))	//Add first into cluster where second is already found
+		{
+			merge_clusters.at(mergeFrom).insert(first);
+		}
+		else if (secondIntoFirst) //Add second into first's cluster
+		{
+			merge_clusters.at(first).insert(second);
+		}
+		else if (firstIntoSecond) //Add first into second's cluster
+		{
+			merge_clusters.at(second).insert(first);
+		}
+		else  //Create new cluster with first as leader (KEY)
+		{
+			merge_clusters.insert(std::pair<int, std::set<int>>(first, std::set<int>()));
+			merge_clusters.at(first).insert(second);
 		}
 	}
 
@@ -3040,7 +3213,7 @@ void ObjectGraph::ObjectAggregationLevel2_ViaObjectPairConvexity(float convexThr
 						if (fail)//got to the next link
 							continue;
 						inputcluster_label.at(object_links.at(currObj).at(l).b) = label; //if everything has passed then label the object
-						fifo.push(object_links.at(i).at(l).b);	//push it to fifo so it's links can be analyzed
+						fifo.push(object_links.at(currObj).at(l).b);	//push it to fifo so it's links can be analyzed
 					}
 				}
 				label++; //current cluster finished, go to next
@@ -3086,6 +3259,14 @@ void ObjectGraph::ObjectAggregationLevel2_ViaObjectPairConvexity(float convexThr
 
 			pElementList2 = &(pNode2->elementList);
 
+			//Update objectMap
+			piElement = pElementList2->pFirst;
+			while (piElement)
+			{
+				this->objectMap[piElement->Idx] = clustIt->first;
+				piElement = piElement->pNext;
+			}
+
 			// iNode1 <- union of iNode1 and iNode2 
 
 			RVLQLIST_APPEND(pElementList1, pElementList2);	//append their surfels
@@ -3093,10 +3274,12 @@ void ObjectGraph::ObjectAggregationLevel2_ViaObjectPairConvexity(float convexThr
 			// iNode2 <- empty set
 
 			RVLQLIST_INIT(pElementList2);	//reset list
+
+			//Update object size
+			pNode1->size += pNode2->size;
 			if (verbose)
 				std::cout << "Merged: " << clustIt->first << ", " << *clusterSetIt << std::endl;
 		}
-
 	}
 }
 
@@ -3534,4 +3717,132 @@ void ObjectGraph::RenderConvexityPos(int iObjectSurf, int iObjectVert, Mesh *pMe
 	renderer->ResetCamera();
 	window->Render();
 	interactor->Start();
+}
+
+void ObjectGraph::MergeSmallObjects(int sizeThr, float maxDistThr, bool verbose)
+{
+	//Determine a list of neighbours and distances for each small object
+	GRAPH::AggregateNode<SURFEL::AgEdge> *pObject;
+	GRAPH::AggregateNode<SURFEL::AgEdge> *pOtherObject;
+	Surfel *pSurfel;
+	int surfelIdx;
+	Surfel *pOtherSurfel;
+	int otherSurfelIdx;
+	QLIST::Index *piElement;
+	std::vector<int> validObjects;
+	std::map<int, std::map<int, float>> objectNeighbourhood;
+	std::map<int, std::map<int, float>>::iterator objectIt;
+	std::map<int, float>::iterator objectNeighboorIt;
+	//For each object
+	for (int iObject = 0; iObject < this->NodeArray.n; iObject++)
+	{
+		pObject = this->NodeArray.Element + iObject;
+
+		if (pObject->size > sizeThr)
+			continue;
+
+		piElement = pObject->elementList.pFirst;
+
+		//check if object
+		if (!piElement)
+			continue;
+		//
+		objectNeighbourhood.insert(std::make_pair(iObject, std::map<int, float>()));
+		//For each object surfel look at adjacent surfel and chech if they are owned by different object
+		while (piElement)
+		{
+			pSurfel = this->pSurfels->NodeArray.Element + piElement->Idx;
+			surfelIdx = piElement->Idx;
+			//check 
+			if (!((pSurfel->size <= 1) || pSurfel->bEdge))
+			{
+				//Running through its adjacency
+				for (int i = 0; i < pSurfel->imgAdjacency.size(); i++)
+				{
+					pOtherSurfel = pSurfel->imgAdjacency.at(i);
+					otherSurfelIdx = pOtherSurfel - this->pSurfels->NodeArray.Element;
+					//Check if current and other surfel is owned by different object, if yes add to the list, if it is already there update min distance
+					if (this->objectMap[surfelIdx] != this->objectMap[otherSurfelIdx])
+					{
+						//check if the size of the found object is greater than minimum
+						pOtherObject = this->NodeArray.Element + this->objectMap[otherSurfelIdx];
+						if (pOtherObject->size <= sizeThr)
+							continue;
+						//check if it exists
+						if (objectNeighbourhood.at(iObject).count(this->objectMap[otherSurfelIdx]))
+						{
+							//check if update of minimum distance is required
+							if (objectNeighbourhood.at(iObject).at(this->objectMap[otherSurfelIdx]) > pSurfel->imgAdjacencyDescriptors.at(i)->minDist)
+								objectNeighbourhood.at(iObject).at(this->objectMap[otherSurfelIdx]) = pSurfel->imgAdjacencyDescriptors.at(i)->minDist;
+						}
+						else //add
+							objectNeighbourhood.at(iObject).insert(std::make_pair(this->objectMap[otherSurfelIdx], pSurfel->imgAdjacencyDescriptors.at(i)->minDist));
+					}
+				}
+			}
+
+			piElement = piElement->pNext;
+		}
+	}
+
+	//Merge object to its closest and largest neighbour
+	QList<QLIST::Index> *pElementList1;
+	QList<QLIST::Index> *pElementList2;
+	float dist = 10000000;
+	int size = 0;
+	int chosenOtherObject;
+	for (objectIt = objectNeighbourhood.begin(); objectIt != objectNeighbourhood.end(); objectIt++)
+	{
+		//first = key, second = value
+		pObject = this->NodeArray.Element + objectIt->first;
+		pElementList1 = &pObject->elementList;
+		//run through neighbourhood and find min size
+		dist = 10000000;
+		chosenOtherObject = -1;
+		size = 0;
+		for (objectNeighboorIt = objectIt->second.begin(); objectNeighboorIt != objectIt->second.end(); objectNeighboorIt++)
+		{
+			//find largest object whose distance is lower than specified
+			pOtherObject = this->NodeArray.Element + objectNeighboorIt->first;
+			if (objectNeighboorIt->second > maxDistThr)
+				continue;
+			if (pOtherObject->size < size)
+				continue;
+			if (objectNeighboorIt->second < dist)
+			{
+				dist = objectNeighboorIt->second;
+				size = pOtherObject->size;
+				chosenOtherObject = objectNeighboorIt->first;
+			}
+		}
+
+		//check if merege is apropriate
+		if ((chosenOtherObject >= 0) && (dist <= maxDistThr))
+		{
+			pOtherObject = this->NodeArray.Element + chosenOtherObject;
+			pElementList2 = &pOtherObject->elementList;
+			
+			//Update objectMap
+			piElement = pElementList1->pFirst;
+			while (piElement)
+			{
+				this->objectMap[piElement->Idx] = chosenOtherObject;
+				piElement = piElement->pNext;
+			}
+
+			// iNode1 <- union of iNode1 and iNode2 
+
+			RVLQLIST_APPEND(pElementList2, pElementList1);	//append their surfels
+
+			// iNode2 <- empty set
+
+			RVLQLIST_INIT(pElementList1);	//reset list
+
+			//Update object size
+			pOtherObject->size += pObject->size;
+			if (verbose)
+				std::cout << "Merged: " << objectIt->first << " into " << chosenOtherObject << std::endl;
+		}
+	}
+
 }
