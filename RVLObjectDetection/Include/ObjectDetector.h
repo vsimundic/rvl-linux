@@ -43,11 +43,15 @@ namespace RVL
 		float convexityThr;
 		float convexityRatioThr1;
 		float convexityRatioThr2;
+		int nMultilateralFilterIterations;
+		int joinSmallObjectsToLargestNeighborSizeThr;
+		float joinSmallObjectsToLargestNeighborDistThr;
 		bool bSegmentToObjects;
 		bool bObjectAggregationLevel2;
 		bool bSurfelsFromSSF;
 		bool bCTIBasedObjectAggregation;
-		bool bConcaveObjectAggregation;
+		bool bMultilateralFilter;
+		bool bJoinSmallObjectsToLargestNeighbor;
 		SurfelGraph *pSurfels;
 		PlanarSurfelDetector *pSurfelDetector;
 		SURFEL::ObjectGraph *pObjects;

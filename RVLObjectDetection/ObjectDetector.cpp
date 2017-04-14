@@ -31,10 +31,15 @@ ObjectDetector::ObjectDetector()
 	convexityRatioThr1 = 0.77f;
 	convexityRatioThr2 = 0.75f;
 
+	nMultilateralFilterIterations = 10;
+	joinSmallObjectsToLargestNeighborSizeThr = 1000;
+	joinSmallObjectsToLargestNeighborDistThr = 0.020f;
+
 	bSegmentToObjects = false;
 	bObjectAggregationLevel2 = false;
 	bCTIBasedObjectAggregation = false;
-	bConcaveObjectAggregation = false;
+	bMultilateralFilter = false;
+	bJoinSmallObjectsToLargestNeighbor = false;
 
 	pSurfels = NULL;
 	pSurfelDetector = NULL;
@@ -137,7 +142,11 @@ void ObjectDetector::CreateParamList()
 	pParamData = ParamList.AddParam("ObjectDetector.convexityThr", RVLPARAM_TYPE_FLOAT, &convexityThr);
 	pParamData = ParamList.AddParam("ObjectDetector.convexityRatioThr1", RVLPARAM_TYPE_FLOAT, &convexityRatioThr1);
 	pParamData = ParamList.AddParam("ObjectDetector.convexityRatioThr2", RVLPARAM_TYPE_FLOAT, &convexityRatioThr2);
-	pParamData = ParamList.AddParam("ObjectGraph.concaveObjectAggregation", RVLPARAM_TYPE_BOOL, &bConcaveObjectAggregation);
+	pParamData = ParamList.AddParam("ObjectDetector.multilateralFilterIterations", RVLPARAM_TYPE_INT, &nMultilateralFilterIterations);
+	pParamData = ParamList.AddParam("ObjectDetector.joinSmallObjectsToLargestNeighborSizeThr", RVLPARAM_TYPE_INT, &joinSmallObjectsToLargestNeighborSizeThr);
+	pParamData = ParamList.AddParam("ObjectDetector.joinSmallObjectsToLargestNeighborDistThr", RVLPARAM_TYPE_FLOAT, &joinSmallObjectsToLargestNeighborDistThr);
+	pParamData = ParamList.AddParam("ObjectDetector.multilateralFilter", RVLPARAM_TYPE_BOOL, &bMultilateralFilter);
+	pParamData = ParamList.AddParam("ObjectDetector.joinSmallObjectsToLargestNeighbor", RVLPARAM_TYPE_BOOL, &bJoinSmallObjectsToLargestNeighbor);
 }
 
 //Dirk Holz and Sven Behnke: "Approximate Triangulation and Region Growing for Efficient Segmentation and Smoothing of Range Images"
@@ -695,7 +704,8 @@ void ObjectDetector::DetectObjects(char *MeshFilePathName)
 
 		//SmoothMesh(&mesh, 30);
 		//LaplaceSmooting(&mesh, 30);
-		MultilateralSmoothMesh(&mesh, 10, true);
+		if (bMultilateralFilter)
+			MultilateralSmoothMesh(&mesh, nMultilateralFilterIterations);
 
 		// Segment mesh to surfels.				
 
@@ -805,14 +815,17 @@ void ObjectDetector::DetectObjects(char *MeshFilePathName)
 			pPSGM->CTIs(pObjects, &boundingBoxes);
 			//pPSGM->convexTemplate = pPSGM->convexTemplate66;
 			pObjects->pMesh = &mesh;
-			pObjects->DetermineObjectConvexityData(convexityThr, 0.15, bConcaveObjectAggregation, false);
+			pObjects->DetermineObjectConvexityData(convexityThr, 0.15, false);
 			pObjects->vpObjectAggregationLevel2CriterionData = this;
 			pObjects->ExtFuncCheckIfWithinVolume = &RVL::ObjectDetector::CheckIfWithinCTIBoundingBox;
 			pObjects->ObjectAggregationLevel2_ViaObjectPairConvexity(convexityThr, convexityRatioThr1, convexityRatioThr2, pObjects->minObjectSize, false);
 			cv::imshow("Level2", pObjects->CreateSegmentationImage());
-			pObjects->MergeSmallObjects(1000, 0.02, true);
-			cv::imshow("level2 + merge small objects", pObjects->CreateSegmentationImage());
-			cv::waitKey(1);
+			if (bJoinSmallObjectsToLargestNeighbor)
+			{
+				pObjects->MergeSmallObjects(joinSmallObjectsToLargestNeighborSizeThr, joinSmallObjectsToLargestNeighborDistThr);
+				cv::imshow("level2 + merge small objects", pObjects->CreateSegmentationImage());
+				cv::waitKey(1);
+			}
 
 			////
 			//Evaluation

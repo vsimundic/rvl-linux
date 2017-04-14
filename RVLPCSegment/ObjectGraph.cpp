@@ -621,6 +621,8 @@ ObjectGraph::ObjectGraph()
 
 	bObjectAggregationLevel2Uncertainty = false;
 	bObjectAggregationLevel2Edges = false;
+	bFlattenVertices = false;
+	bConcaveObjectAggregation = false;
 
 	nValidObjects = -1;
 	sortedObjectArray.n = -1;
@@ -683,6 +685,8 @@ void ObjectGraph::CreateParamList(CRVLMem *pMem)
 	ParamList.AddID(pParamData, "CONVEXITY", RVLPCSEGMENT_OBJECT_AGGREGATION_LEVEL2_METHOD_CONVEXITY);
 	ParamList.AddID(pParamData, "SYMMETRY", RVLPCSEGMENT_OBJECT_AGGREGATION_LEVEL2_METHOD_SYMMETRY);
 	pParamData = ParamList.AddParam("ObjectGraph.minObjectSize", RVLPARAM_TYPE_INT, &minObjectSize);
+	pParamData = ParamList.AddParam("ObjectGraph.flattenVertices", RVLPARAM_TYPE_BOOL, &bFlattenVertices);
+	pParamData = ParamList.AddParam("ObjectGraph.concaveObjectAggregation", RVLPARAM_TYPE_BOOL, &bConcaveObjectAggregation);
 }
 
 #ifdef RVLSURFEL_IMAGE_ADJACENCY
@@ -1907,7 +1911,7 @@ bool RVL::SURFEL::objectMouseRButtonDownUserFunction(
 		return false;
 }
 
-void ObjectGraph::DetermineObjectConvexityData(float convexThr, float minDiffFlipReq, bool setflip, bool verbose)
+void ObjectGraph::DetermineObjectConvexityData(float convexThr, float minDiffFlipReq, bool verbose)
 {
 	//Reseting convexity data
 	if (this->additionalObjectData.CHVertexIndices.size())
@@ -2154,7 +2158,7 @@ void ObjectGraph::DetermineObjectConvexityData(float convexThr, float minDiffFli
 			this->additionalObjectData.CHVertexIndices.at(iObject) = CHVertexIndicesOtherDir;
 			this->additionalObjectData.ObjectsSurfelConvexity.at(iObject) = ObjectsSurfelConvexityOtherDir;
 			//Set multiplier to -1
-			if (setflip)
+			if (bConcaveObjectAggregation)
 				this->additionalObjectData.convexityMultipliers.at(iObject) = -1.0;
 			//std::cout << "Object " << iObject << " is concave!" << std::endl;
 		}
@@ -2231,7 +2235,7 @@ void ObjectGraph::FlattenVertex(const float * P, float * Pc, const float * N, fl
 	Pc[2] = P[2] - ntpd * N[2];
 }
 
-void ObjectGraph::CalculateConvexityRatiosForObjectPair(int firstObject, int secondObject, float& firstRatio, float& secondRatio, float convexThr, bool useFlatten)
+void ObjectGraph::CalculateConvexityRatiosForObjectPair(int firstObject, int secondObject, float& firstRatio, float& secondRatio, float convexThr)
 {
 	//if ((firstObject == 5) && (secondObject == 10))	//60, 484 za test 57
 	//	RenderConvexityPos(secondObject, firstObject, this->pMesh);
@@ -2339,7 +2343,7 @@ void ObjectGraph::CalculateConvexityRatiosForObjectPair(int firstObject, int sec
 		{
 			//*iterator = value
 			rvlvertex = this->pSurfels->vertexArray.Element[chVertexIndices.at(i)];
-			if (useFlatten)
+			if (bFlattenVertices)
 			{
 				pSurfelTemp = pSurfels->NodeArray.Element + chVertexIndicesSurfelIdx.at(i);
 				FlattenVertex(rvlvertex->P, fP, pSurfelTemp->N, pSurfelTemp->d);
@@ -2374,7 +2378,7 @@ void ObjectGraph::CalculateConvexityRatiosForObjectPair(int firstObject, int sec
 				while (qlistelement)
 				{
 					rvlvertex = this->pSurfels->vertexArray.Element[qlistelement->Idx];
-					if (useFlatten)
+					if (bFlattenVertices)
 					{
 						FlattenVertex(rvlvertex->P, fP, pSurfel->N, pSurfel->d);
 						fPu = fP;
@@ -2706,7 +2710,7 @@ void ObjectGraph::ObjectAggregationLevel2_ViaObjectPairConvexity(float convexThr
 					if (!ExtFuncCheckIfWithinVolume(vpObjectAggregationLevel2CriterionData, validObjects.at(iObject), validObjects.at(iObject2), 0.30))	//HARDCODED THRESHOLD?????
 						continue;
 				}
-				this->CalculateConvexityRatiosForObjectPair(validObjects.at(iObject), validObjects.at(iObject2), firstRatio, secondRatio, convexThr, false);
+				this->CalculateConvexityRatiosForObjectPair(validObjects.at(iObject), validObjects.at(iObject2), firstRatio, secondRatio, convexThr);
 				if (verbose)
 					std::cout << "(" << validObjects.at(iObject) << ", " << validObjects.at(iObject2) << ")" << " = " << firstRatio << ", " << secondRatio << std::endl;
 				if ((firstRatio > ratioThr) && (secondRatio > ratioThr))
