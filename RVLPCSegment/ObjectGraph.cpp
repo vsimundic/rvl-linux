@@ -537,7 +537,9 @@ void ObjectGraph::CalculateOverAndUnderSegmentation(
 	int &N, 
 	bool useGTNoPix, 
 	std::string imageFileName, 
-	bool useBackground)
+	bool useBackground,
+	std::string selectedGTObjectFileName,
+	std::vector<ObjectCoverage> *pSelectedGTObjectCoverage)
 {
 	//Getting GThist size and initializing GT object histogram;
 	//find a surfel that has defined GTObjHist
@@ -551,13 +553,16 @@ void ObjectGraph::CalculateOverAndUnderSegmentation(
 		}
 	}
 
+	if (pSelectedGTObjectCoverage)
+		LoadSelectedGTObjects((char *)(imageFileName.c_str()), (char *)(selectedGTObjectFileName.c_str()), *pSelectedGTObjectCoverage);
+
 #ifdef RVLPCSEGMENT_OBJECT_GRAPH_EVALUATION_LOG
 	FILE *fp = fopen("C:\\RVL\\ExpRez\\SegmentationToGT.txt", "w");
+#endif
 
 	int *nObjectPts = new int[GTHistSize];
 
 	memset(nObjectPts, 0, GTHistSize * sizeof(int));
-#endif
 
 	if (useGTNoPix)	//Assumption - GT files is in the same directory as the SSF file and has name in format : SSFfilename + a + .png (label image) and SSFfilename + d + .png (depth image)
 	{
@@ -582,14 +587,11 @@ void ObjectGraph::CalculateOverAndUnderSegmentation(
 
 				GTLabel = (int)GTLabImg.at<cv::Vec3b>(y, x)[0];
 
+				nObjectPts[GTLabel]++;
+
 				//if ((GTLabel > 0) && GTDepthImg.at<unsigned short>(y, x) > 0)
 				if (GTLabel > 0)
-				{
-#ifdef RVLPCSEGMENT_OBJECT_GRAPH_EVALUATION_LOG
-					nObjectPts[GTLabel]++;
-#endif
 					N++;
-				}					
 			}
 		}
 #ifdef RVLPCSEGMENT_OBJECT_GRAPH_EVALUATION_LOG
@@ -732,12 +734,17 @@ void ObjectGraph::CalculateOverAndUnderSegmentation(
 	fprintf(fp, "-----------------------------\n");
 #endif
 
+	if (pSelectedGTObjectCoverage)
+		for (int j = 0; j < pSelectedGTObjectCoverage->size(); j++)
+			pSelectedGTObjectCoverage->at(j).coverage = 0.0f;
+
 	//Sum positive values
 	for (int i = 0; i < GTHistSize; i++)
 	{
 #ifdef RVLPCSEGMENT_OBJECT_GRAPH_EVALUATION_LOG
 		fprintf(fp, "GTO %d (%d pts): ", i, nObjectPts[i]);
 #endif
+
 		if ((i == 0) && !useBackground)
 			continue;
 
@@ -746,6 +753,15 @@ void ObjectGraph::CalculateOverAndUnderSegmentation(
 			intersection = GTObjHistogram[maxObj[i] * GTHistSize + i];
 
 			E[0] += intersection;
+
+			if (pSelectedGTObjectCoverage)
+			{
+				for (int j = 0; j < pSelectedGTObjectCoverage->size(); j++)
+				{
+					if (i == pSelectedGTObjectCoverage->at(j).iObject)
+						pSelectedGTObjectCoverage->at(j).coverage = (float)intersection / (float)nObjectPts[i];
+				}
+			}
 
 #ifdef RVLPCSEGMENT_OBJECT_GRAPH_EVALUATION_LOG
 			fprintf(fp, "S %d #Pts: %d, perc: %lf, error perc: %lf\n", maxObj[i], intersection, (float)intersection / (float)nObjectPts[i] * 100.0f,
@@ -768,15 +784,61 @@ void ObjectGraph::CalculateOverAndUnderSegmentation(
 
 #ifdef RVLPCSEGMENT_OBJECT_GRAPH_EVALUATION_LOG
 	fclose(fp);
-
-	delete[] nObjectPts;
 #endif
 
 	//DeRef
+	delete[] nObjectPts;
 	delete[] GTObjHistogram;
 	delete[] maxObj;
 	delete[] g;
 	delete[] maxBin;
+}
+
+void ObjectGraph::LoadSelectedGTObjects(
+	char *meshFileName,
+	char *selectedGTObjectFileName,
+	std::vector<ObjectCoverage> &selectedGTObjectCoverage)
+{
+	selectedGTObjectCoverage.clear();
+
+	FILE *fpSelectedGTObjects = fopen(selectedGTObjectFileName, "r");
+
+	if (fpSelectedGTObjects)
+	{
+		char *meshName;
+		char *meshFilePath = NULL;
+
+		GetFileNameAndPath(meshFileName, meshName, meshFilePath);
+
+		char line[200];
+		char meshName_[200];
+		int iObject;
+		int type;
+		ObjectCoverage objectCoverageData;
+
+		while (true)
+		{
+			fgets(line, 200, fpSelectedGTObjects);
+
+			if (line[0] == '\n')
+				continue;
+
+			if (strstr(line, "end") == line)
+				break;
+
+			sscanf(line, "%s\t%d\t%d\n", meshName_, &iObject, &type);
+
+			if (strcmp(meshName, meshName_) == 0)
+			{
+				objectCoverageData.iObject = iObject;
+				objectCoverageData.type = type;
+
+				selectedGTObjectCoverage.push_back(objectCoverageData);
+			}
+		}
+
+		fclose(fpSelectedGTObjects);
+	}
 }
 #endif
 

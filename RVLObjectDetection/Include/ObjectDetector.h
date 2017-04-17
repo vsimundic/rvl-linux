@@ -27,7 +27,8 @@ namespace RVL
 		void DetectObjects(char *MeshFilePathName);
 		void Evaluate(
 			FILE *fp,
-			char *fileName);
+			char *fileName,
+			char *selectedGTObjectsFileName = NULL);
 		void BoundingBox(
 			int iObject1,
 			int iObject2,

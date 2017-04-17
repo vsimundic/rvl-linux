@@ -83,8 +83,20 @@ void SaveDepthImage(cv::Mat *iDepth, int w, int h, char *pDepthFileName);
 void SaveGTMask(int *iDepth, int w, int h, char *pGTFileName);
 void SaveFiles(int iImageCnt, IplImage *pRgbImage, cv::Mat *pDepthMat, cv::Mat *pDepthMatTest, int w, int h, char *pDefaultFileLocation);
 
-
-
+namespace RVL
+{
+	namespace PCGT
+	{
+		void DisplayLabelImage(
+			cv::Mat labelImage, 
+			cv::Mat displayImage);
+		void SelectObjectMouseCallback(int event, int x, int y, int flags, void* param);
+		void DisplayGroundTruthSegmentation(
+			char *meshFileName,
+			cv::Mat &GTLabImg,
+			bool bRGB = false);
+	}
+}
 	
 template < class T >
 void set_pixel(T &pcl_pixel, cv::Mat &src, int x, int y, RVLGT_INTRINSIC_PARAMS &cam_params);

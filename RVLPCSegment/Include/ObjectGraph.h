@@ -58,6 +58,13 @@ namespace RVL
 			float PClean;
 			float P;
 		};
+		
+		struct ObjectCoverage
+		{
+			int iObject;
+			unsigned char type;
+			float coverage;
+		};
 
 		bool objectKeyPressUserFunction(
 			Mesh *pMesh,
@@ -96,7 +103,14 @@ namespace RVL
 			void Create(SurfelGraph *pSurfels_);
 			void CreateFromSSF(std::string ssfFileName);	//Filko
 			void CalculateOverAndUnderSegmentation_SSF(int *E, int &N, bool useGTNoPix = true,  bool useBackground = true);	//Filko
-			void CalculateOverAndUnderSegmentation(int *E, int &N, bool useGTNoPix = false, std::string GTlabImgFilename = "", bool useBackground = true);	//Filko
+			void CalculateOverAndUnderSegmentation(
+				int *E, 
+				int &N, 
+				bool useGTNoPix = false, 
+				std::string GTlabImgFilename = "", 
+				bool useBackground = true,
+				std::string selectedGTObjectFileName = "",
+				std::vector<ObjectCoverage> *pSelectedGTObjectCoverage = NULL);	//Filko
 			void DetermineObjectConvexityData(float convexThr = 0.005, float minDiffFlipReq = 0.1, bool verbose = false);	//Filko
 			void CalculateConvexityRatiosForObjectPair(int firstObject, int secondObject, float& firstRatio, float& secondRatio, float convexThr = 0.005);	//Filko
 			void CalculateObjectsColorHistogram(); //Filko
@@ -135,6 +149,10 @@ namespace RVL
 			cv::Mat CreateSegmentationImage();
 			cv::Mat CreateSegmentationImageFromSSF();
 			void Debug();
+			void LoadSelectedGTObjects(
+				char *meshFileName,
+				char *selectedGTObjectFileName,
+				std::vector<ObjectCoverage> &selectedGTObjectCoverage);
 
 		public:
 			CRVLParameterList ParamList;

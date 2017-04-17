@@ -92,7 +92,8 @@ void CreateParamList(
 	RVLGT_SEGMENTATION_PARAMS *pGTSegmentParams,
 	RVLGT_PCLSUPERVOXEL_PARAMS *pPCLSuperVoxelParams,
 	DWORD &flags,
-	DWORD &mode)
+	DWORD &mode,
+	char **pSequenceFileName)
 {
 	pParamList->m_pMem = pMem;
 
@@ -101,13 +102,13 @@ void CreateParamList(
 	pParamList->Init();
 
 	pParamData = pParamList->AddParam("GT.ImageLocation", RVLPARAM_TYPE_STRING, &(pGTSegmentParams->pDefaultFileLocation));
+	pParamData = pParamList->AddParam("GT.SequenceFileName", RVLPARAM_TYPE_STRING, pSequenceFileName);	//VIDOVIC
 	pParamData = pParamList->AddParam("GT.InitialImageNo", RVLPARAM_TYPE_INT, &(pGTSegmentParams->iImageNo));
 	pParamData = pParamList->AddParam("GT.DifferenceThreshold", RVLPARAM_TYPE_INT, &(pGTSegmentParams->DiffThreshold));
 	pParamData = pParamList->AddParam("GT.PercThreshold", RVLPARAM_TYPE_FLOAT, &(pGTSegmentParams->PercThreshold));
 	pParamData = pParamList->AddParam("GT.MinNoOfPoints", RVLPARAM_TYPE_INT, &(pGTSegmentParams->MinNoOfPoints));
 	pParamData = pParamList->AddParam("GT.MaxDist", RVLPARAM_TYPE_INT, &(pGTSegmentParams->MaxDist));
 	pParamData = pParamList->AddParam("GT.minConnectedComponentSize", RVLPARAM_TYPE_INT, &(pGTSegmentParams->minConnectedComponentSize));
-
 	pParamData = pParamList->AddParam("GT.mode", RVLPARAM_TYPE_ID, &mode);
 	pParamList->AddID(pParamData, "GENERATE_GT", RVLPCGT_MODE_FLAG_GENERATE_GT);
 	pParamList->AddID(pParamData, "OBJECT_SELECTION", RVLPCGT_MODE_FLAG_GT_OBJECT_SELECTION);
@@ -1092,10 +1093,11 @@ int main(int argc, char ** argv)
 
 	DWORD flags = 0x00000000;
 	DWORD mode;
+	char *sequenceFileName = NULL;
 
 	CRVLParameterList ParamList;
 
-	CreateParamList(&ParamList, &mem0, &gtSegmentParams,&gtSuperVoxelParams, flags, mode);
+	CreateParamList(&ParamList, &mem0, &gtSegmentParams, &gtSuperVoxelParams, flags, mode, &sequenceFileName);
 
 	ParamList.LoadParams("RVLPCGroundTruthDemo.cfg");
 
@@ -1136,7 +1138,29 @@ int main(int argc, char ** argv)
 	}
 	else if (mode == RVLPCGT_MODE_FLAG_GT_OBJECT_SELECTION)
 	{
+		char displayImageName[] = "Ground Truth";
+		char RGBImageName[] = "RGB Image";
 
+		cv::Mat displayImage(480, 640, CV_8UC3, cv::Scalar::all(0));
+
+		char meshFileName[200];
+		char *GTFileName;
+		char *RGBFileName;
+		cv::Mat GTLabImg;
+		FileSequenceLoader sceneSequence;
+
+		sceneSequence.Init(sequenceFileName);
+
+		while (sceneSequence.GetNextPath(meshFileName))
+		{
+			printf("Image %s...\n", meshFileName);
+
+			PCGT::DisplayGroundTruthSegmentation(meshFileName, GTLabImg, true);
+
+			cv::waitKey();
+
+			delete[] GTFileName;
+		}
 	}
 	else if (mode == RVLPCGT_MODE_FLAG_RECORD)
 	{

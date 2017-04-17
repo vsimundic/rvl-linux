@@ -824,8 +824,9 @@ void ObjectDetector::DetectObjects(char *MeshFilePathName)
 			{
 				pObjects->MergeSmallObjects(joinSmallObjectsToLargestNeighborSizeThr, joinSmallObjectsToLargestNeighborDistThr);
 				cv::imshow("level2 + merge small objects", pObjects->CreateSegmentationImage());
-				cv::waitKey(1);
 			}
+			
+			
 
 			////
 			//Evaluation
@@ -843,19 +844,37 @@ void ObjectDetector::DetectObjects(char *MeshFilePathName)
 
 void ObjectDetector::Evaluate(
 	FILE *fp,
-	char *fileName)
+	char *fileName,
+	char *selectedGTObjectsFileName)
 {
 #ifdef RVLSURFEL_IMAGE_ADJACENCY
 	if (bSegmentToObjects)
-	{
+	{	
 		int E[2];
 		int N = 0;
 
 		if (bSurfelsFromSSF)
 			pObjects->CalculateOverAndUnderSegmentation_SSF(E, N, true, false);
 		else
-			pObjects->CalculateOverAndUnderSegmentation(E, N, true, std::string(fileName), false);
+		{			
+			if (selectedGTObjectsFileName)
+			{
+				std::vector<SURFEL::ObjectCoverage> selectedGTObjectCoverage;
 
+				pObjects->CalculateOverAndUnderSegmentation(E, N, true, std::string(fileName), false, std::string(selectedGTObjectsFileName), &selectedGTObjectCoverage);
+
+				FILE *fpSelectedGTObjectCoverage = fopen("selected_GT_object_coverage.txt", "a");
+
+				for (int i = 0; i < selectedGTObjectCoverage.size(); i++)
+					fprintf(fpSelectedGTObjectCoverage, "%d\t%d\t%f\n", selectedGTObjectCoverage.at(i).iObject,
+					selectedGTObjectCoverage.at(i).type, selectedGTObjectCoverage.at(i).coverage);
+
+				fclose(fpSelectedGTObjectCoverage);
+			}
+			else
+				pObjects->CalculateOverAndUnderSegmentation(E, N, true, std::string(fileName), false);
+		}
+			
 		std::cout << "Oversegmenation error: " << 100.0f * (1 - E[0] / (float)N) << "%" << std::endl;
 		std::cout << "Undersegmenation error: " << 100.0f * E[1] / (float)N << "%" << std::endl;
 

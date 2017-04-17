@@ -26,8 +26,11 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 #include "PCLTools.h"
 #include "RGBDCamera.h"
 #include "PCLMeshBuilder.h"
+#include "GTTools.h"
 #include "vtkOBBTree.h"
 #include "vtkLine.h"
+
+#define RVLOBJECTDETECTIONDEMO_SELECT_GT_OBJECTS
 
 using namespace RVL;
 
@@ -38,7 +41,8 @@ void CreateParamList(
 	char **pSequenceFileName,
 	char **pSegmentationResultsFileName,
 	bool &b3DVisualization,
-	bool &b2DVisualization)
+	bool &b2DVisualization,
+	char **pSelectedGTObjectsFileName)
 {
 	pParamList->m_pMem = pMem;
 
@@ -51,6 +55,7 @@ void CreateParamList(
 	pParamData = pParamList->AddParam("SegmentationResultsFileName", RVLPARAM_TYPE_STRING, pSegmentationResultsFileName);
 	pParamData = pParamList->AddParam("Visualization.3D", RVLPARAM_TYPE_BOOL, &b3DVisualization);
 	pParamData = pParamList->AddParam("Visualization.2D", RVLPARAM_TYPE_BOOL, &b2DVisualization);
+	pParamData = pParamList->AddParam("SelectedGTObjectsFileName", RVLPARAM_TYPE_STRING, pSelectedGTObjectsFileName);
 }
 
 //void VisualizeSurfelNormals(Visualizer *vis, SurfelGraph* pSurfels)
@@ -164,11 +169,13 @@ int main(int argc, char ** argv)
 	char *MeshFileName = NULL;
 	char *SequenceFileName = NULL;
 	char *SegmentationResultsFileName = NULL;
+	char *selectedGTObjectsFileName = NULL;
 	bool b3DVisualization, b2DVisualization;
 
 	CRVLParameterList ParamList;
 
-	CreateParamList(&ParamList, &mem0, &MeshFileName, &SequenceFileName, &SegmentationResultsFileName, b3DVisualization, b2DVisualization);
+	CreateParamList(&ParamList, &mem0, &MeshFileName, &SequenceFileName, &SegmentationResultsFileName, b3DVisualization, 
+		b2DVisualization, &selectedGTObjectsFileName);
 
 	ParamList.LoadParams(cfgFileName);
 
@@ -211,6 +218,8 @@ int main(int argc, char ** argv)
 	if (fp)
 		fprintf(fp, "Image\tE0\tE1\tN\n");
 
+	cv::Mat GTLabImg;
+
 	if (bSequence)
 	{
 		//Run sequence
@@ -230,7 +239,11 @@ int main(int argc, char ** argv)
 
 			printf("Scene %s...finished!\n\n", fileName);
 
-			objectDetector.Evaluate(fp, filePath);
+			objectDetector.Evaluate(fp, filePath, selectedGTObjectsFileName);
+
+			PCGT::DisplayGroundTruthSegmentation(filePath, GTLabImg);
+
+			cv::waitKey(1);
 
 #ifdef RVLSURFEL_IMAGE_ADJACENCY
 			if (objectDetector.bSegmentToObjects)
@@ -253,7 +266,11 @@ int main(int argc, char ** argv)
 
 		objectDetector.DetectObjects(MeshFileName);
 
-		objectDetector.Evaluate(fp, MeshFileName);
+		objectDetector.Evaluate(fp, MeshFileName, selectedGTObjectsFileName);
+
+		PCGT::DisplayGroundTruthSegmentation(MeshFileName, GTLabImg);
+
+		cv::waitKey();
 
 #ifdef RVLSURFEL_IMAGE_ADJACENCY
 		if (objectDetector.bSurfelsFromSSF)
