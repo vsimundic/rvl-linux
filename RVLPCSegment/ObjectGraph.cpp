@@ -16,6 +16,7 @@
 #include <queue>
 
 //#define RVLPCSEGMENT_OBJECT_GRAPH_IGNORE_EDGES
+#define RVLPCSEGMENT_OBJECT_GRAPH_OBJECT_SIZE_WITHOUT_EDGES
 
 //#define RVLPCSEGMENT_OBJECT_GRAPH_LOG					// Currently is not used for anything!
 //#define RVLPCSEGMENT_OBJECT_GRAPH_EVALUATION_LOG
@@ -879,7 +880,10 @@ void ObjectGraph::WERSegmentation()
 			{
 				pElement = NodeArray.Element + pElementIdx->Idx;
 
-				size += pElement->size;
+#ifdef RVLPCSEGMENT_OBJECT_GRAPH_OBJECT_SIZE_WITHOUT_EDGES
+				if (!pSurfels->NodeArray.Element[pElementIdx->Idx].bEdge)
+#endif
+					size += pElement->size;
 
 				pElementIdx = pElementIdx->pNext;
 			}

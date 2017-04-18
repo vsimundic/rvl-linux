@@ -30,7 +30,7 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 #include "vtkOBBTree.h"
 #include "vtkLine.h"
 
-#define RVLOBJECTDETECTIONDEMO_SELECT_GT_OBJECTS
+//#define RVLOBJECTDETECTIONDEMO_SELECT_GT_OBJECTS
 
 using namespace RVL;
 
@@ -241,7 +241,9 @@ int main(int argc, char ** argv)
 
 			objectDetector.Evaluate(fp, filePath, selectedGTObjectsFileName);
 
+#ifdef RVLOBJECTDETECTIONDEMO_SELECT_GT_OBJECTS
 			PCGT::DisplayGroundTruthSegmentation(filePath, GTLabImg);
+#endif
 
 			cv::waitKey(1);
 
@@ -268,9 +270,11 @@ int main(int argc, char ** argv)
 
 		objectDetector.Evaluate(fp, MeshFileName, selectedGTObjectsFileName);
 
+#ifdef RVLOBJECTDETECTIONDEMO_SELECT_GT_OBJECTS
 		PCGT::DisplayGroundTruthSegmentation(MeshFileName, GTLabImg);
+#endif
 
-		cv::waitKey();
+		cv::waitKey(1);
 
 #ifdef RVLSURFEL_IMAGE_ADJACENCY
 		if (objectDetector.bSurfelsFromSSF)
