@@ -97,8 +97,8 @@ namespace RVL
 			void CreateFromSSF(std::string ssfFileName);	//Filko
 			void CalculateOverAndUnderSegmentation_SSF(int *E, int &N, bool useGTNoPix = true,  bool useBackground = true);	//Filko
 			void CalculateOverAndUnderSegmentation(int *E, int &N, bool useGTNoPix = false, std::string GTlabImgFilename = "", bool useBackground = true);	//Filko
-			void DetermineObjectConvexityData(float convexThr = 0.005, float minDiffFlipReq = 0.1, bool setflip = false, bool verbose = false);	//Filko
-			void CalculateConvexityRatiosForObjectPair(int firstObject, int secondObject, float& firstRatio, float& secondRatio, float convexThr = 0.005, bool useFlatten = false);	//Filko
+			void DetermineObjectConvexityData(float convexThr = 0.005, float minDiffFlipReq = 0.1, bool verbose = false);	//Filko
+			void CalculateConvexityRatiosForObjectPair(int firstObject, int secondObject, float& firstRatio, float& secondRatio, float convexThr = 0.005);	//Filko
 			void CalculateObjectsColorHistogram(); //Filko
 			bool(*ExtFuncCheckIfWithinVolume)(void*, int, int, float);	//Filko
 			void ObjectAggregationLevel2_ViaObjectPairConvexity(float convexThr, float ratioThr, float ratioThr2, int objValidThr = 300, bool verbose = false); //Filko - NOT OPTIMIZED!!!!
@@ -160,6 +160,8 @@ namespace RVL
 			int nValidObjects;
 			bool bObjectAggregationLevel2Uncertainty;
 			bool bObjectAggregationLevel2Edges;
+			bool bFlattenVertices;
+			bool bConcaveObjectAggregation;
 			void(*objectAggregationLevel2Criterion)(ObjectGraph *pObjects, int iObject1, int iObject2, void *vpData);
 			void *vpObjectAggregationLevel2CriterionData;
 			FILE *fpSymmetry;

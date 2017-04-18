@@ -95,6 +95,7 @@ SurfelGraph::SurfelGraph()
 	DisplayData.vpUserFunctionData = NULL;
 	DisplayData.edgeFeatureDepth = 0.01f;
 	DisplayData.normalLen = 10.0f;
+	DisplayData.bCallbackFunctionsDefined = false;
 	RVLSET3VECTOR(DisplayData.ForegroundColor, 0, 255, 0);
 	RVLSET3VECTOR(DisplayData.BackgroundColor, 255, 0, 0);
 	RVLSET3VECTOR(DisplayData.ConvexColor, 0, 255, 0);
@@ -1362,112 +1363,112 @@ void SurfelGraph::DetectVertices(
 								if (pFeature_[0])
 								{
 									for (i = 0; i < pFeature_[0]->imgAdjacency.size(); i++)
-								{
+									{
 										pF = pFeature_[0]->imgAdjacency.at(i);
 
 										if (pF == pFeature_[1])
 											bConvex[0] = (pFeature_[0]->imgAdjacencyDescriptors.at(i)->cupyDescriptor[0] >= 0);
 										else if (pF == pFeature_[2])
 											bConvex[2] = (pFeature_[0]->imgAdjacencyDescriptors.at(i)->cupyDescriptor[0] >= 0);
-								}
+									}
 
 									if (pFeature_[1])
-								{
+									{
 										for (i = 0; i < pFeature_[1]->imgAdjacency.size(); i++)
-								{
+										{
 											pF = pFeature_[1]->imgAdjacency.at(i);
 
 											if (pF == pFeature_[2])
 												bConvex[1] = (pFeature_[1]->imgAdjacencyDescriptors.at(i)->cupyDescriptor[0] >= 0);
 										}
-								}
+									}
 
-								// Create vertex.
+									// Create vertex.
 
-								RVLMEM_ALLOC_STRUCT(pMem, Vertex, pVertex);
+									RVLMEM_ALLOC_STRUCT(pMem, Vertex, pVertex);
 
-								// Compute vertex position.
+									// Compute vertex position.
 
-								P = pVertex->P;
+									P = pVertex->P;
 
-								nFeatures = 0;
+									nFeatures = 0;
 
-								iP[0] = iPt;
-								iP[1] = iPt__;
-								iP[2] = iPt_;
+									iP[0] = iPt;
+									iP[1] = iPt__;
+									iP[2] = iPt_;
 
-								RVLNULL3VECTOR(P);
+									RVLNULL3VECTOR(P);
 
-								for (i = 0; i < 3; i++)
-								{
+									for (i = 0; i < 3; i++)
+									{
 										P_ = pMesh->NodeArray.Element[iP[i]].P;
 
 										RVLSUM3VECTORS(P, P_, P);
 
 										if (iF[i] >= 0)
-										nFeatures++;
+											nFeatures++;
 									}
 
 									pVertex->iSurfelArray.n = nFeatures;
 
-								nVertexSurfelRelations += nFeatures;
+									nVertexSurfelRelations += nFeatures;
 
 									RVLSCALE3VECTOR2(P, 3.0f, P);
 
-								// Classify vertex.
+									// Classify vertex.
 
 									pVertex->type = (nFeatures >= 2 ? bConvex[0] + bConvex[1] + bConvex[2] : 4);
 
-								// Fill iSurfelArray 
+									// Fill iSurfelArray 
 
-								RVLMEM_ALLOC_STRUCT_ARRAY(pMem, int, nFeatures, pVertex->iSurfelArray.Element);
+									RVLMEM_ALLOC_STRUCT_ARRAY(pMem, int, nFeatures, pVertex->iSurfelArray.Element);
 
-								j = 0;
+									j = 0;
 
-								for (i = 0; i < 3; i++)
-									if (iF[i] >= 0)
-										pVertex->iSurfelArray.Element[j++] = iF[i];
-								
-								// Determine normal hull.
+									for (i = 0; i < 3; i++)
+										if (iF[i] >= 0)
+											pVertex->iSurfelArray.Element[j++] = iF[i];
+
+									// Determine normal hull.
 
 									pVertex->normalHull.n = 0;
 
-								RVLMEM_ALLOC_STRUCT_ARRAY(pMem, NormalHullElement, (pVertex->type == 1 ? 4 : nFeatures), pVertex->normalHull.Element);
+									RVLMEM_ALLOC_STRUCT_ARRAY(pMem, NormalHullElement, (pVertex->type == 1 ? 4 : nFeatures), pVertex->normalHull.Element);
 
-								if (pVertex->type == 1)
-								{
-									for (i = 0; i < 3; i++)
-										if (bConvex[i])
-											break;
+									if (pVertex->type == 1)
+									{
+										for (i = 0; i < 3; i++)
+											if (bConvex[i])
+												break;
 
 										N1 = pFeature_[i]->N;
 										N2 = pFeature_[(i + 1) % 3]->N;
 
-									UpdateNormalHull(pVertex->normalHull, N1);
-									UpdateNormalHull(pVertex->normalHull, N2);
+										UpdateNormalHull(pVertex->normalHull, N1);
+										UpdateNormalHull(pVertex->normalHull, N2);
 
-									RVLCROSSPRODUCT3(N1, N2, VTmp);
-									RVLNORM3(VTmp, fTmp);
-									RVLSCALE3VECTOR(VTmp, sq, VTmp);
-									RVLSCALE3VECTOR(N1, cq, N3);
-									RVLSUM3VECTORS(VTmp, N3, N3);
-									UpdateNormalHull(pVertex->normalHull, N3);
-									RVLSCALE3VECTOR(N2, cq, N3);
-									RVLSUM3VECTORS(VTmp, N3, N3);
-									UpdateNormalHull(pVertex->normalHull, N3);
-								}
-								else
-								{
-									for (i = 0; i < 3; i++)
-										if (iF[i] >= 0)
-											UpdateNormalHull(pVertex->normalHull, NodeArray.Element[iF[i]].N);										
-								}
+										RVLCROSSPRODUCT3(N1, N2, VTmp);
+										RVLNORM3(VTmp, fTmp);
+										RVLSCALE3VECTOR(VTmp, sq, VTmp);
+										RVLSCALE3VECTOR(N1, cq, N3);
+										RVLSUM3VECTORS(VTmp, N3, N3);
+										UpdateNormalHull(pVertex->normalHull, N3);
+										RVLSCALE3VECTOR(N2, cq, N3);
+										RVLSUM3VECTORS(VTmp, N3, N3);
+										UpdateNormalHull(pVertex->normalHull, N3);
+									}
+									else
+									{
+										for (i = 0; i < 3; i++)
+											if (iF[i] >= 0)
+												UpdateNormalHull(pVertex->normalHull, NodeArray.Element[iF[i]].N);
+									}
 
-								// Add vertex to the vertex list.
+									// Add vertex to the vertex list.
 
-								RVLQLIST_ADD_ENTRY(pVertexList, pVertex);
+									RVLQLIST_ADD_ENTRY(pVertexList, pVertex);
 
-								nVertices++;
+									nVertices++;
 								}
 
 							}	// if (iFeature__ != iFeature && iFeature__ != iFeature_)
@@ -2837,8 +2838,14 @@ void SurfelGraph::InitDisplay(
 		pVisualizer->SetMesh(pMesh);
 		if (bCallbackFunctions)
 		{
+			if (!DisplayData.bCallbackFunctionsDefined)
+			{
 			pVisualizer->SetMouseRButtonDownCallback(SURFEL::MouseRButtonDown, &DisplayData);
 			pVisualizer->SetKeyPressCallback(SURFEL::KeyPressCallback, &DisplayData);
+
+				DisplayData.bCallbackFunctionsDefined = true;
+			}
+
 		}
 	}
 

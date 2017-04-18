@@ -90,12 +90,12 @@ void VisualizeObjectGraphVertexPointCloud(SURFEL::ObjectGraph *ograph, int sizeT
 		renderer = vtkSmartPointer<vtkRenderer>::New();
 		window = vtkSmartPointer<vtkRenderWindow>::New();
 		interactor = vtkSmartPointer<vtkRenderWindowInteractor>::New();
-		window->AddRenderer(renderer);
-		window->SetSize(800, 600);
-		interactor->SetRenderWindow(window);
-		vtkSmartPointer<vtkInteractorStyleTrackballCamera> style = vtkSmartPointer<vtkInteractorStyleTrackballCamera>::New();
-		interactor->SetInteractorStyle(style);
-		renderer->SetBackground(0.5294, 0.8078, 0.9803);
+	window->AddRenderer(renderer);
+	window->SetSize(800, 600);
+	interactor->SetRenderWindow(window);
+	vtkSmartPointer<vtkInteractorStyleTrackballCamera> style = vtkSmartPointer<vtkInteractorStyleTrackballCamera>::New();
+	interactor->SetInteractorStyle(style);
+	renderer->SetBackground(0.5294, 0.8078, 0.9803);
 	}
 
 	//VTK objects
@@ -182,12 +182,12 @@ void VisualizeObjectGraphVertexPointCloud(SURFEL::ObjectGraph *ograph, int sizeT
 	}
 	else
 	{
-		renderer->AddActor(act);
-		//Start VTK
-		renderer->ResetCamera();
-		window->Render();
-		interactor->Start();
-	}
+	renderer->AddActor(act);
+	//Start VTK
+	renderer->ResetCamera();
+	window->Render();
+	interactor->Start();
+}
 }
 
 void TestCHMatching(SURFEL::ObjectGraph *objects)

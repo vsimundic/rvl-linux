@@ -3,6 +3,8 @@
 #include <vtkPolyLine.h>
 #include "RVLCore2.h"
 #include "Util.h"
+//#define RVLPCSEGMENT_GRAPH_WERAGGREGATION_DEBUG
+//#define RVLPCSEGMENT_GRAPH_WERAGGREGATION_DETAILED_DEBUG
 #include "Graph.h"
 #include "Mesh.h"
 #include "Visualizer.h"
@@ -18,594 +20,7 @@
 //#define RVLPCSEGMENT_OBJECT_GRAPH_LOG					// Currently is not used for anything!
 //#define RVLPCSEGMENT_OBJECT_GRAPH_EVALUATION_LOG
 #define RVLPCSEGMENT_OBJECT_GRAPH_SYMMETRY_LOG
-
-/// Move to RVLQListArray.h
-
-#define RVLQLIST_APPEND2(pList, pList2)\
-{if(pList2->pFirst)\
-{\
-	*(pList->ppNext) = pList2->pFirst;\
-	pList2->pFirst->pPtrToThis = pList->ppNext;\
-	pList->ppNext = pList2->ppNext;\
-}}
-
-/// Move to Graph.h
-
-//#define RVLPCSEGMENT_GRAPH_WERAGGREGATION_DEBUG
-//#define RVLPCSEGMENT_GRAPH_WERAGGREGATION_DETAILED_DEBUG
-
-namespace RVL
-{
-	namespace GRAPH
-	{
-#ifdef RVLPCSEGMENT_GRAPH_WERAGGREGATION_DEBUG
-		template<typename NodeType, typename EdgeType, typename EdgePtrType>
-		void WriteAggNodeData(
-			FILE *fp,
-			Graph<typename NodeType, typename EdgeType, typename EdgePtrType> &graph,
-			int iNode)
-		{
-			fprintf(fp, "N%d: Elements: ", iNode);
-
-			NodeType *pNode = graph.NodeArray.Element + iNode;
-
-			QList<EdgePtrType> *pEdgeList = &(pNode->EdgeList);
-
-			QList<QLIST::Index> *pElementList = &(pNode->elementList);
-
-			QLIST::Index *piElement = pElementList->pFirst;
-
-			while (piElement)
-			{
-				fprintf(fp, "%d ", piElement->Idx);
-
-				piElement = piElement->pNext;
-			}
-
-			fprintf(fp, "Neighbors: ");
-
-			int iNode_;
-
-			EdgePtrType *pEdgePtr = pEdgeList->pFirst;
-
-			while (pEdgePtr)
-			{
-				iNode_ = RVLPCSEGMENT_GRAPH_GET_OPPOSITE_NODE(pEdgePtr);
-
-				fprintf(fp, "%d ", iNode_);
-
-				pEdgePtr = pEdgePtr->pNext;
-			}
-
-			fprintf(fp, "\n");
-		}
-
-		template<typename CostType>
-		void WriteWERAggEdgeQueueBin(
-			FILE *fp,
-			Array<QList<QLIST::Index2>> &edgeQueue,
-			int iCost,
-			bool bSkipIfEmpty = false)
-		{
-			QList<QLIST::Index2> *pEdgeList = edgeQueue.Element + iCost;
-
-			QLIST::Index2 *pEdgeIdx = pEdgeList->pFirst;
-
-			if (pEdgeIdx)
-			{
-				fprintf(fp, "%d:\t", iCost);
-
-				while (pEdgeIdx)
-				{
-					fprintf(fp, "%d ", pEdgeIdx->Idx);
-
-					pEdgeIdx = pEdgeIdx->pNext;
-				}
-
-				fprintf(fp, "\n");
-			}
-			else if (!bSkipIfEmpty)
-				fprintf(fp, "%d:\n", iCost);
-		}
-#endif
-
-		template<typename NodeType, typename EdgeType, typename EdgePtrType, typename CostType>
-		void WERAggregation(
-			Graph<typename NodeType, typename EdgeType, typename EdgePtrType> &graph,
-			int *aggregateMap,
-			QLIST::Index *elementListMem,
-			CostType minCostDiff,
-			CostType costResolution)
-		{
-#ifdef RVLPCSEGMENT_GRAPH_WERAGGREGATION_DEBUG
-			FILE *fp = fopen("C:\\RVL\\Debug\\WERAgg.txt", "w");
-#endif
-
-			// Initialize elements lists of all nodes. 
-
-			QLIST::Index *pElement = elementListMem;
-
-			NodeType *pNode;
-			int iNode;
-			QList<QLIST::Index> *pElementList;
-
-			for (iNode = 0; iNode < graph.NodeArray.n; iNode++)
-			{
-				pNode = graph.NodeArray.Element + iNode;
-
-				pElementList = &(pNode->elementList);
-
-				RVLQLIST_INIT(pElementList);
-
-				RVLQLIST_ADD_ENTRY(pElementList, pElement);
-
-				pElement->Idx = iNode;
-
-				pElement++;
-			}
-
-			// maxPossibleCost <- the maximum possible cost.
-
-			CostType maxPossibleCost = 0;
-
-			int i;
-			CostType cost;
-
-			for (i = 0; i < graph.EdgeArray.n; i++)
-			{
-				cost = graph.EdgeArray.Element[i].cost;
-
-				if (cost > 0)
-					maxPossibleCost += cost;
-			}
-
-			// edgeQueue <- edge queue sorted according to their cost.
-
-			float lnCostResolution = log((float)(1 + costResolution));
-
-			Array<QList<QLIST::Index2>> edgeQueue;
-
-			edgeQueue.n = RVLPCSEGMENT_GRAPH_LOG_BIN_INDEX(maxPossibleCost, minCostDiff, lnCostResolution) + 1;
-
-			edgeQueue.Element = new QList<QLIST::Index2>[edgeQueue.n];
-
-			QLIST::Index2 *edgeQueueMem = new QLIST::Index2[graph.EdgeArray.n];
-
-			QList<QLIST::Index2> *pEdgeList;
-
-			for (i = 0; i < edgeQueue.n; i++)
-			{
-				pEdgeList = edgeQueue.Element + i;
-
-				RVLQLIST_INIT(pEdgeList);
-			}
-		
-			int iMaxCost = 0;
-
-			int iCost;
-			EdgeType *pEdge;
-			int iEdge;
-			QLIST::Index2 *pEdgeQueueEntry;
-
-			for (iEdge = 0; iEdge < graph.EdgeArray.n; iEdge++)
-			{
-				pEdge = graph.EdgeArray.Element + iEdge;
-
-				pEdgeQueueEntry = edgeQueueMem + iEdge;
-
-				pEdgeQueueEntry->Idx = iEdge;
-
-				cost = pEdge->cost;
-
-				if (cost > 0)
-				{
-					iCost = RVLPCSEGMENT_GRAPH_LOG_BIN_INDEX(cost, minCostDiff, lnCostResolution);
-
-					pEdgeList = edgeQueue.Element + iCost;
-
-					RVLQLIST_ADD_ENTRY2(pEdgeList, pEdgeQueueEntry);					
-
-					if (iCost > iMaxCost)
-						iMaxCost = iCost;
-				}
-			}
-
-#ifdef RVLPCSEGMENT_GRAPH_WERAGGREGATION_DEBUG
-			fprintf(fp, "Sorted edge list:\n\n", iEdge, pEdge->cost);
-
-			for (iCost = iMaxCost; iCost >= 0; iCost--)
-				WriteWERAggEdgeQueueBin<CostType>(fp, edgeQueue, iCost, true);
-
-			fprintf(fp, "\n");
-#endif
-
-			/// main loop
-
-			int *iVisitedNodeEdge = new int[graph.NodeArray.n];
-
-			memset(iVisitedNodeEdge, 0xff, graph.NodeArray.n * sizeof(int));
-
-			//QLIST::Index2 **ppNextDebug = NULL;
-
-			int iNode1, iNode2, iNode3, iEdge13, iRefEdge, iCost_;
-			EdgePtrType *pEdgePtr13, *pEdgePtr31, *pEdgePtr21;
-			NodeType *pNode1, *pNode2, *pNode3;
-			QList<EdgePtrType> *pEdgeList1, *pEdgeList2, *pEdgeList3;
-			int side3;
-			QLIST::Index2 *pEdge13QueueEntry, *pRefEdgeQueueEntry;
-			QList<QLIST::Index2> *pEdgeList_;
-			EdgeType *pEdge12, *pEdge13, *pRefEdge;
-			QList<QLIST::Index> *pElementList1, *pElementList2;
-
-			while (iMaxCost >= 0)
-			{
-				pEdgeList = edgeQueue.Element + iMaxCost;
-
-				pEdgeQueueEntry = pEdgeList->pFirst;
-
-				while (pEdgeQueueEntry == NULL)
-				{
-					iMaxCost--;
-
-					if (iMaxCost >= 0)
-					{
-						pEdgeList = edgeQueue.Element + iMaxCost;
-
-						pEdgeQueueEntry = pEdgeList->pFirst;
-					}
-					else
-						break;
-				}
-
-				if (iMaxCost < 0)
-					break;
-
-				// pEdge <- the first top edge in the edgeQueue.
-
-				iEdge = pEdgeQueueEntry->Idx;
-
-				pEdge = graph.EdgeArray.Element + iEdge;
-
-				// iNode1, iNode2 <- nodes connected by pEdge
-
-				iNode1 = pEdge->iVertex[0];
-
-				pNode1 = graph.NodeArray.Element + iNode1;
-
-				pEdgeList1 = &(pNode1->EdgeList);
-
-				pElementList1 = &(pNode1->elementList);
-
-				iNode2 = pEdge->iVertex[1];
-
-				pNode2 = graph.NodeArray.Element + iNode2;
-
-				pEdgeList2 = &(pNode2->EdgeList);
-
-				pElementList2 = &(pNode2->elementList);
-
-#ifdef RVLPCSEGMENT_GRAPH_WERAGGREGATION_DEBUG
-				fprintf(fp, "Removing edge %d: cost %f iCost %d\n", iEdge, pEdge->cost, iMaxCost);
-
-				WriteAggNodeData<NodeType, EdgeType, EdgePtrType>(fp, graph, iNode1);
-
-				WriteAggNodeData<NodeType, EdgeType, EdgePtrType>(fp, graph, iNode2);
-#endif
-
-				// iNode1 <- union of iNode1 and iNode2 
-
-				RVLQLIST_APPEND(pElementList1, pElementList2);
-
-				// iNode2 <- empty set
-
-				RVLQLIST_INIT(pElementList2);
-
-				// Remove the edge connecting iNode1 and iNode2 from the edgeQueue.
-
-				RVLQLIST_REMOVE_ENTRY2(pEdgeList, pEdgeQueueEntry, QLIST::Index2);
-
-#ifdef RVLPCSEGMENT_GRAPH_WERAGGREGATION_DETAILED_DEBUG
-				fprintf(fp, "Remove edge %d from queue.\n", iEdge);
-
-				WriteWERAggEdgeQueueBin<CostType>(fp, edgeQueue, iMaxCost);
-#endif
-
-				// Append the edge list of iNode2 to the edge list of iNode1.
-
-				RVLQLIST_APPEND2(pEdgeList1, pEdgeList2);
-
-				pEdgePtr21 = pEdgeList2->pFirst;
-
-				while (pEdgePtr21)
-				{
-					pEdge12 = pEdgePtr21->pEdge;
-
-					if (pEdge12->iVertex[0] == iNode2)
-						pEdge12->iVertex[0] = iNode1;
-					else if (pEdge12->iVertex[1] == iNode2)
-						pEdge12->iVertex[1] = iNode1;
-
-					pEdgePtr21 = pEdgePtr21->pNext;
-				}
-
-				// Empty the edge list of iNode2.
-
-				RVLQLIST_INIT(pEdgeList2);
-
-#ifdef RVLPCSEGMENT_GRAPH_WERAGGREGATION_DETAILED_DEBUG
-				WriteAggNodeData<NodeType, EdgeType, EdgePtrType>(fp, graph, iNode1);
-
-				WriteAggNodeData<NodeType, EdgeType, EdgePtrType>(fp, graph, iNode2);
-#endif
-
-				// 
-
-				pEdgePtr13 = pEdgeList1->pFirst;
-
-				while (pEdgePtr13)	// for every edge of iNode1
-				{
-					// iNode3 <- node connected to iNode1 via edge pEdge13
-
-					pEdge13 = pEdgePtr13->pEdge;
-
-					iEdge13 = pEdge13->idx;
-
-					side3 = 1 - RVLPCSEGMENT_GRAPH_GET_SIDE(pEdgePtr13);
-
-					iNode3 = pEdge13->iVertex[side3];
-
-					if (iNode3 == iNode1)
-					{
-						RVLQLIST_REMOVE_ENTRY2(pEdgeList1, pEdgePtr13, EdgePtrType);	// Remove pEdge13 from the edge list of iNode1.
-
-#ifdef RVLPCSEGMENT_GRAPH_WERAGGREGATION_DETAILED_DEBUG
-						fprintf(fp, "Removing edge %d(%d-%d) from the edge list of N%d.\n", iEdge13, iNode1, iNode3, iNode1);
-
-						WriteAggNodeData<NodeType, EdgeType, EdgePtrType>(fp, graph, iNode1);
-#endif
-					}
-					else if (iVisitedNodeEdge[iNode3] >= 0)
-					{
-						// Remove pEdge13 from the edge list of iNode1. 
-
-						RVLQLIST_REMOVE_ENTRY2(pEdgeList1, pEdgePtr13, EdgePtrType);
-
-#ifdef RVLPCSEGMENT_GRAPH_WERAGGREGATION_DETAILED_DEBUG
-						fprintf(fp, "Removing edge %d(%d-%d) from the edge list of N%d.\n", iEdge13, iNode1, iNode3, iNode1);
-
-						WriteAggNodeData<NodeType, EdgeType, EdgePtrType>(fp, graph, iNode1);
-#endif
-
-						// Remove pEdge13 from the edge list of iNode3. 
-
-						pEdgePtr31 = pEdge13->pVertexEdgePtr[side3];
-
-						pNode3 = graph.NodeArray.Element + iNode3;
-
-						pEdgeList3 = &(pNode3->EdgeList);
-
-						RVLQLIST_REMOVE_ENTRY2(pEdgeList3, pEdgePtr31, EdgePtrType);
-
-#ifdef RVLPCSEGMENT_GRAPH_WERAGGREGATION_DETAILED_DEBUG
-						fprintf(fp, "Removing edge %d(%d-%d) from the edge list of N%d.\n", iEdge13, iNode1, iNode3, iNode3);
-
-						WriteAggNodeData<NodeType, EdgeType, EdgePtrType>(fp, graph, iNode3);
-#endif
-
-						// pRefEdge <- the first visited edge which connects iNode1 and iNode3
-
-						iRefEdge = iVisitedNodeEdge[iNode3];
-
-						pRefEdge = graph.EdgeArray.Element + iRefEdge;
-
-						// Remove pEdge13 from edgeQueue.
-
-						if (pEdge13->cost > 0)
-						{
-							pEdge13QueueEntry = edgeQueueMem + iEdge13;
-
-							iCost_ = RVLPCSEGMENT_GRAPH_LOG_BIN_INDEX(pEdge13->cost, minCostDiff, lnCostResolution);
-
-							//if (iCost_ == 576)
-							//	int debug = 0;
-
-							pEdgeList_ = edgeQueue.Element + iCost_;
-
-							//// Debug
-
-							//bool bDebug = false;
-
-							//QLIST::Index2 *pEdgeQueueEntryDebug = pEdgeList_->pFirst;
-
-							//while (pEdgeQueueEntryDebug)
-							//{
-							//	if (pEdgeQueueEntryDebug == pEdge13QueueEntry)
-							//		bDebug = true;
-
-							//	if (pEdgeQueueEntryDebug->pNext == NULL)
-							//		if (pEdgeList_->ppNext != &(pEdgeQueueEntryDebug->pNext))
-							//			int debug = 0;
-
-							//	pEdgeQueueEntryDebug = pEdgeQueueEntryDebug->pNext;
-							//}
-
-							//if (!bDebug)
-							//	int debug = 0;
-
-							/////
-
-							RVLQLIST_REMOVE_ENTRY2(pEdgeList_, pEdge13QueueEntry, QLIST::Index2);
-
-#ifdef RVLPCSEGMENT_GRAPH_WERAGGREGATION_DETAILED_DEBUG
-							fprintf(fp, "Remove edge %d from queue.\n", iEdge13);
-
-							WriteWERAggEdgeQueueBin<CostType>(fp, edgeQueue, iCost_);
-#endif
-						}
-
-						// Remove pRefEdge from edgeQueue.
-
-						pRefEdgeQueueEntry = edgeQueueMem + iRefEdge;
-
-						if (pRefEdge->cost > 0)
-						{
-							iCost_ = RVLPCSEGMENT_GRAPH_LOG_BIN_INDEX(pRefEdge->cost, minCostDiff, lnCostResolution);
-
-							//if (iCost_ == 576)
-							//	int debug = 0;
-
-							pEdgeList_ = edgeQueue.Element + iCost_;
-
-							//// Debug
-
-							//bool bDebug = false;
-
-							//QLIST::Index2 *pEdgeQueueEntryDebug = pEdgeList_->pFirst;
-
-							//while (pEdgeQueueEntryDebug)
-							//{
-							//	if (pEdgeQueueEntryDebug == pRefEdgeQueueEntry)
-							//		bDebug = true;
-
-							//	if (pEdgeQueueEntryDebug->pNext == NULL)
-							//		if (pEdgeList_->ppNext != &(pEdgeQueueEntryDebug->pNext))
-							//			int debug = 0;
-
-							//	pEdgeQueueEntryDebug = pEdgeQueueEntryDebug->pNext;
-							//}
-
-							//if (!bDebug)
-							//	int debug = 0;
-
-							/////
-
-							RVLQLIST_REMOVE_ENTRY2(pEdgeList_, pRefEdgeQueueEntry, QLIST::Index2);
-
-#ifdef RVLPCSEGMENT_GRAPH_WERAGGREGATION_DETAILED_DEBUG
-							fprintf(fp, "Remove edge %d from queue.\n", iRefEdge);
-
-							WriteWERAggEdgeQueueBin<CostType>(fp, edgeQueue, iCost_);
-#endif
-						}
-
-						// pRefEdge->cost <- pRefEdge->cost + pEdge13->cost
-
-						pRefEdge->cost += pEdge13->cost;
-						
-						if (pEdge13->distance < pRefEdge->distance)
-							pRefEdge->distance = pEdge13->distance;
-
-						if (pRefEdge->cost > 0)
-						{
-							// Add pRefEdge to edgeQueue.
-
-							iCost = RVLPCSEGMENT_GRAPH_LOG_BIN_INDEX(pRefEdge->cost, minCostDiff, lnCostResolution);
-
-							//if (iCost == 576)
-							//	int debug = 0;
-
-							//if (iCost == 576 && iRefEdge == 12438)
-							//	int debug = 0;
-
-							//if (iCost == 576 && iRefEdge == 7839)
-							//	int debug = 0;
-
-							pEdgeList_ = edgeQueue.Element + iCost;
-
-							RVLQLIST_ADD_ENTRY2(pEdgeList_, pRefEdgeQueueEntry);
-
-#ifdef RVLPCSEGMENT_GRAPH_WERAGGREGATION_DETAILED_DEBUG
-							if (iCost == 576 && iRefEdge == 7839)
-								ppNextDebug = &(pRefEdgeQueueEntry->pNext);
-
-							fprintf(fp, "Add edge %d to queue.\n", iRefEdge);
-
-							WriteWERAggEdgeQueueBin<CostType>(fp, edgeQueue, iCost);
-#endif
-
-							// Update iMaxCost.
-
-							if (iCost > iMaxCost)
-							{
-								iMaxCost = iCost;
-
-#ifdef RVLPCSEGMENT_GRAPH_WERAGGREGATION_DEBUG
-								fprintf(fp, "new max cost bin index: %d\n", iMaxCost);
-
-								//if (iMaxCost == 574)
-								//	int debug = 0;
-#endif
-							}
-						}
-					}
-					else
-						iVisitedNodeEdge[iNode3] = iEdge13;
-
-					//if (ppNextDebug)
-					//	if (edgeQueue.Element[576].ppNext != ppNextDebug)
-					//		int debug = 0;
-
-					pEdgePtr13 = pEdgePtr13->pNext;
-				}	// for every edge of iNode1
-
-				pEdgePtr13 = pEdgeList1->pFirst;
-
-				while (pEdgePtr13)	// for every edge of iNode1
-				{
-					iNode3 = RVLPCSEGMENT_GRAPH_GET_OPPOSITE_NODE(pEdgePtr13);
-
-					iVisitedNodeEdge[iNode3] = -1;
-
-					pEdgePtr13 = pEdgePtr13->pNext;
-				}
-
-#ifdef RVLPCSEGMENT_GRAPH_WERAGGREGATION_DEBUG
-				fprintf(fp, "After aggregation:\n", iEdge, pEdge->cost);
-
-				WriteAggNodeData<NodeType, EdgeType, EdgePtrType>(fp, graph, iNode1);
-
-				WriteAggNodeData<NodeType, EdgeType, EdgePtrType>(fp, graph, iNode2);
-
-				fprintf(fp, "\n");
-
-				fflush(fp);
-#endif
-			}	// while (iMaxCost >= 0)
-
-			/// 
-
-			delete[] iVisitedNodeEdge;
-			delete[] edgeQueue.Element;
-			delete[] edgeQueueMem;
-
-			// Fill the elementMap.
-
-			memset(aggregateMap, 0xff, graph.NodeArray.n * sizeof(int));
-
-			for (iNode = 0; iNode < graph.NodeArray.n; iNode++)
-			{
-				pNode = graph.NodeArray.Element + iNode;
-
-				pElementList = &(pNode->elementList);
-
-				pElement = pElementList->pFirst;
-
-				while (pElement)
-				{
-					aggregateMap[pElement->Idx] = iNode;
-
-					pElement = pElement->pNext;
-				}
-			}
-
-#ifdef RVLPCSEGMENT_GRAPH_WERAGGREGATION_DEBUG
-			fclose(fp);
-#endif
-		}	// WERSegmentation()
-	}	// namespace GRAPH
-}
-
-///
+#define RVLPCSEGMENT_OBJECT_GRAPH_OBJECT_AGGREGATION_LEVEL2_GREEDY_GROUPING2
 
 using namespace RVL;
 using namespace SURFEL;
@@ -620,6 +35,8 @@ ObjectGraph::ObjectGraph()
 
 	bObjectAggregationLevel2Uncertainty = false;
 	bObjectAggregationLevel2Edges = false;
+	bFlattenVertices = false;
+	bConcaveObjectAggregation = false;
 
 	nValidObjects = -1;
 	sortedObjectArray.n = -1;
@@ -682,6 +99,8 @@ void ObjectGraph::CreateParamList(CRVLMem *pMem)
 	ParamList.AddID(pParamData, "CONVEXITY", RVLPCSEGMENT_OBJECT_AGGREGATION_LEVEL2_METHOD_CONVEXITY);
 	ParamList.AddID(pParamData, "SYMMETRY", RVLPCSEGMENT_OBJECT_AGGREGATION_LEVEL2_METHOD_SYMMETRY);
 	pParamData = ParamList.AddParam("ObjectGraph.minObjectSize", RVLPARAM_TYPE_INT, &minObjectSize);
+	pParamData = ParamList.AddParam("ObjectGraph.flattenVertices", RVLPARAM_TYPE_BOOL, &bFlattenVertices);
+	pParamData = ParamList.AddParam("ObjectGraph.concaveObjectAggregation", RVLPARAM_TYPE_BOOL, &bConcaveObjectAggregation);
 }
 
 #ifdef RVLSURFEL_IMAGE_ADJACENCY
@@ -1689,7 +1108,7 @@ void ObjectGraph::InitDisplay(
 	pSurfels->DisplayData.mouseRButtonDownUserFunction = &objectMouseRButtonDownUserFunction;
 	pSurfels->DisplayData.vpUserFunctionData = &displayData;
 
-	pSurfels->InitDisplay(pVisualizer, pMesh, NULL, false);
+	pSurfels->InitDisplay(pVisualizer, pMesh, NULL);
 
 	displayData.bObjects = true;
 }
@@ -1906,7 +1325,7 @@ bool RVL::SURFEL::objectMouseRButtonDownUserFunction(
 		return false;
 }
 
-void ObjectGraph::DetermineObjectConvexityData(float convexThr, float minDiffFlipReq, bool setflip, bool verbose)
+void ObjectGraph::DetermineObjectConvexityData(float convexThr, float minDiffFlipReq, bool verbose)
 {
 	//Reseting convexity data
 	if (this->additionalObjectData.CHVertexIndices.size())
@@ -2153,7 +1572,7 @@ void ObjectGraph::DetermineObjectConvexityData(float convexThr, float minDiffFli
 			this->additionalObjectData.CHVertexIndices.at(iObject) = CHVertexIndicesOtherDir;
 			this->additionalObjectData.ObjectsSurfelConvexity.at(iObject) = ObjectsSurfelConvexityOtherDir;
 			//Set multiplier to -1
-			if (setflip)
+			if (bConcaveObjectAggregation)
 				this->additionalObjectData.convexityMultipliers.at(iObject) = -1.0;
 			//std::cout << "Object " << iObject << " is concave!" << std::endl;
 		}
@@ -2230,7 +1649,7 @@ void ObjectGraph::FlattenVertex(const float * P, float * Pc, const float * N, fl
 	Pc[2] = P[2] - ntpd * N[2];
 }
 
-void ObjectGraph::CalculateConvexityRatiosForObjectPair(int firstObject, int secondObject, float& firstRatio, float& secondRatio, float convexThr, bool useFlatten)
+void ObjectGraph::CalculateConvexityRatiosForObjectPair(int firstObject, int secondObject, float& firstRatio, float& secondRatio, float convexThr)
 {
 	//if ((firstObject == 5) && (secondObject == 10))	//60, 484 za test 57
 	//	RenderConvexityPos(secondObject, firstObject, this->pMesh);
@@ -2338,7 +1757,7 @@ void ObjectGraph::CalculateConvexityRatiosForObjectPair(int firstObject, int sec
 		{
 			//*iterator = value
 			rvlvertex = this->pSurfels->vertexArray.Element[chVertexIndices.at(i)];
-			if (useFlatten)
+			if (bFlattenVertices)
 			{
 				pSurfelTemp = pSurfels->NodeArray.Element + chVertexIndicesSurfelIdx.at(i);
 				FlattenVertex(rvlvertex->P, fP, pSurfelTemp->N, pSurfelTemp->d);
@@ -2373,7 +1792,7 @@ void ObjectGraph::CalculateConvexityRatiosForObjectPair(int firstObject, int sec
 				while (qlistelement)
 				{
 					rvlvertex = this->pSurfels->vertexArray.Element[qlistelement->Idx];
-					if (useFlatten)
+					if (bFlattenVertices)
 					{
 						FlattenVertex(rvlvertex->P, fP, pSurfel->N, pSurfel->d);
 						fPu = fP;
@@ -2705,7 +2124,7 @@ void ObjectGraph::ObjectAggregationLevel2_ViaObjectPairConvexity(float convexThr
 					if (!ExtFuncCheckIfWithinVolume(vpObjectAggregationLevel2CriterionData, validObjects.at(iObject), validObjects.at(iObject2), 0.30))	//HARDCODED THRESHOLD?????
 						continue;
 				}
-				this->CalculateConvexityRatiosForObjectPair(validObjects.at(iObject), validObjects.at(iObject2), firstRatio, secondRatio, convexThr, false);
+				this->CalculateConvexityRatiosForObjectPair(validObjects.at(iObject), validObjects.at(iObject2), firstRatio, secondRatio, convexThr);
 				if (verbose)
 					std::cout << "(" << validObjects.at(iObject) << ", " << validObjects.at(iObject2) << ")" << " = " << firstRatio << ", " << secondRatio << std::endl;
 				if ((firstRatio > ratioThr) && (secondRatio > ratioThr))
@@ -2957,14 +2376,25 @@ void ObjectGraph::ObjectAggregationLevel2_ViaObjectPairConvexity(float convexThr
 		}
 	}
 
-	//Checking cluster consistincy if there is are more than two objects in cluster
+	//Checking cluster consistincy if there are more than two objects in cluster
 	//Helper stuff
-	struct temp_pair{ int a; int b; float score; static bool sort_desc(temp_pair first, temp_pair second) { return (first.score > second.score); } };
+	struct temp_pair{ int a; int b; float score;  static bool sort_desc(temp_pair first, temp_pair second) { return (first.score > second.score); } };
 	//
-	std::vector<int> inputcluster;
-	std::vector<int> inputcluster_label;
+#ifdef RVLPCSEGMENT_OBJECT_GRAPH_OBJECT_AGGREGATION_LEVEL2_GREEDY_GROUPING2
+	int *objectLinkIdx;
+	std::vector<temp_pair> objectLinkQueue;
+	temp_pair link;
+	int nObjects;
+	int iFirstOpenLink;
+	int iLink, iLink_;
+	std::vector<int> aggregate;
+	int iGroupedObject;
+#else
 	std::queue<int> fifo;
 	std::vector<std::vector<temp_pair>> object_links;
+#endif
+	std::vector<int> inputcluster;
+	std::vector<int> inputcluster_label;
 	std::vector<std::vector<int>> newclusters;
 	std::map<int, std::set<int>> merge_clusters_copy = merge_clusters;
 	int label = 0;
@@ -2979,13 +2409,132 @@ void ObjectGraph::ObjectAggregationLevel2_ViaObjectPairConvexity(float convexThr
 		{
 			//remove this cluster from the list (new cluster or clusters will be added)
 			merge_clusters.erase(clustIt->first);
+
 			//setup a cluster
 			inputcluster.clear();	//reset cluster
 			inputcluster.push_back(clustIt->first);
 			for (clusterSetIt = clustIt->second.begin(); clusterSetIt != clustIt->second.end(); clusterSetIt++)
 				inputcluster.push_back(*clusterSetIt);
 
-			//run through cluster and find the object woth the best connection
+#ifdef RVLPCSEGMENT_OBJECT_GRAPH_OBJECT_AGGREGATION_LEVEL2_GREEDY_GROUPING2
+			nObjects = inputcluster.size();
+
+			objectLinkIdx = new int[nObjects * nObjects];
+
+			objectLinkQueue.clear();
+			objectLinkQueue.resize((nObjects * (nObjects - 1)) / 2);
+
+			iLink = 0;
+
+			for (int iObject = 0; iObject < nObjects; iObject++)
+			{
+				for (int iObject2 = iObject + 1; iObject2 < nObjects; iObject2++, iLink++)
+				{
+					link.a = iObject;
+					link.b = iObject2;
+					ss.clear();
+					ss.str("");
+					ss << inputcluster.at(iObject) << "_" << inputcluster.at(iObject2);
+					link.score = (min_convexity_values.count(ss.str()) ? min_convexity_values.at(ss.str()) : 0.0);
+
+					objectLinkQueue.at(iLink) = link;
+				}
+			}
+
+			std::sort(objectLinkQueue.begin(), objectLinkQueue.end(), temp_pair::sort_desc);
+
+			for (iLink = 0; iLink < objectLinkQueue.size(); iLink++)
+			{
+				link = objectLinkQueue.at(iLink);
+
+				objectLinkIdx[link.a + link.b * nObjects] = objectLinkIdx[link.b + link.a * nObjects] = iLink;
+			}
+
+			inputcluster_label.clear();
+			inputcluster_label.resize(nObjects, -1);
+
+			label = 0;
+
+			iFirstOpenLink = 0;
+
+			iLink = 0;
+
+			while (iLink < objectLinkQueue.size())	// while there are ungrouped objects in the cluster
+			{
+				link = objectLinkQueue.at(iLink);
+
+				if (inputcluster_label.at(link.a) != -1 || inputcluster_label.at(link.b) != -1)
+				{
+					iLink++;
+
+					continue;
+				}
+
+				aggregate.clear();
+				aggregate.push_back(link.a);
+
+				inputcluster_label.at(link.a) = label;
+
+				iLink_ = iFirstOpenLink = iLink;
+
+				while (iLink_ < objectLinkQueue.size())	// while there are open links
+				{
+					link = objectLinkQueue.at(iLink_);
+
+					if (inputcluster_label.at(link.a) == label && inputcluster_label.at(link.b) == -1)
+						iObject1_ = link.b;
+					else if (inputcluster_label.at(link.b) == label && inputcluster_label.at(link.a) == -1)
+						iObject1_ = link.a;
+					else if (inputcluster_label.at(link.a) == -1 && inputcluster_label.at(link.b) == -1)
+					{
+						iLink_++;
+
+						continue;
+					}
+					else
+					{
+						iFirstOpenLink++;
+
+						iLink_ = iFirstOpenLink;
+
+						continue;
+					}
+
+					for (iGroupedObject = 0; iGroupedObject < aggregate.size(); iGroupedObject++)
+					{
+						iObject2_ = aggregate.at(iGroupedObject);
+
+						if (objectLinkQueue.at(objectLinkIdx[iObject1_ + iObject2_ * nObjects]).score < ratioThr2)
+							break;
+					}
+
+					if (iGroupedObject == aggregate.size())
+					{
+						inputcluster_label.at(iObject1_) = label;
+
+						aggregate.push_back(iObject1_);
+
+						iLink_ = iFirstOpenLink;
+					}
+					else
+					{
+						inputcluster_label.at(iObject1_) = -2;
+
+						iLink_++;
+					}
+				}	// while there are open links
+
+				for (iObject1_ = 0; iObject1_ < inputcluster_label.size(); iObject1_++)
+					if (inputcluster_label.at(iObject1_) == -2)
+						inputcluster_label.at(iObject1_) = -1;
+
+				label++;
+			}	// while there are ungrouped objects in the cluster
+
+			delete[] objectLinkIdx;
+#else
+
+			//run through cluster and find the object with the best connection
 			startObj = 0;
 			startObjScore = 0.0;
 			for (int iObject = 0; iObject < inputcluster.size(); iObject++)
@@ -3087,12 +2636,18 @@ void ObjectGraph::ObjectAggregationLevel2_ViaObjectPairConvexity(float convexThr
 				}
 				label++; //current cluster finished, go to next
 			}
+#endif
 
 			//compiling new clusters based on labels
 			newclusters.clear();
 			newclusters.resize(label);
 			for (int i = 0; i < inputcluster_label.size(); i++)
-				newclusters.at(inputcluster_label.at(i)).push_back(inputcluster.at(i));
+				if (inputcluster_label.at(i) >= 0)
+					newclusters.at(inputcluster_label.at(i)).push_back(inputcluster.at(i));
+
+			//for (int i = 0; i < newclusters.size(); i++)
+			//	if (newclusters.at(i).size() >= 3)
+			//		printf("%d segments grouped.\n", newclusters.at(i).size());
 
 			//Adding new clusters that have more than one member
 			for (int i = 0; i < newclusters.size(); i++)
@@ -3103,10 +2658,8 @@ void ObjectGraph::ObjectAggregationLevel2_ViaObjectPairConvexity(float convexThr
 				for (int j = 1; j < newclusters.at(i).size(); j++)
 					merge_clusters.at(newclusters.at(i).at(0)).insert(newclusters.at(i).at(j));
 			}
-		}
-	}
-
-
+		}	// if cluster has three or more segments
+	}	// for every cluster
 
 	//Running through merge clusters and combining objects
 	GRAPH::AggregateNode<SURFEL::AgEdge> *pNode1;

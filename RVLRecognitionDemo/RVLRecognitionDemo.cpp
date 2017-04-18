@@ -203,6 +203,8 @@ int main(int argc, char ** argv)
 
 	// Read parameters from a configuration file.
 
+	char cfgFileName[] = "RVLRecognitionDemo_all.cfg";
+
 	char *sceneMeshFileName = NULL;
 	char *sceneSequenceFileName = NULL; //VIDOVIC
 	char *modelSequenceFileName = NULL; //VIDOVIC
@@ -227,13 +229,21 @@ int main(int argc, char ** argv)
 		method,
 		flags);	 //VIDOVIC
 
-	ParamList.LoadParams("RVLRecognitionDemo_all.cfg");
+	ParamList.LoadParams(cfgFileName);
 
 	if (segmentGTFileName == NULL)
 	{
 		segmentGTFileName = new char[200];
 		segmentGTFileName = "C:\\RVL\\segmentGT.txt";
 	}
+
+	// Create mesh builder.
+
+	PCLMeshBuilder meshBuilder;
+
+	meshBuilder.CreateParamList(&mem0);
+
+	meshBuilder.ParamList.LoadParams(cfgFileName);
 
 	// Initialize surfel detection
 
@@ -243,13 +253,13 @@ int main(int argc, char ** argv)
 
 	surfels.CreateParamList(&mem0);
 
-	surfels.ParamList.LoadParams("RVLRecognitionDemo_all.cfg");
+	surfels.ParamList.LoadParams(cfgFileName);
 
 	PlanarSurfelDetector surfelDetector;
 
 	surfelDetector.CreateParamList(&mem0);
 
-	surfelDetector.ParamList.LoadParams("RVLRecognitionDemo_all.cfg");
+	surfelDetector.ParamList.LoadParams(cfgFileName);
 
 	//VIDOVIC
 	//initialize mesh noiser
@@ -278,7 +288,7 @@ int main(int argc, char ** argv)
 
 		recognition.CreateParamList(&mem0);
 
-		recognition.ParamList.LoadParams("RVLRecognitionDemo.cfg");
+		recognition.ParamList.LoadParams(cfgFileName);
 
 		recognition.pMem0 = &mem0;
 		recognition.pMem = &mem;
@@ -381,7 +391,7 @@ int main(int argc, char ** argv)
 
 		recognition.CreateParamList(&mem0);
 
-		recognition.ParamList.LoadParams("RVLRecognitionDemo_all.cfg");
+		recognition.ParamList.LoadParams(cfgFileName);
 
 		//recognition.Create();
 
@@ -470,7 +480,8 @@ int main(int argc, char ** argv)
 
 				recognition.clusters.n = 0;
 #else
-				mesh.LoadPolyDataFromPLY(filePath);
+				//mesh.LoadPolyDataFromPLY(filePath);
+				LoadMesh(&meshBuilder, filePath, &mesh, false);
 
 				mem.Clear();
 
@@ -493,12 +504,11 @@ int main(int argc, char ** argv)
 
 				printf("Scene %s...finished!\n\n", filePath);
 
-				mesh.LoadPolyDataFromPLY(filePath);
+				//mesh.LoadPolyDataFromPLY(filePath);
+				//LoadMesh(&meshBuilder, filePath, &mesh, false);
 
-
-				//surfels.NodeColors(SelectionColor);
-				
-				visualizer.renderer->RemoveAllViewProps();
+				surfels.NodeColors(SelectionColor);				
+				//visualizer.renderer->RemoveAllViewProps();
 				recognition.InitDisplay(&visualizer, &mesh, SelectionColor);
 				recognition.Display();
 
@@ -579,7 +589,7 @@ int main(int argc, char ** argv)
 			char filePath[200];
 			FILE *fpClusterNormalDistribution;
 
-			//char filePath[200];		
+			//char filePath[200];
 
 			///
 
@@ -590,7 +600,8 @@ int main(int argc, char ** argv)
 
 				printf("Scene %s...\n", filePath);
 
-				mesh.LoadPolyDataFromPLY(filePath);
+				//mesh.LoadPolyDataFromPLY(filePath);
+				LoadMesh(&meshBuilder, filePath, &mesh, false);
 
 				recognition.SetSceneFileName(filePath);
 
@@ -637,21 +648,21 @@ int main(int argc, char ** argv)
 
 				iScene++;
 
-			// Visualization
-			surfels.NodeColors(SelectionColor);
-				visualizer.renderer->RemoveAllViewProps();								
-			recognition.InitDisplay(&visualizer, &mesh, SelectionColor);
-			recognition.Display();
-			visualizer.Run();
+				// Visualization
+				//surfels.NodeColors(SelectionColor);
+				////visualizer.renderer->RemoveAllViewProps();								
+				//recognition.InitDisplay(&visualizer, &mesh, SelectionColor);
+				//recognition.Display();
+				//visualizer.Run();
 			}
 
 			RVL_DELETE_ARRAY(clusterNormalDistributionFileName);
 
 			// Visualization
-			//surfels.NodeColors(SelectionColor);
-			//recognition.InitDisplay(&visualizer, &mesh, SelectionColor);
-			//recognition.Display();
-			//visualizer.Run();
+			surfels.NodeColors(SelectionColor);
+			recognition.InitDisplay(&visualizer, &mesh, SelectionColor);
+			recognition.Display();
+			visualizer.Run();
 		}
 	}	// if (method == RVLRECOGNITION_METHOD_PSGM)
 
