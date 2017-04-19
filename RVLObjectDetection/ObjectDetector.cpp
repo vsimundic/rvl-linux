@@ -151,6 +151,7 @@ void ObjectDetector::CreateParamList()
 
 //Dirk Holz and Sven Behnke: "Approximate Triangulation and Region Growing for Efficient Segmentation and Smoothing of Range Images"
 //NOT DEBUGGED
+//NOT UPDATED
 vtkSmartPointer<vtkPolyData> MultilateralSmoothMesh(vtkSmartPointer<vtkPolyData> inputPD, int noIter)
 {
 
@@ -891,8 +892,8 @@ void ObjectDetector::DetectObjects(char *MeshFilePathName)
 			if (bJoinSmallObjectsToLargestNeighbor)
 			{
 				pObjects->MergeSmallObjects(joinSmallObjectsToLargestNeighborSizeThr, joinSmallObjectsToLargestNeighborDistThr);
-			cv::imshow("level2 + merge small objects", pObjects->CreateSegmentationImage());
-			cv::waitKey(1);
+				cv::imshow("level2 + merge small objects", pObjects->CreateSegmentationImage());
+				cv::waitKey(1);
 			}
 
 			////
