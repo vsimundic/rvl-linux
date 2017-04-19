@@ -3203,8 +3203,9 @@ void ObjectGraph::RenderConvexityPos(int iObjectSurf, int iObjectVert, Mesh *pMe
 	interactor->Start();
 }
 
-void ObjectGraph::MergeSmallObjects(int sizeThr, float maxDistThr, bool verbose)
+bool ObjectGraph::MergeSmallObjects(int sizeThr, float maxDistThr, bool verbose)
 {
+	bool merged = false;
 	//Determine a list of neighbours and distances for each small object
 	GRAPH::AggregateNode<SURFEL::AgEdge> *pObject;
 	GRAPH::AggregateNode<SURFEL::AgEdge> *pOtherObject;
@@ -3326,7 +3327,8 @@ void ObjectGraph::MergeSmallObjects(int sizeThr, float maxDistThr, bool verbose)
 			pOtherObject->size += pObject->size;
 			if (verbose)
 				std::cout << "Merged: " << objectIt->first << " into " << chosenOtherObject << std::endl;
+			merged = true;
 		}
 	}
-
+	return merged;
 }

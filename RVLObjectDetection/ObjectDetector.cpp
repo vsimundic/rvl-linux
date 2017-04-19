@@ -889,9 +889,15 @@ void ObjectDetector::DetectObjects(char *MeshFilePathName)
 			pObjects->ExtFuncCheckIfWithinVolume = &RVL::ObjectDetector::CheckIfWithinCTIBoundingBox;
 			pObjects->ObjectAggregationLevel2_ViaObjectPairConvexity(convexityThr, convexityRatioThr1, convexityRatioThr2, pObjects->minObjectSize, false);
 			cv::imshow("Level2", pObjects->CreateSegmentationImage());
+			cv::waitKey(1);
 			if (bJoinSmallObjectsToLargestNeighbor)
 			{
-				pObjects->MergeSmallObjects(joinSmallObjectsToLargestNeighborSizeThr, joinSmallObjectsToLargestNeighborDistThr);
+				int mergedIt = 0;
+				while (pObjects->MergeSmallObjects(joinSmallObjectsToLargestNeighborSizeThr, joinSmallObjectsToLargestNeighborDistThr))
+				{ 
+					std::cout << "Merged iteration: " << mergedIt << std::endl;
+					mergedIt++;
+				}
 				cv::imshow("level2 + merge small objects", pObjects->CreateSegmentationImage());
 				cv::waitKey(1);
 			}

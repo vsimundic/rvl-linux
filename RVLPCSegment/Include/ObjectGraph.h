@@ -121,7 +121,7 @@ namespace RVL
 			bool CheckIfNeighbours(int iObject1, int iObject2);	//Filko
 			void RenderConvexityPos(int iObjectSurf, int iObjectVert, Mesh *pMeshScene);	//Filko
 			void FlattenVertex(const float * P, float * Pc, const float * N, float d); //Filko
-			void MergeSmallObjects(int sizeThr = 500, float maxDistThr = 0.02, bool verbose = false); //Filko
+			bool MergeSmallObjects(int sizeThr = 500, float maxDistThr = 0.02, bool verbose = false); //Filko
 			
 			void WERSegmentation();
 			void ComputeRelationCosts();
