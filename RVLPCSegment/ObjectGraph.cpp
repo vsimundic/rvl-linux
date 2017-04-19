@@ -33,6 +33,9 @@ ObjectGraph::ObjectGraph()
 	kCoverage = 0.99f;
 	alpha = 0.5f;
 	minObjectSize = 300;
+	continuousThr = 0.015f;
+	convexThr = -20.0f;
+	cleanThr = 0.8f;
 
 	bObjectAggregationLevel2Uncertainty = false;
 	bObjectAggregationLevel2Edges = false;
@@ -89,11 +92,15 @@ void ObjectGraph::CreateParamList(CRVLMem *pMem)
 	ParamList.Init();
 
 	pParamData = ParamList.AddParam("ObjectGraph.alpha", RVLPARAM_TYPE_FLOAT, &alpha);
+	pParamData = ParamList.AddParam("ObjectGraph.continuousThr", RVLPARAM_TYPE_FLOAT, &continuousThr);
+	pParamData = ParamList.AddParam("ObjectGraph.convexThr", RVLPARAM_TYPE_FLOAT, &convexThr);
+	pParamData = ParamList.AddParam("ObjectGraph.cleanThr", RVLPARAM_TYPE_FLOAT, &cleanThr);
 	pParamData = ParamList.AddParam("ObjectGraph.relationClassifier", RVLPARAM_TYPE_ID, &relationClassifier);
 	ParamList.AddID(pParamData, "HEURISTIC", RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_HEURISTIC);
 	ParamList.AddID(pParamData, "SVM", RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_SVM);
 	ParamList.AddID(pParamData, "NLMC", RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_NLMC);
 	ParamList.AddID(pParamData, "NLMC2", RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_NLMC2);
+	ParamList.AddID(pParamData, "FUZZY_HEURISTIC", RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_FUZZY_HEURISTIC);
 	pParamData = ParamList.AddParam("ObjectGraph.objectAggregationLevel2.uncertainty", RVLPARAM_TYPE_BOOL, &bObjectAggregationLevel2Uncertainty);
 	pParamData = ParamList.AddParam("ObjectGraph.objectAggregationLevel2.edges", RVLPARAM_TYPE_BOOL, &bObjectAggregationLevel2Edges);
 	pParamData = ParamList.AddParam("ObjectGraph.objectAggregationLevel2.method", RVLPARAM_TYPE_ID, &objectAggregationLevel2Method);
@@ -1066,6 +1073,14 @@ void ObjectGraph::ComputeRelationCost(
 
 	switch (relationClassifier){
 	case RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_HEURISTIC:
+		data.PContinuous = (f4 <= continuousThr ? 1 : 0);
+		data.PConvex = (f1 >= convexThr * DEG2RAD ? 1 : 0);
+		data.PClean = (f2 >= cleanThr ? 1 : 0);
+
+		data.P = RVLMIN(data.PContinuous, RVLMIN(data.PConvex, data.PClean));
+
+		break;
+	case RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_FUZZY_HEURISTIC:
 		data.PContinuous = (f4 <= depthStepIntThr ? 1.0f : (f4 <= depthStepExtThr ? (depthStepExtThr - f4) / (depthStepExtThr - depthStepIntThr) : 0.0f));
 
 		data.PConvex = (f1 >= -concaveAngleIntThr ? 1.0f : (f1 >= -concaveAngleExtThr ? concaveMinCost + (1.0f - concaveMinCost) * (concaveAngleExtThr + f1) / (concaveAngleExtThr - concaveAngleIntThr) : concaveMinCost));

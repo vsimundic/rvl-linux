@@ -819,14 +819,8 @@ void ObjectDetector::DetectObjects(char *MeshFilePathName)
 			pObjects->vpObjectAggregationLevel2CriterionData = this;
 			pObjects->ExtFuncCheckIfWithinVolume = &RVL::ObjectDetector::CheckIfWithinCTIBoundingBox;
 			pObjects->ObjectAggregationLevel2_ViaObjectPairConvexity(convexityThr, convexityRatioThr1, convexityRatioThr2, pObjects->minObjectSize, false);
-			cv::imshow("Level2", pObjects->CreateSegmentationImage());
-			if (bJoinSmallObjectsToLargestNeighbor)
-			{
-				pObjects->MergeSmallObjects(joinSmallObjectsToLargestNeighborSizeThr, joinSmallObjectsToLargestNeighborDistThr);
-				cv::imshow("level2 + merge small objects", pObjects->CreateSegmentationImage());
-			}
-			
-			
+			if (!bJoinSmallObjectsToLargestNeighbor)
+				cv::imshow("Level2", pObjects->CreateSegmentationImage());
 
 			////
 			//Evaluation
@@ -837,6 +831,12 @@ void ObjectDetector::DetectObjects(char *MeshFilePathName)
 			std::cout << "Undersegmenation error: " << 100.0f * E[1] / (float)N << "%" << std::endl;*/
 
 			printf("completed.\n");
+		}	// if (!bSurfelsFromSSF && bObjectAggregationLevel2)
+
+		if (bJoinSmallObjectsToLargestNeighbor)
+		{
+			pObjects->MergeSmallObjects(joinSmallObjectsToLargestNeighborSizeThr, joinSmallObjectsToLargestNeighborDistThr);
+			cv::imshow("level2 + merge small objects", pObjects->CreateSegmentationImage());
 		}
 	}
 #endif
