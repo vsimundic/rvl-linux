@@ -244,6 +244,10 @@ void SurfelGraph::Init(Mesh *pMesh)
 	//surfelBndMap = new QLIST::Index2[nPoints];
 	NodeArray.Element = new Surfel[2 * nMeshVertices];
 	edgeMarkMap = new unsigned char[nMeshEdges];
+
+	QList<SURFEL::Vertex> *pVertexList = &vertexList;
+	RVLQLIST_INIT(pVertexList);
+	vertexArray.n = 0;
 }
 
 #ifdef RVLSURFEL_IMAGE_ADJACENCY
@@ -888,6 +892,9 @@ void SurfelGraph::SplitAndMergeError(
 	int &splitError,
 	int &mergeError)
 {
+	if (pCurrSurfel - NodeArray.Element == 3 && pOtherSurfel - NodeArray.Element == 141)
+		int debug = 0;
+
 	int iGTObject, GTObjectSize, GTObjectSize_, commonGTObjectSize;
 	int iRefSurfel, mergeCost, splitCost, maxOtherGTObjectSize;
 	Surfel *pOtherSurfel_;
@@ -1064,7 +1071,7 @@ void SurfelGraph::GenerateSSF(
 			adjFeatureSet->CopyFeatureData<int>(SceneSegFile::FeaturesList::CommonBoundaryLength, &pCurrSurfel->imgAdjacencyDescriptors.at(i)->commonBoundaryLength, 1);
 			//Cost of false classification
 			SplitAndMergeError(pCurrSurfel, pOtherSurfel, nGTObjects, splitError, mergeError);
-			falseClassificationCost = (sameGTObj ? splitError : mergeError);
+			falseClassificationCost = (sameGTObj ? splitError - mergeError : mergeError - splitError);
 			adjFeatureSet->AddFeature(SceneSegFile::FeaturesList::FalseSegmentationCost, SceneSegFile::FeaturesDictionary::dictionary.at(SceneSegFile::FeaturesList::FalseSegmentationCost), "int");
 			adjFeatureSet->CopyFeatureData<int>(SceneSegFile::FeaturesList::FalseSegmentationCost, &falseClassificationCost, 1);
 		}

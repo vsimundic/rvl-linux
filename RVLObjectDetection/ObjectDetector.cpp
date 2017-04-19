@@ -550,104 +550,104 @@ void LaplaceSmooting(Mesh *pMesh, int noIter, bool useCotan)
 
 			if (useCotan)
 			{
-				//calculating cotangent weight
-				for (id_curr = 0; id_curr < noPointEdges; id_curr++)
+			//calculating cotangent weight
+			for (id_curr = 0; id_curr < noPointEdges; id_curr++)
+			{
+				id_next = (id_curr + 1) >= noPointEdges ? 0 : id_curr + 1;
+				id_prev = (id_curr - 1) >= 0 ? (id_curr - 1) : noPointEdges - 1;
+
+				/*currEdgePoint = pMesh->NodeArray.Element + neighbourPoints[id_curr];
+				nextEdgePoint = pMesh->NodeArray.Element + neighbourPoints[id_next];
+				prevEdgePoint = pMesh->NodeArray.Element + neighbourPoints[id_prev];
+				v1[0] = currPoint->P[0] - prevEdgePoint->P[0];
+				v1[1] = currPoint->P[1] - prevEdgePoint->P[1];
+				v1[2] = currPoint->P[2] - prevEdgePoint->P[2];
+				v2[0] = currEdgePoint->P[0] - prevEdgePoint->P[0];
+				v2[1] = currEdgePoint->P[1] - prevEdgePoint->P[1];
+				v2[2] = currEdgePoint->P[2] - prevEdgePoint->P[2];
+				v3[0] = currPoint->P[0] - nextEdgePoint->P[0];
+				v3[1] = currPoint->P[1] - nextEdgePoint->P[1];
+				v3[2] = currPoint->P[2] - nextEdgePoint->P[2];
+				v4[0] = currEdgePoint->P[0] - nextEdgePoint->P[0];
+				v4[1] = currEdgePoint->P[1] - nextEdgePoint->P[1];
+				v4[2] = currEdgePoint->P[2] - nextEdgePoint->P[2];*/
+				pointsSource->GetPoint(neighbourPoints[id_curr], currEdgePointD);
+				pointsSource->GetPoint(neighbourPoints[id_next], nextEdgePointD);
+				pointsSource->GetPoint(neighbourPoints[id_prev], prevEdgePointD);
+				v1[0] = currPointD[0] - prevEdgePointD[0];
+				v1[1] = currPointD[1] - prevEdgePointD[1];
+				v1[2] = currPointD[2] - prevEdgePointD[2];
+				v2[0] = currEdgePointD[0] - prevEdgePointD[0];
+				v2[1] = currEdgePointD[1] - prevEdgePointD[1];
+				v2[2] = currEdgePointD[2] - prevEdgePointD[2];
+				v3[0] = currPointD[0] - nextEdgePointD[0];
+				v3[1] = currPointD[1] - nextEdgePointD[1];
+				v3[2] = currPointD[2] - nextEdgePointD[2];
+				v4[0] = currEdgePointD[0] - nextEdgePointD[0];
+				v4[1] = currEdgePointD[1] - nextEdgePointD[1];
+				v4[2] = currEdgePointD[2] - nextEdgePointD[2];
+
+				/*const Vec3 v1 = c_pos - geom.vertex(id_prev);
+				const Vec3 v2 = geom.vertex(id_curr) - geom.vertex(id_prev);
+				const Vec3 v3 = c_pos - geom.vertex(id_next);
+				const Vec3 v4 = geom.vertex(id_curr) - geom.vertex(id_next);*/
+
+				// wij = (cot(alpha) + cot(beta)),
+				// for boundary edge, there is only one such edge
+				// If the mesh is not a water-tight closed volume
+				// we must check for edges lying on the sides of wholes
+				cotan1 = 0.0;
+				cotan2 = 0.0;
+				if (!boundaryEdges[id_curr])
 				{
-					id_next = (id_curr + 1) >= noPointEdges ? 0 : id_curr + 1;
-					id_prev = (id_curr - 1) >= 0 ? (id_curr - 1) : noPointEdges - 1;
-
-					/*currEdgePoint = pMesh->NodeArray.Element + neighbourPoints[id_curr];
-					nextEdgePoint = pMesh->NodeArray.Element + neighbourPoints[id_next];
-					prevEdgePoint = pMesh->NodeArray.Element + neighbourPoints[id_prev];
-					v1[0] = currPoint->P[0] - prevEdgePoint->P[0];
-					v1[1] = currPoint->P[1] - prevEdgePoint->P[1];
-					v1[2] = currPoint->P[2] - prevEdgePoint->P[2];
-					v2[0] = currEdgePoint->P[0] - prevEdgePoint->P[0];
-					v2[1] = currEdgePoint->P[1] - prevEdgePoint->P[1];
-					v2[2] = currEdgePoint->P[2] - prevEdgePoint->P[2];
-					v3[0] = currPoint->P[0] - nextEdgePoint->P[0];
-					v3[1] = currPoint->P[1] - nextEdgePoint->P[1];
-					v3[2] = currPoint->P[2] - nextEdgePoint->P[2];
-					v4[0] = currEdgePoint->P[0] - nextEdgePoint->P[0];
-					v4[1] = currEdgePoint->P[1] - nextEdgePoint->P[1];
-					v4[2] = currEdgePoint->P[2] - nextEdgePoint->P[2];*/
-					pointsSource->GetPoint(neighbourPoints[id_curr], currEdgePointD);
-					pointsSource->GetPoint(neighbourPoints[id_next], nextEdgePointD);
-					pointsSource->GetPoint(neighbourPoints[id_prev], prevEdgePointD);
-					v1[0] = currPointD[0] - prevEdgePointD[0];
-					v1[1] = currPointD[1] - prevEdgePointD[1];
-					v1[2] = currPointD[2] - prevEdgePointD[2];
-					v2[0] = currEdgePointD[0] - prevEdgePointD[0];
-					v2[1] = currEdgePointD[1] - prevEdgePointD[1];
-					v2[2] = currEdgePointD[2] - prevEdgePointD[2];
-					v3[0] = currPointD[0] - nextEdgePointD[0];
-					v3[1] = currPointD[1] - nextEdgePointD[1];
-					v3[2] = currPointD[2] - nextEdgePointD[2];
-					v4[0] = currEdgePointD[0] - nextEdgePointD[0];
-					v4[1] = currEdgePointD[1] - nextEdgePointD[1];
-					v4[2] = currEdgePointD[2] - nextEdgePointD[2];
-
-					/*const Vec3 v1 = c_pos - geom.vertex(id_prev);
-					const Vec3 v2 = geom.vertex(id_curr) - geom.vertex(id_prev);
-					const Vec3 v3 = c_pos - geom.vertex(id_next);
-					const Vec3 v4 = geom.vertex(id_curr) - geom.vertex(id_next);*/
-
-					// wij = (cot(alpha) + cot(beta)),
-					// for boundary edge, there is only one such edge
-					// If the mesh is not a water-tight closed volume
-					// we must check for edges lying on the sides of wholes
-					cotan1 = 0.0;
-					cotan2 = 0.0;
-					if (!boundaryEdges[id_curr])
+					// general case: not a boundary
+					v1v2Dot = RVLDOTPRODUCT3(v1, v2);
+					RVLCROSSPRODUCT3(v1, v2, v1v2Cross);
+					norm = RVLDOTPRODUCT3(v1v2Cross, v1v2Cross);
+					cotan1 = v1v2Dot / sqrt(norm);
+					v3v4Dot = RVLDOTPRODUCT3(v3, v4);
+					RVLCROSSPRODUCT3(v3, v4, v3v4Cross);
+					norm = RVLDOTPRODUCT3(v3v4Cross, v3v4Cross);
+					cotan2 = v3v4Dot / sqrt(norm);
+					/*cotan1 = (v1.dot(v2)) / (v1.cross(v2)).norm();
+					cotan2 = (v3.dot(v4)) / (v3.cross(v4)).norm();*/
+				}
+				else // boundary edge, only have one such angle
+				{
+					if (id_next == id_prev)
 					{
-						// general case: not a boundary
+						// two angles are the same, e.g. corner of a square
 						v1v2Dot = RVLDOTPRODUCT3(v1, v2);
 						RVLCROSSPRODUCT3(v1, v2, v1v2Cross);
 						norm = RVLDOTPRODUCT3(v1v2Cross, v1v2Cross);
 						cotan1 = v1v2Dot / sqrt(norm);
-						v3v4Dot = RVLDOTPRODUCT3(v3, v4);
-						RVLCROSSPRODUCT3(v3, v4, v3v4Cross);
-						norm = RVLDOTPRODUCT3(v3v4Cross, v3v4Cross);
-						cotan2 = v3v4Dot / sqrt(norm);
-						/*cotan1 = (v1.dot(v2)) / (v1.cross(v2)).norm();
-						cotan2 = (v3.dot(v4)) / (v3.cross(v4)).norm();*/
+						//cotan1 = (v1.dot(v2)) / (v1.cross(v2)).norm();
 					}
-					else // boundary edge, only have one such angle
+					else
 					{
-						if (id_next == id_prev)
+						// find the angle not on the boundary
+						if (!boundaryEdges[id_next])
 						{
-							// two angles are the same, e.g. corner of a square
+							v3v4Dot = RVLDOTPRODUCT3(v3, v4);
+							RVLCROSSPRODUCT3(v3, v4, v3v4Cross);
+							norm = RVLDOTPRODUCT3(v3v4Cross, v3v4Cross);
+							cotan2 = v3v4Dot / sqrt(norm);
+							//cotan2 = (v3.dot(v4)) / (v3.cross(v4)).norm();
+						}
+						else
+						{
 							v1v2Dot = RVLDOTPRODUCT3(v1, v2);
 							RVLCROSSPRODUCT3(v1, v2, v1v2Cross);
 							norm = RVLDOTPRODUCT3(v1v2Cross, v1v2Cross);
 							cotan1 = v1v2Dot / sqrt(norm);
 							//cotan1 = (v1.dot(v2)) / (v1.cross(v2)).norm();
 						}
-						else
-						{
-							// find the angle not on the boundary
-							if (!boundaryEdges[id_next])
-							{
-								v3v4Dot = RVLDOTPRODUCT3(v3, v4);
-								RVLCROSSPRODUCT3(v3, v4, v3v4Cross);
-								norm = RVLDOTPRODUCT3(v3v4Cross, v3v4Cross);
-								cotan2 = v3v4Dot / sqrt(norm);
-								//cotan2 = (v3.dot(v4)) / (v3.cross(v4)).norm();
-							}
-							else
-							{
-								v1v2Dot = RVLDOTPRODUCT3(v1, v2);
-								RVLCROSSPRODUCT3(v1, v2, v1v2Cross);
-								norm = RVLDOTPRODUCT3(v1v2Cross, v1v2Cross);
-								cotan1 = v1v2Dot / sqrt(norm);
-								//cotan1 = (v1.dot(v2)) / (v1.cross(v2)).norm();
-							}
-						}
 					}
-
-					//neighboorhoodCoTangentW.at(i).push_back(cotan1 + cotan2);
-					neighboorhoodCoTangentW[id_curr] = cotan1 + cotan2;
 				}
+
+				//neighboorhoodCoTangentW.at(i).push_back(cotan1 + cotan2);
+				neighboorhoodCoTangentW[id_curr] = cotan1 + cotan2;
+			}
 			}
 			else
 			{
@@ -896,6 +896,8 @@ void ObjectDetector::DetectObjects(char *MeshFilePathName)
 				cv::waitKey(1);
 			}
 
+			
+
 			////
 			//Evaluation
 			/*int E[2];
@@ -912,7 +914,8 @@ void ObjectDetector::DetectObjects(char *MeshFilePathName)
 
 void ObjectDetector::Evaluate(
 	FILE *fp,
-	char *fileName)
+	char *fileName,
+	char *selectedGTObjectsFileName)
 {
 #ifdef RVLSURFEL_IMAGE_ADJACENCY
 	if (bSegmentToObjects)
@@ -923,7 +926,24 @@ void ObjectDetector::Evaluate(
 		if (bSurfelsFromSSF)
 			pObjects->CalculateOverAndUnderSegmentation_SSF(E, N, true, false);
 		else
+		{			
+			if (selectedGTObjectsFileName)
+			{
+				std::vector<SURFEL::ObjectCoverage> selectedGTObjectCoverage;
+
+				pObjects->CalculateOverAndUnderSegmentation(E, N, true, std::string(fileName), false, std::string(selectedGTObjectsFileName), &selectedGTObjectCoverage);
+
+				FILE *fpSelectedGTObjectCoverage = fopen("selected_GT_object_coverage.txt", "a");
+
+				for (int i = 0; i < selectedGTObjectCoverage.size(); i++)
+					fprintf(fpSelectedGTObjectCoverage, "%d\t%d\t%f\n", selectedGTObjectCoverage.at(i).iObject,
+					selectedGTObjectCoverage.at(i).type, selectedGTObjectCoverage.at(i).coverage);
+
+				fclose(fpSelectedGTObjectCoverage);
+			}
+			else
 			pObjects->CalculateOverAndUnderSegmentation(E, N, true, std::string(fileName), false);
+		}
 
 		std::cout << "Oversegmenation error: " << 100.0f * (1 - E[0] / (float)N) << "%" << std::endl;
 		std::cout << "Undersegmenation error: " << 100.0f * E[1] / (float)N << "%" << std::endl;

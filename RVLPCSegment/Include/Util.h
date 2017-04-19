@@ -130,6 +130,11 @@ namespace RVL
 		return RVL::Roots2<Type>(p, eig);
 	}
 
+	void GetFileNameAndPath(
+		char *fileNameWithPath,
+		char *&fileName,
+		char *&filePath);
+
 	//VIDOVIC
 	class FileSequenceLoader
 	{
