@@ -36,6 +36,11 @@ ObjectGraph::ObjectGraph()
 	continuousThr = 0.015f;
 	convexThr = -20.0f;
 	cleanThr = 0.8f;
+	depthStepIntThr = 0.005f;
+	depthStepExtThr = 0.025f;
+	concaveAngleIntThr = 0.0f;
+	concaveAngleExtThr = 45.0f;
+	concaveMinCost = 0.3f;
 
 	bObjectAggregationLevel2Uncertainty = false;
 	bObjectAggregationLevel2Edges = false;
@@ -95,6 +100,11 @@ void ObjectGraph::CreateParamList(CRVLMem *pMem)
 	pParamData = ParamList.AddParam("ObjectGraph.continuousThr", RVLPARAM_TYPE_FLOAT, &continuousThr);
 	pParamData = ParamList.AddParam("ObjectGraph.convexThr", RVLPARAM_TYPE_FLOAT, &convexThr);
 	pParamData = ParamList.AddParam("ObjectGraph.cleanThr", RVLPARAM_TYPE_FLOAT, &cleanThr);
+	pParamData = ParamList.AddParam("ObjectGraph.depthStepIntThr", RVLPARAM_TYPE_FLOAT, &depthStepIntThr);
+	pParamData = ParamList.AddParam("ObjectGraph.depthStepExtThr", RVLPARAM_TYPE_FLOAT, &depthStepExtThr);
+	pParamData = ParamList.AddParam("ObjectGraph.concaveAngleIntThr", RVLPARAM_TYPE_FLOAT, &concaveAngleIntThr);
+	pParamData = ParamList.AddParam("ObjectGraph.concaveAngleExtThr", RVLPARAM_TYPE_FLOAT, &concaveAngleExtThr);
+	pParamData = ParamList.AddParam("ObjectGraph.concaveMinCost", RVLPARAM_TYPE_FLOAT, &concaveMinCost);
 	pParamData = ParamList.AddParam("ObjectGraph.relationClassifier", RVLPARAM_TYPE_ID, &relationClassifier);
 	ParamList.AddID(pParamData, "HEURISTIC", RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_HEURISTIC);
 	ParamList.AddID(pParamData, "SVM", RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_SVM);
@@ -1058,11 +1068,10 @@ void ObjectGraph::ComputeRelationCost(
 {
 	//float scale = 1000.0f;
 	float scale = 1.0f;
-	float depthStepIntThr = scale * 0.005f;
-	float depthStepExtThr = scale * 0.025f;
-	float concaveAngleIntThr = 0.0f * DEG2RAD;
-	float concaveAngleExtThr = 45.0f * DEG2RAD;
-	float concaveMinCost = 0.3f;
+	float depthStepIntThr_ = depthStepIntThr * scale;
+	float depthStepExtThr_ = depthStepExtThr * scale;
+	float concaveAngleIntThr_ = concaveAngleIntThr * DEG2RAD;
+	float concaveAngleExtThr_ = concaveAngleExtThr * DEG2RAD;
 
 	float f1 = pEdge->desc.cupyDescriptor[0];
 	float f2 = pEdge->desc.cupyDescriptor[1];
@@ -1081,13 +1090,14 @@ void ObjectGraph::ComputeRelationCost(
 
 		break;
 	case RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_FUZZY_HEURISTIC:
-		data.PContinuous = (f4 <= depthStepIntThr ? 1.0f : (f4 <= depthStepExtThr ? (depthStepExtThr - f4) / (depthStepExtThr - depthStepIntThr) : 0.0f));
+		data.PContinuous = (f4 <= depthStepIntThr_ ? 1.0f : (f4 <= depthStepExtThr_ ? (depthStepExtThr_ - f4) / (depthStepExtThr_ - depthStepIntThr_) : 0.0f));
 
-		data.PConvex = (f1 >= -concaveAngleIntThr ? 1.0f : (f1 >= -concaveAngleExtThr ? concaveMinCost + (1.0f - concaveMinCost) * (concaveAngleExtThr + f1) / (concaveAngleExtThr - concaveAngleIntThr) : concaveMinCost));
+		data.PConvex = (f1 >= -concaveAngleIntThr_ ? 1.0f : (f1 >= -concaveAngleExtThr_ ? concaveMinCost + (1.0f - concaveMinCost) * (concaveAngleExtThr_ + f1) / (concaveAngleExtThr_ - concaveAngleIntThr_) : concaveMinCost));
 
 		//data.PClean = 0.5f + 0.5f * f2;
 		//data.PClean = (RVLABS(f1) >= 20.0f * DEG2RAD ? (f3 >= 0.5 ? 2.0f * (f3 - 0.5f) : 0.0f) : 1.0f);
-		data.PClean = (RVLABS(f1) >= 20.0f * DEG2RAD ? (f2 >= 0.5 ? 2.0f * (f2 - 0.5f) : 0.0f) : 1.0f);
+		//data.PClean = (RVLABS(f1) >= 20.0f * DEG2RAD ? (f2 >= 0.5 ? 2.0f * (f2 - 0.5f) : 0.0f) : 1.0f);
+		data.PClean = (f2 >= 0.5 ? 2.0f * (f2 - 0.5f) : 0.0f);
 
 		data.P = RVLMIN(data.PContinuous, RVLMIN(data.PConvex, data.PClean));
 

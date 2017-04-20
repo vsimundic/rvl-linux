@@ -189,6 +189,12 @@ namespace RVL
 			float continuousThr;
 			float convexThr;
 			float cleanThr;
+			float depthStepIntThr;
+			float depthStepExtThr;
+			float concaveAngleIntThr;
+			float concaveAngleExtThr;
+			float concaveMinCost;
+
 			Mesh *pMesh; //FIlko
 
 		private:
