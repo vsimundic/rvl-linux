@@ -196,31 +196,50 @@ void CTISet::CopyCTIsToArray()
 		pCTI_ = CTI.pFirst;
 
 		for (int i = 0; i < nS; i++)
-		{
-			iM = pCTI_->iModel;
-			iC = pCTI_->iCluster;
-
 			nCTI[i] = 0;
 
-			if (iM == -1)
-			{
-				if (i != iC)
-					continue;
-			}
+		pCTI_ = CTI.pFirst;
+
+		for (int i = 0; i < pCTI.n; i++)
+		{
+			if (pCTI_->iModel == -1)
+				nCTI[pCTI_->iCluster]++;
 			else
-				if ((iM * (maxSegmentIdx + 1) + iC) != i)
-					continue;
+				nCTI[pCTI_->iModel * (maxSegmentIdx + 1) + pCTI_->iCluster]++;
 
-			//if ((iM == -1 && i != iC) || ((iM * (maxSegmentIdx + 1) + iC) != i))
-			//	continue;
-
-			while (pCTI_ && iM == pCTI_->iModel && iC == pCTI_->iCluster)
-			{
-				nCTI[i]++;
-
-				pCTI_ = pCTI_->pNext;
-			}
+			pCTI_ = pCTI_->pNext;
 		}
+
+		/*
+		for (int i = 0; i < nS; i++)
+		{
+			nCTI[i] = 0;
+
+			if (pCTI_)
+			{
+				iM = pCTI_->iModel;
+				iC = pCTI_->iCluster;
+
+				if (iM == -1)
+				{
+					if (i != iC)
+						continue;
+				}
+				else
+					if ((iM * (maxSegmentIdx + 1) + iC) != i)
+						continue;
+
+				//if ((iM == -1 && i != iC) || ((iM * (maxSegmentIdx + 1) + iC) != i))
+				//	continue;
+
+				while (pCTI_ && iM == pCTI_->iModel && iC == pCTI_->iCluster)
+				{
+					nCTI[i]++;
+
+					pCTI_ = pCTI_->pNext;
+				}
+			}
+		}*/
 
 		// Creates Array of segments, each segment contains CTI indices in that segment
 		RVL_DELETE_ARRAY(SegmentCTIs.Element);

@@ -403,8 +403,6 @@ int main(int argc, char ** argv)
 
 		if (recognition.mode == RVLRECOGNITION_MODE_TRAINING)
 		{
-			surfels.NodeColors(SelectionColor);
-
 			recognition.Learn(modelSequenceFileName, &visualizer); //Vidovic
 		}
 		else if (recognition.mode == RVLRECOGNITION_MODE_RECOGNITION)
@@ -508,7 +506,7 @@ int main(int argc, char ** argv)
 				//LoadMesh(&meshBuilder, filePath, &mesh, false);
 
 				surfels.NodeColors(SelectionColor);				
-				//visualizer.renderer->RemoveAllViewProps();
+				visualizer.renderer->RemoveAllViewProps();
 				recognition.InitDisplay(&visualizer, &mesh, SelectionColor);
 				recognition.Display();
 

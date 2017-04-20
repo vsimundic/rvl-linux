@@ -3052,6 +3052,7 @@ void PSGM::Learn(
 
 		if (visualizer)
 		{
+			pSurfels->NodeColors(SelectionColor);
 			InitDisplay(visualizer, &mesh, SelectionColor);
 			Display();
 			visualizer->Run();
