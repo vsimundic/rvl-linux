@@ -1078,7 +1078,9 @@ void ObjectGraph::ComputeRelationCost(
 	float f3 = pEdge->desc.cupyDescriptor[2];
 	float f4 = pEdge->desc.cupyDescriptor[3];
 
-	float y1, y2, y3, y4;
+	//float PClean_ = 0.0f; 
+
+	float y1, y2, y3, y4;	
 
 	switch (relationClassifier){
 	case RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_HEURISTIC:
@@ -1098,6 +1100,10 @@ void ObjectGraph::ComputeRelationCost(
 		//data.PClean = (RVLABS(f1) >= 20.0f * DEG2RAD ? (f3 >= 0.5 ? 2.0f * (f3 - 0.5f) : 0.0f) : 1.0f);
 		//data.PClean = (RVLABS(f1) >= 20.0f * DEG2RAD ? (f2 >= 0.5 ? 2.0f * (f2 - 0.5f) : 0.0f) : 1.0f);
 		data.PClean = (f2 >= 0.5 ? 2.0f * (f2 - 0.5f) : 0.0f);
+
+		//PClean_ = (f3 >= 0.5 ? 2.0f * (f3 - 0.5f) : 0.0f);
+
+		//data.PClean = RVLMIN(data.PClean, PClean_);
 
 		data.P = RVLMIN(data.PContinuous, RVLMIN(data.PConvex, data.PClean));
 

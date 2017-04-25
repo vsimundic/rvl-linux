@@ -19,6 +19,8 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 
 using namespace RVL;
 
+#define DIPLOMSKI_RADOCAJ
+
 int main(int argc, char* argv[])
 {
 	// create vision system
@@ -31,14 +33,16 @@ int main(int argc, char* argv[])
 
 	VS.Init("RVLPCSdemo.cfg");
 
+#ifdef DIPLOMSKI_RADOCAJ
 	// Create RGB-D camera.
 
-	//RGBDCamera camera;						 //Radocaj
-	//Array2D<short int> depthImage;         //Radocaj
+	RGBDCamera camera;
+	Array2D<short int> depthImage;
 
 	// Create point cloud.
 
-	//pcl::PointCloud<pcl::PointXYZRGBA>::Ptr PC(new pcl::PointCloud<pcl::PointXYZRGBA>(320, 240));
+	pcl::PointCloud<pcl::PointXYZRGBA>::Ptr PC(new pcl::PointCloud<pcl::PointXYZRGBA>(320, 240));
+#endif
 
 	// create GUI
 
@@ -94,11 +98,19 @@ int main(int argc, char* argv[])
 			return 0;
 		}
 
-		//Array2D<short int> depthImage;
+#ifdef DIPLOMSKI_RADOCAJ
+		Array2D<short int> depthImage;
 
-		//depthImage.Element = pDepthImage->Disparity;
+		depthImage.Element = pDepthImage->Disparity;
+		depthImage.w = pDepthImage->Width;
+		depthImage.h = pDepthImage->Height;
+		camera.depthFu *= 0.5;
+		camera.depthFv *= 0.5;
+		camera.depthUc *= 0.5;
+		camera.depthVc *= 0.5;
 
-		//camera.GetPointCloud(&depthImage, GUI.m_pRGBImage, PC);
+		camera.GetPointCloud(&depthImage, GUI.m_pRGBImage, PC);
+#endif
 
 		if (GUI.m_bRecord)
 		{

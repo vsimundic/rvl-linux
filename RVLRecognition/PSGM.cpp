@@ -6416,7 +6416,8 @@ void PSGM::PaintCluster(
 
 		pSurfel = pSurfels->NodeArray.Element + iSurfel;
 
-		pVisualizer->PaintPointSet(&(pSurfel->PtList), pMesh->pPolygonData, color);
+		if (!pSurfel->bEdge)
+			pVisualizer->PaintPointSet(&(pSurfel->PtList), pMesh->pPolygonData, color);
 	}
 }
 
