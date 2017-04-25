@@ -151,6 +151,7 @@ void ObjectDetector::CreateParamList()
 
 //Dirk Holz and Sven Behnke: "Approximate Triangulation and Region Growing for Efficient Segmentation and Smoothing of Range Images"
 //NOT DEBUGGED
+//NOT UPDATED
 vtkSmartPointer<vtkPolyData> MultilateralSmoothMesh(vtkSmartPointer<vtkPolyData> inputPD, int noIter)
 {
 
@@ -272,7 +273,7 @@ vtkSmartPointer<vtkPolyData> MultilateralSmoothMesh(vtkSmartPointer<vtkPolyData>
 
 //Dirk Holz and Sven Behnke: "Approximate Triangulation and Region Growing for Efficient Segmentation and Smoothing of Range Images"
 //NOT DEBUGGED
-void MultilateralSmoothMesh(Mesh *pMesh, int noIter, bool verbose = false)
+void MultilateralSmoothMesh(Mesh *pMesh, int noIter, bool Boundary1DFiltering, bool onlyFirstNeigh_1DFiltering = false, bool verbose = false)
 {
 	//get a copy of pPolygonData points (destination points for first iteration)
 	vtkSmartPointer<vtkPoints> pointsSource = pMesh->pPolygonData->GetPoints();
@@ -293,11 +294,13 @@ void MultilateralSmoothMesh(Mesh *pMesh, int noIter, bool verbose = false)
 	double nextEdgePointD[3];
 	MeshEdge* pEdge;
 	MeshEdgePtr* pEdgePtr;
+	MeshEdge* pEdge2;
+	MeshEdgePtr* pEdgePtr2;
 	int othersideIdx;
+	int otherothersideIdx;
 	int noPointEdges = 0;
 	int neighbourPoints[20]; //assumption: there is maximum 20 edges for any point
 	bool boundaryEdges[20];
-
 
 	float tempDist2 = 0.0;
 	float tempL1 = 0.0;
@@ -311,27 +314,75 @@ void MultilateralSmoothMesh(Mesh *pMesh, int noIter, bool verbose = false)
 	float sumW = 0.0;
 	float sumPts[3];
 	float sumNorm[3];
-
+	bool first = true;
+	bool found = false;
 	for (int iter = 0; iter < noIter; iter++)
 	{
 		for (int idx = 0; idx < pMesh->NodeArray.n; idx++)
 		{
 			//current point and edge list
 			currPoint = pMesh->NodeArray.Element + idx;
-			//if ((currPoint->P[0] == 0.0) && (currPoint->P[1] == 0.0) && (currPoint->P[2] == 0.0))
-			//	continue;
 			if (!currPoint->bValid)
 				continue;
 			pointsSource->GetPoint(idx, currPointD);
 			normalsSource->GetTupleValue(idx, currNor);
 			pEdgePtr = currPoint->EdgeList.pFirst;
 			noPointEdges = 0;
+			if (Boundary1DFiltering && currPoint->bBoundary)//If the point is on the boundary and we use 1D boundary filtering
+			{
+			while (pEdgePtr)
+			{
+				RVLPCSEGMENT_GRAPH_GET_NEIGHBOR(idx, pEdgePtr, pEdge, othersideIdx);	//get the other side index and point
+				nextEdgePoint = pMesh->NodeArray.Element + othersideIdx;
+					if ((noPointEdges == 0) || (pEdgePtr->pNext == NULL))	//boundary is only first and last pointer?
+					{
+						neighbourPoints[noPointEdges] = othersideIdx;
+						boundaryEdges[noPointEdges] = true;
+						noPointEdges++;
+						if (!onlyFirstNeigh_1DFiltering)	//if we use first and second neighbours
+						{
+							//find neighbours boundary edges
+							pEdgePtr2 = nextEdgePoint->EdgeList.pFirst;
+							first = true;
+							while (pEdgePtr2)
+							{
+								RVLPCSEGMENT_GRAPH_GET_NEIGHBOR(othersideIdx, pEdgePtr2, pEdge2, otherothersideIdx);	//get the other side index
+								if ((first || (pEdgePtr2->pNext == NULL)) && (otherothersideIdx != idx)) //boundary is only first and last pointer? //Also it must not be the poiter to current point
+								{
+									//Check if it is not already on the list
+									found = false;
+									for (int i = 0; i < noPointEdges; i++)
+									{
+										if (neighbourPoints[i] == otherothersideIdx)	//If it is on the list
+										{
+											found = true;
+											break;
+										}
+									}
+									if (!found)	//If it is not already in, add it
+									{
+										neighbourPoints[noPointEdges] = otherothersideIdx;
+										boundaryEdges[noPointEdges] = true;
+										noPointEdges++;
+									}
+								}
+								first = false;	//It is no longer the first pointer
+								pEdgePtr2 = pEdgePtr2->pNext;
+							}
+						}
+					}
+
+					pEdgePtr = pEdgePtr->pNext;
+				}
+			}
+			else   //Standard multilateral filter takes all neighbours into considiration regardless of boundary
+			{
 			while (pEdgePtr)
 			{
 				RVLPCSEGMENT_GRAPH_GET_NEIGHBOR(idx, pEdgePtr, pEdge, othersideIdx);	//get the other side index and point
 				nextEdgePoint = pMesh->NodeArray.Element + othersideIdx;
 				neighbourPoints[noPointEdges] = othersideIdx;	//set other side index as in the neighbourhood
-				if ((noPointEdges == 0) || (pEdgePtr->pNext == NULL))	//Check if that edge is boundary
+					if ((noPointEdges == 0) || (pEdgePtr->pNext == NULL))	//Check if that edge is boundary //first and last are boundary edges
 					boundaryEdges[noPointEdges] = true;
 				else
 					boundaryEdges[noPointEdges] = false;
@@ -339,12 +390,27 @@ void MultilateralSmoothMesh(Mesh *pMesh, int noIter, bool verbose = false)
 				noPointEdges++;
 				pEdgePtr = pEdgePtr->pNext;
 			}
+			}
 
 			sumPts[0] = 0.0; sumPts[1] = 0.0; sumPts[2] = 0.0;
 			sumNorm[0] = 0.0; sumNorm[1] = 0.0; sumNorm[2] = 0.0;
 			sumW = 0.0;
-			for (int id_curr = 0; id_curr < noPointEdges; id_curr++)
+
+			if (Boundary1DFiltering && onlyFirstNeigh_1DFiltering && currPoint->bBoundary)	//If we take only first neighbours into considiration for 1D boundary filtering we also use the current (central point)
 			{
+				sumW += 1.0;
+				sumPts[0] += currPointD[0];
+				sumPts[1] += currPointD[1];
+				sumPts[2] += currPointD[2];
+				sumNorm[0] += currNor[0];
+				sumNorm[1] += currNor[1];
+				sumNorm[2] += currNor[2];
+			}
+
+			for (int id_curr = 0; id_curr < noPointEdges; id_curr++)	//for each neighbour on the list
+			{
+				/*if (boundaryEdgeFiltering && currPoint->bBoundary && !boundaryEdges[id_curr])
+					continue;*/
 				pointsSource->GetPoint(neighbourPoints[id_curr], otherPt);
 				normalsSource->GetTupleValue(neighbourPoints[id_curr], otherNor);
 				//calculate distance
@@ -410,6 +476,8 @@ void MultilateralSmoothMesh(Mesh *pMesh, int noIter, bool verbose = false)
 		currPoint->P[1] = currPointD[1];
 		currPoint->P[2] = currPointD[2];
 	}
+	if (verbose)
+		std::cout << "Mesh data updated!" << std::endl;
 }
 
 void LaplaceSmooting(Mesh *pMesh, int noIter, bool useCotan)
@@ -705,7 +773,8 @@ void ObjectDetector::DetectObjects(char *MeshFilePathName)
 		//SmoothMesh(&mesh, 30);
 		//LaplaceSmooting(&mesh, 30);
 		if (bMultilateralFilter)
-			MultilateralSmoothMesh(&mesh, nMultilateralFilterIterations);
+			MultilateralSmoothMesh(&mesh, nMultilateralFilterIterations, false, false, true);
+		
 
 		// Segment mesh to surfels.				
 
@@ -820,8 +889,8 @@ void ObjectDetector::DetectObjects(char *MeshFilePathName)
 			pObjects->ExtFuncCheckIfWithinVolume = &RVL::ObjectDetector::CheckIfWithinCTIBoundingBox;
 			pObjects->ObjectAggregationLevel2_ViaObjectPairConvexity(convexityThr, convexityRatioThr1, convexityRatioThr2, pObjects->minObjectSize, false);
 			if (!bJoinSmallObjectsToLargestNeighbor)
-				cv::imshow("Level2", pObjects->CreateSegmentationImage());
-
+			cv::imshow("Level2", pObjects->CreateSegmentationImage());
+			
 			////
 			//Evaluation
 			/*int E[2];
@@ -835,8 +904,14 @@ void ObjectDetector::DetectObjects(char *MeshFilePathName)
 
 		if (bJoinSmallObjectsToLargestNeighbor)
 		{
-			pObjects->MergeSmallObjects(joinSmallObjectsToLargestNeighborSizeThr, joinSmallObjectsToLargestNeighborDistThr);
+			int mergedIt = 0;
+			while (pObjects->MergeSmallObjects(joinSmallObjectsToLargestNeighborSizeThr, joinSmallObjectsToLargestNeighborDistThr))
+			{
+				std::cout << "Merged iteration: " << mergedIt << std::endl;
+				mergedIt++;
+			}
 			cv::imshow("level2 + merge small objects", pObjects->CreateSegmentationImage());
+			//cv::waitKey(1);
 		}
 	}
 #endif
@@ -862,6 +937,12 @@ void ObjectDetector::Evaluate(
 				std::vector<SURFEL::ObjectCoverage> selectedGTObjectCoverage;
 
 				pObjects->CalculateOverAndUnderSegmentation(E, N, true, std::string(fileName), false, std::string(selectedGTObjectsFileName), &selectedGTObjectCoverage);
+				/*std::string imageName = fileName;
+				imageName.erase(imageName.find_last_of("."));
+				std::string depthImgFileName = imageName + "d.png";
+				std::string labelImgFileName = imageName + "a.png";
+				std::string segLabelImgFileName = imageName + "LCCPLabels.png";
+				pObjects->CalculateOverAndUnderSegmentation_Img(E, N, segLabelImgFileName, labelImgFileName, depthImgFileName, true, false, std::string(selectedGTObjectsFileName), &selectedGTObjectCoverage);*/
 
 				FILE *fpSelectedGTObjectCoverage = fopen("selected_GT_object_coverage.txt", "a");
 
