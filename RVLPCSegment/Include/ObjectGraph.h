@@ -111,6 +111,16 @@ namespace RVL
 				bool useBackground = true,
 				std::string selectedGTObjectFileName = "",
 				std::vector<ObjectCoverage> *pSelectedGTObjectCoverage = NULL);	//Filko
+			static void CalculateOverAndUnderSegmentation_Img(
+				int *E,
+				int &N,
+				std::string SegLabImgFilename,
+				std::string GTlabImgFilename,
+				std::string DepthImgFilename,
+				bool useGTNoPix = false,
+				bool useBackground = true,
+				std::string selectedGTObjectFileName = "",
+				std::vector<ObjectCoverage> *pSelectedGTObjectCoverage = NULL);	//Filko
 			void DetermineObjectConvexityData(float convexThr = 0.005, float minDiffFlipReq = 0.1, bool verbose = false);	//Filko
 			void CalculateConvexityRatiosForObjectPair(int firstObject, int secondObject, float& firstRatio, float& secondRatio, float convexThr = 0.005);	//Filko
 			void CalculateObjectsColorHistogram(); //Filko
@@ -149,7 +159,7 @@ namespace RVL
 			cv::Mat CreateSegmentationImage();
 			cv::Mat CreateSegmentationImageFromSSF();
 			void Debug();
-			void LoadSelectedGTObjects(
+			static void LoadSelectedGTObjects(
 				char *meshFileName,
 				char *selectedGTObjectFileName,
 				std::vector<ObjectCoverage> &selectedGTObjectCoverage);

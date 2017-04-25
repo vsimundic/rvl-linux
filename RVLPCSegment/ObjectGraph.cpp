@@ -573,7 +573,7 @@ void ObjectGraph::CalculateOverAndUnderSegmentation(
 		std::string labelImgFileName = imageName + "a.png";
 
 		//load GT files
-		cv::Mat GTLabImg = cv::imread(labelImgFileName);
+		cv::Mat GTLabImg = cv::imread(labelImgFileName, cv::ImreadModes::IMREAD_ANYDEPTH);
 		cv::Mat GTDepthImg = cv::imread(depthImgFileName, cv::ImreadModes::IMREAD_ANYDEPTH);
 		//Count GT object pixels
 		N = 0;
@@ -586,7 +586,7 @@ void ObjectGraph::CalculateOverAndUnderSegmentation(
 			{
 				//adding points that have valid label and depth value
 
-				GTLabel = (int)GTLabImg.at<cv::Vec3b>(y, x)[0];
+				GTLabel = (int)GTLabImg.at<unsigned char>(y, x);
 
 				nObjectPts[GTLabel]++;
 
@@ -842,6 +842,240 @@ void ObjectGraph::LoadSelectedGTObjects(
 	}
 }
 #endif
+
+//Must be linked with the ground truth (AssignGroundTruthSegmentation per surfel). Return 'Ntrue', 'Nfalse' and 'N' needed to calculate oversegmentation (Fos = 1 - Ntrue/N) and undersegmenation (Fus =Nfalse/N) error. The asumption is that the GT object hist bin with the highest values is the correct one!!! 
+void ObjectGraph::CalculateOverAndUnderSegmentation_Img(
+	int *E,
+	int &N,
+	std::string SegLabImgFilename,
+	std::string GTlabImgFilename,
+	std::string DepthImgFilename,
+	bool useGTNoPix,
+	bool useBackground,
+	std::string selectedGTObjectFileName,
+	std::vector<ObjectCoverage> *pSelectedGTObjectCoverage)
+{
+	//Load segmentation and GT label images
+	cv::Mat GTLabImg = cv::imread(GTlabImgFilename, cv::ImreadModes::IMREAD_ANYDEPTH);
+	cv::Mat SeglabImg = cv::imread(SegLabImgFilename, cv::ImreadModes::IMREAD_ANYDEPTH);
+	cv::Mat GTDepthImg = cv::imread(DepthImgFilename, cv::ImreadModes::IMREAD_ANYDEPTH);
+	
+	//Getting GThist size and initializing GT object histogram;
+	//Get GT label min/max value
+	double minLab, maxLab;
+	cv::minMaxLoc(GTLabImg, &minLab, &maxLab);
+	int GTHistSize = maxLab + 1;
+	//Get Segmenation label min/max value
+	cv::minMaxLoc(SeglabImg, &minLab, &maxLab);
+	int noSegObject = maxLab + 1;
+	
+	if (pSelectedGTObjectCoverage)
+	{
+		//Generate a mesh filename
+		std::string meshfilename = GTlabImgFilename;
+		meshfilename.erase(meshfilename.find_last_of(".") - 1);
+		meshfilename += ".ply";
+		LoadSelectedGTObjects((char *)(meshfilename.c_str()), (char *)(selectedGTObjectFileName.c_str()), *pSelectedGTObjectCoverage);
+	}
+
+#ifdef RVLPCSEGMENT_OBJECT_GRAPH_EVALUATION_LOG
+	FILE *fp = fopen("C:\\RVL\\ExpRez\\SegmentationToGT.txt", "w");
+#endif
+
+	int *nObjectPts = new int[GTHistSize];
+
+	memset(nObjectPts, 0, GTHistSize * sizeof(int));
+
+	if (useGTNoPix)	
+	{
+
+		//Count GT object pixels
+		N = 0;
+
+		int GTLabel;
+
+		for (int y = 0; y < 480; y++)
+		{
+			for (int x = 0; x < 640; x++)
+			{
+				//adding points that have valid label and depth value
+				if (GTLabImg.step[1] == 1)
+					GTLabel = (int)GTLabImg.at<unsigned char>(y, x);
+				else if (GTLabImg.step[1] == 2)
+					GTLabel = (int)GTLabImg.at<unsigned short>(y, x);
+
+				nObjectPts[GTLabel]++;
+
+				//if ((GTLabel > 0) && GTDepthImg.at<unsigned short>(y, x) > 0)
+				if (GTLabel > 0)
+					N++;
+			}
+		}
+#ifdef RVLPCSEGMENT_OBJECT_GRAPH_EVALUATION_LOG
+		fprintf(fp, "Total #GTPts: %d\n\n", N);
+#endif
+	}
+
+	int *GTObjHistogram = new int[GTHistSize * noSegObject];	//GTObject histogam per segmented object
+	memset(GTObjHistogram, 0, GTHistSize * noSegObject * sizeof(int));
+	int *maxObj = new int[GTHistSize];	//Idx of segmented object per maximum bin
+	memset(maxObj, 0, GTHistSize * sizeof(int));
+	int *g = new int[GTHistSize];	//gama
+	memset(g, 0, GTHistSize * sizeof(int));
+	int *maxBin = new int[noSegObject];	//maximum bin per segmented object
+	memset(maxBin, 0, noSegObject * sizeof(int));
+
+	GRAPH::AggregateNode<SURFEL::AgEdge> *pObject;
+	QLIST::Index *piElement;
+	Surfel *pSurfel;
+
+	//Calculating GT object histogram
+	for (int y = 0; y < GTLabImg.rows; y++)
+	{
+		for (int x = 0; x < GTLabImg.cols; x++)
+		{
+			if ((SeglabImg.step[1] == 1) && (GTLabImg.step[1] == 1))
+				GTObjHistogram[(int)SeglabImg.at<unsigned char>(y, x) * GTHistSize + (int)GTLabImg.at<unsigned char>(y, x)]++;
+			else if ((SeglabImg.step[1] == 2) && (GTLabImg.step[1] == 2))
+				GTObjHistogram[(int)SeglabImg.at<unsigned short>(y, x) * GTHistSize + (int)GTLabImg.at<unsigned short>(y, x)]++;
+			else if ((SeglabImg.step[1] == 1) && (GTLabImg.step[1] == 2))
+				GTObjHistogram[(int)SeglabImg.at<unsigned char>(y, x) * GTHistSize + (int)GTLabImg.at<unsigned short>(y, x)]++;
+			else if ((SeglabImg.step[1] == 2) && (GTLabImg.step[1] == 1))
+				GTObjHistogram[(int)SeglabImg.at<unsigned short>(y, x) * GTHistSize + (int)GTLabImg.at<unsigned char>(y, x)]++;
+
+		}
+	}
+
+#ifdef RVLPCSEGMENT_OBJECT_GRAPH_EVALUATION_LOG
+	fprintf(fp, "Undersegmentation\n");
+	fprintf(fp, "-----------------------------\n");
+#endif
+
+	E[0] = 0;	//Oversegmentation values
+	E[1] = 0;	//Undersegmentation values
+	int* ptrGTObjHist;
+	int max = 0;
+
+	int intersection;
+
+	int totVal = 0;
+	for (int iObject = 0; iObject < noSegObject; iObject++)
+	{
+		ptrGTObjHist = &(GTObjHistogram[iObject * GTHistSize]);
+
+		//find max
+		max = 0;
+		maxBin[iObject] = -1;
+		for (int i = 0; i < GTHistSize; i++)
+		{
+			intersection = ptrGTObjHist[i];
+
+			if (intersection > max)
+			{
+				maxBin[iObject] = i;
+				max = intersection;
+			}
+		}
+
+		if (max == 0)//invalid object
+			continue;
+
+		//Sum false values
+		for (int i = 0; i < GTHistSize; i++)
+		{
+			//if ((i == 0) && !useBackground)
+			//	continue;
+
+			intersection = ptrGTObjHist[i];
+
+			if (i != maxBin[iObject])
+			{
+				if (intersection > 0)
+				{
+					E[1] += intersection;
+
+#ifdef RVLPCSEGMENT_OBJECT_GRAPH_EVALUATION_LOG
+					fprintf(fp, "S %d GTO %d: #Pts: %d, perc: %lf\n", iObject, i, intersection, (float)intersection / (float)N * 100.0f);
+#endif
+				}
+			}
+
+			totVal += intersection;
+		}
+
+		//Set max segmented object per max bin
+		if (ptrGTObjHist[maxBin[iObject]] > g[maxBin[iObject]])
+		{
+			maxObj[maxBin[iObject]] = iObject;
+			g[maxBin[iObject]] = ptrGTObjHist[maxBin[iObject]];
+		}
+	}
+
+#ifdef RVLPCSEGMENT_OBJECT_GRAPH_EVALUATION_LOG
+	fprintf(fp, "\n");
+	fprintf(fp, "Oversegmentation\n");
+	fprintf(fp, "-----------------------------\n");
+#endif
+
+	if (pSelectedGTObjectCoverage)
+		for (int j = 0; j < pSelectedGTObjectCoverage->size(); j++)
+			pSelectedGTObjectCoverage->at(j).coverage = 0.0f;
+
+	//Sum positive values
+	for (int i = 0; i < GTHistSize; i++)
+	{
+#ifdef RVLPCSEGMENT_OBJECT_GRAPH_EVALUATION_LOG
+		fprintf(fp, "GTO %d (%d pts): ", i, nObjectPts[i]);
+#endif
+
+		if ((i == 0) && !useBackground)
+			continue;
+
+		if (i == maxBin[maxObj[i]])
+		{
+			intersection = GTObjHistogram[maxObj[i] * GTHistSize + i];
+
+			E[0] += intersection;
+
+			if (pSelectedGTObjectCoverage)
+			{
+				for (int j = 0; j < pSelectedGTObjectCoverage->size(); j++)
+				{
+					if (i == pSelectedGTObjectCoverage->at(j).iObject)
+						pSelectedGTObjectCoverage->at(j).coverage = (float)intersection / (float)nObjectPts[i];
+				}
+			}
+
+#ifdef RVLPCSEGMENT_OBJECT_GRAPH_EVALUATION_LOG
+			fprintf(fp, "S %d #Pts: %d, perc: %lf, error perc: %lf\n", maxObj[i], intersection, (float)intersection / (float)nObjectPts[i] * 100.0f,
+				(float)(nObjectPts[i] - intersection) / (float)N * 100.0f);
+#endif
+		}
+#ifdef RVLPCSEGMENT_OBJECT_GRAPH_EVALUATION_LOG
+		else
+			fprintf(fp, "S - #Pts: %d, perc: %lf, error perc: %lf\n", 0, 0.0, (float)nObjectPts[i] / (float)N * 100.0f);
+#endif
+	}
+
+
+	//Final results
+	/*E[0] = 1 - E[0] / totVal;
+	E[1] /= totVal;*/
+
+	if (!useGTNoPix)
+		N = totVal;
+
+#ifdef RVLPCSEGMENT_OBJECT_GRAPH_EVALUATION_LOG
+	fclose(fp);
+#endif
+
+	//DeRef
+	delete[] nObjectPts;
+	delete[] GTObjHistogram;
+	delete[] maxObj;
+	delete[] g;
+	delete[] maxBin;
+}
 
 void ObjectGraph::WERSegmentation()
 {
@@ -1717,7 +1951,7 @@ void ObjectGraph::FlattenVertex(const float * P, float * Pc, const float * N, fl
 
 void ObjectGraph::CalculateConvexityRatiosForObjectPair(int firstObject, int secondObject, float& firstRatio, float& secondRatio, float convexThr)
 {
-	//if ((firstObject == 5) && (secondObject == 10))	//60, 484 za test 57
+	//if ((firstObject == 30) && (secondObject == 32))	//60, 484 za test 57
 	//	RenderConvexityPos(secondObject, firstObject, this->pMesh);
 	GRAPH::AggregateNode<SURFEL::AgEdge> *pFirstObject = this->NodeArray.Element + firstObject;
 	GRAPH::AggregateNode<SURFEL::AgEdge> *pSecondObject = this->NodeArray.Element + secondObject;
@@ -3166,8 +3400,8 @@ void ObjectGraph::RenderConvexityPos(int iObjectSurf, int iObjectVert, Mesh *pMe
 			{
 				rvlvertex = this->pSurfels->vertexArray.Element[qlistelement->Idx];
 				points->InsertNextPoint(rvlvertex->P);
-				verts->InsertNextCell(1);
-				verts->InsertCellPoint(ptIdx);
+				verts->InsertNextCell(1, (vtkIdType*)&ptIdx);
+				//verts->InsertCellPoint(ptIdx);
 				ptIdx++;
 				//Next
 				qlistelement = qlistelement->pNext;

@@ -887,7 +887,7 @@ void ObjectDetector::DetectObjects(char *MeshFilePathName)
 			pObjects->DetermineObjectConvexityData(convexityThr, 0.15, false);
 			pObjects->vpObjectAggregationLevel2CriterionData = this;
 			pObjects->ExtFuncCheckIfWithinVolume = &RVL::ObjectDetector::CheckIfWithinCTIBoundingBox;
-			pObjects->ObjectAggregationLevel2_ViaObjectPairConvexity(convexityThr, convexityRatioThr1, convexityRatioThr2, pObjects->minObjectSize, false);
+			pObjects->ObjectAggregationLevel2_ViaObjectPairConvexity(convexityThr, convexityRatioThr1, convexityRatioThr2, pObjects->minObjectSize, true);
 			cv::imshow("Level2", pObjects->CreateSegmentationImage());
 			cv::waitKey(1);
 			if (bJoinSmallObjectsToLargestNeighbor)
@@ -938,6 +938,12 @@ void ObjectDetector::Evaluate(
 				std::vector<SURFEL::ObjectCoverage> selectedGTObjectCoverage;
 
 				pObjects->CalculateOverAndUnderSegmentation(E, N, true, std::string(fileName), false, std::string(selectedGTObjectsFileName), &selectedGTObjectCoverage);
+				/*std::string imageName = fileName;
+				imageName.erase(imageName.find_last_of("."));
+				std::string depthImgFileName = imageName + "d.png";
+				std::string labelImgFileName = imageName + "a.png";
+				std::string segLabelImgFileName = imageName + "LCCPLabels.png";
+				pObjects->CalculateOverAndUnderSegmentation_Img(E, N, segLabelImgFileName, labelImgFileName, depthImgFileName, true, false, std::string(selectedGTObjectsFileName), &selectedGTObjectCoverage);*/
 
 				FILE *fpSelectedGTObjectCoverage = fopen("selected_GT_object_coverage.txt", "a");
 
