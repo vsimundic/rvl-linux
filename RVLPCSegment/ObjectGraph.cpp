@@ -1331,9 +1331,9 @@ void ObjectGraph::ComputeRelationCost(
 		data.PConvex = (f1 >= -concaveAngleIntThr_ ? 1.0f : (f1 >= -concaveAngleExtThr_ ? concaveMinCost + (1.0f - concaveMinCost) * (concaveAngleExtThr_ + f1) / (concaveAngleExtThr_ - concaveAngleIntThr_) : concaveMinCost));
 
 		//data.PClean = 0.5f + 0.5f * f2;
-		//data.PClean = (RVLABS(f1) >= 20.0f * DEG2RAD ? (f3 >= 0.5 ? 2.0f * (f3 - 0.5f) : 0.0f) : 1.0f);
+		data.PClean = (RVLABS(f1) >= 10.0f * DEG2RAD ? (f3 >= 0.5 ? 2.0f * (f3 - 0.5f) : 0.0f) : 1.0f);
 		//data.PClean = (RVLABS(f1) >= 20.0f * DEG2RAD ? (f2 >= 0.5 ? 2.0f * (f2 - 0.5f) : 0.0f) : 1.0f);
-		data.PClean = (f2 >= 0.5 ? 2.0f * (f2 - 0.5f) : 0.0f);
+		//data.PClean = (f2 >= 0.5 ? 2.0f * (f2 - 0.5f) : 0.0f);
 
 		//PClean_ = (f3 >= 0.5 ? 2.0f * (f3 - 0.5f) : 0.0f);
 
