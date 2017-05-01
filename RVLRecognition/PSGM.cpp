@@ -7663,6 +7663,8 @@ bool PSGM::GravityReferenceFrame(
 	{
 		iSurfel = piSurfel->Idx;
 
+		//printf("Surfel %d\n", iSurfel);
+
 		pSurfel = pSurfels->NodeArray.Element + iSurfel;
 
 		if (pSurfel->flags & RVLSURFEL_FLAG_RF)
@@ -7807,6 +7809,8 @@ void PSGM::CTIs(
 	{
 		if (iObject != iGndObject)
 		{
+			//printf("Object %d:\n", iObject);
+
 			pObject = pObjects->objectArray.Element + iObject;
 
 			if (pObject->iVertexArray.n >= 3)
@@ -8721,4 +8725,17 @@ void PSGM::PrintCTIMeshFaces(FILE *fp, Eigen::MatrixXi F, Eigen::MatrixXi Fn, in
 	}
 
 	fprintf(fp, "\n");
+}
+
+void PSGM::BoundingBoxSize(
+	RECOG::PSGM_::ModelInstance *pBoundingBox,
+	float *size)
+{
+	float a;
+	a = pBoundingBox->modelInstance.Element[4].d + pBoundingBox->modelInstance.Element[1].d;
+	size[0] = RVLABS(a);
+	a = pBoundingBox->modelInstance.Element[5].d + pBoundingBox->modelInstance.Element[2].d;
+	size[1] = RVLABS(a);	
+	a = pBoundingBox->modelInstance.Element[0].d + pBoundingBox->modelInstance.Element[3].d;
+	size[2] = RVLABS(a);
 }

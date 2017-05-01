@@ -96,6 +96,7 @@ SurfelGraph::SurfelGraph()
 	DisplayData.edgeFeatureDepth = 0.01f;
 	DisplayData.normalLen = 10.0f;
 	DisplayData.bCallbackFunctionsDefined = false;
+	DisplayData.bEdges = false;
 	RVLSET3VECTOR(DisplayData.ForegroundColor, 0, 255, 0);
 	RVLSET3VECTOR(DisplayData.BackgroundColor, 255, 0, 0);
 	RVLSET3VECTOR(DisplayData.ConvexColor, 0, 255, 0);
@@ -2384,8 +2385,9 @@ void SurfelGraph::Display(
 	else if (DisplayData.mode == RVLSURFEL_DISPLAY_MODE_CONVEX_CONCAVE)
 		DisplayConvexAndConcaveEdges(pVisualizer, pMesh);
 #endif
-
-	DisplayEdgeFeatures();
+	
+	if (DisplayData.bEdges)
+		DisplayEdgeFeatures();
 
 #ifdef RVLSURFELGRAPH_DISPLAY_VERTICES
 	DisplayVertices();
@@ -2832,9 +2834,9 @@ void SurfelGraph::InitDisplay(
 	DisplayData.pVisualizer = pVisualizer;
 	DisplayData.vpDetector = vpDetector;
 	RVLSET3VECTOR(DisplayData.SelectionColor, 0, 255, 0);
-	//DisplayData.mode = RVLSURFEL_DISPLAY_MODE_SURFELS;
+	DisplayData.mode = RVLSURFEL_DISPLAY_MODE_SURFELS;
 	//DisplayData.mode = RVLSURFEL_DISPLAY_MODE_FOREGROUND_BACKGROUND;
-	DisplayData.mode = RVLSURFEL_DISPLAY_MODE_CONVEX_CONCAVE;
+	//DisplayData.mode = RVLSURFEL_DISPLAY_MODE_CONVEX_CONCAVE;
 	DisplayData.iSelectedSurfel = DisplayData.iSelectedSurfel2 = -1;
 	DisplayData.iSelection = 1;
 	DisplayData.bVertices = false;

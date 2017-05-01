@@ -54,6 +54,7 @@ namespace RVL
 			vtkSmartPointer<vtkActor> edgeFeatures;
 			vtkSmartPointer<vtkActor> vertices;
 			float normalLen;
+			bool bEdges;
 			bool bVertices;
 			bool bFirstKey;
 		};

@@ -121,6 +121,141 @@ void ObjectGraph::CreateParamList(CRVLMem *pMem)
 	pParamData = ParamList.AddParam("ObjectGraph.concaveObjectAggregation", RVLPARAM_TYPE_BOOL, &bConcaveObjectAggregation);
 }
 
+void ObjectGraph::CreateFromGroundTruth(SurfelGraph *pSurfels_)
+{
+	pSurfels = pSurfels_;
+
+	// Create an object for each surfel.
+
+	RVL_DELETE_ARRAY(NodeArray.Element);
+	NodeArray.Element = new GRAPH::AggregateNode<AgEdge>[pSurfels->NodeArray.n];
+	NodeArray.n = pSurfels->NodeArray.n;
+	RVL_DELETE_ARRAY(elementMem);
+	elementMem = new QLIST::Index[pSurfels->NodeArray.n];
+	RVL_DELETE_ARRAY(objectMap);
+	objectMap = new int[pSurfels->NodeArray.n];
+	EdgeArray.n = 0;
+
+	QLIST::Index *piElement = elementMem;
+
+	int i;
+	int iSurfel;
+	Surfel *pSurfel;
+	GRAPH::AggregateNode<AgEdge> *pAgNode;
+	QList<GRAPH::EdgePtr2<AgEdge>> *pEdgeList;
+	QList<QLIST::Index> *pElementList;
+
+	for (iSurfel = 0; iSurfel < pSurfels->NodeArray.n; iSurfel++)
+	{
+		pSurfel = pSurfels->NodeArray.Element + iSurfel;
+
+		pAgNode = NodeArray.Element + iSurfel;
+
+		pElementList = &(pAgNode->elementList);
+
+		RVLQLIST_INIT(pElementList);
+
+		pEdgeList = &(pAgNode->EdgeList);
+
+		RVLQLIST_INIT(pEdgeList);
+
+		//if (pSurfel->size < 0)
+		//	int debug = 0;
+
+		pAgNode->size = 0;
+	}
+
+	// Allocate array for storing indices of reference surfels of GT objects.
+
+	Array<int> refSurfelArray;
+
+	refSurfelArray.n = 0;
+
+	for (int i = 0; i < pSurfels->NodeArray.n; i++)
+	{
+		if (pSurfels->NodeArray.Element[i].GTObjHist.size() > 0)
+		{
+			refSurfelArray.n = this->pSurfels->NodeArray.Element[i].GTObjHist.size();
+			break;
+		}
+	}
+
+	if (refSurfelArray.n == 0)
+		return;
+
+	refSurfelArray.Element = new int[refSurfelArray.n];
+
+	memset(refSurfelArray.Element, 0xff, refSurfelArray.n * sizeof(int));
+
+	// Create objects from the ground truth.
+
+	int iRefSurfel;
+	Surfel *pRefSurfel;
+	GRAPH::AggregateNode<AgEdge> *pRefAgNode;
+
+	for (iSurfel = 0; iSurfel < pSurfels->NodeArray.n; iSurfel++)
+	{
+		pSurfel = pSurfels->NodeArray.Element + iSurfel;
+
+		pAgNode = NodeArray.Element + iSurfel;
+
+		if (pSurfel->size <= 1)
+			continue;
+
+		if (pSurfel->bEdge)
+			continue;
+
+		if (pSurfel->ObjectID >= 0 && pSurfel->ObjectID < refSurfelArray.n)
+		{
+			iRefSurfel = refSurfelArray.Element[pSurfel->ObjectID];
+
+			if (iRefSurfel < 0)
+				iRefSurfel = refSurfelArray.Element[pSurfel->ObjectID] = iSurfel;
+			
+			pRefAgNode = NodeArray.Element + iRefSurfel;
+
+			pElementList = &(pRefAgNode->elementList);
+
+			RVLQLIST_ADD_ENTRY(pElementList, piElement);
+			piElement->Idx = iSurfel;
+
+			pRefAgNode->size += pSurfel->size;
+
+			piElement++;
+		}
+	}
+
+	//int iObject;
+	//QLIST::Index *pElementIdx;
+
+	//for (iObject = 0; iObject < NodeArray.n; iObject++)
+	//{
+	//	pAgNode = NodeArray.Element + iObject;
+
+	//	if (pAgNode->elementList.pFirst == NULL)
+	//		continue;
+
+	//	printf("Object %d: ", pSurfels->NodeArray.Element[iObject].ObjectID);
+
+	//	pElementList = &(pAgNode->elementList);
+
+	//	pElementIdx = pElementList->pFirst;
+
+	//	while (pElementIdx)
+	//	{
+	//		printf("%d, ", pElementIdx->Idx);
+
+	//		pElementIdx = pElementIdx->pNext;
+	//	}
+
+	//	printf("\n");
+	//}
+
+	// Free memory.
+
+	delete[] refSurfelArray.Element;
+}
+
 #ifdef RVLSURFEL_IMAGE_ADJACENCY
 void ObjectGraph::Create(SurfelGraph *pSurfels_)
 {
@@ -3470,6 +3605,7 @@ void ObjectGraph::RenderConvexityPos(int iObjectSurf, int iObjectVert, Mesh *pMe
 
 bool ObjectGraph::MergeSmallObjects(int sizeThr, float maxDistThr, bool verbose)
 {
+#ifdef RVLSURFEL_IMAGE_ADJACENCY
 	bool merged = false;
 	//Determine a list of neighbours and distances for each small object
 	GRAPH::AggregateNode<SURFEL::AgEdge> *pObject;
@@ -3596,4 +3732,7 @@ bool ObjectGraph::MergeSmallObjects(int sizeThr, float maxDistThr, bool verbose)
 		}
 	}
 	return merged;
+#else
+	return false;
+#endif
 }

@@ -40,6 +40,7 @@ ObjectDetector::ObjectDetector()
 	bCTIBasedObjectAggregation = false;
 	bMultilateralFilter = false;
 	bJoinSmallObjectsToLargestNeighbor = false;
+	bGroundTruthSegmentation = false;
 
 	pSurfels = NULL;
 	pSurfelDetector = NULL;
@@ -147,6 +148,7 @@ void ObjectDetector::CreateParamList()
 	pParamData = ParamList.AddParam("ObjectDetector.joinSmallObjectsToLargestNeighborDistThr", RVLPARAM_TYPE_FLOAT, &joinSmallObjectsToLargestNeighborDistThr);
 	pParamData = ParamList.AddParam("ObjectDetector.multilateralFilter", RVLPARAM_TYPE_BOOL, &bMultilateralFilter);
 	pParamData = ParamList.AddParam("ObjectDetector.joinSmallObjectsToLargestNeighbor", RVLPARAM_TYPE_BOOL, &bJoinSmallObjectsToLargestNeighbor);
+	pParamData = ParamList.AddParam("ObjectDetector.GroundTruthSegmentation", RVLPARAM_TYPE_BOOL, &bGroundTruthSegmentation);
 }
 
 //Dirk Holz and Sven Behnke: "Approximate Triangulation and Region Growing for Efficient Segmentation and Smoothing of Range Images"
@@ -773,8 +775,7 @@ void ObjectDetector::DetectObjects(char *MeshFilePathName)
 		//SmoothMesh(&mesh, 30);
 		//LaplaceSmooting(&mesh, 30);
 		if (bMultilateralFilter)
-			MultilateralSmoothMesh(&mesh, nMultilateralFilterIterations, false, false, true);
-		
+			MultilateralSmoothMesh(&mesh, nMultilateralFilterIterations, false, false, true);		
 
 		// Segment mesh to surfels.				
 
@@ -819,10 +820,15 @@ void ObjectDetector::DetectObjects(char *MeshFilePathName)
 				pSurfels->DetermineImgAdjDescriptors(pSurfel, &mesh);
 			}
 
-			pObjects->Create(pSurfels);
+			if (bGroundTruthSegmentation)
+				pObjects->CreateFromGroundTruth(pSurfels);
+			else
+			{
+				pObjects->Create(pSurfels);
 
-			pObjects->ComputeRelationCosts();
-
+				pObjects->ComputeRelationCosts();
+			}
+			
 			printf("completed.\n");
 
 			pObjects->Debug();
@@ -848,70 +854,85 @@ void ObjectDetector::DetectObjects(char *MeshFilePathName)
 #ifdef RVLSURFEL_IMAGE_ADJACENCY
 	if (bSegmentToObjects)
 	{
-		printf("Aggregating surfels into objects... ");
-
-		pObjects->WERSegmentation();
-
-		printf("completed.\n");
-
-		if (!bSurfelsFromSSF && bObjectAggregationLevel2)
-		{
-			printf("Aggregating objects (LEVEL 2)... ");
-
-			//pSurfels->DetectVertices(&mesh);
-
-			//Generate color histograms for surfels
-			/*std::string imgFileName(MeshFileName);
-			imgFileName.erase(imgFileName.find_last_of("."));
-			imgFileName += ".png";
-			cv::Mat img = cv::imread(imgFileName);
-			cv::cvtColor(img, img, cv::COLOR_BGR2HSV);
-			int binsize[3] = { 8, 8, 0 };
-			surfels.CalculateSurfelsColorHistograms(img, RVLColorDescriptor::ColorSpaceList::HSV, false, binsize, true);
-			objects.CalculateObjectsColorHistogram();
-			TestCHMatching(&objects);*/
-			////Filko
-			//objects.DetermineObjectConvexityData(0.005, 0.5);
-			//ObjectAggregationLevel2(&objects, &surfels, &mesh, MeshFileName);
-			cv::imshow("Level1", pObjects->CreateSegmentationImage());
-			cv::waitKey(1);
-			/*VisualizeObjectGraphVertexPointCloud(&objects, 100);*/
-			//if (bCTIBasedObjectAggregation)
-			pObjects->GetVertices();	
+		if (bGroundTruthSegmentation)
+		{			
+			pObjects->sortedObjectArray.n = -1;
+			pObjects->nValidObjects = -1;
+			pObjects->GetVertices();
 			pPSGM->Init(&mesh);
-			//pPSGM->CTIs(pObjects, &CTIs);
+			GroundTruthGroundPlane();
 			pPSGM->convexTemplate = pPSGM->convexTemplateBox;
 			pPSGM->CTIs(pObjects, &boundingBoxes);
-			//pPSGM->convexTemplate = pPSGM->convexTemplate66;
-			pObjects->pMesh = &mesh;
-			pObjects->DetermineObjectConvexityData(convexityThr, 0.15, false);
-			pObjects->vpObjectAggregationLevel2CriterionData = this;
-			pObjects->ExtFuncCheckIfWithinVolume = &RVL::ObjectDetector::CheckIfWithinCTIBoundingBox;
-			pObjects->ObjectAggregationLevel2_ViaObjectPairConvexity(convexityThr, convexityRatioThr1, convexityRatioThr2, pObjects->minObjectSize, false);
-			if (!bJoinSmallObjectsToLargestNeighbor)
-				cv::imshow("Level2", pObjects->CreateSegmentationImage());
-			
-			////
-			//Evaluation
-			/*int E[2];
-			int N = 0;
-			objects.CalculateOverAndUnderSegmentation(E, N, false, "", false);
-			std::cout << "Oversegmenation error: " << 100.0f * (1 - E[0] / (float)N) << "%" << std::endl;
-			std::cout << "Undersegmenation error: " << 100.0f * E[1] / (float)N << "%" << std::endl;*/
+			SaveBoundingBoxSizes(MeshFilePathName);
+		}
+		else
+		{
+			printf("Aggregating surfels into objects... ");
+
+			pObjects->WERSegmentation();
 
 			printf("completed.\n");
-		}	// if (!bSurfelsFromSSF && bObjectAggregationLevel2)
 
-		if (bJoinSmallObjectsToLargestNeighbor)
-		{
-			int mergedIt = 0;
-			while (pObjects->MergeSmallObjects(joinSmallObjectsToLargestNeighborSizeThr, joinSmallObjectsToLargestNeighborDistThr))
+			if (!bSurfelsFromSSF && bObjectAggregationLevel2)
 			{
-				//std::cout << "Merged iteration: " << mergedIt << std::endl;
-				mergedIt++;
+				printf("Aggregating objects (LEVEL 2)... ");
+
+				//pSurfels->DetectVertices(&mesh);
+
+				//Generate color histograms for surfels
+				/*std::string imgFileName(MeshFileName);
+				imgFileName.erase(imgFileName.find_last_of("."));
+				imgFileName += ".png";
+				cv::Mat img = cv::imread(imgFileName);
+				cv::cvtColor(img, img, cv::COLOR_BGR2HSV);
+				int binsize[3] = { 8, 8, 0 };
+				surfels.CalculateSurfelsColorHistograms(img, RVLColorDescriptor::ColorSpaceList::HSV, false, binsize, true);
+				objects.CalculateObjectsColorHistogram();
+				TestCHMatching(&objects);*/
+				////Filko
+				//objects.DetermineObjectConvexityData(0.005, 0.5);
+				//ObjectAggregationLevel2(&objects, &surfels, &mesh, MeshFileName);
+				cv::imshow("Level1", pObjects->CreateSegmentationImage());
+				cv::waitKey(1);
+				/*VisualizeObjectGraphVertexPointCloud(&objects, 100);*/
+				//if (bCTIBasedObjectAggregation)
+				pObjects->GetVertices();
+				pPSGM->Init(&mesh);
+				//pPSGM->CTIs(pObjects, &CTIs);
+				pPSGM->convexTemplate = pPSGM->convexTemplateBox;
+				pPSGM->CTIs(pObjects, &boundingBoxes);
+				SaveBoundingBoxSizes(MeshFilePathName);
+				//pPSGM->convexTemplate = pPSGM->convexTemplate66;
+				pObjects->pMesh = &mesh;
+				pObjects->DetermineObjectConvexityData(convexityThr, 0.15, false);
+				pObjects->vpObjectAggregationLevel2CriterionData = this;
+				pObjects->ExtFuncCheckIfWithinVolume = &RVL::ObjectDetector::CheckIfWithinCTIBoundingBox;
+				pObjects->ObjectAggregationLevel2_ViaObjectPairConvexity(convexityThr, convexityRatioThr1, convexityRatioThr2, pObjects->minObjectSize, false);
+				if (!bJoinSmallObjectsToLargestNeighbor)
+					cv::imshow("Level2", pObjects->CreateSegmentationImage());
+
+				////
+				//Evaluation
+				/*int E[2];
+				int N = 0;
+				objects.CalculateOverAndUnderSegmentation(E, N, false, "", false);
+				std::cout << "Oversegmenation error: " << 100.0f * (1 - E[0] / (float)N) << "%" << std::endl;
+				std::cout << "Undersegmenation error: " << 100.0f * E[1] / (float)N << "%" << std::endl;*/
+
+				printf("completed.\n");
+			}	// if (!bSurfelsFromSSF && bObjectAggregationLevel2)
+
+			if (bJoinSmallObjectsToLargestNeighbor)
+			{
+				int mergedIt = 0;
+				while (pObjects->MergeSmallObjects(joinSmallObjectsToLargestNeighborSizeThr, joinSmallObjectsToLargestNeighborDistThr))
+				{
+					//std::cout << "Merged iteration: " << mergedIt << std::endl;
+					mergedIt++;
+				}
+				cv::imshow("level2 + merge small objects", pObjects->CreateSegmentationImage());
+				//cv::waitKey(1);
 			}
-			cv::imshow("level2 + merge small objects", pObjects->CreateSegmentationImage());
-			//cv::waitKey(1);
 		}
 	}
 #endif
@@ -1113,3 +1134,61 @@ bool ObjectDetector::CheckIfWithinCTIBoundingBox(void * odObj, int iObject1, int
 	delete[] boundingBox.modelInstance.Element;
 }
 
+void ObjectDetector::GroundTruthGroundPlane()
+{
+	int iLargestBackgroundSurfel = -1;
+
+	float largestBackgroundSurfelSize = 0.0f;
+
+	pPSGM->iGndObject = -1;
+
+	int iSurfel;
+	Surfel *pSurfel;
+
+	for (iSurfel = 0; iSurfel < pSurfels->NodeArray.n; iSurfel++)
+	{
+		pSurfel = pSurfels->NodeArray.Element + iSurfel;
+
+		if (pSurfel->ObjectID == 0)
+		{
+			if (pPSGM->iGndObject < 0)
+				pPSGM->iGndObject = iSurfel;
+
+			if (pSurfel->size > largestBackgroundSurfelSize)
+			{
+				largestBackgroundSurfelSize = pSurfel->size;
+				iLargestBackgroundSurfel = iSurfel;			
+			}
+		}
+	}
+
+	if (iLargestBackgroundSurfel < 0)
+		return;
+
+	pSurfel = pSurfels->NodeArray.Element + iLargestBackgroundSurfel;
+
+	pPSGM->bGnd = true;
+
+	RVLCOPY3VECTOR(pSurfel->N, pPSGM->NGnd);
+	pPSGM->dGnd = pSurfel->d;	
+}
+
+void ObjectDetector::SaveBoundingBoxSizes(char *imageFileName)
+{
+	FILE *fpBoundingBoxes = fopen("bounding_boxes.txt", "a");
+
+	int i;
+	RECOG::PSGM_::ModelInstance *pBoundingBox;
+	float size[3];
+
+	for (i = 0; i < boundingBoxes.pCTI.n; i++)
+	{
+		pBoundingBox = boundingBoxes.pCTI.Element[i];
+
+		pPSGM->BoundingBoxSize(pBoundingBox, size);
+
+		fprintf(fpBoundingBoxes, "%s\t%d\t%f\t%f\t%f\n", imageFileName, pBoundingBox->iCluster, size[0], size[1], size[2]);
+	}		
+
+	fclose(fpBoundingBoxes);
+}
