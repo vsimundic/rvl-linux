@@ -243,9 +243,10 @@ int main(int argc, char ** argv)
 
 #ifdef RVLOBJECTDETECTIONDEMO_SELECT_GT_OBJECTS
 			PCGT::DisplayGroundTruthSegmentation(filePath, GTLabImg);
+			cv::moveWindow("GT Segmentation", 0, 0);
 #endif
 
-			cv::waitKey(1);
+			cv::waitKey();
 
 #ifdef RVLSURFEL_IMAGE_ADJACENCY
 			if (objectDetector.bSegmentToObjects)
@@ -271,7 +272,7 @@ int main(int argc, char ** argv)
 		objectDetector.Evaluate(fp, MeshFileName, selectedGTObjectsFileName);
 
 #ifdef RVLOBJECTDETECTIONDEMO_SELECT_GT_OBJECTS
-		PCGT::DisplayGroundTruthSegmentation(MeshFileName, GTLabImg);
+		PCGT::DisplayGroundTruthSegmentation(MeshFileName, GTLabImg);		
 #endif
 
 		cv::waitKey(1);
@@ -347,11 +348,11 @@ int main(int argc, char ** argv)
 
 			// END DEMO
 
-			/*objectDetector.pPSGM->convexTemplate = objectDetector.pPSGM->convexTemplateBox;
+			objectDetector.pPSGM->convexTemplate = objectDetector.pPSGM->convexTemplateBox;
 
 			objectDetector.pPSGM->DisplayCTIs(&visualizer, &(objectDetector.boundingBoxes));
 
-			objectDetector.pPSGM->convexTemplate = objectDetector.pPSGM->convexTemplate66;*/
+			objectDetector.pPSGM->convexTemplate = objectDetector.pPSGM->convexTemplate66;
 
 			//detector.DisplaySoftEdges(&visualizer, &mesh, &surfels, SelectionColor);
 			visualizer.Run();
