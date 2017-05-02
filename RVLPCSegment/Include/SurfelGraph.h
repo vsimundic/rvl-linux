@@ -138,6 +138,9 @@ namespace RVL
 		void UpdateNormalHull(
 			Array<SURFEL::NormalHullElement> &NHull,
 			float *N);
+		float DistanceFromNormalHull(
+			Array<SURFEL::NormalHullElement> &NHull,
+			float *N);
 		float Distance(
 			Surfel *pSurfel,
 			float *P,

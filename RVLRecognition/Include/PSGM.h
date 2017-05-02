@@ -455,9 +455,6 @@ namespace RVL
 			RECOG::PSGM_::Cluster *pCluster,
 			Surfel *pSurfel,
 			int iFirstVertex = 0);
-		float DistanceFromNormalHull(
-			Array<SURFEL::NormalHullElement> &NHull,
-			float *N);
 		void UpdateMeanNormal(
 			float *sumN,
 			float &wN,

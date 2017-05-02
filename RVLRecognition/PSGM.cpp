@@ -1566,7 +1566,7 @@ void PSGM::Clusters()
 				pSurfel_ = pSurfels->NodeArray.Element + iSurfel_;
 
 #ifdef RVLPSGM_NORMAL_HULL
-				dist = DistanceFromNormalHull(NHull, pSurfel_->N);
+				dist = pSurfels->DistanceFromNormalHull(NHull, pSurfel_->N);
 #else
 				float e = RVLDOTPRODUCT3(meanN, pSurfel_->N);
 				dist = (wN < 1e-10 ? 0.0f : acos(e));
@@ -2173,7 +2173,7 @@ void PSGM::FitModel(
 			{
 				//if (pVertex->normalHull.n >= 3)
 				//{
-				//	dist = DistanceFromNormalHull(pVertex->normalHull, N_);
+				//	dist = pSurfels->DistanceFromNormalHull(pVertex->normalHull, N_);
 
 				//	if (dist <= 0.0f)
 				//	{
@@ -2837,40 +2837,6 @@ bool PSGM::BelowPlane(
 	}
 
 	return true;
-}
-
-float PSGM::DistanceFromNormalHull(
-	Array<SURFEL::NormalHullElement> &NHull,
-	float *N)
-{
-	if (NHull.n == 0)
-		return 0.0f;
-	if (NHull.n == 1)
-	{
-		float *N_ = NHull.Element[0].N;
-
-		float e = RVLDOTPRODUCT3(N_, N);
-
-		return (e < 0.0f ? 1.0f : sqrt(1.0f - e * e));
-	}		
-
-	float maxDist = 0.0f;
-
-	int i;
-	float dist;
-	float *Nh_;
-
-	for (i = 0; i < NHull.n; i++)
-	{
-		Nh_ = NHull.Element[i].Nh;
-
-		dist = RVLDOTPRODUCT3(Nh_, N);
-
-		if (dist > maxDist)
-			maxDist = dist;
-	}
-
-	return maxDist;
 }
 
 void PSGM::UpdateMeanNormal(
