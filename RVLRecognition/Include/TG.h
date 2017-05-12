@@ -28,7 +28,7 @@ namespace RVL
 			void Save(
 				FILE *fp,
 				bool bSaveA = false);
-			void Load(
+			bool Load(
 				FILE *fp,
 				void *vpSet,
 				bool bLoadA = false);
@@ -41,6 +41,7 @@ namespace RVL
 			Array<QList<TGNode>> descriptor;
 			int nNodes;
 			int iObject;
+			int iVertexGraph;
 		};
 	}
 }

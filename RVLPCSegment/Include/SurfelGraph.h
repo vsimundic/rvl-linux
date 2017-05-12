@@ -1,6 +1,7 @@
 #pragma once
 
 #define RVLSURFEL_IMAGE_ADJACENCY //FILKO usporava debug :)
+#define RVLSURFELGRAPH_DEBUG_RELATION_DESCRIPTOR
 
 #define RVLSURFEL_DISPLAY_MODE_SURFELS					0
 #define RVLSURFEL_DISPLAY_MODE_BOUNDARY					1
@@ -82,9 +83,17 @@ namespace RVL
 			float Nh[3];
 		};
 
+		struct VertexEdge
+		{
+			int iVertex[2];
+			GRAPH::EdgePtr2<VertexEdge> *pVertexEdgePtr[2];
+			int idx;
+		};
+
 		struct Vertex
 		{
 			float P[3];
+			QList<GRAPH::EdgePtr2<VertexEdge>> EdgeList;
 			Array<NormalHullElement> normalHull;
 			Array<int> iSurfelArray;
 			Vertex *pNext;
@@ -214,6 +223,14 @@ namespace RVL
 		void DetermineImgAdjDescriptors(
 			Surfel *pSurfel,
 			Mesh *mesh);
+		void SurfelAreaDistribution(
+			Mesh *mesh,
+			Surfel *pSurfel,
+			int iBoundary,
+			float *dN,
+			float dOffset,
+			float *a);
+		void SurfelRelations(Mesh *pMesh);
 		void GenerateSSF(
 			std::string filename,
 			int minSurfelSize,
@@ -272,6 +289,10 @@ namespace RVL
 		Array<Array<int>> vertexDisplayLineArray;
 		int *vertexDisplayLineArrayMem;
 		vtkSmartPointer<vtkPolyData> linesPolyData;
+#ifdef RVLSURFELGRAPH_DEBUG_RELATION_DESCRIPTOR
+		bool bDebug;
+		FILE *fpDebug;
+#endif
 	};
 
 	namespace SURFEL

@@ -16,6 +16,9 @@
 #include "RVLRecognition.h"
 #include "PSGMCommon.h"
 #include "CTISet.h"
+#include "VertexGraph.h"
+#include "TG.h"
+#include "TGSet.h"
 #include "PSGM.h"
 #include <Eigen\Eigenvalues>
 #include <random> //VIDOVIC
@@ -131,6 +134,10 @@ PSGM::PSGM()
 
 	bGnd = false;
 	bBoundingPlanes = false;
+
+	MTGSet.nodeSimilarityThr = 3.0f;
+
+	TemplateMatrix(MTGSet.A);
 }
 
 
@@ -283,6 +290,12 @@ void PSGM::Interpret(
 
 	printf("No. of surfels = %d\n", nSurfels);
 
+	// Relations between adjacent surfels.
+
+#ifdef RVLSURFEL_IMAGE_ADJACENCY
+	pSurfels->SurfelRelations(pMesh);
+#endif
+
 	// Detect vertices.
 
 	printf("Detect vertices.\n");
@@ -398,6 +411,46 @@ void PSGM::Interpret(
 	fclose(fp);
 
 	delete[] PSGModelInstanceFileName;
+
+	// Create tangent graphs.
+
+	if (mode == RVLRECOGNITION_MODE_TRAINING)
+	{
+		VertexGraph *pVertexGraph = new VertexGraph;
+
+		pVertexGraph->idx = iScene;
+
+		MTGSet.vertexGraphs.push_back(pVertexGraph);
+
+		pVertexGraph->Create(pSurfels);
+
+		TG *pTG = new TG;
+
+		float R[9], t[3];
+
+		RVLUNITMX3(R);
+		RVLNULL3VECTOR(t);
+
+		pTG->iVertexGraph = pTG->iObject = pVertexGraph->idx;
+
+		Array<int> iVertexArray;
+
+		iVertexArray.n = pVertexGraph->NodeArray.n;
+		iVertexArray.Element = new int[iVertexArray.n];
+
+		int i;
+
+		for (i = 0; i < iVertexArray.n; i++)
+			iVertexArray.Element[i] = i;
+
+		pTG->A = MTGSet.A;
+
+		pTG->Create(pSurfels, iVertexArray, R, t, &MTGSet);
+
+		delete[] iVertexArray.Element;
+
+		MTGSet.TGs.push_back(pTG);
+	}
 
 	//Vidovic
 	//Match scene MI to model MI
@@ -2089,7 +2142,7 @@ void PSGM::CreateTemplateBox()
 	convexTemplateBox.Element[5].d = 1.0;
 }
 
-void PSGM::TemplateMatrix(Array2D<float> A)
+void PSGM::TemplateMatrix(Array2D<float> &A)
 {
 	A.Element = new float[3 * convexTemplate.n];
 	A.w = 3;
@@ -2975,6 +3028,8 @@ void PSGM::Learn(
 	//RVL_DELETE_ARRAY(modelDataBase);
 	//RVL_DELETE_ARRAY(modelsInDataBase);
 
+	MTGSet.Clear();
+
 	if (!modelDataBase)
 		modelDataBase = "modelDB.dat";
 
@@ -3003,11 +3058,11 @@ void PSGM::Learn(
 
 		SetSceneFileName(modelFilePath);
 
-		Interpret(&mesh);
-
-		nClusters = RVLMIN(clusters.n, nDominantClusters);
-
 		currentModelID = dbLoader.GetLastModelID() + 1;
+
+		Interpret(&mesh, currentModelID);
+
+		nClusters = RVLMIN(clusters.n, nDominantClusters);		
 
 		//Add vtkPolyData to vtkModelDB
 		vtkModelDB.insert(std::make_pair(currentModelID, mesh.pPolygonData));
@@ -3018,6 +3073,7 @@ void PSGM::Learn(
 
 		if (visualizer)
 		{
+			pSurfels->NodeColors(SelectionColor);
 			InitDisplay(visualizer, &mesh, SelectionColor);
 			Display();
 			visualizer->Run();
@@ -3032,6 +3088,12 @@ void PSGM::Learn(
 		SaveModelID(dbLoader);
 
 	fclose(fp);
+
+	char *TGFileName = RVLCreateFileName(modelDataBase, ".dat", -1, ".tgr");
+
+	MTGSet.Save(TGFileName);
+
+	delete[] TGFileName;
 }
 
 
@@ -3119,6 +3181,12 @@ void PSGM::LoadModelDataBase()
 		tBestMatch.Element[i].Element = new float[3];
 		tBestMatch.Element[i].n = 3;
 	}
+
+	char *TGFileName = RVLCreateFileName(modelDataBase, ".dat", -1, ".tgr");
+
+	MTGSet.Load(TGFileName);
+
+	delete[] TGFileName;
 }
 
 void PSGM::LoadCTI(char *fileName)

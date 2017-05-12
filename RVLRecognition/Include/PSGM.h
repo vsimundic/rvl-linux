@@ -442,7 +442,7 @@ namespace RVL
 		void Clusters();
 		void CreateTemplate66();
 		void CreateTemplateBox();
-		void TemplateMatrix(Array2D<float> A);
+		void TemplateMatrix(Array2D<float> &A);
 		bool ReferenceFrames(int iCluster);
 		bool ReferenceFrames(
 			RECOG::PSGM_::Cluster *pCluster,
@@ -477,6 +477,7 @@ namespace RVL
 		CRVLParameterList ParamList;
 		DWORD mode;
 		CRVLMem *pMem;
+		CRVLMem *pMem0;
 		PlanarSurfelDetector *pSurfelDetector;
 		SurfelGraph *pSurfels;
 		Mesh *pMesh;
@@ -487,7 +488,7 @@ namespace RVL
 		float kNoise;
 		Array<RECOG::PSGM_::Plane> convexTemplate;
 		Array<RECOG::PSGM_::Plane> convexTemplate66;
-		Array<RECOG::PSGM_::Plane> convexTemplateBox;
+		Array<RECOG::PSGM_::Plane> convexTemplateBox;		
 		int minInitialSurfelSize;
 		int minVertexPerc;
 		float kReferenceSurfelSize;
@@ -519,6 +520,8 @@ namespace RVL
 		Array <RVL::SegmentGTInstance> segmentGT;
 		RECOG::CTISet CTISet;
 		RECOG::CTISet MCTISet;
+		RECOG::TGSet TGSet;
+		RECOG::TGSet MTGSet;
 		CRVLTimer *pTimer;
 		FILE *fpTime;
 		Eigen::MatrixXf nT; //Petra

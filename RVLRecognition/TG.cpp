@@ -13,6 +13,7 @@
 #include "PlanarSurfelDetector.h"
 #include "RVLRecognition.h"
 #include "PSGMCommon.h"
+#include "VertexGraph.h"
 #include "TG.h"
 #include "TGSet.h"
 
@@ -67,8 +68,6 @@ void TG::Create(
 
 	RVLMEM_ALLOC_STRUCT_ARRAY(pMem, QList<TGNode>, A.h, descriptor.Element);
 
-	nNodes = 0;
-
 	int j;
 	SURFEL::Vertex *pVertex;
 	float dist;
@@ -90,11 +89,17 @@ void TG::Create(
 		{
 			iVertex = iVertexArray.Element[j];
 
+			if (iVertex == 71)
+				int debug = 0;
+
 			pVertex = pSurfels->vertexArray.Element[iVertex];
+
+			if (pVertex->normalHull.n < 3)
+				continue;
 
 			dist = pSurfels->DistanceFromNormalHull(pVertex->normalHull, N);
 
-			if (dist < 0.0f)
+			if (dist > 0.0f)
 				continue;
 
 			d = RVLDOTPRODUCT3(N, pVertex->P);
@@ -109,7 +114,7 @@ void TG::Create(
 				pNode__ = pNode_;
 
 				pNode_ = pNode_->pNext;
-			}
+			}			
 
 			RVLMEM_ALLOC_STRUCT(pMem, TGNode, pNode);
 
@@ -118,8 +123,39 @@ void TG::Create(
 			pNode->d = d;
 			pNode->i = i;
 			pNode->iVertex = iVertex;
+		}
+	}
 
-			nNodes++;
+	// Remove similar nodes.
+
+	nNodes = 0;
+
+	TGNode **ppNode;
+
+	for (i = 0; i < A.h; i++)
+	{
+		pDescriptorBin = descriptor.Element + i;
+
+		ppNode = &(pDescriptorBin->pFirst);
+
+		pNode = pDescriptorBin->pFirst;
+
+		d = pNode->d + 2.0f * pSet->nodeSimilarityThr;
+
+		while (pNode)
+		{
+			if (d - pNode->d < pSet->nodeSimilarityThr)
+				RVLQLIST_REMOVE_ENTRY(pDescriptorBin, pNode, ppNode)
+			else
+			{
+				d = pNode->d;
+
+				nNodes++;
+
+				ppNode = &(pNode->pNext);
+			}
+				
+			pNode = *ppNode;
 		}
 	}
 
@@ -132,6 +168,8 @@ void TG::Save(
 	FILE *fp,
 	bool bSaveA)
 {
+	fprintf(fp, "%d\t%d\t%d\n", iObject, iVertexGraph, nNodes);
+
 	int i;
 
 	for (i = 0; i < 3; i++)
@@ -147,9 +185,7 @@ void TG::Save(
 
 		for (i = 0; i < A.h; i++, N += 3)
 			fprintf(fp, "%f\t%f\t%f\n", N[0], N[1], N[2]);
-	}
-
-	fprintf(fp, "%d\t0\t0\n", nNodes);
+	}	
 
 	QList<TGNode> *pDescriptorBin;
 	TGNode *pNode;
@@ -169,11 +205,14 @@ void TG::Save(
 	}
 }
 
-void TG::Load(
+bool TG::Load(
 	FILE *fp,
 	void *vpSet,
 	bool bLoadA)
 {
+	if (fscanf(fp, "%d\t%d\t%d\n", &iObject, &iVertexGraph, &nNodes) < 2)
+		return false;
+
 	TGSet *pSet = (TGSet *)vpSet;
 
 	CRVLMem *pMem = pSet->pMem;
@@ -196,8 +235,6 @@ void TG::Load(
 		for (i = 0; i < A.h; i++, N += 3)
 			fscanf(fp, "%f\t%f\t%f\n", N, N + 1, N + 2);
 	}
-
-	fscanf(fp, "%d\t0\t0\n", &nNodes);
 
 	RVLMEM_ALLOC_STRUCT_ARRAY(pMem, QList<TGNode>, A.h, descriptor.Element);
 
@@ -224,4 +261,6 @@ void TG::Load(
 
 		RVLQLIST_ADD_ENTRY(pDescriptorBin, pNode);
 	}
+
+	return true;
 }
