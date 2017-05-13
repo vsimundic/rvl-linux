@@ -405,7 +405,6 @@ int main(int argc, char ** argv)
 
 		recognition.pSurfelDetector = &surfelDetector;
 
-		recognition.TGSet.pMem = recognition.pMem;
 		recognition.MTGSet.pMem = recognition.pMem0;
 
 		if (recognition.mode == RVLRECOGNITION_MODE_TRAINING)

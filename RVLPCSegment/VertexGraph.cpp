@@ -98,3 +98,24 @@ bool VertexGraph::Load(FILE *fp)
 
 	return true;
 }
+
+bool VertexGraph::BoundingBox(Box<float> *pBox)
+{
+	if (NodeArray.n == 0)
+		return false;
+
+	SURFEL::Vertex *pVertex = NodeArray.Element;
+
+	InitBoundingBox<float>(pBox, pVertex->P);
+
+	int iVertex;	
+
+	for (iVertex = 1; iVertex < NodeArray.n; iVertex++)
+	{
+		pVertex = NodeArray.Element + iVertex;
+
+		UpdateBoundingBox<float>(pBox, pVertex->P);
+	}
+
+	return true;
+}

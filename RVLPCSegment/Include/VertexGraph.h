@@ -11,6 +11,7 @@ namespace RVL
 		void Create(SurfelGraph *pSurfels);
 		void Save(FILE *fp);
 		bool Load(FILE *fp);
+		bool BoundingBox(Box<float> *pBox);
 
 	public:
 		int idx;

@@ -173,6 +173,8 @@ void TGSet::Load(char *fileName)
 	{
 		pTG = new TG;
 
+		pTG->A = A;
+
 		if (!pTG->Load(fp, this))
 		{
 			delete pTG;
@@ -189,9 +191,12 @@ void TGSet::Load(char *fileName)
 
 	char *vertexGraphFileName = RVLCreateFileName(fileName, ".tgr", -1, ".vgr");
 
-	fp = fopen(vertexGraphFileName, "w");
+	fp = fopen(vertexGraphFileName, "r");
 
 	delete[] vertexGraphFileName;
+
+	if (fp == NULL)
+		return;
 
 	VertexGraph *pVertexGraph;
 
@@ -210,4 +215,20 @@ void TGSet::Load(char *fileName)
 	}
 
 	fclose(fp);
+}
+
+VertexGraph *TGSet::GetVertexGraph(TG *pTG)
+{
+	int i;
+	VertexGraph *pVG;
+
+	for (i = 0; i < vertexGraphs.size(); i++)
+	{
+		pVG = vertexGraphs.at(i);
+
+		if (pVG->idx == pTG->iVertexGraph)
+			return pVG;
+	}
+
+	return NULL;
 }

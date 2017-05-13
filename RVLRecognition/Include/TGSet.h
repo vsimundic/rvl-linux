@@ -13,6 +13,7 @@ namespace RVL
 			void Clear();
 			void Save(char *fileName);
 			void Load(char *fileName);
+			VertexGraph *GetVertexGraph(TG *pTG);
 
 		public:
 			CRVLMem *pMem;

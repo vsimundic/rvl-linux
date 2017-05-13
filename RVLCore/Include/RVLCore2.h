@@ -81,6 +81,14 @@ namespace RVL
 		T Element[9];
 	};
 
+	template <typename T>
+	void InitBoundingBox(Box<T> *pBox, T *P)
+	{
+		pBox->minx = pBox->maxx = P[0];
+		pBox->miny = pBox->maxy = P[1];
+		pBox->minz = pBox->maxz = P[2];
+	}
+
 	template <typename T> 
 	void UpdateBoundingBox(Box<T> *pBox, T *P)
 	{
@@ -98,6 +106,14 @@ namespace RVL
 			pBox->minz = P[2];
 		else if (P[2] > pBox->maxz)
 			pBox->maxz = P[2];
+	}
+
+	template <typename T>
+	bool InBoundingBox(Box<T> *pBox, T *P)
+	{
+		return (P[0] >= pBox->minx && P[0] <= pBox->maxx && 
+			P[1] >= pBox->miny && P[1] <= pBox->maxy && 
+			P[2] >= pBox->minz && P[2] <= pBox->maxz);
 	}
 }
 

@@ -312,6 +312,7 @@ namespace RVL
 			RECOG::PSGM_::ModelInstance *pSModelInstance,
 			int startIdx,
 			int endIdx); //Vidovic
+		void MatchTGs();
 		bool IsFlat(
 			Array<int> SurfelArray,
 			float *N,
@@ -520,7 +521,7 @@ namespace RVL
 		Array <RVL::SegmentGTInstance> segmentGT;
 		RECOG::CTISet CTISet;
 		RECOG::CTISet MCTISet;
-		RECOG::TGSet TGSet;
+		RECOG::TGSet STGSet;
 		RECOG::TGSet MTGSet;
 		CRVLTimer *pTimer;
 		FILE *fpTime;

@@ -138,6 +138,10 @@ PSGM::PSGM()
 	MTGSet.nodeSimilarityThr = 3.0f;
 
 	TemplateMatrix(MTGSet.A);
+
+	STGSet.nodeSimilarityThr = 3.0f;
+
+	TemplateMatrix(STGSet.A);
 }
 
 
@@ -4477,6 +4481,10 @@ void PSGM::Match()
 	SaveMatches();
 	printf("completed!\n\n");
 #endif
+
+	// Match TGs.
+
+	MatchTGs();
 }
 
 void PSGM::Match(
@@ -4832,6 +4840,117 @@ void PSGM::Match(
 			}
 		}
 	}	//for all model MI
+}
+
+void PSGM::MatchTGs()
+{
+	// Initialize memory storage.
+
+	CRVLMem mem;
+
+	mem.Create(10000000);
+
+	STGSet.pMem = &mem;
+
+	// Get match.
+
+	int iMatch = scoreMatchMatrix.Element[0].Element[0].idx;
+	RECOG::PSGM_::MatchInstance *pMatch = pCTImatchesArray.Element[iMatch];
+	int iSCTI = pCTImatchesArray.Element[iMatch]->iSCTI;
+	int iMCTI = pCTImatchesArray.Element[iMatch]->iMCTI;
+
+	RECOG::PSGM_::ModelInstance *pSCTI = CTISet.pCTI.Element[iSCTI];
+	RECOG::PSGM_::ModelInstance *pMCTI = MCTISet.pCTI.Element[iMCTI];
+
+	float RMS[9], tMS[3];
+	
+	MSTransformation(pMCTI, pSCTI, pMatch->tMatch, RMS, tMS);
+
+	float RSM[9], tSM[3];
+
+	RVLINVTRANSF3D(RMS, tMS, RSM, tSM);
+
+	// Get model TG.
+
+	RECOG::TG *pMTG;
+	int i;
+
+	for (i = 0; i < MTGSet.TGs.size(); i++)
+	{
+		pMTG = MTGSet.TGs.at(i);
+
+		if (pMTG->iObject == pMCTI->iModel)
+			break;
+	}	
+
+	if (i < MTGSet.TGs.size())	// If there is a TG in MTGSet which corresponds to the model CTI
+	{
+		// Get vertex graph.
+
+		VertexGraph *pVG = MTGSet.GetVertexGraph(pMTG);
+
+		if (pVG)
+		{
+			// Determine model bounding box.
+
+			Box<float> boundingBox;
+
+			if (pVG->BoundingBox(&boundingBox))
+			{
+				// Expand boundingBox.
+
+				float boundingBoxExtension = 30.0f;
+
+				boundingBox.minx -= boundingBoxExtension;
+				boundingBox.maxx += boundingBoxExtension;
+				boundingBox.miny -= boundingBoxExtension;
+				boundingBox.maxy += boundingBoxExtension;
+				boundingBox.minz -= boundingBoxExtension;
+				boundingBox.maxz += boundingBoxExtension;
+
+				// iVertexArray <- scene vertices within boundingBox.
+
+				Array<int> iVertexArray;
+				
+				iVertexArray.Element = new int[pSurfels->vertexArray.n];
+
+				iVertexArray.n = 0;
+
+				int iVertex;
+				SURFEL::Vertex *pVertex;
+				float *PS;
+				float PM[3];
+
+				for (iVertex = 0; iVertex < pSurfels->vertexArray.n; iVertex++)
+				{
+					pVertex = pSurfels->vertexArray.Element[iVertex];
+
+					PS = pVertex->P;
+
+					RVLTRANSF3(PS, RSM, tSM, PM);
+
+					if (InBoundingBox<float>(&boundingBox, PM))
+						iVertexArray.Element[iVertexArray.n++] = iVertex;
+				}
+
+				// Create TG from the vertices in boundingBox.
+
+				RECOG::TG *pSTG = new RECOG::TG;
+
+				pSTG->A = STGSet.A;
+
+				pSTG->Create(pSurfels, iVertexArray, RMS, tMS, &STGSet);
+
+				STGSet.Save("sceneTG.tgr");
+
+				// Free memory.
+
+				mem.Clear();
+				delete[] iVertexArray.Element;
+				delete[] pSTG;
+			}	// If there is at least one point in the vertex graph
+		}	// If pMTG has a vertex graph
+	}	// If there is a TG in MTGSet which corresponds to the model CTI
 }
 
 void PSGM::CalculateScore(int similarityMeasure)
@@ -5828,19 +5947,19 @@ void PSGM::EvaluateMatchesByScore(
 		{
 			//for (scoreThresh = minScore; scoreThresh <= maxScore; scoreThresh += scoreStep)
 			//{
-				for (iSSegment = 0; iSSegment < nSSegments; iSSegment++)
-				{
-					firstTP[iSSegment] = -1;
+			for (iSSegment = 0; iSSegment < nSSegments; iSSegment++)
+			{
+				firstTP[iSSegment] = -1;
 
-					for (iMSegment = 0; iMSegment <= iBestMatches; iMSegment++)
-					{
+				for (iMSegment = 0; iMSegment <= iBestMatches; iMSegment++)
+				{
 					if (evaluateICP)
 						iMatch = scoreMatchMatrixICP.Element[iSSegment].Element[iMSegment].idx;
 					else
 						iMatch = scoreMatchMatrix.Element[iSSegment].Element[iMSegment].idx;
 
-						if (iMatch != -1)
-						{
+					if (iMatch != -1)
+					{
 						if (evaluateICP)
 							scoreTmp = scoreMatchMatrixICP.Element[iSSegment].Element[iMSegment].cost;
 						else
@@ -5850,36 +5969,36 @@ void PSGM::EvaluateMatchesByScore(
 						//if(iMSegment == 0)
 						//bestNesto = scoreTmp
 
-							//if (scoreTmp <= scoreThresh)
-							//{
-								//Compare to segment GT
-								iMCTI = pCTImatchesArray.Element[iMatch]->iMCTI;
-								iMatchedModel = MCTISet.pCTI.Element[iMCTI]->iModel;
+						//if (scoreTmp <= scoreThresh)
+						//{
+						//Compare to segment GT
+						iMCTI = pCTImatchesArray.Element[iMatch]->iMCTI;
+						iMatchedModel = MCTISet.pCTI.Element[iMCTI]->iModel;
 
-								int iSegmentGT = (iScene - 1) * nDominantClusters + iSSegment;
+						int iSegmentGT = (iScene - 1) * nDominantClusters + iSSegment;
 
-								//eliminate FP from segments without GT
-								if (!segmentGT.Element[iSegmentGT].valid)
-									TPMatch = false;
-								else
+						//eliminate FP from segments without GT
+						if (!segmentGT.Element[iSegmentGT].valid)
+							TPMatch = false;
+						else
 						{
-									TPMatch = CompareMatchToSegmentGT((iScene - 1), iSSegment, iMatchedModel);
+							TPMatch = CompareMatchToSegmentGT((iScene - 1), iSSegment, iMatchedModel);
 						}
 
-								if (!TPMatch)
-								{
-									FP_++;
-								}
-								else
+						if (!TPMatch)
 						{
-									if (firstTP[iSSegment] == -1)
-									{
+							FP_++;
+						}
+						else
+						{
+							if (firstTP[iSSegment] == -1)
+							{
 								if (iSSegment == 2)
 									printf("iMatch: %d, iMatchedModel: %d", iMatch, iMatchedModel);
 
-										firstTP[iSSegment] = iMSegment;
-										firstTPScore[iSSegment] = scoreTmp;
-										firstTPiModel[iSSegment] = iMatchedModel;
+								firstTP[iSSegment] = iMSegment;
+								firstTPScore[iSSegment] = scoreTmp;
+								firstTPiModel[iSSegment] = iMatchedModel;
 
 								//if iMSegment != 0
 								//u file zapisati bestNesto i scoreTmp
@@ -5892,39 +6011,39 @@ void PSGM::EvaluateMatchesByScore(
 
 								pSCTI = CTISet.pCTI.Element[iSCTI];
 								pMCTI = MCTISet.pCTI.Element[iMCTI];
-								
-								MSTransformation(pMCTI, pSCTI, pCTImatchesArray.Element[iMatch]->tMatch, pCTImatchesArray.Element[iMatch]->R, pCTImatchesArray.Element[iMatch]->t);					
+
+								MSTransformation(pMCTI, pSCTI, pCTImatchesArray.Element[iMatch]->tMatch, pCTImatchesArray.Element[iMatch]->R, pCTImatchesArray.Element[iMatch]->t);
 
 								FindGTInstance(&pGT, pCTImatchesArray.Element[iMatch]->iScene, iMatchedModel);
 
 								//poseMatch = PoseCheck(pGT, pCTImatchesArray.Element[iMatch], 50.0, PI / 6, fpPoseError);
 								if (iMSegment != 0) // pose check for matches that are not on the first place 
 									int klkl = 0;
-									//zapis u file1
-									//fprintf(fpnotFirstInfo, "%d, %d, %d", iScene, iSSegment, iMSegment);
-									//poseMatch = PoseCheck(pGT, pCTImatchesArray.Element[iMatch], 50.0, cos30, fpPoseError, fpnotFirstPoseErr, evaluateICP);
+								//zapis u file1
+								//fprintf(fpnotFirstInfo, "%d, %d, %d", iScene, iSSegment, iMSegment);
+								//poseMatch = PoseCheck(pGT, pCTImatchesArray.Element[iMatch], 50.0, cos30, fpPoseError, fpnotFirstPoseErr, evaluateICP);
 							}
-									}
-							//}
 						}
+						//}
 					}
 				}
+			}
 
 #ifdef RVLPSGM_EVALUATION_PRINT_INFO
-				CountTPandFN(TP_, FN_, true);
+			CountTPandFN(TP_, FN_, true);
 #else
-				CountTPandFN(TP_, FN_, false);
+			CountTPandFN(TP_, FN_, false);
 #endif
 
-				CalculatePR(TP_, FP_, FN_, precision, recall);
+			CalculatePR(TP_, FP_, FN_, precision, recall);
 
 			//pECCVGT->ResetMatchFlag();
 
-				PrintMatchInfo(fp, fpLog, TP_, FP_, FN_, precision, recall, nSSegments, firstTP, firstTPiModel, firstTPScore, -1.0, -1.0, -1.0, -1.0, nBestSegments, iBestMatches, graphID);
+			PrintMatchInfo(fp, fpLog, TP_, FP_, FN_, precision, recall, nSSegments, firstTP, firstTPiModel, firstTPScore, -1.0, -1.0, -1.0, -1.0, nBestSegments, iBestMatches, graphID);
 
-				TP_ = 0; FP_ = 0; FN_ = 0;
+			TP_ = 0; FP_ = 0; FN_ = 0;
 
-				graphID++;
+			graphID++;
 
 			//}
 		}
