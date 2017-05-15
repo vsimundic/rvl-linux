@@ -25,6 +25,7 @@
 #include <nanoflann.hpp>
 
 //#define RVLPSGM_CTIMESH_DEBUG
+//#define RVLPSGM_MATCHTGS_CREATE_SCENE_TG
 
 using namespace RVL;
 using namespace RECOG;
@@ -136,10 +137,11 @@ PSGM::PSGM()
 	bBoundingPlanes = false;
 
 	MTGSet.nodeSimilarityThr = 3.0f;
+	MTGSet.eLimit = 30.0f;
 
 	TemplateMatrix(MTGSet.A);
 
-	STGSet.nodeSimilarityThr = 3.0f;
+	STGSet.nodeSimilarityThr = 0.003f;
 
 	TemplateMatrix(STGSet.A);
 }
@@ -4418,7 +4420,8 @@ void PSGM::Match()
 
 	int startIdx = 0, endIdx = MCTISet.pCTI.n;
 
-	for (iSCluster = 0; iSCluster < nClusters; iSCluster++)
+	//for (iSCluster = 0; iSCluster < nClusters; iSCluster++)
+	iSCluster = 0;		// Only for debugging purpose!!!
 	{
 		printf("%d/%d", iSCluster + 1, nClusters);
 	
@@ -4844,6 +4847,7 @@ void PSGM::Match(
 
 void PSGM::MatchTGs()
 {
+#ifdef RVLPSGM_MATCHTGS_CREATE_SCENE_TG
 	// Initialize memory storage.
 
 	CRVLMem mem;
@@ -4851,6 +4855,17 @@ void PSGM::MatchTGs()
 	mem.Create(10000000);
 
 	STGSet.pMem = &mem;
+
+	// Create vertex graph.
+
+	VertexGraph *pVertexGraph = new VertexGraph;
+
+	pVertexGraph->idx = 0;
+
+	STGSet.vertexGraphs.push_back(pVertexGraph);
+
+	pVertexGraph->Create(pSurfels);
+#endif
 
 	// Get match.
 
@@ -4918,14 +4933,13 @@ void PSGM::MatchTGs()
 
 				int iVertex;
 				SURFEL::Vertex *pVertex;
-				float *PS;
-				float PM[3];
+				float PS[3], PM[3];
 
 				for (iVertex = 0; iVertex < pSurfels->vertexArray.n; iVertex++)
 				{
 					pVertex = pSurfels->vertexArray.Element[iVertex];
 
-					PS = pVertex->P;
+					RVLSCALE3VECTOR(pVertex->P, 1000.0f, PS);
 
 					RVLTRANSF3(PS, RSM, tSM, PM);
 
@@ -4933,24 +4947,45 @@ void PSGM::MatchTGs()
 						iVertexArray.Element[iVertexArray.n++] = iVertex;
 				}
 
+#ifdef RVLPSGM_MATCHTGS_CREATE_SCENE_TG
 				// Create TG from the vertices in boundingBox.
 
 				RECOG::TG *pSTG = new RECOG::TG;
 
 				pSTG->A = STGSet.A;
 
+
+				pSTG->iVertexGraph = pSTG->iObject = pVertexGraph->idx;
+
 				pSTG->Create(pSurfels, iVertexArray, RMS, tMS, &STGSet);
 
+				STGSet.TGs.push_back(pSTG);
+
 				STGSet.Save("sceneTG.tgr");
+#endif
+
+				// Match pMTG to vertices in iVertexArray.
+
+				float score;
+				Array<RECOG::TGCorrespondence> correspondences;
+
+				pMTG->Match(pSurfels, iVertexArray, 1000.0f, &MTGSet, RMS, tMS, score, correspondences);
 
 				// Free memory.
 
+				delete[] correspondences.Element;
+				delete[] iVertexArray.Element;	
+#ifdef RVLPSGM_MATCHTGS_CREATE_SCENE_TG
 				mem.Clear();
-				delete[] iVertexArray.Element;
-				delete[] pSTG;
+				delete pSTG;
+#endif							
 			}	// If there is at least one point in the vertex graph
 		}	// If pMTG has a vertex graph
 	}	// If there is a TG in MTGSet which corresponds to the model CTI
+
+#ifdef RVLPSGM_MATCHTGS_CREATE_SCENE_TG
+	delete pVertexGraph;
+#endif
 }
 
 void PSGM::CalculateScore(int similarityMeasure)

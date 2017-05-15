@@ -17,6 +17,8 @@
 #include "TG.h"
 #include "TGSet.h"
 
+#define RVLTG_MATCH_DEBUG
+
 using namespace RVL;
 using namespace RECOG;
 
@@ -27,6 +29,26 @@ TG::TG()
 
 TG::~TG()
 {
+}
+
+void TG::RotateTemplate(
+	float *R,
+	float *A_)
+{
+	float *A__ = A.Element;
+
+	int nT = A.h;
+
+	int i;
+	float *a__, *a_;
+
+	for (i = 0; i < nT; i++)
+	{
+		a__ = A__ + 3 * i;
+		a_ = A_ + 3 * i;
+
+		RVLMULMX3X3VECT(R, a__, a_);
+	}
 }
 
 void TG::Create(
@@ -47,28 +69,15 @@ void TG::Create(
 
 	// A_ <- A * R'
 
-	float *A__ = A.Element;
+	float *A_ = new float[3 * A.h];
 
-	int nT = A.h;
-
-	float *A_ = new float[3 * nT];
-
-	int i;
-	float *a__, *a_;
-
-	for (i = 0; i < nT; i++)
-	{
-		a__ = A__ + 3 * i;
-		a_ = A_ + 3 * i;
-
-		RVLMULMX3X3VECT(R, a__, a_);
-	}
+	RotateTemplate(R, A_);
 
 	// Create nodes and descriptor.
 
 	RVLMEM_ALLOC_STRUCT_ARRAY(pMem, QList<TGNode>, A.h, descriptor.Element);
 
-	int j;
+	int i, j;
 	SURFEL::Vertex *pVertex;
 	float dist;
 	float *N;
@@ -89,8 +98,8 @@ void TG::Create(
 		{
 			iVertex = iVertexArray.Element[j];
 
-			if (iVertex == 71)
-				int debug = 0;
+			//if (iVertex == 71)
+			//	int debug = 0;
 
 			pVertex = pSurfels->vertexArray.Element[iVertex];
 
@@ -136,32 +145,205 @@ void TG::Create(
 	{
 		pDescriptorBin = descriptor.Element + i;
 
+		j = 0;
+
 		ppNode = &(pDescriptorBin->pFirst);
 
 		pNode = pDescriptorBin->pFirst;
 
-		d = pNode->d + 2.0f * pSet->nodeSimilarityThr;
-
-		while (pNode)
+		if (pNode)
 		{
-			if (d - pNode->d < pSet->nodeSimilarityThr)
-				RVLQLIST_REMOVE_ENTRY(pDescriptorBin, pNode, ppNode)
-			else
+			d = pNode->d + 2.0f * pSet->nodeSimilarityThr;
+
+			while (pNode)
 			{
-				d = pNode->d;
+				if (d - pNode->d < pSet->nodeSimilarityThr)
+					RVLQLIST_REMOVE_ENTRY(pDescriptorBin, pNode, ppNode)
+				else
+				{
+					d = pNode->d;
 
-				nNodes++;
+					pNode->j = j;
 
-				ppNode = &(pNode->pNext);
+					j++;
+
+					nNodes++;
+
+					ppNode = &(pNode->pNext);
+				}
+
+				pNode = *ppNode;
 			}
-				
-			pNode = *ppNode;
 		}
 	}
 
 	// Free memory.
 
 	delete[] A_;
+}
+
+void TG::Match(
+	SurfelGraph *pSurfels,
+	Array<int> iVertexArray,
+	float scale,
+	void *vpSet,
+	float *RIn,
+	float *tIn,
+	float &score,
+	Array<TGCorrespondence> &correspondences
+	)
+{
+	TGSet *pSet = (TGSet *)vpSet;
+
+	VertexGraph *pVertexGraph = pSet->GetVertexGraph(this);
+
+	float R[9], t[3];
+
+	RVLCOPYMX3X3(RIn, R);
+	RVLCOPY3VECTOR(tIn, t);
+
+	// Allocate arrays.
+
+	float *A_ = new float[3 * A.h];
+	float *PArray = new float[3 * iVertexArray.n];
+
+	// A_ <- A * R'	
+
+	RotateTemplate(R, A_);
+
+	// sR <- scale * R
+
+	float sR[9];
+
+	RVLSCALEMX3X3(R, scale, sR);
+
+	float st[3];
+
+	RVLSCALE3VECTOR2(t, scale, st);
+
+	// Transform vertices to TG RF.
+
+	int j;
+	SURFEL::Vertex *pVertex;
+	int iVertex;
+	float V3Tmp[3];
+	float *P;
+
+	for (j = 0; j < iVertexArray.n; j++)
+	{
+		iVertex = iVertexArray.Element[j];
+
+		pVertex = pSurfels->vertexArray.Element[iVertex];
+
+		if (pVertex->normalHull.n < 3)
+			continue;
+
+		P = PArray + 3 * j;
+
+		RVLINVTRANSF3(pVertex->P, sR, st, P, V3Tmp);
+	}
+
+	// Identify correspondences and compute score.
+
+	correspondences.Element = new TGCorrespondence[nNodes];
+
+	TGCorrespondence *pCorrespondence = correspondences.Element;
+
+	score = 0.0f;
+
+	int i;
+	float *N, *N_;
+	QList<TGNode> *pDescriptorBin;
+	TGNode *pNode, *pCorrespondingNode;
+	float d, eClosest, e, eAbsClosest, eAbs;
+	float dist, fTmp;
+
+	for (j = 0; j < iVertexArray.n; j++)
+	{
+		iVertex = iVertexArray.Element[j];
+
+		pVertex = pSurfels->vertexArray.Element[iVertex];
+
+		if (pVertex->normalHull.n < 3)
+			continue;
+
+		P = PArray + 3 * j;
+
+		for (i = 0; i < A.h; i++)	// for every template normal
+		{
+			//if (i == 65)
+			//	int debug = 0;
+
+			N = A.Element + 3 * i;
+			N_ = A_ + 3 * i;
+
+			eAbsClosest = -1.0f;
+
+			pDescriptorBin = descriptor.Element + i;
+
+			pNode = pDescriptorBin->pFirst;
+
+			while (pNode)	// for every node in the descriptor bin
+			{				
+				if (pVertex->type == pVertexGraph->NodeArray.Element[pNode->iVertex].type)
+				{
+					dist = pSurfels->DistanceFromNormalHull(pVertex->normalHull, N_);
+
+					if (dist <= 0.0f)
+					{
+						d = RVLDOTPRODUCT3(N, P);
+
+						e = d - pNode->d;
+
+						eAbs = RVLABS(e);
+
+						if (eAbsClosest < 0.0f || eAbs < eAbsClosest)
+						{
+							eClosest = e;
+
+							eAbsClosest = eAbs;
+
+							pCorrespondingNode = pNode;
+						}
+					}	// if the template normal is in the normal hull of the vertex 
+				}	// if the vertices are of the same type
+
+				pNode = pNode->pNext;
+			}	// for every node in the descriptor bin
+
+			if (eAbsClosest >= 0.0f && eAbsClosest <= pSet->eLimit)
+			{
+				pCorrespondence->pNode = pCorrespondingNode;
+				pCorrespondence->iVertex = iVertex;
+				pCorrespondence->e = eClosest;
+				pCorrespondence++;
+
+				fTmp = eClosest / pSet->eLimit;
+
+				score += (1.0f - fTmp * fTmp);
+			}
+		}	// for every template normal
+	}	// for every vertex
+
+	correspondences.n = pCorrespondence - correspondences.Element;
+
+#ifdef RVLTG_MATCH_DEBUG
+	FILE *fp = fopen("TG_match_error.txt", "w");
+
+	for (i = 0; i < correspondences.n; i++)
+	{
+		pCorrespondence = correspondences.Element + i;
+
+		fprintf(fp, "%d\t%d\t%d\t%f\n", pCorrespondence->pNode->i, pCorrespondence->pNode->j, pCorrespondence->iVertex, pCorrespondence->e);
+	}
+
+	fclose(fp);
+#endif
+
+	// Free memory.
+
+	delete[] A_;
+	delete[] PArray;
 }
 
 void TG::Save(
@@ -253,6 +435,9 @@ bool TG::Load(
 
 	TGNode *pNode = NodeMem;	
 
+	int j = 0;
+	int i_ = -1;
+
 	for (i = 0; i < nNodes; i++, pNode++)
 	{
 		fscanf(fp, "%d\t%f\t%d\n", &(pNode->i), &(pNode->d), &(pNode->iVertex));
@@ -260,6 +445,16 @@ bool TG::Load(
 		pDescriptorBin = descriptor.Element + pNode->i;
 
 		RVLQLIST_ADD_ENTRY(pDescriptorBin, pNode);
+
+		if (pNode->i == i_)
+			j++;
+		else
+		{
+			j = 0;
+			i_ = pNode->i;
+		}
+
+		pNode->j = j;
 	}
 
 	return true;

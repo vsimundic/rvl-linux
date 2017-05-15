@@ -30,6 +30,7 @@ TGSet::TGSet()
 	A.Element = NULL;
 
 	nodeSimilarityThr = 1.0f;
+	eLimit = 1.0f;
 }
 
 

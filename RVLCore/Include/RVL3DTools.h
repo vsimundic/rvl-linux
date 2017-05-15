@@ -287,6 +287,12 @@
 	RVLMULMX3X3VECT(R, pSrc, pTgt)\
 	RVLSUM3VECTORS(pTgt, t, pTgt)\
 }
+// pTgt = R' * (pSrc - t)
+#define RVLINVTRANSF3(pSrc, R, t, pTgt, tmp3x1)\
+{\
+	RVLDIF3VECTORS(pSrc, t, tmp3x1);\
+	RVLMULMX3X3TVECT(R, tmp3x1, pTgt);\
+}
 // T(R, t) = T(R1, t1) * T(R2, t2)
 #define RVLCOMPTRANSF3D(R1, t1, R2, t2, R, t)\
 {\

@@ -81,6 +81,12 @@ namespace RVL
 		T Element[9];
 	};
 
+	template < typename T1, typename T2 > struct Correspondence
+	{
+		T1 item1;
+		T2 item2;
+	};
+
 	template <typename T>
 	void InitBoundingBox(Box<T> *pBox, T *P)
 	{

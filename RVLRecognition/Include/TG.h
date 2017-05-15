@@ -10,8 +10,16 @@ namespace RVL
 		{
 			float d;
 			int i;
+			int j;
 			int iVertex;
 			TGNode *pNext;
+		};
+
+		struct TGCorrespondence
+		{
+			TGNode *pNode;
+			int iVertex;
+			float e;
 		};
 
 		class TG
@@ -25,6 +33,19 @@ namespace RVL
 				float *R,
 				float *t,
 				void *vpSet);
+			void Match(
+				SurfelGraph *pSurfels,
+				Array<int> iVertexArray,
+				float scale,
+				void *vpSet,
+				float *R,
+				float *t,
+				float &score,
+				Array<TGCorrespondence> &correspondences
+				);
+			void RotateTemplate(
+				float *R,
+				float *A_);
 			void Save(
 				FILE *fp,
 				bool bSaveA = false);
@@ -32,6 +53,7 @@ namespace RVL
 				FILE *fp,
 				void *vpSet,
 				bool bLoadA = false);
+
 
 		public:
 			//QList<TGNode> NodeList;

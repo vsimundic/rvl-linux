@@ -20,6 +20,7 @@ namespace RVL
 			std::vector<VertexGraph *> vertexGraphs;
 			std::vector<TG *> TGs;
 			float nodeSimilarityThr;
+			float eLimit;
 			Array2D<float> A;
 			//Array<int> vertexArray;			
 			//Array2D<float> convexTemplate;
