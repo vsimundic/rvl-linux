@@ -426,6 +426,8 @@ void PSGM::Interpret(
 
 		pVertexGraph->idx = iScene;
 
+		pVertexGraph->pMem = MTGSet.pMem;
+
 		MTGSet.vertexGraphs.push_back(pVertexGraph);
 
 		pVertexGraph->Create(pSurfels);

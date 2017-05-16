@@ -32,14 +32,21 @@ VertexGraph::~VertexGraph()
 
 void VertexGraph::Create(SurfelGraph *pSurfels)
 {
+	// Create nodes.
+
 	NodeArray.n = pSurfels->vertexArray.n;
 
 	NodeArray.Element = new Vertex[NodeArray.n];
 
 	Vertex *pVertex = NodeArray.Element;
 
-	int iVertex;
+	int iVertex, iVertex_;
 	QList<GRAPH::EdgePtr2<VertexEdge>> *pEdgeList;
+	int i;
+	int iSurfel;
+	Surfel *pSurfel;
+	QList<QLIST::Index> *pVertexList;
+	QLIST::Index *pVertexIdx;
 
 	for (iVertex = 0; iVertex < pSurfels->vertexArray.n; iVertex++, pVertex++)
 	{
@@ -50,14 +57,73 @@ void VertexGraph::Create(SurfelGraph *pSurfels)
 		pEdgeList = &(pVertex->EdgeList);
 
 		RVLQLIST_INIT(pEdgeList);
-
-		pVertex->iSurfelArray.n = 0;
 	}
+
+	// Create edges.	
+
+	bool *bAlreadyConnected = new bool[NodeArray.n];
+
+	memset(bAlreadyConnected, 0, NodeArray.n * sizeof(bool));
+
+	QList<SURFEL::VertexEdge> *pEdgeList_ = &edgeList;
+
+	RVLQLIST_INIT(pEdgeList_);
+
+	nEdges = 0;
+
+	SURFEL::VertexEdge *pEdge;
+	GRAPH::EdgePtr2<SURFEL::VertexEdge> *pEdgePtr;
+
+	for (iVertex = 0; iVertex < NodeArray.n; iVertex++)
+	{
+		pVertex = NodeArray.Element + iVertex;
+
+		for (i = 0; i < pVertex->iSurfelArray.n; i++)
+		{
+			iSurfel = pVertex->iSurfelArray.Element[i];
+
+			pSurfel = pSurfels->NodeArray.Element + iSurfel;
+
+			pVertexList = pSurfels->surfelVertexList.Element + iSurfel;
+
+			pVertexIdx = pVertexList->pFirst;
+
+			while (pVertexIdx)
+			{
+				if (!bAlreadyConnected[pVertexIdx->Idx])
+				{
+					pEdge = ConnectNodes<SURFEL::Vertex, SURFEL::VertexEdge, GRAPH::EdgePtr2<SURFEL::VertexEdge>>(iVertex, pVertexIdx->Idx,
+						NodeArray, pMem);
+
+					RVLQLIST_ADD_ENTRY(pEdgeList_, pEdge);
+
+					nEdges++;
+
+					bAlreadyConnected[pVertexIdx->Idx] = true;
+				}
+
+				pVertexIdx = pVertexIdx->pNext;
+			}
+		}
+
+		pEdgePtr = pVertex->EdgeList.pFirst;
+
+		while (pEdgePtr)
+		{
+			iVertex_ = RVLPCSEGMENT_GRAPH_GET_OPPOSITE_NODE(pEdgePtr);
+
+			bAlreadyConnected[iVertex_] = false;
+
+			pEdgePtr = pEdgePtr->pNext;
+		}
+	}
+
+	delete[] bAlreadyConnected;
 }
 
 void VertexGraph::Save(FILE *fp)
 {
-	fprintf(fp, "%d\t%d\t0\t0\t0\n", idx, NodeArray.n);
+	fprintf(fp, "%d\t%d\t%d\t0\t0\n", idx, NodeArray.n, nEdges);
 
 	Vertex *pVertex = NodeArray.Element;
 
@@ -65,11 +131,20 @@ void VertexGraph::Save(FILE *fp)
 
 	for (i = 0; i < NodeArray.n; i++, pVertex++)
 		fprintf(fp, "%f\t%f\t%f\t%d\t%d\n", pVertex->P[0], pVertex->P[1], pVertex->P[2], pVertex->type, pVertex->bEdge);
+
+	SURFEL::VertexEdge *pEdge = edgeList.pFirst;
+
+	while (pEdge)
+	{
+		fprintf(fp, "%d\t%d\t0\t0\t0\n", pEdge->iVertex[0], pEdge->iVertex[1]);
+
+		pEdge = pEdge->pNext;
+	}
 }
 
 bool VertexGraph::Load(FILE *fp)
 {
-	if (fscanf(fp, "%d\t%d\t0\t0\t0\n", &idx, &NodeArray.n) < 2)
+	if (fscanf(fp, "%d\t%d\t%d\t0\t0\n", &idx, &NodeArray.n, &nEdges) < 3)
 		return false;
 
 	NodeArray.Element = new Vertex[NodeArray.n];
@@ -94,6 +169,21 @@ bool VertexGraph::Load(FILE *fp)
 		RVLQLIST_INIT(pEdgeList);
 
 		pVertex->iSurfelArray.n = 0;
+	}
+
+	QList<SURFEL::VertexEdge> *pEdgeList_ = &edgeList;
+
+	int iEdge, iVertex_;
+	SURFEL::VertexEdge *pEdge;
+
+	for (iEdge = 0; iEdge < nEdges; iEdge++)
+	{
+		fscanf(fp, "%d\t%d\t0\t0\t0\n", &iVertex, &iVertex_);
+
+		pEdge = ConnectNodes<SURFEL::Vertex, SURFEL::VertexEdge, GRAPH::EdgePtr2<SURFEL::VertexEdge>>(iVertex, iVertex_, 
+			NodeArray, pMem);
+
+		RVLQLIST_ADD_ENTRY(pEdgeList_, pEdge);
 	}
 
 	return true;

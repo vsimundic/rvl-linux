@@ -14,7 +14,10 @@ namespace RVL
 		bool BoundingBox(Box<float> *pBox);
 
 	public:
+		CRVLMem *pMem;
 		int idx;
+		QList<SURFEL::VertexEdge> edgeList;
+		int nEdges;
 	};
 }
 

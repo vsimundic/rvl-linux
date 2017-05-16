@@ -88,6 +88,7 @@ namespace RVL
 			int iVertex[2];
 			GRAPH::EdgePtr2<VertexEdge> *pVertexEdgePtr[2];
 			int idx;
+			VertexEdge *pNext;
 		};
 
 		struct Vertex
