@@ -24,11 +24,13 @@ using namespace RECOG;
 
 TG::TG()
 {
+	NodeArray.Element = NULL;
 }
 
 
 TG::~TG()
 {
+	RVL_DELETE_ARRAY(NodeArray.Element);
 }
 
 void TG::RotateTemplate(
@@ -75,14 +77,15 @@ void TG::Create(
 
 	// Create nodes and descriptor.
 
-	RVLMEM_ALLOC_STRUCT_ARRAY(pMem, QList<TGNode>, A.h, descriptor.Element);
+	RVLMEM_ALLOC_STRUCT_ARRAY(pMem, QList<QLIST::Ptr<TGNode>>, A.h, descriptor.Element);
 
 	int i, j;
 	SURFEL::Vertex *pVertex;
 	float dist;
 	float *N;
-	TGNode *pNode, *pNode_, *pNode__;
-	QList<TGNode> *pDescriptorBin;
+	TGNode *pNode, *pNode_;
+	QList<QLIST::Ptr<TGNode>> *pDescriptorBin;
+	QLIST::Ptr<TGNode> *pNodePtr, *pNodePtr_, *pNodePtr__;
 	float d;
 	int iVertex;
 
@@ -113,21 +116,25 @@ void TG::Create(
 
 			d = RVLDOTPRODUCT3(N, pVertex->P);
 
-			pNode_ = pDescriptorBin->pFirst;
+			pNodePtr_ = pDescriptorBin->pFirst;
 
-			while (pNode_)
+			while (pNodePtr_)
 			{
-				if (d > pNode_->d)
+				if (d > pNodePtr_->ptr->d)
 					break;
 
-				pNode__ = pNode_;
+				pNodePtr__ = pNodePtr_;
 
-				pNode_ = pNode_->pNext;
-			}			
+				pNodePtr_ = pNodePtr_->pNext;
+			}	
 
-			RVLMEM_ALLOC_STRUCT(pMem, TGNode, pNode);
+			RVLMEM_ALLOC_STRUCT(pMem, QLIST::Ptr<TGNode>, pNodePtr);
 
-			RVLQLIST_INSERT_ENTRY(pDescriptorBin, pNode__, pNode_, pNode);
+			RVLMEM_ALLOC_STRUCT(pMem, TGNode, pNode);		// In order to optimize memory consuption, this should be allocated in a tempmorary memory.
+
+			pNodePtr->ptr = pNode;
+
+			RVLQLIST_INSERT_ENTRY(pDescriptorBin, pNodePtr__, pNodePtr_, pNodePtr);
 
 			pNode->d = d;
 			pNode->i = i;
@@ -137,9 +144,9 @@ void TG::Create(
 
 	// Remove similar nodes.
 
-	nNodes = 0;
+	NodeArray.n = 0;
 
-	TGNode **ppNode;
+	QLIST::Ptr<TGNode> **ppNodePtr;
 
 	for (i = 0; i < A.h; i++)
 	{
@@ -147,18 +154,22 @@ void TG::Create(
 
 		j = 0;
 
-		ppNode = &(pDescriptorBin->pFirst);
+		ppNodePtr = &(pDescriptorBin->pFirst);
 
-		pNode = pDescriptorBin->pFirst;
+		pNodePtr = pDescriptorBin->pFirst;
 
-		if (pNode)
+		if (pNodePtr)
 		{
+			pNode = pNodePtr->ptr;
+
 			d = pNode->d + 2.0f * pSet->nodeSimilarityThr;
 
-			while (pNode)
+			while (pNodePtr)
 			{
+				pNode = pNodePtr->ptr;
+
 				if (d - pNode->d < pSet->nodeSimilarityThr)
-					RVLQLIST_REMOVE_ENTRY(pDescriptorBin, pNode, ppNode)
+					RVLQLIST_REMOVE_ENTRY(pDescriptorBin, pNodePtr, ppNodePtr)
 				else
 				{
 					d = pNode->d;
@@ -167,13 +178,37 @@ void TG::Create(
 
 					j++;
 
-					nNodes++;
+					NodeArray.n++;
 
-					ppNode = &(pNode->pNext);
+					ppNodePtr = &(pNodePtr->pNext);
 				}
 
-				pNode = *ppNode;
+				pNodePtr = *ppNodePtr;
 			}
+		}
+	}
+
+	// Copy nodes to NodeArray.
+
+	RVL_DELETE_ARRAY(NodeArray.Element);
+
+	NodeArray.Element = new TGNode[NodeArray.n];
+
+	NodeArray.n = 0;
+
+	for (i = 0; i < A.h; i++)
+	{
+		pDescriptorBin = descriptor.Element + i;
+
+		pNodePtr = pDescriptorBin->pFirst;
+
+		while (pNodePtr)
+		{
+			pNode = pNodePtr->ptr;
+
+			NodeArray.Element[NodeArray.n++] = *pNode;
+
+			pNodePtr = pNodePtr->pNext;
 		}
 	}
 
@@ -245,7 +280,7 @@ void TG::Match(
 
 	// Identify correspondences and compute score.
 
-	correspondences.Element = new TGCorrespondence[nNodes];
+	correspondences.Element = new TGCorrespondence[NodeArray.n];
 
 	TGCorrespondence *pCorrespondence = correspondences.Element;
 
@@ -253,10 +288,11 @@ void TG::Match(
 
 	int i;
 	float *N, *N_;
-	QList<TGNode> *pDescriptorBin;
+	QList<QLIST::Ptr<TGNode>> *pDescriptorBin;
 	TGNode *pNode, *pCorrespondingNode;
 	float d, eClosest, e, eAbsClosest, eAbs;
 	float dist, fTmp;
+	QLIST::Ptr<TGNode> *pNodePtr;
 
 	for (j = 0; j < iVertexArray.n; j++)
 	{
@@ -281,10 +317,12 @@ void TG::Match(
 
 			pDescriptorBin = descriptor.Element + i;
 
-			pNode = pDescriptorBin->pFirst;
+			pNodePtr = pDescriptorBin->pFirst;
 
-			while (pNode)	// for every node in the descriptor bin
+			while (pNodePtr)	// for every node in the descriptor bin
 			{				
+				pNode = pNodePtr->ptr;
+
 				if (pVertex->type == pVertexGraph->NodeArray.Element[pNode->iVertex].type)
 				{
 					dist = pSurfels->DistanceFromNormalHull(pVertex->normalHull, N_);
@@ -308,7 +346,7 @@ void TG::Match(
 					}	// if the template normal is in the normal hull of the vertex 
 				}	// if the vertices are of the same type
 
-				pNode = pNode->pNext;
+				pNodePtr = pNodePtr->pNext;
 			}	// for every node in the descriptor bin
 
 			if (eAbsClosest >= 0.0f && eAbsClosest <= pSet->eLimit)
@@ -350,7 +388,7 @@ void TG::Save(
 	FILE *fp,
 	bool bSaveA)
 {
-	fprintf(fp, "%d\t%d\t%d\n", iObject, iVertexGraph, nNodes);
+	fprintf(fp, "%d\t%d\t%d\n", iObject, iVertexGraph, NodeArray.n);
 
 	int i;
 
@@ -369,21 +407,13 @@ void TG::Save(
 			fprintf(fp, "%f\t%f\t%f\n", N[0], N[1], N[2]);
 	}	
 
-	QList<TGNode> *pDescriptorBin;
 	TGNode *pNode;
 
-	for (i = 0; i < A.h; i++)
+	for (i = 0; i < NodeArray.n; i++)
 	{
-		pDescriptorBin = descriptor.Element + i;
+		pNode = NodeArray.Element + i;
 
-		pNode = pDescriptorBin->pFirst;
-
-		while (pNode)
-		{
-			fprintf(fp, "%d\t%f\t%d\n", pNode->i, pNode->d, pNode->iVertex);
-
-			pNode = pNode->pNext;
-		}
+		fprintf(fp, "%d\t%f\t%d\n", pNode->i, pNode->d, pNode->iVertex);
 	}
 }
 
@@ -392,7 +422,7 @@ bool TG::Load(
 	void *vpSet,
 	bool bLoadA)
 {
-	if (fscanf(fp, "%d\t%d\t%d\n", &iObject, &iVertexGraph, &nNodes) < 2)
+	if (fscanf(fp, "%d\t%d\t%d\n", &iObject, &iVertexGraph, &(NodeArray.n)) < 3)
 		return false;
 
 	TGSet *pSet = (TGSet *)vpSet;
@@ -418,9 +448,9 @@ bool TG::Load(
 			fscanf(fp, "%f\t%f\t%f\n", N, N + 1, N + 2);
 	}
 
-	RVLMEM_ALLOC_STRUCT_ARRAY(pMem, QList<TGNode>, A.h, descriptor.Element);
+	RVLMEM_ALLOC_STRUCT_ARRAY(pMem, QList<QLIST::Ptr<TGNode>>, A.h, descriptor.Element);
 
-	QList<TGNode> *pDescriptorBin;
+	QList<QLIST::Ptr<TGNode>> *pDescriptorBin;
 
 	for (i = 0; i < A.h; i++)
 	{
@@ -429,23 +459,31 @@ bool TG::Load(
 		RVLQLIST_INIT(pDescriptorBin);
 	}
 
-	TGNode *NodeMem;
+	QLIST::Ptr<TGNode> *descriptorMem;
 
-	RVLMEM_ALLOC_STRUCT_ARRAY(pMem, TGNode, nNodes, NodeMem);
+	RVLMEM_ALLOC_STRUCT_ARRAY(pMem, QLIST::Ptr<TGNode>, NodeArray.n, descriptorMem);
 
-	TGNode *pNode = NodeMem;	
+	QLIST::Ptr<TGNode> *pNodePtr = descriptorMem;
+
+	RVL_DELETE_ARRAY(NodeArray.Element);
+
+	NodeArray.Element = new TGNode[NodeArray.n];
+
+	TGNode *pNode = NodeArray.Element;
 
 	int j = 0;
 	int i_ = -1;
 
-	for (i = 0; i < nNodes; i++, pNode++)
+	for (i = 0; i < NodeArray.n; i++, pNode++, pNodePtr++)
 	{
 		fscanf(fp, "%d\t%f\t%d\n", &(pNode->i), &(pNode->d), &(pNode->iVertex));
 
 		pDescriptorBin = descriptor.Element + pNode->i;
 
-		RVLQLIST_ADD_ENTRY(pDescriptorBin, pNode);
+		pNodePtr->ptr = pNode;
 
+		RVLQLIST_ADD_ENTRY(pDescriptorBin, pNodePtr);
+		
 		if (pNode->i == i_)
 			j++;
 		else

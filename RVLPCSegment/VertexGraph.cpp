@@ -119,6 +119,7 @@ void VertexGraph::Create(SurfelGraph *pSurfels)
 	}
 
 	delete[] bAlreadyConnected;
+
 }
 
 void VertexGraph::Save(FILE *fp)
@@ -172,6 +173,8 @@ bool VertexGraph::Load(FILE *fp)
 	}
 
 	QList<SURFEL::VertexEdge> *pEdgeList_ = &edgeList;
+
+	RVLQLIST_INIT(pEdgeList_);
 
 	int iEdge, iVertex_;
 	SURFEL::VertexEdge *pEdge;

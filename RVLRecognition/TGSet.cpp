@@ -199,11 +199,13 @@ void TGSet::Load(char *fileName)
 	if (fp == NULL)
 		return;
 
-	VertexGraph *pVertexGraph;
+	VertexGraph *pVertexGraph;	
 
 	while (true)
 	{
 		pVertexGraph = new VertexGraph;
+
+		pVertexGraph->pMem = pMem;
 
 		if (!pVertexGraph->Load(fp))
 		{

@@ -1,5 +1,7 @@
 #pragma once
 
+//#define RVLVERTEX_GRAPH_EDGES_FROM_SURFELS
+
 namespace RVL
 {
 	class VertexGraph :

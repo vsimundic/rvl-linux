@@ -4862,6 +4862,8 @@ void PSGM::MatchTGs()
 
 	VertexGraph *pVertexGraph = new VertexGraph;
 
+	pVertexGraph->pMem = &mem;
+
 	pVertexGraph->idx = 0;
 
 	STGSet.vertexGraphs.push_back(pVertexGraph);
@@ -4916,7 +4918,7 @@ void PSGM::MatchTGs()
 			{
 				// Expand boundingBox.
 
-				float boundingBoxExtension = 30.0f;
+				float boundingBoxExtension = 20.0f;
 
 				boundingBox.minx -= boundingBoxExtension;
 				boundingBox.maxx += boundingBoxExtension;

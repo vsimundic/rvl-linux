@@ -6,13 +6,24 @@ namespace RVL
 {
 	namespace RECOG
 	{
+		struct TGEdge;
+
 		struct TGNode
 		{
+			QList<GRAPH::EdgePtr2<TGEdge>> EdgeList;
 			float d;
 			int i;
 			int j;
 			int iVertex;
 			TGNode *pNext;
+		};
+
+		struct TGEdge
+		{
+			int iVertex[2];
+			GRAPH::EdgePtr2<TGEdge> *pVertexEdgePtr[2];
+			int idx;
+			TGEdge *pNext;
 		};
 
 		struct TGCorrespondence
@@ -22,7 +33,7 @@ namespace RVL
 			float e;
 		};
 
-		class TG
+		class TG : public Graph < TGNode, TGEdge, GRAPH::EdgePtr2<TGEdge> >
 		{
 		public:
 			TG();
@@ -56,12 +67,10 @@ namespace RVL
 
 
 		public:
-			//QList<TGNode> NodeList;
 			Array2D<float> A;
 			float R[9];
 			float t[3];
-			Array<QList<TGNode>> descriptor;
-			int nNodes;
+			Array<QList<QLIST::Ptr<TGNode>>> descriptor;
 			int iObject;
 			int iVertexGraph;
 		};
