@@ -25,7 +25,7 @@
 #include <nanoflann.hpp>
 
 //#define RVLPSGM_CTIMESH_DEBUG
-//#define RVLPSGM_MATCHTGS_CREATE_SCENE_TG
+#define RVLPSGM_MATCHTGS_CREATE_SCENE_TG
 
 using namespace RVL;
 using namespace RECOG;
@@ -4958,10 +4958,9 @@ void PSGM::MatchTGs()
 
 				pSTG->A = STGSet.A;
 
-
 				pSTG->iVertexGraph = pSTG->iObject = pVertexGraph->idx;
 
-				pSTG->Create(pSurfels, iVertexArray, RMS, tMS, &STGSet);
+				pSTG->Create(pVertexGraph, iVertexArray, RMS, tMS, &STGSet, pSurfels);
 
 				STGSet.TGs.push_back(pSTG);
 

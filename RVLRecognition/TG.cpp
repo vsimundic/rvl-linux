@@ -225,11 +225,15 @@ void TG::Create(
 
 	iVertexTGNodeList = new QList<QLIST::Index>[pVertexGraph->NodeArray.n];
 
-	QList<QLIST::Index> *piVertexTGNodeList = iVertexTGNodeList;
+	QList<QLIST::Index> *piVertexTGNodeList;
 
-	for (i = 0; i < iVertexArray.n; i++, piVertexTGNodeList++)
+	for (i = 0; i < iVertexArray.n; i++)
 	{
-		RGData.mFlags[iVertexArray.Element[i]] = 0x01;
+		iVertex = iVertexArray.Element[i];
+
+		RGData.mFlags[iVertex] = 0x01;
+
+		piVertexTGNodeList = iVertexTGNodeList + iVertex;
 
 		RVLQLIST_INIT(piVertexTGNodeList);
 	}
@@ -278,8 +282,8 @@ void TG::Create(
 
 	for (iNode = 0; iNode < NodeArray.n; iNode++)
 	{
-		if (iNode == 92)
-			int debug = 0;
+		//if (iNode == 92)
+		//	int debug = 0;
 
 		pNode = NodeArray.Element + iNode;
 
@@ -585,7 +589,10 @@ bool TG::Load(
 	void *vpSet,
 	bool bLoadA)
 {
-	if (fscanf(fp, "%d\t%d\t%d\n", &iObject, &iVertexGraph, &(NodeArray.n)) < 3)
+	if (fscanf(fp, "%d\t%d\t0\n", &iObject, &iVertexGraph) < 2)
+		return false;
+
+	if (fscanf(fp, "%d\t%d\t0\n", &(NodeArray.n), &nEdges) < 2)
 		return false;
 
 	TGSet *pSet = (TGSet *)vpSet;
@@ -637,6 +644,8 @@ bool TG::Load(
 	int j = 0;
 	int i_ = -1;
 
+	QList<GRAPH::EdgePtr2<TGEdge>> *pEdgeList;
+
 	for (i = 0; i < NodeArray.n; i++, pNode++, pNodePtr++)
 	{
 		fscanf(fp, "%d\t%f\t%d\n", &(pNode->i), &(pNode->d), &(pNode->iVertex));
@@ -656,6 +665,20 @@ bool TG::Load(
 		}
 
 		pNode->j = j;
+
+		pEdgeList = &(pNode->EdgeList);
+
+		RVLQLIST_INIT(pEdgeList);
+	}
+
+	int iNode, iNode_;
+	TGEdge *pEdge;
+
+	for (i = 0; i < nEdges; i++)
+	{
+		fscanf(fp, "%d\t%d\t0\n", &iNode, &iNode_);
+
+		pEdge = ConnectNodes<TGNode, TGEdge, GRAPH::EdgePtr2<TGEdge>>(iNode, iNode_, NodeArray, pMem);
 	}
 
 	return true;
