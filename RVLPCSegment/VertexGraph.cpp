@@ -47,12 +47,17 @@ void VertexGraph::Create(SurfelGraph *pSurfels)
 	Surfel *pSurfel;
 	QList<QLIST::Index> *pVertexList;
 	QLIST::Index *pVertexIdx;
+	Vertex *pVertex_;
 
 	for (iVertex = 0; iVertex < pSurfels->vertexArray.n; iVertex++, pVertex++)
 	{
-		*pVertex = *(pSurfels->vertexArray.Element[iVertex]);
+		pVertex_ = pSurfels->vertexArray.Element[iVertex];
 
-		pVertex->normalHull.n = 0;
+		*pVertex = *pVertex_;
+
+		RVLMEM_ALLOC_STRUCT_ARRAY(pMem, NormalHullElement, pVertex->normalHull.n, pVertex->normalHull.Element);
+
+		memcpy(pVertex->normalHull.Element, pVertex_->normalHull.Element, pVertex->normalHull.n * sizeof(NormalHullElement));
 
 		pEdgeList = &(pVertex->EdgeList);
 
@@ -92,12 +97,17 @@ void VertexGraph::Create(SurfelGraph *pSurfels)
 			{
 				if (!bAlreadyConnected[pVertexIdx->Idx])
 				{
-					pEdge = ConnectNodes<SURFEL::Vertex, SURFEL::VertexEdge, GRAPH::EdgePtr2<SURFEL::VertexEdge>>(iVertex, pVertexIdx->Idx,
-						NodeArray, pMem);
+					if (iVertex < pVertexIdx->Idx)
+					{
+						pEdge = ConnectNodes<SURFEL::Vertex, SURFEL::VertexEdge, GRAPH::EdgePtr2<SURFEL::VertexEdge>>(iVertex, pVertexIdx->Idx,
+							NodeArray, pMem);
 
-					RVLQLIST_ADD_ENTRY(pEdgeList_, pEdge);
+						RVLQLIST_ADD_ENTRY(pEdgeList_, pEdge);
 
-					nEdges++;
+						RVLCOPY3VECTOR(pSurfel->N, pEdge->N);
+
+						nEdges++;
+					}
 
 					bAlreadyConnected[pVertexIdx->Idx] = true;
 				}
@@ -137,7 +147,7 @@ void VertexGraph::Save(FILE *fp)
 
 	while (pEdge)
 	{
-		fprintf(fp, "%d\t%d\t0\t0\t0\n", pEdge->iVertex[0], pEdge->iVertex[1]);
+		fprintf(fp, "%d\t%d\t%f\t%f\t%f\n", pEdge->iVertex[0], pEdge->iVertex[1], pEdge->N[0], pEdge->N[1], pEdge->N[2]);
 
 		pEdge = pEdge->pNext;
 	}
@@ -178,15 +188,18 @@ bool VertexGraph::Load(FILE *fp)
 
 	int iEdge, iVertex_;
 	SURFEL::VertexEdge *pEdge;
+	float N[3];
 
 	for (iEdge = 0; iEdge < nEdges; iEdge++)
 	{
-		fscanf(fp, "%d\t%d\t0\t0\t0\n", &iVertex, &iVertex_);
+		fscanf(fp, "%d\t%d\t%f\t%f\t%f\n", &iVertex, &iVertex_, N, N + 1, N + 2);
 
 		pEdge = ConnectNodes<SURFEL::Vertex, SURFEL::VertexEdge, GRAPH::EdgePtr2<SURFEL::VertexEdge>>(iVertex, iVertex_, 
 			NodeArray, pMem);
 
 		RVLQLIST_ADD_ENTRY(pEdgeList_, pEdge);
+
+		RVLCOPY3VECTOR(N, pEdge->N);
 	}
 
 	return true;

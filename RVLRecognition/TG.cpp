@@ -54,11 +54,12 @@ void TG::RotateTemplate(
 }
 
 void TG::Create(
-	SurfelGraph *pSurfels,
+	VertexGraph *pVertexGraph,
 	Array<int> iVertexArray,
 	float *RIn,
 	float *tIn,
-	void *vpSet)
+	void *vpSet,
+	SurfelGraph *pSurfels)
 {
 	TGSet *pSet = (TGSet *)vpSet;
 
@@ -104,7 +105,7 @@ void TG::Create(
 			//if (iVertex == 71)
 			//	int debug = 0;
 
-			pVertex = pSurfels->vertexArray.Element[iVertex];
+			pVertex = pVertexGraph->NodeArray.Element + iVertex;
 
 			if (pVertex->normalHull.n < 3)
 				continue;
@@ -212,9 +213,147 @@ void TG::Create(
 		}
 	}
 
+	// Connect neighboring nodes with edges.
+
+	TGConnectNodesRGData RGData;
+
+	RGData.mFlags = new BYTE[pVertexGraph->NodeArray.n];
+
+	memset(RGData.mFlags, 0, pVertexGraph->NodeArray.n);
+
+	QList<QLIST::Index> *iVertexTGNodeList;
+
+	iVertexTGNodeList = new QList<QLIST::Index>[pVertexGraph->NodeArray.n];
+
+	QList<QLIST::Index> *piVertexTGNodeList = iVertexTGNodeList;
+
+	for (i = 0; i < iVertexArray.n; i++, piVertexTGNodeList++)
+	{
+		RGData.mFlags[iVertexArray.Element[i]] = 0x01;
+
+		RVLQLIST_INIT(piVertexTGNodeList);
+	}
+		
+	QLIST::Index *iVertexTGNodeMem = new QLIST::Index[NodeArray.n];
+
+	QLIST::Index *vertexTGNodeIdx = iVertexTGNodeMem;
+
+	int iNode;
+	
+	for (iNode = 0; iNode < NodeArray.n; iNode++)
+	{
+		pNode = NodeArray.Element + iNode;
+
+		piVertexTGNodeList = iVertexTGNodeList + pNode->iVertex;
+
+		RVLQLIST_ADD_ENTRY(piVertexTGNodeList, vertexTGNodeIdx);
+
+		vertexTGNodeIdx->Idx = iNode;
+
+		vertexTGNodeIdx++;
+	}
+
+	QList<GRAPH::EdgePtr2<TGEdge>> *pEdgeList;
+	TGEdge *pEdge;
+
+	for (iNode = 0; iNode < NodeArray.n; iNode++)
+	{
+		pNode = NodeArray.Element + iNode;
+
+		pEdgeList = &(pNode->EdgeList);
+
+		RVLQLIST_INIT(pEdgeList);
+	}
+
+	RGData.csNThr = 0.8;
+
+	int *vertexBuff = new int[iVertexArray.n];
+
+	nEdges = 0;
+
+	int *piVertexPut, *piVertexFetch, *vertexBuffEnd, *piVertex;
+
+	float *N_;
+	int iNode_;
+
+	for (iNode = 0; iNode < NodeArray.n; iNode++)
+	{
+		if (iNode == 92)
+			int debug = 0;
+
+		pNode = NodeArray.Element + iNode;
+
+		RGData.N = A_ + 3 * pNode->i;
+
+		piVertexFetch = piVertexPut = vertexBuff;
+
+		*(piVertexPut++) = pNode->iVertex;
+
+		vertexBuffEnd = RegionGrowing<VertexGraph, SURFEL::Vertex, SURFEL::VertexEdge, GRAPH::EdgePtr2<SURFEL::VertexEdge>, TGConnectNodesRGData,
+			ConnectNodesRG>(pVertexGraph, &RGData, piVertexFetch, piVertexPut);
+
+		for (piVertex = vertexBuff; piVertex < vertexBuffEnd; piVertex++)
+		{
+			iVertex = *piVertex;
+
+			RGData.mFlags[iVertex] &= ~0x02;
+
+			piVertexTGNodeList = iVertexTGNodeList + iVertex;
+
+			vertexTGNodeIdx = piVertexTGNodeList->pFirst;
+
+			while (vertexTGNodeIdx)
+			{
+				iNode_ = vertexTGNodeIdx->Idx;
+
+				if (iNode < iNode_)
+				{
+					pNode_ = NodeArray.Element + iNode_;
+
+					N_ = A_ + 3 * pNode_->i;
+
+					if (RVLDOTPRODUCT3(RGData.N, N_) >= RGData.csNThr)
+					{
+						pEdge = ConnectNodes<TGNode, TGEdge, GRAPH::EdgePtr2<TGEdge>>(iNode, iNode_, NodeArray, pMem);
+
+						nEdges++;
+					}
+				}
+					
+				vertexTGNodeIdx = vertexTGNodeIdx->pNext;
+			}
+		}
+	}	// for every TG node
+
 	// Free memory.
 
+	delete[] iVertexTGNodeMem;
+	delete[] iVertexTGNodeList;
+	delete[] RGData.mFlags;
+	delete[] vertexBuff;
 	delete[] A_;
+}
+
+int RECOG::ConnectNodesRG(
+	int iVertex,
+	int iParentVertex,
+	SURFEL::VertexEdge *pEdge,
+	VertexGraph *pVertexGraph,
+	TGConnectNodesRGData *pData)
+{
+	if (pData->mFlags[iVertex] != 0x01)
+		return 0;
+
+	float csN = RVLDOTPRODUCT3(pEdge->N, pData->N);
+
+	if (csN >= pData->csNThr)
+	{
+		pData->mFlags[iVertex] |= 0x02;
+
+		return 1;
+	}
+	else
+		return 0;
 }
 
 void TG::Match(
@@ -388,7 +527,8 @@ void TG::Save(
 	FILE *fp,
 	bool bSaveA)
 {
-	fprintf(fp, "%d\t%d\t%d\n", iObject, iVertexGraph, NodeArray.n);
+	fprintf(fp, "%d\t%d\t0\n", iObject, iVertexGraph);
+	fprintf(fp, "%d\t%d\t0\n", NodeArray.n, nEdges);
 
 	int i;
 
@@ -414,6 +554,29 @@ void TG::Save(
 		pNode = NodeArray.Element + i;
 
 		fprintf(fp, "%d\t%f\t%d\n", pNode->i, pNode->d, pNode->iVertex);
+	}
+
+	QList<GRAPH::EdgePtr2<TGEdge>> *pEdgeList;
+	GRAPH::EdgePtr2<TGEdge> *pEdgePtr;
+	int iNode, iNode_;
+
+	for (iNode = 0; iNode < NodeArray.n; iNode++)
+	{
+		pNode = NodeArray.Element + iNode;
+
+		pEdgeList = &(pNode->EdgeList);
+
+		pEdgePtr = pEdgeList->pFirst;
+
+		while (pEdgePtr)
+		{
+			iNode_ = RVLPCSEGMENT_GRAPH_GET_OPPOSITE_NODE(pEdgePtr);
+
+			if (iNode < iNode_)
+				fprintf(fp, "%d\t%d\t0\n", iNode, iNode_);
+
+			pEdgePtr = pEdgePtr->pNext;
+		}
 	}
 }
 

@@ -136,7 +136,7 @@ PSGM::PSGM()
 	bGnd = false;
 	bBoundingPlanes = false;
 
-	MTGSet.nodeSimilarityThr = 3.0f;
+	MTGSet.nodeSimilarityThr = 0.0f;
 	MTGSet.eLimit = 30.0f;
 
 	TemplateMatrix(MTGSet.A);
@@ -453,7 +453,7 @@ void PSGM::Interpret(
 
 		pTG->A = MTGSet.A;
 
-		pTG->Create(pSurfels, iVertexArray, R, t, &MTGSet);
+		pTG->Create(pVertexGraph, iVertexArray, R, t, &MTGSet, pSurfels);
 
 		delete[] iVertexArray.Element;
 

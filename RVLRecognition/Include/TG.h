@@ -32,6 +32,20 @@ namespace RVL
 			int iVertex;
 			float e;
 		};
+		
+		struct TGConnectNodesRGData
+		{
+			BYTE *mFlags;
+			float *N;
+			float csNThr;
+		};
+
+		int ConnectNodesRG(
+			int iVertex,
+			int iParentVertex,
+			SURFEL::VertexEdge *pEdge,
+			VertexGraph *pVertexGraph,
+			TGConnectNodesRGData *pData);
 
 		class TG : public Graph < TGNode, TGEdge, GRAPH::EdgePtr2<TGEdge> >
 		{
@@ -39,11 +53,12 @@ namespace RVL
 			TG();
 			virtual ~TG();
 			void Create(
-				SurfelGraph *pSurfels,
+				VertexGraph *pVertexGraph,
 				Array<int> iVertexArray,
 				float *R,
 				float *t,
-				void *vpSet);
+				void *vpSet,
+				SurfelGraph *pSurfels);
 			void Match(
 				SurfelGraph *pSurfels,
 				Array<int> iVertexArray,
@@ -73,6 +88,7 @@ namespace RVL
 			Array<QList<QLIST::Ptr<TGNode>>> descriptor;
 			int iObject;
 			int iVertexGraph;
+			int nEdges;
 		};
 	}
 }
