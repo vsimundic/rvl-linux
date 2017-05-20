@@ -16,6 +16,7 @@
 #include "VertexGraph.h"
 #include "TG.h"
 #include "TGSet.h"
+#include <Eigen\Eigenvalues>
 
 #define RVLTG_MATCH_DEBUG
 
@@ -371,6 +372,14 @@ void TG::Match(
 	Array<TGCorrespondence> &correspondences
 	)
 {
+	// parameters
+
+	int maxnIterations = 20;
+	float dOrientationThr = PI / 200.0f;
+	float dPositionThr = 1.0f;
+
+	///
+
 	TGSet *pSet = (TGSet *)vpSet;
 
 	VertexGraph *pVertexGraph = pSet->GetVertexGraph(this);
@@ -384,28 +393,372 @@ void TG::Match(
 
 	float *A_ = new float[3 * A.h];
 	float *PArray = new float[3 * iVertexArray.n];
+	correspondences.Element = new TGCorrespondence[NodeArray.n];
 
-	// A_ <- A * R'	
+	Array<TGCorrespondence> correspondences1, correspondences2;
 
-	RotateTemplate(R, A_);
+	correspondences1.Element = new TGCorrespondence[NodeArray.n];
+	correspondences1.n = 0;
 
-	// sR <- scale * R
+	correspondences2.Element = new TGCorrespondence[NodeArray.n];
+	correspondences2.n = 0;
 
-	float sR[9];
+	Array<TGCorrespondence> *pCorrespondences = &correspondences1;
+	Array<TGCorrespondence> *pPrevCorrespondences = &correspondences2;
 
-	RVLSCALEMX3X3(R, scale, sR);
-
-	float st[3];
-
-	RVLSCALE3VECTOR2(t, scale, st);
+	Array<TGCorrespondence> *pCorrespondancesTmp;
 
 	// Transform vertices to TG RF.
 
+	TransformVertices(pSurfels, iVertexArray, scale, R, t, PArray);
+
+	// main loop
+
+	int k = 0;
+
+	double Mqq[3 * 3], Mqt[3 * 3], Mtt[3 * 3];
+	double Mqq_[3 * 3], Mqt_[3 * 3], Mtt_[3 * 3];
+	float aq[3];
+	double bq[3], bt[3], bq_[3], bt_[3];
+	float dq[3], dt[3], u[3];
+	float q, lendt;
 	int j;
 	SURFEL::Vertex *pVertex;
 	int iVertex;
 	float V3Tmp[3];
 	float *P;
+	int i;
+	float *N, *N_;
+	QList<QLIST::Ptr<TGNode>> *pDescriptorBin;
+	TGNode *pNode, *pCorrespondingNode;
+	float d, eClosest, e, eAbsClosest, eAbs;
+	float dist, fTmp;
+	QLIST::Ptr<TGNode> *pNodePtr;
+	TGCorrespondence *pCorrespondence, *pPrevCorrespondence;
+	Eigen::MatrixXd M(6, 6);
+	Eigen::VectorXd b(6);
+	Eigen::VectorXd dw(6);
+	float dR[9], RNew[9];
+	
+	while (k < maxnIterations)
+	{
+		// A_ <- A * R'	
+
+		RotateTemplate(R, A_);
+
+		// Identify correspondences and compute score.
+
+		pCorrespondancesTmp = pCorrespondences;
+		pCorrespondences = pPrevCorrespondences;
+		pPrevCorrespondences = pCorrespondancesTmp;
+
+		TGCorrespondence *pCorrespondence = pCorrespondences->Element;
+
+		score = 0.0f;
+
+		for (j = 0; j < iVertexArray.n; j++)
+		{
+			iVertex = iVertexArray.Element[j];
+
+			pVertex = pSurfels->vertexArray.Element[iVertex];
+
+			if (pVertex->normalHull.n < 3)
+				continue;
+
+			P = PArray + 3 * j;
+
+			for (i = 0; i < A.h; i++)	// for every template normal
+			{
+				//if (i == 65)
+				//	int debug = 0;
+
+				N = A.Element + 3 * i;
+				N_ = A_ + 3 * i;
+
+				eAbsClosest = -1.0f;
+
+				pDescriptorBin = descriptor.Element + i;
+
+				pNodePtr = pDescriptorBin->pFirst;
+
+				while (pNodePtr)	// for every node in the descriptor bin
+				{
+					pNode = pNodePtr->ptr;
+
+					if (pVertex->type == pVertexGraph->NodeArray.Element[pNode->iVertex].type)
+					{
+						dist = pSurfels->DistanceFromNormalHull(pVertex->normalHull, N_);
+
+						if (dist <= 0.0f)
+						{
+							d = RVLDOTPRODUCT3(N, P);
+
+							e = pNode->d - d;
+
+							eAbs = RVLABS(e);
+
+							if (eAbsClosest < 0.0f || eAbs < eAbsClosest)
+							{
+								eClosest = e;
+
+								eAbsClosest = eAbs;
+
+								pCorrespondingNode = pNode;
+							}
+						}	// if the template normal is in the normal hull of the vertex 
+					}	// if the vertices are of the same type
+
+					pNodePtr = pNodePtr->pNext;
+				}	// for every node in the descriptor bin
+
+				if (eAbsClosest >= 0.0f && eAbsClosest <= pSet->eLimit)
+				{
+					pCorrespondence->pNode = pCorrespondingNode;
+					pCorrespondence->iVertex = j;
+					pCorrespondence->e = eClosest;
+					pCorrespondence++;
+
+					fTmp = eClosest / pSet->eLimit;
+
+					score += (1.0f - fTmp * fTmp);
+				}
+			}	// for every template normal
+		}	// for every vertex
+
+		pCorrespondences->n = pCorrespondence - pCorrespondences->Element;
+
+#ifdef RVLTG_MATCH_DEBUG
+		// Write matches to file.
+
+		FILE *fp = fopen("TG_match_error.txt", "w");
+
+		for (i = 0; i < 3; i++)
+			fprintf(fp, "%f\t%f\t%f\t%f\n", R[3 * i + 0], R[3 * i + 1], R[3 * i + 2], t[i]);
+
+		for (i = 0; i < pCorrespondences->n; i++)
+		{
+			pCorrespondence = pCorrespondences->Element + i;
+
+			fprintf(fp, "%d\t%d\t%d\t%f\n", pCorrespondence->pNode->i, pCorrespondence->pNode->j, iVertexArray.Element[pCorrespondence->iVertex],
+				pCorrespondence->e);
+		}
+
+		fclose(fp);
+#endif
+
+		// If there are no changes in correspondences, then stop the procedure.
+
+		if (pCorrespondences->n == pPrevCorrespondences->n)
+		{
+			pCorrespondence = pCorrespondences->Element;
+			pPrevCorrespondence = pPrevCorrespondences->Element;
+
+			for (i = 0; i < pCorrespondences->n; i++, pCorrespondence++, pPrevCorrespondence++)
+			{
+				if (pCorrespondence->pNode != pCorrespondence->pNode)
+					break;
+
+				if (pCorrespondence->iVertex != pPrevCorrespondence->iVertex)
+					break;
+			}
+				
+			if (i >= pCorrespondences->n)
+				break;
+		}
+
+		/// Compute the optimal pose.
+
+		do
+		{
+			RVLNULLMX3X3(Mqq);
+			RVLNULLMX3X3(Mqt);
+			RVLNULLMX3X3(Mtt);
+			RVLNULL3VECTOR(bq);
+			RVLNULL3VECTOR(bt);
+
+			for (i = 0; i < pCorrespondences->n; i++)
+			{
+				pCorrespondence = pCorrespondences->Element + i;
+
+				P = PArray + 3 * pCorrespondence->iVertex;
+
+				N = A.Element + 3 * pCorrespondence->pNode->i;
+
+				// aq <- P x N
+
+				RVLCROSSPRODUCT3(P, N, aq);
+
+				// M_ = [Mqq_  Mqt_] <- a * a',   where a = [aq', N']'
+				//      [Mqt_' Mtt_]
+
+				RVLVECTCOV3(aq, Mqq_);
+				RVLMULVECT3VECT3T(aq, N, Mqt_);
+				RVLVECTCOV3(N, Mtt_);
+
+				// b_ = [bq_', bt_']' <- a * e
+
+				e = pCorrespondence->e;
+
+				RVLSCALE3VECTOR(aq, e, bq_);
+				RVLSCALE3VECTOR(N, e, bt_);
+
+				// M <- M + M_
+
+				RVLSUMMX3X3UT(Mqq, Mqq_, Mqq);
+				RVLSUMMX3X3(Mqt, Mqt_, Mqt);
+				RVLSUMMX3X3UT(Mtt, Mtt_, Mtt);
+
+				// b <- b + b_
+
+				RVLSUM3VECTORS(bq, bq_, bq);
+				RVLSUM3VECTORS(bt, bt_, bt);
+			}
+
+			// dw = [dq' dt']' <- solve M * dw = b
+
+			M << RVLMXEL(Mqq, 3, 0, 0), RVLMXEL(Mqq, 3, 0, 1), RVLMXEL(Mqq, 3, 0, 2), RVLMXEL(Mqt, 3, 0, 0), RVLMXEL(Mqt, 3, 0, 1), RVLMXEL(Mqt, 3, 0, 2),
+				RVLMXEL(Mqq, 3, 0, 1), RVLMXEL(Mqq, 3, 1, 1), RVLMXEL(Mqq, 3, 1, 2), RVLMXEL(Mqt, 3, 1, 0), RVLMXEL(Mqt, 3, 1, 1), RVLMXEL(Mqt, 3, 1, 2),
+				RVLMXEL(Mqq, 3, 0, 2), RVLMXEL(Mqq, 3, 1, 2), RVLMXEL(Mqq, 3, 2, 2), RVLMXEL(Mqt, 3, 2, 0), RVLMXEL(Mqt, 3, 2, 1), RVLMXEL(Mqt, 3, 2, 2),
+				RVLMXEL(Mqt, 3, 0, 0), RVLMXEL(Mqt, 3, 1, 0), RVLMXEL(Mqt, 3, 2, 0), RVLMXEL(Mtt, 3, 0, 0), RVLMXEL(Mtt, 3, 0, 1), RVLMXEL(Mtt, 3, 0, 2),
+				RVLMXEL(Mqt, 3, 0, 1), RVLMXEL(Mqt, 3, 1, 1), RVLMXEL(Mqt, 3, 2, 1), RVLMXEL(Mtt, 3, 0, 1), RVLMXEL(Mtt, 3, 1, 1), RVLMXEL(Mtt, 3, 1, 2),
+				RVLMXEL(Mqt, 3, 0, 2), RVLMXEL(Mqt, 3, 1, 2), RVLMXEL(Mqt, 3, 2, 2), RVLMXEL(Mtt, 3, 0, 2), RVLMXEL(Mtt, 3, 1, 2), RVLMXEL(Mtt, 3, 2, 2);
+			b << bq[0], bq[1], bq[2], bt[0], bt[1], bt[2];
+			dw = M.colPivHouseholderQr().solve(b);
+			RVLCOPY3VECTOR(dw, dq);
+			dt[0] = dw[3]; dt[1] = dw[4]; dt[2] = dw[5];
+
+			// q = || dq ||
+
+			q = sqrt(RVLDOTPRODUCT3(dq, dq));
+
+			// u <- dq / || dq ||
+
+			RVLSCALE3VECTOR2(dq, q, u);
+
+			// dR <- Rot(u, q) (angle axis to rotation matrix)
+
+			AngleAxisToRot<float>(u, q, dR);
+
+			//RVLSKEW(dq, dR);
+			//dR[0] = dR[4] = dR[8] = 1.0f;
+
+			// R <- (dR * R')' = R * dR'
+
+			RVLMXMUL3X3T2(R, dR, RNew);
+			RVLCOPYMX3X3(RNew, R);
+
+			// t <- t - RNew * dt
+
+			RVLMULMX3X3VECT(RNew, dt, V3Tmp);
+			RVLDIF3VECTORS(t, V3Tmp, t);
+
+			// lendt <- || dt ||
+
+			lendt = sqrt(RVLDOTPRODUCT3(dt, dt));
+
+			// Transform vertices with new R and t
+
+			TransformVertices(pSurfels, iVertexArray, scale, R, t, PArray);
+
+#ifdef RVLTG_MATCH_DEBUG
+			// Compute new score
+
+			float score_ = 0.0f;
+			//float E = 0.0f;
+			//float E_ = 0.0f;
+
+			float PM[3];
+			float e_;
+
+			for (i = 0; i < pCorrespondences->n; i++)
+			{
+				pCorrespondence = pCorrespondences->Element + i;
+
+				P = PArray + 3 * pCorrespondence->iVertex;
+
+				N = A.Element + 3 * pCorrespondence->pNode->i;
+
+				d = RVLDOTPRODUCT3(N, P);
+
+				e = pCorrespondence->pNode->d - d;
+
+				fTmp = e / pSet->eLimit;
+
+				score_ += (1.0f - fTmp * fTmp);
+
+				pCorrespondence->e = e;
+
+				//P = PArray + 3 * pCorrespondence->iVertex;
+
+				//RVLCROSSPRODUCT3(P, N, aq);
+
+				//e_ = pCorrespondence->e - RVLDOTPRODUCT3(aq, dq) - RVLDOTPRODUCT3(N, dt);
+
+				//// M_ = [Mqq_  Mqt_] <- a * a',   where a = [aq', N']'
+				////      [Mqt_' Mtt_]
+
+				//RVLVECTCOV3(aq, Mqq_);
+				//RVLMULVECT3VECT3T(aq, N, Mqt_);
+				//RVLVECTCOV3(N, Mtt_);
+
+				//// b_ = [bq_', bt_']' <- a * e
+
+				//RVLSCALE3VECTOR(aq, pCorrespondence->e, bq_);
+				//RVLSCALE3VECTOR(N, pCorrespondence->e, bt_);
+
+				//RVLMULMX3X3TVECT(Mqt_, dq, V3Tmp)
+
+				//float e__2 = RVLCOV3DTRANSFTO1D(Mqq_, dq) + 2.0 * RVLDOTPRODUCT3(V3Tmp, dt) + RVLCOV3DTRANSFTO1D(Mtt_, dt);
+
+				//E += (pCorrespondence->e * pCorrespondence->e);
+				//E_ += (e_ * e_);
+
+				//int debug = 0;
+			}
+
+			//// E__ = dw' * M * dw - 2 * b' dw + E
+
+			//Eigen::VectorXd g = dw.transpose() * M * dw - 2.0 * b.transpose() * dw;
+
+			//double E__ = g[0] + E;
+
+			int debug = 0;
+#endif
+		} while (RVLABS(q) > dOrientationThr || RVLABS(lendt) > dPositionThr);
+
+		k++;
+	}	// main loop
+
+	// Free memory.
+
+	delete[] A_;
+	delete[] PArray;
+	delete[] correspondences1.Element;
+	delete[] correspondences2.Element;
+}
+
+void TG::TransformVertices(
+	SurfelGraph *pSurfels,
+	Array<int> iVertexArray,
+	float scale,
+	float *R,
+	float *t,
+	float *PArray)
+{
+	float sR[9];
+	float st[3];
+
+	// sR <- scale * R
+
+	RVLSCALEMX3X3(R, scale, sR);
+	RVLSCALE3VECTOR2(t, scale, st);
+
+	// Transform vertices to TG RF.
+
+	int j, iVertex;
+	SURFEL::Vertex *pVertex;
+	float *P;
+	float V3Tmp[3];
 
 	for (j = 0; j < iVertexArray.n; j++)
 	{
@@ -420,111 +773,6 @@ void TG::Match(
 
 		RVLINVTRANSF3(pVertex->P, sR, st, P, V3Tmp);
 	}
-
-	// Identify correspondences and compute score.
-
-	correspondences.Element = new TGCorrespondence[NodeArray.n];
-
-	TGCorrespondence *pCorrespondence = correspondences.Element;
-
-	score = 0.0f;
-
-	int i;
-	float *N, *N_;
-	QList<QLIST::Ptr<TGNode>> *pDescriptorBin;
-	TGNode *pNode, *pCorrespondingNode;
-	float d, eClosest, e, eAbsClosest, eAbs;
-	float dist, fTmp;
-	QLIST::Ptr<TGNode> *pNodePtr;
-
-	for (j = 0; j < iVertexArray.n; j++)
-	{
-		iVertex = iVertexArray.Element[j];
-
-		pVertex = pSurfels->vertexArray.Element[iVertex];
-
-		if (pVertex->normalHull.n < 3)
-			continue;
-
-		P = PArray + 3 * j;
-
-		for (i = 0; i < A.h; i++)	// for every template normal
-		{
-			//if (i == 65)
-			//	int debug = 0;
-
-			N = A.Element + 3 * i;
-			N_ = A_ + 3 * i;
-
-			eAbsClosest = -1.0f;
-
-			pDescriptorBin = descriptor.Element + i;
-
-			pNodePtr = pDescriptorBin->pFirst;
-
-			while (pNodePtr)	// for every node in the descriptor bin
-			{				
-				pNode = pNodePtr->ptr;
-
-				if (pVertex->type == pVertexGraph->NodeArray.Element[pNode->iVertex].type)
-				{
-					dist = pSurfels->DistanceFromNormalHull(pVertex->normalHull, N_);
-
-					if (dist <= 0.0f)
-					{
-						d = RVLDOTPRODUCT3(N, P);
-
-						e = d - pNode->d;
-
-						eAbs = RVLABS(e);
-
-						if (eAbsClosest < 0.0f || eAbs < eAbsClosest)
-						{
-							eClosest = e;
-
-							eAbsClosest = eAbs;
-
-							pCorrespondingNode = pNode;
-						}
-					}	// if the template normal is in the normal hull of the vertex 
-				}	// if the vertices are of the same type
-
-				pNodePtr = pNodePtr->pNext;
-			}	// for every node in the descriptor bin
-
-			if (eAbsClosest >= 0.0f && eAbsClosest <= pSet->eLimit)
-			{
-				pCorrespondence->pNode = pCorrespondingNode;
-				pCorrespondence->iVertex = iVertex;
-				pCorrespondence->e = eClosest;
-				pCorrespondence++;
-
-				fTmp = eClosest / pSet->eLimit;
-
-				score += (1.0f - fTmp * fTmp);
-			}
-		}	// for every template normal
-	}	// for every vertex
-
-	correspondences.n = pCorrespondence - correspondences.Element;
-
-#ifdef RVLTG_MATCH_DEBUG
-	FILE *fp = fopen("TG_match_error.txt", "w");
-
-	for (i = 0; i < correspondences.n; i++)
-	{
-		pCorrespondence = correspondences.Element + i;
-
-		fprintf(fp, "%d\t%d\t%d\t%f\n", pCorrespondence->pNode->i, pCorrespondence->pNode->j, pCorrespondence->iVertex, pCorrespondence->e);
-	}
-
-	fclose(fp);
-#endif
-
-	// Free memory.
-
-	delete[] A_;
-	delete[] PArray;
 }
 
 void TG::Save(

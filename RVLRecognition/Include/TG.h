@@ -69,6 +69,13 @@ namespace RVL
 				float &score,
 				Array<TGCorrespondence> &correspondences
 				);
+			void TransformVertices(
+				SurfelGraph *pSurfels,
+				Array<int> iVertexArray,
+				float scale,
+				float *R,
+				float *t, 
+				float *PArray);
 			void RotateTemplate(
 				float *R,
 				float *A_);

@@ -537,4 +537,24 @@ namespace RVL
 			fprintf(fp, "\n");
 		}
 	}
+
+	template <typename Type> void AngleAxisToRot(Type *k, Type q, Type *R)
+	{
+		Type cq = cos(q);
+		Type sq = sin(q);
+		Type cqcomp = 1.0 - cq;
+		Type kxy = k[0] * k[1] * cqcomp;
+		Type kyz = k[1] * k[2] * cqcomp;
+		Type kzx = k[2] * k[0] * cqcomp;
+
+		R[0] = k[0] * k[0] * cqcomp + cq;
+		R[1] = kxy - k[2] * sq;
+		R[2] = kzx + k[1] * sq;
+		R[3] = kxy + k[2] * sq;
+		R[4] = k[1] * k[1] * cqcomp + cq;
+		R[5] = kyz - k[0] * sq;
+		R[6] = kzx - k[1] * sq;
+		R[7] = kyz + k[0] * sq;
+		R[8] = k[2] * k[2] * cqcomp + cq;
+	}
 }
