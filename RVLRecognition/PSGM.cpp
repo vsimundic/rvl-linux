@@ -439,7 +439,9 @@ void PSGM::Interpret(
 		RVLUNITMX3(R);
 		RVLNULL3VECTOR(t);
 
-		pTG->iVertexGraph = pTG->iObject = pVertexGraph->idx;
+		pTG->iObject = iScene;
+
+		pTG->iVertexGraph = pVertexGraph->idx;
 
 		Array<int> iVertexArray;
 
@@ -453,7 +455,7 @@ void PSGM::Interpret(
 
 		pTG->A = MTGSet.A;
 
-		pTG->Create(pVertexGraph, iVertexArray, R, t, &MTGSet, pSurfels);
+		pTG->Create(pVertexGraph, iVertexArray, R, t, &MTGSet, pSurfels, true);
 
 		delete[] iVertexArray.Element;
 

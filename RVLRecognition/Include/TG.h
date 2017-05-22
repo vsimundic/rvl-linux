@@ -58,7 +58,8 @@ namespace RVL
 				float *R,
 				float *t,
 				void *vpSet,
-				SurfelGraph *pSurfels);
+				SurfelGraph *pSurfels,
+				bool bForceMaxdNodes = false);
 			void Match(
 				SurfelGraph *pSurfels,
 				Array<int> iVertexArray,

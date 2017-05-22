@@ -60,7 +60,8 @@ void TG::Create(
 	float *RIn,
 	float *tIn,
 	void *vpSet,
-	SurfelGraph *pSurfels)
+	SurfelGraph *pSurfels,
+	bool bForceMaxdNodes)
 {
 	TGSet *pSet = (TGSet *)vpSet;
 
@@ -81,6 +82,8 @@ void TG::Create(
 
 	RVLMEM_ALLOC_STRUCT_ARRAY(pMem, QList<QLIST::Ptr<TGNode>>, A.h, descriptor.Element);
 
+	float maxd = 0.0f;
+
 	int i, j;
 	SURFEL::Vertex *pVertex;
 	float dist;
@@ -90,10 +93,14 @@ void TG::Create(
 	QLIST::Ptr<TGNode> *pNodePtr, *pNodePtr_, *pNodePtr__;
 	float d;
 	int iVertex;
+	int iMaxdVertex;
+	bool bMaxdNodeAdded;
 
 	for (i = 0; i < A.h; i++)
 	{
 		N = A_ + 3 * i;
+
+		iMaxdVertex = -1;
 
 		pDescriptorBin = descriptor.Element + i;
 
@@ -108,15 +115,25 @@ void TG::Create(
 
 			pVertex = pVertexGraph->NodeArray.Element + iVertex;
 
+			d = RVLDOTPRODUCT3(N, pVertex->P);
+
+			if (bForceMaxdNodes)
+			{
+				if (iMaxdVertex < 0 || d > maxd)
+				{
+					iMaxdVertex = iVertex;
+					maxd = d;
+					bMaxdNodeAdded = false;
+				}
+			}
+
 			if (pVertex->normalHull.n < 3)
 				continue;
 
 			dist = pSurfels->DistanceFromNormalHull(pVertex->normalHull, N);
 
 			if (dist > 0.0f)
-				continue;
-
-			d = RVLDOTPRODUCT3(N, pVertex->P);
+				continue;			
 
 			pNodePtr_ = pDescriptorBin->pFirst;
 
@@ -141,6 +158,28 @@ void TG::Create(
 			pNode->d = d;
 			pNode->i = i;
 			pNode->iVertex = iVertex;
+
+			if (iVertex == iMaxdVertex)
+				bMaxdNodeAdded = true;
+		}
+		
+		if (bForceMaxdNodes && !bMaxdNodeAdded)
+		{			
+			RVLMEM_ALLOC_STRUCT(pMem, QLIST::Ptr<TGNode>, pNodePtr);
+
+			RVLMEM_ALLOC_STRUCT(pMem, TGNode, pNode);		// In order to optimize memory consuption, this should be allocated in a tempmorary memory.
+
+			pNodePtr->ptr = pNode;
+
+			pNodePtr_ = pDescriptorBin->pFirst;
+
+			pDescriptorBin->pFirst = pNodePtr;
+
+			pNodePtr->pNext = pNodePtr_;
+
+			pNode->d = maxd;
+			pNode->i = i;
+			pNode->iVertex = iMaxdVertex;
 		}
 	}
 
