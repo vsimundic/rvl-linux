@@ -285,6 +285,7 @@ namespace RVL
 		int edgeDepth;
 		bool *bVertexAssigned;
 		int *iVertexMem;
+		bool bContactEdgeVertices;
 	private:
 		unsigned char *nodeColor;
 		QLIST::Index *surfelVertexMem;

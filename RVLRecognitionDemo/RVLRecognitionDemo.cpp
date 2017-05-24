@@ -435,6 +435,8 @@ int main(int argc, char ** argv)
 
 			sceneSequence.Init(sceneSequenceFileName);
 
+			recognition.pSurfels->bContactEdgeVertices = true;
+
 			recognition.pECCVGT->Init(sceneSequence, GTFolder, modelsInDB);
 
 			//recognition.pECCVGT->SaveGTFile("D:\\ARP3D\\TUW_GT.txt");			

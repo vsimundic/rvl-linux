@@ -83,6 +83,9 @@ void VertexGraph::Create(SurfelGraph *pSurfels)
 	{
 		pVertex = NodeArray.Element + iVertex;
 
+		if (iVertex == 217)
+			int debug = 0;
+
 		for (i = 0; i < pVertex->iSurfelArray.n; i++)
 		{
 			iSurfel = pVertex->iSurfelArray.Element[i];

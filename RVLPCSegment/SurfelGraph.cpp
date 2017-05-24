@@ -88,6 +88,8 @@ SurfelGraph::SurfelGraph()
 	bVertexAssigned = NULL;
 	iVertexMem = NULL;
 
+	bContactEdgeVertices = false;
+
 	DisplayData.mode = RVLSURFEL_DISPLAY_MODE_SURFELS;
 	DisplayData.mouseRButtonDownUserFunction = NULL;
 	DisplayData.keyPressUserFunction = NULL;
@@ -1459,53 +1461,56 @@ void SurfelGraph::DetectVertices(
 
 									nVertices++;
 
-									// If pVertex->type == 1, then add one more vertex.
-
-									if (pVertex->type == 1 && nFeatures == 3)
+									if (bContactEdgeVertices)
 									{
-										for (i = 0; i < 3; i++)
-											if (bConvex[i])
-												break;
+										// If pVertex->type == 1, then add one more vertex.
 
-										N1 = pFeature_[i]->N;
-										N2 = pFeature_[(i + 1) % 3]->N;
-										N3 = pFeature_[(i + 2) % 3]->N;
-
-										c13 = RVLDOTPRODUCT3(N1, N3);
-										c23 = RVLDOTPRODUCT3(N2, N3);
-
-										if (RVLABS(c13) <= 0.87 && RVLABS(c23) <= 0.87)
+										if (pVertex->type == 1 && nFeatures == 3)
 										{
-											RVLMEM_ALLOC_STRUCT(pMem, Vertex, pVertex_);
+											for (i = 0; i < 3; i++)
+												if (bConvex[i])
+													break;
 
-											P_ = pVertex_->P;
+											N1 = pFeature_[i]->N;
+											N2 = pFeature_[(i + 1) % 3]->N;
+											N3 = pFeature_[(i + 2) % 3]->N;
 
-											RVLCOPY3VECTOR(P, P_, P_);
+											c13 = RVLDOTPRODUCT3(N1, N3);
+											c23 = RVLDOTPRODUCT3(N2, N3);
 
-											nVertexSurfelRelations += nFeatures;
+											if (RVLABS(c13) <= 0.87 && RVLABS(c23) <= 0.87)
+											{
+												RVLMEM_ALLOC_STRUCT(pMem, Vertex, pVertex_);
 
-											pVertex_->type = 3;
+												P_ = pVertex_->P;
 
-											pVertex_->iSurfelArray.n = nFeatures;
+												RVLCOPY3VECTOR(P, P_, P_);
 
-											RVLMEM_ALLOC_STRUCT_ARRAY(pMem, int, nFeatures, pVertex_->iSurfelArray.Element);
+												nVertexSurfelRelations += nFeatures;
 
-											memcpy(pVertex_->iSurfelArray.Element, pVertex->iSurfelArray.Element, nFeatures * sizeof(int));
+												pVertex_->type = 3;
 
-											pVertex_->normalHull.n = 0;
+												pVertex_->iSurfelArray.n = nFeatures;
 
-											RVLMEM_ALLOC_STRUCT_ARRAY(pMem, NormalHullElement, nFeatures, pVertex_->normalHull.Element);
+												RVLMEM_ALLOC_STRUCT_ARRAY(pMem, int, nFeatures, pVertex_->iSurfelArray.Element);
 
-											UpdateNormalHull(pVertex_->normalHull, N1);
-											UpdateNormalHull(pVertex_->normalHull, N2);
-											RVLNEGVECT3(N3, N3_);
-											UpdateNormalHull(pVertex_->normalHull, N3_);
+												memcpy(pVertex_->iSurfelArray.Element, pVertex->iSurfelArray.Element, nFeatures * sizeof(int));
 
-											RVLQLIST_ADD_ENTRY(pVertexList, pVertex_);
+												pVertex_->normalHull.n = 0;
 
-											nVertices++;
+												RVLMEM_ALLOC_STRUCT_ARRAY(pMem, NormalHullElement, nFeatures, pVertex_->normalHull.Element);
+
+												UpdateNormalHull(pVertex_->normalHull, N1);
+												UpdateNormalHull(pVertex_->normalHull, N2);
+												RVLNEGVECT3(N3, N3_);
+												UpdateNormalHull(pVertex_->normalHull, N3_);
+
+												RVLQLIST_ADD_ENTRY(pVertexList, pVertex_);
+
+												nVertices++;
+											}
 										}
-									}
+									}	// if (bContactEdgeVertices)
 								}
 
 							}	// if (iFeature__ != iFeature && iFeature__ != iFeature_)

@@ -269,6 +269,8 @@ void PSGM::Init(Mesh *pMesh_)
 
 	bGnd = false;
 	bBoundingPlanes = false;
+
+
 }
 
 void PSGM::Interpret(
@@ -387,6 +389,11 @@ void PSGM::Interpret(
 	}
 
 	//Vidovic
+	bool bNormalValidityTest_ = bNormalValidityTest;
+
+	if (mode == RVLRECOGNITION_MODE_TRAINING)
+		bNormalValidityTest = false;
+
 	pModelInstance = CTISet.CTI.pFirst;
 
 	while (pModelInstance)
@@ -397,6 +404,8 @@ void PSGM::Interpret(
 
 		pModelInstance = pModelInstance->pNext;
 	}
+
+	bNormalValidityTest = bNormalValidityTest_;
 
 	//Copy CTIs from Qlist to Array
 	CTISet.CopyCTIsToArray();
@@ -4425,7 +4434,7 @@ void PSGM::Match()
 	int startIdx = 0, endIdx = MCTISet.pCTI.n;
 
 	//for (iSCluster = 0; iSCluster < nClusters; iSCluster++)
-	iSCluster = 0;		// Only for debugging purpose!!!
+	iSCluster = 4;		// Only for debugging purpose!!!
 	{
 		printf("%d/%d", iSCluster + 1, nClusters);
 	
@@ -4851,6 +4860,10 @@ void PSGM::Match(
 
 void PSGM::MatchTGs()
 {
+	// Parameters.
+
+	int nBestMatches = 7;
+
 #ifdef RVLPSGM_MATCHTGS_CREATE_SCENE_TG
 	// Initialize memory storage.
 
@@ -4873,123 +4886,125 @@ void PSGM::MatchTGs()
 	pVertexGraph->Create(pSurfels);
 #endif
 
-	// Get match.
+	/// Compute Matching scores for the first nBestMatches best matches for every scene segment.
 
-	int iMatch = scoreMatchMatrix.Element[0].Element[0].idx;
-	RECOG::PSGM_::MatchInstance *pMatch = pCTImatchesArray.Element[iMatch];
-	int iSCTI = pCTImatchesArray.Element[iMatch]->iSCTI;
-	int iMCTI = pCTImatchesArray.Element[iMatch]->iMCTI;
+	int iSS, i;
 
-	RECOG::PSGM_::ModelInstance *pSCTI = CTISet.pCTI.Element[iSCTI];
-	RECOG::PSGM_::ModelInstance *pMCTI = MCTISet.pCTI.Element[iMCTI];
-
-	float RMS[9], tMS[3];
-	
-	MSTransformation(pMCTI, pSCTI, pMatch->tMatch, RMS, tMS);
-
-	float RSM[9], tSM[3];
-
-	RVLINVTRANSF3D(RMS, tMS, RSM, tSM);
-
-	// Get model TG.
-
-	RECOG::TG *pMTG;
-	int i;
-
-	for (i = 0; i < MTGSet.TGs.size(); i++)
+	//for (iSS = 0; iSS < scoreMatchMatrix.n; iSS++)
+	iSS = 4;
 	{
-		pMTG = MTGSet.TGs.at(i);
-
-		if (pMTG->iObject == pMCTI->iModel)
-			break;
-	}	
-
-	if (i < MTGSet.TGs.size())	// If there is a TG in MTGSet which corresponds to the model CTI
-	{
-		// Get vertex graph.
-
-		VertexGraph *pVG = MTGSet.GetVertexGraph(pMTG);
-
-		if (pVG)
+		for (i = 0; i < nBestMatches; i++)
 		{
-			// Determine model bounding box.
+			// Get match.
 
-			Box<float> boundingBox;
+			int iMatch = scoreMatchMatrix.Element[iSS].Element[i].idx;
+			RECOG::PSGM_::MatchInstance *pMatch = pCTImatchesArray.Element[iMatch];
+			int iSCTI = pCTImatchesArray.Element[iMatch]->iSCTI;
+			int iMCTI = pCTImatchesArray.Element[iMatch]->iMCTI;
 
-			if (pVG->BoundingBox(&boundingBox))
+			RECOG::PSGM_::ModelInstance *pSCTI = CTISet.pCTI.Element[iSCTI];
+			RECOG::PSGM_::ModelInstance *pMCTI = MCTISet.pCTI.Element[iMCTI];
+
+			float RMS[9], tMS[3];
+
+			MSTransformation(pMCTI, pSCTI, pMatch->tMatch, RMS, tMS);
+
+			float RSM[9], tSM[3];
+
+			RVLINVTRANSF3D(RMS, tMS, RSM, tSM);
+
+			// Get model TG.
+
+			RECOG::TG *pMTG = MTGSet.GetTG(pMCTI->iModel);
+
+			if (pMTG)	// If there is a TG in MTGSet which corresponds to the model CTI
 			{
-				// Expand boundingBox.
+				// Get vertex graph.
 
-				float boundingBoxExtension = 20.0f;
+				VertexGraph *pVG = MTGSet.GetVertexGraph(pMTG);
 
-				boundingBox.minx -= boundingBoxExtension;
-				boundingBox.maxx += boundingBoxExtension;
-				boundingBox.miny -= boundingBoxExtension;
-				boundingBox.maxy += boundingBoxExtension;
-				boundingBox.minz -= boundingBoxExtension;
-				boundingBox.maxz += boundingBoxExtension;
-
-				// iVertexArray <- scene vertices within boundingBox.
-
-				Array<int> iVertexArray;
-				
-				iVertexArray.Element = new int[pSurfels->vertexArray.n];
-
-				iVertexArray.n = 0;
-
-				int iVertex;
-				SURFEL::Vertex *pVertex;
-				float PS[3], PM[3];
-
-				for (iVertex = 0; iVertex < pSurfels->vertexArray.n; iVertex++)
+				if (pVG)
 				{
-					pVertex = pSurfels->vertexArray.Element[iVertex];
+					// Determine model bounding box.
 
-					RVLSCALE3VECTOR(pVertex->P, 1000.0f, PS);
+					Box<float> boundingBox;
 
-					RVLTRANSF3(PS, RSM, tSM, PM);
+					if (pVG->BoundingBox(&boundingBox))
+					{
+						// Expand boundingBox.
 
-					if (InBoundingBox<float>(&boundingBox, PM))
-						iVertexArray.Element[iVertexArray.n++] = iVertex;
-				}
+						float boundingBoxExtension = 20.0f;
+
+						boundingBox.minx -= boundingBoxExtension;
+						boundingBox.maxx += boundingBoxExtension;
+						boundingBox.miny -= boundingBoxExtension;
+						boundingBox.maxy += boundingBoxExtension;
+						boundingBox.minz -= boundingBoxExtension;
+						boundingBox.maxz += boundingBoxExtension;
+
+						// iVertexArray <- scene vertices within boundingBox.
+
+						Array<int> iVertexArray;
+
+						iVertexArray.Element = new int[pSurfels->vertexArray.n];
+
+						iVertexArray.n = 0;
+
+						int iVertex;
+						SURFEL::Vertex *pVertex;
+						float PS[3], PM[3];
+
+						for (iVertex = 0; iVertex < pSurfels->vertexArray.n; iVertex++)
+						{
+							pVertex = pSurfels->vertexArray.Element[iVertex];
+
+							RVLSCALE3VECTOR(pVertex->P, 1000.0f, PS);
+
+							RVLTRANSF3(PS, RSM, tSM, PM);
+
+							if (InBoundingBox<float>(&boundingBox, PM))
+								iVertexArray.Element[iVertexArray.n++] = iVertex;
+						}
 
 #ifdef RVLPSGM_MATCHTGS_CREATE_SCENE_TG
-				// Create TG from the vertices in boundingBox.
+						// Create TG from the vertices in boundingBox.
 
-				RECOG::TG *pSTG = new RECOG::TG;
+						RECOG::TG *pSTG = new RECOG::TG;
 
-				pSTG->A = STGSet.A;
+						pSTG->A = STGSet.A;
 
-				pSTG->iVertexGraph = pSTG->iObject = pVertexGraph->idx;
+						pSTG->iVertexGraph = pVertexGraph->idx;
 
-				pSTG->Create(pVertexGraph, iVertexArray, RMS, tMS, &STGSet, pSurfels);
+						pSTG->iObject = pMTG->iObject;
 
-				STGSet.TGs.push_back(pSTG);
+						pSTG->Create(pVertexGraph, iVertexArray, RMS, tMS, &STGSet, pSurfels);
 
-				STGSet.Save("sceneTG.tgr");
+						STGSet.TGs.push_back(pSTG);
 #endif
 
-				// Match pMTG to vertices in iVertexArray.
+						// Match pMTG to vertices in iVertexArray.
 
-				float score;
-				Array<RECOG::TGCorrespondence> correspondences;
+						float score;
+						Array<RECOG::TGCorrespondence> correspondences;
 
-				pMTG->Match(pSurfels, iVertexArray, 1000.0f, &MTGSet, RMS, tMS, score, correspondences);
+						pMTG->Match(pSurfels, iVertexArray, 1000.0f, &MTGSet, RMS, tMS, score, correspondences);
 
-				// Free memory.
+						// Free memory.
 
-				delete[] correspondences.Element;
-				delete[] iVertexArray.Element;	
-#ifdef RVLPSGM_MATCHTGS_CREATE_SCENE_TG
-				mem.Clear();
-				delete pSTG;
-#endif							
-			}	// If there is at least one point in the vertex graph
-		}	// If pMTG has a vertex graph
-	}	// If there is a TG in MTGSet which corresponds to the model CTI
+						delete[] correspondences.Element;
+						delete[] iVertexArray.Element;				
+					}	// If there is at least one point in the vertex graph
+				}	// If pMTG has a vertex graph
+			}	// If there is a TG in MTGSet which corresponds to the model CTI
+		}	// for the first nBestMatches
+	}	// for every scene segment
 
 #ifdef RVLPSGM_MATCHTGS_CREATE_SCENE_TG
-	delete pVertexGraph;
+	STGSet.Save("sceneTG.tgr");
+
+	STGSet.Clear();
+
+	mem.Clear();
 #endif
 }
 

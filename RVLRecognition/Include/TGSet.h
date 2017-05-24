@@ -14,6 +14,7 @@ namespace RVL
 			void Save(char *fileName);
 			void Load(char *fileName);
 			VertexGraph *GetVertexGraph(TG *pTG);
+			TG *GetTG(int ID);
 
 		public:
 			CRVLMem *pMem;

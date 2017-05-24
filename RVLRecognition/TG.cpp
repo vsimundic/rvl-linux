@@ -414,6 +414,7 @@ void TG::Match(
 	// parameters
 
 	int maxnIterations = 20;
+	int maxnOptimizationIterations = 5;
 	float dOrientationThr = PI / 200.0f;
 	float dPositionThr = 1.0f;
 
@@ -478,8 +479,10 @@ void TG::Match(
 	Eigen::VectorXd b(6);
 	Eigen::VectorXd dw(6);
 	float dR[9], RNew[9];
+	bool bCompleted;
+	int l;
 	
-	while (k < maxnIterations)
+	while (true)
 	{
 		// A_ <- A * R'	
 
@@ -566,28 +569,30 @@ void TG::Match(
 
 		pCorrespondences->n = pCorrespondence - pCorrespondences->Element;
 
-#ifdef RVLTG_MATCH_DEBUG
-		// Write matches to file.
-
-		FILE *fp = fopen("TG_match_error.txt", "w");
-
-		for (i = 0; i < 3; i++)
-			fprintf(fp, "%f\t%f\t%f\t%f\n", R[3 * i + 0], R[3 * i + 1], R[3 * i + 2], t[i]);
-
-		for (i = 0; i < pCorrespondences->n; i++)
-		{
-			pCorrespondence = pCorrespondences->Element + i;
-
-			fprintf(fp, "%d\t%d\t%d\t%f\n", pCorrespondence->pNode->i, pCorrespondence->pNode->j, iVertexArray.Element[pCorrespondence->iVertex],
-				pCorrespondence->e);
-		}
-
-		fclose(fp);
-#endif
+//#ifdef RVLTG_MATCH_DEBUG
+//		// Write matches to file.
+//
+//		FILE *fp = fopen("TG_match_error.txt", "w");
+//
+//		for (i = 0; i < 3; i++)
+//			fprintf(fp, "%f\t%f\t%f\t%f\n", R[3 * i + 0], R[3 * i + 1], R[3 * i + 2], t[i]);
+//
+//		for (i = 0; i < pCorrespondences->n; i++)
+//		{
+//			pCorrespondence = pCorrespondences->Element + i;
+//
+//			fprintf(fp, "%d\t%d\t%d\t%f\n", pCorrespondence->pNode->i, pCorrespondence->pNode->j, iVertexArray.Element[pCorrespondence->iVertex],
+//				pCorrespondence->e);
+//		}
+//
+//		fclose(fp);
+//#endif
 
 		// If there are no changes in correspondences, then stop the procedure.
 
-		if (pCorrespondences->n == pPrevCorrespondences->n)
+		if (k >= maxnIterations)
+			bCompleted = true;
+		else if (pCorrespondences->n == pPrevCorrespondences->n)
 		{
 			pCorrespondence = pCorrespondences->Element;
 			pPrevCorrespondence = pPrevCorrespondences->Element;
@@ -601,11 +606,36 @@ void TG::Match(
 					break;
 			}
 				
-			if (i >= pCorrespondences->n)
-				break;
+			bCompleted = (i >= pCorrespondences->n);
+		}
+
+		if (bCompleted)
+		{
+#ifdef RVLTG_MATCH_DEBUG
+			// Write matches to file.
+
+			FILE *fp = fopen("TG_match_error.txt", "w");
+
+			for (i = 0; i < 3; i++)
+				fprintf(fp, "%f\t%f\t%f\t%f\n", R[3 * i + 0], R[3 * i + 1], R[3 * i + 2], t[i]);
+
+			for (i = 0; i < pCorrespondences->n; i++)
+			{
+				pCorrespondence = pCorrespondences->Element + i;
+
+				fprintf(fp, "%d\t%d\t%d\t%f\n", pCorrespondence->pNode->i, pCorrespondence->pNode->j, iVertexArray.Element[pCorrespondence->iVertex],
+					pCorrespondence->e);
+			}
+
+			fclose(fp);
+#endif
+
+			break;
 		}
 
 		/// Compute the optimal pose.
+
+		l = 0;
 
 		do
 		{
@@ -699,7 +729,6 @@ void TG::Match(
 
 			TransformVertices(pSurfels, iVertexArray, scale, R, t, PArray);
 
-#ifdef RVLTG_MATCH_DEBUG
 			// Compute new score
 
 			float score_ = 0.0f;
@@ -761,9 +790,8 @@ void TG::Match(
 
 			//double E__ = g[0] + E;
 
-			int debug = 0;
-#endif
-		} while (RVLABS(q) > dOrientationThr || RVLABS(lendt) > dPositionThr);
+			l++;
+		} while ((RVLABS(q) > dOrientationThr || RVLABS(lendt) > dPositionThr) && l < maxnOptimizationIterations);
 
 		k++;
 	}	// main loop

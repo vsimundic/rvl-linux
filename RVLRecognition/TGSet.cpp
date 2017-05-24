@@ -40,6 +40,8 @@ TGSet::~TGSet()
 	//RVL_DELETE_ARRAY(mVertexFlags);
 	//RVL_DELETE_ARRAY(convexTemplate.Element);
 	RVL_DELETE_ARRAY(A.Element);
+
+	Clear();
 }
 
 void TGSet::Init(SurfelGraph *pSurfels)
@@ -51,8 +53,6 @@ void TGSet::Init(SurfelGraph *pSurfels)
 
 void TGSet::Clear()
 {
-	TGs.clear();
-
 	int i;
 	TG *pTG;
 
@@ -63,6 +63,8 @@ void TGSet::Clear()
 		delete pTG;
 	}
 
+	TGs.clear();
+
 	VertexGraph *pVertexGraph;
 
 	for (i = 0; i < vertexGraphs.size(); i++)
@@ -71,6 +73,8 @@ void TGSet::Clear()
 
 		delete pVertexGraph;
 	}
+
+	vertexGraphs.clear();
 }
 
 void TGSet::Save(char *fileName)
@@ -231,6 +235,22 @@ VertexGraph *TGSet::GetVertexGraph(TG *pTG)
 
 		if (pVG->idx == pTG->iVertexGraph)
 			return pVG;
+	}
+
+	return NULL;
+}
+
+TG *TGSet::GetTG(int ID)
+{
+	int i;
+	TG *pTG;
+
+	for (i = 0; i < TGs.size(); i++)
+	{
+		pTG = TGs.at(i);
+
+		if (pTG->iObject == ID)
+			return pTG;
 	}
 
 	return NULL;
