@@ -65,10 +65,13 @@ namespace RVL
 				Array<int> iVertexArray,
 				float scale,
 				void *vpSet,
-				float *R,
-				float *t,
+				float *RIn,
+				float *tIn,
+				bool bConvexHullAllignment,
 				float &score,
-				Array<TGCorrespondence> &correspondences
+				Array<TGCorrespondence> &correspondences,
+				float *ROut,
+				float *tOut
 				);
 			void TransformVertices(
 				SurfelGraph *pSurfels,

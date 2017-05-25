@@ -137,7 +137,7 @@ PSGM::PSGM()
 	bBoundingPlanes = false;
 
 	MTGSet.nodeSimilarityThr = 0.0f;
-	MTGSet.eLimit = 30.0f;
+	MTGSet.eLimit = 20.0f;
 
 	TemplateMatrix(MTGSet.A);
 
@@ -4434,7 +4434,7 @@ void PSGM::Match()
 	int startIdx = 0, endIdx = MCTISet.pCTI.n;
 
 	//for (iSCluster = 0; iSCluster < nClusters; iSCluster++)
-	iSCluster = 4;		// Only for debugging purpose!!!
+	iSCluster = 5;		// Only for debugging purpose!!!
 	{
 		printf("%d/%d", iSCluster + 1, nClusters);
 	
@@ -4862,7 +4862,7 @@ void PSGM::MatchTGs()
 {
 	// Parameters.
 
-	int nBestMatches = 7;
+	int nBestMatches = 20;
 
 #ifdef RVLPSGM_MATCHTGS_CREATE_SCENE_TG
 	// Initialize memory storage.
@@ -4888,10 +4888,24 @@ void PSGM::MatchTGs()
 
 	/// Compute Matching scores for the first nBestMatches best matches for every scene segment.
 
-	int iSS, i;
+	Array<int> iVertexArray;
+
+	iVertexArray.Element = new int[pSurfels->vertexArray.n];
+
+	bool *bAlreadyInArray = new bool[pSurfels->vertexArray.n];
+
+	memset(bAlreadyInArray, 0, pSurfels->vertexArray.n * sizeof(bool));
+
+	int iSS, iSS_, i, j, iVertex;
+	Box<float> MBoundingBox, SBoundingBox, boundingBoxIntersection;
+	float RMS[9], tMS[3];
+	float RMS_[9], tMS_[3];
+	float RSM[9], tSM[3];
+	PSGM_::Cluster *pSSegment;
+	float boundingBoxOverlap;
 
 	//for (iSS = 0; iSS < scoreMatchMatrix.n; iSS++)
-	iSS = 4;
+	iSS = 5;
 	{
 		for (i = 0; i < nBestMatches; i++)
 		{
@@ -4905,11 +4919,7 @@ void PSGM::MatchTGs()
 			RECOG::PSGM_::ModelInstance *pSCTI = CTISet.pCTI.Element[iSCTI];
 			RECOG::PSGM_::ModelInstance *pMCTI = MCTISet.pCTI.Element[iMCTI];
 
-			float RMS[9], tMS[3];
-
 			MSTransformation(pMCTI, pSCTI, pMatch->tMatch, RMS, tMS);
-
-			float RSM[9], tSM[3];
 
 			RVLINVTRANSF3D(RMS, tMS, RSM, tSM);
 
@@ -4927,47 +4937,75 @@ void PSGM::MatchTGs()
 				{
 					// Determine model bounding box.
 
-					Box<float> boundingBox;
-
-					if (pVG->BoundingBox(&boundingBox))
+					if (pVG->BoundingBox(&MBoundingBox))
 					{
 						// Expand boundingBox.
 
-						float boundingBoxExtension = 20.0f;
+						//float boundingBoxExtension = 20.0f;
 
-						boundingBox.minx -= boundingBoxExtension;
-						boundingBox.maxx += boundingBoxExtension;
-						boundingBox.miny -= boundingBoxExtension;
-						boundingBox.maxy += boundingBoxExtension;
-						boundingBox.minz -= boundingBoxExtension;
-						boundingBox.maxz += boundingBoxExtension;
+						//boundingBox.minx -= boundingBoxExtension;
+						//boundingBox.maxx += boundingBoxExtension;
+						//boundingBox.miny -= boundingBoxExtension;
+						//boundingBox.maxy += boundingBoxExtension;
+						//boundingBox.minz -= boundingBoxExtension;
+						//boundingBox.maxz += boundingBoxExtension;
 
 						// iVertexArray <- scene vertices within boundingBox.
 
-						Array<int> iVertexArray;
+						//iVertexArray.n = 0;
 
-						iVertexArray.Element = new int[pSurfels->vertexArray.n];
+						//SURFEL::Vertex *pVertex;
+						//float PS[3], PM[3];
+
+						//for (iVertex = 0; iVertex < pSurfels->vertexArray.n; iVertex++)
+						//{
+						//	pVertex = pSurfels->vertexArray.Element[iVertex];
+
+						//	RVLSCALE3VECTOR(pVertex->P, 1000.0f, PS);
+
+						//	RVLTRANSF3(PS, RSM, tSM, PM);
+
+						//	if (InBoundingBox<float>(&boundingBox, PM))
+						//		iVertexArray.Element[iVertexArray.n++] = iVertex;
+						//}
+
+						// iVertexArray <- vertices of the clusters which overlap significantly with MBoundingBox
 
 						iVertexArray.n = 0;
 
-						int iVertex;
-						SURFEL::Vertex *pVertex;
-						float PS[3], PM[3];
-
-						for (iVertex = 0; iVertex < pSurfels->vertexArray.n; iVertex++)
+						for (iSS_ = 0; iSS_ < clusters.n; iSS_++)
 						{
-							pVertex = pSurfels->vertexArray.Element[iVertex];
+							pSSegment = clusters.Element[iSS_];
 
-							RVLSCALE3VECTOR(pVertex->P, 1000.0f, PS);
+							if (pSurfels->BoundingBox(pSSegment->iVertexArray, RSM, tSM, 1000.0f, SBoundingBox))
+							{
+								if (BoxIntersection<float>(&MBoundingBox, &SBoundingBox, &boundingBoxIntersection))
+								{
+									boundingBoxOverlap = BoxVolume<float>(&boundingBoxIntersection) / BoxVolume<float>(&SBoundingBox);
 
-							RVLTRANSF3(PS, RSM, tSM, PM);
+									if (boundingBoxOverlap > 0.5f)
+									{
+										for (j = 0; j < pSSegment->iVertexArray.n; j++)
+										{
+											iVertex = pSSegment->iVertexArray.Element[j];
 
-							if (InBoundingBox<float>(&boundingBox, PM))
-								iVertexArray.Element[iVertexArray.n++] = iVertex;
+											if (!bAlreadyInArray[iVertex])
+											{
+												iVertexArray.Element[iVertexArray.n++] = iVertex;
+
+												bAlreadyInArray[iVertex] = true;
+											}
+										}
+									}
+								}
+							}
 						}
 
+						for (j = 0; j < iVertexArray.n; j++)
+							bAlreadyInArray[iVertexArray.Element[j]] = false;
+						
 #ifdef RVLPSGM_MATCHTGS_CREATE_SCENE_TG
-						// Create TG from the vertices in boundingBox.
+						// Create TG from the vertices in MBoundingBox.
 
 						RECOG::TG *pSTG = new RECOG::TG;
 
@@ -4987,17 +5025,19 @@ void PSGM::MatchTGs()
 						float score;
 						Array<RECOG::TGCorrespondence> correspondences;
 
-						pMTG->Match(pSurfels, iVertexArray, 1000.0f, &MTGSet, RMS, tMS, score, correspondences);
+						pMTG->Match(pSurfels, iVertexArray, 1000.0f, &MTGSet, RMS, tMS, true, score, correspondences, RMS_, tMS_);
 
 						// Free memory.
 
-						delete[] correspondences.Element;
-						delete[] iVertexArray.Element;				
+						RVL_DELETE_ARRAY(correspondences.Element);
 					}	// If there is at least one point in the vertex graph
 				}	// If pMTG has a vertex graph
 			}	// If there is a TG in MTGSet which corresponds to the model CTI
 		}	// for the first nBestMatches
 	}	// for every scene segment
+
+	delete[] iVertexArray.Element;
+	delete[] bAlreadyInArray;
 
 #ifdef RVLPSGM_MATCHTGS_CREATE_SCENE_TG
 	STGSet.Save("sceneTG.tgr");

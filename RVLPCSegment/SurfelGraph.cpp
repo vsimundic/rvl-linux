@@ -2295,6 +2295,42 @@ void SurfelGraph::GetVertices(
 		bVertexAssigned[piVertexArray->Element[i]] = false;
 }
 
+bool SurfelGraph::BoundingBox(
+	Array<int> iVertexArray,
+	float *R,
+	float *t,
+	float scale,
+	Box<float> &boundingBox)
+{
+	if (iVertexArray.n == 0)
+		return false;
+
+	SURFEL::Vertex *pVertex = vertexArray.Element[iVertexArray.Element[0]];
+
+	float P[3], P_[3];
+
+	RVLSCALE3VECTOR(pVertex->P, scale, P_);
+
+	RVLTRANSF3(P_, R, t, P);
+
+	InitBoundingBox<float>(&boundingBox, P);
+
+	int i;
+
+	for (i = 1; i < iVertexArray.n; i++)
+	{
+		pVertex = vertexArray.Element[iVertexArray.Element[i]];
+
+		RVLSCALE3VECTOR(pVertex->P, scale, P_);
+
+		RVLTRANSF3(P_, R, t, P);
+
+		UpdateBoundingBox<float>(&boundingBox, P);
+	}
+
+	return true;
+}
+
 void SurfelGraph::NodeColors(unsigned char *SelectionColor)
 {
 	int SelectionColor_[3];

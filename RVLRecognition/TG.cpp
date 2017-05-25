@@ -322,8 +322,8 @@ void TG::Create(
 
 	for (iNode = 0; iNode < NodeArray.n; iNode++)
 	{
-		//if (iNode == 92)
-		//	int debug = 0;
+		if (iNode == 19)
+			int debug = 0;
 
 		pNode = NodeArray.Element + iNode;
 
@@ -332,6 +332,8 @@ void TG::Create(
 		piVertexFetch = piVertexPut = vertexBuff;
 
 		*(piVertexPut++) = pNode->iVertex;
+
+		RGData.mFlags[pNode->iVertex] |= 0x02;
 
 		vertexBuffEnd = RegionGrowing<VertexGraph, SURFEL::Vertex, SURFEL::VertexEdge, GRAPH::EdgePtr2<SURFEL::VertexEdge>, TGConnectNodesRGData,
 			ConnectNodesRG>(pVertexGraph, &RGData, piVertexFetch, piVertexPut);
@@ -407,10 +409,27 @@ void TG::Match(
 	void *vpSet,
 	float *RIn,
 	float *tIn,
+	bool bConvexHullAllignment,
 	float &score,
-	Array<TGCorrespondence> &correspondences
+	Array<TGCorrespondence> &correspondences,
+	float *R,
+	float *t
 	)
 {
+	RVLCOPYMX3X3(RIn, R);
+	RVLCOPY3VECTOR(tIn, t);
+
+	if (iVertexArray.n == 0)
+	{
+		score = 0.0f;
+
+		correspondences.n = 0;
+
+		correspondences.Element = NULL;
+
+		return;
+	}
+
 	// parameters
 
 	int maxnIterations = 20;
@@ -423,11 +442,6 @@ void TG::Match(
 	TGSet *pSet = (TGSet *)vpSet;
 
 	VertexGraph *pVertexGraph = pSet->GetVertexGraph(this);
-
-	float R[9], t[3];
-
-	RVLCOPYMX3X3(RIn, R);
-	RVLCOPY3VECTOR(tIn, t);
 
 	// Allocate arrays.
 
@@ -456,6 +470,10 @@ void TG::Match(
 
 	int k = 0;
 
+	bool bCompleted = false;
+
+	float dmax = 0.0f;
+
 	double Mqq[3 * 3], Mqt[3 * 3], Mtt[3 * 3];
 	double Mqq_[3 * 3], Mqt_[3 * 3], Mtt_[3 * 3];
 	float aq[3];
@@ -479,7 +497,6 @@ void TG::Match(
 	Eigen::VectorXd b(6);
 	Eigen::VectorXd dw(6);
 	float dR[9], RNew[9];
-	bool bCompleted;
 	int l;
 	
 	while (true)
@@ -498,74 +515,123 @@ void TG::Match(
 
 		score = 0.0f;
 
-		for (j = 0; j < iVertexArray.n; j++)
+		if (bConvexHullAllignment)
 		{
-			iVertex = iVertexArray.Element[j];
-
-			pVertex = pSurfels->vertexArray.Element[iVertex];
-
-			if (pVertex->normalHull.n < 3)
-				continue;
-
-			P = PArray + 3 * j;
-
 			for (i = 0; i < A.h; i++)	// for every template normal
 			{
-				//if (i == 65)
-				//	int debug = 0;
-
 				N = A.Element + 3 * i;
 				N_ = A_ + 3 * i;
 
-				eAbsClosest = -1.0f;
-
 				pDescriptorBin = descriptor.Element + i;
 
-				pNodePtr = pDescriptorBin->pFirst;
+				pCorrespondence->iVertex = -1;
 
-				while (pNodePtr)	// for every node in the descriptor bin
+				pNode = pDescriptorBin->pFirst->ptr;
+
+				for (j = 0; j < iVertexArray.n; j++)		// for every vertex in iVertexArray
 				{
-					pNode = pNodePtr->ptr;
+					iVertex = iVertexArray.Element[j];
 
-					if (pVertex->type == pVertexGraph->NodeArray.Element[pNode->iVertex].type)
+					pVertex = pSurfels->vertexArray.Element[iVertex];
+
+					P = PArray + 3 * j;
+
+					d = RVLDOTPRODUCT3(N, P);
+
+					if (pCorrespondence->iVertex < 0 || d > dmax)
 					{
-						dist = pSurfels->DistanceFromNormalHull(pVertex->normalHull, N_);
+						dmax = d;
 
-						if (dist <= 0.0f)
-						{
-							d = RVLDOTPRODUCT3(N, P);
+						pCorrespondence->iVertex = j;
+					}
+				}	// for every vertex in iVertexArray
 
-							e = pNode->d - d;
+				pVertex = pSurfels->vertexArray.Element[pCorrespondence->iVertex];
 
-							eAbs = RVLABS(e);
-
-							if (eAbsClosest < 0.0f || eAbs < eAbsClosest)
-							{
-								eClosest = e;
-
-								eAbsClosest = eAbs;
-
-								pCorrespondingNode = pNode;
-							}
-						}	// if the template normal is in the normal hull of the vertex 
-					}	// if the vertices are of the same type
-
-					pNodePtr = pNodePtr->pNext;
-				}	// for every node in the descriptor bin
-
-				if (eAbsClosest >= 0.0f && eAbsClosest <= pSet->eLimit)
+				if (RVLDOTPRODUCT3(pVertex->P, N_) < 0.0f)
 				{
-					pCorrespondence->pNode = pCorrespondingNode;
-					pCorrespondence->iVertex = j;
-					pCorrespondence->e = eClosest;
-					pCorrespondence++;
+					pCorrespondence->pNode = pNode;
+					pCorrespondence->e = pNode->d - dmax;
 
-					fTmp = eClosest / pSet->eLimit;
+					fTmp = pCorrespondence->e / pSet->eLimit;
 
 					score += (1.0f - fTmp * fTmp);
+					
+					pCorrespondence++;
 				}
 			}	// for every template normal
-		}	// for every vertex
+		}	// if (bConvexHullAllignment)
+		else
+		{
+			for (j = 0; j < iVertexArray.n; j++)	// for every vertex in iVertexArray
+			{
+				iVertex = iVertexArray.Element[j];
+
+				pVertex = pSurfels->vertexArray.Element[iVertex];
+
+				if (pVertex->normalHull.n < 3)
+					continue;
+
+				P = PArray + 3 * j;
+
+				for (i = 0; i < A.h; i++)	// for every template normal
+				{
+					//if (i == 65)
+					//	int debug = 0;
+
+					N = A.Element + 3 * i;
+					N_ = A_ + 3 * i;
+
+					eAbsClosest = -1.0f;
+
+					pDescriptorBin = descriptor.Element + i;
+
+					pNodePtr = pDescriptorBin->pFirst;
+
+					while (pNodePtr)	// for every node in the descriptor bin
+					{
+						pNode = pNodePtr->ptr;
+
+						if (pVertex->type == pVertexGraph->NodeArray.Element[pNode->iVertex].type)
+						{
+							dist = pSurfels->DistanceFromNormalHull(pVertex->normalHull, N_);
+
+							if (dist <= 0.0f)
+							{
+								d = RVLDOTPRODUCT3(N, P);
+
+								e = pNode->d - d;
+
+								eAbs = RVLABS(e);
+
+								if (eAbsClosest < 0.0f || eAbs < eAbsClosest)
+								{
+									eClosest = e;
+
+									eAbsClosest = eAbs;
+
+									pCorrespondingNode = pNode;
+								}
+							}	// if the template normal is in the normal hull of the vertex 
+						}	// if the vertices are of the same type
+
+						pNodePtr = pNodePtr->pNext;
+					}	// for every node in the descriptor bin
+
+					if (eAbsClosest >= 0.0f && eAbsClosest <= pSet->eLimit)
+					{
+						pCorrespondence->pNode = pCorrespondingNode;
+						pCorrespondence->iVertex = j;
+						pCorrespondence->e = eClosest;
+						pCorrespondence++;
+
+						fTmp = eClosest / pSet->eLimit;
+
+						score += (1.0f - fTmp * fTmp);
+					}
+				}	// for every template normal
+			}	// for every vertex
+		}
 
 		pCorrespondences->n = pCorrespondence - pCorrespondences->Element;
 
@@ -796,6 +862,12 @@ void TG::Match(
 		k++;
 	}	// main loop
 
+	// Copy pCorrespondences to correspondences.
+
+	correspondences.n = pCorrespondences->n;
+
+	memcpy(correspondences.Element, pCorrespondences->Element, pCorrespondences->n * sizeof(TGCorrespondence));
+
 	// Free memory.
 
 	delete[] A_;
@@ -833,8 +905,8 @@ void TG::TransformVertices(
 
 		pVertex = pSurfels->vertexArray.Element[iVertex];
 
-		if (pVertex->normalHull.n < 3)
-			continue;
+		//if (pVertex->normalHull.n < 3)
+		//	continue;
 
 		P = PArray + 3 * j;
 

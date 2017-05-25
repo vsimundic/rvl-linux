@@ -121,6 +121,39 @@ namespace RVL
 			P[1] >= pBox->miny && P[1] <= pBox->maxy && 
 			P[2] >= pBox->minz && P[2] <= pBox->maxz);
 	}
+
+	template <typename T>
+	bool BoxIntersection(
+		Box<T> *pBoxSrc1,
+		Box<T> *pBoxSrc2,
+		Box<T> *pBoxTgt)
+	{
+		pBoxTgt->minx = RVLMAX(pBoxSrc1->minx, pBoxSrc2->minx);
+		pBoxTgt->maxx = RVLMIN(pBoxSrc1->maxx, pBoxSrc2->maxx);
+
+		if (pBoxTgt->minx >= pBoxTgt->maxx)
+			return false;
+
+		pBoxTgt->miny = RVLMAX(pBoxSrc1->miny, pBoxSrc2->miny);
+		pBoxTgt->maxy = RVLMIN(pBoxSrc1->maxy, pBoxSrc2->maxy);
+
+		if (pBoxTgt->miny >= pBoxTgt->maxy)
+			return false;
+
+		pBoxTgt->minz = RVLMAX(pBoxSrc1->minz, pBoxSrc2->minz);
+		pBoxTgt->maxz = RVLMIN(pBoxSrc1->maxz, pBoxSrc2->maxz);
+
+		if (pBoxTgt->minz >= pBoxTgt->maxz)
+			return false;
+
+		return true;
+	}
+
+	template <typename T>
+	T BoxVolume(Box<T> *pBox)
+	{
+		return (pBox->maxx - pBox->minx) * (pBox->maxy - pBox->miny) * (pBox->maxz - pBox->minz);
+	}
 }
 
 

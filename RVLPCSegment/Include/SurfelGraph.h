@@ -160,6 +160,12 @@ namespace RVL
 			QList<QLIST::Index> surfelList,
 			Array<int> *piVertexArray,
 			int *&piVertexIdxMem);
+		bool BoundingBox(
+			Array<int> iVertexArray,
+			float *R,
+			float *t,
+			float scale,
+			Box<float> &boundingBox);
 		void NodeColors(unsigned char *SelectionColor);
 		void Display(
 			Visualizer *pVisualizer,
