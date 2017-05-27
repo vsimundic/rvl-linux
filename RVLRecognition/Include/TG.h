@@ -2,6 +2,8 @@
 
 #define RVLRECOG_TG_VERTEX_FLAG_MARKED		0x01
 
+#define RVLTG_MATCH_DEBUG
+
 namespace RVL
 {
 	namespace RECOG

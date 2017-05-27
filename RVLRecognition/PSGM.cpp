@@ -25,7 +25,8 @@
 #include <nanoflann.hpp>
 
 //#define RVLPSGM_CTIMESH_DEBUG
-#define RVLPSGM_MATCHTGS_CREATE_SCENE_TG
+//#define RVLPSGM_MATCHTGS_CREATE_SCENE_TG
+#define RVLPSGM_MATCHTGS_CREATE_SCENE_VG
 
 using namespace RVL;
 using namespace RECOG;
@@ -4884,6 +4885,38 @@ void PSGM::MatchTGs()
 	STGSet.vertexGraphs.push_back(pVertexGraph);
 
 	pVertexGraph->Create(pSurfels);
+#else
+#ifdef RVLPSGM_MATCHTGS_CREATE_SCENE_VG
+	// Create vertex graph.
+
+	VertexGraph *pVertexGraph = new VertexGraph;
+
+	CRVLMem mem;
+
+	mem.Create(10000000);
+
+	pVertexGraph->pMem = &mem;
+
+	pVertexGraph->idx = 0;
+
+	pVertexGraph->Create(pSurfels);
+
+	FILE *fpSVG = fopen("sceneVG.vgr", "w");
+
+	pVertexGraph->Save(fpSVG);
+
+	fclose(fpSVG);
+
+	delete pVertexGraph;
+
+	mem.Clear();
+#endif
+#endif
+
+#ifdef RVLTG_MATCH_DEBUG
+	FILE *fpDebug = fopen("TG_match_error.txt", "w");
+
+	fclose(fpDebug);
 #endif
 
 	/// Compute Matching scores for the first nBestMatches best matches for every scene segment.

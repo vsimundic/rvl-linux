@@ -18,8 +18,6 @@
 #include "TGSet.h"
 #include <Eigen\Eigenvalues>
 
-#define RVLTG_MATCH_DEBUG
-
 using namespace RVL;
 using namespace RECOG;
 
@@ -680,11 +678,31 @@ void TG::Match(
 #ifdef RVLTG_MATCH_DEBUG
 			// Write matches to file.
 
-			FILE *fp = fopen("TG_match_error.txt", "w");
+			FILE *fp = fopen("TG_match_error.txt", "a");
+
+			fprintf(fp, "%d\t%d\t%d\t0\n", iObject, iVertexArray.n, pCorrespondences->n);
 
 			for (i = 0; i < 3; i++)
 				fprintf(fp, "%f\t%f\t%f\t%f\n", R[3 * i + 0], R[3 * i + 1], R[3 * i + 2], t[i]);
 
+			int *iVertexRow = iVertexArray.Element;
+
+			for (i = 0; i < iVertexArray.n / 4; i++, iVertexRow += 4)
+				fprintf(fp, "%d\t%d\t%d\t%d\n", iVertexRow[0], iVertexRow[1], iVertexRow[2], iVertexRow[3]);
+
+			int m = iVertexArray.n % 4;
+
+			if (m > 0)
+			{
+				int iVertexLastRow[4];
+
+				memset(iVertexLastRow, 0xff, 4 * sizeof(int));
+
+				memcpy(iVertexLastRow, iVertexRow, m * sizeof(int));
+
+				fprintf(fp, "%d\t%d\t%d\t%d\n", iVertexLastRow[0], iVertexLastRow[1], iVertexLastRow[2], iVertexLastRow[3]);
+			}
+			
 			for (i = 0; i < pCorrespondences->n; i++)
 			{
 				pCorrespondence = pCorrespondences->Element + i;
