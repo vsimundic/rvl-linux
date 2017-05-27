@@ -2938,9 +2938,9 @@ void SurfelGraph::InitDisplay(
 	DisplayData.pVisualizer = pVisualizer;
 	DisplayData.vpDetector = vpDetector;
 	RVLSET3VECTOR(DisplayData.SelectionColor, 0, 255, 0);
-	DisplayData.mode = RVLSURFEL_DISPLAY_MODE_SURFELS;
+	//DisplayData.mode = RVLSURFEL_DISPLAY_MODE_SURFELS;
 	//DisplayData.mode = RVLSURFEL_DISPLAY_MODE_FOREGROUND_BACKGROUND;
-	//DisplayData.mode = RVLSURFEL_DISPLAY_MODE_CONVEX_CONCAVE;
+	DisplayData.mode = RVLSURFEL_DISPLAY_MODE_CONVEX_CONCAVE;
 	DisplayData.iSelectedSurfel = DisplayData.iSelectedSurfel2 = -1;
 	DisplayData.iSelection = 1;
 	DisplayData.bVertices = false;

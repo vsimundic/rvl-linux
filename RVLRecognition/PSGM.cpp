@@ -4434,8 +4434,8 @@ void PSGM::Match()
 
 	int startIdx = 0, endIdx = MCTISet.pCTI.n;
 
-	//for (iSCluster = 0; iSCluster < nClusters; iSCluster++)
-	iSCluster = 5;		// Only for debugging purpose!!!
+	for (iSCluster = 0; iSCluster < nClusters; iSCluster++)
+	//iSCluster = 5;		// Only for debugging purpose!!!
 	{
 		printf("%d/%d", iSCluster + 1, nClusters);
 	
@@ -4863,7 +4863,7 @@ void PSGM::MatchTGs()
 {
 	// Parameters.
 
-	int nBestMatches = 20;
+	int nBestMatches = 10;
 
 #ifdef RVLPSGM_MATCHTGS_CREATE_SCENE_TG
 	// Initialize memory storage.
@@ -4936,15 +4936,44 @@ void PSGM::MatchTGs()
 	float RSM[9], tSM[3];
 	PSGM_::Cluster *pSSegment;
 	float boundingBoxOverlap;
+	int nMatches;
 
-	//for (iSS = 0; iSS < scoreMatchMatrix.n; iSS++)
-	iSS = 5;
+	for (iSS = 0; iSS < scoreMatchMatrix.n; iSS++)
+	//iSS = 5;
 	{
+#ifdef RVLTG_MATCH_DEBUG
+		// Write matches to file.
+
+		FILE *fp = fopen("TG_match_error.txt", "a");
+
+		fprintf(fp, "%d\t%d\t0\t0\n", iSS, nBestMatches);
+
+		fclose(fp);
+#endif
 		for (i = 0; i < nBestMatches; i++)
 		{
 			// Get match.
 
 			int iMatch = scoreMatchMatrix.Element[iSS].Element[i].idx;
+
+			if (iMatch < 0)
+			{
+#ifdef RVLTG_MATCH_DEBUG
+				FILE *fp = fopen("TG_match_error.txt", "a");
+
+				fprintf(fp, "-1\t0\t0\t%f\n", 0.0f);
+
+				int i;
+
+				for (i = 0; i < 3; i++)
+					fprintf(fp, "%f\t%f\t%f\t%f\n", 0.0f, 0.0f, 0.0f, 0.0f);
+
+				fclose(fp);
+#endif
+
+				continue;
+			}
+
 			RECOG::PSGM_::MatchInstance *pMatch = pCTImatchesArray.Element[iMatch];
 			int iSCTI = pCTImatchesArray.Element[iMatch]->iSCTI;
 			int iMCTI = pCTImatchesArray.Element[iMatch]->iMCTI;

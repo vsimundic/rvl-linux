@@ -425,6 +425,21 @@ void TG::Match(
 
 		correspondences.Element = NULL;
 
+#ifdef RVLTG_MATCH_DEBUG
+		// Write matches to file.
+
+		FILE *fp = fopen("TG_match_error.txt", "a");
+
+		fprintf(fp, "%d\t0\t0\t%f\n", iObject, 0.0f);
+
+		int i;
+
+		for (i = 0; i < 3; i++)
+			fprintf(fp, "%f\t%f\t%f\t%f\n", 0.0f, 0.0f, 0.0f, 0.0f);
+
+		fclose(fp);
+#endif
+
 		return;
 	}
 
@@ -680,7 +695,7 @@ void TG::Match(
 
 			FILE *fp = fopen("TG_match_error.txt", "a");
 
-			fprintf(fp, "%d\t%d\t%d\t0\n", iObject, iVertexArray.n, pCorrespondences->n);
+			fprintf(fp, "%d\t%d\t%d\t%f\n", iObject, iVertexArray.n, pCorrespondences->n, score);
 
 			for (i = 0; i < 3; i++)
 				fprintf(fp, "%f\t%f\t%f\t%f\n", R[3 * i + 0], R[3 * i + 1], R[3 * i + 2], t[i]);

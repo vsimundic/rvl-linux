@@ -15,6 +15,9 @@
 #include "RVLRecognition.h"
 #include "PSGMCommon.h"
 #include "CTISet.h"
+#include "VertexGraph.h"
+#include "TG.h"
+#include "TGSet.h"
 #include "PSGM.h"
 #include "ObjectDetector.h"
 
@@ -930,6 +933,9 @@ void ObjectDetector::Evaluate(
 	char *fileName,
 	char *selectedGTObjectsFileName)
 {
+	if (!(flags & RVLOBJECTDETECTION_FLAG_SEGMENTATION_GT))
+		return;
+
 #ifdef RVLSURFEL_IMAGE_ADJACENCY
 	if (bSegmentToObjects)
 	{	
