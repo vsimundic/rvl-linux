@@ -46,6 +46,14 @@
 		pList->ppNext = pList2->ppNext;\
 	}}
 
+#define RVLQLIST_APPEND2(pList, pList2)\
+	{if(pList2->pFirst)\
+	{\
+		*(pList->ppNext) = pList2->pFirst;\
+		pList2->pFirst->pPtrToThis = pList->ppNext;\
+		pList->ppNext = pList2->ppNext;\
+	}}
+
 #define RVLQLIST_GET_N_ENTRIES(pList, type, n) {n = 0; type *RVLQListGetnEntriesTmp = (type *)(pList->pFirst); while(RVLQListGetnEntriesTmp){n++; RVLQListGetnEntriesTmp = (type *)(RVLQListGetnEntriesTmp->pNext);}}
 
 #define RVLQLIST_GET_N_ENTRIES2(pList, type, n, maxn) \
