@@ -33,6 +33,14 @@ ObjectGraph::ObjectGraph()
 	kCoverage = 0.99f;
 	alpha = 0.5f;
 	minObjectSize = 300;
+	continuousThr = 0.015f;
+	convexThr = -20.0f;
+	cleanThr = 0.8f;
+	depthStepIntThr = 0.005f;
+	depthStepExtThr = 0.025f;
+	concaveAngleIntThr = 0.0f;
+	concaveAngleExtThr = 45.0f;
+	concaveMinCost = 0.3f;
 
 	bObjectAggregationLevel2Uncertainty = false;
 	bObjectAggregationLevel2Edges = false;
@@ -89,11 +97,20 @@ void ObjectGraph::CreateParamList(CRVLMem *pMem)
 	ParamList.Init();
 
 	pParamData = ParamList.AddParam("ObjectGraph.alpha", RVLPARAM_TYPE_FLOAT, &alpha);
+	pParamData = ParamList.AddParam("ObjectGraph.continuousThr", RVLPARAM_TYPE_FLOAT, &continuousThr);
+	pParamData = ParamList.AddParam("ObjectGraph.convexThr", RVLPARAM_TYPE_FLOAT, &convexThr);
+	pParamData = ParamList.AddParam("ObjectGraph.cleanThr", RVLPARAM_TYPE_FLOAT, &cleanThr);
+	pParamData = ParamList.AddParam("ObjectGraph.depthStepIntThr", RVLPARAM_TYPE_FLOAT, &depthStepIntThr);
+	pParamData = ParamList.AddParam("ObjectGraph.depthStepExtThr", RVLPARAM_TYPE_FLOAT, &depthStepExtThr);
+	pParamData = ParamList.AddParam("ObjectGraph.concaveAngleIntThr", RVLPARAM_TYPE_FLOAT, &concaveAngleIntThr);
+	pParamData = ParamList.AddParam("ObjectGraph.concaveAngleExtThr", RVLPARAM_TYPE_FLOAT, &concaveAngleExtThr);
+	pParamData = ParamList.AddParam("ObjectGraph.concaveMinCost", RVLPARAM_TYPE_FLOAT, &concaveMinCost);
 	pParamData = ParamList.AddParam("ObjectGraph.relationClassifier", RVLPARAM_TYPE_ID, &relationClassifier);
 	ParamList.AddID(pParamData, "HEURISTIC", RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_HEURISTIC);
 	ParamList.AddID(pParamData, "SVM", RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_SVM);
 	ParamList.AddID(pParamData, "NLMC", RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_NLMC);
 	ParamList.AddID(pParamData, "NLMC2", RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_NLMC2);
+	ParamList.AddID(pParamData, "FUZZY_HEURISTIC", RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_FUZZY_HEURISTIC);
 	pParamData = ParamList.AddParam("ObjectGraph.objectAggregationLevel2.uncertainty", RVLPARAM_TYPE_BOOL, &bObjectAggregationLevel2Uncertainty);
 	pParamData = ParamList.AddParam("ObjectGraph.objectAggregationLevel2.edges", RVLPARAM_TYPE_BOOL, &bObjectAggregationLevel2Edges);
 	pParamData = ParamList.AddParam("ObjectGraph.objectAggregationLevel2.method", RVLPARAM_TYPE_ID, &objectAggregationLevel2Method);
@@ -102,6 +119,141 @@ void ObjectGraph::CreateParamList(CRVLMem *pMem)
 	pParamData = ParamList.AddParam("ObjectGraph.minObjectSize", RVLPARAM_TYPE_INT, &minObjectSize);
 	pParamData = ParamList.AddParam("ObjectGraph.flattenVertices", RVLPARAM_TYPE_BOOL, &bFlattenVertices);
 	pParamData = ParamList.AddParam("ObjectGraph.concaveObjectAggregation", RVLPARAM_TYPE_BOOL, &bConcaveObjectAggregation);
+}
+
+void ObjectGraph::CreateFromGroundTruth(SurfelGraph *pSurfels_)
+{
+	pSurfels = pSurfels_;
+
+	// Create an object for each surfel.
+
+	RVL_DELETE_ARRAY(NodeArray.Element);
+	NodeArray.Element = new GRAPH::AggregateNode<AgEdge>[pSurfels->NodeArray.n];
+	NodeArray.n = pSurfels->NodeArray.n;
+	RVL_DELETE_ARRAY(elementMem);
+	elementMem = new QLIST::Index[pSurfels->NodeArray.n];
+	RVL_DELETE_ARRAY(objectMap);
+	objectMap = new int[pSurfels->NodeArray.n];
+	EdgeArray.n = 0;
+
+	QLIST::Index *piElement = elementMem;
+
+	int i;
+	int iSurfel;
+	Surfel *pSurfel;
+	GRAPH::AggregateNode<AgEdge> *pAgNode;
+	QList<GRAPH::EdgePtr2<AgEdge>> *pEdgeList;
+	QList<QLIST::Index> *pElementList;
+
+	for (iSurfel = 0; iSurfel < pSurfels->NodeArray.n; iSurfel++)
+	{
+		pSurfel = pSurfels->NodeArray.Element + iSurfel;
+
+		pAgNode = NodeArray.Element + iSurfel;
+
+		pElementList = &(pAgNode->elementList);
+
+		RVLQLIST_INIT(pElementList);
+
+		pEdgeList = &(pAgNode->EdgeList);
+
+		RVLQLIST_INIT(pEdgeList);
+
+		//if (pSurfel->size < 0)
+		//	int debug = 0;
+
+		pAgNode->size = 0;
+	}
+
+	// Allocate array for storing indices of reference surfels of GT objects.
+
+	Array<int> refSurfelArray;
+
+	refSurfelArray.n = 0;
+
+	for (int i = 0; i < pSurfels->NodeArray.n; i++)
+	{
+		if (pSurfels->NodeArray.Element[i].GTObjHist.size() > 0)
+		{
+			refSurfelArray.n = this->pSurfels->NodeArray.Element[i].GTObjHist.size();
+			break;
+		}
+	}
+
+	if (refSurfelArray.n == 0)
+		return;
+
+	refSurfelArray.Element = new int[refSurfelArray.n];
+
+	memset(refSurfelArray.Element, 0xff, refSurfelArray.n * sizeof(int));
+
+	// Create objects from the ground truth.
+
+	int iRefSurfel;
+	Surfel *pRefSurfel;
+	GRAPH::AggregateNode<AgEdge> *pRefAgNode;
+
+	for (iSurfel = 0; iSurfel < pSurfels->NodeArray.n; iSurfel++)
+	{
+		pSurfel = pSurfels->NodeArray.Element + iSurfel;
+
+		pAgNode = NodeArray.Element + iSurfel;
+
+		if (pSurfel->size <= 1)
+			continue;
+
+		if (pSurfel->bEdge)
+			continue;
+
+		if (pSurfel->ObjectID >= 0 && pSurfel->ObjectID < refSurfelArray.n)
+		{
+			iRefSurfel = refSurfelArray.Element[pSurfel->ObjectID];
+
+			if (iRefSurfel < 0)
+				iRefSurfel = refSurfelArray.Element[pSurfel->ObjectID] = iSurfel;
+			
+			pRefAgNode = NodeArray.Element + iRefSurfel;
+
+			pElementList = &(pRefAgNode->elementList);
+
+			RVLQLIST_ADD_ENTRY(pElementList, piElement);
+			piElement->Idx = iSurfel;
+
+			pRefAgNode->size += pSurfel->size;
+
+			piElement++;
+		}
+	}
+
+	//int iObject;
+	//QLIST::Index *pElementIdx;
+
+	//for (iObject = 0; iObject < NodeArray.n; iObject++)
+	//{
+	//	pAgNode = NodeArray.Element + iObject;
+
+	//	if (pAgNode->elementList.pFirst == NULL)
+	//		continue;
+
+	//	printf("Object %d: ", pSurfels->NodeArray.Element[iObject].ObjectID);
+
+	//	pElementList = &(pAgNode->elementList);
+
+	//	pElementIdx = pElementList->pFirst;
+
+	//	while (pElementIdx)
+	//	{
+	//		printf("%d, ", pElementIdx->Idx);
+
+	//		pElementIdx = pElementIdx->pNext;
+	//	}
+
+	//	printf("\n");
+	//}
+
+	// Free memory.
+
+	delete[] refSurfelArray.Element;
 }
 
 #ifdef RVLSURFEL_IMAGE_ADJACENCY
@@ -1285,28 +1437,42 @@ void ObjectGraph::ComputeRelationCost(
 {
 	//float scale = 1000.0f;
 	float scale = 1.0f;
-	float depthStepIntThr = scale * 0.005f;
-	float depthStepExtThr = scale * 0.025f;
-	float concaveAngleIntThr = 0.0f * DEG2RAD;
-	float concaveAngleExtThr = 45.0f * DEG2RAD;
-	float concaveMinCost = 0.3f;
+	float depthStepIntThr_ = depthStepIntThr * scale;
+	float depthStepExtThr_ = depthStepExtThr * scale;
+	float concaveAngleIntThr_ = concaveAngleIntThr * DEG2RAD;
+	float concaveAngleExtThr_ = concaveAngleExtThr * DEG2RAD;
 
 	float f1 = pEdge->desc.cupyDescriptor[0];
 	float f2 = pEdge->desc.cupyDescriptor[1];
 	float f3 = pEdge->desc.cupyDescriptor[2];
 	float f4 = pEdge->desc.cupyDescriptor[3];
 
-	float y1, y2, y3, y4;
+	//float PClean_ = 0.0f; 
+
+	float y1, y2, y3, y4;	
 
 	switch (relationClassifier){
 	case RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_HEURISTIC:
-		data.PContinuous = (f4 <= depthStepIntThr ? 1.0f : (f4 <= depthStepExtThr ? (depthStepExtThr - f4) / (depthStepExtThr - depthStepIntThr) : 0.0f));
+		data.PContinuous = (f4 <= continuousThr ? 1 : 0);
+		data.PConvex = (f1 >= convexThr * DEG2RAD ? 1 : 0);
+		data.PClean = (f2 >= cleanThr ? 1 : 0);
 
-		data.PConvex = (f1 >= -concaveAngleIntThr ? 1.0f : (f1 >= -concaveAngleExtThr ? concaveMinCost + (1.0f - concaveMinCost) * (concaveAngleExtThr + f1) / (concaveAngleExtThr - concaveAngleIntThr) : concaveMinCost));
+		data.P = RVLMIN(data.PContinuous, RVLMIN(data.PConvex, data.PClean));
+
+		break;
+	case RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_FUZZY_HEURISTIC:
+		data.PContinuous = (f4 <= depthStepIntThr_ ? 1.0f : (f4 <= depthStepExtThr_ ? (depthStepExtThr_ - f4) / (depthStepExtThr_ - depthStepIntThr_) : 0.0f));
+
+		data.PConvex = (f1 >= -concaveAngleIntThr_ ? 1.0f : (f1 >= -concaveAngleExtThr_ ? concaveMinCost + (1.0f - concaveMinCost) * (concaveAngleExtThr_ + f1) / (concaveAngleExtThr_ - concaveAngleIntThr_) : concaveMinCost));
 
 		//data.PClean = 0.5f + 0.5f * f2;
-		//data.PClean = (RVLABS(f1) >= 20.0f * DEG2RAD ? (f3 >= 0.5 ? 2.0f * (f3 - 0.5f) : 0.0f) : 1.0f);
-		data.PClean = (RVLABS(f1) >= 20.0f * DEG2RAD ? (f2 >= 0.5 ? 2.0f * (f2 - 0.5f) : 0.0f) : 1.0f);
+		data.PClean = (RVLABS(f1) >= 10.0f * DEG2RAD ? (f3 >= 0.5 ? 2.0f * (f3 - 0.5f) : 0.0f) : 1.0f);
+		//data.PClean = (RVLABS(f1) >= 20.0f * DEG2RAD ? (f2 >= 0.5 ? 2.0f * (f2 - 0.5f) : 0.0f) : 1.0f);
+		//data.PClean = (f2 >= 0.5 ? 2.0f * (f2 - 0.5f) : 0.0f);
+
+		//PClean_ = (f3 >= 0.5 ? 2.0f * (f3 - 0.5f) : 0.0f);
+
+		//data.PClean = RVLMIN(data.PClean, PClean_);
 
 		data.P = RVLMIN(data.PContinuous, RVLMIN(data.PConvex, data.PClean));
 
@@ -3439,6 +3605,7 @@ void ObjectGraph::RenderConvexityPos(int iObjectSurf, int iObjectVert, Mesh *pMe
 
 bool ObjectGraph::MergeSmallObjects(int sizeThr, float maxDistThr, bool verbose)
 {
+#ifdef RVLSURFEL_IMAGE_ADJACENCY
 	bool merged = false;
 	//Determine a list of neighbours and distances for each small object
 	GRAPH::AggregateNode<SURFEL::AgEdge> *pObject;
@@ -3565,4 +3732,7 @@ bool ObjectGraph::MergeSmallObjects(int sizeThr, float maxDistThr, bool verbose)
 		}
 	}
 	return merged;
+#else
+	return false;
+#endif
 }

@@ -34,6 +34,8 @@ namespace RVL
 			int iObject2,
 			RECOG::PSGM_::ModelInstance *pBoundingBox);
 		static bool CheckIfWithinCTIBoundingBox(void * odObj, int iObject1, int iObject2, float dimThr = 0.30);	//Filko
+		void GroundTruthGroundPlane();
+		void SaveBoundingBoxSizes(char *imageFileName);
 		
 	public:
 		DWORD flags;
@@ -53,6 +55,7 @@ namespace RVL
 		bool bCTIBasedObjectAggregation;
 		bool bMultilateralFilter;
 		bool bJoinSmallObjectsToLargestNeighbor;
+		bool bGroundTruthSegmentation;
 		SurfelGraph *pSurfels;
 		PlanarSurfelDetector *pSurfelDetector;
 		SURFEL::ObjectGraph *pObjects;

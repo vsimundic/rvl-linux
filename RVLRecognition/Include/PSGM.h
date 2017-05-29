@@ -434,6 +434,9 @@ namespace RVL
 			RECOG::CTISet *pCTISet,
 			int iModel = -1);
 		void RVLPSGInstanceMesh(Eigen::MatrixXf nI, float *dI);
+		void BoundingBoxSize(
+			RECOG::PSGM_::ModelInstance *pBoundingBox,
+			float *size);
 
 	private:
 		void Clusters();

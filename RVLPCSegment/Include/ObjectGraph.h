@@ -6,10 +6,12 @@
 #include <set>
 #include "opencv2\opencv.hpp"
 
-#define RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_HEURISTIC	0
-#define RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_SVM			1
-#define RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_NLMC		2
-#define RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_NLMC2		3
+#define RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_HEURISTIC		0
+#define RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_SVM				1
+#define RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_NLMC			2
+#define RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_NLMC2			3
+#define RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_FUZZY_HEURISTIC	4
+
 
 #define RVLPCSEGMENT_OBJECT_AGGREGATION_LEVEL2_METHOD_CONVEXITY		0
 #define RVLPCSEGMENT_OBJECT_AGGREGATION_LEVEL2_METHOD_SYMMETRY		1
@@ -101,6 +103,7 @@ namespace RVL
 			virtual ~ObjectGraph();
 			void CreateParamList(CRVLMem *pMem);
 			void Create(SurfelGraph *pSurfels_);
+			void CreateFromGroundTruth(SurfelGraph *pSurfels_);
 			void CreateFromSSF(std::string ssfFileName);	//Filko
 			void CalculateOverAndUnderSegmentation_SSF(int *E, int &N, bool useGTNoPix = true,  bool useBackground = true);	//Filko
 			void CalculateOverAndUnderSegmentation(
@@ -194,6 +197,15 @@ namespace RVL
 			void *vpObjectAggregationLevel2CriterionData;
 			FILE *fpSymmetry;
 			int minObjectSize;
+			float continuousThr;
+			float convexThr;
+			float cleanThr;
+			float depthStepIntThr;
+			float depthStepExtThr;
+			float concaveAngleIntThr;
+			float concaveAngleExtThr;
+			float concaveMinCost;
+
 			Mesh *pMesh; //FIlko
 
 		private:
