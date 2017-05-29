@@ -15,6 +15,9 @@
 #include "RVLRecognition.h"
 #include "PSGMCommon.h"
 #include "CTISet.h"
+#include "VertexGraph.h"
+#include "TG.h"
+#include "TGSet.h"
 #include "PSGM.h"
 #include "ObjectDetector.h"
 
@@ -805,20 +808,7 @@ void ObjectDetector::DetectObjects(char *MeshFilePathName)
 		{
 			printf("Computing relations between adjacent surfels...");
 
-			pSurfels->ImageAdjacency(&mesh);
-
-			Surfel *pSurfel = pSurfels->NodeArray.Element;
-
-			for (int i = 0; i < pSurfels->NodeArray.n; pSurfel++, i++)
-			{
-				if (pSurfel->size <= 1)
-					continue;
-
-				//if (pSurfel->bEdge)
-				//	continue;
-
-				pSurfels->DetermineImgAdjDescriptors(pSurfel, &mesh);
-			}
+			pSurfels->SurfelRelations(&mesh);
 
 			if (bGroundTruthSegmentation)
 				pObjects->CreateFromGroundTruth(pSurfels);
@@ -943,6 +933,9 @@ void ObjectDetector::Evaluate(
 	char *fileName,
 	char *selectedGTObjectsFileName)
 {
+	if (!(flags & RVLOBJECTDETECTION_FLAG_SEGMENTATION_GT))
+		return;
+
 #ifdef RVLSURFEL_IMAGE_ADJACENCY
 	if (bSegmentToObjects)
 	{	
