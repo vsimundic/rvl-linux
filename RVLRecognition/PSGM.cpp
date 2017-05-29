@@ -2216,15 +2216,15 @@ void PSGM::FitModel(
 
 	if (bBoundingPlanes)
 	{
-		int minID, maxID;
+		//int minID, maxID;
 
-		for (i = 0; i < 3; i++)
-		{
-			minID = centroidID.Element[i * 2].Idx;
-			maxID = centroidID.Element[i * 2 + 1].Idx;
+		//for (i = 0; i < 3; i++)
+		//{
+		//	minID = centroidID.Element[i * 2].Idx;
+		//	maxID = centroidID.Element[i * 2 + 1].Idx;
 
-			pModelInstance->tc[i] = (pModelInstance->modelInstance.Element[maxID].d - pModelInstance->modelInstance.Element[minID].d) / 2; // PROVJERITI
-		}
+		//	pModelInstance->tc[i] = (pModelInstance->modelInstance.Element[maxID].d - pModelInstance->modelInstance.Element[minID].d) / 2; // PROVJERITI
+		//}
 	}
 
 	//END calculate segment centroid - Vidovic
