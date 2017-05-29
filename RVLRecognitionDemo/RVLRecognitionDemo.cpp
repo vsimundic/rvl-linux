@@ -400,7 +400,7 @@ int main(int argc, char ** argv)
 		{
 			recognition.LoadModelDataBase(); //Vidovic
 
-			recognition.LoadModelMeshDB(modelSequenceFileName, true, 0.4);
+			//recognition.LoadModelMeshDB(modelSequenceFileName, true, 0.4); //uncomment later
 
 			Mesh mesh;
 
@@ -434,6 +434,11 @@ int main(int argc, char ** argv)
 			//FILE *fpHypothesisEvaluation = fopen("C:\\RVL\\ExpRez\\compare_TNM_Valid_TMP.txt", "w");
 
 			//FILE *fpLog = fopen("C:\\RVL\\ExpRez\\evaluationLog.txt", "w");
+
+			Eigen::MatrixXf nI = recognition.ConvexTemplatenT();
+			float dI[66];
+			for (int i = 0; i < 66; i++) dI[i] = 1;
+			recognition.RVLPSGInstanceMesh(nI, dI);
 
 			recognition.LoadCompleteSegmentGT(sceneSequence);
 
@@ -518,11 +523,12 @@ int main(int argc, char ** argv)
 				//kdtree->setInputCloud(cloud_destination); //using this doesn't really improve anything
 
 				//recognition.CalculateICPCost(PCLICP, PCLICPVariants::Point_to_plane, &kdtree);
-				GenerateSegmentNeighbourhood(&recognition, 0.1);
-				recognition.CalculateNNCost(&visualizer, PCLICP, PCLICPVariants::Point_to_plane);
+				
+				//GenerateSegmentNeighbourhood(&recognition, 0.1);
+				//recognition.CalculateNNCost(&visualizer, PCLICP, PCLICPVariants::Point_to_plane);
 			
 				//evaluate ICP
-				recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, fpPoseError, fpnotFirstInfo, fpnotFirstPoseErr, 7, true);
+				//recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, fpPoseError, fpnotFirstInfo, fpnotFirstPoseErr, 7, true);
 				//recognition.AddModelsToVisualizer(&visualizer, true, PCLICP, PCLICPVariants::Point_to_plane, NULL/*&kdtree*/);
 				QueryPerformanceCounter((LARGE_INTEGER *)&ctr2_);
 				QueryPerformanceFrequency((LARGE_INTEGER *)&freq_);
@@ -534,7 +540,8 @@ int main(int argc, char ** argv)
 				float timevalue = (ctr2.QuadPart - ctr1.QuadPart) * 1000.0 / freq.QuadPart;
 				std::cout << "Ukupno vrijeme: " << timevalue << std::endl;
 				std::cout << "ICP vrijeme: " << timevalueICP << std::endl;
-				visualizer.Run();
+				//visualizer.Run();
+
 
 
 			}

@@ -263,6 +263,11 @@ namespace RVL
 		void CalculateNNCost(Visualizer *pVisualizer, RVL::PSGM::ICPfunction ICPFunction, int ICPvariant); // For each pair of scene segment and visible part of the matched model, calls NNCost.
 
 		float NNCost(int iCluster, vtkSmartPointer<vtkPolyData> targetPD); // Calculates cost based on sum of distances between scene segment points and their nearest neighbours in visible part of the matched model.
+		
+		void RVLPSGInstanceMesh(Eigen::MatrixXf nI, float *dI);
+
+		void PSGM::PrintCTIMeshFaces(FILE *fp, Eigen::MatrixXi F, Eigen::MatrixXi Fn, int n, Eigen::MatrixXi nP);
+
 		//end Petra
 
 		void InitDisplay(
@@ -468,7 +473,7 @@ namespace RVL
 		Eigen::MatrixXf nT; //Petra
 		RECOG::PSGM_::SegmentMatch *SMatch; //Petra
 		SortIndex<float> *sortedMatches; //Petra
-		Eigen::VectorXf E;
+		//Eigen::VectorXf E;
 		Eigen::MatrixXf t;
 		RECOG::CTISet CTIset;
 		RECOG::CTISet MCTIset;
@@ -477,9 +482,14 @@ namespace RVL
 
 		float NGnd[3];
 		float dGnd;
-		
+
 		//Petra & Ivan
 		double *icpTMatrix;
+
+		//For InstanceMesh:
+		Eigen::MatrixXf P; //points list
+		Eigen::MatrixXi F; //faces list (polygones)
+		Eigen::MatrixXi Edges; //Edges
 
 
 	private:		
