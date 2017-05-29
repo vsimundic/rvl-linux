@@ -362,7 +362,10 @@ namespace RVL
 			int nBestSegments,
 			int iBestMatches,
 			int graphID); //Vidovic
-		void CalculateScore(int similarityMeasure = 3); //Vidovic
+		void CalculateScore(
+			int similarityMeasure = 3,
+			int iFirstCTI = 0,
+			int iEndCTI = -1); //Vidovic
 		void UpdateScoreMatchMatrix(RECOG::PSGM_::ModelInstance *pSModelInstance); //Vidovic
 		void SortScoreMatchMatrix(bool descending = false); //Vidovic
 		void EvaluateMatchesByScore(
@@ -516,6 +519,8 @@ namespace RVL
 		//QList<RECOG::PSGM_::MatchInstance> SSegmentMatches2; //Vidovic - probability2
 		Array<Array<SortIndex<float>>> scoreMatchMatrix;
 		Array<Array<SortIndex<float>>> scoreMatchMatrixICP;
+		Array2D<Array<int>> matchMatrix;
+		int *matchMatrixMem;
 		DWORD scoreCalculation; //Vidovic - TO DO (Implement read from cfg file)
 		ECCVGTLoader *pECCVGT; //Vidovic
 		Array <RVL::SegmentGTInstance> segmentGT;

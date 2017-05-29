@@ -26,7 +26,8 @@
 
 //#define RVLPSGM_CTIMESH_DEBUG
 //#define RVLPSGM_MATCHTGS_CREATE_SCENE_TG
-#define RVLPSGM_MATCHTGS_CREATE_SCENE_VG
+//#define RVLPSGM_MATCHTGS_CREATE_SCENE_VG
+//#define RVLPSGM_MATCHCTI_MATCH_MATRIX
 
 using namespace RVL;
 using namespace RECOG;
@@ -83,6 +84,8 @@ PSGM::PSGM()
 	modelDataBase = NULL; //Vidovic
 	modelsInDataBase = NULL; //Vidovic
 	sceneMIMatch = NULL; //Vidovic	
+	matchMatrixMem = NULL;
+	matchMatrix.Element = NULL;
 
 	//nSamples = 20; //Vidovic
 	stdNoise = 2; //Vidovic
@@ -166,6 +169,8 @@ PSGM::~PSGM()
 	RVL_DELETE_ARRAY(centroidID.Element); //Vidovic
 	RVL_DELETE_ARRAY(pCTImatchesArray.Element); //Vidovic
 	RVL_DELETE_ARRAY(segmentGT.Element); //Vidovic
+	RVL_DELETE_ARRAY(matchMatrixMem);
+	RVL_DELETE_ARRAY(matchMatrix.Element);
 
 	//Vidovic
 	int iSSegment;
@@ -4432,6 +4437,129 @@ void PSGM::Match()
 	nTc = new float[3 * convexTemplate.n];
 	dISMc = new float[convexTemplate.n];
 
+#ifdef RVLPSGM_MATCHCTI_MATCH_MATRIX
+	// maxnSClusterCTIs <- max no. of CTIs per scene cluster
+
+	int maxnSClusterCTIs = 0;
+
+	int nSClusterCTIs;
+
+	for (iSCluster = 0; iSCluster < nClusters; iSCluster++)
+	{
+		nSClusterCTIs = CTISet.SegmentCTIs.Element[iSCluster].n;
+
+		if (nSClusterCTIs > maxnSClusterCTIs)
+			maxnSClusterCTIs = nSClusterCTIs;
+	}
+
+	// CTIInterval <- interval of CTI indices created from a particular model in MCTISet
+	// maxnModelCTIs <- max no. of CTIs per model
+
+	Pair<int, int> *CTIInterval = new Pair<int, int>[MCTISet.nModels];
+
+	int maxnModelCTIs = 0;
+
+	int iMCluster = 0;
+
+	int iModel, iMCTI;
+	int nModelCTIs;
+
+	for (iModel = 0; iModel < MCTISet.nModels; iModel++)
+	{
+		CTIInterval[iModel].a = MCTISet.SegmentCTIs.Element[iMCluster].Element[0];
+
+		nModelCTIs = 0;
+
+		do
+		{
+			nModelCTIs += MCTISet.SegmentCTIs.Element[iMCluster].n;
+
+			iMCluster++;
+
+			if (iMCluster >= MCTISet.SegmentCTIs.n)
+				break;
+
+			iMCTI = MCTISet.SegmentCTIs.Element[iMCluster].Element[0];
+
+			pMModelInstance = MCTISet.pCTI.Element[iMCTI];
+		} while (pMModelInstance->iModel == iModel);
+
+		CTIInterval[iModel].b = (iMCluster >= MCTISet.SegmentCTIs.n ? MCTISet.SegmentCTIs.Element[iMCluster].Element[0] : MCTISet.pCTI.n);
+
+		if (nModelCTIs > maxnModelCTIs)
+			maxnModelCTIs = nModelCTIs;
+	}
+
+	// Initialize hypothesis space.
+
+	RVL_DELETE_ARRAY(matchMatrixMem);
+
+	matchMatrixMem = new int[CTISet.pCTI.n * MCTISet.pCTI.n];
+
+	RVL_DELETE_ARRAY(matchMatrix.Element);
+
+	matchMatrix.Element = new Array<int>[nClusters * MCTISet.nModels];
+
+	Array3D<QList<QLIST::Index>> HSpace;
+
+	int HSpaceSize = 40;
+
+	int nHSpaceCells = HSpaceSize * HSpaceSize * HSpaceSize + 1;
+
+	HSpace.Element = new QList<QLIST::Index>[nHSpaceCells];
+	
+	HSpace.a = HSpace.b = HSpace.c = HSpaceSize;
+
+	int i;
+	QList<QLIST::Index> *pHSpaceCellList;
+
+	for (i = 0; i < nHSpaceCells; i++)
+	{
+		pHSpaceCellList = HSpace.Element + i;
+
+		RVLQLIST_INIT(pHSpaceCellList);
+	}
+
+	QLIST::Index *HSpaceMem = new QLIST::Index[maxnSClusterCTIs * maxnModelCTIs];
+
+	PSGM_::MatchInstance **pFirstMatch;
+	float centroid[3];
+	PSGM_::Cluster *pSCluster;
+
+	for (iSCluster = 0; iSCluster < nClusters; iSCluster++)
+		//iSCluster = 5;		// Only for debugging purpose!!!
+	{
+		printf("%d/%d", iSCluster + 1, nClusters);
+
+		nCTI = CTISet.SegmentCTIs.Element[iSCluster].n;
+
+		pSCluster = clusters.Element[iSCluster];
+
+		pSurfels->Centroid(pSCluster->iSurfelArray, centroid);
+
+		for (iModel = 0; iModel < MCTISet.nModels; iModel++)
+		{
+			pFirstMatch = pCTImatches->ppNext;
+
+			for (iSCTI = 0; iSCTI < nCTI; iSCTI++)
+			{
+				CTIIdx = CTISet.SegmentCTIs.Element[iSCluster].Element[iSCTI];
+
+				pSModelInstance = CTISet.pCTI.Element[CTIIdx];
+
+				Match(pSModelInstance, CTIInterval[iModel].a, CTIInterval[iModel].b);
+
+				CalculateScore(RVLPSGM_MATCH_SIMILARITY_MEASURE_MEAN_SATURATED_SQUARE_DISTANCE, CTIInterval[iModel].a, CTIInterval[iModel].b);
+			} // for all MI in cluster
+
+
+		}
+	}
+
+	delete[] CTIInterval;
+	delete[] HSpace.Element;
+	delete[] HSpaceMem;
+#else
 	int startIdx = 0, endIdx = MCTISet.pCTI.n;
 
 	for (iSCluster = 0; iSCluster < nClusters; iSCluster++)
@@ -4468,6 +4596,7 @@ void PSGM::Match()
 			printf("\b\b\b");
 
 	}	// for all dominant clusters
+#endif
 
 	pCTImatchesArray.n = CTISet.pCTI.n * MCTISet.pCTI.n;
 
@@ -4477,7 +4606,10 @@ void PSGM::Match()
 
 	QLIST::CreatePtrArray<RECOG::PSGM_::MatchInstance>(pCTImatches, &pCTImatchesArray);
 
+#ifdef RVLPSGM_MATCHCTI_MATCH_MATRIX
+#else
 	SortScoreMatchMatrix();
+#endif
 
 	////for Visualization purposes:
 	//RECOG::PSGM_::MatchInstance *pMatchx = pCTImatchesArray.Element[scoreMatchMatrix.Element[0].Element[0].idx];
@@ -5110,7 +5242,10 @@ void PSGM::MatchTGs()
 #endif
 }
 
-void PSGM::CalculateScore(int similarityMeasure)
+void PSGM::CalculateScore(
+	int similarityMeasure,
+	int iFirstCTI,
+	int iEndCTI)
 {
 	float sigma = 8.0;
 
@@ -5119,6 +5254,8 @@ void PSGM::CalculateScore(int similarityMeasure)
 	int iMCTI, iValidPlane, idx;
 
 	int nMCTI = MCTISet.pCTI.n;
+
+	int iEndCTI_ = (iEndCTI >= 0 ? iEndCTI : nMCTI);
 
 	float fTmp, eTmp, scoreTmp;
 
@@ -5130,7 +5267,7 @@ void PSGM::CalculateScore(int similarityMeasure)
 	{
 	case RVLPSGM_MATCH_SIMILARITY_MEASURE_MEAN_SQUARE_DISTANCE: //mean square error
 
-		for (iMCTI = 0; iMCTI < nMCTI; iMCTI++)
+		for (iMCTI = iFirstCTI; iMCTI < iEndCTI_; iMCTI++)
 		{
 			scoreTmp = 0;
 

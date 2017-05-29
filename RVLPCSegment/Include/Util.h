@@ -32,6 +32,12 @@ namespace RVL
 		T cost;
 	};
 
+	template <typename T1, typename T2> struct Pair
+	{
+		T1 a;
+		T2 b;
+	};
+
 	//VIDOVIC
 	struct GTInstance{
 		int iScene;

@@ -2331,6 +2331,36 @@ bool SurfelGraph::BoundingBox(
 	return true;
 }
 
+void SurfelGraph::Centroid(
+	Array<int> iSurfelArray,
+	float *centroid)
+{
+	RVLNULL3VECTOR(centroid);
+
+	float wTotal = 0.0f;
+
+	int i;
+	Surfel *pSurfel;
+	float w;
+	float V3Tmp[3];
+
+	for (i = 0; i < iSurfelArray.n; i++)
+	{
+		pSurfel = NodeArray.Element + iSurfelArray.Element[i];
+
+		w = (float)(pSurfel->size);
+
+		RVLSCALE3VECTOR(pSurfel->P, w, V3Tmp);
+
+		RVLSUM3VECTORS(centroid, V3Tmp, centroid);
+
+		wTotal += w;
+	}
+
+	if (wTotal > 0.0f)
+		RVLSCALE3VECTOR2(centroid, wTotal, centroid);
+}
+
 void SurfelGraph::NodeColors(unsigned char *SelectionColor)
 {
 	int SelectionColor_[3];

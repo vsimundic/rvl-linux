@@ -166,6 +166,9 @@ namespace RVL
 			float *t,
 			float scale,
 			Box<float> &boundingBox);
+		void Centroid(
+			Array<int> iSurfelArray,
+			float *centroid);
 		void NodeColors(unsigned char *SelectionColor);
 		void Display(
 			Visualizer *pVisualizer,
