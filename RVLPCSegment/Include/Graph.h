@@ -713,6 +713,9 @@ namespace RVL
 
 						pRefEdge->cost += pEdge13->cost;
 
+						//if (pEdge13->cost > pRefEdge->cost)		// Region growing method
+						//	pRefEdge->cost = pEdge13->cost;
+
 						if (pEdge13->distance < pRefEdge->distance)
 							pRefEdge->distance = pEdge13->distance;
 

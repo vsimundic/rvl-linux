@@ -1435,6 +1435,9 @@ void ObjectGraph::ComputeRelationCost(
 	AgEdge *pEdge,
 	ObjectEdgeData &data)
 {
+	//if (pEdge->desc.commonBoundaryLength < 20)
+	//	pEdge->cost = 0;
+
 	//float scale = 1000.0f;
 	float scale = 1.0f;
 	float depthStepIntThr_ = depthStepIntThr * scale;

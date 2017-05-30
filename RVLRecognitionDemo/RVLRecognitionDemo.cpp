@@ -23,6 +23,9 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 #include "RVLMeshNoiser.h"
 #include "PSGMCommon.h"
 #include "CTISet.h"
+#include "VertexGraph.h"
+#include "TG.h"
+#include "TGSet.h"
 #include "PSGM.h"
 #include <pcl/common/common.h>
 #include <pcl/registration/registration.h>
@@ -396,17 +399,16 @@ int main(int argc, char ** argv)
 		//recognition.Create();
 
 		recognition.pMem = &mem;
+		recognition.pMem0 = &mem0;
 
 		recognition.pSurfels = &surfels;
 
 		recognition.pSurfelDetector = &surfelDetector;
 
-		if (recognition.mode == RVLRECOGNITION_MODE_TRAINING)
-		{
-			surfels.NodeColors(SelectionColor);
+		recognition.MTGSet.pMem = recognition.pMem0;
 
+		if (recognition.mode == RVLRECOGNITION_MODE_TRAINING)
 			recognition.Learn(modelSequenceFileName, &visualizer); //Vidovic
-		}
 		else if (recognition.mode == RVLRECOGNITION_MODE_RECOGNITION)
 		{
 			//Eigen::MatrixXf nI = recognition.ConvexTemplatenT();
@@ -432,6 +434,8 @@ int main(int argc, char ** argv)
 			FileSequenceLoader sceneSequence;
 
 			sceneSequence.Init(sceneSequenceFileName);
+
+			recognition.pSurfels->bContactEdgeVertices = true;
 
 			recognition.pECCVGT->Init(sceneSequence, GTFolder, modelsInDB);
 

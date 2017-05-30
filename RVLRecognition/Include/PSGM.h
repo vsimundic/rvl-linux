@@ -312,6 +312,7 @@ namespace RVL
 			RECOG::PSGM_::ModelInstance *pSModelInstance,
 			int startIdx,
 			int endIdx); //Vidovic
+		void MatchTGs();
 		bool IsFlat(
 			Array<int> SurfelArray,
 			float *N,
@@ -361,7 +362,10 @@ namespace RVL
 			int nBestSegments,
 			int iBestMatches,
 			int graphID); //Vidovic
-		void CalculateScore(int similarityMeasure = 3); //Vidovic
+		void CalculateScore(
+			int similarityMeasure = 3,
+			int iFirstCTI = 0,
+			int iEndCTI = -1); //Vidovic
 		void UpdateScoreMatchMatrix(RECOG::PSGM_::ModelInstance *pSModelInstance); //Vidovic
 		void SortScoreMatchMatrix(bool descending = false); //Vidovic
 		void EvaluateMatchesByScore(
@@ -444,7 +448,7 @@ namespace RVL
 		void Clusters();
 		void CreateTemplate66();
 		void CreateTemplateBox();
-		void TemplateMatrix(Array2D<float> A);
+		void TemplateMatrix(Array2D<float> &A);
 		bool ReferenceFrames(int iCluster);
 		bool ReferenceFrames(
 			RECOG::PSGM_::Cluster *pCluster,
@@ -457,9 +461,6 @@ namespace RVL
 			RECOG::PSGM_::Cluster *pCluster,
 			Surfel *pSurfel,
 			int iFirstVertex = 0);
-		float DistanceFromNormalHull(
-			Array<SURFEL::NormalHullElement> &NHull,
-			float *N);
 		void UpdateMeanNormal(
 			float *sumN,
 			float &wN,
@@ -482,6 +483,7 @@ namespace RVL
 		CRVLParameterList ParamList;
 		DWORD mode;
 		CRVLMem *pMem;
+		CRVLMem *pMem0;
 		PlanarSurfelDetector *pSurfelDetector;
 		SurfelGraph *pSurfels;
 		Mesh *pMesh;
@@ -492,7 +494,7 @@ namespace RVL
 		float kNoise;
 		Array<RECOG::PSGM_::Plane> convexTemplate;
 		Array<RECOG::PSGM_::Plane> convexTemplate66;
-		Array<RECOG::PSGM_::Plane> convexTemplateBox;
+		Array<RECOG::PSGM_::Plane> convexTemplateBox;		
 		int minInitialSurfelSize;
 		int minVertexPerc;
 		float kReferenceSurfelSize;
@@ -519,11 +521,15 @@ namespace RVL
 		//QList<RECOG::PSGM_::MatchInstance> SSegmentMatches2; //Vidovic - probability2
 		Array<Array<SortIndex<float>>> scoreMatchMatrix;
 		Array<Array<SortIndex<float>>> scoreMatchMatrixICP;
+		Array2D<Array<int>> matchMatrix;
+		int *matchMatrixMem;
 		DWORD scoreCalculation; //Vidovic - TO DO (Implement read from cfg file)
 		ECCVGTLoader *pECCVGT; //Vidovic
 		Array <RVL::SegmentGTInstance> segmentGT;
 		RECOG::CTISet CTISet;
 		RECOG::CTISet MCTISet;
+		RECOG::TGSet STGSet;
+		RECOG::TGSet MTGSet;
 		CRVLTimer *pTimer;
 		FILE *fpTime;
 		Eigen::MatrixXf nT; //Petra
