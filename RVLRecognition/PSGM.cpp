@@ -6,6 +6,7 @@
 #include <vtkLine.h>
 #include "RVLCore2.h"
 #include "Util.h"
+#include "Space3DGrid.h"
 #include "Graph.h"
 #include "Mesh.h"
 #include "Visualizer.h"
@@ -27,7 +28,7 @@
 //#define RVLPSGM_CTIMESH_DEBUG
 //#define RVLPSGM_MATCHTGS_CREATE_SCENE_TG
 //#define RVLPSGM_MATCHTGS_CREATE_SCENE_VG
-//#define RVLPSGM_MATCHCTI_MATCH_MATRIX
+#define RVLPSGM_MATCHCTI_MATCH_MATRIX
 
 using namespace RVL;
 using namespace RECOG;
@@ -4492,6 +4493,14 @@ void PSGM::Match()
 
 	// Initialize hypothesis space.
 
+	Space3DGrid<PSGM_::Hypothesis, float> HSpace;
+
+	int HSpaceSize = 40;
+
+	HSpace.Create(HSpaceSize, HSpaceSize, HSpaceSize, 0.020f, maxnSClusterCTIs * maxnModelCTIs);
+
+	// Initialize match matrix.
+
 	RVL_DELETE_ARRAY(matchMatrixMem);
 
 	matchMatrixMem = new int[CTISet.pCTI.n * MCTISet.pCTI.n];
@@ -4499,28 +4508,6 @@ void PSGM::Match()
 	RVL_DELETE_ARRAY(matchMatrix.Element);
 
 	matchMatrix.Element = new Array<int>[nClusters * MCTISet.nModels];
-
-	Array3D<QList<QLIST::Index>> HSpace;
-
-	int HSpaceSize = 40;
-
-	int nHSpaceCells = HSpaceSize * HSpaceSize * HSpaceSize + 1;
-
-	HSpace.Element = new QList<QLIST::Index>[nHSpaceCells];
-	
-	HSpace.a = HSpace.b = HSpace.c = HSpaceSize;
-
-	int i;
-	QList<QLIST::Index> *pHSpaceCellList;
-
-	for (i = 0; i < nHSpaceCells; i++)
-	{
-		pHSpaceCellList = HSpace.Element + i;
-
-		RVLQLIST_INIT(pHSpaceCellList);
-	}
-
-	QLIST::Index *HSpaceMem = new QLIST::Index[maxnSClusterCTIs * maxnModelCTIs];
 
 	PSGM_::MatchInstance **pFirstMatch;
 	float centroid[3];
@@ -4557,8 +4544,7 @@ void PSGM::Match()
 	}
 
 	delete[] CTIInterval;
-	delete[] HSpace.Element;
-	delete[] HSpaceMem;
+
 #else
 	int startIdx = 0, endIdx = MCTISet.pCTI.n;
 

@@ -132,6 +132,13 @@ namespace RVL
 				int iCTIElement;
 			};
 
+			struct Hypothesis
+			{
+				float P[3];
+				int iMatch;
+				Hypothesis *pNext;
+			};
+
 			int ValidTangent(
 				int iSurfel,
 				int iSurfel_,
