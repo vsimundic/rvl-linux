@@ -437,6 +437,8 @@ namespace RVL
 		void BoundingBoxSize(
 			RECOG::PSGM_::ModelInstance *pBoundingBox,
 			float *size);
+		std::vector<int> GetHypothesesConsensus();	//Filko
+		bool CheckHypothesesCollision(int firstHyp, int secondHyp); //Filko
 
 	private:
 		void Clusters();

@@ -8739,3 +8739,74 @@ void PSGM::BoundingBoxSize(
 	a = pBoundingBox->modelInstance.Element[0].d + pBoundingBox->modelInstance.Element[3].d;
 	size[2] = RVLABS(a);
 }
+
+//Return a consensus of hypotheses where no one is in collision
+std::vector<int> PSGM::GetHypothesesConsensus()
+{
+	std::vector<int> chosenHypotheses;
+	std::set<int> finishedSeg;
+	//get sorted list of hypothesis
+	////helper stuff////
+	struct Hyp{
+		int idSeg;
+		int idMatch;
+		float score;
+		Hyp(int ids, int idm, float s) : idSeg(ids), idMatch(idm), score(s) {}
+		bool operator < (const Hyp& other) const
+		{
+			return (score < other.score);
+		}
+	};
+	////////////////////
+	//fill the list
+	std::vector<Hyp> hypotheses;
+	for (int i = 0; i < scoreMatchMatrix.n; i++)
+	{
+		for (int j = 0; j < scoreMatchMatrix.Element[i].n; j++)
+			Hyp(i, scoreMatchMatrix.Element[i].Element[j].idx, scoreMatchMatrix.Element[i].Element[j].cost);
+	}
+	//Sort it
+	std::sort(hypotheses.begin(), hypotheses.end());
+
+	//Add first hypothesis
+	chosenHypotheses.push_back(hypotheses.at(0).idMatch);
+	finishedSeg.insert(hypotheses.at(0).idSeg);
+	int currentMatch;
+	int currentSeg;
+	bool collision;
+	for (int i = 0; i < hypotheses.size(); i++)
+	{
+		currentSeg = hypotheses.at(i).idSeg;
+		//Check is that segment is already finished
+		if (finishedSeg.count(currentSeg))
+			continue;
+		currentMatch = hypotheses.at(i).idMatch;
+		//Check collision with chosen hypotheses
+		collision = false;
+		for (int h = 0; h < chosenHypotheses.size(); h++)
+		{
+			collision = CheckHypothesesCollision(currentMatch, chosenHypotheses.at(h));
+			if (collision)
+				break;
+		}
+		if (collision)
+			continue;
+		//else add it to the list of the chosen
+		chosenHypotheses.push_back(currentMatch);
+		finishedSeg.insert(currentSeg);
+		//check if all segments are finished
+		if (finishedSeg.size() == scoreMatchMatrix.n)
+			break;
+	}
+	return chosenHypotheses;
+}
+
+//Check if two objects are in collision. Return true if they are.
+bool PSGM::CheckHypothesesCollision(int firstHyp, int secondHyp)
+{
+	bool inCollision = false;
+	RECOG::PSGM_::MatchInstance* firstMatch = pCTImatchesArray.Element[firstHyp];
+	RECOG::PSGM_::MatchInstance* secondMatch = pCTImatchesArray.Element[secondHyp];
+
+	return inCollision;
+}
