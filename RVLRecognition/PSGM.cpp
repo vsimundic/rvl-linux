@@ -4496,8 +4496,20 @@ void PSGM::Match()
 	Space3DGrid<PSGM_::Hypothesis, float> HSpace;
 
 	int HSpaceSize = 40;
+	float HSpaceCellSize = 20.0f;
+	int maxnMatches = maxnSClusterCTIs * maxnModelCTIs;
 
-	HSpace.Create(HSpaceSize, HSpaceSize, HSpaceSize, 0.020f, maxnSClusterCTIs * maxnModelCTIs);
+	HSpace.Create(HSpaceSize, HSpaceSize, HSpaceSize, HSpaceCellSize, maxnMatches);
+
+	float volumeCorner[3];
+
+	float halfVolumeSize = 0.5f * HSpaceCellSize * (float)HSpaceSize;
+
+	RVLSET3VECTOR(volumeCorner, halfVolumeSize, halfVolumeSize, halfVolumeSize);
+
+	Array<int> iMergingCandidates;
+
+	iMergingCandidates.Element = new int[maxnMatches];
 
 	// Initialize match matrix.
 
@@ -4524,6 +4536,8 @@ void PSGM::Match()
 
 		pSurfels->Centroid(pSCluster->iSurfelArray, centroid);
 
+		HSpace.SetVolume(centroid[0] - volumeCorner[0], centroid[1] - volumeCorner[1], centroid[2] - volumeCorner[2]);
+
 		for (iModel = 0; iModel < MCTISet.nModels; iModel++)
 		{
 			pFirstMatch = pCTImatches->ppNext;
@@ -4539,11 +4553,12 @@ void PSGM::Match()
 				CalculateScore(RVLPSGM_MATCH_SIMILARITY_MEASURE_MEAN_SATURATED_SQUARE_DISTANCE, CTIInterval[iModel].a, CTIInterval[iModel].b);
 			} // for all MI in cluster
 
-
+			UpdateMatchMatrix(HSpace);
 		}
 	}
 
 	delete[] CTIInterval;
+	delete[] iMergingCandidates.Element;
 
 #else
 	int startIdx = 0, endIdx = MCTISet.pCTI.n;
@@ -5226,6 +5241,73 @@ void PSGM::MatchTGs()
 
 	mem.Clear();
 #endif
+}
+
+void PSGM::UpdateMatchMatrix(
+	Space3DGrid<PSGM_::Hypothesis, float> &HSpace,
+	Array<int> &iMergingCandidates)
+{
+	float et2Thr = HSpace.cellSize * HSpace.cellSize;
+
+	float eqThr = 0.94;		// cos(20 deg)
+
+	PSGM_::MatchInstance *pMatch = pFirstSCTIMatch;
+
+	PSGM_::Hypothesis Hypothesis;
+	PSGM_::Hypothesis *pHypothesis_;
+	Array<PSGM_::Hypothesis *> neighborArray;
+	int i;
+	float dt[3];
+	float e;
+	float *X, *Z, *X_, *Z_;
+
+	while (pMatch)
+	{
+		X = pMatch->R;
+		Z = pMatch->R + 6;
+
+		HSpace.Neighbors(pMatch->t, neighborArray);
+
+		iMergingCandidates.n = 0;
+
+		for (i = 0; i < neighborArray.n; i++)
+		{
+			pHypothesis_ = neighborArray.Element[i];
+
+			RVLDIF3VECTORS(pHypothesis_->P, pMatch->t, dt);
+
+			e = RVLDOTPRODUCT3(dt, dt);
+
+			if (e > et2Thr)
+				continue;
+
+			Z_ = pHypothesis_->R + 6;
+
+			e = RVLDOTPRODUCT3(Z, Z_);
+
+			if (e > eqThr)
+				continue;
+
+			X_ = pHypothesis_->R;
+
+			e = RVLDOTPRODUCT3(X, X_);
+
+			if (e > eqThr)
+				continue;
+
+			if (pMatch->score <= pHypothesis_->score)
+				iMergingCandidates.Element[iMergingCandidates.n++] = i;
+			else
+				break;
+		}
+
+		if (i >= neighborArray.n)
+		{
+
+		}
+
+		pMatch = pMatch->pNext;
+	}
 }
 
 void PSGM::CalculateScore(

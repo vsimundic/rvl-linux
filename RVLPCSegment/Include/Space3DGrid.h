@@ -51,6 +51,8 @@ namespace RVL
 				RVL_DELETE_ARRAY(activeCellArray.Element);
 
 				activeCellArray.Element = new int[nCells];
+
+				activeCellArray.n = 0;
 			}
 
 			iOutCell = nCells - 1;
@@ -89,9 +91,9 @@ namespace RVL
 		}
 
 		void SetVolume(
-			int minx,
-			int miny,
-			int minz)
+			CoordinateType minx,
+			CoordinateType miny,
+			CoordinateType minz)
 		{
 			volume.minx = minx;
 			volume.maxx = minx + cellSize * (CoordinateType)(grid.a);
@@ -137,7 +139,7 @@ namespace RVL
 			if (pCellDataList->pFirst == NULL)
 				activeCellArray.Element[activeCellArray.n++] = iCell;
 
-			RVLQLIST_ADD_ENTRY(pCellDataList, pNewData);
+			RVLQLIST_ADD_ENTRY2(pCellDataList, pNewData);
 		}
 
 		void Neighbors(
@@ -218,12 +220,14 @@ namespace RVL
 			}
 		}
 
+	public:
+		CoordinateType cellSize;
+
 	private:
 		Array3D<QList<DataType>> grid;
 		DataType *dataMem;
 		int dataMemSize;
 		Box<CoordinateType> volume;
-		CoordinateType cellSize;
 		CoordinateType cellSize2;
 		DataType *pNewData;
 		int nCells;

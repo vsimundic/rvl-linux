@@ -134,9 +134,12 @@ namespace RVL
 
 			struct Hypothesis
 			{
+				float R[9];
 				float P[3];
 				int iMatch;
+				float score;
 				Hypothesis *pNext;
+				Hypothesis **pPtrToThis;
 			};
 
 			int ValidTangent(
@@ -320,6 +323,9 @@ namespace RVL
 			int startIdx,
 			int endIdx); //Vidovic
 		void MatchTGs();
+		void UpdateMatchMatrix(
+			Space3DGrid<PSGM_::Hypothesis, float> &HSpace,
+			Array<int> &iMergingCandidates);
 		bool IsFlat(
 			Array<int> SurfelArray,
 			float *N,
