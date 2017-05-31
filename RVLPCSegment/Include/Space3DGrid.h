@@ -12,6 +12,7 @@ namespace RVL
 			grid.Element = NULL;
 			dataMem = NULL;
 			neighborBuff = NULL;
+			activeCellArray.Element = NULL;
 
 			neighborCellArray.Element = new int[8];
 		}
@@ -21,6 +22,7 @@ namespace RVL
 			RVL_DELETE_ARRAY(grid.Element);
 			RVL_DELETE_ARRAY(dataMem);
 			RVL_DELETE_ARRAY(neighborBuff);
+			RVL_DELETE_ARRAY(activeCellArray.Element);
 
 			delete[] neighborCellArray.Element;
 		}
@@ -45,6 +47,10 @@ namespace RVL
 				grid.Element = new QList<DataType>[nCells];
 
 				cellMemSize = nCells;
+
+				RVL_DELETE_ARRAY(activeCellArray.Element);
+
+				activeCellArray.Element = new int[nCells];
 			}
 
 			iOutCell = nCells - 1;
@@ -124,7 +130,12 @@ namespace RVL
 
 			Cell(data.P, i, j, k);
 
-			QList<DataType> *pCellDataList = grid.Element + Cell(i, j, k);
+			int iCell = Cell(i, j, k);
+
+			QList<DataType> *pCellDataList = grid.Element + iCell;
+
+			if (pCellDataList->pFirst == NULL)
+				activeCellArray.Element[activeCellArray.n++] = iCell;
 
 			RVLQLIST_ADD_ENTRY(pCellDataList, pNewData);
 		}
@@ -221,5 +232,6 @@ namespace RVL
 		DataType **neighborBuff;
 		int iOutCell;
 		Array<int> neighborCellArray;
+		Array<int> activeCellArray;
 	};
 }

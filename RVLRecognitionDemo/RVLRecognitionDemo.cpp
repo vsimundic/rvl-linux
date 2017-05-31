@@ -63,6 +63,7 @@ void CreateParamList(
 	char **pModelsInDB,	//VIDOVIC
 	char **pGTFolder,	//VIDOVIC
 	char **pSegmentGTFileName,	//Vidovic
+	char **pResultsFolder,
 	DWORD &method,
 	DWORD &flags //VIDOVIC
 	)
@@ -78,6 +79,7 @@ void CreateParamList(
 	pParamData = pParamList->AddParam("ModelSequenceFileName", RVLPARAM_TYPE_STRING, pModelSequenceFileName);	//VIDOVIC
 	pParamData = pParamList->AddParam("ModelsInDataBase", RVLPARAM_TYPE_STRING, pModelsInDB);	//VIDOVIC
 	pParamData = pParamList->AddParam("GTFolder", RVLPARAM_TYPE_STRING, pGTFolder);	//VIDOVIC
+	pParamData = pParamList->AddParam("ResultsFolder", RVLPARAM_TYPE_STRING, pResultsFolder);
 	pParamData = pParamList->AddParam("SegmentGTFileName", RVLPARAM_TYPE_STRING, pSegmentGTFileName);	//Vidovic
 	pParamData = pParamList->AddParam("Recognition.method", RVLPARAM_TYPE_ID, &method);
 	pParamList->AddID(pParamData, "PSGM", RVLRECOGNITION_METHOD_PSGM);
@@ -213,6 +215,7 @@ int main(int argc, char ** argv)
 	char *modelSequenceFileName = NULL; //VIDOVIC
 	char *modelsInDB = NULL; //VIDOVIC
 	char *GTFolder = NULL; //VIDOVIC
+	char *ResultsFolder = NULL;
 	char *segmentGTFileName = NULL; //Vidovic
 	DWORD method = RVLRECOGNITION_METHOD_PSGM;
 	//DWORD method = RVLRECOGNITION_METHOD_RF; //VIDOVIC
@@ -229,6 +232,7 @@ int main(int argc, char ** argv)
 		&modelsInDB,
 		&GTFolder,
 		&segmentGTFileName,
+		&ResultsFolder,
 		method,
 		flags);	 //VIDOVIC
 
@@ -237,7 +241,7 @@ int main(int argc, char ** argv)
 	if (segmentGTFileName == NULL)
 	{
 		segmentGTFileName = new char[200];
-		segmentGTFileName = "C:\\RVL\\segmentGT.txt";
+		segmentGTFileName = "C:\\RVL\\segmentGT.txt"; 
 	}
 
 	// Create mesh builder.
@@ -443,19 +447,21 @@ int main(int argc, char ** argv)
 
 			//FILE *fpHypothesisEvaluation = fopen("D:\\ARP3D\\compare_TNM_Valid_TMP.txt", "w");
 
-			//FILE *fpLog = fopen("D:\\ARP3D\\evaluationLog.txt", "w");			
+			//FILE *fpLog = fopen("D:\\ARP3D\\evaluationLog.txt", "w");
 
-			FILE *fpPoseError = fopen("C:\\RVL\\ExpRez\\poseError.txt", "w");
+			std::string resultsFolderName = std::string(ResultsFolder);
 
-			FILE *fpnotFirstInfo = fopen("C:\\RVL\\ExpRez\\notFirstInfo.txt", "w");
+			FILE *fpPoseError = fopen((resultsFolderName + "\\poseError.txt").data(), "w");
 
-			FILE *fpnotFirstPoseErr = fopen("C:\\RVL\\ExpRez\\notFirstInfo.txt", "w");
+			FILE *fpnotFirstInfo = fopen((resultsFolderName + "\\notFirstInfo.txt").data(), "w");
+
+			FILE *fpnotFirstPoseErr = fopen((resultsFolderName + "\\notFirstInfo.txt").data(), "w");
 
 			//recognition.pECCVGT->SaveGTFile("C:\\RVL\\ExpRez\\TUW_GT.txt");
 
-			FILE *fpHypothesisEvaluation = fopen("C:\\RVL\\ExpRez\\compare_TNM_Valid_TMP.txt", "w");
+			FILE *fpHypothesisEvaluation = fopen((resultsFolderName + "\\compare_TNM_Valid_TMP.txt").data(), "w");
 
-			FILE *fpLog = fopen("C:\\RVL\\ExpRez\\evaluationLog.txt", "w");
+			FILE *fpLog = fopen((resultsFolderName + "\\evaluationLog.txt").data(), "w");
 
 			recognition.LoadCompleteSegmentGT(sceneSequence);
 

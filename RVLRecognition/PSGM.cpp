@@ -7112,25 +7112,25 @@ bool RVL::RECOG::PSGM_::mouseRButtonDownUserFunction(
 			pSurfels->UpdateVertexDisplayLines();
 		}
 
-		pData->iSelectedCluster = iCluster;
+		//pData->iSelectedCluster = iCluster;
 
-		FILE *fp = fopen("C:\\RVL\\Debug\\cluster_vertices.txt", "w");
+		//FILE *fp = fopen("C:\\RVL\\Debug\\cluster_vertices.txt", "w");
 
-		RECOG::PSGM_::Cluster *pCluster = pRecognition->clusters.Element[iCluster];
+		//RECOG::PSGM_::Cluster *pCluster = pRecognition->clusters.Element[iCluster];
 
-		int i, iVertex;
-		SURFEL::Vertex *pVertex;
+		//int i, iVertex;
+		//SURFEL::Vertex *pVertex;
 
-		for (i = 0; i < pCluster->iVertexArray.n; i++)
-		{
-			iVertex = pCluster->iVertexArray.Element[i];
+		//for (i = 0; i < pCluster->iVertexArray.n; i++)
+		//{
+		//	iVertex = pCluster->iVertexArray.Element[i];
 
-			pVertex = pSurfels->vertexArray.Element[iVertex];
+		//	pVertex = pSurfels->vertexArray.Element[iVertex];
 
-			fprintf(fp, "%d\t%lf\t%lf\t%lf\n", iVertex, pVertex->P[0], pVertex->P[1], pVertex->P[2]);
-		}
+		//	fprintf(fp, "%d\t%lf\t%lf\t%lf\n", iVertex, pVertex->P[0], pVertex->P[1], pVertex->P[2]);
+		//}
 
-		fclose(fp);
+		//fclose(fp);
 
 		return true;
 	}
