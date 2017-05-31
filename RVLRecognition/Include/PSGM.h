@@ -262,7 +262,7 @@ namespace RVL
 		
 		//Recomended,
 		//Visualizes chosen hypotheses 0-6 for each segment on the scene, activated when pressed "c":
-		void AddOneModelToVisualizer(Visualizer *pVisualizer, int iMatch, int iRank, bool align);
+		void AddOneModelToVisualizer(Visualizer *pVisualizer, int iMatch, int iRank, bool align, bool useTG = false);
 		
 		void LoadModelMeshDB(char *modelSequenceFileName, bool decimate=false, float decimatePercent=0.4);
 
@@ -441,8 +441,8 @@ namespace RVL
 		void BoundingBoxSize(
 			RECOG::PSGM_::ModelInstance *pBoundingBox,
 			float *size);
-		std::vector<int> GetHypothesesConsensus();	//Filko
-		bool CheckHypothesesCollision(int firstHyp, int secondHyp); //Filko
+		std::vector<int> GetHypothesesCollisionConsensus(float thr);	//Filko
+		bool CheckHypothesesCollision(int firstHyp, int secondHyp, float thr); //Filko
 
 	private:
 		void Clusters();

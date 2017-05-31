@@ -445,17 +445,17 @@ int main(int argc, char ** argv)
 
 			//FILE *fpLog = fopen("D:\\ARP3D\\evaluationLog.txt", "w");			
 
-			FILE *fpPoseError = fopen("C:\\RVL\\ExpRez\\poseError.txt", "w");
+			/*FILE *fpPoseError = fopen("C:\\RVL\\ExpRez\\poseError.txt", "w");
 
 			FILE *fpnotFirstInfo = fopen("C:\\RVL\\ExpRez\\notFirstInfo.txt", "w");
 
-			FILE *fpnotFirstPoseErr = fopen("C:\\RVL\\ExpRez\\notFirstInfo.txt", "w");
+			FILE *fpnotFirstPoseErr = fopen("C:\\RVL\\ExpRez\\notFirstInfo.txt", "w");*/
 
 			//recognition.pECCVGT->SaveGTFile("C:\\RVL\\ExpRez\\TUW_GT.txt");
 
-			FILE *fpHypothesisEvaluation = fopen("C:\\RVL\\ExpRez\\compare_TNM_Valid_TMP.txt", "w");
+			/*FILE *fpHypothesisEvaluation = fopen("C:\\RVL\\ExpRez\\compare_TNM_Valid_TMP.txt", "w");
 
-			FILE *fpLog = fopen("C:\\RVL\\ExpRez\\evaluationLog.txt", "w");
+			FILE *fpLog = fopen("C:\\RVL\\ExpRez\\evaluationLog.txt", "w");*/
 
 			recognition.LoadCompleteSegmentGT(sceneSequence);
 
@@ -516,6 +516,13 @@ int main(int argc, char ** argv)
 				recognition.InitDisplay(&visualizer, &mesh, SelectionColor);
 				recognition.Display();
 
+				//////NEW FILKO - TEST COLLISION CONSENSUS
+				////std::vector<int> conHyp = recognition.GetHypothesesCollisionConsensus(20);
+				////for (int i = 0; i < conHyp.size(); i++)
+				////{
+				////	recognition.AddOneModelToVisualizer(&visualizer, conHyp.at(i), 0, false, true);
+				////}
+
 				QueryPerformanceCounter((LARGE_INTEGER *)&ctr1_);
 
 #ifdef RVLPSGM_ICP
@@ -547,7 +554,7 @@ int main(int argc, char ** argv)
 				//evaluate ICP
 				recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, fpPoseError, fpnotFirstInfo, fpnotFirstPoseErr, 7, true);
 #else
-				recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, fpPoseError, fpnotFirstInfo, fpnotFirstPoseErr, 7);
+				//recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, fpPoseError, fpnotFirstInfo, fpnotFirstPoseErr, 7);
 #endif
 				//recognition.AddModelsToVisualizer(&visualizer, true, PCLICP, PCLICPVariants::Point_to_plane, NULL/*&kdtree*/);
 				QueryPerformanceCounter((LARGE_INTEGER *)&ctr2_);
@@ -571,8 +578,8 @@ int main(int argc, char ** argv)
 
 			RVL_DELETE_ARRAY(recognition.segmentGT.Element);
 
-			fclose(fpHypothesisEvaluation);
-			fclose(fpLog);
+			//fclose(fpHypothesisEvaluation);
+			//fclose(fpLog);
 
 			//END Vidovic
 		}	// if (recognition.mode == RVLRECOGNITION_MODE_RECOGNITION)
