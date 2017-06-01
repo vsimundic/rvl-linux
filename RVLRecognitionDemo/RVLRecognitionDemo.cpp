@@ -4,8 +4,8 @@
 #include <ctime>
 //#include "stdafx.h"
 #include <vtkAutoInit.h>
+//VTK_MODULE_INIT(vtkRenderingOpenGL);
 VTK_MODULE_INIT(vtkRenderingOpenGL2);
-//VTK_MODULE_INIT(vtkRenderingOpenGL2);
 VTK_MODULE_INIT(vtkInteractionStyle);
 VTK_MODULE_INIT(vtkRenderingFreeType);
 #include "RVLVTK.h"
@@ -99,15 +99,22 @@ void GenerateSegmentNeighbourhood(PSGM * psgm, double radius)
 	cloud_destination->is_dense = false;
 	cloud_destination->points.resize(cloud_destination->width * cloud_destination->height);
 
+	
+	int idx = 0;
 	for (int i = 0; i <psgm->pMesh->NodeArray.n; i++)
 	{
-		cloud_destination->points[i].x = psgm->pMesh->NodeArray.Element[i].P[0];
-		cloud_destination->points[i].y = psgm->pMesh->NodeArray.Element[i].P[1];
-		cloud_destination->points[i].z = psgm->pMesh->NodeArray.Element[i].P[2];
+		if (psgm->clusterMap[psgm->pSurfels->surfelMap[i]] == -1)
+			continue;
 
-		cloud_destination->points[i].normal_x = psgm->pMesh->NodeArray.Element[i].N[0];
-		cloud_destination->points[i].normal_y = psgm->pMesh->NodeArray.Element[i].N[1];
-		cloud_destination->points[i].normal_z = psgm->pMesh->NodeArray.Element[i].N[2];
+		cloud_destination->points[idx].x = psgm->pMesh->NodeArray.Element[i].P[0];
+		cloud_destination->points[idx].y = psgm->pMesh->NodeArray.Element[i].P[1];
+		cloud_destination->points[idx].z = psgm->pMesh->NodeArray.Element[i].P[2];
+
+		cloud_destination->points[idx].normal_x = psgm->pMesh->NodeArray.Element[i].N[0];
+		cloud_destination->points[idx].normal_y = psgm->pMesh->NodeArray.Element[i].N[1];
+		cloud_destination->points[idx].normal_z = psgm->pMesh->NodeArray.Element[i].N[2];
+
+		idx++;
 	}
 
 	pcl::search::KdTree<pcl::PointXYZINormal>::Ptr kdtree = boost::make_shared<pcl::search::KdTree<pcl::PointXYZINormal>>((new pcl::search::KdTree<pcl::PointXYZINormal>));
@@ -129,7 +136,7 @@ void GenerateSegmentNeighbourhood(PSGM * psgm, double radius)
 		{
 			pSurfel = &psgm->pSurfels->NodeArray.Element[pCluster->iSurfelArray.Element[i]];
 			pt = pSurfel->PtList.pFirst;
-			for (int k = 0; k < pSurfel->size; k++)
+			while (pt)
 			{
 				centroids[3 * iCluster] += psgm->pMesh->NodeArray.Element[pt->Idx].P[0];
 				centroids[3 * iCluster + 1] += psgm->pMesh->NodeArray.Element[pt->Idx].P[1];
@@ -242,7 +249,7 @@ int main(int argc, char ** argv)
 	if (segmentGTFileName == NULL)
 	{
 		segmentGTFileName = new char[200];
-		segmentGTFileName = "C:\\RVL\\segmentGT.txt"; 
+		segmentGTFileName = "C:\\RVL\\segmentGT.txt";
 	}
 
 	// Create mesh builder.
@@ -448,7 +455,7 @@ int main(int argc, char ** argv)
 
 			//FILE *fpHypothesisEvaluation = fopen("D:\\ARP3D\\compare_TNM_Valid_TMP.txt", "w");
 
-			//FILE *fpLog = fopen("D:\\ARP3D\\evaluationLog.txt", "w");
+			//FILE *fpLog = fopen("D:\\ARP3D\\evaluationLog.txt", "w");			
 
 			std::string resultsFolderName = std::string(ResultsFolder);
 
@@ -519,7 +526,7 @@ int main(int argc, char ** argv)
 				//LoadMesh(&meshBuilder, filePath, &mesh, false);
 
 				surfels.NodeColors(SelectionColor);				
-				//visualizer.renderer->RemoveAllViewProps();
+				visualizer.renderer->RemoveAllViewProps();
 				recognition.InitDisplay(&visualizer, &mesh, SelectionColor);
 				recognition.Display();
 
@@ -552,7 +559,7 @@ int main(int argc, char ** argv)
 				recognition.CalculateNNCost(&visualizer, PCLICP, PCLICPVariants::Point_to_plane);
 
 				//evaluate ICP
-				recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, fpPoseError, fpnotFirstInfo, fpnotFirstPoseErr, 7, true);
+				recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, fpPoseError, fpnotFirstInfo, fpnotFirstPoseErr, 10, true);
 #else
 				recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, fpPoseError, fpnotFirstInfo, fpnotFirstPoseErr, 7);
 #endif
@@ -580,6 +587,7 @@ int main(int argc, char ** argv)
 
 			fclose(fpHypothesisEvaluation);
 			fclose(fpLog);
+			fclose(fpPoseError);
 
 			//END Vidovic
 		}	// if (recognition.mode == RVLRECOGNITION_MODE_RECOGNITION)
@@ -697,4 +705,3 @@ int main(int argc, char ** argv)
 
 	return 0;
 }
-

@@ -5020,6 +5020,10 @@ int PlanarSurfelDetector::CreateEdgeFeatures(
 
 				pEdgeFeature->physicalSize = l;
 
+				QList<QLIST::Index2> *pPtList = &(pEdgeFeature->PtList);
+
+				RVLQLIST_INIT(pPtList);
+
 				// Assign points to the new edge feature.
 				// Connect the new edge feature to the neighboring surfels.
 

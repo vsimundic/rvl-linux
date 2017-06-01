@@ -1,5 +1,8 @@
 #pragma once
 
+#define RVLSURFEL_IMAGE_ADJACENCY //Vidovic -> exclude Filko functions 
+#define RVLSURFEL_COLOR_HISTOGRAM //Vidovic -> exclude Filko functions
+
 //#define RVLPCSEGMENT_GRAPH_WERAGGREGATION_DEBUG
 //#define RVLPCSEGMENT_GRAPH_WERAGGREGATION_DETAILED_DEBUG
 

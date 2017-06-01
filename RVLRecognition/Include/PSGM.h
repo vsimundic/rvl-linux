@@ -12,8 +12,11 @@
 #define RVLPSGM_MATCH_SIMILARITY_MEASURE_MAX_ABS_DISTANCE										2
 #define RVLPSGM_MATCH_SIMILARITY_MEASURE_SATURATED_SQUARE_DISTANCE_INVISIBILITY_PENAL			3
 #define RVLPSGM_MATCH_SIMILARITY_MEASURE_MEAN_SATURATED_SQUARE_DISTANCE							4
+#define RVLPSGM_MATCH_SIMILARITY_MEASURE_MEDIAN_ABS_DISTANCE									5
 //#define RVLPSGM_RANSAC
-//#define RVLPSGM_ICP
+#define RVLPSGM_ICP
+#define RVLPSGM_ICP_SIMILARITY_MEASURE_COSTNN				0
+#define RVLPSGM_ICP_SIMILARITY_MEASURE_SATURATED_SCORE		1
 
 
 #define RVLRECOGNITION_MODE_PSGM_CREATE_CTIS		2
@@ -283,9 +286,11 @@ namespace RVL
 
 		static vtkSmartPointer<vtkPolyData> GetVisiblePart(vtkSmartPointer<vtkPolyData> PD); // Models are reduced to only the visible part (using angle between normals) which improves ICP. 
 
+		static vtkSmartPointer<vtkPolyData> GetVisiblePart(vtkSmartPointer<vtkPolyData> PD, double *T_M_S); // Models are reduced to only the visible part (using angle between normals) which improves ICP.
+
 		void CalculateNNCost(Visualizer *pVisualizer, RVL::PSGM::ICPfunction ICPFunction, int ICPvariant); // For each pair of scene segment and visible part of the matched model, calls NNCost.
 
-		float NNCost(int iCluster, vtkSmartPointer<vtkPolyData> targetPD); // Calculates cost based on sum of distances between scene segment points and their nearest neighbours in visible part of the matched model.
+		float NNCost(int iCluster, vtkSmartPointer<vtkPolyData> sourcePD, vtkSmartPointer<vtkPolyData> targetPD, int similarityMeasure = 0); // Calculates cost based on sum of distances between scene segment points and their nearest neighbours in visible part of the matched model.
 		//end Petra
 
 		void InitDisplay(
@@ -441,8 +446,8 @@ namespace RVL
 			RVL::GTInstance **pGT,
 			int iScene,
 			int iModel);
-		bool PSGM::CompareMatchToGT(RECOG::PSGM_::MatchInstance *pMatch, ECCVGTLoader *ECCVGT, bool poseCheck, float angleThresh, float distanceThresh); //VIDOVIC
-		void PSGM::CountTPandFN(ECCVGTLoader *ECCVGT, int &TP, int &FN, bool printMatchInfo); //VIDOVIC
+		//bool PSGM::CompareMatchToGT(RECOG::PSGM_::MatchInstance *pMatch, ECCVGTLoader *ECCVGT, bool poseCheck, float angleThresh, float distanceThresh); //VIDOVIC
+		//void PSGM::CountTPandFN(ECCVGTLoader *ECCVGT, int &TP, int &FN, bool printMatchInfo); //VIDOVIC
 		void CreateScoreMatchMatrixICP();
 		void FindMinMaxInScoreMatchMatrix(
 			float &min,
@@ -507,7 +512,7 @@ namespace RVL
 		float kNoise;
 		Array<RECOG::PSGM_::Plane> convexTemplate;
 		Array<RECOG::PSGM_::Plane> convexTemplate66;
-		Array<RECOG::PSGM_::Plane> convexTemplateBox;		
+		Array<RECOG::PSGM_::Plane> convexTemplateBox;
 		int minInitialSurfelSize;
 		int minVertexPerc;
 		float kReferenceSurfelSize;

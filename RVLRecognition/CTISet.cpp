@@ -161,10 +161,19 @@ void CTISet::CopyCTIsToArray()
 
 		maxSegmentIdx = 0;
 
+		int segmentDiff;
+
 		for (int i = 0; i < pCTI.n - 1; i++)
 		{
 			if (pCTI_->iCluster != pCTINext->iCluster || pCTI_->iModel != pCTINext->iModel)
+			{
 				nS++;
+				segmentDiff = pCTINext->iCluster - pCTI_->iCluster;
+								
+				if (segmentDiff > 1)
+					nS += segmentDiff - 1;
+			}
+				
 
 			pCTI_ = pCTINext;
 			pCTINext = pCTI_->pNext;
@@ -173,9 +182,12 @@ void CTISet::CopyCTIsToArray()
 				maxSegmentIdx = pCTI_->iCluster;
 		}
 
-		nS += 1;
+		nS += 1;	
 
-		nModels = pCTI.Element[pCTI.n - 1]->iModel;
+		nModels = pCTI.Element[pCTI.n - 1]->iModel + 1;
+
+		if (nModels != 0)
+			nS = (nModels) * (maxSegmentIdx + 1);
 
 		// nCTI(i) represents number of CTI-s in i-th segment	
 		int *nCTI = new int[nS];
@@ -184,19 +196,50 @@ void CTISet::CopyCTIsToArray()
 		pCTI_ = CTI.pFirst;
 
 		for (int i = 0; i < nS; i++)
-		{
-			iM = pCTI_->iModel;
-			iC = pCTI_->iCluster;
-
 			nCTI[i] = 0;
 
-			while (pCTI_ && iM == pCTI_->iModel && iC == pCTI_->iCluster)
-			{
-				nCTI[i]++;
+		pCTI_ = CTI.pFirst;
 
-				pCTI_ = pCTI_->pNext;
-			}
+		for (int i = 0; i < pCTI.n; i++)
+		{
+			if (pCTI_->iModel == -1)
+				nCTI[pCTI_->iCluster]++;
+			else
+				nCTI[pCTI_->iModel * (maxSegmentIdx + 1) + pCTI_->iCluster]++;
+
+			pCTI_ = pCTI_->pNext;
 		}
+
+		/*
+		for (int i = 0; i < nS; i++)
+		{
+			nCTI[i] = 0;
+
+			if (pCTI_)
+			{
+				iM = pCTI_->iModel;
+				iC = pCTI_->iCluster;
+
+				if (iM == -1)
+				{
+					if (i != iC)
+						continue;
+				}
+				else
+					if ((iM * (maxSegmentIdx + 1) + iC) != i)
+						continue;
+
+				//if ((iM == -1 && i != iC) || ((iM * (maxSegmentIdx + 1) + iC) != i))
+				//	continue;
+
+				while (pCTI_ && iM == pCTI_->iModel && iC == pCTI_->iCluster)
+				{
+					nCTI[i]++;
+
+					pCTI_ = pCTI_->pNext;
+				}
+			}
+		}*/
 
 		// Creates Array of segments, each segment contains CTI indices in that segment
 		RVL_DELETE_ARRAY(SegmentCTIs.Element);
@@ -212,10 +255,15 @@ void CTISet::CopyCTIsToArray()
 
 		for (int i = 0; i < nS; i++)
 		{
-			SegmentCTIs.Element[i].Element = iSegmentCTIIdx;
+			if (nCTI[i] == 0)
+				SegmentCTIs.Element[i].Element = NULL;
+			else
+			{
+				SegmentCTIs.Element[i].Element = iSegmentCTIIdx;
 
-			for (int j = 0; j < nCTI[i]; j++, iCTI++)
-				*(iSegmentCTIIdx++) = iCTI;
+				for (int j = 0; j < nCTI[i]; j++, iCTI++)
+					*(iSegmentCTIIdx++) = iCTI;
+			}
 
 			SegmentCTIs.Element[i].n = nCTI[i];
 		}
