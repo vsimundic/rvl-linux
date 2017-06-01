@@ -137,6 +137,7 @@ namespace RVL
 				float R[9];
 				float P[3];
 				int iMatch;
+				int iCell;
 				float score;
 				Hypothesis *pNext;
 				Hypothesis **pPtrToThis;
@@ -243,10 +244,10 @@ namespace RVL
 			Eigen::MatrixXf dM,
 			int iCTI);
 
-		void UpdateMatchMatrix(
-			RECOG::PSGM_::SegmentMatch *SMatch,			
-			int iCTI
-			);
+		//void UpdateMatchMatrix(
+		//	RECOG::PSGM_::SegmentMatch *SMatch,			
+		//	int iCTI
+		//	);
 
 		void VisualizeCTIMatch( //Damir
 			float *nT, 
@@ -323,8 +324,9 @@ namespace RVL
 			int startIdx,
 			int endIdx); //Vidovic
 		void MatchTGs();
-		void UpdateMatchMatrix(
-			Space3DGrid<PSGM_::Hypothesis, float> &HSpace,
+		void AddSegmentMatches(
+			int iCluster,
+			Space3DGrid<RECOG::PSGM_::Hypothesis, float> &HSpace,
 			Array<int> &iMergingCandidates);
 		bool IsFlat(
 			Array<int> SurfelArray,
@@ -532,8 +534,10 @@ namespace RVL
 		//QList<RECOG::PSGM_::MatchInstance> SSegmentMatches2; //Vidovic - probability2
 		Array<Array<SortIndex<float>>> scoreMatchMatrix;
 		Array<Array<SortIndex<float>>> scoreMatchMatrixICP;
-		Array2D<Array<int>> matchMatrix;
-		int *matchMatrixMem;
+		Array<Array<SortIndex<float>>> sceneSegmentMatches;
+		Array<SortIndex<float>> sceneSegmentMatchesArray;
+		//Array2D<Array<int>> matchMatrix;
+		//int *matchMatrixMem;
 		DWORD scoreCalculation; //Vidovic - TO DO (Implement read from cfg file)
 		ECCVGTLoader *pECCVGT; //Vidovic
 		Array <RVL::SegmentGTInstance> segmentGT;

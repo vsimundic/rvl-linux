@@ -11,7 +11,7 @@ namespace RVL
 
 			grid.Element = NULL;
 			dataMem = NULL;
-			neighborBuff = NULL;
+			dataBuff = NULL;
 			activeCellArray.Element = NULL;
 
 			neighborCellArray.Element = new int[8];
@@ -21,7 +21,7 @@ namespace RVL
 		{
 			RVL_DELETE_ARRAY(grid.Element);
 			RVL_DELETE_ARRAY(dataMem);
-			RVL_DELETE_ARRAY(neighborBuff);
+			RVL_DELETE_ARRAY(dataBuff);
 			RVL_DELETE_ARRAY(activeCellArray.Element);
 
 			delete[] neighborCellArray.Element;
@@ -82,9 +82,9 @@ namespace RVL
 
 				dataMem = new DataType[dataMemSize];
 
-				RVL_DELETE_ARRAY(neighborBuff);
+				RVL_DELETE_ARRAY(dataBuff);
 
-				neighborBuff = new DataType *[dataMemSize];
+				dataBuff = new DataType *[dataMemSize];
 			}
 
 			pNewData = dataMem;
@@ -122,7 +122,7 @@ namespace RVL
 			return (i >= 0 && i < grid.a && j >= 0 && j < grid.b && k >= 0 && k < grid.c ? (k * grid.b + j) * grid.a + i : iOutCell);
 		}
 
-		void AddData(DataType data)
+		inline void AddData(DataType &data)
 		{
 			*pNewData = data;
 
@@ -136,10 +136,19 @@ namespace RVL
 
 			QList<DataType> *pCellDataList = grid.Element + iCell;
 
+			pNewData->iCell = iCell;
+
 			if (pCellDataList->pFirst == NULL)
 				activeCellArray.Element[activeCellArray.n++] = iCell;
 
 			RVLQLIST_ADD_ENTRY2(pCellDataList, pNewData);
+		}
+
+		inline void RemoveData(DataType *pData)
+		{
+			QList<DataType> *pCellDataList = grid.Element + pData->iCell;
+
+			RVLQLIST_REMOVE_ENTRY2(pCellDataList, pData, DataType);
 		}
 
 		void Neighbors(
@@ -195,7 +204,7 @@ namespace RVL
 
 			neighborArray.n = 0;
 
-			neighborArray.Element = neighborBuff;
+			neighborArray.Element = dataBuff;
 
 			DataType *pData;
 			CoordinateType dist2;
@@ -220,20 +229,41 @@ namespace RVL
 			}
 		}
 
-	public:
-		CoordinateType cellSize;
+		void GetData(Array<DataType *> &dataArray)
+		{
+			dataArray.n = 0;
+
+			int iCell;
+			DataType *pData;
+			QList<DataType> *pCellDataList;
+
+			for (iCell = 0; iCell < activeCellArray.n; iCell++)
+			{
+				pCellDataList = grid.Element + iCell;
+
+				pData = pCellDataList->pFirst;
+
+				while (pData)
+				{
+					dataArray.Element[dataArray.n++] = pData;
+
+					pData = pData->pNext;
+				}
+			}
+		}
 
 	private:
 		Array3D<QList<DataType>> grid;
 		DataType *dataMem;
 		int dataMemSize;
 		Box<CoordinateType> volume;
+		CoordinateType cellSize;
 		CoordinateType cellSize2;
 		DataType *pNewData;
 		int nCells;
 		int cellMemSize;
 		CoordinateType halfCellSize;
-		DataType **neighborBuff;
+		DataType **dataBuff;
 		int iOutCell;
 		Array<int> neighborCellArray;
 		Array<int> activeCellArray;

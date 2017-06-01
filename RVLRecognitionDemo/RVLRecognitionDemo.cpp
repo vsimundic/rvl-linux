@@ -11,6 +11,7 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 #include "RVLVTK.h"
 #include "RVLCore2.h"
 #include "Util.h"
+#include "Space3DGrid.h"
 #include "Graph.h"
 #include "Mesh.h"
 #include "Visualizer.h"

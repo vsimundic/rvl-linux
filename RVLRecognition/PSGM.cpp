@@ -85,8 +85,11 @@ PSGM::PSGM()
 	modelDataBase = NULL; //Vidovic
 	modelsInDataBase = NULL; //Vidovic
 	sceneMIMatch = NULL; //Vidovic	
-	matchMatrixMem = NULL;
-	matchMatrix.Element = NULL;
+	//matchMatrixMem = NULL;
+	//matchMatrix.Element = NULL;
+	sceneSegmentMatches.Element = NULL;
+	sceneSegmentMatchesArray.Element = NULL;
+	sceneSegmentMatchesArray.n = 0;
 
 	//nSamples = 20; //Vidovic
 	stdNoise = 2; //Vidovic
@@ -170,8 +173,10 @@ PSGM::~PSGM()
 	RVL_DELETE_ARRAY(centroidID.Element); //Vidovic
 	RVL_DELETE_ARRAY(pCTImatchesArray.Element); //Vidovic
 	RVL_DELETE_ARRAY(segmentGT.Element); //Vidovic
-	RVL_DELETE_ARRAY(matchMatrixMem);
-	RVL_DELETE_ARRAY(matchMatrix.Element);
+	//RVL_DELETE_ARRAY(matchMatrixMem);
+	//RVL_DELETE_ARRAY(matchMatrix.Element);
+	RVL_DELETE_ARRAY(sceneSegmentMatches.Element);
+	RVL_DELETE_ARRAY(sceneSegmentMatchesArray.Element);
 
 	//Vidovic
 	int iSSegment;
@@ -4511,15 +4516,34 @@ void PSGM::Match()
 
 	iMergingCandidates.Element = new int[maxnMatches];
 
-	// Initialize match matrix.
+	//// Initialize match matrix.
 
-	RVL_DELETE_ARRAY(matchMatrixMem);
+	//RVL_DELETE_ARRAY(matchMatrixMem);
 
-	matchMatrixMem = new int[CTISet.pCTI.n * MCTISet.pCTI.n];
+	//matchMatrixMem = new int[CTISet.pCTI.n * MCTISet.pCTI.n];
 
-	RVL_DELETE_ARRAY(matchMatrix.Element);
+	//RVL_DELETE_ARRAY(matchMatrix.Element);
 
-	matchMatrix.Element = new Array<int>[nClusters * MCTISet.nModels];
+	//matchMatrix.Element = new Array<int>[nClusters * MCTISet.nModels];
+
+	// Allocate memory for sceneSegmentMatches.
+
+	RVL_DELETE_ARRAY(sceneSegmentMatches.Element);
+
+	sceneSegmentMatches.Element = new Array<SortIndex<float>>[nClusters];
+
+	int nMatches = CTISet.pCTI.n * MCTISet.pCTI.n;
+
+	if (nMatches > sceneSegmentMatchesArray.n)
+	{
+		RVL_DELETE_ARRAY(sceneSegmentMatchesArray.Element);
+
+		sceneSegmentMatchesArray.n = nMatches;
+
+		sceneSegmentMatchesArray.Element = new SortIndex<float>[sceneSegmentMatchesArray.n];
+	}
+
+	// main loop
 
 	PSGM_::MatchInstance **pFirstMatch;
 	float centroid[3];
@@ -4529,6 +4553,10 @@ void PSGM::Match()
 		//iSCluster = 5;		// Only for debugging purpose!!!
 	{
 		printf("%d/%d", iSCluster + 1, nClusters);
+
+		sceneSegmentMatches.Element[iSCluster].n = 0;
+
+		sceneSegmentMatches.Element[iSCluster].Element = sceneSegmentMatchesArray.Element + matchID;
 
 		nCTI = CTISet.SegmentCTIs.Element[iSCluster].n;
 
@@ -4553,7 +4581,7 @@ void PSGM::Match()
 				CalculateScore(RVLPSGM_MATCH_SIMILARITY_MEASURE_MEAN_SATURATED_SQUARE_DISTANCE, CTIInterval[iModel].a, CTIInterval[iModel].b);
 			} // for all MI in cluster
 
-			UpdateMatchMatrix(HSpace);
+			AddSegmentMatches(iSCluster, HSpace, iMergingCandidates);
 		}
 	}
 
@@ -5243,12 +5271,11 @@ void PSGM::MatchTGs()
 #endif
 }
 
-void PSGM::UpdateMatchMatrix(
+void PSGM::AddSegmentMatches(
+	int iCluster,
 	Space3DGrid<PSGM_::Hypothesis, float> &HSpace,
 	Array<int> &iMergingCandidates)
 {
-	float et2Thr = HSpace.cellSize * HSpace.cellSize;
-
 	float eqThr = 0.94;		// cos(20 deg)
 
 	PSGM_::MatchInstance *pMatch = pFirstSCTIMatch;
@@ -5257,7 +5284,6 @@ void PSGM::UpdateMatchMatrix(
 	PSGM_::Hypothesis *pHypothesis_;
 	Array<PSGM_::Hypothesis *> neighborArray;
 	int i;
-	float dt[3];
 	float e;
 	float *X, *Z, *X_, *Z_;
 
@@ -5273,13 +5299,6 @@ void PSGM::UpdateMatchMatrix(
 		for (i = 0; i < neighborArray.n; i++)
 		{
 			pHypothesis_ = neighborArray.Element[i];
-
-			RVLDIF3VECTORS(pHypothesis_->P, pMatch->t, dt);
-
-			e = RVLDOTPRODUCT3(dt, dt);
-
-			if (e > et2Thr)
-				continue;
 
 			Z_ = pHypothesis_->R + 6;
 
@@ -5301,12 +5320,40 @@ void PSGM::UpdateMatchMatrix(
 				break;
 		}
 
-		if (i >= neighborArray.n)
+		if (i >= neighborArray.n)	// If there are no better hypotheses in the neighborhood of pMatch
 		{
+			Hypothesis.iMatch = pMatch->ID;
+			RVLCOPY3VECTOR(pMatch->t, Hypothesis.P);
+			RVLCOPYMX3X3(pMatch->R, Hypothesis.R);
+			Hypothesis.score = pMatch->score;
 
+			HSpace.AddData(Hypothesis);
+
+			for (i = 0; i < iMergingCandidates.n; i++)
+			{
+				pHypothesis_ = neighborArray.Element[iMergingCandidates.Element[i]];
+
+				HSpace.RemoveData(pHypothesis_);
+			}
 		}
 
 		pMatch = pMatch->pNext;
+	}
+
+	Array<PSGM_::Hypothesis *> hypothesisArray;
+
+	HSpace.GetData(hypothesisArray);
+
+	SortIndex<float> *pMatchIdx = sceneSegmentMatches.Element[iCluster].Element;
+
+	PSGM_::Hypothesis **ppHypothesis = hypothesisArray.Element;
+
+	for (i = 0; i < hypothesisArray.n; i++, pMatchIdx++, ppHypothesis++)
+	{
+		pHypothesis_ = *ppHypothesis;
+
+		pMatchIdx->idx = pHypothesis_->iMatch;
+		pMatchIdx->cost = pHypothesis_->score;
 	}
 }
 
