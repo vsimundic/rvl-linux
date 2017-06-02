@@ -215,7 +215,7 @@ void SaveFiles(int iImageCnt, IplImage *rgbImage, cv::Mat *depthMat, cv::Mat *de
 void PCGT::DisplayLabelImage(cv::Mat labelImage, cv::Mat displayImage)
 {
 	double fMinLabel, fMaxLabel;
-	
+
 	cv::minMaxLoc(labelImage, &fMinLabel, &fMaxLabel);
 
 	int nObjects = (int)round(fMaxLabel) + 1;

@@ -141,6 +141,7 @@
     <ClInclude Include="Include\PlanarSurfelDetector.h" />
     <ClInclude Include="Include\PolygonGraph.h" />
     <ClInclude Include="Include\SceneSegFile.hpp" />
+    <ClInclude Include="Include\Space3DGrid.h" />
     <ClInclude Include="Include\SurfelGraph.h" />
     <ClInclude Include="Include\SVMClassifier.h" />
     <ClInclude Include="Include\Util.h" />
