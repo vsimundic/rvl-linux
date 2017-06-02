@@ -447,7 +447,7 @@ int main(int argc, char ** argv)
 
 			sceneSequence.Init(sceneSequenceFileName);
 
-			recognition.pSurfels->bContactEdgeVertices = true;
+			//recognition.pSurfels->bContactEdgeVertices = true;
 
 			recognition.pECCVGT->Init(sceneSequence, GTFolder, modelsInDB);
 
