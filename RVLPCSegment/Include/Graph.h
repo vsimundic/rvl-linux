@@ -1,5 +1,8 @@
 #pragma once
 
+#define RVLSURFEL_IMAGE_ADJACENCY //Vidovic -> exclude Filko functions 
+#define RVLSURFEL_COLOR_HISTOGRAM //Vidovic -> exclude Filko functions
+
 //#define RVLPCSEGMENT_GRAPH_WERAGGREGATION_DEBUG
 //#define RVLPCSEGMENT_GRAPH_WERAGGREGATION_DETAILED_DEBUG
 
@@ -712,6 +715,9 @@ namespace RVL
 						// pRefEdge->cost <- pRefEdge->cost + pEdge13->cost
 
 						pRefEdge->cost += pEdge13->cost;
+
+						//if (pEdge13->cost > pRefEdge->cost)		// Region growing method
+						//	pRefEdge->cost = pEdge13->cost;
 
 						if (pEdge13->distance < pRefEdge->distance)
 							pRefEdge->distance = pEdge13->distance;

@@ -19,6 +19,9 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 #include "RVLRecognition.h"
 #include "PSGMCommon.h"
 #include "CTISet.h"
+#include "VertexGraph.h"
+#include "TG.h"
+#include "TGSet.h"
 #include "PSGM.h"
 #include "ObjectDetector.h"
 #include <pcl/common/common.h>
@@ -371,4 +374,3 @@ int main(int argc, char ** argv)
 
 	return 0;
 }
-

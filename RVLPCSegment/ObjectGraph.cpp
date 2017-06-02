@@ -69,11 +69,11 @@ ObjectGraph::ObjectGraph()
 	objectAggregationLevel2Method = RVLPCSEGMENT_OBJECT_AGGREGATION_LEVEL2_METHOD_CONVEXITY;
 
 	ExtFuncCheckIfWithinVolume = NULL;
-}
+			}
 
 
 ObjectGraph::~ObjectGraph()
-{
+			{
 	RVL_DELETE_ARRAY(elementMem);
 	RVL_DELETE_ARRAY(NodeArray.Element);
 	RVL_DELETE_ARRAY(EdgeArray.Element);
@@ -86,10 +86,10 @@ ObjectGraph::~ObjectGraph()
 	RVL_DELETE_ARRAY(objectArray.Element);
 	RVL_DELETE_ARRAY(objectVertexIdxMem);
 	RVL_DELETE_ARRAY(iObjectAssignedToNode);
-}
+			}
 
 void ObjectGraph::CreateParamList(CRVLMem *pMem)
-{
+		{
 	ParamList.m_pMem = pMem;
 
 	RVLPARAM_DATA *pParamData;
@@ -119,10 +119,10 @@ void ObjectGraph::CreateParamList(CRVLMem *pMem)
 	pParamData = ParamList.AddParam("ObjectGraph.minObjectSize", RVLPARAM_TYPE_INT, &minObjectSize);
 	pParamData = ParamList.AddParam("ObjectGraph.flattenVertices", RVLPARAM_TYPE_BOOL, &bFlattenVertices);
 	pParamData = ParamList.AddParam("ObjectGraph.concaveObjectAggregation", RVLPARAM_TYPE_BOOL, &bConcaveObjectAggregation);
-}
+				}
 
 void ObjectGraph::CreateFromGroundTruth(SurfelGraph *pSurfels_)
-{
+		{
 	pSurfels = pSurfels_;
 
 	// Create an object for each surfel.
@@ -138,7 +138,7 @@ void ObjectGraph::CreateFromGroundTruth(SurfelGraph *pSurfels_)
 
 	QLIST::Index *piElement = elementMem;
 
-	int i;
+			int i;
 	int iSurfel;
 	Surfel *pSurfel;
 	GRAPH::AggregateNode<AgEdge> *pAgNode;
@@ -146,7 +146,7 @@ void ObjectGraph::CreateFromGroundTruth(SurfelGraph *pSurfels_)
 	QList<QLIST::Index> *pElementList;
 
 	for (iSurfel = 0; iSurfel < pSurfels->NodeArray.n; iSurfel++)
-	{
+			{
 		pSurfel = pSurfels->NodeArray.Element + iSurfel;
 
 		pAgNode = NodeArray.Element + iSurfel;
@@ -157,13 +157,13 @@ void ObjectGraph::CreateFromGroundTruth(SurfelGraph *pSurfels_)
 
 		pEdgeList = &(pAgNode->EdgeList);
 
-		RVLQLIST_INIT(pEdgeList);
-
+				RVLQLIST_INIT(pEdgeList);
+		
 		//if (pSurfel->size < 0)
 		//	int debug = 0;
 
 		pAgNode->size = 0;
-	}
+				}
 
 	// Allocate array for storing indices of reference surfels of GT objects.
 
@@ -172,12 +172,12 @@ void ObjectGraph::CreateFromGroundTruth(SurfelGraph *pSurfels_)
 	refSurfelArray.n = 0;
 
 	for (int i = 0; i < pSurfels->NodeArray.n; i++)
-	{
+			{
 		if (pSurfels->NodeArray.Element[i].GTObjHist.size() > 0)
-		{
+				{
 			refSurfelArray.n = this->pSurfels->NodeArray.Element[i].GTObjHist.size();
-			break;
-		}
+						break;
+				}
 	}
 
 	if (refSurfelArray.n == 0)
@@ -194,7 +194,7 @@ void ObjectGraph::CreateFromGroundTruth(SurfelGraph *pSurfels_)
 	GRAPH::AggregateNode<AgEdge> *pRefAgNode;
 
 	for (iSurfel = 0; iSurfel < pSurfels->NodeArray.n; iSurfel++)
-	{
+				{
 		pSurfel = pSurfels->NodeArray.Element + iSurfel;
 
 		pAgNode = NodeArray.Element + iSurfel;
@@ -206,12 +206,12 @@ void ObjectGraph::CreateFromGroundTruth(SurfelGraph *pSurfels_)
 			continue;
 
 		if (pSurfel->ObjectID >= 0 && pSurfel->ObjectID < refSurfelArray.n)
-		{
+				{
 			iRefSurfel = refSurfelArray.Element[pSurfel->ObjectID];
 
 			if (iRefSurfel < 0)
 				iRefSurfel = refSurfelArray.Element[pSurfel->ObjectID] = iSurfel;
-			
+
 			pRefAgNode = NodeArray.Element + iRefSurfel;
 
 			pElementList = &(pRefAgNode->elementList);
@@ -222,14 +222,14 @@ void ObjectGraph::CreateFromGroundTruth(SurfelGraph *pSurfels_)
 			pRefAgNode->size += pSurfel->size;
 
 			piElement++;
-		}
+					}
 	}
 
 	//int iObject;
 	//QLIST::Index *pElementIdx;
 
 	//for (iObject = 0; iObject < NodeArray.n; iObject++)
-	//{
+							//{
 	//	pAgNode = NodeArray.Element + iObject;
 
 	//	if (pAgNode->elementList.pFirst == NULL)
@@ -249,12 +249,12 @@ void ObjectGraph::CreateFromGroundTruth(SurfelGraph *pSurfels_)
 	//	}
 
 	//	printf("\n");
-	//}
+							//}
 
 	// Free memory.
 
 	delete[] refSurfelArray.Element;
-}
+						}
 
 #ifdef RVLSURFEL_IMAGE_ADJACENCY
 void ObjectGraph::Create(SurfelGraph *pSurfels_)
@@ -745,8 +745,8 @@ void ObjectGraph::CalculateOverAndUnderSegmentation(
 				//if ((GTLabel > 0) && GTDepthImg.at<unsigned short>(y, x) > 0)
 				if (GTLabel > 0)
 					N++;
+				}					
 			}
-		}
 #ifdef RVLPCSEGMENT_OBJECT_GRAPH_EVALUATION_LOG
 		fprintf(fp, "Total #GTPts: %d\n\n", N);
 #endif
@@ -1269,7 +1269,7 @@ void ObjectGraph::WERSegmentation()
 #ifdef RVLPCSEGMENT_OBJECT_GRAPH_OBJECT_SIZE_WITHOUT_EDGES
 				if (!pSurfels->NodeArray.Element[pElementIdx->Idx].bEdge)
 #endif
-					size += pElement->size;
+				size += pElement->size;
 
 				pElementIdx = pElementIdx->pNext;
 			}
@@ -1435,6 +1435,9 @@ void ObjectGraph::ComputeRelationCost(
 	AgEdge *pEdge,
 	ObjectEdgeData &data)
 {
+	//if (pEdge->desc.commonBoundaryLength < 20)
+	//	pEdge->cost = 0;
+
 	//float scale = 1000.0f;
 	float scale = 1.0f;
 	float depthStepIntThr_ = depthStepIntThr * scale;
@@ -1449,7 +1452,7 @@ void ObjectGraph::ComputeRelationCost(
 
 	//float PClean_ = 0.0f; 
 
-	float y1, y2, y3, y4;	
+	float y1, y2, y3, y4;
 
 	switch (relationClassifier){
 	case RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_HEURISTIC:
@@ -2765,42 +2768,42 @@ void ObjectGraph::ObjectAggregationLevel2_ViaObjectPairConvexity(float convexThr
 				}
 			}
 			if (secondCL)	//second is cluster leader
-			{
+		{
 				//check if first is in some cluster in order to merge with second0s cluster
-				for (clustIt = merge_clusters.begin(); clustIt != merge_clusters.end(); clustIt++)
-				{
+			for (clustIt = merge_clusters.begin(); clustIt != merge_clusters.end(); clustIt++)
+			{
 					if (clustIt->second.count(first))
-					{
+				{
 						mergeInto = second;
 						mergeFrom = clustIt->first;
 						mergeClusters = true;
-						break;
-					}
+					break;
 				}
+			}
 				if (!mergeClusters) //first is not in any cluster therefore just add first into second's cluster
 					firstIntoSecond = true;
-			}
+		}
 			else //Second is also not cluster leader
-			{
+		{
 				//check if first is already in some other cluster (SHOULD NOT BE POSSIBLE)
-				for (clustIt = merge_clusters.begin(); clustIt != merge_clusters.end(); clustIt++)
-				{
+			for (clustIt = merge_clusters.begin(); clustIt != merge_clusters.end(); clustIt++)
+			{
 					if (clustIt->second.count(first))
-					{
+				{
 						mergeInto = clustIt->first;
 						secondIntoFirst = true;
-						break;
-					}
+					break;
+				}
 				}
 				//check if second is already in some cluster
 				for (clustIt = merge_clusters.begin(); clustIt != merge_clusters.end(); clustIt++)
 				{
 					if (clustIt->second.count(second))
-					{
+				{
 						mergeFrom = clustIt->first;	//mergeFrom will be used if first is added into second's cluster
 						firstIntoSecond = true;
-						break;
-					}
+					break;
+				}
 				}
 				if (firstIntoSecond && secondIntoFirst)	//If they are both in som other clusters then merge clusters
 					mergeClusters = true;
@@ -3109,7 +3112,7 @@ void ObjectGraph::ObjectAggregationLevel2_ViaObjectPairConvexity(float convexThr
 			newclusters.resize(label);
 			for (int i = 0; i < inputcluster_label.size(); i++)
 				if (inputcluster_label.at(i) >= 0)
-					newclusters.at(inputcluster_label.at(i)).push_back(inputcluster.at(i));
+				newclusters.at(inputcluster_label.at(i)).push_back(inputcluster.at(i));
 
 			//for (int i = 0; i < newclusters.size(); i++)
 			//	if (newclusters.at(i).size() >= 3)

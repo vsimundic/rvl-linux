@@ -39,13 +39,13 @@
     <ClInclude Include="Include\CTISet.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Include\TSM.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Include\TSMSet.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="Include\PSGMCommon.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Include\TG.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Include\TGSet.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
@@ -69,6 +69,12 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="TSMSet.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="TG.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="TGSet.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
