@@ -4,6 +4,7 @@
 #include <vtkLine.h>
 #include "RVLCore2.h"
 #include "Util.h"
+#include "Space3DGrid.h"
 #include "Graph.h"
 #include "Mesh.h"
 #include "Visualizer.h"
@@ -73,7 +74,7 @@ ObjectDetector::~ObjectDetector()
 }
 
 
-void ObjectDetector::Init()
+void ObjectDetector::Init(PSGM *pPSGM_)
 {
 	CreateParamList();
 
@@ -83,19 +84,42 @@ void ObjectDetector::Init()
 	if (flags & RVLOBJECTDETECTION_FLAG_SAVE_SSF)
 		flags |= RVLOBJECTDETECTION_FLAG_SEGMENTATION_GT;
 
-	pSurfels = new SurfelGraph;
+	if (pPSGM_)
+	{
+		pPSGM = pPSGM_;
 
-	pSurfels->pMem = pMem;
+		pSurfels = pPSGM->pSurfels;
 
-	pSurfels->CreateParamList(pMem0);
+		pSurfelDetector = pPSGM->pSurfelDetector;
+	}
+	else
+	{
+		pSurfels = new SurfelGraph;
 
-	pSurfels->ParamList.LoadParams(cfgFileName);
+		pSurfels->pMem = pMem;
 
-	pSurfelDetector = new PlanarSurfelDetector;
+		pSurfels->CreateParamList(pMem0);
 
-	pSurfelDetector->CreateParamList(pMem0);
+		pSurfels->ParamList.LoadParams(cfgFileName);
 
-	pSurfelDetector->ParamList.LoadParams(cfgFileName);
+		pSurfelDetector = new PlanarSurfelDetector;
+
+		pSurfelDetector->CreateParamList(pMem0);
+
+		pSurfelDetector->ParamList.LoadParams(cfgFileName);
+
+		pPSGM = new PSGM;
+
+		pPSGM->CreateParamList(pMem0);
+
+		pPSGM->ParamList.LoadParams(cfgFileName);
+
+		pPSGM->pMem = pMem;
+
+		pPSGM->pSurfels = pSurfels;
+
+		pPSGM->pSurfelDetector = pSurfelDetector;
+	}
 
 	pObjects = new SURFEL::ObjectGraph;
 
@@ -112,17 +136,7 @@ void ObjectDetector::Init()
 	pObjects->objectAggregationLevel2Criterion = OBJECT_DETECTION::Symmetry;
 	pObjects->vpObjectAggregationLevel2CriterionData = this;
 
-	pPSGM = new PSGM;
-
-	pPSGM->CreateParamList(pMem0);
-
-	pPSGM->ParamList.LoadParams(cfgFileName);
-
-	pPSGM->pMem = pMem;
-
-	pPSGM->pSurfels = pSurfels;
-
-	pPSGM->pSurfelDetector = pSurfelDetector;
+	pPSGM->pObjects = pObjects;
 }
 
 void ObjectDetector::CreateParamList()
@@ -788,15 +802,21 @@ void ObjectDetector::DetectObjects(char *MeshFilePathName)
 
 		printf("Segmentation to surfels... ");
 
-		double StartTime = pSurfelDetector->pTimer->GetTime();
+		double StartTime, ExecTime;
+
+		if (pSurfelDetector->pTimer)
+			StartTime = pSurfelDetector->pTimer->GetTime();
 
 		pSurfelDetector->Segment(&mesh, pSurfels);
 
-		double ExecTime = pSurfelDetector->pTimer->GetTime() - StartTime;
+		if (pSurfelDetector->pTimer)
+			ExecTime = pSurfelDetector->pTimer->GetTime() - StartTime;
 
 		printf("completed.\n");
 		printf("No. of surfels = %d\n", pSurfels->NodeArray.n);
-		printf("Total segmentation time = %lf s\n", ExecTime);
+
+		if (pSurfelDetector->pTimer)
+			printf("Total segmentation time = %lf s\n", ExecTime);
 
 #ifdef RVLSURFEL_IMAGE_ADJACENCY
 		if (flags & RVLOBJECTDETECTION_FLAG_SEGMENTATION_GT)

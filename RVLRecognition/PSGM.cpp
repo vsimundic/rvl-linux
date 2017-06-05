@@ -21,6 +21,7 @@
 #include "TG.h"
 #include "TGSet.h"
 #include "PSGM.h"
+#include "ObjectDetector.h"
 #include <Eigen\Eigenvalues>
 #include <random> //VIDOVIC
 #include <nanoflann.hpp>
@@ -37,6 +38,7 @@ using namespace RECOG;
 PSGM::PSGM()
 {
 	mode = RVLRECOGNITION_MODE_RECOGNITION;
+	problem = RVLRECOGNITION_PROBLEM_SHAPE_INSTANCE_DETECTION;
 	bZeroRFDescriptor = false;
 	bGTRFDescriptors = false;
 	bMatchRANSAC = false;
@@ -73,6 +75,8 @@ PSGM::PSGM()
 
 	ConvexTemplateCentoidID();
 	//END Vidovic
+
+	vpObjectDetector = NULL;
 
 	clusters.Element = NULL;
 	clusterMap = NULL;
@@ -230,6 +234,13 @@ PSGM::~PSGM()
 
 	//fclose(fpTime);
 	//End Vidovic
+
+	if (vpObjectDetector)
+	{
+		ObjectDetector *pObjectDetector = (ObjectDetector *)vpObjectDetector;
+
+		delete pObjectDetector;
+	}
 }
 
 void PSGM::CreateParamList(CRVLMem *pMem)
@@ -244,6 +255,9 @@ void PSGM::CreateParamList(CRVLMem *pMem)
 	ParamList.AddID(pParamData, "TRAINING", RVLRECOGNITION_MODE_TRAINING);
 	ParamList.AddID(pParamData, "RECOGNITION", RVLRECOGNITION_MODE_RECOGNITION); //Vidovic
 	ParamList.AddID(pParamData, "CREATE_CTIS", RVLRECOGNITION_MODE_PSGM_CREATE_CTIS);
+	pParamData = ParamList.AddParam("Recognition.problem", RVLPARAM_TYPE_ID, &problem);
+	ParamList.AddID(pParamData, "SHAPE_INSTANCE_DETECTION", RVLRECOGNITION_PROBLEM_SHAPE_INSTANCE_DETECTION);
+	ParamList.AddID(pParamData, "CLASSIFICATION", RVLRECOGNITION_PROBLEM_CLASSIFICATION);
 	pParamData = ParamList.AddParam("PSGM.nDominantClusters", RVLPARAM_TYPE_INT, &nDominantClusters);
 	pParamData = ParamList.AddParam("PSGM.kNoise", RVLPARAM_TYPE_FLOAT, &kNoise);
 	pParamData = ParamList.AddParam("PSGM.minInitialSurfelSize", RVLPARAM_TYPE_INT, &minInitialSurfelSize);
@@ -275,6 +289,28 @@ void PSGM::CreateParamList(CRVLMem *pMem)
 	pParamData = ParamList.AddParam("PSGM.symmetryMatchThr", RVLPARAM_TYPE_FLOAT, &symmetryMatchThr);
 	pParamData = ParamList.AddParam("PSGM.debug1", RVLPARAM_TYPE_INT, &debug1);
 	pParamData = ParamList.AddParam("PSGM.debug2", RVLPARAM_TYPE_INT, &debug2);
+}
+
+void PSGM::Init(char *cfgFileName)
+{
+	if (problem == RVLRECOGNITION_PROBLEM_CLASSIFICATION)
+	{
+		ObjectDetector *pObjectDetector = new ObjectDetector;
+
+		vpObjectDetector = pObjectDetector;
+
+		pObjectDetector->pMem0 = pMem0;
+		pObjectDetector->pMem = pMem;
+		pObjectDetector->cfgFileName = RVLCreateString(cfgFileName);
+
+		pObjectDetector->Init(this);
+
+		pObjectDetector->vpMeshBuilder = vpMeshBuilder;
+		pObjectDetector->LoadMesh = LoadMesh;
+
+		pObjectDetector->bSegmentToObjects = true;
+		pObjectDetector->bObjectAggregationLevel2 = false;
+	}
 }
 
 void PSGM::Init(Mesh *pMesh_)
@@ -3041,92 +3077,122 @@ void PSGM::Learn(
 	char *modelSequenceFileName,
 	Visualizer *visualizer)
 {
-	unsigned char SelectionColor[3];
-
-	SelectionColor[0] = 0;
-	SelectionColor[1] = 255;
-	SelectionColor[2] = 0;
-
-	FileSequenceLoader modelsLoader;
-	FileSequenceLoader dbLoader;
-
-	char modelFilePath[200];
-	char modelFileName[200];
-
-	Mesh mesh;
-
-	//int iCluster;
-	int nClusters, currentModelID;
-
-	//RVL_DELETE_ARRAY(modelDataBase);
-	//RVL_DELETE_ARRAY(modelsInDataBase);
-
-	MTGSet.Clear();
-
-	if (!modelDataBase)
-		modelDataBase = "modelDB.dat";
-
-	if (!modelsInDataBase)
-		modelsInDataBase = "DBModels.txt";
-
-	modelsLoader.Init(modelSequenceFileName);
-	dbLoader.Init(modelsInDataBase);
-
-	FILE *fp = fopen(modelDataBase, "a");
-
-	bool saveDBSequenceFile = false;
-
-	printf("Model DB creation started...\n");
-
-	while (modelsLoader.GetNext(modelFilePath, modelFileName))
+	if (problem == RVLRECOGNITION_PROBLEM_SHAPE_INSTANCE_DETECTION)
 	{
-		if (ModelExistInDB(modelFileName, dbLoader))
-			continue;
+		unsigned char SelectionColor[3];
 
-		printf("\nProcessing model %s!\n", modelFileName);
+		SelectionColor[0] = 0;
+		SelectionColor[1] = 255;
+		SelectionColor[2] = 0;
 
-		saveDBSequenceFile = true;
+		FileSequenceLoader modelsLoader;
+		FileSequenceLoader dbLoader;
 
-		mesh.LoadPolyDataFromPLY(modelFilePath);
+		char modelFilePath[200];
+		char modelFileName[200];
 
-		SetSceneFileName(modelFilePath);
+		Mesh mesh;
 
-		currentModelID = dbLoader.GetLastModelID() + 1;
+		//int iCluster;
+		int nClusters, currentModelID;
 
-		Interpret(&mesh, currentModelID);
+		//RVL_DELETE_ARRAY(modelDataBase);
+		//RVL_DELETE_ARRAY(modelsInDataBase);
 
-		nClusters = RVLMIN(clusters.n, nDominantClusters);
+		MTGSet.Clear();
 
-		//Add vtkPolyData to vtkModelDB
-		vtkModelDB.insert(std::make_pair(currentModelID, mesh.pPolygonData));
+		if (!modelDataBase)
+			modelDataBase = "modelDB.dat";
 
-		SaveModelInstances(fp, currentModelID);
+		if (!modelsInDataBase)
+			modelsInDataBase = "DBModels.txt";
 
-		dbLoader.AddModel(currentModelID, modelFilePath, modelFileName);
+		modelsLoader.Init(modelSequenceFileName);
+		dbLoader.Init(modelsInDataBase);
 
-		if (visualizer)
+		FILE *fp = fopen(modelDataBase, "a");
+
+		bool saveDBSequenceFile = false;
+
+		printf("Model DB creation started...\n");
+
+		while (modelsLoader.GetNext(modelFilePath, modelFileName))
 		{
-			pSurfels->NodeColors(SelectionColor);
-			InitDisplay(visualizer, &mesh, SelectionColor);
-			Display();
-			visualizer->Run();
+			if (ModelExistInDB(modelFileName, dbLoader))
+				continue;
 
-			visualizer->renderer->RemoveAllViewProps();
+			printf("\nProcessing model %s!\n", modelFileName);
+
+			saveDBSequenceFile = true;
+
+			mesh.LoadPolyDataFromPLY(modelFilePath);
+
+			SetSceneFileName(modelFilePath);
+
+			currentModelID = dbLoader.GetLastModelID() + 1;
+
+			Interpret(&mesh, currentModelID);
+
+			nClusters = RVLMIN(clusters.n, nDominantClusters);
+
+			//Add vtkPolyData to vtkModelDB
+			vtkModelDB.insert(std::make_pair(currentModelID, mesh.pPolygonData));
+
+			SaveModelInstances(fp, currentModelID);
+
+			dbLoader.AddModel(currentModelID, modelFilePath, modelFileName);
+
+			if (visualizer)
+			{
+				pSurfels->NodeColors(SelectionColor);
+				InitDisplay(visualizer, &mesh, SelectionColor);
+				Display();
+				visualizer->Run();
+
+				visualizer->renderer->RemoveAllViewProps();
+			}
+		}
+
+		printf("Model DB creation completed!\n");
+
+		if (saveDBSequenceFile)
+			SaveModelID(dbLoader);
+
+		fclose(fp);
+
+		char *TGFileName = RVLCreateFileName(modelDataBase, ".dat", -1, ".tgr");
+
+		MTGSet.Save(TGFileName);
+
+		delete[] TGFileName;
+	}
+	else if (problem == RVLRECOGNITION_PROBLEM_CLASSIFICATION)
+	{
+		ObjectDetector *pObjectDetector = (ObjectDetector *)vpObjectDetector;
+
+		pObjectDetector->bGroundTruthSegmentation = true;
+
+		pObjectDetector->flags |= RVLOBJECTDETECTION_FLAG_SEGMENTATION_GT;
+
+		FileSequenceLoader sceneSequence;
+		sceneSequence.Init(modelSequenceFileName);
+
+		char filePath[200];
+		char fileName[200];
+
+		while (sceneSequence.GetNext(filePath, fileName))
+		{
+			pMem->Clear();
+
+			printf("Scene %s...\n", fileName);
+
+			pObjectDetector->DetectObjects(filePath);
+
+			cv::imshow("Segmentation", pObjects->CreateSegmentationImage());
+
+			cv::waitKey();
 		}
 	}
-
-	printf("Model DB creation completed!\n");
-
-	if (saveDBSequenceFile)
-		SaveModelID(dbLoader);
-
-	fclose(fp);
-
-	char *TGFileName = RVLCreateFileName(modelDataBase, ".dat", -1, ".tgr");
-
-	MTGSet.Save(TGFileName);
-
-	delete[] TGFileName;
 }
 
 

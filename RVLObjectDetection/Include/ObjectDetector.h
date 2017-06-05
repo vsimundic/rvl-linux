@@ -22,7 +22,7 @@ namespace RVL
 	public:
 		ObjectDetector();
 		virtual ~ObjectDetector();
-		void Init();
+		void Init(PSGM *pPSGM_ = NULL);
 		void CreateParamList();
 		void DetectObjects(char *MeshFilePathName);
 		void Evaluate(

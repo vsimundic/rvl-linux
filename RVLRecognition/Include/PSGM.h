@@ -228,6 +228,7 @@ namespace RVL
 		virtual ~PSGM();
 		//void Create();
 		void CreateParamList(CRVLMem *pMem);
+		void Init(char *cfgFileName);
 		void Init(Mesh *pMesh);
 		void Interpret(
 			Mesh *pMesh,
@@ -501,10 +502,18 @@ namespace RVL
 	public:
 		CRVLParameterList ParamList;
 		DWORD mode;
+		DWORD problem;
 		CRVLMem *pMem;
 		CRVLMem *pMem0;
+		void *vpMeshBuilder;
+		bool(*LoadMesh)(void *vpMeshBuilder,
+			char *FileName,
+			Mesh *pMesh,
+			bool bSavePLY);
 		PlanarSurfelDetector *pSurfelDetector;
+		void *vpObjectDetector;
 		SurfelGraph *pSurfels;
+		SURFEL::ObjectGraph *pObjects;
 		Mesh *pMesh;
 		RECOG::PSGM_::DisplayData displayData;
 		Array<RECOG::PSGM_::Cluster *> clusters;
