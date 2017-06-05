@@ -19,6 +19,9 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 #include "RVLRecognition.h"
 #include "PSGMCommon.h"
 #include "CTISet.h"
+#include "VertexGraph.h"
+#include "TG.h"
+#include "TGSet.h"
 #include "PSGM.h"
 #include "ObjectDetector.h"
 #include <pcl/common/common.h>
@@ -26,8 +29,11 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 #include "PCLTools.h"
 #include "RGBDCamera.h"
 #include "PCLMeshBuilder.h"
+#include "GTTools.h"
 #include "vtkOBBTree.h"
 #include "vtkLine.h"
+
+//#define RVLOBJECTDETECTIONDEMO_SELECT_GT_OBJECTS
 
 using namespace RVL;
 
@@ -38,7 +44,8 @@ void CreateParamList(
 	char **pSequenceFileName,
 	char **pSegmentationResultsFileName,
 	bool &b3DVisualization,
-	bool &b2DVisualization)
+	bool &b2DVisualization,
+	char **pSelectedGTObjectsFileName)
 {
 	pParamList->m_pMem = pMem;
 
@@ -51,6 +58,7 @@ void CreateParamList(
 	pParamData = pParamList->AddParam("SegmentationResultsFileName", RVLPARAM_TYPE_STRING, pSegmentationResultsFileName);
 	pParamData = pParamList->AddParam("Visualization.3D", RVLPARAM_TYPE_BOOL, &b3DVisualization);
 	pParamData = pParamList->AddParam("Visualization.2D", RVLPARAM_TYPE_BOOL, &b2DVisualization);
+	pParamData = pParamList->AddParam("SelectedGTObjectsFileName", RVLPARAM_TYPE_STRING, pSelectedGTObjectsFileName);
 }
 
 //void VisualizeSurfelNormals(Visualizer *vis, SurfelGraph* pSurfels)
@@ -164,11 +172,13 @@ int main(int argc, char ** argv)
 	char *MeshFileName = NULL;
 	char *SequenceFileName = NULL;
 	char *SegmentationResultsFileName = NULL;
+	char *selectedGTObjectsFileName = NULL;
 	bool b3DVisualization, b2DVisualization;
 
 	CRVLParameterList ParamList;
 
-	CreateParamList(&ParamList, &mem0, &MeshFileName, &SequenceFileName, &SegmentationResultsFileName, b3DVisualization, b2DVisualization);
+	CreateParamList(&ParamList, &mem0, &MeshFileName, &SequenceFileName, &SegmentationResultsFileName, b3DVisualization, 
+		b2DVisualization, &selectedGTObjectsFileName);
 
 	ParamList.LoadParams(cfgFileName);
 
@@ -211,6 +221,8 @@ int main(int argc, char ** argv)
 	if (fp)
 		fprintf(fp, "Image\tE0\tE1\tN\n");
 
+	cv::Mat GTLabImg;
+
 	if (bSequence)
 	{
 		//Run sequence
@@ -230,7 +242,14 @@ int main(int argc, char ** argv)
 
 			printf("Scene %s...finished!\n\n", fileName);
 
-			objectDetector.Evaluate(fp, filePath);
+			objectDetector.Evaluate(fp, filePath, selectedGTObjectsFileName);
+
+#ifdef RVLOBJECTDETECTIONDEMO_SELECT_GT_OBJECTS
+			PCGT::DisplayGroundTruthSegmentation(filePath, GTLabImg);
+			cv::moveWindow("GT Segmentation", 0, 0);
+#endif
+
+			cv::waitKey();
 
 #ifdef RVLSURFEL_IMAGE_ADJACENCY
 			if (objectDetector.bSegmentToObjects)
@@ -253,7 +272,13 @@ int main(int argc, char ** argv)
 
 		objectDetector.DetectObjects(MeshFileName);
 
-		objectDetector.Evaluate(fp, MeshFileName);
+		objectDetector.Evaluate(fp, MeshFileName, selectedGTObjectsFileName);
+
+#ifdef RVLOBJECTDETECTIONDEMO_SELECT_GT_OBJECTS
+		PCGT::DisplayGroundTruthSegmentation(MeshFileName, GTLabImg);		
+#endif
+
+		cv::waitKey(1);
 
 #ifdef RVLSURFEL_IMAGE_ADJACENCY
 		if (objectDetector.bSurfelsFromSSF)
@@ -326,11 +351,11 @@ int main(int argc, char ** argv)
 
 			// END DEMO
 
-			/*objectDetector.pPSGM->convexTemplate = objectDetector.pPSGM->convexTemplateBox;
+			objectDetector.pPSGM->convexTemplate = objectDetector.pPSGM->convexTemplateBox;
 
 			objectDetector.pPSGM->DisplayCTIs(&visualizer, &(objectDetector.boundingBoxes));
 
-			objectDetector.pPSGM->convexTemplate = objectDetector.pPSGM->convexTemplate66;*/
+			objectDetector.pPSGM->convexTemplate = objectDetector.pPSGM->convexTemplate66;
 
 			//detector.DisplaySoftEdges(&visualizer, &mesh, &surfels, SelectionColor);
 			visualizer.Run();

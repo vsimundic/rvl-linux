@@ -27,12 +27,15 @@ namespace RVL
 		void DetectObjects(char *MeshFilePathName);
 		void Evaluate(
 			FILE *fp,
-			char *fileName);
+			char *fileName,
+			char *selectedGTObjectsFileName = NULL);
 		void BoundingBox(
 			int iObject1,
 			int iObject2,
 			RECOG::PSGM_::ModelInstance *pBoundingBox);
 		static bool CheckIfWithinCTIBoundingBox(void * odObj, int iObject1, int iObject2, float dimThr = 0.30);	//Filko
+		void GroundTruthGroundPlane();
+		void SaveBoundingBoxSizes(char *imageFileName);
 		
 	public:
 		DWORD flags;
@@ -43,11 +46,16 @@ namespace RVL
 		float convexityThr;
 		float convexityRatioThr1;
 		float convexityRatioThr2;
+		int nMultilateralFilterIterations;
+		int joinSmallObjectsToLargestNeighborSizeThr;
+		float joinSmallObjectsToLargestNeighborDistThr;
 		bool bSegmentToObjects;
 		bool bObjectAggregationLevel2;
 		bool bSurfelsFromSSF;
 		bool bCTIBasedObjectAggregation;
-		bool bConcaveObjectAggregation;
+		bool bMultilateralFilter;
+		bool bJoinSmallObjectsToLargestNeighbor;
+		bool bGroundTruthSegmentation;
 		SurfelGraph *pSurfels;
 		PlanarSurfelDetector *pSurfelDetector;
 		SURFEL::ObjectGraph *pObjects;

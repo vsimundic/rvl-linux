@@ -15,6 +15,9 @@
 #include "RVLRecognition.h"
 #include "PSGMCommon.h"
 #include "CTISet.h"
+#include "VertexGraph.h"
+#include "TG.h"
+#include "TGSet.h"
 #include "PSGM.h"
 #include "ObjectDetector.h"
 
@@ -31,10 +34,16 @@ ObjectDetector::ObjectDetector()
 	convexityRatioThr1 = 0.77f;
 	convexityRatioThr2 = 0.75f;
 
+	nMultilateralFilterIterations = 10;
+	joinSmallObjectsToLargestNeighborSizeThr = 1000;
+	joinSmallObjectsToLargestNeighborDistThr = 0.020f;
+
 	bSegmentToObjects = false;
 	bObjectAggregationLevel2 = false;
 	bCTIBasedObjectAggregation = false;
-	bConcaveObjectAggregation = false;
+	bMultilateralFilter = false;
+	bJoinSmallObjectsToLargestNeighbor = false;
+	bGroundTruthSegmentation = false;
 
 	pSurfels = NULL;
 	pSurfelDetector = NULL;
@@ -137,17 +146,36 @@ void ObjectDetector::CreateParamList()
 	pParamData = ParamList.AddParam("ObjectDetector.convexityThr", RVLPARAM_TYPE_FLOAT, &convexityThr);
 	pParamData = ParamList.AddParam("ObjectDetector.convexityRatioThr1", RVLPARAM_TYPE_FLOAT, &convexityRatioThr1);
 	pParamData = ParamList.AddParam("ObjectDetector.convexityRatioThr2", RVLPARAM_TYPE_FLOAT, &convexityRatioThr2);
-	pParamData = ParamList.AddParam("ObjectGraph.concaveObjectAggregation", RVLPARAM_TYPE_BOOL, &bConcaveObjectAggregation);
+	pParamData = ParamList.AddParam("ObjectDetector.multilateralFilterIterations", RVLPARAM_TYPE_INT, &nMultilateralFilterIterations);
+	pParamData = ParamList.AddParam("ObjectDetector.joinSmallObjectsToLargestNeighborSizeThr", RVLPARAM_TYPE_INT, &joinSmallObjectsToLargestNeighborSizeThr);
+	pParamData = ParamList.AddParam("ObjectDetector.joinSmallObjectsToLargestNeighborDistThr", RVLPARAM_TYPE_FLOAT, &joinSmallObjectsToLargestNeighborDistThr);
+	pParamData = ParamList.AddParam("ObjectDetector.multilateralFilter", RVLPARAM_TYPE_BOOL, &bMultilateralFilter);
+	pParamData = ParamList.AddParam("ObjectDetector.joinSmallObjectsToLargestNeighbor", RVLPARAM_TYPE_BOOL, &bJoinSmallObjectsToLargestNeighbor);
+	pParamData = ParamList.AddParam("ObjectDetector.GroundTruthSegmentation", RVLPARAM_TYPE_BOOL, &bGroundTruthSegmentation);
 }
 
-void SmoothMesh(Mesh* pMesh, int noIter)
+//Dirk Holz and Sven Behnke: "Approximate Triangulation and Region Growing for Efficient Segmentation and Smoothing of Range Images"
+//NOT DEBUGGED
+//NOT UPDATED
+vtkSmartPointer<vtkPolyData> MultilateralSmoothMesh(vtkSmartPointer<vtkPolyData> inputPD, int noIter)
 {
-	//Bilateral filtring
-	vtkSmartPointer<vtkPolyData> norPD = pMesh->pPolygonData;
-	norPD->BuildLinks();
-	vtkSmartPointer<vtkFloatArray> norNormalData = vtkFloatArray::SafeDownCast(norPD->GetPointData()->GetNormals());
-	vtkSmartPointer<vtkPoints> norPts = norPD->GetPoints();
-	int noPts = norPts->GetNumberOfPoints();
+
+	vtkSmartPointer<vtkPolyData> outputPD = vtkSmartPointer<vtkPolyData>::New();
+	outputPD->DeepCopy(inputPD);
+	outputPD->BuildLinks();
+
+	// get a copy of pPolygonData points(destination points for first iteration)
+	vtkSmartPointer<vtkPoints> pointsSource = outputPD->GetPoints();
+	vtkSmartPointer<vtkPoints> pointsDestination = vtkSmartPointer<vtkPoints>::New();
+	pointsDestination->DeepCopy(outputPD->GetPoints());
+	vtkSmartPointer<vtkPoints> pointsTemp;
+
+	vtkSmartPointer<vtkFloatArray> normalsSource = vtkFloatArray::SafeDownCast(outputPD->GetPointData()->GetNormals());
+	vtkSmartPointer<vtkFloatArray> normalsDestination = vtkSmartPointer<vtkFloatArray>::New();	//point normals copy
+	normalsDestination->DeepCopy(vtkFloatArray::SafeDownCast(outputPD->GetPointData()->GetNormals()));
+	vtkSmartPointer<vtkFloatArray> normalsTemp;
+
+	int noPts = outputPD->GetNumberOfPoints();
 	float sumW = 0.0;
 	float sumPts[3];
 	float sumNorm[3];
@@ -155,12 +183,7 @@ void SmoothMesh(Mesh* pMesh, int noIter)
 	vtkSmartPointer<vtkIdList> ptCells = vtkSmartPointer<vtkIdList>::New();
 	vtkSmartPointer<vtkIdList> ptCellPts = vtkSmartPointer<vtkIdList>::New();
 	vtkSmartPointer<vtkPoints> pointsCpy = vtkSmartPointer<vtkPoints>::New();	//points copy where new coordinates will go
-	pointsCpy->SetDataTypeToFloat();
-	pointsCpy->SetNumberOfPoints(640 * 480);
-	//pointsCpy->DeepCopy(points);
-	vtkSmartPointer<vtkFloatArray> normalsCpy = vtkSmartPointer<vtkFloatArray>::New();	//point normals copy
-	normalsCpy->SetNumberOfComponents(3);
-	normalsCpy->SetNumberOfTuples(640 * 480);
+
 	int ptID = 0;
 	float tempDist2 = 0.0;
 	float tempL1 = 0.0;
@@ -175,14 +198,14 @@ void SmoothMesh(Mesh* pMesh, int noIter)
 	{
 		for (int i = 0; i < noPts; i++)
 		{
-			norPts->GetPoint(i, currPt);
+			pointsSource->GetPoint(i, currPt);
 			if ((currPt[0] <= -1.0) && (currPt[1] <= -1.0) && (currPt[2] <= -1.0))
 			{
 				pointsCpy->SetPoint(i, -1.0, -1.0, -1.0);
 				continue;
 			}
-			norNormalData->GetTupleValue(i, currNor);
-			norPD->GetPointCells(i, ptCells);
+			normalsSource->GetTupleValue(i, currNor);
+			outputPD->GetPointCells(i, ptCells);
 			sumPts[0] = 0.0; sumPts[1] = 0.0; sumPts[2] = 0.0;
 			sumNorm[0] = 0.0; sumNorm[1] = 0.0; sumNorm[2] = 0.0;
 			sumW = 0.0;
@@ -190,14 +213,14 @@ void SmoothMesh(Mesh* pMesh, int noIter)
 			for (int j = 0; j < noCells; j++)
 			{
 				ptCellPts->Reset();
-				norPD->GetCellPoints(ptCells->GetId(j), ptCellPts);
+				outputPD->GetCellPoints(ptCells->GetId(j), ptCellPts);
 				for (int k = 0; k < 3; k++)
 				{
 					ptID = ptCellPts->GetId(k);
 					if (ptID != i)
 					{
-						norPts->GetPoint(ptID, pt1);
-						norNormalData->GetTupleValue(ptID, tempNor);
+						pointsSource->GetPoint(ptID, pt1);
+						normalsSource->GetTupleValue(ptID, tempNor);
 						//calculate distance
 						tempDist2 = sqrt(vtkMath::Distance2BetweenPoints(currPt, pt1));
 						//calculate L1 normals norm
@@ -218,8 +241,8 @@ void SmoothMesh(Mesh* pMesh, int noIter)
 			//calculate new point coordinates and new normals
 			if (sumW == 0.0)
 			{
-				pointsCpy->SetPoint(i, currPt);
-				normalsCpy->SetTuple(i, currNor);
+				pointsDestination->SetPoint(i, currPt);
+				normalsDestination->SetTuple(i, currNor);
 			}
 			else
 			{
@@ -229,36 +252,240 @@ void SmoothMesh(Mesh* pMesh, int noIter)
 				newNor[0] = sumNorm[0] / sumW;
 				newNor[1] = sumNorm[1] / sumW;
 				newNor[2] = sumNorm[2] / sumW;
-				pointsCpy->SetPoint(i, newPt);
-				normalsCpy->SetTuple(i, newNor);
+				pointsDestination->SetPoint(i, newPt);
+				normalsDestination->SetTuple(i, newNor);
 			}
 		}
-		norPD->SetPoints(pointsCpy);
-		//norPD->Print(cout);
-		norPD->GetPointData()->SetNormals(normalsCpy);
+		
+		//Swap source and distination
+		pointsTemp = pointsSource;
+		pointsSource = pointsDestination;
+		pointsDestination = pointsTemp;
+
+		normalsTemp = normalsSource;
+		normalsSource = normalsDestination;
+		normalsDestination = normalsTemp;
+
 		std::cout << "Iteration " << it << " finished!" << std::endl;
 	}
 
-	//Updating mesh point and normal data;
-	//pMesh->pPolygonData = normalsFilter->GetOutput();
-	//vtkSmartPointer<vtkPoints> pdPoints = normalsFilter->GetOutput()->GetPoints();
-	//vtkSmartPointer<vtkFloatArray> normals = vtkFloatArray::SafeDownCast(normalsFilter->GetOutput()->GetPointData()->GetNormals());
-	int noPoints = pointsCpy->GetNumberOfPoints();
-	//float normal[3];
+	outputPD->SetPoints(pointsSource);
+	//norPD->Print(cout);
+	outputPD->GetPointData()->SetNormals(normalsSource);
+
+	return outputPD;
+}
+
+//Dirk Holz and Sven Behnke: "Approximate Triangulation and Region Growing for Efficient Segmentation and Smoothing of Range Images"
+//NOT DEBUGGED
+void MultilateralSmoothMesh(Mesh *pMesh, int noIter, bool Boundary1DFiltering, bool onlyFirstNeigh_1DFiltering = false, bool verbose = false)
+{
+	//get a copy of pPolygonData points (destination points for first iteration)
+	vtkSmartPointer<vtkPoints> pointsSource = pMesh->pPolygonData->GetPoints();
+	vtkSmartPointer<vtkPoints> pointsDestination = vtkSmartPointer<vtkPoints>::New();
+	pointsDestination->DeepCopy(pMesh->pPolygonData->GetPoints());
+	vtkSmartPointer<vtkPoints> pointsTemp;
+
+	vtkSmartPointer<vtkFloatArray> normalsSource = vtkFloatArray::SafeDownCast(pMesh->pPolygonData->GetPointData()->GetNormals());
+	vtkSmartPointer<vtkFloatArray> normalsDestination = vtkSmartPointer<vtkFloatArray>::New();	//point normals copy
+	normalsDestination->DeepCopy(vtkFloatArray::SafeDownCast(pMesh->pPolygonData->GetPointData()->GetNormals()));
+	vtkSmartPointer<vtkFloatArray> normalsTemp;
+
 	Point* currPoint;
 	double currPointD[3];
-	for (int i = 0; i < noPoints; i++)
+	Point* currEdgePoint;
+	double currEdgePointD[3];
+	Point* nextEdgePoint;
+	double nextEdgePointD[3];
+	MeshEdge* pEdge;
+	MeshEdgePtr* pEdgePtr;
+	MeshEdge* pEdge2;
+	MeshEdgePtr* pEdgePtr2;
+	int othersideIdx;
+	int otherothersideIdx;
+	int noPointEdges = 0;
+	int neighbourPoints[20]; //assumption: there is maximum 20 edges for any point
+	bool boundaryEdges[20];
+
+	float tempDist2 = 0.0;
+	float tempL1 = 0.0;
+	float tempW = 0.0;
+	float currNor[3];
+	float otherNor[3];
+	float newPt[3];
+	float newNor[3];
+	double currPt[3];
+	double otherPt[3];
+	float sumW = 0.0;
+	float sumPts[3];
+	float sumNorm[3];
+	bool first = true;
+	bool found = false;
+	for (int iter = 0; iter < noIter; iter++)
 	{
-		currPoint = pMesh->NodeArray.Element + i;
-		pointsCpy->GetPoint(i, currPointD);
-		normalsCpy->GetTupleValue(i, currPoint->N);
+		for (int idx = 0; idx < pMesh->NodeArray.n; idx++)
+		{
+			//current point and edge list
+			currPoint = pMesh->NodeArray.Element + idx;
+			if (!currPoint->bValid)
+				continue;
+			pointsSource->GetPoint(idx, currPointD);
+			normalsSource->GetTupleValue(idx, currNor);
+			pEdgePtr = currPoint->EdgeList.pFirst;
+			noPointEdges = 0;
+			if (Boundary1DFiltering && currPoint->bBoundary)//If the point is on the boundary and we use 1D boundary filtering
+			{
+			while (pEdgePtr)
+			{
+				RVLPCSEGMENT_GRAPH_GET_NEIGHBOR(idx, pEdgePtr, pEdge, othersideIdx);	//get the other side index and point
+				nextEdgePoint = pMesh->NodeArray.Element + othersideIdx;
+					if ((noPointEdges == 0) || (pEdgePtr->pNext == NULL))	//boundary is only first and last pointer?
+					{
+						neighbourPoints[noPointEdges] = othersideIdx;
+						boundaryEdges[noPointEdges] = true;
+						noPointEdges++;
+						if (!onlyFirstNeigh_1DFiltering)	//if we use first and second neighbours
+						{
+							//find neighbours boundary edges
+							pEdgePtr2 = nextEdgePoint->EdgeList.pFirst;
+							first = true;
+							while (pEdgePtr2)
+							{
+								RVLPCSEGMENT_GRAPH_GET_NEIGHBOR(othersideIdx, pEdgePtr2, pEdge2, otherothersideIdx);	//get the other side index
+								if ((first || (pEdgePtr2->pNext == NULL)) && (otherothersideIdx != idx)) //boundary is only first and last pointer? //Also it must not be the poiter to current point
+								{
+									//Check if it is not already on the list
+									found = false;
+									for (int i = 0; i < noPointEdges; i++)
+									{
+										if (neighbourPoints[i] == otherothersideIdx)	//If it is on the list
+										{
+											found = true;
+											break;
+										}
+									}
+									if (!found)	//If it is not already in, add it
+									{
+										neighbourPoints[noPointEdges] = otherothersideIdx;
+										boundaryEdges[noPointEdges] = true;
+										noPointEdges++;
+									}
+								}
+								first = false;	//It is no longer the first pointer
+								pEdgePtr2 = pEdgePtr2->pNext;
+							}
+						}
+					}
+
+					pEdgePtr = pEdgePtr->pNext;
+				}
+			}
+			else   //Standard multilateral filter takes all neighbours into considiration regardless of boundary
+			{
+			while (pEdgePtr)
+			{
+				RVLPCSEGMENT_GRAPH_GET_NEIGHBOR(idx, pEdgePtr, pEdge, othersideIdx);	//get the other side index and point
+				nextEdgePoint = pMesh->NodeArray.Element + othersideIdx;
+				neighbourPoints[noPointEdges] = othersideIdx;	//set other side index as in the neighbourhood
+					if ((noPointEdges == 0) || (pEdgePtr->pNext == NULL))	//Check if that edge is boundary //first and last are boundary edges
+					boundaryEdges[noPointEdges] = true;
+				else
+					boundaryEdges[noPointEdges] = false;
+
+				noPointEdges++;
+				pEdgePtr = pEdgePtr->pNext;
+			}
+			}
+
+			sumPts[0] = 0.0; sumPts[1] = 0.0; sumPts[2] = 0.0;
+			sumNorm[0] = 0.0; sumNorm[1] = 0.0; sumNorm[2] = 0.0;
+			sumW = 0.0;
+
+			if (Boundary1DFiltering && onlyFirstNeigh_1DFiltering && currPoint->bBoundary)	//If we take only first neighbours into considiration for 1D boundary filtering we also use the current (central point)
+			{
+				sumW += 1.0;
+				sumPts[0] += currPointD[0];
+				sumPts[1] += currPointD[1];
+				sumPts[2] += currPointD[2];
+				sumNorm[0] += currNor[0];
+				sumNorm[1] += currNor[1];
+				sumNorm[2] += currNor[2];
+			}
+
+			for (int id_curr = 0; id_curr < noPointEdges; id_curr++)	//for each neighbour on the list
+			{
+				/*if (boundaryEdgeFiltering && currPoint->bBoundary && !boundaryEdges[id_curr])
+					continue;*/
+				pointsSource->GetPoint(neighbourPoints[id_curr], otherPt);
+				normalsSource->GetTupleValue(neighbourPoints[id_curr], otherNor);
+				//calculate distance
+				tempDist2 = sqrt(vtkMath::Distance2BetweenPoints(currPointD, otherPt));
+				//calculate L1 normals norm
+				tempL1 = abs(currNor[0] - otherNor[0]) + abs(currNor[1] - otherNor[1]) + abs(currNor[2] - otherNor[2]);
+				//calculate weight
+				tempW = exp(tempDist2) * exp(tempL1);
+				//calculate sum weight and sum point coordinates and sum normals
+				sumW += tempW;
+				sumPts[0] += tempW * otherPt[0];
+				sumPts[1] += tempW * otherPt[1];
+				sumPts[2] += tempW * otherPt[2];
+				sumNorm[0] += tempW * otherNor[0];
+				sumNorm[1] += tempW * otherNor[1];
+				sumNorm[2] += tempW * otherNor[2];
+			}
+			
+			//calculate new point coordinates and new normals
+			if (sumW == 0.0)
+			{
+				pointsDestination->SetPoint(idx, currPt);
+				normalsDestination->SetTuple(idx, currNor);
+			}
+			else
+			{
+				newPt[0] = sumPts[0] / sumW;
+				newPt[1] = sumPts[1] / sumW;
+				newPt[2] = sumPts[2] / sumW;
+				newNor[0] = sumNorm[0] / sumW;
+				newNor[1] = sumNorm[1] / sumW;
+				newNor[2] = sumNorm[2] / sumW;
+				pointsDestination->SetPoint(idx, newPt);
+				normalsDestination->SetTuple(idx, newNor);
+			}
+
+		}
+		//Swap source and distination
+		pointsTemp = pointsSource;
+		pointsSource = pointsDestination;
+		pointsDestination = pointsTemp;
+
+		normalsTemp = normalsSource;
+		normalsSource = normalsDestination;
+		normalsDestination = normalsTemp;
+		if (verbose)
+			std::cout << "Multilateral smoothing: Finished " << iter << " iteration!" << std::endl;
+	}
+
+	//setting final points (? is this needed ?)
+	pMesh->pPolygonData->SetPoints(pointsSource);
+	pMesh->pPolygonData->GetPointData()->SetNormals(normalsSource);
+
+	//Updating mesh point and normal data;
+	if (verbose)
+		std::cout << "Updating mesh data!" << std::endl;
+	for (int idx = 0; idx < pMesh->NodeArray.n; idx++)
+	{
+		currPoint = pMesh->NodeArray.Element + idx;
+		pointsSource->GetPoint(idx, currPointD);
+		normalsSource->GetTupleValue(idx, currPoint->N);
 		currPoint->P[0] = currPointD[0];
 		currPoint->P[1] = currPointD[1];
 		currPoint->P[2] = currPointD[2];
 	}
+	if (verbose)
+		std::cout << "Mesh data updated!" << std::endl;
 }
 
-void LaplaceSmooting(Mesh *pMesh, int noIter)
+void LaplaceSmooting(Mesh *pMesh, int noIter, bool useCotan)
 {
 	//get a copy of pPolygonData points (destination points for first iteration)
 	vtkSmartPointer<vtkPoints> pointsSource = pMesh->pPolygonData->GetPoints();
@@ -305,7 +532,9 @@ void LaplaceSmooting(Mesh *pMesh, int noIter)
 		{
 			//current point and edge list
 			currPoint = pMesh->NodeArray.Element + idx;
-			if ((currPoint->P[0] == 0.0) && (currPoint->P[1] == 0.0) && (currPoint->P[2] == 0.0))
+			/*if ((currPoint->P[0] == 0.0) && (currPoint->P[1] == 0.0) && (currPoint->P[2] == 0.0))
+				continue;*/
+			if (!currPoint->bValid)
 				continue;
 			pointsSource->GetPoint(idx, currPointD);
 			pEdgePtr = currPoint->EdgeList.pFirst;
@@ -324,6 +553,8 @@ void LaplaceSmooting(Mesh *pMesh, int noIter)
 				pEdgePtr = pEdgePtr->pNext;
 			}
 
+			if (useCotan)
+			{
 			//calculating cotangent weight
 			for (id_curr = 0; id_curr < noPointEdges; id_curr++)
 			{
@@ -422,6 +653,12 @@ void LaplaceSmooting(Mesh *pMesh, int noIter)
 				//neighboorhoodCoTangentW.at(i).push_back(cotan1 + cotan2);
 				neighboorhoodCoTangentW[id_curr] = cotan1 + cotan2;
 			}
+			}
+			else
+			{
+				for (id_curr = 0; id_curr < noPointEdges; id_curr++)
+					neighboorhoodCoTangentW[id_curr] = 1.0;
+			}
 
 			//Calculating new point position
 			cog[0] = 0.0;
@@ -479,6 +716,28 @@ void LaplaceSmooting(Mesh *pMesh, int noIter)
 		currPoint->P[1] = currPointD[1];
 		currPoint->P[2] = currPointD[2];
 	}
+
+	//// Initialize VTK.
+	//vtkSmartPointer<vtkRenderer> renderer = vtkSmartPointer<vtkRenderer>::New();;
+	//vtkSmartPointer<vtkRenderWindow> window = vtkSmartPointer<vtkRenderWindow>::New();
+	//vtkSmartPointer<vtkRenderWindowInteractor> interactor = vtkSmartPointer<vtkRenderWindowInteractor>::New();
+	//window->AddRenderer(renderer);
+	//window->SetSize(800, 600);
+	//interactor->SetRenderWindow(window);
+	//vtkSmartPointer<vtkInteractorStyleTrackballCamera> style = vtkSmartPointer<vtkInteractorStyleTrackballCamera>::New();
+	//interactor->SetInteractorStyle(style);
+	//renderer->SetBackground(0.5294, 0.8078, 0.9803);
+
+	//vtkSmartPointer<vtkPolyDataMapper> mapper = vtkSmartPointer<vtkPolyDataMapper>::New();
+	//mapper->SetInputData(pMesh->pPolygonData);
+	//vtkSmartPointer<vtkActor> act = vtkSmartPointer<vtkActor>::New();
+	//act->SetMapper(mapper);
+	//renderer->AddActor(act);
+
+	////Start VTK
+	//renderer->ResetCamera();
+	//window->Render();
+	//interactor->Start();
 }
 
 void ObjectDetector::DetectObjects(char *MeshFilePathName)
@@ -517,6 +776,9 @@ void ObjectDetector::DetectObjects(char *MeshFilePathName)
 			printf("ERROR: Mesh can't be created!\n");
 
 		//SmoothMesh(&mesh, 30);
+		//LaplaceSmooting(&mesh, 30);
+		if (bMultilateralFilter)
+			MultilateralSmoothMesh(&mesh, nMultilateralFilterIterations, false, false, true);		
 
 		// Segment mesh to surfels.				
 
@@ -546,25 +808,17 @@ void ObjectDetector::DetectObjects(char *MeshFilePathName)
 		{
 			printf("Computing relations between adjacent surfels...");
 
-			pSurfels->ImageAdjacency(&mesh);
+			pSurfels->SurfelRelations(&mesh);
 
-			Surfel *pSurfel = pSurfels->NodeArray.Element;
-
-			for (int i = 0; i < pSurfels->NodeArray.n; pSurfel++, i++)
+			if (bGroundTruthSegmentation)
+				pObjects->CreateFromGroundTruth(pSurfels);
+			else
 			{
-				if (pSurfel->size <= 1)
-					continue;
+				pObjects->Create(pSurfels);
 
-				//if (pSurfel->bEdge)
-				//	continue;
-
-				pSurfels->DetermineImgAdjDescriptors(pSurfel, &mesh);
+				pObjects->ComputeRelationCosts();
 			}
-
-			pObjects->Create(pSurfels);
-
-			pObjects->ComputeRelationCosts();
-
+			
 			printf("completed.\n");
 
 			pObjects->Debug();
@@ -590,58 +844,85 @@ void ObjectDetector::DetectObjects(char *MeshFilePathName)
 #ifdef RVLSURFEL_IMAGE_ADJACENCY
 	if (bSegmentToObjects)
 	{
-		printf("Aggregating surfels into objects... ");
-
-		pObjects->WERSegmentation();
-
-		printf("completed.\n");
-
-		if (!bSurfelsFromSSF && bObjectAggregationLevel2)
-		{
-			printf("Aggregating objects (LEVEL 2)... ");
-
-			//pSurfels->DetectVertices(&mesh);
-
-			//Generate color histograms for surfels
-			/*std::string imgFileName(MeshFileName);
-			imgFileName.erase(imgFileName.find_last_of("."));
-			imgFileName += ".png";
-			cv::Mat img = cv::imread(imgFileName);
-			cv::cvtColor(img, img, cv::COLOR_BGR2HSV);
-			int binsize[3] = { 8, 8, 0 };
-			surfels.CalculateSurfelsColorHistograms(img, RVLColorDescriptor::ColorSpaceList::HSV, false, binsize, true);
-			objects.CalculateObjectsColorHistogram();
-			TestCHMatching(&objects);*/
-			////Filko
-			//objects.DetermineObjectConvexityData(0.005, 0.5);
-			//ObjectAggregationLevel2(&objects, &surfels, &mesh, MeshFileName);
-			cv::imshow("Colored object image", pObjects->CreateSegmentationImage());
-			cv::waitKey(1);
-			/*VisualizeObjectGraphVertexPointCloud(&objects, 100);*/
-			//if (bCTIBasedObjectAggregation)
-			pObjects->GetVertices();	
+		if (bGroundTruthSegmentation)
+		{			
+			pObjects->sortedObjectArray.n = -1;
+			pObjects->nValidObjects = -1;
+			pObjects->GetVertices();
 			pPSGM->Init(&mesh);
-			//pPSGM->CTIs(pObjects, &CTIs);
+			GroundTruthGroundPlane();
 			pPSGM->convexTemplate = pPSGM->convexTemplateBox;
 			pPSGM->CTIs(pObjects, &boundingBoxes);
-			//pPSGM->convexTemplate = pPSGM->convexTemplate66;
-			pObjects->pMesh = &mesh;
-			pObjects->DetermineObjectConvexityData(convexityThr, 0.15, bConcaveObjectAggregation, true);
-			pObjects->vpObjectAggregationLevel2CriterionData = this;
-			pObjects->ExtFuncCheckIfWithinVolume = &RVL::ObjectDetector::CheckIfWithinCTIBoundingBox;
-			pObjects->ObjectAggregationLevel2_ViaObjectPairConvexity(convexityThr, convexityRatioThr1, convexityRatioThr2, pObjects->minObjectSize, false);
-			cv::imshow("New Colored object image", pObjects->CreateSegmentationImage());
-			cv::waitKey();
+			SaveBoundingBoxSizes(MeshFilePathName);
+		}
+		else
+		{
+			printf("Aggregating surfels into objects... ");
 
-			////
-			//Evaluation
-			/*int E[2];
-			int N = 0;
-			objects.CalculateOverAndUnderSegmentation(E, N, false, "", false);
-			std::cout << "Oversegmenation error: " << 100.0f * (1 - E[0] / (float)N) << "%" << std::endl;
-			std::cout << "Undersegmenation error: " << 100.0f * E[1] / (float)N << "%" << std::endl;*/
+			pObjects->WERSegmentation();
 
 			printf("completed.\n");
+
+			if (!bSurfelsFromSSF && bObjectAggregationLevel2)
+			{
+				printf("Aggregating objects (LEVEL 2)... ");
+
+				//pSurfels->DetectVertices(&mesh);
+
+				//Generate color histograms for surfels
+				/*std::string imgFileName(MeshFileName);
+				imgFileName.erase(imgFileName.find_last_of("."));
+				imgFileName += ".png";
+				cv::Mat img = cv::imread(imgFileName);
+				cv::cvtColor(img, img, cv::COLOR_BGR2HSV);
+				int binsize[3] = { 8, 8, 0 };
+				surfels.CalculateSurfelsColorHistograms(img, RVLColorDescriptor::ColorSpaceList::HSV, false, binsize, true);
+				objects.CalculateObjectsColorHistogram();
+				TestCHMatching(&objects);*/
+				////Filko
+				//objects.DetermineObjectConvexityData(0.005, 0.5);
+				//ObjectAggregationLevel2(&objects, &surfels, &mesh, MeshFileName);
+				cv::imshow("Level1", pObjects->CreateSegmentationImage());
+				cv::waitKey(1);
+				/*VisualizeObjectGraphVertexPointCloud(&objects, 100);*/
+				//if (bCTIBasedObjectAggregation)
+				pObjects->GetVertices();
+				pPSGM->Init(&mesh);
+				//pPSGM->CTIs(pObjects, &CTIs);
+				pPSGM->convexTemplate = pPSGM->convexTemplateBox;
+				pPSGM->CTIs(pObjects, &boundingBoxes);
+				SaveBoundingBoxSizes(MeshFilePathName);
+				//pPSGM->convexTemplate = pPSGM->convexTemplate66;
+				pObjects->pMesh = &mesh;
+				pObjects->DetermineObjectConvexityData(convexityThr, 0.15, false);
+				pObjects->vpObjectAggregationLevel2CriterionData = this;
+				pObjects->ExtFuncCheckIfWithinVolume = &RVL::ObjectDetector::CheckIfWithinCTIBoundingBox;
+				pObjects->ObjectAggregationLevel2_ViaObjectPairConvexity(convexityThr, convexityRatioThr1, convexityRatioThr2, pObjects->minObjectSize, false);
+				if (!bJoinSmallObjectsToLargestNeighbor)
+					cv::imshow("Level2", pObjects->CreateSegmentationImage());
+
+				////
+				//Evaluation
+				/*int E[2];
+				int N = 0;
+				objects.CalculateOverAndUnderSegmentation(E, N, false, "", false);
+				std::cout << "Oversegmenation error: " << 100.0f * (1 - E[0] / (float)N) << "%" << std::endl;
+				std::cout << "Undersegmenation error: " << 100.0f * E[1] / (float)N << "%" << std::endl;*/
+
+				printf("completed.\n");
+			}	// if (!bSurfelsFromSSF && bObjectAggregationLevel2)
+
+			if (bJoinSmallObjectsToLargestNeighbor)
+			{
+				int mergedIt = 0;
+				while (pObjects->MergeSmallObjects(joinSmallObjectsToLargestNeighborSizeThr, joinSmallObjectsToLargestNeighborDistThr))
+				{
+					//std::cout << "Merged iteration: " << mergedIt << std::endl;
+					mergedIt++;
+				}
+				cv::imshow("level2 + merge small objects", pObjects->CreateSegmentationImage());
+				//cv::waitKey(1);
+			}
 		}
 	}
 #endif
@@ -649,19 +930,46 @@ void ObjectDetector::DetectObjects(char *MeshFilePathName)
 
 void ObjectDetector::Evaluate(
 	FILE *fp,
-	char *fileName)
+	char *fileName,
+	char *selectedGTObjectsFileName)
 {
+	if (!(flags & RVLOBJECTDETECTION_FLAG_SEGMENTATION_GT))
+		return;
+
 #ifdef RVLSURFEL_IMAGE_ADJACENCY
 	if (bSegmentToObjects)
-	{
+	{	
 		int E[2];
 		int N = 0;
 
 		if (bSurfelsFromSSF)
 			pObjects->CalculateOverAndUnderSegmentation_SSF(E, N, true, false);
 		else
-			pObjects->CalculateOverAndUnderSegmentation(E, N, true, std::string(fileName), false);
+		{			
+			if (selectedGTObjectsFileName)
+			{
+				std::vector<SURFEL::ObjectCoverage> selectedGTObjectCoverage;
 
+				pObjects->CalculateOverAndUnderSegmentation(E, N, true, std::string(fileName), false, std::string(selectedGTObjectsFileName), &selectedGTObjectCoverage);
+				/*std::string imageName = fileName;
+				imageName.erase(imageName.find_last_of("."));
+				std::string depthImgFileName = imageName + "d.png";
+				std::string labelImgFileName = imageName + "a.png";
+				std::string segLabelImgFileName = imageName + "LCCPLabels.png";
+				pObjects->CalculateOverAndUnderSegmentation_Img(E, N, segLabelImgFileName, labelImgFileName, depthImgFileName, true, false, std::string(selectedGTObjectsFileName), &selectedGTObjectCoverage);*/
+
+				FILE *fpSelectedGTObjectCoverage = fopen("selected_GT_object_coverage.txt", "a");
+
+				for (int i = 0; i < selectedGTObjectCoverage.size(); i++)
+					fprintf(fpSelectedGTObjectCoverage, "%d\t%d\t%f\n", selectedGTObjectCoverage.at(i).iObject,
+					selectedGTObjectCoverage.at(i).type, selectedGTObjectCoverage.at(i).coverage);
+
+				fclose(fpSelectedGTObjectCoverage);
+			}
+			else
+				pObjects->CalculateOverAndUnderSegmentation(E, N, true, std::string(fileName), false);
+		}
+			
 		std::cout << "Oversegmenation error: " << 100.0f * (1 - E[0] / (float)N) << "%" << std::endl;
 		std::cout << "Undersegmenation error: " << 100.0f * E[1] / (float)N << "%" << std::endl;
 
@@ -819,3 +1127,61 @@ bool ObjectDetector::CheckIfWithinCTIBoundingBox(void * odObj, int iObject1, int
 	delete[] boundingBox.modelInstance.Element;
 }
 
+void ObjectDetector::GroundTruthGroundPlane()
+{
+	int iLargestBackgroundSurfel = -1;
+
+	float largestBackgroundSurfelSize = 0.0f;
+
+	pPSGM->iGndObject = -1;
+
+	int iSurfel;
+	Surfel *pSurfel;
+
+	for (iSurfel = 0; iSurfel < pSurfels->NodeArray.n; iSurfel++)
+	{
+		pSurfel = pSurfels->NodeArray.Element + iSurfel;
+
+		if (pSurfel->ObjectID == 0)
+		{
+			if (pPSGM->iGndObject < 0)
+				pPSGM->iGndObject = iSurfel;
+
+			if (pSurfel->size > largestBackgroundSurfelSize)
+			{
+				largestBackgroundSurfelSize = pSurfel->size;
+				iLargestBackgroundSurfel = iSurfel;			
+			}
+		}
+	}
+
+	if (iLargestBackgroundSurfel < 0)
+		return;
+
+	pSurfel = pSurfels->NodeArray.Element + iLargestBackgroundSurfel;
+
+	pPSGM->bGnd = true;
+
+	RVLCOPY3VECTOR(pSurfel->N, pPSGM->NGnd);
+	pPSGM->dGnd = pSurfel->d;	
+}
+
+void ObjectDetector::SaveBoundingBoxSizes(char *imageFileName)
+{
+	FILE *fpBoundingBoxes = fopen("bounding_boxes.txt", "a");
+
+	int i;
+	RECOG::PSGM_::ModelInstance *pBoundingBox;
+	float size[3];
+
+	for (i = 0; i < boundingBoxes.pCTI.n; i++)
+	{
+		pBoundingBox = boundingBoxes.pCTI.Element[i];
+
+		pPSGM->BoundingBoxSize(pBoundingBox, size);
+
+		fprintf(fpBoundingBoxes, "%s\t%d\t%f\t%f\t%f\n", imageFileName, pBoundingBox->iCluster, size[0], size[1], size[2]);
+	}		
+
+	fclose(fpBoundingBoxes);
+}

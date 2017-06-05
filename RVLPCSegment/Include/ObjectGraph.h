@@ -6,10 +6,12 @@
 #include <set>
 #include "opencv2\opencv.hpp"
 
-#define RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_HEURISTIC	0
-#define RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_SVM			1
-#define RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_NLMC		2
-#define RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_NLMC2		3
+#define RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_HEURISTIC		0
+#define RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_SVM				1
+#define RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_NLMC			2
+#define RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_NLMC2			3
+#define RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_FUZZY_HEURISTIC	4
+
 
 #define RVLPCSEGMENT_OBJECT_AGGREGATION_LEVEL2_METHOD_CONVEXITY		0
 #define RVLPCSEGMENT_OBJECT_AGGREGATION_LEVEL2_METHOD_SYMMETRY		1
@@ -58,6 +60,13 @@ namespace RVL
 			float PClean;
 			float P;
 		};
+		
+		struct ObjectCoverage
+		{
+			int iObject;
+			unsigned char type;
+			float coverage;
+		};
 
 		bool objectKeyPressUserFunction(
 			Mesh *pMesh,
@@ -94,10 +103,28 @@ namespace RVL
 			virtual ~ObjectGraph();
 			void CreateParamList(CRVLMem *pMem);
 			void Create(SurfelGraph *pSurfels_);
+			void CreateFromGroundTruth(SurfelGraph *pSurfels_);
 			void CreateFromSSF(std::string ssfFileName);	//Filko
 			void CalculateOverAndUnderSegmentation_SSF(int *E, int &N, bool useGTNoPix = true,  bool useBackground = true);	//Filko
-			void CalculateOverAndUnderSegmentation(int *E, int &N, bool useGTNoPix = false, std::string GTlabImgFilename = "", bool useBackground = true);	//Filko
-			void DetermineObjectConvexityData(float convexThr = 0.005, float minDiffFlipReq = 0.1, bool setflip = false, bool verbose = false);	//Filko
+			void CalculateOverAndUnderSegmentation(
+				int *E, 
+				int &N, 
+				bool useGTNoPix = false, 
+				std::string GTlabImgFilename = "", 
+				bool useBackground = true,
+				std::string selectedGTObjectFileName = "",
+				std::vector<ObjectCoverage> *pSelectedGTObjectCoverage = NULL);	//Filko
+			static void CalculateOverAndUnderSegmentation_Img(
+				int *E,
+				int &N,
+				std::string SegLabImgFilename,
+				std::string GTlabImgFilename,
+				std::string DepthImgFilename,
+				bool useGTNoPix = false,
+				bool useBackground = true,
+				std::string selectedGTObjectFileName = "",
+				std::vector<ObjectCoverage> *pSelectedGTObjectCoverage = NULL);	//Filko
+			void DetermineObjectConvexityData(float convexThr = 0.005, float minDiffFlipReq = 0.1, bool verbose = false);	//Filko
 			void CalculateConvexityRatiosForObjectPair(int firstObject, int secondObject, float& firstRatio, float& secondRatio, float convexThr = 0.005);	//Filko
 			void CalculateObjectsColorHistogram(); //Filko
 			bool(*ExtFuncCheckIfWithinVolume)(void*, int, int, float);	//Filko
@@ -106,6 +133,8 @@ namespace RVL
 			bool CheckObjectUniformity(int objectIdx, int minSurfelSize, float uniThr); //Filko
 			bool CheckIfNeighbours(int iObject1, int iObject2);	//Filko
 			void RenderConvexityPos(int iObjectSurf, int iObjectVert, Mesh *pMeshScene);	//Filko
+			void FlattenVertex(const float * P, float * Pc, const float * N, float d); //Filko
+			bool MergeSmallObjects(int sizeThr = 500, float maxDistThr = 0.02, bool verbose = false); //Filko
 			
 			void WERSegmentation();
 			void ComputeRelationCosts();
@@ -133,6 +162,10 @@ namespace RVL
 			cv::Mat CreateSegmentationImage();
 			cv::Mat CreateSegmentationImageFromSSF();
 			void Debug();
+			static void LoadSelectedGTObjects(
+				char *meshFileName,
+				char *selectedGTObjectFileName,
+				std::vector<ObjectCoverage> &selectedGTObjectCoverage);
 
 		public:
 			CRVLParameterList ParamList;
@@ -158,10 +191,21 @@ namespace RVL
 			int nValidObjects;
 			bool bObjectAggregationLevel2Uncertainty;
 			bool bObjectAggregationLevel2Edges;
+			bool bFlattenVertices;
+			bool bConcaveObjectAggregation;
 			void(*objectAggregationLevel2Criterion)(ObjectGraph *pObjects, int iObject1, int iObject2, void *vpData);
 			void *vpObjectAggregationLevel2CriterionData;
 			FILE *fpSymmetry;
 			int minObjectSize;
+			float continuousThr;
+			float convexThr;
+			float cleanThr;
+			float depthStepIntThr;
+			float depthStepExtThr;
+			float concaveAngleIntThr;
+			float concaveAngleExtThr;
+			float concaveMinCost;
+
 			Mesh *pMesh; //FIlko
 
 		private:

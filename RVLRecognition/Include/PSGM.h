@@ -14,7 +14,7 @@
 #define RVLPSGM_MATCH_SIMILARITY_MEASURE_MEAN_SATURATED_SQUARE_DISTANCE							4
 #define RVLPSGM_MATCH_SIMILARITY_MEASURE_MEDIAN_ABS_DISTANCE									5
 //#define RVLPSGM_RANSAC
-#define RVLPSGM_ICP
+#define RVLPSGM_ICP		// 170601: ON
 #define RVLPSGM_ICP_SIMILARITY_MEASURE_COSTNN				0
 #define RVLPSGM_ICP_SIMILARITY_MEASURE_SATURATED_SCORE		1
 
@@ -135,6 +135,17 @@ namespace RVL
 				int iCTIElement;
 			};
 
+			struct Hypothesis
+			{
+				float R[9];
+				float P[3];
+				int iMatch;
+				int iCell;
+				float score;
+				Hypothesis *pNext;
+				Hypothesis **pPtrToThis;
+			};
+
 			int ValidTangent(
 				int iSurfel,
 				int iSurfel_,
@@ -236,10 +247,10 @@ namespace RVL
 			Eigen::MatrixXf dM,
 			int iCTI);
 
-		void UpdateMatchMatrix(
-			RECOG::PSGM_::SegmentMatch *SMatch,			
-			int iCTI
-			);
+		//void UpdateMatchMatrix(
+		//	RECOG::PSGM_::SegmentMatch *SMatch,			
+		//	int iCTI
+		//	);
 
 		void VisualizeCTIMatch( //Damir
 			float *nT, 
@@ -273,7 +284,7 @@ namespace RVL
 
 		void CalculateICPCost(RVL::PSGM::ICPfunction ICPFunction, int ICPvariant, void *kdTreePtr = NULL); 
 
-		static vtkSmartPointer<vtkPolyData> GetVisiblePart(vtkSmartPointer<vtkPolyData> PD); // Models are reduced to only the visible part (using angle between normals) which improves ICP.
+		static vtkSmartPointer<vtkPolyData> GetVisiblePart(vtkSmartPointer<vtkPolyData> PD); // Models are reduced to only the visible part (using angle between normals) which improves ICP. 
 
 		static vtkSmartPointer<vtkPolyData> GetVisiblePart(vtkSmartPointer<vtkPolyData> PD, double *T_M_S); // Models are reduced to only the visible part (using angle between normals) which improves ICP.
 
@@ -317,6 +328,11 @@ namespace RVL
 			RECOG::PSGM_::ModelInstance *pSModelInstance,
 			int startIdx,
 			int endIdx); //Vidovic
+		void MatchTGs();
+		void AddSegmentMatches(
+			int iCluster,
+			Space3DGrid<RECOG::PSGM_::Hypothesis, float> &HSpace,
+			Array<int> &iMergingCandidates);
 		bool IsFlat(
 			Array<int> SurfelArray,
 			float *N,
@@ -366,7 +382,10 @@ namespace RVL
 			int nBestSegments,
 			int iBestMatches,
 			int graphID); //Vidovic
-		void CalculateScore(int similarityMeasure = 3); //Vidovic
+		void CalculateScore(
+			int similarityMeasure = 3,
+			int iFirstCTI = 0,
+			int iEndCTI = -1); //Vidovic
 		void UpdateScoreMatchMatrix(RECOG::PSGM_::ModelInstance *pSModelInstance); //Vidovic
 		void SortScoreMatchMatrix(bool descending = false); //Vidovic
 		void EvaluateMatchesByScore(
@@ -439,12 +458,15 @@ namespace RVL
 			RECOG::CTISet *pCTISet,
 			int iModel = -1);
 		void RVLPSGInstanceMesh(Eigen::MatrixXf nI, float *dI);
+		void BoundingBoxSize(
+			RECOG::PSGM_::ModelInstance *pBoundingBox,
+			float *size);
 
 	private:
 		void Clusters();
 		void CreateTemplate66();
 		void CreateTemplateBox();
-		void TemplateMatrix(Array2D<float> A);
+		void TemplateMatrix(Array2D<float> &A);
 		bool ReferenceFrames(int iCluster);
 		bool ReferenceFrames(
 			RECOG::PSGM_::Cluster *pCluster,
@@ -457,9 +479,6 @@ namespace RVL
 			RECOG::PSGM_::Cluster *pCluster,
 			Surfel *pSurfel,
 			int iFirstVertex = 0);
-		float DistanceFromNormalHull(
-			Array<SURFEL::NormalHullElement> &NHull,
-			float *N);
 		void UpdateMeanNormal(
 			float *sumN,
 			float &wN,
@@ -482,6 +501,7 @@ namespace RVL
 		CRVLParameterList ParamList;
 		DWORD mode;
 		CRVLMem *pMem;
+		CRVLMem *pMem0;
 		PlanarSurfelDetector *pSurfelDetector;
 		SurfelGraph *pSurfels;
 		Mesh *pMesh;
@@ -519,11 +539,17 @@ namespace RVL
 		//QList<RECOG::PSGM_::MatchInstance> SSegmentMatches2; //Vidovic - probability2
 		Array<Array<SortIndex<float>>> scoreMatchMatrix;
 		Array<Array<SortIndex<float>>> scoreMatchMatrixICP;
+		Array<Array<SortIndex<float>>> sceneSegmentMatches;
+		Array<SortIndex<float>> sceneSegmentMatchesArray;
+		//Array2D<Array<int>> matchMatrix;
+		//int *matchMatrixMem;
 		DWORD scoreCalculation; //Vidovic - TO DO (Implement read from cfg file)
 		ECCVGTLoader *pECCVGT; //Vidovic
 		Array <RVL::SegmentGTInstance> segmentGT;
 		RECOG::CTISet CTISet;
 		RECOG::CTISet MCTISet;
+		RECOG::TGSet STGSet;
+		RECOG::TGSet MTGSet;
 		CRVLTimer *pTimer;
 		FILE *fpTime;
 		Eigen::MatrixXf nT; //Petra

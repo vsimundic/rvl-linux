@@ -11,6 +11,7 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 #include "RVLVTK.h"
 #include "RVLCore2.h"
 #include "Util.h"
+#include "Space3DGrid.h"
 #include "Graph.h"
 #include "Mesh.h"
 #include "Visualizer.h"
@@ -23,6 +24,9 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 #include "RVLMeshNoiser.h"
 #include "PSGMCommon.h"
 #include "CTISet.h"
+#include "VertexGraph.h"
+#include "TG.h"
+#include "TGSet.h"
 #include "PSGM.h"
 #include <pcl/common/common.h>
 #include <pcl/registration/registration.h>
@@ -60,6 +64,7 @@ void CreateParamList(
 	char **pModelsInDB,	//VIDOVIC
 	char **pGTFolder,	//VIDOVIC
 	char **pSegmentGTFileName,	//Vidovic
+	char **pResultsFolder,
 	DWORD &method,
 	DWORD &flags //VIDOVIC
 	)
@@ -75,6 +80,7 @@ void CreateParamList(
 	pParamData = pParamList->AddParam("ModelSequenceFileName", RVLPARAM_TYPE_STRING, pModelSequenceFileName);	//VIDOVIC
 	pParamData = pParamList->AddParam("ModelsInDataBase", RVLPARAM_TYPE_STRING, pModelsInDB);	//VIDOVIC
 	pParamData = pParamList->AddParam("GTFolder", RVLPARAM_TYPE_STRING, pGTFolder);	//VIDOVIC
+	pParamData = pParamList->AddParam("ResultsFolder", RVLPARAM_TYPE_STRING, pResultsFolder);
 	pParamData = pParamList->AddParam("SegmentGTFileName", RVLPARAM_TYPE_STRING, pSegmentGTFileName);	//Vidovic
 	pParamData = pParamList->AddParam("Recognition.method", RVLPARAM_TYPE_ID, &method);
 	pParamList->AddID(pParamData, "PSGM", RVLRECOGNITION_METHOD_PSGM);
@@ -217,6 +223,7 @@ int main(int argc, char ** argv)
 	char *modelSequenceFileName = NULL; //VIDOVIC
 	char *modelsInDB = NULL; //VIDOVIC
 	char *GTFolder = NULL; //VIDOVIC
+	char *ResultsFolder = NULL;
 	char *segmentGTFileName = NULL; //Vidovic
 	DWORD method = RVLRECOGNITION_METHOD_PSGM;
 	//DWORD method = RVLRECOGNITION_METHOD_RF; //VIDOVIC
@@ -233,6 +240,7 @@ int main(int argc, char ** argv)
 		&modelsInDB,
 		&GTFolder,
 		&segmentGTFileName,
+		&ResultsFolder,
 		method,
 		flags);	 //VIDOVIC
 
@@ -403,15 +411,16 @@ int main(int argc, char ** argv)
 		//recognition.Create();
 
 		recognition.pMem = &mem;
+		recognition.pMem0 = &mem0;
 
 		recognition.pSurfels = &surfels;
 
 		recognition.pSurfelDetector = &surfelDetector;
 
+		recognition.MTGSet.pMem = recognition.pMem0;
+
 		if (recognition.mode == RVLRECOGNITION_MODE_TRAINING)
-		{
 			recognition.Learn(modelSequenceFileName, &visualizer); //Vidovic
-		}
 		else if (recognition.mode == RVLRECOGNITION_MODE_RECOGNITION)
 		{
 			//Eigen::MatrixXf nI = recognition.ConvexTemplatenT();
@@ -438,6 +447,8 @@ int main(int argc, char ** argv)
 
 			sceneSequence.Init(sceneSequenceFileName);
 
+			//recognition.pSurfels->bContactEdgeVertices = true;
+
 			recognition.pECCVGT->Init(sceneSequence, GTFolder, modelsInDB);
 
 			//recognition.pECCVGT->SaveGTFile("D:\\ARP3D\\TUW_GT.txt");			
@@ -446,17 +457,19 @@ int main(int argc, char ** argv)
 
 			//FILE *fpLog = fopen("D:\\ARP3D\\evaluationLog.txt", "w");			
 
-			FILE *fpPoseError = fopen("C:\\RVL\\ExpRez\\poseError.txt", "w");
+			std::string resultsFolderName = std::string(ResultsFolder);
 
-			FILE *fpnotFirstInfo = fopen("C:\\RVL\\ExpRez\\notFirstInfo.txt", "w");
+			FILE *fpPoseError = fopen((resultsFolderName + "\\poseError.txt").data(), "w");
 
-			FILE *fpnotFirstPoseErr = fopen("C:\\RVL\\ExpRez\\notFirstInfo.txt", "w");
+			FILE *fpnotFirstInfo = fopen((resultsFolderName + "\\notFirstInfo.txt").data(), "w");
+
+			FILE *fpnotFirstPoseErr = fopen((resultsFolderName + "\\notFirstInfo.txt").data(), "w");
 
 			//recognition.pECCVGT->SaveGTFile("C:\\RVL\\ExpRez\\TUW_GT.txt");
 
-			FILE *fpHypothesisEvaluation = fopen("C:\\RVL\\ExpRez\\compare_TNM_Valid_TMP.txt", "w");
+			FILE *fpHypothesisEvaluation = fopen((resultsFolderName + "\\compare_TNM_Valid_TMP.txt").data(), "w");
 
-			FILE *fpLog = fopen("C:\\RVL\\ExpRez\\evaluationLog.txt", "w");
+			FILE *fpLog = fopen((resultsFolderName + "\\evaluationLog.txt").data(), "w");
 
 			recognition.LoadCompleteSegmentGT(sceneSequence);
 
