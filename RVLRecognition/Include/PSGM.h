@@ -341,10 +341,10 @@ namespace RVL
 			float &d,
 			Array<int> PtArray);
 		void DetectGroundPlane(SURFEL::ObjectGraph *pObjects);
-		bool GravityReferenceFrame(
+		bool GravityReferenceFrames(
 			QList<QLIST::Index> surfelList,
-			float *RGC,
-			float &varX);
+			RECOG::CTISet *pCTISet,
+			CRVLMem *pMem_);
 		int CTIs(
 			QList<QLIST::Index> surfelList,
 			Array<int> iVertexArray,
@@ -353,8 +353,10 @@ namespace RVL
 			RECOG::CTISet *pCTISet,
 			CRVLMem *pMem);
 		void CTIs(
+			int iModel,
 			SURFEL::ObjectGraph *pObjects,
-			RECOG::CTISet *pCTISet);
+			RECOG::CTISet *pCTISet,
+			CRVLMem *pMem);
 		void FitModel(
 			Array<int> iVertexArray,
 			RECOG::PSGM_::ModelInstance *pModelInstance,

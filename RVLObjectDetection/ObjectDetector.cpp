@@ -45,6 +45,10 @@ ObjectDetector::ObjectDetector()
 	bMultilateralFilter = false;
 	bJoinSmallObjectsToLargestNeighbor = false;
 	bGroundTruthSegmentation = false;
+	bGroundTruthSegmentationOnSurfelLevel = false;
+	bGroundTruthBoundingBoxes = false;
+	bOwnsSurfelDetectionTool = false;
+	bOwnsPSGM = false;
 
 	pSurfels = NULL;
 	pSurfelDetector = NULL;
@@ -56,17 +60,23 @@ ObjectDetector::ObjectDetector()
 
 ObjectDetector::~ObjectDetector()
 {
-	if (pSurfels)
-		delete pSurfels;
+	if (bOwnsSurfelDetectionTool)
+	{
+		if (pSurfels)
+			delete pSurfels;
 
-	if (pSurfelDetector)
-		delete pSurfelDetector;
+		if (pSurfelDetector)
+			delete pSurfelDetector;
+	}
 
 	if (pObjects)
 		delete pObjects;
 
-	if (pPSGM)
-		delete pPSGM;
+	if (bOwnsPSGM)
+	{
+		if (pPSGM)
+			delete pPSGM;
+	}
 
 	RVL_DELETE_ARRAY(cfgFileName);
 
@@ -91,6 +101,9 @@ void ObjectDetector::Init(PSGM *pPSGM_)
 		pSurfels = pPSGM->pSurfels;
 
 		pSurfelDetector = pPSGM->pSurfelDetector;
+
+		bOwnsSurfelDetectionTool = false;
+		bOwnsPSGM = false;
 	}
 	else
 	{
@@ -119,6 +132,9 @@ void ObjectDetector::Init(PSGM *pPSGM_)
 		pPSGM->pSurfels = pSurfels;
 
 		pPSGM->pSurfelDetector = pSurfelDetector;
+
+		bOwnsSurfelDetectionTool = true;
+		bOwnsPSGM = true;
 	}
 
 	pObjects = new SURFEL::ObjectGraph;
@@ -830,7 +846,7 @@ void ObjectDetector::DetectObjects(char *MeshFilePathName)
 
 			pSurfels->SurfelRelations(&mesh);
 
-			if (bGroundTruthSegmentation)
+			if (bGroundTruthSegmentation && bGroundTruthSegmentationOnSurfelLevel)
 				pObjects->CreateFromGroundTruth(pSurfels);
 			else
 			{
@@ -841,7 +857,7 @@ void ObjectDetector::DetectObjects(char *MeshFilePathName)
 			
 			printf("completed.\n");
 
-			pObjects->Debug();
+			//pObjects->Debug();
 
 			// Detect vertices.
 
@@ -864,16 +880,19 @@ void ObjectDetector::DetectObjects(char *MeshFilePathName)
 #ifdef RVLSURFEL_IMAGE_ADJACENCY
 	if (bSegmentToObjects)
 	{
-		if (bGroundTruthSegmentation)
+		if (bGroundTruthSegmentation && bGroundTruthSegmentationOnSurfelLevel)
 		{			
 			pObjects->sortedObjectArray.n = -1;
 			pObjects->nValidObjects = -1;
 			pObjects->GetVertices();
 			pPSGM->Init(&mesh);
 			GroundTruthGroundPlane();
-			pPSGM->convexTemplate = pPSGM->convexTemplateBox;
-			pPSGM->CTIs(pObjects, &boundingBoxes);
-			SaveBoundingBoxSizes(MeshFilePathName);
+			if (bGroundTruthBoundingBoxes)
+			{
+				pPSGM->convexTemplate = pPSGM->convexTemplateBox;
+				pPSGM->CTIs(-1, pObjects, &boundingBoxes, pMem);
+				SaveBoundingBoxSizes(MeshFilePathName);
+			}
 		}
 		else
 		{
@@ -910,7 +929,7 @@ void ObjectDetector::DetectObjects(char *MeshFilePathName)
 				pPSGM->Init(&mesh);
 				//pPSGM->CTIs(pObjects, &CTIs);
 				pPSGM->convexTemplate = pPSGM->convexTemplateBox;
-				pPSGM->CTIs(pObjects, &boundingBoxes);
+				pPSGM->CTIs(-1, pObjects, &boundingBoxes, pMem);
 				SaveBoundingBoxSizes(MeshFilePathName);
 				//pPSGM->convexTemplate = pPSGM->convexTemplate66;
 				pObjects->pMesh = &mesh;
@@ -943,7 +962,19 @@ void ObjectDetector::DetectObjects(char *MeshFilePathName)
 				cv::imshow("level2 + merge small objects", pObjects->CreateSegmentationImage());
 				//cv::waitKey(1);
 			}
-		}
+
+			if (bGroundTruthSegmentation && !bGroundTruthSegmentationOnSurfelLevel)
+			{
+				pObjects->GroupAccordingToGroundTruth();
+
+				GroundTruthGroundPlane();
+
+				pObjects->sortedObjectArray.n = -1;
+				pObjects->nValidObjects = -1;
+
+				pObjects->GetVertices();
+			}
+		}	// if (!bGroundTruthSegmentation)
 	}
 #endif
 }

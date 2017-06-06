@@ -56,6 +56,10 @@ namespace RVL
 		bool bMultilateralFilter;
 		bool bJoinSmallObjectsToLargestNeighbor;
 		bool bGroundTruthSegmentation;
+		bool bGroundTruthSegmentationOnSurfelLevel;
+		bool bGroundTruthBoundingBoxes;
+		bool bOwnsSurfelDetectionTool;
+		bool bOwnsPSGM;
 		SurfelGraph *pSurfels;
 		PlanarSurfelDetector *pSurfelDetector;
 		SURFEL::ObjectGraph *pObjects;

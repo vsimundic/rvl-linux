@@ -3077,14 +3077,14 @@ void PSGM::Learn(
 	char *modelSequenceFileName,
 	Visualizer *visualizer)
 {
+	unsigned char SelectionColor[3];
+
+	SelectionColor[0] = 0;
+	SelectionColor[1] = 255;
+	SelectionColor[2] = 0;
+
 	if (problem == RVLRECOGNITION_PROBLEM_SHAPE_INSTANCE_DETECTION)
 	{
-		unsigned char SelectionColor[3];
-
-		SelectionColor[0] = 0;
-		SelectionColor[1] = 255;
-		SelectionColor[2] = 0;
-
 		FileSequenceLoader modelsLoader;
 		FileSequenceLoader dbLoader;
 
@@ -3171,11 +3171,20 @@ void PSGM::Learn(
 		ObjectDetector *pObjectDetector = (ObjectDetector *)vpObjectDetector;
 
 		pObjectDetector->bGroundTruthSegmentation = true;
+		pObjectDetector->bGroundTruthSegmentationOnSurfelLevel = false;
 
 		pObjectDetector->flags |= RVLOBJECTDETECTION_FLAG_SEGMENTATION_GT;
 
+		FILE *fp = fopen("TrainCTIs.txt", "w");
+
+		fclose(fp);
+
+		fp = fopen("TrainCTIs.txt", "a");
+
 		FileSequenceLoader sceneSequence;
 		sceneSequence.Init(modelSequenceFileName);
+
+		int iScene = 0;
 
 		char filePath[200];
 		char fileName[200];
@@ -3188,10 +3197,32 @@ void PSGM::Learn(
 
 			pObjectDetector->DetectObjects(filePath);
 
+			CTISet.Init();
+
+			CTIs(iScene, pObjects, &CTISet, pMem);
+
+			SaveCTIs(fp, &CTISet, iScene);
+
 			cv::imshow("Segmentation", pObjects->CreateSegmentationImage());
 
-			cv::waitKey();
+			//cv::waitKey();
+
+			cv::waitKey(1);
+
+			if (visualizer)
+			{
+				pSurfels->NodeColors(SelectionColor);
+				pObjectDetector->pObjects->InitDisplay(visualizer, &(pObjectDetector->mesh), SelectionColor);
+				pObjectDetector->pObjects->Display();
+				visualizer->Run();
+
+				visualizer->renderer->RemoveAllViewProps();
+			}
+
+			iScene++;
 		}
+
+		fclose(fp);
 	}
 }
 
@@ -8671,24 +8702,45 @@ void PSGM::DetectGroundPlane(SURFEL::ObjectGraph *pObjects)
 	delete[] iSurfelArray.Element;
 }
 
-bool PSGM::GravityReferenceFrame(
+bool PSGM::GravityReferenceFrames(
 	QList<QLIST::Index> surfelList,
-	float *RGC,
-	float &varX)
+	RECOG::CTISet *pCTISet,
+	CRVLMem *pMem_)
 {
 	if (!bGnd)
 		return false;
 
+	int n = 0;
+
 	QLIST::Index *piSurfel = surfelList.pFirst;
 
-	if (piSurfel == NULL)
+	while (piSurfel)
+	{
+		n++;
+
+		piSurfel = piSurfel->pNext;
+	}
+
+	if (n == 0)
 		return false;
 
-	float RCG[9];
+	float csSeparationAngle = cos(baseSeparationAngle * DEG2RAD);
 
-	float *XGC = RCG;
-	float *YGC = RCG + 3;
-	float *ZGC = RCG + 6;
+	Array<SortIndex<float>> sortedSurfelArray;
+
+	sortedSurfelArray.Element = new SortIndex<float>[n];
+
+	float *UMem = new float[3 * n];
+	float *VMem = new float[3 * n];
+
+	float *U = UMem;
+	float *V = VMem;
+
+	SortIndex<float> *piSurfel_ = sortedSurfelArray.Element;
+
+	sortedSurfelArray.n = 0;
+
+	float ZGC[3];
 
 	RVLCOPY3VECTOR(NGnd, ZGC);
 
@@ -8696,20 +8748,19 @@ bool PSGM::GravityReferenceFrame(
 
 	RVLSKEW(ZGC, ZSkew);
 
-	bool bFirst = true;
-	
 	float J[6];
 
 	float *Jx = J;
 	float *Jy = J + 3;
 
+	piSurfel = surfelList.pFirst;
+
 	int iSurfel;
 	float *N, *R, *X, *Y;
 	Surfel *pSurfel;
-	float U[3], V[3];
 	float lenV, fTmp;
 	float A[9], B[9], CV[9];
-	float stdx, stdy, varv, kx, ky, minVarv;	
+	float stdx, stdy, varv, kx, ky;
 
 	while (piSurfel)
 	{
@@ -8725,76 +8776,131 @@ bool PSGM::GravityReferenceFrame(
 
 			N = pSurfel->N;
 
-			R = pSurfel->R;
+			fTmp = RVLDOTPRODUCT3(N, NGnd);
 
-			X = R;
-
-			Y = R + 3;
-
-			stdx = 1.0f / pSurfel->r1;
-
-			stdy = 1.0f / pSurfel->r2;
-
-			// V <- NGnd x N
-			RVLCROSSPRODUCT3(ZGC, N, V);
-
-			// V <- V / || V ||
-			// lenV <- || V ||
-			RVLNORM3(V, lenV);
-
-			kx = stdx / lenV;
-			ky = stdy / lenV;
-
-			// A <- V * V'
-			RVLVECTCOV3(V, A);
-			RVLCOMPLETESIMMX3(A);
-
-			// B <- (I - A) * [NGnd]x
-			RVLMXMUL3X3(A, ZSkew, B);
-			RVLDIFMX3X3(ZSkew, B, B);
-
-			// J <- (B * [X Y])'
-			RVLMULMX3X3VECT(B, X, Jx);
-			RVLMULMX3X3VECT(B, Y, Jy);
-
-			// J <- stdx * J / lenV
-			RVLSCALE3VECTOR(Jx, kx, Jx);
-			RVLSCALE3VECTOR(Jy, ky, Jy);
-
-			// CV <- J * J'
-			RVLVECTCOV3(Jx, A);
-			RVLVECTCOV3(Jy, B);
-			RVLSUMMX3X3UT(A, B, CV);
-
-			// U <- NGnd x V / || NGnd x V ||
-			RVLCROSSPRODUCT3(ZGC, V, U);
-			RVLNORM3(U, fTmp);
-
-			// varv <- U' * CV * U
-			varv = RVLCOV3DTRANSFTO1D(CV, U);
-
-			///
-
-			if (bFirst || varv < minVarv)
+			if (RVLABS(fTmp) <= csSeparationAngle)
 			{
-				minVarv = varv;
+				R = pSurfel->R;
 
-				RVLCOPY3VECTOR(V, XGC);
-				RVLCOPY3VECTOR(U, YGC);
+				X = R;
 
-				bFirst = false;
+				Y = R + 3;
+
+				stdx = 1.0f / pSurfel->r1;
+
+				stdy = 1.0f / pSurfel->r2;
+
+				// V <- NGnd x N
+				RVLCROSSPRODUCT3(ZGC, N, V);
+
+				// V <- V / || V ||
+				// lenV <- || V ||
+				RVLNORM3(V, lenV);
+
+				kx = stdx / lenV;
+				ky = stdy / lenV;
+
+				// A <- V * V'
+				RVLVECTCOV3(V, A);
+				RVLCOMPLETESIMMX3(A);
+
+				// B <- (I - A) * [NGnd]x
+				RVLMXMUL3X3(A, ZSkew, B);
+				RVLDIFMX3X3(ZSkew, B, B);
+
+				// J <- (B * [X Y])'
+				RVLMULMX3X3VECT(B, X, Jx);
+				RVLMULMX3X3VECT(B, Y, Jy);
+
+				// J <- stdx * J / lenV
+				RVLSCALE3VECTOR(Jx, kx, Jx);
+				RVLSCALE3VECTOR(Jy, ky, Jy);
+
+				// CV <- J * J'
+				RVLVECTCOV3(Jx, A);
+				RVLVECTCOV3(Jy, B);
+				RVLSUMMX3X3UT(A, B, CV);
+
+				// U <- NGnd x V / || NGnd x V ||
+				RVLCROSSPRODUCT3(ZGC, V, U);
+				RVLNORM3(U, fTmp);
+
+				// varv <- U' * CV * U
+				varv = RVLCOV3DTRANSFTO1D(CV, U);
+
+				piSurfel_->idx = sortedSurfelArray.n;
+				piSurfel_->cost = varv;
+
+				sortedSurfelArray.n++;
+
+				U += 3;
+				V += 3;
+
+				piSurfel_++;
 			}
 		}	// if (pSurfel->flags & RVLSURFEL_FLAG_RF)
 
 		piSurfel = piSurfel->pNext;
 	}	// for every surfel in surfelList
 
-	if (bFirst)
+	if (sortedSurfelArray.n == 0)
+	{
+		delete[] sortedSurfelArray.Element;
+		delete[] UMem;
+		delete[] VMem;
+
 		return false;
+	}
 
-	RVLCOPYMX3X3T(RCG, RGC);
+	if (sortedSurfelArray.n > 1)
+		BubbleSort<SortIndex<float>>(sortedSurfelArray);
 
-	varX = minVarv;
+	RECOG::PSGM_::ModelInstance **ppFirstModelInstance = pCTISet->CTI.ppNext;
+
+	int i;
+	RECOG::PSGM_::ModelInstance *pModelInstance;
+	float *t;
+
+	for (i = 0; i < sortedSurfelArray.n; i++)
+	{
+		X = VMem + 3 * sortedSurfelArray.Element[i].idx;
+
+		pModelInstance = *ppFirstModelInstance;
+
+		while (pModelInstance)
+		{
+			if (RVLMULROWCOL3(X, pModelInstance->R, 0, 0) > csSeparationAngle)
+				break;
+
+			pModelInstance = pModelInstance->pNext;
+		}
+
+		if (pModelInstance)
+			continue;
+
+		RVLMEM_ALLOC_STRUCT(pMem_, RECOG::PSGM_::ModelInstance, pModelInstance);
+
+		pCTISet->AddCTI(pModelInstance); //Vidovic
+
+		R = pModelInstance->R;
+
+		RVLCOPYTOCOL3(ZGC, 2, R);
+		RVLCOPYTOCOL3(X, 0, R);
+
+		Y = UMem + 3 * sortedSurfelArray.Element[i].idx;
+
+		RVLCOPYTOCOL3(Y, 1, R);
+
+		t = pModelInstance->t;
+
+		RVLNULL3VECTOR(t);
+
+		pModelInstance->varX = sortedSurfelArray.Element[i].cost;
+	}
+
+	delete[] sortedSurfelArray.Element;
+	delete[] UMem;
+	delete[] VMem;
 
 	return true;
 }
@@ -8807,39 +8913,38 @@ int PSGM::CTIs(
 	RECOG::CTISet *pCTISet,
 	CRVLMem *pMem)
 {
+	RECOG::PSGM_::ModelInstance **ppCTI = pCTISet->CTI.ppNext;
+
 	float RGC[9];
 	float varX;
 
-	if (!GravityReferenceFrame(surfelList, RGC, varX))
-		return 0;
+	if (!GravityReferenceFrames(surfelList, pCTISet, pMem))
+		return 0;	
 
-	RECOG::PSGM_::ModelInstance *pCTI;
+	int nCTIs = 0;
 
-	RVLMEM_ALLOC_STRUCT(pMem, RECOG::PSGM_::ModelInstance, pCTI);
+	RECOG::PSGM_::ModelInstance *pCTI = *ppCTI;
 
-	pCTISet->AddCTI(pCTI);
+	while (pCTI)
+	{
+		pCTI->iCluster = iCluster;
+		pCTI->iModel = iModel;
 
-	float *R = pCTI->R;
+		FitModel(iVertexArray, pCTI);
 
-	RVLCOPYMX3X3(RGC, R);
+		nCTIs++;
 
-	float *t = pCTI->t;
+		pCTI = pCTI->pNext;
+	}
 
-	RVLNULL3VECTOR(t);
-
-	pCTI->varX = varX;
-
-	pCTI->iCluster = iCluster;
-	pCTI->iModel = iModel;
-
-	FitModel(iVertexArray, pCTI);
-
-	return 1;
+	return nCTIs;
 }
 
 void PSGM::CTIs(
+	int iModel,
 	SURFEL::ObjectGraph *pObjects,
-	RECOG::CTISet *pCTISet)
+	RECOG::CTISet *pCTISet,
+	CRVLMem *pMem_)
 {
 	pCTISet->Init();
 
@@ -8866,7 +8971,7 @@ void PSGM::CTIs(
 			pObject = pObjects->objectArray.Element + iObject;
 
 			if (pObject->iVertexArray.n >= 3)
-				pCTISet->SegmentCTIs.Element[iObject].n = CTIs(pObject->surfelList, pObject->iVertexArray, -1, iObject, pCTISet, pMem);
+				pCTISet->SegmentCTIs.Element[iObject].n = CTIs(pObject->surfelList, pObject->iVertexArray, iModel, iObject, pCTISet, pMem_);
 			else
 				pCTISet->SegmentCTIs.Element[iObject].n = 0;			
 		}
