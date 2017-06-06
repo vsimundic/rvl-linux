@@ -126,8 +126,6 @@ namespace RVL
 		{
 			*pNewData = data;
 
-			pNewData++;
-
 			int i, j, k;
 
 			Cell(data.P, i, j, k);
@@ -142,6 +140,8 @@ namespace RVL
 				activeCellArray.Element[activeCellArray.n++] = iCell;
 
 			RVLQLIST_ADD_ENTRY2(pCellDataList, pNewData);
+
+			pNewData++;
 		}
 
 		inline void RemoveData(DataType *pData)
@@ -184,7 +184,7 @@ namespace RVL
 							for (k_ = k; k_ <= k + 1; k_++)
 							{
 								if (k_ >= 0 && k_ < grid.c)
-									neighborCellArray.Element[neighborCellArray.n++] = (k * grid.b + j) * grid.a + i;
+									neighborCellArray.Element[neighborCellArray.n++] = (k_ * grid.b + j_) * grid.a + i_;
 								else
 									bOutCell = true;
 							}
@@ -233,13 +233,15 @@ namespace RVL
 		{
 			dataArray.n = 0;
 
-			int iCell;
+			dataArray.Element = dataBuff;
+
+			int i;
 			DataType *pData;
 			QList<DataType> *pCellDataList;
 
-			for (iCell = 0; iCell < activeCellArray.n; iCell++)
+			for (i = 0; i < activeCellArray.n; i++)
 			{
-				pCellDataList = grid.Element + iCell;
+				pCellDataList = grid.Element + activeCellArray.Element[i];
 
 				pData = pCellDataList->pFirst;
 

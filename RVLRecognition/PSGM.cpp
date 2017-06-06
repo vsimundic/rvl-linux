@@ -21,6 +21,7 @@
 #include "TG.h"
 #include "TGSet.h"
 #include "PSGM.h"
+#include "ObjectDetector.h"
 #include <Eigen\Eigenvalues>
 #include <random> //VIDOVIC
 #include <nanoflann.hpp>
@@ -28,7 +29,8 @@
 //#define RVLPSGM_CTIMESH_DEBUG
 //#define RVLPSGM_MATCHTGS_CREATE_SCENE_TG
 //#define RVLPSGM_MATCHTGS_CREATE_SCENE_VG
-//#define RVLPSGM_MATCHCTI_MATCH_MATRIX
+#define RVLPSGM_MATCHCTI_MATCH_MATRIX		// 170601: OFF
+#define RVLPSGM_MATCH_HYPOTHESIS_LOG
 
 using namespace RVL;
 using namespace RECOG;
@@ -36,6 +38,7 @@ using namespace RECOG;
 PSGM::PSGM()
 {
 	mode = RVLRECOGNITION_MODE_RECOGNITION;
+	problem = RVLRECOGNITION_PROBLEM_SHAPE_INSTANCE_DETECTION;
 	bZeroRFDescriptor = false;
 	bGTRFDescriptors = false;
 	bMatchRANSAC = false;
@@ -72,6 +75,8 @@ PSGM::PSGM()
 
 	ConvexTemplateCentoidID();
 	//END Vidovic
+
+	vpObjectDetector = NULL;
 
 	clusters.Element = NULL;
 	clusterMap = NULL;
@@ -229,6 +234,13 @@ PSGM::~PSGM()
 
 	//fclose(fpTime);
 	//End Vidovic
+
+	if (vpObjectDetector)
+	{
+		ObjectDetector *pObjectDetector = (ObjectDetector *)vpObjectDetector;
+
+		delete pObjectDetector;
+	}
 }
 
 void PSGM::CreateParamList(CRVLMem *pMem)
@@ -243,6 +255,9 @@ void PSGM::CreateParamList(CRVLMem *pMem)
 	ParamList.AddID(pParamData, "TRAINING", RVLRECOGNITION_MODE_TRAINING);
 	ParamList.AddID(pParamData, "RECOGNITION", RVLRECOGNITION_MODE_RECOGNITION); //Vidovic
 	ParamList.AddID(pParamData, "CREATE_CTIS", RVLRECOGNITION_MODE_PSGM_CREATE_CTIS);
+	pParamData = ParamList.AddParam("Recognition.problem", RVLPARAM_TYPE_ID, &problem);
+	ParamList.AddID(pParamData, "SHAPE_INSTANCE_DETECTION", RVLRECOGNITION_PROBLEM_SHAPE_INSTANCE_DETECTION);
+	ParamList.AddID(pParamData, "CLASSIFICATION", RVLRECOGNITION_PROBLEM_CLASSIFICATION);
 	pParamData = ParamList.AddParam("PSGM.nDominantClusters", RVLPARAM_TYPE_INT, &nDominantClusters);
 	pParamData = ParamList.AddParam("PSGM.kNoise", RVLPARAM_TYPE_FLOAT, &kNoise);
 	pParamData = ParamList.AddParam("PSGM.minInitialSurfelSize", RVLPARAM_TYPE_INT, &minInitialSurfelSize);
@@ -274,6 +289,28 @@ void PSGM::CreateParamList(CRVLMem *pMem)
 	pParamData = ParamList.AddParam("PSGM.symmetryMatchThr", RVLPARAM_TYPE_FLOAT, &symmetryMatchThr);
 	pParamData = ParamList.AddParam("PSGM.debug1", RVLPARAM_TYPE_INT, &debug1);
 	pParamData = ParamList.AddParam("PSGM.debug2", RVLPARAM_TYPE_INT, &debug2);
+}
+
+void PSGM::Init(char *cfgFileName)
+{
+	if (problem == RVLRECOGNITION_PROBLEM_CLASSIFICATION)
+	{
+		ObjectDetector *pObjectDetector = new ObjectDetector;
+
+		vpObjectDetector = pObjectDetector;
+
+		pObjectDetector->pMem0 = pMem0;
+		pObjectDetector->pMem = pMem;
+		pObjectDetector->cfgFileName = RVLCreateString(cfgFileName);
+
+		pObjectDetector->Init(this);
+
+		pObjectDetector->vpMeshBuilder = vpMeshBuilder;
+		pObjectDetector->LoadMesh = LoadMesh;
+
+		pObjectDetector->bSegmentToObjects = true;
+		pObjectDetector->bObjectAggregationLevel2 = false;
+	}
 }
 
 void PSGM::Init(Mesh *pMesh_)
@@ -3046,86 +3083,147 @@ void PSGM::Learn(
 	SelectionColor[1] = 255;
 	SelectionColor[2] = 0;
 
-	FileSequenceLoader modelsLoader;
-	FileSequenceLoader dbLoader;
-
-	char modelFilePath[200];
-	char modelFileName[200];
-
-	Mesh mesh;
-
-	//int iCluster;
-	int nClusters, currentModelID;
-
-	//RVL_DELETE_ARRAY(modelDataBase);
-	//RVL_DELETE_ARRAY(modelsInDataBase);
-
-	MTGSet.Clear();
-
-	if (!modelDataBase)
-		modelDataBase = "modelDB.dat";
-
-	if (!modelsInDataBase)
-		modelsInDataBase = "DBModels.txt";
-
-	modelsLoader.Init(modelSequenceFileName);
-	dbLoader.Init(modelsInDataBase);
-
-	FILE *fp = fopen(modelDataBase, "a");
-
-	bool saveDBSequenceFile = false;
-
-	printf("Model DB creation started...\n");
-
-	while (modelsLoader.GetNext(modelFilePath, modelFileName))
+	if (problem == RVLRECOGNITION_PROBLEM_SHAPE_INSTANCE_DETECTION)
 	{
-		if (ModelExistInDB(modelFileName, dbLoader))
-			continue;
+		FileSequenceLoader modelsLoader;
+		FileSequenceLoader dbLoader;
 
-		printf("\nProcessing model %s!\n", modelFileName);
+		char modelFilePath[200];
+		char modelFileName[200];
 
-		saveDBSequenceFile = true;
+		Mesh mesh;
 
-		mesh.LoadPolyDataFromPLY(modelFilePath);
+		//int iCluster;
+		int nClusters, currentModelID;
 
-		SetSceneFileName(modelFilePath);
+		//RVL_DELETE_ARRAY(modelDataBase);
+		//RVL_DELETE_ARRAY(modelsInDataBase);
 
-		currentModelID = dbLoader.GetLastModelID() + 1;
+		MTGSet.Clear();
 
-		Interpret(&mesh, currentModelID);
+		if (!modelDataBase)
+			modelDataBase = "modelDB.dat";
 
-		nClusters = RVLMIN(clusters.n, nDominantClusters);
+		if (!modelsInDataBase)
+			modelsInDataBase = "DBModels.txt";
 
-		//Add vtkPolyData to vtkModelDB
-		vtkModelDB.insert(std::make_pair(currentModelID, mesh.pPolygonData));
+		modelsLoader.Init(modelSequenceFileName);
+		dbLoader.Init(modelsInDataBase);
 
-		SaveModelInstances(fp, currentModelID);
+		FILE *fp = fopen(modelDataBase, "a");
 
-		dbLoader.AddModel(currentModelID, modelFilePath, modelFileName);
+		bool saveDBSequenceFile = false;
 
-		if (visualizer)
+		printf("Model DB creation started...\n");
+
+		while (modelsLoader.GetNext(modelFilePath, modelFileName))
 		{
-			pSurfels->NodeColors(SelectionColor);
-			InitDisplay(visualizer, &mesh, SelectionColor);
-			Display();
-			visualizer->Run();
+			if (ModelExistInDB(modelFileName, dbLoader))
+				continue;
 
-			visualizer->renderer->RemoveAllViewProps();
+			printf("\nProcessing model %s!\n", modelFileName);
+
+			saveDBSequenceFile = true;
+
+			mesh.LoadPolyDataFromPLY(modelFilePath);
+
+			SetSceneFileName(modelFilePath);
+
+			currentModelID = dbLoader.GetLastModelID() + 1;
+
+			Interpret(&mesh, currentModelID);
+
+			nClusters = RVLMIN(clusters.n, nDominantClusters);
+
+			//Add vtkPolyData to vtkModelDB
+			vtkModelDB.insert(std::make_pair(currentModelID, mesh.pPolygonData));
+
+			SaveModelInstances(fp, currentModelID);
+
+			dbLoader.AddModel(currentModelID, modelFilePath, modelFileName);
+
+			if (visualizer)
+			{
+				pSurfels->NodeColors(SelectionColor);
+				InitDisplay(visualizer, &mesh, SelectionColor);
+				Display();
+				visualizer->Run();
+
+				visualizer->renderer->RemoveAllViewProps();
+			}
 		}
+
+		printf("Model DB creation completed!\n");
+
+		if (saveDBSequenceFile)
+			SaveModelID(dbLoader);
+
+		fclose(fp);
+
+		char *TGFileName = RVLCreateFileName(modelDataBase, ".dat", -1, ".tgr");
+
+		MTGSet.Save(TGFileName);
+
+		delete[] TGFileName;
 	}
+	else if (problem == RVLRECOGNITION_PROBLEM_CLASSIFICATION)
+	{
+		ObjectDetector *pObjectDetector = (ObjectDetector *)vpObjectDetector;
 
-	printf("Model DB creation completed!\n");
+		pObjectDetector->bGroundTruthSegmentation = true;
+		pObjectDetector->bGroundTruthSegmentationOnSurfelLevel = false;
 
-	if (saveDBSequenceFile)
-		SaveModelID(dbLoader);
+		pObjectDetector->flags |= RVLOBJECTDETECTION_FLAG_SEGMENTATION_GT;
 
-	fclose(fp);
+		FILE *fp = fopen("TrainCTIs.txt", "w");
 
-	char *TGFileName = RVLCreateFileName(modelDataBase, ".dat", -1, ".tgr");
+		fclose(fp);
 
-	MTGSet.Save(TGFileName);
+		fp = fopen("TrainCTIs.txt", "a");
 
-	delete[] TGFileName;
+		FileSequenceLoader sceneSequence;
+		sceneSequence.Init(modelSequenceFileName);
+
+		int iScene = 0;
+
+		char filePath[200];
+		char fileName[200];
+
+		while (sceneSequence.GetNext(filePath, fileName))
+		{
+			pMem->Clear();
+
+			printf("Scene %s...\n", fileName);
+
+			pObjectDetector->DetectObjects(filePath);
+
+			CTISet.Init();
+
+			CTIs(iScene, pObjects, &CTISet, pMem);
+
+			SaveCTIs(fp, &CTISet, iScene);
+
+			cv::imshow("Segmentation", pObjects->CreateSegmentationImage());
+
+			//cv::waitKey();
+
+			cv::waitKey(1);
+
+			if (visualizer)
+			{
+				pSurfels->NodeColors(SelectionColor);
+				pObjectDetector->pObjects->InitDisplay(visualizer, &(pObjectDetector->mesh), SelectionColor);
+				pObjectDetector->pObjects->Display();
+				visualizer->Run();
+
+				visualizer->renderer->RemoveAllViewProps();
+			}
+
+			iScene++;
+		}
+
+		fclose(fp);
+	}
 }
 
 
@@ -4471,6 +4569,7 @@ void PSGM::Match()
 
 	int iModel, iMCTI;
 	int nModelCTIs;
+	int nMClusterCTIs;
 
 	for (iModel = 0; iModel < MCTISet.nModels; iModel++)
 	{
@@ -4478,21 +4577,31 @@ void PSGM::Match()
 
 		nModelCTIs = 0;
 
-		do
+		nMClusterCTIs = MCTISet.SegmentCTIs.Element[iMCluster].n;
+
+		while (true)
 		{
-			nModelCTIs += MCTISet.SegmentCTIs.Element[iMCluster].n;
+			nModelCTIs += nMClusterCTIs;
 
 			iMCluster++;
 
 			if (iMCluster >= MCTISet.SegmentCTIs.n)
 				break;
 
-			iMCTI = MCTISet.SegmentCTIs.Element[iMCluster].Element[0];
+			nMClusterCTIs = MCTISet.SegmentCTIs.Element[iMCluster].n;
 
-			pMModelInstance = MCTISet.pCTI.Element[iMCTI];
-		} while (pMModelInstance->iModel == iModel);
+			if (nMClusterCTIs > 0)
+			{
+				iMCTI = MCTISet.SegmentCTIs.Element[iMCluster].Element[0];
 
-		CTIInterval[iModel].b = (iMCluster >= MCTISet.SegmentCTIs.n ? MCTISet.SegmentCTIs.Element[iMCluster].Element[0] : MCTISet.pCTI.n);
+				pMModelInstance = MCTISet.pCTI.Element[iMCTI];
+
+				if (pMModelInstance->iModel != iModel)
+					break;
+			}
+		}
+
+		CTIInterval[iModel].b = (iMCluster < MCTISet.SegmentCTIs.n ? MCTISet.SegmentCTIs.Element[iMCluster].Element[0] : MCTISet.pCTI.n);
 
 		if (nModelCTIs > maxnModelCTIs)
 			maxnModelCTIs = nModelCTIs;
@@ -4547,7 +4656,7 @@ void PSGM::Match()
 
 	// main loop
 
-	PSGM_::MatchInstance **pFirstMatch;
+	PSGM_::MatchInstance **ppFirstMatch;
 	float centroid[3];
 	PSGM_::Cluster *pSCluster;
 
@@ -4566,11 +4675,13 @@ void PSGM::Match()
 
 		pSurfels->Centroid(pSCluster->iSurfelArray, centroid);
 
+		RVLSCALE3VECTOR(centroid, 1000.0f, centroid);
+
 		HSpace.SetVolume(centroid[0] - volumeCorner[0], centroid[1] - volumeCorner[1], centroid[2] - volumeCorner[2]);
 
 		for (iModel = 0; iModel < MCTISet.nModels; iModel++)
 		{
-			pFirstMatch = pCTImatches->ppNext;
+			ppFirstMatch = pCTImatches->ppNext;
 
 			for (iSCTI = 0; iSCTI < nCTI; iSCTI++)
 			{
@@ -4581,9 +4692,11 @@ void PSGM::Match()
 				Match(pSModelInstance, CTIInterval[iModel].a, CTIInterval[iModel].b);
 
 				CalculateScore(RVLPSGM_MATCH_SIMILARITY_MEASURE_MEAN_SATURATED_SQUARE_DISTANCE, CTIInterval[iModel].a, CTIInterval[iModel].b);
+
+				
 			} // for all MI in cluster
 
-			AddSegmentMatches(iSCluster, HSpace, iMergingCandidates);
+			AddSegmentMatches(iSCluster, ppFirstMatch, HSpace, iMergingCandidates);
 		}
 	}
 
@@ -5009,9 +5122,7 @@ void PSGM::Match(
 				pCTIMatch->angleGT = NAN;
 				pCTIMatch->distanceGT = NAN;
 
-
-
-				//MSTransformation(pMModelInstance, pSModelInstance, tBestMatch.Element[iMCTI].Element, R_, t_);
+				MSTransformation(pMModelInstance, pSModelInstance, tBestMatch.Element[iMCTI].Element, pCTIMatch->R, pCTIMatch->t);
 			}
 			else
 			{
@@ -5276,12 +5387,14 @@ void PSGM::MatchTGs()
 
 void PSGM::AddSegmentMatches(
 	int iCluster,
+	PSGM_::MatchInstance **ppFirstMatch,
 	Space3DGrid<PSGM_::Hypothesis, float> &HSpace,
 	Array<int> &iMergingCandidates)
 {
-	float eqThr = 0.94;		// cos(20 deg)
+	//float eqThr = 0.94;		// cos(20 deg)
+	float eqThr = COS45;
 
-	PSGM_::MatchInstance *pMatch = pFirstSCTIMatch;
+	PSGM_::MatchInstance *pMatch = *ppFirstMatch;
 
 	PSGM_::Hypothesis Hypothesis;
 	PSGM_::Hypothesis *pHypothesis_;
@@ -5292,6 +5405,9 @@ void PSGM::AddSegmentMatches(
 
 	while (pMatch)
 	{
+		if (pMatch->ID == 77)
+			int debug = 0;
+
 		X = pMatch->R;
 		Z = pMatch->R + 6;
 
@@ -5307,14 +5423,14 @@ void PSGM::AddSegmentMatches(
 
 			e = RVLDOTPRODUCT3(Z, Z_);
 
-			if (e > eqThr)
+			if (e < eqThr)
 				continue;
 
 			X_ = pHypothesis_->R;
 
 			e = RVLDOTPRODUCT3(X, X_);
 
-			if (e > eqThr)
+			if (e < eqThr)
 				continue;
 
 			if (pMatch->score <= pHypothesis_->score)
@@ -5347,17 +5463,37 @@ void PSGM::AddSegmentMatches(
 
 	HSpace.GetData(hypothesisArray);
 
+	sceneSegmentMatches.Element[iCluster].n = hypothesisArray.n;
+
 	SortIndex<float> *pMatchIdx = sceneSegmentMatches.Element[iCluster].Element;
 
 	PSGM_::Hypothesis **ppHypothesis = hypothesisArray.Element;
 
 	for (i = 0; i < hypothesisArray.n; i++, pMatchIdx++, ppHypothesis++)
-{
+	{
 		pHypothesis_ = *ppHypothesis;
 
 		pMatchIdx->idx = pHypothesis_->iMatch;
 		pMatchIdx->cost = pHypothesis_->score;
 	}
+
+#ifdef RVLPSGM_MATCH_HYPOTHESIS_LOG
+	FILE *fp = fopen("hypotheses.txt", "w");
+
+	for (i = 0; i < hypothesisArray.n; i++, pMatchIdx++, ppHypothesis++)
+	{
+		pHypothesis_ = hypothesisArray.Element[i];
+
+		fprintf(fp, "%d\t", pHypothesis_->iMatch);
+
+		for (int j = 0; j < 9; j++)
+			fprintf(fp, "%f\t", pHypothesis_->R[j]);
+
+		fprintf(fp, "%f\t%f\t%f\n", pHypothesis_->P[0], pHypothesis_->P[1], pHypothesis_->P[2]);
+	}
+
+	fclose(fp);
+#endif
 }
 
 void PSGM::CalculateScore(
@@ -5409,7 +5545,7 @@ void PSGM::CalculateScore(
 		break;
 	case RVLPSGM_MATCH_SIMILARITY_MEASURE_MAX_ABS_DISTANCE: //maximum absolute error
 
-		for (iMCTI = 0; iMCTI < nMCTI; iMCTI++)
+		for (iMCTI = iFirstCTI; iMCTI < iEndCTI_; iMCTI++)
 		{
 			for (iValidPlane = 0; iValidPlane < iValid.n; iValidPlane++)
 			{
@@ -5435,7 +5571,7 @@ void PSGM::CalculateScore(
 		break;
 	case RVLPSGM_MATCH_SIMILARITY_MEASURE_SATURATED_SQUARE_DISTANCE_INVISIBILITY_PENAL: //saturated square error
 
-		for (iMCTI = 0; iMCTI < nMCTI; iMCTI++)
+		for (iMCTI = iFirstCTI; iMCTI < iEndCTI_; iMCTI++)
 		{
 			scoreTmp = 0;
 
@@ -5463,7 +5599,7 @@ void PSGM::CalculateScore(
 
 		break;
 	case RVLPSGM_MATCH_SIMILARITY_MEASURE_MEAN_SATURATED_SQUARE_DISTANCE:
-		for (iMCTI = 0; iMCTI < nMCTI; iMCTI++)
+		for (iMCTI = iFirstCTI; iMCTI < iEndCTI_; iMCTI++)
 		{
 			scoreTmp = 0;
 
@@ -5499,7 +5635,7 @@ void PSGM::CalculateScore(
 
 		medianIdx = iValid.n / 2;
 
-		for (iMCTI = 0; iMCTI < nMCTI; iMCTI++)
+		for (iMCTI = iFirstCTI; iMCTI < iEndCTI_; iMCTI++)
 		{
 			for (iValidPlane = 0; iValidPlane < iValid.n; iValidPlane++)
 			{
@@ -8566,24 +8702,45 @@ void PSGM::DetectGroundPlane(SURFEL::ObjectGraph *pObjects)
 	delete[] iSurfelArray.Element;
 }
 
-bool PSGM::GravityReferenceFrame(
+bool PSGM::GravityReferenceFrames(
 	QList<QLIST::Index> surfelList,
-	float *RGC,
-	float &varX)
+	RECOG::CTISet *pCTISet,
+	CRVLMem *pMem_)
 {
 	if (!bGnd)
 		return false;
 
+	int n = 0;
+
 	QLIST::Index *piSurfel = surfelList.pFirst;
 
-	if (piSurfel == NULL)
+	while (piSurfel)
+	{
+		n++;
+
+		piSurfel = piSurfel->pNext;
+	}
+
+	if (n == 0)
 		return false;
 
-	float RCG[9];
+	float csSeparationAngle = cos(baseSeparationAngle * DEG2RAD);
 
-	float *XGC = RCG;
-	float *YGC = RCG + 3;
-	float *ZGC = RCG + 6;
+	Array<SortIndex<float>> sortedSurfelArray;
+
+	sortedSurfelArray.Element = new SortIndex<float>[n];
+
+	float *UMem = new float[3 * n];
+	float *VMem = new float[3 * n];
+
+	float *U = UMem;
+	float *V = VMem;
+
+	SortIndex<float> *piSurfel_ = sortedSurfelArray.Element;
+
+	sortedSurfelArray.n = 0;
+
+	float ZGC[3];
 
 	RVLCOPY3VECTOR(NGnd, ZGC);
 
@@ -8591,20 +8748,19 @@ bool PSGM::GravityReferenceFrame(
 
 	RVLSKEW(ZGC, ZSkew);
 
-	bool bFirst = true;
-	
 	float J[6];
 
 	float *Jx = J;
 	float *Jy = J + 3;
 
+	piSurfel = surfelList.pFirst;
+
 	int iSurfel;
 	float *N, *R, *X, *Y;
 	Surfel *pSurfel;
-	float U[3], V[3];
 	float lenV, fTmp;
 	float A[9], B[9], CV[9];
-	float stdx, stdy, varv, kx, ky, minVarv;	
+	float stdx, stdy, varv, kx, ky;
 
 	while (piSurfel)
 	{
@@ -8620,76 +8776,131 @@ bool PSGM::GravityReferenceFrame(
 
 			N = pSurfel->N;
 
-			R = pSurfel->R;
+			fTmp = RVLDOTPRODUCT3(N, NGnd);
 
-			X = R;
-
-			Y = R + 3;
-
-			stdx = 1.0f / pSurfel->r1;
-
-			stdy = 1.0f / pSurfel->r2;
-
-			// V <- NGnd x N
-			RVLCROSSPRODUCT3(ZGC, N, V);
-
-			// V <- V / || V ||
-			// lenV <- || V ||
-			RVLNORM3(V, lenV);
-
-			kx = stdx / lenV;
-			ky = stdy / lenV;
-
-			// A <- V * V'
-			RVLVECTCOV3(V, A);
-			RVLCOMPLETESIMMX3(A);
-
-			// B <- (I - A) * [NGnd]x
-			RVLMXMUL3X3(A, ZSkew, B);
-			RVLDIFMX3X3(ZSkew, B, B);
-
-			// J <- (B * [X Y])'
-			RVLMULMX3X3VECT(B, X, Jx);
-			RVLMULMX3X3VECT(B, Y, Jy);
-
-			// J <- stdx * J / lenV
-			RVLSCALE3VECTOR(Jx, kx, Jx);
-			RVLSCALE3VECTOR(Jy, ky, Jy);
-
-			// CV <- J * J'
-			RVLVECTCOV3(Jx, A);
-			RVLVECTCOV3(Jy, B);
-			RVLSUMMX3X3UT(A, B, CV);
-
-			// U <- NGnd x V / || NGnd x V ||
-			RVLCROSSPRODUCT3(ZGC, V, U);
-			RVLNORM3(U, fTmp);
-
-			// varv <- U' * CV * U
-			varv = RVLCOV3DTRANSFTO1D(CV, U);
-
-			///
-
-			if (bFirst || varv < minVarv)
+			if (RVLABS(fTmp) <= csSeparationAngle)
 			{
-				minVarv = varv;
+				R = pSurfel->R;
 
-				RVLCOPY3VECTOR(V, XGC);
-				RVLCOPY3VECTOR(U, YGC);
+				X = R;
 
-				bFirst = false;
+				Y = R + 3;
+
+				stdx = 1.0f / pSurfel->r1;
+
+				stdy = 1.0f / pSurfel->r2;
+
+				// V <- NGnd x N
+				RVLCROSSPRODUCT3(ZGC, N, V);
+
+				// V <- V / || V ||
+				// lenV <- || V ||
+				RVLNORM3(V, lenV);
+
+				kx = stdx / lenV;
+				ky = stdy / lenV;
+
+				// A <- V * V'
+				RVLVECTCOV3(V, A);
+				RVLCOMPLETESIMMX3(A);
+
+				// B <- (I - A) * [NGnd]x
+				RVLMXMUL3X3(A, ZSkew, B);
+				RVLDIFMX3X3(ZSkew, B, B);
+
+				// J <- (B * [X Y])'
+				RVLMULMX3X3VECT(B, X, Jx);
+				RVLMULMX3X3VECT(B, Y, Jy);
+
+				// J <- stdx * J / lenV
+				RVLSCALE3VECTOR(Jx, kx, Jx);
+				RVLSCALE3VECTOR(Jy, ky, Jy);
+
+				// CV <- J * J'
+				RVLVECTCOV3(Jx, A);
+				RVLVECTCOV3(Jy, B);
+				RVLSUMMX3X3UT(A, B, CV);
+
+				// U <- NGnd x V / || NGnd x V ||
+				RVLCROSSPRODUCT3(ZGC, V, U);
+				RVLNORM3(U, fTmp);
+
+				// varv <- U' * CV * U
+				varv = RVLCOV3DTRANSFTO1D(CV, U);
+
+				piSurfel_->idx = sortedSurfelArray.n;
+				piSurfel_->cost = varv;
+
+				sortedSurfelArray.n++;
+
+				U += 3;
+				V += 3;
+
+				piSurfel_++;
 			}
 		}	// if (pSurfel->flags & RVLSURFEL_FLAG_RF)
 
 		piSurfel = piSurfel->pNext;
 	}	// for every surfel in surfelList
 
-	if (bFirst)
+	if (sortedSurfelArray.n == 0)
+	{
+		delete[] sortedSurfelArray.Element;
+		delete[] UMem;
+		delete[] VMem;
+
 		return false;
+	}
 
-	RVLCOPYMX3X3T(RCG, RGC);
+	if (sortedSurfelArray.n > 1)
+		BubbleSort<SortIndex<float>>(sortedSurfelArray);
 
-	varX = minVarv;
+	RECOG::PSGM_::ModelInstance **ppFirstModelInstance = pCTISet->CTI.ppNext;
+
+	int i;
+	RECOG::PSGM_::ModelInstance *pModelInstance;
+	float *t;
+
+	for (i = 0; i < sortedSurfelArray.n; i++)
+	{
+		X = VMem + 3 * sortedSurfelArray.Element[i].idx;
+
+		pModelInstance = *ppFirstModelInstance;
+
+		while (pModelInstance)
+		{
+			if (RVLMULROWCOL3(X, pModelInstance->R, 0, 0) > csSeparationAngle)
+				break;
+
+			pModelInstance = pModelInstance->pNext;
+		}
+
+		if (pModelInstance)
+			continue;
+
+		RVLMEM_ALLOC_STRUCT(pMem_, RECOG::PSGM_::ModelInstance, pModelInstance);
+
+		pCTISet->AddCTI(pModelInstance); //Vidovic
+
+		R = pModelInstance->R;
+
+		RVLCOPYTOCOL3(ZGC, 2, R);
+		RVLCOPYTOCOL3(X, 0, R);
+
+		Y = UMem + 3 * sortedSurfelArray.Element[i].idx;
+
+		RVLCOPYTOCOL3(Y, 1, R);
+
+		t = pModelInstance->t;
+
+		RVLNULL3VECTOR(t);
+
+		pModelInstance->varX = sortedSurfelArray.Element[i].cost;
+	}
+
+	delete[] sortedSurfelArray.Element;
+	delete[] UMem;
+	delete[] VMem;
 
 	return true;
 }
@@ -8702,39 +8913,38 @@ int PSGM::CTIs(
 	RECOG::CTISet *pCTISet,
 	CRVLMem *pMem)
 {
+	RECOG::PSGM_::ModelInstance **ppCTI = pCTISet->CTI.ppNext;
+
 	float RGC[9];
 	float varX;
 
-	if (!GravityReferenceFrame(surfelList, RGC, varX))
-		return 0;
+	if (!GravityReferenceFrames(surfelList, pCTISet, pMem))
+		return 0;	
 
-	RECOG::PSGM_::ModelInstance *pCTI;
+	int nCTIs = 0;
 
-	RVLMEM_ALLOC_STRUCT(pMem, RECOG::PSGM_::ModelInstance, pCTI);
+	RECOG::PSGM_::ModelInstance *pCTI = *ppCTI;
 
-	pCTISet->AddCTI(pCTI);
+	while (pCTI)
+	{
+		pCTI->iCluster = iCluster;
+		pCTI->iModel = iModel;
 
-	float *R = pCTI->R;
+		FitModel(iVertexArray, pCTI);
 
-	RVLCOPYMX3X3(RGC, R);
+		nCTIs++;
 
-	float *t = pCTI->t;
+		pCTI = pCTI->pNext;
+	}
 
-	RVLNULL3VECTOR(t);
-
-	pCTI->varX = varX;
-
-	pCTI->iCluster = iCluster;
-	pCTI->iModel = iModel;
-
-	FitModel(iVertexArray, pCTI);
-
-	return 1;
+	return nCTIs;
 }
 
 void PSGM::CTIs(
+	int iModel,
 	SURFEL::ObjectGraph *pObjects,
-	RECOG::CTISet *pCTISet)
+	RECOG::CTISet *pCTISet,
+	CRVLMem *pMem_)
 {
 	pCTISet->Init();
 
@@ -8761,7 +8971,7 @@ void PSGM::CTIs(
 			pObject = pObjects->objectArray.Element + iObject;
 
 			if (pObject->iVertexArray.n >= 3)
-				pCTISet->SegmentCTIs.Element[iObject].n = CTIs(pObject->surfelList, pObject->iVertexArray, -1, iObject, pCTISet, pMem);
+				pCTISet->SegmentCTIs.Element[iObject].n = CTIs(pObject->surfelList, pObject->iVertexArray, iModel, iObject, pCTISet, pMem_);
 			else
 				pCTISet->SegmentCTIs.Element[iObject].n = 0;			
 		}
