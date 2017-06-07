@@ -29,7 +29,7 @@
 //#define RVLPSGM_CTIMESH_DEBUG
 //#define RVLPSGM_MATCHTGS_CREATE_SCENE_TG
 //#define RVLPSGM_MATCHTGS_CREATE_SCENE_VG
-#define RVLPSGM_MATCHCTI_MATCH_MATRIX		// 170601: OFF
+//#define RVLPSGM_MATCHCTI_MATCH_MATRIX		// 170601: OFF
 #define RVLPSGM_MATCH_HYPOTHESIS_LOG
 
 using namespace RVL;
@@ -7645,7 +7645,7 @@ void PSGM::AddModelsToVisualizer(Visualizer *pVisualizer, bool align, RVL::PSGM:
 //	delete[] validS;
 //}
 
-void PSGM::AddOneModelToVisualizer(Visualizer *pVisualizer, int iMatch, int iRank, bool align)
+void PSGM::AddOneModelToVisualizer(Visualizer *pVisualizer, int iMatch, int iRank, bool align, bool useTG)
 {
 	//Setting indices:
 	int iMCTI = pCTImatchesArray.Element[iMatch]->iMCTI;
