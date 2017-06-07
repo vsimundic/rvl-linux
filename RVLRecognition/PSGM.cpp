@@ -5295,7 +5295,8 @@ void PSGM::AddSegmentMatches(
 	Array<int> &iMergingCandidates)
 {
 	//float eqThr = 0.94;		// cos(20 deg)
-	float eqThr = COS45;
+	//float eqThr = COS45;
+	float eqThr = 0.0f;
 
 	PSGM_::MatchInstance *pMatch = *ppFirstMatch;
 
@@ -5379,6 +5380,8 @@ void PSGM::AddSegmentMatches(
 		pMatchIdx->idx = pHypothesis_->iMatch;
 		pMatchIdx->cost = pHypothesis_->score;
 	}
+
+	HSpace.Clear();
 
 #ifdef RVLPSGM_MATCH_HYPOTHESIS_LOG
 	FILE *fp = fopen("hypotheses.txt", "w");

@@ -254,6 +254,19 @@ namespace RVL
 			}
 		}
 
+		void Clear()
+		{
+			int i;
+			QList<DataType> *pCellDataList;
+
+			for (i = 0; i < activeCellArray.n; i++)
+			{
+				pCellDataList = grid.Element + activeCellArray.Element[i];
+
+				RVLQLIST_INIT(pCellDataList);
+			}
+		}
+
 	private:
 		Array3D<QList<DataType>> grid;
 		DataType *dataMem;
