@@ -260,6 +260,13 @@ int main(int argc, char ** argv)
 
 	meshBuilder.ParamList.LoadParams(cfgFileName);
 
+	int w = 640;
+	int h = 480;
+
+	pcl::PointCloud<pcl::PointXYZRGBA>::Ptr PC(new pcl::PointCloud<pcl::PointXYZRGBA>(w, h));
+
+	meshBuilder.PC = PC;
+
 	// Initialize surfel detection
 
 	SurfelGraph surfels;
@@ -413,11 +420,16 @@ int main(int argc, char ** argv)
 		recognition.pMem = &mem;
 		recognition.pMem0 = &mem0;
 
+		recognition.vpMeshBuilder = &meshBuilder;
+		recognition.LoadMesh = LoadMesh;
+
 		recognition.pSurfels = &surfels;
 
 		recognition.pSurfelDetector = &surfelDetector;
 
 		recognition.MTGSet.pMem = recognition.pMem0;
+
+		recognition.Init(cfgFileName);
 
 		if (recognition.mode == RVLRECOGNITION_MODE_TRAINING)
 			recognition.Learn(modelSequenceFileName, &visualizer); //Vidovic

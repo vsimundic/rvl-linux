@@ -122,7 +122,7 @@ void ObjectGraph::CreateParamList(CRVLMem *pMem)
 				}
 
 void ObjectGraph::CreateFromGroundTruth(SurfelGraph *pSurfels_)
-		{
+{
 	pSurfels = pSurfels_;
 
 	// Create an object for each surfel.
@@ -138,7 +138,7 @@ void ObjectGraph::CreateFromGroundTruth(SurfelGraph *pSurfels_)
 
 	QLIST::Index *piElement = elementMem;
 
-			int i;
+	int i;
 	int iSurfel;
 	Surfel *pSurfel;
 	GRAPH::AggregateNode<AgEdge> *pAgNode;
@@ -146,7 +146,7 @@ void ObjectGraph::CreateFromGroundTruth(SurfelGraph *pSurfels_)
 	QList<QLIST::Index> *pElementList;
 
 	for (iSurfel = 0; iSurfel < pSurfels->NodeArray.n; iSurfel++)
-			{
+	{
 		pSurfel = pSurfels->NodeArray.Element + iSurfel;
 
 		pAgNode = NodeArray.Element + iSurfel;
@@ -157,13 +157,13 @@ void ObjectGraph::CreateFromGroundTruth(SurfelGraph *pSurfels_)
 
 		pEdgeList = &(pAgNode->EdgeList);
 
-				RVLQLIST_INIT(pEdgeList);
-		
+		RVLQLIST_INIT(pEdgeList);
+
 		//if (pSurfel->size < 0)
 		//	int debug = 0;
 
 		pAgNode->size = 0;
-				}
+	}
 
 	// Allocate array for storing indices of reference surfels of GT objects.
 
@@ -172,12 +172,12 @@ void ObjectGraph::CreateFromGroundTruth(SurfelGraph *pSurfels_)
 	refSurfelArray.n = 0;
 
 	for (int i = 0; i < pSurfels->NodeArray.n; i++)
-			{
+	{
 		if (pSurfels->NodeArray.Element[i].GTObjHist.size() > 0)
-				{
+		{
 			refSurfelArray.n = this->pSurfels->NodeArray.Element[i].GTObjHist.size();
-						break;
-				}
+			break;
+		}
 	}
 
 	if (refSurfelArray.n == 0)
@@ -194,7 +194,7 @@ void ObjectGraph::CreateFromGroundTruth(SurfelGraph *pSurfels_)
 	GRAPH::AggregateNode<AgEdge> *pRefAgNode;
 
 	for (iSurfel = 0; iSurfel < pSurfels->NodeArray.n; iSurfel++)
-				{
+	{
 		pSurfel = pSurfels->NodeArray.Element + iSurfel;
 
 		pAgNode = NodeArray.Element + iSurfel;
@@ -206,7 +206,7 @@ void ObjectGraph::CreateFromGroundTruth(SurfelGraph *pSurfels_)
 			continue;
 
 		if (pSurfel->ObjectID >= 0 && pSurfel->ObjectID < refSurfelArray.n)
-				{
+		{
 			iRefSurfel = refSurfelArray.Element[pSurfel->ObjectID];
 
 			if (iRefSurfel < 0)
@@ -222,7 +222,7 @@ void ObjectGraph::CreateFromGroundTruth(SurfelGraph *pSurfels_)
 			pRefAgNode->size += pSurfel->size;
 
 			piElement++;
-					}
+		}
 	}
 
 	//int iObject;
@@ -254,7 +254,105 @@ void ObjectGraph::CreateFromGroundTruth(SurfelGraph *pSurfels_)
 	// Free memory.
 
 	delete[] refSurfelArray.Element;
-						}
+}
+
+void ObjectGraph::GroupAccordingToGroundTruth()
+{
+	// Allocate array for storing indices of reference AgNodes of GT objects.
+
+	Array<int> refAgNodeArray;
+
+	int nGTObjects = 0;
+
+	for (int i = 0; i < pSurfels->NodeArray.n; i++)
+	{
+		if (pSurfels->NodeArray.Element[i].GTObjHist.size() > 0)
+		{
+			nGTObjects = this->pSurfels->NodeArray.Element[i].GTObjHist.size();
+			break;
+		}
+	}
+
+	if (nGTObjects == 0)
+		return;
+
+	refAgNodeArray.Element = new int[nGTObjects];
+
+	memset(refAgNodeArray.Element, 0xff, nGTObjects * sizeof(int));
+
+	refAgNodeArray.n = nGTObjects;
+
+	// Group nodes according to the ground truth.
+
+	int *overlap = new int[nGTObjects];
+
+	int iAgNode, iGTObject;
+	GRAPH::AggregateNode<AgEdge> *pAgNode, *pRefAgNode;
+	QLIST::Index *piElement;
+	Surfel *pSurfel;
+	int maxOverlap;
+	int iAssignedGTObject, iRefAgNode;
+	QList<QLIST::Index> *pElementList, *pRefElementList;
+
+	for (iAgNode = 0; iAgNode < NodeArray.n; iAgNode++)
+	{
+		pAgNode = NodeArray.Element + iAgNode;
+
+		if (pAgNode->elementList.pFirst == NULL)
+			continue;
+
+		memset(overlap, 0, nGTObjects * sizeof(int));
+
+		piElement = pAgNode->elementList.pFirst;
+
+		while (piElement)
+		{
+			pSurfel = pSurfels->NodeArray.Element + piElement->Idx;
+
+			for (iGTObject = 0; iGTObject < pSurfel->GTObjHist.size(); iGTObject++)
+				overlap[iGTObject] += pSurfel->GTObjHist[iGTObject];
+
+			piElement = piElement->pNext;
+		}
+
+		maxOverlap = 0;
+
+		for (iGTObject = 0; iGTObject < nGTObjects; iGTObject++)
+			if (overlap[iGTObject] > maxOverlap)
+			{
+				maxOverlap = overlap[iGTObject];
+
+				iAssignedGTObject = iGTObject;
+			}
+
+		if (maxOverlap == 0)
+			continue;
+
+		iRefAgNode = refAgNodeArray.Element[iAssignedGTObject];
+
+		if (iRefAgNode < 0)
+			refAgNodeArray.Element[iAssignedGTObject] = iAgNode;
+		else
+		{
+			pRefAgNode = NodeArray.Element + iRefAgNode;
+
+			pElementList = &(pAgNode->elementList);
+
+			pRefElementList = &(pRefAgNode->elementList);
+
+			RVLQLIST_APPEND(pRefElementList, pElementList);
+
+			RVLQLIST_INIT(pElementList);
+
+			pRefAgNode->size += pAgNode->size;
+		}
+	}
+
+	// Free memory.
+
+	delete[] refAgNodeArray.Element;
+	delete[] overlap;
+}
 
 #ifdef RVLSURFEL_IMAGE_ADJACENCY
 void ObjectGraph::Create(SurfelGraph *pSurfels_)
