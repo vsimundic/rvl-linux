@@ -542,6 +542,13 @@ int main(int argc, char ** argv)
 				recognition.InitDisplay(&visualizer, &mesh, SelectionColor);
 				recognition.Display();
 
+				//////NEW FILKO - TEST COLLISION CONSENSUS
+				////std::vector<int> conHyp = recognition.GetHypothesesCollisionConsensus(20);
+				////for (int i = 0; i < conHyp.size(); i++)
+				////{
+				////	recognition.AddOneModelToVisualizer(&visualizer, conHyp.at(i), 0, false, true);
+				////}
+
 				QueryPerformanceCounter((LARGE_INTEGER *)&ctr1_);
 
 #ifdef RVLPSGM_ICP
@@ -573,7 +580,7 @@ int main(int argc, char ** argv)
 				//evaluate ICP
 				recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, fpPoseError, fpnotFirstInfo, fpnotFirstPoseErr, 10, true);
 #else
-				recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, fpPoseError, fpnotFirstInfo, fpnotFirstPoseErr, 7);
+				//recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, fpPoseError, fpnotFirstInfo, fpnotFirstPoseErr, 7);
 #endif
 				//recognition.AddModelsToVisualizer(&visualizer, true, PCLICP, PCLICPVariants::Point_to_plane, NULL/*&kdtree*/);
 				QueryPerformanceCounter((LARGE_INTEGER *)&ctr2_);
