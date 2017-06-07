@@ -28,7 +28,8 @@
 //#define RVLPSGM_CTIMESH_DEBUG
 //#define RVLPSGM_MATCHTGS_CREATE_SCENE_TG
 //#define RVLPSGM_MATCHTGS_CREATE_SCENE_VG
-//#define RVLPSGM_MATCHCTI_MATCH_MATRIX
+#define RVLPSGM_MATCHCTI_MATCH_MATRIX		// 170601: OFF
+#define RVLPSGM_MATCH_HYPOTHESIS_LOG
 
 using namespace RVL;
 using namespace RECOG;
@@ -4471,6 +4472,7 @@ void PSGM::Match()
 
 	int iModel, iMCTI;
 	int nModelCTIs;
+	int nMClusterCTIs;
 
 	for (iModel = 0; iModel < MCTISet.nModels; iModel++)
 	{
@@ -4478,21 +4480,31 @@ void PSGM::Match()
 
 		nModelCTIs = 0;
 
-		do
+		nMClusterCTIs = MCTISet.SegmentCTIs.Element[iMCluster].n;
+
+		while (true)
 		{
-			nModelCTIs += MCTISet.SegmentCTIs.Element[iMCluster].n;
+			nModelCTIs += nMClusterCTIs;
 
 			iMCluster++;
 
 			if (iMCluster >= MCTISet.SegmentCTIs.n)
 				break;
 
-			iMCTI = MCTISet.SegmentCTIs.Element[iMCluster].Element[0];
+			nMClusterCTIs = MCTISet.SegmentCTIs.Element[iMCluster].n;
 
-			pMModelInstance = MCTISet.pCTI.Element[iMCTI];
-		} while (pMModelInstance->iModel == iModel);
+			if (nMClusterCTIs > 0)
+			{
+				iMCTI = MCTISet.SegmentCTIs.Element[iMCluster].Element[0];
 
-		CTIInterval[iModel].b = (iMCluster >= MCTISet.SegmentCTIs.n ? MCTISet.SegmentCTIs.Element[iMCluster].Element[0] : MCTISet.pCTI.n);
+				pMModelInstance = MCTISet.pCTI.Element[iMCTI];
+
+				if (pMModelInstance->iModel != iModel)
+					break;
+			}
+		}
+
+		CTIInterval[iModel].b = (iMCluster < MCTISet.SegmentCTIs.n ? MCTISet.SegmentCTIs.Element[iMCluster].Element[0] : MCTISet.pCTI.n);
 
 		if (nModelCTIs > maxnModelCTIs)
 			maxnModelCTIs = nModelCTIs;
@@ -4547,7 +4559,7 @@ void PSGM::Match()
 
 	// main loop
 
-	PSGM_::MatchInstance **pFirstMatch;
+	PSGM_::MatchInstance **ppFirstMatch;
 	float centroid[3];
 	PSGM_::Cluster *pSCluster;
 
@@ -4566,11 +4578,13 @@ void PSGM::Match()
 
 		pSurfels->Centroid(pSCluster->iSurfelArray, centroid);
 
+		RVLSCALE3VECTOR(centroid, 1000.0f, centroid);
+
 		HSpace.SetVolume(centroid[0] - volumeCorner[0], centroid[1] - volumeCorner[1], centroid[2] - volumeCorner[2]);
 
 		for (iModel = 0; iModel < MCTISet.nModels; iModel++)
 		{
-			pFirstMatch = pCTImatches->ppNext;
+			ppFirstMatch = pCTImatches->ppNext;
 
 			for (iSCTI = 0; iSCTI < nCTI; iSCTI++)
 			{
@@ -4581,9 +4595,11 @@ void PSGM::Match()
 				Match(pSModelInstance, CTIInterval[iModel].a, CTIInterval[iModel].b);
 
 				CalculateScore(RVLPSGM_MATCH_SIMILARITY_MEASURE_MEAN_SATURATED_SQUARE_DISTANCE, CTIInterval[iModel].a, CTIInterval[iModel].b);
+
+				
 			} // for all MI in cluster
 
-			AddSegmentMatches(iSCluster, HSpace, iMergingCandidates);
+			AddSegmentMatches(iSCluster, ppFirstMatch, HSpace, iMergingCandidates);
 		}
 	}
 
@@ -5009,9 +5025,7 @@ void PSGM::Match(
 				pCTIMatch->angleGT = NAN;
 				pCTIMatch->distanceGT = NAN;
 
-
-
-				//MSTransformation(pMModelInstance, pSModelInstance, tBestMatch.Element[iMCTI].Element, R_, t_);
+				MSTransformation(pMModelInstance, pSModelInstance, tBestMatch.Element[iMCTI].Element, pCTIMatch->R, pCTIMatch->t);
 			}
 			else
 			{
@@ -5276,12 +5290,15 @@ void PSGM::MatchTGs()
 
 void PSGM::AddSegmentMatches(
 	int iCluster,
+	PSGM_::MatchInstance **ppFirstMatch,
 	Space3DGrid<PSGM_::Hypothesis, float> &HSpace,
 	Array<int> &iMergingCandidates)
 {
-	float eqThr = 0.94;		// cos(20 deg)
+	//float eqThr = 0.94;		// cos(20 deg)
+	//float eqThr = COS45;
+	float eqThr = 0.0f;
 
-	PSGM_::MatchInstance *pMatch = pFirstSCTIMatch;
+	PSGM_::MatchInstance *pMatch = *ppFirstMatch;
 
 	PSGM_::Hypothesis Hypothesis;
 	PSGM_::Hypothesis *pHypothesis_;
@@ -5292,6 +5309,9 @@ void PSGM::AddSegmentMatches(
 
 	while (pMatch)
 	{
+		if (pMatch->ID == 77)
+			int debug = 0;
+
 		X = pMatch->R;
 		Z = pMatch->R + 6;
 
@@ -5307,14 +5327,14 @@ void PSGM::AddSegmentMatches(
 
 			e = RVLDOTPRODUCT3(Z, Z_);
 
-			if (e > eqThr)
+			if (e < eqThr)
 				continue;
 
 			X_ = pHypothesis_->R;
 
 			e = RVLDOTPRODUCT3(X, X_);
 
-			if (e > eqThr)
+			if (e < eqThr)
 				continue;
 
 			if (pMatch->score <= pHypothesis_->score)
@@ -5347,17 +5367,39 @@ void PSGM::AddSegmentMatches(
 
 	HSpace.GetData(hypothesisArray);
 
+	sceneSegmentMatches.Element[iCluster].n = hypothesisArray.n;
+
 	SortIndex<float> *pMatchIdx = sceneSegmentMatches.Element[iCluster].Element;
 
 	PSGM_::Hypothesis **ppHypothesis = hypothesisArray.Element;
 
 	for (i = 0; i < hypothesisArray.n; i++, pMatchIdx++, ppHypothesis++)
-{
+	{
 		pHypothesis_ = *ppHypothesis;
 
 		pMatchIdx->idx = pHypothesis_->iMatch;
 		pMatchIdx->cost = pHypothesis_->score;
 	}
+
+	HSpace.Clear();
+
+#ifdef RVLPSGM_MATCH_HYPOTHESIS_LOG
+	FILE *fp = fopen("hypotheses.txt", "w");
+
+	for (i = 0; i < hypothesisArray.n; i++, pMatchIdx++, ppHypothesis++)
+	{
+		pHypothesis_ = hypothesisArray.Element[i];
+
+		fprintf(fp, "%d\t", pHypothesis_->iMatch);
+
+		for (int j = 0; j < 9; j++)
+			fprintf(fp, "%f\t", pHypothesis_->R[j]);
+
+		fprintf(fp, "%f\t%f\t%f\n", pHypothesis_->P[0], pHypothesis_->P[1], pHypothesis_->P[2]);
+	}
+
+	fclose(fp);
+#endif
 }
 
 void PSGM::CalculateScore(
@@ -5409,7 +5451,7 @@ void PSGM::CalculateScore(
 		break;
 	case RVLPSGM_MATCH_SIMILARITY_MEASURE_MAX_ABS_DISTANCE: //maximum absolute error
 
-		for (iMCTI = 0; iMCTI < nMCTI; iMCTI++)
+		for (iMCTI = iFirstCTI; iMCTI < iEndCTI_; iMCTI++)
 		{
 			for (iValidPlane = 0; iValidPlane < iValid.n; iValidPlane++)
 			{
@@ -5435,7 +5477,7 @@ void PSGM::CalculateScore(
 		break;
 	case RVLPSGM_MATCH_SIMILARITY_MEASURE_SATURATED_SQUARE_DISTANCE_INVISIBILITY_PENAL: //saturated square error
 
-		for (iMCTI = 0; iMCTI < nMCTI; iMCTI++)
+		for (iMCTI = iFirstCTI; iMCTI < iEndCTI_; iMCTI++)
 		{
 			scoreTmp = 0;
 
@@ -5463,7 +5505,7 @@ void PSGM::CalculateScore(
 
 		break;
 	case RVLPSGM_MATCH_SIMILARITY_MEASURE_MEAN_SATURATED_SQUARE_DISTANCE:
-		for (iMCTI = 0; iMCTI < nMCTI; iMCTI++)
+		for (iMCTI = iFirstCTI; iMCTI < iEndCTI_; iMCTI++)
 		{
 			scoreTmp = 0;
 
@@ -5499,7 +5541,7 @@ void PSGM::CalculateScore(
 
 		medianIdx = iValid.n / 2;
 
-		for (iMCTI = 0; iMCTI < nMCTI; iMCTI++)
+		for (iMCTI = iFirstCTI; iMCTI < iEndCTI_; iMCTI++)
 		{
 			for (iValidPlane = 0; iValidPlane < iValid.n; iValidPlane++)
 			{

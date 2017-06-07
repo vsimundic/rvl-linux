@@ -14,7 +14,7 @@
 #define RVLPSGM_MATCH_SIMILARITY_MEASURE_MEAN_SATURATED_SQUARE_DISTANCE							4
 #define RVLPSGM_MATCH_SIMILARITY_MEASURE_MEDIAN_ABS_DISTANCE									5
 //#define RVLPSGM_RANSAC
-#define RVLPSGM_ICP		// 170601: ON
+//#define RVLPSGM_ICP		// 170601: ON
 #define RVLPSGM_ICP_SIMILARITY_MEASURE_COSTNN				0
 #define RVLPSGM_ICP_SIMILARITY_MEASURE_SATURATED_SCORE		1
 
@@ -331,6 +331,7 @@ namespace RVL
 		void MatchTGs();
 		void AddSegmentMatches(
 			int iCluster,
+			RECOG::PSGM_::MatchInstance **ppFirstMatch,
 			Space3DGrid<RECOG::PSGM_::Hypothesis, float> &HSpace,
 			Array<int> &iMergingCandidates);
 		bool IsFlat(
