@@ -7390,7 +7390,7 @@ void PSGM::AddOneModelToVisualizer(Visualizer *pVisualizer, int iMatch, int iRan
 	modelActor2->SetMapper(modelMapper2);
 	modelActor2->GetProperty()->SetColor(0, 0, 1);
 	pVisualizer->renderer->AddActor(modelActor2);
-
+	
 	delete[] dM;
 	delete[] dS;
 	delete[] validS;
@@ -9364,4 +9364,41 @@ bool PSGM::CheckHypothesesCollision(int firstHyp, int secondHyp, float thr)
 		return true;
 
 	return inCollision;
+}
+float PSGM::GetObjectTrasparencyRatio(vtkSmartPointer<vtkPolyData> object, unsigned short *depthImg, float depthThr, int width, int height, float c_fu, float c_fv, float c_uc, float c_vc)
+{
+	//get vtk data
+	vtkSmartPointer<vtkPoints> points = object->GetPoints();
+	vtkSmartPointer<vtkFloatArray> normals = vtkFloatArray::SafeDownCast(object->GetPointData()->GetNormals());
+
+	float sumW = 0;
+	int noPts = points->GetNumberOfPoints();
+	double point[3];
+	float pointN[3];
+	float norm;
+	float normal[3];
+	int u;
+	int v;
+	for (int i = 0; i < noPts; i++)
+	{
+		//Get point
+		points->GetPoint(i, point);
+		pointN[0] = point[0];
+		pointN[1] = point[1];
+		pointN[2] = point[2];
+		//Get normal
+		normals->GetTupleValue(i, normal);
+		//Get u, v;
+		u = c_fu * point[0] / point[2] + c_uc;
+		v = c_fv * point[1] / point[2] + c_vc;
+		//check transparency
+		if (point[2] - depthImg[v * width + u] > depthThr)
+		{
+			RVLNORM3(pointN, norm);
+			sumW += RVLDOTPRODUCT3(normal, pointN);
+		}
+		
+	}
+
+	return sumW / noPts;
 }

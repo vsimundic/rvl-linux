@@ -73,11 +73,12 @@ namespace RVL
 	//Test vtk PolyData distance class
 	void testvtkdistance();
 
-	void TestVTK_Plane_z_buffer(float distancefromZ, int width, int height, float fx, float fy, float cx, float cy, float horizFOV, float clipnear, float clipfar);
-
-	cv::Mat GenerateVTKDepthImage(vtkSmartPointer<vtkRenderWindow> renWin, int width, int height, double fx, double fy, double cx, double cy, double horizFOV, double vertFOV, double clipnear, double clipfar);
-
+	void TestVTK_Plane_z_buffer(float distancefromZ, int width, int height, float fx, float fy, float cx, float cy, float clipnear, float clipfar);
+	cv::Mat GenerateVTKDepthImage(vtkSmartPointer<vtkRenderWindow> renWin, int width, int height, double fx, double fy, double cx, double cy, double clipnear, double clipfar);
+	cv::Mat GenerateVTKDepthImage(vtkSmartPointer<vtkRenderWindow> renWin, vtkSmartPointer<vtkCamera> camera, int width, int height);
 	cv::Mat GenerateVTKDepthImage_Kinect(vtkSmartPointer<vtkRenderWindow> renWin, double clipnear, double clipfar);
-
 	cv::Mat GenerateVTKPolyDataDepthImage_Kinect(vtkSmartPointer<vtkPolyData> pd);
+	vtkSmartPointer<vtkCamera> CreateVTKCamera(int width, int height, double fx, double fy, double cx, double cy, double clipnear, double clipfar);
+	vtkSmartPointer<vtkCamera> CreateVTKCamera_GenericKinect_1(double clipnear, double clipfar);
+	vtkSmartPointer<vtkCamera> CreateVTKCamera_GenericKinect_2(double clipnear, double clipfar);
 }

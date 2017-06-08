@@ -443,6 +443,7 @@ namespace RVL
 			float *size);
 		std::vector<int> GetHypothesesCollisionConsensus(float thr);	//Filko
 		bool CheckHypothesesCollision(int firstHyp, int secondHyp, float thr); //Filko
+		float GetObjectTrasparencyRatio(vtkSmartPointer<vtkPolyData> object, unsigned short *depthImg, float depthThr, int width, int height, float c_fu, float c_fv, float c_uc, float c_vc); //Filko
 
 	private:
 		void Clusters();

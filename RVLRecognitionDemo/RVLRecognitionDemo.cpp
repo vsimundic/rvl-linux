@@ -2,6 +2,7 @@
 //
 #include <Windows.h>
 #include <ctime>
+#include <fstream>
 //#include "stdafx.h"
 #include <vtkAutoInit.h>
 VTK_MODULE_INIT(vtkRenderingOpenGL2);
@@ -188,6 +189,42 @@ void GenerateSegmentNeighbourhood(PSGM * psgm, double radius)
 	}
 	delete[] centroids;
 	
+}
+
+void FilterImage(cv::Mat img)
+{
+	cv::Mat newImg(480, 640, CV_16UC1, cv::Scalar::all(0));
+	img.copyTo(newImg);
+	float sum = 0;
+	float max = 0;
+	int no = 0;
+	for (int y = 10; y < (img.rows - 10); y++)
+	{
+		for (int x = 10; x < (img.cols - 10); x++)
+		{
+			if (img.at<uint16_t>(y, x) > 0)
+				continue;
+			//inner 
+			sum = 0;
+			no = 0;
+			max = 0;
+			for (int v = -1; v < 1; v++)
+			{
+				for (int u = -1; u < 1; u++)
+				{
+					if (img.at<uint16_t>(y + v, x + u) == 0)
+						continue;
+					sum += img.at<uint16_t>(y + v, x + u);
+					no++;
+					if (img.at<uint16_t>(y + v, x + u) > max)
+						max = img.at<uint16_t>(y + v, x + u);
+				}
+			}
+			if (no != 0)
+				newImg.at<uint16_t>(y, x) = max;// sum / no;
+		}
+	}
+	newImg.copyTo(img);
 }
 
 int main(int argc, char ** argv)
@@ -487,6 +524,133 @@ int main(int argc, char ** argv)
 				//mesh.LoadPolyDataFromPLY(filePath);
 				LoadMesh(&meshBuilder, filePath, &mesh, false);
 
+
+
+				///////////TEST/////////
+				///*std::fstream fileS("eccv_frame_20111221T142636.413299_depth.txt", std::fstream::out);
+				//double point[3];
+				//int u, v;
+				//for (int i = 0; i < mesh.pPolygonData->GetNumberOfPoints(); i++)
+				//{
+				//	mesh.pPolygonData->GetPoint(i, point);
+				//	if ((point[0] == 0) && (point[1] == 0) && (point[2] == 0))
+				//		continue;
+				//	v = floor(float(i) / 640);
+				//	u = i - v * 640;
+				//	fileS << u << " " << v << " " << point[0] << " " << point[1] << " " << point[2] << std::endl;
+				//}
+				//fileS.close();*/
+				////Generate scene depth
+				//double point[3];
+				//int u, v;
+				//cv::Mat origDepth(480, 640, CV_16UC1, cv::Scalar::all(0));
+				//for (int i = 0; i < mesh.pPolygonData->GetNumberOfPoints(); i++)
+				//{
+				//	mesh.pPolygonData->GetPoint(i, point);
+				//	if ((point[0] == 0) && (point[1] == 0) && (point[2] == 0))
+				//		continue;
+				//	v = floor(float(i) / 640);
+				//	u = i - v * 640;
+				//	origDepth.at<uint16_t>(v, u) = (uint16_t)(point[2] * 1000); //in milimeters
+				//}
+				//// Initialize VTK.
+				//vtkSmartPointer<vtkRenderer> renderer = vtkSmartPointer<vtkRenderer>::New();
+				//vtkSmartPointer<vtkRenderWindow> renWin = vtkSmartPointer<vtkRenderWindow>::New();
+				///*vtkSmartPointer<vtkRenderWindowInteractor> interactor = vtkSmartPointer<vtkRenderWindowInteractor>::New();
+				//interactor->SetRenderWindow(renWin);
+				//vtkSmartPointer<vtkInteractorStyleTrackballCamera> style = vtkSmartPointer<vtkInteractorStyleTrackballCamera>::New();
+				//interactor->SetInteractorStyle(style);*/
+				//renWin->OffScreenRenderingOn(); //OFF-SCREEN RENDERING
+				//renWin->AddRenderer(renderer);
+				//renWin->SetSize(640, 480); //HARDCODED 640X480 IMAGE
+
+				////adding polydata actor
+				//vtkSmartPointer<vtkPolyDataMapper>	map = vtkSmartPointer<vtkPolyDataMapper>::New();
+				//map->SetInputData(mesh.pPolygonData);
+				//vtkSmartPointer<vtkActor> act = vtkSmartPointer<vtkActor>::New();
+				//act->SetMapper(map);
+				//renderer->AddActor(act);
+				////renWin->Render();
+				////interactor->Start();
+
+				////find zbounds
+				//double *bounds;
+				//mesh.pPolygonData->GetPoints()->ComputeBounds(); //just in case
+				//bounds = mesh.pPolygonData->GetPoints()->GetBounds(); // (Xmin, Xmax) = (bounds[0], bounds[1]), (Ymin, Ymax) = (bounds[2], bounds[3]), (Zmin, Zmax) = (bounds[4], bounds[5])
+				//if (bounds[4] == 0.0)
+				//	bounds[4] = 0.4; //0.4m
+				//vtkSmartPointer<vtkCamera> camera = CreateVTKCamera_GenericKinect_1(bounds[4], bounds[5]);
+				//cv::Mat bufferDepth;
+				//for (int i = 0; i < 10; i++)
+				//{
+				//	LARGE_INTEGER d_ctr1, d_ctr2, d_freq;
+				//	QueryPerformanceCounter((LARGE_INTEGER *)&d_ctr1);
+				//	bufferDepth = GenerateVTKDepthImage(renWin, camera, 640, 480);// GenerateVTKDepthImage_Kinect(renWin, bounds[4], bounds[5]);
+				//	QueryPerformanceCounter((LARGE_INTEGER *)&d_ctr2);
+				//	QueryPerformanceFrequency((LARGE_INTEGER *)&d_freq);
+				//	float d_timevalue = (d_ctr2.QuadPart - d_ctr1.QuadPart) * 1000.0 / d_freq.QuadPart;
+				//	std::cout << "Depth gen vrijeme: " << d_timevalue << std::endl;
+				//}
+				////show
+				//cv::Mat depthShow(480, 640, CV_8UC1);
+				//double minVal, maxVal;
+				////FilterImage(bufferDepth);
+				//cv::minMaxLoc(bufferDepth, &minVal, &maxVal);
+				//bufferDepth.convertTo(depthShow, CV_8U, -255.0f / maxVal, 255.0f);
+				//cv::imshow("Rendered depth image", depthShow);
+				////cv::imwrite("renderedDepthF.png", bufferDepth);
+				///*cv::Mat bufferDepthBlur(480, 640, CV_16UC1, cv::Scalar::all(0));
+				//cv::Mat depthShowBlur(480, 640, CV_8UC1);
+				//cv::GaussianBlur(bufferDepth, bufferDepthBlur, cv::Size(9, 9), 0, 0);
+				//cv::minMaxLoc(bufferDepthBlur, &minVal, &maxVal);
+				//bufferDepthBlur.convertTo(depthShowBlur, CV_8U, -255.0f / maxVal, 255.0f);
+				//cv::imshow("Rendered depth (blur) image", depthShowBlur);*/
+				////Original depth
+				//cv::minMaxLoc(origDepth, &minVal, &maxVal);
+				//cv::Mat depthOrigShow(480, 640, CV_8UC1);
+				//origDepth.convertTo(depthOrigShow, CV_8U, -255.0f / maxVal, 255.0f);
+				//cv::imshow("Original depth", depthOrigShow);			
+				////cv::imwrite("origDepth.png", origDepth);
+				////Dilate original depth
+				//cv::Mat elementD = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(20,20));
+				//cv::Mat elementE = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(11, 11));
+				//cv::Mat origDepth_D(480, 640, CV_16UC1, cv::Scalar::all(0));
+				//LARGE_INTEGER d_ctr1, d_ctr2, d_freq;
+				//QueryPerformanceCounter((LARGE_INTEGER *)&d_ctr1);
+				//for (int y = 0; y < origDepth.rows; y++)
+				//{
+				//	for (int x = 0; x < origDepth.cols; x++)
+				//	{
+				//		if (origDepth.at<uint16_t>(y, x) == 0)
+				//			origDepth.at<uint16_t>(y, x) = 10000; //in milimeters
+				//	}
+				//}
+				////cv::dilate(origDepth, origDepth_D, elementD);
+				//cv::erode(origDepth, origDepth_D, elementE);
+				//QueryPerformanceCounter((LARGE_INTEGER *)&d_ctr2);
+				//QueryPerformanceFrequency((LARGE_INTEGER *)&d_freq);
+				//float d_timevalue = (d_ctr2.QuadPart - d_ctr1.QuadPart) * 1000.0 / d_freq.QuadPart;
+				//std::cout << "Dilate vrijeme: " << d_timevalue << std::endl;
+
+				//cv::Mat depthOrigShow_D(480, 640, CV_8UC1);
+				//cv::minMaxLoc(origDepth_D, &minVal, &maxVal);
+				//origDepth_D.convertTo(depthOrigShow_D, CV_8U, -255.0f / maxVal, 255.0f);
+				//cv::imshow("Original depth (dilated)", depthOrigShow_D);
+
+				//////show the difference between rendered depth and original
+				////cv::Mat depthDifference(480, 640, CV_16UC1, cv::Scalar::all(0));
+				////cv::absdiff(bufferDepth, origDepth, depthDifference);
+				////cv::minMaxLoc(depthDifference, &minVal, &maxVal);
+				////cv::Mat depthDifferenceShow(480, 640, CV_8UC1);
+				////depthDifference.convertTo(depthDifferenceShow, CV_8U, -255.0f / maxVal, 255.0f);
+				////cv::imshow("Difference", depthDifferenceShow);
+
+				//cv::waitKey();
+				////interactor->Start();
+				////
+
+
+
 				mem.Clear();
 
 				recognition.Interpret(&mesh);
@@ -516,12 +680,12 @@ int main(int argc, char ** argv)
 				recognition.InitDisplay(&visualizer, &mesh, SelectionColor);
 				recognition.Display();
 
-				//////NEW FILKO - TEST COLLISION CONSENSUS
-				////std::vector<int> conHyp = recognition.GetHypothesesCollisionConsensus(20);
-				////for (int i = 0; i < conHyp.size(); i++)
-				////{
-				////	recognition.AddOneModelToVisualizer(&visualizer, conHyp.at(i), 0, false, true);
-				////}
+				////NEW FILKO - TEST COLLISION CONSENSUS
+				//std::vector<int> conHyp = recognition.GetHypothesesCollisionConsensus(20);
+				//for (int i = 0; i < conHyp.size(); i++)
+				//{
+				//	recognition.AddOneModelToVisualizer(&visualizer, conHyp.at(i), 0, false, true);
+				//}
 
 				QueryPerformanceCounter((LARGE_INTEGER *)&ctr1_);
 
