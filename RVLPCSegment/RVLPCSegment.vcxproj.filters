@@ -63,6 +63,9 @@
     <ClInclude Include="Include\VertexGraph.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Include\Space3DGrid.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="stdafx.cpp">
