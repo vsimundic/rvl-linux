@@ -4761,6 +4761,10 @@ void PSGM::Match()
 	//VisualizeCTIMatchidx(pMatchx->iSCTI, pMatchx->iMCTI);
 	////end of visualization
 
+	//Transparency check
+	////Transparency check
+	//FilterHypothesesUsingTransparency(0.5, 0.01, true);
+
 	printf("completed.\n");
 
 	//int nSMI = iMIS;
@@ -7318,12 +7322,25 @@ bool RVL::RECOG::PSGM_::keyPressUserFunction(
 		pRecognition->Display();
 
 #ifdef RVLPSGM_ICP
+		//for (int i = 0; i < pRecognition->scoreMatchMatrixICP.n; i++)
+		//{
+		//	if (pRecognition->scoreMatchMatrixICP.Element[i].Element[iHypothesesRank].idx != -1)
+		//	{
+		//		//visualize new ICP matches on the scene
+		//		pRecognition->AddOneModelToVisualizer(pVisualizer, pRecognition->scoreMatchMatrixICP.Element[i].Element[iHypothesesRank].idx, iHypothesesRank, true);
+		//	}
+		//}
 		for (int i = 0; i < pRecognition->scoreMatchMatrixICP.n; i++)
 		{
-			if (pRecognition->scoreMatchMatrixICP.Element[i].Element[iHypothesesRank].idx != -1)
+			for (int j = 0; j < RVLMIN(7, pRecognition->scoreMatchMatrixICP.Element[i].n); j++)
 			{
-				//visualize new ICP matches on the scene
-				pRecognition->AddOneModelToVisualizer(pVisualizer, pRecognition->scoreMatchMatrixICP.Element[i].Element[iHypothesesRank].idx, iHypothesesRank, true);
+
+				if (pRecognition->scoreMatchMatrixICP.Element[i].Element[j].idx != -1)
+				{
+					//visualize new ICP matches on the scene
+					pRecognition->AddOneModelToVisualizer(pVisualizer, pRecognition->scoreMatchMatrixICP.Element[i].Element[j].idx, j, true);
+					break;
+				}
 			}
 		}
 #else
@@ -8543,6 +8560,7 @@ void PSGM::CalculateNNCost(Visualizer *pVisualizer, RVL::PSGM::ICPfunction ICPFu
 
 		}
 	}
+
 }
 
 float PSGM::NNCost(int iCluster, vtkSmartPointer<vtkPolyData> sourcePD, vtkSmartPointer<vtkPolyData> targetPD, int similarityMeasure)
@@ -10079,13 +10097,14 @@ bool PSGM::CheckHypothesesCollision(int firstHyp, int secondHyp, float thr)
 
 	return inCollision;
 }
-float PSGM::GetObjectTrasparencyRatio(vtkSmartPointer<vtkPolyData> object, unsigned short *depthImg, float depthThr, int width, int height, float c_fu, float c_fv, float c_uc, float c_vc)
+float PSGM::GetObjectTransparencyRatio(vtkSmartPointer<vtkPolyData> object, unsigned short *depthImg, float depthThr, int width, int height, float c_fu, float c_fv, float c_uc, float c_vc)
 {
 	//get vtk data
 	vtkSmartPointer<vtkPoints> points = object->GetPoints();
 	vtkSmartPointer<vtkFloatArray> normals = vtkFloatArray::SafeDownCast(object->GetPointData()->GetNormals());
 
-	float sumW = 0;
+	float sumW_T = 0;
+	float sumW_A = 0;
 	int noPts = points->GetNumberOfPoints();
 	double point[3];
 	float pointN[3];
@@ -10093,6 +10112,11 @@ float PSGM::GetObjectTrasparencyRatio(vtkSmartPointer<vtkPolyData> object, unsig
 	float normal[3];
 	int u;
 	int v;
+	float w;
+	/*cv::Mat depth(480, 640, CV_16UC1, cv::Scalar::all(0));
+	memcpy(depth.data, depthImg, 640 * 480 * sizeof(short));
+	cv::Mat depthShow(480, 640, CV_8UC1);
+	double minVal, maxVal;*/
 	for (int i = 0; i < noPts; i++)
 	{
 		//Get point
@@ -10105,14 +10129,87 @@ float PSGM::GetObjectTrasparencyRatio(vtkSmartPointer<vtkPolyData> object, unsig
 		//Get u, v;
 		u = c_fu * point[0] / point[2] + c_uc;
 		v = c_fv * point[1] / point[2] + c_vc;
+		//depth.at<unsigned short>(v, u) = (point[2] * 1000) - depthImg[v * width + u];
+		RVLNORM3(pointN, norm);
+		w = abs(RVLDOTPRODUCT3(normal, pointN));
 		//check transparency
-		if (point[2] - depthImg[v * width + u] > depthThr)
-		{
-			RVLNORM3(pointN, norm);
-			sumW += RVLDOTPRODUCT3(normal, pointN);
-		}
+		if (depthImg[v * width + u] - (point[2] * 1000) > depthThr)
+			sumW_T += w;
+		sumW_A += w;
 		
 	}
+	/*cv::minMaxLoc(depth, &minVal, &maxVal);
+	depth.convertTo(depthShow, CV_8U, -255.0f / maxVal, 255.0f);
+	cv::imshow("Transparency test", depthShow);
+	cv::waitKey();*/
+	return sumW_T / sumW_A;
+}
 
-	return sumW / noPts;
+//Requires scoreMatchMatrixICP???
+void PSGM::FilterHypothesesUsingTransparency(float tranThr, float depthThr, bool verbose)
+{
+	float tranRatio;
+	for (int i = 0; i < scoreMatchMatrixICP.n; i++)
+	{
+		for (int j = 0; j < RVLMIN(7, scoreMatchMatrixICP.Element[i].n); j++)
+		{
+			if (scoreMatchMatrixICP.Element[i].Element[j].idx >= 0)
+			{
+				vtkSmartPointer<vtkPolyData> object = GetPoseCorrectedVisibleModel(scoreMatchMatrixICP.Element[i].Element[j].idx);
+				tranRatio = GetObjectTransparencyRatio(object, this->depthImg, depthThr, 640, 480, 525, 525, 320, 240); //HARDCODED FOR ECCV DATASET CAMERA
+				if (tranRatio > tranThr)
+				{
+					if (verbose)
+					{
+						std::cout << "Hypothesis " << scoreMatchMatrixICP.Element[i].Element[j].idx << " Model: " << MCTISet.pCTI.Element[pCTImatchesArray.Element[scoreMatchMatrixICP.Element[i].Element[j].idx]->iMCTI]->iModel << " for segment " << i << " has been invalidated by transparency ratio of: " << tranRatio << std::endl;
+					}
+					scoreMatchMatrixICP.Element[i].Element[j].idx = -1;
+				}
+				else
+					break; //Break transparency check for this segment
+			}
+		}
+	}
+}
+
+vtkSmartPointer<vtkPolyData> PSGM::GetPoseCorrectedVisibleModel(int iMatch)
+{
+	//Get model instance
+	RECOG::PSGM_::ModelInstance *pMCTI;
+	pMCTI = MCTISet.pCTI.Element[pCTImatchesArray.Element[iMatch]->iMCTI];
+	int iModel = pMCTI->iModel;
+	
+	//Gat match instance (and calculate pose??? Is this necessary???)
+	RECOG::PSGM_::MatchInstance *pMatch = pCTImatchesArray.Element[iMatch];
+	CalculatePose(iMatch);
+	
+	//Set transform
+	vtkSmartPointer<vtkTransform> transform = vtkSmartPointer<vtkTransform>::New();
+	double T_M_S[16];
+	for (int i = 0; i < 16; i++)
+		T_M_S[i] = pMatch->T_ICP[i];	//FROM ICP???
+	transform->SetMatrix(T_M_S);
+
+	//Scaling PLY model to meters
+	vtkSmartPointer<vtkTransform> transformScale = vtkSmartPointer<vtkTransform>::New();
+	transformScale->Scale(0.001, 0.001, 0.001);
+	vtkSmartPointer<vtkTransformPolyDataFilter> transformFilterScale = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
+	transformFilterScale->SetInputData(vtkModelDB.at(iModel));	//Get model from DB
+	transformFilterScale->SetTransform(transformScale);
+	transformFilterScale->Update();
+
+	//Generate visible parts of the models pointcloud
+	vtkSmartPointer<vtkPolyData> visiblePD = GetVisiblePart(transformFilterScale->GetOutput(), T_M_S); 
+
+	//Transform it
+	vtkSmartPointer<vtkTransformPolyDataFilter> transformFilter = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
+	transformFilter->SetInputData(visiblePD); //PLY model
+	transformFilter->SetTransform(transform);
+	transformFilter->Update();
+
+	//copy data to final object (this is not needed, it could be in visiblePD)
+	vtkSmartPointer<vtkPolyData> finPD = vtkSmartPointer<vtkPolyData>::New();
+	finPD->DeepCopy(transformFilter->GetOutput());
+
+	return finPD;
 }

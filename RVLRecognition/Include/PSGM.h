@@ -467,7 +467,9 @@ namespace RVL
 			float *size);
 		std::vector<int> GetHypothesesCollisionConsensus(float thr);	//Filko
 		bool CheckHypothesesCollision(int firstHyp, int secondHyp, float thr); //Filko
-		float GetObjectTrasparencyRatio(vtkSmartPointer<vtkPolyData> object, unsigned short *depthImg, float depthThr, int width, int height, float c_fu, float c_fv, float c_uc, float c_vc); //Filko
+		float GetObjectTransparencyRatio(vtkSmartPointer<vtkPolyData> object, unsigned short *depthImg, float depthThr, int width, int height, float c_fu, float c_fv, float c_uc, float c_vc); //Filko
+		void FilterHypothesesUsingTransparency(float tranThr, float depthThr, bool verbose = false); //Filko
+		vtkSmartPointer<vtkPolyData> GetPoseCorrectedVisibleModel(int iMatch); //Filko
 
 	private:
 		void Clusters();
@@ -576,6 +578,7 @@ namespace RVL
 		RECOG::CTISet MCTIset;
 		std::map<int, vtkSmartPointer<vtkPolyData>> vtkModelDB;
 		std::map<int, vtkSmartPointer<vtkPolyData>> segmentN_PD; //neighbourhood
+		unsigned short * depthImg; //Current scene depth image // Filko
 
 				
 		//Petra & Ivan

@@ -550,8 +550,38 @@ int main(int argc, char ** argv)
 				//mesh.LoadPolyDataFromPLY(filePath);
 				LoadMesh(&meshBuilder, filePath, &mesh, false);
 
-
-
+				//Generate scene depth
+				double point[3];
+				int u, v;
+				cv::Mat depth(480, 640, CV_16UC1, cv::Scalar::all(0));
+				for (int i = 0; i < mesh.pPolygonData->GetNumberOfPoints(); i++)
+				{
+					mesh.pPolygonData->GetPoint(i, point);
+					if ((point[0] == 0) && (point[1] == 0) && (point[2] == 0))
+						continue;
+					v = floor(float(i) / 640);
+					u = i - v * 640;
+					depth.at<uint16_t>(v, u) = (uint16_t)(point[2] * 1000); //in milimeters
+				}
+				//Postprocessing
+				for (int y = 0; y < depth.rows; y++)
+				{
+					for (int x = 0; x < depth.cols; x++)
+					{
+						if (depth.at<uint16_t>(y, x) == 0)
+							depth.at<uint16_t>(y, x) = 10000; //in milimeters
+					}
+				}
+				cv::Mat elementE = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(9, 9));
+				cv::erode(depth, depth, elementE);
+				//Set PSGM depth
+				recognition.depthImg = (unsigned short*)depth.data;
+				//cv::Mat depthShow(480, 640, CV_8UC1);
+				//double minVal, maxVal;
+				//cv::minMaxLoc(depth, &minVal, &maxVal);
+				//depth.convertTo(depthShow, CV_8U, -255.0f / maxVal, 255.0f);
+				//cv::imshow("depth image", depthShow);
+				//cv::waitKey();
 				///////////TEST/////////
 				///*std::fstream fileS("eccv_frame_20111221T142636.413299_depth.txt", std::fstream::out);
 				//double point[3];
@@ -740,9 +770,13 @@ int main(int argc, char ** argv)
 				//recognition.CalculateICPCost(PCLICP, PCLICPVariants::Point_to_plane, &kdtree);
 				GenerateSegmentNeighbourhood(&recognition, 0.1);
 				recognition.CalculateNNCost(&visualizer, PCLICP, PCLICPVariants::Point_to_plane);
+				
+				//Transparency check
+				recognition.CreateScoreMatchMatrixICP();
+				recognition.FilterHypothesesUsingTransparency(0.15, 10, true);
 
 				//evaluate ICP
-				recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, fpPoseError, fpnotFirstInfo, fpnotFirstPoseErr, 10, true);
+				//recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, fpPoseError, fpnotFirstInfo, fpnotFirstPoseErr, 10, true);
 #else
 				//recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, fpPoseError, fpnotFirstInfo, fpnotFirstPoseErr, 7);
 #endif
