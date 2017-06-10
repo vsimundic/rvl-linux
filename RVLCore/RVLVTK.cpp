@@ -126,7 +126,7 @@ namespace RVL
 		interactor->Start();
 	}
 
-	void TestVTK_Plane_z_buffer(float distancefromZ, int width, int height, float fx, float fy, float cx, float cy, float horizFOV, float clipnear, float clipfar)
+	void TestVTK_Plane_z_buffer(float distancefromZ, int width, int height, float fx, float fy, float cx, float cy, float clipnear, float clipfar)
 	{
 		// Initialize VTK.
 		vtkSmartPointer<vtkRenderer> renderer = vtkSmartPointer<vtkRenderer>::New();
@@ -199,7 +199,7 @@ namespace RVL
 		cv::waitKey();
 	}
 
-	cv::Mat GenerateVTKDepthImage(vtkSmartPointer<vtkRenderWindow> renWin, int width, int height, double fx, double fy, double cx, double cy, double horizFOV, double vertFOV, double clipnear, double clipfar)
+	cv::Mat GenerateVTKDepthImage(vtkSmartPointer<vtkRenderWindow> renWin, int width, int height, double fx, double fy, double cx, double cy, double clipnear, double clipfar)
 	{
 		//opencv
 		cv::Mat renderedDepthImg(height, width, CV_16UC1, cv::Scalar::all(0));
@@ -253,6 +253,49 @@ namespace RVL
 		renWin->Render();
 
 		cv::flip(renderedDepthImg, renderedDepthImg, 0); //flip image
+
+		return renderedDepthImg;
+	}
+
+	cv::Mat GenerateVTKDepthImage(vtkSmartPointer<vtkRenderWindow> renWin, vtkSmartPointer<vtkCamera> camera, int width, int height)
+	{
+		//opencv
+		cv::Mat renderedDepthImg(height, width, CV_16UC1, cv::Scalar::all(0));
+
+		//get old camera
+		vtkSmartPointer<vtkCamera> oldCamera = renWin->GetRenderers()->GetFirstRenderer()->GetActiveCamera();
+		int oldwidth = renWin->GetSize()[0];
+		int oldheight = renWin->GetSize()[1];
+		//Set new camera
+		renWin->SetSize(width, height);
+		renWin->GetRenderers()->GetFirstRenderer()->SetActiveCamera(camera);
+		renWin->Render();
+		double cliprange[2];
+		camera->GetClippingRange(cliprange);
+		//get Z Buffer
+		float *d = renWin->GetZbufferData(0, 0, width - 1, 479);
+		double tempd;
+		for (int y = 0; y < height; y++)
+		{
+			for (int x = 0; x < width; x++)
+			{
+				if (d[y * width + x] == 1.0) //Check if valid
+				{
+					renderedDepthImg.at<uint16_t>(y, x) = 0;
+					continue;
+				}
+				tempd = (d[y * width + x] * (1.0 / cliprange[1] - 1.0 / cliprange[0]) * cliprange[0] + 1.0) / cliprange[0];
+				renderedDepthImg.at<uint16_t>(y, x) = (uint16_t)((1.0 / tempd) * 1000); //in milimeters
+			}
+		}
+
+		////returning old camera
+		//renWin->GetRenderers()->GetFirstRenderer()->SetActiveCamera(oldCamera);
+		//renWin->SetSize(oldwidth, oldheight);
+		//renWin->Render();
+
+		//flip image
+		cv::flip(renderedDepthImg, renderedDepthImg, 0); 
 
 		return renderedDepthImg;
 	}
@@ -346,5 +389,61 @@ namespace RVL
 
 		//Generate and return Kinect-like depth image
 		return GenerateVTKDepthImage_Kinect(renWin, bounds[4], bounds[5]);
+	}
+
+	vtkSmartPointer<vtkCamera> CreateVTKCamera(int width, int height, double fx, double fy, double cx, double cy, double clipnear, double clipfar)
+	{
+		// create the camera
+		vtkSmartPointer<vtkCamera> camera = vtkSmartPointer<vtkCamera>::New();
+
+		// the camera can stay at the origin because we are transforming the scene objects
+		camera->SetPosition(0, 0, 0);
+		//// look in the +Z direction of the camera coordinate system
+		camera->SetFocalPoint(0, 0, 1);
+		//// the camera Y axis points down
+		camera->SetViewUp(0, -1, 0);
+		//// ensure the relevant range of depths are rendered
+		camera->SetClippingRange(clipnear, clipfar);
+		//// convert the principal point to window center (normalized coordinate system) and set it
+		double wcx = -2 * (cx - width / 2) / width;
+		double wcy = 2 * (cy - height / 2) / height;
+		camera->SetWindowCenter(wcx, wcy);
+		// convert the focal length to view angle and set it (ONLY FOR KINECT???)
+		double view_angle = 57.2958 * (2.0 * atan2(height / 2.0, fy));
+		camera->SetViewAngle(view_angle);//vertical 46,6 ???
+
+		return camera;
+	}
+
+	//ECCV kinect camera
+	vtkSmartPointer<vtkCamera> CreateVTKCamera_GenericKinect_1(double clipnear, double clipfar)
+	{
+		//generic
+		int width = 640;
+		int height = 480;
+		double fx = 525;
+		double fy = 525;
+		double cx = 320;
+		double cy = 240;
+		double horizFOV = 58.5; //???hardware spec???
+		double vertFOV = 46.6;  //???hardware spec???
+
+		return CreateVTKCamera(width, height, fx, fy, cx, cy, clipnear, clipfar);
+	}
+
+	//Other kinect camera
+	vtkSmartPointer<vtkCamera> CreateVTKCamera_GenericKinect_2(double clipnear, double clipfar)
+	{
+		//generic
+		int width = 640;
+		int height = 480;
+		double fx = 581.45624912987f;
+		double fy = 543.1221626989097f;
+		double cx = 317.2825290065861f;
+		double cy = 240.955527515504f;
+		double horizFOV = 58.5; //???hardware spec???
+		double vertFOV = 46.6;  //???hardware spec???
+
+		return CreateVTKCamera(width, height, fx, fy, cx, cy, clipnear, clipfar);
 	}
 }

@@ -103,6 +103,7 @@ namespace RVL
 			virtual ~ObjectGraph();
 			void CreateParamList(CRVLMem *pMem);
 			void Create(SurfelGraph *pSurfels_);
+			void GroupAccordingToGroundTruth();
 			void CreateFromGroundTruth(SurfelGraph *pSurfels_);
 			void CreateFromSSF(std::string ssfFileName);	//Filko
 			void CalculateOverAndUnderSegmentation_SSF(int *E, int &N, bool useGTNoPix = true,  bool useBackground = true);	//Filko
@@ -214,4 +215,3 @@ namespace RVL
 		};
 	}
 }
-

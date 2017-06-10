@@ -4,6 +4,7 @@
 #include <vtkLine.h>
 #include "RVLCore2.h"
 #include "Util.h"
+#include "Space3DGrid.h"
 #include "Graph.h"
 #include "Mesh.h"
 #include "Visualizer.h"
@@ -44,6 +45,10 @@ ObjectDetector::ObjectDetector()
 	bMultilateralFilter = false;
 	bJoinSmallObjectsToLargestNeighbor = false;
 	bGroundTruthSegmentation = false;
+	bGroundTruthSegmentationOnSurfelLevel = false;
+	bGroundTruthBoundingBoxes = false;
+	bOwnsSurfelDetectionTool = false;
+	bOwnsPSGM = false;
 
 	pSurfels = NULL;
 	pSurfelDetector = NULL;
@@ -55,17 +60,23 @@ ObjectDetector::ObjectDetector()
 
 ObjectDetector::~ObjectDetector()
 {
-	if (pSurfels)
-		delete pSurfels;
+	if (bOwnsSurfelDetectionTool)
+	{
+		if (pSurfels)
+			delete pSurfels;
 
-	if (pSurfelDetector)
-		delete pSurfelDetector;
+		if (pSurfelDetector)
+			delete pSurfelDetector;
+	}
 
 	if (pObjects)
 		delete pObjects;
 
-	if (pPSGM)
-		delete pPSGM;
+	if (bOwnsPSGM)
+	{
+		if (pPSGM)
+			delete pPSGM;
+	}
 
 	RVL_DELETE_ARRAY(cfgFileName);
 
@@ -73,7 +84,7 @@ ObjectDetector::~ObjectDetector()
 }
 
 
-void ObjectDetector::Init()
+void ObjectDetector::Init(PSGM *pPSGM_)
 {
 	CreateParamList();
 
@@ -83,19 +94,48 @@ void ObjectDetector::Init()
 	if (flags & RVLOBJECTDETECTION_FLAG_SAVE_SSF)
 		flags |= RVLOBJECTDETECTION_FLAG_SEGMENTATION_GT;
 
-	pSurfels = new SurfelGraph;
+	if (pPSGM_)
+	{
+		pPSGM = pPSGM_;
 
-	pSurfels->pMem = pMem;
+		pSurfels = pPSGM->pSurfels;
 
-	pSurfels->CreateParamList(pMem0);
+		pSurfelDetector = pPSGM->pSurfelDetector;
 
-	pSurfels->ParamList.LoadParams(cfgFileName);
+		bOwnsSurfelDetectionTool = false;
+		bOwnsPSGM = false;
+	}
+	else
+	{
+		pSurfels = new SurfelGraph;
 
-	pSurfelDetector = new PlanarSurfelDetector;
+		pSurfels->pMem = pMem;
 
-	pSurfelDetector->CreateParamList(pMem0);
+		pSurfels->CreateParamList(pMem0);
 
-	pSurfelDetector->ParamList.LoadParams(cfgFileName);
+		pSurfels->ParamList.LoadParams(cfgFileName);
+
+		pSurfelDetector = new PlanarSurfelDetector;
+
+		pSurfelDetector->CreateParamList(pMem0);
+
+		pSurfelDetector->ParamList.LoadParams(cfgFileName);
+
+		pPSGM = new PSGM;
+
+		pPSGM->CreateParamList(pMem0);
+
+		pPSGM->ParamList.LoadParams(cfgFileName);
+
+		pPSGM->pMem = pMem;
+
+		pPSGM->pSurfels = pSurfels;
+
+		pPSGM->pSurfelDetector = pSurfelDetector;
+
+		bOwnsSurfelDetectionTool = true;
+		bOwnsPSGM = true;
+	}
 
 	pObjects = new SURFEL::ObjectGraph;
 
@@ -112,17 +152,7 @@ void ObjectDetector::Init()
 	pObjects->objectAggregationLevel2Criterion = OBJECT_DETECTION::Symmetry;
 	pObjects->vpObjectAggregationLevel2CriterionData = this;
 
-	pPSGM = new PSGM;
-
-	pPSGM->CreateParamList(pMem0);
-
-	pPSGM->ParamList.LoadParams(cfgFileName);
-
-	pPSGM->pMem = pMem;
-
-	pPSGM->pSurfels = pSurfels;
-
-	pPSGM->pSurfelDetector = pSurfelDetector;
+	pPSGM->pObjects = pObjects;
 }
 
 void ObjectDetector::CreateParamList()
@@ -788,15 +818,21 @@ void ObjectDetector::DetectObjects(char *MeshFilePathName)
 
 		printf("Segmentation to surfels... ");
 
-		double StartTime = pSurfelDetector->pTimer->GetTime();
+		double StartTime, ExecTime;
+
+		if (pSurfelDetector->pTimer)
+			StartTime = pSurfelDetector->pTimer->GetTime();
 
 		pSurfelDetector->Segment(&mesh, pSurfels);
 
-		double ExecTime = pSurfelDetector->pTimer->GetTime() - StartTime;
+		if (pSurfelDetector->pTimer)
+			ExecTime = pSurfelDetector->pTimer->GetTime() - StartTime;
 
 		printf("completed.\n");
 		printf("No. of surfels = %d\n", pSurfels->NodeArray.n);
-		printf("Total segmentation time = %lf s\n", ExecTime);
+
+		if (pSurfelDetector->pTimer)
+			printf("Total segmentation time = %lf s\n", ExecTime);
 
 #ifdef RVLSURFEL_IMAGE_ADJACENCY
 		if (flags & RVLOBJECTDETECTION_FLAG_SEGMENTATION_GT)
@@ -810,7 +846,7 @@ void ObjectDetector::DetectObjects(char *MeshFilePathName)
 
 			pSurfels->SurfelRelations(&mesh);
 
-			if (bGroundTruthSegmentation)
+			if (bGroundTruthSegmentation && bGroundTruthSegmentationOnSurfelLevel)
 				pObjects->CreateFromGroundTruth(pSurfels);
 			else
 			{
@@ -821,7 +857,7 @@ void ObjectDetector::DetectObjects(char *MeshFilePathName)
 			
 			printf("completed.\n");
 
-			pObjects->Debug();
+			//pObjects->Debug();
 
 			// Detect vertices.
 
@@ -844,16 +880,19 @@ void ObjectDetector::DetectObjects(char *MeshFilePathName)
 #ifdef RVLSURFEL_IMAGE_ADJACENCY
 	if (bSegmentToObjects)
 	{
-		if (bGroundTruthSegmentation)
+		if (bGroundTruthSegmentation && bGroundTruthSegmentationOnSurfelLevel)
 		{			
 			pObjects->sortedObjectArray.n = -1;
 			pObjects->nValidObjects = -1;
 			pObjects->GetVertices();
 			pPSGM->Init(&mesh);
 			GroundTruthGroundPlane();
-			pPSGM->convexTemplate = pPSGM->convexTemplateBox;
-			pPSGM->CTIs(pObjects, &boundingBoxes);
-			SaveBoundingBoxSizes(MeshFilePathName);
+			if (bGroundTruthBoundingBoxes)
+			{
+				pPSGM->convexTemplate = pPSGM->convexTemplateBox;
+				pPSGM->CTIs(-1, pObjects, &boundingBoxes, pMem);
+				SaveBoundingBoxSizes(MeshFilePathName);
+			}
 		}
 		else
 		{
@@ -890,7 +929,7 @@ void ObjectDetector::DetectObjects(char *MeshFilePathName)
 				pPSGM->Init(&mesh);
 				//pPSGM->CTIs(pObjects, &CTIs);
 				pPSGM->convexTemplate = pPSGM->convexTemplateBox;
-				pPSGM->CTIs(pObjects, &boundingBoxes);
+				pPSGM->CTIs(-1, pObjects, &boundingBoxes, pMem);
 				SaveBoundingBoxSizes(MeshFilePathName);
 				//pPSGM->convexTemplate = pPSGM->convexTemplate66;
 				pObjects->pMesh = &mesh;
@@ -923,7 +962,19 @@ void ObjectDetector::DetectObjects(char *MeshFilePathName)
 				cv::imshow("level2 + merge small objects", pObjects->CreateSegmentationImage());
 				//cv::waitKey(1);
 			}
-		}
+
+			if (bGroundTruthSegmentation && !bGroundTruthSegmentationOnSurfelLevel)
+			{
+				pObjects->GroupAccordingToGroundTruth();
+
+				GroundTruthGroundPlane();
+
+				pObjects->sortedObjectArray.n = -1;
+				pObjects->nValidObjects = -1;
+
+				pObjects->GetVertices();
+			}
+		}	// if (!bGroundTruthSegmentation)
 	}
 #endif
 }

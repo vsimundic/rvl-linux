@@ -12,8 +12,11 @@
 #define RVLPSGM_MATCH_SIMILARITY_MEASURE_MAX_ABS_DISTANCE										2
 #define RVLPSGM_MATCH_SIMILARITY_MEASURE_SATURATED_SQUARE_DISTANCE_INVISIBILITY_PENAL			3
 #define RVLPSGM_MATCH_SIMILARITY_MEASURE_MEAN_SATURATED_SQUARE_DISTANCE							4
+#define RVLPSGM_MATCH_SIMILARITY_MEASURE_MEDIAN_ABS_DISTANCE									5
 //#define RVLPSGM_RANSAC
-//#define RVLPSGM_ICP
+#define RVLPSGM_ICP		// 170601: ON
+#define RVLPSGM_ICP_SIMILARITY_MEASURE_COSTNN				0
+#define RVLPSGM_ICP_SIMILARITY_MEASURE_SATURATED_SCORE		1
 
 
 #define RVLRECOGNITION_MODE_PSGM_CREATE_CTIS		2
@@ -132,6 +135,17 @@ namespace RVL
 				int iCTIElement;
 			};
 
+			struct Hypothesis
+			{
+				float R[9];
+				float P[3];
+				int iMatch;
+				int iCell;
+				float score;
+				Hypothesis *pNext;
+				Hypothesis **pPtrToThis;
+			};
+
 			int ValidTangent(
 				int iSurfel,
 				int iSurfel_,
@@ -214,6 +228,7 @@ namespace RVL
 		virtual ~PSGM();
 		//void Create();
 		void CreateParamList(CRVLMem *pMem);
+		void Init(char *cfgFileName);
 		void Init(Mesh *pMesh);
 		void Interpret(
 			Mesh *pMesh,
@@ -233,10 +248,10 @@ namespace RVL
 			Eigen::MatrixXf dM,
 			int iCTI);
 
-		void UpdateMatchMatrix(
-			RECOG::PSGM_::SegmentMatch *SMatch,			
-			int iCTI
-			);
+		//void UpdateMatchMatrix(
+		//	RECOG::PSGM_::SegmentMatch *SMatch,			
+		//	int iCTI
+		//	);
 
 		void VisualizeCTIMatch( //Damir
 			float *nT, 
@@ -272,9 +287,11 @@ namespace RVL
 
 		static vtkSmartPointer<vtkPolyData> GetVisiblePart(vtkSmartPointer<vtkPolyData> PD); // Models are reduced to only the visible part (using angle between normals) which improves ICP. 
 
+		static vtkSmartPointer<vtkPolyData> GetVisiblePart(vtkSmartPointer<vtkPolyData> PD, double *T_M_S); // Models are reduced to only the visible part (using angle between normals) which improves ICP.
+
 		void CalculateNNCost(Visualizer *pVisualizer, RVL::PSGM::ICPfunction ICPFunction, int ICPvariant); // For each pair of scene segment and visible part of the matched model, calls NNCost.
 
-		float NNCost(int iCluster, vtkSmartPointer<vtkPolyData> targetPD); // Calculates cost based on sum of distances between scene segment points and their nearest neighbours in visible part of the matched model.
+		float NNCost(int iCluster, vtkSmartPointer<vtkPolyData> sourcePD, vtkSmartPointer<vtkPolyData> targetPD, int similarityMeasure = 0); // Calculates cost based on sum of distances between scene segment points and their nearest neighbours in visible part of the matched model.
 		//end Petra
 
 		void InitDisplay(
@@ -313,16 +330,21 @@ namespace RVL
 			int startIdx,
 			int endIdx); //Vidovic
 		void MatchTGs();
+		void AddSegmentMatches(
+			int iCluster,
+			RECOG::PSGM_::MatchInstance **ppFirstMatch,
+			Space3DGrid<RECOG::PSGM_::Hypothesis, float> &HSpace,
+			Array<int> &iMergingCandidates);
 		bool IsFlat(
 			Array<int> SurfelArray,
 			float *N,
 			float &d,
 			Array<int> PtArray);
 		void DetectGroundPlane(SURFEL::ObjectGraph *pObjects);
-		bool GravityReferenceFrame(
+		bool GravityReferenceFrames(
 			QList<QLIST::Index> surfelList,
-			float *RGC,
-			float &varX);
+			RECOG::CTISet *pCTISet,
+			CRVLMem *pMem_);
 		int CTIs(
 			QList<QLIST::Index> surfelList,
 			Array<int> iVertexArray,
@@ -331,8 +353,10 @@ namespace RVL
 			RECOG::CTISet *pCTISet,
 			CRVLMem *pMem);
 		void CTIs(
+			int iModel,
 			SURFEL::ObjectGraph *pObjects,
-			RECOG::CTISet *pCTISet);
+			RECOG::CTISet *pCTISet,
+			CRVLMem *pMem);
 		void FitModel(
 			Array<int> iVertexArray,
 			RECOG::PSGM_::ModelInstance *pModelInstance,
@@ -426,8 +450,8 @@ namespace RVL
 			RVL::GTInstance **pGT,
 			int iScene,
 			int iModel);
-		bool PSGM::CompareMatchToGT(RECOG::PSGM_::MatchInstance *pMatch, ECCVGTLoader *ECCVGT, bool poseCheck, float angleThresh, float distanceThresh); //VIDOVIC
-		void PSGM::CountTPandFN(ECCVGTLoader *ECCVGT, int &TP, int &FN, bool printMatchInfo); //VIDOVIC
+		//bool PSGM::CompareMatchToGT(RECOG::PSGM_::MatchInstance *pMatch, ECCVGTLoader *ECCVGT, bool poseCheck, float angleThresh, float distanceThresh); //VIDOVIC
+		//void PSGM::CountTPandFN(ECCVGTLoader *ECCVGT, int &TP, int &FN, bool printMatchInfo); //VIDOVIC
 		void CreateScoreMatchMatrixICP();
 		void FindMinMaxInScoreMatchMatrix(
 			float &min,
@@ -443,6 +467,9 @@ namespace RVL
 			float *size);
 		std::vector<int> GetHypothesesCollisionConsensus(float thr);	//Filko
 		bool CheckHypothesesCollision(int firstHyp, int secondHyp, float thr); //Filko
+		float GetObjectTransparencyRatio(vtkSmartPointer<vtkPolyData> object, unsigned short *depthImg, float depthThr, int width, int height, float c_fu, float c_fv, float c_uc, float c_vc); //Filko
+		void FilterHypothesesUsingTransparency(float tranThr, float depthThr, bool verbose = false); //Filko
+		vtkSmartPointer<vtkPolyData> GetPoseCorrectedVisibleModel(int iMatch); //Filko
 
 	private:
 		void Clusters();
@@ -482,10 +509,18 @@ namespace RVL
 	public:
 		CRVLParameterList ParamList;
 		DWORD mode;
+		DWORD problem;
 		CRVLMem *pMem;
 		CRVLMem *pMem0;
+		void *vpMeshBuilder;
+		bool(*LoadMesh)(void *vpMeshBuilder,
+			char *FileName,
+			Mesh *pMesh,
+			bool bSavePLY);
 		PlanarSurfelDetector *pSurfelDetector;
+		void *vpObjectDetector;
 		SurfelGraph *pSurfels;
+		SURFEL::ObjectGraph *pObjects;
 		Mesh *pMesh;
 		RECOG::PSGM_::DisplayData displayData;
 		Array<RECOG::PSGM_::Cluster *> clusters;
@@ -494,7 +529,7 @@ namespace RVL
 		float kNoise;
 		Array<RECOG::PSGM_::Plane> convexTemplate;
 		Array<RECOG::PSGM_::Plane> convexTemplate66;
-		Array<RECOG::PSGM_::Plane> convexTemplateBox;		
+		Array<RECOG::PSGM_::Plane> convexTemplateBox;
 		int minInitialSurfelSize;
 		int minVertexPerc;
 		float kReferenceSurfelSize;
@@ -521,8 +556,10 @@ namespace RVL
 		//QList<RECOG::PSGM_::MatchInstance> SSegmentMatches2; //Vidovic - probability2
 		Array<Array<SortIndex<float>>> scoreMatchMatrix;
 		Array<Array<SortIndex<float>>> scoreMatchMatrixICP;
-		Array2D<Array<int>> matchMatrix;
-		int *matchMatrixMem;
+		Array<Array<SortIndex<float>>> sceneSegmentMatches;
+		Array<SortIndex<float>> sceneSegmentMatchesArray;
+		//Array2D<Array<int>> matchMatrix;
+		//int *matchMatrixMem;
 		DWORD scoreCalculation; //Vidovic - TO DO (Implement read from cfg file)
 		ECCVGTLoader *pECCVGT; //Vidovic
 		Array <RVL::SegmentGTInstance> segmentGT;
@@ -541,6 +578,7 @@ namespace RVL
 		RECOG::CTISet MCTIset;
 		std::map<int, vtkSmartPointer<vtkPolyData>> vtkModelDB;
 		std::map<int, vtkSmartPointer<vtkPolyData>> segmentN_PD; //neighbourhood
+		unsigned short * depthImg; //Current scene depth image // Filko
 
 				
 		//Petra & Ivan
