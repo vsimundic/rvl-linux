@@ -14,7 +14,7 @@
 #define RVLPSGM_MATCH_SIMILARITY_MEASURE_MEAN_SATURATED_SQUARE_DISTANCE							4
 #define RVLPSGM_MATCH_SIMILARITY_MEASURE_MEDIAN_ABS_DISTANCE									5
 //#define RVLPSGM_RANSAC
-#define RVLPSGM_ICP		// 170601: ON
+//#define RVLPSGM_ICP		// 170601: ON
 #define RVLPSGM_ICP_SIMILARITY_MEASURE_COSTNN				0
 #define RVLPSGM_ICP_SIMILARITY_MEASURE_SATURATED_SCORE		1
 
@@ -558,6 +558,8 @@ namespace RVL
 		Array<Array<SortIndex<float>>> scoreMatchMatrixICP;
 		Array<Array<SortIndex<float>>> sceneSegmentMatches;
 		Array<SortIndex<float>> sceneSegmentMatchesArray;
+		Array<Array<SortIndex<float>>> bestSceneSegmentMatches;
+		Array<SortIndex<float>> bestSceneSegmentMatchesArray;
 		//Array2D<Array<int>> matchMatrix;
 		//int *matchMatrixMem;
 		DWORD scoreCalculation; //Vidovic - TO DO (Implement read from cfg file)

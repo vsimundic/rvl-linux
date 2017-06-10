@@ -265,6 +265,10 @@ namespace RVL
 
 				RVLQLIST_INIT(pCellDataList);
 			}
+
+			activeCellArray.n = 0;
+
+			pNewData = dataMem;
 		}
 
 	private:

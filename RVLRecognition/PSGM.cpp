@@ -29,7 +29,7 @@
 //#define RVLPSGM_CTIMESH_DEBUG
 //#define RVLPSGM_MATCHTGS_CREATE_SCENE_TG
 //#define RVLPSGM_MATCHTGS_CREATE_SCENE_VG
-//#define RVLPSGM_MATCHCTI_MATCH_MATRIX		// 170601: OFF
+#define RVLPSGM_MATCHCTI_MATCH_MATRIX		// 170601: OFF
 #define RVLPSGM_MATCH_HYPOTHESIS_LOG
 
 using namespace RVL;
@@ -95,6 +95,9 @@ PSGM::PSGM()
 	sceneSegmentMatches.Element = NULL;
 	sceneSegmentMatchesArray.Element = NULL;
 	sceneSegmentMatchesArray.n = 0;
+	bestSceneSegmentMatchesArray.Element = NULL;
+	bestSceneSegmentMatchesArray.Element = NULL;
+	bestSceneSegmentMatchesArray.n = 0;
 
 	//nSamples = 20; //Vidovic
 	stdNoise = 2; //Vidovic
@@ -183,6 +186,8 @@ PSGM::~PSGM()
 	//RVL_DELETE_ARRAY(matchMatrix.Element);
 	RVL_DELETE_ARRAY(sceneSegmentMatches.Element);
 	RVL_DELETE_ARRAY(sceneSegmentMatchesArray.Element);
+	RVL_DELETE_ARRAY(bestSceneSegmentMatches.Element);
+	RVL_DELETE_ARRAY(bestSceneSegmentMatchesArray.Element);
 
 	//Vidovic
 	int iSSegment;
@@ -4464,6 +4469,197 @@ void PSGM::Match()
 }
 #endif
 
+namespace RVL
+{
+	template<typename T> struct QList2Array
+	{
+		Array<QList<T>> listArray;
+		T *mem;
+	};
+
+	template <class DataType, class CostType>
+	void Min(Array<DataType> &InArray,
+		int nOut,
+		Array<DataType> &OutArray)
+	{
+		if (InArray.n <= 0 || nOut <= 0)
+			return;
+
+		OutArray.n = 0;
+
+		int nBins = InArray.n / nOut + 1;
+
+		QList2Array<QLIST::Index2> binArray[2];
+		int *n[2];
+
+		int i, j;
+
+		for (i = 0; i < 2; i++)
+		{
+			binArray[i].listArray.Element = new QList<QLIST::Index2>[nBins];
+			binArray[i].mem = new QLIST::Index2[InArray.n];
+			n[i] = new int[nBins];
+		}
+
+		QList<QLIST::Index2> *bin = binArray[0].listArray.Element;
+
+		RVLQLIST_INIT(bin);
+
+		QLIST::Index2 *pIdx = binArray[0].mem;
+
+		n[0][0] = 0;
+
+		for (i = 0; i < InArray.n; i++)
+		{
+			pIdx->Idx = i;
+
+			RVLQLIST_ADD_ENTRY(bin, pIdx);
+
+			pIdx++;
+
+			n[0][0]++;
+		}
+
+		int nBins_ = nBins;
+
+		int iSrc = 0;
+		int iSrcBin = 0;
+
+		int iTgt = 1;
+
+		CostType min, max;
+		int idx, iTmp;
+		float cost;
+
+		while (OutArray.n < nOut)
+		{
+			if (OutArray.n == nOut - 1)
+			{
+				pIdx = binArray[iSrc].listArray.Element[iSrcBin].pFirst;
+
+				min = InArray.Element[pIdx->Idx].cost;
+
+				pIdx = pIdx->pNext;
+
+				idx = 0;
+
+				while (pIdx)
+				{
+					cost = InArray.Element[pIdx->Idx].cost;
+
+					if (cost < min)
+					{
+						min = cost;
+
+						idx = pIdx->Idx;
+					}
+
+					pIdx = pIdx->pNext;
+				}
+
+				OutArray.Element[OutArray.n++] = InArray.Element[idx];
+
+				break;
+			}
+
+			pIdx = binArray[iTgt].mem;
+
+			for (i = 0; i < nBins_; i++)
+			{
+				bin = binArray[iTgt].listArray.Element + i;
+
+				RVLQLIST_INIT(bin);
+
+				n[iTgt][i] = 0;
+			}
+
+			pIdx = binArray[iSrc].listArray.Element[iSrcBin].pFirst;
+
+			min = max = InArray.Element[pIdx->Idx].cost;
+
+			CostType cost;
+
+			pIdx = pIdx->pNext;
+
+			while (pIdx)
+			{
+				cost = InArray.Element[pIdx->Idx].cost;
+
+				if (cost < min)
+					min = cost;
+				else if (cost > max)
+					max = cost;
+
+				pIdx = pIdx->pNext;
+			}
+
+			CostType binSize = (max - min) / (CostType)(nBins - 1);
+
+			QLIST::Index2 *pIdx_ = binArray[iTgt].mem;
+
+			int iBin;
+
+			pIdx = binArray[iSrc].listArray.Element[iSrcBin].pFirst;
+
+			while (pIdx)
+			{
+				cost = InArray.Element[pIdx->Idx].cost;
+
+				iBin = (cost - min) / binSize;
+
+				bin = binArray[iTgt].listArray.Element + iBin;
+
+				RVLQLIST_ADD_ENTRY(bin, pIdx_);
+
+				pIdx_++;
+
+				n[iTgt][iBin]++;
+
+				pIdx = pIdx->pNext;
+			}
+
+			iBin = 0;
+
+			while (OutArray.n < nOut)
+			{
+				bin = binArray[iTgt].listArray.Element + iBin;
+
+				if (OutArray.n + n[iTgt][iBin] <= nOut)
+				{
+					pIdx = bin->pFirst;
+
+					while (pIdx)
+					{
+						OutArray.Element[OutArray.n++] = InArray.Element[pIdx->Idx];
+
+						pIdx = pIdx->pNext;
+					}
+				}
+				else
+				{
+					iSrcBin = iBin;
+
+					iTmp = iSrc;
+					iSrc = iTgt;
+					iTgt = iTmp;
+
+					nBins_ = (nOut - OutArray.n) / n[iSrc][iSrcBin] + 1;
+
+					if (nBins_ > nBins)
+						nBins_ = nBins;
+				}
+			}
+		}
+
+		for (i = 0; i < 2; i++)
+		{
+			delete[] binArray[i].listArray.Element;
+			delete[] binArray[i].mem;
+			delete[] n[i];
+		}
+	}
+}
+
 void PSGM::Match()
 {
 	printf("Scene to model match started...");
@@ -4643,6 +4839,8 @@ void PSGM::Match()
 	
 	sceneSegmentMatches.Element = new Array<SortIndex<float>>[nClusters];
 
+	sceneSegmentMatches.n = nClusters;
+
 	int nMatches = CTISet.pCTI.n * MCTISet.pCTI.n;
 
 	if (nMatches > sceneSegmentMatchesArray.n)
@@ -4652,6 +4850,25 @@ void PSGM::Match()
 		sceneSegmentMatchesArray.n = nMatches;
 
 		sceneSegmentMatchesArray.Element = new SortIndex<float>[sceneSegmentMatchesArray.n];
+	}
+
+	RVL_DELETE_ARRAY(bestSceneSegmentMatches.Element);
+
+	bestSceneSegmentMatches.Element = new Array<SortIndex<float>>[nClusters];
+
+	bestSceneSegmentMatches.n = nClusters;
+
+	int nBestMatchesPerCluster = 10;
+
+	int nBestMatchesTotal = nBestMatchesPerCluster * nClusters;
+
+	if (nBestMatchesTotal > bestSceneSegmentMatchesArray.n)
+	{
+		RVL_DELETE_ARRAY(bestSceneSegmentMatchesArray.Element);
+
+		bestSceneSegmentMatchesArray.n = nBestMatchesTotal;
+
+		bestSceneSegmentMatchesArray.Element = new SortIndex<float>[bestSceneSegmentMatchesArray.n];
 	}
 
 	// main loop
@@ -4698,6 +4915,10 @@ void PSGM::Match()
 
 			AddSegmentMatches(iSCluster, ppFirstMatch, HSpace, iMergingCandidates);
 		}
+
+		bestSceneSegmentMatches.Element[iSCluster].Element = bestSceneSegmentMatchesArray.Element + nBestMatchesPerCluster * iSCluster;
+
+		Min<SortIndex<float>, float>(sceneSegmentMatches.Element[iSCluster], nBestMatchesPerCluster, bestSceneSegmentMatches.Element[iSCluster]);
 	}
 
 	delete[] CTIInterval;
@@ -5410,7 +5631,7 @@ void PSGM::AddSegmentMatches(
 
 	while (pMatch)
 	{
-		if (pMatch->ID == 77)
+		if (pMatch->ID == 12134)
 			int debug = 0;
 
 		X = pMatch->R;
@@ -5466,11 +5687,9 @@ void PSGM::AddSegmentMatches(
 
 	Array<PSGM_::Hypothesis *> hypothesisArray;
 
-	HSpace.GetData(hypothesisArray);
+	HSpace.GetData(hypothesisArray);	
 
-	sceneSegmentMatches.Element[iCluster].n = hypothesisArray.n;
-
-	SortIndex<float> *pMatchIdx = sceneSegmentMatches.Element[iCluster].Element;
+	SortIndex<float> *pMatchIdx = sceneSegmentMatches.Element[iCluster].Element + sceneSegmentMatches.Element[iCluster].n;
 
 	PSGM_::Hypothesis **ppHypothesis = hypothesisArray.Element;
 
@@ -5481,6 +5700,8 @@ void PSGM::AddSegmentMatches(
 		pMatchIdx->idx = pHypothesis_->iMatch;
 		pMatchIdx->cost = pHypothesis_->score;
 	}
+
+	sceneSegmentMatches.Element[iCluster].n += hypothesisArray.n;
 
 	HSpace.Clear();
 
