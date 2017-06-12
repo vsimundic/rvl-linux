@@ -95,7 +95,7 @@ PSGM::PSGM()
 	sceneSegmentMatches.Element = NULL;
 	sceneSegmentMatchesArray.Element = NULL;
 	sceneSegmentMatchesArray.n = 0;
-	bestSceneSegmentMatchesArray.Element = NULL;
+	bestSceneSegmentMatches.Element = NULL;
 	bestSceneSegmentMatchesArray.Element = NULL;
 	bestSceneSegmentMatchesArray.n = 0;
 
