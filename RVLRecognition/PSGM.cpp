@@ -3129,7 +3129,7 @@ void PSGM::Learn(
 }
 
 
-void PSGM::LoadModelMeshDB(char *modelSequenceFileName, bool decimate, float decimatePercent)
+void PSGM::LoadModelMeshDB(char *modelSequenceFileName, std::map<int, vtkSmartPointer<vtkPolyData>> *vtkModelDB, bool bDecimate, float decimatePercent)
 {
 	FileSequenceLoader modelsLoader;
 
@@ -3154,7 +3154,7 @@ void PSGM::LoadModelMeshDB(char *modelSequenceFileName, bool decimate, float dec
 		vtkSmartPointer<vtkDecimatePro> decimate = vtkSmartPointer<vtkDecimatePro>::New();
 		//mesh.pPolygonData->Print(std::cout);
 
-		if (decimate) //subsampling the model to reduce number of points and fasten the process
+		if (bDecimate) //subsampling the model to reduce number of points and fasten the process
 		{
 			decimate->SetInputData(mesh.pPolygonData);
 			decimate->SetTargetReduction(decimatePercent);
@@ -3166,7 +3166,7 @@ void PSGM::LoadModelMeshDB(char *modelSequenceFileName, bool decimate, float dec
 		vtkSmartPointer<vtkPolyDataNormals> normalsFilter = vtkSmartPointer<vtkPolyDataNormals>::New();
 		normalsFilter->ComputePointNormalsOn();
 		normalsFilter->SplittingOff();
-		if (decimate)
+		if (bDecimate)
 			normalsFilter->SetInputConnection(decimate->GetOutputPort());
 		else
 			normalsFilter->SetInputData(mesh.pPolygonData);
@@ -3181,7 +3181,7 @@ void PSGM::LoadModelMeshDB(char *modelSequenceFileName, bool decimate, float dec
 		//cleanFilter->GetOutput()->Print(std::cout);
 		
 		//Add vtkPolyData to vtkModelDB:
-		vtkModelDB.insert(std::make_pair(currentModelID, normalsFilter->GetOutput()));
+		vtkModelDB->insert(std::make_pair(currentModelID, normalsFilter->GetOutput()));
 		currentModelID++;
 	}
 
@@ -6448,7 +6448,10 @@ void PSGM::EvaluateMatchesByScore(
 				}
 
 #ifdef RVLPSGM_EVALUATION_PRINT_INFO
-				CountTPandFN(TP_, FN_, true);
+				if (iBestMatches == nBestSegments - 1)
+					CountTPandFN(TP_, FN_, true);
+				else
+					CountTPandFN(TP_, FN_, false);
 #else
 				CountTPandFN(TP_, FN_, false);
 #endif
@@ -6457,7 +6460,8 @@ void PSGM::EvaluateMatchesByScore(
 
 			//pECCVGT->ResetMatchFlag();
 
-				PrintMatchInfo(fp, fpLog, TP_, FP_, FN_, precision, recall, nSSegments, firstTP, firstTPiModel, firstTPScore, -1.0, -1.0, -1.0, -1.0, nBestSegments, iBestMatches, graphID);
+				if (iBestMatches == nBestSegments - 1)
+					PrintMatchInfo(fp, fpLog, TP_, FP_, FN_, precision, recall, nSSegments, firstTP, firstTPiModel, firstTPScore, -1.0, -1.0, -1.0, -1.0, nBestSegments, iBestMatches, graphID);
 
 				TP_ = 0; FP_ = 0; FN_ = 0;
 
@@ -7203,6 +7207,11 @@ bool RVL::RECOG::PSGM_::keyPressUserFunction(
 		return true;
 	}
 
+	if (key == "m")
+	{
+		pRecognition->AddGTModelsToVisualizer(pVisualizer);
+	}
+
 	return false;
 }
 
@@ -7595,8 +7604,10 @@ void PSGM::AddOneModelToVisualizer(Visualizer *pVisualizer, int iMatch, int iRan
 
 #ifdef RVLPSGM_ICP
 	if (displayData.hypothesisVisualizationMode == RVLPSGM_HYPOTHESIS_VISUALIZATION_MODE_PLY)
+	{
 		//transform->SetMatrix((double*)pMatch->T_ICP);//
 		transform->SetMatrix(T_M_S); //when transforming PLY models to scene
+	}
 #endif
 
 	if (displayData.hypothesisVisualizationMode == RVLPSGM_HYPOTHESIS_VISUALIZATION_MODE_CTI)
@@ -7686,6 +7697,61 @@ void PSGM::AddOneModelToVisualizer(Visualizer *pVisualizer, int iMatch, int iRan
 	delete[] dS;
 	delete[] validS;
 }
+
+//Vidovic
+void PSGM::AddGTModelsToVisualizer(Visualizer *pVisualizer)
+{
+	//get GT transformation
+	vtkSmartPointer<vtkTransform> GTtransform = vtkSmartPointer<vtkTransform>::New();
+	vtkSmartPointer<vtkTransform> GTTransformScale = vtkSmartPointer<vtkTransform>::New();
+	vtkSmartPointer<vtkTransformPolyDataFilter> GTTransformFilterScale = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
+	vtkSmartPointer<vtkTransformPolyDataFilter> GTtransformFilter = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
+	vtkSmartPointer<vtkPolyData> GTVisiblePD = vtkSmartPointer<vtkPolyData>::New();
+
+	//model are in mm
+	GTTransformScale->Scale(0.001, 0.001, 0.001);
+
+	int iSegmentGT, iSSegment, iGTM, iGTS, nGTModels;
+	double TGT[16], RGT[9];
+	RVL::GTInstance *pGT;
+
+	iGTS = iScene - 1;
+
+	pGT = pECCVGT->GT.Element[iGTS].Element;
+	nGTModels = pECCVGT->GT.Element[iGTS].n;
+
+	for (iGTM = 0; iGTM < nGTModels; iGTM++, pGT++)
+	{
+		RVLSCALEMX3X3(pGT->R, 1000, RGT);
+		RVLHTRANSFMX(RGT, pGT->t, TGT);
+
+		GTtransform->SetMatrix(TGT); //transform model to GT pose
+
+		GTTransformFilterScale->SetInputData(vtkModelDB.at(pGT->iModel));
+		GTTransformFilterScale->SetTransform(GTTransformScale);
+		GTTransformFilterScale->Update();
+
+		GTVisiblePD = GetVisiblePart(GTTransformFilterScale->GetOutput(), TGT); //Generate visible parts of the models pointcloud
+
+		GTtransformFilter->SetInputData(GTVisiblePD);
+		GTtransformFilter->SetTransform(GTtransform);
+		GTtransformFilter->Update();
+
+		//Model mapper for GT model
+		vtkSmartPointer<vtkPolyDataMapper> GTmodelMapper = vtkSmartPointer<vtkPolyDataMapper>::New();
+		vtkSmartPointer<vtkActor> GTmodelActor = vtkSmartPointer<vtkActor>::New();
+
+		vtkSmartPointer<vtkPolyData> finPD = vtkSmartPointer<vtkPolyData>::New();
+		finPD->DeepCopy(GTtransformFilter->GetOutput());
+		
+		GTmodelMapper->SetInputData(finPD);
+		GTmodelActor->SetMapper(GTmodelMapper);
+		GTmodelActor->GetProperty()->SetColor(0, 1, 0);
+		GTmodelActor->GetProperty()->SetPointSize(3);
+		pVisualizer->renderer->AddActor(GTmodelActor);
+	}
+}
+//END Vidovic
 
 //With ICP calculation
 void PSGM::AddOneModelToVisualizerICP(Visualizer *pVisualizer, int iMatch, bool align, RVL::PSGM::ICPfunction ICPFunction, int ICPvariant, void *kdTreePtr)
@@ -8350,9 +8416,22 @@ void PSGM::CalculateNNCost(Visualizer *pVisualizer, RVL::PSGM::ICPfunction ICPFu
 
 			//pMatch->cost_NN = NNCost(iCluster, transformFilterICP->GetOutput(), RVLPSGM_ICP_SIMILARITY_MEASURE_SATURATED_SCORE); //VIDOVIC
 			//pMatch->cost_NN = NNCost(iCluster, sceneTransformFilter->GetOutput(), visiblePD, RVLPSGM_ICP_SIMILARITY_MEASURE_SATURATED_SCORE); //VIDOVIC - cost for points in the neighbourhood of segment
-			//pMatch->cost_NN = NNCost(iCluster, sceneTransformFilter->GetOutput(), visiblePD, RVLPSGM_ICP_SIMILARITY_MEASURE_COSTNN); //VIDOVIC - cost for points in the neighbourhood of segment
-			pMatch->cost_NN = NNCost(iCluster, sceneSegmentTransformFilter->GetOutput(), visiblePD, RVLPSGM_ICP_SIMILARITY_MEASURE_COSTNN); //VIDOVIC - cost for points in the neighbourhood of segment
+			pMatch->cost_NN = NNCost(iCluster, sceneTransformFilter->GetOutput(), visiblePD, RVLPSGM_ICP_SIMILARITY_MEASURE_COSTNN); //VIDOVIC - cost for points in the neighbourhood of segment
+			//pMatch->cost_NN = NNCost(iCluster, sceneSegmentTransformFilter->GetOutput(), visiblePD, RVLPSGM_ICP_SIMILARITY_MEASURE_COSTNN); //VIDOVIC - cost for points in the neighbourhood of segment
 			//pMatch->cost_NN = NNCost(iCluster, sceneSegmentTransformFilter->GetOutput(), visiblePD, RVLPSGM_ICP_SIMILARITY_MEASURE_SATURATED_SCORE); //VIDOVIC - cost for segment points
+
+			//penalize the distance from the gound plane - Vidovic
+			float tConst = 30.0;
+			float tDistance;
+
+			tDistance = groundPlaneDistance(iModel, icpT2d);
+
+			//if (iCluster == 2 && (iModel == 12 || iModel == 29))
+			//	printf("\nDistance of model %d from the ground plane is: %f\n (cost: %f; cost penalty: %f; total: %f;)", iModel, tDistance, pMatch->cost_NN, tConst * RVLABS(groundPlaneDistance(iModel, icpT2d)) * pMatch->cost_NN, pMatch->cost_NN + tConst * RVLABS(groundPlaneDistance(iModel, icpT2d)) * pMatch->cost_NN);
+
+
+			//pMatch->cost_NN += tConst * groundPlaneDistance(iModel, icpT2d);
+			pMatch->cost_NN += tConst * RVLABS(groundPlaneDistance(iModel, icpT2d)) * pMatch->cost_NN;
 
 			//test Vidovic
 			//pMatch->cost_NN = NNCost(iCluster, transformFilter->GetOutput());
@@ -8456,6 +8535,204 @@ float PSGM::NNCost(int iCluster, vtkSmartPointer<vtkPolyData> sourcePD, vtkSmart
 }
 
 }
+
+//Vidovic
+float PSGM::groundPlaneDistance(int iModel, double *MSTransform)
+{
+	VertexGraph *pVertexGraph;
+	pVertexGraph = MTGSet.vertexGraphs.at(iModel);
+	int iVertex;
+
+	double R[9], t[3];
+	float P_[3], P[3];
+	float minDistance, distance;
+
+	for (iVertex = 0; iVertex < pVertexGraph->NodeArray.n; iVertex++)
+	{
+		RVLSCALE3VECTOR2(pVertexGraph->NodeArray.Element[iVertex].P, 1000, P_);
+		RVLHTRANSFMXDECOMP(MSTransform, R, t);
+		RVLTRANSF3(P_, R, t, P);
+
+		if (iVertex == 0)
+			minDistance = RVLDOTPRODUCT3(P, NGnd) - dGnd;
+		else
+		{
+			distance = RVLDOTPRODUCT3(P, NGnd) - dGnd;
+
+			if (distance < minDistance)
+				minDistance = distance;
+		}			
+	}
+
+	return minDistance;
+}
+
+//calculate RMSE for all TP hypothesis on the scene
+void PSGM::RMSE(FILE *fp, bool allTPHypotheses)
+{
+	int iMatch, iGTS, iSegment, iGTM, iMCTI, iMatchedModel, iSegmentGT, iSSegment, iHypothesis;
+	bool TPHypothesis = false;
+	int nGTModels;
+	RVL::GTInstance *pGT;
+	RECOG::PSGM_::MatchInstance *pMatch;
+	float RMSE_ = 0.0;
+	double TGT[16], T[16], tICP[3], RGT[9], tGT[3];
+
+	if (scoreMatchMatrixICP.Element == NULL)
+		CreateScoreMatchMatrixICP();
+
+	iMatch = scoreMatchMatrixICP.Element[0].Element[0].idx;
+
+	iGTS = pCTImatchesArray.Element[iMatch]->iScene;
+	nGTModels = pECCVGT->GT.Element[iGTS].n;
+
+	printf("RMSE for TP hypothesis:\n");
+
+	if (!allTPHypotheses)
+	{
+		pGT = pECCVGT->GT.Element[iGTS].Element;
+
+		for (iGTM = 0; iGTM < nGTModels; iGTM++, pGT++)
+		{
+			for (iSegment = 0; iSegment < scoreMatchMatrix.n; iSegment++)
+			{
+				iMatch = scoreMatchMatrixICP.Element[iSegment].Element[0].idx;
+				pMatch = pCTImatchesArray.Element[iMatch];
+
+				iMCTI = pMatch->iMCTI;
+				iMatchedModel = MCTISet.pCTI.Element[iMCTI]->iModel;
+				iSSegment = CTISet.pCTI.Element[pMatch->iSCTI]->iCluster;
+
+				iSegmentGT = iGTS * nDominantClusters + iSSegment;
+
+				if (iMatchedModel == segmentGT.Element[iSegmentGT].iModel && iMatchedModel == pGT->iModel)
+				{
+					RVLSCALEMX3X3(pGT->R, 1000, RGT);
+					RVLSCALE3VECTOR(pGT->t, 1000, tGT);
+					RVLHTRANSFMX(RGT, tGT, TGT);
+					RVLHTRANSFMX(pMatch->RICP_, pMatch->tICP_, T);
+
+					RMSE_ = RMSE(iMatchedModel, TGT, T);
+					printf("Segment %d matched with model %d. RMSE for TP is: %f\n", iSegment, iMatchedModel, RMSE_);
+					fprintf(fp, "%d\t%d\t%d\t%f\n", iGTS, iSSegment, iMatchedModel, RMSE_);
+				}
+			}
+		}
+		printf("---------------------------------------------------\n");
+	}//only for 0-th palced hypotheses
+	else
+	{
+		pGT = pECCVGT->GT.Element[iGTS].Element;
+
+		for (iGTM = 0; iGTM < nGTModels; iGTM++, pGT++)
+		{
+			for (iSegment = 0; iSegment < scoreMatchMatrix.n; iSegment++)
+			{
+				TPHypothesis = false;
+
+				for (iHypothesis = 0; iHypothesis < nBestMatches; iHypothesis++)
+				{
+					iMatch = scoreMatchMatrixICP.Element[iSegment].Element[iHypothesis].idx;
+					pMatch = pCTImatchesArray.Element[iMatch];
+
+					iMCTI = pMatch->iMCTI;
+					iMatchedModel = MCTISet.pCTI.Element[iMCTI]->iModel;
+					iSSegment = CTISet.pCTI.Element[pMatch->iSCTI]->iCluster;
+
+					iSegmentGT = iGTS * nDominantClusters + iSSegment;
+
+					if (segmentGT.Element[iSegmentGT].iModel == pGT->iModel)
+					{
+						RVLSCALEMX3X3(pGT->R, 1000, RGT);
+						RVLSCALE3VECTOR(pGT->t, 1000, tGT);
+						RVLHTRANSFMX(RGT, tGT, TGT);
+						RVLHTRANSFMX(pMatch->RICP_, pMatch->tICP_, T);
+
+						RMSE_ = RMSE(iMatchedModel, TGT, T);
+
+						if (iMatchedModel == segmentGT.Element[iSegmentGT].iModel)
+						{
+							printf("Segment %d matched with model %d on %d. place (TP). RMSE is: %f\n", iSegment, iMatchedModel, iHypothesis, RMSE_);
+							fprintf(fp, "%d\t%d\t%d\t%f\t%d\n", iGTS, iSSegment, iMatchedModel, RMSE_, 1);
+							TPHypothesis = true;
+						}
+						else
+						{
+							printf("Segment %d matched with model %d on %d. place (FP). RMSE is: %f\n", iSegment, iMatchedModel, iHypothesis, RMSE_);
+							fprintf(fp, "%d\t%d\t%d\t%f\t%d\n", iGTS, iSSegment, iMatchedModel, RMSE_, 0);
+						}
+					}
+
+					if (TPHypothesis)
+						break;
+				}
+			}
+		}
+		printf("---------------------------------------------------\n");
+
+	}//for all TP hypothesis
+}
+
+//calculate RMSE for single model
+float PSGM::RMSE(int iModel, double *TGT, double *T)
+{
+	vtkSmartPointer<vtkTransform> GTtransform = vtkSmartPointer<vtkTransform>::New();
+	GTtransform->SetMatrix(TGT); //tranform model to the GT pose
+
+	vtkSmartPointer<vtkTransformPolyDataFilter> GTtransformFilter = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
+	GTtransformFilter->SetInputData(vtkRMSEModelDB.at(iModel));
+	GTtransformFilter->SetTransform(GTtransform);
+	GTtransformFilter->Update();
+
+	vtkSmartPointer<vtkTransform> transform = vtkSmartPointer<vtkTransform>::New();
+	transform->SetMatrix(T); //transform model to the hypothesis pose
+
+	vtkSmartPointer<vtkTransformPolyDataFilter> transformFilter = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
+	transformFilter->SetInputData(vtkRMSEModelDB.at(iModel));
+	transformFilter->SetTransform(transform);
+	transformFilter->Update();
+
+	NanoFlannPointCloud<float> GTPC;
+	vtkSmartPointer<vtkPoints> GTPoints = GTtransformFilter->GetOutput()->GetPoints();
+	GTPC.pts.resize(GTPoints->GetNumberOfPoints());
+	double *point;
+	int iPoint;
+
+	for (iPoint = 0; iPoint < GTPoints->GetNumberOfPoints(); iPoint++)
+	{
+		point = GTPoints->GetPoint(iPoint);
+		GTPC.pts.at(iPoint).x = point[0];
+		GTPC.pts.at(iPoint).y = point[1];
+		GTPC.pts.at(iPoint).z = point[2];
+	}
+
+	nanoflann::KDTreeSingleIndexAdaptor<nanoflann::L2_Simple_Adaptor<float, NanoFlannPointCloud<float> >, NanoFlannPointCloud<float>, 3> index(3 /*dim*/, GTPC, nanoflann::KDTreeSingleIndexAdaptorParams(10 /* max leaf */));
+	index.buildIndex();
+
+	vtkSmartPointer<vtkPoints> hypothesisPoints = transformFilter->GetOutput()->GetPoints();
+	float pointF[3];
+
+	std::vector<size_t>   ret_index(1);
+	std::vector<float> out_dist_sqr(1);
+	float RMSE_ = 0;
+
+	for (iPoint = 0; iPoint < hypothesisPoints->GetNumberOfPoints(); iPoint++)
+	{
+		point = hypothesisPoints->GetPoint(iPoint);
+		pointF[0] = point[0];
+		pointF[1] = point[1];
+		pointF[2] = point[2];
+
+		index.knnSearch(pointF, 1, &ret_index[0], &out_dist_sqr[0]);
+
+		RMSE_ += out_dist_sqr.at(0);
+	}
+
+	RMSE_ = sqrt((RMSE_ / hypothesisPoints->GetNumberOfPoints()));
+
+	return RMSE_;
+}
+//END Vidovic
 
 bool PSGM::IsFlat(
 	Array<int> surfelArray,

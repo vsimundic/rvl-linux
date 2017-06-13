@@ -431,7 +431,7 @@ int main(int argc, char ** argv)
 			recognition.LoadModelDataBase(); //Vidovic
 
 #ifdef RVLPSGM_ICP
-			recognition.LoadModelMeshDB(modelSequenceFileName, true, 0.4);
+			recognition.LoadModelMeshDB(modelSequenceFileName, &recognition.vtkModelDB, true, 0.4);
 #endif
 
 			Mesh mesh;
@@ -470,6 +470,8 @@ int main(int argc, char ** argv)
 			FILE *fpHypothesisEvaluation = fopen((resultsFolderName + "\\compare_TNM_Valid_TMP.txt").data(), "w");
 
 			FILE *fpLog = fopen((resultsFolderName + "\\evaluationLog.txt").data(), "w");
+
+			FILE *fpRMSE = fopen((resultsFolderName + "\\RMSE.txt").data(), "w");
 
 			recognition.LoadCompleteSegmentGT(sceneSequence);
 
@@ -560,6 +562,12 @@ int main(int argc, char ** argv)
 
 				//evaluate ICP
 				recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, fpPoseError, fpnotFirstInfo, fpnotFirstPoseErr, 10, true);
+
+				//Load models without decimation
+				recognition.LoadModelMeshDB(modelSequenceFileName, &recognition.vtkRMSEModelDB, false);
+
+				//Calculate RMSE
+				recognition.RMSE(fpRMSE, false);
 #else
 				recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, fpPoseError, fpnotFirstInfo, fpnotFirstPoseErr, 7);
 #endif
@@ -588,6 +596,7 @@ int main(int argc, char ** argv)
 			fclose(fpHypothesisEvaluation);
 			fclose(fpLog);
 			fclose(fpPoseError);
+			fclose(fpRMSE);
 
 			//END Vidovic
 		}	// if (recognition.mode == RVLRECOGNITION_MODE_RECOGNITION)

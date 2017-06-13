@@ -277,8 +277,11 @@ namespace RVL
 		//Recomended,
 		//Visualizes chosen hypotheses 0-6 for each segment on the scene, activated when pressed "c":
 		void AddOneModelToVisualizer(Visualizer *pVisualizer, int iMatch, int iRank, bool align);
+
+		//Visualizes GT models on the scene, activated when pressed "g":
+		void AddGTModelsToVisualizer(Visualizer *pVisualizer);
 		
-		void LoadModelMeshDB(char *modelSequenceFileName, bool decimate=false, float decimatePercent=0.4);
+		void LoadModelMeshDB(char *modelSequenceFileName, std::map<int, vtkSmartPointer<vtkPolyData>> *vtkModelDB, bool bDecimate = false, float decimatePercent = 0.4);
 
 		vtkSmartPointer<vtkPolyData> GetSceneModelPC(int iCluster);
 
@@ -292,6 +295,12 @@ namespace RVL
 
 		float NNCost(int iCluster, vtkSmartPointer<vtkPolyData> sourcePD, vtkSmartPointer<vtkPolyData> targetPD, int similarityMeasure = 0); // Calculates cost based on sum of distances between scene segment points and their nearest neighbours in visible part of the matched model.
 		//end Petra
+
+		float groundPlaneDistance(int iModel, double *MSTransform); //Vidovic
+
+		void RMSE(FILE *fp, bool allTPHypotheses = false); //calculate RMSE for TP hypothesis on the scene (only 0-th placed TP hypotheses-> allTPHypothesis = false; all TP hypotheses -> allTPHypothesis = true) - Vidovic
+
+		float RMSE(int iModel, double *TGT, double *T); //calculate RMSE for single model - Vidovic
 
 		void InitDisplay(
 			Visualizer *pVisualizer,
@@ -560,6 +569,7 @@ namespace RVL
 		RECOG::CTISet CTIset;
 		RECOG::CTISet MCTIset;
 		std::map<int, vtkSmartPointer<vtkPolyData>> vtkModelDB;
+		std::map<int, vtkSmartPointer<vtkPolyData>> vtkRMSEModelDB; //Vidovic
 		std::map<int, vtkSmartPointer<vtkPolyData>> segmentN_PD; //neighbourhood
 
 				
