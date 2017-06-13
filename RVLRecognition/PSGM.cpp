@@ -10129,7 +10129,7 @@ float PSGM::GetObjectTransparencyRatio(vtkSmartPointer<vtkPolyData> object, unsi
 		u = c_fu * point[0] / point[2] + c_uc;
 		v = c_fv * point[1] / point[2] + c_vc;
 		//Check if the point is within scene (image)
-		if ((u < 0) || (u > width) || (v < 0) || (v > height))
+		if ((u < 0) || (u >= width) || (v < 0) || (v >= height))
 			continue;
 		//depth.at<unsigned short>(v, u) = (point[2] * 1000) - depthImg[v * width + u];
 		//Get normal
