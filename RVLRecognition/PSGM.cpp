@@ -4611,6 +4611,8 @@ namespace RVL
 
 				RVLQLIST_ADD_ENTRY(bin, pIdx_);
 
+				pIdx_->Idx = pIdx->Idx;
+
 				pIdx_++;
 
 				n[iTgt][iBin]++;
@@ -4634,6 +4636,8 @@ namespace RVL
 
 						pIdx = pIdx->pNext;
 					}
+
+					iBin++;
 				}
 				else
 				{
@@ -4915,6 +4919,17 @@ void PSGM::Match()
 
 			AddSegmentMatches(iSCluster, ppFirstMatch, HSpace, iMergingCandidates);
 		}
+
+		// Only for debugging purpose!!!
+
+		FILE *fp = fopen("tmp.txt", "w");
+
+		for (int i = 0; i < sceneSegmentMatches.Element[iSCluster].n; i++)
+			fprintf(fp, "%d\t%f\n", sceneSegmentMatches.Element[iSCluster].Element[i].idx, sceneSegmentMatches.Element[iSCluster].Element[i].cost);
+
+		fclose(fp);
+
+		//
 
 		bestSceneSegmentMatches.Element[iSCluster].Element = bestSceneSegmentMatchesArray.Element + nBestMatchesPerCluster * iSCluster;
 
@@ -5631,8 +5646,8 @@ void PSGM::AddSegmentMatches(
 
 	while (pMatch)
 	{
-		if (pMatch->ID == 12134)
-			int debug = 0;
+		//if (pMatch->ID == 12134)
+		//	int debug = 0;
 
 		X = pMatch->R;
 		Z = pMatch->R + 6;
@@ -5696,6 +5711,9 @@ void PSGM::AddSegmentMatches(
 	for (i = 0; i < hypothesisArray.n; i++, pMatchIdx++, ppHypothesis++)
 	{
 		pHypothesis_ = *ppHypothesis;
+
+		//if (pHypothesis_->iMatch == 174)
+		//	int debug = 0;
 
 		pMatchIdx->idx = pHypothesis_->iMatch;
 		pMatchIdx->cost = pHypothesis_->score;

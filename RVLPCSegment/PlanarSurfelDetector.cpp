@@ -5823,8 +5823,8 @@ void PlanarSurfelDetector::JoinSmallSurfelsToClosestNeighbors(
 			}
 		}	// if (pSurfel->size > 0 && pSurfel->size < minSurfelSize)
 
-		if (pSurfels->NodeArray.Element[974].PtList.pFirst->pNext != NULL)
-			int debug = 0;
+		//if (pSurfels->NodeArray.Element[974].PtList.pFirst->pNext != NULL)
+		//	int debug = 0;
 	}	// for every surfel
 }
 
