@@ -473,6 +473,7 @@ namespace RVL
 
 	private:
 		void Clusters();
+		void WholeMeshCluster();
 		void CreateTemplate66();
 		void CreateTemplateBox();
 		void TemplateMatrix(Array2D<float> &A);
@@ -548,6 +549,7 @@ namespace RVL
 		bool bGTRFDescriptors;
 		bool bMatchRANSAC; //Vidovic
 		bool bGnd;
+		bool bWholeMeshCluster;
 		Array<RECOG::PSGM_::ModelInstance> modelInstanceDB; //Vidovic
 		QList<RECOG::PSGM_::MatchInstance> CTImatches; //Vidovic
 		Array<RECOG::PSGM_::MatchInstance*> pCTImatchesArray; //Vidovic
