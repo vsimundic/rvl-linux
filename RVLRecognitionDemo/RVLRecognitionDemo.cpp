@@ -567,7 +567,7 @@ int main(int argc, char ** argv)
 				recognition.LoadModelMeshDB(modelSequenceFileName, &recognition.vtkRMSEModelDB, false);
 
 				//Calculate RMSE
-				recognition.RMSE(fpRMSE, false);
+				recognition.RMSE(fpRMSE, true);
 #else
 				recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, fpPoseError, fpnotFirstInfo, fpnotFirstPoseErr, 7);
 #endif

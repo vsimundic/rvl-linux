@@ -8431,26 +8431,24 @@ void PSGM::CalculateNNCost(Visualizer *pVisualizer, RVL::PSGM::ICPfunction ICPFu
 
 
 			//pMatch->cost_NN += tConst * groundPlaneDistance(iModel, icpT2d);
-			pMatch->cost_NN += tConst * RVLABS(groundPlaneDistance(iModel, icpT2d)) * pMatch->cost_NN;
+			pMatch->gndDistance = groundPlaneDistance(iModel, icpT2d);
+			pMatch->cost_NN += tConst * RVLABS(pMatch->gndDistance) * pMatch->cost_NN;			
 
-			//test Vidovic
-			//pMatch->cost_NN = NNCost(iCluster, transformFilter->GetOutput());
+			memcpy(pMatch->T_ICP, icpT2, 16 * sizeof(float));
 
-				memcpy(pMatch->T_ICP, icpT2, 16 * sizeof(float));
+			pMatch->RICP_[0] = pMatch->T_ICP[0];
+			pMatch->RICP_[1] = pMatch->T_ICP[1];
+			pMatch->RICP_[2] = pMatch->T_ICP[2];
+			pMatch->RICP_[3] = pMatch->T_ICP[4];
+			pMatch->RICP_[4] = pMatch->T_ICP[5];
+			pMatch->RICP_[5] = pMatch->T_ICP[6];
+			pMatch->RICP_[6] = pMatch->T_ICP[8];
+			pMatch->RICP_[7] = pMatch->T_ICP[9];
+			pMatch->RICP_[8] = pMatch->T_ICP[10];
 
-				pMatch->RICP_[0] = pMatch->T_ICP[0];
-				pMatch->RICP_[1] = pMatch->T_ICP[1];
-				pMatch->RICP_[2] = pMatch->T_ICP[2];
-				pMatch->RICP_[3] = pMatch->T_ICP[4];
-				pMatch->RICP_[4] = pMatch->T_ICP[5];
-				pMatch->RICP_[5] = pMatch->T_ICP[6];
-				pMatch->RICP_[6] = pMatch->T_ICP[8];
-				pMatch->RICP_[7] = pMatch->T_ICP[9];
-				pMatch->RICP_[8] = pMatch->T_ICP[10];
-
-				pMatch->tICP_[0] = pMatch->T_ICP[3] * 1000;
-				pMatch->tICP_[1] = pMatch->T_ICP[7] * 1000;
-				pMatch->tICP_[2] = pMatch->T_ICP[11] * 1000;
+			pMatch->tICP_[0] = pMatch->T_ICP[3] * 1000;
+			pMatch->tICP_[1] = pMatch->T_ICP[7] * 1000;
+			pMatch->tICP_[2] = pMatch->T_ICP[11] * 1000;
 
 				
 			}
@@ -8537,6 +8535,7 @@ float PSGM::NNCost(int iCluster, vtkSmartPointer<vtkPolyData> sourcePD, vtkSmart
 }
 
 //Vidovic
+//distance is in [m]
 float PSGM::groundPlaneDistance(int iModel, double *MSTransform)
 {
 	VertexGraph *pVertexGraph;
@@ -8655,11 +8654,17 @@ void PSGM::RMSE(FILE *fp, bool allTPHypotheses)
 							printf("Segment %d matched with model %d on %d. place (TP). RMSE is: %f\n", iSegment, iMatchedModel, iHypothesis, RMSE_);
 							fprintf(fp, "%d\t%d\t%d\t%f\t%d\n", iGTS, iSSegment, iMatchedModel, RMSE_, 1);
 							TPHypothesis = true;
+
+							//printing distance from the ground plane - TEST
+							//fprintf(fp, "%d\t%d\t%d\t%d\t%f\t%d\n", iGTS, iSSegment, iHypothesis, iMatchedModel, pMatch->gndDistance, 1);
 						}
 						else
 						{
 							printf("Segment %d matched with model %d on %d. place (FP). RMSE is: %f\n", iSegment, iMatchedModel, iHypothesis, RMSE_);
 							fprintf(fp, "%d\t%d\t%d\t%f\t%d\n", iGTS, iSSegment, iMatchedModel, RMSE_, 0);
+
+							//printing distance from the ground plane - TEST
+							//fprintf(fp, "%d\t%d\t%d\t%d\t%f\t%d\n", iGTS, iSSegment, iHypothesis, iMatchedModel, pMatch->gndDistance, 0);
 						}
 					}
 

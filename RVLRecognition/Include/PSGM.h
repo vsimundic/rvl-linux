@@ -105,6 +105,7 @@ namespace RVL
 				float distanceGT;
 				int nValids;
 				float eSeg;
+				float gndDistance;
 				// Petra
 				double cost_ICP; 
 				float T_ICP[16]; //transformation between current and ICP pose
