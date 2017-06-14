@@ -10245,12 +10245,22 @@ std::vector<int> PSGM::GetHypothesesCollisionConsensus(float thr)
 	////////////////////
 	//fill the list
 	std::vector<Hyp> hypotheses;
+
+#ifdef RVLPSGM_ICP
+	for (int i = 0; i < scoreMatchMatrixICP.n; i++)
+	{
+		for (int j = 0; j < RVLMIN(nBestMatches, scoreMatchMatrixICP.Element[i].n); j++)
+			if (scoreMatchMatrixICP.Element[i].Element[j].idx >= 0)
+				hypotheses.push_back(Hyp(i, scoreMatchMatrixICP.Element[i].Element[j].idx, scoreMatchMatrixICP.Element[i].Element[j].cost));
+	}
+#else
 	for (int i = 0; i < scoreMatchMatrix.n; i++)
 	{
-		for (int j = 0; j < RVLMIN(7, scoreMatchMatrix.Element[i].n); j++)
+		for (int j = 0; j < RVLMIN(nBestMatches, scoreMatchMatrix.Element[i].n); j++)
 			if (scoreMatchMatrix.Element[i].Element[j].idx >= 0)
 				hypotheses.push_back(Hyp(i, scoreMatchMatrix.Element[i].Element[j].idx, scoreMatchMatrix.Element[i].Element[j].cost));
 	}
+#endif
 	//Sort it
 	std::sort(hypotheses.begin(), hypotheses.end());
 
