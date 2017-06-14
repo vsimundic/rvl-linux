@@ -862,7 +862,7 @@ int main(int argc, char ** argv)
 	//if (segmentGTFileName)
 	//	delete[] segmentGTFileName;
 
-	//END VIDOVIC
+	//END Vidovic
 
 	return 0;
 }
