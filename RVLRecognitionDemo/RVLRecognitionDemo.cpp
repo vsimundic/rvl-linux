@@ -922,3 +922,51 @@ int main(int argc, char ** argv)
 
 	return 0;
 }
+
+// Only for debugging purpose!!!
+//
+//void RVLMinTest()
+//{
+//	Array<SortIndex<float>> dataArray;
+//
+//	dataArray.n = 10000;
+//	dataArray.Element = new SortIndex<float>[dataArray.n];
+//
+//	int nTopData = 10;
+//
+//	Array<SortIndex<float>> topDataArray;
+//
+//	topDataArray.n = nTopData;
+//	topDataArray.Element = new SortIndex<float>[topDataArray.n];
+//
+//	FILE *fpSrc, *fpTgt;
+//
+//	for (int i = 0; i < 20; i++)
+//	{
+//		fpSrc = fopen("a.txt", "w");
+//
+//		for (int j = 0; j < dataArray.n; j++)
+//		{
+//			dataArray.Element[j].idx = j;
+//			dataArray.Element[j].cost = (float)rand() / (float)RAND_MAX;
+//
+//			fprintf(fpSrc, "%f\n", dataArray.Element[j].cost);
+//		}
+//
+//		fclose(fpSrc);
+//
+//		Min<SortIndex<float>, float>(dataArray, nTopData, topDataArray);
+//
+//		fpTgt = fopen("b.txt", "w");
+//
+//		for (int j = 0; j < topDataArray.n; j++)
+//			fprintf(fpSrc, "%d\t%f\n", topDataArray.Element[j].idx, topDataArray.Element[j].cost);
+//
+//		fclose(fpTgt);
+//
+//		int debug = 0;
+//	}
+//
+//	delete[] dataArray.Element;
+//	delete[] topDataArray.Element;
+//}

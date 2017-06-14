@@ -4544,201 +4544,6 @@ void PSGM::Match()
 }
 #endif
 
-namespace RVL
-{
-	template<typename T> struct QList2Array
-	{
-		Array<QList<T>> listArray;
-		T *mem;
-	};
-
-	template <class DataType, class CostType>
-	void Min(Array<DataType> &InArray,
-		int nOut,
-		Array<DataType> &OutArray)
-	{
-		if (InArray.n <= 0 || nOut <= 0)
-			return;
-
-		OutArray.n = 0;
-
-		int nBins = InArray.n / nOut + 1;
-
-		QList2Array<QLIST::Index2> binArray[2];
-		int *n[2];
-
-		int i, j;
-
-		for (i = 0; i < 2; i++)
-		{
-			binArray[i].listArray.Element = new QList<QLIST::Index2>[nBins];
-			binArray[i].mem = new QLIST::Index2[InArray.n];
-			n[i] = new int[nBins];
-		}
-
-		QList<QLIST::Index2> *bin = binArray[0].listArray.Element;
-
-		RVLQLIST_INIT(bin);
-
-		QLIST::Index2 *pIdx = binArray[0].mem;
-
-		n[0][0] = 0;
-
-		for (i = 0; i < InArray.n; i++)
-		{
-			pIdx->Idx = i;
-
-			RVLQLIST_ADD_ENTRY(bin, pIdx);
-
-			pIdx++;
-
-			n[0][0]++;
-		}
-
-		int nBins_ = nBins;
-
-		int iSrc = 0;
-		int iSrcBin = 0;
-
-		int iTgt = 1;
-
-		CostType min, max;
-		int idx, iTmp;
-		float cost;
-
-		while (OutArray.n < nOut)
-		{
-			if (OutArray.n == nOut - 1)
-			{
-				pIdx = binArray[iSrc].listArray.Element[iSrcBin].pFirst;
-
-				min = InArray.Element[pIdx->Idx].cost;
-
-				pIdx = pIdx->pNext;
-
-				idx = 0;
-
-				while (pIdx)
-				{
-					cost = InArray.Element[pIdx->Idx].cost;
-
-					if (cost < min)
-					{
-						min = cost;
-
-						idx = pIdx->Idx;
-					}
-
-					pIdx = pIdx->pNext;
-				}
-
-				OutArray.Element[OutArray.n++] = InArray.Element[idx];
-
-				break;
-			}
-
-			pIdx = binArray[iTgt].mem;
-
-			for (i = 0; i < nBins_; i++)
-			{
-				bin = binArray[iTgt].listArray.Element + i;
-
-				RVLQLIST_INIT(bin);
-
-				n[iTgt][i] = 0;
-			}
-
-			pIdx = binArray[iSrc].listArray.Element[iSrcBin].pFirst;
-
-			min = max = InArray.Element[pIdx->Idx].cost;
-
-			CostType cost;
-
-			pIdx = pIdx->pNext;
-
-			while (pIdx)
-			{
-				cost = InArray.Element[pIdx->Idx].cost;
-
-				if (cost < min)
-					min = cost;
-				else if (cost > max)
-					max = cost;
-
-				pIdx = pIdx->pNext;
-			}
-
-			CostType binSize = (max - min) / (CostType)(nBins - 1);
-
-			QLIST::Index2 *pIdx_ = binArray[iTgt].mem;
-
-			int iBin;
-
-			pIdx = binArray[iSrc].listArray.Element[iSrcBin].pFirst;
-
-			while (pIdx)
-			{
-				cost = InArray.Element[pIdx->Idx].cost;
-
-				iBin = (cost - min) / binSize;
-
-				bin = binArray[iTgt].listArray.Element + iBin;
-
-				RVLQLIST_ADD_ENTRY(bin, pIdx_);
-
-				pIdx_->Idx = pIdx->Idx;
-
-				pIdx_++;
-
-				n[iTgt][iBin]++;
-
-				pIdx = pIdx->pNext;
-			}
-
-			iBin = 0;
-
-			while (OutArray.n < nOut)
-			{
-				bin = binArray[iTgt].listArray.Element + iBin;
-
-				if (OutArray.n + n[iTgt][iBin] <= nOut)
-				{
-					pIdx = bin->pFirst;
-
-					while (pIdx)
-					{
-						OutArray.Element[OutArray.n++] = InArray.Element[pIdx->Idx];
-
-						pIdx = pIdx->pNext;
-					}
-
-					iBin++;
-				}
-				else
-				{
-					iSrcBin = iBin;
-
-					iTmp = iSrc;
-					iSrc = iTgt;
-					iTgt = iTmp;
-
-					nBins_ = (nOut - OutArray.n) / n[iSrc][iSrcBin] + 1;
-
-					if (nBins_ > nBins)
-						nBins_ = nBins;
-				}
-			}
-		}
-
-		for (i = 0; i < 2; i++)
-		{
-			delete[] binArray[i].listArray.Element;
-			delete[] binArray[i].mem;
-			delete[] n[i];
-		}
-	}
-}
-
 void PSGM::Match()
 {
 	printf("Scene to model match started...");
@@ -4959,7 +4764,7 @@ void PSGM::Match()
 	for (iSCluster = 0; iSCluster < nClusters; iSCluster++)
 		//iSCluster = 5;		// Only for debugging purpose!!!
 	{
-		printf("%d/%d", iSCluster + 1, nClusters);
+		printf("%d/%d\n", iSCluster + 1, nClusters);
 
 		sceneSegmentMatches.Element[iSCluster].n = 0;
 
@@ -4995,20 +4800,22 @@ void PSGM::Match()
 			AddSegmentMatches(iSCluster, ppFirstMatch, HSpace, iMergingCandidates);
 		}
 
-		// Only for debugging purpose!!!
+		//// Only for debugging purpose!!!
 
-		FILE *fp = fopen("tmp.txt", "w");
+		//FILE *fp = fopen("tmp.txt", "w");
 
-		for (int i = 0; i < sceneSegmentMatches.Element[iSCluster].n; i++)
-			fprintf(fp, "%d\t%f\n", sceneSegmentMatches.Element[iSCluster].Element[i].idx, sceneSegmentMatches.Element[iSCluster].Element[i].cost);
+		//for (int i = 0; i < sceneSegmentMatches.Element[iSCluster].n; i++)
+		//	fprintf(fp, "%d\t%f\n", sceneSegmentMatches.Element[iSCluster].Element[i].idx, sceneSegmentMatches.Element[iSCluster].Element[i].cost);
 
-		fclose(fp);
+		//fclose(fp);
 
-		//
+		////
 
 		bestSceneSegmentMatches.Element[iSCluster].Element = bestSceneSegmentMatchesArray.Element + nBestMatchesPerCluster * iSCluster;
 
 		Min<SortIndex<float>, float>(sceneSegmentMatches.Element[iSCluster], nBestMatchesPerCluster, bestSceneSegmentMatches.Element[iSCluster]);
+
+		BubbleSort<SortIndex<float>>(bestSceneSegmentMatches.Element[iSCluster]);
 	}
 
 	delete[] CTIInterval;
@@ -5062,8 +4869,7 @@ void PSGM::Match()
 
 	QLIST::CreatePtrArray<RECOG::PSGM_::MatchInstance>(pCTImatches, &pCTImatchesArray);
 
-#ifdef RVLPSGM_MATCHCTI_MATCH_MATRIX
-#else
+#ifndef RVLPSGM_MATCHCTI_MATCH_MATRIX
 	SortScoreMatchMatrix();
 #endif
 
