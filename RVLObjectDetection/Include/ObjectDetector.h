@@ -22,7 +22,7 @@ namespace RVL
 	public:
 		ObjectDetector();
 		virtual ~ObjectDetector();
-		void Init();
+		void Init(PSGM *pPSGM_ = NULL);
 		void CreateParamList();
 		void DetectObjects(char *MeshFilePathName);
 		void Evaluate(
@@ -56,6 +56,10 @@ namespace RVL
 		bool bMultilateralFilter;
 		bool bJoinSmallObjectsToLargestNeighbor;
 		bool bGroundTruthSegmentation;
+		bool bGroundTruthSegmentationOnSurfelLevel;
+		bool bGroundTruthBoundingBoxes;
+		bool bOwnsSurfelDetectionTool;
+		bool bOwnsPSGM;
 		SurfelGraph *pSurfels;
 		PlanarSurfelDetector *pSurfelDetector;
 		SURFEL::ObjectGraph *pObjects;

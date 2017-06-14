@@ -229,6 +229,7 @@ namespace RVL
 		virtual ~PSGM();
 		//void Create();
 		void CreateParamList(CRVLMem *pMem);
+		void Init(char *cfgFileName);
 		void Init(Mesh *pMesh);
 		void Interpret(
 			Mesh *pMesh,
@@ -277,8 +278,8 @@ namespace RVL
 		
 		//Recomended,
 		//Visualizes chosen hypotheses 0-6 for each segment on the scene, activated when pressed "c":
-		void AddOneModelToVisualizer(Visualizer *pVisualizer, int iMatch, int iRank, bool align);
-
+		void AddOneModelToVisualizer(Visualizer *pVisualizer, int iMatch, int iRank, bool align, bool useTG = false);
+		
 		//Visualizes GT models on the scene, activated when pressed "g":
 		void AddGTModelsToVisualizer(Visualizer *pVisualizer);
 		
@@ -341,6 +342,7 @@ namespace RVL
 		void MatchTGs();
 		void AddSegmentMatches(
 			int iCluster,
+			RECOG::PSGM_::MatchInstance **ppFirstMatch,
 			Space3DGrid<RECOG::PSGM_::Hypothesis, float> &HSpace,
 			Array<int> &iMergingCandidates);
 		bool IsFlat(
@@ -349,10 +351,10 @@ namespace RVL
 			float &d,
 			Array<int> PtArray);
 		void DetectGroundPlane(SURFEL::ObjectGraph *pObjects);
-		bool GravityReferenceFrame(
+		bool GravityReferenceFrames(
 			QList<QLIST::Index> surfelList,
-			float *RGC,
-			float &varX);
+			RECOG::CTISet *pCTISet,
+			CRVLMem *pMem_);
 		int CTIs(
 			QList<QLIST::Index> surfelList,
 			Array<int> iVertexArray,
@@ -361,8 +363,10 @@ namespace RVL
 			RECOG::CTISet *pCTISet,
 			CRVLMem *pMem);
 		void CTIs(
+			int iModel,
 			SURFEL::ObjectGraph *pObjects,
-			RECOG::CTISet *pCTISet);
+			RECOG::CTISet *pCTISet,
+			CRVLMem *pMem);
 		void FitModel(
 			Array<int> iVertexArray,
 			RECOG::PSGM_::ModelInstance *pModelInstance,
@@ -471,6 +475,11 @@ namespace RVL
 		void BoundingBoxSize(
 			RECOG::PSGM_::ModelInstance *pBoundingBox,
 			float *size);
+		std::vector<int> GetHypothesesCollisionConsensus(float thr);	//Filko
+		bool CheckHypothesesCollision(int firstHyp, int secondHyp, float thr); //Filko
+		float GetObjectTransparencyRatio(vtkSmartPointer<vtkPolyData> object, unsigned short *depthImg, float depthThr, int width, int height, float c_fu, float c_fv, float c_uc, float c_vc); //Filko
+		void FilterHypothesesUsingTransparency(float tranThr, float depthThr, bool verbose = false); //Filko
+		vtkSmartPointer<vtkPolyData> GetPoseCorrectedVisibleModel(int iMatch); //Filko
 
 	private:
 		void Clusters();
@@ -510,10 +519,18 @@ namespace RVL
 	public:
 		CRVLParameterList ParamList;
 		DWORD mode;
+		DWORD problem;
 		CRVLMem *pMem;
 		CRVLMem *pMem0;
+		void *vpMeshBuilder;
+		bool(*LoadMesh)(void *vpMeshBuilder,
+			char *FileName,
+			Mesh *pMesh,
+			bool bSavePLY);
 		PlanarSurfelDetector *pSurfelDetector;
+		void *vpObjectDetector;
 		SurfelGraph *pSurfels;
+		SURFEL::ObjectGraph *pObjects;
 		Mesh *pMesh;
 		RECOG::PSGM_::DisplayData displayData;
 		Array<RECOG::PSGM_::Cluster *> clusters;
@@ -572,6 +589,7 @@ namespace RVL
 		std::map<int, vtkSmartPointer<vtkPolyData>> vtkModelDB;
 		std::map<int, vtkSmartPointer<vtkPolyData>> vtkRMSEModelDB; //Vidovic
 		std::map<int, vtkSmartPointer<vtkPolyData>> segmentN_PD; //neighbourhood
+		unsigned short * depthImg; //Current scene depth image // Filko
 
 				
 		//Petra & Ivan
