@@ -6,6 +6,8 @@
 #include <pcl/io/ply_io.h>
 #include <pcl/surface/vtk_smoothing/vtk_utils.h>
 #include <pcl/surface/organized_fast_mesh.h>
+#include <pcl/surface/gp3.h>
+#include <pcl/surface/poisson.h>
 #include <pcl/filters/fast_bilateral.h>
 #include <pcl/features/normal_3d_omp.h>
 #include "RVLCore2.h"
@@ -97,6 +99,10 @@ void PCLMeshBuilder::CreateMesh(
 	pOFM->reconstruct(mesh);	// Conditions for adding a triangle are defined in function isShadowed in organized_fast_mesh.h.
 	// This function is applied to endpoints of every triangle edge.
 	// The meaning of most of the parameters of OrganizedFastMesh method can be understood from the code of this function.
+
+	//pcl::GreedyProjectionTriangulation<pcl::PointXYZRGBA> greedyProjectionTriangulation;
+
+	//pcl::Poisson<pcl::PointXYZRGBA> poissonSurfaceReconstruction;
 
 	// Add normals to mesh
 
