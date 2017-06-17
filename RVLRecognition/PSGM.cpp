@@ -29,7 +29,9 @@
 //#define RVLPSGM_CTIMESH_DEBUG
 //#define RVLPSGM_MATCHTGS_CREATE_SCENE_TG
 //#define RVLPSGM_MATCHTGS_CREATE_SCENE_VG
+#ifndef RVLVERSION_170601
 #define RVLPSGM_MATCHCTI_MATCH_MATRIX		// 170601: OFF
+#endif
 #define RVLPSGM_MATCH_HYPOTHESIS_LOG
 
 using namespace RVL;
@@ -3205,7 +3207,8 @@ void PSGM::Learn(
 
 			saveDBSequenceFile = true;
 
-			mesh.LoadPolyDataFromPLY(modelFilePath);
+			//mesh.LoadPolyDataFromPLY(modelFilePath);
+			LoadMesh(vpMeshBuilder, modelFilePath, &mesh, true);
 
 			SetSceneFileName(modelFilePath);
 

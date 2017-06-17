@@ -54,6 +54,8 @@
 
 #define RVLPLANARSURFELDETECTOR_VERSION_0	0
 
+//#define RVLVERSION_170601
+
 #define RVLPLANARSURFELDETECTOR_GET_NEXT_EDGE(pEdgeList, iPt, pEdgePtr, side, map, iNeighborPt, pEdge, OppID, WID, GID, BID)\
 {\
 	do\
