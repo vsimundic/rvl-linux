@@ -6,6 +6,8 @@
 #include <pcl/io/ply_io.h>
 #include <pcl/surface/vtk_smoothing/vtk_utils.h>
 #include <pcl/surface/organized_fast_mesh.h>
+#include <pcl/surface/gp3.h>
+#include <pcl/surface/poisson.h>
 #include <pcl/filters/fast_bilateral.h>
 #include <pcl/features/normal_3d_omp.h>
 #include "RVLCore2.h"
@@ -44,66 +46,116 @@ void PCLMeshBuilder::CreateMesh(
 	pcl::PointCloud<pcl::PointXYZRGBA>::Ptr PC,
 	pcl::PolygonMesh &mesh)
 {
-	pcl::PointCloud<pcl::PointXYZRGBA>::Ptr PC_;
-
-	int i;
-
-	// Bilateral filtering
-
-	if (flags & RVLPCLMESHBUILDER_FLAG_BILATERAL_FILTER)
+	if (flags & RVLPCLMESHBUILDER_FLAG_ORGANIZED_PC)
 	{
-		pcl::FastBilateralFilter<pcl::PointXYZRGBA> *pBilateralFilter = (pcl::FastBilateralFilter<pcl::PointXYZRGBA> *)vpBilateralFilter;
+		pcl::PointCloud<pcl::PointXYZRGBA>::Ptr PC_;
 
-		pBilateralFilter->setSigmaS((float)sigmaS);
-		pBilateralFilter->setSigmaR((float)sigmaR);
+		int i;
 
-		pBilateralFilter->setInputCloud(PC);
+		// Bilateral filtering
 
-		pBilateralFilter->applyFilter(FPC);
+		if (flags & RVLPCLMESHBUILDER_FLAG_BILATERAL_FILTER)
+		{
+			pcl::FastBilateralFilter<pcl::PointXYZRGBA> *pBilateralFilter = (pcl::FastBilateralFilter<pcl::PointXYZRGBA> *)vpBilateralFilter;
 
-		PC_ = { boost::make_shared<pcl::PointCloud<pcl::PointXYZRGBA>>(FPC) };
+			pBilateralFilter->setSigmaS((float)sigmaS);
+			pBilateralFilter->setSigmaR((float)sigmaR);
+
+			pBilateralFilter->setInputCloud(PC);
+
+			pBilateralFilter->applyFilter(FPC);
+
+			PC_ = { boost::make_shared<pcl::PointCloud<pcl::PointXYZRGBA>>(FPC) };
+		}
+		else
+			PC_ = PC;
+
+		// Compute normals
+
+		pcl::search::OrganizedNeighbor<pcl::PointXYZRGBA>::Ptr tree(new pcl::search::OrganizedNeighbor<pcl::PointXYZRGBA>());
+
+		pcl::NormalEstimationOMP<pcl::PointXYZRGBA, pcl::Normal> *pNormalEstimator = (pcl::NormalEstimationOMP<pcl::PointXYZRGBA, pcl::Normal> *)vpNormalEstimator;
+
+		pNormalEstimator->setRadiusSearch((float)normalEstR);
+		pNormalEstimator->setInputCloud(PC_);
+		pNormalEstimator->setSearchMethod(tree);
+		pNormalEstimator->compute(N);
+
+		for (i = 0; i < N.points.size(); i++)
+			if (!isfinite(N.points[i].normal_x))
+			{
+				N.points[i].normal_x = 0.0f;
+				N.points[i].normal_y = 0.0f;
+				N.points[i].normal_z = 0.0f;
+				N.points[i].curvature = 0.0f;
+			}
+
+
+		// Create OrganizedFastMesh
+
+		pcl::OrganizedFastMesh<pcl::PointXYZRGBA> *pOFM = (pcl::OrganizedFastMesh<pcl::PointXYZRGBA> *)vpOFM;
+
+		pOFM->setTriangulationType(pcl::OrganizedFastMesh<pcl::PointXYZRGBA>::TRIANGLE_ADAPTIVE_CUT);
+
+		pOFM->setInputCloud(PC_);
+
+		pOFM->reconstruct(mesh);	// Conditions for adding a triangle are defined in function isShadowed in organized_fast_mesh.h.
+		// This function is applied to endpoints of every triangle edge.
+		// The meaning of most of the parameters of OrganizedFastMesh method can be understood from the code of this function.
+
+		// Add normals to mesh
+
+		//pcl::toPCLPointCloud2(*N, N2);
+		pcl::toPCLPointCloud2(N, N2);
+		pcl::concatenateFields(N2, mesh.cloud, aux);
+		mesh.cloud = aux;
 	}
 	else
-		PC_ = PC;
+	{
+		pcl::NormalEstimationOMP<pcl::PointXYZRGBA, pcl::Normal> *pNormalEstimator = (pcl::NormalEstimationOMP<pcl::PointXYZRGBA, pcl::Normal> *)vpNormalEstimator;
 
-	// Compute normals
+		pNormalEstimator->setRadiusSearch((float)normalEstR);
+		pNormalEstimator->setInputCloud(PC);
 
-	pcl::search::OrganizedNeighbor<pcl::PointXYZRGBA>::Ptr tree(new pcl::search::OrganizedNeighbor<pcl::PointXYZRGBA>());
+		pcl::search::KdTree<pcl::PointXYZRGBA>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZRGBA>());
 
-	pcl::NormalEstimationOMP<pcl::PointXYZRGBA, pcl::Normal> *pNormalEstimator = (pcl::NormalEstimationOMP<pcl::PointXYZRGBA, pcl::Normal> *)vpNormalEstimator;
+		pNormalEstimator->setSearchMethod(tree);
+		pNormalEstimator->compute(N);
 
-	pNormalEstimator->setRadiusSearch((float)normalEstR);
-	pNormalEstimator->setInputCloud(PC_);
-	pNormalEstimator->setSearchMethod(tree);
-	pNormalEstimator->compute(N);
+		pcl::PCLPointCloud2 PCN2;
+		pcl::toPCLPointCloud2(N, N2);
+		pcl::PCLPointCloud2 PC2;
+		pcl::toPCLPointCloud2(*PC, PC2);
+		pcl::concatenateFields(PC2, N2, PCN2);
 
-	for (i = 0; i < N.points.size(); i++)
-		if (!isfinite(N.points[i].normal_x))
-		{
-		N.points[i].normal_x = 0.0f;
-		N.points[i].normal_y = 0.0f;
-		N.points[i].normal_z = 0.0f;
-		N.points[i].curvature = 0.0f;
-		}
+		pcl::PointCloud<pcl::PointNormal>::Ptr PCN(new pcl::PointCloud<pcl::PointNormal>());
 
-	// Create OrganizedFastMesh
+		pcl::fromPCLPointCloud2(PCN2, *PCN);
 
-	pcl::OrganizedFastMesh<pcl::PointXYZRGBA> *pOFM = (pcl::OrganizedFastMesh<pcl::PointXYZRGBA> *)vpOFM;
+		//print_info("Using parameters: depth %d, solverDivide %d, isoDivide %d\n", depth, solver_divide, iso_divide);
 
-	pOFM->setTriangulationType(pcl::OrganizedFastMesh<pcl::PointXYZRGBA>::TRIANGLE_ADAPTIVE_CUT);
+		pcl::Poisson<pcl::PointNormal> poisson;
+		poisson.setDepth(8);
+		poisson.setSolverDivide(8);
+		poisson.setIsoDivide(8);
+		poisson.setPointWeight(4.0f);
+		poisson.setInputCloud(PCN);
 
-	pOFM->setInputCloud(PC_);
-	
-	pOFM->reconstruct(mesh);	// Conditions for adding a triangle are defined in function isShadowed in organized_fast_mesh.h.
-	// This function is applied to endpoints of every triangle edge.
-	// The meaning of most of the parameters of OrganizedFastMesh method can be understood from the code of this function.
+		poisson.reconstruct(mesh);
 
-	// Add normals to mesh
+		pcl::PointCloud<pcl::PointXYZRGBA>::Ptr meshPC(new pcl::PointCloud<pcl::PointXYZRGBA>());
 
-	//pcl::toPCLPointCloud2(*N, N2);
-	pcl::toPCLPointCloud2(N, N2);	
-	pcl::concatenateFields(N2, mesh.cloud, aux);
-	mesh.cloud = aux;
+		pcl::fromPCLPointCloud2(mesh.cloud, *meshPC);
+
+		pNormalEstimator->setInputCloud(meshPC);
+		pNormalEstimator->compute(N);
+		pcl::toPCLPointCloud2(N, N2);
+
+		pcl::concatenateFields(N2, mesh.cloud, aux);
+		mesh.cloud = aux;
+	}
+
+	///
 }
 
 bool PCLMeshBuilder::CreateMesh(

@@ -29,7 +29,9 @@
 //#define RVLPSGM_CTIMESH_DEBUG
 //#define RVLPSGM_MATCHTGS_CREATE_SCENE_TG
 //#define RVLPSGM_MATCHTGS_CREATE_SCENE_VG
-//#define RVLPSGM_MATCHCTI_MATCH_MATRIX		// 170601: OFF
+#ifndef RVLVERSION_170601
+#define RVLPSGM_MATCHCTI_MATCH_MATRIX		// 170601: OFF
+#endif
 #define RVLPSGM_MATCH_HYPOTHESIS_LOG
 
 using namespace RVL;
@@ -42,6 +44,7 @@ PSGM::PSGM()
 	bZeroRFDescriptor = false;
 	bGTRFDescriptors = false;
 	bMatchRANSAC = false;
+	bWholeMeshCluster = false;
 
 	nDominantClusters = 1;
 	kNoise = 1.2f;
@@ -95,6 +98,9 @@ PSGM::PSGM()
 	sceneSegmentMatches.Element = NULL;
 	sceneSegmentMatchesArray.Element = NULL;
 	sceneSegmentMatchesArray.n = 0;
+	bestSceneSegmentMatches.Element = NULL;
+	bestSceneSegmentMatchesArray.Element = NULL;
+	bestSceneSegmentMatchesArray.n = 0;
 
 	//nSamples = 20; //Vidovic
 	stdNoise = 2; //Vidovic
@@ -183,6 +189,8 @@ PSGM::~PSGM()
 	//RVL_DELETE_ARRAY(matchMatrix.Element);
 	RVL_DELETE_ARRAY(sceneSegmentMatches.Element);
 	RVL_DELETE_ARRAY(sceneSegmentMatchesArray.Element);
+	RVL_DELETE_ARRAY(bestSceneSegmentMatches.Element);
+	RVL_DELETE_ARRAY(bestSceneSegmentMatchesArray.Element);
 
 	//Vidovic
 	int iSSegment;
@@ -265,6 +273,7 @@ void PSGM::CreateParamList(CRVLMem *pMem)
 	pParamData = ParamList.AddParam("PSGM.kReferenceSurfelSize", RVLPARAM_TYPE_FLOAT, &kReferenceSurfelSize);
 	pParamData = ParamList.AddParam("PSGM.kReferenceTangentSize", RVLPARAM_TYPE_FLOAT, &kReferenceTangentSize);
 	pParamData = ParamList.AddParam("PSGM.baseSeparationAngle", RVLPARAM_TYPE_FLOAT, &baseSeparationAngle);
+	pParamData = ParamList.AddParam("PSGM.wholeMeshCluster", RVLPARAM_TYPE_BOOL, &bWholeMeshCluster);
 	//pParamData = ParamList.AddParam("PSGM.edgeTangentAngle", RVLPARAM_TYPE_FLOAT, &edgeTangentAngle);
 	pParamData = ParamList.AddParam("ModelDataBase", RVLPARAM_TYPE_STRING, &modelDataBase); //Vidovic
 	pParamData = ParamList.AddParam("ModelsInDataBase", RVLPARAM_TYPE_STRING, &modelsInDataBase); //Vidovic
@@ -360,11 +369,24 @@ void PSGM::Interpret(
 
 	pSurfels->DetectVertices(pMesh);
 
-	// Cluster surfels into convex surfaces.
+	/// Create clusters.
 
-	printf("Detect convex clusters.\n");
-	
-	Clusters();
+	if (bWholeMeshCluster)
+	{
+		// Create a single cluster from the whole mesh.
+
+		WholeMeshCluster();
+	}
+	else
+	{
+		// Cluster surfels into convex surfaces.
+
+		printf("Detect convex clusters.\n");
+
+		Clusters();
+	}
+
+	///
 
 	// Fit model.
 
@@ -2071,6 +2093,66 @@ void PSGM::Clusters()
 	delete[] surfelBuff2.Element;	
 }
 
+void PSGM::WholeMeshCluster()
+{
+	RVL_DELETE_ARRAY(clusterMap);
+
+	clusterMap = new int[pSurfels->NodeArray.n];
+
+	memset(clusterMap, 0, pSurfels->NodeArray.n * sizeof(int));
+
+	RVL_DELETE_ARRAY(clusterMem);
+
+	clusterMem = new RECOG::PSGM_::Cluster;
+
+	RECOG::PSGM_::Cluster *pCluster = clusterMem;
+
+	clusters.n = 0;
+
+	RVL_DELETE_ARRAY(clusterSurfelMem);
+
+	clusterSurfelMem = new int[pSurfels->NodeArray.n];
+
+	pCluster->iSurfelArray.Element = clusterSurfelMem;
+
+	RVL_DELETE_ARRAY(clusterVertexMem);
+
+	clusterVertexMem = new int[pSurfels->nVertexSurfelRelations];
+
+	pCluster->iVertexArray.Element = clusterVertexMem;
+
+	int iSurfel;
+	Surfel* pSurfel;
+
+	for (iSurfel = 0; iSurfel < pSurfels->NodeArray.n; iSurfel++)
+	{
+		pSurfel = pSurfels->NodeArray.Element + iSurfel;
+
+		pCluster->iSurfelArray.Element[iSurfel] = iSurfel;
+
+		pCluster->size += pSurfel->size;
+	}
+
+	pCluster->iSurfelArray.n = pSurfels->NodeArray.n;
+
+	int iVertex;
+
+	for (iVertex = 0; iVertex < pSurfels->vertexArray.n; iVertex++)
+		pCluster->iVertexArray.Element[iVertex] = iVertex;
+
+	pCluster->iVertexArray.n = pSurfels->vertexArray.n;
+
+	pCluster->bValid = true;
+
+	RVL_DELETE_ARRAY(clusters.Element);
+
+	clusters.Element = new RECOG::PSGM_::Cluster *;
+
+	clusters.Element[0] = pCluster;
+
+	clusters.n = 1;
+}
+
 void PSGM::CreateTemplate66()
 {
 	float h = 0.25f * PI;
@@ -3085,87 +3167,88 @@ void PSGM::Learn(
 
 	if (problem == RVLRECOGNITION_PROBLEM_SHAPE_INSTANCE_DETECTION)
 	{
-	FileSequenceLoader modelsLoader;
-	FileSequenceLoader dbLoader;
+		FileSequenceLoader modelsLoader;
+		FileSequenceLoader dbLoader;
 
-	char modelFilePath[200];
-	char modelFileName[200];
+		char modelFilePath[200];
+		char modelFileName[200];
 
-	Mesh mesh;
+		Mesh mesh;
 
-	//int iCluster;
-	int nClusters, currentModelID;
+		//int iCluster;
+		int nClusters, currentModelID;
 
-	//RVL_DELETE_ARRAY(modelDataBase);
-	//RVL_DELETE_ARRAY(modelsInDataBase);
+		//RVL_DELETE_ARRAY(modelDataBase);
+		//RVL_DELETE_ARRAY(modelsInDataBase);
 
-	MTGSet.Clear();
+		MTGSet.Clear();
 
-	if (!modelDataBase)
-		modelDataBase = "modelDB.dat";
+		if (!modelDataBase)
+			modelDataBase = "modelDB.dat";
 
-	if (!modelsInDataBase)
-		modelsInDataBase = "DBModels.txt";
+		if (!modelsInDataBase)
+			modelsInDataBase = "DBModels.txt";
 
-	modelsLoader.Init(modelSequenceFileName);
-	dbLoader.Init(modelsInDataBase);
+		modelsLoader.Init(modelSequenceFileName);
+		dbLoader.Init(modelsInDataBase);
 
-	FILE *fp = fopen(modelDataBase, "a");
+		FILE *fp = fopen(modelDataBase, "a");
 
-	bool saveDBSequenceFile = false;
+		bool saveDBSequenceFile = false;
 
-	printf("Model DB creation started...\n");
+		printf("Model DB creation started...\n");
 
-	while (modelsLoader.GetNext(modelFilePath, modelFileName))
-	{
-		if (ModelExistInDB(modelFileName, dbLoader))
-			continue;
-
-		printf("\nProcessing model %s!\n", modelFileName);
-
-		saveDBSequenceFile = true;
-
-		mesh.LoadPolyDataFromPLY(modelFilePath);
-
-		SetSceneFileName(modelFilePath);
-
-		currentModelID = dbLoader.GetLastModelID() + 1;
-
-		Interpret(&mesh, currentModelID);
-
-		nClusters = RVLMIN(clusters.n, nDominantClusters);
-
-		//Add vtkPolyData to vtkModelDB
-		vtkModelDB.insert(std::make_pair(currentModelID, mesh.pPolygonData));
-
-		SaveModelInstances(fp, currentModelID);
-
-		dbLoader.AddModel(currentModelID, modelFilePath, modelFileName);
-
-		if (visualizer)
+		while (modelsLoader.GetNext(modelFilePath, modelFileName))
 		{
-			pSurfels->NodeColors(SelectionColor);
-			InitDisplay(visualizer, &mesh, SelectionColor);
-			Display();
-			visualizer->Run();
+			if (ModelExistInDB(modelFileName, dbLoader))
+				continue;
 
-			visualizer->renderer->RemoveAllViewProps();
+			printf("\nProcessing model %s!\n", modelFileName);
+
+			saveDBSequenceFile = true;
+
+			//mesh.LoadPolyDataFromPLY(modelFilePath);
+			LoadMesh(vpMeshBuilder, modelFilePath, &mesh, true);
+
+			SetSceneFileName(modelFilePath);
+
+			currentModelID = dbLoader.GetLastModelID() + 1;
+
+			Interpret(&mesh, currentModelID);
+
+			nClusters = RVLMIN(clusters.n, nDominantClusters);
+
+			//Add vtkPolyData to vtkModelDB
+			vtkModelDB.insert(std::make_pair(currentModelID, mesh.pPolygonData));
+
+			SaveModelInstances(fp, currentModelID);
+
+			dbLoader.AddModel(currentModelID, modelFilePath, modelFileName);
+
+			if (visualizer)
+			{
+				pSurfels->NodeColors(SelectionColor);
+				InitDisplay(visualizer, &mesh, SelectionColor);
+				Display();
+				visualizer->Run();
+
+				visualizer->renderer->RemoveAllViewProps();
+			}
 		}
+
+		printf("Model DB creation completed!\n");
+
+		if (saveDBSequenceFile)
+			SaveModelID(dbLoader);
+
+		fclose(fp);
+
+		char *TGFileName = RVLCreateFileName(modelDataBase, ".dat", -1, ".tgr");
+
+		MTGSet.Save(TGFileName);
+
+		delete[] TGFileName;
 	}
-
-	printf("Model DB creation completed!\n");
-
-	if (saveDBSequenceFile)
-		SaveModelID(dbLoader);
-
-	fclose(fp);
-
-	char *TGFileName = RVLCreateFileName(modelDataBase, ".dat", -1, ".tgr");
-
-	MTGSet.Save(TGFileName);
-
-	delete[] TGFileName;
-}
 	else if (problem == RVLRECOGNITION_PROBLEM_CLASSIFICATION)
 	{
 		ObjectDetector *pObjectDetector = (ObjectDetector *)vpObjectDetector;
@@ -4643,6 +4726,8 @@ void PSGM::Match()
 	
 	sceneSegmentMatches.Element = new Array<SortIndex<float>>[nClusters];
 
+	sceneSegmentMatches.n = nClusters;
+
 	int nMatches = CTISet.pCTI.n * MCTISet.pCTI.n;
 
 	if (nMatches > sceneSegmentMatchesArray.n)
@@ -4654,6 +4739,25 @@ void PSGM::Match()
 		sceneSegmentMatchesArray.Element = new SortIndex<float>[sceneSegmentMatchesArray.n];
 	}
 
+	RVL_DELETE_ARRAY(bestSceneSegmentMatches.Element);
+
+	bestSceneSegmentMatches.Element = new Array<SortIndex<float>>[nClusters];
+
+	bestSceneSegmentMatches.n = nClusters;
+
+	int nBestMatchesPerCluster = 10;
+
+	int nBestMatchesTotal = nBestMatchesPerCluster * nClusters;
+
+	if (nBestMatchesTotal > bestSceneSegmentMatchesArray.n)
+	{
+		RVL_DELETE_ARRAY(bestSceneSegmentMatchesArray.Element);
+
+		bestSceneSegmentMatchesArray.n = nBestMatchesTotal;
+
+		bestSceneSegmentMatchesArray.Element = new SortIndex<float>[bestSceneSegmentMatchesArray.n];
+	}
+
 	// main loop
 
 	PSGM_::MatchInstance **ppFirstMatch;
@@ -4663,7 +4767,7 @@ void PSGM::Match()
 	for (iSCluster = 0; iSCluster < nClusters; iSCluster++)
 		//iSCluster = 5;		// Only for debugging purpose!!!
 	{
-		printf("%d/%d", iSCluster + 1, nClusters);
+		printf("%d/%d\n", iSCluster + 1, nClusters);
 
 		sceneSegmentMatches.Element[iSCluster].n = 0;
 
@@ -4698,6 +4802,23 @@ void PSGM::Match()
 
 			AddSegmentMatches(iSCluster, ppFirstMatch, HSpace, iMergingCandidates);
 		}
+
+		//// Only for debugging purpose!!!
+
+		//FILE *fp = fopen("tmp.txt", "w");
+
+		//for (int i = 0; i < sceneSegmentMatches.Element[iSCluster].n; i++)
+		//	fprintf(fp, "%d\t%f\n", sceneSegmentMatches.Element[iSCluster].Element[i].idx, sceneSegmentMatches.Element[iSCluster].Element[i].cost);
+
+		//fclose(fp);
+
+		////
+
+		bestSceneSegmentMatches.Element[iSCluster].Element = bestSceneSegmentMatchesArray.Element + nBestMatchesPerCluster * iSCluster;
+
+		Min<SortIndex<float>, float>(sceneSegmentMatches.Element[iSCluster], nBestMatchesPerCluster, bestSceneSegmentMatches.Element[iSCluster]);
+
+		BubbleSort<SortIndex<float>>(bestSceneSegmentMatches.Element[iSCluster]);
 	}
 
 	delete[] CTIInterval;
@@ -4751,8 +4872,7 @@ void PSGM::Match()
 
 	QLIST::CreatePtrArray<RECOG::PSGM_::MatchInstance>(pCTImatches, &pCTImatchesArray);
 
-#ifdef RVLPSGM_MATCHCTI_MATCH_MATRIX
-#else
+#ifndef RVLPSGM_MATCHCTI_MATCH_MATRIX
 	SortScoreMatchMatrix();
 #endif
 
@@ -5410,8 +5530,8 @@ void PSGM::AddSegmentMatches(
 
 	while (pMatch)
 	{
-		if (pMatch->ID == 77)
-			int debug = 0;
+		//if (pMatch->ID == 12134)
+		//	int debug = 0;
 
 		X = pMatch->R;
 		Z = pMatch->R + 6;
@@ -5466,11 +5586,9 @@ void PSGM::AddSegmentMatches(
 
 	Array<PSGM_::Hypothesis *> hypothesisArray;
 
-	HSpace.GetData(hypothesisArray);
+	HSpace.GetData(hypothesisArray);	
 
-	sceneSegmentMatches.Element[iCluster].n = hypothesisArray.n;
-
-	SortIndex<float> *pMatchIdx = sceneSegmentMatches.Element[iCluster].Element;
+	SortIndex<float> *pMatchIdx = sceneSegmentMatches.Element[iCluster].Element + sceneSegmentMatches.Element[iCluster].n;
 
 	PSGM_::Hypothesis **ppHypothesis = hypothesisArray.Element;
 
@@ -5478,9 +5596,14 @@ void PSGM::AddSegmentMatches(
 	{
 		pHypothesis_ = *ppHypothesis;
 
+		//if (pHypothesis_->iMatch == 174)
+		//	int debug = 0;
+
 		pMatchIdx->idx = pHypothesis_->iMatch;
 		pMatchIdx->cost = pHypothesis_->score;
 	}
+
+	sceneSegmentMatches.Element[iCluster].n += hypothesisArray.n;
 
 	HSpace.Clear();
 
