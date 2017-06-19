@@ -7,7 +7,7 @@
 //#define PSGM_CALCULATE_PROBABILITY //Vidovic
 #define RVLPSGM_EVALUATION_PRINT_INFO //Vidovic
 #define RVLPSGM_MATCH_USING_SEGMENT_GT //Vidovic
-#define RVLPSGM_SAVE_MATCHES //Vidovic
+//#define RVLPSGM_SAVE_MATCHES //Vidovic
 #define RVLPSGM_MATCH_SIMILARITY_MEASURE_MEAN_SQUARE_DISTANCE									1
 #define RVLPSGM_MATCH_SIMILARITY_MEASURE_MAX_ABS_DISTANCE										2
 #define RVLPSGM_MATCH_SIMILARITY_MEASURE_SATURATED_SQUARE_DISTANCE_INVISIBILITY_PENAL			3
@@ -94,8 +94,8 @@ namespace RVL
 				int iMCTI;
 				int iMS;
 				int iSS;
-				float R[9];
-				float t[3];
+				float R[9];			//rotation after CTI match
+				float t[3];			//translation after VTI match
 				float tMatch[3];
 				float E;
 				float score;
@@ -108,11 +108,11 @@ namespace RVL
 				float gndDistance;
 				// Petra
 				double cost_ICP; 
-				float T_ICP[16]; //transformation between current and ICP pose
-				float RICP_[9]; //transformation between current and ICP pose
-				float tICP_[3]; //transformation between current and ICP pose
-				float RICP[9]; //Pose after ICP
-				float tICP[3]; //Pose after ICP
+				//float T_ICP[16]; //transformation between current and ICP pose
+				//float RICP_[9]; //transformation between current and ICP pose
+				//float tICP_[3]; //transformation between current and ICP pose
+				float RICP[9];		//final pose after ICP - Vidovic
+				float tICP[3];		//final pose after ICP - Vidovic
 				double cost_NN;
 				// end Petra
 				MatchInstance *pNext;
@@ -480,6 +480,8 @@ namespace RVL
 		float GetObjectTransparencyRatio(vtkSmartPointer<vtkPolyData> object, unsigned short *depthImg, float depthThr, int width, int height, float c_fu, float c_fv, float c_uc, float c_vc); //Filko
 		void FilterHypothesesUsingTransparency(float tranThr, float depthThr, bool verbose = false); //Filko
 		vtkSmartPointer<vtkPolyData> GetPoseCorrectedVisibleModel(int iMatch); //Filko
+		void GetTransparencyAndCollisionConsensus(Visualizer *pVisualizer = NULL); //Vidovic
+		void EvaluateConsensusMatches(float &precision, float &recall, bool verbose = false); //Vidovic
 
 	private:
 		void Clusters();
@@ -590,6 +592,9 @@ namespace RVL
 		std::map<int, vtkSmartPointer<vtkPolyData>> vtkRMSEModelDB; //Vidovic
 		std::map<int, vtkSmartPointer<vtkPolyData>> segmentN_PD; //neighbourhood
 		unsigned short * depthImg; //Current scene depth image // Filko
+		std::vector<int> transparentHypotheses; //Vidovic
+		std::vector<int> consensusHypotheses; //Vidovic
+		std::vector<int> noCollisionHypotheses; //Vidovic
 
 				
 		//Petra & Ivan

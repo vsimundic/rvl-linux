@@ -533,6 +533,7 @@ int main(int argc, char ** argv)
 
 				printf("Scene %s...\n", filePath);
 
+
 				recognition.SetSceneFileName(filePath);
 				//recognition.InterpretCTIS(&mesh);
 
@@ -721,14 +722,24 @@ int main(int argc, char ** argv)
 				recognition.CreateScoreMatchMatrixICP();
 				recognition.FilterHypothesesUsingTransparency(0.15, 10, true);
 
-				//evaluate ICP
-				recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, fpPoseError, fpnotFirstInfo, fpnotFirstPoseErr, 10, true);
+				//Colision check - Vidovic
+				std::vector<int> noCollisionHypotheses = recognition.GetHypothesesCollisionConsensus(10);
 
-				//Load models without decimation
-				recognition.LoadModelMeshDB(modelSequenceFileName, &recognition.vtkRMSEModelDB, false);
+				//Get transparency and collision consensus
+				recognition.GetTransparencyAndCollisionConsensus(&visualizer);
+
+				//Evaluate consesus matches
+				float precision, recall;
+				recognition.EvaluateConsensusMatches(precision, recall, true);
+
+				//evaluate ICP
+				//recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, fpPoseError, fpnotFirstInfo, fpnotFirstPoseErr, 10, true);
+
+				//Load models without decimation (used for calculatin RMSE)
+				//recognition.LoadModelMeshDB(modelSequenceFileName, &recognition.vtkRMSEModelDB, false);
 
 				//Calculate RMSE
-				recognition.RMSE(fpRMSE, true);
+				//recognition.RMSE(fpRMSE, false);
 #else
 				recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, fpPoseError, fpnotFirstInfo, fpnotFirstPoseErr, 7);
 #endif
