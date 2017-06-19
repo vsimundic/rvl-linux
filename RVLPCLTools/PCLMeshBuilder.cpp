@@ -6,6 +6,8 @@
 #include <pcl/io/ply_io.h>
 #include <pcl/surface/vtk_smoothing/vtk_utils.h>
 #include <pcl/surface/organized_fast_mesh.h>
+#include <pcl/surface/gp3.h>
+#include <pcl/surface/poisson.h>
 #include <pcl/filters/fast_bilateral.h>
 #include <pcl/features/normal_3d_omp.h>
 #include "RVLCore2.h"
@@ -44,6 +46,8 @@ void PCLMeshBuilder::CreateMesh(
 	pcl::PointCloud<pcl::PointXYZRGBA>::Ptr PC,
 	pcl::PolygonMesh &mesh)
 {
+	if (flags & RVLPCLMESHBUILDER_FLAG_ORGANIZED_PC)
+	{
 	pcl::PointCloud<pcl::PointXYZRGBA>::Ptr PC_;
 
 	int i;
@@ -86,6 +90,7 @@ void PCLMeshBuilder::CreateMesh(
 		N.points[i].curvature = 0.0f;
 		}
 
+
 	// Create OrganizedFastMesh
 
 	pcl::OrganizedFastMesh<pcl::PointXYZRGBA> *pOFM = (pcl::OrganizedFastMesh<pcl::PointXYZRGBA> *)vpOFM;
@@ -102,8 +107,55 @@ void PCLMeshBuilder::CreateMesh(
 
 	//pcl::toPCLPointCloud2(*N, N2);
 	pcl::toPCLPointCloud2(N, N2);	
+		pcl::concatenateFields(N2, mesh.cloud, aux);
+		mesh.cloud = aux;
+	}
+	else
+	{
+		pcl::NormalEstimationOMP<pcl::PointXYZRGBA, pcl::Normal> *pNormalEstimator = (pcl::NormalEstimationOMP<pcl::PointXYZRGBA, pcl::Normal> *)vpNormalEstimator;
+
+		pNormalEstimator->setRadiusSearch((float)normalEstR);
+		pNormalEstimator->setInputCloud(PC);
+
+		pcl::search::KdTree<pcl::PointXYZRGBA>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZRGBA>());
+
+		pNormalEstimator->setSearchMethod(tree);
+		pNormalEstimator->compute(N);
+
+		pcl::PCLPointCloud2 PCN2;
+		pcl::toPCLPointCloud2(N, N2);
+		pcl::PCLPointCloud2 PC2;
+		pcl::toPCLPointCloud2(*PC, PC2);
+		pcl::concatenateFields(PC2, N2, PCN2);
+
+		pcl::PointCloud<pcl::PointNormal>::Ptr PCN(new pcl::PointCloud<pcl::PointNormal>());
+
+		pcl::fromPCLPointCloud2(PCN2, *PCN);
+
+		//print_info("Using parameters: depth %d, solverDivide %d, isoDivide %d\n", depth, solver_divide, iso_divide);
+
+		pcl::Poisson<pcl::PointNormal> poisson;
+		poisson.setDepth(8);
+		poisson.setSolverDivide(8);
+		poisson.setIsoDivide(8);
+		poisson.setPointWeight(4.0f);
+		poisson.setInputCloud(PCN);
+
+		poisson.reconstruct(mesh);
+
+		pcl::PointCloud<pcl::PointXYZRGBA>::Ptr meshPC(new pcl::PointCloud<pcl::PointXYZRGBA>());
+
+		pcl::fromPCLPointCloud2(mesh.cloud, *meshPC);
+
+		pNormalEstimator->setInputCloud(meshPC);
+		pNormalEstimator->compute(N);
+		pcl::toPCLPointCloud2(N, N2);
+
 	pcl::concatenateFields(N2, mesh.cloud, aux);
 	mesh.cloud = aux;
+}
+
+	///
 }
 
 bool PCLMeshBuilder::CreateMesh(

@@ -707,20 +707,22 @@ int main(int argc, char ** argv)
 				//	cloud_destination->points[i].normal_y = mesh.NodeArray.Element[i].N[1];
 				//	cloud_destination->points[i].normal_z = mesh.NodeArray.Element[i].N[2];
 				//}
-
 				//pcl::search::KdTree<pcl::PointXYZINormal>::Ptr kdtree = boost::make_shared<pcl::search::KdTree<pcl::PointXYZINormal>>((new pcl::search::KdTree<pcl::PointXYZINormal>));
 				//kdtree->setInputCloud(cloud_destination); //using this doesn't really improve anything
-
 				//recognition.CalculateICPCost(PCLICP, PCLICPVariants::Point_to_plane, &kdtree);
+
 				GenerateSegmentNeighbourhood(&recognition, 0.1);
 				recognition.CalculateNNCost(&visualizer, PCLICP, PCLICPVariants::Point_to_plane);
 				
+#ifdef RVLVERSION_170601
+				recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, fpPoseError, fpnotFirstInfo, fpnotFirstPoseErr, 10, true);
+#else
 				//Transparency check
 				recognition.CreateScoreMatchMatrixICP();
 				recognition.FilterHypothesesUsingTransparency(0.15, 10, true);
+#endif
 
-				//evaluate ICP
-				//recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, fpPoseError, fpnotFirstInfo, fpnotFirstPoseErr, 10, true);
+//#endif
 #else
 				//recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, fpPoseError, fpnotFirstInfo, fpnotFirstPoseErr, 7);
 #endif
@@ -866,3 +868,51 @@ int main(int argc, char ** argv)
 
 	return 0;
 }
+
+// Only for debugging purpose!!!
+//
+//void RVLMinTest()
+//{
+//	Array<SortIndex<float>> dataArray;
+//
+//	dataArray.n = 10000;
+//	dataArray.Element = new SortIndex<float>[dataArray.n];
+//
+//	int nTopData = 10;
+//
+//	Array<SortIndex<float>> topDataArray;
+//
+//	topDataArray.n = nTopData;
+//	topDataArray.Element = new SortIndex<float>[topDataArray.n];
+//
+//	FILE *fpSrc, *fpTgt;
+//
+//	for (int i = 0; i < 20; i++)
+//	{
+//		fpSrc = fopen("a.txt", "w");
+//
+//		for (int j = 0; j < dataArray.n; j++)
+//		{
+//			dataArray.Element[j].idx = j;
+//			dataArray.Element[j].cost = (float)rand() / (float)RAND_MAX;
+//
+//			fprintf(fpSrc, "%f\n", dataArray.Element[j].cost);
+//		}
+//
+//		fclose(fpSrc);
+//
+//		Min<SortIndex<float>, float>(dataArray, nTopData, topDataArray);
+//
+//		fpTgt = fopen("b.txt", "w");
+//
+//		for (int j = 0; j < topDataArray.n; j++)
+//			fprintf(fpSrc, "%d\t%f\n", topDataArray.Element[j].idx, topDataArray.Element[j].cost);
+//
+//		fclose(fpTgt);
+//
+//		int debug = 0;
+//	}
+//
+//	delete[] dataArray.Element;
+//	delete[] topDataArray.Element;
+//}
