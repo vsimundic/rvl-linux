@@ -14,7 +14,9 @@
 #define RVLPSGM_MATCH_SIMILARITY_MEASURE_MEAN_SATURATED_SQUARE_DISTANCE							4
 #define RVLPSGM_MATCH_SIMILARITY_MEASURE_MEDIAN_ABS_DISTANCE									5
 //#define RVLPSGM_RANSAC
+#ifdef RVLVERSION_170601
 #define RVLPSGM_ICP		// 170601: ON
+#endif
 #define RVLPSGM_ICP_SIMILARITY_MEASURE_COSTNN				0
 #define RVLPSGM_ICP_SIMILARITY_MEASURE_SATURATED_SCORE		1
 
@@ -485,6 +487,7 @@ namespace RVL
 
 	private:
 		void Clusters();
+		void WholeMeshCluster();
 		void CreateTemplate66();
 		void CreateTemplateBox();
 		void TemplateMatrix(Array2D<float> &A);
@@ -560,6 +563,7 @@ namespace RVL
 		bool bGTRFDescriptors;
 		bool bMatchRANSAC; //Vidovic
 		bool bGnd;
+		bool bWholeMeshCluster;
 		Array<RECOG::PSGM_::ModelInstance> modelInstanceDB; //Vidovic
 		QList<RECOG::PSGM_::MatchInstance> CTImatches; //Vidovic
 		Array<RECOG::PSGM_::MatchInstance*> pCTImatchesArray; //Vidovic
@@ -570,6 +574,8 @@ namespace RVL
 		Array<Array<SortIndex<float>>> scoreMatchMatrixICP;
 		Array<Array<SortIndex<float>>> sceneSegmentMatches;
 		Array<SortIndex<float>> sceneSegmentMatchesArray;
+		Array<Array<SortIndex<float>>> bestSceneSegmentMatches;
+		Array<SortIndex<float>> bestSceneSegmentMatchesArray;
 		//Array2D<Array<int>> matchMatrix;
 		//int *matchMatrixMem;
 		DWORD scoreCalculation; //Vidovic - TO DO (Implement read from cfg file)
