@@ -707,20 +707,22 @@ int main(int argc, char ** argv)
 				//	cloud_destination->points[i].normal_y = mesh.NodeArray.Element[i].N[1];
 				//	cloud_destination->points[i].normal_z = mesh.NodeArray.Element[i].N[2];
 				//}
-
 				//pcl::search::KdTree<pcl::PointXYZINormal>::Ptr kdtree = boost::make_shared<pcl::search::KdTree<pcl::PointXYZINormal>>((new pcl::search::KdTree<pcl::PointXYZINormal>));
 				//kdtree->setInputCloud(cloud_destination); //using this doesn't really improve anything
-
 				//recognition.CalculateICPCost(PCLICP, PCLICPVariants::Point_to_plane, &kdtree);
+
 				GenerateSegmentNeighbourhood(&recognition, 0.1);
 				recognition.CalculateNNCost(&visualizer, PCLICP, PCLICPVariants::Point_to_plane);
-				
+
+#ifdef RVLVERSION_170601
+				recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, fpPoseError, fpnotFirstInfo, fpnotFirstPoseErr, 10, true);
+#else
 				//Transparency check
 				recognition.CreateScoreMatchMatrixICP();
 				recognition.FilterHypothesesUsingTransparency(0.15, 10, true);
+#endif
 
-				//evaluate ICP
-				//recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, fpPoseError, fpnotFirstInfo, fpnotFirstPoseErr, 10, true);
+//#endif
 #else
 				//recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, fpPoseError, fpnotFirstInfo, fpnotFirstPoseErr, 7);
 #endif
