@@ -6456,6 +6456,10 @@ void PSGM::EvaluateMatchesByScore(
 	int nBestSegments,
 	bool evaluateICP)
 {
+#ifdef RVLPSGM_EVALUATION_PRINT_INFO
+	cout << "Matches evaluation..." << "\n";;
+#endif
+
 	float precision, recall;
 
 	int graphID = 0;
@@ -6741,6 +6745,10 @@ void PSGM::EvaluateMatchesByScore(
 		}
 
 	}
+
+#ifdef RVLPSGM_EVALUATION_PRINT_INFO
+	cout << "---------------------------------------------------\n";
+#endif
 
 	delete[] firstTP;
 	delete[] firstTPScore;
@@ -8771,7 +8779,7 @@ void PSGM::CalculateNNCost(Visualizer *pVisualizer, RVL::PSGM::ICPfunction ICPFu
 			//pMatch->cost_NN += tConst * groundPlaneDistance(iModel, icpT2d);
 			pMatch->gndDistance = groundPlaneDistance(iModel, icpT2d);
 
-#ifdef PSGM_GROUND_PLANE_DISTANCE_PENALIZATION
+#ifdef RVLPSGM_GROUND_PLANE_DISTANCE_PENALIZATION
 			pMatch->cost_NN += tConst * RVLABS(pMatch->gndDistance) * pMatch->cost_NN;
 #endif
 
@@ -8938,7 +8946,8 @@ void PSGM::RMSE(FILE *fp, bool allTPHypotheses)
 
 	iMatch = scoreMatchMatrixICP.Element[0].Element[0].idx;
 
-	iGTS = pCTImatchesArray.Element[iMatch]->iScene;
+	//iGTS = pCTImatchesArray.Element[iMatch]->iScene;
+	iGTS = iScene - 1;
 	nGTModels = pECCVGT->GT.Element[iGTS].n;
 
 	printf("RMSE for TP hypothesis:\n");
@@ -8952,24 +8961,28 @@ void PSGM::RMSE(FILE *fp, bool allTPHypotheses)
 			for (iSegment = 0; iSegment < scoreMatchMatrix.n; iSegment++)
 			{
 				iMatch = scoreMatchMatrixICP.Element[iSegment].Element[0].idx;
-				pMatch = pCTImatchesArray.Element[iMatch];
 
-				iMCTI = pMatch->iMCTI;
-				iMatchedModel = MCTISet.pCTI.Element[iMCTI]->iModel;
-				iSSegment = CTISet.pCTI.Element[pMatch->iSCTI]->iCluster;
-
-				iSegmentGT = iGTS * nDominantClusters + iSSegment;
-
-				if (iMatchedModel == segmentGT.Element[iSegmentGT].iModel && iMatchedModel == pGT->iModel)
+				if (iMatch != -1)
 				{
-					RVLSCALEMX3X3(pGT->R, 1000, RGT);
-					RVLSCALE3VECTOR(pGT->t, 1000, tGT);
-					RVLHTRANSFMX(RGT, tGT, TGT);
-					RVLHTRANSFMX(pMatch->RICP, pMatch->tICP, T);
+					pMatch = pCTImatchesArray.Element[iMatch];
 
-					RMSE_ = RMSE(iMatchedModel, TGT, T);
-					printf("Segment %d matched with model %d. RMSE for TP is: %f\n", iSegment, iMatchedModel, RMSE_);
-					fprintf(fp, "%d\t%d\t%d\t%f\n", iGTS, iSSegment, iMatchedModel, RMSE_);
+					iMCTI = pMatch->iMCTI;
+					iMatchedModel = MCTISet.pCTI.Element[iMCTI]->iModel;
+					iSSegment = CTISet.pCTI.Element[pMatch->iSCTI]->iCluster;
+
+					iSegmentGT = iGTS * nDominantClusters + iSSegment;
+
+					if (iMatchedModel == segmentGT.Element[iSegmentGT].iModel && iMatchedModel == pGT->iModel)
+					{
+						RVLSCALEMX3X3(pGT->R, 1000, RGT);
+						RVLSCALE3VECTOR(pGT->t, 1000, tGT);
+						RVLHTRANSFMX(RGT, tGT, TGT);
+						RVLHTRANSFMX(pMatch->RICP, pMatch->tICP, T);
+
+						RMSE_ = RMSE(iMatchedModel, TGT, T);
+						printf("Segment %d matched with model %d. RMSE for TP is: %f\n", iSegment, iMatchedModel, RMSE_);
+						fprintf(fp, "%d\t%d\t%d\t%f\n", iGTS, iSSegment, iMatchedModel, RMSE_);
+					}
 				}
 			}
 		}
@@ -8988,44 +9001,48 @@ void PSGM::RMSE(FILE *fp, bool allTPHypotheses)
 				for (iHypothesis = 0; iHypothesis < nBestMatches; iHypothesis++)
 				{
 					iMatch = scoreMatchMatrixICP.Element[iSegment].Element[iHypothesis].idx;
-					pMatch = pCTImatchesArray.Element[iMatch];
 
-					iMCTI = pMatch->iMCTI;
-					iMatchedModel = MCTISet.pCTI.Element[iMCTI]->iModel;
-					iSSegment = CTISet.pCTI.Element[pMatch->iSCTI]->iCluster;
-
-					iSegmentGT = iGTS * nDominantClusters + iSSegment;
-
-					if (segmentGT.Element[iSegmentGT].iModel == pGT->iModel)
+					if (iMatch != -1)
 					{
-						RVLSCALEMX3X3(pGT->R, 1000, RGT);
-						RVLSCALE3VECTOR(pGT->t, 1000, tGT);
-						RVLHTRANSFMX(RGT, tGT, TGT);
-						RVLHTRANSFMX(pMatch->RICP, pMatch->tICP, T);
+						pMatch = pCTImatchesArray.Element[iMatch];
 
-						RMSE_ = RMSE(iMatchedModel, TGT, T);
+						iMCTI = pMatch->iMCTI;
+						iMatchedModel = MCTISet.pCTI.Element[iMCTI]->iModel;
+						iSSegment = CTISet.pCTI.Element[pMatch->iSCTI]->iCluster;
 
-						if (iMatchedModel == segmentGT.Element[iSegmentGT].iModel)
+						iSegmentGT = iGTS * nDominantClusters + iSSegment;
+
+						if (segmentGT.Element[iSegmentGT].iModel == pGT->iModel)
 						{
-							printf("Segment %d matched with model %d on %d. place (TP). RMSE is: %f\n", iSegment, iMatchedModel, iHypothesis, RMSE_);
-							fprintf(fp, "%d\t%d\t%d\t%f\t%d\n", iGTS, iSSegment, iMatchedModel, RMSE_, 1);
-							TPHypothesis = true;
+							RVLSCALEMX3X3(pGT->R, 1000, RGT);
+							RVLSCALE3VECTOR(pGT->t, 1000, tGT);
+							RVLHTRANSFMX(RGT, tGT, TGT);
+							RVLHTRANSFMX(pMatch->RICP, pMatch->tICP, T);
 
-							//printing distance from the ground plane - TEST
-							//fprintf(fp, "%d\t%d\t%d\t%d\t%f\t%d\n", iGTS, iSSegment, iHypothesis, iMatchedModel, pMatch->gndDistance, 1);
-}
-						else
-						{
-							printf("Segment %d matched with model %d on %d. place (FP). RMSE is: %f\n", iSegment, iMatchedModel, iHypothesis, RMSE_);
-							fprintf(fp, "%d\t%d\t%d\t%f\t%d\n", iGTS, iSSegment, iMatchedModel, RMSE_, 0);
+							RMSE_ = RMSE(iMatchedModel, TGT, T);
 
-							//printing distance from the ground plane - TEST
-							//fprintf(fp, "%d\t%d\t%d\t%d\t%f\t%d\n", iGTS, iSSegment, iHypothesis, iMatchedModel, pMatch->gndDistance, 0);
+							if (iMatchedModel == segmentGT.Element[iSegmentGT].iModel)
+							{
+								printf("Segment %d matched with model %d on %d. place (TP). RMSE is: %f\n", iSegment, iMatchedModel, iHypothesis, RMSE_);
+								fprintf(fp, "%d\t%d\t%d\t%f\t%d\n", iGTS, iSSegment, iMatchedModel, RMSE_, 1);
+								TPHypothesis = true;
+
+								//printing distance from the ground plane - TEST
+								//fprintf(fp, "%d\t%d\t%d\t%d\t%f\t%d\n", iGTS, iSSegment, iHypothesis, iMatchedModel, pMatch->gndDistance, 1);
+							}
+							else
+							{
+								printf("Segment %d matched with model %d on %d. place (FP). RMSE is: %f\n", iSegment, iMatchedModel, iHypothesis, RMSE_);
+								fprintf(fp, "%d\t%d\t%d\t%f\t%d\n", iGTS, iSSegment, iMatchedModel, RMSE_, 0);
+
+								//printing distance from the ground plane - TEST
+								//fprintf(fp, "%d\t%d\t%d\t%d\t%f\t%d\n", iGTS, iSSegment, iHypothesis, iMatchedModel, pMatch->gndDistance, 0);
+							}
 						}
-					}
 
-					if (TPHypothesis)
-						break;
+						if (TPHypothesis)
+							break;
+					}
 				}
 			}
 		}
@@ -10738,6 +10755,9 @@ void PSGM::GetTransparencyAndCollisionConsensus(Visualizer *pVisualizer)
 
 void PSGM::EvaluateConsensusMatches(float &precision, float &recall, bool verbose)
 {
+	if (verbose)
+		cout << "Consensus matches evaluation for scene "<< iScene - 1 << "..." << "\n";
+
 	int iMatch, iHypothesis, iMCTI, iSCTI, iMatchedModel, iSSegment, iSegmentGT;
 	int TP_ = 0, FP_ = 0, FN_ = 0;
 	bool TPMatch;
@@ -10781,6 +10801,7 @@ void PSGM::EvaluateConsensusMatches(float &precision, float &recall, bool verbos
 	{
 		cout << "Precision: " << precision << "\n" << "Recall: " << recall << "\n";
 		cout << "TP: " << TP_ << "\tFP: " << FP_ << "\tFN: " << FN_ << "\n";
+		cout << "---------------------------------------------------\n";
 	}
 }
 //END Vidovic
