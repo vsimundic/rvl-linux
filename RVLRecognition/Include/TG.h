@@ -40,6 +40,7 @@ namespace RVL
 			BYTE *mFlags;
 			float *N;
 			float csNThr;
+			//Array<int> iOutNodeArray;
 		};
 
 		int ConnectNodesRG(
@@ -48,6 +49,13 @@ namespace RVL
 			SURFEL::VertexEdge *pEdge,
 			VertexGraph *pVertexGraph,
 			TGConnectNodesRGData *pData);
+
+		//float ConnectNodesRG(
+		//	int iVertex,
+		//	int iParentVertex,
+		//	SURFEL::VertexEdge *pEdge,
+		//	VertexGraph *pVertexGraph,
+		//	TGConnectNodesRGData *pData);
 
 		class TG : public Graph < TGNode, TGEdge, GRAPH::EdgePtr2<TGEdge> >
 		{

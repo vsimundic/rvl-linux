@@ -18,6 +18,103 @@
 #include "TGSet.h"
 #include <Eigen\Eigenvalues>
 
+namespace RVL
+{
+	namespace QLIST
+	{
+		// Structure QLIST::SortIndex2 shoule be moved to RVLQListArray.h.
+
+		template <typename T> struct SortIndex2
+		{
+			int Idx;
+			T cost;
+			Index2 *pNext;
+			Index2 **pPtrToThis;
+		};
+	}
+
+	// Function Dijkstra() should be moved to Graph.h.
+
+	// Function Dijkstra() requires an array iNodeMap of data structures of type QLIST::SortIndex2<CostType>,
+	// which is initialized so that idx field of each element contains the index of this element in the array iNodeMap
+	// and cost field is negative except for the elements contained in piNodeQueue, for which cost is 0.
+	// This function is never tested!
+
+	template<typename GraphType, typename NodeType, typename EdgeType, typename EdgePtrType, typename DataType, typename CostType,
+		CostType(*f)(int, int, EdgeType *, GraphType *, DataType *)>
+	void Dijkstra(
+		GraphType *pGraph, 
+		DataType *pData, 
+		QList<QLIST::SortIndex2<CostType>> *piNodeQueue, 
+		QLIST::SortIndex2<CostType> *iNodeMap)
+	{
+		int iNode, iNode_;
+		EdgeType *pEdge;
+		EdgePtrType *pEdgePtr;
+		NodeType *pNode;
+		CostType cost;
+		QLIST::SortIndex2<CostType> *piNode_, *piNode__;
+		QLIST::SortIndex2<CostType> **ppiNode__;
+		bool bInsertNodeInQueue;
+
+		while (piNodeQueue->pFirst)
+		{
+			iNode = piNodeQueue->pFirst->Idx;
+			
+			pNode = pGraph->NodeArray.Element + iNode;
+
+			RVLQLIST_REMOVE_ENTRY2(piNodeQueue, piNodeQueue->pFirst, QLIST::SortIndex2<CostType>);
+
+			pEdgePtr = pNode->EdgeList.pFirst;
+
+			while (pEdgePtr)
+			{
+				RVLPCSEGMENT_GRAPH_GET_NEIGHBOR(iNode, pEdgePtr, pEdge, iNode_);
+
+				cost = f(iNode_, iNode, pEdge, pGraph, pData);
+
+				if (cost >= 0)
+				{
+					bInsertNodeInQueue = true;
+
+					piNode_ = iNodeMap + iNode_;
+
+					if (piNode_->cost >= 0)
+					{
+						if (piNode_->cost > cost)
+							RVLQLIST_REMOVE_ENTRY2(piNodeQueue, piNode_, QLIST::SortIndex2<CostType>);
+						else
+							bInsertNodeInQueue = false;
+					}
+
+					if (bInsertNodeInQueue)
+					{
+						piNode_->cost = cost;
+
+						ppiNode__ = &(piNodeQueue->pFirst);
+
+						piNode__ = piNodeQueue->pFirst;
+
+						while (piNode__)
+						{
+							if (piNode__->cost > cost)
+								break;
+
+							ppiNode__ = &(piNode__->pNext);
+
+							piNode__ = *ppiNode__;
+						}
+
+						RVLQLIST_INSERT_ENTRY2(ppiNode__, piNode_);
+					}
+				}
+
+				pEdgePtr = pEdgePtr->pNext;
+			}	// for every neighborint node
+		}	// region growing loop
+	}
+}
+
 using namespace RVL;
 using namespace RECOG;
 
@@ -255,7 +352,8 @@ void TG::Create(
 
 	TGConnectNodesRGData RGData;
 
-	RGData.mFlags = new BYTE[pVertexGraph->NodeArray.n];
+	RGData.mFlags = new BYTE[pVertexGraph->NodeArray.n];	// 0x01 - vertex in iVertexArray
+															// 0x02 - vertex in vertexBuff
 
 	memset(RGData.mFlags, 0, pVertexGraph->NodeArray.n);
 
@@ -320,8 +418,8 @@ void TG::Create(
 
 	for (iNode = 0; iNode < NodeArray.n; iNode++)
 	{
-		if (iNode == 19)
-			int debug = 0;
+		//if (iNode == 19)
+		//	int debug = 0;
 
 		pNode = NodeArray.Element + iNode;
 
@@ -399,6 +497,33 @@ int RECOG::ConnectNodesRG(
 	else
 		return 0;
 }
+
+//float RECOG::ConnectNodesRG(
+//	int iVertex,
+//	int iParentVertex,
+//	SURFEL::VertexEdge *pEdge,
+//	VertexGraph *pVertexGraph,
+//	TGConnectNodesRGData *pData)
+//{
+//	if (!(pData->mFlags[iVertex] & 0x01))
+//		return -1.0f;
+//
+//	float csN = RVLDOTPRODUCT3(pEdge->N, pData->N);
+//
+//	if (csN >= pData->csNThr)
+//	{
+//		if (!(pData->mFlags[iVertex] & 0x02))
+//		{
+//			pData->iOutNodeArray.Element[pData->iOutNodeArray.n++] = iVertex;
+//
+//			pData->mFlags[iVertex] |= 0x02;
+//		}
+//
+//		return csN;
+//	}
+//	else
+//		return -1.0f;
+//}
 
 void TG::Match(
 	SurfelGraph *pSurfels,
