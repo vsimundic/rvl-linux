@@ -10804,4 +10804,29 @@ void PSGM::EvaluateConsensusMatches(float &precision, float &recall, bool verbos
 		cout << "---------------------------------------------------\n";
 	}
 }
+
+RECOG::PSGM_::MatchInstance* PSGM::GetMatch(int matchID)
+{
+	return pCTImatchesArray.Element[matchID];
+}
+
+RECOG::PSGM_::ModelInstance* PSGM::GetMCTI(int iMCTI)
+{
+	return MCTISet.pCTI.Element[iMCTI];
+}
+
+RECOG::PSGM_::ModelInstance* PSGM::GetMCTI(RECOG::PSGM_::MatchInstance *pMatch)
+{
+	return MCTISet.pCTI.Element[pMatch->iMCTI];
+}
+
+RECOG::PSGM_::ModelInstance* PSGM::GetSCTI(int iSCTI)
+{
+	return CTISet.pCTI.Element[iSCTI];
+}
+
+RECOG::PSGM_::ModelInstance* PSGM::GetSCTI(RECOG::PSGM_::MatchInstance *pMatch)
+{
+	return CTISet.pCTI.Element[pMatch->iSCTI];
+}
 //END Vidovic

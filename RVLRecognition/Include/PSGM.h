@@ -485,6 +485,11 @@ namespace RVL
 		vtkSmartPointer<vtkPolyData> GetPoseCorrectedVisibleModel(int iMatch); //Filko
 		void GetTransparencyAndCollisionConsensus(Visualizer *pVisualizer = NULL); //Vidovic
 		void EvaluateConsensusMatches(float &precision, float &recall, bool verbose = false); //Vidovic
+		RECOG::PSGM_::MatchInstance* GetMatch(int matchID); //Vidovic
+		RECOG::PSGM_::ModelInstance* GetMCTI(int iMCTI); //Vidovic
+		RECOG::PSGM_::ModelInstance* GetMCTI(RECOG::PSGM_::MatchInstance *pMatch); //Vidovic
+		RECOG::PSGM_::ModelInstance* GetSCTI(int iSCTI); //Vidovic
+		RECOG::PSGM_::ModelInstance* GetSCTI(RECOG::PSGM_::MatchInstance *pMatch); //Vidovic
 
 	private:
 		void Clusters();
