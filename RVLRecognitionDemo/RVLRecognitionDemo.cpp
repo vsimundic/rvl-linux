@@ -47,6 +47,8 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 #define PSGM_MATCHES_SCORE_COMPARE
 //#define PSGM_LOAD_CTI_FROM_FILE
 //#define PSGM_RECOGNITION_VISUALIZE_SCENE
+#define RVLPSGM_TRANSPARENCY_AND_COLLISION
+#define RVLPSGM_RMSE_CALCULATION
 
 #define RVLRECOGNITION_DEMO_FLAG_SAVE_PLY			0x00000001
 //END VIDOVIC
@@ -716,16 +718,13 @@ int main(int argc, char ** argv)
 
 				GenerateSegmentNeighbourhood(&recognition, 0.1);
 				recognition.CalculateNNCost(&visualizer, PCLICP, PCLICPVariants::Point_to_plane);
-				
-#ifdef RVLVERSION_170601
-				recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, fpPoseError, fpnotFirstInfo, fpnotFirstPoseErr, 10, true);
-#else
+
+#ifdef RVLPSGM_TRANSPARENCY_AND_COLLISION
 				//Transparency check
 				recognition.CreateScoreMatchMatrixICP();
 				recognition.FilterHypothesesUsingTransparency(0.15, 10, true);
-#endif
 
-				//Colision check - Vidovic
+				//Colision check
 				std::vector<int> noCollisionHypotheses = recognition.GetHypothesesCollisionConsensus(10);
 
 				//Get transparency and collision consensus
@@ -734,15 +733,21 @@ int main(int argc, char ** argv)
 				//Evaluate consesus matches
 				float precision, recall;
 				recognition.EvaluateConsensusMatches(precision, recall, true);
+#endif
 
+#ifdef RVLVERSION_170601
 				//evaluate ICP
-				//recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, fpPoseError, fpnotFirstInfo, fpnotFirstPoseErr, 10, true);
+				recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, fpPoseError, fpnotFirstInfo, fpnotFirstPoseErr, 10, true);
+#endif
 
+#ifdef RVLPSGM_RMSE_CALCULATION
 				//Load models without decimation (used for calculatin RMSE)
-				//recognition.LoadModelMeshDB(modelSequenceFileName, &recognition.vtkRMSEModelDB, false);
+				recognition.LoadModelMeshDB(modelSequenceFileName, &recognition.vtkRMSEModelDB, false);
 
 				//Calculate RMSE
-				//recognition.RMSE(fpRMSE, false);
+				recognition.RMSE(fpRMSE, false);
+#endif
+
 #else
 				recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, fpPoseError, fpnotFirstInfo, fpnotFirstPoseErr, 7);
 #endif

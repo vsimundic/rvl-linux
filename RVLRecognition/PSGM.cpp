@@ -8770,7 +8770,10 @@ void PSGM::CalculateNNCost(Visualizer *pVisualizer, RVL::PSGM::ICPfunction ICPFu
 
 			//pMatch->cost_NN += tConst * groundPlaneDistance(iModel, icpT2d);
 			pMatch->gndDistance = groundPlaneDistance(iModel, icpT2d);
-			pMatch->cost_NN += tConst * RVLABS(pMatch->gndDistance) * pMatch->cost_NN;			
+
+#ifdef PSGM_GROUND_PLANE_DISTANCE_PENALIZATION
+			pMatch->cost_NN += tConst * RVLABS(pMatch->gndDistance) * pMatch->cost_NN;
+#endif
 
 				//memcpy(pMatch->T_ICP, icpT2, 16 * sizeof(float));
 
