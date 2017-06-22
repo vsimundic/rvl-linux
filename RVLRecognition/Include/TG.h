@@ -6,6 +6,19 @@
 
 namespace RVL
 {
+	namespace QLIST
+	{
+		// Structure QLIST::SortIndex2 shoule be moved to RVLQListArray.h.
+
+		template <typename T> struct SortIndex2
+		{
+			int Idx;
+			T cost;
+			SortIndex2<T> *pNext;
+			SortIndex2<T> **pPtrToThis;
+		};
+	}
+
 	namespace RECOG
 	{
 		struct TGEdge;
@@ -40,22 +53,23 @@ namespace RVL
 			BYTE *mFlags;
 			float *N;
 			float csNThr;
-			//Array<int> iOutNodeArray;
+			Array<int> iOutNodeArray;
+			QLIST::SortIndex2<float> *iNodeMap;
 		};
 
-		int ConnectNodesRG(
-			int iVertex,
-			int iParentVertex,
-			SURFEL::VertexEdge *pEdge,
-			VertexGraph *pVertexGraph,
-			TGConnectNodesRGData *pData);
-
-		//float ConnectNodesRG(
+		//int ConnectNodesRG(
 		//	int iVertex,
 		//	int iParentVertex,
 		//	SURFEL::VertexEdge *pEdge,
 		//	VertexGraph *pVertexGraph,
 		//	TGConnectNodesRGData *pData);
+
+		float ConnectNodesRG(
+			int iVertex,
+			int iParentVertex,
+			SURFEL::VertexEdge *pEdge,
+			VertexGraph *pVertexGraph,
+			TGConnectNodesRGData *pData);
 
 		class TG : public Graph < TGNode, TGEdge, GRAPH::EdgePtr2<TGEdge> >
 		{

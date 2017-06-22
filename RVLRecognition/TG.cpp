@@ -18,21 +18,19 @@
 #include "TGSet.h"
 #include <Eigen\Eigenvalues>
 
+// Macro RVLQLIST_INSERT_ENTRY2_ should be moved to RVLQListArray.h.
+
+#define RVLQLIST_INSERT_ENTRY2_(ppEntry, pNewEntry)\
+{\
+	pNewEntry->pNext = (*ppEntry);\
+	*ppEntry = pNewEntry;\
+	pNewEntry->pPtrToThis = ppEntry;\
+	if(pNewEntry->pNext)\
+		pNewEntry->pNext->pPtrToThis = &(pNewEntry->pNext);\
+}
+
 namespace RVL
 {
-	namespace QLIST
-	{
-		// Structure QLIST::SortIndex2 shoule be moved to RVLQListArray.h.
-
-		template <typename T> struct SortIndex2
-		{
-			int Idx;
-			T cost;
-			Index2 *pNext;
-			Index2 **pPtrToThis;
-		};
-	}
-
 	// Function Dijkstra() should be moved to Graph.h.
 
 	// Function Dijkstra() requires an array iNodeMap of data structures of type QLIST::SortIndex2<CostType>,
@@ -53,7 +51,7 @@ namespace RVL
 		EdgePtrType *pEdgePtr;
 		NodeType *pNode;
 		CostType cost;
-		QLIST::SortIndex2<CostType> *piNode_, *piNode__;
+		QLIST::SortIndex2<CostType> *piNode, *piNode_, *piNode__;
 		QLIST::SortIndex2<CostType> **ppiNode__;
 		bool bInsertNodeInQueue;
 
@@ -63,7 +61,9 @@ namespace RVL
 			
 			pNode = pGraph->NodeArray.Element + iNode;
 
-			RVLQLIST_REMOVE_ENTRY2(piNodeQueue, piNodeQueue->pFirst, QLIST::SortIndex2<CostType>);
+			piNode = piNodeQueue->pFirst;
+
+			RVLQLIST_REMOVE_ENTRY2(piNodeQueue, piNode, QLIST::SortIndex2<CostType>);
 
 			pEdgePtr = pNode->EdgeList.pFirst;
 
@@ -82,7 +82,7 @@ namespace RVL
 					if (piNode_->cost >= 0)
 					{
 						if (piNode_->cost > cost)
-							RVLQLIST_REMOVE_ENTRY2(piNodeQueue, piNode_, QLIST::SortIndex2<CostType>);
+							RVLQLIST_REMOVE_ENTRY2(piNodeQueue, piNode_, QLIST::SortIndex2<CostType>)
 						else
 							bInsertNodeInQueue = false;
 					}
@@ -105,7 +105,7 @@ namespace RVL
 							piNode__ = *ppiNode__;
 						}
 
-						RVLQLIST_INSERT_ENTRY2(ppiNode__, piNode_);
+						RVLQLIST_INSERT_ENTRY2_(ppiNode__, piNode_);
 					}
 				}
 
@@ -357,9 +357,15 @@ void TG::Create(
 
 	memset(RGData.mFlags, 0, pVertexGraph->NodeArray.n);
 
-	QList<QLIST::Index> *iVertexTGNodeList;
+	QList<QLIST::Index> *iVertexTGNodeList;		// a list which assigns TG nodes to each vertex in pVertexGraph
 
 	iVertexTGNodeList = new QList<QLIST::Index>[pVertexGraph->NodeArray.n];
+
+	QList<QLIST::SortIndex2<float>> iNodeQueue;
+
+	QList<QLIST::SortIndex2<float>> *piNodeQueue = &iNodeQueue;
+
+	RGData.iNodeMap = new QLIST::SortIndex2<float>[pVertexGraph->NodeArray.n];
 
 	QList<QLIST::Index> *piVertexTGNodeList;
 
@@ -372,6 +378,9 @@ void TG::Create(
 		piVertexTGNodeList = iVertexTGNodeList + iVertex;
 
 		RVLQLIST_INIT(piVertexTGNodeList);
+
+		RGData.iNodeMap[iVertex].cost = -1.0f;
+		RGData.iNodeMap[iVertex].Idx = iVertex;
 	}
 		
 	QLIST::Index *iVertexTGNodeMem = new QLIST::Index[NodeArray.n];
@@ -405,16 +414,21 @@ void TG::Create(
 		RVLQLIST_INIT(pEdgeList);
 	}
 
-	RGData.csNThr = 0.8;
+	//RGData.csNThr = 0.8;
 
-	int *vertexBuff = new int[iVertexArray.n];
+	RGData.csNThr = 0.0;
+
+	RGData.iOutNodeArray.Element = new int[pVertexGraph->NodeArray.n];
+
+	//int *vertexBuff = new int[iVertexArray.n];
+
+	//int *piVertexPut, *piVertexFetch, *vertexBuffEnd, *piVertex;
 
 	nEdges = 0;
 
-	int *piVertexPut, *piVertexFetch, *vertexBuffEnd, *piVertex;
-
 	float *N_;
 	int iNode_;
+	QLIST::SortIndex2<float> *piVertex;
 
 	for (iNode = 0; iNode < NodeArray.n; iNode++)
 	{
@@ -425,46 +439,70 @@ void TG::Create(
 
 		RGData.N = A_ + 3 * pNode->i;
 
-		piVertexFetch = piVertexPut = vertexBuff;
+		RGData.iOutNodeArray.n = 0;
 
-		*(piVertexPut++) = pNode->iVertex;
+		RVLQLIST_INIT(piNodeQueue);
 
-		RGData.mFlags[pNode->iVertex] |= 0x02;
+		piVertex = RGData.iNodeMap + pNode->iVertex;
 
-		vertexBuffEnd = RegionGrowing<VertexGraph, SURFEL::Vertex, SURFEL::VertexEdge, GRAPH::EdgePtr2<SURFEL::VertexEdge>, TGConnectNodesRGData,
-			ConnectNodesRG>(pVertexGraph, &RGData, piVertexFetch, piVertexPut);
+		RVLQLIST_ADD_ENTRY2(piNodeQueue, piVertex);
 
-		for (piVertex = vertexBuff; piVertex < vertexBuffEnd; piVertex++)
+		piVertex->cost = 0.0f;
+
+		Dijkstra < VertexGraph, SURFEL::Vertex, SURFEL::VertexEdge, GRAPH::EdgePtr2<SURFEL::VertexEdge>, TGConnectNodesRGData, float,
+			ConnectNodesRG >(pVertexGraph, &RGData, piNodeQueue, RGData.iNodeMap);
+
+		piVertex->cost = -1.0f;
+
+		for (i = 0; i < RGData.iOutNodeArray.n; i++)
 		{
-			iVertex = *piVertex;
+			iVertex = RGData.iOutNodeArray.Element[i];
 
 			RGData.mFlags[iVertex] &= ~0x02;
 
-			piVertexTGNodeList = iVertexTGNodeList + iVertex;
-
-			vertexTGNodeIdx = piVertexTGNodeList->pFirst;
-
-			while (vertexTGNodeIdx)
-			{
-				iNode_ = vertexTGNodeIdx->Idx;
-
-				if (iNode < iNode_)
-				{
-					pNode_ = NodeArray.Element + iNode_;
-
-					N_ = A_ + 3 * pNode_->i;
-
-					if (RVLDOTPRODUCT3(RGData.N, N_) >= RGData.csNThr)
-					{
-						pEdge = ConnectNodes<TGNode, TGEdge, GRAPH::EdgePtr2<TGEdge>>(iNode, iNode_, NodeArray, pMem);
-
-						nEdges++;
-					}
-				}
-					
-				vertexTGNodeIdx = vertexTGNodeIdx->pNext;
-			}
+			RGData.iNodeMap[iVertex].cost = -1.0f;
 		}
+
+		//piVertexFetch = piVertexPut = vertexBuff;
+
+		//*(piVertexPut++) = pNode->iVertex;
+
+		//RGData.mFlags[pNode->iVertex] |= 0x02;
+
+		//vertexBuffEnd = RegionGrowing<VertexGraph, SURFEL::Vertex, SURFEL::VertexEdge, GRAPH::EdgePtr2<SURFEL::VertexEdge>, TGConnectNodesRGData,
+		//	ConnectNodesRG>(pVertexGraph, &RGData, piVertexFetch, piVertexPut);
+
+		//for (piVertex = vertexBuff; piVertex < vertexBuffEnd; piVertex++)
+		//{
+		//	iVertex = *piVertex;
+
+		//	RGData.mFlags[iVertex] &= ~0x02;
+
+		//	piVertexTGNodeList = iVertexTGNodeList + iVertex;
+
+		//	vertexTGNodeIdx = piVertexTGNodeList->pFirst;
+
+		//	while (vertexTGNodeIdx)
+		//	{
+		//		iNode_ = vertexTGNodeIdx->Idx;
+
+		//		if (iNode < iNode_)
+		//		{
+		//			pNode_ = NodeArray.Element + iNode_;
+
+		//			N_ = A_ + 3 * pNode_->i;
+
+		//			if (RVLDOTPRODUCT3(RGData.N, N_) >= RGData.csNThr)
+		//			{
+		//				pEdge = ConnectNodes<TGNode, TGEdge, GRAPH::EdgePtr2<TGEdge>>(iNode, iNode_, NodeArray, pMem);
+
+		//				nEdges++;
+		//			}
+		//		}
+		//			
+		//		vertexTGNodeIdx = vertexTGNodeIdx->pNext;
+		//	}
+		//}
 	}	// for every TG node
 
 	// Free memory.
@@ -472,58 +510,67 @@ void TG::Create(
 	delete[] iVertexTGNodeMem;
 	delete[] iVertexTGNodeList;
 	delete[] RGData.mFlags;
-	delete[] vertexBuff;
+	//delete[] vertexBuff;
+	delete[] RGData.iNodeMap;
 	delete[] A_;
+	delete[] RGData.iOutNodeArray.Element;
 }
 
-int RECOG::ConnectNodesRG(
-	int iVertex,
-	int iParentVertex,
-	SURFEL::VertexEdge *pEdge,
-	VertexGraph *pVertexGraph,
-	TGConnectNodesRGData *pData)
-{
-	if (pData->mFlags[iVertex] != 0x01)
-		return 0;
-
-	float csN = RVLDOTPRODUCT3(pEdge->N, pData->N);
-
-	if (csN >= pData->csNThr)
-	{
-		pData->mFlags[iVertex] |= 0x02;
-
-		return 1;
-	}
-	else
-		return 0;
-}
-
-//float RECOG::ConnectNodesRG(
+//int RECOG::ConnectNodesRG(
 //	int iVertex,
 //	int iParentVertex,
 //	SURFEL::VertexEdge *pEdge,
 //	VertexGraph *pVertexGraph,
 //	TGConnectNodesRGData *pData)
 //{
-//	if (!(pData->mFlags[iVertex] & 0x01))
-//		return -1.0f;
+//	if (pData->mFlags[iVertex] != 0x01)
+//		return 0;
 //
 //	float csN = RVLDOTPRODUCT3(pEdge->N, pData->N);
 //
 //	if (csN >= pData->csNThr)
 //	{
-//		if (!(pData->mFlags[iVertex] & 0x02))
-//		{
-//			pData->iOutNodeArray.Element[pData->iOutNodeArray.n++] = iVertex;
+//		pData->mFlags[iVertex] |= 0x02;
 //
-//			pData->mFlags[iVertex] |= 0x02;
-//		}
-//
-//		return csN;
+//		return 1;
 //	}
 //	else
-//		return -1.0f;
+//		return 0;
 //}
+
+float RECOG::ConnectNodesRG(
+	int iVertex,
+	int iParentVertex,
+	SURFEL::VertexEdge *pEdge,
+	VertexGraph *pVertexGraph,
+	TGConnectNodesRGData *pData)
+{
+	if (!(pData->mFlags[iVertex] & 0x01))
+		return -1.0f;
+
+	float csN = RVLDOTPRODUCT3(pEdge->N, pData->N);
+
+	if (csN >= pData->csNThr)
+	{
+		float cost = 1.0f - csN;
+
+		if (cost > pData->iNodeMap[iParentVertex].cost)
+		{
+			if (!(pData->mFlags[iVertex] & 0x02))
+			{
+				pData->iOutNodeArray.Element[pData->iOutNodeArray.n++] = iVertex;
+
+				pData->mFlags[iVertex] |= 0x02;
+			}
+
+			return cost;
+		}
+		else
+			return -1.0f;
+	}
+	else
+		return -1.0f;
+}
 
 void TG::Match(
 	SurfelGraph *pSurfels,
