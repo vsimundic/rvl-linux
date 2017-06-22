@@ -64,11 +64,187 @@ void VertexGraph::Create(SurfelGraph *pSurfels)
 		RVLQLIST_INIT(pEdgeList);
 	}
 
+	// Remove redundant vertices
+
+	bool *bBelongsToRefVertex = new bool[pSurfels->NodeArray.n];
+
+	memset(bBelongsToRefVertex, 0, pSurfels->NodeArray.n * sizeof(bool));
+	
+	int j, iSurfel_, nCommonSurfels, nRefVertexSurfels;
+
+	for (iVertex = 0; iVertex < NodeArray.n; iVertex++)
+	{
+		pVertex = NodeArray.Element + iVertex;
+
+		//if (pVertex->type & RVLSURFELVERTEX_TYPE_REDUNDANT)
+		//	continue;
+
+		nRefVertexSurfels = pVertex->iSurfelArray.n;
+
+		for (i = 0; i < nRefVertexSurfels; i++)
+		{
+			iSurfel = pVertex->iSurfelArray.Element[i];
+
+			bBelongsToRefVertex[iSurfel] = true;
+		}
+
+		if (bBelongsToRefVertex[2] && bBelongsToRefVertex[8])
+			int debug = 0;
+
+		for (i = 0; i < pVertex->iSurfelArray.n; i++)
+		{
+			iSurfel = pVertex->iSurfelArray.Element[i];
+
+			pVertexList = pSurfels->surfelVertexList.Element + iSurfel;
+
+			pVertexIdx = pVertexList->pFirst;
+
+			while (pVertexIdx)
+			{
+				iVertex_ = pVertexIdx->Idx;
+
+				if (iVertex_ > iVertex)
+				{
+					pVertex_ = NodeArray.Element + iVertex_;
+
+					if (!(pVertex_->type & RVLSURFELVERTEX_TYPE_REDUNDANT))
+					{
+						nCommonSurfels = 0;
+
+						for (j = 0; j < pVertex_->iSurfelArray.n; j++)
+						{
+							iSurfel_ = pVertex_->iSurfelArray.Element[j];
+
+							if (bBelongsToRefVertex[iSurfel_])
+								nCommonSurfels++;
+						}
+
+						if (nCommonSurfels == nRefVertexSurfels && nCommonSurfels == pVertex_->iSurfelArray.n)
+							pVertex_->type |= RVLSURFELVERTEX_TYPE_REDUNDANT;
+					}
+				}
+
+				pVertexIdx = pVertexIdx->pNext;
+			}
+		}
+
+		for (i = 0; i < nRefVertexSurfels; i++)
+		{
+			iSurfel = pVertex->iSurfelArray.Element[i];
+
+			bBelongsToRefVertex[iSurfel] = false;
+		}
+	}	// for every vertex
+
 	// Create edges.	
+
+	QList<SURFEL::VertexEdge> *pEdgeList_ = &edgeList;
+
+	RVLQLIST_INIT(pEdgeList_);
+
+	nEdges = 0;
 
 	bool *bAlreadyConnected = new bool[NodeArray.n];
 
 	memset(bAlreadyConnected, 0, NodeArray.n * sizeof(bool));
+
+	SURFEL::VertexEdge *pEdge;
+	GRAPH::EdgePtr2<SURFEL::VertexEdge> *pEdgePtr;
+
+	for (iVertex = 0; iVertex < NodeArray.n; iVertex++)
+	{
+		pVertex = NodeArray.Element + iVertex;
+
+		if (pVertex->type & RVLSURFELVERTEX_TYPE_REDUNDANT)
+			continue;
+
+		nRefVertexSurfels = pVertex->iSurfelArray.n;
+
+		for (i = 0; i < nRefVertexSurfels; i++)
+		{
+			iSurfel = pVertex->iSurfelArray.Element[i];
+
+			bBelongsToRefVertex[iSurfel] = true;
+		}
+
+		if (bBelongsToRefVertex[2] && bBelongsToRefVertex[8])
+			int debug = 0;
+
+		for (i = 0; i < pVertex->iSurfelArray.n; i++)
+		{
+			iSurfel = pVertex->iSurfelArray.Element[i];
+
+			pVertexList = pSurfels->surfelVertexList.Element + iSurfel;
+
+			pVertexIdx = pVertexList->pFirst;
+
+			while (pVertexIdx)
+			{
+				iVertex_ = pVertexIdx->Idx;
+
+				if (!bAlreadyConnected[iVertex_])
+				{
+					pVertex_ = NodeArray.Element + iVertex_;
+
+					if (!(pVertex_->type & RVLSURFELVERTEX_TYPE_REDUNDANT))
+					{
+						nCommonSurfels = 0;
+
+						for (j = 0; j < pVertex_->iSurfelArray.n; j++)
+						{
+							iSurfel_ = pVertex_->iSurfelArray.Element[j];
+
+							if (bBelongsToRefVertex[iSurfel_])
+								nCommonSurfels++;
+						}
+
+						if (nCommonSurfels == 2 && iVertex < iVertex_)
+						{
+							pEdge = ConnectNodes<SURFEL::Vertex, SURFEL::VertexEdge, GRAPH::EdgePtr2<SURFEL::VertexEdge>>(iVertex, pVertexIdx->Idx,
+								NodeArray, pMem);
+
+							RVLQLIST_ADD_ENTRY(pEdgeList_, pEdge);
+
+							//RVLCOPY3VECTOR(pSurfel->N, pEdge->N);
+
+							nEdges++;
+
+							bAlreadyConnected[iVertex_] = true;
+						}
+					}
+				}
+
+				pVertexIdx = pVertexIdx->pNext;
+			}
+		}
+
+		for (i = 0; i < nRefVertexSurfels; i++)
+		{
+			iSurfel = pVertex->iSurfelArray.Element[i];
+
+			bBelongsToRefVertex[iSurfel] = false;
+		}
+
+		pEdgePtr = pVertex->EdgeList.pFirst;
+
+		while (pEdgePtr)
+		{
+			iVertex_ = RVLPCSEGMENT_GRAPH_GET_OPPOSITE_NODE(pEdgePtr);
+
+			bAlreadyConnected[iVertex_] = false;
+
+			pEdgePtr = pEdgePtr->pNext;
+		}
+	}	// for every vertex
+
+	delete[] bAlreadyConnected;
+	delete[] bBelongsToRefVertex;
+
+#ifdef NEVER		// Old version: each vertex is connected with all vertices sharing a common surfel.
+
+	//bool *bAlreadyConnected = new bool[NodeArray.n];
+
+	//memset(bAlreadyConnected, 0, NodeArray.n * sizeof(bool));
 
 	QList<SURFEL::VertexEdge> *pEdgeList_ = &edgeList;
 
@@ -83,8 +259,8 @@ void VertexGraph::Create(SurfelGraph *pSurfels)
 	{
 		pVertex = NodeArray.Element + iVertex;
 
-		if (iVertex == 217)
-			int debug = 0;
+		//if (iVertex == 217)
+		//	int debug = 0;
 
 		for (i = 0; i < pVertex->iSurfelArray.n; i++)
 		{
@@ -98,7 +274,7 @@ void VertexGraph::Create(SurfelGraph *pSurfels)
 
 			while (pVertexIdx)
 			{
-				if (!bAlreadyConnected[pVertexIdx->Idx])
+				//if (!bAlreadyConnected[pVertexIdx->Idx])
 				{
 					if (iVertex < pVertexIdx->Idx)
 					{
@@ -112,27 +288,27 @@ void VertexGraph::Create(SurfelGraph *pSurfels)
 						nEdges++;
 					}
 
-					bAlreadyConnected[pVertexIdx->Idx] = true;
+					//bAlreadyConnected[pVertexIdx->Idx] = true;
 				}
 
 				pVertexIdx = pVertexIdx->pNext;
 			}
 		}
 
-		pEdgePtr = pVertex->EdgeList.pFirst;
+		//pEdgePtr = pVertex->EdgeList.pFirst;
 
-		while (pEdgePtr)
-		{
-			iVertex_ = RVLPCSEGMENT_GRAPH_GET_OPPOSITE_NODE(pEdgePtr);
+		//while (pEdgePtr)
+		//{
+		//	iVertex_ = RVLPCSEGMENT_GRAPH_GET_OPPOSITE_NODE(pEdgePtr);
 
-			bAlreadyConnected[iVertex_] = false;
+		//	bAlreadyConnected[iVertex_] = false;
 
-			pEdgePtr = pEdgePtr->pNext;
-		}
+		//	pEdgePtr = pEdgePtr->pNext;
+		//}
 	}
 
-	delete[] bAlreadyConnected;
-
+	//delete[] bAlreadyConnected;
+#endif
 }
 
 void VertexGraph::Save(FILE *fp)

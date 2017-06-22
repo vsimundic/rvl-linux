@@ -18,6 +18,8 @@
 #include "TGSet.h"
 #include <Eigen\Eigenvalues>
 
+#define RVLTG_DEBUG
+
 // Macro RVLQLIST_INSERT_ENTRY2_ should be moved to RVLQListArray.h.
 
 #define RVLQLIST_INSERT_ENTRY2_(ppEntry, pNewEntry)\
@@ -33,27 +35,27 @@ namespace RVL
 {
 	// Function Dijkstra() should be moved to Graph.h.
 
-	// Function Dijkstra() requires an array iNodeMap of data structures of type QLIST::SortIndex2<CostType>,
+	// Function Dijkstra() requires an array iNodeMap of data structures of type QLIST::TreeIndex2<CostType>,
 	// which is initialized so that idx field of each element contains the index of this element in the array iNodeMap
 	// and cost field is negative except for the elements contained in piNodeQueue, for which cost is 0.
-	// This function is never tested!
+	// This function is never proven to work!
 
 	template<typename GraphType, typename NodeType, typename EdgeType, typename EdgePtrType, typename DataType, typename CostType,
-		CostType(*f)(int, int, EdgeType *, GraphType *, DataType *)>
-	void Dijkstra(
+		CostType(*f)(int, int, EdgeType *, GraphType *, DataType *, bool &)>
+	bool Dijkstra(
 		GraphType *pGraph, 
 		DataType *pData, 
-		QList<QLIST::SortIndex2<CostType>> *piNodeQueue, 
-		QLIST::SortIndex2<CostType> *iNodeMap)
+		QList<QLIST::TreeIndex2<CostType>> *piNodeQueue,
+		QLIST::TreeIndex2<CostType> *iNodeMap)
 	{
 		int iNode, iNode_;
 		EdgeType *pEdge;
 		EdgePtrType *pEdgePtr;
 		NodeType *pNode;
 		CostType cost;
-		QLIST::SortIndex2<CostType> *piNode, *piNode_, *piNode__;
-		QLIST::SortIndex2<CostType> **ppiNode__;
-		bool bInsertNodeInQueue;
+		QLIST::TreeIndex2<CostType> *piNode, *piNode_, *piNode__;
+		QLIST::TreeIndex2<CostType> **ppiNode__;
+		bool bInsertNodeInQueue, bGoalReached;
 
 		while (piNodeQueue->pFirst)
 		{
@@ -63,7 +65,7 @@ namespace RVL
 
 			piNode = piNodeQueue->pFirst;
 
-			RVLQLIST_REMOVE_ENTRY2(piNodeQueue, piNode, QLIST::SortIndex2<CostType>);
+			RVLQLIST_REMOVE_ENTRY2(piNodeQueue, piNode, QLIST::TreeIndex2<CostType>);
 
 			pEdgePtr = pNode->EdgeList.pFirst;
 
@@ -71,7 +73,10 @@ namespace RVL
 			{
 				RVLPCSEGMENT_GRAPH_GET_NEIGHBOR(iNode, pEdgePtr, pEdge, iNode_);
 
-				cost = f(iNode_, iNode, pEdge, pGraph, pData);
+				cost = f(iNode_, iNode, pEdge, pGraph, pData, bGoalReached);
+
+				if (bGoalReached)
+					return true;
 
 				if (cost >= 0)
 				{
@@ -82,7 +87,7 @@ namespace RVL
 					if (piNode_->cost >= 0)
 					{
 						if (piNode_->cost > cost)
-							RVLQLIST_REMOVE_ENTRY2(piNodeQueue, piNode_, QLIST::SortIndex2<CostType>)
+							RVLQLIST_REMOVE_ENTRY2(piNodeQueue, piNode_, QLIST::TreeIndex2<CostType>)
 						else
 							bInsertNodeInQueue = false;
 					}
@@ -90,6 +95,8 @@ namespace RVL
 					if (bInsertNodeInQueue)
 					{
 						piNode_->cost = cost;
+
+						piNode_->vpEdge = pEdge;
 
 						ppiNode__ = &(piNodeQueue->pFirst);
 
@@ -112,6 +119,8 @@ namespace RVL
 				pEdgePtr = pEdgePtr->pNext;
 			}	// for every neighborint node
 		}	// region growing loop
+
+		return false;
 	}
 }
 
@@ -209,6 +218,9 @@ void TG::Create(
 			//	int debug = 0;
 
 			pVertex = pVertexGraph->NodeArray.Element + iVertex;
+
+			if (pVertex->type & RVLSURFELVERTEX_TYPE_REDUNDANT)
+				continue;
 
 			d = RVLDOTPRODUCT3(N, pVertex->P);
 
@@ -361,17 +373,22 @@ void TG::Create(
 
 	iVertexTGNodeList = new QList<QLIST::Index>[pVertexGraph->NodeArray.n];
 
-	QList<QLIST::SortIndex2<float>> iNodeQueue;
+	QList<QLIST::TreeIndex2<float>> iNodeQueue;
 
-	QList<QLIST::SortIndex2<float>> *piNodeQueue = &iNodeQueue;
+	QList<QLIST::TreeIndex2<float>> *piNodeQueue = &iNodeQueue;
 
-	RGData.iNodeMap = new QLIST::SortIndex2<float>[pVertexGraph->NodeArray.n];
+	RGData.iNodeMap = new QLIST::TreeIndex2<float>[pVertexGraph->NodeArray.n];
 
 	QList<QLIST::Index> *piVertexTGNodeList;
 
 	for (i = 0; i < iVertexArray.n; i++)
 	{
 		iVertex = iVertexArray.Element[i];
+
+		pVertex = pVertexGraph->NodeArray.Element + iVertex;
+
+		if (pVertex->type & RVLSURFELVERTEX_TYPE_REDUNDANT)
+			continue;
 
 		RGData.mFlags[iVertex] = 0x01;
 
@@ -414,21 +431,32 @@ void TG::Create(
 		RVLQLIST_INIT(pEdgeList);
 	}
 
-	//RGData.csNThr = 0.8;
+	RGData.csNThr = 0.8;
+
+#ifdef NEVER
+	Array<int> iNeighborVertices;
+
+	iNeighborVertices.Element = new int[pVertexGraph->NodeArray.n];
+	
+	Array<int> iVertexBuff;
+
+	iVertexBuff.Element = new int[pVertexGraph->NodeArray.n];
 
 	RGData.csNThr = 0.0;
+	RGData.csVThr = 0.8;
+#endif
 
-	RGData.iOutNodeArray.Element = new int[pVertexGraph->NodeArray.n];
+	int *vertexBuff = new int[iVertexArray.n];
 
-	//int *vertexBuff = new int[iVertexArray.n];
-
-	//int *piVertexPut, *piVertexFetch, *vertexBuffEnd, *piVertex;
+	int *piVertexPut, *piVertexFetch, *vertexBuffEnd, *piVertex;
 
 	nEdges = 0;
 
+	//int iVertex_;
 	float *N_;
 	int iNode_;
-	QLIST::SortIndex2<float> *piVertex;
+	//QLIST::TreeIndex2<float> *piVertex;
+	//bool bConnect;
 
 	for (iNode = 0; iNode < NodeArray.n; iNode++)
 	{
@@ -438,6 +466,9 @@ void TG::Create(
 		pNode = NodeArray.Element + iNode;
 
 		RGData.N = A_ + 3 * pNode->i;
+
+#ifdef NEVER
+		RGData.iOutNodeArray.Element = iNeighborVertices.Element;
 
 		RGData.iOutNodeArray.n = 0;
 
@@ -463,46 +494,110 @@ void TG::Create(
 			RGData.iNodeMap[iVertex].cost = -1.0f;
 		}
 
-		//piVertexFetch = piVertexPut = vertexBuff;
+		iNeighborVertices.n = RGData.iOutNodeArray.n;
 
-		//*(piVertexPut++) = pNode->iVertex;
+		for (i = 0; i < iNeighborVertices.n; i++)
+		{
+			iVertex = iNeighborVertices.Element[i];
 
-		//RGData.mFlags[pNode->iVertex] |= 0x02;
+			RGData.iOutNodeArray.Element = iVertexBuff.Element;
 
-		//vertexBuffEnd = RegionGrowing<VertexGraph, SURFEL::Vertex, SURFEL::VertexEdge, GRAPH::EdgePtr2<SURFEL::VertexEdge>, TGConnectNodesRGData,
-		//	ConnectNodesRG>(pVertexGraph, &RGData, piVertexFetch, piVertexPut);
+			piVertexTGNodeList = iVertexTGNodeList + iVertex;
 
-		//for (piVertex = vertexBuff; piVertex < vertexBuffEnd; piVertex++)
-		//{
-		//	iVertex = *piVertex;
+			vertexTGNodeIdx = piVertexTGNodeList->pFirst;
 
-		//	RGData.mFlags[iVertex] &= ~0x02;
+			while (vertexTGNodeIdx)
+			{
+				iNode_ = vertexTGNodeIdx->Idx;
 
-		//	piVertexTGNodeList = iVertexTGNodeList + iVertex;
+				if (iNode < iNode_)
+				{
+					pNode_ = NodeArray.Element + iNode_;
 
-		//	vertexTGNodeIdx = piVertexTGNodeList->pFirst;
+					N_ = A_ + 3 * pNode_->i;
 
-		//	while (vertexTGNodeIdx)
-		//	{
-		//		iNode_ = vertexTGNodeIdx->Idx;
+					if (RVLDOTPRODUCT3(RGData.N, N_) >= RGData.csNThr)
+					{
+						RVLCROSSPRODUCT3(RGData.N, N_, RGData.V);
 
-		//		if (iNode < iNode_)
-		//		{
-		//			pNode_ = NodeArray.Element + iNode_;
+						RGData.iGoalNode = iVertex;
+						RGData.iOutNodeArray.n = 0;
 
-		//			N_ = A_ + 3 * pNode_->i;
+						RVLQLIST_INIT(piNodeQueue);
 
-		//			if (RVLDOTPRODUCT3(RGData.N, N_) >= RGData.csNThr)
-		//			{
-		//				pEdge = ConnectNodes<TGNode, TGEdge, GRAPH::EdgePtr2<TGEdge>>(iNode, iNode_, NodeArray, pMem);
+						piVertex = RGData.iNodeMap + pNode->iVertex;
 
-		//				nEdges++;
-		//			}
-		//		}
-		//			
-		//		vertexTGNodeIdx = vertexTGNodeIdx->pNext;
-		//	}
-		//}
+						RVLQLIST_ADD_ENTRY2(piNodeQueue, piVertex);
+
+						piVertex->cost = 0.0f;
+
+						bConnect = Dijkstra < VertexGraph, SURFEL::Vertex, SURFEL::VertexEdge, GRAPH::EdgePtr2<SURFEL::VertexEdge>, 
+							TGConnectNodesRGData, float, ConnectNodesRG2 >(pVertexGraph, &RGData, piNodeQueue, RGData.iNodeMap);
+
+						piVertex->cost = -1.0f;
+
+						for (j = 0; j < RGData.iOutNodeArray.n; j++)
+						{
+							iVertex_ = RGData.iOutNodeArray.Element[j];
+
+							RGData.mFlags[iVertex_] &= ~0x02;
+
+							RGData.iNodeMap[iVertex_].cost = -1.0f;
+						}
+
+						if (bConnect)
+						{
+							pEdge = ConnectNodes<TGNode, TGEdge, GRAPH::EdgePtr2<TGEdge>>(iNode, iNode_, NodeArray, pMem);
+
+							nEdges++;
+						}
+					}
+				}
+						
+				vertexTGNodeIdx = vertexTGNodeIdx->pNext;
+			}
+		}
+#endif
+		piVertexFetch = piVertexPut = vertexBuff;
+
+		*(piVertexPut++) = pNode->iVertex;
+
+		RGData.mFlags[pNode->iVertex] |= 0x02;
+
+		vertexBuffEnd = RegionGrowing<VertexGraph, SURFEL::Vertex, SURFEL::VertexEdge, GRAPH::EdgePtr2<SURFEL::VertexEdge>, TGConnectNodesRGData,
+			ConnectNodesRG>(pVertexGraph, &RGData, piVertexFetch, piVertexPut);
+
+		for (piVertex = vertexBuff; piVertex < vertexBuffEnd; piVertex++)
+		{
+			iVertex = *piVertex;
+
+			RGData.mFlags[iVertex] &= ~0x02;
+
+			piVertexTGNodeList = iVertexTGNodeList + iVertex;
+
+			vertexTGNodeIdx = piVertexTGNodeList->pFirst;
+
+			while (vertexTGNodeIdx)
+			{
+				iNode_ = vertexTGNodeIdx->Idx;
+
+				if (iNode < iNode_)
+				{
+					pNode_ = NodeArray.Element + iNode_;
+
+					N_ = A_ + 3 * pNode_->i;
+
+					if (RVLDOTPRODUCT3(RGData.N, N_) >= RGData.csNThr)
+					{
+						pEdge = ConnectNodes<TGNode, TGEdge, GRAPH::EdgePtr2<TGEdge>>(iNode, iNode_, NodeArray, pMem);
+
+						nEdges++;
+					}
+				}
+					
+				vertexTGNodeIdx = vertexTGNodeIdx->pNext;
+			}
+		}
 	}	// for every TG node
 
 	// Free memory.
@@ -510,41 +605,108 @@ void TG::Create(
 	delete[] iVertexTGNodeMem;
 	delete[] iVertexTGNodeList;
 	delete[] RGData.mFlags;
-	//delete[] vertexBuff;
+	delete[] vertexBuff;
 	delete[] RGData.iNodeMap;
 	delete[] A_;
-	delete[] RGData.iOutNodeArray.Element;
+	//delete[] iNeighborVertices.Element;
+	//delete[] iVertexBuff.Element;
 }
 
-//int RECOG::ConnectNodesRG(
-//	int iVertex,
-//	int iParentVertex,
-//	SURFEL::VertexEdge *pEdge,
-//	VertexGraph *pVertexGraph,
-//	TGConnectNodesRGData *pData)
-//{
-//	if (pData->mFlags[iVertex] != 0x01)
-//		return 0;
-//
-//	float csN = RVLDOTPRODUCT3(pEdge->N, pData->N);
-//
-//	if (csN >= pData->csNThr)
-//	{
-//		pData->mFlags[iVertex] |= 0x02;
-//
-//		return 1;
-//	}
-//	else
-//		return 0;
-//}
-
-float RECOG::ConnectNodesRG(
+float RECOG::ConnectNodesRG3(
 	int iVertex,
 	int iParentVertex,
 	SURFEL::VertexEdge *pEdge,
 	VertexGraph *pVertexGraph,
 	TGConnectNodesRGData *pData)
 {
+	if (!(pData->mFlags[iVertex] & 0x01))
+		return -1.0f;
+
+	// Check if the angle between the normal of at least one of the two common surfels of iVertex and iParentVertex 
+	// and the reference normal is <= pData->csNThr.
+
+	// Check if the normal of the third surfel of iVertex is on the opposite side of the plane defined by the normals of 
+	// the two common surfels of iVertex and iParentVertex w.r.t. the reference normal.
+}
+
+int RECOG::ConnectNodesRG(
+	int iVertex,
+	int iParentVertex,
+	SURFEL::VertexEdge *pEdge,
+	VertexGraph *pVertexGraph,
+	TGConnectNodesRGData *pData)
+{
+	if (pData->mFlags[iVertex] != 0x01)
+		return 0;
+
+	float csN = RVLDOTPRODUCT3(pEdge->N, pData->N);
+
+	if (csN >= pData->csNThr)
+	{
+		pData->mFlags[iVertex] |= 0x02;
+
+		return 1;
+	}
+	else
+		return 0;
+}
+
+#ifdef NEVER
+float RECOG::ConnectNodesRG2(
+	int iVertex,
+	int iParentVertex,
+	SURFEL::VertexEdge *pEdge,
+	VertexGraph *pVertexGraph,
+	TGConnectNodesRGData *pData,
+	bool &bGoalReached)
+{
+	if (!(pData->mFlags[iVertex] & 0x01))
+		return -1.0f;
+
+	if (bGoalReached = (iVertex == pData->iGoalNode))
+		return -1.0f;
+
+	float csN = RVLDOTPRODUCT3(pEdge->N, pData->N);
+
+	if (csN >= pData->csNThr)
+	{
+		float cost = 1.0f - csN;
+
+		if (cost > pData->iNodeMap[iParentVertex].cost)
+		{
+			float e = RVLDOTPRODUCT3(pEdge->N, pData->V);
+
+			if (RVLABS(e) <= pData->csVThr)
+			{
+				if (!(pData->mFlags[iVertex] & 0x02))
+				{
+					pData->iOutNodeArray.Element[pData->iOutNodeArray.n++] = iVertex;
+
+					pData->mFlags[iVertex] |= 0x02;
+				}
+
+				return cost;
+			}
+			else
+				return -1.0f;
+		}
+		else
+			return -1.0f;
+	}
+	else
+		return -1.0f;
+}
+
+float RECOG::ConnectNodesRG(
+	int iVertex,
+	int iParentVertex,
+	SURFEL::VertexEdge *pEdge,
+	VertexGraph *pVertexGraph,
+	TGConnectNodesRGData *pData,
+	bool &bGoalReached)
+{
+	bGoalReached = false;
+
 	if (!(pData->mFlags[iVertex] & 0x01))
 		return -1.0f;
 
@@ -571,6 +733,7 @@ float RECOG::ConnectNodesRG(
 	else
 		return -1.0f;
 }
+#endif
 
 void TG::Match(
 	SurfelGraph *pSurfels,

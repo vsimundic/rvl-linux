@@ -1296,7 +1296,11 @@ void SurfelGraph::DetectVertices(
 
 				pPt = pMesh->NodeArray.Element + iPt;
 
+#ifdef RVLVERSION_170601
 				iFeature = (pPt->bBoundary ? edgeMap[iPt] : iSurfel);
+#else
+				iFeature = (pPt->bBoundary ? (edgeMap[iPt] >= 0 ? edgeMap[iPt] : iSurfel) : iSurfel);
+#endif
 
 				if (iFeature == -1)
 					continue;
@@ -1324,7 +1328,11 @@ void SurfelGraph::DetectVertices(
 					{
 						pPt_ = pMesh->NodeArray.Element + iPt_;
 
+#ifdef RVLVERSION_170601
 						iFeature_ = (pPt_->bBoundary ? edgeMap[iPt_] : surfelMap[iPt_]);
+#else
+						iFeature_ = (pPt_->bBoundary ? (edgeMap[iPt_] >= 0 ? edgeMap[iPt_] : surfelMap[iPt_]) : surfelMap[iPt_]);
+#endif
 
 						if (iFeature_ != iFeature)
 						{
