@@ -1220,6 +1220,16 @@ void SurfelGraph::DetectVertices(
 	float cq = cos(q);
 	float sq = sin(q);
 
+	QList<SURFEL::VertexEdge> *pVertexEdgeList = &vertexEdgeList;
+
+	RVLQLIST_INIT(pVertexEdgeList);
+
+	int nVertexEdges = 0;
+
+	bool *bBelongsToRefVertex = new bool[NodeArray.n];
+
+	memset(bBelongsToRefVertex, 0, NodeArray.n * sizeof(bool));
+
 	//float csEdgeTangentAngle = cos(edgeTangentAngle * DEG2RAD);
 	//float snEdgeTangentAngle = sqrt(1.0f - csEdgeTangentAngle * csEdgeTangentAngle);
 
@@ -1261,6 +1271,9 @@ void SurfelGraph::DetectVertices(
 	BYTE bConvex[3];
 	float VTmp[3], N3_[3];
 	float fTmp, c13, c23;
+	Vertex **ppFirstBoundaryVertex;
+	VertexEdge *pEdge;
+	Vertex *pVertex_;
 
 	for (iSurfel = 0; iSurfel < NodeArray.n; iSurfel++)
 	{
@@ -1281,6 +1294,8 @@ void SurfelGraph::DetectVertices(
 		for (iBoundary = 0; iBoundary < pSurfel->BoundaryArray.n; iBoundary++)
 		{
 			pBoundary = pSurfel->BoundaryArray.Element + iBoundary;
+
+			ppFirstBoundaryVertex = vertexList.ppNext;
 
 			for (iPointEdge = 0; iPointEdge < pBoundary->n; iPointEdge++)
 			{
@@ -1384,6 +1399,8 @@ void SurfelGraph::DetectVertices(
 
 									RVLMEM_ALLOC_STRUCT(pMem, Vertex, pVertex);
 
+									pVertex->idx = nVertices;
+
 									// Compute vertex position.
 
 									P = pVertex->P;
@@ -1415,6 +1432,10 @@ void SurfelGraph::DetectVertices(
 									// Classify vertex.
 
 									pVertex->type = (nFeatures >= 2 ? bConvex[0] + bConvex[1] + bConvex[2] : 4);
+
+									// Reset cluster ID.
+
+									pVertex->iCluster = -1;
 
 									// Fill iSurfelArray 
 
@@ -1519,8 +1540,7 @@ void SurfelGraph::DetectVertices(
 											}
 										}
 									}	// if (bContactEdgeVertices)
-								}
-
+								}	// if (pFeature_[0]) then create vertex.
 							}	// if (iFeature__ != iFeature && iFeature__ != iFeature_)
 
 							iFeature__ = iFeature_;
@@ -1549,9 +1569,33 @@ void SurfelGraph::DetectVertices(
 					iPt__ = iPt_;
 				}	// for every neighbor of iPt
 			}	// for each point-edge on the boundary contour
+
+			//// Connect vertices by edges.
+
+			//pVertex_ = pVertex;
+
+			//pVertex = *ppFirstBoundaryVertex;
+
+			//while (pVertex)
+			//{
+			//	if (iSurfel )
+
+			//	pEdge = ConnectNodes<Vertex, VertexEdge, GRAPH::EdgePtr2<VertexEdge>>(pVertex, pVertex_, pVertex->idx, pVertex_->idx, pMem);
+
+			//	RVLQLIST_ADD_ENTRY(pVertexEdgeList, pEdge);
+
+			//	//RVLCOPY3VECTOR(pSurfel->N, pEdge->N);
+
+			//	nVertexEdges++;
+
+			//	pVertex_ = pVertex;
+
+			//	pVertex = pVertex->pNext;
+			//}
 		}	// for each boundary contour
 	}	// for each surfel
 
+	delete[] bBelongsToRefVertex;
 	delete[] bVisited;
 
 	RVL_DELETE_ARRAY(vertexArray.Element);
@@ -1590,7 +1634,7 @@ void SurfelGraph::DetectVertices(
 
 		pVertex = pVertex->pNext;
 	}
-}
+}	// SurfelGraph::DetectVertices()
 
 #endif
 

@@ -1,8 +1,9 @@
 #pragma once
 
-#define RVLRECOG_TG_VERTEX_FLAG_MARKED		0x01
-
+//#define RVLTG_EDGES
 //#define RVLTG_MATCH_DEBUG
+
+#define RVLRECOG_TG_VERTEX_FLAG_MARKED		0x01
 
 namespace RVL
 {
@@ -69,6 +70,8 @@ namespace RVL
 			int iGoalNode;
 			Array<int> iOutNodeArray;
 			QLIST::TreeIndex2<float> *iNodeMap;
+			BYTE *nOwners;
+			SurfelGraph *pSurfels;
 		};
 
 		int ConnectNodesRG(
@@ -95,13 +98,6 @@ namespace RVL
 			TGConnectNodesRGData *pData,
 			bool &bGoalReached);
 #endif
-
-		float ConnectNodesRG3(
-			int iVertex,
-			int iParentVertex,
-			SURFEL::VertexEdge *pEdge,
-			VertexGraph *pVertexGraph,
-			TGConnectNodesRGData *pData);
 
 		class TG : public Graph < TGNode, TGEdge, GRAPH::EdgePtr2<TGEdge> >
 		{

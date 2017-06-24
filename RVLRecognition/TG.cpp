@@ -360,6 +360,19 @@ void TG::Create(
 		}
 	}
 
+	int iNode;
+	QList<GRAPH::EdgePtr2<TGEdge>> *pEdgeList;
+
+	for (iNode = 0; iNode < NodeArray.n; iNode++)
+	{
+		pNode = NodeArray.Element + iNode;
+
+		pEdgeList = &(pNode->EdgeList);
+
+		RVLQLIST_INIT(pEdgeList);
+	}
+
+#ifdef RVLTG_EDGES
 	// Connect neighboring nodes with edges.
 
 	TGConnectNodesRGData RGData;
@@ -404,8 +417,6 @@ void TG::Create(
 
 	QLIST::Index *vertexTGNodeIdx = iVertexTGNodeMem;
 
-	int iNode;
-	
 	for (iNode = 0; iNode < NodeArray.n; iNode++)
 	{
 		pNode = NodeArray.Element + iNode;
@@ -419,17 +430,7 @@ void TG::Create(
 		vertexTGNodeIdx++;
 	}
 
-	QList<GRAPH::EdgePtr2<TGEdge>> *pEdgeList;
 	TGEdge *pEdge;
-
-	for (iNode = 0; iNode < NodeArray.n; iNode++)
-	{
-		pNode = NodeArray.Element + iNode;
-
-		pEdgeList = &(pNode->EdgeList);
-
-		RVLQLIST_INIT(pEdgeList);
-	}
 
 	RGData.csNThr = 0.8;
 
@@ -602,31 +603,16 @@ void TG::Create(
 
 	// Free memory.
 
-	delete[] iVertexTGNodeMem;
-	delete[] iVertexTGNodeList;
 	delete[] RGData.mFlags;
 	delete[] vertexBuff;
 	delete[] RGData.iNodeMap;
+	delete[] iVertexTGNodeList;
+	delete[] iVertexTGNodeMem;
+#endif
+
 	delete[] A_;
 	//delete[] iNeighborVertices.Element;
 	//delete[] iVertexBuff.Element;
-}
-
-float RECOG::ConnectNodesRG3(
-	int iVertex,
-	int iParentVertex,
-	SURFEL::VertexEdge *pEdge,
-	VertexGraph *pVertexGraph,
-	TGConnectNodesRGData *pData)
-{
-	if (!(pData->mFlags[iVertex] & 0x01))
-		return -1.0f;
-
-	// Check if the angle between the normal of at least one of the two common surfels of iVertex and iParentVertex 
-	// and the reference normal is <= pData->csNThr.
-
-	// Check if the normal of the third surfel of iVertex is on the opposite side of the plane defined by the normals of 
-	// the two common surfels of iVertex and iParentVertex w.r.t. the reference normal.
 }
 
 int RECOG::ConnectNodesRG(
