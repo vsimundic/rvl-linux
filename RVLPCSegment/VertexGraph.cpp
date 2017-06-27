@@ -68,6 +68,44 @@ void VertexGraph::Create(SurfelGraph *pSurfels_)
 		RVLQLIST_INIT(pEdgeList);
 	}
 
+	// Copy edges.
+
+	QList<SURFEL::VertexEdge> *pEdgeList_ = &edgeList;
+
+	RVLQLIST_INIT(pEdgeList_);
+
+	nEdges = 0;
+
+	SURFEL::VertexEdge *pEdge;
+	GRAPH::EdgePtr2<SURFEL::VertexEdge> *pEdgePtr;
+
+	for (iVertex = 0; iVertex < NodeArray.n; iVertex++)
+	{
+		pVertex = NodeArray.Element + iVertex;
+
+		pVertex_ = pSurfels->vertexArray.Element[iVertex];
+
+		pEdgeList = &(pVertex_->EdgeList);
+
+		pEdgePtr = pEdgeList->pFirst;
+
+		while (pEdgePtr)
+		{
+			iVertex_ = RVLPCSEGMENT_GRAPH_GET_OPPOSITE_NODE(pEdgePtr);
+
+			pEdge = ConnectNodes<SURFEL::Vertex, SURFEL::VertexEdge, GRAPH::EdgePtr2<SURFEL::VertexEdge>>(iVertex, iVertex_, NodeArray, pMem);
+
+			RVLQLIST_ADD_ENTRY(pEdgeList_, pEdge);
+
+			//RVLCOPY3VECTOR(pSurfel->N, pEdge->N);
+
+			nEdges++;
+
+			pEdgePtr = pEdgePtr->pNext;
+		}
+	}
+
+#ifdef NEVER	// Old version: each vertex is connected to all vertices which share two common surfels.
 	// Remove redundant vertices
 
 	bool *bBelongsToRefVertex = new bool[pSurfels->NodeArray.n];
@@ -243,8 +281,9 @@ void VertexGraph::Create(SurfelGraph *pSurfels_)
 
 	delete[] bAlreadyConnected;
 	delete[] bBelongsToRefVertex;
+#endif		// Old version: each vertex is connected to all vertices which share two common surfels.
 
-#ifdef NEVER		// Old version: each vertex is connected with all vertices sharing a common surfel.
+#ifdef NEVER		// Even older version: each vertex is connected with all vertices sharing a common surfel.
 
 	//bool *bAlreadyConnected = new bool[NodeArray.n];
 
@@ -471,6 +510,9 @@ int SURFEL::ConnectNodesRG(
 
 	if (pVertex->iCluster >= 0)
 		return 0;
+
+	if (iVertex == 81 && iParentVertex == 119)
+		int debug = 0;
 
 	//if (!(pData->mFlags[iVertex] & 0x01))
 	//	return 0;
