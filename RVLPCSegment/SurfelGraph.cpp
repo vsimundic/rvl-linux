@@ -17,7 +17,7 @@
 #define RVLSURFELGRAPH_IMAGE_ADJACENCY_NEW
 #define RVLSURFELGRAPH_DISPLAY_VERTICES
 
-#define RVLSURFELGRAPH_VERTEX_DETECTION_DEBUG
+//#define RVLSURFELGRAPH_VERTEX_DETECTION_DEBUG
 
 // Move to RVL3DTools.h.
 
@@ -1325,7 +1325,9 @@ void SurfelGraph::DetectVertices(
 		{
 			pBoundary = pSurfel->BoundaryArray.Element + iBoundary;
 
+#ifndef RVLVERSION_170601
 			boundaryVertexArray.n = 0;
+#endif
 
 			for (iPointEdge = 0; iPointEdge < pBoundary->n; iPointEdge++)
 			{
@@ -1333,6 +1335,9 @@ void SurfelGraph::DetectVertices(
 				
 				//if (iPt == 296509)
 				//	int debug = 0;
+
+				if(iPointEdge == 169)
+					int debug = 0;
 
 #ifdef RVLVERSION_170601
 				iPt = RVLPCSEGMENT_GRAPH_GET_NODE(pEdgePtr);
@@ -1388,6 +1393,13 @@ void SurfelGraph::DetectVertices(
 #ifdef RVLVERSION_170601
 					if (!bVisited[iPt_])
 #else					
+					pPt_ = pMesh->NodeArray.Element + iPt_;
+
+					iFeature_ = (pPt_->bBoundary ? (edgeMap[iPt_] >= 0 ? edgeMap[iPt_] : surfelMap[iPt_]) : surfelMap[iPt_]);
+
+					if (iFeature_ == iFeature && !bFirst)
+						break;
+
 					pEdgePtrOpp_ = RVLPCSEGMENT_GRAPH_GET_OPPOSITE_EDGE_PTR(pEdgePtr_);
 
 					pVertex = edgeConnectorVertexMap[pEdgePtrOpp_ - pMesh->EdgePtrMem];
@@ -1420,10 +1432,6 @@ void SurfelGraph::DetectVertices(
 						}
 					}
 
-					pPt_ = pMesh->NodeArray.Element + iPt_;
-
-					iFeature_ = (pPt_->bBoundary ? (edgeMap[iPt_] >= 0 ? edgeMap[iPt_] : surfelMap[iPt_]) : surfelMap[iPt_]);
-
 					if (!bVertex)
 #endif
 					{
@@ -1434,9 +1442,6 @@ void SurfelGraph::DetectVertices(
 
 						if (iFeature_ != iFeature)
 #else					
-						if (iFeature_ == iFeature && !bFirst)
-							break;
-
 						bFirst = false;
 #endif
 						{

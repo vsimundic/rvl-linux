@@ -771,12 +771,15 @@ int main(int argc, char ** argv)
 				GenerateSegmentNeighbourhood(&recognition, 0.1);
 				recognition.CalculateNNCost(&visualizer, PCLICP, PCLICPVariants::Point_to_plane);
 				
+#ifdef RVLVERSION_170601
+				//evaluate ICP
+				recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, fpPoseError, fpnotFirstInfo, fpnotFirstPoseErr, 10, true);
+#else
 				//Transparency check
 				recognition.CreateScoreMatchMatrixICP();
 				recognition.FilterHypothesesUsingTransparency(0.15, 10, true);
+#endif
 
-				//evaluate ICP
-				//recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, fpPoseError, fpnotFirstInfo, fpnotFirstPoseErr, 10, true);
 #else
 				//recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, fpPoseError, fpnotFirstInfo, fpnotFirstPoseErr, 7);
 #endif
