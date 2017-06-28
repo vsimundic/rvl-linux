@@ -7447,27 +7447,28 @@ bool RVL::RECOG::PSGM_::keyPressUserFunction(
 		pRecognition->Display();
 
 #ifdef RVLPSGM_ICP
-		//for (int i = 0; i < pRecognition->scoreMatchMatrixICP.n; i++)
-		//{
-		//	if (pRecognition->scoreMatchMatrixICP.Element[i].Element[iHypothesesRank].idx != -1)
-		//	{
-		//		//visualize new ICP matches on the scene
-		//		pRecognition->AddOneModelToVisualizer(pVisualizer, pRecognition->scoreMatchMatrixICP.Element[i].Element[iHypothesesRank].idx, iHypothesesRank, true);
-		//	}
-		//}
 		for (int i = 0; i < pRecognition->scoreMatchMatrixICP.n; i++)
 		{
-			for (int j = 0; j < RVLMIN(7, pRecognition->scoreMatchMatrixICP.Element[i].n); j++)
+			if (pRecognition->scoreMatchMatrixICP.Element[i].Element[iHypothesesRank].idx != -1)
 			{
-
-				if (pRecognition->scoreMatchMatrixICP.Element[i].Element[j].idx != -1)
-				{
-					//visualize new ICP matches on the scene
-					pRecognition->AddOneModelToVisualizer(pVisualizer, pRecognition->scoreMatchMatrixICP.Element[i].Element[j].idx, j, true);
-					break;
-				}
+				//visualize new ICP matches on the scene
+				pRecognition->AddOneModelToVisualizer(pVisualizer, pRecognition->scoreMatchMatrixICP.Element[i].Element[iHypothesesRank].idx, iHypothesesRank, true);
 			}
 		}
+		////Filko - for transparency testing
+		//for (int i = 0; i < pRecognition->scoreMatchMatrixICP.n; i++)
+		//{
+		//	for (int j = 0; j < RVLMIN(7, pRecognition->scoreMatchMatrixICP.Element[i].n); j++)
+		//	{
+
+		//		if (pRecognition->scoreMatchMatrixICP.Element[i].Element[j].idx != -1)
+		//		{
+		//			//visualize new ICP matches on the scene
+		//			pRecognition->AddOneModelToVisualizer(pVisualizer, pRecognition->scoreMatchMatrixICP.Element[i].Element[j].idx, j, true);
+		//			break;
+		//		}
+		//	}
+		//}
 #else
 		for (int i = 0; i < pRecognition->scoreMatchMatrix.n; i++)
 		{
@@ -10249,12 +10250,15 @@ float PSGM::GetObjectTransparencyRatio(vtkSmartPointer<vtkPolyData> object, unsi
 		pointN[0] = point[0];
 		pointN[1] = point[1];
 		pointN[2] = point[2];
-		//Get normal
-		normals->GetTupleValue(i, normal);
 		//Get u, v;
 		u = c_fu * point[0] / point[2] + c_uc;
 		v = c_fv * point[1] / point[2] + c_vc;
+		//Check if the point is within scene (image)
+		if ((u < 0) || (u >= width) || (v < 0) || (v >= height))
+			continue;
 		//depth.at<unsigned short>(v, u) = (point[2] * 1000) - depthImg[v * width + u];
+		//Get normal
+		normals->GetTupleValue(i, normal);
 		RVLNORM3(pointN, norm);
 		w = abs(RVLDOTPRODUCT3(normal, pointN));
 		//check transparency
@@ -10297,6 +10301,7 @@ void PSGM::FilterHypothesesUsingTransparency(float tranThr, float depthThr, bool
 	}
 }
 
+//Uses T_ICP transformation matrix
 vtkSmartPointer<vtkPolyData> PSGM::GetPoseCorrectedVisibleModel(int iMatch)
 {
 	//Get model instance

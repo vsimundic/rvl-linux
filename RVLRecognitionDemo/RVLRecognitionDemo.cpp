@@ -576,12 +576,14 @@ int main(int argc, char ** argv)
 				cv::erode(depth, depth, elementE);
 				//Set PSGM depth
 				recognition.depthImg = (unsigned short*)depth.data;
-				//cv::Mat depthShow(480, 640, CV_8UC1);
-				//double minVal, maxVal;
-				//cv::minMaxLoc(depth, &minVal, &maxVal);
-				//depth.convertTo(depthShow, CV_8U, -255.0f / maxVal, 255.0f);
-				//cv::imshow("depth image", depthShow);
-				//cv::waitKey();
+
+				/*cv::Mat depthShow(480, 640, CV_8UC1);
+				double minVal, maxVal;
+				cv::minMaxLoc(depth, &minVal, &maxVal);
+				depth.convertTo(depthShow, CV_8U, -255.0f / maxVal, 255.0f);
+				cv::imshow("depth image", depthShow);
+				cv::waitKey();*/
+
 				///////////TEST/////////
 				///*std::fstream fileS("eccv_frame_20111221T142636.413299_depth.txt", std::fstream::out);
 				//double point[3];
@@ -763,11 +765,10 @@ int main(int argc, char ** argv)
 				//	cloud_destination->points[i].normal_y = mesh.NodeArray.Element[i].N[1];
 				//	cloud_destination->points[i].normal_z = mesh.NodeArray.Element[i].N[2];
 				//}
-
 				//pcl::search::KdTree<pcl::PointXYZINormal>::Ptr kdtree = boost::make_shared<pcl::search::KdTree<pcl::PointXYZINormal>>((new pcl::search::KdTree<pcl::PointXYZINormal>));
 				//kdtree->setInputCloud(cloud_destination); //using this doesn't really improve anything
-
 				//recognition.CalculateICPCost(PCLICP, PCLICPVariants::Point_to_plane, &kdtree);
+
 				GenerateSegmentNeighbourhood(&recognition, 0.1);
 				recognition.CalculateNNCost(&visualizer, PCLICP, PCLICPVariants::Point_to_plane);
 				
