@@ -13,10 +13,15 @@
 //#include "RFRecognition.h" //VIDOVIC
 //#include <Eigen\Eigenvalues>
 
-#define RVLSURFELGRAPH_VERTEX_DETECTION_NEW
-#define RVLSURFELGRAPH_IMAGE_ADJACENCY_NEW
+//#define RVLSURFELGRAPH_VERTEX_DETECTION_VERSION_0
+#ifdef RVLVERSION_170601
+#define RVLSURFELGRAPH_VERTEX_DETECTION_VERSION_1
+#else
+#define RVLSURFELGRAPH_VERTEX_DETECTION_VERSION_2
+#endif
 #define RVLSURFELGRAPH_DISPLAY_VERTICES
 
+//#define RVLSURFELGRAPH_VERTEX_DETECTION_DEBUG
 
 // Move to RVL3DTools.h.
 
@@ -1194,7 +1199,7 @@ void SurfelGraph::Clear()
 	RVL_DELETE_ARRAY(iVertexMem);
 }
 
-#ifdef RVLSURFELGRAPH_VERTEX_DETECTION_NEW	// New version
+#ifdef RVLSURFELGRAPH_VERTEX_DETECTION_VERSION_1
 
 void SurfelGraph::DetectVertices(
 	Mesh *pMesh)
@@ -1310,7 +1315,7 @@ void SurfelGraph::DetectVertices(
 
 				iFeature__ = iFeature;
 
-				bCycleCompleted = false; 
+				bCycleCompleted = false;
 
 				pEdgeList = &(pPt->EdgeList);
 
@@ -1348,7 +1353,7 @@ void SurfelGraph::DetectVertices(
 										pFeature_[iiF++] = NodeArray.Element + iF[i];
 
 								RVLNULL3VECTOR(bConvex);
-								
+
 								if (pFeature_[0])
 								{
 									for (i = 0; i < pFeature_[0]->imgAdjacency.size(); i++)
@@ -1401,9 +1406,9 @@ void SurfelGraph::DetectVertices(
 									RVLSCALE3VECTOR2(P, 3.0f, P);
 
 									// Update nVertexSurfelRelations.
-								
+
 									nVertexSurfelRelations += nFeatures;
-								
+
 									// Classify vertex.
 
 									pVertex->type = (nFeatures >= 2 ? bConvex[0] + bConvex[1] + bConvex[2] : 4);
@@ -1586,7 +1591,625 @@ void SurfelGraph::DetectVertices(
 
 #endif
 
-#ifndef RVLSURFELGRAPH_VERTEX_DETECTION_NEW	// Old version
+#ifdef RVLSURFELGRAPH_VERTEX_DETECTION_VERSION_2
+
+void SurfelGraph::DetectVertices(
+	Mesh *pMesh)
+{
+#ifdef RVLSURFELGRAPH_VERTEX_DETECTION_DEBUG
+	FILE *fp = fopen("vertex_detection.txt", "w");
+	fclose(fp);
+#endif
+
+	QList<Vertex> *pVertexList = &vertexList;
+
+	RVLQLIST_INIT(pVertexList);
+
+	nVertexSurfelRelations = 0;
+
+	int nVertices = 0;
+
+	RVL_DELETE_ARRAY(surfelVertexList.Element);
+
+	surfelVertexList.Element = new QList<QLIST::Index>[NodeArray.n];
+	surfelVertexList.n = NodeArray.n;
+
+#ifdef RVLVERSION_170601
+	bool *bVisited = new bool[pMesh->NodeArray.n];
+
+	memset(bVisited, 0, pMesh->NodeArray.n * sizeof(bool));
+#else 
+	Array<Vertex *> boundaryVertexArray;
+
+	boundaryVertexArray.Element = new Vertex *[pMesh->maxBoundarySize];
+
+	bool *bNewVertex = new bool[pMesh->maxBoundarySize];
+#endif
+
+	float q = TIVertexToleranceAngle * DEG2RAD;
+	float cq = cos(q);
+	float sq = sin(q);
+
+	QList<SURFEL::VertexEdge> *pVertexEdgeList = &vertexEdgeList;
+
+	RVLQLIST_INIT(pVertexEdgeList);
+
+	int nVertexEdges = 0;
+
+	bool *bBelongsToRefVertex = new bool[NodeArray.n];
+
+	memset(bBelongsToRefVertex, 0, NodeArray.n * sizeof(bool));
+
+	Vertex **edgeConnectorVertexMap = new Vertex *[2 * pMesh->EdgeArray.n];
+
+	memset(edgeConnectorVertexMap, 0, 2 * pMesh->EdgeArray.n * sizeof(Vertex *));
+
+	//float csEdgeTangentAngle = cos(edgeTangentAngle * DEG2RAD);
+	//float snEdgeTangentAngle = sqrt(1.0f - csEdgeTangentAngle * csEdgeTangentAngle);
+
+	//bool *bVisited = new bool[NodeArray.n];
+
+	//memset(bVisited, 0, NodeArray.n * sizeof(bool));
+
+	int iSurfel, iSurfel_;
+	//int iSurfel1, iSurfel2;
+	//int iPrevSurfel;
+	int iBoundary;
+	int iPointEdge;
+	int iPt, iPt_, iPt__;
+	Surfel *pSurfel;
+	Array<MeshEdgePtr *> *pBoundary;
+	MeshEdgePtr *pEdgePtr, *pEdgePtr_, *pLastEdgePtr;
+	//MeshEdge *pEdge;
+	QList<MeshEdgePtr> *pEdgeList;
+	Vertex *pVertex, *pVertex_;
+	Point *pPt, *pPt_;
+	//Point *pPt_;
+	QList<QLIST::Index> *pSurfelVertexList;
+	float *N, *P_, *N1, *N2, *N3;
+	//float *N1, *N2;
+	//float N2_[3], VTmp[3];
+	//float fTmp;
+	int nPlanarFeatures, nEdgeFeatures;
+	int nFeatures, iFeature, iFeature_, iFeature__;
+	int iF[3], iP[3];
+	int iEdgeFeature, iEdgeFeature_, iEdgeFeature__;
+	bool bSmallestIndex;
+	Surfel *pSurfel_, *pEdgeFeature, *pFeature, *pF;
+	Surfel *pFeature_[3];
+	int iiF;
+#ifdef RVLVERSION_170601
+	bool bCycleCompleted;
+#else
+	int k;
+	bool bFirst;
+	bool bVertex;
+	VertexEdge *pEdge;
+	bool bNewVertex_;
+	MeshEdgePtr *pEdgePtr__, *pEdgePtrOpp_;
+	int nCommonSurfels;
+	GRAPH::EdgePtr2<VertexEdge> *pVertexEdgePtr;
+#endif
+	int i, j;
+	float *P;
+	float fnFeatures;
+	BYTE bConvex[3];
+	float VTmp[3], N3_[3];
+	float fTmp, c13, c23;
+	QList<GRAPH::EdgePtr2<VertexEdge>> *pVertexEdgeList_;
+
+	for (iSurfel = 0; iSurfel < NodeArray.n; iSurfel++)
+	{
+		if (iSurfel == 47)
+			int debug = 0;
+
+		pSurfelVertexList = surfelVertexList.Element + iSurfel;
+
+		RVLQLIST_INIT(pSurfelVertexList);
+
+		pSurfel = NodeArray.Element + iSurfel;
+
+		if (pSurfel->bEdge)
+			continue;
+
+		if (pSurfel->size <= 1)
+			continue;
+
+		N = pSurfel->N;
+
+		for (iBoundary = 0; iBoundary < pSurfel->BoundaryArray.n; iBoundary++)
+		{
+			pBoundary = pSurfel->BoundaryArray.Element + iBoundary;
+
+#ifndef RVLVERSION_170601
+			boundaryVertexArray.n = 0;
+#endif
+
+			for (iPointEdge = 0; iPointEdge < pBoundary->n; iPointEdge++)
+			{
+				pEdgePtr = pBoundary->Element[iPointEdge];
+				
+				//if (iPt == 296509)
+				//	int debug = 0;
+
+				if(iPointEdge == 169)
+					int debug = 0;
+
+#ifdef RVLVERSION_170601
+				iPt = RVLPCSEGMENT_GRAPH_GET_NODE(pEdgePtr);
+
+				if (bVisited[iPt])
+					continue;
+#else
+				pEdgePtr = RVLPCSEGMENT_GRAPH_GET_OPPOSITE_EDGE_PTR(pEdgePtr);
+
+				iPt = RVLPCSEGMENT_GRAPH_GET_NODE(pEdgePtr);
+#endif
+
+				pPt = pMesh->NodeArray.Element + iPt;
+
+#ifdef RVLVERSION_170601
+				iFeature = (pPt->bBoundary ? edgeMap[iPt] : iSurfel);
+#else
+				iFeature = (pPt->bBoundary ? (edgeMap[iPt] >= 0 ? edgeMap[iPt] : iSurfel) : iSurfel);
+#endif
+
+				if (iFeature == -1)
+					continue;
+
+#ifdef RVLVERSION_170601
+				bVisited[iPt] = true;
+#endif
+
+				//if (iPt / 640 == 304364)
+				//	int debug = 0;
+
+				pFeature = (iFeature >= 0 ? NodeArray.Element + iFeature : NULL);
+
+				iFeature__ = iFeature;
+
+				pEdgeList = &(pPt->EdgeList);
+
+#ifdef RVLVERSION_170601
+				pEdgePtr_ = pEdgeList->pFirst;
+
+				bCycleCompleted = false;
+#else
+				pEdgePtr_ = pEdgePtr;
+
+				pEdgePtr__ = NULL;
+
+				bFirst = true;
+#endif
+				
+				while (true)	// for every neighbor of iPt
+				{
+					iPt_ = RVLPCSEGMENT_GRAPH_GET_OPPOSITE_NODE(pEdgePtr_);
+
+#ifdef RVLVERSION_170601
+					if (!bVisited[iPt_])
+#else					
+					pPt_ = pMesh->NodeArray.Element + iPt_;
+
+					iFeature_ = (pPt_->bBoundary ? (edgeMap[iPt_] >= 0 ? edgeMap[iPt_] : surfelMap[iPt_]) : surfelMap[iPt_]);
+
+					if (iFeature_ == iFeature && !bFirst)
+						break;
+
+					pEdgePtrOpp_ = RVLPCSEGMENT_GRAPH_GET_OPPOSITE_EDGE_PTR(pEdgePtr_);
+
+					pVertex = edgeConnectorVertexMap[pEdgePtrOpp_ - pMesh->EdgePtrMem];
+
+					bVertex = false;
+
+					if (pVertex)
+					{
+						boundaryVertexArray.Element[boundaryVertexArray.n] = pVertex;
+
+						bNewVertex[boundaryVertexArray.n] = false;
+
+						boundaryVertexArray.n++;
+
+						bVertex = true;
+					}
+					else if (pEdgePtr__)
+					{
+						pVertex = edgeConnectorVertexMap[pEdgePtr__ - pMesh->EdgePtrMem];
+
+						if (pVertex)
+						{
+							boundaryVertexArray.Element[boundaryVertexArray.n] = pVertex;
+
+							bNewVertex[boundaryVertexArray.n] = false;
+
+							boundaryVertexArray.n++;
+
+							bVertex = true;
+						}
+					}
+
+					if (!bVertex)
+#endif
+					{
+#ifdef RVLVERSION_170601
+						pPt_ = pMesh->NodeArray.Element + iPt_;
+
+						iFeature_ = (pPt_->bBoundary ? edgeMap[iPt_] : surfelMap[iPt_]);
+
+						if (iFeature_ != iFeature)
+#else					
+						bFirst = false;
+#endif
+						{
+							if (iFeature__ != iFeature && iFeature__ != iFeature_)
+							{
+								//if (iFeature_ == 161 || iFeature__ == 161)
+								//	int debug = 0;
+
+								iF[0] = iFeature;
+								iF[1] = iFeature__;
+								iF[2] = iFeature_;
+
+								//// Determine convex/concave edges.
+
+								pFeature_[0] = pFeature_[1] = pFeature_[2] = NULL;
+
+								iiF = 0;
+
+								for (i = 0; i < 3; i++)
+									if (iF[i] >= 0)
+										pFeature_[iiF++] = NodeArray.Element + iF[i];
+
+								RVLNULL3VECTOR(bConvex);
+
+								if (pFeature_[0])
+								{
+									for (i = 0; i < pFeature_[0]->imgAdjacency.size(); i++)
+									{
+										pF = pFeature_[0]->imgAdjacency.at(i);
+
+										if (pF == pFeature_[1])
+											bConvex[0] = (pFeature_[0]->imgAdjacencyDescriptors.at(i)->cupyDescriptor[0] >= 0);
+										else if (pF == pFeature_[2])
+											bConvex[2] = (pFeature_[0]->imgAdjacencyDescriptors.at(i)->cupyDescriptor[0] >= 0);
+									}
+
+									if (pFeature_[1])
+									{
+										for (i = 0; i < pFeature_[1]->imgAdjacency.size(); i++)
+										{
+											pF = pFeature_[1]->imgAdjacency.at(i);
+
+											if (pF == pFeature_[2])
+												bConvex[1] = (pFeature_[1]->imgAdjacencyDescriptors.at(i)->cupyDescriptor[0] >= 0);
+										}
+									}
+
+									// Create vertex.
+
+									RVLMEM_ALLOC_STRUCT(pMem, Vertex, pVertex);
+
+									pVertex->idx = nVertices;
+
+									// Compute vertex position.
+
+									P = pVertex->P;
+
+									nFeatures = 0;
+
+									iP[0] = iPt;
+									iP[1] = iPt__;
+									iP[2] = iPt_;
+
+									RVLNULL3VECTOR(P);
+
+									for (i = 0; i < 3; i++)
+									{
+										P_ = pMesh->NodeArray.Element[iP[i]].P;
+
+										RVLSUM3VECTORS(P, P_, P);
+
+										if (iF[i] >= 0)
+											nFeatures++;
+									}
+
+									RVLSCALE3VECTOR2(P, 3.0f, P);
+
+									// Update nVertexSurfelRelations.
+
+									nVertexSurfelRelations += nFeatures;
+
+									// Classify vertex.
+
+									pVertex->type = (nFeatures >= 2 ? bConvex[0] + bConvex[1] + bConvex[2] : 4);
+
+									// Reset cluster ID.
+
+									pVertex->iCluster = -1;
+
+									// Fill iSurfelArray 
+
+									pVertex->iSurfelArray.n = nFeatures;
+
+									RVLMEM_ALLOC_STRUCT_ARRAY(pMem, int, nFeatures, pVertex->iSurfelArray.Element);
+
+									j = 0;
+
+									for (i = 0; i < 3; i++)
+										if (iF[i] >= 0)
+											pVertex->iSurfelArray.Element[j++] = iF[i];
+
+									// Determine normal hull.
+
+									pVertex->normalHull.n = 0;
+
+									RVLMEM_ALLOC_STRUCT_ARRAY(pMem, NormalHullElement, (pVertex->type == 1 ? 4 : nFeatures), pVertex->normalHull.Element);
+
+									//if (pVertex->type == 1)
+									//{
+									//	for (i = 0; i < 3; i++)
+									//		if (bConvex[i])
+									//			break;
+
+									//	N1 = pFeature_[i]->N;
+									//	N2 = pFeature_[(i + 1) % 3]->N;
+
+									//	UpdateNormalHull(pVertex->normalHull, N1);
+									//	UpdateNormalHull(pVertex->normalHull, N2);
+
+									//	RVLCROSSPRODUCT3(N1, N2, VTmp);
+									//	RVLNORM3(VTmp, fTmp);
+									//	RVLSCALE3VECTOR(VTmp, sq, VTmp);
+									//	RVLSCALE3VECTOR(N1, cq, N3_);
+									//	RVLSUM3VECTORS(VTmp, N3_, N3_);
+									//	UpdateNormalHull(pVertex->normalHull, N3_);
+									//	RVLSCALE3VECTOR(N2, cq, N3_);
+									//	RVLSUM3VECTORS(VTmp, N3_, N3_);
+									//	UpdateNormalHull(pVertex->normalHull, N3_);
+									//}
+									//else
+									{
+										for (i = 0; i < 3; i++)
+											if (iF[i] >= 0)
+												UpdateNormalHull(pVertex->normalHull, NodeArray.Element[iF[i]].N);
+									}
+
+									// Initialize edge list.
+
+									pVertexEdgeList_ = &(pVertex->EdgeList);
+
+									RVLQLIST_INIT(pVertexEdgeList_);
+
+									// Add vertex to the vertex list.
+
+									RVLQLIST_ADD_ENTRY(pVertexList, pVertex);
+
+									nVertices++;
+
+#ifndef RVLVERSION_170601
+									// Assign pVertex to edge connectors.
+
+									edgeConnectorVertexMap[pEdgePtrOpp_ - pMesh->EdgePtrMem] =
+										edgeConnectorVertexMap[pEdgePtr__ - pMesh->EdgePtrMem] = pVertex;
+
+									boundaryVertexArray.Element[boundaryVertexArray.n] = pVertex;
+
+									bNewVertex[boundaryVertexArray.n] = true;
+
+									boundaryVertexArray.n++;
+#endif									
+
+									if (bContactEdgeVertices)
+									{
+										// If pVertex->type == 1, then add one more vertex.
+
+										if (pVertex->type == 1 && nFeatures == 3)
+										{
+											for (i = 0; i < 3; i++)
+												if (bConvex[i])
+													break;
+
+											N1 = pFeature_[i]->N;
+											N2 = pFeature_[(i + 1) % 3]->N;
+											N3 = pFeature_[(i + 2) % 3]->N;
+
+											c13 = RVLDOTPRODUCT3(N1, N3);
+											c23 = RVLDOTPRODUCT3(N2, N3);
+
+											if (RVLABS(c13) <= 0.87 && RVLABS(c23) <= 0.87)
+											{
+												RVLMEM_ALLOC_STRUCT(pMem, Vertex, pVertex_);
+
+												P_ = pVertex_->P;
+
+												RVLCOPY3VECTOR(P, P_, P_);
+
+												nVertexSurfelRelations += nFeatures;
+
+												pVertex_->type = 3;
+
+												pVertex_->iSurfelArray.n = nFeatures;
+
+												RVLMEM_ALLOC_STRUCT_ARRAY(pMem, int, nFeatures, pVertex_->iSurfelArray.Element);
+
+												memcpy(pVertex_->iSurfelArray.Element, pVertex->iSurfelArray.Element, nFeatures * sizeof(int));
+
+												pVertex_->normalHull.n = 0;
+
+												RVLMEM_ALLOC_STRUCT_ARRAY(pMem, NormalHullElement, nFeatures, pVertex_->normalHull.Element);
+
+												UpdateNormalHull(pVertex_->normalHull, N1);
+												UpdateNormalHull(pVertex_->normalHull, N2);
+												RVLNEGVECT3(N3, N3_);
+												UpdateNormalHull(pVertex_->normalHull, N3_);
+
+												RVLQLIST_ADD_ENTRY(pVertexList, pVertex_);
+
+												nVertices++;
+											}
+										}
+									}	// if (bContactEdgeVertices)
+
+#ifdef RVLSURFELGRAPH_VERTEX_DETECTION_DEBUG
+									FILE *fp = fopen("vertex_detection.txt", "a");
+
+									fprintf(fp, "%d\t%d\t%d\t%d\n", pVertex->idx, pVertex->iSurfelArray.Element[0], pVertex->iSurfelArray.Element[1], pVertex->iSurfelArray.Element[2]);
+
+									fclose(fp);
+#endif
+								}	// if (pFeature_[0]) then create vertex.
+							}	// if (iFeature__ != iFeature && iFeature__ != iFeature_)
+						}	// if (iFeature_ != iFeature)
+#ifdef RVLVERSION_170601
+					}	// if (!bVisited[iPt_])
+#else
+					}	// if (!bVertex)
+#endif
+
+					iFeature__ = iFeature_;
+
+#ifdef RVLVERSION_170601
+					if (pEdgePtr_ == pEdgeList->pFirst && bCycleCompleted)
+						break;					
+
+					pEdgePtr_ = pEdgePtr_->pNext;
+
+					if (pEdgePtr_ == NULL)
+					{
+						if (pPt->bBoundary)
+							break;
+						else
+						{
+							pEdgePtr_ = pEdgeList->pFirst;
+
+							bCycleCompleted = true;
+						}
+					}
+#else
+					pEdgePtr__ = pEdgePtr_;
+
+					RVLQLIST_GET_NEXT_CIRCULAR(pEdgeList, pEdgePtr_);
+#endif
+					iPt__ = iPt_;
+				}	// for every neighbor of iPt
+			}	// for each point-edge on the boundary contour
+
+#ifndef RVLVERSION_170601			
+			/// Connect vertices by edges.
+
+			pVertex_ = boundaryVertexArray.Element[boundaryVertexArray.n - 1];
+
+			//bNewVertex_ = bNewVertex[boundaryVertexArray.n - 1];
+
+			for (i = 0; i < boundaryVertexArray.n; i++)
+			{
+				pVertex = boundaryVertexArray.Element[i];
+
+				//if (bNewVertex_ || bNewVertex[i])
+				{
+					// Check if pVertex and pVertex_ are connected.
+
+					pVertexEdgePtr = pVertex->EdgeList.pFirst;
+
+					while (pVertexEdgePtr)
+					{
+						if (RVLPCSEGMENT_GRAPH_GET_OPPOSITE_NODE(pVertexEdgePtr) == pVertex_->idx)
+							break;
+
+						pVertexEdgePtr = pVertexEdgePtr->pNext;
+					}
+
+					if (pVertexEdgePtr == NULL)
+					{
+						// Check if pVertex and pVertex_ have two common surfels.
+
+						nCommonSurfels = 0;
+
+						for (j = 0; j < pVertex->iSurfelArray.n; j++)
+							for (k = 0; k < pVertex_->iSurfelArray.n; k++)
+								if (pVertex->iSurfelArray.Element[j] == pVertex_->iSurfelArray.Element[k])
+								{
+									nCommonSurfels++;
+
+									break;
+								}
+
+						if (nCommonSurfels == 2)
+						{
+							// Connect pVertex and pVertex_.
+
+							pEdge = ConnectNodes<Vertex, VertexEdge, GRAPH::EdgePtr2<VertexEdge>>(pVertex, pVertex_, pVertex->idx, pVertex_->idx, pMem);
+
+							RVLQLIST_ADD_ENTRY(pVertexEdgeList, pEdge);
+
+							// Increment vertex edge counter.
+
+							nVertexEdges++;
+						}
+					}
+				}
+
+				pVertex_ = pVertex;
+
+				bNewVertex_ = bNewVertex[i];
+			}
+
+			///
+#endif
+		}	// for each boundary contour
+	}	// for each surfel
+
+	delete[] edgeConnectorVertexMap;
+	delete[] bBelongsToRefVertex;
+#ifdef RVLVERSION_170601
+	delete[] bVisited;
+#else
+	delete[] boundaryVertexArray.Element;
+	delete[] bNewVertex;
+#endif
+
+	RVL_DELETE_ARRAY(vertexArray.Element);
+
+	vertexArray.Element = new Vertex *[nVertices];
+	vertexArray.n = nVertices;
+
+	QLIST::CreatePtrArray<Vertex>(&vertexList, &vertexArray);
+
+	// Assign vertices to surfels.
+
+	RVL_DELETE_ARRAY(surfelVertexMem);
+
+	surfelVertexMem = new QLIST::Index[nVertexSurfelRelations];
+
+	QLIST::Index *pVertexIdx = surfelVertexMem;
+
+	int iVertex = 0;
+
+	pVertex = vertexList.pFirst;
+
+	while (pVertex)
+	{
+		for (iSurfel = 0; iSurfel < pVertex->iSurfelArray.n; iSurfel++)
+		{
+			pSurfelVertexList = surfelVertexList.Element + pVertex->iSurfelArray.Element[iSurfel];
+
+			RVLQLIST_ADD_ENTRY(pSurfelVertexList, pVertexIdx);
+
+			pVertexIdx->Idx = iVertex;
+
+			pVertexIdx++;
+		}
+
+		iVertex++;
+
+		pVertex = pVertex->pNext;
+	}
+}	// SurfelGraph::DetectVertices()
+
+#endif
+
+#ifdef RVLSURFELGRAPH_VERTEX_DETECTION_VERSION_0
+
 void SurfelGraph::DetectVertices(
 	Mesh *pMesh)
 {
@@ -2968,9 +3591,9 @@ void SurfelGraph::InitDisplay(
 	DisplayData.pVisualizer = pVisualizer;
 	DisplayData.vpDetector = vpDetector;
 	RVLSET3VECTOR(DisplayData.SelectionColor, 0, 255, 0);
-	//DisplayData.mode = RVLSURFEL_DISPLAY_MODE_SURFELS;
+	DisplayData.mode = RVLSURFEL_DISPLAY_MODE_SURFELS;
 	//DisplayData.mode = RVLSURFEL_DISPLAY_MODE_FOREGROUND_BACKGROUND;
-	DisplayData.mode = RVLSURFEL_DISPLAY_MODE_CONVEX_CONCAVE;
+	//DisplayData.mode = RVLSURFEL_DISPLAY_MODE_CONVEX_CONCAVE;
 	DisplayData.iSelectedSurfel = DisplayData.iSelectedSurfel2 = -1;
 	DisplayData.iSelection = 1;
 	DisplayData.bVertices = false;

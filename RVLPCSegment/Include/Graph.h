@@ -260,6 +260,44 @@ namespace RVL
 		return pEdge;
 	}
 
+	template<typename NodeType, typename EdgeType, typename EdgePtrType>
+	inline EdgeType *ConnectNodes(
+		NodeType *pNode1,
+		NodeType *pNode2,
+		int iNode1,
+		int iNode2,
+		CRVLMem *pMem
+		)
+	{
+		QList<EdgePtrType> *pEdgeList1 = &(pNode1->EdgeList);
+		QList<EdgePtrType> *pEdgeList2 = &(pNode2->EdgeList);
+
+		EdgeType *pEdge;
+
+		RVLMEM_ALLOC_STRUCT(pMem, EdgeType, pEdge);
+
+		pEdge->iVertex[0] = iNode1;
+		pEdge->iVertex[1] = iNode2;
+
+		EdgePtrType *pEdgePtr;
+
+		RVLMEM_ALLOC_STRUCT(pMem, EdgePtrType, pEdgePtr);
+
+		pEdgePtr->pEdge = pEdge;
+		pEdge->pVertexEdgePtr[0] = pEdgePtr;
+
+		RVLQLIST_ADD_ENTRY(pEdgeList1, pEdgePtr);
+
+		RVLMEM_ALLOC_STRUCT(pMem, EdgePtrType, pEdgePtr);
+
+		pEdgePtr->pEdge = pEdge;
+		pEdge->pVertexEdgePtr[1] = pEdgePtr;
+
+		RVLQLIST_ADD_ENTRY(pEdgeList2, pEdgePtr);
+
+		return pEdge;
+	}
+
 #ifdef RVLPCSEGMENT_GRAPH_WERAGGREGATION_DEBUG
 	template<typename NodeType, typename EdgeType, typename EdgePtrType>
 	void WriteAggNodeData(

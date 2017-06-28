@@ -14,7 +14,9 @@
 #define RVLPSGM_MATCH_SIMILARITY_MEASURE_MEAN_SATURATED_SQUARE_DISTANCE							4
 #define RVLPSGM_MATCH_SIMILARITY_MEASURE_MEDIAN_ABS_DISTANCE									5
 //#define RVLPSGM_RANSAC
-//#define RVLPSGM_ICP		// 170601: ON
+#ifdef RVLVERSION_170601
+#define RVLPSGM_ICP		// 170601: ON
+#endif
 #define RVLPSGM_ICP_SIMILARITY_MEASURE_COSTNN				0
 #define RVLPSGM_ICP_SIMILARITY_MEASURE_SATURATED_SCORE		1
 
@@ -277,7 +279,7 @@ namespace RVL
 		
 		//Recomended,
 		//Visualizes chosen hypotheses 0-6 for each segment on the scene, activated when pressed "c":
-		void AddOneModelToVisualizer(Visualizer *pVisualizer, int iMatch, int iRank, bool align);
+		void AddOneModelToVisualizer(Visualizer *pVisualizer, int iMatch, int iRank, bool align, bool useTG = false);
 		
 		void LoadModelMeshDB(char *modelSequenceFileName, bool decimate=false, float decimatePercent=0.4);
 
@@ -465,9 +467,15 @@ namespace RVL
 		void BoundingBoxSize(
 			RECOG::PSGM_::ModelInstance *pBoundingBox,
 			float *size);
+		std::vector<int> GetHypothesesCollisionConsensus(float thr);	//Filko
+		bool CheckHypothesesCollision(int firstHyp, int secondHyp, float thr); //Filko
+		float GetObjectTransparencyRatio(vtkSmartPointer<vtkPolyData> object, unsigned short *depthImg, float depthThr, int width, int height, float c_fu, float c_fv, float c_uc, float c_vc); //Filko
+		void FilterHypothesesUsingTransparency(float tranThr, float depthThr, bool verbose = false); //Filko
+		vtkSmartPointer<vtkPolyData> GetPoseCorrectedVisibleModel(int iMatch); //Filko
 
 	private:
 		void Clusters();
+		void WholeMeshCluster();
 		void CreateTemplate66();
 		void CreateTemplateBox();
 		void TemplateMatrix(Array2D<float> &A);
@@ -543,6 +551,7 @@ namespace RVL
 		bool bGTRFDescriptors;
 		bool bMatchRANSAC; //Vidovic
 		bool bGnd;
+		bool bWholeMeshCluster;
 		Array<RECOG::PSGM_::ModelInstance> modelInstanceDB; //Vidovic
 		QList<RECOG::PSGM_::MatchInstance> CTImatches; //Vidovic
 		Array<RECOG::PSGM_::MatchInstance*> pCTImatchesArray; //Vidovic
@@ -553,6 +562,8 @@ namespace RVL
 		Array<Array<SortIndex<float>>> scoreMatchMatrixICP;
 		Array<Array<SortIndex<float>>> sceneSegmentMatches;
 		Array<SortIndex<float>> sceneSegmentMatchesArray;
+		Array<Array<SortIndex<float>>> bestSceneSegmentMatches;
+		Array<SortIndex<float>> bestSceneSegmentMatchesArray;
 		//Array2D<Array<int>> matchMatrix;
 		//int *matchMatrixMem;
 		DWORD scoreCalculation; //Vidovic - TO DO (Implement read from cfg file)
@@ -573,6 +584,7 @@ namespace RVL
 		RECOG::CTISet MCTIset;
 		std::map<int, vtkSmartPointer<vtkPolyData>> vtkModelDB;
 		std::map<int, vtkSmartPointer<vtkPolyData>> segmentN_PD; //neighbourhood
+		unsigned short * depthImg; //Current scene depth image // Filko
 
 				
 		//Petra & Ivan

@@ -15,7 +15,11 @@
 #define RVLSURFEL_EDGE_FLAG_CONVEX				0x02
 #define RVLSURFEL_FLAG_RF						0x04
 
+#define RVLSURFELVERTEX_TYPE_REDUNDANT			0x80
+
 #define RVLSURFEL_VERSION_0		0
+
+#define RVLVERSION_170601
 
 namespace RVL
 {
@@ -95,6 +99,7 @@ namespace RVL
 		struct Vertex
 		{
 			float P[3];
+			int idx;
 			QList<GRAPH::EdgePtr2<VertexEdge>> EdgeList;
 			Array<NormalHullElement> normalHull;
 			Array<int> iSurfelArray;
@@ -102,6 +107,7 @@ namespace RVL
 			bool bEdge;
 			BYTE type;
 			float VTX[3];
+			int iCluster;
 		};
 
 
@@ -291,6 +297,7 @@ namespace RVL
 		Array<QList<QLIST::Index>> surfelVertexList;
 		int nVertexSurfelRelations;
 		float TIVertexToleranceAngle;
+		QList<SURFEL::VertexEdge> vertexEdgeList;
 		int edgeDepth;
 		bool *bVertexAssigned;
 		int *iVertexMem;
