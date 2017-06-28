@@ -19,7 +19,7 @@
 
 #define RVLSURFEL_VERSION_0		0
 
-#define RVLVERSION_170601
+//#define RVLVERSION_170601
 
 namespace RVL
 {
