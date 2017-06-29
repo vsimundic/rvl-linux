@@ -916,8 +916,6 @@ void Mesh::Boundary(
 
 	int idx = map[pPtIdx->Idx];
 
-	maxBoundarySize = 0;
-
 	BoundaryArray.n = 0;
 
 	MeshEdge *pEdge;
@@ -977,9 +975,6 @@ void Mesh::Boundary(
 					} while (pEdgePtr != pEdgePtr0);
 
 					pBoundary->n = pBoundaryMem - pBoundary->Element;
-
-					if (pBoundary->n > maxBoundarySize)
-						maxBoundarySize = pBoundary->n;
 
 					///
 				}

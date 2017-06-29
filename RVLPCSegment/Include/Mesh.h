@@ -276,7 +276,6 @@ namespace RVL
 			bool bOrganizedPC;
 			int width;
 			int height;
-			int maxBoundarySize;
 
 #ifdef RVLMESH_BOUNDARY_DEBUG		
 			int debugState;

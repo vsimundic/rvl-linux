@@ -1615,17 +1615,11 @@ void SurfelGraph::DetectVertices(
 	surfelVertexList.Element = new QList<QLIST::Index>[NodeArray.n];
 	surfelVertexList.n = NodeArray.n;
 
-#ifdef RVLVERSION_170601
-	bool *bVisited = new bool[pMesh->NodeArray.n];
-
-	memset(bVisited, 0, pMesh->NodeArray.n * sizeof(bool));
-#else 
 	Array<Vertex *> boundaryVertexArray;
 
-	boundaryVertexArray.Element = new Vertex *[pMesh->maxBoundarySize];
+	boundaryVertexArray.Element = new Vertex *[2 * pMesh->EdgeArray.n];
 
-	bool *bNewVertex = new bool[pMesh->maxBoundarySize];
-#endif
+	bool *bNewVertex = new bool[2 * pMesh->EdgeArray.n];
 
 	float q = TIVertexToleranceAngle * DEG2RAD;
 	float cq = cos(q);
@@ -1679,9 +1673,6 @@ void SurfelGraph::DetectVertices(
 	Surfel *pSurfel_, *pEdgeFeature, *pFeature, *pF;
 	Surfel *pFeature_[3];
 	int iiF;
-#ifdef RVLVERSION_170601
-	bool bCycleCompleted;
-#else
 	int k;
 	bool bFirst;
 	bool bVertex;
@@ -1690,7 +1681,6 @@ void SurfelGraph::DetectVertices(
 	MeshEdgePtr *pEdgePtr__, *pEdgePtrOpp_;
 	int nCommonSurfels;
 	GRAPH::EdgePtr2<VertexEdge> *pVertexEdgePtr;
-#endif
 	int i, j;
 	float *P;
 	float fnFeatures;
@@ -1701,17 +1691,14 @@ void SurfelGraph::DetectVertices(
 
 	for (iSurfel = 0; iSurfel < NodeArray.n; iSurfel++)
 	{
-		if (iSurfel == 47)
-			int debug = 0;
+		//if (iSurfel == 47)
+		//	int debug = 0;
 
 		pSurfelVertexList = surfelVertexList.Element + iSurfel;
 
 		RVLQLIST_INIT(pSurfelVertexList);
 
 		pSurfel = NodeArray.Element + iSurfel;
-
-		if (pSurfel->bEdge)
-			continue;
 
 		if (pSurfel->size <= 1)
 			continue;
@@ -1722,9 +1709,7 @@ void SurfelGraph::DetectVertices(
 		{
 			pBoundary = pSurfel->BoundaryArray.Element + iBoundary;
 
-#ifndef RVLVERSION_170601
 			boundaryVertexArray.n = 0;
-#endif
 
 			for (iPointEdge = 0; iPointEdge < pBoundary->n; iPointEdge++)
 			{
@@ -1733,34 +1718,19 @@ void SurfelGraph::DetectVertices(
 				//if (iPt == 296509)
 				//	int debug = 0;
 
-				if(iPointEdge == 169)
-					int debug = 0;
+				//if(iPointEdge == 169)
+				//	int debug = 0;
 
-#ifdef RVLVERSION_170601
-				iPt = RVLPCSEGMENT_GRAPH_GET_NODE(pEdgePtr);
-
-				if (bVisited[iPt])
-					continue;
-#else
 				pEdgePtr = RVLPCSEGMENT_GRAPH_GET_OPPOSITE_EDGE_PTR(pEdgePtr);
 
 				iPt = RVLPCSEGMENT_GRAPH_GET_NODE(pEdgePtr);
-#endif
 
 				pPt = pMesh->NodeArray.Element + iPt;
 
-#ifdef RVLVERSION_170601
-				iFeature = (pPt->bBoundary ? edgeMap[iPt] : iSurfel);
-#else
-				iFeature = (pPt->bBoundary ? (edgeMap[iPt] >= 0 ? edgeMap[iPt] : iSurfel) : iSurfel);
-#endif
+				iFeature = iSurfel;
 
 				if (iFeature == -1)
 					continue;
-
-#ifdef RVLVERSION_170601
-				bVisited[iPt] = true;
-#endif
 
 				//if (iPt / 640 == 304364)
 				//	int debug = 0;
@@ -1771,28 +1741,19 @@ void SurfelGraph::DetectVertices(
 
 				pEdgeList = &(pPt->EdgeList);
 
-#ifdef RVLVERSION_170601
-				pEdgePtr_ = pEdgeList->pFirst;
-
-				bCycleCompleted = false;
-#else
 				pEdgePtr_ = pEdgePtr;
 
 				pEdgePtr__ = NULL;
 
 				bFirst = true;
-#endif
 				
 				while (true)	// for every neighbor of iPt
 				{
 					iPt_ = RVLPCSEGMENT_GRAPH_GET_OPPOSITE_NODE(pEdgePtr_);
 
-#ifdef RVLVERSION_170601
-					if (!bVisited[iPt_])
-#else					
 					pPt_ = pMesh->NodeArray.Element + iPt_;
 
-					iFeature_ = (pPt_->bBoundary ? (edgeMap[iPt_] >= 0 ? edgeMap[iPt_] : surfelMap[iPt_]) : surfelMap[iPt_]);
+					iFeature_ = surfelMap[iPt_];
 
 					if (iFeature_ == iFeature && !bFirst)
 						break;
@@ -1830,17 +1791,8 @@ void SurfelGraph::DetectVertices(
 					}
 
 					if (!bVertex)
-#endif
 					{
-#ifdef RVLVERSION_170601
-						pPt_ = pMesh->NodeArray.Element + iPt_;
-
-						iFeature_ = (pPt_->bBoundary ? edgeMap[iPt_] : surfelMap[iPt_]);
-
-						if (iFeature_ != iFeature)
-#else					
 						bFirst = false;
-#endif
 						{
 							if (iFeature__ != iFeature && iFeature__ != iFeature_)
 							{
@@ -1987,7 +1939,6 @@ void SurfelGraph::DetectVertices(
 
 									nVertices++;
 
-#ifndef RVLVERSION_170601
 									// Assign pVertex to edge connectors.
 
 									edgeConnectorVertexMap[pEdgePtrOpp_ - pMesh->EdgePtrMem] =
@@ -1998,7 +1949,6 @@ void SurfelGraph::DetectVertices(
 									bNewVertex[boundaryVertexArray.n] = true;
 
 									boundaryVertexArray.n++;
-#endif									
 
 									if (bContactEdgeVertices)
 									{
@@ -2061,41 +2011,18 @@ void SurfelGraph::DetectVertices(
 								}	// if (pFeature_[0]) then create vertex.
 							}	// if (iFeature__ != iFeature && iFeature__ != iFeature_)
 						}	// if (iFeature_ != iFeature)
-#ifdef RVLVERSION_170601
-					}	// if (!bVisited[iPt_])
-#else
 					}	// if (!bVertex)
-#endif
 
 					iFeature__ = iFeature_;
 
-#ifdef RVLVERSION_170601
-					if (pEdgePtr_ == pEdgeList->pFirst && bCycleCompleted)
-						break;					
-
-					pEdgePtr_ = pEdgePtr_->pNext;
-
-					if (pEdgePtr_ == NULL)
-					{
-						if (pPt->bBoundary)
-							break;
-						else
-						{
-							pEdgePtr_ = pEdgeList->pFirst;
-
-							bCycleCompleted = true;
-						}
-					}
-#else
 					pEdgePtr__ = pEdgePtr_;
 
 					RVLQLIST_GET_NEXT_CIRCULAR(pEdgeList, pEdgePtr_);
-#endif
+
 					iPt__ = iPt_;
 				}	// for every neighbor of iPt
 			}	// for each point-edge on the boundary contour
 
-#ifndef RVLVERSION_170601			
 			/// Connect vertices by edges.
 
 			pVertex_ = boundaryVertexArray.Element[boundaryVertexArray.n - 1];
@@ -2156,18 +2083,13 @@ void SurfelGraph::DetectVertices(
 			}
 
 			///
-#endif
 		}	// for each boundary contour
 	}	// for each surfel
 
 	delete[] edgeConnectorVertexMap;
 	delete[] bBelongsToRefVertex;
-#ifdef RVLVERSION_170601
-	delete[] bVisited;
-#else
 	delete[] boundaryVertexArray.Element;
 	delete[] bNewVertex;
-#endif
 
 	RVL_DELETE_ARRAY(vertexArray.Element);
 
