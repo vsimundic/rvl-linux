@@ -46,11 +46,11 @@ void VertexGraph::Create(SurfelGraph *pSurfels_)
 
 	int iVertex, iVertex_;
 	QList<GRAPH::EdgePtr2<VertexEdge>> *pEdgeList;
-	int i;
-	int iSurfel;
-	Surfel *pSurfel;
-	QList<QLIST::Index> *pVertexList;
-	QLIST::Index *pVertexIdx;
+	//int i;
+	//int iSurfel;
+	//Surfel *pSurfel;
+	//QList<QLIST::Index> *pVertexList;
+	//QLIST::Index *pVertexIdx;
 	Vertex *pVertex_;
 
 	for (iVertex = 0; iVertex < pSurfels->vertexArray.n; iVertex++, pVertex++)
@@ -356,6 +356,173 @@ void VertexGraph::Create(SurfelGraph *pSurfels_)
 
 void VertexGraph::Clustering()
 {
+	// Create graph G.
+
+	Graph<GRAPH::Node, GRAPH::Edge, GRAPH::EdgePtr<GRAPH::Edge>> G;
+
+	G.NodeArray.Element = new GRAPH::Node[NodeArray.n];
+	G.NodeArray.n = NodeArray.n;
+
+	int iVertex;
+	GRAPH::Node *pNode2;
+	QList<GRAPH::EdgePtr<GRAPH::Edge>> *pEdge2List;
+
+	for (iVertex = 0; iVertex < NodeArray.n; iVertex++)
+	{
+		pNode2 = G.NodeArray.Element + iVertex;
+
+		pNode2->idx = iVertex;
+
+		pEdge2List = &(pNode2->EdgeList);
+
+		RVLQLIST_INIT(pEdge2List);
+	}
+
+	CRVLMem mem;
+
+	mem.Create(NodeArray.n * (NodeArray.n + 1) / 2 * (2 * sizeof(GRAPH::EdgePtr<GRAPH::Edge>) + sizeof(GRAPH::Edge)));
+
+	VertexConnectRGData RGData2;
+	
+	float normalNoiseDeg = 20.0f;	// deg
+
+	float normalNoise = normalNoiseDeg * DEG2RAD;
+
+	RGData2.thr1 = sin(normalNoise);
+	RGData2.thr2 = cos(normalNoise);
+	
+	RGData2.bVisited = new bool[NodeArray.n];
+
+	memset(RGData2.bVisited, 0, NodeArray.n * sizeof(bool));
+
+	RGData2.visitedNodeArray.Element = new int[NodeArray.n];
+
+	RGData2.pVertexGraph2 = &G;
+	RGData2.pMem = &mem;
+
+	int *iNodeBuff = new int[NodeArray.n];
+
+	int i, j;
+	Vertex *pVertex;
+	NormalHullElement *pNormaHullElement;
+	int *piNodeBuffEnd, *piNodeFetch, *piNodePut;
+
+	for (iVertex = 0; iVertex < NodeArray.n; iVertex++)
+	{
+		pVertex = NodeArray.Element + iVertex;
+
+		iNodeBuff[0] = iVertex;
+
+		RGData2.iRefVertex = iVertex;
+		RGData2.bVisited[iVertex] = true;
+
+		for (i = 0; i < pVertex->normalHull.n; i++)
+		{
+			pNormaHullElement = pVertex->normalHull.Element + i;
+
+			RGData2.Z = pNormaHullElement->Nh;
+
+			RGData2.X1 = pNormaHullElement->N;
+
+			pNormaHullElement = pVertex->normalHull.Element + (i + 1) % pVertex->normalHull.n;
+
+			RGData2.X2 = pNormaHullElement->N;
+
+			/// Only for debugging purpose!!!
+
+			//float V3Tmp[3];
+
+			//RVLCROSSPRODUCT3(RGData2.X2, RGData2.X1, V3Tmp);
+
+			//float fTmp;
+
+			//RVLNORM3(V3Tmp, fTmp);
+
+			//fTmp = RVLDOTPRODUCT3(RGData2.Z, pVertex->normalHull.Element[(i + pVertex->normalHull.n - 1) % pVertex->normalHull.n].N);
+
+			///
+
+			RVLCROSSPRODUCT3(RGData2.X1, RGData2.Z, RGData2.Y1);
+			RVLCROSSPRODUCT3(RGData2.Z, RGData2.X2, RGData2.Y2);
+
+			RGData2.visitedNodeArray.n = 0;
+
+			piNodeFetch = iNodeBuff;
+
+			piNodePut = iNodeBuff + 1;
+
+			piNodeBuffEnd = RegionGrowing<VertexGraph, SURFEL::Vertex, SURFEL::VertexEdge, GRAPH::EdgePtr2<SURFEL::VertexEdge>,
+				VertexConnectRGData, ConnectNodesRG2>(this, &RGData2, piNodeFetch, piNodePut);
+
+			for (j = 0; j < RGData2.visitedNodeArray.n; j++)
+				RGData2.bVisited[RGData2.visitedNodeArray.Element[j]] = false;
+		}
+
+		RGData2.bVisited[iVertex] = false;
+	}
+
+	delete[] iNodeBuff;
+	delete[] RGData2.bVisited;
+	delete[] RGData2.visitedNodeArray.Element;
+
+	//float X1[3];
+	//float Y1[3];
+	//float X2[3];
+	//float Y2[3];
+	//float Z[3];	
+	//CRVLMem *pMem;
+
+	// Create clusters by detecting connected subgraphs of G.
+
+	clusters.clear();
+
+	RVL_DELETE_ARRAY(iVertexClusterMem);
+
+	iVertexClusterMem = new int[NodeArray.n];
+
+	int *piVertex = iVertexClusterMem;
+
+	VertexClusterRGData3 RGData;
+
+	VertexCluster cluster;
+	int *piVertexArrayEnd, *piVertexFetch, *piVertexPut;
+
+	for (iVertex = 0; iVertex < NodeArray.n; iVertex++)
+	{
+		pVertex = NodeArray.Element + iVertex;
+
+		if (pVertex->iCluster >= 0)
+			continue;
+
+		if (pVertex->type & RVLSURFELVERTEX_TYPE_REDUNDANT)
+			continue;
+
+		pVertex->iCluster = clusters.size();
+
+		cluster.iVertexArray.Element = piVertex;
+
+		piVertexFetch = piVertexPut = cluster.iVertexArray.Element;
+
+		*(piVertexPut++) = iVertex;
+
+		piVertexArrayEnd = RegionGrowing<Graph<GRAPH::Node, GRAPH::Edge, GRAPH::EdgePtr<GRAPH::Edge>>,
+			GRAPH::Node, GRAPH::Edge, GRAPH::EdgePtr<GRAPH::Edge>,
+			VertexClusterRGData3, ConnectNodesRG3>(&G, &RGData, piVertexFetch, piVertexPut);
+
+		cluster.iVertexArray.n = piVertexArrayEnd - cluster.iVertexArray.Element;
+
+		clusters.push_back(cluster);
+	}
+
+	// Free memory.
+
+	delete[] G.NodeArray.Element;
+}
+
+#ifdef NEVER	// Old version.
+
+void VertexGraph::Clustering()
+{
 	clusters.clear();
 
 	RVL_DELETE_ARRAY(iVertexClusterMem);
@@ -403,6 +570,8 @@ void VertexGraph::Clustering()
 
 	delete[] RGData.nOwners;
 }
+
+#endif
 
 void VertexGraph::Save(FILE *fp)
 {
@@ -511,8 +680,8 @@ int SURFEL::ConnectNodesRG(
 	if (pVertex->iCluster >= 0)
 		return 0;
 
-	if (iVertex == 81 && iParentVertex == 119)
-		int debug = 0;
+	//if (iVertex == 81 && iParentVertex == 119)
+	//	int debug = 0;
 
 	//if (!(pData->mFlags[iVertex] & 0x01))
 	//	return 0;
@@ -531,11 +700,11 @@ int SURFEL::ConnectNodesRG(
 		pData->nOwners[iSurfel] = 1;
 	}	
 
-	int j = 0;
+	int nCommonSurfels = 0;
 
 	//bool bContinue = false;
 
-	Surfel *pSurfel;
+	//Surfel *pSurfel;
 	int iSurfel_[4];
 
 	for (i = 0; i < pVertex->iSurfelArray.n; i++)
@@ -544,7 +713,7 @@ int SURFEL::ConnectNodesRG(
 
 		if (pData->nOwners[iSurfel] > 0)
 		{
-			iSurfel_[j++] = iSurfel;
+			iSurfel_[nCommonSurfels++] = iSurfel;
 
 			pData->nOwners[iSurfel] = 2;
 
@@ -566,6 +735,13 @@ int SURFEL::ConnectNodesRG(
 			iSurfel_[3] = iSurfel;
 
 		pData->nOwners[iSurfel] = 0;
+	}
+
+	if (nCommonSurfels > 2)
+	{
+		pVertex->iCluster = pParentVertex->iCluster;
+
+		return 1;
 	}
 
 	//if (!bContinue)
@@ -594,4 +770,109 @@ int SURFEL::ConnectNodesRG(
 	}
 
 	return 0;
+}
+
+
+int SURFEL::ConnectNodesRG2(
+	int iVertex,
+	int iParentVertex,
+	VertexEdge *pEdge,
+	VertexGraph *pVertexGraph,
+	VertexConnectRGData *pData)
+{
+	Vertex *pVertex = pVertexGraph->NodeArray.Element + iVertex;
+
+	if (pData->bVisited[iVertex])
+		return 0;
+
+	pData->bVisited[iVertex] = true;
+
+	pData->visitedNodeArray.Element[pData->visitedNodeArray.n++] = iVertex;
+
+	int i;
+	float x1, x2, y1, y2, z;
+	float *N;
+	float Np[3];
+	float V3Tmp[3];
+	float fTmp;
+	GRAPH::Edge *pEdge2;
+
+	for (i = 0; i < pVertex->normalHull.n; i++)
+	{
+		N = pVertex->normalHull.Element[i].N;
+
+		z = RVLDOTPRODUCT3(N, pData->Z);
+
+		if (z < -pData->thr1)
+			return 0;
+		else if (z <= pData->thr1)
+		{
+			RVLSCALE3VECTOR(pData->Z, z, V3Tmp);
+
+			RVLDIF3VECTORS(N, V3Tmp, Np);
+
+			RVLNORM3(Np, fTmp);
+
+			y1 = RVLDOTPRODUCT3(Np, pData->Y1);
+
+			if (y1 < 0.0f)
+			{
+				x1 = RVLDOTPRODUCT3(Np, pData->X1);
+
+				if (x1 >= pData->thr2)
+					continue;
+				else
+					return 0;
+			}
+
+			y2 = RVLDOTPRODUCT3(Np, pData->Y2);
+
+			if (y2 < 0.0f)
+			{
+				x2 = RVLDOTPRODUCT3(Np, pData->X2);
+
+				if (x2 >= pData->thr2)
+					continue;
+				else
+					return 0;
+			}
+		}
+		else
+		{
+			GRAPH::Node *pNode = pData->pVertexGraph2->NodeArray.Element + iVertex;
+
+			GRAPH::EdgePtr<GRAPH::Edge > *pEdgePtr = pNode->EdgeList.pFirst;
+
+			while (pEdgePtr)
+			{
+				if (RVLPCSEGMENT_GRAPH_GET_OPPOSITE_NODE(pEdgePtr) == pData->iRefVertex)
+					return 0;
+				
+				pEdgePtr = pEdgePtr->pNext;
+			}
+
+			pEdge2 = ConnectNodes<GRAPH::Node, GRAPH::Edge, GRAPH::EdgePtr<GRAPH::Edge>>(pData->iRefVertex, iVertex, 
+				pData->pVertexGraph2->NodeArray, pData->pMem);
+
+			return 0;
+		}
+	}
+
+	return 1;
+}
+
+int SURFEL::ConnectNodesRG3(
+	int iVertex,
+	int iParentVertex,
+	GRAPH::Edge *pEdge,
+	Graph<GRAPH::Node, GRAPH::Edge, GRAPH::EdgePtr<GRAPH::Edge>> *pGraph,
+	VertexClusterRGData3 *pData)
+{
+	Vertex *pVertex = pData->pVertexGraph->NodeArray.Element + iVertex;
+
+	Vertex *pParentVertex = pData->pVertexGraph->NodeArray.Element + iParentVertex;
+
+	pVertex->iCluster = pParentVertex->iCluster;
+
+	return 1;
 }

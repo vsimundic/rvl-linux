@@ -2062,7 +2062,7 @@ void SurfelGraph::DetectVertices(
 									break;
 								}
 
-						if (nCommonSurfels == 2)
+						if (nCommonSurfels >= 2)
 						{
 							// Connect pVertex and pVertex_.
 

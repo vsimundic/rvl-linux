@@ -62,8 +62,8 @@ namespace RVL
 
 		struct Edge
 		{
-			int iNode[2];
-			GRAPH::EdgePtr<GRAPH::Edge> *pEdgePtr[2];
+			int iVertex[2];
+			GRAPH::EdgePtr<GRAPH::Edge> *pVertexEdgePtr[2];
 			int idx;
 		};
 
