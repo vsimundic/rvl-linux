@@ -6,17 +6,36 @@
 
 namespace RVL
 {
+	class ObjectDetector;
+
+	namespace OBJECT_DETECTION
+	{
+		void Symmetry(
+			SURFEL::ObjectGraph *pObjects, 
+			int iObject1, 
+			int iObject2, 
+			void *vpData);
+	}
+
 	class ObjectDetector
 	{
 	public:
 		ObjectDetector();
 		virtual ~ObjectDetector();
-		void Init();
+		void Init(PSGM *pPSGM_ = NULL);
 		void CreateParamList();
 		void DetectObjects(char *MeshFilePathName);
 		void Evaluate(
 			FILE *fp,
-			char *fileName);
+			char *fileName,
+			char *selectedGTObjectsFileName = NULL);
+		void BoundingBox(
+			int iObject1,
+			int iObject2,
+			RECOG::PSGM_::ModelInstance *pBoundingBox);
+		static bool CheckIfWithinCTIBoundingBox(void * odObj, int iObject1, int iObject2, float dimThr = 0.30);	//Filko
+		void GroundTruthGroundPlane();
+		void SaveBoundingBoxSizes(char *imageFileName);
 		
 	public:
 		DWORD flags;
@@ -24,12 +43,27 @@ namespace RVL
 		CRVLMem *pMem0;
 		CRVLMem *pMem;
 		char *SVMClassifierParamsFileName;
+		float convexityThr;
+		float convexityRatioThr1;
+		float convexityRatioThr2;
+		int nMultilateralFilterIterations;
+		int joinSmallObjectsToLargestNeighborSizeThr;
+		float joinSmallObjectsToLargestNeighborDistThr;
 		bool bSegmentToObjects;
 		bool bObjectAggregationLevel2;
 		bool bSurfelsFromSSF;
+		bool bCTIBasedObjectAggregation;
+		bool bMultilateralFilter;
+		bool bJoinSmallObjectsToLargestNeighbor;
+		bool bGroundTruthSegmentation;
+		bool bGroundTruthSegmentationOnSurfelLevel;
+		bool bGroundTruthBoundingBoxes;
+		bool bOwnsSurfelDetectionTool;
+		bool bOwnsPSGM;
 		SurfelGraph *pSurfels;
 		PlanarSurfelDetector *pSurfelDetector;
 		SURFEL::ObjectGraph *pObjects;
+		PSGM *pPSGM;
 		Mesh mesh;
 		char *cfgFileName;
 		void *vpMeshBuilder;
@@ -37,6 +71,8 @@ namespace RVL
 			char *FileName,
 			Mesh *pMesh,
 			bool bSavePLY);
+		RECOG::CTISet CTIs;
+		RECOG::CTISet boundingBoxes;
 	};
 }
 

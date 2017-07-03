@@ -2,6 +2,7 @@
 //
 
 //#include "stdafx.h"
+#include "SceneSegFile.hpp"
 #include <vtkAutoInit.h>
 VTK_MODULE_INIT(vtkRenderingOpenGL2);
 VTK_MODULE_INIT(vtkInteractionStyle);
@@ -78,18 +79,24 @@ void CreateParamList(
 	pParamData = pParamList->AddParam("SegmentationResultsFileName", RVLPARAM_TYPE_STRING, pSegmentationResultsFileName);
 }
 
-void VisualizeObjectGraphVertexPointCloud(SURFEL::ObjectGraph *ograph, int sizeThr)
+void VisualizeObjectGraphVertexPointCloud(SURFEL::ObjectGraph *ograph, int sizeThr, int pointSize = 5, vtkSmartPointer<vtkRenderer> externalRenderer = NULL)
 {
 	// Initialize VTK.
-	vtkSmartPointer<vtkRenderer> renderer = vtkSmartPointer<vtkRenderer>::New();
-	vtkSmartPointer<vtkRenderWindow> window = vtkSmartPointer<vtkRenderWindow>::New();
-	vtkSmartPointer<vtkRenderWindowInteractor> interactor = vtkSmartPointer<vtkRenderWindowInteractor>::New();
+	vtkSmartPointer<vtkRenderer> renderer;
+	vtkSmartPointer<vtkRenderWindow> window;
+	vtkSmartPointer<vtkRenderWindowInteractor> interactor;
+	if (!externalRenderer.GetPointer())
+	{
+		renderer = vtkSmartPointer<vtkRenderer>::New();
+		window = vtkSmartPointer<vtkRenderWindow>::New();
+		interactor = vtkSmartPointer<vtkRenderWindowInteractor>::New();
 	window->AddRenderer(renderer);
 	window->SetSize(800, 600);
 	interactor->SetRenderWindow(window);
 	vtkSmartPointer<vtkInteractorStyleTrackballCamera> style = vtkSmartPointer<vtkInteractorStyleTrackballCamera>::New();
 	interactor->SetInteractorStyle(style);
 	renderer->SetBackground(0.5294, 0.8078, 0.9803);
+	}
 
 	//VTK objects
 	vtkSmartPointer<vtkPolyData> pd = vtkSmartPointer<vtkPolyData>::New();
@@ -109,6 +116,7 @@ void VisualizeObjectGraphVertexPointCloud(SURFEL::ObjectGraph *ograph, int sizeT
 	double P[3];
 	unsigned char rgb[3];
 	srand(time(NULL));
+	int objVertexNo = 0;
 	for (int iObject = 0; iObject < ograph->NodeArray.n; iObject++)
 	{
 		pObject = ograph->NodeArray.Element + iObject;
@@ -126,6 +134,7 @@ void VisualizeObjectGraphVertexPointCloud(SURFEL::ObjectGraph *ograph, int sizeT
 		rgb[1] = rand() % 255;
 		rgb[2] = rand() % 255;
 		//All surfels and points
+		objVertexNo = 0;
 		while (piElement)
 		{
 			pSurfel = ograph->pSurfels->NodeArray.Element + piElement->Idx;
@@ -137,18 +146,18 @@ void VisualizeObjectGraphVertexPointCloud(SURFEL::ObjectGraph *ograph, int sizeT
 				//running through added surfel vertices
 				qlistelement = pSurfelVertexList->pFirst;
 				while (qlistelement)
-		{
+				{
 					rvlvertex = ograph->pSurfels->vertexArray.Element[qlistelement->Idx];
 					
-			P[0] = rvlvertex->P[0];
-			P[1] = rvlvertex->P[1];
-			P[2] = rvlvertex->P[2];
-			points->InsertNextPoint(P);
-			verts->InsertNextCell(1);
-			verts->InsertCellPoint(ptIdx);
+					P[0] = rvlvertex->P[0];
+					P[1] = rvlvertex->P[1];
+					P[2] = rvlvertex->P[2];
+					points->InsertNextPoint(P);
+					verts->InsertNextCell(1);
+					verts->InsertCellPoint(ptIdx);
 					rgbs->InsertNextTupleValue(rgb);
-			ptIdx++;
-
+					ptIdx++;
+					objVertexNo++;
 					//Next
 					qlistelement = qlistelement->pNext;
 				}
@@ -156,7 +165,7 @@ void VisualizeObjectGraphVertexPointCloud(SURFEL::ObjectGraph *ograph, int sizeT
 
 			piElement = piElement->pNext;
 		}
-
+		std::cout << "Object " << iObject << " has " << objVertexNo << " vertices!" << std::endl;
 	}
 
 	pd->SetPoints(points);
@@ -166,12 +175,19 @@ void VisualizeObjectGraphVertexPointCloud(SURFEL::ObjectGraph *ograph, int sizeT
 	mapper->SetInputData(pd);
 	vtkSmartPointer<vtkActor> act = vtkSmartPointer<vtkActor>::New();
 	act->SetMapper(mapper);
-		act->GetProperty()->SetPointSize(5);
-		renderer->AddActor(act);
+	act->GetProperty()->SetPointSize(pointSize);
+	if (externalRenderer.GetPointer())
+	{
+		externalRenderer->AddActor(act);
+	}
+	else
+	{
+	renderer->AddActor(act);
 	//Start VTK
 	renderer->ResetCamera();
 	window->Render();
 	interactor->Start();
+}
 }
 
 void TestCHMatching(SURFEL::ObjectGraph *objects)
@@ -490,17 +506,21 @@ void RunMainProg(
 			//ObjectAggregationLevel2(&objects, &surfels, &mesh, MeshFileName);
 			cv::imshow("Colored object image", objects.CreateSegmentationImage());
 			cv::waitKey(1);
-			/*VisualizeObjectGraphVertexPointCloud(&objects, 100);*/
-			objects.ObjectAggregationLevel2_ViaObjectPairConvexity(0.015, 0.77, 0.75, 300, true);
+			//VisualizeObjectGraphVertexPointCloud(&objects, 100);
+			objects.DetermineObjectConvexityData(0.015, 0.15, false);
+			//objects.ObjectAggregationLevel2_ViaObjectPairConvexity(0.015, 0.77, 0.75, 300, true);
 			cv::imshow("New Colored object image", objects.CreateSegmentationImage());
 			cv::waitKey(1);
 			////
 			//Evaluation
-			/*int E[2];
+			int E[2];
 			int N = 0;
-			objects.CalculateOverAndUnderSegmentation(E, N, false, "", false);
+			//std::string gtImgFileName(fileName);
+			//gtImgFileName.erase(gtImgFileName.find_last_of("."));
+			//gtImgFileName += "a.png";
+			objects.CalculateOverAndUnderSegmentation(E, N, true, fileName, false);
 			std::cout << "Oversegmenation error: " << 100.0f * (1 - E[0] / (float)N) << "%" << std::endl;
-			std::cout << "Undersegmenation error: " << 100.0f * E[1] / (float)N << "%" << std::endl;*/
+			std::cout << "Undersegmenation error: " << 100.0f * E[1] / (float)N << "%" << std::endl;
 			//save label image
 			/*std::string imgFileName(fileName);
 			imgFileName.erase(imgFileName.find_last_of("."));
@@ -564,6 +584,7 @@ void RunMainProg(
 		if (bSegmentToObjects)
 		{
 			objects.InitDisplay(&visualizer, &mesh, SelectionColor);
+			//VisualizeObjectGraphVertexPointCloud(&objects, 100, 10, visualizer.renderer);
 			objects.Display();
 		}
 		else

@@ -1,26 +1,32 @@
 
-#include "stdafx.h"
+//#include "stdafx.h"
 #include "atlstr.h"
 #include <iostream>
 #include <string>
 #include <sstream>
 
 #include <vtkAutoInit.h>
-VTK_MODULE_INIT(vtkRenderingOpenGL);
+VTK_MODULE_INIT(vtkRenderingOpenGL2);
 VTK_MODULE_INIT(vtkInteractionStyle);
 VTK_MODULE_INIT(vtkRenderingFreeType);
 #include "RVLVTK.h"
 #include "RVLCore2.h"
+#include "Util.h"
 #include "Graph.h"
+#include "Mesh.h"
+#include "Visualizer.h"
+#include "SceneSegFile.hpp"
+#include "SurfelGraph.h"
+#include "PlanarSurfelDetector.h"
+
 #include <pcl/common/common.h>
 #include <pcl/PolygonMesh.h>
 #include "PCLTools.h"
 #include "PCLMeshBuilder.h"
 #include "RGBDCamera.h"
-#include "Mesh.h"
-#include "Visualizer.h"
-#include "SurfelGraph.h"
-#include "PlanarSurfelDetector.h"
+
+
+
 #include "GTTools.h"
 
 
@@ -50,8 +56,11 @@ using namespace std;
 
 #define RVLPCGT_DEMO_FLAG_SAVE_PLY					0x00000001
 #define RVLPCGT_DEMO_FLAG_DISABLE_TRANSFORM			0x00000100
-#define RVLPCGT_DEMO_FLAG_GENERATE_GT				0x00100000
 #define RVLPCGT_DEMO_FLAG_USER_SURFEL				0x10000000
+
+#define RVLPCGT_MODE_FLAG_RECORD					0
+#define RVLPCGT_MODE_FLAG_GENERATE_GT				1
+#define RVLPCGT_MODE_FLAG_GT_OBJECT_SELECTION		2
 
 // COENE struct needed to pass to callback function
 struct Group_Structure_VTK{
@@ -82,7 +91,9 @@ void CreateParamList(
 	CRVLMem *pMem,
 	RVLGT_SEGMENTATION_PARAMS *pGTSegmentParams,
 	RVLGT_PCLSUPERVOXEL_PARAMS *pPCLSuperVoxelParams,
-	DWORD &flags)
+	DWORD &flags,
+	DWORD &mode,
+	char **pSequenceFileName)
 {
 	pParamList->m_pMem = pMem;
 
@@ -91,15 +102,17 @@ void CreateParamList(
 	pParamList->Init();
 
 	pParamData = pParamList->AddParam("GT.ImageLocation", RVLPARAM_TYPE_STRING, &(pGTSegmentParams->pDefaultFileLocation));
+	pParamData = pParamList->AddParam("GT.SequenceFileName", RVLPARAM_TYPE_STRING, pSequenceFileName);	//VIDOVIC
 	pParamData = pParamList->AddParam("GT.InitialImageNo", RVLPARAM_TYPE_INT, &(pGTSegmentParams->iImageNo));
 	pParamData = pParamList->AddParam("GT.DifferenceThreshold", RVLPARAM_TYPE_INT, &(pGTSegmentParams->DiffThreshold));
 	pParamData = pParamList->AddParam("GT.PercThreshold", RVLPARAM_TYPE_FLOAT, &(pGTSegmentParams->PercThreshold));
 	pParamData = pParamList->AddParam("GT.MinNoOfPoints", RVLPARAM_TYPE_INT, &(pGTSegmentParams->MinNoOfPoints));
 	pParamData = pParamList->AddParam("GT.MaxDist", RVLPARAM_TYPE_INT, &(pGTSegmentParams->MaxDist));
 	pParamData = pParamList->AddParam("GT.minConnectedComponentSize", RVLPARAM_TYPE_INT, &(pGTSegmentParams->minConnectedComponentSize));
-
-	pParamData = pParamList->AddParam("GT.GenerateGT", RVLPARAM_TYPE_FLAG, &flags);
-	pParamList->AddID(pParamData, "yes", RVLPCGT_DEMO_FLAG_GENERATE_GT);
+	pParamData = pParamList->AddParam("GT.mode", RVLPARAM_TYPE_ID, &mode);
+	pParamList->AddID(pParamData, "GENERATE_GT", RVLPCGT_MODE_FLAG_GENERATE_GT);
+	pParamList->AddID(pParamData, "OBJECT_SELECTION", RVLPCGT_MODE_FLAG_GT_OBJECT_SELECTION);
+	pParamList->AddID(pParamData, "RECORD", RVLPCGT_MODE_FLAG_RECORD);
 
 	pParamData = pParamList->AddParam("GT.UseSurfel", RVLPARAM_TYPE_FLAG, &flags);
 	pParamList->AddID(pParamData, "yes", RVLPCGT_DEMO_FLAG_USER_SURFEL);
@@ -689,7 +702,8 @@ bool GenerateGT(RVLGT_PCLSUPERVOXEL_PARAMS *pPCLSuperVoxelParams, RVLGT_SEGMENTA
 			if ((*pFlags & RVLPCGT_DEMO_FLAG_USER_SURFEL) != 0)
 			{
 				printf(" >> Loading PLY file...");
-				if (mesh.Load(pCurrentFileName, pMeshBuilder, PC, PCLMesh, (*pFlags & RVLPCGT_DEMO_FLAG_SAVE_PLY) != 0))
+				//if (mesh.Load(pCurrentFileName, pMeshBuilder, PC, PCLMesh, (*pFlags & RVLPCGT_DEMO_FLAG_SAVE_PLY) != 0))
+				if (LoadMesh(pMeshBuilder, pCurrentFileName, &mesh, (*pFlags & RVLPCGT_DEMO_FLAG_SAVE_PLY) != 0))
 				{
 					surfels.Init(&mesh);
 					pDetector->Init(&mesh, &surfels, pmem);
@@ -1078,10 +1092,12 @@ int main(int argc, char ** argv)
 	RVLGT_PCLSUPERVOXEL_PARAMS gtSuperVoxelParams;
 
 	DWORD flags = 0x00000000;
+	DWORD mode;
+	char *sequenceFileName = NULL;
 
 	CRVLParameterList ParamList;
 
-	CreateParamList(&ParamList, &mem0, &gtSegmentParams,&gtSuperVoxelParams, flags);
+	CreateParamList(&ParamList, &mem0, &gtSegmentParams, &gtSuperVoxelParams, flags, mode, &sequenceFileName);
 
 	ParamList.LoadParams("RVLPCGroundTruthDemo.cfg");
 
@@ -1098,7 +1114,7 @@ int main(int argc, char ** argv)
 
 
 	//GENERATE GT
-	if ((flags & RVLPCGT_DEMO_FLAG_GENERATE_GT) != 0)
+	if (mode == RVLPCGT_MODE_FLAG_GENERATE_GT)
 	{
 		
 		char pSegmentLookupFile[17] = "SegmentColor.txt";
@@ -1120,7 +1136,33 @@ int main(int argc, char ** argv)
 		GenerateGT(&gtSuperVoxelParams,  &gtSegmentParams, pSegmentLookupFile, &meshBuilder, &detector, &mem, &flags);
 		
 	}
-	else //RECORD DATA
+	else if (mode == RVLPCGT_MODE_FLAG_GT_OBJECT_SELECTION)
+	{
+		char displayImageName[] = "Ground Truth";
+		char RGBImageName[] = "RGB Image";
+
+		cv::Mat displayImage(480, 640, CV_8UC3, cv::Scalar::all(0));
+
+		char meshFileName[200];
+		char *GTFileName;
+		char *RGBFileName;
+		cv::Mat GTLabImg;
+		FileSequenceLoader sceneSequence;
+
+		sceneSequence.Init(sequenceFileName);
+
+		while (sceneSequence.GetNextPath(meshFileName))
+		{
+			printf("Image %s...\n", meshFileName);
+
+			PCGT::DisplayGroundTruthSegmentation(meshFileName, GTLabImg, true);
+
+			cv::waitKey();
+
+			delete[] GTFileName;
+		}
+	}
+	else if (mode == RVLPCGT_MODE_FLAG_RECORD)
 	{
 		RecordData(&gtSegmentParams, &meshBuilder, &flags);
 	}

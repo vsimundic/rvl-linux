@@ -141,9 +141,11 @@
     <ClInclude Include="Include\PlanarSurfelDetector.h" />
     <ClInclude Include="Include\PolygonGraph.h" />
     <ClInclude Include="Include\SceneSegFile.hpp" />
+    <ClInclude Include="Include\Space3DGrid.h" />
     <ClInclude Include="Include\SurfelGraph.h" />
     <ClInclude Include="Include\SVMClassifier.h" />
     <ClInclude Include="Include\Util.h" />
+    <ClInclude Include="Include\VertexGraph.h" />
     <ClInclude Include="Include\Visualizer.h" />
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="targetver.h" />
@@ -166,6 +168,7 @@
     <ClCompile Include="SurfelGraph.cpp" />
     <ClCompile Include="SVMClassifier.cpp" />
     <ClCompile Include="Util.cpp" />
+    <ClCompile Include="VertexGraph.cpp" />
     <ClCompile Include="Visualizer.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

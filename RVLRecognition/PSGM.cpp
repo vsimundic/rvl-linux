@@ -6,18 +6,33 @@
 #include <vtkLine.h>
 #include "RVLCore2.h"
 #include "Util.h"
+#include "Space3DGrid.h"
 #include "Graph.h"
 #include "Mesh.h"
 #include "Visualizer.h"
 #include "SceneSegFile.hpp"
 #include "SurfelGraph.h"
+#include "ObjectGraph.h"
 #include "PlanarSurfelDetector.h"
 #include "RVLRecognition.h"
 #include "PSGMCommon.h"
 #include "CTISet.h"
+#include "VertexGraph.h"
+#include "TG.h"
+#include "TGSet.h"
 #include "PSGM.h"
+#include "ObjectDetector.h"
 #include <Eigen\Eigenvalues>
 #include <random> //VIDOVIC
+#include <nanoflann.hpp>
+
+//#define RVLPSGM_CTIMESH_DEBUG
+//#define RVLPSGM_MATCHTGS_CREATE_SCENE_TG
+//#define RVLPSGM_MATCHTGS_CREATE_SCENE_VG
+#ifndef RVLVERSION_170601
+#define RVLPSGM_MATCHCTI_MATCH_MATRIX		// 170601: OFF
+#endif
+#define RVLPSGM_MATCH_HYPOTHESIS_LOG
 
 using namespace RVL;
 using namespace RECOG;
@@ -25,9 +40,11 @@ using namespace RECOG;
 PSGM::PSGM()
 {
 	mode = RVLRECOGNITION_MODE_RECOGNITION;
+	problem = RVLRECOGNITION_PROBLEM_SHAPE_INSTANCE_DETECTION;
 	bZeroRFDescriptor = false;
 	bGTRFDescriptors = false;
 	bMatchRANSAC = false;
+	bWholeMeshCluster = false;
 
 	nDominantClusters = 1;
 	kNoise = 1.2f;
@@ -46,10 +63,14 @@ PSGM::PSGM()
 	minClusterNormalDistributionStd = 0.1f;
 	groundPlaneTolerance = 0.020f;
 
-	convexTemplate.n = 66;
-	convexTemplate.Element = new RECOG::PSGM_::Plane[convexTemplate.n];
+	convexTemplate66.n = 66;
+	convexTemplate66.Element = new RECOG::PSGM_::Plane[convexTemplate66.n];
 
-	CreateTemplate();
+	CreateTemplate66();
+
+	convexTemplate = convexTemplate66;
+
+	CreateTemplateBox();
 
 	//Vidovic
 	centroidID.n = 6;
@@ -57,6 +78,8 @@ PSGM::PSGM()
 
 	ConvexTemplateCentoidID();
 	//END Vidovic
+
+	vpObjectDetector = NULL;
 
 	clusters.Element = NULL;
 	clusterMap = NULL;
@@ -70,6 +93,14 @@ PSGM::PSGM()
 	modelDataBase = NULL; //Vidovic
 	modelsInDataBase = NULL; //Vidovic
 	sceneMIMatch = NULL; //Vidovic	
+	//matchMatrixMem = NULL;
+	//matchMatrix.Element = NULL;
+	sceneSegmentMatches.Element = NULL;
+	sceneSegmentMatchesArray.Element = NULL;
+	sceneSegmentMatchesArray.n = 0;
+	bestSceneSegmentMatches.Element = NULL;
+	bestSceneSegmentMatchesArray.Element = NULL;
+	bestSceneSegmentMatchesArray.n = 0;
 
 	//nSamples = 20; //Vidovic
 	stdNoise = 2; //Vidovic
@@ -83,6 +114,12 @@ PSGM::PSGM()
 
 	scoreMatchMatrix.Element = NULL;
 	scoreMatchMatrix.n = 0;
+
+	scoreMatchMatrixICP.Element = NULL;
+	scoreMatchMatrixICP.n = 0;
+
+	nBestMatches = 10; //add loading from file
+	//nBestMatches = 20; //add loading from file
 
 	//Arrays allocation for Match function
 	iValidSampleCandidate.Element = new QLIST::Index[convexTemplate.n];
@@ -108,13 +145,25 @@ PSGM::PSGM()
 
 	pCTImatchesArray.Element = NULL;
 
-	int iSSegment;
-
 	scoreMatchMatrix.Element = NULL;
 	scoreMatchMatrix.n = 0;
 
+	icpTMatrix = NULL;
+
 	//fpTime = fopen("C:\\RVL\\MatchTime_WithoutRansac.txt", "w");
 	//End Vidovic
+
+	bGnd = false;
+	bBoundingPlanes = false;
+
+	MTGSet.nodeSimilarityThr = 0.0f;
+	MTGSet.eLimit = 20.0f;
+
+	TemplateMatrix(MTGSet.A);
+
+	STGSet.nodeSimilarityThr = 0.003f;
+
+	TemplateMatrix(STGSet.A);
 }
 
 
@@ -125,7 +174,8 @@ PSGM::~PSGM()
 	RVL_DELETE_ARRAY(clusterMem);
 	RVL_DELETE_ARRAY(clusterSurfelMem);
 	RVL_DELETE_ARRAY(clusterVertexMem);
-	RVL_DELETE_ARRAY(convexTemplate.Element);	
+	RVL_DELETE_ARRAY(convexTemplate66.Element);
+	RVL_DELETE_ARRAY(convexTemplateBox.Element);
 	//RVL_DELETE_ARRAY(modelInstanceMem);
 	RVL_DELETE_ARRAY(sceneFileName);
 	RVL_DELETE_ARRAY(modelInstanceDB.Element); //Vidovic
@@ -135,6 +185,12 @@ PSGM::~PSGM()
 	RVL_DELETE_ARRAY(centroidID.Element); //Vidovic
 	RVL_DELETE_ARRAY(pCTImatchesArray.Element); //Vidovic
 	RVL_DELETE_ARRAY(segmentGT.Element); //Vidovic
+	//RVL_DELETE_ARRAY(matchMatrixMem);
+	//RVL_DELETE_ARRAY(matchMatrix.Element);
+	RVL_DELETE_ARRAY(sceneSegmentMatches.Element);
+	RVL_DELETE_ARRAY(sceneSegmentMatchesArray.Element);
+	RVL_DELETE_ARRAY(bestSceneSegmentMatches.Element);
+	RVL_DELETE_ARRAY(bestSceneSegmentMatchesArray.Element);
 
 	//Vidovic
 	int iSSegment;
@@ -168,12 +224,31 @@ PSGM::~PSGM()
 
 	//delete scoreMatchMatrix	
 	for (iSSegment = 0; iSSegment < scoreMatchMatrix.n; iSSegment++)
+	{
 		RVL_DELETE_ARRAY(scoreMatchMatrix.Element[iSSegment].Element);
+	}
+
+	for (iSSegment = 0; iSSegment < scoreMatchMatrixICP.n; iSSegment++)
+	{
+		RVL_DELETE_ARRAY(scoreMatchMatrixICP.Element[iSSegment].Element);
+	}
 
 	RVL_DELETE_ARRAY(scoreMatchMatrix.Element);
 
+	RVL_DELETE_ARRAY(scoreMatchMatrixICP.Element);
+
+	if (icpTMatrix)
+		delete[] icpTMatrix;
+
 	//fclose(fpTime);
 	//End Vidovic
+
+	if (vpObjectDetector)
+	{
+		ObjectDetector *pObjectDetector = (ObjectDetector *)vpObjectDetector;
+
+		delete pObjectDetector;
+}
 }
 
 void PSGM::CreateParamList(CRVLMem *pMem)
@@ -188,6 +263,9 @@ void PSGM::CreateParamList(CRVLMem *pMem)
 	ParamList.AddID(pParamData, "TRAINING", RVLRECOGNITION_MODE_TRAINING);
 	ParamList.AddID(pParamData, "RECOGNITION", RVLRECOGNITION_MODE_RECOGNITION); //Vidovic
 	ParamList.AddID(pParamData, "CREATE_CTIS", RVLRECOGNITION_MODE_PSGM_CREATE_CTIS);
+	pParamData = ParamList.AddParam("Recognition.problem", RVLPARAM_TYPE_ID, &problem);
+	ParamList.AddID(pParamData, "SHAPE_INSTANCE_DETECTION", RVLRECOGNITION_PROBLEM_SHAPE_INSTANCE_DETECTION);
+	ParamList.AddID(pParamData, "CLASSIFICATION", RVLRECOGNITION_PROBLEM_CLASSIFICATION);
 	pParamData = ParamList.AddParam("PSGM.nDominantClusters", RVLPARAM_TYPE_INT, &nDominantClusters);
 	pParamData = ParamList.AddParam("PSGM.kNoise", RVLPARAM_TYPE_FLOAT, &kNoise);
 	pParamData = ParamList.AddParam("PSGM.minInitialSurfelSize", RVLPARAM_TYPE_INT, &minInitialSurfelSize);
@@ -195,6 +273,7 @@ void PSGM::CreateParamList(CRVLMem *pMem)
 	pParamData = ParamList.AddParam("PSGM.kReferenceSurfelSize", RVLPARAM_TYPE_FLOAT, &kReferenceSurfelSize);
 	pParamData = ParamList.AddParam("PSGM.kReferenceTangentSize", RVLPARAM_TYPE_FLOAT, &kReferenceTangentSize);
 	pParamData = ParamList.AddParam("PSGM.baseSeparationAngle", RVLPARAM_TYPE_FLOAT, &baseSeparationAngle);
+	pParamData = ParamList.AddParam("PSGM.wholeMeshCluster", RVLPARAM_TYPE_BOOL, &bWholeMeshCluster);
 	//pParamData = ParamList.AddParam("PSGM.edgeTangentAngle", RVLPARAM_TYPE_FLOAT, &edgeTangentAngle);
 	pParamData = ParamList.AddParam("ModelDataBase", RVLPARAM_TYPE_STRING, &modelDataBase); //Vidovic
 	pParamData = ParamList.AddParam("ModelsInDataBase", RVLPARAM_TYPE_STRING, &modelsInDataBase); //Vidovic
@@ -213,6 +292,44 @@ void PSGM::CreateParamList(CRVLMem *pMem)
 	pParamData = ParamList.AddParam("PSGM.groundPlaneTolerance", RVLPARAM_TYPE_FLOAT, &groundPlaneTolerance);
 	pParamData = ParamList.AddParam("PSGM.zeroRFDescriptor", RVLPARAM_TYPE_BOOL, &bZeroRFDescriptor);	
 	pParamData = ParamList.AddParam("PSGM.GTRFDescriptors", RVLPARAM_TYPE_BOOL, &bGTRFDescriptors);
+	pParamData = ParamList.AddParam("PSGM.Visualization.hypothesisVisualizationMode", RVLPARAM_TYPE_ID, &(displayData.hypothesisVisualizationMode));
+	ParamList.AddID(pParamData, "CTI", RVLPSGM_HYPOTHESIS_VISUALIZATION_MODE_CTI);
+	ParamList.AddID(pParamData, "PLY", RVLPSGM_HYPOTHESIS_VISUALIZATION_MODE_PLY);
+	pParamData = ParamList.AddParam("PSGM.symmetryMatchThr", RVLPARAM_TYPE_FLOAT, &symmetryMatchThr);
+	pParamData = ParamList.AddParam("PSGM.debug1", RVLPARAM_TYPE_INT, &debug1);
+	pParamData = ParamList.AddParam("PSGM.debug2", RVLPARAM_TYPE_INT, &debug2);
+}
+
+void PSGM::Init(char *cfgFileName)
+{
+	if (problem == RVLRECOGNITION_PROBLEM_CLASSIFICATION)
+	{
+		ObjectDetector *pObjectDetector = new ObjectDetector;
+
+		vpObjectDetector = pObjectDetector;
+
+		pObjectDetector->pMem0 = pMem0;
+		pObjectDetector->pMem = pMem;
+		pObjectDetector->cfgFileName = RVLCreateString(cfgFileName);
+
+		pObjectDetector->Init(this);
+
+		pObjectDetector->vpMeshBuilder = vpMeshBuilder;
+		pObjectDetector->LoadMesh = LoadMesh;
+
+		pObjectDetector->bSegmentToObjects = true;
+		pObjectDetector->bObjectAggregationLevel2 = false;
+	}
+}
+
+void PSGM::Init(Mesh *pMesh_)
+{
+	pMesh = pMesh_;
+
+	bGnd = false;
+	bBoundingPlanes = false;
+
+
 }
 
 void PSGM::Interpret(
@@ -240,17 +357,36 @@ void PSGM::Interpret(
 
 	printf("No. of surfels = %d\n", nSurfels);
 
+	// Relations between adjacent surfels.
+
+#ifdef RVLSURFEL_IMAGE_ADJACENCY
+	pSurfels->SurfelRelations(pMesh);
+#endif
+
 	// Detect vertices.
 
 	printf("Detect vertices.\n");
 
 	pSurfels->DetectVertices(pMesh);
 
-	// Cluster surfels into convex surfaces.
+	/// Create clusters.
 
-	printf("Detect convex clusters.\n");
-	
-	Clusters();
+	if (bWholeMeshCluster)
+	{
+		// Create a single cluster from the whole mesh.
+
+		WholeMeshCluster();
+	}
+	else
+	{
+		// Cluster surfels into convex surfaces.
+
+		printf("Detect convex clusters.\n");
+
+		Clusters();
+	}
+
+	///
 
 	// Fit model.
 
@@ -290,7 +426,9 @@ void PSGM::Interpret(
 
 			//AddReferenceFrame(iCluster); //Vidovic
 
-			AddReferenceFrame();
+			pModelInstance = AddReferenceFrame();
+
+			pModelInstance->iCluster = iCluster;
 		}
 		else if (bGTRFDescriptors)
 		{
@@ -311,7 +449,9 @@ void PSGM::Interpret(
 	
 				//AddReferenceFrame(iCluster, R, pGTInstance->t); //Vidovic
 
-				AddReferenceFrame(R, pGTInstance->t); //Vidovic
+				pModelInstance = AddReferenceFrame(R, pGTInstance->t); //Vidovic
+
+				pModelInstance->iCluster = iCluster;
 
 				fprintf(fpGTH, "%d\t%d\n", iCluster, pGTInstance->iModel);
 			}
@@ -321,14 +461,23 @@ void PSGM::Interpret(
 	}
 
 	//Vidovic
+	bool bNormalValidityTest_ = bNormalValidityTest;
+
+	if (mode == RVLRECOGNITION_MODE_TRAINING)
+		bNormalValidityTest = false;
+
 	pModelInstance = CTISet.CTI.pFirst;
 
 	while (pModelInstance)
 	{
-		FitModel(pModelInstance);
+		pCluster = clusters.Element[pModelInstance->iCluster];
+
+		FitModel(pCluster->iVertexArray, pModelInstance);
 
 		pModelInstance = pModelInstance->pNext;
 	}
+
+	bNormalValidityTest = bNormalValidityTest_;
 
 	//Copy CTIs from Qlist to Array
 	CTISet.CopyCTIsToArray();
@@ -349,6 +498,52 @@ void PSGM::Interpret(
 	fclose(fp);
 
 	delete[] PSGModelInstanceFileName;
+
+	// Create tangent graphs.
+
+	if (mode == RVLRECOGNITION_MODE_TRAINING)
+	{
+		VertexGraph *pVertexGraph = new VertexGraph;
+
+		pVertexGraph->idx = iScene;
+
+		pVertexGraph->pMem = MTGSet.pMem;
+
+		MTGSet.vertexGraphs.push_back(pVertexGraph);
+
+		pVertexGraph->Create(pSurfels);
+
+		pVertexGraph->Clustering();
+
+		TG *pTG = new TG;
+
+		float R[9], t[3];
+
+		RVLUNITMX3(R);
+		RVLNULL3VECTOR(t);
+
+		pTG->iObject = iScene;
+
+		pTG->iVertexGraph = pVertexGraph->idx;
+
+		Array<int> iVertexArray;
+
+		iVertexArray.n = pVertexGraph->NodeArray.n;
+		iVertexArray.Element = new int[iVertexArray.n];
+
+		int i;
+
+		for (i = 0; i < iVertexArray.n; i++)
+			iVertexArray.Element[i] = i;
+
+		pTG->A = MTGSet.A;
+
+		pTG->Create(pVertexGraph, iVertexArray, R, t, &MTGSet, pSurfels, true);
+
+		delete[] iVertexArray.Element;
+
+		MTGSet.TGs.push_back(pTG);
+	}
 
 	//Vidovic
 	//Match scene MI to model MI
@@ -1078,7 +1273,7 @@ vtkSmartPointer<vtkPolyData> GenerateCTIPrimitivePolydata_CW(float *planeNormals
 }
 
 //Generates vtkPolyData object (points and polys) that represenent a single CTI primitive, planeNormals is row wise (normal_1_x_coordinate, normal_1_y_coordinate, normal_1_z_coordinate, normal_2_x_coordinate, ...)
-vtkSmartPointer<vtkPolyData> GenerateCTIPrimitivePolydata_RW(float *planeNormals, float *planeDist, bool centered = false, int *mask = NULL, float *t = NULL)
+vtkSmartPointer<vtkPolyData> GenerateCTIPrimitivePolydata_RW(float *planeNormals, float *planeDist, int nPlanes, bool centered = false, int *mask = NULL, float *t = NULL)
 {
 	vtkSmartPointer<vtkPolyData> outPD;
 
@@ -1087,15 +1282,15 @@ vtkSmartPointer<vtkPolyData> GenerateCTIPrimitivePolydata_RW(float *planeNormals
 	if (!centered)
 	{
 		//make copy of original plane dist
-		planeDistLocal = new float[66];
-		memcpy(planeDistLocal, planeDist, 66 * sizeof(float));
+		planeDistLocal = new float[nPlanes];
+		memcpy(planeDistLocal, planeDist, nPlanes * sizeof(float));
 
 		//Finding MIN and MAX for each normal dimension
 		float maxN[3] = { -10, -10, -10 };
 		int maxI[3] = { 0, 0, 0 };
 		float minN[3] = { 10, 10, 10 };
 		int minI[3] = { 0, 0, 0 };
-		for (int i = 0; i < 66; i++)
+		for (int i = 0; i < nPlanes; i++)
 		{
 			if (planeNormals[i * 3] > maxN[0])
 			{
@@ -1131,15 +1326,15 @@ vtkSmartPointer<vtkPolyData> GenerateCTIPrimitivePolydata_RW(float *planeNormals
 			}
 		}
 		//centering
-		float newexampleTemp[66];
+		float newexampleTemp;
 		float tempV[3];
 		tempV[0] = 0.5 * (planeDistLocal[maxI[0]] - planeDistLocal[minI[0]]);
 		tempV[1] = 0.5 * (planeDistLocal[maxI[1]] - planeDistLocal[minI[1]]);
 		tempV[2] = 0.5 * (planeDistLocal[maxI[2]] - planeDistLocal[minI[2]]);
-		for (int i = 0; i < 66; i++)
+		for (int i = 0; i < nPlanes; i++)
 		{
-			newexampleTemp[i] = planeNormals[i * 3] * tempV[0] + planeNormals[i * 3 + 1] * tempV[1] + planeNormals[i * 3 + 2] * tempV[2];
-			planeDistLocal[i] -= newexampleTemp[i];
+			newexampleTemp = planeNormals[i * 3] * tempV[0] + planeNormals[i * 3 + 1] * tempV[1] + planeNormals[i * 3 + 2] * tempV[2];
+			planeDistLocal[i] -= newexampleTemp;
 		}
 		if (t)
 			memcpy(t, tempV, 3 * sizeof(float));
@@ -1150,7 +1345,7 @@ vtkSmartPointer<vtkPolyData> GenerateCTIPrimitivePolydata_RW(float *planeNormals
 	vtkSmartPointer<vtkPoints> points = vtkSmartPointer<vtkPoints>::New();
 	vtkSmartPointer<vtkFloatArray> normalp = vtkSmartPointer<vtkFloatArray>::New();
 	normalp->SetNumberOfComponents(3);
-	for (int i = 0; i < 66; i++)
+	for (int i = 0; i < nPlanes; i++)
 	{
 		points->InsertPoint(i, planeNormals[i * 3] * planeDistLocal[i], planeNormals[i * 3 + 1] * planeDistLocal[i], planeNormals[i * 3 + 2] * planeDistLocal[i]);
 		normalp->InsertTuple3(i, planeNormals[i * 3], planeNormals[i * 3 + 1], planeNormals[i * 3 + 2]);
@@ -1179,7 +1374,7 @@ vtkSmartPointer<vtkPolyData> GenerateCTIPrimitivePolydata_RW(float *planeNormals
 			//calculate polygon normal
 			vtkPolygon::ComputeNormal(hullPD->GetPoints(), npts, polysPtsIds, n);
 			//find corresponding normal in normal list
-			for (int k = 0; k < 66; k++)
+			for (int k = 0; k < nPlanes; k++)
 			{
 				cosfi = n[0] * planeNormals[k * 3] + n[1] * planeNormals[k * 3 * 1] + n[2] * planeNormals[k * 3 + 2];
 				if ((cosfi > 0.9999) && (mask[k] == 1))
@@ -1206,6 +1401,7 @@ vtkSmartPointer<vtkPolyData> GenerateCTIPrimitivePolydata_RW(float *planeNormals
 	//make copy of the final polydata and send it back
 	outPD = vtkSmartPointer<vtkPolyData>::New();
 	outPD->DeepCopy(cleanPD->GetOutput());
+
 	return outPD;
 }
 
@@ -1264,7 +1460,7 @@ void PSGM::VisualizeCTIMatch(float *nT, float *dM, float *dS, int *validS)
 	renderer->SetBackground(0.5294, 0.8078, 0.9803);
 
 	//Generate model polydata
-	vtkSmartPointer<vtkPolyData> modelPD = GenerateCTIPrimitivePolydata_RW(nT, dM);
+	vtkSmartPointer<vtkPolyData> modelPD = GenerateCTIPrimitivePolydata_RW(nT, dM, 66);
 	/*if (tM) //if translation exists
 	{
 		float scale = 1;
@@ -1300,7 +1496,7 @@ void PSGM::VisualizeCTIMatch(float *nT, float *dM, float *dS, int *validS)
 	renderer->AddActor(modelActor2);
 	*/
 	//Generate scene polydata
-	vtkSmartPointer<vtkPolyData> modelSPD = GenerateCTIPrimitivePolydata_RW(nT, dS, false, validS);
+	vtkSmartPointer<vtkPolyData> modelSPD = GenerateCTIPrimitivePolydata_RW(nT, dS, 66, false, validS);
 	vtkSmartPointer<vtkPolyDataMapper> modelSMapper = vtkSmartPointer<vtkPolyDataMapper>::New();
 	modelSMapper->SetInputData(modelSPD);
 	vtkSmartPointer<vtkActor> modelSActor = vtkSmartPointer<vtkActor>::New();
@@ -1516,7 +1712,7 @@ void PSGM::Clusters()
 				pSurfel_ = pSurfels->NodeArray.Element + iSurfel_;
 
 #ifdef RVLPSGM_NORMAL_HULL
-				dist = DistanceFromNormalHull(NHull, pSurfel_->N);
+				dist = pSurfels->DistanceFromNormalHull(NHull, pSurfel_->N);
 #else
 				float e = RVLDOTPRODUCT3(meanN, pSurfel_->N);
 				dist = (wN < 1e-10 ? 0.0f : acos(e));
@@ -1732,18 +1928,17 @@ void PSGM::Clusters()
 
 	PtArray.Element = new int[pMesh->NodeArray.n];
 
-	bool bGnd = false;
+	bGnd = false;
 
-	int *piPt;
+	//int *piPt;
 	int iiSurfel;
-	QLIST::Index2 *pPtIdx;
-	MESH::Distribution PtDistribution;
-	float *var;
-	int idx[3];
-	int iTmp;
-	float *NGnd;
-	float dGnd;
+	//QLIST::Index2 *pPtIdx;
+	//MESH::Distribution PtDistribution;
+	//float *var;
+	//int idx[3];
+	//int iTmp;
 	float eGnd;
+	float *NGnd_;
 
 	for (i = 0; i < nValidClusters; i++)
 	{
@@ -1767,7 +1962,7 @@ void PSGM::Clusters()
 
 						eGnd = RVLDOTPRODUCT3(NGnd, pSurfel->P) - dGnd;
 
-						if (RVLABS(eGnd) > groundPlaneTolerance)
+						if (eGnd > groundPlaneTolerance)
 							break;
 					}
 
@@ -1778,44 +1973,9 @@ void PSGM::Clusters()
 		}
 		else
 		{
-			piPt = PtArray.Element;
-
-			for (iiSurfel = 0; iiSurfel < pCluster->iSurfelArray.n; iiSurfel++)
-			{
-				iSurfel = pCluster->iSurfelArray.Element[iiSurfel];
-
-				pSurfel = pSurfels->NodeArray.Element + iSurfel;
-
-				pPtIdx = pSurfel->PtList.pFirst;
-
-				while (pPtIdx)
-				{
-					*(piPt++) = pPtIdx->Idx;
-
-					pPtIdx = pPtIdx->pNext;
-				}
-			}
-
-			PtArray.n = piPt - PtArray.Element;
-
-			pMesh->ComputeDistribution(PtArray, PtDistribution);
-
-			var = PtDistribution.var;
-
-			RVLSORT3DESCEND(var, idx, iTmp);
-
-			if (var[idx[0]] / var[idx[1]] <= 0.0005 && var[idx[0]] / var[idx[2]] <= 0.0005)
+			if (IsFlat(pCluster->iSurfelArray, NGnd, dGnd, PtArray))
 			{
 				pCluster->bValid = false;
-
-				NGnd = PtDistribution.R + 3 * idx[0];
-
-				if (NGnd[2] > 0.0f)
-				{
-					RVLNEGVECT3(NGnd, NGnd);
-				}
-
-				dGnd = RVLDOTPRODUCT3(NGnd, PtDistribution.t);
 
 				bGnd = true;
 			}
@@ -1935,7 +2095,67 @@ void PSGM::Clusters()
 	delete[] surfelBuff2.Element;	
 }
 
-void PSGM::CreateTemplate()
+void PSGM::WholeMeshCluster()
+{
+	RVL_DELETE_ARRAY(clusterMap);
+
+	clusterMap = new int[pSurfels->NodeArray.n];
+
+	memset(clusterMap, 0, pSurfels->NodeArray.n * sizeof(int));
+
+	RVL_DELETE_ARRAY(clusterMem);
+
+	clusterMem = new RECOG::PSGM_::Cluster;
+
+	RECOG::PSGM_::Cluster *pCluster = clusterMem;
+
+	clusters.n = 0;
+
+	RVL_DELETE_ARRAY(clusterSurfelMem);
+
+	clusterSurfelMem = new int[pSurfels->NodeArray.n];
+
+	pCluster->iSurfelArray.Element = clusterSurfelMem;
+
+	RVL_DELETE_ARRAY(clusterVertexMem);
+
+	clusterVertexMem = new int[pSurfels->nVertexSurfelRelations];
+
+	pCluster->iVertexArray.Element = clusterVertexMem;
+
+	int iSurfel;
+	Surfel* pSurfel;
+
+	for (iSurfel = 0; iSurfel < pSurfels->NodeArray.n; iSurfel++)
+	{
+		pSurfel = pSurfels->NodeArray.Element + iSurfel;
+
+		pCluster->iSurfelArray.Element[iSurfel] = iSurfel;
+
+		pCluster->size += pSurfel->size;
+	}
+
+	pCluster->iSurfelArray.n = pSurfels->NodeArray.n;
+
+	int iVertex;
+
+	for (iVertex = 0; iVertex < pSurfels->vertexArray.n; iVertex++)
+		pCluster->iVertexArray.Element[iVertex] = iVertex;
+
+	pCluster->iVertexArray.n = pSurfels->vertexArray.n;
+
+	pCluster->bValid = true;
+
+	RVL_DELETE_ARRAY(clusters.Element);
+
+	clusters.Element = new RECOG::PSGM_::Cluster *;
+
+	clusters.Element[0] = pCluster;
+
+	clusters.n = 1;
+}
+
+void PSGM::CreateTemplate66()
 {
 	float h = 0.25f * PI;
 	float q = 0.5f * h;
@@ -1999,7 +2219,7 @@ void PSGM::CreateTemplate()
 	{
 		for (j = 0; j < 11; j++)
 		{
-			pPlane = convexTemplate.Element + 11 * i + j;
+			pPlane = convexTemplate66.Element + 11 * i + j;
 
 			N = pPlane->N;
 
@@ -2043,7 +2263,39 @@ void PSGM::CreateTemplate()
 	delete[] NT;
 }
 
-void PSGM::TemplateMatrix(Array2D<float> A)
+void PSGM::CreateTemplateBox()
+{
+	convexTemplateBox.n = 6;
+	convexTemplateBox.Element = new RECOG::PSGM_::Plane[convexTemplateBox.n];
+
+	float *N;
+
+	N = convexTemplateBox.Element[0].N;
+	N[0] = 0.0f; N[1] = 0.0f; N[2] = 1.0f;
+	convexTemplateBox.Element[0].d = 1.0;
+
+	N = convexTemplateBox.Element[1].N;
+	N[0] = -1.0f; N[1] = 0.0f; N[2] = 0.0f;
+	convexTemplateBox.Element[1].d = 1.0;
+
+	N = convexTemplateBox.Element[2].N;
+	N[0] = 0.0f; N[1] = -1.0f; N[2] = 0.0f;
+	convexTemplateBox.Element[2].d = 1.0;
+
+	N = convexTemplateBox.Element[3].N;
+	N[0] = 0.0f; N[1] = 0.0f; N[2] = -1.0f;
+	convexTemplateBox.Element[3].d = 1.0;
+
+	N = convexTemplateBox.Element[4].N;
+	N[0] = 1.0f; N[1] = 0.0f; N[2] = 0.0f;
+	convexTemplateBox.Element[4].d = 1.0;
+
+	N = convexTemplateBox.Element[5].N;
+	N[0] = 0.0f; N[1] = 1.0f; N[2] = 0.0f;
+	convexTemplateBox.Element[5].d = 1.0;
+}
+
+void PSGM::TemplateMatrix(Array2D<float> &A)
 {
 	A.Element = new float[3 * convexTemplate.n];
 	A.w = 3;
@@ -2064,9 +2316,11 @@ void PSGM::TemplateMatrix(Array2D<float> A)
 }
 
 void PSGM::FitModel(
-	//RECOG::PSGM_::Cluster *pCluster, //Vidovic
-	RECOG::PSGM_::ModelInstance *pModelInstance)
+	Array<int> iVertexArray,
+	RECOG::PSGM_::ModelInstance *pModelInstance,
+	bool bMemAllocated)
 {
+	if (!bMemAllocated)
 	RVLMEM_ALLOC_STRUCT_ARRAY(pMem, RECOG::PSGM_::ModelInstanceElement, convexTemplate.n, pModelInstance->modelInstance.Element);
 
 	pModelInstance->modelInstance.n = convexTemplate.n;
@@ -2083,10 +2337,7 @@ void PSGM::FitModel(
 	float N_[3];
 	//float dist;
 	//float maxdDefinedNormal;
-
-	int iCluster = pModelInstance->iCluster; //Vidovic
-
-	RECOG::PSGM_::Cluster *pCluster = clusters.Element[iCluster]; //Vidovic
+	int iVertex;
 
 	for (iModelInstanceElement = 0; iModelInstanceElement < convexTemplate.n; iModelInstanceElement++)
 	{
@@ -2101,25 +2352,34 @@ void PSGM::FitModel(
 
 		RVLMULMX3X3VECT(R, N, N_);		
 
-		pVertex = pSurfels->vertexArray.Element[pCluster->iVertexArray.Element[0]];
+		iVertex = iVertexArray.Element[0];
+
+		pVertex = pSurfels->vertexArray.Element[iVertex];
 
 		pModelInstanceElement->d = RVLDOTPRODUCT3(N_, pVertex->P);
+		pModelInstanceElement->iVertex = 0;
 
-		for (i = 0; i < pCluster->iVertexArray.n; i++)
+		for (i = 0; i < iVertexArray.n; i++)
 		{
-			pVertex = pSurfels->vertexArray.Element[pCluster->iVertexArray.Element[i]];
+			iVertex = iVertexArray.Element[i];
+
+			pVertex = pSurfels->vertexArray.Element[iVertex];
 
 			d = RVLDOTPRODUCT3(N_, pVertex->P);
 
 			if (d > pModelInstanceElement->d)
+			{
 				pModelInstanceElement->d = d;
+				pModelInstanceElement->iVertex = iVertex;
+			}
+		}
 
 			//Vidovic
 			if (bNormalValidityTest)
 			{
 				//if (pVertex->normalHull.n >= 3)
 				//{
-				//	dist = DistanceFromNormalHull(pVertex->normalHull, N_);
+				//	dist = pSurfels->DistanceFromNormalHull(pVertex->normalHull, N_);
 
 				//	if (dist <= 0.0f)
 				//	{
@@ -2137,6 +2397,8 @@ void PSGM::FitModel(
 				//}
 				pModelInstanceElement->valid = true;
 
+			pVertex = pSurfels->vertexArray.Element[pModelInstanceElement->iVertex];
+
 				P = pVertex->P;
 
 				if (RVLDOTPRODUCT3(N_, P) >= 0.0f)
@@ -2145,7 +2407,6 @@ void PSGM::FitModel(
 			else
 				pModelInstanceElement->valid = true;
 			//END Vidovic
-		}	// for every vertex in the cluster
 
 		pModelInstanceElement->d -= RVLDOTPRODUCT3(N_, t);
 
@@ -2158,15 +2419,19 @@ void PSGM::FitModel(
 	}	// for every model instance descriptor element
 
 	//calculate segment centroid - Vidovic
-	int minID, maxID;
 
-	for (i = 0; i < 3; i++)
+	if (bBoundingPlanes)
 	{
-		minID = centroidID.Element[i * 2].Idx;
-		maxID = centroidID.Element[i * 2 + 1].Idx;
-			
-		pModelInstance->tc[i] = (pModelInstance->modelInstance.Element[maxID].d - pModelInstance->modelInstance.Element[minID].d) / 2; // PROVJERITI
-	}
+		//int minID, maxID;
+
+		//for (i = 0; i < 3; i++)
+		//{
+		//	minID = centroidID.Element[i * 2].Idx;
+		//	maxID = centroidID.Element[i * 2 + 1].Idx;
+
+		//	pModelInstance->tc[i] = (pModelInstance->modelInstance.Element[maxID].d - pModelInstance->modelInstance.Element[minID].d) / 2; // PROVJERITI
+		//}
+		}
 
 	//END calculate segment centroid - Vidovic
 }
@@ -2486,7 +2751,7 @@ bool PSGM::ReferenceFrames(
 	return true;
 }
 
-void PSGM::AddReferenceFrame(
+RECOG::PSGM_::ModelInstance * PSGM::AddReferenceFrame(
 	//int iCluster, //Vidovic
 	float *RIn,
 	float *tIn)
@@ -2522,6 +2787,8 @@ void PSGM::AddReferenceFrame(
 	{
 		RVLNULL3VECTOR(t);
 	}
+
+	return pModelInstance;
 }
 
 int RVL::RECOG::PSGM_::ValidTangent(
@@ -2778,40 +3045,6 @@ bool PSGM::BelowPlane(
 	return true;
 }
 
-float PSGM::DistanceFromNormalHull(
-	Array<SURFEL::NormalHullElement> &NHull,
-	float *N)
-{
-	if (NHull.n == 0)
-		return 0.0f;
-	if (NHull.n == 1)
-	{
-		float *N_ = NHull.Element[0].N;
-
-		float e = RVLDOTPRODUCT3(N_, N);
-
-		return (e < 0.0f ? 1.0f : sqrt(1.0f - e * e));
-	}		
-
-	float maxDist = 0.0f;
-
-	int i;
-	float dist;
-	float *Nh_;
-
-	for (i = 0; i < NHull.n; i++)
-	{
-		Nh_ = NHull.Element[i].Nh;
-
-		dist = RVLDOTPRODUCT3(Nh_, N);
-
-		if (dist > maxDist)
-			maxDist = dist;
-	}
-
-	return maxDist;
-}
-
 void PSGM::UpdateMeanNormal(
 	float *sumN,
 	float &wN,
@@ -2838,16 +3071,16 @@ void PSGM::SetSceneFileName(char *sceneFileName_)
 	RVLCopyString(sceneFileName_, &sceneFileName);
 }
 
-//Vidovic
-void PSGM::SaveModelInstances(
+void PSGM::SaveCTIs(
 	FILE *fp,
+	RECOG::CTISet *pCTISet,
 	int iModel)
 {
 	int i;
 	int iModelInstanceElement;
 	RECOG::PSGM_::ModelInstanceElement *pModelInstanceElement;
 
-	RECOG::PSGM_::ModelInstance *pModelInstance = CTISet.CTI.pFirst;
+	RECOG::PSGM_::ModelInstance *pModelInstance = pCTISet->CTI.pFirst;
 
 	while (pModelInstance)
 	{
@@ -2889,6 +3122,14 @@ void PSGM::SaveModelInstances(
 	}
 }
 
+//Vidovic
+void PSGM::SaveModelInstances(
+	FILE *fp,
+	int iModel)
+{
+	SaveCTIs(fp, &CTISet, iModel);
+}
+
 
 bool PSGM::ModelExistInDB(char *modelFileName, FileSequenceLoader dbLoader)
 {
@@ -2926,81 +3167,152 @@ void PSGM::Learn(
 	SelectionColor[1] = 255;
 	SelectionColor[2] = 0;
 
-	FileSequenceLoader modelsLoader;
-	FileSequenceLoader dbLoader;
-
-	char modelFilePath[200];
-	char modelFileName[200];
-
-	Mesh mesh;
-
-	//int iCluster;
-	int nClusters, currentModelID;
-
-	//RVL_DELETE_ARRAY(modelDataBase);
-	//RVL_DELETE_ARRAY(modelsInDataBase);
-
-	if (!modelDataBase)
-		modelDataBase = "modelDB.dat";
-
-	if (!modelsInDataBase)
-		modelsInDataBase = "DBModels.txt";
-
-	modelsLoader.Init(modelSequenceFileName);
-	dbLoader.Init(modelsInDataBase);
-
-	FILE *fp = fopen(modelDataBase, "a");
-
-	bool saveDBSequenceFile = false;
-
-	printf("Model DB creation started...\n");
-
-	while (modelsLoader.GetNext(modelFilePath, modelFileName))
+	if (problem == RVLRECOGNITION_PROBLEM_SHAPE_INSTANCE_DETECTION)
 	{
-		if (ModelExistInDB(modelFileName, dbLoader))
-			continue;
+		FileSequenceLoader modelsLoader;
+		FileSequenceLoader dbLoader;
 
-		printf("\nProcessing model %s!\n", modelFileName);
+		char modelFilePath[200];
+		char modelFileName[200];
 
-		saveDBSequenceFile = true;
+		Mesh mesh;
 
-		mesh.LoadPolyDataFromPLY(modelFilePath);
+		//int iCluster;
+		int nClusters, currentModelID;
 
-		SetSceneFileName(modelFilePath);
+		//RVL_DELETE_ARRAY(modelDataBase);
+		//RVL_DELETE_ARRAY(modelsInDataBase);
 
-		Interpret(&mesh);
+		MTGSet.Clear();
 
-		nClusters = RVLMIN(clusters.n, nDominantClusters);
+		if (!modelDataBase)
+			modelDataBase = "modelDB.dat";
 
-		currentModelID = dbLoader.GetLastModelID() + 1;
+		if (!modelsInDataBase)
+			modelsInDataBase = "DBModels.txt";
 
-		//Add vtkPolyData to vtkModelDB
-		vtkModelDB.insert(std::make_pair(currentModelID, mesh.pPolygonData));
+		modelsLoader.Init(modelSequenceFileName);
+		dbLoader.Init(modelsInDataBase);
 
-		SaveModelInstances(fp, currentModelID);
+		FILE *fp = fopen(modelDataBase, "a");
 
-		dbLoader.AddModel(currentModelID, modelFilePath, modelFileName);
+		bool saveDBSequenceFile = false;
 
-		if (visualizer)
+		printf("Model DB creation started...\n");
+
+		while (modelsLoader.GetNext(modelFilePath, modelFileName))
 		{
-			InitDisplay(visualizer, &mesh, SelectionColor);
-			Display();
-			visualizer->Run();
+			if (ModelExistInDB(modelFileName, dbLoader))
+				continue;
 
-			visualizer->renderer->RemoveAllViewProps();
+			printf("\nProcessing model %s!\n", modelFileName);
+
+			saveDBSequenceFile = true;
+
+			//mesh.LoadPolyDataFromPLY(modelFilePath);
+			LoadMesh(vpMeshBuilder, modelFilePath, &mesh, true);
+
+			SetSceneFileName(modelFilePath);
+
+			currentModelID = dbLoader.GetLastModelID() + 1;
+
+			Interpret(&mesh, currentModelID);
+
+			nClusters = RVLMIN(clusters.n, nDominantClusters);
+
+			//Add vtkPolyData to vtkModelDB
+			vtkModelDB.insert(std::make_pair(currentModelID, mesh.pPolygonData));
+
+			SaveModelInstances(fp, currentModelID);
+
+			dbLoader.AddModel(currentModelID, modelFilePath, modelFileName);
+
+			if (visualizer)
+			{
+				pSurfels->NodeColors(SelectionColor);
+				InitDisplay(visualizer, &mesh, SelectionColor);
+				Display();
+				visualizer->Run();
+
+				visualizer->renderer->RemoveAllViewProps();
+			}
 		}
+
+		printf("Model DB creation completed!\n");
+
+		if (saveDBSequenceFile)
+			SaveModelID(dbLoader);
+
+		fclose(fp);
+
+		char *TGFileName = RVLCreateFileName(modelDataBase, ".dat", -1, ".tgr");
+
+		MTGSet.Save(TGFileName);
+
+		delete[] TGFileName;
 	}
+	else if (problem == RVLRECOGNITION_PROBLEM_CLASSIFICATION)
+	{
+		ObjectDetector *pObjectDetector = (ObjectDetector *)vpObjectDetector;
 
-	printf("Model DB creation completed!\n");
+		pObjectDetector->bGroundTruthSegmentation = true;
+		pObjectDetector->bGroundTruthSegmentationOnSurfelLevel = false;
 
-	if (saveDBSequenceFile)
-		SaveModelID(dbLoader);
+		pObjectDetector->flags |= RVLOBJECTDETECTION_FLAG_SEGMENTATION_GT;
 
-	fclose(fp);
+		FILE *fp = fopen("TrainCTIs.txt", "w");
+
+		fclose(fp);
+
+		fp = fopen("TrainCTIs.txt", "a");
+
+		FileSequenceLoader sceneSequence;
+		sceneSequence.Init(modelSequenceFileName);
+
+		int iScene = 0;
+
+		char filePath[200];
+		char fileName[200];
+
+		while (sceneSequence.GetNext(filePath, fileName))
+		{
+			pMem->Clear();
+
+			printf("Scene %s...\n", fileName);
+
+			pObjectDetector->DetectObjects(filePath);
+
+			CTISet.Init();
+
+			CTIs(iScene, pObjects, &CTISet, pMem);
+
+			SaveCTIs(fp, &CTISet, iScene);
+
+			cv::imshow("Segmentation", pObjects->CreateSegmentationImage());
+
+			//cv::waitKey();
+
+			cv::waitKey(1);
+
+			if (visualizer)
+			{
+				pSurfels->NodeColors(SelectionColor);
+				pObjectDetector->pObjects->InitDisplay(visualizer, &(pObjectDetector->mesh), SelectionColor);
+				pObjectDetector->pObjects->Display();
+				visualizer->Run();
+
+				visualizer->renderer->RemoveAllViewProps();
+			}
+
+			iScene++;
+		}
+
+		fclose(fp);
+	}
 }
 
 
-void PSGM::LoadModelMeshDB(char *modelSequenceFileName)
+void PSGM::LoadModelMeshDB(char *modelSequenceFileName, bool decimate, float decimatePercent)
 {
 	FileSequenceLoader modelsLoader;
 
@@ -3019,13 +3331,40 @@ void PSGM::LoadModelMeshDB(char *modelSequenceFileName)
 	printf("Starting VTK Model DB creation.\n");
 	while (modelsLoader.GetNext(modelFilePath, modelFileName))
 	{
-		printf("\Loading VTK model %s to DB!\n", modelFileName);
+		printf("Loading VTK model %s to DB!\n", modelFileName);
 
 		mesh.LoadPolyDataFromPLY(modelFilePath);
+		vtkSmartPointer<vtkDecimatePro> decimate = vtkSmartPointer<vtkDecimatePro>::New();
+		//mesh.pPolygonData->Print(std::cout);
 
-		//Add vtkPolyData to vtkModelDB
-		vtkModelDB.insert(std::make_pair(currentModelID, mesh.pPolygonData));
-
+		if (decimate) //subsampling the model to reduce number of points and fasten the process
+		{
+			decimate->SetInputData(mesh.pPolygonData);
+			decimate->SetTargetReduction(decimatePercent);
+			decimate->Update();
+			//decimate->GetOutput()->Print(std::cout);
+		}
+		
+		//Calculate normals
+		vtkSmartPointer<vtkPolyDataNormals> normalsFilter = vtkSmartPointer<vtkPolyDataNormals>::New();
+		normalsFilter->ComputePointNormalsOn();
+		normalsFilter->SplittingOff();
+		if (decimate)
+			normalsFilter->SetInputConnection(decimate->GetOutputPort());
+		else
+			normalsFilter->SetInputData(mesh.pPolygonData);
+		normalsFilter->Update();
+		//normalsFilter->GetOutput()->Print(std::cout);
+		/*vtkSmartPointer<vtkCleanPolyData> cleanFilter = vtkSmartPointer<vtkCleanPolyData>::New();
+		cleanFilter->SetInputConnection(normalsFilter->GetOutputPort());
+		cleanFilter->PointMergingOn();
+		cleanFilter->SetAbsoluteTolerance(0.03);
+		cleanFilter->ToleranceIsAbsoluteOn();
+		cleanFilter->Update();*/
+		//cleanFilter->GetOutput()->Print(std::cout);
+		
+		//Add vtkPolyData to vtkModelDB:
+		vtkModelDB.insert(std::make_pair(currentModelID, normalsFilter->GetOutput()));
 		currentModelID++;
 	}
 
@@ -3057,6 +3396,12 @@ void PSGM::LoadModelDataBase()
 		tBestMatch.Element[i].Element = new float[3];
 		tBestMatch.Element[i].n = 3;
 	}
+
+	char *TGFileName = RVLCreateFileName(modelDataBase, ".dat", -1, ".tgr");
+
+	MTGSet.Load(TGFileName);
+
+	delete[] TGFileName;
 }
 
 void PSGM::LoadCTI(char *fileName)
@@ -4254,7 +4599,8 @@ void PSGM::Match()
 
 	int iMSegment;
 
-	int maxMSegments = (MCTISet.nModels + 1) * (MCTISet.maxSegmentIdx + 1);
+	//int maxMSegments = (MCTISet.nModels + 1) * (MCTISet.maxSegmentIdx + 1);
+	int maxMSegments = (MCTISet.nModels) * (MCTISet.maxSegmentIdx + 1);
 
 	//delete scoreMatchMatrix	
 	for (iSCluster = 0; iSCluster < scoreMatchMatrix.n; iSCluster++)
@@ -4282,9 +4628,209 @@ void PSGM::Match()
 	nTc = new float[3 * convexTemplate.n];
 	dISMc = new float[convexTemplate.n];
 
+#ifdef RVLPSGM_MATCHCTI_MATCH_MATRIX
+	// maxnSClusterCTIs <- max no. of CTIs per scene cluster
+
+	int maxnSClusterCTIs = 0;
+
+	int nSClusterCTIs;
+
+	for (iSCluster = 0; iSCluster < nClusters; iSCluster++)
+	{
+		nSClusterCTIs = CTISet.SegmentCTIs.Element[iSCluster].n;
+
+		if (nSClusterCTIs > maxnSClusterCTIs)
+			maxnSClusterCTIs = nSClusterCTIs;
+	}
+
+	// CTIInterval <- interval of CTI indices created from a particular model in MCTISet
+	// maxnModelCTIs <- max no. of CTIs per model
+
+	Pair<int, int> *CTIInterval = new Pair<int, int>[MCTISet.nModels];
+
+	int maxnModelCTIs = 0;
+
+	int iMCluster = 0;
+
+	int iModel, iMCTI;
+	int nModelCTIs;
+	int nMClusterCTIs;
+
+	for (iModel = 0; iModel < MCTISet.nModels; iModel++)
+	{
+		CTIInterval[iModel].a = MCTISet.SegmentCTIs.Element[iMCluster].Element[0];
+
+		nModelCTIs = 0;
+
+		nMClusterCTIs = MCTISet.SegmentCTIs.Element[iMCluster].n;
+
+		while (true)
+		{
+			nModelCTIs += nMClusterCTIs;
+
+			iMCluster++;
+
+			if (iMCluster >= MCTISet.SegmentCTIs.n)
+				break;
+
+			nMClusterCTIs = MCTISet.SegmentCTIs.Element[iMCluster].n;
+
+			if (nMClusterCTIs > 0)
+			{
+			iMCTI = MCTISet.SegmentCTIs.Element[iMCluster].Element[0];
+
+			pMModelInstance = MCTISet.pCTI.Element[iMCTI];
+
+				if (pMModelInstance->iModel != iModel)
+					break;
+			}
+		}
+
+		CTIInterval[iModel].b = (iMCluster < MCTISet.SegmentCTIs.n ? MCTISet.SegmentCTIs.Element[iMCluster].Element[0] : MCTISet.pCTI.n);
+
+		if (nModelCTIs > maxnModelCTIs)
+			maxnModelCTIs = nModelCTIs;
+	}
+
+	// Initialize hypothesis space.
+
+	Space3DGrid<PSGM_::Hypothesis, float> HSpace;
+
+	int HSpaceSize = 40;
+	float HSpaceCellSize = 20.0f;
+	int maxnMatches = maxnSClusterCTIs * maxnModelCTIs;
+
+	HSpace.Create(HSpaceSize, HSpaceSize, HSpaceSize, HSpaceCellSize, maxnMatches);
+
+	float volumeCorner[3];
+
+	float halfVolumeSize = 0.5f * HSpaceCellSize * (float)HSpaceSize;
+
+	RVLSET3VECTOR(volumeCorner, halfVolumeSize, halfVolumeSize, halfVolumeSize);
+
+	Array<int> iMergingCandidates;
+
+	iMergingCandidates.Element = new int[maxnMatches];
+
+	//// Initialize match matrix.
+
+	//RVL_DELETE_ARRAY(matchMatrixMem);
+
+	//matchMatrixMem = new int[CTISet.pCTI.n * MCTISet.pCTI.n];
+
+	//RVL_DELETE_ARRAY(matchMatrix.Element);
+
+	//matchMatrix.Element = new Array<int>[nClusters * MCTISet.nModels];
+
+	// Allocate memory for sceneSegmentMatches.
+
+	RVL_DELETE_ARRAY(sceneSegmentMatches.Element);
+	
+	sceneSegmentMatches.Element = new Array<SortIndex<float>>[nClusters];
+
+	sceneSegmentMatches.n = nClusters;
+
+	int nMatches = CTISet.pCTI.n * MCTISet.pCTI.n;
+
+	if (nMatches > sceneSegmentMatchesArray.n)
+	{
+		RVL_DELETE_ARRAY(sceneSegmentMatchesArray.Element);
+
+		sceneSegmentMatchesArray.n = nMatches;
+
+		sceneSegmentMatchesArray.Element = new SortIndex<float>[sceneSegmentMatchesArray.n];
+	}
+
+	RVL_DELETE_ARRAY(bestSceneSegmentMatches.Element);
+
+	bestSceneSegmentMatches.Element = new Array<SortIndex<float>>[nClusters];
+
+	bestSceneSegmentMatches.n = nClusters;
+
+	int nBestMatchesPerCluster = 10;
+
+	int nBestMatchesTotal = nBestMatchesPerCluster * nClusters;
+
+	if (nBestMatchesTotal > bestSceneSegmentMatchesArray.n)
+	{
+		RVL_DELETE_ARRAY(bestSceneSegmentMatchesArray.Element);
+
+		bestSceneSegmentMatchesArray.n = nBestMatchesTotal;
+
+		bestSceneSegmentMatchesArray.Element = new SortIndex<float>[bestSceneSegmentMatchesArray.n];
+	}
+
+	// main loop
+
+	PSGM_::MatchInstance **ppFirstMatch;
+	float centroid[3];
+	PSGM_::Cluster *pSCluster;
+
+	for (iSCluster = 0; iSCluster < nClusters; iSCluster++)
+		//iSCluster = 5;		// Only for debugging purpose!!!
+	{
+		printf("%d/%d\n", iSCluster + 1, nClusters);
+
+		sceneSegmentMatches.Element[iSCluster].n = 0;
+
+		sceneSegmentMatches.Element[iSCluster].Element = sceneSegmentMatchesArray.Element + matchID;
+
+		nCTI = CTISet.SegmentCTIs.Element[iSCluster].n;
+
+		pSCluster = clusters.Element[iSCluster];
+
+		pSurfels->Centroid(pSCluster->iSurfelArray, centroid);
+
+		RVLSCALE3VECTOR(centroid, 1000.0f, centroid);
+
+		HSpace.SetVolume(centroid[0] - volumeCorner[0], centroid[1] - volumeCorner[1], centroid[2] - volumeCorner[2]);
+
+		for (iModel = 0; iModel < MCTISet.nModels; iModel++)
+		{
+			ppFirstMatch = pCTImatches->ppNext;
+
+			for (iSCTI = 0; iSCTI < nCTI; iSCTI++)
+			{
+				CTIIdx = CTISet.SegmentCTIs.Element[iSCluster].Element[iSCTI];
+
+				pSModelInstance = CTISet.pCTI.Element[CTIIdx];
+
+				Match(pSModelInstance, CTIInterval[iModel].a, CTIInterval[iModel].b);
+
+				CalculateScore(RVLPSGM_MATCH_SIMILARITY_MEASURE_MEAN_SATURATED_SQUARE_DISTANCE, CTIInterval[iModel].a, CTIInterval[iModel].b);
+
+
+			} // for all MI in cluster
+
+			AddSegmentMatches(iSCluster, ppFirstMatch, HSpace, iMergingCandidates);
+		}
+
+		//// Only for debugging purpose!!!
+
+		//FILE *fp = fopen("tmp.txt", "w");
+
+		//for (int i = 0; i < sceneSegmentMatches.Element[iSCluster].n; i++)
+		//	fprintf(fp, "%d\t%f\n", sceneSegmentMatches.Element[iSCluster].Element[i].idx, sceneSegmentMatches.Element[iSCluster].Element[i].cost);
+
+		//fclose(fp);
+
+		////
+
+		bestSceneSegmentMatches.Element[iSCluster].Element = bestSceneSegmentMatchesArray.Element + nBestMatchesPerCluster * iSCluster;
+
+		Min<SortIndex<float>, float>(sceneSegmentMatches.Element[iSCluster], nBestMatchesPerCluster, bestSceneSegmentMatches.Element[iSCluster]);
+
+		BubbleSort<SortIndex<float>>(bestSceneSegmentMatches.Element[iSCluster]);
+	}
+
+	delete[] CTIInterval;
+	delete[] iMergingCandidates.Element;
+
+#else
 	int startIdx = 0, endIdx = MCTISet.pCTI.n;
 
 	for (iSCluster = 0; iSCluster < nClusters; iSCluster++)
+	//iSCluster = 5;		// Only for debugging purpose!!!
 	{
 		printf("%d/%d", iSCluster + 1, nClusters);
 	
@@ -4298,7 +4844,8 @@ void PSGM::Match()
 
 			Match(pSModelInstance, startIdx, endIdx);
 
-			CalculateScore(RVLPSGM_MATCHES_SIMILARITY_MEASURE);
+			//CalculateScore(RVLPSGM_MATCH_SIMILARITY_MEASURE_MEAN_SATURATED_SQUARE_DISTANCE);
+			CalculateScore(RVLPSGM_MATCH_SIMILARITY_MEASURE_SATURATED_SQUARE_DISTANCE_INVISIBILITY_PENAL);			
 
 			UpdateScoreMatchMatrix(pSModelInstance);
 
@@ -4317,6 +4864,7 @@ void PSGM::Match()
 			printf("\b\b\b");
 
 	}	// for all dominant clusters
+#endif
 
 	pCTImatchesArray.n = CTISet.pCTI.n * MCTISet.pCTI.n;
 
@@ -4326,12 +4874,18 @@ void PSGM::Match()
 
 	QLIST::CreatePtrArray<RECOG::PSGM_::MatchInstance>(pCTImatches, &pCTImatchesArray);
 
+#ifndef RVLPSGM_MATCHCTI_MATCH_MATRIX
 	SortScoreMatchMatrix();
+#endif
 
 	////for Visualization purposes:
 	//RECOG::PSGM_::MatchInstance *pMatchx = pCTImatchesArray.Element[scoreMatchMatrix.Element[0].Element[0].idx];
 	//VisualizeCTIMatchidx(pMatchx->iSCTI, pMatchx->iMCTI);
 	////end of visualization
+
+	//Transparency check
+	////Transparency check
+	//FilterHypothesesUsingTransparency(0.5, 0.01, true);
 
 	printf("completed.\n");
 
@@ -4347,6 +4901,10 @@ void PSGM::Match()
 	SaveMatches();
 	printf("completed!\n\n");
 #endif
+
+	// Match TGs.
+
+	MatchTGs();
 }
 
 void PSGM::Match(
@@ -4690,9 +5248,7 @@ void PSGM::Match(
 				pCTIMatch->angleGT = NAN;
 				pCTIMatch->distanceGT = NAN;
 
-
-
-				//MSTransformation(pMModelInstance, pSModelInstance, tBestMatch.Element[iMCTI].Element, R_, t_);
+				MSTransformation(pMModelInstance, pSModelInstance, tBestMatch.Element[iMCTI].Element, pCTIMatch->R, pCTIMatch->t);
 			}
 			else
 			{
@@ -4704,7 +5260,378 @@ void PSGM::Match(
 	}	//for all model MI
 }
 
-void PSGM::CalculateScore(int similarityMeasure)
+void PSGM::MatchTGs()
+{
+	// Parameters.
+
+	int nBestMatches = 10;
+
+#ifdef RVLPSGM_MATCHTGS_CREATE_SCENE_TG
+	// Initialize memory storage.
+
+	CRVLMem mem;
+
+	mem.Create(10000000);
+
+	STGSet.pMem = &mem;
+
+	// Create vertex graph.
+
+	VertexGraph *pVertexGraph = new VertexGraph;
+
+	pVertexGraph->pMem = &mem;
+
+	pVertexGraph->idx = 0;
+
+	STGSet.vertexGraphs.push_back(pVertexGraph);
+
+	pVertexGraph->Create(pSurfels);
+#else
+#ifdef RVLPSGM_MATCHTGS_CREATE_SCENE_VG
+	// Create vertex graph.
+
+	VertexGraph *pVertexGraph = new VertexGraph;
+
+	CRVLMem mem;
+
+	mem.Create(10000000);
+
+	pVertexGraph->pMem = &mem;
+
+	pVertexGraph->idx = 0;
+
+	pVertexGraph->Create(pSurfels);
+
+	FILE *fpSVG = fopen("sceneVG.vgr", "w");
+
+	pVertexGraph->Save(fpSVG);
+
+	fclose(fpSVG);
+
+	delete pVertexGraph;
+
+	mem.Clear();
+#endif
+#endif
+
+#ifdef RVLTG_MATCH_DEBUG
+	FILE *fpDebug = fopen("TG_match_error.txt", "w");
+
+	fclose(fpDebug);
+#endif
+
+	/// Compute Matching scores for the first nBestMatches best matches for every scene segment.
+
+	Array<int> iVertexArray;
+
+	iVertexArray.Element = new int[pSurfels->vertexArray.n];
+
+	bool *bAlreadyInArray = new bool[pSurfels->vertexArray.n];
+
+	memset(bAlreadyInArray, 0, pSurfels->vertexArray.n * sizeof(bool));
+
+	int iSS, iSS_, i, j, iVertex;
+	Box<float> MBoundingBox, SBoundingBox, boundingBoxIntersection;
+	float RMS[9], tMS[3];
+	float RMS_[9], tMS_[3];
+	float RSM[9], tSM[3];
+	PSGM_::Cluster *pSSegment;
+	float boundingBoxOverlap;
+	int nMatches;
+
+	for (iSS = 0; iSS < scoreMatchMatrix.n; iSS++)
+	//iSS = 5;
+	{
+#ifdef RVLTG_MATCH_DEBUG
+		// Write matches to file.
+
+		FILE *fp = fopen("TG_match_error.txt", "a");
+
+		fprintf(fp, "%d\t%d\t0\t0\n", iSS, nBestMatches);
+
+		fclose(fp);
+#endif
+		for (i = 0; i < nBestMatches; i++)
+		{
+			// Get match.
+
+			int iMatch = scoreMatchMatrix.Element[iSS].Element[i].idx;
+
+			if (iMatch < 0)
+			{
+#ifdef RVLTG_MATCH_DEBUG
+				FILE *fp = fopen("TG_match_error.txt", "a");
+
+				fprintf(fp, "-1\t0\t0\t%f\n", 0.0f);
+
+				int i;
+
+				for (i = 0; i < 3; i++)
+					fprintf(fp, "%f\t%f\t%f\t%f\n", 0.0f, 0.0f, 0.0f, 0.0f);
+
+				fclose(fp);
+#endif
+
+				continue;
+			}
+
+			RECOG::PSGM_::MatchInstance *pMatch = pCTImatchesArray.Element[iMatch];
+			int iSCTI = pCTImatchesArray.Element[iMatch]->iSCTI;
+			int iMCTI = pCTImatchesArray.Element[iMatch]->iMCTI;
+
+			RECOG::PSGM_::ModelInstance *pSCTI = CTISet.pCTI.Element[iSCTI];
+			RECOG::PSGM_::ModelInstance *pMCTI = MCTISet.pCTI.Element[iMCTI];
+
+			MSTransformation(pMCTI, pSCTI, pMatch->tMatch, RMS, tMS);
+
+			RVLINVTRANSF3D(RMS, tMS, RSM, tSM);
+
+			// Get model TG.
+
+			RECOG::TG *pMTG = MTGSet.GetTG(pMCTI->iModel);
+
+			if (pMTG)	// If there is a TG in MTGSet which corresponds to the model CTI
+			{
+				// Get vertex graph.
+
+				VertexGraph *pVG = MTGSet.GetVertexGraph(pMTG);
+
+				if (pVG)
+				{
+					// Determine model bounding box.
+
+					if (pVG->BoundingBox(&MBoundingBox))
+					{
+						// Expand boundingBox.
+
+						//float boundingBoxExtension = 20.0f;
+
+						//boundingBox.minx -= boundingBoxExtension;
+						//boundingBox.maxx += boundingBoxExtension;
+						//boundingBox.miny -= boundingBoxExtension;
+						//boundingBox.maxy += boundingBoxExtension;
+						//boundingBox.minz -= boundingBoxExtension;
+						//boundingBox.maxz += boundingBoxExtension;
+
+						// iVertexArray <- scene vertices within boundingBox.
+
+						//iVertexArray.n = 0;
+
+						//SURFEL::Vertex *pVertex;
+						//float PS[3], PM[3];
+
+						//for (iVertex = 0; iVertex < pSurfels->vertexArray.n; iVertex++)
+						//{
+						//	pVertex = pSurfels->vertexArray.Element[iVertex];
+
+						//	RVLSCALE3VECTOR(pVertex->P, 1000.0f, PS);
+
+						//	RVLTRANSF3(PS, RSM, tSM, PM);
+
+						//	if (InBoundingBox<float>(&boundingBox, PM))
+						//		iVertexArray.Element[iVertexArray.n++] = iVertex;
+						//}
+
+						// iVertexArray <- vertices of the clusters which overlap significantly with MBoundingBox
+
+						iVertexArray.n = 0;
+
+						for (iSS_ = 0; iSS_ < clusters.n; iSS_++)
+						{
+							pSSegment = clusters.Element[iSS_];
+
+							if (pSurfels->BoundingBox(pSSegment->iVertexArray, RSM, tSM, 1000.0f, SBoundingBox))
+							{
+								if (BoxIntersection<float>(&MBoundingBox, &SBoundingBox, &boundingBoxIntersection))
+								{
+									boundingBoxOverlap = BoxVolume<float>(&boundingBoxIntersection) / BoxVolume<float>(&SBoundingBox);
+
+									if (boundingBoxOverlap > 0.5f)
+									{
+										for (j = 0; j < pSSegment->iVertexArray.n; j++)
+										{
+											iVertex = pSSegment->iVertexArray.Element[j];
+
+											if (!bAlreadyInArray[iVertex])
+											{
+												iVertexArray.Element[iVertexArray.n++] = iVertex;
+
+												bAlreadyInArray[iVertex] = true;
+											}
+										}
+									}
+								}
+							}
+						}
+
+						for (j = 0; j < iVertexArray.n; j++)
+							bAlreadyInArray[iVertexArray.Element[j]] = false;
+						
+#ifdef RVLPSGM_MATCHTGS_CREATE_SCENE_TG
+						// Create TG from the vertices in MBoundingBox.
+
+						RECOG::TG *pSTG = new RECOG::TG;
+
+						pSTG->A = STGSet.A;
+
+						pSTG->iVertexGraph = pVertexGraph->idx;
+
+						pSTG->iObject = pMTG->iObject;
+
+						pSTG->Create(pVertexGraph, iVertexArray, RMS, tMS, &STGSet, pSurfels);
+
+						STGSet.TGs.push_back(pSTG);
+#endif
+
+						// Match pMTG to vertices in iVertexArray.
+
+						float score;
+						Array<RECOG::TGCorrespondence> correspondences;
+
+						pMTG->Match(pSurfels, iVertexArray, 1000.0f, &MTGSet, RMS, tMS, true, score, correspondences, RMS_, tMS_);
+
+						// Free memory.
+
+						RVL_DELETE_ARRAY(correspondences.Element);
+					}	// If there is at least one point in the vertex graph
+				}	// If pMTG has a vertex graph
+			}	// If there is a TG in MTGSet which corresponds to the model CTI
+		}	// for the first nBestMatches
+	}	// for every scene segment
+
+	delete[] iVertexArray.Element;
+	delete[] bAlreadyInArray;
+
+#ifdef RVLPSGM_MATCHTGS_CREATE_SCENE_TG
+	STGSet.Save("sceneTG.tgr");
+
+	STGSet.Clear();
+
+	mem.Clear();
+#endif
+}
+
+void PSGM::AddSegmentMatches(
+	int iCluster,
+	PSGM_::MatchInstance **ppFirstMatch,
+	Space3DGrid<PSGM_::Hypothesis, float> &HSpace,
+	Array<int> &iMergingCandidates)
+{
+	//float eqThr = 0.94;		// cos(20 deg)
+	//float eqThr = COS45;
+	float eqThr = 0.0f;
+
+	PSGM_::MatchInstance *pMatch = *ppFirstMatch;
+
+	PSGM_::Hypothesis Hypothesis;
+	PSGM_::Hypothesis *pHypothesis_;
+	Array<PSGM_::Hypothesis *> neighborArray;
+	int i;
+	float e;
+	float *X, *Z, *X_, *Z_;
+
+	while (pMatch)
+	{
+		//if (pMatch->ID == 12134)
+		//	int debug = 0;
+
+		X = pMatch->R;
+		Z = pMatch->R + 6;
+
+		HSpace.Neighbors(pMatch->t, neighborArray);
+
+		iMergingCandidates.n = 0;
+
+		for (i = 0; i < neighborArray.n; i++)
+		{
+			pHypothesis_ = neighborArray.Element[i];
+
+			Z_ = pHypothesis_->R + 6;
+
+			e = RVLDOTPRODUCT3(Z, Z_);
+
+			if (e < eqThr)
+				continue;
+
+			X_ = pHypothesis_->R;
+
+			e = RVLDOTPRODUCT3(X, X_);
+
+			if (e < eqThr)
+				continue;
+
+			if (pMatch->score <= pHypothesis_->score)
+				iMergingCandidates.Element[iMergingCandidates.n++] = i;
+			else
+				break;
+		}
+
+		if (i >= neighborArray.n)	// If there are no better hypotheses in the neighborhood of pMatch
+		{
+			Hypothesis.iMatch = pMatch->ID;
+			RVLCOPY3VECTOR(pMatch->t, Hypothesis.P);
+			RVLCOPYMX3X3(pMatch->R, Hypothesis.R);
+			Hypothesis.score = pMatch->score;
+
+			HSpace.AddData(Hypothesis);
+
+			for (i = 0; i < iMergingCandidates.n; i++)
+			{
+				pHypothesis_ = neighborArray.Element[iMergingCandidates.Element[i]];
+
+				HSpace.RemoveData(pHypothesis_);
+			}
+		}
+
+		pMatch = pMatch->pNext;
+	}
+
+	Array<PSGM_::Hypothesis *> hypothesisArray;
+
+	HSpace.GetData(hypothesisArray);	
+
+	SortIndex<float> *pMatchIdx = sceneSegmentMatches.Element[iCluster].Element + sceneSegmentMatches.Element[iCluster].n;
+
+	PSGM_::Hypothesis **ppHypothesis = hypothesisArray.Element;
+
+	for (i = 0; i < hypothesisArray.n; i++, pMatchIdx++, ppHypothesis++)
+	{
+		pHypothesis_ = *ppHypothesis;
+
+		//if (pHypothesis_->iMatch == 174)
+		//	int debug = 0;
+
+		pMatchIdx->idx = pHypothesis_->iMatch;
+		pMatchIdx->cost = pHypothesis_->score;
+	}
+
+	sceneSegmentMatches.Element[iCluster].n += hypothesisArray.n;
+
+	HSpace.Clear();
+
+#ifdef RVLPSGM_MATCH_HYPOTHESIS_LOG
+	FILE *fp = fopen("hypotheses.txt", "w");
+
+	for (i = 0; i < hypothesisArray.n; i++, pMatchIdx++, ppHypothesis++)
+	{
+		pHypothesis_ = hypothesisArray.Element[i];
+
+		fprintf(fp, "%d\t", pHypothesis_->iMatch);
+
+		for (int j = 0; j < 9; j++)
+			fprintf(fp, "%f\t", pHypothesis_->R[j]);
+
+		fprintf(fp, "%f\t%f\t%f\n", pHypothesis_->P[0], pHypothesis_->P[1], pHypothesis_->P[2]);
+	}
+
+	fclose(fp);
+#endif
+}
+
+void PSGM::CalculateScore(
+	int similarityMeasure,
+	int iFirstCTI,
+	int iEndCTI)
 {
 	float sigma = 8.0;
 
@@ -4714,17 +5641,21 @@ void PSGM::CalculateScore(int similarityMeasure)
 
 	int nMCTI = MCTISet.pCTI.n;
 
+	int iEndCTI_ = (iEndCTI >= 0 ? iEndCTI : nMCTI);
+
 	float fTmp, eTmp, scoreTmp;
 
 	float maxError;
+
+	int medianIdx;
 
 	RECOG::PSGM_::MatchInstance *pCTIMatch_ = pFirstSCTIMatch;
 
 	switch (similarityMeasure)
 	{
-	case 1: //mean square error
+	case RVLPSGM_MATCH_SIMILARITY_MEASURE_MEAN_SQUARE_DISTANCE: //mean square error
 
-		for (iMCTI = 0; iMCTI < nMCTI; iMCTI++)
+		for (iMCTI = iFirstCTI; iMCTI < iEndCTI_; iMCTI++)
 		{
 			scoreTmp = 0;
 
@@ -4744,9 +5675,9 @@ void PSGM::CalculateScore(int similarityMeasure)
 		}
 
 		break;
-	case 2: //maximum absolute error
+	case RVLPSGM_MATCH_SIMILARITY_MEASURE_MAX_ABS_DISTANCE: //maximum absolute error
 
-		for (iMCTI = 0; iMCTI < nMCTI; iMCTI++)
+		for (iMCTI = iFirstCTI; iMCTI < iEndCTI_; iMCTI++)
 		{
 			for (iValidPlane = 0; iValidPlane < iValid.n; iValidPlane++)
 			{
@@ -4770,9 +5701,9 @@ void PSGM::CalculateScore(int similarityMeasure)
 		}
 
 		break;
-	case 3: //saturated square error
+	case RVLPSGM_MATCH_SIMILARITY_MEASURE_SATURATED_SQUARE_DISTANCE_INVISIBILITY_PENAL: //saturated square error
 
-		for (iMCTI = 0; iMCTI < nMCTI; iMCTI++)
+		for (iMCTI = iFirstCTI; iMCTI < iEndCTI_; iMCTI++)
 		{
 			scoreTmp = 0;
 
@@ -4799,6 +5730,34 @@ void PSGM::CalculateScore(int similarityMeasure)
 		}
 
 		break;
+	case RVLPSGM_MATCH_SIMILARITY_MEASURE_MEAN_SATURATED_SQUARE_DISTANCE:
+		for (iMCTI = iFirstCTI; iMCTI < iEndCTI_; iMCTI++)
+		{
+			scoreTmp = 0;
+
+			for (iValidPlane = 0; iValidPlane < iValid.n; iValidPlane++)
+			{
+				idx = iValid.Element[iValidPlane].Idx;
+
+				eTmp = e.Element[iMCTI].Element[idx];
+
+				fTmp = eTmp / sigma;
+
+				if (fTmp * fTmp < sigma25)
+				{
+					scoreTmp += fTmp * fTmp;
+				}
+				else
+					scoreTmp += sigma25;
+			}
+
+			score.Element[iMCTI] = scoreTmp / iValid.n;
+
+			pCTIMatch_->score = score.Element[iMCTI];
+			pCTIMatch_ = pCTIMatch_->pNext;
+		}
+
+		break;
 	default: //median of absolute error
 
 		Array<SortIndex<float>> validErrors;
@@ -4806,9 +5765,9 @@ void PSGM::CalculateScore(int similarityMeasure)
 		validErrors.Element = new SortIndex<float>[iValid.n];
 		validErrors.n = iValid.n;
 
-		int medianIdx = iValid.n / 2;
+		medianIdx = iValid.n / 2;
 
-		for (iMCTI = 0; iMCTI < nMCTI; iMCTI++)
+		for (iMCTI = iFirstCTI; iMCTI < iEndCTI_; iMCTI++)
 		{
 			for (iValidPlane = 0; iValidPlane < iValid.n; iValidPlane++)
 			{
@@ -4884,6 +5843,66 @@ void PSGM::SortScoreMatchMatrix(bool descending)
 	{
 		BubbleSort<SortIndex<float>>(scoreMatchMatrix.Element[iSSegment], descending);
 	}
+}
+
+void PSGM::CreateScoreMatchMatrixICP()
+{
+	int nClusters = CTISet.maxSegmentIdx + 1;
+
+	//int maxMSegments = (MCTISet.nModels + 1) * (MCTISet.maxSegmentIdx + 1);
+	int maxMSegments = (MCTISet.nModels) * (MCTISet.maxSegmentIdx + 1);
+
+	int iSCluster, iMSegment;
+
+	//delete scoreMatchMatrix	
+	for (iSCluster = 0; iSCluster < scoreMatchMatrixICP.n; iSCluster++)
+		RVL_DELETE_ARRAY(scoreMatchMatrixICP.Element[iSCluster].Element);
+
+	RVL_DELETE_ARRAY(scoreMatchMatrixICP.Element);
+
+	scoreMatchMatrixICP.Element = new Array<SortIndex<float>>[nClusters];
+	scoreMatchMatrixICP.n = nClusters;
+
+	for (iSCluster = 0; iSCluster < nClusters; iSCluster++)
+	{
+		scoreMatchMatrixICP.Element[iSCluster].Element = new SortIndex<float>[maxMSegments];
+		scoreMatchMatrixICP.Element[iSCluster].n = maxMSegments;
+
+		for (iMSegment = 0; iMSegment < maxMSegments; iMSegment++)
+		{
+			scoreMatchMatrixICP.Element[iSCluster].Element[iMSegment].cost = 10000; //MAX COST!!!
+			//scoreMatchMatrixICP.Element[iSCluster].Element[iMSegment].cost = -1; //MAX COST!!!
+
+			scoreMatchMatrixICP.Element[iSCluster].Element[iMSegment].idx = -1;
+		}
+	}
+
+	int iMatch;
+
+	for (iSCluster = 0; iSCluster < nClusters; iSCluster++)
+	{
+		for (iMSegment = 0; iMSegment < nBestMatches; iMSegment++)
+		{
+			iMatch = scoreMatchMatrix.Element[iSCluster].Element[iMSegment].idx;
+
+			if (iMatch != -1)
+			{
+				scoreMatchMatrixICP.Element[iSCluster].Element[iMSegment].cost = pCTImatchesArray.Element[iMatch]->cost_NN;
+
+				scoreMatchMatrixICP.Element[iSCluster].Element[iMSegment].idx = iMatch;
+			}
+			else
+				break;
+		}
+	}
+
+	//sort ICP matrix
+	for (iSCluster = 0; iSCluster < nClusters; iSCluster++)
+	{
+		BubbleSort<SortIndex<float>>(scoreMatchMatrixICP.Element[iSCluster], false); //ascending
+		//BubbleSort<SortIndex<float>>(scoreMatchMatrixICP.Element[iSCluster], true); //descending
+	}
+
 }
 
 void PSGM::ComputeClusterNormalDistribution(
@@ -5276,6 +6295,115 @@ void PSGM::CountTPandFN(
 	}	
 }
 
+bool PSGM::PoseCheck(
+	RVL::GTInstance *pGT,
+	RECOG::PSGM_::MatchInstance *pMatch,
+	float distanceThresh,
+	float angleThresh,
+	FILE *fpLog,
+	FILE *fpnotFirstPoseErr,
+	bool evaluateICP)
+{
+	float R[9], R_[9], RGT[9], tGT[3], t[3], RICP[9], tICP[3];
+	float V[3], theta, distance;
+	float zGT[3], z[3];
+	float thetaZ;
+
+	RVLSCALEMX3X3(pGT->R, 1000, RGT);
+	RVLSCALE3VECTOR(pGT->t, 1000, tGT);	
+	
+	if (evaluateICP)
+	{
+		float Rpom[9], tpom[3], tmp[3];
+		RVLCOMPTRANSF3DWITHINV(RGT, tGT, pMatch->RICP_, pMatch->tICP_, Rpom, tpom, tmp);
+		RVLCOMPTRANSF3D(Rpom, tpom, pMatch->R, pMatch->t, pMatch->RICP, pMatch->tICP);
+
+		RVLCOPYMX3X3(pMatch->RICP, R);
+		RVLCOPY3VECTOR(pMatch->tICP, t);
+
+	}
+	else
+	{
+		RVLMXMUL3X3T2(RGT, pMatch->R, R);
+		RVLDIF3VECTORS(tGT, pMatch->t, t);
+	}
+
+	
+
+		/*
+		#ifdef RVLPSGM_MATCH_SEGMENT_CENTROID
+
+		RVLDIFMX3X3(RGT, pMatch->R, R_);
+
+		RVLMULMX3X3VECT(R_, modelInstanceDB.Element[pMatch->iMMI].tc, t);
+
+		RVLSUM3VECTORS(t, tGT, t);
+
+		RVLDIF3VECTORS(t, pMatch->t, t);
+		#else if
+		RVLDIF3VECTORS(pMatch->t, tGT, t);
+		#endif
+		*/
+		
+
+	GetAngleAxis(R, V, theta);
+
+	GetDistance(t, distance);
+
+	zGT[0] = RGT[2];
+	zGT[1] = RGT[5];
+	zGT[2] = RGT[8];
+
+	if (evaluateICP) //not anymore, because we do not have the apsolute pose, rather the relative
+	{
+		thetaZ = acos(R[9]);
+	}
+	else
+	{
+		z[0] = pMatch->R[2];
+		z[1] = pMatch->R[5];
+		z[2] = pMatch->R[8];
+		thetaZ = RVLDOTPRODUCT3(zGT, z);
+}
+
+	//if ((theta < angleThresh || (theta >(PI - angleThresh) && theta < (PI + angleThresh))) && distance < distanceThresh)
+	//if (distance < distanceThresh && theta < angleThresh)
+	if (distance < distanceThresh && thetaZ > angleThresh)
+	{
+		return true;
+	}
+	else
+	{
+		if (fpLog)
+		{
+			//fprintf(fpLog, "%d\t%d\t%d\t%d\t%f\t%f\n", pMatch->iScene, MCTISet.pCTI.Element[pMatch->iMCTI]->iModel, MCTISet.pCTI.Element[pMatch->iMCTI]->iCluster, CTISet.pCTI.Element[pMatch->iSCTI]->iCluster, distance, theta);
+			fprintf(fpLog, "%d\t%d\t%d\t%d\t%f\t%f\n", pMatch->iScene, MCTISet.pCTI.Element[pMatch->iMCTI]->iModel, MCTISet.pCTI.Element[pMatch->iMCTI]->iCluster, CTISet.pCTI.Element[pMatch->iSCTI]->iCluster, distance, acos(thetaZ) * 180 / PI);
+		}
+
+		return false;
+	}
+}
+
+void PSGM::FindGTInstance(
+	RVL::GTInstance **pGT,
+	int iScene,
+	int iModel)
+{
+	int nGTModels, iGTM;
+
+	RVL::GTInstance *pGT_ = *pGT;
+
+	pGT_ = pECCVGT->GT.Element[iScene].Element;
+
+	nGTModels = pECCVGT->GT.Element[iScene].n;
+
+	for (iGTM = 0; iGTM < nGTModels; iGTM++, pGT_++)
+		if (pGT_->iModel == iModel)
+			break;
+
+	*pGT = pGT_;
+}
+
 void PSGM::CalculatePR(int TP, int FP, int FN, float &precision, float &recall)
 {
 	if (TP + FP > 0)
@@ -5287,10 +6415,44 @@ void PSGM::CalculatePR(int TP, int FP, int FN, float &precision, float &recall)
 
 }
 
+void PSGM::FindMinMaxInScoreMatchMatrix(float &min, float &max, Array<Array<SortIndex<float>>> &scoreMatchMatrix_)
+{
+	
+	int nSSegments = scoreMatchMatrix_.n;
+
+	int iSSegment;
+	int iMSegment;
+	float scoreTmp;
+	int idx;
+
+	//scoreMatchMatrix must be sorted
+	min = scoreMatchMatrix_.Element[0].Element[0].cost;
+	max = scoreMatchMatrix_.Element[0].Element[0].cost;
+
+	for (iSSegment = 1; iSSegment < nSSegments; iSSegment++)
+		if (scoreMatchMatrix_.Element[iSSegment].Element[0].cost < min)
+			min = scoreMatchMatrix_.Element[iSSegment].Element[0].cost;
+
+	for (iSSegment = 0; iSSegment < nSSegments; iSSegment++)
+		for (iMSegment = 0; iMSegment < nMSegments; iMSegment++)
+		{
+			scoreTmp = scoreMatchMatrix_.Element[iSSegment].Element[iMSegment].cost;
+
+			idx = scoreMatchMatrix_.Element[iSSegment].Element[iMSegment].idx;
+
+			if (scoreTmp > max && idx != -1)
+				max = scoreTmp;
+		}
+}
+
 void PSGM::EvaluateMatchesByScore(
 	FILE *fp,
 	FILE *fpLog,
-	int nBestSegments)
+	FILE *fpPoseError,
+	FILE *fpnotFirstInfo,
+	FILE *fpnotFirstPoseErr,
+	int nBestSegments,
+	bool evaluateICP)
 {
 	float precision, recall;
 
@@ -5299,16 +6461,21 @@ void PSGM::EvaluateMatchesByScore(
 	float minScore, maxScore;
 
 	int iSSegment;
-	int nSSegments = scoreMatchMatrix.n;
+	//int nSSegments = scoreMatchMatrix.n;
+	int nSSegments = CTISet.SegmentCTIs.n;
 
 	int iMSegment;
-	int nMSegments = (MCTISet.nModels + 1) * (MCTISet.maxSegmentIdx + 1);
+	//int nMSegments = (MCTISet.nModels + 1) * (MCTISet.maxSegmentIdx + 1);
+	int nMSegments = (MCTISet.nModels) * (MCTISet.maxSegmentIdx + 1);
 
 	float scoreTmp;
 
 	int idx;
 
+	float cos30 = sqrt(3) / 2;
+
 	//scoreMatchMatrix is sorted
+	/*
 	minScore = scoreMatchMatrix.Element[0].Element[0].cost;
 	maxScore = scoreMatchMatrix.Element[0].Element[0].cost;
 
@@ -5326,6 +6493,15 @@ void PSGM::EvaluateMatchesByScore(
 			if (scoreTmp > maxScore && idx != -1)
 				maxScore = scoreTmp;
 		}
+		*/
+
+	if (evaluateICP)
+	{
+		CreateScoreMatchMatrixICP();
+		FindMinMaxInScoreMatchMatrix(minScore, maxScore, scoreMatchMatrixICP);
+	}
+	else
+		FindMinMaxInScoreMatchMatrix(minScore, maxScore, scoreMatchMatrix);
 
 	int iScore, nScoreSteps = 200;
 
@@ -5333,7 +6509,7 @@ void PSGM::EvaluateMatchesByScore(
 
 	float scoreStep = (maxScore - minScore) / nScoreSteps;
 
-	bool TPMatch;
+	bool TPMatch, poseMatch;
 
 	int TP_ = 0, FP_ = 0, FN_ = 0;
 
@@ -5347,7 +6523,14 @@ void PSGM::EvaluateMatchesByScore(
 
 	int iBestMatches;
 
-	int iMCTI;
+	int iMCTI, iSCTI;
+
+	RECOG::PSGM_::ModelInstance *pSCTI;
+	RECOG::PSGM_::ModelInstance *pMCTI;
+
+	RVL::GTInstance *pGT = NULL;
+
+	float R_[9], t_[3];
 
 	if (nBestSegments == 0)
 	{
@@ -5363,10 +6546,16 @@ void PSGM::EvaluateMatchesByScore(
 
 				for (iMSegment = 0; iMSegment < nMSegments; iMSegment++)
 				{
+					if (evaluateICP)
+						iMatch = scoreMatchMatrixICP.Element[iSSegment].Element[iMSegment].idx;
+					else
 					iMatch = scoreMatchMatrix.Element[iSSegment].Element[iMSegment].idx;
 
 					if (iMatch != -1)
 					{
+						if (evaluateICP)
+							scoreTmp = scoreMatchMatrixICP.Element[iSSegment].Element[iMSegment].cost;
+						else
 						scoreTmp = scoreMatchMatrix.Element[iSSegment].Element[iMSegment].cost;
 
 						if (scoreTmp <= scoreThresh)
@@ -5388,12 +6577,31 @@ void PSGM::EvaluateMatchesByScore(
 								FP_++;
 							}
 							else
+							{
 								if (firstTP[iSSegment] == -1)
 								{
 									firstTP[iSSegment] = iMSegment;
 									firstTPScore[iSSegment] = scoreTmp;
 									firstTPiModel[iSSegment] = iMatchedModel;
 								}
+
+								//check pose of TP segment matches
+								if (iScore == nScoreSteps - 1)
+								{
+									iSCTI = pCTImatchesArray.Element[iMatch]->iSCTI;
+
+									pSCTI = CTISet.pCTI.Element[iSCTI];
+									pMCTI = MCTISet.pCTI.Element[iMCTI];
+
+									MSTransformation(pMCTI, pSCTI, pCTImatchesArray.Element[iMatch]->tMatch, pCTImatchesArray.Element[iMatch]->R, pCTImatchesArray.Element[iMatch]->t);
+
+									FindGTInstance(&pGT, pCTImatchesArray.Element[iMatch]->iScene, iMatchedModel);
+
+									//poseMatch = PoseCheck(pGT, pCTImatchesArray.Element[iMatch], 50.0, PI / 6, fpPoseError);
+									poseMatch = PoseCheck(pGT, pCTImatchesArray.Element[iMatch], 50.0, cos30, fpPoseError, fpnotFirstPoseErr, evaluateICP);
+								}
+
+							}
 						}
 					}
 				}
@@ -5431,11 +6639,21 @@ void PSGM::EvaluateMatchesByScore(
 
 					for (iMSegment = 0; iMSegment <= iBestMatches; iMSegment++)
 					{
+					if (evaluateICP)
+						iMatch = scoreMatchMatrixICP.Element[iSSegment].Element[iMSegment].idx;
+					else
 						iMatch = scoreMatchMatrix.Element[iSSegment].Element[iMSegment].idx;
 
 						if (iMatch != -1)
 						{
+						if (evaluateICP)
+							scoreTmp = scoreMatchMatrixICP.Element[iSSegment].Element[iMSegment].cost;
+						else
 							scoreTmp = scoreMatchMatrix.Element[iSSegment].Element[iMSegment].cost;
+
+						//save score for best match
+						//if(iMSegment == 0)
+						//bestNesto = scoreTmp
 
 							//if (scoreTmp <= scoreThresh)
 							//{
@@ -5449,18 +6667,48 @@ void PSGM::EvaluateMatchesByScore(
 								if (!segmentGT.Element[iSegmentGT].valid)
 									TPMatch = false;
 								else
+						{
 									TPMatch = CompareMatchToSegmentGT((iScene - 1), iSSegment, iMatchedModel);
+						}
 
 								if (!TPMatch)
 								{
 									FP_++;
 								}
 								else
+						{
 									if (firstTP[iSSegment] == -1)
 									{
+								//if (iSSegment == 2)
+									//printf("iMatch: %d, iMatchedModel: %d", iMatch, iMatchedModel);
+
 										firstTP[iSSegment] = iMSegment;
 										firstTPScore[iSSegment] = scoreTmp;
 										firstTPiModel[iSSegment] = iMatchedModel;
+
+								//if iMSegment != 0
+								//u file zapisati bestNesto i scoreTmp
+							}
+
+							//check pose of TP segment matches
+							if (iBestMatches == nBestSegments - 1)
+							{
+								iSCTI = pCTImatchesArray.Element[iMatch]->iSCTI;
+
+								pSCTI = CTISet.pCTI.Element[iSCTI];
+								pMCTI = MCTISet.pCTI.Element[iMCTI];
+								
+								MSTransformation(pMCTI, pSCTI, pCTImatchesArray.Element[iMatch]->tMatch, pCTImatchesArray.Element[iMatch]->R, pCTImatchesArray.Element[iMatch]->t);					
+
+								FindGTInstance(&pGT, pCTImatchesArray.Element[iMatch]->iScene, iMatchedModel);
+
+								//poseMatch = PoseCheck(pGT, pCTImatchesArray.Element[iMatch], 50.0, PI / 6, fpPoseError);
+								if (iMSegment != 0) // pose check for matches that are not on the first place 
+									int klkl = 0;
+									//zapis u file1
+									//fprintf(fpnotFirstInfo, "%d, %d, %d", iScene, iSSegment, iMSegment);
+									//poseMatch = PoseCheck(pGT, pCTImatchesArray.Element[iMatch], 50.0, cos30, fpPoseError, fpnotFirstPoseErr, evaluateICP);
+							}
 									}
 							//}
 						}
@@ -5475,7 +6723,7 @@ void PSGM::EvaluateMatchesByScore(
 
 				CalculatePR(TP_, FP_, FN_, precision, recall);
 
-				pECCVGT->ResetMatchFlag();
+			//pECCVGT->ResetMatchFlag();
 
 				PrintMatchInfo(fp, fpLog, TP_, FP_, FN_, precision, recall, nSSegments, firstTP, firstTPiModel, firstTPScore, -1.0, -1.0, -1.0, -1.0, nBestSegments, iBestMatches, graphID);
 
@@ -5762,6 +7010,8 @@ void PSGM::ConvexTemplateCentoidID()
 			centroidID.Element[5].Idx = iPlane;
 		}
 	}
+
+	bBoundingPlanes = true;
 }
 //END Vidovic
 
@@ -5780,10 +7030,9 @@ void PSGM::InitDisplay(
 	displayData.pVisualizer = pVisualizer;	
 	RVLCOPY3VECTOR(selectionColor, displayData.selectionColor);
 	displayData.iSelectedCluster = -1;
-
-	pSurfels->DisplayData.keyPressUserFunction = &RECOG::PSGM_::keyPressUserFunction;
-	pSurfels->DisplayData.mouseRButtonDownUserFunction = &RECOG::PSGM_::mouseRButtonDownUserFunction;
-	pSurfels->DisplayData.vpUserFunctionData = &displayData;
+		pSurfels->DisplayData.keyPressUserFunction = &RECOG::PSGM_::keyPressUserFunction;
+		pSurfels->DisplayData.mouseRButtonDownUserFunction = &RECOG::PSGM_::mouseRButtonDownUserFunction;
+		pSurfels->DisplayData.vpUserFunctionData = &displayData;
 
 	pSurfels->InitDisplay(pVisualizer, pMesh, pSurfelDetector);
 	
@@ -5899,6 +7148,94 @@ void PSGM::DisplayModelInstance(Visualizer *pVisualizer)
 	pVisualizer->renderer->AddActor(pVisualizer->actor);
 }
 
+void PSGM::DisplayCTIs(
+	Visualizer *pVisualizer,
+	RECOG::CTISet *pCTISet,
+	Array<int> *pCTIArray)
+{
+	Array<int> CTIArray;
+	int i;
+
+	if (pCTIArray)
+		CTIArray = *pCTIArray;
+	else
+	{
+		CTIArray.Element = new int[pCTISet->pCTI.n];
+		CTIArray.n = pCTISet->pCTI.n;
+
+		for (i = 0; i < pCTISet->pCTI.n; i++)
+			CTIArray.Element[i] = i;
+	}
+
+	RECOG::PSGM_::ModelInstance *pCTI;
+
+	for (i = 0; i < CTIArray.n; i++)
+	{
+		pCTI = pCTISet->pCTI.Element[CTIArray.Element[i]];
+
+		DisplayCTI(pVisualizer, pCTI);
+	}
+
+	RVL_DELETE_ARRAY(CTIArray.Element);
+}
+
+void PSGM::DisplayCTI(
+	Visualizer *pVisualizer,
+	RECOG::PSGM_::ModelInstance *pCTI)
+{
+	float *N = new float[3 * convexTemplate.n];
+
+	float *N_ = N;
+
+	float *d = new float[convexTemplate.n];
+
+	int i;
+	float *N__;
+
+	for (i = 0; i < convexTemplate.n; i++, N_ += 3)
+	{
+		N__ = convexTemplate.Element[i].N;
+
+		RVLCOPY3VECTOR(N__, N_);
+
+		d[i] = pCTI->modelInstance.Element[i].d;
+	}
+	
+	float tCTIc_CTI[3];
+
+	vtkSmartPointer<vtkPolyData> modelPD = GenerateCTIPrimitivePolydata_RW(N, d, convexTemplate.n, false, NULL, tCTIc_CTI);
+
+	float *RCTI_S = pCTI->R;
+	float *tCTI_S = pCTI->t;
+	
+	float tCTIc_S[3];
+
+	RVLTRANSF3(tCTIc_CTI, RCTI_S, tCTI_S, tCTIc_S);
+
+	double T[16];
+
+	RVLHTRANSFMX(RCTI_S, tCTIc_S, T);
+
+	vtkSmartPointer<vtkTransform> transform = vtkSmartPointer<vtkTransform>::New();
+	transform->SetMatrix(T);
+
+	vtkSmartPointer<vtkTransformPolyDataFilter> transformFilter = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
+	transformFilter->SetInputData(modelPD);
+
+	transformFilter->SetTransform(transform);
+	transformFilter->Update();
+
+	vtkSmartPointer<vtkPolyDataMapper> modelMapper = vtkSmartPointer<vtkPolyDataMapper>::New();
+	modelMapper->SetInputConnection(transformFilter->GetOutputPort());
+	vtkSmartPointer<vtkActor> modelActor = vtkSmartPointer<vtkActor>::New();
+	modelActor->SetMapper(modelMapper);
+	modelActor->GetProperty()->SetColor(0, 1, 0);
+	pVisualizer->renderer->AddActor(modelActor);
+
+	delete[] N;
+	delete[] d;
+}
+
 void PSGM::PaintCluster(
 	int iCluster,
 	unsigned char *color)
@@ -5918,6 +7255,7 @@ void PSGM::PaintCluster(
 
 		pSurfel = pSurfels->NodeArray.Element + iSurfel;
 
+		if (!pSurfel->bEdge)
 		pVisualizer->PaintPointSet(&(pSurfel->PtList), pMesh->pPolygonData, color);
 	}
 }
@@ -6047,7 +7385,8 @@ bool RVL::RECOG::PSGM_::keyPressUserFunction(
 	Mesh *pMesh, 
 	SurfelGraph *pSurfels, 
 	std::string &key, 
-	void *vpData)
+	void *vpData
+	)
 {
 	RECOG::PSGM_::DisplayData *pData = (RECOG::PSGM_::DisplayData *)vpData;
 
@@ -6064,23 +7403,85 @@ bool RVL::RECOG::PSGM_::keyPressUserFunction(
 		{
 			pSurfels->Display(pVisualizer, pMesh);
 
-			if (pSurfels->DisplayData.bVertices)
-			{
-				if (pData->iSelectedCluster >= 0)
-				{
-					unsigned char color[3];
+			//if (pSurfels->DisplayData.bVertices)
+			//{
+			//	if (pData->iSelectedCluster >= 0)
+			//	{
+			//		unsigned char color[3];
 
-					RVLSET3VECTOR(color, 255, 0, 0);
+			//		RVLSET3VECTOR(color, 255, 0, 0);
 
-					pRecognition->PaintClusterVertices(pData->iSelectedCluster, color);
+			//		pRecognition->PaintClusterVertices(pData->iSelectedCluster, color);
 
-					pSurfels->UpdateVertexDisplayLines();
-				}
-			}
+			//		pSurfels->UpdateVertexDisplayLines();
+			//	}
+			//}
 
 			pData->iSelectedCluster = -1;
 		}
 			
+		return true;
+	}
+
+	//sometimes it doesn't exit properly, as if "c" is constantly pressed
+	if (key == "c") // choose which hypothesis is shown (0-6) 
+	{
+		std::string line;
+		int iHypothesesRank = -1;
+		unsigned char SelectionColor[3];
+
+		SelectionColor[0] = 0;
+		SelectionColor[1] = 255;
+		SelectionColor[2] = 0;
+		do
+		{
+			std::cout << "Enter hypothesis rank, 0-6: ";
+			std::getline(std::cin, line);
+			sscanf(line.data(), "%d", &iHypothesesRank);
+		} while (iHypothesesRank < 0 || iHypothesesRank > 25);
+
+		//delete visualized ICP matches from the scene:
+		pVisualizer->renderer->RemoveAllViewProps();
+		//pRecognition->InitDisplay(pVisualizer, pMesh, SelectionColor);
+		pVisualizer->SetMesh(pMesh);
+		pRecognition->Display();
+
+#ifdef RVLPSGM_ICP
+		for (int i = 0; i < pRecognition->scoreMatchMatrixICP.n; i++)
+		{
+			if (pRecognition->scoreMatchMatrixICP.Element[i].Element[iHypothesesRank].idx != -1)
+			{
+				//visualize new ICP matches on the scene
+				pRecognition->AddOneModelToVisualizer(pVisualizer, pRecognition->scoreMatchMatrixICP.Element[i].Element[iHypothesesRank].idx, iHypothesesRank, true);
+			}
+		}
+		////Filko - for transparency testing
+		//for (int i = 0; i < pRecognition->scoreMatchMatrixICP.n; i++)
+		//{
+		//	for (int j = 0; j < RVLMIN(7, pRecognition->scoreMatchMatrixICP.Element[i].n); j++)
+		//	{
+
+		//		if (pRecognition->scoreMatchMatrixICP.Element[i].Element[j].idx != -1)
+		//		{
+		//			//visualize new ICP matches on the scene
+		//			pRecognition->AddOneModelToVisualizer(pVisualizer, pRecognition->scoreMatchMatrixICP.Element[i].Element[j].idx, j, true);
+		//			break;
+		//		}
+		//	}
+		//}
+#else
+		for (int i = 0; i < pRecognition->scoreMatchMatrix.n; i++)
+		{
+			if (pRecognition->scoreMatchMatrix.Element[i].Element[iHypothesesRank].idx != -1)
+			{
+				//visualize new matches on the scene
+				pRecognition->AddOneModelToVisualizer(pVisualizer, pRecognition->scoreMatchMatrix.Element[i].Element[iHypothesesRank].idx, iHypothesesRank, false);
+
+				//printf("CTI %d\n", pRecognition->pCTImatchesArray.Element[pRecognition->scoreMatchMatrix.Element[i].Element[iHypothesesRank].idx]->iSCTI);
+			}
+		}
+#endif
+		
 		return true;
 	}
 
@@ -6135,25 +7536,25 @@ bool RVL::RECOG::PSGM_::mouseRButtonDownUserFunction(
 			pSurfels->UpdateVertexDisplayLines();
 		}
 
-		pData->iSelectedCluster = iCluster;
+		//pData->iSelectedCluster = iCluster;
 
-		FILE *fp = fopen("C:\\RVL\\Debug\\cluster_vertices.txt", "w");
+		//FILE *fp = fopen("C:\\RVL\\Debug\\cluster_vertices.txt", "w");
 
-		RECOG::PSGM_::Cluster *pCluster = pRecognition->clusters.Element[iCluster];
+		//RECOG::PSGM_::Cluster *pCluster = pRecognition->clusters.Element[iCluster];
 
-		int i, iVertex;
-		SURFEL::Vertex *pVertex;
+		//int i, iVertex;
+		//SURFEL::Vertex *pVertex;
 
-		for (i = 0; i < pCluster->iVertexArray.n; i++)
-		{
-			iVertex = pCluster->iVertexArray.Element[i];
+		//for (i = 0; i < pCluster->iVertexArray.n; i++)
+		//{
+		//	iVertex = pCluster->iVertexArray.Element[i];
 
-			pVertex = pSurfels->vertexArray.Element[iVertex];
+		//	pVertex = pSurfels->vertexArray.Element[iVertex];
 
-			fprintf(fp, "%d\t%lf\t%lf\t%lf\n", iVertex, pVertex->P[0], pVertex->P[1], pVertex->P[2]);
-		}
+		//	fprintf(fp, "%d\t%lf\t%lf\t%lf\n", iVertex, pVertex->P[0], pVertex->P[1], pVertex->P[2]);
+		//}
 
-		fclose(fp);
+		//fclose(fp);
 
 		return true;
 	}
@@ -6174,34 +7575,426 @@ void PSGM::CalculatePose(int iMatch)
 }
 
 
-void PSGM::AddBestCTIModelsToVisualizer(Visualizer *pVisualizer, bool align, RVL::PSGM::ICPfunction ICPFunction, int ICPvariant)
+
+void PSGM::AddModelsToVisualizer(Visualizer *pVisualizer, bool align, RVL::PSGM::ICPfunction ICPFunction, int ICPvariant, void *kdTreePtr)
 {
-	int bestMatchIdx;
-	float bestScore;
-	//RECOG::PSGM_::MatchInstance *pMatch;
-
-	//RECOG::PSGM_::MatchInstance *pMatchx = pCTImatchesArray.Element[scoreMatchMatrix.Element[0].Element[0].idx];
-
-	for (int i = 0; i < scoreMatchMatrix.n; i++)
+	printf("Visualization:\n\n");
+	for (int i = 0; i < scoreMatchMatrixICP.n; i++)
 	{
-		bestScore = 0;
-		bestMatchIdx = -1;
-		/*for (int j = 0; j < scoreMatchMatrix.Element[i].n; j++)
-		{
-			if (scoreMatchMatrix.Element[i].Element[j].idx < 0)
-				continue;
-			pMatch = pCTImatchesArray.Element[scoreMatchMatrix.Element[i].Element[j].idx];
-			if (pMatch->score > bestScore)
-			{
-				bestMatchIdx = scoreMatchMatrix.Element[i].Element[j].idx;
-				bestScore = pMatch->score;
-			}
-		}*/
-		AddCTIModelToVisualizer(pVisualizer, scoreMatchMatrix.Element[i].Element[0].idx, align, ICPFunction, ICPvariant);
+		if (scoreMatchMatrixICP.Element[i].Element[0].idx != -1)
+			//AddOneModelToVisualizer(pVisualizer, scoreMatchMatrixICP.Element[i].Element[0].idx, 0, align); //without double ICP
+			AddOneModelToVisualizerICP(pVisualizer, scoreMatchMatrixICP.Element[i].Element[0].idx, align, ICPFunction, ICPvariant, kdTreePtr); //with icp
 	}
 }
 
-void PSGM::AddCTIModelToVisualizer(Visualizer *pVisualizer, int iMatch, bool align, RVL::PSGM::ICPfunction ICPFunction, int ICPvariant)
+//OLD visualizer - for ICP in scene c.s.
+//void PSGM::AddOneModelToVisualizer(Visualizer *pVisualizer, int iMatch, int iRank, bool align)
+//{
+//	//Setting indices:
+//	int iMCTI = pCTImatchesArray.Element[iMatch]->iMCTI;
+//	int iSCTI = pCTImatchesArray.Element[iMatch]->iSCTI;
+//	int iCluster, iModel;
+//
+//	//Getting scene and model pointers:
+//	RECOG::PSGM_::ModelInstance *pMCTI;
+//	RECOG::PSGM_::ModelInstanceElement *pMIE;
+//	RECOG::PSGM_::ModelInstance *pSCTI;
+//	RECOG::PSGM_::ModelInstanceElement *pSIE;
+//	pMCTI = MCTISet.pCTI.Element[iMCTI];
+//	pMIE = pMCTI->modelInstance.Element;
+//	pSCTI = CTISet.pCTI.Element[iSCTI];
+//	pSIE = pSCTI->modelInstance.Element;
+//
+//	iCluster = pSCTI->iCluster;
+//	iModel = pMCTI->iModel;
+//
+//	//For a chosen hypothesis, prints which scene segment is matched to which model
+//#ifdef RVLPSGM_ICP
+//	printf("SSegment: %d\tMatchedModel: %d (score: %f)\n", iCluster, iModel, scoreMatchMatrixICP.Element[iCluster].Element[iRank].cost);
+//#else
+//	printf("SSegment: %d\tMatchedModel: %d (score: %f)\n", iCluster, iModel, scoreMatchMatrix.Element[iCluster].Element[iRank].cost);
+//#endif
+//
+//	//Setting descriptors:
+//	float *dM = new float[66];
+//	float *dS = new float[66];
+//	int *validS = new int[66];
+//
+//	for (int i = 0; i < 66; i++)
+//	{
+//		dS[i] = pSIE->d; // Filling scene descriptor
+//		validS[i] = pSIE->valid;
+//		pSIE++;
+//
+//		dM[i] = pMIE->d / 1000.0; // Filling model descriptor
+//		pMIE++;
+//	}
+//
+//	//Getting match pointer and calculating pose:
+//	RECOG::PSGM_::MatchInstance *pMatch = pCTImatchesArray.Element[iMatch];
+//	CalculatePose(iMatch);
+//	Eigen::MatrixXf nT = ConvexTemplatenT();
+//
+//	//Generate model polydata
+//	float t[3];
+//	vtkSmartPointer<vtkPolyData> modelPD = GenerateCTIPrimitivePolydata_RW(nT.data(), dM, 66, false, NULL, t);
+//
+//	//Getting transform from centered (model) CTI polygon data to scene (T_CCTIM_S)
+//	float *R_M_S = pCTImatchesArray.Element[iMatch]->R;
+//	float *t_M_S_mm = pCTImatchesArray.Element[iMatch]->t;
+//	float t_M_S[3];
+//	RVLSCALE3VECTOR2(t_M_S_mm, 1000.0f, t_M_S);
+//	float *R_CTIM_M = pMCTI->R;
+//	float *t_CTIM_M = pMCTI->t;
+//	float R_CTIM_S[9], t_CTIM_S[3];
+//
+//	RVLCOMPTRANSF3D(R_M_S, t_M_S, R_CTIM_M, t_CTIM_M, R_CTIM_S, t_CTIM_S);
+//	float t_CCTIM_S[3];
+//	RVLTRANSF3(t, R_CTIM_S, t_CTIM_S, t_CCTIM_S);
+//	double T_CCTIM_S[16];
+//	RVLHTRANSFMX(pSCTI->R, t_CCTIM_S, T_CCTIM_S);
+//
+//	//Generate scene CTI polydata
+//	vtkSmartPointer<vtkPolyData> modelSPD = GenerateCTIPrimitivePolydata_RW(nT.data(), dS, 66, false, validS, t);
+//
+//	//Getting transform from centered (scene) CTI polygon data to scene (T_CCTIS_S)
+//	float t_CCTIS_S[3];
+//	RVLTRANSF3(t, pSCTI->R, pSCTI->t, t_CCTIS_S)
+//		double T_CCTIS_S[16];
+//	RVLHTRANSFMX(pSCTI->R, t_CCTIS_S, T_CCTIS_S);
+//
+//
+//	//PLY Model transformation
+//	double T_M_S[16];
+//	RVLHTRANSFMX(R_M_S, t_M_S, T_M_S);
+//	vtkSmartPointer<vtkTransform> transform = vtkSmartPointer<vtkTransform>::New();
+//
+//#ifdef RVLPSGM_ICP
+//	if (displayData.hypothesisVisualizationMode == RVLPSGM_HYPOTHESIS_VISUALIZATION_MODE_PLY)
+//		transform->SetMatrix(T_M_S); //when transforming PLY models to scene
+//#endif
+//
+//	if (displayData.hypothesisVisualizationMode == RVLPSGM_HYPOTHESIS_VISUALIZATION_MODE_CTI)
+//		transform->SetMatrix(T_CCTIM_S); //when transforming CTI convex hull to scene
+//
+//#ifdef RVLPSGM_ICP
+//	//Scaling PLY model to meters
+//	vtkSmartPointer<vtkTransform> transformScale = vtkSmartPointer<vtkTransform>::New();
+//	transformScale->Scale(0.001, 0.001, 0.001);
+//	vtkSmartPointer<vtkTransformPolyDataFilter> transformFilterScale = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
+//	transformFilterScale->SetInputData(vtkModelDB.at(iModel));
+//	transformFilterScale->SetTransform(transformScale);
+//	transformFilterScale->Update();
+//#endif
+//
+//	//Transforming PLY model or CTI convex hull model to scene
+//	vtkSmartPointer<vtkTransformPolyDataFilter> transformFilter = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
+//	if (displayData.hypothesisVisualizationMode == RVLPSGM_HYPOTHESIS_VISUALIZATION_MODE_CTI)
+//		transformFilter->SetInputData(modelPD); //model CTI convex hull
+//#ifdef RVLPSGM_ICP
+//	if (displayData.hypothesisVisualizationMode == RVLPSGM_HYPOTHESIS_VISUALIZATION_MODE_PLY)
+//		transformFilter->SetInputConnection(transformFilterScale->GetOutputPort()); //PLY model
+//#endif
+//
+//	transformFilter->SetTransform(transform);
+//	transformFilter->Update();
+//
+//	//Transforming scene CTI convex hull
+//	vtkSmartPointer<vtkTransform> transform2 = vtkSmartPointer<vtkTransform>::New();
+//	transform2->SetMatrix(T_CCTIS_S);
+//	vtkSmartPointer<vtkTransformPolyDataFilter> transformFilter2 = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
+//	transformFilter2->SetInputData(modelSPD);
+//	transformFilter2->SetTransform(transform2);
+//	transformFilter2->Update();
+//	
+//#ifdef RVLPSGM_ICP
+//	//Aligning point clouds (if required) 
+//	vtkSmartPointer<vtkTransformPolyDataFilter> transformFilterICP;
+//	if (align)
+//		{
+//		//Sampling filter for model polydata
+//		//vtkSmartPointer<vtkTriangleFilter> modelSamplerTriangleFilter = vtkSmartPointer<vtkTriangleFilter>::New();
+//		//modelSamplerTriangleFilter->SetInputConnection(transformFilter->GetOutputPort());
+//		//modelSamplerTriangleFilter->Update();
+//		//vtkSmartPointer<vtkPolyDataPointSampler> modelSampler = vtkSmartPointer<vtkPolyDataPointSampler>::New();
+//		//modelSampler->SetInputConnection(modelSamplerTriangleFilter->GetOutputPort());
+//		//modelSampler->SetDistance(0.005);
+//		//modelSampler->Update();
+//		//vtkSmartPointer<vtkPolyData> modelSamplerPD = modelSampler->GetOutput();
+//
+//		//Sampling filter for scene polydata
+//		//vtkSmartPointer<vtkTriangleFilter> sceneSamplerTriangleFilter = vtkSmartPointer<vtkTriangleFilter>::New(); //Creates triangles from polygons (Samples don't work with polygons)
+//		//sceneSamplerTriangleFilter->SetInputConnection(transformFilter2->GetOutputPort());
+//		//sceneSamplerTriangleFilter->Update();
+//		//vtkSmartPointer<vtkPolyDataPointSampler> sceneSampler = vtkSmartPointer<vtkPolyDataPointSampler>::New();
+//		//sceneSampler->SetInputConnection(sceneSamplerTriangleFilter->GetOutputPort());
+//		//sceneSampler->SetDistance(0.005);
+//		//sceneSampler->Update();
+//		//vtkSmartPointer<vtkPolyData> sceneSamplerPD = sceneSampler->GetOutput();
+//
+//		/*vtkSmartPointer<vtkCleanPolyData> cleanFilter = vtkSmartPointer<vtkCleanPolyData>::New();
+//		cleanFilter->SetInputConnection(transformFilter->GetOutputPort());
+//		cleanFilter->PointMergingOn();
+//		cleanFilter->SetAbsoluteTolerance(0.005);
+//		cleanFilter->ToleranceIsAbsoluteOn();
+//		cleanFilter->Update();*/
+//		//vtkSmartPointer<vtkPolyData> scenePD = GetSceneModelPC(iCluster); //Generate scene model pointcloud
+//		
+//		//Aligning pointcluds (using PCL ICP)
+//		double icpT[16];
+//
+//		vtkSmartPointer<vtkPolyData> visiblePD = GetVisiblePart(transformFilter->GetOutput()); //Generate visible parts of the models pointcloud
+//		for (int k = 0; k < 16; k++)
+//			{
+//			icpT[k] = icpTMatrix[iCluster*nBestMatches * 16 + iRank * 16 + k];
+//			}
+//
+//		//Transforming model polydata to ICP pose
+//		vtkSmartPointer<vtkTransform> transformICP = vtkSmartPointer<vtkTransform>::New();
+//		transformICP->SetMatrix(icpT);
+//		transformFilterICP = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
+//		transformFilterICP->SetInputData(visiblePD);
+//		//transformFilterICP->SetInputConnection(transformFilter->GetOutputPort());
+//		transformFilterICP->SetTransform(transformICP);
+//		transformFilterICP->Update();
+//		}		
+//#endif
+//		
+//
+//	//Mapper and actor for model
+//	vtkSmartPointer<vtkPolyDataMapper> modelMapper = vtkSmartPointer<vtkPolyDataMapper>::New();
+//#ifdef RVLPSGM_ICP
+//	if (align)
+//		modelMapper->SetInputConnection(transformFilterICP->GetOutputPort());
+//	else
+//#endif
+//		modelMapper->SetInputConnection(transformFilter->GetOutputPort());
+//	vtkSmartPointer<vtkActor> modelActor = vtkSmartPointer<vtkActor>::New();
+//	modelActor->SetMapper(modelMapper);
+//	modelActor->GetProperty()->SetColor(1, 0, 0);
+//	modelActor->GetProperty()->SetPointSize(3);
+//	pVisualizer->renderer->AddActor(modelActor);
+//
+//	//Mapper and actor for scene
+//	vtkSmartPointer<vtkPolyDataMapper> modelMapper2 = vtkSmartPointer<vtkPolyDataMapper>::New();
+//	modelMapper2->SetInputConnection(transformFilter2->GetOutputPort());
+//	vtkSmartPointer<vtkActor> modelActor2 = vtkSmartPointer<vtkActor>::New();
+//	modelActor2->SetMapper(modelMapper2);
+//	modelActor2->GetProperty()->SetColor(0, 0, 1);
+//	pVisualizer->renderer->AddActor(modelActor2);
+//
+//	delete[] dM;
+//	delete[] dS;
+//	delete[] validS;
+//}
+
+void PSGM::AddOneModelToVisualizer(Visualizer *pVisualizer, int iMatch, int iRank, bool align, bool useTG)
+{
+	//Setting indices:
+	int iMCTI = pCTImatchesArray.Element[iMatch]->iMCTI;
+	int iSCTI = pCTImatchesArray.Element[iMatch]->iSCTI;
+	int iCluster, iModel;
+
+	//Getting scene and model pointers:
+	RECOG::PSGM_::ModelInstance *pMCTI;
+	RECOG::PSGM_::ModelInstanceElement *pMIE;
+	RECOG::PSGM_::ModelInstance *pSCTI;
+	RECOG::PSGM_::ModelInstanceElement *pSIE;
+	pMCTI = MCTISet.pCTI.Element[iMCTI];
+	pMIE = pMCTI->modelInstance.Element;
+	pSCTI = CTISet.pCTI.Element[iSCTI];
+	pSIE = pSCTI->modelInstance.Element;
+
+	iCluster = pSCTI->iCluster;
+	iModel = pMCTI->iModel;
+
+	//For a chosen hypothesis, prints which scene segment is matched to which model
+#ifdef RVLPSGM_ICP
+	printf("SSegment: %d\tMatchedModel: %d (score: %f)\n", iCluster, iModel, scoreMatchMatrixICP.Element[iCluster].Element[iRank].cost);
+#else
+	printf("SSegment: %d\tMatchedModel: %d (score: %f)\n", iCluster, iModel, scoreMatchMatrix.Element[iCluster].Element[iRank].cost);
+#endif
+
+	//Setting descriptors:
+	float *dM = new float[66];
+	float *dS = new float[66];
+	int *validS = new int[66];
+
+	for (int i = 0; i < 66; i++)
+	{
+		dS[i] = pSIE->d; // Filling scene descriptor
+		validS[i] = pSIE->valid;
+		pSIE++;
+
+		if (useTG)
+		{
+			dM[i] = MTGSet.TGs.at(MCTISet.pCTI.Element[pCTImatchesArray.Element[iMatch]->iMCTI]->iModel)->descriptor.Element[i].pFirst->ptr->d / 1000.0;
+			pMIE++;
+		}
+		else
+		{
+			dM[i] = pMIE->d / 1000.0; // Filling model descriptor
+			pMIE++;
+		}
+	}
+
+	//Getting match pointer and calculating pose:
+	RECOG::PSGM_::MatchInstance *pMatch = pCTImatchesArray.Element[iMatch];
+	CalculatePose(iMatch);
+	Eigen::MatrixXf nT = ConvexTemplatenT();
+
+	//Generate model polydata
+	float tMc[3];
+	vtkSmartPointer<vtkPolyData> modelPD = GenerateCTIPrimitivePolydata_RW(nT.data(), dM, 66, false, NULL, tMc);
+
+	//Getting transform from centered (model) CTI polygon data to scene (T_CCTIM_S)
+	float *R_M_S = pCTImatchesArray.Element[iMatch]->R;
+	float *t_M_S_mm = pCTImatchesArray.Element[iMatch]->t;
+	float t_M_S[3];
+	RVLSCALE3VECTOR2(t_M_S_mm, 1000.0f, t_M_S);
+	float *R_CTIM_M = pMCTI->R;
+	float *t_CTIM_M = pMCTI->t;
+	float R_CTIM_S[9], t_CTIM_S[3];
+
+	RVLCOMPTRANSF3D(R_M_S, t_M_S, R_CTIM_M, t_CTIM_M, R_CTIM_S, t_CTIM_S);
+	float t_CCTIM_S[3];
+	RVLTRANSF3(tMc, R_CTIM_S, t_CTIM_S, t_CCTIM_S);
+	double T_CCTIM_S[16];
+	RVLHTRANSFMX(pSCTI->R, t_CCTIM_S, T_CCTIM_S);
+
+	//Generate scene CTI polydata
+	float t[3];
+	vtkSmartPointer<vtkPolyData> modelSPD = GenerateCTIPrimitivePolydata_RW(nT.data(), dS, 66, false, validS, t);
+
+	//Getting transform from centered (scene) CTI polygon data to scene (T_CCTIS_S)
+	float t_CCTIS_S[3];
+	RVLTRANSF3(t, pSCTI->R, pSCTI->t, t_CCTIS_S)
+		double T_CCTIS_S[16];
+	RVLHTRANSFMX(pSCTI->R, t_CCTIS_S, T_CCTIS_S);
+
+
+	//PLY Model transformation
+	//double T_M_S[16];
+	//RVLHTRANSFMX(R_M_S, t_M_S, T_M_S);
+	//vtkSmartPointer<vtkTransform> transform = vtkSmartPointer<vtkTransform>::New();
+
+	//Get T matrix from match; T_ICP matrix is saved as T_S_M * T_ICP (ICP is done in model c.s.)
+	vtkSmartPointer<vtkTransform> transform = vtkSmartPointer<vtkTransform>::New();
+	double T_M_S[16];
+	for (int i = 0; i < 16; i++)
+		T_M_S[i] = pMatch->T_ICP[i];
+
+#ifdef RVLPSGM_ICP
+	if (displayData.hypothesisVisualizationMode == RVLPSGM_HYPOTHESIS_VISUALIZATION_MODE_PLY)
+		//transform->SetMatrix((double*)pMatch->T_ICP);//
+		transform->SetMatrix(T_M_S); //when transforming PLY models to scene
+#endif
+
+	if (displayData.hypothesisVisualizationMode == RVLPSGM_HYPOTHESIS_VISUALIZATION_MODE_CTI)
+	{
+		if (useTG)
+		{
+			float t_Mc_S[3];
+
+			RVLTRANSF3(tMc, R_M_S, t_M_S, t_Mc_S);
+
+			double T_Mc_S[16];
+
+			RVLHTRANSFMX(R_M_S, t_Mc_S, T_Mc_S);
+
+			transform->SetMatrix(T_Mc_S);
+		}
+		else
+			transform->SetMatrix(T_CCTIM_S); //when transforming CTI convex hull to scene
+	}
+
+#ifdef RVLPSGM_ICP
+	//Scaling PLY model to meters
+	vtkSmartPointer<vtkTransform> transformScale = vtkSmartPointer<vtkTransform>::New();
+	transformScale->Scale(0.001, 0.001, 0.001);
+	vtkSmartPointer<vtkTransformPolyDataFilter> transformFilterScale = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
+	transformFilterScale->SetInputData(vtkModelDB.at(iModel));
+	transformFilterScale->SetTransform(transformScale);
+	transformFilterScale->Update();
+#endif
+
+	//Transforming PLY model or CTI convex hull model to scene
+	vtkSmartPointer<vtkTransformPolyDataFilter> transformFilter = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
+	if (displayData.hypothesisVisualizationMode == RVLPSGM_HYPOTHESIS_VISUALIZATION_MODE_CTI)
+		transformFilter->SetInputData(modelPD); //model CTI convex hull
+#ifdef RVLPSGM_ICP
+	vtkSmartPointer<vtkPolyData> visiblePD = GetVisiblePart(transformFilterScale->GetOutput(), T_M_S); //Generate visible parts of the models pointcloud
+
+	if (displayData.hypothesisVisualizationMode == RVLPSGM_HYPOTHESIS_VISUALIZATION_MODE_PLY)
+		transformFilter->SetInputData(visiblePD); //PLY model
+#endif
+
+	transformFilter->SetTransform(transform);
+	transformFilter->Update();
+
+	//Transforming scene CTI convex hull
+	vtkSmartPointer<vtkTransform> transform2 = vtkSmartPointer<vtkTransform>::New();
+	transform2->SetMatrix(T_CCTIS_S);
+	vtkSmartPointer<vtkTransformPolyDataFilter> transformFilter2 = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
+	transformFilter2->SetInputData(modelSPD);
+	transformFilter2->SetTransform(transform2);
+	transformFilter2->Update();
+
+//#ifdef RVLPSGM_ICP
+//	//Aligning point clouds (if required) 
+//	vtkSmartPointer<vtkTransformPolyDataFilter> transformFilterICP;
+//	if (align)
+//	{
+//		//Aligning pointcluds (using PCL ICP)
+//		double icpT[16];
+//
+//		vtkSmartPointer<vtkPolyData> visiblePD = GetVisiblePart(transformFilter->GetOutput()); //Generate visible parts of the models pointcloud
+//		for (int k = 0; k < 16; k++)
+//		{
+//			icpT[k] = icpTMatrix[iCluster*nBestMatches * 16 + iRank * 16 + k];
+//		}
+//
+//		//Transforming model polydata to ICP pose
+//		vtkSmartPointer<vtkTransform> transformICP = vtkSmartPointer<vtkTransform>::New();
+//		transformICP->SetMatrix(icpT);
+//		transformFilterICP = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
+//		transformFilterICP->SetInputData(visiblePD);
+//		//transformFilterICP->SetInputConnection(transformFilter->GetOutputPort());
+//		transformFilterICP->SetTransform(transformICP);
+//		transformFilterICP->Update();
+//	}
+//#endif
+
+
+	//Mapper and actor for model
+	vtkSmartPointer<vtkPolyDataMapper> modelMapper = vtkSmartPointer<vtkPolyDataMapper>::New();
+//#ifdef RVLPSGM_ICP
+//	if (align)
+//		modelMapper->SetInputConnection(transformFilterICP->GetOutputPort());
+//	else
+//#endif
+		modelMapper->SetInputConnection(transformFilter->GetOutputPort());
+	vtkSmartPointer<vtkActor> modelActor = vtkSmartPointer<vtkActor>::New();
+	modelActor->SetMapper(modelMapper);
+	modelActor->GetProperty()->SetColor(1, 0, 0);
+	modelActor->GetProperty()->SetPointSize(3);
+	pVisualizer->renderer->AddActor(modelActor);
+
+	//Mapper and actor for scene
+	vtkSmartPointer<vtkPolyDataMapper> modelMapper2 = vtkSmartPointer<vtkPolyDataMapper>::New();
+	modelMapper2->SetInputConnection(transformFilter2->GetOutputPort());
+	vtkSmartPointer<vtkActor> modelActor2 = vtkSmartPointer<vtkActor>::New();
+	modelActor2->SetMapper(modelMapper2);
+	modelActor2->GetProperty()->SetColor(0, 0, 1);
+	pVisualizer->renderer->AddActor(modelActor2);
+
+	delete[] dM;
+	delete[] dS;
+	delete[] validS;
+}
+
+//With ICP calculation
+void PSGM::AddOneModelToVisualizerICP(Visualizer *pVisualizer, int iMatch, bool align, RVL::PSGM::ICPfunction ICPFunction, int ICPvariant, void *kdTreePtr)
 {
 	//Setting indices:
 	int iMCTI = pCTImatchesArray.Element[iMatch]->iMCTI;
@@ -6243,7 +8036,7 @@ void PSGM::AddCTIModelToVisualizer(Visualizer *pVisualizer, int iMatch, bool ali
 
 	//Generate model polydata
 	float t[3];
-	vtkSmartPointer<vtkPolyData> modelPD = GenerateCTIPrimitivePolydata_RW(nT.data(), dM, false, NULL, t);
+	vtkSmartPointer<vtkPolyData> modelPD = GenerateCTIPrimitivePolydata_RW(nT.data(), dM, 66, false, NULL, t);
 	
 	//Getting transform from centered (model) CTI polygon data to scene (T_CCTIM_S)
 	float *R_M_S = pCTImatchesArray.Element[iMatch]->R;
@@ -6261,7 +8054,7 @@ void PSGM::AddCTIModelToVisualizer(Visualizer *pVisualizer, int iMatch, bool ali
 	RVLHTRANSFMX(pSCTI->R, t_CCTIM_S, T_CCTIM_S);
 
 	//Generate scene CTI polydata
-	vtkSmartPointer<vtkPolyData> modelSPD = GenerateCTIPrimitivePolydata_RW(nT.data(), dS, false, validS, t);
+	vtkSmartPointer<vtkPolyData> modelSPD = GenerateCTIPrimitivePolydata_RW(nT.data(), dS, 66, false, validS, t);
 	
 	//Getting transform from centered (scene) CTI polygon data to scene (T_CCTIS_S)
 	float t_CCTIS_S[3];
@@ -6269,12 +8062,16 @@ void PSGM::AddCTIModelToVisualizer(Visualizer *pVisualizer, int iMatch, bool ali
 	double T_CCTIS_S[16];
 	RVLHTRANSFMX(pSCTI->R, t_CCTIS_S, T_CCTIS_S);
 
+
 	//PLY Model transformation
 	double T_M_S[16];
 	RVLHTRANSFMX(R_M_S, t_M_S, T_M_S);
 	vtkSmartPointer<vtkTransform> transform = vtkSmartPointer<vtkTransform>::New();
-	transform->SetMatrix(T_M_S); //when transforming PLY models to scene
-	//transform->SetMatrix(T_CCTIM_S); //when transforming CTI convex hull to scene
+	if (displayData.hypothesisVisualizationMode == RVLPSGM_HYPOTHESIS_VISUALIZATION_MODE_PLY)
+		transform->SetMatrix(T_M_S); //when transforming PLY models to scene
+
+	if (displayData.hypothesisVisualizationMode == RVLPSGM_HYPOTHESIS_VISUALIZATION_MODE_CTI)
+		transform->SetMatrix(T_CCTIM_S); //when transforming CTI convex hull to scene
 
 	//Scaling PLY model to meters
 	vtkSmartPointer<vtkTransform> transformScale = vtkSmartPointer<vtkTransform>::New();
@@ -6286,8 +8083,11 @@ void PSGM::AddCTIModelToVisualizer(Visualizer *pVisualizer, int iMatch, bool ali
 
 	//Transforming PLY model or CTI convex hull model to scene
 	vtkSmartPointer<vtkTransformPolyDataFilter> transformFilter = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
-	//transformFilter->SetInputData(modelPD); //model CTI convex hull
-	transformFilter->SetInputConnection(transformFilterScale->GetOutputPort()); //PLY model
+	if (displayData.hypothesisVisualizationMode == RVLPSGM_HYPOTHESIS_VISUALIZATION_MODE_CTI)
+		transformFilter->SetInputData(modelPD); //model CTI convex hull
+	if (displayData.hypothesisVisualizationMode == RVLPSGM_HYPOTHESIS_VISUALIZATION_MODE_PLY)
+		transformFilter->SetInputConnection(transformFilterScale->GetOutputPort()); //PLY model
+
 	transformFilter->SetTransform(transform);
 	transformFilter->Update();
 
@@ -6323,13 +8123,22 @@ void PSGM::AddCTIModelToVisualizer(Visualizer *pVisualizer, int iMatch, bool ali
 		//sceneSampler->Update();
 		//vtkSmartPointer<vtkPolyData> sceneSamplerPD = sceneSampler->GetOutput();
 
+		/*vtkSmartPointer<vtkCleanPolyData> cleanFilter = vtkSmartPointer<vtkCleanPolyData>::New();
+		cleanFilter->SetInputConnection(transformFilter->GetOutputPort());
+		cleanFilter->PointMergingOn();
+		cleanFilter->SetAbsoluteTolerance(0.005);
+		cleanFilter->ToleranceIsAbsoluteOn();
+		cleanFilter->Update();*/
 
-		vtkSmartPointer<vtkPolyData> scenePD = GetSceneModelPC(iCluster); //Generate scene model pointcloud
+
+		//vtkSmartPointer<vtkPolyData> scenePD = GetSceneModelPC(iCluster); //Generate scene model pointcloud
 		//Aligning pointcluds (using PCL ICP)
 		float icpT[16];
 		double icpTd[16];
 		double fitnessScore;
-		ICPFunction(transformFilter->GetOutput(), scenePD, icpT, 20, 0.02, ICPvariant, &fitnessScore);
+
+		vtkSmartPointer<vtkPolyData> visiblePD = GetVisiblePart(transformFilter->GetOutput()); //Generate visible scene model pointcloud
+		ICPFunction(visiblePD, /*this->pMesh->pPolygonData*/this->segmentN_PD.at(iCluster), icpT, 30, 0.01, ICPvariant, &fitnessScore, kdTreePtr);
 		for (int i = 0; i < 16; i++)
 		{
 			icpTd[i] = icpT[i];
@@ -6339,7 +8148,8 @@ void PSGM::AddCTIModelToVisualizer(Visualizer *pVisualizer, int iMatch, bool ali
 		vtkSmartPointer<vtkTransform> transformICP = vtkSmartPointer<vtkTransform>::New();
 		transformICP->SetMatrix(icpTd);
 		transformFilterICP = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
-		transformFilterICP->SetInputConnection(transformFilter->GetOutputPort());
+		transformFilterICP->SetInputData(visiblePD);
+		//transformFilterICP->SetInputConnection(transformFilter->GetOutputPort());
 		transformFilterICP->SetTransform(transformICP);
 		transformFilterICP->Update();
 	}
@@ -6352,7 +8162,8 @@ void PSGM::AddCTIModelToVisualizer(Visualizer *pVisualizer, int iMatch, bool ali
 		modelMapper->SetInputConnection(transformFilter->GetOutputPort());
 	vtkSmartPointer<vtkActor> modelActor = vtkSmartPointer<vtkActor>::New();
 	modelActor->SetMapper(modelMapper);
-	modelActor->GetProperty()->SetColor(0, 1, 0);
+	modelActor->GetProperty()->SetColor(1, 0, 0);
+	modelActor->GetProperty()->SetPointSize(3);
 	pVisualizer->renderer->AddActor(modelActor);
 	
 	//Mapper and actor for scene
@@ -6361,7 +8172,7 @@ void PSGM::AddCTIModelToVisualizer(Visualizer *pVisualizer, int iMatch, bool ali
 	vtkSmartPointer<vtkActor> modelActor2 = vtkSmartPointer<vtkActor>::New();
 	modelActor2->SetMapper(modelMapper2);
 	modelActor2->GetProperty()->SetColor(0, 0, 1);
-	//pVisualizer->renderer->AddActor(modelActor2);
+	pVisualizer->renderer->AddActor(modelActor2);
 
 	delete[] dM;
 	delete[] dS;
@@ -6376,6 +8187,8 @@ vtkSmartPointer<vtkPolyData> PSGM::GetSceneModelPC(int iCluster)
 	RVL::QLIST::Index2 *pt;
 	//RECOG::PSGM_::ModelInstance *pModelInstance;
 	vtkSmartPointer<vtkPoints> points = vtkSmartPointer<vtkPoints>::New();
+	vtkSmartPointer<vtkFloatArray> normals = vtkSmartPointer<vtkFloatArray>::New();
+	normals->SetNumberOfComponents(3);
 	//points->SetDataTypeToDouble();
 	vtkSmartPointer<vtkCellArray> verts = vtkSmartPointer<vtkCellArray>::New();
 	int ptIdx = 0;
@@ -6384,10 +8197,11 @@ vtkSmartPointer<vtkPolyData> PSGM::GetSceneModelPC(int iCluster)
 	{
 		pSurfel = &this->pSurfels->NodeArray.Element[pCluster->iSurfelArray.Element[i]];
 		pt = pSurfel->PtList.pFirst;
-		//Set pixel colors
-		for (int k = 0; k < pSurfel->size; k++)
+
+		while (pt)
 		{
 			points->InsertNextPoint(this->pMesh->NodeArray.Element[pt->Idx].P);
+			normals->InsertNextTuple(this->pMesh->NodeArray.Element[pt->Idx].N);
 			verts->InsertNextCell(1);
 			verts->InsertCellPoint(ptIdx);
 			ptIdx++;
@@ -6397,111 +8211,2135 @@ vtkSmartPointer<vtkPolyData> PSGM::GetSceneModelPC(int iCluster)
 
 	vtkSmartPointer<vtkPolyData> PD = vtkSmartPointer<vtkPolyData>::New();
 	PD->SetPoints(points);
+	PD->GetPointData()->SetNormals(normals);
 	PD->SetVerts(verts);
 	return PD;
 }
 
-void PSGM::CalculateICPCost(RVL::PSGM::ICPfunction ICPFunction, int ICPvariant) //under construction
+void PSGM::CalculateICPCost(RVL::PSGM::ICPfunction ICPFunction, int ICPvariant, void *kdTreePtr)
 {
-//	int iMatch;
-//	int iMCTI, iSCTI, iCluster, iModel;
-//
-//	RECOG::PSGM_::ModelInstance *pMCTI;
-//	RECOG::PSGM_::ModelInstanceElement *pMIE;
-//	RECOG::PSGM_::ModelInstance *pSCTI;
-//	RECOG::PSGM_::ModelInstanceElement *pSIE;
-//
-//	RECOG::PSGM_::MatchInstance *pMatch;
-//	//RECOG::PSGM_::MatchInstance *pMatchx = pCTImatchesArray.Element[scoreMatchMatrix.Element[0].Element[0].idx];
-//
-//	for (int i = 0; i < scoreMatchMatrix.n; i++)
-//	{
-//		for (int j = 0; j < 7; j++)
-//		{
-//			iMatch = scoreMatchMatrix.Element[i].Element[j].idx;
-//			
-//			//Setting indices:
-//			iMCTI = pCTImatchesArray.Element[iMatch]->iMCTI;
-//			iSCTI = pCTImatchesArray.Element[iMatch]->iSCTI;
-//	
-//			//Getting scene and model pointers:
-//			pMCTI = MCTISet.pCTI.Element[iMCTI];
-//			pMIE = pMCTI->modelInstance.Element;
-//			pSCTI = CTISet.pCTI.Element[iSCTI];
-//			pSIE = pSCTI->modelInstance.Element;
-//
-//			iCluster = pSCTI->iCluster;
-//			iModel = pMCTI->iModel;
-//
-//			//Getting match pointer and calculating pose:
-//			pMatch = pCTImatchesArray.Element[iMatch];
-//			CalculatePose(iMatch);
-//
-//			//Getting transform from centered (model) CTI polygon data to scene (T_CCTIM_S)
-//			float *R_M_S = pMatch->R;
-//			float *t_M_S_mm = pMatch->t;
-//			float t_M_S[3];
-//			RVLSCALE3VECTOR2(t_M_S_mm, 1000.0f, t_M_S);
-//			
-//
-//			//PLY Model transformation
-//			double T_M_S[16];
-//			RVLHTRANSFMX(R_M_S, t_M_S, T_M_S);
-//			vtkSmartPointer<vtkTransform> transform = vtkSmartPointer<vtkTransform>::New();
-//			transform->SetMatrix(T_M_S); //when transforming PLY models to scene
-//			//transform->SetMatrix(T_CCTIM_S); //when transforming CTI convex hull to scene
-//
-//			//Scaling PLY model to meters
-//			vtkSmartPointer<vtkTransform> transformScale = vtkSmartPointer<vtkTransform>::New();
-//			transformScale->Scale(0.001, 0.001, 0.001);
-//			vtkSmartPointer<vtkTransformPolyDataFilter> transformFilterScale = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
-//			transformFilterScale->SetInputData(vtkModelDB.at(iModel));
-//			transformFilterScale->SetTransform(transformScale);
-//			transformFilterScale->Update();
-//
-//			//Transforming PLY model or CTI convex hull model to scene
-//			vtkSmartPointer<vtkTransformPolyDataFilter> transformFilter = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
-//			//transformFilter->SetInputData(modelPD); //model CTI convex hull
-//			transformFilter->SetInputConnection(transformFilterScale->GetOutputPort()); //PLY model
-//			transformFilter->SetTransform(transform);
-//			transformFilter->Update();
-//
-//			
-//			//Sampling filter for model polydata
-//			//vtkSmartPointer<vtkTriangleFilter> modelSamplerTriangleFilter = vtkSmartPointer<vtkTriangleFilter>::New();
-//			//modelSamplerTriangleFilter->SetInputConnection(transformFilter->GetOutputPort());
-//			//modelSamplerTriangleFilter->Update();
-//			//vtkSmartPointer<vtkPolyDataPointSampler> modelSampler = vtkSmartPointer<vtkPolyDataPointSampler>::New();
-//			//modelSampler->SetInputConnection(modelSamplerTriangleFilter->GetOutputPort());
-//			//modelSampler->SetDistance(0.005);
-//			//modelSampler->Update();
-//			//vtkSmartPointer<vtkPolyData> modelSamplerPD = modelSampler->GetOutput();
-//
-//			//Sampling filter for scene polydata
-//			//vtkSmartPointer<vtkTriangleFilter> sceneSamplerTriangleFilter = vtkSmartPointer<vtkTriangleFilter>::New(); //Creates triangles from polygons (Samples don't work with polygons)
-//			//sceneSamplerTriangleFilter->SetInputConnection(transformFilter2->GetOutputPort());
-//			//sceneSamplerTriangleFilter->Update();
-//			//vtkSmartPointer<vtkPolyDataPointSampler> sceneSampler = vtkSmartPointer<vtkPolyDataPointSampler>::New();
-//			//sceneSampler->SetInputConnection(sceneSamplerTriangleFilter->GetOutputPort());
-//			//sceneSampler->SetDistance(0.005);
-//			//sceneSampler->Update();
-//			//vtkSmartPointer<vtkPolyData> sceneSamplerPD = sceneSampler->GetOutput();
-//
-//
-//			vtkSmartPointer<vtkPolyData> scenePD = GetSceneModelPC(iCluster); //Generate scene model pointcloud
-//			//Aligning pointcluds (using PCL ICP)
-//			float icpT[16];
-//			double icpTd[16];
-//			double fitnessScore;
-//			ICPFunction(transformFilter->GetOutput(), scenePD, icpT, 20, 0.02, ICPvariant, &fitnessScore);
-//			for (int i = 0; i < 16; i++)
-//			{
-//				icpTd[i] = icpT[i];
-//			}
-//
-//
-//			
-//		}
-//		
-//	}
+	int iMatch;
+	int iMCTI, iSCTI, iCluster, iModel;
+	
+	RECOG::PSGM_::ModelInstance *pMCTI;
+	RECOG::PSGM_::ModelInstanceElement *pMIE;
+	RECOG::PSGM_::ModelInstance *pSCTI;
+	RECOG::PSGM_::ModelInstanceElement *pSIE;
+	RECOG::PSGM_::MatchInstance *pMatch;
+
+	for (int i = 0; i < scoreMatchMatrix.n; i++)
+	{
+		for (int j = 0; j < 7; j++)
+		{
+			iMatch = scoreMatchMatrix.Element[i].Element[j].idx;
+			
+			//Setting indices:
+			iMCTI = pCTImatchesArray.Element[iMatch]->iMCTI;
+			iSCTI = pCTImatchesArray.Element[iMatch]->iSCTI;
+	
+			//Getting scene and model pointers:
+			pMCTI = MCTISet.pCTI.Element[iMCTI];
+			pMIE = pMCTI->modelInstance.Element;
+			pSCTI = CTISet.pCTI.Element[iSCTI];
+			pSIE = pSCTI->modelInstance.Element;
+
+			iCluster = pSCTI->iCluster;
+			iModel = pMCTI->iModel;
+
+			//Getting match pointer and calculating pose:
+			pMatch = pCTImatchesArray.Element[iMatch];
+			CalculatePose(iMatch);
+
+			//Getting transform from centered (model) CTI polygon data to scene (T_CCTIM_S)
+			float *R_M_S = pMatch->R;
+			float *t_M_S_mm = pMatch->t;
+			float t_M_S[3];
+			RVLSCALE3VECTOR2(t_M_S_mm, 1000.0f, t_M_S);
+			
+			//PLY Model transformation
+			double T_M_S[16];
+			RVLHTRANSFMX(R_M_S, t_M_S, T_M_S);
+			vtkSmartPointer<vtkTransform> transform = vtkSmartPointer<vtkTransform>::New();
+			transform->SetMatrix(T_M_S); //when transforming PLY models to scene
+			//transform->SetMatrix(T_CCTIM_S); //when transforming CTI convex hull to scene
+
+			//Scaling PLY model to meters
+			vtkSmartPointer<vtkTransform> transformScale = vtkSmartPointer<vtkTransform>::New();
+			transformScale->Scale(0.001, 0.001, 0.001);
+			vtkSmartPointer<vtkTransformPolyDataFilter> transformFilterScale = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
+			transformFilterScale->SetInputData(vtkModelDB.at(iModel));
+			transformFilterScale->SetTransform(transformScale);
+			transformFilterScale->Update();
+
+			//Transforming PLY model or CTI convex hull model to scene
+			vtkSmartPointer<vtkTransformPolyDataFilter> transformFilter = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
+			//transformFilter->SetInputData(modelPD); //model CTI convex hull
+			transformFilter->SetInputConnection(transformFilterScale->GetOutputPort()); //PLY model
+			transformFilter->SetTransform(transform);
+			transformFilter->Update();
+
+			
+			//Sampling filter for model polydata
+			//vtkSmartPointer<vtkTriangleFilter> modelSamplerTriangleFilter = vtkSmartPointer<vtkTriangleFilter>::New();
+			//modelSamplerTriangleFilter->SetInputConnection(transformFilter->GetOutputPort());
+			//modelSamplerTriangleFilter->Update();
+			//vtkSmartPointer<vtkPolyDataPointSampler> modelSampler = vtkSmartPointer<vtkPolyDataPointSampler>::New();
+			//modelSampler->SetInputConnection(modelSamplerTriangleFilter->GetOutputPort());
+			//modelSampler->SetDistance(0.005);
+			//modelSampler->Update();
+			//vtkSmartPointer<vtkPolyData> modelSamplerPD = modelSampler->GetOutput();
+
+			//Sampling filter for scene polydata
+			//vtkSmartPointer<vtkTriangleFilter> sceneSamplerTriangleFilter = vtkSmartPointer<vtkTriangleFilter>::New(); //Creates triangles from polygons (Samples don't work with polygons)
+			//sceneSamplerTriangleFilter->SetInputConnection(transformFilter2->GetOutputPort());
+			//sceneSamplerTriangleFilter->Update();
+			//vtkSmartPointer<vtkPolyDataPointSampler> sceneSampler = vtkSmartPointer<vtkPolyDataPointSampler>::New();
+			//sceneSampler->SetInputConnection(sceneSamplerTriangleFilter->GetOutputPort());
+			//sceneSampler->SetDistance(0.005);
+			//sceneSampler->Update();
+			//vtkSmartPointer<vtkPolyData> sceneSamplerPD = sceneSampler->GetOutput();
+
+
+			vtkSmartPointer<vtkPolyData> scenePD = GetSceneModelPC(iCluster); //Generate scene model pointcloud
+			//Aligning pointcluds (using PCL ICP)
+			float icpT[16];
+			double fitnessScore;
+			ICPFunction(transformFilter->GetOutput(), scenePD, icpT, 20, 0.02, ICPvariant, &fitnessScore, kdTreePtr);
+
+			pMatch->cost_ICP = fitnessScore;
+			memcpy(pMatch->T_ICP, icpT, 16 * sizeof(float));
+			
+			pMatch->RICP_[0] = pMatch->T_ICP[0];
+			pMatch->RICP_[1] = pMatch->T_ICP[1];
+			pMatch->RICP_[2] = pMatch->T_ICP[2];
+			pMatch->RICP_[3] = pMatch->T_ICP[4];
+			pMatch->RICP_[4] = pMatch->T_ICP[5];
+			pMatch->RICP_[5] = pMatch->T_ICP[6];
+			pMatch->RICP_[6] = pMatch->T_ICP[8];
+			pMatch->RICP_[7] = pMatch->T_ICP[9];
+			pMatch->RICP_[8] = pMatch->T_ICP[10];
+
+			pMatch->tICP_[0] = pMatch->T_ICP[3];
+			pMatch->tICP_[1] = pMatch->T_ICP[7];
+			pMatch->tICP_[2] = pMatch->T_ICP[11];
+
+			RVLCOMPTRANSF3D(pMatch->R, pMatch->t, pMatch->RICP_, pMatch->tICP_, pMatch->RICP, pMatch->tICP);		
+		}
+	}
+}
+
+vtkSmartPointer<vtkPolyData> PSGM::GetVisiblePart(vtkSmartPointer<vtkPolyData> PD)
+{
+	vtkSmartPointer<vtkPoints> visiblePoints = vtkSmartPointer<vtkPoints>::New();
+	vtkSmartPointer<vtkFloatArray> visibleNormals = vtkSmartPointer<vtkFloatArray>::New();
+	visibleNormals->SetNumberOfComponents(3);
+	//points->SetDataTypeToDouble();
+	vtkSmartPointer<vtkCellArray> verts = vtkSmartPointer<vtkCellArray>::New();
+	vtkSmartPointer<vtkPolyData> visiblePD = vtkSmartPointer<vtkPolyData>::New();
+
+	vtkSmartPointer<vtkPoints> pdPoints = PD->GetPoints();
+	vtkSmartPointer<vtkFloatArray> normals = vtkFloatArray::SafeDownCast(PD->GetPointData()->GetNormals());
+	double *point;
+	float normal[3];
+	int ptIdx = 0;
+
+	if (!normals.GetPointer()) //check if mode does not have normals 
+	{
+		printf("Invalid input model. Doesn't have normals.\n");
+		return NULL;
+	}
+
+	for (int i = 0; i < pdPoints->GetNumberOfPoints(); i++)
+	{
+		point = pdPoints->GetPoint(i);
+		normals->GetTupleValue(i, normal);
+		if ((point[0] * normal[0] + point[1] * normal[1] + point[2] * normal[2]) < 0) //cheks the scalar product, must be negative
+		{
+			visiblePoints->InsertNextPoint(point);
+			visibleNormals->InsertNextTuple(normal);
+			verts->InsertNextCell(1);
+			verts->InsertCellPoint(ptIdx);
+			ptIdx++;
+		}
+	}
+	visiblePD->SetPoints(visiblePoints);
+	visiblePD->GetPointData()->SetNormals(visibleNormals);
+	visiblePD->SetVerts(verts);
+	return visiblePD;
+}
+
+//Vidovic
+vtkSmartPointer<vtkPolyData> PSGM::GetVisiblePart(vtkSmartPointer<vtkPolyData> PD, double *T_M_S)
+{
+	vtkSmartPointer<vtkPoints> pdPoints = PD->GetPoints();
+	vtkSmartPointer<vtkFloatArray> normals = vtkFloatArray::SafeDownCast(PD->GetPointData()->GetNormals());
+
+	vtkSmartPointer<vtkTransform> transform = vtkSmartPointer<vtkTransform>::New();
+	transform->SetMatrix(T_M_S); //transformation from model c.s. to scene c.s.
+
+	//Transforming PLY model or CTI convex hull model to scene
+	vtkSmartPointer<vtkTransformPolyDataFilter> transformFilter = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
+	transformFilter->SetInputData(PD); //PLY model
+	transformFilter->SetTransform(transform);
+	transformFilter->Update();
+
+	vtkSmartPointer<vtkPoints> visiblePoints = vtkSmartPointer<vtkPoints>::New();
+	vtkSmartPointer<vtkFloatArray> visibleNormals = vtkSmartPointer<vtkFloatArray>::New();
+	visibleNormals->SetNumberOfComponents(3);
+	//points->SetDataTypeToDouble();
+	vtkSmartPointer<vtkCellArray> verts = vtkSmartPointer<vtkCellArray>::New();
+	vtkSmartPointer<vtkPolyData> visiblePD = vtkSmartPointer<vtkPolyData>::New();
+
+	vtkSmartPointer<vtkPoints> transformedPoints = transformFilter->GetOutput()->GetPoints();
+	vtkSmartPointer<vtkFloatArray> transformedNormals = vtkFloatArray::SafeDownCast(transformFilter->GetOutput()->GetPointData()->GetNormals());
+	double *transformedPoint;
+	float transformedNormal[3], normal[3];
+	int ptIdx = 0;
+
+	if (!normals.GetPointer()) //check if mode does not have normals 
+	{
+		printf("Invalid input model. Doesn't have normals.\n");
+		return NULL;
+	}
+
+	for (int i = 0; i < transformedPoints->GetNumberOfPoints(); i++)
+	{
+		transformedPoint = transformedPoints->GetPoint(i);
+		transformedNormals->GetTupleValue(i, transformedNormal);
+		if ((transformedPoint[0] * transformedNormal[0] + transformedPoint[1] * transformedNormal[1] + transformedPoint[2] * transformedNormal[2]) < 0) //cheks the scalar product, must be negative
+		{
+			normals->GetTupleValue(i, normal);
+
+			visiblePoints->InsertNextPoint(pdPoints->GetPoint(i));
+			visibleNormals->InsertNextTuple(normal);
+			verts->InsertNextCell(1);
+			verts->InsertCellPoint(ptIdx);
+			ptIdx++;
+		}
+	}
+	visiblePD->SetPoints(visiblePoints);
+	visiblePD->GetPointData()->SetNormals(visibleNormals);
+	visiblePD->SetVerts(verts);
+	return visiblePD;
+}
+//END Vidovic
+
+void PSGM::CalculateNNCost(Visualizer *pVisualizer, RVL::PSGM::ICPfunction ICPFunction, int ICPvariant)
+{
+	int iMatch;
+	int iMCTI, iSCTI, iCluster, iModel;
+
+	RECOG::PSGM_::ModelInstance *pMCTI;
+	RECOG::PSGM_::ModelInstanceElement *pMIE;
+	RECOG::PSGM_::ModelInstance *pSCTI;
+	RECOG::PSGM_::ModelInstanceElement *pSIE;
+
+	RECOG::PSGM_::MatchInstance *pMatch;
+
+	if (icpTMatrix)
+		delete[] icpTMatrix;
+
+	icpTMatrix = new double[scoreMatchMatrix.n * nBestMatches * 16]; //nSSegments * nBestMatches * 16 elements of matrix T
+
+	for (int i = 0; i < scoreMatchMatrix.n; i++)
+	{
+		for (int j = 0; j < nBestMatches; j++)
+		{
+			iMatch = scoreMatchMatrix.Element[i].Element[j].idx;
+
+			if (iMatch == 39597)
+				int debug = 0;
+
+			if (iMatch != -1)
+			{
+			//Setting indices:
+			iMCTI = pCTImatchesArray.Element[iMatch]->iMCTI;
+			iSCTI = pCTImatchesArray.Element[iMatch]->iSCTI;
+
+			//Getting scene and model pointers:
+			pMCTI = MCTISet.pCTI.Element[iMCTI];
+			pMIE = pMCTI->modelInstance.Element;
+			pSCTI = CTISet.pCTI.Element[iSCTI];
+			pSIE = pSCTI->modelInstance.Element;
+
+			iCluster = pSCTI->iCluster;
+			iModel = pMCTI->iModel;
+
+			//Getting match pointer and calculating pose:
+			pMatch = pCTImatchesArray.Element[iMatch];
+			CalculatePose(iMatch);
+
+			//Getting transform from centered (model) CTI polygon data to scene (T_CCTIM_S)
+			float *R_M_S = pMatch->R;
+			float *t_M_S_mm = pMatch->t;
+			float t_M_S[3];
+			RVLSCALE3VECTOR2(t_M_S_mm, 1000.0f, t_M_S);
+
+			//PLY Model transformation
+			double T_M_S[16], eyeT[16];
+			RVLHTRANSFMX(R_M_S, t_M_S, T_M_S);
+
+			//Without transforming model points to scene c.s.
+			eyeT[0] = 1; eyeT[1] = 0; eyeT[2] = 0; eyeT[3] = 0;
+			eyeT[4] = 0; eyeT[5] = 1; eyeT[6] = 0; eyeT[7] = 0;
+			eyeT[8] = 0; eyeT[9] = 0; eyeT[10] = 1; eyeT[11] = 0;
+			eyeT[12] = 0; eyeT[13] = 0; eyeT[14] = 0; eyeT[15] = 1;
+
+			vtkSmartPointer<vtkTransform> transform = vtkSmartPointer<vtkTransform>::New();
+			transform->SetMatrix(T_M_S); //when transforming PLY models to scene
+			//transform->SetMatrix(eyeT); //when transforming PLY models to scene
+			//transform->SetMatrix(T_CCTIM_S); //when transforming CTI convex hull to scene
+
+			//Scaling PLY model to meters
+			vtkSmartPointer<vtkTransform> transformScale = vtkSmartPointer<vtkTransform>::New();
+			transformScale->Scale(0.001, 0.001, 0.001);
+			vtkSmartPointer<vtkTransformPolyDataFilter> transformFilterScale = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
+			transformFilterScale->SetInputData(vtkModelDB.at(iModel));
+			transformFilterScale->SetTransform(transformScale);
+			transformFilterScale->Update();
+
+			//Transforming PLY model or CTI convex hull model to scene
+			//vtkSmartPointer<vtkTransformPolyDataFilter> transformFilter = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
+			////transformFilter->SetInputData(modelPD); //model CTI convex hull
+			//transformFilter->SetInputConnection(transformFilterScale->GetOutputPort()); //PLY model
+			//transformFilter->SetTransform(transform);
+			//transformFilter->Update();
+
+
+			//Sampling filter for model polydata
+			//vtkSmartPointer<vtkTriangleFilter> modelSamplerTriangleFilter = vtkSmartPointer<vtkTriangleFilter>::New();
+			//modelSamplerTriangleFilter->SetInputConnection(transformFilter->GetOutputPort());
+			//modelSamplerTriangleFilter->Update();
+			//vtkSmartPointer<vtkPolyDataPointSampler> modelSampler = vtkSmartPointer<vtkPolyDataPointSampler>::New();
+			//modelSampler->SetInputConnection(modelSamplerTriangleFilter->GetOutputPort());
+			//modelSampler->SetDistance(0.005);
+			//modelSampler->Update();
+			//vtkSmartPointer<vtkPolyData> modelSamplerPD = modelSampler->GetOutput();
+
+			//Sampling filter for scene polydata
+			//vtkSmartPointer<vtkTriangleFilter> sceneSamplerTriangleFilter = vtkSmartPointer<vtkTriangleFilter>::New(); //Creates triangles from polygons (Samples don't work with polygons)
+			//sceneSamplerTriangleFilter->SetInputConnection(transformFilter2->GetOutputPort());
+			//sceneSamplerTriangleFilter->Update();
+			//vtkSmartPointer<vtkPolyDataPointSampler> sceneSampler = vtkSmartPointer<vtkPolyDataPointSampler>::New();
+			//sceneSampler->SetInputConnection(sceneSamplerTriangleFilter->GetOutputPort());
+			//sceneSampler->SetDistance(0.005);
+			//sceneSampler->Update();
+			//vtkSmartPointer<vtkPolyData> sceneSamplerPD = sceneSampler->GetOutput();
+
+
+			//vtkSmartPointer<vtkPolyData> visiblePD = GetVisiblePart(transformFilter->GetOutput()); //Generate visible scene model pointcloud - points are in scene c.s.
+			vtkSmartPointer<vtkPolyData> visiblePD = GetVisiblePart(transformFilterScale->GetOutput(), T_M_S); //Generate visible scene model pointcloud - points are in model c.s.
+
+			//Aligning pointcluds (using PCL ICP)
+			float icpT[16];
+			double icpTd[16];
+			double fitnessScore;
+			
+			icpT[0] = 1; icpT[1] = 0; icpT[2] = 0; icpT[3] = 0;
+			icpT[4] = 0; icpT[5] = 1; icpT[6] = 0; icpT[7] = 0;
+			icpT[8] = 0; icpT[9] = 0; icpT[10] = 1; icpT[11] = 0;
+			icpT[12] = 0; icpT[13] = 0; icpT[14] = 0; icpT[15] = 1;
+
+			//Transforming scene points to model c.s.
+			float R_S_M[9], t_S_M[3];
+			double T_S_M[16];
+			
+			RVLINVTRANSF3D(R_M_S, t_M_S, R_S_M, t_S_M);
+			RVLHTRANSFMX(R_S_M, t_S_M, T_S_M);
+
+			vtkSmartPointer<vtkTransform> S_M_transform = vtkSmartPointer<vtkTransform>::New();
+			S_M_transform->SetMatrix(T_S_M); //when transforming PLY models to scene
+
+			vtkSmartPointer<vtkTransformPolyDataFilter> sceneTransformFilter = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
+			//sceneTransformFilter->SetInputConnection(transformFilterScale->GetOutputPort()); //PLY model
+			sceneTransformFilter->SetInputData(this->segmentN_PD.at(iCluster)); 
+			sceneTransformFilter->SetTransform(S_M_transform);
+			sceneTransformFilter->Update();
+			
+			//ICPFunction(visiblePD, /*this->pMesh->pPolygonData*/this->segmentN_PD.at(iCluster), icpT, 10, 0.01, ICPvariant, &fitnessScore, NULL); //ICP in scene c.s.
+
+			ICPFunction(visiblePD, /*this->pMesh->pPolygonData*/sceneTransformFilter->GetOutput(), icpT, 10, 0.01, ICPvariant, &fitnessScore, NULL); //ICP in model c.s.
+
+			//VTK ICP
+			//vtkSmartPointer<vtkIterativeClosestPointTransform> vtkicp = vtkSmartPointer<vtkIterativeClosestPointTransform>::New();
+			//vtkicp->SetSource(visiblePD); //Ulazni objekt (poèetna poza objekta)
+			//vtkicp->SetTarget(this->segmentN_PD.at(iCluster)); //Konaèni objekt (željena poza objekta)
+			//vtkicp->GetLandmarkTransform()->SetModeToRigidBody(); //Potrebni naèin rada je transformacija za kruta tijela
+			//vtkicp->SetMaximumNumberOfIterations(10); //Željeni broj iteracija
+			//vtkicp->SetMaximumNumberOfLandmarks(1000); //Koliko parova toèaka da se koristi prilikom minimiziranja cost funkcije
+			//vtkicp->Update(); //Provedi algoritam
+			//vtkSmartPointer<vtkMatrix4x4> m = vtkSmartPointer<vtkMatrix4x4>::New();
+			//vtkicp->GetMatrix(m);
+			//std::cout << "Matrica:" << *m << std::endl;
+			//END VTK ICP
+
+			//TEST Vidovic
+			float R_ICP[9], t_ICP[3];
+			//float R_ICP_inv[9], t_ICP_inv[3];
+			float R_ICP_S[9], t_ICP_S[3];
+			float icpT2[16];
+
+			R_ICP[0] = icpT[0]; R_ICP[1] = icpT[1]; R_ICP[2] = icpT[2];
+			R_ICP[3] = icpT[4]; R_ICP[4] = icpT[5]; R_ICP[5] = icpT[6];
+			R_ICP[6] = icpT[8]; R_ICP[7] = icpT[9]; R_ICP[8] = icpT[10];
+
+			t_ICP[0] = icpT[3]; t_ICP[1] = icpT[7]; t_ICP[2] = icpT[11];
+
+			//RVLINVTRANSF3D(R_ICP, t_ICP, R_ICP_inv, t_ICP_inv);
+			//RVLCOMPTRANSF3D(R_M_S, t_M_S, R_ICP_inv, t_ICP_inv, R_ICP_S, t_ICP_S);
+			RVLCOMPTRANSF3D(R_M_S, t_M_S, R_ICP, t_ICP, R_ICP_S, t_ICP_S);
+			RVLHTRANSFMX(R_ICP_S, t_ICP_S, icpT2);
+
+			double icpT2d[16];
+			//END test Vidovic
+
+			if (iCluster == 2 && j == 1)
+				int debug = 0;
+
+				for (int k = 0; k < 16; k++)
+			{
+				//icpT[k] = vtkicp->GetMatrix()->GetElement(k / 4, k % 4); //VTK ICP
+				
+				//if (iCluster == 2 && j == 1){
+				//	icpT[0] = 1; icpT[1] = 0; icpT[2] = 0; icpT[3] = 0;
+				//	icpT[4] = 0; icpT[5] = 1; icpT[6] = 0; icpT[7] = 0;
+				//	icpT[8] = 0; icpT[9] = 0; icpT[10] = 1; icpT[11] = 0;
+				//	icpT[12] = 0; icpT[13] = 0; icpT[14] = 0; icpT[15] = 1;
+				//}
+
+					icpTd[k] = icpT[k];			
+					//save icpT to PSGM class
+				icpTMatrix[i*nBestMatches * 16 + j * 16 + k] = icpT2[k];
+				icpT2d[k] = (double)icpT2[k];
+			}
+
+			//Transforming model polydata to ICP pose
+			vtkSmartPointer<vtkTransform> transformICP = vtkSmartPointer<vtkTransform>::New();
+			transformICP->SetMatrix(icpTd);
+
+			vtkSmartPointer<vtkTransformPolyDataFilter> transformFilterICP = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
+			//transformFilterICP->SetInputData(visiblePD); //VIDOVIC
+			transformFilterICP->SetInputData(transformFilterScale->GetOutput()); //VIDOVIC transformFilter->GetOutput()
+			//transformFilterICP->SetTransform(vtkicp); //VTK ICP
+			transformFilterICP->SetTransform(transformICP);	//PCL ICP
+			transformFilterICP->Update();
+
+			//calculate new visible part of models (using ICP pose) - VIDOVIC
+			//visiblePD = GetVisiblePart(transformFilterICP->GetOutput()); ////Generate visible scene model pointcloud - points are in scene c.s.
+			//visiblePD = GetVisiblePart(transformFilterICP->GetOutput(), T_M_S); ////Generate visible scene model pointcloud - points are in model c.s.
+			visiblePD = GetVisiblePart(transformFilterICP->GetOutput(), icpT2d); ////Generate visible scene model pointcloud - points are in model c.s.
+
+			//for visualisation only - Vidovic
+			//transformFilterICP->SetTransform(transform);
+			//transformFilterICP->Update();
+
+				//if visualization is needed right here:
+
+				//Mapper and actor for model
+				/*vtkSmartPointer<vtkPolyDataMapper> modelMapper = vtkSmartPointer<vtkPolyDataMapper>::New();
+				modelMapper->SetInputConnection(transformFilterICP->GetOutputPort());
+				vtkSmartPointer<vtkActor> modelActor = vtkSmartPointer<vtkActor>::New();
+				modelActor->SetMapper(modelMapper);
+				modelActor->GetProperty()->SetColor(0, 1, 0);
+				modelActor->GetProperty()->SetPointSize(3);
+
+				if (iCluster == 2 && j == 1)
+				{
+					pVisualizer->renderer->AddActor(modelActor);
+				}*/
+
+
+			vtkSmartPointer<vtkTransformPolyDataFilter> sceneSegmentTransformFilter = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
+			sceneSegmentTransformFilter->SetInputData(GetSceneModelPC(iCluster));
+			sceneSegmentTransformFilter->SetTransform(S_M_transform);
+			sceneSegmentTransformFilter->Update();
+
+
+			//pMatch->cost_NN = NNCost(iCluster, transformFilterICP->GetOutput(), RVLPSGM_ICP_SIMILARITY_MEASURE_SATURATED_SCORE); //VIDOVIC
+			//pMatch->cost_NN = NNCost(iCluster, sceneTransformFilter->GetOutput(), visiblePD, RVLPSGM_ICP_SIMILARITY_MEASURE_SATURATED_SCORE); //VIDOVIC - cost for points in the neighbourhood of segment
+			pMatch->cost_NN = NNCost(iCluster, sceneTransformFilter->GetOutput(), visiblePD, RVLPSGM_ICP_SIMILARITY_MEASURE_COSTNN); //VIDOVIC - cost for points in the neighbourhood of segment
+			//pMatch->cost_NN = NNCost(iCluster, sceneSegmentTransformFilter->GetOutput(), visiblePD, RVLPSGM_ICP_SIMILARITY_MEASURE_COSTNN); //VIDOVIC - cost for points in the neighbourhood of segment
+			//pMatch->cost_NN = NNCost(iCluster, sceneSegmentTransformFilter->GetOutput(), visiblePD, RVLPSGM_ICP_SIMILARITY_MEASURE_SATURATED_SCORE); //VIDOVIC - cost for segment points
+
+			//test Vidovic
+			//pMatch->cost_NN = NNCost(iCluster, transformFilter->GetOutput());
+
+				memcpy(pMatch->T_ICP, icpT2, 16 * sizeof(float));
+
+				pMatch->RICP_[0] = pMatch->T_ICP[0];
+				pMatch->RICP_[1] = pMatch->T_ICP[1];
+				pMatch->RICP_[2] = pMatch->T_ICP[2];
+				pMatch->RICP_[3] = pMatch->T_ICP[4];
+				pMatch->RICP_[4] = pMatch->T_ICP[5];
+				pMatch->RICP_[5] = pMatch->T_ICP[6];
+				pMatch->RICP_[6] = pMatch->T_ICP[8];
+				pMatch->RICP_[7] = pMatch->T_ICP[9];
+				pMatch->RICP_[8] = pMatch->T_ICP[10];
+
+				pMatch->tICP_[0] = pMatch->T_ICP[3] * 1000;
+				pMatch->tICP_[1] = pMatch->T_ICP[7] * 1000;
+				pMatch->tICP_[2] = pMatch->T_ICP[11] * 1000;
+
+				
+			}
+			else break;
+
+		}
+	}
+
+}
+
+float PSGM::NNCost(int iCluster, vtkSmartPointer<vtkPolyData> sourcePD, vtkSmartPointer<vtkPolyData> targetPD, int similarityMeasure)
+{
+	//vtkSmartPointer<vtkPolyData> sourcePD = this->segmentN_PD.at(iCluster);//GetSceneModelPC(iCluster); //Generate scene model pointcloud
+	NanoFlannPointCloud<float> targetPC;
+	vtkSmartPointer<vtkPoints> pdPoints = targetPD->GetPoints();
+	targetPC.pts.resize(pdPoints->GetNumberOfPoints());
+	double *point;
+	int i;
+
+	for (i = 0; i < pdPoints->GetNumberOfPoints(); i++)
+	{
+		point = pdPoints->GetPoint(i);
+		targetPC.pts.at(i).x = point[0];
+		targetPC.pts.at(i).y = point[1];
+		targetPC.pts.at(i).z = point[2];
+	}
+
+	nanoflann::KDTreeSingleIndexAdaptor<nanoflann::L2_Simple_Adaptor<float, NanoFlannPointCloud<float> >, NanoFlannPointCloud<float>, 3> index(3 /*dim*/, targetPC, nanoflann::KDTreeSingleIndexAdaptorParams(10 /* max leaf */));
+	index.buildIndex();
+
+	vtkSmartPointer<vtkPoints> sourcePoints = sourcePD->GetPoints();
+	float pointF[3];
+
+	std::vector<size_t>   ret_index(1);
+	std::vector<float> out_dist_sqr(1);
+	float costNN=0;
+	float score = 0, distance;
+	int br = 0;
+	
+	switch (similarityMeasure)
+	{
+	case RVLPSGM_ICP_SIMILARITY_MEASURE_SATURATED_SCORE:
+
+		for (i = 0; i < sourcePoints->GetNumberOfPoints(); i++)
+		{
+			point = sourcePoints->GetPoint(i);
+			pointF[0] = point[0];
+			pointF[1] = point[1];
+			pointF[2] = point[2];
+
+			index.knnSearch(pointF, 1, &ret_index[0], &out_dist_sqr[0]);
+			distance = out_dist_sqr.at(0) / 0.0001; //0.0001 = 0.01*0.01
+
+			if (distance < 1) 
+				score += 1 - distance;
+		}
+
+		//if (iCluster == 3)
+		//	printf("Broj toèaka: %d, Score: %f\n", sourcePoints->GetNumberOfPoints(), score);
+
+		return score / sourcePoints->GetNumberOfPoints();
+
+		default:
+	
+	for (i = 0; i < sourcePoints->GetNumberOfPoints(); i++)
+	{
+		point = sourcePoints->GetPoint(i);
+		pointF[0] = point[0];
+		pointF[1] = point[1];
+		pointF[2] = point[2];
+		
+		index.knnSearch(pointF, 1, &ret_index[0], &out_dist_sqr[0]);
+		if (sqrt(out_dist_sqr.at(0)) > 0.01)
+		{
+			costNN += 0.01;
+			br++;
+		}
+		else costNN += sqrt(out_dist_sqr.at(0));
+	}
+
+	float meanCost = costNN / i;
+	return costNN;
+}
+
+}
+
+bool PSGM::IsFlat(
+	Array<int> surfelArray,
+	float *N,
+	float &d,
+	Array<int> PtArray)
+{
+	MESH::Distribution PtDistribution;
+
+	int *piPt = PtArray.Element;
+
+	int iSurfel, iiSurfel;
+	Surfel *pSurfel;
+	QLIST::Index2 *pPtIdx;
+
+	for (iiSurfel = 0; iiSurfel < surfelArray.n; iiSurfel++)
+	{
+		iSurfel = surfelArray.Element[iiSurfel];
+
+		pSurfel = pSurfels->NodeArray.Element + iSurfel;
+
+		if (pSurfel->bEdge)
+			continue;
+
+		pPtIdx = pSurfel->PtList.pFirst;
+
+		while (pPtIdx)
+		{
+			*(piPt++) = pPtIdx->Idx;
+
+			pPtIdx = pPtIdx->pNext;
+		}
+	}
+
+	PtArray.n = piPt - PtArray.Element;
+
+	if (PtArray.n == 0)
+		return false;
+
+	pMesh->ComputeDistributionDouble(PtArray, PtDistribution);
+
+	float *var = PtDistribution.var;
+
+	int idx[3];
+	int iTmp;
+	float *N_;
+
+	RVLSORT3ASCEND(var, idx, iTmp);
+
+	if (var[idx[0]] / var[idx[1]] <= 0.0005)
+	{
+		N_ = PtDistribution.R + 3 * idx[0];
+
+		if (N_[2] > 0.0f)
+		{
+			RVLNEGVECT3(N_, N);
+		}
+		else
+		{
+			RVLCOPY3VECTOR(N_, N);
+		}
+
+		d = RVLDOTPRODUCT3(N, PtDistribution.t);
+
+		return true;
+	}
+	else
+		return false;
+}
+
+void PSGM::DetectGroundPlane(SURFEL::ObjectGraph *pObjects)
+{
+	if (pObjects->sortedObjectArray.n < 0)
+		pObjects->SortObjects();
+
+	Array<int> PtArray;
+
+	PtArray.Element = new int[pMesh->NodeArray.n];
+
+	Array<int> iSurfelArray;
+
+	iSurfelArray.Element = new int[pSurfels->NodeArray.n];
+
+	bGnd = false;
+
+	iGndObject = -1;
+
+	int iObject;
+	SURFEL::Object *pObject;
+
+	for (iObject = 0; iObject < pObjects->objectArray.n; iObject++)
+	{
+		pObject = pObjects->objectArray.Element + iObject;
+
+		QLIST::CopyToArray(&(pObject->surfelList), &iSurfelArray);
+
+		if (IsFlat(iSurfelArray, NGnd, dGnd, PtArray))
+		{
+			iGndObject = iObject;
+
+			bGnd = true;
+
+			break;
+		}			
+	}
+
+	delete[] PtArray.Element;
+	delete[] iSurfelArray.Element;
+}
+
+bool PSGM::GravityReferenceFrames(
+	QList<QLIST::Index> surfelList,
+	RECOG::CTISet *pCTISet,
+	CRVLMem *pMem_)
+{
+	if (!bGnd)
+		return false;
+
+	int n = 0;
+
+	QLIST::Index *piSurfel = surfelList.pFirst;
+
+	while (piSurfel)
+	{
+		n++;
+
+		piSurfel = piSurfel->pNext;
+	}
+
+	if (n == 0)
+		return false;
+
+	float csSeparationAngle = cos(baseSeparationAngle * DEG2RAD);
+
+	Array<SortIndex<float>> sortedSurfelArray;
+
+	sortedSurfelArray.Element = new SortIndex<float>[n];
+
+	float *UMem = new float[3 * n];
+	float *VMem = new float[3 * n];
+
+	float *U = UMem;
+	float *V = VMem;
+
+	SortIndex<float> *piSurfel_ = sortedSurfelArray.Element;
+
+	sortedSurfelArray.n = 0;
+
+	float ZGC[3];
+
+	RVLCOPY3VECTOR(NGnd, ZGC);
+
+	float ZSkew[9];
+
+	RVLSKEW(ZGC, ZSkew);
+
+	float J[6];
+
+	float *Jx = J;
+	float *Jy = J + 3;
+
+	piSurfel = surfelList.pFirst;
+
+	int iSurfel;
+	float *N, *R, *X, *Y;
+	Surfel *pSurfel;
+	float lenV, fTmp;
+	float A[9], B[9], CV[9];
+	float stdx, stdy, varv, kx, ky;
+
+	while (piSurfel)
+	{
+		iSurfel = piSurfel->Idx;
+
+		//printf("Surfel %d\n", iSurfel);
+
+		pSurfel = pSurfels->NodeArray.Element + iSurfel;
+
+		if (pSurfel->flags & RVLSURFEL_FLAG_RF)
+		{
+			/// Computation of varv according to ARP3D.TR11.
+
+			N = pSurfel->N;
+
+			fTmp = RVLDOTPRODUCT3(N, NGnd);
+
+			if (RVLABS(fTmp) <= csSeparationAngle)
+			{
+			R = pSurfel->R;
+
+			X = R;
+
+			Y = R + 3;
+
+			stdx = 1.0f / pSurfel->r1;
+
+			stdy = 1.0f / pSurfel->r2;
+
+			// V <- NGnd x N
+			RVLCROSSPRODUCT3(ZGC, N, V);
+
+			// V <- V / || V ||
+			// lenV <- || V ||
+			RVLNORM3(V, lenV);
+
+			kx = stdx / lenV;
+			ky = stdy / lenV;
+
+			// A <- V * V'
+			RVLVECTCOV3(V, A);
+			RVLCOMPLETESIMMX3(A);
+
+			// B <- (I - A) * [NGnd]x
+			RVLMXMUL3X3(A, ZSkew, B);
+			RVLDIFMX3X3(ZSkew, B, B);
+
+			// J <- (B * [X Y])'
+			RVLMULMX3X3VECT(B, X, Jx);
+			RVLMULMX3X3VECT(B, Y, Jy);
+
+			// J <- stdx * J / lenV
+			RVLSCALE3VECTOR(Jx, kx, Jx);
+			RVLSCALE3VECTOR(Jy, ky, Jy);
+
+			// CV <- J * J'
+			RVLVECTCOV3(Jx, A);
+			RVLVECTCOV3(Jy, B);
+			RVLSUMMX3X3UT(A, B, CV);
+
+			// U <- NGnd x V / || NGnd x V ||
+			RVLCROSSPRODUCT3(ZGC, V, U);
+			RVLNORM3(U, fTmp);
+
+			// varv <- U' * CV * U
+			varv = RVLCOV3DTRANSFTO1D(CV, U);
+
+				piSurfel_->idx = sortedSurfelArray.n;
+				piSurfel_->cost = varv;
+
+				sortedSurfelArray.n++;
+
+				U += 3;
+				V += 3;
+
+				piSurfel_++;
+			}
+		}	// if (pSurfel->flags & RVLSURFEL_FLAG_RF)
+
+		piSurfel = piSurfel->pNext;
+	}	// for every surfel in surfelList
+
+	if (sortedSurfelArray.n == 0)
+	{
+		delete[] sortedSurfelArray.Element;
+		delete[] UMem;
+		delete[] VMem;
+
+		return false;
+	}
+
+	if (sortedSurfelArray.n > 1)
+		BubbleSort<SortIndex<float>>(sortedSurfelArray);
+
+	RECOG::PSGM_::ModelInstance **ppFirstModelInstance = pCTISet->CTI.ppNext;
+
+	int i;
+	RECOG::PSGM_::ModelInstance *pModelInstance;
+	float *t;
+
+	for (i = 0; i < sortedSurfelArray.n; i++)
+	{
+		X = VMem + 3 * sortedSurfelArray.Element[i].idx;
+
+		pModelInstance = *ppFirstModelInstance;
+
+		while (pModelInstance)
+		{
+			if (RVLMULROWCOL3(X, pModelInstance->R, 0, 0) > csSeparationAngle)
+				break;
+
+			pModelInstance = pModelInstance->pNext;
+		}
+
+		if (pModelInstance)
+			continue;
+
+		RVLMEM_ALLOC_STRUCT(pMem_, RECOG::PSGM_::ModelInstance, pModelInstance);
+
+		pCTISet->AddCTI(pModelInstance); //Vidovic
+
+		R = pModelInstance->R;
+
+		RVLCOPYTOCOL3(ZGC, 2, R);
+		RVLCOPYTOCOL3(X, 0, R);
+
+		Y = UMem + 3 * sortedSurfelArray.Element[i].idx;
+
+		RVLCOPYTOCOL3(Y, 1, R);
+
+		t = pModelInstance->t;
+
+		RVLNULL3VECTOR(t);
+
+		pModelInstance->varX = sortedSurfelArray.Element[i].cost;
+	}
+
+	delete[] sortedSurfelArray.Element;
+	delete[] UMem;
+	delete[] VMem;
+
+	return true;
+}
+
+int PSGM::CTIs(
+	QList<QLIST::Index> surfelList,
+	Array<int> iVertexArray,
+	int iModel,
+	int iCluster,
+	RECOG::CTISet *pCTISet,
+	CRVLMem *pMem)
+{
+	RECOG::PSGM_::ModelInstance **ppCTI = pCTISet->CTI.ppNext;
+
+	float RGC[9];
+	float varX;
+
+	if (!GravityReferenceFrames(surfelList, pCTISet, pMem))
+		return 0;
+
+	int nCTIs = 0;
+
+	RECOG::PSGM_::ModelInstance *pCTI = *ppCTI;
+
+	while (pCTI)
+	{
+	pCTI->iCluster = iCluster;
+	pCTI->iModel = iModel;
+
+	FitModel(iVertexArray, pCTI);
+
+		nCTIs++;
+
+		pCTI = pCTI->pNext;
+	}
+
+	return nCTIs;
+}
+
+void PSGM::CTIs(
+	int iModel,
+	SURFEL::ObjectGraph *pObjects,
+	RECOG::CTISet *pCTISet,
+	CRVLMem *pMem_)
+{
+	pCTISet->Init();
+
+	if (!bGnd)
+		DetectGroundPlane(pObjects);
+
+	if (!bGnd)
+		return;
+
+	RVL_DELETE_ARRAY(pCTISet->SegmentCTIs.Element);
+
+	pCTISet->SegmentCTIs.Element = new Array<int>[pObjects->objectArray.n];
+	pCTISet->SegmentCTIs.n = pObjects->objectArray.n;
+
+	int iObject;
+	SURFEL::Object *pObject;
+
+	for (iObject = 0; iObject < pObjects->objectArray.n; iObject++)
+	{
+		if (iObject != iGndObject)
+		{
+			//printf("Object %d:\n", iObject);
+
+			pObject = pObjects->objectArray.Element + iObject;
+
+			if (pObject->iVertexArray.n >= 3)
+				pCTISet->SegmentCTIs.Element[iObject].n = CTIs(pObject->surfelList, pObject->iVertexArray, iModel, iObject, pCTISet, pMem_);
+			else
+				pCTISet->SegmentCTIs.Element[iObject].n = 0;			
+		}
+		else
+			pCTISet->SegmentCTIs.Element[iObject].n = 0;
+	}
+
+	RVL_DELETE_ARRAY(pCTISet->segmentCTIIdxMem);
+
+	pCTISet->segmentCTIIdxMem = new int[pCTISet->pCTI.n];
+
+	int *iSegmentCTIIdx = pCTISet->segmentCTIIdxMem;
+
+	RVL_DELETE_ARRAY(pCTISet->pCTI.Element);
+
+	pCTISet->pCTI.Element = new RECOG::PSGM_::ModelInstance*[pCTISet->pCTI.n];
+
+	QLIST::CreatePtrArray<RECOG::PSGM_::ModelInstance>(&(pCTISet->CTI), &(pCTISet->pCTI));
+
+	for (iObject = 0; iObject < pObjects->objectArray.n; iObject++)
+	{
+		if (pCTISet->SegmentCTIs.Element[iObject].n > 0)
+		{
+			pCTISet->SegmentCTIs.Element[iObject].Element = iSegmentCTIIdx;
+
+			iSegmentCTIIdx += pCTISet->SegmentCTIs.Element[iObject].n;
+
+			pCTISet->SegmentCTIs.Element[iObject].n = 0;
+		}
+		else
+			pCTISet->SegmentCTIs.Element[iObject].Element = NULL;
+	}
+
+	int iCTI;
+
+	for (iCTI = 0; iCTI < pCTISet->pCTI.n; iCTI++)
+	{
+		iObject = pCTISet->pCTI.Element[iCTI]->iCluster;
+
+		pCTISet->SegmentCTIs.Element[iObject].Element[pCTISet->SegmentCTIs.Element[iObject].n++] = iCTI;
+	}
+}
+
+float PSGM::Symmetry(
+	SURFEL::ObjectGraph *pObjects,
+	int iObject1,
+	int iObject2,
+	RECOG::CTISet *pCTIs,
+	Array<RECOG::PSGM_::SymmetryMatch> &symmetryMatch)
+{
+	bool bDebug = (iObject1 == debug1 && iObject2 == debug2 || iObject1 == debug2 && iObject2 == debug1);
+
+	if (bDebug)
+		int debug = 0;
+
+	//bool bDebug = false;
+
+	int iObject[2];
+
+	iObject[0] = iObject1;
+	iObject[1] = iObject2;
+
+	SURFEL::Object *pObject[2];
+	
+	pObject[0] = pObjects->objectArray.Element + iObject[0];
+	pObject[1] = pObjects->objectArray.Element + iObject[1];
+
+	// Select the better RF.
+
+	float *RGC = NULL;
+
+	float varX = 0.0f;
+
+	int iObject1_ = -1;
+
+	RECOG::PSGM_::ModelInstance *pCTI;
+	int i;
+
+	for (i = 0; i < 2; i++)
+	{
+		if (pCTIs->SegmentCTIs.Element[iObject[i]].n > 0)
+		{
+			pCTI = pCTIs->pCTI.Element[pCTIs->SegmentCTIs.Element[iObject[i]].Element[0]];
+
+			if (RGC == NULL || pCTI->varX < varX)
+			{
+				RGC = pCTI->R;
+
+				varX = pCTI->varX;
+
+				iObject1_ = i;
+			}
+		}
+	}
+
+	if (RGC == NULL)
+		return 0.0f;
+
+	int iObject2_ = 1 - iObject1_;
+
+	// Select symmetry planes from convexTemplate.
+
+	Array<int> iSymmetryPlanes;
+
+	iSymmetryPlanes.Element = new int[convexTemplate.n];
+
+	iSymmetryPlanes.n = 0;
+
+	float *N;
+
+	for (i = 0; i < convexTemplate.n; i++)
+	{
+		N = convexTemplate.Element[i].N;
+
+		if (RVLABS(N[2]) < 1e-10)
+			iSymmetryPlanes.Element[iSymmetryPlanes.n++] = i;
+	}
+	
+	// 
+
+	Array<int> iVertexArray[2];
+
+	iVertexArray[0] = pObject[iObject1_]->iVertexArray;
+	iVertexArray[1] = pObject[iObject2_]->iVertexArray;
+
+	int nVertices2 = iVertexArray[1].n;
+
+	pCTI = pCTIs->pCTI.Element[pCTIs->SegmentCTIs.Element[iObject[iObject1_]].Element[0]];
+
+	//RECOG::PSGM_::ModelInstanceElement *pCTIElement1 = CTI1.modelInstance.Element;
+
+	// Determine convex hull.
+
+	//int *hull = new int[convexTemplate.n];
+
+	//int hull_;
+
+	//for (i = 0; i < convexTemplate.n; i++, pCTIElement1++, pCTIElement2++)
+	//{
+	//	hull_ = -1;
+
+	//	if (pCTIElement1->valid)
+	//		hull_ = 0;
+	//	
+	//	if (pCTIElement2->valid)
+	//	{
+	//		if (hull_ > 0)
+	//		{
+	//			if (pCTIElement2->d > pCTIElement1->d)
+	//				hull_ = 1;
+	//		}
+	//		else
+	//			hull_ = 1;
+	//	}
+
+	//	hull[i] = hull_;
+	//}
+
+	// Transform convex template to gravity RF.
+
+	Array<RECOG::PSGM_::Plane> convexTemplateC;
+
+	convexTemplateC.Element = new RECOG::PSGM_::Plane[convexTemplate.n];
+
+	float *NC;
+
+	for (i = 0; i < convexTemplate.n; i++)
+	{
+		N = convexTemplate.Element[i].N;
+
+		NC = convexTemplateC.Element[i].N;
+
+		RVLMULMX3X3VECT(RGC, N, NC);
+	}
+
+	/// Identify the symmetry plane.
+
+	//BYTE *bVisible = new BYTE[nSymmetryPlanes];
+	
+	Array<RECOG::PSGM_::SymmetryMatch> symmetryMatch_;
+
+	symmetryMatch_.Element = new RECOG::PSGM_::SymmetryMatch[convexTemplate.n];
+
+	Array<SortIndex<float>> sortedSymmatryMatchIdx;
+
+	sortedSymmatryMatchIdx.Element = new SortIndex<float>[convexTemplate.n];
+
+	float *P2RMem = new float[3 * iVertexArray[1].n];
+	
+	float maxSymmetryScore = 0.0f;
+
+	int iSymmetryPlane;
+	float *NSymmetryPlaneG, *P;
+	float NSymmetryPlaneC[3], NR[3];
+	float k, d, absk;
+	int iVertex;
+	float *P2R;
+	int j, jBest;
+	float dMax;
+	float sumw, halfSumw, t_;
+	float fTmp;
+	float symmetryScore;
+	RECOG::PSGM_::SymmetryMatch *pSymmetryMatch;
+	float e;
+	int iBestSymmetryPlane;
+	float dBestSymmetryPlane;
+	RECOG::PSGM_::ModelInstanceElement *pCTIElement1;
+
+	for (iSymmetryPlane = 0; iSymmetryPlane < iSymmetryPlanes.n; iSymmetryPlane++)
+	//iSymmetryPlane = 15;
+	{
+		NSymmetryPlaneG = convexTemplate.Element[iSymmetryPlanes.Element[iSymmetryPlane]].N;
+
+		RVLMULMX3X3VECT(RGC, NSymmetryPlaneG, NSymmetryPlaneC);
+
+		// Compute mirror images of all vertices of iObject2.
+
+		P2R = P2RMem;
+
+		for (i = 0; i < nVertices2; i++, P2R += 3)
+		{
+			iVertex = iVertexArray[1].Element[i];
+
+			P = pSurfels->vertexArray.Element[iVertex]->P;
+
+			d = 2.0f * RVLDOTPRODUCT3(P, NSymmetryPlaneC);
+
+			RVLSCALE3VECTOR(NSymmetryPlaneC, d, P2R);
+
+			RVLDIF3VECTORS(P, P2R, P2R);
+		}
+
+		//memset(bVisible, 0, nSymmetryPlanes * sizeof(BYTE));
+		
+		// For every element of CTI of iObject1 identify the corresponding tangent to mirror images of the vertices of iObject2.
+
+		symmetryMatch_.n = 0;
+
+		sortedSymmatryMatchIdx.n = 0;
+
+		sumw = 0.0f;
+
+		pCTIElement1 = pCTI->modelInstance.Element;
+
+		for (i = 0; i < convexTemplate.n; i++, pCTIElement1++)
+		{
+			if (!pCTIElement1->valid)
+				continue;
+
+			NC = convexTemplateC.Element[i].N;			
+
+			//if (i < nSymmetryPlanes)
+			//{
+			//	k = RVLDOTPRODUCT3(NSymmetryPlaneG, N);
+
+			//	bVisible[i] = (k > 0.0f ? 1 : -1);
+			//}
+			//else
+			//{
+			//	if (bVisible[i - nSymmetryPlanes] > 0)
+			//		continue;
+			//}
+
+			k = RVLDOTPRODUCT3(NSymmetryPlaneC, NC);
+
+			if (k > -1e-6)
+			{
+				fTmp = 2.0f * k;
+
+				RVLSCALE3VECTOR(NSymmetryPlaneC, fTmp, NR);
+
+				RVLDIF3VECTORS(NC, NR, NR);
+
+				P2R = P2RMem;
+
+				dMax = RVLDOTPRODUCT3(NC, P2R);
+
+				jBest = 0;
+
+				for (j = 1; j < nVertices2; j++, P2R += 3)
+				{
+					d = RVLDOTPRODUCT3(NC, P2R);
+
+					if (d > dMax)
+					{
+						dMax = d;
+
+						jBest = j;
+					}
+				}
+
+				//iVertex = iVertexArray[1].Element[jBest];
+
+				//P = pSurfels->vertexArray.Element[iVertex]->P;
+
+				//if (RVLDOTPRODUCT3(P, NR) < 0.0f)
+				{
+					absk = RVLABS(k);
+
+					pSymmetryMatch = symmetryMatch_.Element + symmetryMatch_.n;
+
+					pSymmetryMatch->d = dMax;
+					pSymmetryMatch->w = k;
+					pSymmetryMatch->iCTIElement = i;
+					pSymmetryMatch->b = (absk > 1e-6);	// normal of the CTI element is not parallel to the symmetry plane
+
+					if (pSymmetryMatch->b)
+					{
+						sortedSymmatryMatchIdx.Element[sortedSymmatryMatchIdx.n].cost = (pCTIElement1->d - dMax) / k;
+						sortedSymmatryMatchIdx.Element[sortedSymmatryMatchIdx.n].idx = symmetryMatch_.n;
+						sortedSymmatryMatchIdx.n++;
+						sumw += absk;
+					}
+
+					symmetryMatch_.n++;
+				}
+			}	// if (NSymmetryPlaneC' * NC > -1e-6)
+		}	// for every element of convexTemplate
+
+		// Compute optimal symmetry plane offset.
+
+		if (sortedSymmatryMatchIdx.n > 0)
+		{
+			BubbleSort<SortIndex<float>>(sortedSymmatryMatchIdx);
+
+			halfSumw = 0.5f * sumw;
+
+			sumw = 0.0f;
+
+			for (i = 0; i < sortedSymmatryMatchIdx.n && sumw < halfSumw; i++)
+			{
+				k = symmetryMatch_.Element[sortedSymmatryMatchIdx.Element[i].idx].w;
+
+				sumw += RVLABS(k);
+			}
+				
+			t_ = sortedSymmatryMatchIdx.Element[i].cost;
+		}
+
+		// Compute symmetry score.		
+
+		symmetryScore = 0.0f;
+
+		for (i = 0; i < symmetryMatch_.n; i++)
+		{
+			pSymmetryMatch = symmetryMatch_.Element + i;
+
+			e = (pSymmetryMatch->d + pSymmetryMatch->w * t_ - pCTI->modelInstance.Element[pSymmetryMatch->iCTIElement].d) / symmetryMatchThr;
+
+			e *= e;
+
+			if (e < 1.0f)
+			{
+				e = 1.0f - e;
+
+				symmetryScore += e;
+
+				pSymmetryMatch->w = e;
+				pSymmetryMatch->b = true;
+			}
+			else
+				pSymmetryMatch->b = false;
+		}
+
+		if (symmetryScore > maxSymmetryScore)
+		{
+			maxSymmetryScore = symmetryScore;
+
+			iBestSymmetryPlane = iSymmetryPlane;
+
+			dBestSymmetryPlane = -0.5f * t_;
+
+			symmetryMatch.n = 0;
+
+			for (i = 0; i < symmetryMatch_.n; i++)
+				if (symmetryMatch_.Element[i].b)
+					symmetryMatch.Element[symmetryMatch.n++] = symmetryMatch_.Element[i];
+		}
+	}	// for each symmetry plane
+
+	///
+
+	// Save the results to a file. 
+
+	if (bDebug)
+	{
+		FILE *fp = fopen("symmetry.txt", "w");
+
+		PrintMatrix<float>(fp, RGC, 3, 3);
+
+		NSymmetryPlaneG = convexTemplate.Element[iSymmetryPlanes.Element[iBestSymmetryPlane]].N;
+
+		//NSymmetryPlaneG = convexTemplate.Element[22].N;
+
+		RVLMULMX3X3VECT(RGC, NSymmetryPlaneG, NSymmetryPlaneC);
+
+		PrintMatrix<float>(fp, NSymmetryPlaneC, 1, 3);
+
+		fprintf(fp, "%f\t%d\t%d\t\n", dBestSymmetryPlane, iVertexArray[0].n, iVertexArray[1].n);
+
+		SURFEL::Vertex *pVertex;
+
+		for (j = 0; j < 2; j++)
+		{
+			for (i = 0; i < iVertexArray[j].n; i++)
+			{
+				pVertex = pSurfels->vertexArray.Element[iVertexArray[j].Element[i]];
+
+				fprintf(fp, "%f\t%f\t%f\t\n", pVertex->P[0], pVertex->P[1], pVertex->P[2]);
+			}
+		}
+
+		fclose(fp);
+	}
+
+	// Free memory.
+
+	//delete[] bVisible;
+	delete[] P2RMem;
+	delete[] symmetryMatch_.Element;
+	delete[] iSymmetryPlanes.Element;
+	delete[] sortedSymmatryMatchIdx.Element;
+
+	// Return the symmetry score.
+
+	return maxSymmetryScore;
+}
+
+void PSGM::RVLPSGInstanceMesh(Eigen::MatrixXf nI, float *dI)
+{
+#ifdef RVLPSGM_CTIMESH_DEBUG
+	FILE *fp = fopen("CTIMeshDebug.txt", "w");
+#endif
+
+	//transform nI and dI to Eigen:
+	Eigen::MatrixXf nIE = nI;
+	Eigen::MatrixXf dIE(1, 66);
+
+	//if nI was an array
+	//Eigen::MatrixXf nIE(3, 66);
+	//int br = 0;
+	//for (int i = 0; i < 3; i++)
+	//{
+	//	for (int j = 0; j < 66; j++)
+	//	{
+	//		nIE(i, j) = nI[br];
+	//		br++;
+	//	}
+	//}
+	for (int i = 0; i < 66; i++)
+	{
+		dIE(0, i) = dI[i];
+	}
+
+	float noise = 1e-6;
+	int nF = nIE.cols();
+	float halfCubeSize;
+
+	float max, min;
+	max = dIE.maxCoeff();
+	min = dIE.minCoeff();
+	if (min<0 && min*-1 > max)
+		max = min;
+	halfCubeSize = max*1.1;
+
+	P.resize(3, 8);
+	P << 1, 1, -1, -1, 1, 1, -1, -1, 1, -1, 1, -1, 1, -1, 1, -1, 1, 1, 1, 1, -1, -1, -1, -1;
+	P = halfCubeSize*P;
+
+	Eigen::MatrixXi Premoved = Eigen::MatrixXi::Zero(1, P.cols());//list of removed vertices
+	Eigen::MatrixXi nP = Eigen::MatrixXi::Ones(nF + 6, 1);
+	nP = 4 * nP;
+
+	F = Eigen::MatrixXi::Zero(nF + 6, 66 * 66);
+	//F.block<6, 4>(0, 0) << 1, 3, 4, 2, 3, 7, 8, 4, 2, 4, 8, 6, 5, 6, 8, 7, 1, 2, 6, 5, 1, 5, 7, 3;
+	F.block<6, 4>(0, 0) << 0, 2, 3, 1, 2, 6, 7, 3, 1, 3, 7, 5, 4, 5, 7, 6, 0, 1, 5, 4, 0, 4, 6, 2;
+
+
+	Eigen::MatrixXi E = Eigen::MatrixXi::Ones(nF + 6, nF + 6);
+	E *= -1;
+	Eigen::MatrixXi Fn = Eigen::MatrixXi::Zero(nF + 6, 66 * 66);
+
+	int iP1, iP2;
+	int l;
+	int br2;
+	int NextCirc, PrevCirc;
+	for (int i_ = 0; i_ < 6; i_++) //for every face
+	{
+		int i, j;
+		i = i_;
+		for (int k = 0; k < 4; k++)
+		{
+			NextCirc = (k + 1) % 4;
+			iP1 = F(i, k);
+			iP2 = F(i, NextCirc);
+
+			for (int j_ = i_ + 1; j_ < 6; j_++)
+			{
+				j = j_;
+				l = -1;
+				for (int iF = 0; iF < nP(j); iF++) //find(F(j,:)==iP1)
+				{
+					if (F(j, iF) == iP1)
+					{
+						l = iF;
+						break;
+					}
+				}
+				if (l >= 0)
+				{
+					PrevCirc = (l + 3) % 4;
+					if (F(j, PrevCirc) == iP2)
+					{
+						E(i, j) = iP1;
+						E(j, i) = iP2;
+						Fn(i, k) = j;
+						Fn(j, PrevCirc) = i;
+					}
+				}
+			}
+		}
+	}
+
+#ifdef RVLPSGM_CTIMESH_DEBUG
+	PrintCTIMeshFaces(fp, F, Fn, 6, nP);
+
+	fprintf(fp, "\n\n\n");
+
+	fclose(fp);
+#endif
+
+	Eigen::MatrixXi iNewVertices;
+	Eigen::MatrixXi iNeighbors;
+	Eigen::MatrixXf N;
+	Eigen::MatrixXf dCut, dCutSorted;
+	float d, d_;
+	int nCut;
+	Eigen::MatrixXf Temp;
+	Eigen::MatrixXf Tempnext;
+	Eigen::MatrixXf Temp2;
+	for (int i = 0; i < nF; i++) //for every face
+	{
+		printf("%d\n", i);
+
+#ifdef RVLPSGM_CTIMESH_DEBUG
+		fprintf(fp, "i = %d\n\n\n", i);
+#endif
+		iNewVertices.resize(0, 0);
+		iNeighbors.resize(0, 0);
+		N = nIE.block<3, 1>(0, i); //normal of the i-th face
+		d = dIE(0, i); //distance of the i-th face
+		dCut = Eigen::MatrixXf::Zero(P.cols(), 1);
+		dCutSorted = Eigen::MatrixXf::Zero(P.cols(), 1);
+		nCut = 0;
+
+
+		for (int k = 0; k < 8; k++)
+		{
+			Temp = N.transpose()*P.block<3, 1>(0, k);
+			d_ = Temp(0, 0) - d;
+			if (d_ > 0)
+			{
+				nCut += 1;
+				dCut(nCut, 0) = d_;
+			}
+		}
+
+		//Bubble sort:
+		float temp;
+		for (int idCut = 0; idCut < nCut; idCut++)
+		{
+			for (int jdCut = 0; jdCut < nCut; jdCut++)
+			{
+				if (dCut(jdCut, 0)>dCut(jdCut + 1, 0))
+				{
+					temp = dCut(jdCut, 0);
+					dCut(jdCut, 0) = dCut(jdCut + 1, 0);
+					dCut(jdCut + 1, 0) = temp;
+				}
+			}
+		}
+
+		float dCorr = 0;
+		for (int k = 0; k < nCut; k++)
+		{
+			if (dCut(k, 0) - dCorr < noise)
+				dCorr = dCut(k, 0);
+
+		}
+		d += dCorr;
+
+		Eigen::MatrixXi F_;//j-th face
+		Eigen::MatrixXi Fn_;//neighbors of F_
+		Eigen::MatrixXf P_; //position vector of vector iP
+		Eigen::MatrixXf Pnext;//position vector of vertex iPNext
+		int nP_; //number of vertices od F_
+		int iP; // k-th vertex of F_
+		int iPNext; //next vertex
+		Eigen::MatrixXf dP;
+		int L; //neighbor of F_ on the opposite side of edge iP-iPNext
+
+		int iPolygon, iVertex;
+		int iPNew, iPNewVertex, iFNewVertex;
+		float s;
+
+
+		for (int j = 0; j <= i + 5; j++) //for every previously considered face
+		{
+			F_ = F.block(j, 0, 1, F.cols());
+			Fn_ = Fn.block(j, 0, 1, Fn.cols());
+			int ff = F(j, 0);
+			int k = 0;
+			nP_ = nP(j, 0);
+
+			for (int k_ = 0; k_ < nP_; k_++)
+			{
+				int p = P.cols();
+				iP = F_(0, k_);
+				P_ = P.block(0, iP, P.rows(), 1);
+
+
+				if (k_ == nP_ - 1) NextCirc = 0;
+				else NextCirc = k_ % (nP_)+1;
+
+				iPNext = F_(0, NextCirc);
+				Pnext = P.block(0, iPNext, P.rows(), 1);
+
+				dP.resize(P.rows(), 1);
+				dP = Pnext - P_;
+
+				L = Fn_(0, k_);
+
+				Temp = N.transpose()*P_;
+				Tempnext = N.transpose()*Pnext;
+
+				if (i == 1 && j == 2)
+					int debug = 1;
+
+
+				if (Temp(0, 0) > d) //if iP is over new plane
+				{
+					if (Premoved(0, iP) == 0)
+						Premoved(0, iP) = 1; //vertex iP is removed
+
+					iPolygon = j;
+					iVertex = k;
+
+					//Remove Vertex from Polygon:
+					for (int iF = 0; iF < (nP(iPolygon) - 1 - iVertex); iF++)
+					{
+						F(iPolygon, iVertex + iF) = F(iPolygon, iVertex + iF + 1);
+						Fn(iPolygon, iVertex + iF) = Fn(iPolygon, iVertex + iF + 1);
+					}
+					nP(iPolygon) = nP(iPolygon) - 1;
+#ifdef RVLPSGM_CTIMESH_DEBUG
+					fp = fopen("CTIMeshDebug.txt", "a");
+
+					fprintf(fp, "j = %d, k_ = %d\n\n", j, k_);
+
+					PrintCTIMeshFaces(fp, F, Fn, i + 7, nP);
+
+					fprintf(fp, "\n\n\n");
+
+					fclose(fp);
+#endif
+
+					if (Tempnext(0, 0) > d)
+					{
+						E(L, j) = -1;
+						E(j, L) = -1;
+						k -= 1;
+					}
+					else
+					{
+						if (E(j, L) == iP) //Vertex is not updated
+						{
+							//Add new vertex
+							Temp = N.transpose()*P_;
+							Temp2 = N.transpose()*dP;
+							s = (d - Temp(0, 0)) / Temp2(0, 0);
+							Eigen::MatrixXf Ptemp = P;
+							P.resize(P.rows(), P.cols() + 1);
+							P.block(0, 0, Ptemp.rows(), Ptemp.cols()) = Ptemp;
+							Eigen::Vector3f col = P_ + s*dP;
+							P.col(P.cols() - 1) = col;
+							iPNew = P.cols() - 1;
+
+							Eigen::MatrixXi Premovedtemp = Premoved;
+							Premoved.resize(1, Premoved.cols() + 1);
+							Premoved.block(0, 0, Premovedtemp.rows(), Premovedtemp.cols()) = Premovedtemp;
+							Premoved(0, Premoved.cols() - 1) = 0;
+							E(j, L) = iPNew;
+						}
+						else
+							iPNew = E(j, L);
+
+						iPolygon = j;
+						iVertex = k;
+						iPNewVertex = iPNew;
+						iFNewVertex = L;
+						//Add new Vertex to Polygon:
+						Eigen::MatrixXi Ftemp = F;
+						Eigen::MatrixXi Fntemp = Fn;
+						for (int iF = 0; iF < (nP(iPolygon) - iVertex); iF++)
+						{
+							F(iPolygon, iVertex + iF + 1) = Ftemp(iPolygon, iVertex + iF);
+							Fn(iPolygon, iVertex + iF + 1) = Fntemp(iPolygon, iVertex + iF);
+						}
+						F(iPolygon, iVertex) = iPNewVertex;
+						Fn(iPolygon, iVertex) = iFNewVertex;
+						nP(iPolygon) = nP(iPolygon) + 1;
+#ifdef RVLPSGM_CTIMESH_DEBUG
+						fp = fopen("CTIMeshDebug.txt", "a");
+
+						fprintf(fp, "j = %d, k_ = %d\n\n", j, k_);
+
+						PrintCTIMeshFaces(fp, F, Fn, i + 7, nP);
+
+						fprintf(fp, "\n\n\n");
+
+						fclose(fp);
+#endif
+
+						Eigen::MatrixXi iNewVerticestemp = iNewVertices;
+						iNewVertices.resize(1, iNewVertices.cols() + 1);
+						iNewVertices.block(0, 0, iNewVerticestemp.rows(), iNewVerticestemp.cols()) = iNewVerticestemp;
+						iNewVertices(0, iNewVertices.cols() - 1) = iPNew;
+
+
+						Eigen::MatrixXi iNeighborstemp = iNeighbors;
+						iNeighbors.resize(1, iNeighbors.cols() + 1);
+						iNeighbors.block(0, 0, iNeighborstemp.rows(), iNeighborstemp.cols()) = iNeighborstemp;
+						iNeighbors(0, iNeighbors.cols() - 1) = j;
+
+						E((i + 6), j) = iPNew;
+					}
+				}
+
+				else if (Tempnext(0, 0) > d)
+				{
+					if (E(L, j) == iPNext) //Vertex is not updated
+					{
+						Temp = N.transpose()*P_;
+						Temp2 = N.transpose()*dP;
+						s = (d - Temp(0, 0)) / Temp2(0, 0);
+
+
+						Eigen::MatrixXf Ptemp = P;
+						P.resize(P.rows(), P.cols() + 1);
+						P.block(0, 0, Ptemp.rows(), Ptemp.cols()) = Ptemp;
+						Eigen::Vector3f col = P_ + s*dP;
+						P.col(P.cols() - 1) = col;
+						iPNew = P.cols() - 1;
+
+						Eigen::MatrixXi Premovedtemp = Premoved;
+						Premoved.resize(1, Premoved.cols() + 1);
+						Premoved.block(0, 0, Premovedtemp.rows(), Premovedtemp.cols()) = Premovedtemp;
+						Premoved(0, Premoved.cols() - 1) = 0;
+
+						E(L, j) = iPNew;
+					}
+					else
+						iPNew = E(L, j);
+
+					iPolygon = j;
+					iVertex = k + 1;
+					iPNewVertex = iPNew;
+					iFNewVertex = i + 6;
+					//Add new Vertex to Polygon:
+					Eigen::MatrixXi Ftemp = F;
+					Eigen::MatrixXi Fntemp = Fn;
+					for (int iF = 0; iF < (nP(iPolygon) - iVertex); iF++)
+					{
+						F(iPolygon, iVertex + iF + 1) = Ftemp(iPolygon, iVertex + iF);
+						Fn(iPolygon, iVertex + iF + 1) = Fntemp(iPolygon, iVertex + iF);
+					}
+					F(iPolygon, iVertex) = iPNewVertex;
+					Fn(iPolygon, iVertex) = iFNewVertex;
+					nP(iPolygon) = nP(iPolygon) + 1;
+#ifdef RVLPSGM_CTIMESH_DEBUG
+					fp = fopen("CTIMeshDebug.txt", "a");
+
+					fprintf(fp, "j = %d, k_ = %d\n\n", j, k_);
+
+					PrintCTIMeshFaces(fp, F, Fn, i + 7, nP);
+
+					fprintf(fp, "\n\n\n");
+
+					fclose(fp);
+#endif
+
+					E(j, i + 6) = iPNew;
+					k = k + 1;
+				}
+				k = k + 1;
+			}
+
+#ifdef RVLPSGM_CTIMESH_DEBUG
+			fp = fopen("CTIMeshDebug.txt", "a");
+
+			fprintf(fp, "j = %d\n\n", j);
+
+			PrintCTIMeshFaces(fp, F, Fn, i + 7, nP);
+
+			fprintf(fp, "\n\n\n");
+
+			fclose(fp);
+#endif
+		}	 //for every previously considered face
+		int iNeighbor;
+		nP(i + 6) = iNewVertices.cols(); //rows
+
+		int m;
+		if (nP(i + 6) > 0)
+		{
+			Eigen::MatrixXi F_;
+			Eigen::MatrixXi Fn_;
+			m = 0;
+			while (1)
+			{
+				Eigen::MatrixXi F_temp = F_;
+				F_.resize(1, F_.cols() + 1);
+				F_.block(0, 0, F_temp.rows(), F_temp.cols()) = F_temp;
+				F_(0, F_.cols() - 1) = iNewVertices(m);
+
+				int iN = iNeighbors(0, m);
+				iNeighbor = iNeighbors(0, m);
+
+
+				Eigen::MatrixXi Fn_temp = Fn_;
+				Fn_.resize(1, Fn_.cols() + 1);
+				Fn_.block(0, 0, Fn_temp.rows(), Fn_temp.cols()) = Fn_temp;
+				Fn_(0, Fn_.cols() - 1) = iNeighbor;
+
+
+				iPNext = E(iNeighbor, (i + 6));
+				int iNV;
+				for (iNV = 0; iNV < iNewVertices.cols(); iNV++)
+				{
+					int a = iPNext;
+					int b = iNewVertices(iNV);
+					if (iNewVertices(iNV) == iPNext)
+					{
+						m = iNV;
+						break;
+					}
+				}
+				if (m == 0)
+					break;
+			}
+
+			for (int iF = 0; iF < F_.cols(); iF++)
+			{
+				F((i + 6), iF) = F_(0, iF);
+				Fn((i + 6), iF) = Fn_(0, iF);
+			}
+
+		}
+
+#ifdef RVLPSGM_CTIMESH_DEBUG
+		fp = fopen("CTIMeshDebug.txt", "a");
+
+		PrintCTIMeshFaces(fp, F, Fn, i + 7, nP);
+
+		fprintf(fp, "\n\n\n");
+
+		fclose(fp);
+#endif
+	}	 //for every face
+	int mF = F.cols();
+
+	for (int i = 0; i < F.rows(); i++)
+	{
+		for (int iF = 0; iF < mF; iF++)
+			F(i, nP(i) + 1 + iF) = 0;
+	}
+
+	Eigen::MatrixXi Ffinal = F.block((F.rows() - 6), F.cols(), 6, 0);
+	Edges = E;
+
+#ifdef RVLPSGM_CTIMESH_DEBUG
+	fclose(fp);
+#endif
+}
+
+void PSGM::PrintCTIMeshFaces(FILE *fp, Eigen::MatrixXi F, Eigen::MatrixXi Fn, int n, Eigen::MatrixXi nP)
+{
+	fprintf(fp, "F:\n");
+
+	for (int i = 0; i < n; i++)
+	{
+		for (int j = 0; j < nP(i); j++)
+			fprintf(fp, "%d\t", F(i, j));
+
+		fprintf(fp, "\n");
+	}
+
+	fprintf(fp, "\n");
+
+	fprintf(fp, "Fn:\n");
+
+	for (int i = 0; i < n; i++)
+	{
+		for (int j = 0; j < nP(i); j++)
+			fprintf(fp, "%d\t", Fn(i, j));
+
+		fprintf(fp, "\n");
+	}
+
+	fprintf(fp, "\n");
+}
+
+void PSGM::BoundingBoxSize(
+	RECOG::PSGM_::ModelInstance *pBoundingBox,
+	float *size)
+{
+	float a;
+	a = pBoundingBox->modelInstance.Element[4].d + pBoundingBox->modelInstance.Element[1].d;
+	size[0] = RVLABS(a);
+	a = pBoundingBox->modelInstance.Element[5].d + pBoundingBox->modelInstance.Element[2].d;
+	size[1] = RVLABS(a);	
+	a = pBoundingBox->modelInstance.Element[0].d + pBoundingBox->modelInstance.Element[3].d;
+	size[2] = RVLABS(a);
+}
+
+//Return a consensus of hypotheses where no one is in collision
+std::vector<int> PSGM::GetHypothesesCollisionConsensus(float thr)
+{
+	std::vector<int> chosenHypotheses;
+	std::set<int> finishedSeg;
+	//get sorted list of hypothesis
+	////helper stuff////
+	struct Hyp{
+		int idSeg;
+		int idMatch;
+		float score;
+		Hyp(int ids, int idm, float s) : idSeg(ids), idMatch(idm), score(s) {}
+		bool operator < (const Hyp& other) const
+		{
+			return (score > other.score);
+		}
+	};
+	////////////////////
+	//fill the list
+	std::vector<Hyp> hypotheses;
+	for (int i = 0; i < scoreMatchMatrix.n; i++)
+	{
+		for (int j = 0; j < RVLMIN(7, scoreMatchMatrix.Element[i].n); j++)
+			if (scoreMatchMatrix.Element[i].Element[j].idx >= 0)
+				hypotheses.push_back(Hyp(i, scoreMatchMatrix.Element[i].Element[j].idx, scoreMatchMatrix.Element[i].Element[j].cost));
+	}
+	//Sort it
+	std::sort(hypotheses.begin(), hypotheses.end());
+
+	//Add first hypothesis
+	chosenHypotheses.push_back(hypotheses.at(0).idMatch);
+	finishedSeg.insert(hypotheses.at(0).idSeg);
+	int currentMatch;
+	int currentSeg;
+	bool collision;
+	for (int i = 0; i < hypotheses.size(); i++)
+	{
+		currentSeg = hypotheses.at(i).idSeg;
+		//Check is that segment is already finished
+		if (finishedSeg.count(currentSeg))
+			continue;
+		currentMatch = hypotheses.at(i).idMatch;
+		//Check collision with chosen hypotheses
+		collision = false;
+		for (int h = 0; h < chosenHypotheses.size(); h++)
+		{
+			collision = CheckHypothesesCollision(currentMatch, chosenHypotheses.at(h), thr);
+			if (collision)
+				break;
+		}
+		if (collision)
+			continue;
+		//else add it to the list of the chosen
+		chosenHypotheses.push_back(currentMatch);
+		finishedSeg.insert(currentSeg);
+		//check if all segments are finished
+		if (finishedSeg.size() == scoreMatchMatrix.n)
+			break;
+	}
+	return chosenHypotheses;
+}
+
+//Check if two objects are in collision. Return true if they are.
+bool PSGM::CheckHypothesesCollision(int firstHyp, int secondHyp, float thr)
+{
+	bool inCollision = false;
+	//First hypothesis data
+	RECOG::PSGM_::MatchInstance* firstMatch = pCTImatchesArray.Element[firstHyp];
+	VertexGraph * firstVG = MTGSet.vertexGraphs.at(MCTISet.pCTI.Element[firstMatch->iMCTI]->iModel);
+	TG* firstTG = MTGSet.TGs.at(MCTISet.pCTI.Element[firstMatch->iMCTI]->iModel);
+	//Second hypothesis data
+	RECOG::PSGM_::MatchInstance* secondMatch = pCTImatchesArray.Element[secondHyp];
+	VertexGraph * secondVG = MTGSet.vertexGraphs.at(MCTISet.pCTI.Element[secondMatch->iMCTI]->iModel);
+	TG* secondTG = MTGSet.TGs.at(MCTISet.pCTI.Element[secondMatch->iMCTI]->iModel);
+	float R12[9], t12[3], R21[9], t21[3], V3Tmp[3];
+	RVLCOMPTRANSF3DWITHINV(secondMatch->R, secondMatch->t, firstMatch->R, firstMatch->t, R12, t12, V3Tmp);
+	RVLINVTRANSF3D(R12, t12, R21, t21);
+	SURFEL::Vertex * rvlvertex;
+	TGNode* plane;
+	float tP[3];
+	float dist;
+	float* N;
+
+	//Check second to first
+	//for each plane
+	float* minDistPlane = new float[firstTG->A.h + secondTG->A.h];
+	//memset(minDistPlane, 1, (firstTG->A.h + secondTG->A.h)*sizeof(float)); //some big value
+	for (int j = 0; j < firstTG->A.h; j++)
+	{
+		plane = firstTG->descriptor.Element[j].pFirst->ptr;
+		//For each point
+		minDistPlane[j] = 1000000;
+		for (int i = 0; i < secondVG->NodeArray.n; i++)
+		{
+			//Transform vertex to first model space
+			rvlvertex = &secondVG->NodeArray.Element[i];
+			RVLTRANSF3(rvlvertex->P, R21, t21, tP);
+			//distance
+			N = &firstTG->A.Element[firstTG->A.w * plane->i];
+			dist = RVLDOTPRODUCT3(N, tP) - plane->d;
+			if (dist < minDistPlane[j])
+				minDistPlane[j] = dist;
+		}
+
+	}
+	////find max
+	//float maxVal = -1000000;
+	//for (int i = 0; i < firstTG->A.h; i++)
+	//{
+	//	if (minDistPlane[i] > maxVal)
+	//		maxVal = minDistPlane[i];
+	//}
+	//delete[] minDistPlane;
+	////Check
+	//if (maxVal < -thr)
+	//	return true;	
+	
+
+	//Check first to second
+	//for each plane
+	//minDistPlane = new float[secondTG->A.h];
+	//memset(minDistPlane, 1, secondTG->A.h*sizeof(float)); //some big value
+	for (int j = 0; j < secondTG->A.h; j++)
+	{
+		plane = secondTG->descriptor.Element[j].pFirst->ptr;
+		//For each point
+		minDistPlane[firstTG->A.h + j] = 1000000;
+		for (int i = 0; i < firstVG->NodeArray.n; i++)
+		{
+			//Transform vertex to second model space
+			rvlvertex = &firstVG->NodeArray.Element[i];
+			RVLTRANSF3(rvlvertex->P, R12, t12, tP);
+			//distance
+			N = &secondTG->A.Element[secondTG->A.w * plane->i];
+			dist = RVLDOTPRODUCT3(N, tP) - plane->d;
+			if (dist < minDistPlane[firstTG->A.h + j])
+				minDistPlane[firstTG->A.h + j] = dist;
+		}
+
+	}
+	//find max
+	float maxVal = -1000000;
+	for (int i = 0; i < firstTG->A.h + secondTG->A.h; i++)
+	{
+		if (minDistPlane[i] > maxVal)
+			maxVal = minDistPlane[i];
+	}
+	delete[] minDistPlane;
+	//Check
+	if (maxVal < -thr)
+		return true;
+
+	return inCollision;
+}
+float PSGM::GetObjectTransparencyRatio(vtkSmartPointer<vtkPolyData> object, unsigned short *depthImg, float depthThr, int width, int height, float c_fu, float c_fv, float c_uc, float c_vc)
+{
+	//get vtk data
+	vtkSmartPointer<vtkPoints> points = object->GetPoints();
+	vtkSmartPointer<vtkFloatArray> normals = vtkFloatArray::SafeDownCast(object->GetPointData()->GetNormals());
+
+	float sumW_T = 0;
+	float sumW_A = 0;
+	int noPts = points->GetNumberOfPoints();
+	double point[3];
+	float pointN[3];
+	float norm;
+	float normal[3];
+	int u;
+	int v;
+	float w;
+	/*cv::Mat depth(480, 640, CV_16UC1, cv::Scalar::all(0));
+	memcpy(depth.data, depthImg, 640 * 480 * sizeof(short));
+	cv::Mat depthShow(480, 640, CV_8UC1);
+	double minVal, maxVal;*/
+	for (int i = 0; i < noPts; i++)
+	{
+		//Get point
+		points->GetPoint(i, point);
+		pointN[0] = point[0];
+		pointN[1] = point[1];
+		pointN[2] = point[2];
+		//Get u, v;
+		u = c_fu * point[0] / point[2] + c_uc;
+		v = c_fv * point[1] / point[2] + c_vc;
+		//Check if the point is within scene (image)
+		if ((u < 0) || (u >= width) || (v < 0) || (v >= height))
+			continue;
+		//depth.at<unsigned short>(v, u) = (point[2] * 1000) - depthImg[v * width + u];
+		//Get normal
+		normals->GetTupleValue(i, normal);
+		RVLNORM3(pointN, norm);
+		w = abs(RVLDOTPRODUCT3(normal, pointN));
+		//check transparency
+		if (depthImg[v * width + u] - (point[2] * 1000) > depthThr)
+			sumW_T += w;
+		sumW_A += w;
+		
+	}
+	/*cv::minMaxLoc(depth, &minVal, &maxVal);
+	depth.convertTo(depthShow, CV_8U, -255.0f / maxVal, 255.0f);
+	cv::imshow("Transparency test", depthShow);
+	cv::waitKey();*/
+	return sumW_T / sumW_A;
+}
+
+//Requires scoreMatchMatrixICP???
+void PSGM::FilterHypothesesUsingTransparency(float tranThr, float depthThr, bool verbose)
+{
+	float tranRatio;
+	for (int i = 0; i < scoreMatchMatrixICP.n; i++)
+	{
+		for (int j = 0; j < RVLMIN(7, scoreMatchMatrixICP.Element[i].n); j++)
+		{
+			if (scoreMatchMatrixICP.Element[i].Element[j].idx >= 0)
+			{
+				vtkSmartPointer<vtkPolyData> object = GetPoseCorrectedVisibleModel(scoreMatchMatrixICP.Element[i].Element[j].idx);
+				tranRatio = GetObjectTransparencyRatio(object, this->depthImg, depthThr, 640, 480, 525, 525, 320, 240); //HARDCODED FOR ECCV DATASET CAMERA
+				if (tranRatio > tranThr)
+				{
+					if (verbose)
+					{
+						std::cout << "Hypothesis " << scoreMatchMatrixICP.Element[i].Element[j].idx << " Model: " << MCTISet.pCTI.Element[pCTImatchesArray.Element[scoreMatchMatrixICP.Element[i].Element[j].idx]->iMCTI]->iModel << " for segment " << i << " has been invalidated by transparency ratio of: " << tranRatio << std::endl;
+					}
+					scoreMatchMatrixICP.Element[i].Element[j].idx = -1;
+				}
+				else
+					break; //Break transparency check for this segment
+			}
+		}
+	}
+}
+
+//Uses T_ICP transformation matrix
+vtkSmartPointer<vtkPolyData> PSGM::GetPoseCorrectedVisibleModel(int iMatch)
+{
+	//Get model instance
+	RECOG::PSGM_::ModelInstance *pMCTI;
+	pMCTI = MCTISet.pCTI.Element[pCTImatchesArray.Element[iMatch]->iMCTI];
+	int iModel = pMCTI->iModel;
+	
+	//Gat match instance (and calculate pose??? Is this necessary???)
+	RECOG::PSGM_::MatchInstance *pMatch = pCTImatchesArray.Element[iMatch];
+	CalculatePose(iMatch);
+	
+	//Set transform
+	vtkSmartPointer<vtkTransform> transform = vtkSmartPointer<vtkTransform>::New();
+	double T_M_S[16];
+	for (int i = 0; i < 16; i++)
+		T_M_S[i] = pMatch->T_ICP[i];	//FROM ICP???
+	transform->SetMatrix(T_M_S);
+
+	//Scaling PLY model to meters
+	vtkSmartPointer<vtkTransform> transformScale = vtkSmartPointer<vtkTransform>::New();
+	transformScale->Scale(0.001, 0.001, 0.001);
+	vtkSmartPointer<vtkTransformPolyDataFilter> transformFilterScale = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
+	transformFilterScale->SetInputData(vtkModelDB.at(iModel));	//Get model from DB
+	transformFilterScale->SetTransform(transformScale);
+	transformFilterScale->Update();
+
+	//Generate visible parts of the models pointcloud
+	vtkSmartPointer<vtkPolyData> visiblePD = GetVisiblePart(transformFilterScale->GetOutput(), T_M_S); 
+
+	//Transform it
+	vtkSmartPointer<vtkTransformPolyDataFilter> transformFilter = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
+	transformFilter->SetInputData(visiblePD); //PLY model
+	transformFilter->SetTransform(transform);
+	transformFilter->Update();
+
+	//copy data to final object (this is not needed, it could be in visiblePD)
+	vtkSmartPointer<vtkPolyData> finPD = vtkSmartPointer<vtkPolyData>::New();
+	finPD->DeepCopy(transformFilter->GetOutput());
+
+	return finPD;
 }

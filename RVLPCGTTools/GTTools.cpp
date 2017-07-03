@@ -20,6 +20,8 @@
 
 #include "GTTools.h"
 
+using namespace RVL;
+
 //Create and return full fileName
 char *CreateFileName(int iImageCnt, char *pDefaultFileLocation, char *pFileExtension)
 {
@@ -210,9 +212,88 @@ void SaveFiles(int iImageCnt, IplImage *rgbImage, cv::Mat *depthMat, cv::Mat *de
 }
 
 
+void PCGT::DisplayLabelImage(cv::Mat labelImage, cv::Mat displayImage)
+{
+	double fMinLabel, fMaxLabel;
 
+	cv::minMaxLoc(labelImage, &fMinLabel, &fMaxLabel);
 
+	int nObjects = (int)round(fMaxLabel) + 1;
 
+	unsigned char *color = new unsigned char[3 * nObjects];
+
+	unsigned char *color_;
+	
+	int iObject;
+
+	for (iObject = 0; iObject < nObjects; iObject++)
+	{
+		color_ = color + 3 * iObject;
+
+		color_[0] = rand() % 255;
+		color_[1] = rand() % 255;
+		color_[2] = rand() % 255;
+	}
+	
+	int nPix = labelImage.size().width * labelImage.size().height;
+	
+	unsigned char *pixTgt = displayImage.data;
+
+	int u, v;
+
+	for (v = 0; v < labelImage.size().height; v++)
+	{
+		for (u = 0; u < labelImage.size().width; u++, pixTgt += 3)
+		{
+			iObject = (int)labelImage.at<cv::Vec3b>(v, u)[0];
+
+			color_ = color + 3 * iObject;
+
+			RVLCOPY3VECTOR(color_, pixTgt);
+		}
+	}
+}
+
+void PCGT::SelectObjectMouseCallback(int event, int x, int y, int flags, void* param)
+{
+	cv::Mat GTImage = *(cv::Mat *)param;
+
+	switch (event)
+	{
+	case CV_EVENT_LBUTTONDOWN:
+		int iSelectedObject = (int)GTImage.at<cv::Vec3b>(y, x)[0];
+
+		printf("Selected object %d\n", iSelectedObject);
+	}
+}
+
+void PCGT::DisplayGroundTruthSegmentation(
+	char *meshFileName,
+	cv::Mat &GTLabImg,
+	bool bRGB)
+{
+	char *GTFileName = RVLCreateFileName(meshFileName, ".ply", -1, "a.png");
+
+	GTLabImg = cv::imread(GTFileName);
+
+	cv::Mat displayImage(480, 640, CV_8UC3, cv::Scalar::all(0));
+
+	PCGT::DisplayLabelImage(GTLabImg, displayImage);
+
+	cv::imshow("GT Segmentation", displayImage);
+	cv::setMouseCallback("GT Segmentation", PCGT::SelectObjectMouseCallback, &GTLabImg);
+
+	if (bRGB)
+	{
+		char *RGBFileName;
+
+		RGBFileName = RVLCreateFileName(meshFileName, ".ply", -1, ".png");
+
+		cv::Mat RGBImage = cv::imread(RGBFileName);
+
+		cv::imshow("RGB Image", RGBImage);
+	}
+}
 
 template < class T >
 void set_pixel(T &pcl_pixel, cv::Mat &src, int x, int y, RVLGT_INTRINSIC_PARAMS &cam_params)

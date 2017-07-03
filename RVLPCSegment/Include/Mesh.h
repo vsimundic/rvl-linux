@@ -123,6 +123,9 @@ namespace RVL
 			void ComputeDistribution(
 				Array<int> &PtArray,
 				MESH::Distribution &distribution);
+			void ComputeDistributionDouble(
+				Array<int> &PtArray,
+				MESH::Distribution &distribution);
 			bool FindBoundaryEdge(
 				QList<QLIST::Index> *pInPtList,
 				QLIST::Index *&pPtIdx,
@@ -273,6 +276,7 @@ namespace RVL
 			bool bOrganizedPC;
 			int width;
 			int height;
+			int maxBoundarySize;
 
 #ifdef RVLMESH_BOUNDARY_DEBUG		
 			int debugState;

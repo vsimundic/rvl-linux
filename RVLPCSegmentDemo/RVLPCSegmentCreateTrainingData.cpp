@@ -13,6 +13,7 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 #include "Graph.h"
 #include "Mesh.h"
 #include "Visualizer.h"
+#include "SceneSegFile.hpp"
 #include "SurfelGraph.h"
 #include "PlanarSurfelDetector.h"
 #include <pcl/common/common.h>
@@ -25,7 +26,6 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 #include <vector>
 #include <algorithm>
 #include <unordered_set>
-#include "SceneSegFile.hpp"
 #include "ObjectGraph.h"
 
 #define RVLPCSEGMENT_DEMO_FLAG_SAVE_PLY			0x00000001

@@ -81,6 +81,20 @@ namespace RVL
 		T Element[9];
 	};
 
+	template < typename T1, typename T2 > struct Correspondence
+	{
+		T1 item1;
+		T2 item2;
+	};
+
+	template <typename T>
+	void InitBoundingBox(Box<T> *pBox, T *P)
+	{
+		pBox->minx = pBox->maxx = P[0];
+		pBox->miny = pBox->maxy = P[1];
+		pBox->minz = pBox->maxz = P[2];
+	}
+
 	template <typename T> 
 	void UpdateBoundingBox(Box<T> *pBox, T *P)
 	{
@@ -98,6 +112,47 @@ namespace RVL
 			pBox->minz = P[2];
 		else if (P[2] > pBox->maxz)
 			pBox->maxz = P[2];
+	}
+
+	template <typename T>
+	bool InBoundingBox(Box<T> *pBox, T *P)
+	{
+		return (P[0] >= pBox->minx && P[0] <= pBox->maxx && 
+			P[1] >= pBox->miny && P[1] <= pBox->maxy && 
+			P[2] >= pBox->minz && P[2] <= pBox->maxz);
+	}
+
+	template <typename T>
+	bool BoxIntersection(
+		Box<T> *pBoxSrc1,
+		Box<T> *pBoxSrc2,
+		Box<T> *pBoxTgt)
+	{
+		pBoxTgt->minx = RVLMAX(pBoxSrc1->minx, pBoxSrc2->minx);
+		pBoxTgt->maxx = RVLMIN(pBoxSrc1->maxx, pBoxSrc2->maxx);
+
+		if (pBoxTgt->minx >= pBoxTgt->maxx)
+			return false;
+
+		pBoxTgt->miny = RVLMAX(pBoxSrc1->miny, pBoxSrc2->miny);
+		pBoxTgt->maxy = RVLMIN(pBoxSrc1->maxy, pBoxSrc2->maxy);
+
+		if (pBoxTgt->miny >= pBoxTgt->maxy)
+			return false;
+
+		pBoxTgt->minz = RVLMAX(pBoxSrc1->minz, pBoxSrc2->minz);
+		pBoxTgt->maxz = RVLMIN(pBoxSrc1->maxz, pBoxSrc2->maxz);
+
+		if (pBoxTgt->minz >= pBoxTgt->maxz)
+			return false;
+
+		return true;
+	}
+
+	template <typename T>
+	T BoxVolume(Box<T> *pBox)
+	{
+		return (pBox->maxx - pBox->minx) * (pBox->maxy - pBox->miny) * (pBox->maxz - pBox->minz);
 	}
 }
 

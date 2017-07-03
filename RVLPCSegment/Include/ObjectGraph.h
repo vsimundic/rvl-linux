@@ -6,10 +6,15 @@
 #include <set>
 #include "opencv2\opencv.hpp"
 
-#define RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_HEURISTIC	0
-#define RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_SVM			1
-#define RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_NLMC		2
-#define RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_NLMC2		3
+#define RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_HEURISTIC		0
+#define RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_SVM				1
+#define RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_NLMC			2
+#define RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_NLMC2			3
+#define RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_FUZZY_HEURISTIC	4
+
+
+#define RVLPCSEGMENT_OBJECT_AGGREGATION_LEVEL2_METHOD_CONVEXITY		0
+#define RVLPCSEGMENT_OBJECT_AGGREGATION_LEVEL2_METHOD_SYMMETRY		1
 
 namespace RVL
 {
@@ -22,10 +27,20 @@ namespace RVL
 			int idx;
 			SurfelAdjecencyDescriptors desc;
 			float cost;
+			float distance;
 			AgEdge *pNext;
 		};
 
 		class ObjectGraph;
+
+		struct Object
+		{
+			int iNode;
+			QList<QLIST::Index> surfelList;
+			Array<int> iVertexArray;
+			Array<int> CTIs;
+			float varGRF;
+		};
 
 		struct ObjectDisplayData
 		{
@@ -44,6 +59,13 @@ namespace RVL
 			float PConvex;
 			float PClean;
 			float P;
+		};
+		
+		struct ObjectCoverage
+		{
+			int iObject;
+			unsigned char type;
+			float coverage;
 		};
 
 		bool objectKeyPressUserFunction(
@@ -68,6 +90,8 @@ namespace RVL
 			std::vector<std::set<int>> CHVertexIndices;
 			std::vector<std::map<int, bool>> ObjectsSurfelConvexity;
 			std::vector<RVLColorDescriptor> colordescriptor;
+			std::vector<float> convexityMultipliers;
+			//std::vector<std::vector<float>> bbDistances;
 		};
 		//
 
@@ -79,23 +103,52 @@ namespace RVL
 			virtual ~ObjectGraph();
 			void CreateParamList(CRVLMem *pMem);
 			void Create(SurfelGraph *pSurfels_);
+			void GroupAccordingToGroundTruth();
+			void CreateFromGroundTruth(SurfelGraph *pSurfels_);
 			void CreateFromSSF(std::string ssfFileName);	//Filko
 			void CalculateOverAndUnderSegmentation_SSF(int *E, int &N, bool useGTNoPix = true,  bool useBackground = true);	//Filko
-			void CalculateOverAndUnderSegmentation(int *E, int &N, bool useGTNoPix = false, std::string GTlabImgFilename = "", bool useBackground = true);	//Filko
-			void DetermineObjectConvexityData(float convexThr = 0.005, float ratioThr = 0.9);	//Filko
+			void CalculateOverAndUnderSegmentation(
+				int *E, 
+				int &N, 
+				bool useGTNoPix = false, 
+				std::string GTlabImgFilename = "", 
+				bool useBackground = true,
+				std::string selectedGTObjectFileName = "",
+				std::vector<ObjectCoverage> *pSelectedGTObjectCoverage = NULL);	//Filko
+			static void CalculateOverAndUnderSegmentation_Img(
+				int *E,
+				int &N,
+				std::string SegLabImgFilename,
+				std::string GTlabImgFilename,
+				std::string DepthImgFilename,
+				bool useGTNoPix = false,
+				bool useBackground = true,
+				std::string selectedGTObjectFileName = "",
+				std::vector<ObjectCoverage> *pSelectedGTObjectCoverage = NULL);	//Filko
+			void DetermineObjectConvexityData(float convexThr = 0.005, float minDiffFlipReq = 0.1, bool verbose = false);	//Filko
 			void CalculateConvexityRatiosForObjectPair(int firstObject, int secondObject, float& firstRatio, float& secondRatio, float convexThr = 0.005);	//Filko
 			void CalculateObjectsColorHistogram(); //Filko
+			bool(*ExtFuncCheckIfWithinVolume)(void*, int, int, float);	//Filko
 			void ObjectAggregationLevel2_ViaObjectPairConvexity(float convexThr, float ratioThr, float ratioThr2, int objValidThr = 300, bool verbose = false); //Filko - NOT OPTIMIZED!!!!
 			void SaveSegmentationLabelImg(std::string filename); //Filko
+			bool CheckObjectUniformity(int objectIdx, int minSurfelSize, float uniThr); //Filko
+			bool CheckIfNeighbours(int iObject1, int iObject2);	//Filko
+			void RenderConvexityPos(int iObjectSurf, int iObjectVert, Mesh *pMeshScene);	//Filko
+			void FlattenVertex(const float * P, float * Pc, const float * N, float d); //Filko
+			bool MergeSmallObjects(int sizeThr = 500, float maxDistThr = 0.02, bool verbose = false); //Filko
+			
 			void WERSegmentation();
 			void ComputeRelationCosts();
 			void ComputeRelationCost(
 				AgEdge *pEdge,
 				ObjectEdgeData &data);
-			void CreateSortedObjectArray();
+			//void CreateSortedObjectArray();
 			void SortElements(
 				GRAPH::AggregateNode<AgEdge> *pAgNode,
 				Array<SortIndex<int>> *pSortedElementIdxArray);
+			void SortObjects();
+			void CountValidObjects();
+			void GetVertices();
 			void InitDisplay(
 				Visualizer *pVisualizer,
 				Mesh *pMesh,
@@ -110,6 +163,10 @@ namespace RVL
 			cv::Mat CreateSegmentationImage();
 			cv::Mat CreateSegmentationImageFromSSF();
 			void Debug();
+			static void LoadSelectedGTObjects(
+				char *meshFileName,
+				char *selectedGTObjectFileName,
+				std::vector<ObjectCoverage> &selectedGTObjectCoverage);
 
 		public:
 			CRVLParameterList ParamList;
@@ -121,16 +178,40 @@ namespace RVL
 			std::shared_ptr<SceneSegFile::SceneSegFile> ssf;	//Filko
 			std::map<int, int> objID2idxMap; //Filko
 			SVMClassifier *pSVMClassifier;  //Nyarko
-			Array<int> objectArray;
+			//Array<int> objectArray;
 			float kCoverage;
 			float alpha;
 			ObjectGraphObjectData additionalObjectData;	//Filko
 			//Array<int> *sortedElementIdxArray;
 			DWORD relationClassifier;
+			DWORD objectAggregationLevel2Method;
+			Array<SortIndex<int>> sortedObjectArray;
+			Array<SURFEL::Object> objectArray;
+			int *iObjectAssignedToNode;
+			int *objectVertexIdxMem;
+			int nValidObjects;
+			bool bObjectAggregationLevel2Uncertainty;
+			bool bObjectAggregationLevel2Edges;
+			bool bFlattenVertices;
+			bool bConcaveObjectAggregation;
+			void(*objectAggregationLevel2Criterion)(ObjectGraph *pObjects, int iObject1, int iObject2, void *vpData);
+			void *vpObjectAggregationLevel2CriterionData;
+			FILE *fpSymmetry;
+			int minObjectSize;
+			float continuousThr;
+			float convexThr;
+			float cleanThr;
+			float depthStepIntThr;
+			float depthStepExtThr;
+			float concaveAngleIntThr;
+			float concaveAngleExtThr;
+			float concaveMinCost;
+
+			Mesh *pMesh; //FIlko
+
 		private:
 			QLIST::Index *elementMem;
 			//int *sortedElementIdxMem;
 		};
 	}
 }
-
