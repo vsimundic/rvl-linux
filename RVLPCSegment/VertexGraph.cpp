@@ -354,8 +354,44 @@ void VertexGraph::Create(SurfelGraph *pSurfels_)
 #endif
 }
 
+//#ifdef NEVER		// New version
+
 void VertexGraph::Clustering()
 {
+	float normalNoiseDeg = 20.0f;	// deg
+
+	float normalNoise = normalNoiseDeg * DEG2RAD;
+
+	// Detect tangent vertices.
+
+	float normalNoise_ = 0.99 * normalNoise;
+
+	float snqThr = sin(normalNoise_);
+
+	int iVertex;
+	Vertex *pVertex;
+	float minsnq;
+	int i, j;
+
+	for (iVertex = 0; iVertex < NodeArray.n; iVertex++)
+	{
+		pVertex = NodeArray.Element + iVertex;
+
+		if (pVertex->normalHull.n < 3)
+			continue;
+
+		minsnq = pVertex->normalHull.Element[0].snq;
+
+		for (i = 1; i < pVertex->normalHull.n; i++)
+			if (pVertex->normalHull.Element[i].snq < minsnq)
+				minsnq = pVertex->normalHull.Element[i].snq;
+
+		if (minsnq < snqThr)
+			continue;
+
+		pVertex->type |= RVLSURFELVERTEX_TYPE_TANGENT;
+	}
+
 	// Create graph G.
 
 	Graph<GRAPH::Node, GRAPH::Edge, GRAPH::EdgePtr<GRAPH::Edge>> G;
@@ -363,7 +399,6 @@ void VertexGraph::Clustering()
 	G.NodeArray.Element = new GRAPH::Node[NodeArray.n];
 	G.NodeArray.n = NodeArray.n;
 
-	int iVertex;
 	GRAPH::Node *pNode2;
 	QList<GRAPH::EdgePtr<GRAPH::Edge>> *pEdge2List;
 
@@ -382,15 +417,11 @@ void VertexGraph::Clustering()
 
 	mem.Create(NodeArray.n * (NodeArray.n + 1) / 2 * (2 * sizeof(GRAPH::EdgePtr<GRAPH::Edge>) + sizeof(GRAPH::Edge)));
 
-	VertexConnectRGData RGData2;
-	
-	float normalNoiseDeg = 20.0f;	// deg
-
-	float normalNoise = normalNoiseDeg * DEG2RAD;
+	VertexConnectRGData RGData2;	
 
 	RGData2.thr1 = sin(normalNoise);
 	RGData2.thr2 = cos(normalNoise);
-	
+
 	RGData2.bVisited = new bool[NodeArray.n];
 
 	memset(RGData2.bVisited, 0, NodeArray.n * sizeof(bool));
@@ -402,14 +433,15 @@ void VertexGraph::Clustering()
 
 	int *iNodeBuff = new int[NodeArray.n];
 
-	int i, j;
-	Vertex *pVertex;
 	NormalHullElement *pNormaHullElement;
 	int *piNodeBuffEnd, *piNodeFetch, *piNodePut;
 
 	for (iVertex = 0; iVertex < NodeArray.n; iVertex++)
 	{
 		pVertex = NodeArray.Element + iVertex;
+
+		if (!(pVertex->type & RVLSURFELVERTEX_TYPE_TANGENT))
+			continue;
 
 		iNodeBuff[0] = iVertex;
 
@@ -518,6 +550,8 @@ void VertexGraph::Clustering()
 
 	delete[] G.NodeArray.Element;
 }
+
+//#endif
 
 #ifdef NEVER	// Old version.
 

@@ -2598,10 +2598,12 @@ void SurfelGraph::UpdateNormalHull(
 
 		fTmp = sqrt(RVLDOTPRODUCT3(Nh_, Nh_));
 
-		if (RVLABS(fTmp) < 1e-10)
+		if (fTmp < 1e-10)
 			return;
 
 		RVLSCALE3VECTOR2(Nh_, fTmp, Nh_);
+
+		NHull.Element[0].snq = NHull.Element[1].snq = fTmp;
 
 		N_ = NHull.Element[1].N;
 		float *Nh__ = NHull.Element[1].Nh;
@@ -2662,10 +2664,12 @@ void SurfelGraph::UpdateNormalHull(
 
 	fTmp = sqrt(RVLDOTPRODUCT3(Nh, Nh));
 
-	if (RVLABS(fTmp) < 1e-10)
+	if (fTmp < 1e-10)
 		return;
 
 	RVLSCALE3VECTOR2(Nh, fTmp, Nh_);
+
+	pHullElement->snq = fTmp;
 
 	pHullElement = NHull.Element + iEnd;
 
@@ -2675,7 +2679,7 @@ void SurfelGraph::UpdateNormalHull(
 
 	fTmp = sqrt(RVLDOTPRODUCT3(Nh, Nh));
 
-	if (RVLABS(fTmp) < 1e-10)
+	if (fTmp < 1e-10)
 		return;
 
 	if (iEnd == (iStart + 1) % NHull.n)	// Size of NHull should be increased.
@@ -2717,6 +2721,7 @@ void SurfelGraph::UpdateNormalHull(
 
 	RVLCOPY3VECTOR(N, N_);
 	RVLSCALE3VECTOR2(Nh, fTmp, Nh_);
+	pHullElement->snq = fTmp;
 }
 
 float SurfelGraph::DistanceFromNormalHull(

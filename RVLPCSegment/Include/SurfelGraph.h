@@ -15,6 +15,8 @@
 #define RVLSURFEL_EDGE_FLAG_CONVEX				0x02
 #define RVLSURFEL_FLAG_RF						0x04
 
+#define RVLSURFELVERTEX_TYPE_CONVEX_CONCAVE		0x07
+#define RVLSURFELVERTEX_TYPE_TANGENT			0x40
 #define RVLSURFELVERTEX_TYPE_REDUNDANT			0x80
 
 #define RVLSURFEL_VERSION_0		0
@@ -85,6 +87,7 @@ namespace RVL
 		{
 			float N[3];
 			float Nh[3];
+			float snq;
 		};
 
 		struct VertexEdge

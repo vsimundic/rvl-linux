@@ -513,7 +513,7 @@ void PSGM::Interpret(
 
 		pVertexGraph->Create(pSurfels);
 
-		pVertexGraph->Clustering();
+		//pVertexGraph->Clustering();
 
 		TG *pTG = new TG;
 

@@ -445,6 +445,45 @@ void PlanarSurfelDetector::Segment(
 	// Detect edge features.
 
 	EdgeFetures(pMesh, pSurfels, &SEdgeList, nSEdges);
+
+	// Memorize occlusion edge points and set their ID in surfelMap to 0 in order to exclude them from surfel detection.
+
+	Array<Pair<int, int>> iOcclusionEdgePtArray;
+
+	iOcclusionEdgePtArray.Element = new Pair<int, int>[pMesh->NodeArray.n];
+	iOcclusionEdgePtArray.n = 0;
+
+	int iPointEdge;
+	int iPt;
+	MeshEdgePtr *pEdgePtr;
+
+	QLIST::Entry<Array<MeshEdgePtr *>> *pBoundary = pSurfels->BoundaryList.pFirst;
+
+	while (pBoundary)
+	{
+		for (iPointEdge = 0; iPointEdge < pBoundary->data.n; iPointEdge++)
+		{
+			pEdgePtr = pBoundary->data.Element[iPointEdge];
+
+			iPt = RVLPCSEGMENT_GRAPH_GET_NODE(pEdgePtr);
+
+			iOcclusionEdgePtArray.Element[iOcclusionEdgePtArray.n].a = iPt;
+			iOcclusionEdgePtArray.Element[iOcclusionEdgePtArray.n].b = pSurfels->surfelMap[iPt];
+			iOcclusionEdgePtArray.n++;
+			pSurfels->surfelMap[iPt] = 0;
+		}
+
+		pBoundary = pBoundary->pNext;
+	}
+
+	//for (iPt = 0; iPt < pMesh->NodeArray.n; iPt++)
+	//	if (pSurfels->surfelMap[iPt] < -1)
+	//	{
+	//		iOcclusionEdgePtArray.Element[iOcclusionEdgePtArray.n].a = iPt;
+	//		iOcclusionEdgePtArray.Element[iOcclusionEdgePtArray.n].b = pSurfels->surfelMap[iPt];
+	//		iOcclusionEdgePtArray.n++;
+	//		pSurfels->surfelMap[iPt] = 0;
+	//	}
 #endif
 
 	Point *Pt = pMesh->NodeArray.Element;		
@@ -548,6 +587,13 @@ void PlanarSurfelDetector::Segment(
 
 	//	pPtIdx++;
 	//}
+
+#ifndef RVLVERSION_170601
+	// Restore occlusion edges.
+
+	for (i = 0; i < iOcclusionEdgePtArray.n; i++)
+		pSurfels->surfelMap[iOcclusionEdgePtArray.Element[i].a] = iOcclusionEdgePtArray.Element[i].b;
+#endif
 	
 	// Initialize buffers for determining of surfel neighbors, boundaries and sizes.
 
@@ -5222,7 +5268,11 @@ int PlanarSurfelDetector::CreateEdgeFeatures(
 					if (iPt / 640 == 460)
 						int debug = 0;
 
+#ifdef RVLVERSION_170601
 					pSurfels->edgeMap[iPt] = -nOcclusionEdges;
+#else
+					pSurfels->surfelMap[iPt] = -nOcclusionEdges;
+#endif
 
 					iPointEdge = (iPointEdge + 1) % pBoundary->n;
 				}
