@@ -16,6 +16,7 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 #include "Visualizer.h"
 #include "SceneSegFile.hpp"
 #include "SurfelGraph.h"
+#include "ObjectGraph.h"
 #include "PlanarSurfelDetector.h"
 #include "RVLRecognition.h"
 #include "RFRecognition.h"
@@ -202,6 +203,8 @@ int main(int argc, char ** argv)
 
 	// Read parameters from a configuration file.
 
+	char cfgFileName[] = "RVLRecognitionDemo_all.cfg";
+
 	char *sceneMeshFileName = NULL;
 	char *sceneSequenceFileName = NULL; //VIDOVIC
 	char *modelSequenceFileName = NULL; //VIDOVIC
@@ -226,13 +229,21 @@ int main(int argc, char ** argv)
 		method,
 		flags);	 //VIDOVIC
 
-	ParamList.LoadParams("RVLRecognitionDemo_all.cfg");
+	ParamList.LoadParams(cfgFileName);
 
 	if (segmentGTFileName == NULL)
 	{
 		segmentGTFileName = new char[200];
 		segmentGTFileName = "C:\\RVL\\segmentGT.txt";
 	}
+
+	// Create mesh builder.
+
+	PCLMeshBuilder meshBuilder;
+
+	meshBuilder.CreateParamList(&mem0);
+
+	meshBuilder.ParamList.LoadParams(cfgFileName);
 
 	// Initialize surfel detection
 
@@ -242,13 +253,13 @@ int main(int argc, char ** argv)
 
 	surfels.CreateParamList(&mem0);
 
-	surfels.ParamList.LoadParams("RVLRecognitionDemo_all.cfg");
+	surfels.ParamList.LoadParams(cfgFileName);
 
 	PlanarSurfelDetector surfelDetector;
 
 	surfelDetector.CreateParamList(&mem0);
 
-	surfelDetector.ParamList.LoadParams("RVLRecognitionDemo_all.cfg");
+	surfelDetector.ParamList.LoadParams(cfgFileName);
 
 	//VIDOVIC
 	//initialize mesh noiser
@@ -277,7 +288,7 @@ int main(int argc, char ** argv)
 
 		recognition.CreateParamList(&mem0);
 
-		recognition.ParamList.LoadParams("RVLRecognitionDemo.cfg");
+		recognition.ParamList.LoadParams(cfgFileName);
 
 		recognition.pMem0 = &mem0;
 		recognition.pMem = &mem;
@@ -380,7 +391,7 @@ int main(int argc, char ** argv)
 
 		recognition.CreateParamList(&mem0);
 
-		recognition.ParamList.LoadParams("RVLRecognitionDemo_all.cfg");
+		recognition.ParamList.LoadParams(cfgFileName);
 
 		//recognition.Create();
 
@@ -398,9 +409,16 @@ int main(int argc, char ** argv)
 		}
 		else if (recognition.mode == RVLRECOGNITION_MODE_RECOGNITION)
 		{
+			//Eigen::MatrixXf nI = recognition.ConvexTemplatenT();
+			//float dI[66];
+			//for (int i = 0; i < 66; i++) dI[i] = 1;
+			//recognition.RVLPSGInstanceMesh(nI, dI);
+
 			recognition.LoadModelDataBase(); //Vidovic
 
-			//recognition.LoadModelMeshDB(modelSequenceFileName, true, 0.4); //uncomment later
+#ifdef RVLPSGM_ICP
+			recognition.LoadModelMeshDB(modelSequenceFileName, true, 0.4);
+#endif
 
 			Mesh mesh;
 
@@ -417,23 +435,23 @@ int main(int argc, char ** argv)
 
 			recognition.pECCVGT->Init(sceneSequence, GTFolder, modelsInDB);
 
-			recognition.pECCVGT->SaveGTFile("D:\\ARP3D\\TUW_GT.txt");
+			//recognition.pECCVGT->SaveGTFile("D:\\ARP3D\\TUW_GT.txt");			
 
-			FILE *fpHypothesisEvaluation = fopen("D:\\ARP3D\\compare_TNM_Valid_TMP.txt", "w");
+			//FILE *fpHypothesisEvaluation = fopen("D:\\ARP3D\\compare_TNM_Valid_TMP.txt", "w");
 
-			FILE *fpLog = fopen("D:\\ARP3D\\evaluationLog.txt", "w");
+			//FILE *fpLog = fopen("D:\\ARP3D\\evaluationLog.txt", "w");			
 
-			FILE *fpPoseError = fopen("D:\\ARP3D\\poseError.txt", "w");
+			FILE *fpPoseError = fopen("C:\\RVL\\ExpRez\\poseError.txt", "w");
 
-			FILE *fpnotFirstInfo = fopen("D:\\ARP3D\\notFirstInfo.txt", "w");
+			FILE *fpnotFirstInfo = fopen("C:\\RVL\\ExpRez\\notFirstInfo.txt", "w");
 
-			FILE *fpnotFirstPoseErr = fopen("D:\\ARP3D\\notFirstInfo.txt", "w");
+			FILE *fpnotFirstPoseErr = fopen("C:\\RVL\\ExpRez\\notFirstInfo.txt", "w");
 
 			//recognition.pECCVGT->SaveGTFile("C:\\RVL\\ExpRez\\TUW_GT.txt");
 
-			//FILE *fpHypothesisEvaluation = fopen("C:\\RVL\\ExpRez\\compare_TNM_Valid_TMP.txt", "w");
+			FILE *fpHypothesisEvaluation = fopen("C:\\RVL\\ExpRez\\compare_TNM_Valid_TMP.txt", "w");
 
-			//FILE *fpLog = fopen("C:\\RVL\\ExpRez\\evaluationLog.txt", "w");
+			FILE *fpLog = fopen("C:\\RVL\\ExpRez\\evaluationLog.txt", "w");
 
 			Eigen::MatrixXf nI = recognition.ConvexTemplatenT();
 			float dI[66];
@@ -467,7 +485,8 @@ int main(int argc, char ** argv)
 
 				recognition.clusters.n = 0;
 #else
-				mesh.LoadPolyDataFromPLY(filePath);
+				//mesh.LoadPolyDataFromPLY(filePath);
+				LoadMesh(&meshBuilder, filePath, &mesh, false);
 
 				mem.Clear();
 
@@ -490,17 +509,17 @@ int main(int argc, char ** argv)
 
 				printf("Scene %s...finished!\n\n", filePath);
 
-				mesh.LoadPolyDataFromPLY(filePath);
+				//mesh.LoadPolyDataFromPLY(filePath);
+				//LoadMesh(&meshBuilder, filePath, &mesh, false);
 
-
-				//surfels.NodeColors(SelectionColor);
-				
-				visualizer.renderer->RemoveAllViewProps();
+				surfels.NodeColors(SelectionColor);				
+				//visualizer.renderer->RemoveAllViewProps();
 				recognition.InitDisplay(&visualizer, &mesh, SelectionColor);
 				recognition.Display();
 
 				QueryPerformanceCounter((LARGE_INTEGER *)&ctr1_);
 
+#ifdef RVLPSGM_ICP
 				//pcl::PointCloud<pcl::PointXYZINormal>::Ptr cloud_destination(new pcl::PointCloud<pcl::PointXYZINormal>);
 				////creating destination cloud
 				//cloud_destination->width = mesh.NodeArray.n;
@@ -526,9 +545,12 @@ int main(int argc, char ** argv)
 				
 				//GenerateSegmentNeighbourhood(&recognition, 0.1);
 				//recognition.CalculateNNCost(&visualizer, PCLICP, PCLICPVariants::Point_to_plane);
-			
+
 				//evaluate ICP
 				//recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, fpPoseError, fpnotFirstInfo, fpnotFirstPoseErr, 7, true);
+#else
+				recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, fpPoseError, fpnotFirstInfo, fpnotFirstPoseErr, 7);
+#endif
 				//recognition.AddModelsToVisualizer(&visualizer, true, PCLICP, PCLICPVariants::Point_to_plane, NULL/*&kdtree*/);
 				QueryPerformanceCounter((LARGE_INTEGER *)&ctr2_);
 				QueryPerformanceFrequency((LARGE_INTEGER *)&freq_);
@@ -574,7 +596,9 @@ int main(int argc, char ** argv)
 			char filePath[200];
 			FILE *fpClusterNormalDistribution;
 
-			//char filePath[200];		
+			//char filePath[200];
+
+			///
 
 			int nM = 35, nSM = 3;
 
@@ -583,7 +607,8 @@ int main(int argc, char ** argv)
 
 				printf("Scene %s...\n", filePath);
 
-				mesh.LoadPolyDataFromPLY(filePath);
+				//mesh.LoadPolyDataFromPLY(filePath);
+				LoadMesh(&meshBuilder, filePath, &mesh, false);
 
 				recognition.SetSceneFileName(filePath);
 
@@ -629,6 +654,13 @@ int main(int argc, char ** argv)
 				printf("Scene %s...finished!\n\n", filePath);
 
 				iScene++;
+
+				// Visualization
+				//surfels.NodeColors(SelectionColor);
+				////visualizer.renderer->RemoveAllViewProps();								
+				//recognition.InitDisplay(&visualizer, &mesh, SelectionColor);
+				//recognition.Display();
+				//visualizer.Run();
 			}
 
 			RVL_DELETE_ARRAY(clusterNormalDistributionFileName);
@@ -638,9 +670,6 @@ int main(int argc, char ** argv)
 			recognition.InitDisplay(&visualizer, &mesh, SelectionColor);
 			recognition.Display();
 			visualizer.Run();
-
-
-
 		}
 	}	// if (method == RVLRECOGNITION_METHOD_PSGM)
 
