@@ -2,15 +2,17 @@
 //
 #include <Windows.h>
 #include <ctime>
+#include <fstream>
 //#include "stdafx.h"
 #include <vtkAutoInit.h>
+//VTK_MODULE_INIT(vtkRenderingOpenGL);
 VTK_MODULE_INIT(vtkRenderingOpenGL2);
-//VTK_MODULE_INIT(vtkRenderingOpenGL2);
 VTK_MODULE_INIT(vtkInteractionStyle);
 VTK_MODULE_INIT(vtkRenderingFreeType);
 #include "RVLVTK.h"
 #include "RVLCore2.h"
 #include "Util.h"
+#include "Space3DGrid.h"
 #include "Graph.h"
 #include "Mesh.h"
 #include "Visualizer.h"
@@ -23,6 +25,9 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 #include "RVLMeshNoiser.h"
 #include "PSGMCommon.h"
 #include "CTISet.h"
+#include "VertexGraph.h"
+#include "TG.h"
+#include "TGSet.h"
 #include "PSGM.h"
 #include <pcl/common/common.h>
 #include <pcl/registration/registration.h>
@@ -60,6 +65,7 @@ void CreateParamList(
 	char **pModelsInDB,	//VIDOVIC
 	char **pGTFolder,	//VIDOVIC
 	char **pSegmentGTFileName,	//Vidovic
+	char **pResultsFolder,
 	DWORD &method,
 	DWORD &flags //VIDOVIC
 	)
@@ -75,6 +81,7 @@ void CreateParamList(
 	pParamData = pParamList->AddParam("ModelSequenceFileName", RVLPARAM_TYPE_STRING, pModelSequenceFileName);	//VIDOVIC
 	pParamData = pParamList->AddParam("ModelsInDataBase", RVLPARAM_TYPE_STRING, pModelsInDB);	//VIDOVIC
 	pParamData = pParamList->AddParam("GTFolder", RVLPARAM_TYPE_STRING, pGTFolder);	//VIDOVIC
+	pParamData = pParamList->AddParam("ResultsFolder", RVLPARAM_TYPE_STRING, pResultsFolder);
 	pParamData = pParamList->AddParam("SegmentGTFileName", RVLPARAM_TYPE_STRING, pSegmentGTFileName);	//Vidovic
 	pParamData = pParamList->AddParam("Recognition.method", RVLPARAM_TYPE_ID, &method);
 	pParamList->AddID(pParamData, "PSGM", RVLRECOGNITION_METHOD_PSGM);
@@ -93,15 +100,22 @@ void GenerateSegmentNeighbourhood(PSGM * psgm, double radius)
 	cloud_destination->is_dense = false;
 	cloud_destination->points.resize(cloud_destination->width * cloud_destination->height);
 
+	
+	int idx = 0;
 	for (int i = 0; i <psgm->pMesh->NodeArray.n; i++)
 	{
-		cloud_destination->points[i].x = psgm->pMesh->NodeArray.Element[i].P[0];
-		cloud_destination->points[i].y = psgm->pMesh->NodeArray.Element[i].P[1];
-		cloud_destination->points[i].z = psgm->pMesh->NodeArray.Element[i].P[2];
+		if (psgm->clusterMap[psgm->pSurfels->surfelMap[i]] == -1)
+			continue;
 
-		cloud_destination->points[i].normal_x = psgm->pMesh->NodeArray.Element[i].N[0];
-		cloud_destination->points[i].normal_y = psgm->pMesh->NodeArray.Element[i].N[1];
-		cloud_destination->points[i].normal_z = psgm->pMesh->NodeArray.Element[i].N[2];
+		cloud_destination->points[idx].x = psgm->pMesh->NodeArray.Element[i].P[0];
+		cloud_destination->points[idx].y = psgm->pMesh->NodeArray.Element[i].P[1];
+		cloud_destination->points[idx].z = psgm->pMesh->NodeArray.Element[i].P[2];
+
+		cloud_destination->points[idx].normal_x = psgm->pMesh->NodeArray.Element[i].N[0];
+		cloud_destination->points[idx].normal_y = psgm->pMesh->NodeArray.Element[i].N[1];
+		cloud_destination->points[idx].normal_z = psgm->pMesh->NodeArray.Element[i].N[2];
+
+		idx++;
 	}
 
 	pcl::search::KdTree<pcl::PointXYZINormal>::Ptr kdtree = boost::make_shared<pcl::search::KdTree<pcl::PointXYZINormal>>((new pcl::search::KdTree<pcl::PointXYZINormal>));
@@ -123,7 +137,7 @@ void GenerateSegmentNeighbourhood(PSGM * psgm, double radius)
 		{
 			pSurfel = &psgm->pSurfels->NodeArray.Element[pCluster->iSurfelArray.Element[i]];
 			pt = pSurfel->PtList.pFirst;
-			for (int k = 0; k < pSurfel->size; k++)
+			while (pt)
 			{
 				centroids[3 * iCluster] += psgm->pMesh->NodeArray.Element[pt->Idx].P[0];
 				centroids[3 * iCluster + 1] += psgm->pMesh->NodeArray.Element[pt->Idx].P[1];
@@ -187,6 +201,42 @@ void GenerateSegmentNeighbourhood(PSGM * psgm, double radius)
 	
 }
 
+void FilterImage(cv::Mat img)
+{
+	cv::Mat newImg(480, 640, CV_16UC1, cv::Scalar::all(0));
+	img.copyTo(newImg);
+	float sum = 0;
+	float max = 0;
+	int no = 0;
+	for (int y = 10; y < (img.rows - 10); y++)
+	{
+		for (int x = 10; x < (img.cols - 10); x++)
+		{
+			if (img.at<uint16_t>(y, x) > 0)
+				continue;
+			//inner 
+			sum = 0;
+			no = 0;
+			max = 0;
+			for (int v = -1; v < 1; v++)
+			{
+				for (int u = -1; u < 1; u++)
+				{
+					if (img.at<uint16_t>(y + v, x + u) == 0)
+						continue;
+					sum += img.at<uint16_t>(y + v, x + u);
+					no++;
+					if (img.at<uint16_t>(y + v, x + u) > max)
+						max = img.at<uint16_t>(y + v, x + u);
+				}
+			}
+			if (no != 0)
+				newImg.at<uint16_t>(y, x) = max;// sum / no;
+		}
+	}
+	newImg.copyTo(img);
+}
+
 int main(int argc, char ** argv)
 {
 	// Create memory storage.
@@ -210,6 +260,7 @@ int main(int argc, char ** argv)
 	char *modelSequenceFileName = NULL; //VIDOVIC
 	char *modelsInDB = NULL; //VIDOVIC
 	char *GTFolder = NULL; //VIDOVIC
+	char *ResultsFolder = NULL;
 	char *segmentGTFileName = NULL; //Vidovic
 	DWORD method = RVLRECOGNITION_METHOD_PSGM;
 	//DWORD method = RVLRECOGNITION_METHOD_RF; //VIDOVIC
@@ -226,6 +277,7 @@ int main(int argc, char ** argv)
 		&modelsInDB,
 		&GTFolder,
 		&segmentGTFileName,
+		&ResultsFolder,
 		method,
 		flags);	 //VIDOVIC
 
@@ -244,6 +296,13 @@ int main(int argc, char ** argv)
 	meshBuilder.CreateParamList(&mem0);
 
 	meshBuilder.ParamList.LoadParams(cfgFileName);
+
+	int w = 640;
+	int h = 480;
+
+	pcl::PointCloud<pcl::PointXYZRGBA>::Ptr PC(new pcl::PointCloud<pcl::PointXYZRGBA>(w, h));
+
+	meshBuilder.PC = PC;
 
 	// Initialize surfel detection
 
@@ -396,10 +455,18 @@ int main(int argc, char ** argv)
 		//recognition.Create();
 
 		recognition.pMem = &mem;
+		recognition.pMem0 = &mem0;
+
+		recognition.vpMeshBuilder = &meshBuilder;
+		recognition.LoadMesh = LoadMesh;
 
 		recognition.pSurfels = &surfels;
 
 		recognition.pSurfelDetector = &surfelDetector;
+
+		recognition.MTGSet.pMem = recognition.pMem0;
+
+		recognition.Init(cfgFileName);
 
 		if (recognition.mode == RVLRECOGNITION_MODE_TRAINING)
 			recognition.Learn(modelSequenceFileName, &visualizer); //Vidovic
@@ -429,6 +496,8 @@ int main(int argc, char ** argv)
 
 			sceneSequence.Init(sceneSequenceFileName);
 
+			//recognition.pSurfels->bContactEdgeVertices = true;
+
 			recognition.pECCVGT->Init(sceneSequence, GTFolder, modelsInDB);
 
 			//recognition.pECCVGT->SaveGTFile("D:\\ARP3D\\TUW_GT.txt");			
@@ -437,22 +506,19 @@ int main(int argc, char ** argv)
 
 			//FILE *fpLog = fopen("D:\\ARP3D\\evaluationLog.txt", "w");			
 
-			FILE *fpPoseError = fopen("C:\\RVL\\ExpRez\\poseError.txt", "w");
+			std::string resultsFolderName = std::string(ResultsFolder);
 
-			FILE *fpnotFirstInfo = fopen("C:\\RVL\\ExpRez\\notFirstInfo.txt", "w");
+			FILE *fpPoseError = fopen((resultsFolderName + "\\poseError.txt").data(), "w");
 
-			FILE *fpnotFirstPoseErr = fopen("C:\\RVL\\ExpRez\\notFirstInfo.txt", "w");
+			FILE *fpnotFirstInfo = fopen((resultsFolderName + "\\notFirstInfo.txt").data(), "w");
+
+			FILE *fpnotFirstPoseErr = fopen((resultsFolderName + "\\notFirstInfo.txt").data(), "w");
 
 			//recognition.pECCVGT->SaveGTFile("C:\\RVL\\ExpRez\\TUW_GT.txt");
 
-			FILE *fpHypothesisEvaluation = fopen("C:\\RVL\\ExpRez\\compare_TNM_Valid_TMP.txt", "w");
+			FILE *fpHypothesisEvaluation = fopen((resultsFolderName + "\\compare_TNM_Valid_TMP.txt").data(), "w");
 
-			FILE *fpLog = fopen("C:\\RVL\\ExpRez\\evaluationLog.txt", "w");
-
-			Eigen::MatrixXf nI = recognition.ConvexTemplatenT();
-			float dI[66];
-			for (int i = 0; i < 66; i++) dI[i] = 1;
-			//recognition.RVLPSGInstanceMesh(nI, dI);
+			FILE *fpLog = fopen((resultsFolderName + "\\evaluationLog.txt").data(), "w");
 
 			recognition.LoadCompleteSegmentGT(sceneSequence);
 
@@ -484,6 +550,165 @@ int main(int argc, char ** argv)
 				//mesh.LoadPolyDataFromPLY(filePath);
 				LoadMesh(&meshBuilder, filePath, &mesh, false);
 
+				//Generate scene depth
+				double point[3];
+				int u, v;
+				cv::Mat depth(480, 640, CV_16UC1, cv::Scalar::all(0));
+				for (int i = 0; i < mesh.pPolygonData->GetNumberOfPoints(); i++)
+				{
+					mesh.pPolygonData->GetPoint(i, point);
+					if ((point[0] == 0) && (point[1] == 0) && (point[2] == 0))
+						continue;
+					v = floor(float(i) / 640);
+					u = i - v * 640;
+					depth.at<uint16_t>(v, u) = (uint16_t)(point[2] * 1000); //in milimeters
+				}
+				//Postprocessing
+				for (int y = 0; y < depth.rows; y++)
+				{
+					for (int x = 0; x < depth.cols; x++)
+					{
+						if (depth.at<uint16_t>(y, x) == 0)
+							depth.at<uint16_t>(y, x) = 10000; //in milimeters
+					}
+				}
+				cv::Mat elementE = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(9, 9));
+				cv::erode(depth, depth, elementE);
+				//Set PSGM depth
+				recognition.depthImg = (unsigned short*)depth.data;
+
+				/*cv::Mat depthShow(480, 640, CV_8UC1);
+				double minVal, maxVal;
+				cv::minMaxLoc(depth, &minVal, &maxVal);
+				depth.convertTo(depthShow, CV_8U, -255.0f / maxVal, 255.0f);
+				cv::imshow("depth image", depthShow);
+				cv::waitKey();*/
+
+				///////////TEST/////////
+				///*std::fstream fileS("eccv_frame_20111221T142636.413299_depth.txt", std::fstream::out);
+				//double point[3];
+				//int u, v;
+				//for (int i = 0; i < mesh.pPolygonData->GetNumberOfPoints(); i++)
+				//{
+				//	mesh.pPolygonData->GetPoint(i, point);
+				//	if ((point[0] == 0) && (point[1] == 0) && (point[2] == 0))
+				//		continue;
+				//	v = floor(float(i) / 640);
+				//	u = i - v * 640;
+				//	fileS << u << " " << v << " " << point[0] << " " << point[1] << " " << point[2] << std::endl;
+				//}
+				//fileS.close();*/
+				////Generate scene depth
+				//double point[3];
+				//int u, v;
+				//cv::Mat origDepth(480, 640, CV_16UC1, cv::Scalar::all(0));
+				//for (int i = 0; i < mesh.pPolygonData->GetNumberOfPoints(); i++)
+				//{
+				//	mesh.pPolygonData->GetPoint(i, point);
+				//	if ((point[0] == 0) && (point[1] == 0) && (point[2] == 0))
+				//		continue;
+				//	v = floor(float(i) / 640);
+				//	u = i - v * 640;
+				//	origDepth.at<uint16_t>(v, u) = (uint16_t)(point[2] * 1000); //in milimeters
+				//}
+				//// Initialize VTK.
+				//vtkSmartPointer<vtkRenderer> renderer = vtkSmartPointer<vtkRenderer>::New();
+				//vtkSmartPointer<vtkRenderWindow> renWin = vtkSmartPointer<vtkRenderWindow>::New();
+				///*vtkSmartPointer<vtkRenderWindowInteractor> interactor = vtkSmartPointer<vtkRenderWindowInteractor>::New();
+				//interactor->SetRenderWindow(renWin);
+				//vtkSmartPointer<vtkInteractorStyleTrackballCamera> style = vtkSmartPointer<vtkInteractorStyleTrackballCamera>::New();
+				//interactor->SetInteractorStyle(style);*/
+				//renWin->OffScreenRenderingOn(); //OFF-SCREEN RENDERING
+				//renWin->AddRenderer(renderer);
+				//renWin->SetSize(640, 480); //HARDCODED 640X480 IMAGE
+
+				////adding polydata actor
+				//vtkSmartPointer<vtkPolyDataMapper>	map = vtkSmartPointer<vtkPolyDataMapper>::New();
+				//map->SetInputData(mesh.pPolygonData);
+				//vtkSmartPointer<vtkActor> act = vtkSmartPointer<vtkActor>::New();
+				//act->SetMapper(map);
+				//renderer->AddActor(act);
+				////renWin->Render();
+				////interactor->Start();
+
+				////find zbounds
+				//double *bounds;
+				//mesh.pPolygonData->GetPoints()->ComputeBounds(); //just in case
+				//bounds = mesh.pPolygonData->GetPoints()->GetBounds(); // (Xmin, Xmax) = (bounds[0], bounds[1]), (Ymin, Ymax) = (bounds[2], bounds[3]), (Zmin, Zmax) = (bounds[4], bounds[5])
+				//if (bounds[4] == 0.0)
+				//	bounds[4] = 0.4; //0.4m
+				//vtkSmartPointer<vtkCamera> camera = CreateVTKCamera_GenericKinect_1(bounds[4], bounds[5]);
+				//cv::Mat bufferDepth;
+				//for (int i = 0; i < 10; i++)
+				//{
+				//	LARGE_INTEGER d_ctr1, d_ctr2, d_freq;
+				//	QueryPerformanceCounter((LARGE_INTEGER *)&d_ctr1);
+				//	bufferDepth = GenerateVTKDepthImage(renWin, camera, 640, 480);// GenerateVTKDepthImage_Kinect(renWin, bounds[4], bounds[5]);
+				//	QueryPerformanceCounter((LARGE_INTEGER *)&d_ctr2);
+				//	QueryPerformanceFrequency((LARGE_INTEGER *)&d_freq);
+				//	float d_timevalue = (d_ctr2.QuadPart - d_ctr1.QuadPart) * 1000.0 / d_freq.QuadPart;
+				//	std::cout << "Depth gen vrijeme: " << d_timevalue << std::endl;
+				//}
+				////show
+				//cv::Mat depthShow(480, 640, CV_8UC1);
+				//double minVal, maxVal;
+				////FilterImage(bufferDepth);
+				//cv::minMaxLoc(bufferDepth, &minVal, &maxVal);
+				//bufferDepth.convertTo(depthShow, CV_8U, -255.0f / maxVal, 255.0f);
+				//cv::imshow("Rendered depth image", depthShow);
+				////cv::imwrite("renderedDepthF.png", bufferDepth);
+				///*cv::Mat bufferDepthBlur(480, 640, CV_16UC1, cv::Scalar::all(0));
+				//cv::Mat depthShowBlur(480, 640, CV_8UC1);
+				//cv::GaussianBlur(bufferDepth, bufferDepthBlur, cv::Size(9, 9), 0, 0);
+				//cv::minMaxLoc(bufferDepthBlur, &minVal, &maxVal);
+				//bufferDepthBlur.convertTo(depthShowBlur, CV_8U, -255.0f / maxVal, 255.0f);
+				//cv::imshow("Rendered depth (blur) image", depthShowBlur);*/
+				////Original depth
+				//cv::minMaxLoc(origDepth, &minVal, &maxVal);
+				//cv::Mat depthOrigShow(480, 640, CV_8UC1);
+				//origDepth.convertTo(depthOrigShow, CV_8U, -255.0f / maxVal, 255.0f);
+				//cv::imshow("Original depth", depthOrigShow);			
+				////cv::imwrite("origDepth.png", origDepth);
+				////Dilate original depth
+				//cv::Mat elementD = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(20,20));
+				//cv::Mat elementE = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(11, 11));
+				//cv::Mat origDepth_D(480, 640, CV_16UC1, cv::Scalar::all(0));
+				//LARGE_INTEGER d_ctr1, d_ctr2, d_freq;
+				//QueryPerformanceCounter((LARGE_INTEGER *)&d_ctr1);
+				//for (int y = 0; y < origDepth.rows; y++)
+				//{
+				//	for (int x = 0; x < origDepth.cols; x++)
+				//	{
+				//		if (origDepth.at<uint16_t>(y, x) == 0)
+				//			origDepth.at<uint16_t>(y, x) = 10000; //in milimeters
+				//	}
+				//}
+				////cv::dilate(origDepth, origDepth_D, elementD);
+				//cv::erode(origDepth, origDepth_D, elementE);
+				//QueryPerformanceCounter((LARGE_INTEGER *)&d_ctr2);
+				//QueryPerformanceFrequency((LARGE_INTEGER *)&d_freq);
+				//float d_timevalue = (d_ctr2.QuadPart - d_ctr1.QuadPart) * 1000.0 / d_freq.QuadPart;
+				//std::cout << "Dilate vrijeme: " << d_timevalue << std::endl;
+
+				//cv::Mat depthOrigShow_D(480, 640, CV_8UC1);
+				//cv::minMaxLoc(origDepth_D, &minVal, &maxVal);
+				//origDepth_D.convertTo(depthOrigShow_D, CV_8U, -255.0f / maxVal, 255.0f);
+				//cv::imshow("Original depth (dilated)", depthOrigShow_D);
+
+				//////show the difference between rendered depth and original
+				////cv::Mat depthDifference(480, 640, CV_16UC1, cv::Scalar::all(0));
+				////cv::absdiff(bufferDepth, origDepth, depthDifference);
+				////cv::minMaxLoc(depthDifference, &minVal, &maxVal);
+				////cv::Mat depthDifferenceShow(480, 640, CV_8UC1);
+				////depthDifference.convertTo(depthDifferenceShow, CV_8U, -255.0f / maxVal, 255.0f);
+				////cv::imshow("Difference", depthDifferenceShow);
+
+				//cv::waitKey();
+				////interactor->Start();
+				////
+
+
+
 				mem.Clear();
 
 				recognition.Interpret(&mesh);
@@ -509,9 +734,16 @@ int main(int argc, char ** argv)
 				//LoadMesh(&meshBuilder, filePath, &mesh, false);
 
 				surfels.NodeColors(SelectionColor);				
-				//visualizer.renderer->RemoveAllViewProps();
+				visualizer.renderer->RemoveAllViewProps();
 				recognition.InitDisplay(&visualizer, &mesh, SelectionColor);
 				recognition.Display();
+
+				////NEW FILKO - TEST COLLISION CONSENSUS
+				//std::vector<int> conHyp = recognition.GetHypothesesCollisionConsensus(20);
+				//for (int i = 0; i < conHyp.size(); i++)
+				//{
+				//	recognition.AddOneModelToVisualizer(&visualizer, conHyp.at(i), 0, false, true);
+				//}
 
 				QueryPerformanceCounter((LARGE_INTEGER *)&ctr1_);
 
@@ -533,19 +765,24 @@ int main(int argc, char ** argv)
 				//	cloud_destination->points[i].normal_y = mesh.NodeArray.Element[i].N[1];
 				//	cloud_destination->points[i].normal_z = mesh.NodeArray.Element[i].N[2];
 				//}
-
 				//pcl::search::KdTree<pcl::PointXYZINormal>::Ptr kdtree = boost::make_shared<pcl::search::KdTree<pcl::PointXYZINormal>>((new pcl::search::KdTree<pcl::PointXYZINormal>));
 				//kdtree->setInputCloud(cloud_destination); //using this doesn't really improve anything
-
 				//recognition.CalculateICPCost(PCLICP, PCLICPVariants::Point_to_plane, &kdtree);
-				
-				//GenerateSegmentNeighbourhood(&recognition, 0.1);
-				//recognition.CalculateNNCost(&visualizer, PCLICP, PCLICPVariants::Point_to_plane);
 
+				GenerateSegmentNeighbourhood(&recognition, 0.1);
+				recognition.CalculateNNCost(&visualizer, PCLICP, PCLICPVariants::Point_to_plane);
+				
+#ifdef RVLVERSION_170601
 				//evaluate ICP
-				//recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, fpPoseError, fpnotFirstInfo, fpnotFirstPoseErr, 7, true);
+				recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, fpPoseError, fpnotFirstInfo, fpnotFirstPoseErr, 10, true);
 #else
-				recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, fpPoseError, fpnotFirstInfo, fpnotFirstPoseErr, 7);
+				//Transparency check
+				recognition.CreateScoreMatchMatrixICP();
+				recognition.FilterHypothesesUsingTransparency(0.15, 10, true);
+#endif
+
+#else
+				//recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, fpPoseError, fpnotFirstInfo, fpnotFirstPoseErr, 7);
 #endif
 				//recognition.AddModelsToVisualizer(&visualizer, true, PCLICP, PCLICPVariants::Point_to_plane, NULL/*&kdtree*/);
 				QueryPerformanceCounter((LARGE_INTEGER *)&ctr2_);
@@ -558,8 +795,7 @@ int main(int argc, char ** argv)
 				float timevalue = (ctr2.QuadPart - ctr1.QuadPart) * 1000.0 / freq.QuadPart;
 				std::cout << "Ukupno vrijeme: " << timevalue << std::endl;
 				std::cout << "ICP vrijeme: " << timevalueICP << std::endl;
-				//visualizer.Run();
-
+				visualizer.Run();
 
 
 			}
@@ -572,6 +808,7 @@ int main(int argc, char ** argv)
 
 			fclose(fpHypothesisEvaluation);
 			fclose(fpLog);
+			fclose(fpPoseError);
 
 			//END Vidovic
 		}	// if (recognition.mode == RVLRECOGNITION_MODE_RECOGNITION)
@@ -689,3 +926,51 @@ int main(int argc, char ** argv)
 
 	return 0;
 }
+
+// Only for debugging purpose!!!
+//
+//void RVLMinTest()
+//{
+//	Array<SortIndex<float>> dataArray;
+//
+//	dataArray.n = 10000;
+//	dataArray.Element = new SortIndex<float>[dataArray.n];
+//
+//	int nTopData = 10;
+//
+//	Array<SortIndex<float>> topDataArray;
+//
+//	topDataArray.n = nTopData;
+//	topDataArray.Element = new SortIndex<float>[topDataArray.n];
+//
+//	FILE *fpSrc, *fpTgt;
+//
+//	for (int i = 0; i < 20; i++)
+//	{
+//		fpSrc = fopen("a.txt", "w");
+//
+//		for (int j = 0; j < dataArray.n; j++)
+//		{
+//			dataArray.Element[j].idx = j;
+//			dataArray.Element[j].cost = (float)rand() / (float)RAND_MAX;
+//
+//			fprintf(fpSrc, "%f\n", dataArray.Element[j].cost);
+//		}
+//
+//		fclose(fpSrc);
+//
+//		Min<SortIndex<float>, float>(dataArray, nTopData, topDataArray);
+//
+//		fpTgt = fopen("b.txt", "w");
+//
+//		for (int j = 0; j < topDataArray.n; j++)
+//			fprintf(fpSrc, "%d\t%f\n", topDataArray.Element[j].idx, topDataArray.Element[j].cost);
+//
+//		fclose(fpTgt);
+//
+//		int debug = 0;
+//	}
+//
+//	delete[] dataArray.Element;
+//	delete[] topDataArray.Element;
+//}
