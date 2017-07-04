@@ -276,10 +276,6 @@ namespace RVL
 
 		float NNCost(int iCluster, vtkSmartPointer<vtkPolyData> targetPD); // Calculates cost based on sum of distances between scene segment points and their nearest neighbours in visible part of the matched model.
 		
-		void RVLPSGInstanceMesh(Eigen::MatrixXf nI, float *dI);
-
-		void PSGM::PrintCTIMeshFaces(FILE *fp, Eigen::MatrixXi F, Eigen::MatrixXi Fn, int n, Eigen::MatrixXi nP);
-
 		//end Petra
 
 		void InitDisplay(
@@ -587,10 +583,6 @@ namespace RVL
 		int CTIIdx; //Vidovic
 		int nBestMatches; //n best matches for each scene segment
 		int debug1, debug2;
-		//For InstanceMesh:
-		Eigen::MatrixXf P; //points list
-		Eigen::MatrixXi F; //faces list (polygones)
-		Eigen::MatrixXi Edges; //Edges
 	};
 
 	

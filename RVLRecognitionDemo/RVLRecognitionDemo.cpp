@@ -402,11 +402,7 @@ int main(int argc, char ** argv)
 		recognition.pSurfelDetector = &surfelDetector;
 
 		if (recognition.mode == RVLRECOGNITION_MODE_TRAINING)
-		{
-			surfels.NodeColors(SelectionColor);
-
 			recognition.Learn(modelSequenceFileName, &visualizer); //Vidovic
-		}
 		else if (recognition.mode == RVLRECOGNITION_MODE_RECOGNITION)
 		{
 			//Eigen::MatrixXf nI = recognition.ConvexTemplatenT();
@@ -456,7 +452,7 @@ int main(int argc, char ** argv)
 			Eigen::MatrixXf nI = recognition.ConvexTemplatenT();
 			float dI[66];
 			for (int i = 0; i < 66; i++) dI[i] = 1;
-			recognition.RVLPSGInstanceMesh(nI, dI);
+			//recognition.RVLPSGInstanceMesh(nI, dI);
 
 			recognition.LoadCompleteSegmentGT(sceneSequence);
 

@@ -9470,6 +9470,7 @@ float PSGM::Symmetry(
 	return maxSymmetryScore;
 }
 
+#ifdef NEVER
 void PSGM::RVLPSGInstanceMesh(Eigen::MatrixXf nI, float *dI)
 {
 #ifdef RVLPSGM_CTIMESH_DEBUG
@@ -9953,6 +9954,8 @@ void PSGM::PrintCTIMeshFaces(FILE *fp, Eigen::MatrixXi F, Eigen::MatrixXi Fn, in
 
 	fprintf(fp, "\n");
 }
+
+#endif
 
 void PSGM::BoundingBoxSize(
 	RECOG::PSGM_::ModelInstance *pBoundingBox,
