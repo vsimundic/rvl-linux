@@ -16,6 +16,9 @@
 #include "PlanarSurfelDetector.h"
 
 #define RVLPLANARSURFELDETECTOR_OCCLUSION_EDGES
+#ifndef RVLVERSION_170601
+#define RVLPLANARSURFELDETECTOR_JOIN_SMALL_SURFELS_ONLY_TO_LARGE_NEIGHBORS		// 170601: OFF
+#endif
 
 using namespace RVL;
 
@@ -225,7 +228,7 @@ void PlanarSurfelDetector::CreateParamList(CRVLMem *pMem)
 	pParamData = ParamList.AddParam("SurfelDetector.edgeClassDepthDiscontinuityThr", RVLPARAM_TYPE_FLOAT, &edgeClassDepthDiscontinuityThr);
 	pParamData = ParamList.AddParam("SurfelDetector.normalConstraintInSecondInitRG", RVLPARAM_TYPE_BOOL, &bNormalConstraintInSecondInitRG);
 	pParamData = ParamList.AddParam("SurfelDetector.LimitedDepthUnconstrainedNormalRG", RVLPARAM_TYPE_BOOL, &bLimitedDepthUnconstrainedNormalRG);
-	pParamData = ParamList.AddParam("SurfelDetector.maxAttackSize", RVLPARAM_TYPE_INT, &maxUnconstrainedNormalDepth);
+	pParamData = ParamList.AddParam("SurfelDetector.maxUnconstrainedNormalDepth", RVLPARAM_TYPE_INT, &maxUnconstrainedNormalDepth);
 }
 
 void PlanarSurfelDetector::RandomIndices(Array<int> &A)
@@ -493,13 +496,13 @@ void PlanarSurfelDetector::Segment(
 
 		// Next surfel index
 
-		//printf("surfel %d\n", iSurfel);	// debug
+		//printf("surfel %d\t%d\n", iSurfel, pSurfel->size);	// debug
 
 		iSurfel++;
 
 		pSurfel++;
 
-		//if (iSurfel == 85)	// debug
+		//if (iSurfel == 974)	// debug
 		//	int debug = 0;
 			//break;
 	}	// for every vertex
@@ -5020,6 +5023,10 @@ int PlanarSurfelDetector::CreateEdgeFeatures(
 
 				pEdgeFeature->physicalSize = l;
 
+				QList<QLIST::Index2> *pPtList = &(pEdgeFeature->PtList);
+
+				RVLQLIST_INIT(pPtList);
+
 				// Assign points to the new edge feature.
 				// Connect the new edge feature to the neighboring surfels.
 
@@ -5729,15 +5736,20 @@ int PlanarSurfelDetector::GetClosestNeighbor(
 
 		pSurfel_ = pSurfels->NodeArray.Element + iSurfel_;
 
-		dist = RVLDOTPRODUCT3(pSurfel_->N, pSurfel->P) - pSurfel_->d;
-
-		dist = RVLABS(dist);
-
-		if (iClosestNeighbor < 0 || dist < minDist)
+#ifdef RVLPLANARSURFELDETECTOR_JOIN_SMALL_SURFELS_ONLY_TO_LARGE_NEIGHBORS
+		if (pSurfel_->size >= minSurfelSize)
+#endif
 		{
-			iClosestNeighbor = iSurfel_;
+			dist = RVLDOTPRODUCT3(pSurfel_->N, pSurfel->P) - pSurfel_->d;
 
-			minDist = dist;
+			dist = RVLABS(dist);
+
+			if (iClosestNeighbor < 0 || dist < minDist)
+			{
+				iClosestNeighbor = iSurfel_;
+
+				minDist = dist;
+			}
 		}
 
 		pEdge = pEdge->pNext;
@@ -5768,8 +5780,8 @@ void PlanarSurfelDetector::JoinSmallSurfelsToClosestNeighbors(
 
 	for (iSurfel = 0; iSurfel < pSurfels->NodeArray.n; iSurfel++, pSurfel++)
 	{
-		//if (iSurfel == 28)
-		//	int debug = 0;
+		if (iSurfel == 518)
+			int debug = 0;
 
 		if (pSurfel->size > 0 && pSurfel->size < minSurfelSize)
 		{
@@ -5812,6 +5824,9 @@ void PlanarSurfelDetector::JoinSmallSurfelsToClosestNeighbors(
 				pSurfel->size = 0;
 			}
 		}	// if (pSurfel->size > 0 && pSurfel->size < minSurfelSize)
+
+		//if (pSurfels->NodeArray.Element[974].PtList.pFirst->pNext != NULL)
+		//	int debug = 0;
 	}	// for every surfel
 }
 

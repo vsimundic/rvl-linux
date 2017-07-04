@@ -1,6 +1,7 @@
 #pragma once
 
 #define RVLSURFEL_IMAGE_ADJACENCY //FILKO usporava debug :)
+#define RVLSURFELGRAPH_DEBUG_RELATION_DESCRIPTOR
 
 #define RVLSURFEL_DISPLAY_MODE_SURFELS					0
 #define RVLSURFEL_DISPLAY_MODE_BOUNDARY					1
@@ -14,7 +15,11 @@
 #define RVLSURFEL_EDGE_FLAG_CONVEX				0x02
 #define RVLSURFEL_FLAG_RF						0x04
 
+#define RVLSURFELVERTEX_TYPE_REDUNDANT			0x80
+
 #define RVLSURFEL_VERSION_0		0
+
+#define RVLVERSION_170601
 
 namespace RVL
 {
@@ -82,15 +87,27 @@ namespace RVL
 			float Nh[3];
 		};
 
+		struct VertexEdge
+		{
+			int iVertex[2];
+			GRAPH::EdgePtr2<VertexEdge> *pVertexEdgePtr[2];
+			int idx;
+			float N[3];
+			VertexEdge *pNext;
+		};
+
 		struct Vertex
 		{
 			float P[3];
+			int idx;
+			QList<GRAPH::EdgePtr2<VertexEdge>> EdgeList;
 			Array<NormalHullElement> normalHull;
 			Array<int> iSurfelArray;
 			Vertex *pNext;
 			bool bEdge;
 			BYTE type;
 			float VTX[3];
+			int iCluster;
 		};
 
 
@@ -138,6 +155,9 @@ namespace RVL
 		void UpdateNormalHull(
 			Array<SURFEL::NormalHullElement> &NHull,
 			float *N);
+		float DistanceFromNormalHull(
+			Array<SURFEL::NormalHullElement> &NHull,
+			float *N);
 		float Distance(
 			Surfel *pSurfel,
 			float *P,
@@ -146,6 +166,15 @@ namespace RVL
 			QList<QLIST::Index> surfelList,
 			Array<int> *piVertexArray,
 			int *&piVertexIdxMem);
+		bool BoundingBox(
+			Array<int> iVertexArray,
+			float *R,
+			float *t,
+			float scale,
+			Box<float> &boundingBox);
+		void Centroid(
+			Array<int> iSurfelArray,
+			float *centroid);
 		void NodeColors(unsigned char *SelectionColor);
 		void Display(
 			Visualizer *pVisualizer,
@@ -211,6 +240,14 @@ namespace RVL
 		void DetermineImgAdjDescriptors(
 			Surfel *pSurfel,
 			Mesh *mesh);
+		void SurfelAreaDistribution(
+			Mesh *mesh,
+			Surfel *pSurfel,
+			int iBoundary,
+			float *dN,
+			float dOffset,
+			float *a);
+		void SurfelRelations(Mesh *pMesh);
 		void GenerateSSF(
 			std::string filename,
 			int minSurfelSize,
@@ -260,15 +297,21 @@ namespace RVL
 		Array<QList<QLIST::Index>> surfelVertexList;
 		int nVertexSurfelRelations;
 		float TIVertexToleranceAngle;
+		QList<SURFEL::VertexEdge> vertexEdgeList;
 		int edgeDepth;
 		bool *bVertexAssigned;
 		int *iVertexMem;
+		bool bContactEdgeVertices;
 	private:
 		unsigned char *nodeColor;
 		QLIST::Index *surfelVertexMem;
 		Array<Array<int>> vertexDisplayLineArray;
 		int *vertexDisplayLineArrayMem;
 		vtkSmartPointer<vtkPolyData> linesPolyData;
+#ifdef RVLSURFELGRAPH_DEBUG_RELATION_DESCRIPTOR
+		bool bDebug;
+		FILE *fpDebug;
+#endif
 	};
 
 	namespace SURFEL

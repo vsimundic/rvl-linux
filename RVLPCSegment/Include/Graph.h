@@ -1,5 +1,8 @@
 #pragma once
 
+#define RVLSURFEL_IMAGE_ADJACENCY //Vidovic -> exclude Filko functions 
+#define RVLSURFEL_COLOR_HISTOGRAM //Vidovic -> exclude Filko functions
+
 //#define RVLPCSEGMENT_GRAPH_WERAGGREGATION_DEBUG
 //#define RVLPCSEGMENT_GRAPH_WERAGGREGATION_DETAILED_DEBUG
 
@@ -228,6 +231,44 @@ namespace RVL
 		NodeType *pNode1 = NodeArray.Element + iNode1;
 		NodeType *pNode2 = NodeArray.Element + iNode2;
 
+		QList<EdgePtrType> *pEdgeList1 = &(pNode1->EdgeList);
+		QList<EdgePtrType> *pEdgeList2 = &(pNode2->EdgeList);
+
+		EdgeType *pEdge;
+
+		RVLMEM_ALLOC_STRUCT(pMem, EdgeType, pEdge);
+
+		pEdge->iVertex[0] = iNode1;
+		pEdge->iVertex[1] = iNode2;
+
+		EdgePtrType *pEdgePtr;
+
+		RVLMEM_ALLOC_STRUCT(pMem, EdgePtrType, pEdgePtr);
+
+		pEdgePtr->pEdge = pEdge;
+		pEdge->pVertexEdgePtr[0] = pEdgePtr;
+
+		RVLQLIST_ADD_ENTRY(pEdgeList1, pEdgePtr);
+
+		RVLMEM_ALLOC_STRUCT(pMem, EdgePtrType, pEdgePtr);
+
+		pEdgePtr->pEdge = pEdge;
+		pEdge->pVertexEdgePtr[1] = pEdgePtr;
+
+		RVLQLIST_ADD_ENTRY(pEdgeList2, pEdgePtr);
+
+		return pEdge;
+	}
+
+	template<typename NodeType, typename EdgeType, typename EdgePtrType>
+	inline EdgeType *ConnectNodes(
+		NodeType *pNode1,
+		NodeType *pNode2,
+		int iNode1,
+		int iNode2,
+		CRVLMem *pMem
+		)
+	{
 		QList<EdgePtrType> *pEdgeList1 = &(pNode1->EdgeList);
 		QList<EdgePtrType> *pEdgeList2 = &(pNode2->EdgeList);
 
@@ -712,6 +753,9 @@ namespace RVL
 						// pRefEdge->cost <- pRefEdge->cost + pEdge13->cost
 
 						pRefEdge->cost += pEdge13->cost;
+
+						//if (pEdge13->cost > pRefEdge->cost)		// Region growing method
+						//	pRefEdge->cost = pEdge13->cost;
 
 						if (pEdge13->distance < pRefEdge->distance)
 							pRefEdge->distance = pEdge13->distance;
