@@ -23,6 +23,8 @@ VertexGraph::VertexGraph()
 	iVertexClusterMem = NULL;
 }
 
+//
+
 
 VertexGraph::~VertexGraph()
 {
