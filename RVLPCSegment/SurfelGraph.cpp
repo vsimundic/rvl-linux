@@ -4222,3 +4222,58 @@ void SurfelGraph::CalculateSurfelsColorHistograms(cv::Mat img, int colorspace, b
 
 }
 #endif
+
+void SurfelGraph::DetectDominantPlane(Array<int> &dominantPlaneSurfelArray)
+{
+	// Detect largest surfel.
+
+	int largestSurfelSize = 0;
+
+	int iSurfel, iLargestSurfel;
+	Surfel *pSurfel;
+
+	for (iSurfel = 0; iSurfel < NodeArray.n; iSurfel++)
+	{
+		pSurfel = NodeArray.Element + iSurfel;
+
+		if (pSurfel->bEdge)
+			continue;
+
+		if (pSurfel->size > largestSurfelSize)
+		{
+			largestSurfelSize = pSurfel->size;
+
+			iLargestSurfel = iSurfel;
+		}
+	}
+
+	pSurfel = NodeArray.Element + iLargestSurfel;
+
+	float *NGnd = pSurfel->N;
+	float dGnd = pSurfel->d;
+
+	// dominantPlaneSurfelArray <- All surfels which are approximatelly co-planar with the largest surfel
+
+	QLIST::Index *piVertex;
+
+	for (iSurfel = 0; iSurfel < NodeArray.n; iSurfel++)
+	{
+		pSurfel = NodeArray.Element + iSurfel;
+
+		if (pSurfel->bEdge)
+			continue;
+
+		piVertex = surfelVertexList.Element[iSurfel].pFirst;
+
+		if (piVertex == NULL)
+			continue;
+
+		if (piVertex)
+		{
+
+
+			piVertex = piVertex->pNext;
+		}
+		
+	}
+}

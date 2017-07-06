@@ -564,6 +564,8 @@ void PSGM::Interpret(
 	{
 		// Detect ground plane.
 
+
+
 		// Detect objects as connected surfel sets.
 
 		// Save the segmentation results to a file.
