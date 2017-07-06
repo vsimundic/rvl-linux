@@ -3837,3 +3837,106 @@ bool ObjectGraph::MergeSmallObjects(int sizeThr, float maxDistThr, bool verbose)
 	return false;
 #endif
 }
+
+void ObjectGraph::CreateObjectsAsConnectedComponents(Array<int> &groundPlaneObjectArray)
+{
+	// Create objects from surfels;
+
+	Create(pSurfels);
+
+	memset(objectMap, 0xff, NodeArray.n * sizeof(int));
+
+	// Assign all ground plane objects to the reference ground plane object.
+
+	int iGndPlane = groundPlaneObjectArray.Element[0];
+
+	GRAPH::AggregateNode<SURFEL::AgEdge> *pObject = NodeArray.Element + iGndPlane;
+
+	objectMap[iGndPlane] = iGndPlane;
+
+	QList<QLIST::Index> *pElementList = &(pObject->elementList);
+
+	QList<QLIST::Index> *pElementList_;
+	GRAPH::AggregateNode<SURFEL::AgEdge> *pObject_;
+	int i;
+	int iObject;
+
+	for (i = 1; i < groundPlaneObjectArray.n; i++)
+	{
+		iObject = groundPlaneObjectArray.Element[i];
+
+		pObject_ = NodeArray.Element + iObject;
+
+		objectMap[iObject] = iGndPlane;
+
+		pElementList_ = &(pObject_->elementList);
+
+		RVLQLIST_APPEND(pElementList, pElementList_);
+
+		RVLQLIST_INIT(pElementList_);
+
+		pObject->size += pObject_->size;
+
+		pObject_->size = 0;
+	}
+
+	// Detect objects as connected surfel sets.
+
+	int *iObjectBuff = new int[NodeArray.n];
+
+	ConnectedSetRGData RGData;
+	int *piObjectPut, *piObjectFetch, *piObjectBuffEnd;
+
+	for (iObject = 0; iObject < NodeArray.n; iObject++)
+	{
+		if (objectMap[iObject] >= 0)
+			continue;
+
+		pObject = NodeArray.Element + iObject;
+
+		if (pObject->size <= 1)
+			continue;
+
+		RGData.iRefObject = iObject;
+
+		piObjectPut = piObjectFetch = iObjectBuff;
+
+		*(piObjectPut++) = iObject;
+
+		piObjectBuffEnd = RegionGrowing<ObjectGraph, GRAPH::AggregateNode<AgEdge>, AgEdge, GRAPH::EdgePtr2<AgEdge>, ConnectedSetRGData,
+			ConnectedSetRG>(this, &RGData, piObjectFetch, piObjectPut);
+	}
+
+	delete[] iObjectBuff;
+}
+
+int SURFEL::ConnectedSetRG(
+	int iObject,
+	int iObject_,
+	AgEdge *pEdge,
+	ObjectGraph *pObjects,
+	ConnectedSetRGData *pData)
+{
+	if (pObjects->objectMap[iObject] >= 0)
+		return 0;
+
+	pObjects->objectMap[iObject] = pData->iRefObject;
+
+	GRAPH::AggregateNode<AgEdge> *pObject = pObjects->NodeArray.Element + pData->iRefObject;
+
+	QList<QLIST::Index> *pElementList = &(pObject->elementList);
+
+	GRAPH::AggregateNode<AgEdge> *pObject_ = pObjects->NodeArray.Element + iObject;
+
+	QList<QLIST::Index> *pElementList_ = &(pObject_->elementList);
+
+	RVLQLIST_APPEND(pElementList, pElementList_);
+
+	RVLQLIST_INIT(pElementList_);
+
+	pObject->size += pObject_->size;
+
+	pObject_->size = 0;
+
+	return 1;
+}

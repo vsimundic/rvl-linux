@@ -564,14 +564,25 @@ void PSGM::Interpret(
 	{
 		// Detect ground plane.
 
+		Array<int> groundPlaneSurfelArray;
 
+		groundPlaneSurfelArray.Element = new int[pSurfels->NodeArray.n];
+
+		pSurfels->DetectDominantPlane(groundPlaneSurfelArray);
 
 		// Detect objects as connected surfel sets.
+
+		pObjects->CreateObjectsAsConnectedComponents(groundPlaneSurfelArray);
+
+		delete[] groundPlaneSurfelArray.Element;
+
+		// Sort objects.
+
+		pObjects->SortObjects();
 
 		// Save the segmentation results to a file.
 
 	}	// if(problem == RVLRECOGNITION_PROBLEM_CLASSIFICATION)
-
 }
 
 //PETRA

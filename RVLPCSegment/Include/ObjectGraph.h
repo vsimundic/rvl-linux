@@ -68,6 +68,17 @@ namespace RVL
 			float coverage;
 		};
 
+		struct ConnectedSetRGData
+		{
+			int iRefObject;
+		};
+
+		int ConnectedSetRG(
+			int iObject,
+			int iObject_,
+			AgEdge *pEdge,
+			ObjectGraph *pObjects,
+			ConnectedSetRGData *pData);
 		bool objectKeyPressUserFunction(
 			Mesh *pMesh,
 			SurfelGraph *pSurfels,
@@ -149,6 +160,7 @@ namespace RVL
 			void SortObjects();
 			void CountValidObjects();
 			void GetVertices();
+			void CreateObjectsAsConnectedComponents(Array<int> &groundPlaneObjectArray);
 			void InitDisplay(
 				Visualizer *pVisualizer,
 				Mesh *pMesh,

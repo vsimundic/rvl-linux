@@ -4252,28 +4252,52 @@ void SurfelGraph::DetectDominantPlane(Array<int> &dominantPlaneSurfelArray)
 	float *NGnd = pSurfel->N;
 	float dGnd = pSurfel->d;
 
-	// dominantPlaneSurfelArray <- All surfels which are approximatelly co-planar with the largest surfel
+	// Add neighboring surfels recursively by region growing.
 
-	QLIST::Index *piVertex;
+	PlaneDetectionRGData RGData;
 
-	for (iSurfel = 0; iSurfel < NodeArray.n; iSurfel++)
-	{
-		pSurfel = NodeArray.Element + iSurfel;
+	RGData.csqThr = cos(10.0f * DEG2RAD);
 
-		if (pSurfel->bEdge)
-			continue;
+	RGData.bVisited = new bool[NodeArray.n];
 
-		piVertex = surfelVertexList.Element[iSurfel].pFirst;
+	memset(RGData.bVisited, 0, NodeArray.n * sizeof(int));
 
-		if (piVertex == NULL)
-			continue;
+	RVLCOPY3VECTOR(pSurfel->N, RGData.NRef);
 
-		if (piVertex)
-		{
+	dominantPlaneSurfelArray.Element = new int[NodeArray.n];
 
+	int *piSurfelPut = dominantPlaneSurfelArray.Element;
 
-			piVertex = piVertex->pNext;
-		}
+	int *piSurfelFetch = piSurfelPut;
 		
-	}
+	*(piSurfelPut++) = iLargestSurfel;
+
+	int *piSurfelBuffEnd = RegionGrowing<SurfelGraph, Surfel, Edge, EdgePtr, PlaneDetectionRGData, PlaneDetectionRG>(this, &RGData, piSurfelFetch, piSurfelPut);
+
+	dominantPlaneSurfelArray.n = piSurfelBuffEnd - dominantPlaneSurfelArray.Element;
+
+	delete[] RGData.bVisited;
+}
+
+int SURFEL::PlaneDetectionRG(
+	int iSurfel,
+	int iSurfel_,
+	Edge *pEdge,
+	SurfelGraph *pSurfels,
+	SURFEL::PlaneDetectionRGData *pData)
+{
+	if (pData->bVisited[iSurfel])
+		return 0;
+
+	pData->bVisited[iSurfel] = true;
+
+	Surfel *pSurfel = pSurfels->NodeArray.Element + iSurfel;
+
+	if (pSurfel->bEdge)
+		return 0;
+
+	if (pSurfel->size <= 1)
+		return 0;
+
+	return (RVLDOTPRODUCT3(pSurfel->N, pData->NRef) >= pData->csqThr ? 1 : 0);
 }

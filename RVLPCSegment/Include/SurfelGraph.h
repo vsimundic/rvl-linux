@@ -113,7 +113,12 @@ namespace RVL
 			int iCluster;
 		};
 
-
+		struct PlaneDetectionRGData
+		{
+			float NRef[3];
+			float csqThr;
+			bool *bVisited;
+		};
 	}
 
 	struct Surfel
@@ -332,5 +337,11 @@ namespace RVL
 			Point *pPoint);
 		void MouseRButtonDown(vtkObject* caller, unsigned long eid, void* clientdata, void *calldata);
 		void KeyPressCallback(vtkObject* caller, unsigned long eid, void* clientdata, void *calldata);
+		int PlaneDetectionRG(
+			int iSurfel,
+			int iSurfel_,
+			Edge *pEdge,
+			SurfelGraph *pSurfels,
+			SURFEL::PlaneDetectionRGData *pData);
 	};
 }
