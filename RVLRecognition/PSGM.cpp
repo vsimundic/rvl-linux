@@ -369,194 +369,207 @@ void PSGM::Interpret(
 
 	pSurfels->DetectVertices(pMesh);
 
-	/// Create clusters.
-
-	if (bWholeMeshCluster)
+	if (problem == RVLRECOGNITION_PROBLEM_SHAPE_INSTANCE_DETECTION)
 	{
-		// Create a single cluster from the whole mesh.
+		/// Create clusters.
 
-		WholeMeshCluster();
-	}
-	else
-	{
-		// Cluster surfels into convex surfaces.
-
-		printf("Detect convex clusters.\n");
-
-		Clusters();
-	}
-
-	///
-
-	// Fit model.
-
-	printf("Fit convex template.\n");
-
-	int nClusters = RVLMIN(clusters.n, nDominantClusters);
-
-	char *GTHFileName = NULL;
-	FILE *fpGTH = NULL;
-
-	if (bGTRFDescriptors)
-	{
-		char *GTHFileName = RVLCreateString(sceneFileName);
-
-		sprintf(GTHFileName + strlen(GTHFileName) - 3, "gth");
-
-		fpGTH = fopen(GTHFileName, "w");
-	}
-
-	int iCluster;
-	RECOG::PSGM_::Cluster *pCluster;
-	RECOG::PSGM_::ModelInstance *pModelInstance;
-	float R[9];
-
-	//Init CTISet Qlist
-	CTISet.Init();//Vidovic
-
-	for (iCluster = 0; iCluster < nClusters; iCluster++)
-	{
-		pCluster = clusters.Element[iCluster];
-
-		if (bZeroRFDescriptor)
+		if (bWholeMeshCluster)
 		{
-			//QList<RECOG::PSGM_::ModelInstance> *pModelInstanceList = &(pCluster->modelInstanceList); //Vidovic
+			// Create a single cluster from the whole mesh.
 
-			//RVLQLIST_INIT(pModelInstanceList); //Vidovic
-
-			//AddReferenceFrame(iCluster); //Vidovic
-
-			pModelInstance = AddReferenceFrame();
-
-			pModelInstance->iCluster = iCluster;
-		}
-		else if (bGTRFDescriptors)
-		{
-			//QList<RECOG::PSGM_::ModelInstance> *pModelInstanceList = &(pCluster->modelInstanceList); //Vidovic
-
-			//RVLQLIST_INIT(pModelInstanceList); //Vidovic
-
-			Array<GTInstance> *pGT = pECCVGT->GT.Element + iScene;
-
-			int iGTInstance;
-			GTInstance *pGTInstance;
-
-			for (iGTInstance = 0; iGTInstance < pGT->n; iGTInstance++)
-			{
-				pGTInstance = pGT->Element + iGTInstance;
-
-				RVLSCALEMX3X3(pGTInstance->R, 1000.0f, R);
-	
-				//AddReferenceFrame(iCluster, R, pGTInstance->t); //Vidovic
-
-				pModelInstance = AddReferenceFrame(R, pGTInstance->t); //Vidovic
-
-				pModelInstance->iCluster = iCluster;
-
-				fprintf(fpGTH, "%d\t%d\n", iCluster, pGTInstance->iModel);
-			}
+			WholeMeshCluster();
 		}
 		else
-			ReferenceFrames(iCluster);		
-	}
+		{
+			// Cluster surfels into convex surfaces.
 
-	//Vidovic
-	bool bNormalValidityTest_ = bNormalValidityTest;
+			printf("Detect convex clusters.\n");
 
-	if (mode == RVLRECOGNITION_MODE_TRAINING)
-		bNormalValidityTest = false;
+			Clusters();
+		}
 
-	pModelInstance = CTISet.CTI.pFirst;
+		///
 
-	while (pModelInstance)
+		// Fit model.
+
+		printf("Fit convex template.\n");
+
+		int nClusters = RVLMIN(clusters.n, nDominantClusters);
+
+		char *GTHFileName = NULL;
+		FILE *fpGTH = NULL;
+
+		if (bGTRFDescriptors)
+		{
+			char *GTHFileName = RVLCreateString(sceneFileName);
+
+			sprintf(GTHFileName + strlen(GTHFileName) - 3, "gth");
+
+			fpGTH = fopen(GTHFileName, "w");
+		}
+
+		int iCluster;
+		RECOG::PSGM_::Cluster *pCluster;
+		RECOG::PSGM_::ModelInstance *pModelInstance;
+		float R[9];
+
+		//Init CTISet Qlist
+		CTISet.Init();//Vidovic
+
+		for (iCluster = 0; iCluster < nClusters; iCluster++)
+		{
+			pCluster = clusters.Element[iCluster];
+
+			if (bZeroRFDescriptor)
+			{
+				//QList<RECOG::PSGM_::ModelInstance> *pModelInstanceList = &(pCluster->modelInstanceList); //Vidovic
+
+				//RVLQLIST_INIT(pModelInstanceList); //Vidovic
+
+				//AddReferenceFrame(iCluster); //Vidovic
+
+				pModelInstance = AddReferenceFrame();
+
+				pModelInstance->iCluster = iCluster;
+			}
+			else if (bGTRFDescriptors)
+			{
+				//QList<RECOG::PSGM_::ModelInstance> *pModelInstanceList = &(pCluster->modelInstanceList); //Vidovic
+
+				//RVLQLIST_INIT(pModelInstanceList); //Vidovic
+
+				Array<GTInstance> *pGT = pECCVGT->GT.Element + iScene;
+
+				int iGTInstance;
+				GTInstance *pGTInstance;
+
+				for (iGTInstance = 0; iGTInstance < pGT->n; iGTInstance++)
+				{
+					pGTInstance = pGT->Element + iGTInstance;
+
+					RVLSCALEMX3X3(pGTInstance->R, 1000.0f, R);
+
+					//AddReferenceFrame(iCluster, R, pGTInstance->t); //Vidovic
+
+					pModelInstance = AddReferenceFrame(R, pGTInstance->t); //Vidovic
+
+					pModelInstance->iCluster = iCluster;
+
+					fprintf(fpGTH, "%d\t%d\n", iCluster, pGTInstance->iModel);
+				}
+			}
+			else
+				ReferenceFrames(iCluster);
+		}
+
+		//Vidovic
+		bool bNormalValidityTest_ = bNormalValidityTest;
+
+		if (mode == RVLRECOGNITION_MODE_TRAINING)
+			bNormalValidityTest = false;
+
+		pModelInstance = CTISet.CTI.pFirst;
+
+		while (pModelInstance)
+		{
+			pCluster = clusters.Element[pModelInstance->iCluster];
+
+			FitModel(pCluster->iVertexArray, pModelInstance);
+
+			pModelInstance = pModelInstance->pNext;
+		}
+
+		bNormalValidityTest = bNormalValidityTest_;
+
+		//Copy CTIs from Qlist to Array
+		CTISet.CopyCTIsToArray();
+		//END Vidovic
+
+		// Save model instances to a file.
+
+		printf("Save model instances to a file.\n");
+
+		char *PSGModelInstanceFileName = RVLCreateString(sceneFileName);
+
+		sprintf(PSGModelInstanceFileName + strlen(PSGModelInstanceFileName) - 3, "cti");
+
+		FILE *fp = fopen(PSGModelInstanceFileName, "w");
+
+		SaveModelInstances(fp); //Vidovic
+
+		fclose(fp);
+
+		delete[] PSGModelInstanceFileName;
+
+		// Create tangent graphs.
+
+		if (mode == RVLRECOGNITION_MODE_TRAINING)
+		{
+			VertexGraph *pVertexGraph = new VertexGraph;
+
+			pVertexGraph->idx = iScene;
+
+			pVertexGraph->pMem = MTGSet.pMem;
+
+			MTGSet.vertexGraphs.push_back(pVertexGraph);
+
+			pVertexGraph->Create(pSurfels);
+
+			//pVertexGraph->Clustering();
+
+			TG *pTG = new TG;
+
+			float R[9], t[3];
+
+			RVLUNITMX3(R);
+			RVLNULL3VECTOR(t);
+
+			pTG->iObject = iScene;
+
+			pTG->iVertexGraph = pVertexGraph->idx;
+
+			Array<int> iVertexArray;
+
+			iVertexArray.n = pVertexGraph->NodeArray.n;
+			iVertexArray.Element = new int[iVertexArray.n];
+
+			int i;
+
+			for (i = 0; i < iVertexArray.n; i++)
+				iVertexArray.Element[i] = i;
+
+			pTG->A = MTGSet.A;
+
+			pTG->Create(pVertexGraph, iVertexArray, R, t, &MTGSet, pSurfels, true);
+
+			delete[] iVertexArray.Element;
+
+			MTGSet.TGs.push_back(pTG);
+		}
+
+		//Vidovic
+		//Match scene MI to model MI
+		if (mode == RVLRECOGNITION_MODE_RECOGNITION)
+			Match();
+
+		if (bGTRFDescriptors)
+		{
+			if (fpGTH)
+				fclose(fpGTH);
+
+			RVL_DELETE_ARRAY(GTHFileName);
+		}
+	}	// if(problem == RVLRECOGNITION_PROBLEM_SHAPE_INSTANCE_DETECTION)
+	else if (problem == RVLRECOGNITION_PROBLEM_CLASSIFICATION)
 	{
-		pCluster = clusters.Element[pModelInstance->iCluster];
+		// Detect ground plane.
 
-		FitModel(pCluster->iVertexArray, pModelInstance);
+		// Detect objects as connected surfel sets.
 
-		pModelInstance = pModelInstance->pNext;
-	}
+		// Save the segmentation results to a file.
 
-	bNormalValidityTest = bNormalValidityTest_;
+	}	// if(problem == RVLRECOGNITION_PROBLEM_CLASSIFICATION)
 
-	//Copy CTIs from Qlist to Array
-	CTISet.CopyCTIsToArray();
-	//END Vidovic
-
-	// Save model instances to a file.
-
-	printf("Save model instances to a file.\n");
-
-	char *PSGModelInstanceFileName = RVLCreateString(sceneFileName);
-
-	sprintf(PSGModelInstanceFileName + strlen(PSGModelInstanceFileName) - 3, "cti");
-
-	FILE *fp = fopen(PSGModelInstanceFileName, "w");
-
-	SaveModelInstances(fp); //Vidovic
-
-	fclose(fp);
-
-	delete[] PSGModelInstanceFileName;
-
-	// Create tangent graphs.
-
-	if (mode == RVLRECOGNITION_MODE_TRAINING)
-	{
-		VertexGraph *pVertexGraph = new VertexGraph;
-
-		pVertexGraph->idx = iScene;
-
-		pVertexGraph->pMem = MTGSet.pMem;
-
-		MTGSet.vertexGraphs.push_back(pVertexGraph);
-
-		pVertexGraph->Create(pSurfels);
-
-		//pVertexGraph->Clustering();
-
-		TG *pTG = new TG;
-
-		float R[9], t[3];
-
-		RVLUNITMX3(R);
-		RVLNULL3VECTOR(t);
-
-		pTG->iObject = iScene;
-
-		pTG->iVertexGraph = pVertexGraph->idx;
-
-		Array<int> iVertexArray;
-
-		iVertexArray.n = pVertexGraph->NodeArray.n;
-		iVertexArray.Element = new int[iVertexArray.n];
-
-		int i;
-
-		for (i = 0; i < iVertexArray.n; i++)
-			iVertexArray.Element[i] = i;
-
-		pTG->A = MTGSet.A;
-
-		pTG->Create(pVertexGraph, iVertexArray, R, t, &MTGSet, pSurfels, true);
-
-		delete[] iVertexArray.Element;
-
-		MTGSet.TGs.push_back(pTG);
-	}
-
-	//Vidovic
-	//Match scene MI to model MI
-	if (mode == RVLRECOGNITION_MODE_RECOGNITION)
-		Match();
-
-	if (bGTRFDescriptors)
-	{
-		if (fpGTH)
-			fclose(fpGTH);
-
-		RVL_DELETE_ARRAY(GTHFileName);
-	}
 }
 
 //PETRA
@@ -4885,6 +4898,7 @@ void PSGM::Match()
 
 	//Transparency check
 	////Transparency check
+
 	//FilterHypothesesUsingTransparency(0.5, 0.01, true);
 
 	printf("completed.\n");
@@ -10277,6 +10291,8 @@ float PSGM::GetObjectTransparencyRatio(vtkSmartPointer<vtkPolyData> object, unsi
 //Requires scoreMatchMatrixICP???
 void PSGM::FilterHypothesesUsingTransparency(float tranThr, float depthThr, bool verbose)
 {
+	CreateDilatedDepthImage();
+
 	float tranRatio;
 	for (int i = 0; i < scoreMatchMatrixICP.n; i++)
 	{
@@ -10342,4 +10358,34 @@ vtkSmartPointer<vtkPolyData> PSGM::GetPoseCorrectedVisibleModel(int iMatch)
 	finPD->DeepCopy(transformFilter->GetOutput());
 
 	return finPD;
+}
+
+void PSGM::CreateDilatedDepthImage()
+{
+	//Generate scene depth
+	double point[3];
+	int u, v;
+	cv::Mat depth(480, 640, CV_16UC1, cv::Scalar::all(0));
+	for (int i = 0; i < pMesh->pPolygonData->GetNumberOfPoints(); i++)
+	{
+		pMesh->pPolygonData->GetPoint(i, point);
+		if ((point[0] == 0) && (point[1] == 0) && (point[2] == 0))
+			continue;
+		v = floor(float(i) / 640);
+		u = i - v * 640;
+		depth.at<uint16_t>(v, u) = (uint16_t)(point[2] * 1000); //in milimeters
+	}
+	//Postprocessing
+	for (int y = 0; y < depth.rows; y++)
+	{
+		for (int x = 0; x < depth.cols; x++)
+		{
+			if (depth.at<uint16_t>(y, x) == 0)
+				depth.at<uint16_t>(y, x) = 10000; //in milimeters
+		}
+	}
+	cv::Mat elementE = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(9, 9));
+	cv::erode(depth, depth, elementE);
+	//Set PSGM depth
+	depthImg = (unsigned short*)depth.data;
 }

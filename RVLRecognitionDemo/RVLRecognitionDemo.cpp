@@ -550,32 +550,32 @@ int main(int argc, char ** argv)
 				//mesh.LoadPolyDataFromPLY(filePath);
 				LoadMesh(&meshBuilder, filePath, &mesh, false);
 
-				//Generate scene depth
-				double point[3];
-				int u, v;
-				cv::Mat depth(480, 640, CV_16UC1, cv::Scalar::all(0));
-				for (int i = 0; i < mesh.pPolygonData->GetNumberOfPoints(); i++)
-				{
-					mesh.pPolygonData->GetPoint(i, point);
-					if ((point[0] == 0) && (point[1] == 0) && (point[2] == 0))
-						continue;
-					v = floor(float(i) / 640);
-					u = i - v * 640;
-					depth.at<uint16_t>(v, u) = (uint16_t)(point[2] * 1000); //in milimeters
-				}
-				//Postprocessing
-				for (int y = 0; y < depth.rows; y++)
-				{
-					for (int x = 0; x < depth.cols; x++)
-					{
-						if (depth.at<uint16_t>(y, x) == 0)
-							depth.at<uint16_t>(y, x) = 10000; //in milimeters
-					}
-				}
-				cv::Mat elementE = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(9, 9));
-				cv::erode(depth, depth, elementE);
-				//Set PSGM depth
-				recognition.depthImg = (unsigned short*)depth.data;
+				////Generate scene depth
+				//double point[3];
+				//int u, v;
+				//cv::Mat depth(480, 640, CV_16UC1, cv::Scalar::all(0));
+				//for (int i = 0; i < mesh.pPolygonData->GetNumberOfPoints(); i++)
+				//{
+				//	mesh.pPolygonData->GetPoint(i, point);
+				//	if ((point[0] == 0) && (point[1] == 0) && (point[2] == 0))
+				//		continue;
+				//	v = floor(float(i) / 640);
+				//	u = i - v * 640;
+				//	depth.at<uint16_t>(v, u) = (uint16_t)(point[2] * 1000); //in milimeters
+				//}
+				////Postprocessing
+				//for (int y = 0; y < depth.rows; y++)
+				//{
+				//	for (int x = 0; x < depth.cols; x++)
+				//	{
+				//		if (depth.at<uint16_t>(y, x) == 0)
+				//			depth.at<uint16_t>(y, x) = 10000; //in milimeters
+				//	}
+				//}
+				//cv::Mat elementE = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(9, 9));
+				//cv::erode(depth, depth, elementE);
+				////Set PSGM depth
+				//recognition.depthImg = (unsigned short*)depth.data;
 
 				/*cv::Mat depthShow(480, 640, CV_8UC1);
 				double minVal, maxVal;
@@ -706,8 +706,6 @@ int main(int argc, char ** argv)
 				//cv::waitKey();
 				////interactor->Start();
 				////
-
-
 
 				mem.Clear();
 
