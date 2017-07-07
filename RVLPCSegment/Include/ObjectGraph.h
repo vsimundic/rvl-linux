@@ -179,6 +179,7 @@ namespace RVL
 				char *meshFileName,
 				char *selectedGTObjectFileName,
 				std::vector<ObjectCoverage> &selectedGTObjectCoverage);
+			void SaveObjectMap(char *fileName);
 
 		public:
 			CRVLParameterList ParamList;

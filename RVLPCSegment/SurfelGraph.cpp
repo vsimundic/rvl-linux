@@ -4260,7 +4260,7 @@ void SurfelGraph::DetectDominantPlane(Array<int> &dominantPlaneSurfelArray)
 
 	RGData.bVisited = new bool[NodeArray.n];
 
-	memset(RGData.bVisited, 0, NodeArray.n * sizeof(int));
+	memset(RGData.bVisited, 0, NodeArray.n * sizeof(bool));
 
 	RVLCOPY3VECTOR(pSurfel->N, RGData.NRef);
 

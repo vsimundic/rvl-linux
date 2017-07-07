@@ -339,7 +339,7 @@ void PSGM::Interpret(
 	// Create ordered mesh.
 	pMesh = pMeshIn;
 
-	pMesh->CreateOrderedMeshFromPolyData();
+	//pMesh->CreateOrderedMeshFromPolyData();
 
 	// Detect surfels.
 
@@ -572,6 +572,8 @@ void PSGM::Interpret(
 
 		// Detect objects as connected surfel sets.
 
+		pObjects->pMesh = pMesh;
+
 		pObjects->CreateObjectsAsConnectedComponents(groundPlaneSurfelArray);
 
 		delete[] groundPlaneSurfelArray.Element;
@@ -579,8 +581,6 @@ void PSGM::Interpret(
 		// Sort objects.
 
 		pObjects->SortObjects();
-
-		// Save the segmentation results to a file.
 
 	}	// if(problem == RVLRECOGNITION_PROBLEM_CLASSIFICATION)
 }
@@ -3236,7 +3236,7 @@ void PSGM::Learn(
 			saveDBSequenceFile = true;
 
 			//mesh.LoadPolyDataFromPLY(modelFilePath);
-			LoadMesh(vpMeshBuilder, modelFilePath, &mesh, true);
+			LoadMesh(vpMeshBuilder, modelFilePath, &mesh, false);
 
 			SetSceneFileName(modelFilePath);
 
@@ -3401,6 +3401,10 @@ void PSGM::LoadModelMeshDB(char *modelSequenceFileName, bool decimate, float dec
 void PSGM::LoadModelDataBase()
 {
 	MCTISet.nT = convexTemplate.n;
+
+	if (modelDataBase == NULL)
+		return;
+
 	MCTISet.Load(modelDataBase);
 
 	//Alocate arrays for Match() function

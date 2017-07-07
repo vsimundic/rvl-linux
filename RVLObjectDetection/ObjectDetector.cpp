@@ -149,6 +149,7 @@ void ObjectDetector::Init(PSGM *pPSGM_)
 		pObjects->InitSVMClassifier(SVMClassifierParamsFileName);
 	}
 
+	pObjects->pSurfels = pSurfels;
 	pObjects->objectAggregationLevel2Criterion = OBJECT_DETECTION::Symmetry;
 	pObjects->vpObjectAggregationLevel2CriterionData = this;
 

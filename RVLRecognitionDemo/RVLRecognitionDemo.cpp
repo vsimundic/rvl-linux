@@ -283,12 +283,6 @@ int main(int argc, char ** argv)
 
 	ParamList.LoadParams(cfgFileName);
 
-	if (segmentGTFileName == NULL)
-	{
-		segmentGTFileName = new char[200];
-		segmentGTFileName = "C:\\RVL\\segmentGT.txt";
-	}
-
 	// Create mesh builder.
 
 	PCLMeshBuilder meshBuilder;
@@ -303,6 +297,38 @@ int main(int argc, char ** argv)
 	pcl::PointCloud<pcl::PointXYZRGBA>::Ptr PC(new pcl::PointCloud<pcl::PointXYZRGBA>(w, h));
 
 	meshBuilder.PC = PC;
+
+	if (flags & RVLRECOGNITION_DEMO_FLAG_SAVE_PLY)
+	{
+		Mesh mesh;
+
+		FileSequenceLoader sceneSequence;
+		char filePath[200];
+
+		sceneSequence.Init(sceneSequenceFileName);
+
+		while (sceneSequence.GetNextPath(filePath))
+			LoadMesh(&meshBuilder, filePath, &mesh, true);
+
+		if (sceneMeshFileName)
+			delete[] sceneMeshFileName;
+
+		if (sceneSequenceFileName)
+			delete[] sceneSequenceFileName;
+
+		if (modelSequenceFileName)
+			delete[] modelSequenceFileName;
+
+		return 0;
+	}
+
+	// Create segment GT file name.
+
+	if (segmentGTFileName == NULL)
+	{
+		segmentGTFileName = new char[200];
+		segmentGTFileName = "C:\\RVL\\segmentGT.txt";
+	}
 
 	// Initialize surfel detection
 
@@ -722,6 +748,16 @@ int main(int argc, char ** argv)
 
 				visualizer.renderer->RemoveAllViewProps();
 #endif
+				if (recognition.problem == RVLRECOGNITION_PROBLEM_CLASSIFICATION)
+				{
+					// Save the segmentation results to a file.
+
+					char *objectMapFileName = RVLCreateFileName(filePath, ".ply", -1, ".objmap.png");
+
+					recognition.pObjects->SaveObjectMap(objectMapFileName);
+
+					delete[] objectMapFileName;
+				}
 #endif
 				//Evaluate CTI match
 				//recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, 7);

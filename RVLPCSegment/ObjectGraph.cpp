@@ -3889,6 +3889,9 @@ void ObjectGraph::CreateObjectsAsConnectedComponents(Array<int> &groundPlaneObje
 
 	for (iObject = 0; iObject < NodeArray.n; iObject++)
 	{
+		if (iObject == 60)
+			int debug = 0;
+
 		if (objectMap[iObject] >= 0)
 			continue;
 
@@ -3903,11 +3906,50 @@ void ObjectGraph::CreateObjectsAsConnectedComponents(Array<int> &groundPlaneObje
 
 		*(piObjectPut++) = iObject;
 
+		objectMap[iObject] = iObject;
+
 		piObjectBuffEnd = RegionGrowing<ObjectGraph, GRAPH::AggregateNode<AgEdge>, AgEdge, GRAPH::EdgePtr2<AgEdge>, ConnectedSetRGData,
 			ConnectedSetRG>(this, &RGData, piObjectFetch, piObjectPut);
 	}
 
 	delete[] iObjectBuff;
+}
+
+void ObjectGraph::SaveObjectMap(char *fileName)
+{
+	if (!pMesh->bOrganizedPC)
+		return;
+	
+	cv::Mat objectImg(pMesh->height, pMesh->width, CV_8UC1);
+
+	int i;
+	int iSurfel, iNode, iObject;
+
+	for (i = 0; i < pMesh->NodeArray.n; i++)
+	{
+		iSurfel = pSurfels->surfelMap[i];
+
+		if (iSurfel >= 0)
+		{
+			iNode = objectMap[iSurfel];
+
+			if (iNode >= 0)
+			{
+				iObject = iObjectAssignedToNode[iNode];
+
+				if (iObject >= 0 && iObject < nValidObjects)
+					objectImg.data[i] = (iObject < 255 ? iObject + 1 : 0);
+				else
+					objectImg.data[i] = 0;
+			}
+			else
+				objectImg.data[i] = 0;
+		}
+		else
+			objectImg.data[i] = 0;
+	}
+
+	cv::imwrite(fileName, objectImg);	
 }
 
 int SURFEL::ConnectedSetRG(
