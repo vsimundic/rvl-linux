@@ -713,6 +713,7 @@ int main(int argc, char ** argv)
 
 				recognition.Interpret(&mesh);
 
+				recognition.GetSceneConsistancyPairs(0.1, 10, 1.0, true);
 				//recognition.SaveMatches();
 
 #ifdef PSGM_RECOGNITION_VISUALIZE_SCENE

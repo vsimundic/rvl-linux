@@ -472,6 +472,9 @@ namespace RVL
 		float GetObjectTransparencyRatio(vtkSmartPointer<vtkPolyData> object, unsigned short *depthImg, float depthThr, int width, int height, float c_fu, float c_fv, float c_uc, float c_vc); //Filko
 		void FilterHypothesesUsingTransparency(float tranThr, float depthThr, bool verbose = false); //Filko
 		vtkSmartPointer<vtkPolyData> GetPoseCorrectedVisibleModel(int iMatch); //Filko
+		std::vector<std::vector<int>> GetSegmentBBNeighbourhood(float dist, bool verbose = false);	//Filko
+		std::vector<std::pair<int, int>> GetSceneConsistancyPairs(float nDist = 0.1, float expDist = 0.1, float ratioThr = 1.0, bool verbose = false);	//Filko //neighbourhood distance = 10cm, model expansion dist = 10cm, ratio of enveloped vertices = 100%
+		bool CheckHypothesesToSegmentEnvelopment(int hyp, int segment, float expDist, float ratioThr); //Filko
 
 	private:
 		void Clusters();
