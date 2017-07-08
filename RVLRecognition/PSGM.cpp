@@ -363,6 +363,24 @@ void PSGM::Interpret(
 	pSurfels->SurfelRelations(pMesh);
 #endif
 
+	// Detect ground plane.
+
+	Array<int> groundPlaneSurfelArray;
+
+	groundPlaneSurfelArray.Element = NULL;
+
+	if (pSurfels->bGroundContactVertices)
+	{
+		groundPlaneSurfelArray.Element = new int[pSurfels->NodeArray.n];
+
+		pSurfels->DetectDominantPlane(groundPlaneSurfelArray);
+
+		int i;
+
+		for (i = 0; i < groundPlaneSurfelArray.n; i++)
+			pSurfels->NodeArray.Element[groundPlaneSurfelArray.Element[i]].flags |= RVLSURFEL_FLAG_GND;
+	}
+
 	// Detect vertices.
 
 	printf("Detect vertices.\n");
@@ -550,7 +568,31 @@ void PSGM::Interpret(
 		//Vidovic
 		//Match scene MI to model MI
 		if (mode == RVLRECOGNITION_MODE_RECOGNITION)
+		{
+			VertexGraph vertexGraph;
+
+			vertexGraph.idx = iScene;
+
+			vertexGraph.pMem = pMem;
+
+			vertexGraph.Create(pSurfels);
+
+			vertexGraph.Clustering();
+
+			char *vertexGraphFileName = RVLCreateFileName(sceneFileName, ".ply", -1, ".vgr");
+
+			fp = fopen(vertexGraphFileName, "w");
+
+			delete[] vertexGraphFileName;
+
+			vertexGraph.Save(fp);
+
+			fclose(fp);
+
+#ifdef RVLVERSION_170601
 			Match();
+#endif
+		}
 
 		if (bGTRFDescriptors)
 		{
@@ -562,27 +604,19 @@ void PSGM::Interpret(
 	}	// if(problem == RVLRECOGNITION_PROBLEM_SHAPE_INSTANCE_DETECTION)
 	else if (problem == RVLRECOGNITION_PROBLEM_CLASSIFICATION)
 	{
-		// Detect ground plane.
-
-		Array<int> groundPlaneSurfelArray;
-
-		groundPlaneSurfelArray.Element = new int[pSurfels->NodeArray.n];
-
-		pSurfels->DetectDominantPlane(groundPlaneSurfelArray);
-
 		// Detect objects as connected surfel sets.
 
 		pObjects->pMesh = pMesh;
 
 		pObjects->CreateObjectsAsConnectedComponents(groundPlaneSurfelArray);
 
-		delete[] groundPlaneSurfelArray.Element;
-
 		// Sort objects.
 
 		pObjects->SortObjects();
 
 	}	// if(problem == RVLRECOGNITION_PROBLEM_CLASSIFICATION)
+
+	RVL_DELETE_ARRAY(groundPlaneSurfelArray.Element);
 }
 
 //PETRA

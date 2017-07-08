@@ -65,6 +65,7 @@ namespace RVL
 			int iVertex[2];
 			GRAPH::EdgePtr<GRAPH::Edge> *pVertexEdgePtr[2];
 			int idx;
+			GRAPH::Edge *pNext;
 		};
 
 		template<typename EdgeType> struct AggregateNode

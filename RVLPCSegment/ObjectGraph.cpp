@@ -3889,8 +3889,8 @@ void ObjectGraph::CreateObjectsAsConnectedComponents(Array<int> &groundPlaneObje
 
 	for (iObject = 0; iObject < NodeArray.n; iObject++)
 	{
-		if (iObject == 60)
-			int debug = 0;
+		//if (iObject == 60)
+		//	int debug = 0;
 
 		if (objectMap[iObject] >= 0)
 			continue;

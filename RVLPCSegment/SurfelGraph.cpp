@@ -75,6 +75,8 @@ SurfelGraph::SurfelGraph()
 	TIVertexToleranceAngle = 22.5f;		// deg
 	edgeDepth = 20;
 
+	bGroundContactVertices = false;
+
 	PtMem = NULL;
 	surfelBndMem = NULL;
 	surfelBndMem2 = NULL;
@@ -127,6 +129,7 @@ void SurfelGraph::CreateParamList(CRVLMem *pMem)
 	pParamData = ParamList.AddParam("SurfelGraph.visualization.edgeFeatureDepth", RVLPARAM_TYPE_FLOAT, &(DisplayData.edgeFeatureDepth));
 	pParamData = ParamList.AddParam("SurfelGraph.visualization.normalLen", RVLPARAM_TYPE_FLOAT, &(DisplayData.normalLen));
 	pParamData = ParamList.AddParam("SurfelGraph.edgeDepth", RVLPARAM_TYPE_INT, &edgeDepth);
+	pParamData = ParamList.AddParam("SurfelGraph.groundContactVertices", RVLPARAM_TYPE_BOOL, &bGroundContactVertices);
 }
 
 void SurfelGraph::InitGetNeighborsBoundaryAndSize()
@@ -1688,6 +1691,7 @@ void SurfelGraph::DetectVertices(
 	float VTmp[3], N3_[3];
 	float fTmp, c13, c23;
 	QList<GRAPH::EdgePtr2<VertexEdge>> *pVertexEdgeList_;
+	float NOpp[3];
 
 	for (iSurfel = 0; iSurfel < NodeArray.n; iSurfel++)
 	{
@@ -1924,7 +1928,23 @@ void SurfelGraph::DetectVertices(
 									{
 										for (i = 0; i < 3; i++)
 											if (iF[i] >= 0)
-												UpdateNormalHull(pVertex->normalHull, NodeArray.Element[iF[i]].N);
+											{
+												pSurfel_ = NodeArray.Element + iF[i];
+
+												if (bGroundContactVertices)
+												{
+													if (pSurfel_->flags & RVLSURFEL_FLAG_GND)
+													{
+														RVLNEGVECT3(pSurfel_->N, NOpp);
+
+														UpdateNormalHull(pVertex->normalHull, NOpp);
+													}
+													else
+														UpdateNormalHull(pVertex->normalHull, pSurfel_->N);
+												}
+												else
+													UpdateNormalHull(pVertex->normalHull, pSurfel_->N);
+											}
 									}
 
 									// Initialize edge list.
@@ -2032,6 +2052,9 @@ void SurfelGraph::DetectVertices(
 			for (i = 0; i < boundaryVertexArray.n; i++)
 			{
 				pVertex = boundaryVertexArray.Element[i];
+
+				//if (pVertex->idx == 153 && pVertex_->idx == 581 || pVertex_->idx == 153 && pVertex->idx == 581)
+				//	int debug = 0;
 
 				//if (bNewVertex_ || bNewVertex[i])
 				{
@@ -2570,6 +2593,8 @@ void SurfelGraph::DetectVertices(
 	}
 }
 #endif
+
+// Nh(i) = norm(N(i+1) x N(i))
 
 void SurfelGraph::UpdateNormalHull(
 	Array<NormalHullElement> &NHull,

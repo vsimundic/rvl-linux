@@ -92,6 +92,9 @@ namespace RVL
 		int nEdges;
 		std::vector<SURFEL::VertexCluster> clusters;
 		int *iVertexClusterMem;
+		Graph<GRAPH::Node, GRAPH::Edge, GRAPH::EdgePtr<GRAPH::Edge>> G;
+		QList<GRAPH::Edge> GEdgeList;
+		int nGEdges;
 	};
 }
 

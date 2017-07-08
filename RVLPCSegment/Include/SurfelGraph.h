@@ -13,7 +13,9 @@
 
 #define RVLSURFEL_EDGE_FLAG_HARD				0x01
 #define RVLSURFEL_EDGE_FLAG_CONVEX				0x02
-#define RVLSURFEL_FLAG_RF						0x04
+
+#define RVLSURFEL_FLAG_RF						0x01
+#define RVLSURFEL_FLAG_GND						0x02
 
 #define RVLSURFELVERTEX_TYPE_CONVEX_CONCAVE		0x07
 #define RVLSURFELVERTEX_TYPE_TANGENT			0x40
@@ -284,6 +286,7 @@ namespace RVL
 
 	public:	
 		CRVLParameterList ParamList;
+		bool bGroundContactVertices;
 		int nMeshVertices;
 		int nMeshEdges;
 		QLIST::Index2 *PtMem;
