@@ -1624,6 +1624,8 @@ void SurfelGraph::DetectVertices(
 
 	bool *bNewVertex = new bool[2 * pMesh->EdgeArray.n];
 
+	Pair<int, int> *iNeighborSurfels = new Pair<int, int>[2 * pMesh->EdgeArray.n];
+
 	float q = TIVertexToleranceAngle * DEG2RAD;
 	float cq = cos(q);
 	float sq = sin(q);
@@ -1774,6 +1776,9 @@ void SurfelGraph::DetectVertices(
 
 						bNewVertex[boundaryVertexArray.n] = false;
 
+						iNeighborSurfels[boundaryVertexArray.n].a = iFeature__;
+						iNeighborSurfels[boundaryVertexArray.n].b = iFeature_;
+
 						boundaryVertexArray.n++;
 
 						bVertex = true;
@@ -1787,6 +1792,9 @@ void SurfelGraph::DetectVertices(
 							boundaryVertexArray.Element[boundaryVertexArray.n] = pVertex;
 
 							bNewVertex[boundaryVertexArray.n] = false;
+
+							iNeighborSurfels[boundaryVertexArray.n].a = iFeature__;
+							iNeighborSurfels[boundaryVertexArray.n].b = iFeature_;
 
 							boundaryVertexArray.n++;
 
@@ -1968,6 +1976,9 @@ void SurfelGraph::DetectVertices(
 
 									bNewVertex[boundaryVertexArray.n] = true;
 
+									iNeighborSurfels[boundaryVertexArray.n].a = iFeature__;
+									iNeighborSurfels[boundaryVertexArray.n].b = iFeature_;
+
 									boundaryVertexArray.n++;
 
 									if (bContactEdgeVertices)
@@ -2074,24 +2085,55 @@ void SurfelGraph::DetectVertices(
 					{
 						// Check if pVertex and pVertex_ have two common surfels.
 
-						nCommonSurfels = 0;
+						//nCommonSurfels = 0;
 
-						for (j = 0; j < pVertex->iSurfelArray.n; j++)
-							for (k = 0; k < pVertex_->iSurfelArray.n; k++)
-								if (pVertex->iSurfelArray.Element[j] == pVertex_->iSurfelArray.Element[k])
-								{
-									nCommonSurfels++;
+						//for (j = 0; j < pVertex->iSurfelArray.n; j++)
+						//	for (k = 0; k < pVertex_->iSurfelArray.n; k++)
+						//		if (pVertex->iSurfelArray.Element[j] == pVertex_->iSurfelArray.Element[k])
+						//		{
+						//			nCommonSurfels++;
 
-									break;
-								}
+						//			break;
+						//		}
 
-						if (nCommonSurfels >= 2)
+						//if (nCommonSurfels >= 2)
+						if (iNeighborSurfels[i].a == iNeighborSurfels[(i + boundaryVertexArray.n - 1) % boundaryVertexArray.n].b)
 						{
 							// Connect pVertex and pVertex_.
 
 							pEdge = ConnectNodes<Vertex, VertexEdge, GRAPH::EdgePtr2<VertexEdge>>(pVertex, pVertex_, pVertex->idx, pVertex_->idx, pMem);
 
 							RVLQLIST_ADD_ENTRY(pVertexEdgeList, pEdge);
+
+							pEdge->iSurfel[0] = iFeature;
+							pEdge->iSurfel[1] = iNeighborSurfels[i].a;
+
+							// Only for debugging purpose!!!
+
+							//if (pEdge->iSurfel[0] >= 0 && pEdge->iSurfel[1] >= 0)
+							//{
+							//	bool debug[2];
+
+							//	debug[0] = debug[1] = false;
+
+							//	for (j = 0; j < pVertex->iSurfelArray.n; j++)
+							//		for (k = 0; k < 2; k++)
+							//			if (pVertex->iSurfelArray.Element[j] == pEdge->iSurfel[k])
+							//				debug[k] = true;
+
+							//	if (!(debug[0] && debug[1]))
+							//		int debug_ = 0;
+
+							//	debug[0] = debug[1] = false;
+
+							//	for (j = 0; j < pVertex_->iSurfelArray.n; j++)
+							//		for (k = 0; k < 2; k++)
+							//			if (pVertex_->iSurfelArray.Element[j] == pEdge->iSurfel[k])
+							//				debug[k] = true;
+
+							//	if (!(debug[0] && debug[1]))
+							//		int debug_ = 0;
+							//}
 
 							// Increment vertex edge counter.
 
@@ -2113,6 +2155,7 @@ void SurfelGraph::DetectVertices(
 	delete[] bBelongsToRefVertex;
 	delete[] boundaryVertexArray.Element;
 	delete[] bNewVertex;
+	delete[] iNeighborSurfels;
 
 	RVL_DELETE_ARRAY(vertexArray.Element);
 

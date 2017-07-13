@@ -104,6 +104,9 @@ void VertexGraph::Create(SurfelGraph *pSurfels_)
 
 				RVLQLIST_ADD_ENTRY(pEdgeList_, pEdge);
 
+				pEdge->iSurfel[0] = pEdgePtr->pEdge->iSurfel[0];
+				pEdge->iSurfel[1] = pEdgePtr->pEdge->iSurfel[1];
+
 				//RVLCOPY3VECTOR(pSurfel->N, pEdge->N);
 
 				nEdges++;
@@ -468,8 +471,8 @@ void VertexGraph::Clustering()
 
 	for (iVertex = 0; iVertex < NodeArray.n; iVertex++)
 	{
-		if (iVertex == 276)
-			int debug = 0;
+		//if (iVertex == 276)
+		//	int debug = 0;
 
 		pVertex = NodeArray.Element + iVertex;
 
@@ -876,6 +879,22 @@ int SURFEL::ConnectNodesRG2(
 	Vertex *pVertex = pVertexGraph->NodeArray.Element + iVertex;
 
 	if (pData->bVisited[iVertex])
+		return 0;
+
+	int iSurfel1 = pEdge->iSurfel[0];
+
+	if (iSurfel1 < 0)
+		return 0;
+
+	int iSurfel2 = pEdge->iSurfel[1];
+
+	if (iSurfel2 < 0)
+		return 0;
+
+	float *N1 = pVertexGraph->pSurfels->NodeArray.Element[iSurfel1].N;
+	float *N2 = pVertexGraph->pSurfels->NodeArray.Element[iSurfel2].N;
+
+	if (RVLDOTPRODUCT3(N1, N2) > pData->thr2)
 		return 0;
 
 	pData->bVisited[iVertex] = true;

@@ -98,6 +98,7 @@ namespace RVL
 			GRAPH::EdgePtr2<VertexEdge> *pVertexEdgePtr[2];
 			int idx;
 			float N[3];
+			int iSurfel[2];
 			VertexEdge *pNext;
 		};
 
