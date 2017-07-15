@@ -46,6 +46,7 @@ ObjectGraph::ObjectGraph()
 	bObjectAggregationLevel2Edges = false;
 	bFlattenVertices = false;
 	bConcaveObjectAggregation = false;
+	b3DNetVOI = false;
 
 	nValidObjects = -1;
 	sortedObjectArray.n = -1;
@@ -82,7 +83,7 @@ ObjectGraph::~ObjectGraph()
 	//RVL_DELETE_ARRAY(objectArray.Element);
 	//RVL_DELETE_ARRAY(sortedElementIdxMem);
 	//RVL_DELETE_ARRAY(sortedElementIdxArray);
-	RVL_DELETE_ARRAY(sortedObjectArray.Element);
+	//RVL_DELETE_ARRAY(sortedObjectArray.Element);
 	RVL_DELETE_ARRAY(objectArray.Element);
 	RVL_DELETE_ARRAY(objectVertexIdxMem);
 	RVL_DELETE_ARRAY(iObjectAssignedToNode);
@@ -119,7 +120,8 @@ void ObjectGraph::CreateParamList(CRVLMem *pMem)
 	pParamData = ParamList.AddParam("ObjectGraph.minObjectSize", RVLPARAM_TYPE_INT, &minObjectSize);
 	pParamData = ParamList.AddParam("ObjectGraph.flattenVertices", RVLPARAM_TYPE_BOOL, &bFlattenVertices);
 	pParamData = ParamList.AddParam("ObjectGraph.concaveObjectAggregation", RVLPARAM_TYPE_BOOL, &bConcaveObjectAggregation);
-				}
+	pParamData = ParamList.AddParam("ObjectGraph.3DNetVOI", RVLPARAM_TYPE_BOOL, &b3DNetVOI);
+}
 
 void ObjectGraph::CreateFromGroundTruth(SurfelGraph *pSurfels_)
 {
@@ -412,6 +414,8 @@ void ObjectGraph::Create(SurfelGraph *pSurfels_)
 		//	int debug = 0;
 
 		pAgNode->size = pSurfel->size;
+
+		pAgNode->flags = 0x00;
 	}
 
 	for (iSurfel = 0; iSurfel < pSurfels->NodeArray.n; iSurfel++)
@@ -3484,6 +3488,8 @@ void ObjectGraph::SortObjects()
 
 	int minSize = RVLMAX(20, minObjectSize);
 
+	//printf("valid objects: ");
+
 	int iObject;
 	GRAPH::AggregateNode<SURFEL::AgEdge> *pObject;
 	QLIST::Index *piElement;
@@ -3502,10 +3508,14 @@ void ObjectGraph::SortObjects()
 		if (pObject->size < minSize)
 			continue;
 
+		//printf("%d ", iObject);
+
 		pSortIndex->cost = pObject->size;
 		pSortIndex->idx = iObject;
 		pSortIndex++;
 	}
+
+	//printf("\n");
 
 	sortedObjectArray.n = nValidObjects;
 
@@ -3529,10 +3539,17 @@ void ObjectGraph::SortObjects()
 		pObject_ = objectArray.Element + iObject;
 
 		pObject_->iNode = sortedObjectArray.Element[iObject].idx;
-		pObject_->surfelList = NodeArray.Element[pObject_->iNode].elementList;
+
+		pObject = NodeArray.Element + pObject_->iNode;
+
+		pObject_->surfelList = pObject->elementList;
+		pObject_->flags = pObject->flags;
+		pObject_->size = pObject->size;
 
 		iObjectAssignedToNode[pObject_->iNode] = iObject;
 	}
+
+	delete[] sortedObjectArray.Element;
 }
 
 void ObjectGraph::CountValidObjects()
@@ -3540,6 +3557,8 @@ void ObjectGraph::CountValidObjects()
 	nValidObjects = 0;
 
 	int minSize = RVLMAX(20, minObjectSize);
+
+	//printf("valid objects: ");
 
 	int iObject;
 	GRAPH::AggregateNode<SURFEL::AgEdge> *pObject;
@@ -3559,8 +3578,18 @@ void ObjectGraph::CountValidObjects()
 		if (pObject->size < minSize)
 			continue;
 
+		//printf("%d ", iObject);
+
+		//Set flag RVLGRAPH_AGGNODE_FLAG_VALID.
+
+		pObject->flags |= RVLGRAPH_AGGNODE_FLAG_VALID;
+
+		//Increase valid object counter.
+
 		nValidObjects++;
 	}
+
+	//printf("\n");
 }
 
 void ObjectGraph::GetVertices()
@@ -3852,6 +3881,8 @@ void ObjectGraph::CreateObjectsAsConnectedComponents(Array<int> &groundPlaneObje
 
 	GRAPH::AggregateNode<SURFEL::AgEdge> *pObject = NodeArray.Element + iGndPlane;
 
+	pObject->flags |= RVLPCSEGMENT_OBJECT_FLAG_GND;
+
 	objectMap[iGndPlane] = iGndPlane;
 
 	QList<QLIST::Index> *pElementList = &(pObject->elementList);
@@ -3877,7 +3908,7 @@ void ObjectGraph::CreateObjectsAsConnectedComponents(Array<int> &groundPlaneObje
 
 		pObject->size += pObject_->size;
 
-		pObject_->size = 0;
+		pObject_->size = 0;		
 	}
 
 	// Detect objects as connected surfel sets.
@@ -3915,15 +3946,78 @@ void ObjectGraph::CreateObjectsAsConnectedComponents(Array<int> &groundPlaneObje
 	delete[] iObjectBuff;
 }
 
-void ObjectGraph::SaveObjectMap(char *fileName)
+void ObjectGraph::ObjectsInVOI()
+{
+	float RSG[9] = {0.99980135429674, -0.0149552489928097, -0.0131727475021796,
+		0.0, -0.660970797008806, 0.750411624044793,
+		-0.0199293941, -0.750262558, -0.660839498 };
+		
+	float tSG[3] = { 0.00822132217413605, -0.538153753513056, 0.529118745576969};
+
+	float r = 0.560228753391226 - 0.030;
+
+	float r2 = r * r;
+
+	int i;
+	int iObject;
+	Object *pObject;
+	Vertex *pVertex;
+	float P[3];
+
+	for (iObject = 0; iObject < objectArray.n; iObject++)
+	{
+		pObject = objectArray.Element + iObject;
+
+		for (i = 0; i < pObject->iVertexArray.n; i++)
+		{
+			pVertex = pSurfels->vertexArray.Element[pObject->iVertexArray.Element[i]];
+
+			RVLTRANSF3(pVertex->P, RSG, tSG, P);
+
+			if (P[0] * P[0] + P[1] * P[1] > r2)
+				break;
+		}
+
+		if (i >= pObject->iVertexArray.n)
+			pObject->flags |= RVLPCSEGMENT_OBJECT_FLAG_IN_VOI;
+	}
+}
+
+void ObjectGraph::ObjectMapMask(cv::Mat *pMask)
 {
 	if (!pMesh->bOrganizedPC)
 		return;
-	
-	cv::Mat objectImg(pMesh->height, pMesh->width, CV_8UC1);
+
+	int iForegroundObject = -1;
+
+	int foregroundObjectSize = 0;
+
+	int iObject;
+	Object *pObject;
+
+	for (iObject = 0; iObject < objectArray.n; iObject++)
+	{
+		if (iObject < 0)
+			continue;
+
+		pObject = objectArray.Element + iObject;
+
+		if (pObject->flags & RVLPCSEGMENT_OBJECT_FLAG_GND)
+			continue;
+
+		if (b3DNetVOI)
+			if (!(pObject->flags & RVLPCSEGMENT_OBJECT_FLAG_IN_VOI))
+				continue;
+
+		if (pObject->size > foregroundObjectSize)
+		{
+			foregroundObjectSize = pObject->size;
+			iForegroundObject = iObject;
+		}
+	}
 
 	int i;
-	int iSurfel, iNode, iObject;
+	int iSurfel, iNode;
 
 	for (i = 0; i < pMesh->NodeArray.n; i++)
 	{
@@ -3937,19 +4031,17 @@ void ObjectGraph::SaveObjectMap(char *fileName)
 			{
 				iObject = iObjectAssignedToNode[iNode];
 
-				if (iObject >= 0 && iObject < nValidObjects)
-					objectImg.data[i] = (iObject < 255 ? iObject + 1 : 0);
+				if (iObject == iForegroundObject)
+					pMask->data[i] = 255;
 				else
-					objectImg.data[i] = 0;
+					pMask->data[i] = 0;
 			}
 			else
-				objectImg.data[i] = 0;
+				pMask->data[i] = 0;
 		}
 		else
-			objectImg.data[i] = 0;
+			pMask->data[i] = 0;
 	}
-
-	cv::imwrite(fileName, objectImg);	
 }
 
 int SURFEL::ConnectedSetRG(
@@ -3960,6 +4052,9 @@ int SURFEL::ConnectedSetRG(
 	ConnectedSetRGData *pData)
 {
 	if (pObjects->objectMap[iObject] >= 0)
+		return 0;
+
+	if (pEdge->desc.minDist > 0.050f)
 		return 0;
 
 	pObjects->objectMap[iObject] = pData->iRefObject;

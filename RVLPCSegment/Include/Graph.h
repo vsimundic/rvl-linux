@@ -1,5 +1,7 @@
 #pragma once
 
+#define RVLGRAPH_AGGNODE_FLAG_VALID		0x01
+
 #define RVLSURFEL_IMAGE_ADJACENCY //Vidovic -> exclude Filko functions 
 #define RVLSURFEL_COLOR_HISTOGRAM //Vidovic -> exclude Filko functions
 
@@ -73,6 +75,7 @@ namespace RVL
 			QList<QLIST::Index> elementList;
 			QList<EdgePtr2<EdgeType>> EdgeList;
 			int size;
+			BYTE flags;
 		};
 	}
 

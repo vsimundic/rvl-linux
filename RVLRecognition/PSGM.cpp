@@ -612,7 +612,19 @@ void PSGM::Interpret(
 
 		// Sort objects.
 
+		pObjects->nValidObjects = -1;
+		pObjects->sortedObjectArray.n = -1;
+
 		pObjects->SortObjects();
+
+		// Assign vertices to objects.
+
+		pObjects->GetVertices();
+
+		// Detect objects in VOI
+
+		if (pObjects->b3DNetVOI)
+			pObjects->ObjectsInVOI();
 
 	}	// if(problem == RVLRECOGNITION_PROBLEM_CLASSIFICATION)
 

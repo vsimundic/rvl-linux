@@ -49,6 +49,7 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 //#define PSGM_RECOGNITION_VISUALIZE_SCENE
 
 #define RVLRECOGNITION_DEMO_FLAG_SAVE_PLY			0x00000001
+#define RVLRECOGNITION_DEMO_FLAG_3D_VISUALIZATION	0x00000002
 //END VIDOVIC
 
 using namespace RVL;
@@ -67,7 +68,7 @@ void CreateParamList(
 	char **pSegmentGTFileName,	//Vidovic
 	char **pResultsFolder,
 	DWORD &method,
-	DWORD &flags //VIDOVIC
+	DWORD &flags
 	)
 {
 	pParamList->m_pMem = pMem;
@@ -88,6 +89,8 @@ void CreateParamList(
 	pParamList->AddID(pParamData, "RF", RVLRECOGNITION_METHOD_RF); //VIDOVIC
 	pParamData = pParamList->AddParam("Save PLY", RVLPARAM_TYPE_ID, &flags); //VIDOVIC
 	pParamList->AddID(pParamData, "yes", RVLRECOGNITION_DEMO_FLAG_SAVE_PLY); //VIDOVIC
+	pParamData = pParamList->AddParam("3D Visualization", RVLPARAM_TYPE_ID, &flags);
+	pParamList->AddID(pParamData, "yes", RVLRECOGNITION_DEMO_FLAG_3D_VISUALIZATION);
 }
 
 void GenerateSegmentNeighbourhood(PSGM * psgm, double radius)
@@ -754,9 +757,17 @@ int main(int argc, char ** argv)
 
 					char *objectMapFileName = RVLCreateFileName(filePath, ".ply", -1, ".objmap.png");
 
-					recognition.pObjects->SaveObjectMap(objectMapFileName);
+					cv::Mat objectMask(recognition.pMesh->height, recognition.pMesh->width, CV_8UC1);
+
+					recognition.pObjects->ObjectMapMask(&objectMask);
+
+					cv::imshow("Object mask", objectMask);
+
+					cv::imwrite(objectMapFileName, objectMask);
 
 					delete[] objectMapFileName;
+
+					cv::waitKey();
 				}
 #endif
 				//Evaluate CTI match
@@ -767,10 +778,13 @@ int main(int argc, char ** argv)
 				//mesh.LoadPolyDataFromPLY(filePath);
 				//LoadMesh(&meshBuilder, filePath, &mesh, false);
 
-				surfels.NodeColors(SelectionColor);				
-				visualizer.renderer->RemoveAllViewProps();
-				recognition.InitDisplay(&visualizer, &mesh, SelectionColor);
-				recognition.Display();
+				if (flags & RVLRECOGNITION_DEMO_FLAG_3D_VISUALIZATION)
+				{
+					surfels.NodeColors(SelectionColor);
+					visualizer.renderer->RemoveAllViewProps();
+					recognition.InitDisplay(&visualizer, &mesh, SelectionColor);
+					recognition.Display();
+				}
 
 				////NEW FILKO - TEST COLLISION CONSENSUS
 				//std::vector<int> conHyp = recognition.GetHypothesesCollisionConsensus(20);
@@ -829,9 +843,9 @@ int main(int argc, char ** argv)
 				float timevalue = (ctr2.QuadPart - ctr1.QuadPart) * 1000.0 / freq.QuadPart;
 				std::cout << "Ukupno vrijeme: " << timevalue << std::endl;
 				std::cout << "ICP vrijeme: " << timevalueICP << std::endl;
-				visualizer.Run();
 
-
+				if (flags & RVLRECOGNITION_DEMO_FLAG_3D_VISUALIZATION)
+					visualizer.Run();
 			}
 
 			RVL_DELETE_ARRAY(CTIFileName);

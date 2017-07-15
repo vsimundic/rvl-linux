@@ -3492,6 +3492,15 @@ void SurfelGraph::PrintData(
 
 		sprintf(str, "Point %d\nP=(%f, %f, %f)\nN=(%f, %f, %f)\nRGB=(%d, %d, %d)",
 			iVertex, pPt->P[0], pPt->P[1], pPt->P[2], pPt->N[0], pPt->N[1], pPt->N[2], pPt->RGB[0], pPt->RGB[1], pPt->RGB[2]);
+
+		//if (RVLDOTPRODUCT3(pPt->P, pPt->P) > 1e-10)
+		//{
+		//	FILE *fp = fopen("selectedPts.txt", "a");
+
+		//	fprintf(fp, "%f\t%f\t%f\n", pPt->P[0], pPt->P[1], pPt->P[2]);
+
+		//	fclose(fp);
+		//}
 	}
 	else
 		str[0] = 0;
@@ -4329,6 +4338,8 @@ void SurfelGraph::DetectDominantPlane(Array<int> &dominantPlaneSurfelArray)
 	RGData.bVisited = new bool[NodeArray.n];
 
 	memset(RGData.bVisited, 0, NodeArray.n * sizeof(bool));
+
+	RGData.bVisited[iLargestSurfel] = true;
 
 	RVLCOPY3VECTOR(pSurfel->N, RGData.NRef);
 
