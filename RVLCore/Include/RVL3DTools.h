@@ -287,6 +287,12 @@
 	RVLMULMX3X3VECT(R, pSrc, pTgt)\
 	RVLSUM3VECTORS(pTgt, t, pTgt)\
 }
+// pTgt = R' * (pSrc - t)
+#define RVLINVTRANSF3(pSrc, R, t, pTgt, tmp3x1)\
+{\
+	RVLDIF3VECTORS(pSrc, t, tmp3x1);\
+	RVLMULMX3X3TVECT(R, tmp3x1, pTgt);\
+}
 // T(R, t) = T(R1, t1) * T(R2, t2)
 #define RVLCOMPTRANSF3D(R1, t1, R2, t2, R, t)\
 {\
@@ -423,7 +429,7 @@
 }
 #define RVLCONVTOINT3(Src, Tgt) Tgt[0] = (int)Src[0]; Tgt[1] = (int)Src[1]; Tgt[2] = (int)Src[2];
 #define RVLCONVTOUCHAR3(Src, Tgt) Tgt[0] = (unsigned char)Src[0]; Tgt[1] = (unsigned char)Src[1]; Tgt[2] = (unsigned char)Src[2];
-#define RVLSORT3DESCEND(Vect3, idx, tmp)\
+#define RVLSORT3ASCEND(Vect3, idx, tmp)\
 {\
 	if(Vect3[0] <= Vect3[1])\
 			{\
@@ -530,5 +536,25 @@ namespace RVL
 
 			fprintf(fp, "\n");
 		}
+	}
+
+	template <typename Type> void AngleAxisToRot(Type *k, Type q, Type *R)
+	{
+		Type cq = cos(q);
+		Type sq = sin(q);
+		Type cqcomp = 1.0 - cq;
+		Type kxy = k[0] * k[1] * cqcomp;
+		Type kyz = k[1] * k[2] * cqcomp;
+		Type kzx = k[2] * k[0] * cqcomp;
+
+		R[0] = k[0] * k[0] * cqcomp + cq;
+		R[1] = kxy - k[2] * sq;
+		R[2] = kzx + k[1] * sq;
+		R[3] = kxy + k[2] * sq;
+		R[4] = k[1] * k[1] * cqcomp + cq;
+		R[5] = kyz - k[0] * sq;
+		R[6] = kzx - k[1] * sq;
+		R[7] = kyz + k[0] * sq;
+		R[8] = k[2] * k[2] * cqcomp + cq;
 	}
 }
