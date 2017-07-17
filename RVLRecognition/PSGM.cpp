@@ -3227,15 +3227,15 @@ void PSGM::Learn(
 
 			dbLoader.AddModel(currentModelID, modelFilePath, modelFileName);
 
-			if (visualizer)
-			{
-				pSurfels->NodeColors(SelectionColor);
-				InitDisplay(visualizer, &mesh, SelectionColor);
-				Display();
-				visualizer->Run();
+			//if (visualizer)
+			//{
+			//	pSurfels->NodeColors(SelectionColor);
+			//	InitDisplay(visualizer, &mesh, SelectionColor);
+			//	Display();
+			//	visualizer->Run();
 
-				visualizer->renderer->RemoveAllViewProps();
-			}
+			//	visualizer->renderer->RemoveAllViewProps();
+			//}
 		}
 
 		printf("Model DB creation completed!\n");
@@ -3312,7 +3312,7 @@ void PSGM::Learn(
 }
 
 
-void PSGM::LoadModelMeshDB(char *modelSequenceFileName, bool decimate, float decimatePercent)
+void PSGM::LoadModelMeshDB(char *modelSequenceFileName, bool decimateF, float decimatePercent)
 {
 	FileSequenceLoader modelsLoader;
 
@@ -3337,7 +3337,7 @@ void PSGM::LoadModelMeshDB(char *modelSequenceFileName, bool decimate, float dec
 		vtkSmartPointer<vtkDecimatePro> decimate = vtkSmartPointer<vtkDecimatePro>::New();
 		//mesh.pPolygonData->Print(std::cout);
 
-		if (decimate) //subsampling the model to reduce number of points and fasten the process
+		if (decimateF) //subsampling the model to reduce number of points and fasten the process
 		{
 			decimate->SetInputData(mesh.pPolygonData);
 			decimate->SetTargetReduction(decimatePercent);
@@ -3349,7 +3349,7 @@ void PSGM::LoadModelMeshDB(char *modelSequenceFileName, bool decimate, float dec
 		vtkSmartPointer<vtkPolyDataNormals> normalsFilter = vtkSmartPointer<vtkPolyDataNormals>::New();
 		normalsFilter->ComputePointNormalsOn();
 		normalsFilter->SplittingOff();
-		if (decimate)
+		if (decimateF)
 			normalsFilter->SetInputConnection(decimate->GetOutputPort());
 		else
 			normalsFilter->SetInputData(mesh.pPolygonData);
@@ -3364,6 +3364,7 @@ void PSGM::LoadModelMeshDB(char *modelSequenceFileName, bool decimate, float dec
 		//cleanFilter->GetOutput()->Print(std::cout);
 		
 		//Add vtkPolyData to vtkModelDB:
+		normalsFilter->GetOutput()->GetPointData()->RemoveArray("RGB");
 		vtkModelDB.insert(std::make_pair(currentModelID, normalsFilter->GetOutput()));
 		currentModelID++;
 	}
@@ -8714,10 +8715,10 @@ float PSGM::NNCost(int iCluster, vtkSmartPointer<vtkPolyData> sourcePD, vtkSmart
 
 	std::vector<size_t>   ret_index(1);
 	std::vector<float> out_dist_sqr(1);
-	float costNN=0;
+	float costNN = 0;
 	float score = 0, distance;
 	int br = 0;
-	
+
 	switch (similarityMeasure)
 	{
 	case RVLPSGM_ICP_SIMILARITY_MEASURE_SATURATED_SCORE:
@@ -8732,7 +8733,7 @@ float PSGM::NNCost(int iCluster, vtkSmartPointer<vtkPolyData> sourcePD, vtkSmart
 			index.knnSearch(pointF, 1, &ret_index[0], &out_dist_sqr[0]);
 			distance = out_dist_sqr.at(0) / 0.0001; //0.0001 = 0.01*0.01
 
-			if (distance < 1) 
+			if (distance < 1)
 				score += 1 - distance;
 		}
 
@@ -8741,26 +8742,27 @@ float PSGM::NNCost(int iCluster, vtkSmartPointer<vtkPolyData> sourcePD, vtkSmart
 
 		return score / sourcePoints->GetNumberOfPoints();
 
-		default:
-	
-	for (i = 0; i < sourcePoints->GetNumberOfPoints(); i++)
-	{
-		point = sourcePoints->GetPoint(i);
-		pointF[0] = point[0];
-		pointF[1] = point[1];
-		pointF[2] = point[2];
-		
-		index.knnSearch(pointF, 1, &ret_index[0], &out_dist_sqr[0]);
-		if (sqrt(out_dist_sqr.at(0)) > 0.01)
-		{
-			costNN += 0.01;
-			br++;
-		}
-		else costNN += sqrt(out_dist_sqr.at(0));
-	}
+	default:
 
-	float meanCost = costNN / i;
-	return costNN;
+		for (i = 0; i < sourcePoints->GetNumberOfPoints(); i++)
+		{
+			point = sourcePoints->GetPoint(i);
+			pointF[0] = point[0];
+			pointF[1] = point[1];
+			pointF[2] = point[2];
+
+			index.knnSearch(pointF, 1, &ret_index[0], &out_dist_sqr[0]);
+			if (sqrt(out_dist_sqr.at(0)) > 0.01)
+			{
+				costNN += 0.01;
+				br++;
+			}
+			else costNN += sqrt(out_dist_sqr.at(0));
+		}
+
+		float meanCost = costNN / i;
+		return costNN;
+	}
 }
 
 
@@ -11570,4 +11572,262 @@ vtkSmartPointer<vtkPolyData> PSGM::GetPoseCorrectedVisibleModel(int iMatch)
 	finPD->DeepCopy(transformFilter->GetOutput());
 
 	return finPD;
+}
+
+void PSGM::ObjectAlignment()
+{
+	RECOG::PSGM_::ModelInstance *pMCTI;
+	RECOG::PSGM_::ModelInstanceElement *pMIE;
+	
+
+	Eigen::MatrixXf M(4, 66), P, D(66, 1), T(4, 4), T0p(4, 4), Tiq(4, 4), A, d(1, 66), S, E, I;
+
+	float sum;
+	float min;
+	int p, q;
+	Eigen::VectorXf t(3);
+	float s;
+	
+	A = ConvexTemplatenT(); //normals
+	
+	int m_l = MCTISet.SegmentCTIs.Element[0].n; //number of reference model CTI-s
+	int n = MCTISet.nModels; // number of models in database
+	int iPrevClusters = m_l;
+
+	for (int i = 1; i < n-1; i++) //for all non-reference models
+	{
+		int m_i = MCTISet.SegmentCTIs.Element[i].n; //number of current model CTI-s
+		D.resize(66, 1);
+		for (int k = 0; k < m_i; k++) //for all CTI-s in current model
+		{
+			pMCTI = MCTISet.pCTI.Element[iPrevClusters+k];
+			pMIE = pMCTI->modelInstance.Element;
+
+			for (int di = 0; di < 66; di++)
+			{
+				D.block<1, 1>(di, k) << pMIE->d;
+				pMIE++;
+			}
+			D.conservativeResize(D.rows(), D.cols() + 1);
+		}
+
+		min = 1000;
+
+		for (int j = 0; j < m_l; j++) //for all CTI-s in reference model
+		{
+			pMCTI = MCTISet.pCTI.Element[j];
+			pMIE = pMCTI->modelInstance.Element;
+
+			for (int di = 0; di < 66; di++)
+			{
+				d(0, di) = pMIE->d;
+				pMIE++;
+			}
+			M.block<3, 66>(0, 0) << A;
+			M.block<1, 66>(3, 0) << d;
+			Eigen::MatrixXf Mt = M.transpose();
+			P = (Mt.transpose()*Mt).inverse()*Mt.transpose();
+			S = P*D;
+			E = D - Mt*S;
+
+			for (int je = 0; je < E.cols(); je++)
+			{
+				sum = 0;
+				for (int ie = 0; ie < E.rows(); ie++)
+				{
+					sum += E(ie, je)*E(ie, je);
+				}
+				if (sum < min)
+				{
+					min = sum;
+					p = j;
+					q = je;
+					t = S.block<3, 1>(0, q);
+					//s = *(float*)(&S.data()[3 * S.cols() + q]);
+					s = S(3, q);
+				}
+			}
+			
+		}
+		//I = Eigen::Matrix<float, 3, 3>::Identity();			
+		
+		T.block<3, 3>(0, 0) << s, 0, 0, 0, s, 0, 0, 0, s;
+		T.block<3, 1>(0, 3) << t;
+		T.block<1, 3>(3, 0) << 0, 0, 0;
+		T.block<1, 1>(3, 3) << 1;
+
+		
+		//memcpy(Tiq.block<3, 3>(0, 0).data(), MCTISet.pCTI.Element[iPrevClusters + q]->R, 9 * sizeof(float));
+		//memcpy(Tiq.block<3, 1>(0, 3).data(), MCTISet.pCTI.Element[iPrevClusters + q]->t, 3 * sizeof(float));
+
+
+		Tiq(0, 0) = MCTISet.pCTI.Element[iPrevClusters + q]->R[0];
+		Tiq(0, 1) = MCTISet.pCTI.Element[iPrevClusters + q]->R[1];
+		Tiq(0, 2) = MCTISet.pCTI.Element[iPrevClusters + q]->R[2];
+		Tiq(0, 3) = MCTISet.pCTI.Element[iPrevClusters + q]->t[0];
+		Tiq(1, 0) = MCTISet.pCTI.Element[iPrevClusters + q]->R[3];
+		Tiq(1, 1) = MCTISet.pCTI.Element[iPrevClusters + q]->R[4];
+		Tiq(1, 2) = MCTISet.pCTI.Element[iPrevClusters + q]->R[5];
+		Tiq(1, 3) = MCTISet.pCTI.Element[iPrevClusters + q]->t[1];
+		Tiq(2, 0) = MCTISet.pCTI.Element[iPrevClusters + q]->R[6];
+		Tiq(2, 1) = MCTISet.pCTI.Element[iPrevClusters + q]->R[7];
+		Tiq(2, 2) = MCTISet.pCTI.Element[iPrevClusters + q]->R[8];
+		Tiq(2, 3) = MCTISet.pCTI.Element[iPrevClusters + q]->t[2];
+		Tiq.block<1, 3>(3, 0) << 0, 0, 0;
+		Tiq(3, 3) = 1;
+
+		float t1 = Tiq(0, 0);
+		float t2 = Tiq(0, 1);
+		float t3 = Tiq(0, 2);
+		float t4 = Tiq(0, 3);
+		float t5 = Tiq(1, 0);
+		float t6 = Tiq(1, 1);
+		float t7 = Tiq(1, 2);
+		float t8 = Tiq(1, 3);
+		float t9 = Tiq(2, 0);
+		float t10 = Tiq(2, 1);
+		float t11 = Tiq(2, 2);
+		float t12 = Tiq(2, 3);
+
+		//memcpy(T0p.block<3, 3>(0, 0).data(), MCTISet.pCTI.Element[p]->R, 9 * sizeof(float));
+		//memcpy(T0p.block<3, 1>(0, 3).data(), MCTISet.pCTI.Element[p]->t, 3 * sizeof(float));
+
+		T0p(0, 0) = MCTISet.pCTI.Element[p]->R[0];
+		T0p(0, 1) = MCTISet.pCTI.Element[p]->R[1];
+		T0p(0, 2) = MCTISet.pCTI.Element[p]->R[2];
+		T0p(0, 3) = MCTISet.pCTI.Element[p]->t[0];
+		T0p(1, 0) = MCTISet.pCTI.Element[p]->R[3];
+		T0p(1, 1) = MCTISet.pCTI.Element[p]->R[4];
+		T0p(1, 2) = MCTISet.pCTI.Element[p]->R[5];
+		T0p(1, 3) = MCTISet.pCTI.Element[p]->t[1];
+		T0p(2, 0) = MCTISet.pCTI.Element[p]->R[6];
+		T0p(2, 1) = MCTISet.pCTI.Element[p]->R[7];
+		T0p(2, 2) = MCTISet.pCTI.Element[p]->R[8];
+		T0p(2, 3) = MCTISet.pCTI.Element[p]->t[2];
+		T0p.block<1, 3>(3, 0) << 0, 0, 0;
+		T0p(3, 3) = 1;
+
+		t1 = T0p(0, 0);
+		t2 = T0p(0, 1);
+		t3 = T0p(0, 2);
+		t4 = T0p(0, 3);
+		t5 = T0p(1, 0);
+		t6 = T0p(1, 1);
+		t7 = T0p(1, 2);
+		t8 = T0p(1, 3);
+		t9 = T0p(2, 0);
+		t10 = T0p(2, 1);
+		t11 = T0p(2, 2);
+		t12 = T0p(2, 3);
+
+
+		T0i = Tiq*T*T0p.transpose();
+
+		t1 = T0i(0, 0);
+		t2 = T0i(0, 1);
+		t3 = T0i(0, 2);
+		t4 = T0i(0, 3);
+		t5 = T0i(1, 0);
+		t6 = T0i(1, 1);
+		t7 = T0i(1, 2);
+		t8 = T0i(1, 3);
+		t9 = T0i(2, 0);
+		t10 = T0i(2, 1);
+		t11 = T0i(2, 2);
+		t12 = T0i(2, 3);
+
+		VisualizeAlignedModels(0, i);
+
+		iPrevClusters += m_i;
+
+	}
+}
+
+void PSGM::VisualizeAlignedModels(int iRefModel, int iModel)
+{
+	//Set transform
+	vtkSmartPointer<vtkTransform> transform = vtkSmartPointer<vtkTransform>::New();
+	double T_M_S[16];
+	
+	T_M_S[0]= T0i(0, 0);
+	T_M_S[1]= T0i(0, 1);
+	T_M_S[2]= T0i(0, 2);
+	T_M_S[3]= T0i(0, 3);
+	T_M_S[4]= T0i(1, 0);
+	T_M_S[5]= T0i(1, 1);
+	T_M_S[6]= T0i(1, 2);
+	T_M_S[7]= T0i(1, 3);
+	T_M_S[8]= T0i(2, 0);
+	T_M_S[9] = T0i(2, 1);
+	T_M_S[10] = T0i(2, 2);
+	T_M_S[11] = T0i(2, 3);
+	T_M_S[12] = T0i(3, 0);
+	T_M_S[13] = T0i(3, 1);
+	T_M_S[14] = T0i(3, 2);
+	T_M_S[15] = T0i(3, 3);
+
+	transform->SetMatrix(T_M_S);
+
+	//Scaling Ref. PLY model to meters (if needed)
+	vtkSmartPointer<vtkTransform> transformScale = vtkSmartPointer<vtkTransform>::New();
+	//transformScale->Scale(0.001,0.001,0.001);
+	transformScale->Scale(1,1,1);
+	vtkSmartPointer<vtkTransformPolyDataFilter> transformFilterScale = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
+	transformFilterScale->SetInputData(vtkModelDB.at(iRefModel));	//Get model from DB
+	transformFilterScale->SetTransform(transformScale);
+	transformFilterScale->Update();
+
+	//Transform it
+	vtkSmartPointer<vtkTransformPolyDataFilter> transformFilter = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
+	transformFilter->SetInputData(transformFilterScale->GetOutput()); //PLY model
+	transformFilter->SetTransform(transform);
+	transformFilter->Update();
+
+	// Initialize VTK.
+	vtkSmartPointer<vtkRenderer> renderer = vtkSmartPointer<vtkRenderer>::New();
+	vtkSmartPointer<vtkRenderWindow> window = vtkSmartPointer<vtkRenderWindow>::New();
+	vtkSmartPointer<vtkRenderWindowInteractor> interactor = vtkSmartPointer<vtkRenderWindowInteractor>::New();
+	window->AddRenderer(renderer);
+	window->SetSize(800, 600);
+	interactor->SetRenderWindow(window);
+	vtkSmartPointer<vtkInteractorStyleTrackballCamera> style = vtkSmartPointer<vtkInteractorStyleTrackballCamera>::New();
+	interactor->SetInteractorStyle(style);
+	renderer->SetBackground(0.5294, 0.8078, 0.9803);
+
+	//Generate Ref. model polydata
+	vtkSmartPointer<vtkPolyData> modelPD = transformFilter->GetOutput();
+	//vtkSmartPointer<vtkPolyData> modelPD = transformFilterScale->GetOutput();
+	vtkSmartPointer<vtkPolyDataMapper> modelMapper = vtkSmartPointer<vtkPolyDataMapper>::New();
+	modelMapper->SetInputData(modelPD);
+	vtkSmartPointer<vtkActor> modelActor = vtkSmartPointer<vtkActor>::New();
+	modelActor->SetMapper(modelMapper);
+	modelActor->GetProperty()->SetColor(0, 1, 0);
+	renderer->AddActor(modelActor);
+
+
+	//Generate scene polydata
+	//Scaling PLY model to meters (if needed)
+	transformScale = vtkSmartPointer<vtkTransform>::New();
+	//transformScale->Scale(0.001,0.001,0.001);
+	transformScale->Scale(1,1,1);
+	transformFilterScale = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
+	transformFilterScale->SetInputData(vtkModelDB.at(iModel));	//Get model from DB
+	transformFilterScale->SetTransform(transformScale);
+	transformFilterScale->Update();
+
+
+	vtkSmartPointer<vtkPolyData> modelSPD = transformFilterScale->GetOutput();
+	vtkSmartPointer<vtkPolyDataMapper> modelSMapper = vtkSmartPointer<vtkPolyDataMapper>::New();
+	modelSMapper->SetInputData(modelSPD);
+	vtkSmartPointer<vtkActor> modelSActor = vtkSmartPointer<vtkActor>::New();
+	modelSActor->SetMapper(modelSMapper);
+	modelSActor->GetProperty()->SetColor(0, 0, 1);
+	renderer->AddActor(modelSActor);
+
+	//Start VTK
+	renderer->ResetCamera();
+	renderer->TwoSidedLightingOff();
+	window->Render();
+	interactor->Start();
+
 }

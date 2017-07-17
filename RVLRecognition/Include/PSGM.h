@@ -295,6 +295,9 @@ namespace RVL
 
 		float NNCost(int iCluster, vtkSmartPointer<vtkPolyData> sourcePD, vtkSmartPointer<vtkPolyData> targetPD, int similarityMeasure = 0); // Calculates cost based on sum of distances between scene segment points and their nearest neighbours in visible part of the matched model.
 		
+		void ObjectAlignment(); // Calculates transformation matrix to align object with a reference object (for classification)
+
+		void VisualizeAlignedModels(int iRefModel, int iModel);
 		//end Petra
 
 		void InitDisplay(
@@ -581,8 +584,8 @@ namespace RVL
 		SortIndex<float> *sortedMatches; //Petra
 		//Eigen::VectorXf E;
 		Eigen::MatrixXf t;
-		RECOG::CTISet CTIset;
-		RECOG::CTISet MCTIset;
+		//RECOG::CTISet CTIset;
+		//RECOG::CTISet MCTIset;
 		std::map<int, vtkSmartPointer<vtkPolyData>> vtkModelDB;
 		std::map<int, vtkSmartPointer<vtkPolyData>> segmentN_PD; //neighbourhood
 		unsigned short * depthImg; //Current scene depth image // Filko
@@ -599,6 +602,9 @@ namespace RVL
 		float dGnd;
 		int iGndObject;
 		float symmetryMatchThr;
+
+		//For alignment:
+		Eigen::MatrixXf T0i;
 
 
 	private:		
