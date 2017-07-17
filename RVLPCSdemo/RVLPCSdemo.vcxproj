@@ -121,7 +121,7 @@
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>RVLCore.lib;RVLPCS.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>RVLCore.lib;RVLPCS.lib;RVLPCLTools.lib;OpenNI2.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>..\x64\Debug;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Console</SubSystem>

@@ -153,6 +153,34 @@ void RVL::PrintMatrix(FILE *fp, double *A, int n, int m)
 	}
 }
 
+void RVL::GetFileNameAndPath(
+	char *fileNameWithPath,
+	char *&fileName,
+	char *&filePath)
+{
+	fileName = strrchr(fileNameWithPath, '\\') + 1;
+
+	int fileNameLength = (int)strlen(fileName);
+
+	int filePathLength = (int)strlen(fileNameWithPath) - fileNameLength;
+
+	if (filePath)
+	{
+		if (strlen(filePath) < filePathLength)
+		{
+			delete[] filePath;
+
+			filePath = new char[filePathLength + 1];
+		}
+	}
+	else
+		filePath = new char[filePathLength + 1];
+
+	memcpy(filePath, fileNameWithPath, filePathLength);
+
+	filePath[filePathLength] = '\0';
+}
+
 FileSequenceLoader::FileSequenceLoader()
 {
 	nFileNames = 0;

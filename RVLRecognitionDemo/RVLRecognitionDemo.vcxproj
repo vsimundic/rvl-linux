@@ -101,13 +101,13 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\RVLRecognition\Include;..\RVLPCSegment\Include;..\RVLPCLTools\Include;..\RVLCore\Include;..\RapidXML\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\RVLRecognition\Include;..\RVLPCSegment\Include;..\RVLPCLTools\Include;..\RVLCore\Include;..\RapidXML\include;..\RVLObjectDetection\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>..\x64\Debug;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>RVLCore.lib;RVLPCLTools.lib;RVLPCSegment.lib;RVLRecognition.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>RVLCore.lib;RVLPCLTools.lib;RVLPCSegment.lib;RVLObjectDetection.lib;RVLRecognition.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <HeapCommitSize>
       </HeapCommitSize>
       <StackReserveSize>
@@ -140,7 +140,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\RVLRecognition\Include;..\RVLPCSegment\Include;..\RVLPCLTools\Include;..\RVLCore\Include;..\RapidXML\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\RVLRecognition\Include;..\RVLPCSegment\Include;..\RVLPCLTools\Include;..\RVLCore\Include;..\RapidXML\include;..\RVLObjectDetection\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -148,7 +148,7 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <AdditionalLibraryDirectories>..\x64\Release;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>RVLCore.lib;RVLPCLTools.lib;RVLPCSegment.lib;RVLRecognition.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>RVLCore.lib;RVLPCLTools.lib;RVLPCSegment.lib;RVLObjectDetection.lib;RVLRecognition.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
