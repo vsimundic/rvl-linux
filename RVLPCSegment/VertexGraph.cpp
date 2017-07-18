@@ -27,6 +27,8 @@ VertexGraph::VertexGraph()
 	RVLQLIST_INIT(pGEdgeList);
 }
 
+//
+
 
 VertexGraph::~VertexGraph()
 {

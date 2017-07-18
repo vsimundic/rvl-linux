@@ -507,6 +507,10 @@ int main(int argc, char ** argv)
 			//recognition.RVLPSGInstanceMesh(nI, dI);
 
 			recognition.LoadModelDataBase(); //Vidovic
+			
+			//Alignment:
+			recognition.LoadModelMeshDB(modelSequenceFileName, false, 0.4);
+			recognition.ObjectAlignment();
 
 #ifdef RVLPSGM_ICP
 			recognition.LoadModelMeshDB(modelSequenceFileName, true, 0.4);
