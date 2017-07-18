@@ -47,6 +47,7 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 #define PSGM_MATCHES_SCORE_COMPARE
 //#define PSGM_LOAD_CTI_FROM_FILE
 //#define PSGM_RECOGNITION_VISUALIZE_SCENE
+//#define RVLRECOGNITION_DEMO_CLASS_ALIGNMENT
 
 #define RVLRECOGNITION_DEMO_FLAG_SAVE_PLY			0x00000001
 #define RVLRECOGNITION_DEMO_FLAG_3D_VISUALIZATION	0x00000002
@@ -508,9 +509,11 @@ int main(int argc, char ** argv)
 
 			recognition.LoadModelDataBase(); //Vidovic
 			
+#ifdef RVLRECOGNITION_DEMO_CLASS_ALIGNMENT
 			//Alignment:
 			recognition.LoadModelMeshDB(modelSequenceFileName, false, 0.4);
 			recognition.ObjectAlignment();
+#endif
 
 #ifdef RVLPSGM_ICP
 			recognition.LoadModelMeshDB(modelSequenceFileName, true, 0.4);

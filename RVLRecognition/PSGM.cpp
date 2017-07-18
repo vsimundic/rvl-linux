@@ -569,6 +569,7 @@ void PSGM::Interpret(
 		//Match scene MI to model MI
 		if (mode == RVLRECOGNITION_MODE_RECOGNITION)
 		{
+#ifndef RVLVERSION_170601
 			VertexGraph vertexGraph;
 
 			vertexGraph.idx = iScene;
@@ -588,6 +589,7 @@ void PSGM::Interpret(
 			vertexGraph.Save(fp);
 
 			fclose(fp);
+#endif
 
 #ifdef RVLVERSION_170601
 			Match();
