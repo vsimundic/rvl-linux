@@ -585,8 +585,6 @@ namespace RVL
 		SortIndex<float> *sortedMatches; //Petra
 		//Eigen::VectorXf E;
 		Eigen::MatrixXf t;
-		//RECOG::CTISet CTIset;
-		//RECOG::CTISet MCTIset;
 		std::map<int, vtkSmartPointer<vtkPolyData>> vtkModelDB;
 		std::map<int, vtkSmartPointer<vtkPolyData>> segmentN_PD; //neighbourhood
 		unsigned short * depthImg; //Current scene depth image // Filko
