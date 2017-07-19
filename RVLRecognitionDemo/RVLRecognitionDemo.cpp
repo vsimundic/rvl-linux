@@ -48,7 +48,7 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 //#define PSGM_LOAD_CTI_FROM_FILE
 //#define PSGM_RECOGNITION_VISUALIZE_SCENE
 #define RVLPSGM_TRANSPARENCY_AND_COLLISION
-#define RVLPSGM_RMSE_CALCULATION
+//#define RVLPSGM_RMSE_CALCULATION
 
 #define RVLRECOGNITION_DEMO_FLAG_SAVE_PLY			0x00000001
 //END VIDOVIC
@@ -577,7 +577,7 @@ int main(int argc, char ** argv)
 							depth.at<uint16_t>(y, x) = 10000; //in milimeters
 					}
 				}
-				cv::Mat elementE = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(9, 9));
+				cv::Mat elementE = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(17, 17));
 				cv::erode(depth, depth, elementE);
 				//Set PSGM depth
 				recognition.depthImg = (unsigned short*)depth.data;
@@ -717,15 +717,21 @@ int main(int argc, char ** argv)
 				//recognition.CalculateICPCost(PCLICP, PCLICPVariants::Point_to_plane, &kdtree);
 
 				GenerateSegmentNeighbourhood(&recognition, 0.1);
-				recognition.CalculateNNCost(&visualizer, PCLICP, PCLICPVariants::Point_to_plane);
+				//recognition.CalculateNNCost(&visualizer, PCLICP, PCLICPVariants::Point_to_plane);
+
+				//TEST RVLPSGM_MATCHCTI_MATCH_MATRIX
+				recognition.ICP(PCLICP, PCLICPVariants::Point_to_plane);
 
 #ifdef RVLPSGM_TRANSPARENCY_AND_COLLISION
 				//Transparency check
-				recognition.CreateScoreMatchMatrixICP();
+				//recognition.CreateScoreMatchMatrixICP();
+				recognition.CreateScoreMatchMatrixICP_TMP();
 				recognition.FilterHypothesesUsingTransparency(0.15, 10, true);
+				recognition.CreateScoreMatchMatrixICP_TMP(); //because of sorting - TEST
 
 				//Colision check
-				std::vector<int> noCollisionHypotheses = recognition.GetHypothesesCollisionConsensus(10);
+				recognition.noCollisionHypotheses.clear();
+				recognition.GetHypothesesCollisionConsensus(&recognition.noCollisionHypotheses, &recognition.scoreMatchMatrixICP, 10);
 
 				//Get transparency and collision consensus
 				recognition.GetTransparencyAndCollisionConsensus(&visualizer);
