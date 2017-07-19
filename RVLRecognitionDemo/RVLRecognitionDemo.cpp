@@ -752,6 +752,7 @@ int main(int argc, char ** argv)
 
 				recognition.Interpret(&mesh);
 
+				
 				//recognition.SaveMatches();
 
 #ifdef PSGM_RECOGNITION_VISUALIZE_SCENE
@@ -832,6 +833,8 @@ int main(int argc, char ** argv)
 				GenerateSegmentNeighbourhood(&recognition, 0.1);
 				//recognition.CalculateNNCost(&visualizer, PCLICP, PCLICPVariants::Point_to_plane);
 				
+				/*recognition.CreateScoreMatchMatrixICP();
+				recognition.GetSceneConsistancy(0.1, 15, 20, true);*/
 #ifdef RVLVERSION_170601
 				//evaluate ICP
 				recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, fpPoseError, fpnotFirstInfo, fpnotFirstPoseErr, 10, true);

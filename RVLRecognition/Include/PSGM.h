@@ -114,8 +114,8 @@ namespace RVL
 				// Petra
 				double cost_ICP; 
 				//float T_ICP[16]; //transformation between current and ICP pose
-				//float RICP_[9]; //transformation between current and ICP pose
-				//float tICP_[3]; //transformation between current and ICP pose
+				float RICP_[9]; //transformation between current and ICP pose
+				float tICP_[3]; //transformation between current and ICP pose
 				float RICP[9];		//final pose after ICP - Vidovic
 				float tICP[3];		//final pose after ICP - Vidovic
 				double cost_NN;
@@ -503,6 +503,10 @@ namespace RVL
 		void VisualizeConsensusHypotheses(Visualizer *pVisualizer); //Vidovic
 		void VisualizeGTMatch(Visualizer *pVisualizer); //Vidovic
 		int FindCTIMatchRank(int matchID, int iSegment); //Vidovic
+		std::vector<std::vector<int>> GetSegmentBBNeighbourhood(float dist, bool verbose = false);	//Filko
+		std::map<int,std::vector<int>> GetSceneConsistancy(float nDist = 0.1, float d1 = 10.0, float d2 = 0.01, bool verbose = false);	//Filko
+		int CheckHypothesesToSegmentEnvelopmentAndCollision(int hyp, int segment, float d1, float d2); //Filko
+		void CheckHypothesesToSegmentEnvelopmentAndCollision_DEBUG(int hyp, int segment, float d1, float d2); //Filko
 
 		void CreateDilatedDepthImage();
 
