@@ -48,6 +48,8 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 //#define PSGM_LOAD_CTI_FROM_FILE
 //#define PSGM_RECOGNITION_VISUALIZE_SCENE
 //#define RVLRECOGNITION_DEMO_CLASS_ALIGNMENT
+#define RVLPSGM_TRANSPARENCY_AND_COLLISION
+//#define RVLPSGM_RMSE_CALCULATION
 
 #define RVLRECOGNITION_DEMO_FLAG_SAVE_PLY			0x00000001
 #define RVLRECOGNITION_DEMO_FLAG_3D_VISUALIZATION	0x00000002
@@ -516,7 +518,7 @@ int main(int argc, char ** argv)
 #endif
 
 #ifdef RVLPSGM_ICP
-			recognition.LoadModelMeshDB(modelSequenceFileName, true, 0.4);
+			recognition.LoadModelMeshDB(modelSequenceFileName, &recognition.vtkModelDB, true, 0.4);
 #endif
 
 			Mesh mesh;
@@ -556,6 +558,8 @@ int main(int argc, char ** argv)
 
 			FILE *fpLog = fopen((resultsFolderName + "\\evaluationLog.txt").data(), "w");
 
+			FILE *fpRMSE = fopen((resultsFolderName + "\\RMSE.txt").data(), "w");
+
 			recognition.LoadCompleteSegmentGT(sceneSequence);
 
 			LARGE_INTEGER ctr1, ctr2, freq;
@@ -566,6 +570,7 @@ int main(int argc, char ** argv)
 				QueryPerformanceCounter((LARGE_INTEGER *)&ctr1);
 
 				printf("Scene %s...\n", filePath);
+
 
 				recognition.SetSceneFileName(filePath);
 				//recognition.InterpretCTIS(&mesh);
@@ -586,32 +591,32 @@ int main(int argc, char ** argv)
 				//mesh.LoadPolyDataFromPLY(filePath);
 				LoadMesh(&meshBuilder, filePath, &mesh, false);
 
-				////Generate scene depth
-				//double point[3];
-				//int u, v;
-				//cv::Mat depth(480, 640, CV_16UC1, cv::Scalar::all(0));
-				//for (int i = 0; i < mesh.pPolygonData->GetNumberOfPoints(); i++)
-				//{
-				//	mesh.pPolygonData->GetPoint(i, point);
-				//	if ((point[0] == 0) && (point[1] == 0) && (point[2] == 0))
-				//		continue;
-				//	v = floor(float(i) / 640);
-				//	u = i - v * 640;
-				//	depth.at<uint16_t>(v, u) = (uint16_t)(point[2] * 1000); //in milimeters
-				//}
-				////Postprocessing
-				//for (int y = 0; y < depth.rows; y++)
-				//{
-				//	for (int x = 0; x < depth.cols; x++)
-				//	{
-				//		if (depth.at<uint16_t>(y, x) == 0)
-				//			depth.at<uint16_t>(y, x) = 10000; //in milimeters
-				//	}
-				//}
-				//cv::Mat elementE = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(9, 9));
-				//cv::erode(depth, depth, elementE);
-				////Set PSGM depth
-				//recognition.depthImg = (unsigned short*)depth.data;
+				//Generate scene depth
+				double point[3];
+				int u, v;
+				cv::Mat depth(480, 640, CV_16UC1, cv::Scalar::all(0));
+				for (int i = 0; i < mesh.pPolygonData->GetNumberOfPoints(); i++)
+				{
+					mesh.pPolygonData->GetPoint(i, point);
+					if ((point[0] == 0) && (point[1] == 0) && (point[2] == 0))
+						continue;
+					v = floor(float(i) / 640);
+					u = i - v * 640;
+					depth.at<uint16_t>(v, u) = (uint16_t)(point[2] * 1000); //in milimeters
+				}
+				//Postprocessing
+				for (int y = 0; y < depth.rows; y++)
+				{
+					for (int x = 0; x < depth.cols; x++)
+					{
+						if (depth.at<uint16_t>(y, x) == 0)
+							depth.at<uint16_t>(y, x) = 10000; //in milimeters
+					}
+				}
+				cv::Mat elementE = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(17, 17));
+				cv::erode(depth, depth, elementE);
+				//Set PSGM depth
+				recognition.depthImg = (unsigned short*)depth.data;
 
 				/*cv::Mat depthShow(480, 640, CV_8UC1);
 				double minVal, maxVal;
@@ -776,7 +781,7 @@ int main(int argc, char ** argv)
 
 					cv::waitKey();
 				}
-#endif
+#endif	// #ifndef PSGM_LOAD_CTI_FROM_FILE
 				//Evaluate CTI match
 				//recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, 7);
 
@@ -825,20 +830,47 @@ int main(int argc, char ** argv)
 				//recognition.CalculateICPCost(PCLICP, PCLICPVariants::Point_to_plane, &kdtree);
 
 				GenerateSegmentNeighbourhood(&recognition, 0.1);
-				recognition.CalculateNNCost(&visualizer, PCLICP, PCLICPVariants::Point_to_plane);
+				//recognition.CalculateNNCost(&visualizer, PCLICP, PCLICPVariants::Point_to_plane);
 				
 #ifdef RVLVERSION_170601
 				//evaluate ICP
 				recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, fpPoseError, fpnotFirstInfo, fpnotFirstPoseErr, 10, true);
 #else
+				//TEST RVLPSGM_MATCHCTI_MATCH_MATRIX
+				recognition.ICP(PCLICP, PCLICPVariants::Point_to_plane);
+
+#ifdef RVLPSGM_TRANSPARENCY_AND_COLLISION
 				//Transparency check
-				recognition.CreateScoreMatchMatrixICP();
+				//recognition.CreateScoreMatchMatrixICP();
+				recognition.CreateScoreMatchMatrixICP_TMP();
 				recognition.FilterHypothesesUsingTransparency(0.15, 10, true);
+				recognition.CreateScoreMatchMatrixICP_TMP(); //because of sorting - TEST
+
+				//Colision check
+				recognition.noCollisionHypotheses.clear();
+				recognition.GetHypothesesCollisionConsensus(&recognition.noCollisionHypotheses, &recognition.scoreMatchMatrixICP, 10);
+
+				//Get transparency and collision consensus
+				recognition.GetTransparencyAndCollisionConsensus(&visualizer);
+
+				//Evaluate consesus matches
+				float precision, recall;
+				recognition.EvaluateConsensusMatches(precision, recall, true);
 #endif
 
-#else
-				//recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, fpPoseError, fpnotFirstInfo, fpnotFirstPoseErr, 7);
+#ifdef RVLPSGM_RMSE_CALCULATION
+				//Load models without decimation (used for calculatin RMSE)
+				recognition.LoadModelMeshDB(modelSequenceFileName, &recognition.vtkRMSEModelDB, false);
+
+				//Calculate RMSE
+				recognition.RMSE(fpRMSE, false);
 #endif
+
+#endif	// #ifndef RVLVERSION_170601
+
+#else	// #ifndef RVLPSGM_ICP
+				//recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, fpPoseError, fpnotFirstInfo, fpnotFirstPoseErr, 7);
+#endif	// #ifndef RVLPSGM_ICP
 				//recognition.AddModelsToVisualizer(&visualizer, true, PCLICP, PCLICPVariants::Point_to_plane, NULL/*&kdtree*/);
 				QueryPerformanceCounter((LARGE_INTEGER *)&ctr2_);
 				QueryPerformanceFrequency((LARGE_INTEGER *)&freq_);
@@ -864,6 +896,7 @@ int main(int argc, char ** argv)
 			fclose(fpHypothesisEvaluation);
 			fclose(fpLog);
 			fclose(fpPoseError);
+			fclose(fpRMSE);
 
 			//END Vidovic
 		}	// if (recognition.mode == RVLRECOGNITION_MODE_RECOGNITION)

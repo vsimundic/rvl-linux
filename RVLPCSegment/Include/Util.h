@@ -384,7 +384,7 @@ namespace RVL
 					}
 
 					iBin++;
-				}
+}
 				else
 				{
 					iSrcBin = iBin;
