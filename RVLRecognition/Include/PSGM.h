@@ -294,6 +294,10 @@ namespace RVL
 		void CalculateNNCost(Visualizer *pVisualizer, RVL::PSGM::ICPfunction ICPFunction, int ICPvariant); // For each pair of scene segment and visible part of the matched model, calls NNCost.
 
 		float NNCost(int iCluster, vtkSmartPointer<vtkPolyData> sourcePD, vtkSmartPointer<vtkPolyData> targetPD, int similarityMeasure = 0); // Calculates cost based on sum of distances between scene segment points and their nearest neighbours in visible part of the matched model.
+		
+		void ObjectAlignment(); // Calculates transformation matrix to align object with a reference object (for classification)
+
+		void VisualizeAlignedModels(int iRefModel, int iModel);
 		//end Petra
 
 		void InitDisplay(
@@ -472,6 +476,7 @@ namespace RVL
 		float GetObjectTransparencyRatio(vtkSmartPointer<vtkPolyData> object, unsigned short *depthImg, float depthThr, int width, int height, float c_fu, float c_fv, float c_uc, float c_vc); //Filko
 		void FilterHypothesesUsingTransparency(float tranThr, float depthThr, bool verbose = false); //Filko
 		vtkSmartPointer<vtkPolyData> GetPoseCorrectedVisibleModel(int iMatch); //Filko
+		void CreateDilatedDepthImage();
 
 	private:
 		void Clusters();
@@ -578,10 +583,8 @@ namespace RVL
 		Eigen::MatrixXf nT; //Petra
 		RECOG::PSGM_::SegmentMatch *SMatch; //Petra
 		SortIndex<float> *sortedMatches; //Petra
-		Eigen::VectorXf E;
+		//Eigen::VectorXf E;
 		Eigen::MatrixXf t;
-		RECOG::CTISet CTIset;
-		RECOG::CTISet MCTIset;
 		std::map<int, vtkSmartPointer<vtkPolyData>> vtkModelDB;
 		std::map<int, vtkSmartPointer<vtkPolyData>> segmentN_PD; //neighbourhood
 		unsigned short * depthImg; //Current scene depth image // Filko
@@ -590,10 +593,18 @@ namespace RVL
 		//Petra & Ivan
 		double *icpTMatrix;
 
+		//For InstanceMesh:
+		Eigen::MatrixXf P; //points list
+		Eigen::MatrixXi F; //faces list (polygones)
+		Eigen::MatrixXi Edges; //Edges
 		float NGnd[3];
 		float dGnd;
 		int iGndObject;
 		float symmetryMatchThr;
+
+		//For alignment:
+		Eigen::MatrixXf T0i;
+
 
 	private:		
 		RECOG::PSGM_::Cluster *clusterMem;
@@ -629,10 +640,6 @@ namespace RVL
 		int CTIIdx; //Vidovic
 		int nBestMatches; //n best matches for each scene segment
 		int debug1, debug2;
-		//For InstanceMesh:
-		Eigen::MatrixXf P; //points list
-		Eigen::MatrixXi F; //faces list (polygones)
-		Eigen::MatrixXi Edges; //Edges
 	};
 
 	

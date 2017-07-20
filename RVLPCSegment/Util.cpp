@@ -520,6 +520,9 @@ bool ECCVGTLoader::Init(char *filePath, char *GTFolderPath, char *modelsID)
 
 bool ECCVGTLoader::Init(FileSequenceLoader sceneSequence, char *GTFolderPath, char *modelsID)
 {
+	if (GTFolderPath == NULL)
+		return false;
+
 	nScenes = sceneSequence.nFileNames;
 
 	GT.Element = new Array<GTInstance>[nScenes];
@@ -542,12 +545,12 @@ bool ECCVGTLoader::Init(FileSequenceLoader sceneSequence, char *GTFolderPath, ch
 		CreateGTFilePath(filePath, GTFilePath);
 
 		if (!LoadModels(GTFilePath))
-			return 0;
+			return false;
 
 		iScene++;
 	}
 
-	return 1;
+	return true;
 }
 
 bool ECCVGTLoader::LoadModels(char *filePath)

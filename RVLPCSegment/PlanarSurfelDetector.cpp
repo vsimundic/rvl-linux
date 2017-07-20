@@ -423,10 +423,71 @@ void PlanarSurfelDetector::Segment(
 	Mesh *pMesh,
 	SurfelGraph *pSurfels)
 {
-	Point *Pt = pMesh->NodeArray.Element;
-	 
 	int nPts = pMesh->NodeArray.n;
 
+	memset(pSurfels->surfelMap, 0xff, nPts * sizeof(int));
+
+	memset(pSurfels->edgeMap, 0xff, nPts * sizeof(int));
+
+	pSurfels->NodeArray.n = 0;
+
+	int nSEdges = 0;
+
+	QList<SURFEL::Edge> SEdgeList;
+
+	QList<SURFEL::Edge> *pSEdgeList_ = &SEdgeList;
+
+#ifndef RVLVERSION_170601
+	// Detect boundaries.
+
+	Boundaries(pMesh, pSurfels);
+
+	// Detect edge features.
+
+	EdgeFetures(pMesh, pSurfels, &SEdgeList, nSEdges);
+
+	// Memorize occlusion edge points and set their ID in surfelMap to 0 in order to exclude them from surfel detection.
+
+	Array<Pair<int, int>> iOcclusionEdgePtArray;
+
+	iOcclusionEdgePtArray.Element = new Pair<int, int>[pMesh->NodeArray.n];
+	iOcclusionEdgePtArray.n = 0;
+
+	int iPointEdge;
+	int iPt;
+	MeshEdgePtr *pEdgePtr;
+
+	QLIST::Entry<Array<MeshEdgePtr *>> *pBoundary = pSurfels->BoundaryList.pFirst;
+
+	while (pBoundary)
+	{
+		for (iPointEdge = 0; iPointEdge < pBoundary->data.n; iPointEdge++)
+		{
+			pEdgePtr = pBoundary->data.Element[iPointEdge];
+
+			iPt = RVLPCSEGMENT_GRAPH_GET_NODE(pEdgePtr);
+
+			iOcclusionEdgePtArray.Element[iOcclusionEdgePtArray.n].a = iPt;
+			iOcclusionEdgePtArray.Element[iOcclusionEdgePtArray.n].b = pSurfels->surfelMap[iPt];
+			iOcclusionEdgePtArray.n++;
+			pSurfels->surfelMap[iPt] = 0;
+		}
+
+		pBoundary = pBoundary->pNext;
+	}
+
+	//for (iPt = 0; iPt < pMesh->NodeArray.n; iPt++)
+	//	if (pSurfels->surfelMap[iPt] < -1)
+	//	{
+	//		iOcclusionEdgePtArray.Element[iOcclusionEdgePtArray.n].a = iPt;
+	//		iOcclusionEdgePtArray.Element[iOcclusionEdgePtArray.n].b = pSurfels->surfelMap[iPt];
+	//		iOcclusionEdgePtArray.n++;
+	//		pSurfels->surfelMap[iPt] = 0;
+	//	}
+#endif
+
+	Point *Pt = pMesh->NodeArray.Element;
+	 
 	// Randomize vertex indices
 
 	Array<int> RandPtIdxArray;
@@ -437,19 +498,15 @@ void PlanarSurfelDetector::Segment(
 
 	// Allocate memory and initialize arrays.
 
-	memset(pSurfels->surfelMap, 0xff, nPts * sizeof(int));
-
-	memset(pSurfels->edgeMap, 0xff, nPts * sizeof(int));
-
 	int *regionGrowingBuffer = new int[nPts];
 
 	regionGrowingData.buffer = regionGrowingBuffer;
 
 	InitPlanarRegionGrowing(pMesh, pSurfels);
 
-	int iSurfel = 0;
+	int iSurfel = pSurfels->NodeArray.n;
 
-	Surfel *pSurfel = pSurfels->NodeArray.Element;
+	Surfel *pSurfel = pSurfels->NodeArray.Element + iSurfel;
 
 	int i;
 	int iPtSeed;
@@ -531,6 +588,13 @@ void PlanarSurfelDetector::Segment(
 	//	pPtIdx++;
 	//}
 	
+#ifndef RVLVERSION_170601
+	// Restore occlusion edges.
+
+	for (i = 0; i < iOcclusionEdgePtArray.n; i++)
+		pSurfels->surfelMap[iOcclusionEdgePtArray.Element[i].a] = iOcclusionEdgePtArray.Element[i].b;
+#endif
+	
 	// Initialize buffers for determining of surfel neighbors, boundaries and sizes.
 
 	pSurfels->InitGetNeighborsBoundaryAndSize();
@@ -552,12 +616,6 @@ void PlanarSurfelDetector::Segment(
 	MeshEdgePtr **pNewBoundaryElement = pSurfels->surfelBndMem;
 	Array<MeshEdgePtr *> *pNewBoundary = pSurfels->surfelBndMem2;
 
-	int nSEdges = 0;
-
-	QList<SURFEL::Edge> SEdgeList;
-
-	QList<SURFEL::Edge> *pSEdgeList_ = &SEdgeList;
-
 	RVLQLIST_INIT(pSEdgeList_);
 
 	pNewBoundaryElement = pSurfels->surfelBndMem;
@@ -569,6 +627,10 @@ void PlanarSurfelDetector::Segment(
 		//if (pSurfel->size >= minSurfelSize)
 		if (pSurfel->size > 1)
 		{
+#ifndef RVLVERSION_170601
+			//if (!pSurfel->bEdge)
+#endif
+			{
 			pPtList = &(pSurfel->PtList);
 
 			pSurfel->BoundaryArray.Element = pNewBoundary;
@@ -576,11 +638,13 @@ void PlanarSurfelDetector::Segment(
 			pMesh->Boundary(pPtList, pSurfels->surfelMap, pSurfel->BoundaryArray, pNewBoundaryElement, pSurfels->edgeMarkMap);
 
 			pNewBoundary += pSurfel->BoundaryArray.n;
+			}
 
 			GetNeighbors(pMesh, pSurfels, iSurfel, &SEdgeList, nSEdges);
 		}
 	}
 
+#ifdef RVLVERSION_170601
 	// Detect boundaries.
 
 	Boundaries(pMesh, pSurfels);
@@ -588,6 +652,7 @@ void PlanarSurfelDetector::Segment(
 	// Detect edge features.
 
 	EdgeFetures(pMesh, pSurfels, &SEdgeList, nSEdges);
+#endif
 
 	// Create surfel edge array.
 
@@ -3605,6 +3670,10 @@ void PlanarSurfelDetector::DefinePolygon(
 
 		iSurfel = pNeighbor->Idx;
 
+		pSurfel = pSurfels->NodeArray.Element + iSurfel;
+
+		if (!pSurfel->bEdge)
+		{
 		// Define boundary between iSurfel and iSurfel_.
 
 		DefineBoundary(pMesh, pSurfels, data, iSurfel, iSurfel_);
@@ -3641,6 +3710,7 @@ void PlanarSurfelDetector::DefinePolygon(
 				int debug = 0;
 		}
 #endif
+		}
 
 		// Clear the seed points from the seed point list of iSurfel.
 
@@ -4373,7 +4443,7 @@ void PlanarSurfelDetector::Boundaries(
 	int iPt, iPt_, iPt__;
 	QLIST::Entry<Array<MeshEdgePtr *>> *pBoundary;
 	Point *pPt, *pPt_, *pPt__;
-	MeshEdgePtr *pEdgePtr;
+	MeshEdgePtr *pEdgePtr, *pEdgePtr_;
 	int u, v;
 	int u0, v0;
 	//int uMin_, uMax_, vMin_, vMax_;
@@ -4415,6 +4485,17 @@ void PlanarSurfelDetector::Boundaries(
 					pSurfels->edgeMap[iPt_] = 0;
 
 					pEdgePtr = pPt_->EdgeList.pFirst;
+
+//#ifndef RVLVERSION_170601
+//					pEdgePtr_ = pEdgePtr;
+//
+//					while (pEdgePtr_)
+//					{
+//						pEdgePtr = pEdgePtr_;
+//
+//						pEdgePtr_ = pEdgePtr_->pNext;
+//					}
+//#endif
 
 					*(ppEdgePtr++) = pEdgePtr;
 
@@ -4837,6 +4918,8 @@ int PlanarSurfelDetector::CreateEdgeFeatures(
 	int nTmp;
 	int iSurfel;
 	Surfel *pSurfel;
+	QList<QLIST::Index2> *pPtList, *pPtList_;
+	QLIST::Index2 *pPtIdx;
 
 	while (pSegmentEndpoint2)
 	{
@@ -5023,7 +5106,7 @@ int PlanarSurfelDetector::CreateEdgeFeatures(
 
 				pEdgeFeature->physicalSize = l;
 
-				QList<QLIST::Index2> *pPtList = &(pEdgeFeature->PtList);
+				pPtList = &(pEdgeFeature->PtList);
 
 				RVLQLIST_INIT(pPtList);
 
@@ -5034,6 +5117,7 @@ int PlanarSurfelDetector::CreateEdgeFeatures(
 
 				RVLQLIST_INIT(pSEdgeList_);
 
+#ifdef RVLVERSION_170601
 				iPointEdge = pSegmentEndpoint1->Idx;
 
 				while (iPointEdge != pSegmentEndpoint2->Idx)
@@ -5109,6 +5193,48 @@ int PlanarSurfelDetector::CreateEdgeFeatures(
 				}	
 
 				pEdgeFeature->size = pEdgePtArray->n * pSurfels->edgeDepth;
+#else
+				pEdgeFeature->size = 0;
+
+				iPointEdge = pSegmentEndpoint1->Idx;
+
+				while (iPointEdge != pSegmentEndpoint2->Idx)
+				{
+					pEdgePtr = pBoundary->Element[iPointEdge];
+
+					iPt = RVLPCSEGMENT_GRAPH_GET_NODE(pEdgePtr);
+
+					pPtIdx = pSurfels->PtMem + iPt;
+
+					iSurfel = pSurfels->surfelMap[iPt];
+
+					pSurfels->surfelMap[iPt] = iNewFeature_;
+
+					if (iSurfel >= 0)
+					{
+						pSurfel = pSurfels->NodeArray.Element + iSurfel;
+
+						pPtList_ = &(pSurfel->PtList);
+
+						RVLQLIST_MOVE_ENTRY2(pPtList_, pPtList, pPtIdx, QLIST::Index2);
+
+						pSurfel->size--;
+					}
+					else
+					{
+						pPtIdx->Idx = iPt;
+
+						RVLQLIST_ADD_ENTRY2(pPtList, pPtIdx);
+					}
+
+
+					pEdgeFeature->size++;
+
+					iPointEdge = (iPointEdge + 1) % pBoundary->n;
+				}
+
+				pEdgeFeature->size *= pSurfels->edgeDepth;
+#endif
 
 				// Compute other edge feature parameters.
 
@@ -5142,7 +5268,11 @@ int PlanarSurfelDetector::CreateEdgeFeatures(
 					if (iPt / 640 == 460)
 						int debug = 0;
 
+#ifdef RVLVERSION_170601
 					pSurfels->edgeMap[iPt] = -nOcclusionEdges;
+#else
+					pSurfels->surfelMap[iPt] = -nOcclusionEdges;
+#endif
 
 					iPointEdge = (iPointEdge + 1) % pBoundary->n;
 				}
@@ -5736,19 +5866,22 @@ int PlanarSurfelDetector::GetClosestNeighbor(
 
 		pSurfel_ = pSurfels->NodeArray.Element + iSurfel_;
 
+		if (!pSurfel_->bEdge)
+		{
 #ifdef RVLPLANARSURFELDETECTOR_JOIN_SMALL_SURFELS_ONLY_TO_LARGE_NEIGHBORS
 		if (pSurfel_->size >= minSurfelSize)
 #endif
 		{
-		dist = RVLDOTPRODUCT3(pSurfel_->N, pSurfel->P) - pSurfel_->d;
+			dist = RVLDOTPRODUCT3(pSurfel_->N, pSurfel->P) - pSurfel_->d;
 
-		dist = RVLABS(dist);
+			dist = RVLABS(dist);
 
-		if (iClosestNeighbor < 0 || dist < minDist)
-		{
-			iClosestNeighbor = iSurfel_;
+			if (iClosestNeighbor < 0 || dist < minDist)
+			{
+				iClosestNeighbor = iSurfel_;
 
-			minDist = dist;
+				minDist = dist;
+			}
 		}
 		}
 
@@ -5780,8 +5913,11 @@ void PlanarSurfelDetector::JoinSmallSurfelsToClosestNeighbors(
 
 	for (iSurfel = 0; iSurfel < pSurfels->NodeArray.n; iSurfel++, pSurfel++)
 	{
-		if (iSurfel == 518)
-			int debug = 0;
+		if (pSurfel->bEdge)
+			continue;
+
+		//if (iSurfel == 518)
+		//	int debug = 0;
 
 		if (pSurfel->size > 0 && pSurfel->size < minSurfelSize)
 		{
