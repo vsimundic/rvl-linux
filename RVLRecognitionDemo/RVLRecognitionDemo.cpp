@@ -47,8 +47,10 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 #define PSGM_MATCHES_SCORE_COMPARE
 //#define PSGM_LOAD_CTI_FROM_FILE
 //#define PSGM_RECOGNITION_VISUALIZE_SCENE
+//#define RVLRECOGNITION_DEMO_CLASS_ALIGNMENT
 
 #define RVLRECOGNITION_DEMO_FLAG_SAVE_PLY			0x00000001
+#define RVLRECOGNITION_DEMO_FLAG_3D_VISUALIZATION	0x00000002
 //END VIDOVIC
 
 using namespace RVL;
@@ -67,7 +69,7 @@ void CreateParamList(
 	char **pSegmentGTFileName,	//Vidovic
 	char **pResultsFolder,
 	DWORD &method,
-	DWORD &flags //VIDOVIC
+	DWORD &flags
 	)
 {
 	pParamList->m_pMem = pMem;
@@ -88,6 +90,8 @@ void CreateParamList(
 	pParamList->AddID(pParamData, "RF", RVLRECOGNITION_METHOD_RF); //VIDOVIC
 	pParamData = pParamList->AddParam("Save PLY", RVLPARAM_TYPE_ID, &flags); //VIDOVIC
 	pParamList->AddID(pParamData, "yes", RVLRECOGNITION_DEMO_FLAG_SAVE_PLY); //VIDOVIC
+	pParamData = pParamList->AddParam("3D Visualization", RVLPARAM_TYPE_ID, &flags);
+	pParamList->AddID(pParamData, "yes", RVLRECOGNITION_DEMO_FLAG_3D_VISUALIZATION);
 }
 
 void GenerateSegmentNeighbourhood(PSGM * psgm, double radius)
@@ -283,12 +287,6 @@ int main(int argc, char ** argv)
 
 	ParamList.LoadParams(cfgFileName);
 
-	if (segmentGTFileName == NULL)
-	{
-		segmentGTFileName = new char[200];
-		segmentGTFileName = "C:\\RVL\\segmentGT.txt";
-	}
-
 	// Create mesh builder.
 
 	PCLMeshBuilder meshBuilder;
@@ -303,6 +301,38 @@ int main(int argc, char ** argv)
 	pcl::PointCloud<pcl::PointXYZRGBA>::Ptr PC(new pcl::PointCloud<pcl::PointXYZRGBA>(w, h));
 
 	meshBuilder.PC = PC;
+
+	if (flags & RVLRECOGNITION_DEMO_FLAG_SAVE_PLY)
+	{
+		Mesh mesh;
+
+		FileSequenceLoader sceneSequence;
+		char filePath[200];
+
+		sceneSequence.Init(sceneSequenceFileName);
+
+		while (sceneSequence.GetNextPath(filePath))
+			LoadMesh(&meshBuilder, filePath, &mesh, true);
+
+		if (sceneMeshFileName)
+			delete[] sceneMeshFileName;
+
+		if (sceneSequenceFileName)
+			delete[] sceneSequenceFileName;
+
+		if (modelSequenceFileName)
+			delete[] modelSequenceFileName;
+
+		return 0;
+	}
+
+	// Create segment GT file name.
+
+	if (segmentGTFileName == NULL)
+	{
+		segmentGTFileName = new char[200];
+		segmentGTFileName = "C:\\RVL\\segmentGT.txt";
+	}
 
 	// Initialize surfel detection
 
@@ -479,9 +509,11 @@ int main(int argc, char ** argv)
 
 			recognition.LoadModelDataBase(); //Vidovic
 			
+#ifdef RVLRECOGNITION_DEMO_CLASS_ALIGNMENT
 			//Alignment:
 			recognition.LoadModelMeshDB(modelSequenceFileName, false, 0.4);
 			recognition.ObjectAlignment();
+#endif
 
 #ifdef RVLPSGM_ICP
 			recognition.LoadModelMeshDB(modelSequenceFileName, true, 0.4);
@@ -554,32 +586,32 @@ int main(int argc, char ** argv)
 				//mesh.LoadPolyDataFromPLY(filePath);
 				LoadMesh(&meshBuilder, filePath, &mesh, false);
 
-				//Generate scene depth
-				double point[3];
-				int u, v;
-				cv::Mat depth(480, 640, CV_16UC1, cv::Scalar::all(0));
-				for (int i = 0; i < mesh.pPolygonData->GetNumberOfPoints(); i++)
-				{
-					mesh.pPolygonData->GetPoint(i, point);
-					if ((point[0] == 0) && (point[1] == 0) && (point[2] == 0))
-						continue;
-					v = floor(float(i) / 640);
-					u = i - v * 640;
-					depth.at<uint16_t>(v, u) = (uint16_t)(point[2] * 1000); //in milimeters
-				}
-				//Postprocessing
-				for (int y = 0; y < depth.rows; y++)
-				{
-					for (int x = 0; x < depth.cols; x++)
-					{
-						if (depth.at<uint16_t>(y, x) == 0)
-							depth.at<uint16_t>(y, x) = 10000; //in milimeters
-					}
-				}
-				cv::Mat elementE = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(9, 9));
-				cv::erode(depth, depth, elementE);
-				//Set PSGM depth
-				recognition.depthImg = (unsigned short*)depth.data;
+				////Generate scene depth
+				//double point[3];
+				//int u, v;
+				//cv::Mat depth(480, 640, CV_16UC1, cv::Scalar::all(0));
+				//for (int i = 0; i < mesh.pPolygonData->GetNumberOfPoints(); i++)
+				//{
+				//	mesh.pPolygonData->GetPoint(i, point);
+				//	if ((point[0] == 0) && (point[1] == 0) && (point[2] == 0))
+				//		continue;
+				//	v = floor(float(i) / 640);
+				//	u = i - v * 640;
+				//	depth.at<uint16_t>(v, u) = (uint16_t)(point[2] * 1000); //in milimeters
+				//}
+				////Postprocessing
+				//for (int y = 0; y < depth.rows; y++)
+				//{
+				//	for (int x = 0; x < depth.cols; x++)
+				//	{
+				//		if (depth.at<uint16_t>(y, x) == 0)
+				//			depth.at<uint16_t>(y, x) = 10000; //in milimeters
+				//	}
+				//}
+				//cv::Mat elementE = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(9, 9));
+				//cv::erode(depth, depth, elementE);
+				////Set PSGM depth
+				//recognition.depthImg = (unsigned short*)depth.data;
 
 				/*cv::Mat depthShow(480, 640, CV_8UC1);
 				double minVal, maxVal;
@@ -711,8 +743,6 @@ int main(int argc, char ** argv)
 				////interactor->Start();
 				////
 
-
-
 				mem.Clear();
 
 				recognition.Interpret(&mesh);
@@ -728,6 +758,24 @@ int main(int argc, char ** argv)
 
 				visualizer.renderer->RemoveAllViewProps();
 #endif
+				if (recognition.problem == RVLRECOGNITION_PROBLEM_CLASSIFICATION)
+				{
+					// Save the segmentation results to a file.
+
+					char *objectMapFileName = RVLCreateFileName(filePath, ".ply", -1, ".objmap.png");
+
+					cv::Mat objectMask(recognition.pMesh->height, recognition.pMesh->width, CV_8UC1);
+
+					recognition.pObjects->ObjectMapMask(&objectMask);
+
+					cv::imshow("Object mask", objectMask);
+
+					cv::imwrite(objectMapFileName, objectMask);
+
+					delete[] objectMapFileName;
+
+					cv::waitKey();
+				}
 #endif
 				//Evaluate CTI match
 				//recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, 7);
@@ -737,10 +785,13 @@ int main(int argc, char ** argv)
 				//mesh.LoadPolyDataFromPLY(filePath);
 				//LoadMesh(&meshBuilder, filePath, &mesh, false);
 
-				surfels.NodeColors(SelectionColor);				
-				visualizer.renderer->RemoveAllViewProps();
-				recognition.InitDisplay(&visualizer, &mesh, SelectionColor);
-				recognition.Display();
+				if (flags & RVLRECOGNITION_DEMO_FLAG_3D_VISUALIZATION)
+				{
+					surfels.NodeColors(SelectionColor);
+					visualizer.renderer->RemoveAllViewProps();
+					recognition.InitDisplay(&visualizer, &mesh, SelectionColor);
+					recognition.Display();
+				}
 
 				////NEW FILKO - TEST COLLISION CONSENSUS
 				//std::vector<int> conHyp = recognition.GetHypothesesCollisionConsensus(20);
@@ -799,9 +850,9 @@ int main(int argc, char ** argv)
 				float timevalue = (ctr2.QuadPart - ctr1.QuadPart) * 1000.0 / freq.QuadPart;
 				std::cout << "Ukupno vrijeme: " << timevalue << std::endl;
 				std::cout << "ICP vrijeme: " << timevalueICP << std::endl;
-				visualizer.Run();
 
-
+				if (flags & RVLRECOGNITION_DEMO_FLAG_3D_VISUALIZATION)
+					visualizer.Run();
 			}
 
 			RVL_DELETE_ARRAY(CTIFileName);

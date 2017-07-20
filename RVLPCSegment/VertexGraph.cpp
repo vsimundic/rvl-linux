@@ -21,6 +21,10 @@ VertexGraph::VertexGraph()
 	EdgeArray.Element = NULL;
 	EdgePtrMem = NULL;
 	iVertexClusterMem = NULL;
+	G.NodeArray.Element = NULL;
+	nGEdges = 0;
+	QList<GRAPH::Edge> *pGEdgeList = &GEdgeList;
+	RVLQLIST_INIT(pGEdgeList);
 }
 
 //
@@ -32,6 +36,7 @@ VertexGraph::~VertexGraph()
 	RVL_DELETE_ARRAY(EdgeArray.Element);
 	RVL_DELETE_ARRAY(EdgePtrMem);
 	RVL_DELETE_ARRAY(iVertexClusterMem);
+	RVL_DELETE_ARRAY(G.NodeArray.Element);
 }
 
 void VertexGraph::Create(SurfelGraph *pSurfels_)
@@ -48,11 +53,11 @@ void VertexGraph::Create(SurfelGraph *pSurfels_)
 
 	int iVertex, iVertex_;
 	QList<GRAPH::EdgePtr2<VertexEdge>> *pEdgeList;
-	int i;
-	int iSurfel;
-	Surfel *pSurfel;
-	QList<QLIST::Index> *pVertexList;
-	QLIST::Index *pVertexIdx;
+	//int i;
+	//int iSurfel;
+	//Surfel *pSurfel;
+	//QList<QLIST::Index> *pVertexList;
+	//QLIST::Index *pVertexIdx;
 	Vertex *pVertex_;
 
 	for (iVertex = 0; iVertex < pSurfels->vertexArray.n; iVertex++, pVertex++)
@@ -95,13 +100,19 @@ void VertexGraph::Create(SurfelGraph *pSurfels_)
 		{
 			iVertex_ = RVLPCSEGMENT_GRAPH_GET_OPPOSITE_NODE(pEdgePtr);
 
-			pEdge = ConnectNodes<SURFEL::Vertex, SURFEL::VertexEdge, GRAPH::EdgePtr2<SURFEL::VertexEdge>>(iVertex, iVertex_, NodeArray, pMem);
+			if (iVertex_ > iVertex)
+			{
+				pEdge = ConnectNodes<SURFEL::Vertex, SURFEL::VertexEdge, GRAPH::EdgePtr2<SURFEL::VertexEdge>>(iVertex, iVertex_, NodeArray, pMem);
 
-			RVLQLIST_ADD_ENTRY(pEdgeList_, pEdge);
+				RVLQLIST_ADD_ENTRY(pEdgeList_, pEdge);
 
-			//RVLCOPY3VECTOR(pSurfel->N, pEdge->N);
+				pEdge->iSurfel[0] = pEdgePtr->pEdge->iSurfel[0];
+				pEdge->iSurfel[1] = pEdgePtr->pEdge->iSurfel[1];
 
-			nEdges++;
+				//RVLCOPY3VECTOR(pSurfel->N, pEdge->N);
+
+				nEdges++;
+			}
 
 			pEdgePtr = pEdgePtr->pNext;
 		}
@@ -356,6 +367,234 @@ void VertexGraph::Create(SurfelGraph *pSurfels_)
 #endif
 }
 
+//#ifdef NEVER		// New version
+
+void VertexGraph::Clustering()
+{
+	float normalNoiseDeg = 20.0f;	// deg
+
+	float normalNoise = normalNoiseDeg * DEG2RAD;
+
+	// Detect tangent vertices.
+
+	//float normalNoise_ = 0.99 * normalNoise;
+
+	float snqThr = sin(normalNoise);
+
+	int iVertex;
+	Vertex *pVertex;
+	float minsnq;
+	int i, j;
+	bool bTangent;
+	float *N, *Nh;
+
+	for (iVertex = 0; iVertex < NodeArray.n; iVertex++)
+	{
+		pVertex = NodeArray.Element + iVertex;
+
+		if (pVertex->normalHull.n < 3)
+			continue;
+
+		minsnq = pVertex->normalHull.Element[0].snq;
+
+		for (i = 1; i < pVertex->normalHull.n; i++)
+			if (pVertex->normalHull.Element[i].snq < minsnq)
+				minsnq = pVertex->normalHull.Element[i].snq;
+
+		if (minsnq < snqThr)
+			continue;
+
+		bTangent = false;
+
+		for (i = 0; i < pVertex->normalHull.n && !bTangent; i++)
+		{
+			Nh = pVertex->normalHull.Element[i].Nh;
+
+			for (j = 0; j < pVertex->normalHull.n - 2; j++)
+			{
+				N = pVertex->normalHull.Element[(i + 2 + j) % pVertex->normalHull.n].N;
+
+				if (RVLDOTPRODUCT3(Nh, N) < -snqThr)
+				{
+					bTangent = true;
+
+					break;
+				}
+			}
+		}
+
+		if (bTangent)
+			pVertex->type |= RVLSURFELVERTEX_TYPE_TANGENT;
+	}
+
+	// Create graph G.
+
+	G.NodeArray.Element = new GRAPH::Node[NodeArray.n];
+	G.NodeArray.n = NodeArray.n;
+
+	GRAPH::Node *pNode2;
+	QList<GRAPH::EdgePtr<GRAPH::Edge>> *pEdge2List;
+
+	for (iVertex = 0; iVertex < NodeArray.n; iVertex++)
+	{
+		pNode2 = G.NodeArray.Element + iVertex;
+
+		pNode2->idx = iVertex;
+
+		pEdge2List = &(pNode2->EdgeList);
+
+		RVLQLIST_INIT(pEdge2List);
+	}
+
+	VertexConnectRGData RGData2;	
+
+	RGData2.thr1 = sin(normalNoise);
+	RGData2.thr2 = cos(normalNoise);
+
+	RGData2.bVisited = new bool[NodeArray.n];
+
+	memset(RGData2.bVisited, 0, NodeArray.n * sizeof(bool));
+
+	RGData2.visitedNodeArray.Element = new int[NodeArray.n];
+
+	RGData2.pVertexGraph2 = &G;
+	RGData2.pMem = pMem;
+
+	nGEdges = 0;
+
+	QList<GRAPH::Edge> *pGEdgeList = &(GEdgeList);
+
+	RVLQLIST_INIT(pGEdgeList);
+
+	int *iNodeBuff = new int[NodeArray.n];
+
+	NormalHullElement *pNormaHullElement;
+	int *piNodeBuffEnd, *piNodeFetch, *piNodePut;
+
+	for (iVertex = 0; iVertex < NodeArray.n; iVertex++)
+	{
+		//if (iVertex == 276)
+		//	int debug = 0;
+
+		pVertex = NodeArray.Element + iVertex;
+
+		if (!(pVertex->type & RVLSURFELVERTEX_TYPE_TANGENT))
+			continue;
+
+		iNodeBuff[0] = iVertex;
+
+		RGData2.iRefVertex = iVertex;
+		RGData2.bVisited[iVertex] = true;
+
+		for (i = 0; i < pVertex->normalHull.n; i++)
+		{
+			pNormaHullElement = pVertex->normalHull.Element + i;
+
+			RGData2.Z = pNormaHullElement->Nh;
+
+			RGData2.X1 = pNormaHullElement->N;
+
+			pNormaHullElement = pVertex->normalHull.Element + (i + 1) % pVertex->normalHull.n;
+
+			RGData2.X2 = pNormaHullElement->N;
+
+			/// Only for debugging purpose!!!
+
+			//float V3Tmp[3];
+
+			//RVLCROSSPRODUCT3(RGData2.X2, RGData2.X1, V3Tmp);
+
+			//float fTmp;
+
+			//RVLNORM3(V3Tmp, fTmp);
+
+			//fTmp = RVLDOTPRODUCT3(RGData2.Z, pVertex->normalHull.Element[(i + pVertex->normalHull.n - 1) % pVertex->normalHull.n].N);
+
+			///
+
+			RVLCROSSPRODUCT3(RGData2.X1, RGData2.Z, RGData2.Y1);
+			RVLCROSSPRODUCT3(RGData2.Z, RGData2.X2, RGData2.Y2);
+
+			RGData2.visitedNodeArray.n = 0;
+
+			piNodeFetch = iNodeBuff;
+
+			piNodePut = iNodeBuff + 1;
+
+			piNodeBuffEnd = RegionGrowing<VertexGraph, SURFEL::Vertex, SURFEL::VertexEdge, GRAPH::EdgePtr2<SURFEL::VertexEdge>,
+				VertexConnectRGData, ConnectNodesRG2>(this, &RGData2, piNodeFetch, piNodePut);
+
+			for (j = 0; j < RGData2.visitedNodeArray.n; j++)
+				RGData2.bVisited[RGData2.visitedNodeArray.Element[j]] = false;
+		}
+
+		RGData2.bVisited[iVertex] = false;
+	}
+
+	delete[] iNodeBuff;
+	delete[] RGData2.bVisited;
+	delete[] RGData2.visitedNodeArray.Element;
+
+	//float X1[3];
+	//float Y1[3];
+	//float X2[3];
+	//float Y2[3];
+	//float Z[3];	
+	//CRVLMem *pMem;
+
+	// Create clusters by detecting connected subgraphs of G.
+
+	clusters.clear();
+
+	RVL_DELETE_ARRAY(iVertexClusterMem);
+
+	iVertexClusterMem = new int[NodeArray.n];
+
+	int *piVertex = iVertexClusterMem;
+
+	VertexClusterRGData3 RGData;
+
+	RGData.pVertexGraph = this;
+
+	VertexCluster cluster;
+	int *piVertexArrayEnd, *piVertexFetch, *piVertexPut;
+
+	for (iVertex = 0; iVertex < NodeArray.n; iVertex++)
+	{
+		pVertex = NodeArray.Element + iVertex;
+
+		if (pVertex->iCluster >= 0)
+			continue;
+
+		if ((pVertex->type & (RVLSURFELVERTEX_TYPE_REDUNDANT | RVLSURFELVERTEX_TYPE_TANGENT)) != RVLSURFELVERTEX_TYPE_TANGENT)
+			continue;
+
+		pVertex->iCluster = clusters.size();
+
+		cluster.iVertexArray.Element = piVertex;
+
+		piVertexFetch = piVertexPut = cluster.iVertexArray.Element;
+
+		*(piVertexPut++) = iVertex;
+
+		piVertexArrayEnd = RegionGrowing<Graph<GRAPH::Node, GRAPH::Edge, GRAPH::EdgePtr<GRAPH::Edge>>,
+			GRAPH::Node, GRAPH::Edge, GRAPH::EdgePtr<GRAPH::Edge>,
+			VertexClusterRGData3, ConnectNodesRG3>(&G, &RGData, piVertexFetch, piVertexPut);
+
+		cluster.iVertexArray.n = piVertexArrayEnd - cluster.iVertexArray.Element;
+
+		clusters.push_back(cluster);
+	}
+
+	// Free memory.
+
+	
+}
+
+//#endif
+
+#ifdef NEVER	// Old version.
+
 void VertexGraph::Clustering()
 {
 	clusters.clear();
@@ -406,9 +645,11 @@ void VertexGraph::Clustering()
 	delete[] RGData.nOwners;
 }
 
+#endif
+
 void VertexGraph::Save(FILE *fp)
 {
-	fprintf(fp, "%d\t%d\t%d\t0\t0\n", idx, NodeArray.n, nEdges);
+	fprintf(fp, "%d\t%d\t%d\t%d\t0\n", idx, NodeArray.n, nEdges, nGEdges);
 
 	Vertex *pVertex = NodeArray.Element;
 
@@ -425,11 +666,20 @@ void VertexGraph::Save(FILE *fp)
 
 		pEdge = pEdge->pNext;
 	}
+
+	GRAPH::Edge *pGEdge = GEdgeList.pFirst;
+
+	while (pGEdge)
+	{
+		fprintf(fp, "%d\t%d\t0\t0\t0\n", pGEdge->iVertex[0], pGEdge->iVertex[1]);
+
+		pGEdge = pGEdge->pNext;
+	}
 }
 
 bool VertexGraph::Load(FILE *fp)
 {
-	if (fscanf(fp, "%d\t%d\t%d\t0\t0\n", &idx, &NodeArray.n, &nEdges) < 3)
+	if (fscanf(fp, "%d\t%d\t%d\t%d\t0\n", &idx, &NodeArray.n, &nEdges, &nGEdges) < 4)
 		return false;
 
 	NodeArray.Element = new Vertex[NodeArray.n];
@@ -477,6 +727,21 @@ bool VertexGraph::Load(FILE *fp)
 		RVLCOPY3VECTOR(N, pEdge->N);
 	}
 
+	QList<GRAPH::Edge> *pGEdgeList = &GEdgeList;
+
+	RVLQLIST_INIT(pGEdgeList);
+
+	GRAPH::Edge *pGEdge;
+
+	for (iEdge = 0; iEdge < nGEdges; iEdge++)
+	{
+		fscanf(fp, "%d\t%d\t0\t0\t0\n", &iVertex, &iVertex_);
+
+		pGEdge = ConnectNodes<GRAPH::Node, GRAPH::Edge, GRAPH::EdgePtr<GRAPH::Edge>>(iVertex, iVertex_, G.NodeArray, pMem);
+
+		RVLQLIST_ADD_ENTRY(pGEdgeList, pGEdge);
+	}
+
 	return true;
 }
 
@@ -513,8 +778,8 @@ int SURFEL::ConnectNodesRG(
 	if (pVertex->iCluster >= 0)
 		return 0;
 
-	if (iVertex == 81 && iParentVertex == 119)
-		int debug = 0;
+	//if (iVertex == 81 && iParentVertex == 119)
+	//	int debug = 0;
 
 	//if (!(pData->mFlags[iVertex] & 0x01))
 	//	return 0;
@@ -533,11 +798,11 @@ int SURFEL::ConnectNodesRG(
 		pData->nOwners[iSurfel] = 1;
 	}	
 
-	int j = 0;
+	int nCommonSurfels = 0;
 
 	//bool bContinue = false;
 
-	Surfel *pSurfel;
+	//Surfel *pSurfel;
 	int iSurfel_[4];
 
 	for (i = 0; i < pVertex->iSurfelArray.n; i++)
@@ -546,7 +811,7 @@ int SURFEL::ConnectNodesRG(
 
 		if (pData->nOwners[iSurfel] > 0)
 		{
-			iSurfel_[j++] = iSurfel;
+			iSurfel_[nCommonSurfels++] = iSurfel;
 
 			pData->nOwners[iSurfel] = 2;
 
@@ -568,6 +833,13 @@ int SURFEL::ConnectNodesRG(
 			iSurfel_[3] = iSurfel;
 
 		pData->nOwners[iSurfel] = 0;
+	}
+
+	if (nCommonSurfels > 2)
+	{
+		pVertex->iCluster = pParentVertex->iCluster;
+
+		return 1;
 	}
 
 	//if (!bContinue)
@@ -596,4 +868,154 @@ int SURFEL::ConnectNodesRG(
 	}
 
 	return 0;
+}
+
+
+int SURFEL::ConnectNodesRG2(
+	int iVertex,
+	int iParentVertex,
+	VertexEdge *pEdge,
+	VertexGraph *pVertexGraph,
+	VertexConnectRGData *pData)
+{
+	Vertex *pVertex = pVertexGraph->NodeArray.Element + iVertex;
+
+	if (pData->bVisited[iVertex])
+		return 0;
+
+	int iSurfel1 = pEdge->iSurfel[0];
+
+	if (iSurfel1 < 0)
+		return 0;
+
+	int iSurfel2 = pEdge->iSurfel[1];
+
+	if (iSurfel2 < 0)
+		return 0;
+
+	float *N1 = pVertexGraph->pSurfels->NodeArray.Element[iSurfel1].N;
+	float *N2 = pVertexGraph->pSurfels->NodeArray.Element[iSurfel2].N;
+
+	if (RVLDOTPRODUCT3(N1, N2) > pData->thr2)
+		return 0;
+
+	pData->bVisited[iVertex] = true;
+
+	pData->visitedNodeArray.Element[pData->visitedNodeArray.n++] = iVertex;
+
+	int nCoplanar = 0;
+
+	bool bOpposite = false;
+
+	int i;
+	float x1, x2, y1, y2, z;
+	float *N;
+	float Np[3];
+	float V3Tmp[3];
+	float fTmp;
+	GRAPH::Edge *pEdge2;
+
+	for (i = 0; i < pVertex->normalHull.n; i++)
+	{
+		N = pVertex->normalHull.Element[i].N;
+
+		z = RVLDOTPRODUCT3(N, pData->Z);
+
+		if (z < -pData->thr1)
+			return 0;
+		else if (z <= pData->thr1)
+		{
+			//RVLSCALE3VECTOR(pData->Z, z, V3Tmp);
+
+			//RVLDIF3VECTORS(N, V3Tmp, Np);
+
+			//RVLNORM3(Np, fTmp);
+
+			//y1 = RVLDOTPRODUCT3(Np, pData->Y1);
+
+			//if (y1 < 0.0f)
+			//{
+			//	x1 = RVLDOTPRODUCT3(Np, pData->X1);
+
+			//	if (x1 >= pData->thr2)
+			//	{
+			//		nCoplanar++;
+
+			//		continue;
+			//	}
+			//	else
+			//		return 0;
+			//}
+
+			//y2 = RVLDOTPRODUCT3(Np, pData->Y2);
+
+			//if (y2 < 0.0f)
+			//{
+			//	x2 = RVLDOTPRODUCT3(Np, pData->X2);
+
+			//	if (x2 >= pData->thr2)
+			//	{
+			//		nCoplanar++;
+
+			//		continue;
+			//	}
+			//	else
+			//		return 0;
+			//}
+
+			nCoplanar++;
+		}
+		else
+			bOpposite = true;
+	}	// for (i = 0; i < pVertex->normalHull.n; i++)
+
+	if (nCoplanar == 2 && bOpposite)
+	{
+		if (pVertex->type & RVLSURFELVERTEX_TYPE_TANGENT)
+		{
+			GRAPH::Node *pNode = pData->pVertexGraph2->NodeArray.Element + iVertex;
+
+			GRAPH::EdgePtr<GRAPH::Edge > *pEdgePtr = pNode->EdgeList.pFirst;
+
+			while (pEdgePtr)
+			{
+				if (RVLPCSEGMENT_GRAPH_GET_OPPOSITE_NODE(pEdgePtr) == pData->iRefVertex)
+					return 0;
+
+				pEdgePtr = pEdgePtr->pNext;
+			}
+
+			pEdge2 = ConnectNodes<GRAPH::Node, GRAPH::Edge, GRAPH::EdgePtr<GRAPH::Edge>>(pData->iRefVertex, iVertex,
+				pData->pVertexGraph2->NodeArray, pData->pMem);
+
+			QList<GRAPH::Edge> *pGEdgeList = &(pVertexGraph->GEdgeList);
+
+			RVLQLIST_ADD_ENTRY(pGEdgeList, pEdge2);
+
+			pVertexGraph->nGEdges++;
+		}
+
+		return 0;
+	}
+
+	return 1;
+}
+
+int SURFEL::ConnectNodesRG3(
+	int iVertex,
+	int iParentVertex,
+	GRAPH::Edge *pEdge,
+	Graph<GRAPH::Node, GRAPH::Edge, GRAPH::EdgePtr<GRAPH::Edge>> *pGraph,
+	VertexClusterRGData3 *pData)
+{
+	Vertex *pVertex = pData->pVertexGraph->NodeArray.Element + iVertex;
+
+	if (pVertex->iCluster >= 0)
+		return 0;
+
+	Vertex *pParentVertex = pData->pVertexGraph->NodeArray.Element + iParentVertex;
+
+	pVertex->iCluster = pParentVertex->iCluster;
+
+	return 1;
 }

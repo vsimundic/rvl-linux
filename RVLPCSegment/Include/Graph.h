@@ -1,5 +1,7 @@
 #pragma once
 
+#define RVLGRAPH_AGGNODE_FLAG_VALID		0x01
+
 #define RVLSURFEL_IMAGE_ADJACENCY //Vidovic -> exclude Filko functions 
 #define RVLSURFEL_COLOR_HISTOGRAM //Vidovic -> exclude Filko functions
 
@@ -62,9 +64,10 @@ namespace RVL
 
 		struct Edge
 		{
-			int iNode[2];
-			GRAPH::EdgePtr<GRAPH::Edge> *pEdgePtr[2];
+			int iVertex[2];
+			GRAPH::EdgePtr<GRAPH::Edge> *pVertexEdgePtr[2];
 			int idx;
+			GRAPH::Edge *pNext;
 		};
 
 		template<typename EdgeType> struct AggregateNode
@@ -72,6 +75,7 @@ namespace RVL
 			QList<QLIST::Index> elementList;
 			QList<EdgePtr2<EdgeType>> EdgeList;
 			int size;
+			BYTE flags;
 		};
 	}
 

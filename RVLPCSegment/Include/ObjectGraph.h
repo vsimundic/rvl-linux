@@ -12,6 +12,8 @@
 #define RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_NLMC2			3
 #define RVLPCSEGMENT_OBJECT_RELATION_CLASSIFIER_FUZZY_HEURISTIC	4
 
+#define RVLPCSEGMENT_OBJECT_FLAG_IN_VOI		0x10
+#define RVLPCSEGMENT_OBJECT_FLAG_GND		0x20
 
 #define RVLPCSEGMENT_OBJECT_AGGREGATION_LEVEL2_METHOD_CONVEXITY		0
 #define RVLPCSEGMENT_OBJECT_AGGREGATION_LEVEL2_METHOD_SYMMETRY		1
@@ -40,6 +42,8 @@ namespace RVL
 			Array<int> iVertexArray;
 			Array<int> CTIs;
 			float varGRF;
+			BYTE flags;
+			int size;
 		};
 
 		struct ObjectDisplayData
@@ -68,6 +72,17 @@ namespace RVL
 			float coverage;
 		};
 
+		struct ConnectedSetRGData
+		{
+			int iRefObject;
+		};
+
+		int ConnectedSetRG(
+			int iObject,
+			int iObject_,
+			AgEdge *pEdge,
+			ObjectGraph *pObjects,
+			ConnectedSetRGData *pData);
 		bool objectKeyPressUserFunction(
 			Mesh *pMesh,
 			SurfelGraph *pSurfels,
@@ -149,6 +164,8 @@ namespace RVL
 			void SortObjects();
 			void CountValidObjects();
 			void GetVertices();
+			void CreateObjectsAsConnectedComponents(Array<int> &groundPlaneObjectArray);
+			void ObjectsInVOI();
 			void InitDisplay(
 				Visualizer *pVisualizer,
 				Mesh *pMesh,
@@ -167,6 +184,7 @@ namespace RVL
 				char *meshFileName,
 				char *selectedGTObjectFileName,
 				std::vector<ObjectCoverage> &selectedGTObjectCoverage);
+			void ObjectMapMask(cv::Mat *pMask);
 
 		public:
 			CRVLParameterList ParamList;
@@ -194,6 +212,7 @@ namespace RVL
 			bool bObjectAggregationLevel2Edges;
 			bool bFlattenVertices;
 			bool bConcaveObjectAggregation;
+			bool b3DNetVOI;
 			void(*objectAggregationLevel2Criterion)(ObjectGraph *pObjects, int iObject1, int iObject2, void *vpData);
 			void *vpObjectAggregationLevel2CriterionData;
 			FILE *fpSymmetry;

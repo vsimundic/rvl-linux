@@ -13,13 +13,17 @@
 
 #define RVLSURFEL_EDGE_FLAG_HARD				0x01
 #define RVLSURFEL_EDGE_FLAG_CONVEX				0x02
-#define RVLSURFEL_FLAG_RF						0x04
 
+#define RVLSURFEL_FLAG_RF						0x01
+#define RVLSURFEL_FLAG_GND						0x02
+
+#define RVLSURFELVERTEX_TYPE_CONVEX_CONCAVE		0x07
+#define RVLSURFELVERTEX_TYPE_TANGENT			0x40
 #define RVLSURFELVERTEX_TYPE_REDUNDANT			0x80
 
 #define RVLSURFEL_VERSION_0		0
 
-//#define RVLVERSION_170601
+#define RVLVERSION_170601
 
 namespace RVL
 {
@@ -85,6 +89,7 @@ namespace RVL
 		{
 			float N[3];
 			float Nh[3];
+			float snq;
 		};
 
 		struct VertexEdge
@@ -93,6 +98,7 @@ namespace RVL
 			GRAPH::EdgePtr2<VertexEdge> *pVertexEdgePtr[2];
 			int idx;
 			float N[3];
+			int iSurfel[2];
 			VertexEdge *pNext;
 		};
 
@@ -110,7 +116,12 @@ namespace RVL
 			int iCluster;
 		};
 
-
+		struct PlaneDetectionRGData
+		{
+			float NRef[3];
+			float csqThr;
+			bool *bVisited;
+		};
 	}
 
 	struct Surfel
@@ -175,6 +186,7 @@ namespace RVL
 		void Centroid(
 			Array<int> iSurfelArray,
 			float *centroid);
+		void DetectDominantPlane(Array<int> &dominantPlaneSurfelArray);
 		void NodeColors(unsigned char *SelectionColor);
 		void Display(
 			Visualizer *pVisualizer,
@@ -275,6 +287,7 @@ namespace RVL
 
 	public:	
 		CRVLParameterList ParamList;
+		bool bGroundContactVertices;
 		int nMeshVertices;
 		int nMeshEdges;
 		QLIST::Index2 *PtMem;
@@ -328,5 +341,11 @@ namespace RVL
 			Point *pPoint);
 		void MouseRButtonDown(vtkObject* caller, unsigned long eid, void* clientdata, void *calldata);
 		void KeyPressCallback(vtkObject* caller, unsigned long eid, void* clientdata, void *calldata);
+		int PlaneDetectionRG(
+			int iSurfel,
+			int iSurfel_,
+			Edge *pEdge,
+			SurfelGraph *pSurfels,
+			SURFEL::PlaneDetectionRGData *pData);
 	};
 }
