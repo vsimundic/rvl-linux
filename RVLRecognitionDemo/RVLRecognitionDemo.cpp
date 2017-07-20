@@ -49,8 +49,10 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 //#define PSGM_RECOGNITION_VISUALIZE_SCENE
 #define RVLPSGM_TRANSPARENCY_AND_COLLISION
 //#define RVLPSGM_RMSE_CALCULATION
+//#define RVLRECOGNITION_DEMO_CLASS_ALIGNMENT
 
 #define RVLRECOGNITION_DEMO_FLAG_SAVE_PLY			0x00000001
+#define RVLRECOGNITION_DEMO_FLAG_3D_VISUALIZATION	0x00000002
 //END VIDOVIC
 
 using namespace RVL;
@@ -69,7 +71,7 @@ void CreateParamList(
 	char **pSegmentGTFileName,	//Vidovic
 	char **pResultsFolder,
 	DWORD &method,
-	DWORD &flags //VIDOVIC
+	DWORD &flags
 	)
 {
 	pParamList->m_pMem = pMem;
@@ -90,6 +92,8 @@ void CreateParamList(
 	pParamList->AddID(pParamData, "RF", RVLRECOGNITION_METHOD_RF); //VIDOVIC
 	pParamData = pParamList->AddParam("Save PLY", RVLPARAM_TYPE_ID, &flags); //VIDOVIC
 	pParamList->AddID(pParamData, "yes", RVLRECOGNITION_DEMO_FLAG_SAVE_PLY); //VIDOVIC
+	pParamData = pParamList->AddParam("3D Visualization", RVLPARAM_TYPE_ID, &flags);
+	pParamList->AddID(pParamData, "yes", RVLRECOGNITION_DEMO_FLAG_3D_VISUALIZATION);
 }
 
 void GenerateSegmentNeighbourhood(PSGM * psgm, double radius)
@@ -306,6 +310,38 @@ int main(int argc, char ** argv)
 
 	meshBuilder.PC = PC;
 
+	if (flags & RVLRECOGNITION_DEMO_FLAG_SAVE_PLY)
+	{
+		Mesh mesh;
+
+		FileSequenceLoader sceneSequence;
+		char filePath[200];
+
+		sceneSequence.Init(sceneSequenceFileName);
+
+		while (sceneSequence.GetNextPath(filePath))
+			LoadMesh(&meshBuilder, filePath, &mesh, true);
+
+		if (sceneMeshFileName)
+			delete[] sceneMeshFileName;
+
+		if (sceneSequenceFileName)
+			delete[] sceneSequenceFileName;
+
+		if (modelSequenceFileName)
+			delete[] modelSequenceFileName;
+
+		return 0;
+	}
+
+	// Create segment GT file name.
+
+	if (segmentGTFileName == NULL)
+	{
+		segmentGTFileName = new char[200];
+		segmentGTFileName = "C:\\RVL\\segmentGT.txt";
+	}
+
 	// Initialize surfel detection
 
 	SurfelGraph surfels;
@@ -481,6 +517,12 @@ int main(int argc, char ** argv)
 
 			recognition.LoadModelDataBase(); //Vidovic
 
+#ifdef RVLRECOGNITION_DEMO_CLASS_ALIGNMENT
+			//Alignment:
+			recognition.LoadModelMeshDB(modelSequenceFileName, false, 0.4); //Vidovic merge 20.07.2017 - potrebno izmijeniti poziv funkcije //recognition.LoadModelMeshDB(modelSequenceFileName, &recognition.vtkModelDB, false, 0.4);
+			recognition.ObjectAlignment();
+#endif
+
 #ifdef RVLPSGM_ICP
 			recognition.LoadModelMeshDB(modelSequenceFileName, &recognition.vtkModelDB, true, 0.4);
 #endif
@@ -590,6 +632,32 @@ int main(int argc, char ** argv)
 				cv::waitKey();*/
 
 				///////////TEST/////////
+				///*std::fstream fileS("eccv_frame_20111221T142636.413299_depth.txt", std::fstream::out);
+				//double point[3];
+				//int u, v;
+				//for (int i = 0; i < mesh.pPolygonData->GetNumberOfPoints(); i++)
+				//{
+				//	mesh.pPolygonData->GetPoint(i, point);
+				//	if ((point[0] == 0) && (point[1] == 0) && (point[2] == 0))
+				//		continue;
+				//	v = floor(float(i) / 640);
+				//	u = i - v * 640;
+				//	fileS << u << " " << v << " " << point[0] << " " << point[1] << " " << point[2] << std::endl;
+				//}
+				//fileS.close();*/
+				////Generate scene depth
+				//double point[3];
+				//int u, v;
+				//cv::Mat origDepth(480, 640, CV_16UC1, cv::Scalar::all(0));
+				//for (int i = 0; i < mesh.pPolygonData->GetNumberOfPoints(); i++)
+				//{
+				//	mesh.pPolygonData->GetPoint(i, point);
+				//	if ((point[0] == 0) && (point[1] == 0) && (point[2] == 0))
+				//		continue;
+				//	v = floor(float(i) / 640);
+				//	u = i - v * 640;
+				//	origDepth.at<uint16_t>(v, u) = (uint16_t)(point[2] * 1000); //in milimeters
+				//}
 				//// Initialize VTK.
 				//vtkSmartPointer<vtkRenderer> renderer = vtkSmartPointer<vtkRenderer>::New();
 				//vtkSmartPointer<vtkRenderWindow> renWin = vtkSmartPointer<vtkRenderWindow>::New();
@@ -631,16 +699,48 @@ int main(int argc, char ** argv)
 				////show
 				//cv::Mat depthShow(480, 640, CV_8UC1);
 				//double minVal, maxVal;
+				////FilterImage(bufferDepth);
 				//cv::minMaxLoc(bufferDepth, &minVal, &maxVal);
 				//bufferDepth.convertTo(depthShow, CV_8U, -255.0f / maxVal, 255.0f);
 				//cv::imshow("Rendered depth image", depthShow);
-				
+				////cv::imwrite("renderedDepthF.png", bufferDepth);
+				///*cv::Mat bufferDepthBlur(480, 640, CV_16UC1, cv::Scalar::all(0));
+				//cv::Mat depthShowBlur(480, 640, CV_8UC1);
+				//cv::GaussianBlur(bufferDepth, bufferDepthBlur, cv::Size(9, 9), 0, 0);
+				//cv::minMaxLoc(bufferDepthBlur, &minVal, &maxVal);
+				//bufferDepthBlur.convertTo(depthShowBlur, CV_8U, -255.0f / maxVal, 255.0f);
+				//cv::imshow("Rendered depth (blur) image", depthShowBlur);*/
 				////Original depth
 				//cv::minMaxLoc(origDepth, &minVal, &maxVal);
 				//cv::Mat depthOrigShow(480, 640, CV_8UC1);
 				//origDepth.convertTo(depthOrigShow, CV_8U, -255.0f / maxVal, 255.0f);
 				//cv::imshow("Original depth", depthOrigShow);			
 				////cv::imwrite("origDepth.png", origDepth);
+				////Dilate original depth
+				//cv::Mat elementD = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(20,20));
+				//cv::Mat elementE = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(11, 11));
+				//cv::Mat origDepth_D(480, 640, CV_16UC1, cv::Scalar::all(0));
+				//LARGE_INTEGER d_ctr1, d_ctr2, d_freq;
+				//QueryPerformanceCounter((LARGE_INTEGER *)&d_ctr1);
+				//for (int y = 0; y < origDepth.rows; y++)
+				//{
+				//	for (int x = 0; x < origDepth.cols; x++)
+				//	{
+				//		if (origDepth.at<uint16_t>(y, x) == 0)
+				//			origDepth.at<uint16_t>(y, x) = 10000; //in milimeters
+				//	}
+				//}
+				////cv::dilate(origDepth, origDepth_D, elementD);
+				//cv::erode(origDepth, origDepth_D, elementE);
+				//QueryPerformanceCounter((LARGE_INTEGER *)&d_ctr2);
+				//QueryPerformanceFrequency((LARGE_INTEGER *)&d_freq);
+				//float d_timevalue = (d_ctr2.QuadPart - d_ctr1.QuadPart) * 1000.0 / d_freq.QuadPart;
+				//std::cout << "Dilate vrijeme: " << d_timevalue << std::endl;
+
+				//cv::Mat depthOrigShow_D(480, 640, CV_8UC1);
+				//cv::minMaxLoc(origDepth_D, &minVal, &maxVal);
+				//origDepth_D.convertTo(depthOrigShow_D, CV_8U, -255.0f / maxVal, 255.0f);
+				//cv::imshow("Original depth (dilated)", depthOrigShow_D);
 
 				//////show the difference between rendered depth and original
 				////cv::Mat depthDifference(480, 640, CV_16UC1, cv::Scalar::all(0));
@@ -653,8 +753,6 @@ int main(int argc, char ** argv)
 				//cv::waitKey();
 				////interactor->Start();
 				////
-
-
 
 				mem.Clear();
 
@@ -671,6 +769,24 @@ int main(int argc, char ** argv)
 
 				visualizer.renderer->RemoveAllViewProps();
 #endif
+				if (recognition.problem == RVLRECOGNITION_PROBLEM_CLASSIFICATION)
+				{
+					// Save the segmentation results to a file.
+
+					char *objectMapFileName = RVLCreateFileName(filePath, ".ply", -1, ".objmap.png");
+
+					cv::Mat objectMask(recognition.pMesh->height, recognition.pMesh->width, CV_8UC1);
+
+					recognition.pObjects->ObjectMapMask(&objectMask);
+
+					cv::imshow("Object mask", objectMask);
+
+					cv::imwrite(objectMapFileName, objectMask);
+
+					delete[] objectMapFileName;
+
+					cv::waitKey();
+				}
 #endif
 				//Evaluate CTI match
 				//recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, 7);
@@ -680,10 +796,13 @@ int main(int argc, char ** argv)
 				//mesh.LoadPolyDataFromPLY(filePath);
 				//LoadMesh(&meshBuilder, filePath, &mesh, false);
 
+				if (flags & RVLRECOGNITION_DEMO_FLAG_3D_VISUALIZATION)
+				{
 				surfels.NodeColors(SelectionColor);				
 				visualizer.renderer->RemoveAllViewProps();
 				recognition.InitDisplay(&visualizer, &mesh, SelectionColor);
 				recognition.Display();
+				}
 
 				////NEW FILKO - TEST COLLISION CONSENSUS
 				//std::vector<int> conHyp = recognition.GetHypothesesCollisionConsensus(20);
@@ -740,7 +859,7 @@ int main(int argc, char ** argv)
 				float precision, recall;
 				recognition.EvaluateConsensusMatches(precision, recall, true);
 #endif
-
+				
 #ifdef RVLVERSION_170601
 				//evaluate ICP
 				recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, fpPoseError, fpnotFirstInfo, fpnotFirstPoseErr, 10, true);
@@ -768,9 +887,9 @@ int main(int argc, char ** argv)
 				float timevalue = (ctr2.QuadPart - ctr1.QuadPart) * 1000.0 / freq.QuadPart;
 				std::cout << "Ukupno vrijeme: " << timevalue << std::endl;
 				std::cout << "ICP vrijeme: " << timevalueICP << std::endl;
+
+				if (flags & RVLRECOGNITION_DEMO_FLAG_3D_VISUALIZATION)
 				visualizer.Run();
-
-
 			}
 
 			RVL_DELETE_ARRAY(CTIFileName);
