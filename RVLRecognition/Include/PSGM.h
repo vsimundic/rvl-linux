@@ -120,6 +120,7 @@ namespace RVL
 				float tICP[3];		//final pose after ICP - Vidovic
 				double cost_NN;
 				// end Petra
+				bool bValid; //Vidovic
 				MatchInstance *pNext;
 			};
 

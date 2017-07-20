@@ -118,7 +118,7 @@ PSGM::PSGM()
 	scoreMatchMatrixICP.Element = NULL;
 	scoreMatchMatrixICP.n = 0;
 
-	nBestMatches = 100; //add loading from file
+	nBestMatches = 40; //add loading from file
 	//nBestMatches = 20; //add loading from file
 
 	//Arrays allocation for Match function
@@ -4747,7 +4747,7 @@ void PSGM::Match()
 
 	bestSceneSegmentMatches.n = nClusters;
 
-	int nBestMatchesPerCluster = 100;
+	int nBestMatchesPerCluster = 40;
 
 	int nBestMatchesTotal = nBestMatchesPerCluster * nClusters;
 
