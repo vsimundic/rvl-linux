@@ -11580,17 +11580,18 @@ void PSGM::ObjectAlignment()
 	RECOG::PSGM_::ModelInstanceElement *pMIE;
 	
 
-	Eigen::MatrixXf M(4, 66), P, D(66, 1), T(4, 4), T0p(4, 4), Tiq(4, 4), A, d(1, 66), S, E, I;
+	Eigen::MatrixXf M(4, 66), P, D(66, 1), T(4, 4), T0p(4, 4), Tiq(4, 4), A(3,66), d(1, 66), S, E;
 
-	float sum;
-	float min;
+	double sum;
+	double min;
 	int p, q;
 	Eigen::VectorXf t(3);
-	float s;
+	double s;
 	
 	A = ConvexTemplatenT(); //normals
 	
 	int m_l = MCTISet.SegmentCTIs.Element[0].n; //number of reference model CTI-s
+
 	int n = MCTISet.nModels; // number of models in database
 	int iPrevClusters = m_l;
 
@@ -11608,7 +11609,8 @@ void PSGM::ObjectAlignment()
 				D.block<1, 1>(di, k) << pMIE->d;
 				pMIE++;
 			}
-			D.conservativeResize(D.rows(), D.cols() + 1);
+			if (k!=m_i-1) D.conservativeResize(D.rows(), D.cols() + 1);
+			//D.conservativeResize(D.rows(), D.cols() + 1);
 		}
 
 		min = 1000;
@@ -11719,7 +11721,6 @@ void PSGM::ObjectAlignment()
 		t10 = T0p(2, 1);
 		t11 = T0p(2, 2);
 		t12 = T0p(2, 3);
-
 
 		T0i = Tiq*T*T0p.transpose();
 
