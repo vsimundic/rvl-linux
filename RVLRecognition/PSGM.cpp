@@ -11576,31 +11576,37 @@ vtkSmartPointer<vtkPolyData> PSGM::GetPoseCorrectedVisibleModel(int iMatch)
 
 void PSGM::ObjectAlignment()
 {
+	int iRefObject = 100;
+	int nObjectsInClass = 4;
+
 	RECOG::PSGM_::ModelInstance *pMCTI;
 	RECOG::PSGM_::ModelInstanceElement *pMIE;
 	
 
-	Eigen::MatrixXf M(4, 66), P, D(66, 1), T(4, 4), T0p(4, 4), Tiq(4, 4), A, d(1, 66), S, E, I;
+	Eigen::MatrixXf M(4, 66), P, D(66, 1), T(4, 4), T0p(4, 4), Tiq(4, 4), A(3,66), d(1, 66), S, E;
 
-	float sum;
-	float min;
+	double sum;
+	double min;
 	int p, q;
 	Eigen::VectorXf t(3);
-	float s;
+	double s;
 	
 	A = ConvexTemplatenT(); //normals
 	
-	int m_l = MCTISet.SegmentCTIs.Element[0].n; //number of reference model CTI-s
-	int n = MCTISet.nModels; // number of models in database
+	int m_l = MCTISet.SegmentCTIs.Element[iRefObject].n; //number of reference model CTI-s
+
+	//int n = MCTISet.nModels; // number of models in database
+	int n = nObjectsInClass;
 	int iPrevClusters = m_l;
 
-	for (int i = 1; i < n-1; i++) //for all non-reference models
+	for (int i = 1; i < n; i++) //for all non-reference models
 	{
-		int m_i = MCTISet.SegmentCTIs.Element[i].n; //number of current model CTI-s
-		D.resize(66, 1);
+		int m_i = MCTISet.SegmentCTIs.Element[iRefObject + i].n; //number of current model CTI-s
+		D.resize(66, m_i);
 		for (int k = 0; k < m_i; k++) //for all CTI-s in current model
 		{
-			pMCTI = MCTISet.pCTI.Element[iPrevClusters+k];
+			//pMCTI = MCTISet.pCTI.Element[iPrevClusters+k];
+			pMCTI = MCTISet.pCTI.Element[MCTISet.SegmentCTIs.Element[iRefObject + i].Element[k]];
 			pMIE = pMCTI->modelInstance.Element;
 
 			for (int di = 0; di < 66; di++)
@@ -11608,14 +11614,15 @@ void PSGM::ObjectAlignment()
 				D.block<1, 1>(di, k) << pMIE->d;
 				pMIE++;
 			}
-			D.conservativeResize(D.rows(), D.cols() + 1);
+			//if (k!=m_i-1) D.conservativeResize(D.rows(), D.cols() + 1);
+			//D.conservativeResize(D.rows(), D.cols() + 1);
 		}
 
 		min = 1000;
 
 		for (int j = 0; j < m_l; j++) //for all CTI-s in reference model
 		{
-			pMCTI = MCTISet.pCTI.Element[j];
+			pMCTI = MCTISet.pCTI.Element[MCTISet.SegmentCTIs.Element[iRefObject].Element[j]];
 			pMIE = pMCTI->modelInstance.Element;
 
 			for (int di = 0; di < 66; di++)
@@ -11661,18 +11668,31 @@ void PSGM::ObjectAlignment()
 		//memcpy(Tiq.block<3, 1>(0, 3).data(), MCTISet.pCTI.Element[iPrevClusters + q]->t, 3 * sizeof(float));
 
 
-		Tiq(0, 0) = MCTISet.pCTI.Element[iPrevClusters + q]->R[0];
-		Tiq(0, 1) = MCTISet.pCTI.Element[iPrevClusters + q]->R[1];
-		Tiq(0, 2) = MCTISet.pCTI.Element[iPrevClusters + q]->R[2];
-		Tiq(0, 3) = MCTISet.pCTI.Element[iPrevClusters + q]->t[0];
-		Tiq(1, 0) = MCTISet.pCTI.Element[iPrevClusters + q]->R[3];
-		Tiq(1, 1) = MCTISet.pCTI.Element[iPrevClusters + q]->R[4];
-		Tiq(1, 2) = MCTISet.pCTI.Element[iPrevClusters + q]->R[5];
-		Tiq(1, 3) = MCTISet.pCTI.Element[iPrevClusters + q]->t[1];
-		Tiq(2, 0) = MCTISet.pCTI.Element[iPrevClusters + q]->R[6];
-		Tiq(2, 1) = MCTISet.pCTI.Element[iPrevClusters + q]->R[7];
-		Tiq(2, 2) = MCTISet.pCTI.Element[iPrevClusters + q]->R[8];
-		Tiq(2, 3) = MCTISet.pCTI.Element[iPrevClusters + q]->t[2];
+		//Tiq(0, 0) = MCTISet.pCTI.Element[iPrevClusters + q]->R[0];
+		//Tiq(0, 1) = MCTISet.pCTI.Element[iPrevClusters + q]->R[1];
+		//Tiq(0, 2) = MCTISet.pCTI.Element[iPrevClusters + q]->R[2];
+		//Tiq(0, 3) = MCTISet.pCTI.Element[iPrevClusters + q]->t[0];
+		//Tiq(1, 0) = MCTISet.pCTI.Element[iPrevClusters + q]->R[3];
+		//Tiq(1, 1) = MCTISet.pCTI.Element[iPrevClusters + q]->R[4];
+		//Tiq(1, 2) = MCTISet.pCTI.Element[iPrevClusters + q]->R[5];
+		//Tiq(1, 3) = MCTISet.pCTI.Element[iPrevClusters + q]->t[1];
+		//Tiq(2, 0) = MCTISet.pCTI.Element[iPrevClusters + q]->R[6];
+		//Tiq(2, 1) = MCTISet.pCTI.Element[iPrevClusters + q]->R[7];
+		//Tiq(2, 2) = MCTISet.pCTI.Element[iPrevClusters + q]->R[8];
+		//Tiq(2, 3) = MCTISet.pCTI.Element[iPrevClusters + q]->t[2];
+		int iCTI = MCTISet.SegmentCTIs.Element[iRefObject + i].Element[q];
+		Tiq(0, 0) = MCTISet.pCTI.Element[iCTI]->R[0];
+		Tiq(0, 1) = MCTISet.pCTI.Element[iCTI]->R[1];
+		Tiq(0, 2) = MCTISet.pCTI.Element[iCTI]->R[2];
+		Tiq(0, 3) = MCTISet.pCTI.Element[iCTI]->t[0];
+		Tiq(1, 0) = MCTISet.pCTI.Element[iCTI]->R[3];
+		Tiq(1, 1) = MCTISet.pCTI.Element[iCTI]->R[4];
+		Tiq(1, 2) = MCTISet.pCTI.Element[iCTI]->R[5];
+		Tiq(1, 3) = MCTISet.pCTI.Element[iCTI]->t[1];
+		Tiq(2, 0) = MCTISet.pCTI.Element[iCTI]->R[6];
+		Tiq(2, 1) = MCTISet.pCTI.Element[iCTI]->R[7];
+		Tiq(2, 2) = MCTISet.pCTI.Element[iCTI]->R[8];
+		Tiq(2, 3) = MCTISet.pCTI.Element[iCTI]->t[2];
 		Tiq.block<1, 3>(3, 0) << 0, 0, 0;
 		Tiq(3, 3) = 1;
 
@@ -11691,19 +11711,19 @@ void PSGM::ObjectAlignment()
 
 		//memcpy(T0p.block<3, 3>(0, 0).data(), MCTISet.pCTI.Element[p]->R, 9 * sizeof(float));
 		//memcpy(T0p.block<3, 1>(0, 3).data(), MCTISet.pCTI.Element[p]->t, 3 * sizeof(float));
-
-		T0p(0, 0) = MCTISet.pCTI.Element[p]->R[0];
-		T0p(0, 1) = MCTISet.pCTI.Element[p]->R[1];
-		T0p(0, 2) = MCTISet.pCTI.Element[p]->R[2];
-		T0p(0, 3) = MCTISet.pCTI.Element[p]->t[0];
-		T0p(1, 0) = MCTISet.pCTI.Element[p]->R[3];
-		T0p(1, 1) = MCTISet.pCTI.Element[p]->R[4];
-		T0p(1, 2) = MCTISet.pCTI.Element[p]->R[5];
-		T0p(1, 3) = MCTISet.pCTI.Element[p]->t[1];
-		T0p(2, 0) = MCTISet.pCTI.Element[p]->R[6];
-		T0p(2, 1) = MCTISet.pCTI.Element[p]->R[7];
-		T0p(2, 2) = MCTISet.pCTI.Element[p]->R[8];
-		T0p(2, 3) = MCTISet.pCTI.Element[p]->t[2];
+		iCTI = MCTISet.SegmentCTIs.Element[iRefObject].Element[p];
+		T0p(0, 0) = MCTISet.pCTI.Element[iCTI]->R[0];
+		T0p(0, 1) = MCTISet.pCTI.Element[iCTI]->R[1];
+		T0p(0, 2) = MCTISet.pCTI.Element[iCTI]->R[2];
+		T0p(0, 3) = MCTISet.pCTI.Element[iCTI]->t[0];
+		T0p(1, 0) = MCTISet.pCTI.Element[iCTI]->R[3];
+		T0p(1, 1) = MCTISet.pCTI.Element[iCTI]->R[4];
+		T0p(1, 2) = MCTISet.pCTI.Element[iCTI]->R[5];
+		T0p(1, 3) = MCTISet.pCTI.Element[iCTI]->t[1];
+		T0p(2, 0) = MCTISet.pCTI.Element[iCTI]->R[6];
+		T0p(2, 1) = MCTISet.pCTI.Element[iCTI]->R[7];
+		T0p(2, 2) = MCTISet.pCTI.Element[iCTI]->R[8];
+		T0p(2, 3) = MCTISet.pCTI.Element[iCTI]->t[2];
 		T0p.block<1, 3>(3, 0) << 0, 0, 0;
 		T0p(3, 3) = 1;
 
@@ -11719,7 +11739,6 @@ void PSGM::ObjectAlignment()
 		t10 = T0p(2, 1);
 		t11 = T0p(2, 2);
 		t12 = T0p(2, 3);
-
 
 		T0i = Tiq*T*T0p.transpose();
 
