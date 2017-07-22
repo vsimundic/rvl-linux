@@ -518,7 +518,7 @@ int main(int argc, char ** argv)
 #endif
 
 #ifdef RVLPSGM_ICP
-			recognition.LoadModelMeshDB(modelSequenceFileName, &recognition.vtkModelDB, true, 0.4);
+			recognition.LoadModelMeshDB(modelSequenceFileName, true, 0.4);
 #endif
 
 			Mesh mesh;

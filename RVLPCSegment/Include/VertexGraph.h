@@ -80,6 +80,7 @@ namespace RVL
 		virtual ~VertexGraph();
 		void Create(SurfelGraph *pSurfels);
 		void Clustering();
+		void Display(Visualizer *pVisualizer);
 		void Save(FILE *fp);
 		bool Load(FILE *fp);
 		bool BoundingBox(Box<float> *pBox);
@@ -95,6 +96,8 @@ namespace RVL
 		Graph<GRAPH::Node, GRAPH::Edge, GRAPH::EdgePtr<GRAPH::Edge>> G;
 		QList<GRAPH::Edge> GEdgeList;
 		int nGEdges;
+		vtkSmartPointer<vtkActor> actor;
+		vtkSmartPointer<vtkPolyData> polyData;
 	};
 }
 

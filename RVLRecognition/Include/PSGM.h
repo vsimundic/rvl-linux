@@ -17,7 +17,7 @@
 #ifdef RVLVERSION_170601
 #define RVLPSGM_ICP		// 170601: ON
 #endif
-#define RVLPSGM_ICP	 //Vidovic - use ICP regardless to RVLVERSION_170601
+//#define RVLPSGM_ICP	 //Vidovic - use ICP regardless to RVLVERSION_170601
 #define RVLPSGM_ICP_SIMILARITY_MEASURE_COSTNN				0
 #define RVLPSGM_ICP_SIMILARITY_MEASURE_SATURATED_SCORE		1
 #define RVLPSGM_GROUND_PLANE_DISTANCE_PENALIZATION
@@ -288,7 +288,7 @@ namespace RVL
 		//Visualizes GT models on the scene, activated when pressed "g":
 		void AddGTModelsToVisualizer(Visualizer *pVisualizer);
 		
-		void LoadModelMeshDB(char *modelSequenceFileName, std::map<int, vtkSmartPointer<vtkPolyData>> *vtkModelDB, bool bDecimate = false, float decimatePercent = 0.4);
+		void LoadModelMeshDB(char *modelSequenceFileName, bool bDecimate = false, float decimatePercent = 0.4);
 
 		vtkSmartPointer<vtkPolyData> GetSceneModelPC(int iCluster);
 
@@ -610,6 +610,7 @@ namespace RVL
 		RECOG::CTISet MCTISet;
 		RECOG::TGSet STGSet;
 		RECOG::TGSet MTGSet;
+		VertexGraph *pSVertexGraph;
 		CRVLTimer *pTimer;
 		FILE *fpTime;
 		Eigen::MatrixXf nT; //Petra
