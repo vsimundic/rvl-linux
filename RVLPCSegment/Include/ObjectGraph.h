@@ -185,6 +185,7 @@ namespace RVL
 				char *selectedGTObjectFileName,
 				std::vector<ObjectCoverage> &selectedGTObjectCoverage);
 			void ObjectMapMask(cv::Mat *pMask);
+			int GetForegroundObject();
 
 		public:
 			CRVLParameterList ParamList;

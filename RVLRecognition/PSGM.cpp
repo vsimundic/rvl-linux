@@ -43,6 +43,7 @@ PSGM::PSGM()
 	problem = RVLRECOGNITION_PROBLEM_SHAPE_INSTANCE_DETECTION;
 	bZeroRFDescriptor = false;
 	bGTRFDescriptors = false;
+	bGroundPlaneRFDescriptors = false;
 	bMatchRANSAC = false;
 	bWholeMeshCluster = false;
 
@@ -299,6 +300,7 @@ void PSGM::CreateParamList(CRVLMem *pMem)
 	pParamData = ParamList.AddParam("PSGM.groundPlaneTolerance", RVLPARAM_TYPE_FLOAT, &groundPlaneTolerance);
 	pParamData = ParamList.AddParam("PSGM.zeroRFDescriptor", RVLPARAM_TYPE_BOOL, &bZeroRFDescriptor);	
 	pParamData = ParamList.AddParam("PSGM.GTRFDescriptors", RVLPARAM_TYPE_BOOL, &bGTRFDescriptors);
+	pParamData = ParamList.AddParam("PSGM.groundPlaneRFDescriptors", RVLPARAM_TYPE_BOOL, &bGroundPlaneRFDescriptors);
 	pParamData = ParamList.AddParam("PSGM.Visualization.hypothesisVisualizationMode", RVLPARAM_TYPE_ID, &(displayData.hypothesisVisualizationMode));
 	ParamList.AddID(pParamData, "CTI", RVLPSGM_HYPOTHESIS_VISUALIZATION_MODE_CTI);
 	ParamList.AddID(pParamData, "PLY", RVLPSGM_HYPOTHESIS_VISUALIZATION_MODE_PLY);
@@ -510,22 +512,6 @@ void PSGM::Interpret(
 		CTISet.CopyCTIsToArray();
 		//END Vidovic
 
-		// Save model instances to a file.
-
-		printf("Save model instances to a file.\n");
-
-		char *PSGModelInstanceFileName = RVLCreateString(sceneFileName);
-
-		sprintf(PSGModelInstanceFileName + strlen(PSGModelInstanceFileName) - 3, "cti");
-
-		FILE *fp = fopen(PSGModelInstanceFileName, "w");
-
-		SaveModelInstances(fp); //Vidovic
-
-		fclose(fp);
-
-		delete[] PSGModelInstanceFileName;
-
 		// Create tangent graphs.
 
 		if (mode == RVLRECOGNITION_MODE_TRAINING)
@@ -589,7 +575,7 @@ void PSGM::Interpret(
 
 			char *vertexGraphFileName = RVLCreateFileName(sceneFileName, ".ply", -1, ".vgr");
 
-			fp = fopen(vertexGraphFileName, "w");
+			FILE *fp = fopen(vertexGraphFileName, "w");
 
 			delete[] vertexGraphFileName;
 
@@ -635,36 +621,69 @@ void PSGM::Interpret(
 		if (pObjects->b3DNetVOI)
 			pObjects->ObjectsInVOI();
 
+		// Get foreground object.
+
+		int iObject = pObjects->GetForegroundObject();
+
+		// Create CTIs.
+
+		CTISet.Init();
+
+		if (iObject >= 0)
+		{
+			SURFEL::Object *pObject = pObjects->objectArray.Element + iObject;
+
+			CTIs(pObject->surfelList, pObject->iVertexArray, 0, iObject, &CTISet, pMem);
+
+			CTISet.CopyCTIsToArray();
+		}
+
 		// Create vertex graph.
 
-		if (pSVertexGraph)
-			delete pSVertexGraph;
+		//if (pSVertexGraph)
+		//	delete pSVertexGraph;
 
-		pSVertexGraph = new VertexGraph;
+		//pSVertexGraph = new VertexGraph;
 
-		pSVertexGraph->idx = iScene;
+		//pSVertexGraph->idx = iScene;
 
-		pSVertexGraph->pMem = pMem;
+		//pSVertexGraph->pMem = pMem;
 
-		pSVertexGraph->Create(pSurfels);
+		//pSVertexGraph->Create(pSurfels);
 
-		// Vertex graph clustering.
+		//// Vertex graph clustering.
 
-		pSVertexGraph->Clustering();
+		//pSVertexGraph->Clustering();
 
-		// Save vertex graph.
+		//// Save vertex graph.
 
-		char *vertexGraphFileName = RVLCreateFileName(sceneFileName, ".ply", -1, ".vgr");
+		//char *vertexGraphFileName = RVLCreateFileName(sceneFileName, ".ply", -1, ".vgr");
 
-		FILE *fp = fopen(vertexGraphFileName, "w");
+		//FILE *fp = fopen(vertexGraphFileName, "w");
 
-		delete[] vertexGraphFileName;
+		//delete[] vertexGraphFileName;
 
-		pSVertexGraph->Save(fp);
+		//pSVertexGraph->Save(fp);
 
-		fclose(fp);
+		//fclose(fp);
 
 	}	// if(problem == RVLRECOGNITION_PROBLEM_CLASSIFICATION)
+
+	// Save model instances to a file.
+
+	printf("Save model instances to a file.\n");
+
+	char *PSGModelInstanceFileName = RVLCreateString(sceneFileName);
+
+	sprintf(PSGModelInstanceFileName + strlen(PSGModelInstanceFileName) - 3, "cti");
+
+	FILE *fp = fopen(PSGModelInstanceFileName, "w");
+
+	SaveModelInstances(fp); //Vidovic
+
+	fclose(fp);
+
+	delete[] PSGModelInstanceFileName;
 
 	RVL_DELETE_ARRAY(groundPlaneSurfelArray.Element);
 }
@@ -2557,6 +2576,14 @@ bool PSGM::ReferenceFrames(
 	RECOG::PSGM_::Cluster *pCluster,
 	int iCluster)
 {
+	return ReferenceFrames(pCluster->iSurfelArray, clusterMap, iCluster);
+}
+
+bool PSGM::ReferenceFrames(
+	Array<int> iSurfelArray,
+	int *clusterMap,
+	int iCluster)
+{
 	// Identify the largest surfel.
 
 	int maxSize = 0;
@@ -2564,9 +2591,9 @@ bool PSGM::ReferenceFrames(
 	int i;
 	Surfel *pSurfel;
 
-	for (i = 0; i < pCluster->iSurfelArray.n; i++)
+	for (i = 0; i < iSurfelArray.n; i++)
 	{
-		pSurfel = pSurfels->NodeArray.Element + pCluster->iSurfelArray.Element[i];
+		pSurfel = pSurfels->NodeArray.Element + iSurfelArray.Element[i];
 
 		if (pSurfel->size > maxSize)
 			maxSize = pSurfel->size;
@@ -2584,14 +2611,14 @@ bool PSGM::ReferenceFrames(
 
 	Array<SortIndex<int>> iSortedSurfelArray;
 	
-	iSortedSurfelArray.Element = new SortIndex<int>[pCluster->iSurfelArray.n];
+	iSortedSurfelArray.Element = new SortIndex<int>[iSurfelArray.n];
 	iSortedSurfelArray.n = 0;
 
 	int iSurfel;
 
-	for (i = 0; i < pCluster->iSurfelArray.n; i++)
+	for (i = 0; i < iSurfelArray.n; i++)
 	{
-		iSurfel = pCluster->iSurfelArray.Element[i];
+		iSurfel = iSurfelArray.Element[i];
 
 		pSurfel = pSurfels->NodeArray.Element + iSurfel;
 
@@ -2630,12 +2657,13 @@ bool PSGM::ReferenceFrames(
 	tangentRGData.pRecognition = this;
 	tangentRGData.cs = cs;
 	tangentRGData.iCluster = iCluster;
+	tangentRGData.clusterMap = clusterMap;
 	tangentRGData.pTangentArray = &tangentArray;
 	//tangentRGData.pNormalHull = &normalHull;
 	float baseSeparationAngleRad = baseSeparationAngle * DEG2RAD;
 	tangentRGData.baseSeparationAngle = baseSeparationAngleRad;
 
-	int *iSurfelBuff = new int[pCluster->iSurfelArray.n];
+	int *iSurfelBuff = new int[iSurfelArray.n];
 
 	float kReferenceTangentSize2 = kReferenceTangentSize *  kReferenceTangentSize;
 
@@ -3084,7 +3112,7 @@ int RVL::RECOG::PSGM_::ValidTangent(
 
 		return -1;
 	}	// if (RVLDOTPRODUCT3(N0, N) > pData->cs && RVLDOTPRODUCT3(N0, N_) <= pData->cs)
-	else if (pRecognition->clusterMap[iSurfel] == pData->iCluster)
+	else if (pData->clusterMap[iSurfel] == pData->iCluster)
 	{
 		pData->bParent[iSurfel] = true;
 
@@ -7235,7 +7263,7 @@ void PSGM::Display()
 	{
 		pSurfels->Display(pVisualizer, pMesh);
 
-		pSVertexGraph->Display(pVisualizer);
+		//pSVertexGraph->Display(pVisualizer);
 	}
 
 	//pSurfels->Display(pVisualizer, pMesh);
@@ -11978,11 +12006,26 @@ int PSGM::CTIs(
 {
 	RECOG::PSGM_::ModelInstance **ppCTI = pCTISet->CTI.ppNext;
 
-	float RGC[9];
-	float varX;
+	if (bGroundPlaneRFDescriptors)
+	{
+		float RGC[9];
+		float varX;
 
-	if (!GravityReferenceFrames(surfelList, pCTISet, pMem))
-		return 0;
+		if (!GravityReferenceFrames(surfelList, pCTISet, pMem))
+			return 0;
+	}
+	else
+	{
+		Array<int> iSurfelArray;
+
+		iSurfelArray.Element = new int[pSurfels->NodeArray.n];
+
+		QLIST::CopyToArray(&surfelList, &iSurfelArray);
+
+		ReferenceFrames(iSurfelArray, pObjects->objectMap, iCluster);
+
+		delete[] iSurfelArray.Element;
+	}
 
 	int nCTIs = 0;
 
@@ -11990,10 +12033,10 @@ int PSGM::CTIs(
 
 	while (pCTI)
 	{
-	pCTI->iCluster = iCluster;
-	pCTI->iModel = iModel;
+		pCTI->iCluster = iCluster;
+		pCTI->iModel = iModel;
 
-	FitModel(iVertexArray, pCTI);
+		FitModel(iVertexArray, pCTI);
 
 		nCTIs++;
 

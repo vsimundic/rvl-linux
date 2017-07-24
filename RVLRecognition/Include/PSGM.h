@@ -60,6 +60,7 @@ namespace RVL
 				//Array<RECOG::PSGM_::NormalHullElement> *pNormalHull;
 				float baseSeparationAngle;
 				bool *bBase;
+				int *clusterMap;
 			};
 
 			struct DisplayData
@@ -520,6 +521,10 @@ namespace RVL
 		bool ReferenceFrames(
 			RECOG::PSGM_::Cluster *pCluster,
 			int iCluster = -1);
+		bool ReferenceFrames(
+			Array<int> iSurfelArray,
+			int *clusterMap,
+			int iCluster = -1);
 		bool Inside(
 			int iVertex,
 			RECOG::PSGM_::Cluster *pCluster,
@@ -586,6 +591,7 @@ namespace RVL
 		float groundPlaneTolerance;
 		bool bZeroRFDescriptor;
 		bool bGTRFDescriptors;
+		bool bGroundPlaneRFDescriptors;
 		bool bMatchRANSAC; //Vidovic
 		bool bGnd;
 		bool bWholeMeshCluster;
