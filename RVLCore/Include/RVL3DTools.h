@@ -367,6 +367,21 @@
 	T[12] = T[13] = T[14] = 0.0;\
 	T[15] = 1.0;\
 }
+#define RVLHTRANSFMXDECOMP(T, R, t)\
+{\
+	R[0] = T[0];\
+	R[1] = T[1];\
+	R[2] = T[2];\
+	R[3] = T[4];\
+	R[4] = T[5];\
+	R[5] = T[6];\
+	R[6] = T[8];\
+	R[7] = T[9];\
+	R[8] = T[10];\
+	t[0] = T[3];\
+	t[1] = T[7];\
+	t[2] = T[11];\
+}
 
 //// Compute vector Y orthogonal to X
 //#define RVLORTHOGONAL3(X, Y, i, j, k, tmp3x1, fTmp)\
