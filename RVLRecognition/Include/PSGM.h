@@ -297,7 +297,15 @@ namespace RVL
 		
 		void ObjectAlignment(); // Calculates transformation matrix to align object with a reference object (for classification)
 
-		void VisualizeAlignedModels(int iRefModel, int iModel);
+		void VisualizeAlignedModels(int iRefModel, int iModel); // Visualizes models after alignment - for easier debugging
+
+		void Classify(); // For a given object on the scene, returns its object class
+
+		void VisualizeObjectClass( // Visualizes object on the scene and its class (most simmilar model from database)
+			int iModel, 
+			Visualizer *pVisualizer,
+			Mesh *pMesh,
+			unsigned char *selectionColor); 
 		//end Petra
 
 		void InitDisplay(
