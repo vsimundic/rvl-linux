@@ -17,7 +17,6 @@
 #ifdef RVLVERSION_170601
 #define RVLPSGM_ICP		// 170601: ON
 #endif
-#define RVLPSGM_ICP	 //Vidovic - use ICP regardless to RVLVERSION_170601
 #define RVLPSGM_ICP_SIMILARITY_MEASURE_COSTNN				0
 #define RVLPSGM_ICP_SIMILARITY_MEASURE_SATURATED_SCORE		1
 #define RVLPSGM_GROUND_PLANE_DISTANCE_PENALIZATION
@@ -131,6 +130,20 @@ namespace RVL
 				float t[3];
 				int n;
 				FPMatch *pNext;
+			};
+
+			struct MGT
+			{
+				int iScene;
+				int iSegment;
+				int iModel;
+				int matchID;
+				int CTIrank;
+				int ICPrank;
+				float CTIscore;
+				float ICPcost;
+				float gndDistance;
+				float transparencyRatio;
 			};
 			//END Vidovic
 
@@ -504,6 +517,10 @@ namespace RVL
 		void VisualizeConsensusHypotheses(Visualizer *pVisualizer); //Vidovic
 		void VisualizeGTMatch(Visualizer *pVisualizer); //Vidovic
 		int FindCTIMatchRank(int matchID, int iSegment); //Vidovic
+		int FindICPMatchRank(int matchID, int iSegment); //Vidovic
+		void createVersionTestFile(); //Vidovic
+		void checkVersionTestFile(bool verbose = false); //Vidovic
+		bool checkVersionTestFile(RECOG::PSGM_::MGT, bool verbose = false); //Vidovic
 		void CreateDilatedDepthImage();
 
 	private:
@@ -616,7 +633,8 @@ namespace RVL
 		std::map<int, vtkSmartPointer<vtkPolyData>> vtkModelDB;
 		std::map<int, vtkSmartPointer<vtkPolyData>> vtkRMSEModelDB; //Vidovic
 		std::map<int, vtkSmartPointer<vtkPolyData>> segmentN_PD; //neighbourhood
-		unsigned short * depthImg; //Current scene depth image // Filko
+		//unsigned short * depthImg; //Current scene depth image // Filko //Vidovic commented
+		cv::Mat depth;
 		std::vector<int> transparentHypotheses; //Vidovic
 		std::vector<int> consensusHypotheses; //Vidovic
 		std::vector<int> noCollisionHypotheses; //Vidovic
