@@ -48,6 +48,9 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 //#define PSGM_LOAD_CTI_FROM_FILE
 //#define PSGM_RECOGNITION_VISUALIZE_SCENE
 //#define RVLRECOGNITION_DEMO_CLASS_ALIGNMENT
+#define RVLPSGM_TRANSPARENCY_AND_COLLISION
+//#define RVLPSGM_RMSE_CALCULATION
+//#define RVLRECOGNITION_DEMO_CLASS_ALIGNMENT
 
 #define RVLRECOGNITION_DEMO_FLAG_SAVE_PLY			0x00000001
 #define RVLRECOGNITION_DEMO_FLAG_3D_VISUALIZATION	0x00000002
@@ -515,8 +518,14 @@ int main(int argc, char ** argv)
 			recognition.ObjectAlignment();
 #endif
 
+#ifdef RVLRECOGNITION_DEMO_CLASS_ALIGNMENT
+			//Alignment:
+			recognition.LoadModelMeshDB(modelSequenceFileName, false, 0.4); //Vidovic merge 20.07.2017 - potrebno izmijeniti poziv funkcije //recognition.LoadModelMeshDB(modelSequenceFileName, &recognition.vtkModelDB, false, 0.4);
+			recognition.ObjectAlignment();
+#endif
+
 #ifdef RVLPSGM_ICP
-			recognition.LoadModelMeshDB(modelSequenceFileName, true, 0.4);
+			recognition.LoadModelMeshDB(modelSequenceFileName, &recognition.vtkModelDB, true, 0.4);
 #endif
 
 			Mesh mesh;
@@ -556,6 +565,8 @@ int main(int argc, char ** argv)
 
 			FILE *fpLog = fopen((resultsFolderName + "\\evaluationLog.txt").data(), "w");
 
+			FILE *fpRMSE = fopen((resultsFolderName + "\\RMSE.txt").data(), "w");
+
 			recognition.LoadCompleteSegmentGT(sceneSequence);
 
 			LARGE_INTEGER ctr1, ctr2, freq;
@@ -566,6 +577,7 @@ int main(int argc, char ** argv)
 				QueryPerformanceCounter((LARGE_INTEGER *)&ctr1);
 
 				printf("Scene %s...\n", filePath);
+
 
 				recognition.SetSceneFileName(filePath);
 				//recognition.InterpretCTIS(&mesh);
@@ -586,7 +598,12 @@ int main(int argc, char ** argv)
 				//mesh.LoadPolyDataFromPLY(filePath);
 				LoadMesh(&meshBuilder, filePath, &mesh, false);
 
-				////Generate scene depth
+#ifdef NEVER 
+				//Generate scene depth
+				//************************************************************************************************************
+				//Vidovic commented on 21.07.2017.
+				//because function PSGM::CreateDilatedDepthImage(); is called inside PSGM::FilterHypothesesUsingTransparency()
+				//************************************************************************************************************
 				//double point[3];
 				//int u, v;
 				//cv::Mat depth(480, 640, CV_16UC1, cv::Scalar::all(0));
@@ -608,10 +625,14 @@ int main(int argc, char ** argv)
 				//			depth.at<uint16_t>(y, x) = 10000; //in milimeters
 				//	}
 				//}
-				//cv::Mat elementE = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(9, 9));
+				//cv::Mat elementE = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(17, 17));
 				//cv::erode(depth, depth, elementE);
 				////Set PSGM depth
 				//recognition.depthImg = (unsigned short*)depth.data;
+				//************************************************************************************************************
+				//END Vidovic commented
+				//************************************************************************************************************
+
 
 				/*cv::Mat depthShow(480, 640, CV_8UC1);
 				double minVal, maxVal;
@@ -742,11 +763,13 @@ int main(int argc, char ** argv)
 				//cv::waitKey();
 				////interactor->Start();
 				////
+#endif
 
 				mem.Clear();
 
 				recognition.Interpret(&mesh);
 
+				
 				//recognition.SaveMatches();
 
 #ifdef PSGM_RECOGNITION_VISUALIZE_SCENE
@@ -776,7 +799,7 @@ int main(int argc, char ** argv)
 
 					cv::waitKey();
 				}
-#endif
+#endif	// #ifndef PSGM_LOAD_CTI_FROM_FILE
 				//Evaluate CTI match
 				//recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, 7);
 
@@ -792,7 +815,7 @@ int main(int argc, char ** argv)
 					recognition.InitDisplay(&visualizer, &mesh, SelectionColor);
 					recognition.Display();
 				}
-
+				
 				////NEW FILKO - TEST COLLISION CONSENSUS
 				//std::vector<int> conHyp = recognition.GetHypothesesCollisionConsensus(20);
 				//for (int i = 0; i < conHyp.size(); i++)
@@ -825,20 +848,49 @@ int main(int argc, char ** argv)
 				//recognition.CalculateICPCost(PCLICP, PCLICPVariants::Point_to_plane, &kdtree);
 
 				GenerateSegmentNeighbourhood(&recognition, 0.1);
-				recognition.CalculateNNCost(&visualizer, PCLICP, PCLICPVariants::Point_to_plane);
+				//recognition.CalculateNNCost(&visualizer, PCLICP, PCLICPVariants::Point_to_plane);
 				
-#ifdef RVLVERSION_170601
-				//evaluate ICP
-				recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, fpPoseError, fpnotFirstInfo, fpnotFirstPoseErr, 10, true);
-#else
+				//TEST RVLPSGM_MATCHCTI_MATCH_MATRIX
+				recognition.ICP(PCLICP, PCLICPVariants::Point_to_plane);
+
+#ifdef RVLPSGM_TRANSPARENCY_AND_COLLISION
 				//Transparency check
-				recognition.CreateScoreMatchMatrixICP();
+				//recognition.CreateScoreMatchMatrixICP();
+				recognition.CreateScoreMatchMatrixICP_TMP();
 				recognition.FilterHypothesesUsingTransparency(0.15, 10, true);
+				recognition.CreateScoreMatchMatrixICP_TMP(); //because of sorting - TEST
+
+				//Colision check
+				recognition.noCollisionHypotheses.clear();
+				recognition.GetHypothesesCollisionConsensus(&recognition.noCollisionHypotheses, &recognition.scoreMatchMatrixICP, 10);
+
+				//Get transparency and collision consensus
+				recognition.GetTransparencyAndCollisionConsensus(&visualizer);
+
+				//Evaluate consesus matches
+				float precision, recall;
+				recognition.EvaluateConsensusMatches(precision, recall, true);
+
+				//recognition.createVersionTestFile();
+				recognition.checkVersionTestFile();
+#endif
+				
+//#ifdef RVLVERSION_170601
+//				//evaluate ICP
+//				recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, fpPoseError, fpnotFirstInfo, fpnotFirstPoseErr, 10, true);
+//#endif
+
+#ifdef RVLPSGM_RMSE_CALCULATION
+				//Load models without decimation (used for calculatin RMSE)
+				recognition.LoadModelMeshDB(modelSequenceFileName, &recognition.vtkRMSEModelDB, false);
+
+				//Calculate RMSE
+				recognition.RMSE(fpRMSE, false);
 #endif
 
-#else
+#else	// #ifndef RVLPSGM_ICP
 				//recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, fpPoseError, fpnotFirstInfo, fpnotFirstPoseErr, 7);
-#endif
+#endif	// #ifndef RVLPSGM_ICP
 				//recognition.AddModelsToVisualizer(&visualizer, true, PCLICP, PCLICPVariants::Point_to_plane, NULL/*&kdtree*/);
 				QueryPerformanceCounter((LARGE_INTEGER *)&ctr2_);
 				QueryPerformanceFrequency((LARGE_INTEGER *)&freq_);
@@ -864,6 +916,7 @@ int main(int argc, char ** argv)
 			fclose(fpHypothesisEvaluation);
 			fclose(fpLog);
 			fclose(fpPoseError);
+			fclose(fpRMSE);
 
 			//END Vidovic
 		}	// if (recognition.mode == RVLRECOGNITION_MODE_RECOGNITION)

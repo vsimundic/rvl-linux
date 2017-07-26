@@ -3983,11 +3983,8 @@ void ObjectGraph::ObjectsInVOI()
 	}
 }
 
-void ObjectGraph::ObjectMapMask(cv::Mat *pMask)
+int ObjectGraph::GetForegroundObject()
 {
-	if (!pMesh->bOrganizedPC)
-		return;
-
 	int iForegroundObject = -1;
 
 	int foregroundObjectSize = 0;
@@ -4016,8 +4013,18 @@ void ObjectGraph::ObjectMapMask(cv::Mat *pMask)
 		}
 	}
 
+	return iForegroundObject;
+}
+
+void ObjectGraph::ObjectMapMask(cv::Mat *pMask)
+{
+	if (!pMesh->bOrganizedPC)
+		return;
+
+	int iForegroundObject = GetForegroundObject();
+
 	int i;
-	int iSurfel, iNode;
+	int iObject, iSurfel, iNode;
 
 	for (i = 0; i < pMesh->NodeArray.n; i++)
 	{
