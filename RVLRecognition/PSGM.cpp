@@ -10535,7 +10535,7 @@ void PSGM::ICP(RVL::PSGM::ICPfunction ICPFunction, int ICPvariant)
 
 	for (int i = 0; i < bestSceneSegmentMatches.n; i++)
 	{
-		//cout << "Segment: " << i << ":\n";
+		cout << "Segment: " << i << ":\n";
 
 		for (int j = 0; j < bestSceneSegmentMatches.Element[i].n; j++)
 		{
