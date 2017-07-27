@@ -17,7 +17,7 @@
 #ifdef RVLVERSION_170601
 #define RVLPSGM_ICP		// 170601: ON
 #endif
-#define RVLPSGM_ICP	 //Vidovic - use ICP regardless to RVLVERSION_170601
+//#define RVLPSGM_ICP	 //Vidovic - use ICP regardless to RVLVERSION_170601
 #define RVLPSGM_ICP_SIMILARITY_MEASURE_COSTNN				0
 #define RVLPSGM_ICP_SIMILARITY_MEASURE_SATURATED_SCORE		1
 #define RVLPSGM_GROUND_PLANE_DISTANCE_PENALIZATION
@@ -60,6 +60,7 @@ namespace RVL
 				//Array<RECOG::PSGM_::NormalHullElement> *pNormalHull;
 				float baseSeparationAngle;
 				bool *bBase;
+				int *clusterMap;
 			};
 
 			struct DisplayData
@@ -528,6 +529,10 @@ namespace RVL
 		bool ReferenceFrames(
 			RECOG::PSGM_::Cluster *pCluster,
 			int iCluster = -1);
+		bool ReferenceFrames(
+			Array<int> iSurfelArray,
+			int *clusterMap,
+			int iCluster = -1);
 		bool Inside(
 			int iVertex,
 			RECOG::PSGM_::Cluster *pCluster,
@@ -594,6 +599,7 @@ namespace RVL
 		float groundPlaneTolerance;
 		bool bZeroRFDescriptor;
 		bool bGTRFDescriptors;
+		bool bGroundPlaneRFDescriptors;
 		bool bMatchRANSAC; //Vidovic
 		bool bGnd;
 		bool bWholeMeshCluster;
@@ -618,6 +624,7 @@ namespace RVL
 		RECOG::CTISet MCTISet;
 		RECOG::TGSet STGSet;
 		RECOG::TGSet MTGSet;
+		VertexGraph *pSVertexGraph;
 		CRVLTimer *pTimer;
 		FILE *fpTime;
 		Eigen::MatrixXf nT; //Petra
@@ -625,8 +632,6 @@ namespace RVL
 		SortIndex<float> *sortedMatches; //Petra
 		//Eigen::VectorXf E;
 		Eigen::MatrixXf t;
-		//RECOG::CTISet CTIset;
-		//RECOG::CTISet MCTIset;
 		std::map<int, vtkSmartPointer<vtkPolyData>> vtkModelDB;
 		std::map<int, vtkSmartPointer<vtkPolyData>> vtkRMSEModelDB; //Vidovic
 		std::map<int, vtkSmartPointer<vtkPolyData>> segmentN_PD; //neighbourhood

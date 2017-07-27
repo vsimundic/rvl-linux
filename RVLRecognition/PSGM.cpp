@@ -43,6 +43,7 @@ PSGM::PSGM()
 	problem = RVLRECOGNITION_PROBLEM_SHAPE_INSTANCE_DETECTION;
 	bZeroRFDescriptor = false;
 	bGTRFDescriptors = false;
+	bGroundPlaneRFDescriptors = false;
 	bMatchRANSAC = false;
 	bWholeMeshCluster = false;
 
@@ -80,6 +81,8 @@ PSGM::PSGM()
 	//END Vidovic
 
 	vpObjectDetector = NULL;
+
+	pSVertexGraph = NULL;
 
 	clusters.Element = NULL;
 	clusterMap = NULL;
@@ -250,7 +253,10 @@ PSGM::~PSGM()
 		ObjectDetector *pObjectDetector = (ObjectDetector *)vpObjectDetector;
 
 		delete pObjectDetector;
-}
+	}
+
+	if (pSVertexGraph)
+		delete pSVertexGraph;
 }
 
 void PSGM::CreateParamList(CRVLMem *pMem)
@@ -294,6 +300,7 @@ void PSGM::CreateParamList(CRVLMem *pMem)
 	pParamData = ParamList.AddParam("PSGM.groundPlaneTolerance", RVLPARAM_TYPE_FLOAT, &groundPlaneTolerance);
 	pParamData = ParamList.AddParam("PSGM.zeroRFDescriptor", RVLPARAM_TYPE_BOOL, &bZeroRFDescriptor);	
 	pParamData = ParamList.AddParam("PSGM.GTRFDescriptors", RVLPARAM_TYPE_BOOL, &bGTRFDescriptors);
+	pParamData = ParamList.AddParam("PSGM.groundPlaneRFDescriptors", RVLPARAM_TYPE_BOOL, &bGroundPlaneRFDescriptors);
 	pParamData = ParamList.AddParam("PSGM.Visualization.hypothesisVisualizationMode", RVLPARAM_TYPE_ID, &(displayData.hypothesisVisualizationMode));
 	ParamList.AddID(pParamData, "CTI", RVLPSGM_HYPOTHESIS_VISUALIZATION_MODE_CTI);
 	ParamList.AddID(pParamData, "PLY", RVLPSGM_HYPOTHESIS_VISUALIZATION_MODE_PLY);
@@ -505,22 +512,6 @@ void PSGM::Interpret(
 		CTISet.CopyCTIsToArray();
 		//END Vidovic
 
-		// Save model instances to a file.
-
-		printf("Save model instances to a file.\n");
-
-		char *PSGModelInstanceFileName = RVLCreateString(sceneFileName);
-
-		sprintf(PSGModelInstanceFileName + strlen(PSGModelInstanceFileName) - 3, "cti");
-
-		FILE *fp = fopen(PSGModelInstanceFileName, "w");
-
-		SaveModelInstances(fp); //Vidovic
-
-		fclose(fp);
-
-		delete[] PSGModelInstanceFileName;
-
 		// Create tangent graphs.
 
 		if (mode == RVLRECOGNITION_MODE_TRAINING)
@@ -584,7 +575,7 @@ void PSGM::Interpret(
 
 			char *vertexGraphFileName = RVLCreateFileName(sceneFileName, ".ply", -1, ".vgr");
 
-			fp = fopen(vertexGraphFileName, "w");
+			FILE *fp = fopen(vertexGraphFileName, "w");
 
 			delete[] vertexGraphFileName;
 
@@ -630,9 +621,75 @@ void PSGM::Interpret(
 		if (pObjects->b3DNetVOI)
 			pObjects->ObjectsInVOI();
 
-	}	// if(problem == RVLRECOGNITION_PROBLEM_CLASSIFICATION)
+		// Get foreground object.
 
-	RVL_DELETE_ARRAY(groundPlaneSurfelArray.Element);
+		int iObject = pObjects->GetForegroundObject();
+
+		// Create CTIs.
+
+		CTISet.Init();
+		
+		if (iObject >= 0)
+		{
+			SURFEL::Object *pObject = pObjects->objectArray.Element + iObject;
+
+			CTIs(pObject->surfelList, pObject->iVertexArray, 0, iObject, &CTISet, pMem);
+
+			CTISet.CopyCTIsToArray();
+		}
+
+		// Save model instances to a file.
+
+		printf("Save model instances to a file.\n");
+
+		char *PSGModelInstanceFileName = RVLCreateString(sceneFileName);
+
+		sprintf(PSGModelInstanceFileName + strlen(PSGModelInstanceFileName) - 3, "cti");
+
+		FILE *fp = fopen(PSGModelInstanceFileName, "w");
+
+		SaveModelInstances(fp); //Vidovic
+
+		fclose(fp);
+
+		delete[] PSGModelInstanceFileName;
+
+		RVL_DELETE_ARRAY(groundPlaneSurfelArray.Element);
+
+		// Classification
+				
+		Classify();
+
+		// Create vertex graph.
+
+		//if (pSVertexGraph)
+		//	delete pSVertexGraph;
+
+		//pSVertexGraph = new VertexGraph;
+
+		//pSVertexGraph->idx = iScene;
+
+		//pSVertexGraph->pMem = pMem;
+
+		//pSVertexGraph->Create(pSurfels);
+
+		//// Vertex graph clustering.
+
+		//pSVertexGraph->Clustering();
+
+		//// Save vertex graph.
+
+		//char *vertexGraphFileName = RVLCreateFileName(sceneFileName, ".ply", -1, ".vgr");
+
+		//FILE *fp = fopen(vertexGraphFileName, "w");
+
+		//delete[] vertexGraphFileName;
+
+		//pSVertexGraph->Save(fp);
+
+		//fclose(fp);
+
+	}	// if(problem == RVLRECOGNITION_PROBLEM_CLASSIFICATION)
 }
 
 //PETRA
@@ -2523,6 +2580,14 @@ bool PSGM::ReferenceFrames(
 	RECOG::PSGM_::Cluster *pCluster,
 	int iCluster)
 {
+	return ReferenceFrames(pCluster->iSurfelArray, clusterMap, iCluster);
+}
+
+bool PSGM::ReferenceFrames(
+	Array<int> iSurfelArray,
+	int *clusterMap,
+	int iCluster)
+{
 	// Identify the largest surfel.
 
 	int maxSize = 0;
@@ -2530,9 +2595,9 @@ bool PSGM::ReferenceFrames(
 	int i;
 	Surfel *pSurfel;
 
-	for (i = 0; i < pCluster->iSurfelArray.n; i++)
+	for (i = 0; i < iSurfelArray.n; i++)
 	{
-		pSurfel = pSurfels->NodeArray.Element + pCluster->iSurfelArray.Element[i];
+		pSurfel = pSurfels->NodeArray.Element + iSurfelArray.Element[i];
 
 		if (pSurfel->size > maxSize)
 			maxSize = pSurfel->size;
@@ -2550,14 +2615,14 @@ bool PSGM::ReferenceFrames(
 
 	Array<SortIndex<int>> iSortedSurfelArray;
 	
-	iSortedSurfelArray.Element = new SortIndex<int>[pCluster->iSurfelArray.n];
+	iSortedSurfelArray.Element = new SortIndex<int>[iSurfelArray.n];
 	iSortedSurfelArray.n = 0;
 
 	int iSurfel;
 
-	for (i = 0; i < pCluster->iSurfelArray.n; i++)
+	for (i = 0; i < iSurfelArray.n; i++)
 	{
-		iSurfel = pCluster->iSurfelArray.Element[i];
+		iSurfel = iSurfelArray.Element[i];
 
 		pSurfel = pSurfels->NodeArray.Element + iSurfel;
 
@@ -2596,12 +2661,13 @@ bool PSGM::ReferenceFrames(
 	tangentRGData.pRecognition = this;
 	tangentRGData.cs = cs;
 	tangentRGData.iCluster = iCluster;
+	tangentRGData.clusterMap = clusterMap;
 	tangentRGData.pTangentArray = &tangentArray;
 	//tangentRGData.pNormalHull = &normalHull;
 	float baseSeparationAngleRad = baseSeparationAngle * DEG2RAD;
 	tangentRGData.baseSeparationAngle = baseSeparationAngleRad;
 
-	int *iSurfelBuff = new int[pCluster->iSurfelArray.n];
+	int *iSurfelBuff = new int[iSurfelArray.n];
 
 	float kReferenceTangentSize2 = kReferenceTangentSize *  kReferenceTangentSize;
 
@@ -3050,7 +3116,7 @@ int RVL::RECOG::PSGM_::ValidTangent(
 
 		return -1;
 	}	// if (RVLDOTPRODUCT3(N0, N) > pData->cs && RVLDOTPRODUCT3(N0, N_) <= pData->cs)
-	else if (pRecognition->clusterMap[iSurfel] == pData->iCluster)
+	else if (pData->clusterMap[iSurfel] == pData->iCluster)
 	{
 		pData->bParent[iSurfel] = true;
 
@@ -7190,11 +7256,20 @@ void PSGM::Display()
 	Mesh *pMesh = displayData.pMesh;
 	Visualizer *pVisualizer = displayData.pVisualizer;
 
-	DisplayClusters();
+	if (problem == RVLRECOGNITION_PROBLEM_SHAPE_INSTANCE_DETECTION)
+	{
+		DisplayClusters();
 
-	pSurfels->DisplayEdgeFeatures();
+		pSurfels->DisplayEdgeFeatures();
 
-	displayData.bClusters = true;
+		displayData.bClusters = true;
+	}
+	else if (problem == RVLRECOGNITION_PROBLEM_CLASSIFICATION)
+	{
+		pSurfels->Display(pVisualizer, pMesh);
+
+		//pSVertexGraph->Display(pVisualizer);
+	}
 
 	//pSurfels->Display(pVisualizer, pMesh);
 
@@ -10871,7 +10946,748 @@ float PSGM::RMSE(int iModel, double *TGT, double *T)
 
 	return RMSE_;
 }
+
 //END Vidovic
+
+//with Eigen
+//void PSGM::RVLPSGInstanceMesh(Eigen::MatrixXf nI, float *dI)
+//{
+//	//transform nI and dI to Eigen:
+//	Eigen::MatrixXf nIE = nI;
+//	Eigen::MatrixXf dIE(1, 66);
+//
+//	//if nI was an array
+//	//Eigen::MatrixXf nIE(3, 66);
+//	//int br = 0;
+//	//for (int i = 0; i < 3; i++)
+//	//{
+//	//	for (int j = 0; j < 66; j++)
+//	//	{
+//	//		nIE(i, j) = nI[br];
+//	//		br++;
+//	//	}
+//	//}
+//	for (int i = 0; i < 66; i++)
+//	{
+//		dIE(0, i) = dI[i];
+//	}
+//
+//	float noise = 1e-6;
+//	int nF = nIE.cols();
+//	float halfCubeSize;
+//
+//	float max, min;
+//	max = dIE.maxCoeff();
+//	min = dIE.minCoeff();
+//	if (min<0 && min*-1 > max)
+//		max = min;
+//	halfCubeSize = max*1.1;
+//
+//	P.resize(3, 8);
+//	P << 1, 1, -1, -1, 1, 1, -1, -1, 1, -1, 1, -1, 1, -1, 1, -1, 1, 1, 1, 1, -1, -1, -1, -1;
+//	P = halfCubeSize*P;
+//
+//	Eigen::MatrixXf Premoved = Eigen::MatrixXf::Zero(1, P.cols());//list of removed vertices
+//	Eigen::MatrixXf nP = Eigen::MatrixXf::Ones(nF + 6, 1);
+//	nP = 4 * nP;
+//	
+//	F = Eigen::MatrixXi::Zero(nF + 6, 66*66);
+//	//F.block<6, 4>(0, 0) << 1, 3, 4, 2, 3, 7, 8, 4, 2, 4, 8, 6, 5, 6, 8, 7, 1, 2, 6, 5, 1, 5, 7, 3;
+//	F.block<6, 4>(0, 0) << 0, 2, 3, 1, 2, 6, 7, 3, 1, 3, 7, 5, 4, 5, 7, 6, 0, 1, 5, 4, 0, 4, 6, 2;
+//
+//
+//	Eigen::MatrixXi E = Eigen::MatrixXi::Ones(nF + 6, nF+6);
+//	E *= -1;
+//	Eigen::MatrixXi Fn = Eigen::MatrixXi::Zero(nF + 6, 66*66);
+//
+//	int iP1, iP2;
+//	int l;
+//	int br2;
+//	int NextCirc, PrevCirc;
+//	for (int i_ = 0; i_ < 6; i_++) //for every face
+//	{
+//		int i, j;
+//		i = i_;
+//		for (int k = 0; k < 4; k++)
+//		{
+//			if (k == 3) NextCirc = 0;
+//			else NextCirc = k % 3 +1;
+//			iP1 = F(i, k);
+//			iP2 = F(i, NextCirc);
+//
+//			for (int j_ = i_ + 1; j_ < 6; j_++)
+//			{
+//				j = j_;
+//				l = -1;
+//				for (int iF = 0; iF < F.cols(); iF++) //find(F(j,:)==iP1)
+//				{
+//					if (F(j,iF)==iP1)
+//					{
+//						l = iF;
+//					}		
+//				}
+//				if (l>=0)
+//				{
+//					PrevCirc = (l + 3) % 4;
+//					if (F(j, PrevCirc)== iP2)
+//					{
+//						E(i,j) = iP1;
+//						E(j,i) = iP2;
+//						Fn(i,k) = j;
+//						Fn(j, PrevCirc) = i;
+//					}
+//				}
+//			}
+//		}
+//	}
+//
+//	Eigen::MatrixXi iNewVertices;
+//	Eigen::MatrixXi iNeighbors;
+//	Eigen::MatrixXf N;
+//	Eigen::MatrixXf dCut, dCutSorted;
+//	float d, d_;
+//	int nCut;
+//	Eigen::MatrixXf Temp;
+//	Eigen::MatrixXf Tempnext;
+//	Eigen::MatrixXf Temp2;
+//	for (int i = 0; i < nF; i++) //for every face
+//	{
+//		printf("%d\n", i);
+//
+//		N = nIE.block<3, 1>(0, i); //normal of the i-th face
+//		d = dIE(0, i); //distance of the i-th face
+//		dCut = Eigen::MatrixXf::Zero(P.cols(), 1);
+//		dCutSorted = Eigen::MatrixXf::Zero(P.cols(), 1);
+//		nCut = 0;
+//
+//
+//		for (int k = 0; k < 8; k++)
+//		{
+//			Temp = N.transpose()*P.block<3, 1>(0, k);
+//			d_ = Temp(0,0) - d;
+//			if (d_ > 0)
+//			{
+//				nCut += 1;
+//				dCut(nCut,0) = d_;
+//			}
+//		}
+//
+//		//Bubble sort:
+//		float temp;
+//		for (int idCut = 0; idCut < nCut; idCut++)
+//		{
+//			for (int jdCut = 0; jdCut < nCut; jdCut++)
+//			{
+//				if (dCut(jdCut,0)>dCut(jdCut + 1, 0))
+//				{
+//					temp = dCut(jdCut, 0);
+//					dCut(jdCut, 0) = dCut(jdCut + 1, 0);
+//					dCut(jdCut + 1, 0) = temp;
+//				}
+//			}
+//		}
+//
+//		float dCorr = 0;
+//		for (int k = 0; k < nCut; k++)
+//		{
+//			if (dCut(k,0) - dCorr < noise)
+//				dCorr=dCut(k,0);
+//
+//		}
+//		d += dCorr;
+//
+//		Eigen::MatrixXi F_;//j-th face
+//		Eigen::MatrixXi Fn_;//neighbors of F_
+//		Eigen::MatrixXf P_; //position vector of vector iP
+//		Eigen::MatrixXf Pnext;//position vector of vertex iPNext
+//		int nP_; //number of vertices od F_
+//		int iP; // k-th vertex of F_
+//		int iPNext; //next vertex
+//		Eigen::MatrixXf dP;
+//		int L; //neighbor of F_ on the opposite side of edge iP-iPNext
+//
+//		int iPolygon, iVertex;
+//		int iPNew, iPNewVertex, iFNewVertex;
+//		float s;
+//
+//
+//		for (int j = 0; j <= i + 5; j++) //for every previously considered face
+//		{
+//			F_ = F.block(j, 0, 1, F.cols());
+//			Fn_ = Fn.block(j, 0, 1, Fn.cols());
+//			int ff = F(j, 0);
+//			int k = 0;
+//			nP_ = nP(j, 0);
+//
+//			for (int k_ = 0; k_ < nP_; k_++)
+//			{
+//				int p = P.cols();
+//				iP = F_(0, k_);
+//				P_ = P.block(0, iP, P.rows(), 1);
+//				
+//
+//				if (k_ == nP_ - 1) NextCirc = 0;
+//				else NextCirc  = k_ % (nP_) + 1;
+//				
+//				iPNext = F_(0, NextCirc);
+//				Pnext = P.block(0, iPNext, P.rows(), 1);
+//
+//				dP.resize(P.rows(), 1);
+//				dP = Pnext - P_;
+//
+//				L = Fn_(0,k_);
+//
+//				Temp = N.transpose()*P_;
+//				Tempnext = N.transpose()*Pnext;
+//
+//				if (i == 1 && j == 2) 
+//					int debug = 1;
+//
+//
+//				if (Temp(0,0) > d) //if iP is over new plane
+//				{
+//					if (Premoved(0,iP) == 0)
+//						Premoved(0,iP) = 1; //vertex iP is removed
+//
+//					iPolygon = j;
+//					iVertex = k;
+//
+//					//Remove Vertex from Polygon:
+//					for (int iF = 0; iF < (nP(iPolygon) - 1 - iVertex); iF++)
+//					{
+//						F(iPolygon, iVertex + iF) = F(iPolygon, iVertex + iF + 1);
+//						Fn(iPolygon, iVertex + iF) = Fn(iPolygon, iVertex + iF + 1);
+//					}
+//					nP(iPolygon) = nP(iPolygon) - 1;
+//										
+//					if (Tempnext(0,0) > d)
+//					{
+//						E(L,j) = -1;
+//						E(j,L) = -1;
+//						k -= 1;
+//					}
+//					else
+//					{
+//						if (E(j,L) == iP) //Vertex is not updated
+//						{
+//							//Add new vertex
+//							Temp = N.transpose()*P_;
+//							Temp2 = N.transpose()*dP;
+//							s = (d - Temp(0,0))/Temp2(0,0);
+//							Eigen::MatrixXf Ptemp = P;
+//							P.resize(P.rows(), P.cols() + 1);
+//							P.block(0, 0, Ptemp.rows(), Ptemp.cols()) = Ptemp;
+//							Eigen::Vector3f col = P_ + s*dP;
+//							P.col(P.cols()-1) = col;
+//							iPNew = P.cols()-1;
+//
+//							Eigen::MatrixXf Premovedtemp = Premoved;
+//							Premoved.resize(1, Premoved.cols() + 1);
+//							Premoved.block(0, 0, Premovedtemp.rows(), Premovedtemp.cols()) = Premovedtemp;
+//							Premoved(0, Premoved.cols()-1) = 0;
+//							E(j,L) = iPNew;
+//						}
+//						else
+//							iPNew = E(j,L);
+//
+//						iPolygon = j;
+//						iVertex = k;
+//						iPNewVertex = iPNew;
+//						iFNewVertex = L;
+//						//Add new Vertex to Polygon:
+//						Eigen::MatrixXi Ftemp = F;
+//						Eigen::MatrixXi Fntemp = Fn;
+//						for (int iF = 0; iF < (nP(iPolygon) - iVertex ); iF++)
+//						{
+//							F(iPolygon, iVertex + iF + 1) = Ftemp(iPolygon,  iVertex + iF);
+//							Fn(iPolygon, iVertex + iF + 1) = Fntemp(iPolygon, iVertex + iF);
+//						}
+//						F(iPolygon, iVertex) = iPNewVertex;
+//						Fn(iPolygon, iVertex) = iFNewVertex;
+//						nP(iPolygon) = nP(iPolygon) + 1;
+//
+//						Eigen::MatrixXi iNewVerticestemp = iNewVertices;
+//						iNewVertices.resize(1, iNewVertices.cols() + 1);
+//						iNewVertices.block(0, 0, iNewVerticestemp.rows(), iNewVerticestemp.cols()) = iNewVerticestemp;
+//						iNewVertices(0, iNewVertices.cols() - 1)= iPNew;
+//
+//
+//						Eigen::MatrixXi iNeighborstemp = iNeighbors;
+//						iNeighbors.resize(1, iNeighbors.cols() + 1);
+//						iNeighbors.block(0, 0, iNeighborstemp.rows(), iNeighborstemp.cols()) = iNeighborstemp;
+//						iNeighbors(0, iNeighbors.cols() - 1) = j;
+//
+//						E((i + 6), j) = iPNew;
+//					}
+//				}
+//
+//				else if (Tempnext(0,0) > d)
+//				{
+//					if (E(L,j)== iPNext) //Vertex is not updated
+//					{
+//						Temp = N.transpose()*P_;
+//						Temp2 = N.transpose()*dP;
+//						s = (d - Temp(0, 0)) / Temp2(0, 0);
+//
+//
+//						Eigen::MatrixXf Ptemp = P;
+//						P.resize(P.rows(), P.cols() + 1);
+//						P.block(0, 0, Ptemp.rows(), Ptemp.cols()) = Ptemp;
+//						Eigen::Vector3f col = P_ + s*dP;
+//						P.col(P.cols() - 1) = col;
+//						iPNew = P.cols() - 1;
+//
+//						Eigen::MatrixXf Premovedtemp = Premoved;
+//						Premoved.resize(1, Premoved.cols() + 1);
+//						Premoved.block(0, 0, Premovedtemp.rows(), Premovedtemp.cols()) = Premovedtemp;
+//						Premoved(0, Premoved.cols() - 1) = 0;
+//
+//						E(L,j) = iPNew;
+//					}
+//					else
+//						iPNew = E(L,j);
+//
+//					iPolygon = j;
+//					iVertex = k+1;
+//					iPNewVertex = iPNew;
+//					iFNewVertex = i+6;
+//					//Add new Vertex to Polygon:
+//					Eigen::MatrixXi Ftemp = F;
+//					Eigen::MatrixXi Fntemp = Fn;
+//					for (int iF = 0; iF < (nP(iPolygon) - iVertex); iF++)
+//					{
+//						F(iPolygon, iVertex + iF + 1) = Ftemp(iPolygon, iVertex + iF);
+//						Fn(iPolygon, iVertex + iF + 1) = Fntemp(iPolygon, iVertex + iF);
+//					}
+//					F(iPolygon, iVertex) = iPNewVertex;
+//					Fn(iPolygon, iVertex) = iFNewVertex;
+//					nP(iPolygon) = nP(iPolygon) + 1;
+//
+//					E(j, i+6) = iPNew;
+//					k = k + 1;
+//				}
+//				k = k + 1;
+//			}
+//			
+//		}
+//		int iNeighbor;
+//		nP(i + 6) = iNewVertices.cols(); //rows
+//
+//		int m;
+//		if (nP(i + 6) > 0)
+//		{
+//			Eigen::MatrixXi F_; 
+//			Eigen::MatrixXi Fn_;
+//			m = 0;
+//			while (1)
+//			{
+//				Eigen::MatrixXi F_temp = F_;
+//				F_.resize(1, F_.rows() + 1);
+//				F_.block(0, 0, F_temp.rows(), F_temp.cols()) = F_temp;
+//				F_(0, F_.rows() - 1) = iNewVertices(m);
+//				
+//				int iN = iNeighbors(0, m);
+//				iNeighbor = iNeighbors(0, m);
+//
+//
+//				Eigen::MatrixXi Fn_temp = Fn_;
+//				Fn_.resize(1, Fn_.rows() + 1);
+//				Fn_.block(0, 0, Fn_temp.rows(), Fn_temp.cols()) = Fn_temp;
+//				Fn_(0, Fn_.rows() - 1) = iNeighbor;
+//
+//
+//				iPNext = E(iNeighbor, (i + 6));
+//				int iNV;
+//				for (iNV = 0; iNV < iNewVertices.cols(); iNV++)
+//				{
+//					int a = iPNext;
+//					int b = iNewVertices(iNV);
+//					if (iNewVertices(iNV) == iPNext)
+//					{
+//						m = iNV;
+//						break;
+//					}
+//				}
+//				if (m == 0 )
+//					break;
+//			}
+//
+//			for (int iF = 0; iF < F_.cols(); iF++)
+//			{
+//				F((i + 6), iF) = F_(0, iF);
+//				Fn((i + 6), iF) = Fn_(0, iF);
+//			}
+//
+//		}
+//		
+//	}
+//	int mF = F.cols();
+//
+//	for (int i = 0; i < F.rows(); i++)
+//	{
+//		for (int iF = 0; iF < mF; iF++)
+//			F(i, nP(i) + 1 + iF) = 0;
+//	}
+//
+//	Eigen::MatrixXi Ffinal = F.block((F.rows() - 6), F.cols(), 6, 0);
+//	Edges = E;
+//}
+
+//without Eigen; under construction
+//void PSGM::RVLPSGInstanceMesh(float *nI, float *dI)
+//{
+//	float noise = 1e-6;
+//	int nF = 66; // sizeof(nI) / sizeof(float); //total number of faces
+//	float halfCubeSize;
+//
+//	float max;
+//	if (dI[0] < 0)
+//		dI[0] *= -1;
+//	max = dI[0];
+//	for (int i = 0; i < 56; i += 11)
+//	{
+//		if (dI[i] < 0)
+//			dI[i] *= -1;
+//		if (dI[i]>max)
+//			max = dI[i];
+//	}
+//	halfCubeSize = max*1.1;
+//
+//	P = new float[3 * 8];
+//	int PRows = 3, PCols = 8;
+//
+//	P[0] = P[1] = P[4] = P[5] = P[8] = P[10] = P[12] = P[14] = P[16] = P[17] = P[18] = P[19] = halfCubeSize;
+//	P[2] = P[3] = P[6] = P[7] = P[9] = P[11] = P[13] = P[15] = P[20] = P[21] = P[22] = P[23] = -1 * halfCubeSize;
+//
+//	int Premoved[8]; //length=PCols; //list of removed vertices
+//
+//	for (int i = 0; i < 8; i++)
+//		Premoved[i] = 0;
+//
+//	int *nP = new int(nF + 6);
+//	memset(nP, 4, (nF + 6)*sizeof(float));
+//	//for (int i = 0; i < nF + 6; i++)
+//	//	nP[i] = 4;
+//
+//	F = new float((nF + 6) * 4); //initial cube faces
+//	memset(F, 0, ((nF + 6) * 4)*sizeof(float));
+//	//for (int i = 0; i < (nF + 6) * 4; i++)
+//	//	F[i] = 0;
+//
+//	F[0] = 1;
+//	F[1] = 3;
+//	F[2] = 4;
+//	F[3] = 2;
+//	F[4] = 3;
+//	F[5] = 7;
+//	F[6] = 8;
+//	F[7] = 4;
+//	F[8] = 2;
+//	F[9] = 4;
+//	F[10] = 8;
+//	F[11] = 6;
+//	F[12] = 5;
+//	F[13] = 6;
+//	F[14] = 8;
+//	F[15] = 7;
+//	F[16] = 1;
+//	F[17] = 2;
+//	F[18] = 6;
+//	F[19] = 5;
+//	F[20] = 1;
+//	F[21] = 5;
+//	F[22] = 7;
+//	F[23] = 3;
+//
+//	E = new float((nF + 6)*(nF + 6)); //inital Edge matrix
+//	memset(E, 0, ((nF + 6)*(nF + 6))*sizeof(float));
+//	//for (int i = 0; i < (nF + 6)*(nF + 6); i++)
+//	//	E[i] = 0;
+//
+//	float *Fn = new float((nF + 6) * 4);
+//	memset(Fn, 0, ((nF + 6)*(nF + 6))*sizeof(float));
+//	//for (int i = 0; i < (nF + 6)*4; i++)
+//	//	Fn[i] = 0;
+//
+//	float iP1, iP2;
+//	float l[4];
+//	int br;
+//	int NextCirc, PrevCirc;
+//	for (int i_ = 0; i_ < 6; i_++) //for every face
+//	{
+//		int i, j;
+//		i = i_;
+//		for (int k = 0; k < 4; k++)
+//		{
+//			NextCirc = k % 4 + 1;
+//			iP1 = F[i*(nF + 6) + k];
+//			iP2 = F[i*(nF + 6) + NextCirc];
+//
+//			for (int j_ = i_ + 1; j < 6; j++)
+//			{
+//				br = 0;
+//				j = j_;
+//				for (int iF = 0; iF < 4; iF++) //find(F(j,:)==iP1)
+//				{
+//					if (F[j*(nF + 6) * 4 + iF] == iP1)
+//					{
+//						br++;
+//						l[br] = j*(nF + 6) * 4 + iF;
+//					}
+//				}
+//				if (br > 0)
+//				{
+//					PrevCirc = ((1 + 4 - 2) % 4) + 1;
+//					if (F[j, PrevCirc] == iP2)
+//					{
+//						E[i*(nF + 6) + j] = iP1;
+//						E[j*(nF + 6) + i] = iP2;
+//						Fn[i*(nF + 6) + k] = j;
+//						Fn[j*(nF + 6) + PrevCirc] = i;
+//					}
+//				}
+//			}
+//		}
+//	}
+//
+//	int *iNewVertices;
+//	int *iNeighbors;
+//
+//	int nCut;
+//	float dCut[8];
+//	//float dCutSorted[8];
+//
+//	float N, d, d_;
+//	for (int i = 0; i < nF; i++) //for every face
+//	{
+//		N = nI[i]; //normal of the i-th face
+//		d = dI[i]; //distance of the i-th face
+//		memset(dCut, 0, 8 * sizeof(float));
+//		//memset(dCutSorted, 0, 4 * sizeof(float));
+//		nCut = 0;
+//
+//		for (int k = 0; k < 8; k++)
+//		{
+//			d_ = (N*P[k] + N *P[8 + k] + N*P[16 + k]) - d;
+//			if (d_ > 0)
+//			{
+//				nCut += 1;
+//				dCut[nCut] = d_;
+//			}
+//		}
+//
+//
+//
+//		//Bubble sort:
+//		float temp;
+//		for (int idCut = 0; idCut < nCut; idCut++)
+//		{
+//			for (int jdCut = 0; jdCut < nCut; jdCut++)
+//			{
+//				if (dCut[jdCut]>dCut[jdCut + 1])
+//				{
+//					temp = dCut[jdCut];
+//					dCut[jdCut] = dCut[jdCut + 1];
+//					dCut[jdCut + 1] = temp;
+//				}
+//			}
+//		}
+//
+//		float dCorr = 0;
+//		for (int k = 0; k < nCut; k++)
+//		{
+//			if (dCut[k] - dCorr < noise)
+//				dCorr = dCut[k];
+//
+//		}
+//		d = d + dCorr;
+//
+//		float F_[4]; //j-th face
+//		float Fn_[4]; // neighbors if F_
+//		int nP_; //number of vertices od F_
+//		int iP; // k-th vertex of F_
+//		float P_[3]; //position vector of vector iP
+//		int iPNext; //next vertex
+//		float Pnext[3]; //position vector of vertex iPNext
+//		int dP[3];
+//		int L; //neighbor of F_ on the opposite side of edge iP-iPNext
+//
+//		int iPolygon, iVertex;
+//		int iPNew, iPNewVertex, iFNewVertex;
+//		float s;
+//
+//		for (int j = 0; j < i + 5; j++) //for every previously considered face
+//		{
+//			for (int iF = 0; iF < 4; iF++)
+//			{
+//				F_[iF] = F[j * 4 + iF];
+//				Fn_[iF] = Fn[j * 4 + iF];
+//			}
+//
+//			int k = 0;
+//			nP_ = nP[j];
+//
+//			for (int k_ = 0; k_ < nP_; k_++)
+//			{
+//				iP = F_[k_];
+//				for (int iiP = 0; iiP < 3; iiP++)
+//					P_[iiP] = P[8 * iiP + iP];
+//
+//				NextCirc = k_ % nP_ + 1;
+//				iPNext = F_[NextCirc];
+//				for (int iiP = 0; iiP < 3; iiP++)
+//					Pnext[iiP] = P[8 * iiP + iPNext];
+//				for (int idP = 0; idP < 3; idP++)
+//					dP[idP] = Pnext[idP] - P_[idP];
+//				L = Fn_[k_];
+//
+//				float Nsum = N*(P_[0] + P_[1] + P_[2]);
+//				if (Nsum > d) //if iP is over new plane
+//				{
+//					if (Premoved[iP] == 0)
+//						Premoved[iP] == 1; //vertex iP is removed
+//
+//					iPolygon = j;
+//					iVertex = k;
+//
+//					//Remove Vertex from Polygon:
+//					for (int iF = 0; iF < (nP[iPolygon] - 1 - iVertex); iF++)
+//					{
+//						F[iPolygon * 4 + iVertex + iF] = F[iPolygon * 4 + iVertex + iF + 1];
+//						Fn[iPolygon * 4 + iVertex + iF] = Fn[iPolygon * 4 + iVertex + iF + 1];
+//					}
+//					nP[iPolygon] = nP[iPolygon] - 1;
+//
+//					float Nsum = N*(Pnext[0] + Pnext[1] + Pnext[2]);
+//					if (Nsum > d)
+//					{
+//						E[L*(nF + 6) + j] = 0;
+//						E[j*(nF + 6) + L] = 0;
+//						k -= 1;
+//					}
+//					else
+//					{
+//						if (E[j*(nF + 6) + L] == iP) //Vertex is not updated
+//						{
+//							//Add new vertex
+//							s = (d - (N*(P_[0] + P_[1] + P_[2]))) / (N*(dP[0] + dP[1] + dP[2]));
+//							P[0] = P_[0] + s*dP[0];
+//							P[1] = P_[1] + s*dP[1];
+//							P[2] = P_[2] + s*dP[2];
+//							iPNew = 3;
+//							//Premoved = [Premoved, 0];
+//							E[j*(nF + 6) + L] = iPNew;
+//						}
+//						else
+//							iPNew = E[j*(nF + 6) + L];
+//
+//						iPolygon = j;
+//						iVertex = k;
+//						iPNewVertex = iPNew;
+//						iFNewVertex = 1;
+//						//Add new Vertex to Polygon:
+//						for (int iF = 0; iF < (nP[iPolygon] + 1 - iVertex + 1); iF++)
+//						{
+//							F[iPolygon * 4 + iVertex + iF + 1] = F[iPolygon * 4 + iVertex + iF];
+//							Fn[iPolygon * 4 + iVertex + iF + 1] = Fn[iPolygon * 4 + iVertex + iF];
+//						}
+//						F[iPolygon * 4 + iVertex] = iPNewVertex;
+//						Fn[iPolygon * 4 + iVertex] = iFNewVertex;
+//						nP[iPolygon] = nP[iPolygon] + 1;
+//						//iNewVertices = [iNewVertices; iPNew];
+//						//iNeighbors = [iNeighbors; j];
+//						E[(i + 6)*(nF + 6) + j] = iPNew;
+//					}
+//				}
+//				else if ((N*(Pnext[0] + Pnext[1] + Pnext[2]) > d))
+//				{
+//					if (E[L*(nF + 6) + j] == iPNext) //Vertex is not updated
+//					{
+//						s = (d - (N*(P_[0] + P_[1] + P_[2]))) / (N*(dP[0] + dP[1] + dP[2]));
+//						P[0] = P_[0] + s*dP[0];
+//						P[1] = P_[1] + s*dP[1];
+//						P[2] = P_[2] + s*dP[2];
+//						iPNew = 3;
+//						//Premoved = [Premoved, 0];
+//						E[L*(nF + 6) + j] = iPNew;
+//					}
+//					else
+//						iPNew = E[L*(nF + 6) + j];
+//
+//					iPolygon = j;
+//					iVertex = k + 1;
+//					iPNewVertex = iPNew;
+//					iFNewVertex = i + 6;
+//					//Add new Vertex to Polygon:
+//					for (int iF = 0; iF < (nP[iPolygon] + 1 - iVertex + 1); iF++)
+//					{
+//						F[iPolygon * 4 + iVertex + iF + 1] = F[iPolygon * 4 + iVertex + iF];
+//						Fn[iPolygon * 4 + iVertex + iF + 1] = Fn[iPolygon * 4 + iVertex + iF];
+//					}
+//					F[iPolygon * 4 + iVertex] = iPNewVertex;
+//					Fn[iPolygon * 4 + iVertex] = iFNewVertex;
+//					nP[iPolygon] = nP[iPolygon] + 1;
+//					//iNewVertices = [iNewVertices; iPNew];
+//					//iNeighbors = [iNeighbors; j];
+//					E[j*(nF + 6) + i + 6] = iPNew;
+//					k = k + 1;
+//				}
+//				k = k + 1;
+//			}
+//
+//		}
+//		int iNewVerticesSize; //change
+//		int iNeighbor;
+//		nP[i + 6] = iNewVerticesSize;
+//
+//		int m = 1, br = 0;
+//		if (nP[i + 6] > 0)
+//		{
+//			float *F_ = new float(1000 * sizeof(float));
+//			float *Fn_ = new float(1000 * sizeof(float));
+//
+//			while (1)
+//			{
+//				F_[br] = iNewVertices[m];
+//				iNeighbor = iNeighbors[m];
+//				Fn_[br] = iNeighbor;
+//				iPNext = E[iNeighbor*(nF + 6) + (i + 6)];
+//				for (int iNV = 0; iNV < iNewVerticesSize; iNV++)
+//				{
+//					if (iNewVertices[iNV] == iPNext)
+//						m = iNV;
+//				}
+//				if (m == 1)
+//					break;
+//				br++;
+//			}
+//			for (int iF = 0; iF < br; iF++)
+//			{
+//				F[(i + 6) * 4 + iF] = F_[iF];
+//				Fn[(i + 6) * 4 + iF] = F_[iF];
+//			}
+//
+//		}
+//	}
+//	int mF = 4;
+//	int sizeF1, sizeF2; //dodati
+//	for (int i = 0; i < sizeF2; i++)
+//	{
+//		for (int iF = 0; iF < mF; iF++)
+//			F[i * 4 + nP[i] + 1 + iF] = 0;
+//	}
+//
+//	float *Ffinal;
+//	int br = 0;
+//	for (int i = 7; i < sizeF2 - 7; i++)
+//	{
+//		for (int j = 0; j < 4; j++)
+//		{
+//			Ffinal[br] = F[i * 4 + j];
+//			br++;
+//		}
+//	}
+//}
 
 bool PSGM::IsFlat(
 	Array<int> surfelArray,
@@ -11195,11 +12011,26 @@ int PSGM::CTIs(
 {
 	RECOG::PSGM_::ModelInstance **ppCTI = pCTISet->CTI.ppNext;
 
-	float RGC[9];
-	float varX;
+	if (bGroundPlaneRFDescriptors)
+	{
+		float RGC[9];
+		float varX;
 
-	if (!GravityReferenceFrames(surfelList, pCTISet, pMem))
-		return 0;
+		if (!GravityReferenceFrames(surfelList, pCTISet, pMem))
+			return 0;
+	}
+	else
+	{
+		Array<int> iSurfelArray;
+
+		iSurfelArray.Element = new int[pSurfels->NodeArray.n];
+
+		QLIST::CopyToArray(&surfelList, &iSurfelArray);
+
+		ReferenceFrames(iSurfelArray, pObjects->objectMap, iCluster);
+
+		delete[] iSurfelArray.Element;
+	}
 
 	int nCTIs = 0;
 
@@ -11207,10 +12038,10 @@ int PSGM::CTIs(
 
 	while (pCTI)
 	{
-	pCTI->iCluster = iCluster;
-	pCTI->iModel = iModel;
+		pCTI->iCluster = iCluster;
+		pCTI->iModel = iModel;
 
-	FitModel(iVertexArray, pCTI);
+		FitModel(iVertexArray, pCTI);
 
 		nCTIs++;
 
@@ -12537,288 +13368,6 @@ vtkSmartPointer<vtkPolyData> PSGM::GetPoseCorrectedVisibleModel(int iMatch)
 	return finPD;
 }
 
-//Vidovic
-void PSGM::GetTransparencyAndCollisionConsensus(Visualizer *pVisualizer)
-{
-	int i, iMatch;
-
-	consensusHypotheses.clear();
-
-	for (i = 0; i < noCollisionHypotheses.size(); i++)
-	{
-		iMatch = noCollisionHypotheses.at(i);
-
-		if (std::find(transparentHypotheses.begin(), transparentHypotheses.end(), iMatch) != transparentHypotheses.end())
-			continue;
-		else
-		{
-			consensusHypotheses.push_back(iMatch);
-
-			if (pVisualizer)
-				AddOneModelToVisualizer(pVisualizer, noCollisionHypotheses.at(i), -1, false, true);
-
-			cout << "Segment: " << GetSCTI(GetMatch(iMatch))->iCluster << " matched with model: " << GetMCTI(GetMatch(iMatch))->iModel << " with score " << GetMatch(iMatch)->cost_NN << "\n";
-		}			
-	}
-}
-
-void PSGM::EvaluateConsensusMatches(float &precision, float &recall, bool verbose)
-{
-	if (verbose)
-		cout << "Consensus matches evaluation for scene "<< iScene - 1 << "..." << "\n";
-
-	int iMatch, iHypothesis, iMCTI, iSCTI, iMatchedModel, iSSegment, iSegmentGT;
-	int TP_ = 0, FP_ = 0, FN_ = 0;
-	bool TPMatch;
-	RECOG::PSGM_::MatchInstance *pMatch;
-
-	pECCVGT->ResetMatchFlag();
-
-	for (iHypothesis = 0; iHypothesis < consensusHypotheses.size(); iHypothesis++)
-	{
-		iMatch = consensusHypotheses.at(iHypothesis);
-		pMatch = pCTImatchesArray.Element[iMatch];
-
-		//Compare to segment GT
-		iMCTI = pCTImatchesArray.Element[iMatch]->iMCTI;
-		iMatchedModel = MCTISet.pCTI.Element[iMCTI]->iModel;
-		iSCTI = pCTImatchesArray.Element[iMatch]->iSCTI;
-		iSSegment = CTISet.pCTI.Element[iSCTI]->iCluster;
-
-		iSegmentGT = pMatch->iScene * nDominantClusters + iSSegment;
-
-		//eliminate FP from segments without GT
-		if (!segmentGT.Element[iSegmentGT].valid)
-			TPMatch = false;
-		else	
-			TPMatch = CompareMatchToSegmentGT(pMatch->iScene, iSSegment, iMatchedModel); //check if match is TP and update match flag
-	
-		if (!TPMatch)
-		{
-			FP_++;
-		}
-	}
-
-	CountTPandFN(TP_, FN_, verbose);
-
-	CalculatePR(TP_, FP_, FN_, precision, recall);
-
-	//precision = (float) (TP_ / (TP_ + FP_));
-	//recall = (float) (TP_ / (TP_ + FN_));
-
-	if (verbose)
-	{
-		cout << "Precision: " << precision << "\n" << "Recall: " << recall << "\n";
-		cout << "TP: " << TP_ << "\tFP: " << FP_ << "\tFN: " << FN_ << "\n";
-		cout << "---------------------------------------------------\n";
-	}
-}
-
-RECOG::PSGM_::MatchInstance* PSGM::GetMatch(int matchID)
-{
-	return pCTImatchesArray.Element[matchID];
-}
-
-RECOG::PSGM_::ModelInstance* PSGM::GetMCTI(int iMCTI)
-{
-	return MCTISet.pCTI.Element[iMCTI];
-}
-
-RECOG::PSGM_::ModelInstance* PSGM::GetMCTI(RECOG::PSGM_::MatchInstance *pMatch)
-{
-	return MCTISet.pCTI.Element[pMatch->iMCTI];
-}
-
-RECOG::PSGM_::ModelInstance* PSGM::GetSCTI(int iSCTI)
-{
-	return CTISet.pCTI.Element[iSCTI];
-}
-
-RECOG::PSGM_::ModelInstance* PSGM::GetSCTI(RECOG::PSGM_::MatchInstance *pMatch)
-{
-	return CTISet.pCTI.Element[pMatch->iSCTI];
-}
-
-void PSGM::PrintCTIMatches()
-{
-	cout << "\nCTI matches per segment:\n";
-	for (int i = 0; i < bestSceneSegmentMatches.n; i++)
-	{
-		cout << "Segment: " << i << ":\n";
-
-		for (int j = 0; j < bestSceneSegmentMatches.Element[i].n; j++)
-			cout << "Match: " << j << " ModelID:" << GetMCTI(GetMatch(bestSceneSegmentMatches.Element[i].Element[j].idx))->iModel << "\tCTI score: " << GetMatch(bestSceneSegmentMatches.Element[i].Element[j].idx)->score << " (matchID: " << bestSceneSegmentMatches.Element[i].Element[j].idx << ")" << "\n";
-
-		cout << "---------------------------------------------------\n";
-	}
-
-}
-
-void PSGM::PrintICPMatches()
-{
-	cout << "\nICP matches per segment:\n";
-	for (int i = 0; i < scoreMatchMatrixICP.n; i++)
-	{
-		cout << "Segment: " << i << ":\n";
-
-		for (int j = 0; j < scoreMatchMatrixICP.Element[i].n; j++)
-			if (scoreMatchMatrixICP.Element[i].Element[j].idx != -1)
-				cout << "Match: " << j << " ModelID:" << GetMCTI(GetMatch(scoreMatchMatrixICP.Element[i].Element[j].idx))->iModel << "\tICP cost: " << GetMatch(scoreMatchMatrixICP.Element[i].Element[j].idx)->cost_NN << " gndDistance: " << GetMatch(scoreMatchMatrixICP.Element[i].Element[j].idx)->gndDistance << " transparency ratio:" << GetMatch(scoreMatchMatrixICP.Element[i].Element[j].idx)->transparencyRatio << " (matchID: " << scoreMatchMatrixICP.Element[i].Element[j].idx << ")" << "\n";
-
-		cout << "---------------------------------------------------\n";
-	}
-}
-
-void PSGM::VisualizeConsensusHypotheses(Visualizer *pVisualizer)
-{
-	int iHypothesis;
-
-	for (iHypothesis = 0; iHypothesis < consensusHypotheses.size(); iHypothesis++)
-		AddOneModelToVisualizer(pVisualizer, noCollisionHypotheses.at(iHypothesis), -1, false, false, true);
-		
-}
-
-void PSGM::VisualizeGTMatch(Visualizer *pVisualizer)
-{
-	int iSegment, CTIRank, matchID, iSegmentGT, iMatchedModel;
-	char cSelection;
-
-	RECOG::PSGM_::MatchInstance *pMatch;
-	matchID = scoreMatchMatrixICP.Element[matchGTiS].Element[matchGTiRank].idx;
-	pMatch = GetMatch(matchID);
-
-	//FILE *fp;
-	//fp = fopen("C:\\RVL\\matchGT.txt", "w");
-	iSegment = GetSCTI(pMatch)->iCluster;
-
-	iSegmentGT = pMatch->iScene * nDominantClusters + iSegment;
-	iMatchedModel = GetMCTI(pMatch)->iModel;
-
-	if (iMatchedModel == segmentGT.Element[iSegmentGT].iModel) //TP model
-	{
-		//delete visualized matches from the scene:
-		pVisualizer->renderer->RemoveAllViewProps();
-		pVisualizer->SetMesh(pMesh);
-		Display();
-
-		//visualize new ICP matches on the scene
-		AddOneModelToVisualizer(pVisualizer, matchID, matchGTiRank, true);
-	}
-
-
-
-
-
-
-
-	//nSegments = scoreMatchMatrixICP.n;
-
-	//for (iSegment = 0; iSegment < nSegments; iSegment++)
-	//{
-	//	for (iRank = 0; iRank < nBestMatches; iRank++)
-	//	{
-	//		//delete visualized matches from the scene:
-	//		pVisualizer->renderer->RemoveAllViewProps();
-	//		pVisualizer->SetMesh(pMesh);
-	//		Display();
-
-	//		matchID = scoreMatchMatrixICP.Element[iSegment].Element[iRank].idx;
-
-	//		//visualize new ICP matches on the scene
-	//		AddOneModelToVisualizer(pVisualizer, matchID, iRank, true);
-
-	//		CTIRank = FindCTIMatchRank(matchID, iSegment);
-
-	//		//debug
-	//		//cv::waitKey();
-
-	//		//do
-	//		//{
-	//		//	printf("Enter one of the options: \n");
-	//		//	printf("c:\tdisplay CTI match,\n");
-	//		//	printf("i:\tdisplay ICP match,\n");
-	//		//	printf("n:\tnext match,\n");
-	//		//	printf("x:\tprint info and proceed to next segment,\n");
-	//		//	scanf("%c", &cSelection);
-
-	//		//	if (cSelection == 'c')
-	//		//	{
-	//		//		//delete visualized matches from the scene:
-	//		//		pVisualizer->renderer->RemoveAllViewProps();
-	//		//		pVisualizer->SetMesh(pMesh);
-	//		//		Display();
-
-	//		//		AddOneModelToVisualizer(pVisualizer, matchID, CTIRank, false);
-	//		//	}
-	//		//	else if (cSelection == 'p')
-	//		//	{
-	//		//		//delete visualized matches from the scene:
-	//		//		pVisualizer->renderer->RemoveAllViewProps();
-	//		//		pVisualizer->SetMesh(pMesh);
-	//		//		Display();
-
-	//		//		AddOneModelToVisualizer(pVisualizer, scoreMatchMatrixICP.Element[iSegment].Element[iRank].idx, iRank, true);
-	//		//	}
-
-	//		//} while (cSelection != 'n' && cSelection != 'x' );
-
-	//		//if (cSelection == 'x')
-	//		//{
-	//		//	if (fp)
-	//		//	{
-	//		//		pMatch = GetMatch(matchID);
-	//		//		fprintf(fp, "%d\t%d\t%d\t%d\t%d\t%d\n", pMatch->iScene, iSegment, GetMCTI(pMatch)->iModel, matchID, CTIRank, iRank);
-	//		//	}
-	//		//	else
-	//		//		printf("MatchGT info - fp ERROR!\n");
-
-	//		//	break; //proceed to the next segment
-	//		//}
-	//	}
-	//}
-}
-
-int PSGM::FindCTIMatchRank(int matchID, int iSegment)
-{
-	int iRank;
-
-	for (iRank = 0; iRank < nBestMatches; iRank++)
-		if (bestSceneSegmentMatches.Element[iSegment].Element[iRank].idx == matchID)
-			return iRank;
-}
-//END Vidovic
-
-
-void PSGM::CreateDilatedDepthImage()
-{
-	//Generate scene depth
-	double point[3];
-	int u, v;
-	cv::Mat depth(480, 640, CV_16UC1, cv::Scalar::all(0));
-	for (int i = 0; i < pMesh->pPolygonData->GetNumberOfPoints(); i++)
-	{
-		pMesh->pPolygonData->GetPoint(i, point);
-		if ((point[0] == 0) && (point[1] == 0) && (point[2] == 0))
-			continue;
-		v = floor(float(i) / 640);
-		u = i - v * 640;
-		depth.at<uint16_t>(v, u) = (uint16_t)(point[2] * 1000); //in milimeters
-	}
-	//Postprocessing
-	for (int y = 0; y < depth.rows; y++)
-	{
-		for (int x = 0; x < depth.cols; x++)
-		{
-			if (depth.at<uint16_t>(y, x) == 0)
-				depth.at<uint16_t>(y, x) = 10000; //in milimeters
-		}
-	}
-	cv::Mat elementE = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(9, 9));
-	cv::erode(depth, depth, elementE);
-	//Set PSGM depth
-	depthImg = (unsigned short*)depth.data;
-}
-
 void PSGM::ObjectAlignment()
 {
 
@@ -13101,6 +13650,220 @@ void PSGM::VisualizeAlignedModels(int iRefModel, int iModel)
 
 void PSGM::Classify()
 {
+	//apple-> 0, 10; banana -> 10, 6; bottle -> 16, 69; bowl -> 85, 15; car -> 100, 26 
+	//donut -> 126, 10; hammer -> 136, 32; tetra_pak -> 168, 22; toilet_paper -> 190, 6 mug ->196, 61
+	//int iRefObject = 196;
+	//int nObjectsInClass = 61;
+
+	RECOG::PSGM_::ModelInstance *pMCTI, *pSCTI;
+	RECOG::PSGM_::ModelInstanceElement *pMIE, *pSIE;
+
+
+	Eigen::MatrixXf M(4, 66), P, D(66, 1), T(4, 4), T0p(4, 4), Tiq(4, 4), A(3, 66), S, E;
+
+
+	double sum;
+	double min;
+	int p, q;
+	Eigen::VectorXf t(3), d(66);
+	double s, s_;
+
+	A = ConvexTemplatenT(); //normals
+
+	int m_l = CTISet.pCTI.n; //number of reference (scene) model CTI-s
+
+	int nModels = MCTISet.nModels; // number of models in database
+	//int n = nObjectsInClass;
+
+	//number of all CTI-s of all models in database:
+	int nCTIs = 0;
+//	for (int i = 196; i < 257; i++) //mugs
+//	for (int i = 85; i < 100; i++) //bowls
+	for (int i = 0; i < nModels; i++)
+	{
+		nCTIs += MCTISet.SegmentCTIs.Element[i].n;
+	}
+
+	D.resize(66, nCTIs);
+	for (int k = 0; k < nCTIs; k++) //for all CTI-s of all models in database
+	{
+//		pMCTI = MCTISet.pCTI.Element[k+15879];
+		pMCTI = MCTISet.pCTI.Element[k];
+		pMIE = pMCTI->modelInstance.Element;
+
+		for (int di = 0; di < 66; di++)
+		{
+			D(di, k) = pMIE->d;
+			pMIE++;
+		}
+	}
+
+	min = 1000;
+	for (int j = 0; j < m_l; j++) //for all CTI-s in reference (scene) model
+	{
+		pSCTI = CTISet.pCTI.Element[j];
+		pSIE = pSCTI->modelInstance.Element;
+
+
+		// Determine the number of rows (rows=iValid) of M
+		int rows = 0;
+		Eigen::VectorXi validS(66);
+		for (int iSIE = 0; iSIE < 66; iSIE++)
+		{
+			validS(iSIE) = pSIE->valid;
+			d(iSIE) = pSIE->d; // Filling descriptor
+			if (pSIE->valid == 1)
+				rows++;
+			pSIE++;
+		}
+		
+		M.block<3, 66>(0, 0) << A;
+		Eigen::MatrixXf Mt = M.transpose();
+
+		// Search for valids and create dv and Mv
+		Eigen::MatrixXf Mv(rows, 4), Dv(rows, D.cols());
+		Eigen::VectorXf dv(rows);
+	
+		int iValid = 0;
+		for (int iSIE = 0; iSIE < 66; iSIE++)
+		{
+			if (validS(iSIE) == 1)
+			{
+				dv(iValid) = d(iSIE);
+				Mv.block<1, 3>(iValid, 0) << Mt.block<1, 3>(iSIE, 0);
+				Dv.block(iValid, 0, 1, D.cols()) << D.block(iSIE, 0, 1, D.cols());
+				iValid++;
+			}
+			pSIE++;
+		}
+		
+		for (int i = 0; i < rows; i++)
+		{
+			Mv(i, 3) = dv(i);
+		}
+
+		P = (Mv.transpose()*Mv).inverse()*Mv.transpose();
+		S = P*Dv;
+		E = Dv - Mv*S;
+
+		for (int je = 0; je < E.cols(); je++)
+		{
+			sum = 0;
+			for (int ie = 0; ie < E.rows(); ie++)
+			{
+				sum += E(ie, je)*E(ie, je);
+			}
+			s_ = S(3, je);
+			sum /= (s_*s_); //in scene-space
+			if (sum < min)
+			{
+				min = sum;
+				p = j;
+				q = je;
+				t = S.block<3, 1>(0, q);
+				s = s_;
+				
+			}
+
+		}
+
+
+
+	}
+
+	//q += 15879;
+	pMCTI = MCTISet.pCTI.Element[q];
+	int iClass = pMCTI->iModel;
+
+	if (iClass<10) printf("Class - apple.\n");
+	if (iClass >= 10 && iClass<16) printf("Class - banana.\n");
+	if (iClass >= 16 && iClass<85) printf("Class - bottle.\n");
+	if (iClass >= 85 && iClass<100) printf("Class - bowl.\n");
+	if (iClass >= 100 && iClass<126) printf("Class - car.\n");
+	if (iClass >= 126 && iClass<136) printf("Class - donut.\n");
+	if (iClass >= 136 && iClass<168) printf("Class - hammer.\n");
+	if (iClass >= 168 && iClass<190) printf("Class - tetra_pak.\n");
+	if (iClass >= 190 && iClass<196) printf("Class - toilet_paper.\n");
+	if (iClass >= 196) printf("Class - mug.\n");
+
+	FILE *fpClass;
+	fpClass = fopen("D:\\ARP3D\\matchClass.dat", "w");
+
+	fprintf(fpClass, "%d\t%d\t%.3f\t%.3f\t%.3f\t%.3f", q, p, s, t(0), t(1), t(2));
+
+	fclose(fpClass);
+	
+
+	/*T.block<3, 3>(0, 0) << s, 0, 0, 0, s, 0, 0, 0, s;
+	T.block<3, 1>(0, 3) << t;
+	T.block<1, 3>(3, 0) << 0, 0, 0;
+	T.block<1, 1>(3, 3) << 1;
+
+
+
+
+
+	int iCTI = MCTISet.SegmentCTIs.Element[iRefObject + i].Element[q];
+	Tiq(0, 0) = MCTISet.pCTI.Element[iCTI]->R[0];
+	Tiq(0, 1) = MCTISet.pCTI.Element[iCTI]->R[1];
+	Tiq(0, 2) = MCTISet.pCTI.Element[iCTI]->R[2];
+	Tiq(0, 3) = MCTISet.pCTI.Element[iCTI]->t[0];
+	Tiq(1, 0) = MCTISet.pCTI.Element[iCTI]->R[3];
+	Tiq(1, 1) = MCTISet.pCTI.Element[iCTI]->R[4];
+	Tiq(1, 2) = MCTISet.pCTI.Element[iCTI]->R[5];
+	Tiq(1, 3) = MCTISet.pCTI.Element[iCTI]->t[1];
+	Tiq(2, 0) = MCTISet.pCTI.Element[iCTI]->R[6];
+	Tiq(2, 1) = MCTISet.pCTI.Element[iCTI]->R[7];
+	Tiq(2, 2) = MCTISet.pCTI.Element[iCTI]->R[8];
+	Tiq(2, 3) = MCTISet.pCTI.Element[iCTI]->t[2];
+	Tiq.block<1, 3>(3, 0) << 0, 0, 0;
+	Tiq(3, 3) = 1;
+
+	float t1 = Tiq(0, 0);
+	float t2 = Tiq(0, 1);
+	float t3 = Tiq(0, 2);
+	float t4 = Tiq(0, 3);
+	float t5 = Tiq(1, 0);
+	float t6 = Tiq(1, 1);
+	float t7 = Tiq(1, 2);
+	float t8 = Tiq(1, 3);
+	float t9 = Tiq(2, 0);
+	float t10 = Tiq(2, 1);
+	float t11 = Tiq(2, 2);
+	float t12 = Tiq(2, 3);
+
+	iCTI = MCTISet.SegmentCTIs.Element[iRefObject].Element[p];
+	T0p(0, 0) = MCTISet.pCTI.Element[iCTI]->R[0];
+	T0p(0, 1) = MCTISet.pCTI.Element[iCTI]->R[1];
+	T0p(0, 2) = MCTISet.pCTI.Element[iCTI]->R[2];
+	T0p(0, 3) = MCTISet.pCTI.Element[iCTI]->t[0];
+	T0p(1, 0) = MCTISet.pCTI.Element[iCTI]->R[3];
+	T0p(1, 1) = MCTISet.pCTI.Element[iCTI]->R[4];
+	T0p(1, 2) = MCTISet.pCTI.Element[iCTI]->R[5];
+	T0p(1, 3) = MCTISet.pCTI.Element[iCTI]->t[1];
+	T0p(2, 0) = MCTISet.pCTI.Element[iCTI]->R[6];
+	T0p(2, 1) = MCTISet.pCTI.Element[iCTI]->R[7];
+	T0p(2, 2) = MCTISet.pCTI.Element[iCTI]->R[8];
+	T0p(2, 3) = MCTISet.pCTI.Element[iCTI]->t[2];
+	T0p.block<1, 3>(3, 0) << 0, 0, 0;
+	T0p(3, 3) = 1;
+
+	t1 = T0p(0, 0);
+	t2 = T0p(0, 1);
+	t3 = T0p(0, 2);
+	t4 = T0p(0, 3);
+	t5 = T0p(1, 0);
+	t6 = T0p(1, 1);
+	t7 = T0p(1, 2);
+	t8 = T0p(1, 3);
+	t9 = T0p(2, 0);
+	t10 = T0p(2, 1);
+	t11 = T0p(2, 2);
+	t12 = T0p(2, 3);
+
+	T0i = Tiq*T*T0p.transpose();
+*/
+	//VisualizeObjectClass();
 
 }
 
@@ -13554,3 +14317,545 @@ int PSGM::CheckHypothesesToSegmentEnvelopmentAndCollision(int hyp, int segment, 
 
 	return 0;
 }
+
+//Vidovic
+void PSGM::GetTransparencyAndCollisionConsensus(Visualizer *pVisualizer)
+{
+	int i, iMatch;
+
+	consensusHypotheses.clear();
+
+	for (i = 0; i < noCollisionHypotheses.size(); i++)
+	{
+		iMatch = noCollisionHypotheses.at(i);
+
+		if (std::find(transparentHypotheses.begin(), transparentHypotheses.end(), iMatch) != transparentHypotheses.end())
+			continue;
+		else
+		{
+			consensusHypotheses.push_back(iMatch);
+
+			if (pVisualizer)
+				AddOneModelToVisualizer(pVisualizer, noCollisionHypotheses.at(i), -1, false, true);
+
+			cout << "Segment: " << GetSCTI(GetMatch(iMatch))->iCluster << " matched with model: " << GetMCTI(GetMatch(iMatch))->iModel << " with score " << GetMatch(iMatch)->cost_NN << "\n";
+		}			
+	}
+}
+
+void PSGM::EvaluateConsensusMatches(float &precision, float &recall, bool verbose)
+{
+	if (verbose)
+		cout << "Consensus matches evaluation for scene "<< iScene - 1 << "..." << "\n";
+
+	int iMatch, iHypothesis, iMCTI, iSCTI, iMatchedModel, iSSegment, iSegmentGT;
+	int TP_ = 0, FP_ = 0, FN_ = 0;
+	bool TPMatch;
+	RECOG::PSGM_::MatchInstance *pMatch;
+
+	pECCVGT->ResetMatchFlag();
+
+	for (iHypothesis = 0; iHypothesis < consensusHypotheses.size(); iHypothesis++)
+	{
+		iMatch = consensusHypotheses.at(iHypothesis);
+		pMatch = pCTImatchesArray.Element[iMatch];
+
+		//Compare to segment GT
+		iMCTI = pCTImatchesArray.Element[iMatch]->iMCTI;
+		iMatchedModel = MCTISet.pCTI.Element[iMCTI]->iModel;
+		iSCTI = pCTImatchesArray.Element[iMatch]->iSCTI;
+		iSSegment = CTISet.pCTI.Element[iSCTI]->iCluster;
+
+		iSegmentGT = pMatch->iScene * nDominantClusters + iSSegment;
+
+		//eliminate FP from segments without GT
+		if (!segmentGT.Element[iSegmentGT].valid)
+			TPMatch = false;
+		else	
+			TPMatch = CompareMatchToSegmentGT(pMatch->iScene, iSSegment, iMatchedModel); //check if match is TP and update match flag
+	
+		if (!TPMatch)
+		{
+			FP_++;
+		}
+	}
+
+	CountTPandFN(TP_, FN_, verbose);
+
+	CalculatePR(TP_, FP_, FN_, precision, recall);
+
+	//precision = (float) (TP_ / (TP_ + FP_));
+	//recall = (float) (TP_ / (TP_ + FN_));
+
+	if (verbose)
+	{
+		cout << "Precision: " << precision << "\n" << "Recall: " << recall << "\n";
+		cout << "TP: " << TP_ << "\tFP: " << FP_ << "\tFN: " << FN_ << "\n";
+		cout << "---------------------------------------------------\n";
+	}
+}
+
+RECOG::PSGM_::MatchInstance* PSGM::GetMatch(int matchID)
+{
+	return pCTImatchesArray.Element[matchID];
+}
+
+RECOG::PSGM_::ModelInstance* PSGM::GetMCTI(int iMCTI)
+{
+	return MCTISet.pCTI.Element[iMCTI];
+}
+
+RECOG::PSGM_::ModelInstance* PSGM::GetMCTI(RECOG::PSGM_::MatchInstance *pMatch)
+{
+	return MCTISet.pCTI.Element[pMatch->iMCTI];
+}
+
+RECOG::PSGM_::ModelInstance* PSGM::GetSCTI(int iSCTI)
+{
+	return CTISet.pCTI.Element[iSCTI];
+}
+
+RECOG::PSGM_::ModelInstance* PSGM::GetSCTI(RECOG::PSGM_::MatchInstance *pMatch)
+{
+	return CTISet.pCTI.Element[pMatch->iSCTI];
+}
+
+void PSGM::PrintCTIMatches()
+{
+	cout << "\nCTI matches per segment:\n";
+	for (int i = 0; i < bestSceneSegmentMatches.n; i++)
+	{
+		cout << "Segment: " << i << ":\n";
+
+		for (int j = 0; j < bestSceneSegmentMatches.Element[i].n; j++)
+			cout << "Match: " << j << " ModelID:" << GetMCTI(GetMatch(bestSceneSegmentMatches.Element[i].Element[j].idx))->iModel << "\tCTI score: " << GetMatch(bestSceneSegmentMatches.Element[i].Element[j].idx)->score << " (matchID: " << bestSceneSegmentMatches.Element[i].Element[j].idx << ")" << "\n";
+
+		cout << "---------------------------------------------------\n";
+	}
+
+}
+
+void PSGM::PrintICPMatches()
+{
+	cout << "\nICP matches per segment:\n";
+	for (int i = 0; i < scoreMatchMatrixICP.n; i++)
+	{
+		cout << "Segment: " << i << ":\n";
+
+		for (int j = 0; j < scoreMatchMatrixICP.Element[i].n; j++)
+			if (scoreMatchMatrixICP.Element[i].Element[j].idx != -1)
+				cout << "Match: " << j << " ModelID:" << GetMCTI(GetMatch(scoreMatchMatrixICP.Element[i].Element[j].idx))->iModel << "\tICP cost: " << GetMatch(scoreMatchMatrixICP.Element[i].Element[j].idx)->cost_NN << " gndDistance: " << GetMatch(scoreMatchMatrixICP.Element[i].Element[j].idx)->gndDistance << " transparency ratio:" << GetMatch(scoreMatchMatrixICP.Element[i].Element[j].idx)->transparencyRatio << " (matchID: " << scoreMatchMatrixICP.Element[i].Element[j].idx << ")" << "\n";
+
+		cout << "---------------------------------------------------\n";
+	}
+}
+
+void PSGM::VisualizeConsensusHypotheses(Visualizer *pVisualizer)
+{
+	int iHypothesis;
+
+	for (iHypothesis = 0; iHypothesis < consensusHypotheses.size(); iHypothesis++)
+		AddOneModelToVisualizer(pVisualizer, noCollisionHypotheses.at(iHypothesis), -1, false, false, true);
+		
+}
+
+void PSGM::VisualizeGTMatch(Visualizer *pVisualizer)
+{
+	int iSegment, CTIRank, matchID, iSegmentGT, iMatchedModel;
+	char cSelection;
+
+	RECOG::PSGM_::MatchInstance *pMatch;
+	matchID = scoreMatchMatrixICP.Element[matchGTiS].Element[matchGTiRank].idx;
+	pMatch = GetMatch(matchID);
+
+	//FILE *fp;
+	//fp = fopen("C:\\RVL\\matchGT.txt", "w");
+	iSegment = GetSCTI(pMatch)->iCluster;
+
+	iSegmentGT = pMatch->iScene * nDominantClusters + iSegment;
+	iMatchedModel = GetMCTI(pMatch)->iModel;
+
+	if (iMatchedModel == segmentGT.Element[iSegmentGT].iModel) //TP model
+	{
+		//delete visualized matches from the scene:
+		pVisualizer->renderer->RemoveAllViewProps();
+		pVisualizer->SetMesh(pMesh);
+		Display();
+
+		//visualize new ICP matches on the scene
+		AddOneModelToVisualizer(pVisualizer, matchID, matchGTiRank, true);
+	}
+
+
+
+
+
+
+
+	//nSegments = scoreMatchMatrixICP.n;
+
+	//for (iSegment = 0; iSegment < nSegments; iSegment++)
+	//{
+	//	for (iRank = 0; iRank < nBestMatches; iRank++)
+	//	{
+	//		//delete visualized matches from the scene:
+	//		pVisualizer->renderer->RemoveAllViewProps();
+	//		pVisualizer->SetMesh(pMesh);
+	//		Display();
+
+	//		matchID = scoreMatchMatrixICP.Element[iSegment].Element[iRank].idx;
+
+	//		//visualize new ICP matches on the scene
+	//		AddOneModelToVisualizer(pVisualizer, matchID, iRank, true);
+
+	//		CTIRank = FindCTIMatchRank(matchID, iSegment);
+
+	//		//debug
+	//		//cv::waitKey();
+
+	//		//do
+	//		//{
+	//		//	printf("Enter one of the options: \n");
+	//		//	printf("c:\tdisplay CTI match,\n");
+	//		//	printf("i:\tdisplay ICP match,\n");
+	//		//	printf("n:\tnext match,\n");
+	//		//	printf("x:\tprint info and proceed to next segment,\n");
+	//		//	scanf("%c", &cSelection);
+
+	//		//	if (cSelection == 'c')
+	//		//	{
+	//		//		//delete visualized matches from the scene:
+	//		//		pVisualizer->renderer->RemoveAllViewProps();
+	//		//		pVisualizer->SetMesh(pMesh);
+	//		//		Display();
+
+	//		//		AddOneModelToVisualizer(pVisualizer, matchID, CTIRank, false);
+	//		//	}
+	//		//	else if (cSelection == 'p')
+	//		//	{
+	//		//		//delete visualized matches from the scene:
+	//		//		pVisualizer->renderer->RemoveAllViewProps();
+	//		//		pVisualizer->SetMesh(pMesh);
+	//		//		Display();
+
+	//		//		AddOneModelToVisualizer(pVisualizer, scoreMatchMatrixICP.Element[iSegment].Element[iRank].idx, iRank, true);
+	//		//	}
+
+	//		//} while (cSelection != 'n' && cSelection != 'x' );
+
+	//		//if (cSelection == 'x')
+	//		//{
+	//		//	if (fp)
+	//		//	{
+	//		//		pMatch = GetMatch(matchID);
+	//		//		fprintf(fp, "%d\t%d\t%d\t%d\t%d\t%d\n", pMatch->iScene, iSegment, GetMCTI(pMatch)->iModel, matchID, CTIRank, iRank);
+	//		//	}
+	//		//	else
+	//		//		printf("MatchGT info - fp ERROR!\n");
+
+	//		//	break; //proceed to the next segment
+	//		//}
+	//	}
+	//}
+}
+
+int PSGM::FindCTIMatchRank(int matchID, int iSegment)
+{
+	int iRank;
+
+	for (iRank = 0; iRank < nBestMatches; iRank++)
+		if (bestSceneSegmentMatches.Element[iSegment].Element[iRank].idx == matchID)
+			return iRank;
+}
+//END Vidovic
+
+
+void PSGM::CreateDilatedDepthImage()
+{
+	//Generate scene depth
+	double point[3];
+	int u, v;
+	cv::Mat depth(480, 640, CV_16UC1, cv::Scalar::all(0));
+	for (int i = 0; i < pMesh->pPolygonData->GetNumberOfPoints(); i++)
+	{
+		pMesh->pPolygonData->GetPoint(i, point);
+		if ((point[0] == 0) && (point[1] == 0) && (point[2] == 0))
+			continue;
+		v = floor(float(i) / 640);
+		u = i - v * 640;
+		depth.at<uint16_t>(v, u) = (uint16_t)(point[2] * 1000); //in milimeters
+	}
+	//Postprocessing
+	for (int y = 0; y < depth.rows; y++)
+	{
+		for (int x = 0; x < depth.cols; x++)
+		{
+			if (depth.at<uint16_t>(y, x) == 0)
+				depth.at<uint16_t>(y, x) = 10000; //in milimeters
+		}
+	}
+	cv::Mat elementE = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(9, 9));
+	cv::erode(depth, depth, elementE);
+	//Set PSGM depth
+	depthImg = (unsigned short*)depth.data;
+}
+
+#ifdef NEVER		// Old version
+void PSGM::ObjectAlignment()
+{
+	RECOG::PSGM_::ModelInstance *pMCTI;
+	RECOG::PSGM_::ModelInstanceElement *pMIE;
+	
+
+	Eigen::MatrixXf M(4, 66), P, D(66, 1), T(4, 4), T0p(4, 4), Tiq(4, 4), A, d(1, 66), S, E, I;
+
+	float sum;
+	float min;
+	int p, q;
+	Eigen::VectorXf t(3);
+	float s;
+	
+	A = ConvexTemplatenT(); //normals
+	
+	int m_l = MCTISet.SegmentCTIs.Element[0].n; //number of reference model CTI-s
+	int n = MCTISet.nModels; // number of models in database
+	int iPrevClusters = m_l;
+
+	for (int i = 1; i < n-1; i++) //for all non-reference models
+	{
+		int m_i = MCTISet.SegmentCTIs.Element[i].n; //number of current model CTI-s
+		D.resize(66, 1);
+		for (int k = 0; k < m_i; k++) //for all CTI-s in current model
+		{
+			pMCTI = MCTISet.pCTI.Element[iPrevClusters+k];
+			pMIE = pMCTI->modelInstance.Element;
+
+			for (int di = 0; di < 66; di++)
+			{
+				D.block<1, 1>(di, k) << pMIE->d;
+				pMIE++;
+			}
+			D.conservativeResize(D.rows(), D.cols() + 1);
+		}
+
+		min = 1000;
+
+		for (int j = 0; j < m_l; j++) //for all CTI-s in reference model
+		{
+			pMCTI = MCTISet.pCTI.Element[j];
+			pMIE = pMCTI->modelInstance.Element;
+
+			for (int di = 0; di < 66; di++)
+			{
+				d(0, di) = pMIE->d;
+				pMIE++;
+			}
+			M.block<3, 66>(0, 0) << A;
+			M.block<1, 66>(3, 0) << d;
+			Eigen::MatrixXf Mt = M.transpose();
+			P = (Mt.transpose()*Mt).inverse()*Mt.transpose();
+			S = P*D;
+			E = D - Mt*S;
+
+			for (int je = 0; je < E.cols(); je++)
+			{
+				sum = 0;
+				for (int ie = 0; ie < E.rows(); ie++)
+				{
+					sum += E(ie, je)*E(ie, je);
+				}
+				if (sum < min)
+				{
+					min = sum;
+					p = j;
+					q = je;
+					t = S.block<3, 1>(0, q);
+					//s = *(float*)(&S.data()[3 * S.cols() + q]);
+					s = S(3, q);
+				}
+			}
+			
+		}
+		//I = Eigen::Matrix<float, 3, 3>::Identity();			
+		
+		T.block<3, 3>(0, 0) << s, 0, 0, 0, s, 0, 0, 0, s;
+		T.block<3, 1>(0, 3) << t;
+		T.block<1, 3>(3, 0) << 0, 0, 0;
+		T.block<1, 1>(3, 3) << 1;
+
+		
+		//memcpy(Tiq.block<3, 3>(0, 0).data(), MCTISet.pCTI.Element[iPrevClusters + q]->R, 9 * sizeof(float));
+		//memcpy(Tiq.block<3, 1>(0, 3).data(), MCTISet.pCTI.Element[iPrevClusters + q]->t, 3 * sizeof(float));
+
+
+		Tiq(0, 0) = MCTISet.pCTI.Element[iPrevClusters + q]->R[0];
+		Tiq(0, 1) = MCTISet.pCTI.Element[iPrevClusters + q]->R[1];
+		Tiq(0, 2) = MCTISet.pCTI.Element[iPrevClusters + q]->R[2];
+		Tiq(0, 3) = MCTISet.pCTI.Element[iPrevClusters + q]->t[0];
+		Tiq(1, 0) = MCTISet.pCTI.Element[iPrevClusters + q]->R[3];
+		Tiq(1, 1) = MCTISet.pCTI.Element[iPrevClusters + q]->R[4];
+		Tiq(1, 2) = MCTISet.pCTI.Element[iPrevClusters + q]->R[5];
+		Tiq(1, 3) = MCTISet.pCTI.Element[iPrevClusters + q]->t[1];
+		Tiq(2, 0) = MCTISet.pCTI.Element[iPrevClusters + q]->R[6];
+		Tiq(2, 1) = MCTISet.pCTI.Element[iPrevClusters + q]->R[7];
+		Tiq(2, 2) = MCTISet.pCTI.Element[iPrevClusters + q]->R[8];
+		Tiq(2, 3) = MCTISet.pCTI.Element[iPrevClusters + q]->t[2];
+		Tiq.block<1, 3>(3, 0) << 0, 0, 0;
+		Tiq(3, 3) = 1;
+
+		float t1 = Tiq(0, 0);
+		float t2 = Tiq(0, 1);
+		float t3 = Tiq(0, 2);
+		float t4 = Tiq(0, 3);
+		float t5 = Tiq(1, 0);
+		float t6 = Tiq(1, 1);
+		float t7 = Tiq(1, 2);
+		float t8 = Tiq(1, 3);
+		float t9 = Tiq(2, 0);
+		float t10 = Tiq(2, 1);
+		float t11 = Tiq(2, 2);
+		float t12 = Tiq(2, 3);
+
+		//memcpy(T0p.block<3, 3>(0, 0).data(), MCTISet.pCTI.Element[p]->R, 9 * sizeof(float));
+		//memcpy(T0p.block<3, 1>(0, 3).data(), MCTISet.pCTI.Element[p]->t, 3 * sizeof(float));
+
+		T0p(0, 0) = MCTISet.pCTI.Element[p]->R[0];
+		T0p(0, 1) = MCTISet.pCTI.Element[p]->R[1];
+		T0p(0, 2) = MCTISet.pCTI.Element[p]->R[2];
+		T0p(0, 3) = MCTISet.pCTI.Element[p]->t[0];
+		T0p(1, 0) = MCTISet.pCTI.Element[p]->R[3];
+		T0p(1, 1) = MCTISet.pCTI.Element[p]->R[4];
+		T0p(1, 2) = MCTISet.pCTI.Element[p]->R[5];
+		T0p(1, 3) = MCTISet.pCTI.Element[p]->t[1];
+		T0p(2, 0) = MCTISet.pCTI.Element[p]->R[6];
+		T0p(2, 1) = MCTISet.pCTI.Element[p]->R[7];
+		T0p(2, 2) = MCTISet.pCTI.Element[p]->R[8];
+		T0p(2, 3) = MCTISet.pCTI.Element[p]->t[2];
+		T0p.block<1, 3>(3, 0) << 0, 0, 0;
+		T0p(3, 3) = 1;
+
+		t1 = T0p(0, 0);
+		t2 = T0p(0, 1);
+		t3 = T0p(0, 2);
+		t4 = T0p(0, 3);
+		t5 = T0p(1, 0);
+		t6 = T0p(1, 1);
+		t7 = T0p(1, 2);
+		t8 = T0p(1, 3);
+		t9 = T0p(2, 0);
+		t10 = T0p(2, 1);
+		t11 = T0p(2, 2);
+		t12 = T0p(2, 3);
+
+
+		T0i = Tiq*T*T0p.transpose();
+
+		t1 = T0i(0, 0);
+		t2 = T0i(0, 1);
+		t3 = T0i(0, 2);
+		t4 = T0i(0, 3);
+		t5 = T0i(1, 0);
+		t6 = T0i(1, 1);
+		t7 = T0i(1, 2);
+		t8 = T0i(1, 3);
+		t9 = T0i(2, 0);
+		t10 = T0i(2, 1);
+		t11 = T0i(2, 2);
+		t12 = T0i(2, 3);
+
+		VisualizeAlignedModels(0, i);
+
+		iPrevClusters += m_i;
+
+	}
+}
+
+void PSGM::VisualizeAlignedModels(int iRefModel, int iModel)
+{
+	//Set transform
+	vtkSmartPointer<vtkTransform> transform = vtkSmartPointer<vtkTransform>::New();
+	double T_M_S[16];
+	
+	T_M_S[0]= T0i(0, 0);
+	T_M_S[1]= T0i(0, 1);
+	T_M_S[2]= T0i(0, 2);
+	T_M_S[3]= T0i(0, 3);
+	T_M_S[4]= T0i(1, 0);
+	T_M_S[5]= T0i(1, 1);
+	T_M_S[6]= T0i(1, 2);
+	T_M_S[7]= T0i(1, 3);
+	T_M_S[8]= T0i(2, 0);
+	T_M_S[9] = T0i(2, 1);
+	T_M_S[10] = T0i(2, 2);
+	T_M_S[11] = T0i(2, 3);
+	T_M_S[12] = T0i(3, 0);
+	T_M_S[13] = T0i(3, 1);
+	T_M_S[14] = T0i(3, 2);
+	T_M_S[15] = T0i(3, 3);
+
+	transform->SetMatrix(T_M_S);
+
+	//Scaling Ref. PLY model to meters (if needed)
+	vtkSmartPointer<vtkTransform> transformScale = vtkSmartPointer<vtkTransform>::New();
+	//transformScale->Scale(0.001,0.001,0.001);
+	transformScale->Scale(1,1,1);
+	vtkSmartPointer<vtkTransformPolyDataFilter> transformFilterScale = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
+	transformFilterScale->SetInputData(vtkModelDB.at(iRefModel));	//Get model from DB
+	transformFilterScale->SetTransform(transformScale);
+	transformFilterScale->Update();
+
+	//Transform it
+	vtkSmartPointer<vtkTransformPolyDataFilter> transformFilter = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
+	transformFilter->SetInputData(transformFilterScale->GetOutput()); //PLY model
+	transformFilter->SetTransform(transform);
+	transformFilter->Update();
+
+	// Initialize VTK.
+	vtkSmartPointer<vtkRenderer> renderer = vtkSmartPointer<vtkRenderer>::New();
+	vtkSmartPointer<vtkRenderWindow> window = vtkSmartPointer<vtkRenderWindow>::New();
+	vtkSmartPointer<vtkRenderWindowInteractor> interactor = vtkSmartPointer<vtkRenderWindowInteractor>::New();
+	window->AddRenderer(renderer);
+	window->SetSize(800, 600);
+	interactor->SetRenderWindow(window);
+	vtkSmartPointer<vtkInteractorStyleTrackballCamera> style = vtkSmartPointer<vtkInteractorStyleTrackballCamera>::New();
+	interactor->SetInteractorStyle(style);
+	renderer->SetBackground(0.5294, 0.8078, 0.9803);
+
+	//Generate Ref. model polydata
+	vtkSmartPointer<vtkPolyData> modelPD = transformFilter->GetOutput();
+	//vtkSmartPointer<vtkPolyData> modelPD = transformFilterScale->GetOutput();
+	vtkSmartPointer<vtkPolyDataMapper> modelMapper = vtkSmartPointer<vtkPolyDataMapper>::New();
+	modelMapper->SetInputData(modelPD);
+	vtkSmartPointer<vtkActor> modelActor = vtkSmartPointer<vtkActor>::New();
+	modelActor->SetMapper(modelMapper);
+	modelActor->GetProperty()->SetColor(0, 1, 0);
+	renderer->AddActor(modelActor);
+
+
+	//Generate scene polydata
+	//Scaling PLY model to meters (if needed)
+	transformScale = vtkSmartPointer<vtkTransform>::New();
+	//transformScale->Scale(0.001,0.001,0.001);
+	transformScale->Scale(1,1,1);
+	transformFilterScale = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
+	transformFilterScale->SetInputData(vtkModelDB.at(iModel));	//Get model from DB
+	transformFilterScale->SetTransform(transformScale);
+	transformFilterScale->Update();
+
+
+	vtkSmartPointer<vtkPolyData> modelSPD = transformFilterScale->GetOutput();
+	vtkSmartPointer<vtkPolyDataMapper> modelSMapper = vtkSmartPointer<vtkPolyDataMapper>::New();
+	modelSMapper->SetInputData(modelSPD);
+	vtkSmartPointer<vtkActor> modelSActor = vtkSmartPointer<vtkActor>::New();
+	modelSActor->SetMapper(modelSMapper);
+	modelSActor->GetProperty()->SetColor(0, 0, 1);
+	renderer->AddActor(modelSActor);
+
+	//Start VTK
+	renderer->ResetCamera();
+	renderer->TwoSidedLightingOff();
+	window->Render();
+	interactor->Start();
+
+}
+#endif 
