@@ -29,9 +29,7 @@
 //#define RVLPSGM_CTIMESH_DEBUG
 //#define RVLPSGM_MATCHTGS_CREATE_SCENE_TG
 //#define RVLPSGM_MATCHTGS_CREATE_SCENE_VG
-#ifndef RVLVERSION_170601
-#define RVLPSGM_MATCHCTI_MATCH_MATRIX		// 170601: OFF
-#endif
+#define RVLPSGM_MATCHCTI_MATCH_MATRIX //activate this flag regardless to version 170601 - Vidovic 20.07.2017
 #define RVLPSGM_MATCH_HYPOTHESIS_LOG
 
 using namespace RVL;
@@ -63,6 +61,7 @@ PSGM::PSGM()
 	minClusterBoundaryDiscontinuityPerc = 75;
 	minClusterNormalDistributionStd = 0.1f;
 	groundPlaneTolerance = 0.020f;
+	gndCTIThr = 0.015f;
 
 	convexTemplate66.n = 66;
 	convexTemplate66.Element = new RECOG::PSGM_::Plane[convexTemplate66.n];
@@ -169,6 +168,9 @@ PSGM::PSGM()
 	TemplateMatrix(STGSet.A);
 
 	createMatchGT = false;
+
+	//depthImg = new unsigned short(480*640); //Vidovic
+	depth = cv::Mat(480, 640, CV_16UC1, cv::Scalar::all(0));
 }
 
 
@@ -246,6 +248,8 @@ PSGM::~PSGM()
 		delete[] icpTMatrix;
 
 	//fclose(fpTime);
+
+	//delete depthImg;
 	//End Vidovic
 
 	if (vpObjectDetector)
@@ -388,6 +392,16 @@ void PSGM::Interpret(
 
 		for (i = 0; i < groundPlaneSurfelArray.n; i++)
 			pSurfels->NodeArray.Element[groundPlaneSurfelArray.Element[i]].flags |= RVLSURFEL_FLAG_GND;
+
+		bGnd = true;
+
+		Surfel *pGndSurfel = pSurfels->NodeArray.Element + groundPlaneSurfelArray.Element[0];
+
+		float *NGnd_ = pGndSurfel->N;
+
+		RVLCOPY3VECTOR(NGnd_, NGnd);
+
+		dGnd = pGndSurfel->d;
 	}
 
 	// Detect vertices.
@@ -2447,15 +2461,18 @@ void PSGM::TemplateMatrix(Array2D<float> &A)
 void PSGM::FitModel(
 	Array<int> iVertexArray,
 	RECOG::PSGM_::ModelInstance *pModelInstance,
-	bool bMemAllocated)
+	bool bMemAllocated,
+	float *PGnd)
 {
 	if (!bMemAllocated)
-	RVLMEM_ALLOC_STRUCT_ARRAY(pMem, RECOG::PSGM_::ModelInstanceElement, convexTemplate.n, pModelInstance->modelInstance.Element);
+		RVLMEM_ALLOC_STRUCT_ARRAY(pMem, RECOG::PSGM_::ModelInstanceElement, convexTemplate.n, pModelInstance->modelInstance.Element);
 
 	pModelInstance->modelInstance.n = convexTemplate.n;
 
 	float *R = pModelInstance->R;
 	float *t = pModelInstance->t;
+
+	bool bGnd_ = (bGnd && problem == RVLRECOGNITION_PROBLEM_CLASSIFICATION && PGnd != NULL);
 
 	int iModelInstanceElement;
 	RECOG::PSGM_::ModelInstanceElement *pModelInstanceElement;
@@ -2467,6 +2484,8 @@ void PSGM::FitModel(
 	//float dist;
 	//float maxdDefinedNormal;
 	int iVertex;
+	float *PGnd_;
+	float eGnd;
 
 	for (iModelInstanceElement = 0; iModelInstanceElement < convexTemplate.n; iModelInstanceElement++)
 	{
@@ -2503,39 +2522,54 @@ void PSGM::FitModel(
 			}
 		}
 
-			//Vidovic
-			if (bNormalValidityTest)
-			{
-				//if (pVertex->normalHull.n >= 3)
-				//{
-				//	dist = pSurfels->DistanceFromNormalHull(pVertex->normalHull, N_);
+		//Vidovic
+		if (bNormalValidityTest)
+		{
+			//if (pVertex->normalHull.n >= 3)
+			//{
+			//	dist = pSurfels->DistanceFromNormalHull(pVertex->normalHull, N_);
 
-				//	if (dist <= 0.0f)
-				//	{
-				//		if (pModelInstanceElement->valid)
-				//		{
-				//			if (d > maxdDefinedNormal)
-				//				maxdDefinedNormal = d;
-				//		}
-				//		else
-				//		{
-				//			maxdDefinedNormal = d;
-				//			pModelInstanceElement->valid = true;
-				//		}
-				//	}
-				//}
-				pModelInstanceElement->valid = true;
+			//	if (dist <= 0.0f)
+			//	{
+			//		if (pModelInstanceElement->valid)
+			//		{
+			//			if (d > maxdDefinedNormal)
+			//				maxdDefinedNormal = d;
+			//		}
+			//		else
+			//		{
+			//			maxdDefinedNormal = d;
+			//			pModelInstanceElement->valid = true;
+			//		}
+			//	}
+			//}
+			pModelInstanceElement->valid = true;
 
 			pVertex = pSurfels->vertexArray.Element[pModelInstanceElement->iVertex];
 
-				P = pVertex->P;
+			P = pVertex->P;
 
-				if (RVLDOTPRODUCT3(N_, P) >= 0.0f)
+			if (bGnd_)
+			{
+				for (i = 0; i < iVertexArray.n; i++)
+				{
+					PGnd_ = PGnd + 3 * i;
+
+					eGnd = RVLDOTPRODUCT3(N_, PGnd_) - pModelInstanceElement->d;
+
+					if (eGnd > gndCTIThr)
+						break;
+				}
+
+				if (i < iVertexArray.n)
 					pModelInstanceElement->valid = false;
 			}
-			else
-				pModelInstanceElement->valid = true;
-			//END Vidovic
+			else if (RVLDOTPRODUCT3(N_, P) >= 0.0f)
+				pModelInstanceElement->valid = false;
+		}
+		else
+			pModelInstanceElement->valid = true;
+		//END Vidovic
 
 		pModelInstanceElement->d -= RVLDOTPRODUCT3(N_, t);
 
@@ -2543,7 +2577,7 @@ void PSGM::FitModel(
 		//if (bNormalValidityTest)
 		//	pModelInstanceElement->e = (pModelInstanceElement->valid ? pModelInstanceElement->d - maxdDefinedNormal : 0.0f);
 		//else
-			pModelInstanceElement->e = 0.0f;
+		pModelInstanceElement->e = 0.0f;
 		//END Vidovic
 	}	// for every model instance descriptor element
 
@@ -3347,8 +3381,8 @@ void PSGM::Learn(
 
 		saveDBSequenceFile = true;
 
-			//mesh.LoadPolyDataFromPLY(modelFilePath);
-			LoadMesh(vpMeshBuilder, modelFilePath, &mesh, false);
+		//mesh.LoadPolyDataFromPLY(modelFilePath);
+		LoadMesh(vpMeshBuilder, modelFilePath, &mesh, false);
 
 		SetSceneFileName(modelFilePath);
 
@@ -3450,7 +3484,7 @@ void PSGM::Learn(
 }
 
 
-void PSGM::LoadModelMeshDB(char *modelSequenceFileName, bool decimateF, float decimatePercent)
+void PSGM::LoadModelMeshDB(char *modelSequenceFileName, std::map<int, vtkSmartPointer<vtkPolyData>> *vtkModelDB, bool bDecimate, float decimatePercent)
 {
 	FileSequenceLoader modelsLoader;
 
@@ -3475,7 +3509,7 @@ void PSGM::LoadModelMeshDB(char *modelSequenceFileName, bool decimateF, float de
 		vtkSmartPointer<vtkDecimatePro> decimate = vtkSmartPointer<vtkDecimatePro>::New();
 		//mesh.pPolygonData->Print(std::cout);
 
-		if (decimateF) //subsampling the model to reduce number of points and fasten the process
+		if (bDecimate) //subsampling the model to reduce number of points and fasten the process
 		{
 			decimate->SetInputData(mesh.pPolygonData);
 			decimate->SetTargetReduction(decimatePercent);
@@ -3487,7 +3521,7 @@ void PSGM::LoadModelMeshDB(char *modelSequenceFileName, bool decimateF, float de
 		vtkSmartPointer<vtkPolyDataNormals> normalsFilter = vtkSmartPointer<vtkPolyDataNormals>::New();
 		normalsFilter->ComputePointNormalsOn();
 		normalsFilter->SplittingOff();
-		if (decimateF)
+		if (bDecimate)
 			normalsFilter->SetInputConnection(decimate->GetOutputPort());
 		else
 			normalsFilter->SetInputData(mesh.pPolygonData);
@@ -3502,8 +3536,8 @@ void PSGM::LoadModelMeshDB(char *modelSequenceFileName, bool decimateF, float de
 		//cleanFilter->GetOutput()->Print(std::cout);
 		
 		//Add vtkPolyData to vtkModelDB:
-		normalsFilter->GetOutput()->GetPointData()->RemoveArray("RGB");
-		vtkModelDB.insert(std::make_pair(currentModelID, normalsFilter->GetOutput()));
+		normalsFilter->GetOutput()->GetPointData()->RemoveArray("RGB"); //Vidovic merging 20.07.2017
+		vtkModelDB->insert(std::make_pair(currentModelID, normalsFilter->GetOutput()));
 		currentModelID++;
 	}
 
@@ -5048,7 +5082,7 @@ void PSGM::Match()
 
 	// Match TGs.
 
-	MatchTGs();
+	//MatchTGs();
 }
 
 void PSGM::Match(
@@ -7261,6 +7295,8 @@ void PSGM::Display()
 	}
 	else if (problem == RVLRECOGNITION_PROBLEM_CLASSIFICATION)
 	{
+		displayData.bClusters = false;
+
 		pSurfels->Display(pVisualizer, pMesh);
 
 		//pSVertexGraph->Display(pVisualizer);
@@ -7929,7 +7965,7 @@ bool RVL::RECOG::PSGM_::mouseRButtonDownUserFunction(
 			pSurfels->UpdateVertexDisplayLines();
 		}
 
-		//pData->iSelectedCluster = iCluster;
+		pData->iSelectedCluster = iCluster;
 
 		//FILE *fp = fopen("C:\\RVL\\Debug\\cluster_vertices.txt", "w");
 
@@ -8775,7 +8811,7 @@ void PSGM::CalculateICPCost(RVL::PSGM::ICPfunction ICPFunction, int ICPvariant, 
 			ICPFunction(transformFilter->GetOutput(), scenePD, icpT, 20, 0.02, ICPvariant, &fitnessScore, kdTreePtr);
 
 			pMatch->cost_ICP = fitnessScore;
-
+			
 			//Commented on 14.06.2017 - Vidovic
 			//save only final pose in pMatch
 			/*memcpy(pMatch->T_ICP, icpT, 16 * sizeof(float));
@@ -9743,6 +9779,7 @@ void PSGM::RVLPSGInstanceMesh(Eigen::MatrixXf nI, float *dI)
 #endif
 }
 
+
 void PSGM::PrintCTIMeshFaces(FILE *fp, Eigen::MatrixXi F, Eigen::MatrixXi Fn, int n, Eigen::MatrixXi nP)
 {
 	fprintf(fp, "F:\n");
@@ -10531,7 +10568,7 @@ void PSGM::ICP(RVL::PSGM::ICPfunction ICPFunction, int ICPvariant)
 
 	for (int i = 0; i < bestSceneSegmentMatches.n; i++)
 	{
-		//cout << "Segment: " << i << ":\n";
+		cout << "Segment: " << i << ":\n";
 
 		for (int j = 0; j < bestSceneSegmentMatches.Element[i].n; j++)
 		{
@@ -12004,6 +12041,8 @@ int PSGM::CTIs(
 	RECOG::CTISet *pCTISet,
 	CRVLMem *pMem)
 {
+	// Generate CTI reference frames.
+
 	RECOG::PSGM_::ModelInstance **ppCTI = pCTISet->CTI.ppNext;
 
 	if (bGroundPlaneRFDescriptors)
@@ -12027,6 +12066,39 @@ int PSGM::CTIs(
 		delete[] iSurfelArray.Element;
 	}
 
+	// Project vertices onto the ground plane.
+
+	float *PGnd = NULL;
+
+	if (bGnd && problem == RVLRECOGNITION_PROBLEM_CLASSIFICATION)
+	{
+		PGnd = new float[3 * iVertexArray.n];
+
+		float s;
+		int i;
+		float *PGnd_;
+		int iVertex;
+		SURFEL::Vertex *pVertex;
+		float *P;
+
+		for (i = 0; i < iVertexArray.n; i++)
+		{
+			PGnd_ = PGnd + 3 * i;
+
+			iVertex = iVertexArray.Element[i];
+
+			pVertex = pSurfels->vertexArray.Element[iVertex];
+
+			P = pVertex->P;
+
+			s = dGnd / RVLDOTPRODUCT3(NGnd, P);
+
+			RVLSCALE3VECTOR(P, s, PGnd_);
+		}
+	}
+
+	// Create CTI descriptors.
+
 	int nCTIs = 0;
 
 	RECOG::PSGM_::ModelInstance *pCTI = *ppCTI;
@@ -12036,12 +12108,14 @@ int PSGM::CTIs(
 		pCTI->iCluster = iCluster;
 		pCTI->iModel = iModel;
 
-		FitModel(iVertexArray, pCTI);
+		FitModel(iVertexArray, pCTI, false, PGnd);
 
 		nCTIs++;
 
 		pCTI = pCTI->pNext;
 	}
+
+	RVL_DELETE_ARRAY(PGnd);
 
 	return nCTIs;
 }
@@ -13274,11 +13348,11 @@ float PSGM::GetObjectTransparencyRatio(vtkSmartPointer<vtkPolyData> object, unsi
 //Requires scoreMatchMatrixICP???
 void PSGM::FilterHypothesesUsingTransparency(float tranThr, float depthThr, bool verbose)
 {
-	CreateDilatedDepthImage();
-
 	transparentHypotheses.clear(); //Vidovic
 
 	RECOG::PSGM_::MatchInstance *pMatch; //Vidovic
+
+	CreateDilatedDepthImage();
 
 	float tranRatio;
 	for (int i = 0; i < scoreMatchMatrixICP.n; i++)
@@ -13288,7 +13362,8 @@ void PSGM::FilterHypothesesUsingTransparency(float tranThr, float depthThr, bool
 			if (scoreMatchMatrixICP.Element[i].Element[j].idx >= 0)
 			{
 				vtkSmartPointer<vtkPolyData> object = GetPoseCorrectedVisibleModel(scoreMatchMatrixICP.Element[i].Element[j].idx);
-				tranRatio = GetObjectTransparencyRatio(object, this->depthImg, depthThr, 640, 480, 525, 525, 320, 240); //HARDCODED FOR ECCV DATASET CAMERA
+				//tranRatio = GetObjectTransparencyRatio(object, this->depthImg, depthThr, 640, 480, 525, 525, 320, 240); //HARDCODED FOR ECCV DATASET CAMERA
+				tranRatio = GetObjectTransparencyRatio(object, (unsigned short *)depth.data, depthThr, 640, 480, 525, 525, 320, 240); //HARDCODED FOR ECCV DATASET CAMERA
 
 				//save transparency ratio to match instance - Vidovic
 				pMatch = GetMatch(scoreMatchMatrixICP.Element[i].Element[j].idx);
@@ -13889,15 +13964,181 @@ int PSGM::FindCTIMatchRank(int matchID, int iSegment)
 		if (bestSceneSegmentMatches.Element[iSegment].Element[iRank].idx == matchID)
 			return iRank;
 }
-//END Vidovic
 
+
+// vidovic branch
+
+int PSGM::FindICPMatchRank(int matchID, int iSegment)
+{
+	int iRank;
+
+	for (iRank = 0; iRank < nBestMatches; iRank++)
+		if (scoreMatchMatrixICP.Element[iSegment].Element[iRank].idx == matchID)
+			return iRank;
+}
+
+void PSGM::createVersionTestFile()
+{
+	char *versionTestFileName, *matchGTFileName;
+	FILE *fpTF;
+
+	matchGTFileName = RVLCreateFileName(sceneFileName, ".ply", -1, ".mgt", pMem);
+	fpMatchGT = fopen(matchGTFileName, "r");
+
+	versionTestFileName = RVLCreateFileName(sceneFileName, ".ply", -1, ".tf", pMem);
+	fpTF = fopen(versionTestFileName, "w");
+
+	//int iScene, iSegment, iModel, matchID, CTIrank, ICPrank;
+	RECOG::PSGM_::MGT MGTinstance;
+
+	if (fpMatchGT)
+	{
+		while (!feof(fpMatchGT))
+		{
+			fscanf(fpMatchGT, "%d\t%d\t%d\t%d\t%d\t%d", &MGTinstance.iScene, &MGTinstance.iSegment, &MGTinstance.iModel, &MGTinstance.matchID, &MGTinstance.CTIrank, &MGTinstance.ICPrank);
+			fprintf(fpTF, "%d\t%d\t%d\t%d\t%d\t%d\t%.4f\t%.4f\t%.4f\t%.4f\n", MGTinstance.iScene, MGTinstance.iSegment, MGTinstance.iModel, MGTinstance.matchID, MGTinstance.CTIrank, MGTinstance.ICPrank, pCTImatchesArray.Element[MGTinstance.matchID]->score, pCTImatchesArray.Element[MGTinstance.matchID]->cost_NN, pCTImatchesArray.Element[MGTinstance.matchID]->gndDistance, pCTImatchesArray.Element[MGTinstance.matchID]->transparencyRatio);
+		}
+	}
+
+	fclose(fpMatchGT);
+	fclose(fpTF);
+}
+
+void PSGM::checkVersionTestFile(bool verbose)
+{
+	char *versionTestFileName;
+	FILE *fpTF;
+
+	versionTestFileName = RVLCreateFileName(sceneFileName, ".ply", -1, ".tf", pMem);
+	fpTF = fopen(versionTestFileName, "r");
+
+	RECOG::PSGM_::MGT MGTinstance;
+	bool diff = false;
+	int nDiff = 0;
+
+	printf("***********************************************************************\n");
+	printf("Version Test File checking started...");
+
+	if (fpTF)
+	{
+		while (!feof(fpTF))
+		{
+			fscanf(fpTF, "%d\t%d\t%d\t%d\t%d\t%d\t%f\t%f\t%f\t%f", &MGTinstance.iScene, &MGTinstance.iSegment, &MGTinstance.iModel, &MGTinstance.matchID, &MGTinstance.CTIrank, &MGTinstance.ICPrank, &MGTinstance.CTIscore, &MGTinstance.ICPcost, &MGTinstance.gndDistance, &MGTinstance.transparencyRatio);
+
+			if (checkVersionTestFile(MGTinstance, verbose))
+			{
+				if (!verbose)
+					printf("\nDifference between current and old version found in match %d!!", MGTinstance.matchID);
+
+				diff = true;
+				nDiff++;
+			}
+		}
+	
+
+		if (diff)
+			printf("\nVersion Test File checking completed with %d differences!!\n", nDiff);
+		else
+			printf(" completed with no differences!!\n");
+	}
+	else
+		printf("\nVersion Test File %s is missing!!\n", versionTestFileName);
+
+
+	printf("***********************************************************************\n");
+}
+
+bool PSGM::checkVersionTestFile(RECOG::PSGM_::MGT MGTinstance, bool verbose)
+{
+	RECOG::PSGM_::MatchInstance *pMatch;
+	pMatch = pCTImatchesArray.Element[MGTinstance.matchID];
+
+	bool diff = false;
+	int CTIrank, ICPrank;
+
+	if (MGTinstance.matchID == 200107 || MGTinstance.matchID == 200294)
+		int debug = 0;
+
+	if (MGTinstance.iSegment != GetSCTI(pMatch)->iCluster)
+	{
+		diff = true;
+
+		if (verbose)
+			printf("\nVersion Test File difference for match %d. (TF segment is %d, while current is %d)!!", MGTinstance.matchID, MGTinstance.iSegment, GetSCTI(pMatch)->iCluster);
+	}
+
+	if (MGTinstance.iModel != GetMCTI(pMatch)->iModel)
+	{
+		diff = true;
+
+		if (verbose)
+			printf("\nVersion Test File difference for match %d. (TF model is %d, while current is %d)!!", MGTinstance.matchID, MGTinstance.iModel, GetMCTI(pMatch)->iModel);
+	}
+
+	CTIrank = FindCTIMatchRank(MGTinstance.matchID, GetSCTI(pMatch)->iCluster);
+
+	if (MGTinstance.CTIrank != CTIrank)
+	{
+		diff = true;
+
+		if (verbose)
+			printf("\nVersion Test File difference for match %d. (TF CTI rank is %d, while current is %d)!!", MGTinstance.matchID, MGTinstance.CTIrank, CTIrank);
+	}
+
+	ICPrank = FindICPMatchRank(MGTinstance.matchID, GetSCTI(pMatch)->iCluster);
+
+	if (MGTinstance.ICPrank != ICPrank)
+	{
+		diff = true;
+
+		if (verbose)
+			printf("\nVersion Test File difference for match %d. (TF ICP rank is %d, while current is %d)!!", MGTinstance.matchID, MGTinstance.ICPrank, ICPrank);
+	}
+
+	if (RVLABS((MGTinstance.CTIscore - pMatch->score)) > 0.00009)
+	{
+		diff = true;
+
+		if (verbose)
+			printf("\nVersion Test File difference for match %d. (TF CTI score is %.4f, while current is %f)!!", MGTinstance.matchID, MGTinstance.CTIscore, pMatch->score);
+	}
+
+	if (RVLABS((MGTinstance.ICPcost - pMatch->cost_NN)) > 0.00009)
+	{
+		diff = true;
+
+		if (verbose)
+			printf("\nVersion Test File difference for match %d. (TF ICP cost is %.4f, while current is %f)!!", MGTinstance.matchID, MGTinstance.ICPcost, pMatch->cost_NN);
+	}
+
+	if (RVLABS((MGTinstance.gndDistance - pMatch->gndDistance)) > 0.00009)
+	{
+		diff = true;
+
+		if (verbose)
+			printf("\nVersion Test File difference for match %d. (TF ground distance is %.4f, while current is %f)!!", MGTinstance.matchID, MGTinstance.gndDistance, pMatch->gndDistance);
+	}
+
+	if (RVLABS((MGTinstance.transparencyRatio - pMatch->transparencyRatio)) > 0.00009)
+	{
+		diff = true;
+
+		if (verbose)
+			printf("\nVersion Test File difference for match %d. (TF transparency ratio is %.4f, while current is %f)!!", MGTinstance.matchID, MGTinstance.transparencyRatio, pMatch->transparencyRatio);
+	}
+
+	return diff;
+}
+//END Vidovic
 
 void PSGM::CreateDilatedDepthImage()
 {
 	//Generate scene depth
 	double point[3];
 	int u, v;
-	cv::Mat depth(480, 640, CV_16UC1, cv::Scalar::all(0));
+
+	depth.setTo(cv::Scalar(0));
+	//cv::Mat depth(480, 640, CV_16UC1, cv::Scalar::all(0));
 	for (int i = 0; i < pMesh->pPolygonData->GetNumberOfPoints(); i++)
 	{
 		pMesh->pPolygonData->GetPoint(i, point);
@@ -13916,11 +14157,23 @@ void PSGM::CreateDilatedDepthImage()
 				depth.at<uint16_t>(y, x) = 10000; //in milimeters
 		}
 	}
-	cv::Mat elementE = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(9, 9));
+	cv::Mat elementE = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(17, 17));
 	cv::erode(depth, depth, elementE);
 	//Set PSGM depth
-	depthImg = (unsigned short*)depth.data;
+	//depthImg = (unsigned short*)depth.data; //Vidovic 21.07.2017. depth.data is deleted after this function finish
+
+	//Vidovic
+	//unsigned short *depthTMP;
+	//depthTMP = (unsigned short*)depth.data;
+	//int a = sizeof(unsigned short);
+	//int s = sizeof(depthImg);
+	//memcpy(&depthImg, &depthTMP, depth.rows * depth.cols * sizeof(unsigned short));
+	////END Vidovic
 }
+
+//END Vidovic
+
+// cupec_branch3
 
 #ifdef NEVER		// Old version
 void PSGM::ObjectAlignment()
@@ -14552,3 +14805,27 @@ int PSGM::CheckHypothesesToSegmentEnvelopmentAndCollision(int hyp, int segment, 
 
 	return 0;
 }
+
+///////////////////////////////////////////////////////////////////////////
+//
+// VIDOVIC
+//
+///////////////////////////////////////////////////////////////////////////
+
+///////////////////////////////////////////////////////////////////////////
+//
+// END VIDOVIC
+//
+///////////////////////////////////////////////////////////////////////////
+
+///////////////////////////////////////////////////////////////////////////
+//
+// PETRA
+//
+///////////////////////////////////////////////////////////////////////////
+
+///////////////////////////////////////////////////////////////////////////
+//
+// END PETRA
+//
+///////////////////////////////////////////////////////////////////////////

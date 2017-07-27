@@ -17,7 +17,6 @@
 #ifdef RVLVERSION_170601
 #define RVLPSGM_ICP		// 170601: ON
 #endif
-//#define RVLPSGM_ICP	 //Vidovic - use ICP regardless to RVLVERSION_170601
 #define RVLPSGM_ICP_SIMILARITY_MEASURE_COSTNN				0
 #define RVLPSGM_ICP_SIMILARITY_MEASURE_SATURATED_SCORE		1
 #define RVLPSGM_GROUND_PLANE_DISTANCE_PENALIZATION
@@ -121,6 +120,7 @@ namespace RVL
 				float tICP[3];		//final pose after ICP - Vidovic
 				double cost_NN;
 				// end Petra
+				bool bValid; //Vidovic
 				MatchInstance *pNext;
 			};
 
@@ -131,6 +131,20 @@ namespace RVL
 				float t[3];
 				int n;
 				FPMatch *pNext;
+			};
+
+			struct MGT
+			{
+				int iScene;
+				int iSegment;
+				int iModel;
+				int matchID;
+				int CTIrank;
+				int ICPrank;
+				float CTIscore;
+				float ICPcost;
+				float gndDistance;
+				float transparencyRatio;
 			};
 			//END Vidovic
 
@@ -289,7 +303,7 @@ namespace RVL
 		//Visualizes GT models on the scene, activated when pressed "g":
 		void AddGTModelsToVisualizer(Visualizer *pVisualizer);
 		
-		void LoadModelMeshDB(char *modelSequenceFileName, bool bDecimate = false, float decimatePercent = 0.4);
+		void LoadModelMeshDB(char *modelSequenceFileName, std::map<int, vtkSmartPointer<vtkPolyData>> *vtkModelDB, bool bDecimate = false, float decimatePercent = 0.4);
 
 		vtkSmartPointer<vtkPolyData> GetSceneModelPC(int iCluster);
 
@@ -380,7 +394,8 @@ namespace RVL
 		void FitModel(
 			Array<int> iVertexArray,
 			RECOG::PSGM_::ModelInstance *pModelInstance,
-			bool bMemAllocated = false);
+			bool bMemAllocated = false,
+			float *PGnd = NULL);
 		float Symmetry(
 			SURFEL::ObjectGraph *pObjects,
 			int iObject1,
@@ -504,12 +519,15 @@ namespace RVL
 		void VisualizeConsensusHypotheses(Visualizer *pVisualizer); //Vidovic
 		void VisualizeGTMatch(Visualizer *pVisualizer); //Vidovic
 		int FindCTIMatchRank(int matchID, int iSegment); //Vidovic
+		int FindICPMatchRank(int matchID, int iSegment); //Vidovic
+		void createVersionTestFile(); //Vidovic
+		void checkVersionTestFile(bool verbose = false); //Vidovic
+		bool checkVersionTestFile(RECOG::PSGM_::MGT, bool verbose = false); //Vidovic
+		void CreateDilatedDepthImage();
 		std::vector<std::vector<int>> GetSegmentBBNeighbourhood(float dist, bool verbose = false);	//Filko
 		std::map<int,std::vector<int>> GetSceneConsistancy(float nDist = 0.1, float d1 = 10.0, float d2 = 0.01, bool verbose = false);	//Filko
 		int CheckHypothesesToSegmentEnvelopmentAndCollision(int hyp, int segment, float d1, float d2); //Filko
 		void CheckHypothesesToSegmentEnvelopmentAndCollision_DEBUG(int hyp, int segment, float d1, float d2); //Filko
-
-		void CreateDilatedDepthImage();
 
 	private:
 		void Clusters();
@@ -581,6 +599,7 @@ namespace RVL
 		float kReferenceTangentSize;
 		float baseSeparationAngle;
 		float edgeTangentAngle;
+		float gndCTIThr;
 		int nModels; //Vidovic
 		int nMSegments; //Vidovic
 		int minClusterSize;
@@ -627,7 +646,8 @@ namespace RVL
 		std::map<int, vtkSmartPointer<vtkPolyData>> vtkModelDB;
 		std::map<int, vtkSmartPointer<vtkPolyData>> vtkRMSEModelDB; //Vidovic
 		std::map<int, vtkSmartPointer<vtkPolyData>> segmentN_PD; //neighbourhood
-		unsigned short * depthImg; //Current scene depth image // Filko
+		//unsigned short * depthImg; //Current scene depth image // Filko //Vidovic commented
+		cv::Mat depth;
 		std::vector<int> transparentHypotheses; //Vidovic
 		std::vector<int> consensusHypotheses; //Vidovic
 		std::vector<int> noCollisionHypotheses; //Vidovic
