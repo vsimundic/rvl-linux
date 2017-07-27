@@ -394,7 +394,8 @@ namespace RVL
 		void FitModel(
 			Array<int> iVertexArray,
 			RECOG::PSGM_::ModelInstance *pModelInstance,
-			bool bMemAllocated = false);
+			bool bMemAllocated = false,
+			float *PGnd = NULL);
 		float Symmetry(
 			SURFEL::ObjectGraph *pObjects,
 			int iObject1,
@@ -598,6 +599,7 @@ namespace RVL
 		float kReferenceTangentSize;
 		float baseSeparationAngle;
 		float edgeTangentAngle;
+		float gndCTIThr;
 		int nModels; //Vidovic
 		int nMSegments; //Vidovic
 		int minClusterSize;

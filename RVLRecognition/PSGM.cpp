@@ -61,6 +61,7 @@ PSGM::PSGM()
 	minClusterBoundaryDiscontinuityPerc = 75;
 	minClusterNormalDistributionStd = 0.1f;
 	groundPlaneTolerance = 0.020f;
+	gndCTIThr = 0.015f;
 
 	convexTemplate66.n = 66;
 	convexTemplate66.Element = new RECOG::PSGM_::Plane[convexTemplate66.n];
@@ -391,6 +392,16 @@ void PSGM::Interpret(
 
 		for (i = 0; i < groundPlaneSurfelArray.n; i++)
 			pSurfels->NodeArray.Element[groundPlaneSurfelArray.Element[i]].flags |= RVLSURFEL_FLAG_GND;
+
+		bGnd = true;
+
+		Surfel *pGndSurfel = pSurfels->NodeArray.Element + groundPlaneSurfelArray.Element[0];
+
+		float *NGnd_ = pGndSurfel->N;
+
+		RVLCOPY3VECTOR(NGnd_, NGnd);
+
+		dGnd = pGndSurfel->d;
 	}
 
 	// Detect vertices.
@@ -2450,15 +2461,18 @@ void PSGM::TemplateMatrix(Array2D<float> &A)
 void PSGM::FitModel(
 	Array<int> iVertexArray,
 	RECOG::PSGM_::ModelInstance *pModelInstance,
-	bool bMemAllocated)
+	bool bMemAllocated,
+	float *PGnd)
 {
 	if (!bMemAllocated)
-	RVLMEM_ALLOC_STRUCT_ARRAY(pMem, RECOG::PSGM_::ModelInstanceElement, convexTemplate.n, pModelInstance->modelInstance.Element);
+		RVLMEM_ALLOC_STRUCT_ARRAY(pMem, RECOG::PSGM_::ModelInstanceElement, convexTemplate.n, pModelInstance->modelInstance.Element);
 
 	pModelInstance->modelInstance.n = convexTemplate.n;
 
 	float *R = pModelInstance->R;
 	float *t = pModelInstance->t;
+
+	bool bGnd_ = (bGnd && problem == RVLRECOGNITION_PROBLEM_CLASSIFICATION && PGnd != NULL);
 
 	int iModelInstanceElement;
 	RECOG::PSGM_::ModelInstanceElement *pModelInstanceElement;
@@ -2470,6 +2484,8 @@ void PSGM::FitModel(
 	//float dist;
 	//float maxdDefinedNormal;
 	int iVertex;
+	float *PGnd_;
+	float eGnd;
 
 	for (iModelInstanceElement = 0; iModelInstanceElement < convexTemplate.n; iModelInstanceElement++)
 	{
@@ -2506,39 +2522,54 @@ void PSGM::FitModel(
 			}
 		}
 
-			//Vidovic
-			if (bNormalValidityTest)
-			{
-				//if (pVertex->normalHull.n >= 3)
-				//{
-				//	dist = pSurfels->DistanceFromNormalHull(pVertex->normalHull, N_);
+		//Vidovic
+		if (bNormalValidityTest)
+		{
+			//if (pVertex->normalHull.n >= 3)
+			//{
+			//	dist = pSurfels->DistanceFromNormalHull(pVertex->normalHull, N_);
 
-				//	if (dist <= 0.0f)
-				//	{
-				//		if (pModelInstanceElement->valid)
-				//		{
-				//			if (d > maxdDefinedNormal)
-				//				maxdDefinedNormal = d;
-				//		}
-				//		else
-				//		{
-				//			maxdDefinedNormal = d;
-				//			pModelInstanceElement->valid = true;
-				//		}
-				//	}
-				//}
-				pModelInstanceElement->valid = true;
+			//	if (dist <= 0.0f)
+			//	{
+			//		if (pModelInstanceElement->valid)
+			//		{
+			//			if (d > maxdDefinedNormal)
+			//				maxdDefinedNormal = d;
+			//		}
+			//		else
+			//		{
+			//			maxdDefinedNormal = d;
+			//			pModelInstanceElement->valid = true;
+			//		}
+			//	}
+			//}
+			pModelInstanceElement->valid = true;
 
 			pVertex = pSurfels->vertexArray.Element[pModelInstanceElement->iVertex];
 
-				P = pVertex->P;
+			P = pVertex->P;
 
-				if (RVLDOTPRODUCT3(N_, P) >= 0.0f)
+			if (bGnd_)
+			{
+				for (i = 0; i < iVertexArray.n; i++)
+				{
+					PGnd_ = PGnd + 3 * i;
+
+					eGnd = RVLDOTPRODUCT3(N_, PGnd_) - pModelInstanceElement->d;
+
+					if (eGnd > gndCTIThr)
+						break;
+				}
+
+				if (i < iVertexArray.n)
 					pModelInstanceElement->valid = false;
 			}
-			else
-				pModelInstanceElement->valid = true;
-			//END Vidovic
+			else if (RVLDOTPRODUCT3(N_, P) >= 0.0f)
+				pModelInstanceElement->valid = false;
+		}
+		else
+			pModelInstanceElement->valid = true;
+		//END Vidovic
 
 		pModelInstanceElement->d -= RVLDOTPRODUCT3(N_, t);
 
@@ -2546,7 +2577,7 @@ void PSGM::FitModel(
 		//if (bNormalValidityTest)
 		//	pModelInstanceElement->e = (pModelInstanceElement->valid ? pModelInstanceElement->d - maxdDefinedNormal : 0.0f);
 		//else
-			pModelInstanceElement->e = 0.0f;
+		pModelInstanceElement->e = 0.0f;
 		//END Vidovic
 	}	// for every model instance descriptor element
 
@@ -7264,6 +7295,8 @@ void PSGM::Display()
 	}
 	else if (problem == RVLRECOGNITION_PROBLEM_CLASSIFICATION)
 	{
+		displayData.bClusters = false;
+
 		pSurfels->Display(pVisualizer, pMesh);
 
 		//pSVertexGraph->Display(pVisualizer);
@@ -12008,6 +12041,8 @@ int PSGM::CTIs(
 	RECOG::CTISet *pCTISet,
 	CRVLMem *pMem)
 {
+	// Generate CTI reference frames.
+
 	RECOG::PSGM_::ModelInstance **ppCTI = pCTISet->CTI.ppNext;
 
 	if (bGroundPlaneRFDescriptors)
@@ -12031,6 +12066,39 @@ int PSGM::CTIs(
 		delete[] iSurfelArray.Element;
 	}
 
+	// Project vertices onto the ground plane.
+
+	float *PGnd = NULL;
+
+	if (bGnd && problem == RVLRECOGNITION_PROBLEM_CLASSIFICATION)
+	{
+		PGnd = new float[3 * iVertexArray.n];
+
+		float s;
+		int i;
+		float *PGnd_;
+		int iVertex;
+		SURFEL::Vertex *pVertex;
+		float *P;
+
+		for (i = 0; i < iVertexArray.n; i++)
+		{
+			PGnd_ = PGnd + 3 * i;
+
+			iVertex = iVertexArray.Element[i];
+
+			pVertex = pSurfels->vertexArray.Element[iVertex];
+
+			P = pVertex->P;
+
+			s = dGnd / RVLDOTPRODUCT3(NGnd, P);
+
+			RVLSCALE3VECTOR(P, s, PGnd_);
+		}
+	}
+
+	// Create CTI descriptors.
+
 	int nCTIs = 0;
 
 	RECOG::PSGM_::ModelInstance *pCTI = *ppCTI;
@@ -12040,12 +12108,14 @@ int PSGM::CTIs(
 		pCTI->iCluster = iCluster;
 		pCTI->iModel = iModel;
 
-		FitModel(iVertexArray, pCTI);
+		FitModel(iVertexArray, pCTI, false, PGnd);
 
 		nCTIs++;
 
 		pCTI = pCTI->pNext;
 	}
+
+	RVL_DELETE_ARRAY(PGnd);
 
 	return nCTIs;
 }
