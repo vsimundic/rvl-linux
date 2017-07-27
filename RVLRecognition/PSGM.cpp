@@ -29,9 +29,7 @@
 //#define RVLPSGM_CTIMESH_DEBUG
 //#define RVLPSGM_MATCHTGS_CREATE_SCENE_TG
 //#define RVLPSGM_MATCHTGS_CREATE_SCENE_VG
-#ifndef RVLVERSION_170601
-#define RVLPSGM_MATCHCTI_MATCH_MATRIX		// 170601: OFF
-#endif
+#define RVLPSGM_MATCHCTI_MATCH_MATRIX //activate this flag regardless to version 170601 - Vidovic 20.07.2017
 #define RVLPSGM_MATCH_HYPOTHESIS_LOG
 
 using namespace RVL;
@@ -63,6 +61,7 @@ PSGM::PSGM()
 	minClusterBoundaryDiscontinuityPerc = 75;
 	minClusterNormalDistributionStd = 0.1f;
 	groundPlaneTolerance = 0.020f;
+	gndCTIThr = 0.015f;
 
 	convexTemplate66.n = 66;
 	convexTemplate66.Element = new RECOG::PSGM_::Plane[convexTemplate66.n];
@@ -169,6 +168,9 @@ PSGM::PSGM()
 	TemplateMatrix(STGSet.A);
 
 	createMatchGT = false;
+
+	//depthImg = new unsigned short(480*640); //Vidovic
+	depth = cv::Mat(480, 640, CV_16UC1, cv::Scalar::all(0));
 }
 
 
@@ -246,6 +248,8 @@ PSGM::~PSGM()
 		delete[] icpTMatrix;
 
 	//fclose(fpTime);
+
+	//delete depthImg;
 	//End Vidovic
 
 	if (vpObjectDetector)
@@ -388,6 +392,16 @@ void PSGM::Interpret(
 
 		for (i = 0; i < groundPlaneSurfelArray.n; i++)
 			pSurfels->NodeArray.Element[groundPlaneSurfelArray.Element[i]].flags |= RVLSURFEL_FLAG_GND;
+
+		bGnd = true;
+
+		Surfel *pGndSurfel = pSurfels->NodeArray.Element + groundPlaneSurfelArray.Element[0];
+
+		float *NGnd_ = pGndSurfel->N;
+
+		RVLCOPY3VECTOR(NGnd_, NGnd);
+
+		dGnd = pGndSurfel->d;
 	}
 
 	// Detect vertices.
@@ -2451,15 +2465,18 @@ void PSGM::TemplateMatrix(Array2D<float> &A)
 void PSGM::FitModel(
 	Array<int> iVertexArray,
 	RECOG::PSGM_::ModelInstance *pModelInstance,
-	bool bMemAllocated)
+	bool bMemAllocated,
+	float *PGnd)
 {
 	if (!bMemAllocated)
-	RVLMEM_ALLOC_STRUCT_ARRAY(pMem, RECOG::PSGM_::ModelInstanceElement, convexTemplate.n, pModelInstance->modelInstance.Element);
+		RVLMEM_ALLOC_STRUCT_ARRAY(pMem, RECOG::PSGM_::ModelInstanceElement, convexTemplate.n, pModelInstance->modelInstance.Element);
 
 	pModelInstance->modelInstance.n = convexTemplate.n;
 
 	float *R = pModelInstance->R;
 	float *t = pModelInstance->t;
+
+	bool bGnd_ = (bGnd && problem == RVLRECOGNITION_PROBLEM_CLASSIFICATION && PGnd != NULL);
 
 	int iModelInstanceElement;
 	RECOG::PSGM_::ModelInstanceElement *pModelInstanceElement;
@@ -2471,6 +2488,8 @@ void PSGM::FitModel(
 	//float dist;
 	//float maxdDefinedNormal;
 	int iVertex;
+	float *PGnd_;
+	float eGnd;
 
 	for (iModelInstanceElement = 0; iModelInstanceElement < convexTemplate.n; iModelInstanceElement++)
 	{
@@ -2507,39 +2526,54 @@ void PSGM::FitModel(
 			}
 		}
 
-			//Vidovic
-			if (bNormalValidityTest)
-			{
-				//if (pVertex->normalHull.n >= 3)
-				//{
-				//	dist = pSurfels->DistanceFromNormalHull(pVertex->normalHull, N_);
+		//Vidovic
+		if (bNormalValidityTest)
+		{
+			//if (pVertex->normalHull.n >= 3)
+			//{
+			//	dist = pSurfels->DistanceFromNormalHull(pVertex->normalHull, N_);
 
-				//	if (dist <= 0.0f)
-				//	{
-				//		if (pModelInstanceElement->valid)
-				//		{
-				//			if (d > maxdDefinedNormal)
-				//				maxdDefinedNormal = d;
-				//		}
-				//		else
-				//		{
-				//			maxdDefinedNormal = d;
-				//			pModelInstanceElement->valid = true;
-				//		}
-				//	}
-				//}
-				pModelInstanceElement->valid = true;
+			//	if (dist <= 0.0f)
+			//	{
+			//		if (pModelInstanceElement->valid)
+			//		{
+			//			if (d > maxdDefinedNormal)
+			//				maxdDefinedNormal = d;
+			//		}
+			//		else
+			//		{
+			//			maxdDefinedNormal = d;
+			//			pModelInstanceElement->valid = true;
+			//		}
+			//	}
+			//}
+			pModelInstanceElement->valid = true;
 
 			pVertex = pSurfels->vertexArray.Element[pModelInstanceElement->iVertex];
 
-				P = pVertex->P;
+			P = pVertex->P;
 
-				if (RVLDOTPRODUCT3(N_, P) >= 0.0f)
+			if (bGnd_)
+			{
+				for (i = 0; i < iVertexArray.n; i++)
+				{
+					PGnd_ = PGnd + 3 * i;
+
+					eGnd = RVLDOTPRODUCT3(N_, PGnd_) - pModelInstanceElement->d;
+
+					if (eGnd > gndCTIThr)
+						break;
+				}
+
+				if (i < iVertexArray.n)
 					pModelInstanceElement->valid = false;
 			}
-			else
-				pModelInstanceElement->valid = true;
-			//END Vidovic
+			else if (RVLDOTPRODUCT3(N_, P) >= 0.0f)
+				pModelInstanceElement->valid = false;
+		}
+		else
+			pModelInstanceElement->valid = true;
+		//END Vidovic
 
 		pModelInstanceElement->d -= RVLDOTPRODUCT3(N_, t);
 
@@ -2547,7 +2581,7 @@ void PSGM::FitModel(
 		//if (bNormalValidityTest)
 		//	pModelInstanceElement->e = (pModelInstanceElement->valid ? pModelInstanceElement->d - maxdDefinedNormal : 0.0f);
 		//else
-			pModelInstanceElement->e = 0.0f;
+		pModelInstanceElement->e = 0.0f;
 		//END Vidovic
 	}	// for every model instance descriptor element
 
@@ -3351,8 +3385,8 @@ void PSGM::Learn(
 
 		saveDBSequenceFile = true;
 
-			//mesh.LoadPolyDataFromPLY(modelFilePath);
-			LoadMesh(vpMeshBuilder, modelFilePath, &mesh, false);
+		//mesh.LoadPolyDataFromPLY(modelFilePath);
+		LoadMesh(vpMeshBuilder, modelFilePath, &mesh, false);
 
 		SetSceneFileName(modelFilePath);
 
@@ -3506,8 +3540,7 @@ void PSGM::LoadModelMeshDB(char *modelSequenceFileName, std::map<int, vtkSmartPo
 		//cleanFilter->GetOutput()->Print(std::cout);
 		
 		//Add vtkPolyData to vtkModelDB:
-		//normalsFilter->GetOutput()->GetPointData()->RemoveArray("RGB");
-		//vtkModelDB.insert(std::make_pair(currentModelID, normalsFilter->GetOutput()));
+		normalsFilter->GetOutput()->GetPointData()->RemoveArray("RGB"); //Vidovic merging 20.07.2017
 		vtkModelDB->insert(std::make_pair(currentModelID, normalsFilter->GetOutput()));
 		currentModelID++;
 	}
@@ -5053,7 +5086,7 @@ void PSGM::Match()
 
 	// Match TGs.
 
-	MatchTGs();
+	//MatchTGs();
 }
 
 void PSGM::Match(
@@ -7266,6 +7299,8 @@ void PSGM::Display()
 	}
 	else if (problem == RVLRECOGNITION_PROBLEM_CLASSIFICATION)
 	{
+		displayData.bClusters = false;
+
 		pSurfels->Display(pVisualizer, pMesh);
 
 		//pSVertexGraph->Display(pVisualizer);
@@ -7934,7 +7969,7 @@ bool RVL::RECOG::PSGM_::mouseRButtonDownUserFunction(
 			pSurfels->UpdateVertexDisplayLines();
 		}
 
-		//pData->iSelectedCluster = iCluster;
+		pData->iSelectedCluster = iCluster;
 
 		//FILE *fp = fopen("C:\\RVL\\Debug\\cluster_vertices.txt", "w");
 
@@ -8780,7 +8815,7 @@ void PSGM::CalculateICPCost(RVL::PSGM::ICPfunction ICPFunction, int ICPvariant, 
 			ICPFunction(transformFilter->GetOutput(), scenePD, icpT, 20, 0.02, ICPvariant, &fitnessScore, kdTreePtr);
 
 			pMatch->cost_ICP = fitnessScore;
-
+			
 			//Commented on 14.06.2017 - Vidovic
 			//save only final pose in pMatch
 			/*memcpy(pMatch->T_ICP, icpT, 16 * sizeof(float));
@@ -9748,6 +9783,7 @@ void PSGM::RVLPSGInstanceMesh(Eigen::MatrixXf nI, float *dI)
 #endif
 }
 
+
 void PSGM::PrintCTIMeshFaces(FILE *fp, Eigen::MatrixXi F, Eigen::MatrixXi Fn, int n, Eigen::MatrixXi nP)
 {
 	fprintf(fp, "F:\n");
@@ -10536,7 +10572,7 @@ void PSGM::ICP(RVL::PSGM::ICPfunction ICPFunction, int ICPvariant)
 
 	for (int i = 0; i < bestSceneSegmentMatches.n; i++)
 	{
-		//cout << "Segment: " << i << ":\n";
+		cout << "Segment: " << i << ":\n";
 
 		for (int j = 0; j < bestSceneSegmentMatches.Element[i].n; j++)
 		{
@@ -12009,6 +12045,8 @@ int PSGM::CTIs(
 	RECOG::CTISet *pCTISet,
 	CRVLMem *pMem)
 {
+	// Generate CTI reference frames.
+
 	RECOG::PSGM_::ModelInstance **ppCTI = pCTISet->CTI.ppNext;
 
 	if (bGroundPlaneRFDescriptors)
@@ -12032,6 +12070,39 @@ int PSGM::CTIs(
 		delete[] iSurfelArray.Element;
 	}
 
+	// Project vertices onto the ground plane.
+
+	float *PGnd = NULL;
+
+	if (bGnd && problem == RVLRECOGNITION_PROBLEM_CLASSIFICATION)
+	{
+		PGnd = new float[3 * iVertexArray.n];
+
+		float s;
+		int i;
+		float *PGnd_;
+		int iVertex;
+		SURFEL::Vertex *pVertex;
+		float *P;
+
+		for (i = 0; i < iVertexArray.n; i++)
+		{
+			PGnd_ = PGnd + 3 * i;
+
+			iVertex = iVertexArray.Element[i];
+
+			pVertex = pSurfels->vertexArray.Element[iVertex];
+
+			P = pVertex->P;
+
+			s = dGnd / RVLDOTPRODUCT3(NGnd, P);
+
+			RVLSCALE3VECTOR(P, s, PGnd_);
+		}
+	}
+
+	// Create CTI descriptors.
+
 	int nCTIs = 0;
 
 	RECOG::PSGM_::ModelInstance *pCTI = *ppCTI;
@@ -12041,12 +12112,14 @@ int PSGM::CTIs(
 		pCTI->iCluster = iCluster;
 		pCTI->iModel = iModel;
 
-		FitModel(iVertexArray, pCTI);
+		FitModel(iVertexArray, pCTI, false, PGnd);
 
 		nCTIs++;
 
 		pCTI = pCTI->pNext;
 	}
+
+	RVL_DELETE_ARRAY(PGnd);
 
 	return nCTIs;
 }
@@ -13279,11 +13352,11 @@ float PSGM::GetObjectTransparencyRatio(vtkSmartPointer<vtkPolyData> object, unsi
 //Requires scoreMatchMatrixICP???
 void PSGM::FilterHypothesesUsingTransparency(float tranThr, float depthThr, bool verbose)
 {
-	CreateDilatedDepthImage();
-
 	transparentHypotheses.clear(); //Vidovic
 
 	RECOG::PSGM_::MatchInstance *pMatch; //Vidovic
+
+	CreateDilatedDepthImage();
 
 	float tranRatio;
 	for (int i = 0; i < scoreMatchMatrixICP.n; i++)
@@ -13293,7 +13366,8 @@ void PSGM::FilterHypothesesUsingTransparency(float tranThr, float depthThr, bool
 			if (scoreMatchMatrixICP.Element[i].Element[j].idx >= 0)
 			{
 				vtkSmartPointer<vtkPolyData> object = GetPoseCorrectedVisibleModel(scoreMatchMatrixICP.Element[i].Element[j].idx);
-				tranRatio = GetObjectTransparencyRatio(object, this->depthImg, depthThr, 640, 480, 525, 525, 320, 240); //HARDCODED FOR ECCV DATASET CAMERA
+				//tranRatio = GetObjectTransparencyRatio(object, this->depthImg, depthThr, 640, 480, 525, 525, 320, 240); //HARDCODED FOR ECCV DATASET CAMERA
+				tranRatio = GetObjectTransparencyRatio(object, (unsigned short *)depth.data, depthThr, 640, 480, 525, 525, 320, 240); //HARDCODED FOR ECCV DATASET CAMERA
 
 				//save transparency ratio to match instance - Vidovic
 				pMatch = GetMatch(scoreMatchMatrixICP.Element[i].Element[j].idx);
@@ -14567,15 +14641,181 @@ int PSGM::FindCTIMatchRank(int matchID, int iSegment)
 		if (bestSceneSegmentMatches.Element[iSegment].Element[iRank].idx == matchID)
 			return iRank;
 }
-//END Vidovic
 
+
+// vidovic branch
+
+int PSGM::FindICPMatchRank(int matchID, int iSegment)
+{
+	int iRank;
+
+	for (iRank = 0; iRank < nBestMatches; iRank++)
+		if (scoreMatchMatrixICP.Element[iSegment].Element[iRank].idx == matchID)
+			return iRank;
+}
+
+void PSGM::createVersionTestFile()
+{
+	char *versionTestFileName, *matchGTFileName;
+	FILE *fpTF;
+
+	matchGTFileName = RVLCreateFileName(sceneFileName, ".ply", -1, ".mgt", pMem);
+	fpMatchGT = fopen(matchGTFileName, "r");
+
+	versionTestFileName = RVLCreateFileName(sceneFileName, ".ply", -1, ".tf", pMem);
+	fpTF = fopen(versionTestFileName, "w");
+
+	//int iScene, iSegment, iModel, matchID, CTIrank, ICPrank;
+	RECOG::PSGM_::MGT MGTinstance;
+
+	if (fpMatchGT)
+	{
+		while (!feof(fpMatchGT))
+		{
+			fscanf(fpMatchGT, "%d\t%d\t%d\t%d\t%d\t%d", &MGTinstance.iScene, &MGTinstance.iSegment, &MGTinstance.iModel, &MGTinstance.matchID, &MGTinstance.CTIrank, &MGTinstance.ICPrank);
+			fprintf(fpTF, "%d\t%d\t%d\t%d\t%d\t%d\t%.4f\t%.4f\t%.4f\t%.4f\n", MGTinstance.iScene, MGTinstance.iSegment, MGTinstance.iModel, MGTinstance.matchID, MGTinstance.CTIrank, MGTinstance.ICPrank, pCTImatchesArray.Element[MGTinstance.matchID]->score, pCTImatchesArray.Element[MGTinstance.matchID]->cost_NN, pCTImatchesArray.Element[MGTinstance.matchID]->gndDistance, pCTImatchesArray.Element[MGTinstance.matchID]->transparencyRatio);
+		}
+	}
+
+	fclose(fpMatchGT);
+	fclose(fpTF);
+}
+
+void PSGM::checkVersionTestFile(bool verbose)
+{
+	char *versionTestFileName;
+	FILE *fpTF;
+
+	versionTestFileName = RVLCreateFileName(sceneFileName, ".ply", -1, ".tf", pMem);
+	fpTF = fopen(versionTestFileName, "r");
+
+	RECOG::PSGM_::MGT MGTinstance;
+	bool diff = false;
+	int nDiff = 0;
+
+	printf("***********************************************************************\n");
+	printf("Version Test File checking started...");
+
+	if (fpTF)
+	{
+		while (!feof(fpTF))
+		{
+			fscanf(fpTF, "%d\t%d\t%d\t%d\t%d\t%d\t%f\t%f\t%f\t%f", &MGTinstance.iScene, &MGTinstance.iSegment, &MGTinstance.iModel, &MGTinstance.matchID, &MGTinstance.CTIrank, &MGTinstance.ICPrank, &MGTinstance.CTIscore, &MGTinstance.ICPcost, &MGTinstance.gndDistance, &MGTinstance.transparencyRatio);
+
+			if (checkVersionTestFile(MGTinstance, verbose))
+			{
+				if (!verbose)
+					printf("\nDifference between current and old version found in match %d!!", MGTinstance.matchID);
+
+				diff = true;
+				nDiff++;
+			}
+		}
+	
+
+		if (diff)
+			printf("\nVersion Test File checking completed with %d differences!!\n", nDiff);
+		else
+			printf(" completed with no differences!!\n");
+	}
+	else
+		printf("\nVersion Test File %s is missing!!\n", versionTestFileName);
+
+
+	printf("***********************************************************************\n");
+}
+
+bool PSGM::checkVersionTestFile(RECOG::PSGM_::MGT MGTinstance, bool verbose)
+{
+	RECOG::PSGM_::MatchInstance *pMatch;
+	pMatch = pCTImatchesArray.Element[MGTinstance.matchID];
+
+	bool diff = false;
+	int CTIrank, ICPrank;
+
+	if (MGTinstance.matchID == 200107 || MGTinstance.matchID == 200294)
+		int debug = 0;
+
+	if (MGTinstance.iSegment != GetSCTI(pMatch)->iCluster)
+	{
+		diff = true;
+
+		if (verbose)
+			printf("\nVersion Test File difference for match %d. (TF segment is %d, while current is %d)!!", MGTinstance.matchID, MGTinstance.iSegment, GetSCTI(pMatch)->iCluster);
+	}
+
+	if (MGTinstance.iModel != GetMCTI(pMatch)->iModel)
+	{
+		diff = true;
+
+		if (verbose)
+			printf("\nVersion Test File difference for match %d. (TF model is %d, while current is %d)!!", MGTinstance.matchID, MGTinstance.iModel, GetMCTI(pMatch)->iModel);
+	}
+
+	CTIrank = FindCTIMatchRank(MGTinstance.matchID, GetSCTI(pMatch)->iCluster);
+
+	if (MGTinstance.CTIrank != CTIrank)
+	{
+		diff = true;
+
+		if (verbose)
+			printf("\nVersion Test File difference for match %d. (TF CTI rank is %d, while current is %d)!!", MGTinstance.matchID, MGTinstance.CTIrank, CTIrank);
+	}
+
+	ICPrank = FindICPMatchRank(MGTinstance.matchID, GetSCTI(pMatch)->iCluster);
+
+	if (MGTinstance.ICPrank != ICPrank)
+	{
+		diff = true;
+
+		if (verbose)
+			printf("\nVersion Test File difference for match %d. (TF ICP rank is %d, while current is %d)!!", MGTinstance.matchID, MGTinstance.ICPrank, ICPrank);
+	}
+
+	if (RVLABS((MGTinstance.CTIscore - pMatch->score)) > 0.00009)
+	{
+		diff = true;
+
+		if (verbose)
+			printf("\nVersion Test File difference for match %d. (TF CTI score is %.4f, while current is %f)!!", MGTinstance.matchID, MGTinstance.CTIscore, pMatch->score);
+	}
+
+	if (RVLABS((MGTinstance.ICPcost - pMatch->cost_NN)) > 0.00009)
+	{
+		diff = true;
+
+		if (verbose)
+			printf("\nVersion Test File difference for match %d. (TF ICP cost is %.4f, while current is %f)!!", MGTinstance.matchID, MGTinstance.ICPcost, pMatch->cost_NN);
+	}
+
+	if (RVLABS((MGTinstance.gndDistance - pMatch->gndDistance)) > 0.00009)
+	{
+		diff = true;
+
+		if (verbose)
+			printf("\nVersion Test File difference for match %d. (TF ground distance is %.4f, while current is %f)!!", MGTinstance.matchID, MGTinstance.gndDistance, pMatch->gndDistance);
+	}
+
+	if (RVLABS((MGTinstance.transparencyRatio - pMatch->transparencyRatio)) > 0.00009)
+	{
+		diff = true;
+
+		if (verbose)
+			printf("\nVersion Test File difference for match %d. (TF transparency ratio is %.4f, while current is %f)!!", MGTinstance.matchID, MGTinstance.transparencyRatio, pMatch->transparencyRatio);
+	}
+
+	return diff;
+}
+//END Vidovic
 
 void PSGM::CreateDilatedDepthImage()
 {
 	//Generate scene depth
 	double point[3];
 	int u, v;
-	cv::Mat depth(480, 640, CV_16UC1, cv::Scalar::all(0));
+
+	depth.setTo(cv::Scalar(0));
+	//cv::Mat depth(480, 640, CV_16UC1, cv::Scalar::all(0));
 	for (int i = 0; i < pMesh->pPolygonData->GetNumberOfPoints(); i++)
 	{
 		pMesh->pPolygonData->GetPoint(i, point);
@@ -14594,11 +14834,23 @@ void PSGM::CreateDilatedDepthImage()
 				depth.at<uint16_t>(y, x) = 10000; //in milimeters
 		}
 	}
-	cv::Mat elementE = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(9, 9));
+	cv::Mat elementE = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(17, 17));
 	cv::erode(depth, depth, elementE);
 	//Set PSGM depth
-	depthImg = (unsigned short*)depth.data;
+	//depthImg = (unsigned short*)depth.data; //Vidovic 21.07.2017. depth.data is deleted after this function finish
+
+	//Vidovic
+	//unsigned short *depthTMP;
+	//depthTMP = (unsigned short*)depth.data;
+	//int a = sizeof(unsigned short);
+	//int s = sizeof(depthImg);
+	//memcpy(&depthImg, &depthTMP, depth.rows * depth.cols * sizeof(unsigned short));
+	////END Vidovic
 }
+
+//END Vidovic
+
+// cupec_branch3
 
 #ifdef NEVER		// Old version
 void PSGM::ObjectAlignment()
@@ -14859,3 +15111,398 @@ void PSGM::VisualizeAlignedModels(int iRefModel, int iModel)
 
 }
 #endif 
+
+//Returns XYZ oriented bounding box segment neighbourhood
+std::vector<std::vector<int>> PSGM::GetSegmentBBNeighbourhood(float dist, bool verbose)
+{
+	//number of segments
+	int noSegments = this->clusters.n;
+	//create list
+	std::vector<std::vector<int>> neighbourhood(noSegments);
+
+	//find bounding box for all segments
+	float* bbs = new float[noSegments * 2 * 3]; //XYZ, min, max
+	memset(bbs, 0, noSegments * 2 * 3 * sizeof(float));
+	Array<SURFEL::Vertex *> *vertexArray = &this->pSurfels->vertexArray;
+	//QList<QLIST::Index> *pSurfelVertexList;
+	//QLIST::Index *qlistelement;
+	float* P;
+	for (int i = 0; i < noSegments; i++)
+	{
+		//set the starting bounding box to be equal to first vertex of first surfel
+		P = &vertexArray->Element[this->clusters.Element[i]->iVertexArray.Element[0]]->P[0];
+		bbs[i * 6] = P[0];
+		bbs[i * 6 + 1] = P[0];
+		bbs[i * 6 + 2] = P[1];
+		bbs[i * 6 + 3] = P[1];
+		bbs[i * 6 + 4] = P[2];
+		bbs[i * 6 + 5] = P[2];
+		//Running through all segment vertices
+		for (int v = 1; v < this->clusters.Element[i]->iVertexArray.n; v++)
+		{
+			P = &vertexArray->Element[this->clusters.Element[i]->iVertexArray.Element[v]]->P[0];
+
+			//set min/max per dimension
+			//X
+			if (bbs[i * 6] > P[0])
+				bbs[i * 6] = P[0];
+			else if (bbs[i * 6 + 1] < P[0])
+				bbs[i * 6 + 1] = P[0];
+			//Y
+			if (bbs[i * 6 + 2] > P[1])
+				bbs[i * 6 + 2] = P[1];
+			else if (bbs[i * 6 + 3] < P[1])
+				bbs[i * 6 + 3] < P[1];
+			//Z
+			//Y
+			if (bbs[i * 6 + 4] > P[2])
+				bbs[i * 6 + 4] = P[2];
+			else if (bbs[i * 6 + 5] < P[2])
+				bbs[i * 6 + 5] < P[2];
+		}
+	}
+
+	//Find neighbourhoods for all segments
+	float distance = 0.0;
+	float distanceTemp;
+	int intersection = 0;
+	for (int i = 0; i < noSegments; i++)
+	{
+		//Check all segments
+		for (int j = i + 1; j < noSegments; j++)
+		{
+			////Check all dimensions
+			distance = 0.0;
+			intersection = 0;
+			for (int k = 0; k < 3; k++)
+			{
+				//Check intersection per dimension
+				if ((bbs[i * 6 + k * 2] < bbs[j * 6 + k * 2 + 1]) && bbs[i * 6 + k * 2] > bbs[j * 6 + k * 2])	//min_i < max_j & min_i > min_j
+					intersection++;
+				else if ((bbs[j * 6 + k * 2] < bbs[i * 6 + k * 2 + 1]) && (bbs[j * 6 + k * 2] > bbs[i * 6 + k * 2])) //min_j < max_i & min_j > min_i
+					intersection++;
+				else if ((bbs[j * 6 + k * 2] > bbs[i * 6 + k * 2]) && (bbs[j * 6 + k * 2 + 1] < bbs[i * 6 + k * 2 + 1])) //min_j > min_i & max_j < max_i
+					intersection++;
+				else if ((bbs[i * 6 + k * 2] > bbs[j * 6 + k * 2]) && (bbs[i * 6 + k * 2 + 1] < bbs[j * 6 + k * 2 + 1])) //min_i > min_j & max_i < max_j
+					intersection++;
+				
+				//Calculate distance per dimension
+				if (bbs[j * 6 + k * 2 + 1] < bbs[i * 6 + k * 2]) //max_j < min_i
+				{
+					distanceTemp = bbs[j * 6 + k * 2 + 1] - bbs[i * 6 + k * 2];
+					distance += distanceTemp * distanceTemp;
+				}
+				else if (bbs[j * 6 + k * 2] > bbs[i * 6 + k * 2 + 1])	//min_j > max_i
+				{
+					distanceTemp = bbs[j * 6 + k * 2] - bbs[i * 6 + k * 2 + 1];
+					distance += distanceTemp * distanceTemp;
+				}
+			}
+			distance = sqrtf(distance);
+			
+			//Check distance threshold and check if intersection
+			if ((distance < dist) || (intersection == 3))
+			{
+				//Add to neighbourhood
+				neighbourhood.at(i).push_back(j);
+				neighbourhood.at(j).push_back(i);
+
+				if (verbose)
+					std::cout << "Segments " << i << " and " << j << " are in the neighbourhood with distance of: " << distance << ", Intersection: " << intersection << std::endl;
+			}
+		}
+	}
+
+	//deref
+	delete[] bbs;
+
+	//return
+	return neighbourhood;
+}
+
+//FOR DEBUGGING PURPOSES ONLY!!!! Saves data to a file
+void PSGM::CheckHypothesesToSegmentEnvelopmentAndCollision_DEBUG(int hyp, int segment, float d1, float d2)
+{
+	std::fstream dat("CheckHypothesesToSegmentEnvelopment_DEBUG.txt", std::fstream::out);
+	dat << "Hypothesis: " << hyp << std::endl;
+	dat << "Segment: " << segment << std::endl;
+	
+	//Hypothesis data
+	RECOG::PSGM_::MatchInstance* hypothesis = pCTImatchesArray.Element[hyp];
+	VertexGraph * hypVG = MTGSet.vertexGraphs.at(MCTISet.pCTI.Element[hypothesis->iMCTI]->iModel);
+	TG* hypTG = MTGSet.TGs.at(MCTISet.pCTI.Element[hypothesis->iMCTI]->iModel);
+	TGNode* plane;
+	float* N;
+	float* minSegDist = new float[hypTG->A.h];
+	float *RMS = hypothesis->RICP_;
+	float *tMS = hypothesis->tICP_;
+
+	dat << "Model CTI: " << MCTISet.pCTI.Element[hypothesis->iMCTI]->iModel << std::endl;
+
+	//Segment data
+	Array<SURFEL::Vertex *> *vertexArray = &this->pSurfels->vertexArray;
+	SURFEL::Vertex * rvlvertex;
+	float* minModDist = new float[hypTG->A.h];
+	RECOG::PSGM_::ModelInstance *pSCTI = CTISet.pCTI.Element[CTISet.SegmentCTIs.Element[segment].Element[0]];
+	RECOG::PSGM_::ModelInstanceElement *pSIE = pSCTI->modelInstance.Element;
+
+	float RMSCTI[9];
+	float tMSCTI[3];
+	float V3Tmp[3];
+
+	RVLCOMPTRANSF3DWITHINV(pSCTI->R, pSCTI->t, RMS, tMS, RMSCTI, tMSCTI, V3Tmp);
+
+	//Transformation vars?
+	float tPs[3];
+	float tPm[3];
+	float sPs[3];
+	float sPm[3];
+	float st[3] = { tMSCTI[0] / 1000, tMSCTI[1] / 1000, tMSCTI[2] / 1000 };
+
+	//Calculate distances segment vertices to model convex hull
+	int totalPts = this->clusters.Element[segment]->iVertexArray.n;
+	float distance;
+	float segMinDist = 1000000;
+	for (int j = 0; j < hypTG->A.h; j++)
+	{
+		plane = hypTG->descriptor.Element[j].pFirst->ptr;
+		minSegDist[j] = 1000000;
+		//For each point
+		for (int i = 0; i < totalPts; i++)
+		{
+			rvlvertex = vertexArray->Element[this->clusters.Element[segment]->iVertexArray.Element[i]];
+
+			////Transform vertex to hyp model space
+			sPs[0] = 1000 * rvlvertex->P[0];
+			sPs[1] = 1000 * rvlvertex->P[1];
+			sPs[2] = 1000 * rvlvertex->P[2];
+			RVLINVTRANSF3(sPs, RMS, tMS, tPs, V3Tmp);
+
+			dat << tPs[0] << " " << tPs[1] << " " << tPs[2];
+
+			N = &hypTG->A.Element[hypTG->A.w * plane->i];
+
+			//sDistances[i * hypTG->A.h + j] = RVLDOTPRODUCT3(N, tPs) - plane->d;
+			distance = (RVLDOTPRODUCT3(N, tPs) - plane->d);
+			if (distance > d1)
+				dat << " " << 0;
+			else
+				dat << " " << 1;
+
+			if (distance > -d2)
+				dat << " " << 0 << std::endl;
+			else
+				dat << " " << 1 << std::endl;
+		}
+	}
+}
+
+//
+std::map<int, std::vector<int>> PSGM::GetSceneConsistancy(float nDist, float d1, float d2, bool verbose)
+{
+	//CheckHypothesesToSegmentEnvelopmentAndCollision_DEBUG(scoreMatchMatrixICP.Element[0].Element[0].idx, 0, d1, d2);
+
+	std::map<int, std::vector<int>> constL;
+
+	//Get segment neighbourhood
+	std::vector<std::vector<int>> neighbourhood = GetSegmentBBNeighbourhood(nDist);
+
+	//For every segment's hypothesis check if they envelop its source segment and neighbouring segments??? No longer true???
+	int resLab = 0;
+	for (int i = 0; i < scoreMatchMatrixICP.n; i++)	//Per segment
+	{
+		for (int j = 0; j < RVLMIN(7, scoreMatchMatrixICP.Element[i].n); j++)	//Per hypothesis
+		{
+			if (scoreMatchMatrixICP.Element[i].Element[j].idx >= 0) //If hypothesis is valid
+			{
+				//Check for source segment
+				resLab = CheckHypothesesToSegmentEnvelopmentAndCollision(scoreMatchMatrixICP.Element[i].Element[j].idx, i, d1, d2);
+				if (resLab == 2)
+				{
+					//It must be first entry for this hypothesis
+					//make new list
+					std::vector<int> l;
+					l.push_back(i);
+					constL.insert(std::make_pair(scoreMatchMatrixICP.Element[i].Element[j].idx, l));
+				}
+				else if (resLab == 0)
+				{
+					if (verbose)
+						std::cout << "Hypothesis " << scoreMatchMatrixICP.Element[i].Element[j].idx << " invalidated!" << std::endl;
+					scoreMatchMatrixICP.Element[i].Element[j].idx = -1;
+					continue;
+				}
+
+				//Check for neighbourhood segments
+				for (int k = 0; k < neighbourhood.at(i).size(); k++)
+				{
+					resLab = CheckHypothesesToSegmentEnvelopmentAndCollision(scoreMatchMatrixICP.Element[i].Element[j].idx, neighbourhood.at(i).at(k), d1, d2);
+					if (resLab == 2)
+					{
+						if (constL.count(scoreMatchMatrixICP.Element[i].Element[j].idx))
+							constL.at(scoreMatchMatrixICP.Element[i].Element[j].idx).push_back(neighbourhood.at(i).at(k)); //Add segment to hypothesis list
+						else
+						{
+							std::vector<int> l;
+							l.push_back(neighbourhood.at(i).at(k));
+							constL.insert(std::make_pair(scoreMatchMatrixICP.Element[i].Element[j].idx, l));
+						}
+					}
+					else if (resLab == 0)
+					{
+						if (verbose)
+							std::cout << "Hypothesis " << scoreMatchMatrixICP.Element[i].Element[j].idx << " invalidated!" << std::endl;
+						scoreMatchMatrixICP.Element[i].Element[j].idx = -1;
+						constL.erase(scoreMatchMatrixICP.Element[i].Element[j].idx);
+						break;
+					}
+				}
+			}
+		}
+	}
+
+	if (verbose)
+	{
+		std::map<int, std::vector<int>>::iterator it;
+		for (it = constL.begin(); it != constL.end(); it++)
+		{
+			for (int i = 0; i < it->second.size(); i++)
+				std::cout << "Created pair hypothesis/segment: " << it->first << "/" << it->second.at(i) << std::endl;
+		}
+	}
+
+	return constL;
+}
+
+//
+int PSGM::CheckHypothesesToSegmentEnvelopmentAndCollision(int hyp, int segment, float d1, float d2)
+{
+	int retVal = 0;
+
+	//Hypothesis data
+	RECOG::PSGM_::MatchInstance* hypothesis = pCTImatchesArray.Element[hyp];
+	VertexGraph * hypVG = MTGSet.vertexGraphs.at(MCTISet.pCTI.Element[hypothesis->iMCTI]->iModel);
+	TG* hypTG = MTGSet.TGs.at(MCTISet.pCTI.Element[hypothesis->iMCTI]->iModel);
+	TGNode* plane;
+	float* N;
+	float* minSegDist = new float[hypTG->A.h];
+	float *RMS = hypothesis->RICP_;
+	float *tMS = hypothesis->tICP_;
+
+	//Segment data
+	Array<SURFEL::Vertex *> *vertexArray = &this->pSurfels->vertexArray;	
+	SURFEL::Vertex * rvlvertex;
+	float* minModDist = new float[hypTG->A.h];
+	RECOG::PSGM_::ModelInstance *pSCTI = CTISet.pCTI.Element[CTISet.SegmentCTIs.Element[segment].Element[0]];
+	RECOG::PSGM_::ModelInstanceElement *pSIE = pSCTI->modelInstance.Element;
+
+	float RMSCTI[9];
+	float tMSCTI[3];
+	float V3Tmp[3];
+
+	RVLCOMPTRANSF3DWITHINV(pSCTI->R, pSCTI->t, RMS, tMS, RMSCTI, tMSCTI, V3Tmp);
+
+	//Transformation vars?
+	float tPs[3];
+	float tPm[3];
+	float sPs[3];
+	float sPm[3];
+	float st[3] = { tMSCTI[0] / 1000, tMSCTI[1] / 1000, tMSCTI[2] / 1000 };
+
+	//Calculate distances segment vertices to model convex hull
+	int totalPts = this->clusters.Element[segment]->iVertexArray.n;
+	float distance;
+	float segMinDist = 1000000;
+	bool passedfirst = true;
+	for (int j = 0; j < hypTG->A.h; j++)
+	{
+		plane = hypTG->descriptor.Element[j].pFirst->ptr;
+		minSegDist[j] = 1000000;
+		//For each point
+		for (int i = 0; i < totalPts; i++)
+		{
+			rvlvertex = vertexArray->Element[this->clusters.Element[segment]->iVertexArray.Element[i]];
+
+			////Transform vertex to hyp model space
+			sPs[0] = 1000 * rvlvertex->P[0];
+			sPs[1] = 1000 * rvlvertex->P[1];
+			sPs[2] = 1000 * rvlvertex->P[2];
+			RVLINVTRANSF3(sPs, RMS, tMS, tPs, V3Tmp);
+
+			N = &hypTG->A.Element[hypTG->A.w * plane->i];
+
+			//sDistances[i * hypTG->A.h + j] = RVLDOTPRODUCT3(N, tPs) - plane->d;
+			distance = (RVLDOTPRODUCT3(N, tPs) - plane->d);
+			if ((distance > d1))
+				passedfirst = false;
+
+			if (minSegDist[j] > distance)
+				minSegDist[j] = distance;
+		}
+	}
+
+	if (passedfirst)
+		return 2;
+
+	if (!passedfirst)
+	{
+		//Calcuate distnces model vertices to segment convex hull
+		totalPts = hypVG->NodeArray.n;
+		for (int j = 0; j < hypTG->A.h; j++)
+		{
+			plane = hypTG->descriptor.Element[j].pFirst->ptr;
+			minModDist[j] = 1000000;
+			//For each point
+			for (int i = 0; i < totalPts; i++)
+			{
+				rvlvertex = &hypVG->NodeArray.Element[i];
+
+				////Transform vertex to segment space
+				sPm[0] = rvlvertex->P[0] / 1000;
+				sPm[1] = rvlvertex->P[1] / 1000;
+				sPm[2] = rvlvertex->P[2] / 1000;
+				RVLTRANSF3(sPm, RMSCTI, st, tPm, V3Tmp);
+
+				N = &hypTG->A.Element[hypTG->A.w * plane->i];	//Same normal at same index as the model CTI?
+
+				//mDistances[i * hypTG->A.h + j] = RVLDOTPRODUCT3(N, tPm) - pMIE[0].d;
+				distance = RVLDOTPRODUCT3(N, tPm) - pSIE[j].d;
+				if (minModDist[j] > distance)
+					minModDist[j] = distance;
+			}
+		}
+
+		//find max?
+		for (int i = 0; i < hypTG->A.h; i++)
+		{
+			if ((minSegDist[i] > -d2) || (minModDist[i] > -d2/1000.0))
+				return 1;
+		}
+	}
+
+	return 0;
+}
+
+///////////////////////////////////////////////////////////////////////////
+//
+// VIDOVIC
+//
+///////////////////////////////////////////////////////////////////////////
+
+///////////////////////////////////////////////////////////////////////////
+//
+// END VIDOVIC
+//
+///////////////////////////////////////////////////////////////////////////
+
+///////////////////////////////////////////////////////////////////////////
+//
+// PETRA
+//
+///////////////////////////////////////////////////////////////////////////
+
+///////////////////////////////////////////////////////////////////////////
+//
+// END PETRA
+//
+///////////////////////////////////////////////////////////////////////////
