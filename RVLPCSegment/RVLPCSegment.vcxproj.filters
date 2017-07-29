@@ -66,6 +66,9 @@
     <ClInclude Include="Include\Space3DGrid.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Include\MarchingCubes.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="stdafx.cpp">
@@ -108,6 +111,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="VertexGraph.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="MarchingCubes.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

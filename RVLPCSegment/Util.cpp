@@ -1,19 +1,8 @@
-#include "RVLPlatform.h"
-#include <stdlib.h>
-#include <stdio.h>
-#include <math.h>
-#include <string.h>
-#include "opencv2\opencv.hpp"
-#define _CRT_SECURE_NO_WARNINGS 
-#include "RVLConst.h"
-#ifndef ushort
-#define ushort unsigned short int
-#endif
-#include "RVLArray.h"
-#include "RVLKinect.h"
-#include "RVLMem.h"
-#include "RVLQListArray.h"
+#include "RVLVTK.h"
+#include <vtkTriangle.h>
+#include "RVLCore2.h"
 #include "Util.h"
+#include "MarchingCubes.h"
 
 using namespace RVL;
 
@@ -708,3 +697,122 @@ void ECCVGTLoader::ResetMatchFlag()
 	}
 }
 //END VIDOVIC
+
+namespace RVL
+{
+	vtkSmartPointer<vtkPolyData>  DisplayIsoSurface(
+		float *f,
+		float isolevel,
+		Box<float> box,
+		float voxelSize)
+	{
+		Box<int> iBox;
+
+		iBox.minx = (int)floor(box.minx / voxelSize);
+		iBox.maxx = (int)ceil(box.maxx / voxelSize);
+		iBox.miny = (int)floor(box.miny / voxelSize);
+		iBox.maxy = (int)ceil(box.maxy / voxelSize);
+		iBox.minz = (int)floor(box.minz / voxelSize);
+		iBox.maxz = (int)ceil(box.maxz / voxelSize);
+
+		int nx = iBox.maxx - iBox.minx + 1;
+		int ny = iBox.maxy - iBox.miny + 1;
+		int nz = iBox.maxz - iBox.minz + 1;
+
+		CRVLMem mem;
+
+		mem.Create(5 * sizeof(QLIST::Entry<Triangle<float>>));
+
+		QList<QLIST::Entry<Triangle<float>>> triangleList;
+
+		QList<QLIST::Entry<Triangle<float>>> *pTriangleList = &triangleList;
+
+		MarchingCubes MC;
+
+		MC.ComputeTables();
+
+		vtkSmartPointer<vtkPoints> points =
+			vtkSmartPointer<vtkPoints>::New();
+
+		vtkSmartPointer<vtkCellArray> triangles =
+			vtkSmartPointer<vtkCellArray>::New();
+
+		int iTriangle = 0;
+
+		float P[8][3];
+		float F[8];
+		QLIST::Entry<Triangle<float>> *pTriangle;
+		vtkSmartPointer<vtkTriangle> triangle;
+		int i, j, k, i_, j_, k_;
+		float x, y, z;
+
+		for (k_ = iBox.minz; k_ < iBox.maxz; k_++)
+			for (j_ = iBox.miny; j_ < iBox.maxy; j_++)
+				for (i_ = iBox.minx; i_ < iBox.maxx; i_++)
+				{
+					x = (float)i_ * voxelSize;
+					y = (float)j_ * voxelSize;
+					z = (float)k_ * voxelSize;
+
+					RVLQLIST_INIT(pTriangleList);
+
+					RVLSET3VECTOR(P[0], x, y, z);
+					RVLSET3VECTOR(P[1], x + voxelSize, y, z);
+					RVLSET3VECTOR(P[2], x + voxelSize, y + voxelSize, z);
+					RVLSET3VECTOR(P[3], x, y + voxelSize, z);
+					RVLSET3VECTOR(P[4], x, y, z + voxelSize);
+					RVLSET3VECTOR(P[5], x + voxelSize, y, z + voxelSize);
+					RVLSET3VECTOR(P[6], x + voxelSize, y + voxelSize, z + voxelSize);
+					RVLSET3VECTOR(P[7], x, y + voxelSize, z + voxelSize);
+
+					i = i_ - iBox.minx;
+					j = j_ - iBox.miny;
+					k = k_ - iBox.minz;
+
+					F[0] = f[nx * (ny * k + j) + i];
+					F[1] = f[nx * (ny * k + j) + i + 1];
+					F[2] = f[nx * (ny * k + j + 1) + i + 1];
+					F[3] = f[nx * (ny * k + j + 1) + i];
+					F[4] = f[nx * (ny * (k + 1) + j) + i];
+					F[5] = f[nx * (ny * (k + 1) + j) + i + 1];
+					F[6] = f[nx * (ny * (k + 1) + j + 1) + i + 1];
+					F[7] = f[nx * (ny * (k + 1) + j + 1) + i];
+
+					MC.ComputeTriangles(P, F, isolevel, pTriangleList, &mem);
+
+					pTriangle = pTriangleList->pFirst;
+
+					while (pTriangle)
+					{
+						points->InsertNextPoint(pTriangle->data.P[0][0], pTriangle->data.P[0][1], pTriangle->data.P[0][2]);
+						points->InsertNextPoint(pTriangle->data.P[1][0], pTriangle->data.P[1][1], pTriangle->data.P[1][2]);
+						points->InsertNextPoint(pTriangle->data.P[2][0], pTriangle->data.P[2][1], pTriangle->data.P[2][2]);
+
+						triangle = vtkSmartPointer<vtkTriangle>::New();
+						triangle->GetPointIds()->SetId(0, 3 * iTriangle);
+						triangle->GetPointIds()->SetId(1, 3 * iTriangle + 1);
+						triangle->GetPointIds()->SetId(2, 3 * iTriangle + 2);
+
+						triangles->InsertNextCell(triangle);
+
+						iTriangle++;
+
+						pTriangle = pTriangle->pNext;
+					}
+				}
+
+		printf("no. of pts. = %d\n", points->GetNumberOfPoints());
+
+		printf("no. of triangles = %d\n", triangles->GetNumberOfCells());
+
+		// Create a polydata object
+		vtkSmartPointer<vtkPolyData> polyData =
+			vtkSmartPointer<vtkPolyData>::New();
+
+		// Add the geometry and topology to the polydata
+		polyData->SetPoints(points);
+		polyData->SetPolys(triangles);
+
+		return polyData;
+	}
+}

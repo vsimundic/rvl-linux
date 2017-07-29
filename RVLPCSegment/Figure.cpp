@@ -1,4 +1,5 @@
 //#include "stdafx.h"
+#include "RVLVTK.h"
 #include "RVLCore2.h"
 #include "Util.h"
 #include "DisplayVector.h"

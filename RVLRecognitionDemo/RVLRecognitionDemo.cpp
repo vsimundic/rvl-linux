@@ -10,6 +10,7 @@ VTK_MODULE_INIT(vtkRenderingOpenGL2);
 VTK_MODULE_INIT(vtkInteractionStyle);
 VTK_MODULE_INIT(vtkRenderingFreeType);
 #include "RVLVTK.h"
+#include <vtkTriangle.h>		// Remove after completion of MarchingCubes.
 #include "RVLCore2.h"
 #include "Util.h"
 #include "Space3DGrid.h"
@@ -35,6 +36,7 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 #include "PCLTools.h"
 #include "RGBDCamera.h"
 #include "PCLMeshBuilder.h"
+#include "MarchingCubes.h"
 
 
 // VIDOVIC
@@ -57,9 +59,6 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 //END VIDOVIC
 
 using namespace RVL;
-
-#define RVLRECOGNITION_METHOD_RF		0
-#define RVLRECOGNITION_METHOD_PSGM		1
 
 void CreateParamList(
 	CRVLParameterList *pParamList,
@@ -91,6 +90,7 @@ void CreateParamList(
 	pParamData = pParamList->AddParam("Recognition.method", RVLPARAM_TYPE_ID, &method);
 	pParamList->AddID(pParamData, "PSGM", RVLRECOGNITION_METHOD_PSGM);
 	pParamList->AddID(pParamData, "RF", RVLRECOGNITION_METHOD_RF); //VIDOVIC
+	pParamList->AddID(pParamData, "VN", RVLRECOGNITION_METHOD_VN);
 	pParamData = pParamList->AddParam("Save PLY", RVLPARAM_TYPE_ID, &flags); //VIDOVIC
 	pParamList->AddID(pParamData, "yes", RVLRECOGNITION_DEMO_FLAG_SAVE_PLY); //VIDOVIC
 	pParamData = pParamList->AddParam("3D Visualization", RVLPARAM_TYPE_ID, &flags);
@@ -1014,6 +1014,63 @@ int main(int argc, char ** argv)
 			visualizer.Run();
 		}
 	}	// if (method == RVLRECOGNITION_METHOD_PSGM)
+	else if (method == RVLRECOGNITION_METHOD_VN)
+	{
+		Box<float> box;
+
+		box.minx = -1.0f;
+		box.maxx = 1.0f;
+		box.miny = -1.0f;
+		box.maxy = 1.0f;
+		box.minz = -1.0f;
+		box.maxz = 1.0f;
+
+		float voxelSize = 0.01;
+
+		float r = 0.5;
+
+		Box<int> iBox;
+		
+		iBox.minx = (int)floor(box.minx / voxelSize);
+		iBox.maxx = (int)ceil(box.maxx / voxelSize);
+		iBox.miny = (int)floor(box.miny / voxelSize);
+		iBox.maxy = (int)ceil(box.maxy / voxelSize);
+		iBox.minz = (int)floor(box.minz / voxelSize);
+		iBox.maxz = (int)ceil(box.maxz / voxelSize);
+
+		int nx = iBox.maxx - iBox.minx + 1;
+		int ny = iBox.maxy - iBox.miny + 1;
+		int nz = iBox.maxz - iBox.minz + 1;
+
+		float *f = new float[nx * ny * nz];
+
+		int i, j, k;
+		float x, y, z;
+
+		for (k = iBox.minz; k <= iBox.maxz; k++)
+			for (j = iBox.miny; j <= iBox.maxy; j++)
+				for (i = iBox.minx; i <= iBox.maxx; i++)
+				{
+					x = (float)i * voxelSize;
+					y = (float)j * voxelSize;
+					z = (float)k * voxelSize;
+
+					f[nx * (ny * (k - iBox.minz) + j - iBox.miny) + i - iBox.minx] = sqrt(x * x + y * y + z * z);
+				}
+
+		vtkSmartPointer<vtkPolyData> polyData = DisplayIsoSurface(f, r, box, voxelSize);
+
+		// Create a mapper and actor.
+		vtkSmartPointer<vtkPolyDataMapper> mapper = vtkSmartPointer<vtkPolyDataMapper>::New();
+		mapper->SetInputData(polyData);
+		vtkSmartPointer<vtkActor> actor = vtkSmartPointer<vtkActor>::New();
+		actor->SetMapper(mapper);
+
+		visualizer.renderer->AddActor(actor);
+		visualizer.Run();
+
+		delete[] f;
+	}	// if (method == RVLRECOGNITION_METHOD_VN)
 
 	// free memory
 

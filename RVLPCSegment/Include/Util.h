@@ -410,5 +410,11 @@ namespace RVL
 			delete[] n[i];
 		}
 	}
+
+	vtkSmartPointer<vtkPolyData>  DisplayIsoSurface(
+		float *f,
+		float isolevel,
+		Box<float> box,
+		float voxelSize);
 }	// namespace RVL
 
