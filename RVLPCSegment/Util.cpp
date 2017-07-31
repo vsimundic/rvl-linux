@@ -701,24 +701,12 @@ void ECCVGTLoader::ResetMatchFlag()
 namespace RVL
 {
 	vtkSmartPointer<vtkPolyData>  DisplayIsoSurface(
-		float *f,
-		float isolevel,
-		Box<float> box,
-		float voxelSize)
+		Array3D<float> f,
+		float *P0,
+		float voxelSize,
+		float isolevel
+		)
 	{
-		Box<int> iBox;
-
-		iBox.minx = (int)floor(box.minx / voxelSize);
-		iBox.maxx = (int)ceil(box.maxx / voxelSize);
-		iBox.miny = (int)floor(box.miny / voxelSize);
-		iBox.maxy = (int)ceil(box.maxy / voxelSize);
-		iBox.minz = (int)floor(box.minz / voxelSize);
-		iBox.maxz = (int)ceil(box.maxz / voxelSize);
-
-		int nx = iBox.maxx - iBox.minx + 1;
-		int ny = iBox.maxy - iBox.miny + 1;
-		int nz = iBox.maxz - iBox.minz + 1;
-
 		CRVLMem mem;
 
 		mem.Create(5 * sizeof(QLIST::Entry<Triangle<float>>));
@@ -739,20 +727,24 @@ namespace RVL
 
 		int iTriangle = 0;
 
+		int maxi = f.a - 2;
+		int maxj = f.b - 2;
+		int maxk = f.c - 2;
+
 		float P[8][3];
 		float F[8];
 		QLIST::Entry<Triangle<float>> *pTriangle;
 		vtkSmartPointer<vtkTriangle> triangle;
-		int i, j, k, i_, j_, k_;
+		int i, j, k;
 		float x, y, z;
 
-		for (k_ = iBox.minz; k_ < iBox.maxz; k_++)
-			for (j_ = iBox.miny; j_ < iBox.maxy; j_++)
-				for (i_ = iBox.minx; i_ < iBox.maxx; i_++)
+		for (k = 0; k <= maxk; k++)
+			for (j = 0; j <= maxj; j++)
+				for (i = 0; i <= maxi; i++)
 				{
-					x = (float)i_ * voxelSize;
-					y = (float)j_ * voxelSize;
-					z = (float)k_ * voxelSize;
+					x = (float)i * voxelSize + P0[0];
+					y = (float)j * voxelSize + P0[1];
+					z = (float)k * voxelSize + P0[2];
 
 					RVLQLIST_INIT(pTriangleList);
 
@@ -765,18 +757,14 @@ namespace RVL
 					RVLSET3VECTOR(P[6], x + voxelSize, y + voxelSize, z + voxelSize);
 					RVLSET3VECTOR(P[7], x, y + voxelSize, z + voxelSize);
 
-					i = i_ - iBox.minx;
-					j = j_ - iBox.miny;
-					k = k_ - iBox.minz;
-
-					F[0] = f[nx * (ny * k + j) + i];
-					F[1] = f[nx * (ny * k + j) + i + 1];
-					F[2] = f[nx * (ny * k + j + 1) + i + 1];
-					F[3] = f[nx * (ny * k + j + 1) + i];
-					F[4] = f[nx * (ny * (k + 1) + j) + i];
-					F[5] = f[nx * (ny * (k + 1) + j) + i + 1];
-					F[6] = f[nx * (ny * (k + 1) + j + 1) + i + 1];
-					F[7] = f[nx * (ny * (k + 1) + j + 1) + i];
+					F[0] = f.Element[f.a * (f.b * k + j) + i];
+					F[1] = f.Element[f.a * (f.b * k + j) + i + 1];
+					F[2] = f.Element[f.a * (f.b * k + j + 1) + i + 1];
+					F[3] = f.Element[f.a * (f.b * k + j + 1) + i];
+					F[4] = f.Element[f.a * (f.b * (k + 1) + j) + i];
+					F[5] = f.Element[f.a * (f.b * (k + 1) + j) + i + 1];
+					F[6] = f.Element[f.a * (f.b * (k + 1) + j + 1) + i + 1];
+					F[7] = f.Element[f.a * (f.b * (k + 1) + j + 1) + i];
 
 					MC.ComputeTriangles(P, F, isolevel, pTriangleList, &mem);
 

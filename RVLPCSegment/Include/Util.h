@@ -412,9 +412,9 @@ namespace RVL
 	}
 
 	vtkSmartPointer<vtkPolyData>  DisplayIsoSurface(
-		float *f,
-		float isolevel,
-		Box<float> box,
-		float voxelSize);
+		Array3D<float> f,
+		float *P0,
+		float voxelSize,
+		float isolevel);
 }	// namespace RVL
 

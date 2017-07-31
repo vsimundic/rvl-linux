@@ -83,8 +83,13 @@ namespace RVL
 			struct Voxel
 			{
 				QList<QLIST::Index> PtList;
-				bool bOut;
 				int voxelDistance;
+			};
+
+			struct Sample
+			{
+				float P[3];
+				int iFeature;
 			};
 		}
 	}
@@ -1135,7 +1140,9 @@ int main(int argc, char ** argv)
 
 		volume.Element = new RECOG::VN::Voxel[nVoxels];
 
-		int maxVoxelDistance = volume.a + volume.b + volume.c;
+		//int maxVoxelDistance = volume.a + volume.b + volume.c;
+
+		int maxVoxelDistance = sampleVoxelDistance + 1;
 
 		int i;
 		QList<QLIST::Index> *pPtList;
@@ -1149,9 +1156,7 @@ int main(int argc, char ** argv)
 
 			RVLQLIST_INIT(pPtList);
 
-			pVoxel->bOut = false;
-
-			pVoxel->voxelDistance = maxVoxelDistance;
+			pVoxel->voxelDistance = -1;
 		}
 
 		QLIST::Index *PtMem = new QLIST::Index[mesh.NodeArray.n];
@@ -1186,6 +1191,12 @@ int main(int argc, char ** argv)
 		int *pPut = RGBuff;
 		int *pFetch = RGBuff;
 
+		Array<int> zeroDistanceVoxelArray;
+
+		zeroDistanceVoxelArray.Element = new int[nVoxels];
+
+		zeroDistanceVoxelArray.n = 0;
+
 		*(pPut++) = 0;
 
 		int dijk[][3] = {
@@ -1198,10 +1209,6 @@ int main(int argc, char ** argv)
 
 		int iVoxel, iVoxel_;
 		int i_, j_, k_, l;
-
-		iVoxel = RVL3DARRAY_INDEX(volume, 5, 16, 22);
-
-		RVL3DARRAY_INDICES(volume, iVoxel, i, j, k);
 
 		while (pPut > pFetch)
 		{
@@ -1221,22 +1228,126 @@ int main(int argc, char ** argv)
 
 					pVoxel = volume.Element + iVoxel_;
 
-					if (pVoxel->bOut)
+					if (pVoxel->voxelDistance >= 0)
 						continue;
 
 					if (pVoxel->PtList.pFirst)
-						continue;
+					{
+						pVoxel->voxelDistance = 0;
 
-					pVoxel->bOut = true;
+						zeroDistanceVoxelArray.Element[zeroDistanceVoxelArray.n++] = iVoxel_;
+					}
+					else
+					{
+						pVoxel->voxelDistance = maxVoxelDistance;
 
-					*(pPut++) = iVoxel_;
+						*(pPut++) = iVoxel_;
+					}
 				}
 			}
 		}
 
+		Array<RECOG::VN::Sample> sampleArray;
+
+		sampleArray.Element = new RECOG::VN::Sample[nVoxels];
+
+		sampleArray.n = 0;
+
+		float halfVoxelSize = 0.5f * voxelSize;
+
+		float P0[3];
+
+		P0[0] = box.minx + halfVoxelSize;
+		P0[1] = box.miny + halfVoxelSize;
+		P0[2] = box.minz + halfVoxelSize;
+
+		pPut = RGBuff + zeroDistanceVoxelArray.n;
+
+		pFetch = RGBuff;
+
+		memcpy(RGBuff, zeroDistanceVoxelArray.Element, zeroDistanceVoxelArray.n * sizeof(int));
+
+		int voxelDistance;
+
+		while (pPut > pFetch)
+		{
+			iVoxel = (*pFetch++);
+
+			pVoxel = volume.Element + iVoxel;
+
+			voxelDistance = pVoxel->voxelDistance + 1;
+
+			RVL3DARRAY_INDICES(volume, iVoxel, i, j, k);
+
+			for (l = 0; l < 6; l++)
+			{
+				i_ = i + dijk[l][0];
+				j_ = j + dijk[l][1];
+				k_ = k + dijk[l][2];
+
+				if (i_ >= 0 && i_ < volume.a && j_ >= 0 && j_ < volume.b && k_ >= 0 && k_ < volume.c)
+				{
+					iVoxel_ = RVL3DARRAY_INDEX(volume, i_, j_, k_);
+
+					pVoxel = volume.Element + iVoxel_;
+
+					if (pVoxel->voxelDistance > voxelDistance)
+					{
+						pVoxel->voxelDistance = voxelDistance;
+
+						*(pPut++) = iVoxel_;
+
+						if (voxelDistance == sampleVoxelDistance)
+						{
+							P = sampleArray.Element[sampleArray.n].P;
+
+							P[0] = (float)i_ * voxelSize;
+							P[1] = (float)j_ * voxelSize;
+							P[2] = (float)k_ * voxelSize;
+
+							RVLSUM3VECTORS(P, P0, P);
+
+							sampleArray.n++;
+						}
+					}
+				}
+			}
+		}
+
+		Array3D<float> f;
+
+		f.a = volume.a;
+		f.b = volume.b;
+		f.c = volume.c;
+
+		f.Element = new float[nVoxels];		
+
+		for (iVoxel = 0; iVoxel < nVoxels; iVoxel++)
+			f.Element[iVoxel] = (volume.Element[iVoxel].voxelDistance > 0 ? 1.0f : -1.0f);
+		//{
+		//	RVL3DARRAY_INDICES(volume, iVoxel, i, j, k);
+
+		//	f[iVoxel] = (i == 0 || i == volume.a - 1 || j == 0 || j == volume.b - 1 || k == 0 || k == volume.c - 1 ? 1.0f : -1.0f);
+		//}
+
+		vtkSmartPointer<vtkPolyData> polyData = DisplayIsoSurface(f, P0, voxelSize, 0.0f);
+
+		// Create a mapper and actor.
+		vtkSmartPointer<vtkPolyDataMapper> mapper = vtkSmartPointer<vtkPolyDataMapper>::New();
+		mapper->SetInputData(polyData);
+		vtkSmartPointer<vtkActor> actor = vtkSmartPointer<vtkActor>::New();
+		actor->SetMapper(mapper);
+
+		visualizer.renderer->AddActor(actor);
+		visualizer.Run();
+
 		delete[] volume.Element;
 		delete[] PtMem;
 		delete[] RGBuff;
+		delete[] f.Element;
+		delete[] zeroDistanceVoxelArray.Element;
+		delete[] sampleArray.Element;
+
 
 		//vtkSmartPointer<vtkPolyData> polyData = DisplayIsoSurface(f, r, box, voxelSize);
 
