@@ -60,6 +60,41 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 
 using namespace RVL;
 
+// Move to RVLCore2.h under RVL3DTools.h.
+
+template <typename T>
+void BoxCenter(
+	Box<T> *pBox,
+	T *P)
+{
+	P[0] = 0.5f * (pBox->minx + pBox->maxx);
+	P[1] = 0.5f * (pBox->miny + pBox->maxy);
+	P[2] = 0.5f * (pBox->minz + pBox->maxz);
+}
+
+// Move to VN.h after completion.
+
+namespace RVL
+{
+	namespace RECOG
+	{
+		namespace VN
+		{
+			struct Voxel
+			{
+				QList<QLIST::Index> PtList;
+				bool bOut;
+				int voxelDistance;
+			};
+		}
+	}
+}
+
+// Move to RVLArray.h.
+
+#define RVL3DARRAY_INDICES(Array, idx, x, y, z) {x = idx % Array.a; y = (idx / Array.a); z = y / Array.b; y = y % Array.b;}
+#define RVL3DARRAY_INDEX(Array, x, y, z)	(Array.a * (Array.b * (z) + (y)) + (x))
+
 void CreateParamList(
 	CRVLParameterList *pParamList,
 	CRVLMem *pMem,
@@ -1016,60 +1051,205 @@ int main(int argc, char ** argv)
 	}	// if (method == RVLRECOGNITION_METHOD_PSGM)
 	else if (method == RVLRECOGNITION_METHOD_VN)
 	{
+		//Box<float> box;
+
+		//box.minx = -1.0f;
+		//box.maxx = 1.0f;
+		//box.miny = -1.0f;
+		//box.maxy = 1.0f;
+		//box.minz = -1.0f;
+		//box.maxz = 1.0f;
+
+		//float voxelSize = 0.01;
+
+		//float r = 0.5;
+
+		//Box<int> iBox;
+		//
+		//iBox.minx = (int)floor(box.minx / voxelSize);
+		//iBox.maxx = (int)ceil(box.maxx / voxelSize);
+		//iBox.miny = (int)floor(box.miny / voxelSize);
+		//iBox.maxy = (int)ceil(box.maxy / voxelSize);
+		//iBox.minz = (int)floor(box.minz / voxelSize);
+		//iBox.maxz = (int)ceil(box.maxz / voxelSize);
+
+		//int nx = iBox.maxx - iBox.minx + 1;
+		//int ny = iBox.maxy - iBox.miny + 1;
+		//int nz = iBox.maxz - iBox.minz + 1;
+
+		//float *f = new float[nx * ny * nz];
+
+		//int i, j, k;
+		//float x, y, z;
+
+		//for (k = iBox.minz; k <= iBox.maxz; k++)
+		//	for (j = iBox.miny; j <= iBox.maxy; j++)
+		//		for (i = iBox.minx; i <= iBox.maxx; i++)
+		//		{
+		//			x = (float)i * voxelSize;
+		//			y = (float)j * voxelSize;
+		//			z = (float)k * voxelSize;
+
+		//			f[nx * (ny * (k - iBox.minz) + j - iBox.miny) + i - iBox.minx] = sqrt(x * x + y * y + z * z);
+		//		}
+
+		float voxelSize = 5.0f;
+		int sampleVoxelDistance = 2;
+
+		Mesh mesh;
+
+		LoadMesh(&meshBuilder, sceneMeshFileName, &mesh, false);
+
+		Box<float> boundingBox;
+
+		mesh.BoundingBox(&boundingBox);
+
+		int nx = (int)ceil(0.5f * (boundingBox.maxx - boundingBox.minx) / voxelSize) + sampleVoxelDistance;
+		int ny = (int)ceil(0.5f * (boundingBox.maxy - boundingBox.miny) / voxelSize) + sampleVoxelDistance;
+		int nz = (int)ceil(0.5f * (boundingBox.maxz - boundingBox.minz) / voxelSize) + sampleVoxelDistance;
+
+		float a = voxelSize * (float)nx;
+		float b = voxelSize * (float)ny;
+		float c = voxelSize * (float)nz;
+
+		float center[3];
+
+		BoxCenter<float>(&boundingBox, center);
+
 		Box<float> box;
 
-		box.minx = -1.0f;
-		box.maxx = 1.0f;
-		box.miny = -1.0f;
-		box.maxy = 1.0f;
-		box.minz = -1.0f;
-		box.maxz = 1.0f;
+		box.minx = center[0] - a;
+		box.miny = center[1] - b;
+		box.minz = center[2] - c;
+		box.maxx = center[0] + a;
+		box.maxy = center[1] + b;
+		box.maxz = center[2] + c;
 
-		float voxelSize = 0.01;
+		Array3D<RECOG::VN::Voxel> volume;
 
-		float r = 0.5;
+		volume.a = 2 * nx;
+		volume.b = 2 * ny;
+		volume.c = 2 * nz;
 
-		Box<int> iBox;
-		
-		iBox.minx = (int)floor(box.minx / voxelSize);
-		iBox.maxx = (int)ceil(box.maxx / voxelSize);
-		iBox.miny = (int)floor(box.miny / voxelSize);
-		iBox.maxy = (int)ceil(box.maxy / voxelSize);
-		iBox.minz = (int)floor(box.minz / voxelSize);
-		iBox.maxz = (int)ceil(box.maxz / voxelSize);
+		int nVoxels = volume.a * volume.b * volume.c;
 
-		int nx = iBox.maxx - iBox.minx + 1;
-		int ny = iBox.maxy - iBox.miny + 1;
-		int nz = iBox.maxz - iBox.minz + 1;
+		volume.Element = new RECOG::VN::Voxel[nVoxels];
 
-		float *f = new float[nx * ny * nz];
+		int maxVoxelDistance = volume.a + volume.b + volume.c;
 
-		int i, j, k;
-		float x, y, z;
+		int i;
+		QList<QLIST::Index> *pPtList;
+		RECOG::VN::Voxel *pVoxel;
 
-		for (k = iBox.minz; k <= iBox.maxz; k++)
-			for (j = iBox.miny; j <= iBox.maxy; j++)
-				for (i = iBox.minx; i <= iBox.maxx; i++)
+		for (i = 0; i < nVoxels; i++)
+		{
+			pVoxel = volume.Element + i;
+
+			pPtList = &(pVoxel->PtList);
+
+			RVLQLIST_INIT(pPtList);
+
+			pVoxel->bOut = false;
+
+			pVoxel->voxelDistance = maxVoxelDistance;
+		}
+
+		QLIST::Index *PtMem = new QLIST::Index[mesh.NodeArray.n];
+
+		QLIST::Index *pPtIdx = PtMem;
+
+		float *P;
+		int iPt;
+		int j, k;		
+
+		for (iPt = 0; iPt < mesh.NodeArray.n; iPt++)
+		{
+			P = mesh.NodeArray.Element[iPt].P;
+
+			i = (int)floor((P[0] - box.minx) / voxelSize);
+			j = (int)floor((P[1] - box.miny) / voxelSize);
+			k = (int)floor((P[2] - box.minz) / voxelSize);
+
+			pVoxel = RVL3DARRAY_ELEMENT(volume, i, j, k);
+
+			pPtList = &(pVoxel->PtList);
+
+			pPtIdx->Idx = iPt;
+
+			RVLQLIST_ADD_ENTRY(pPtList, pPtIdx);
+
+			pPtIdx++;
+		}
+
+		int *RGBuff = new int[nVoxels];
+
+		int *pPut = RGBuff;
+		int *pFetch = RGBuff;
+
+		*(pPut++) = 0;
+
+		int dijk[][3] = {
+			{ -1, 0, 0 },
+			{ 1, 0, 0 },
+			{ 0, -1, 0 },
+			{ 0, 1, 0 },
+			{ 0, 0, -1 },
+			{ 0, 0, 1 } };
+
+		int iVoxel, iVoxel_;
+		int i_, j_, k_, l;
+
+		iVoxel = RVL3DARRAY_INDEX(volume, 5, 16, 22);
+
+		RVL3DARRAY_INDICES(volume, iVoxel, i, j, k);
+
+		while (pPut > pFetch)
+		{
+			iVoxel = (*pFetch++);
+
+			RVL3DARRAY_INDICES(volume, iVoxel, i, j, k);
+
+			for (l = 0; l < 6; l++)
+			{
+				i_ = i + dijk[l][0];
+				j_ = j + dijk[l][1];
+				k_ = k + dijk[l][2];
+
+				if (i_ >= 0 && i_ < volume.a && j_ >= 0 && j_ < volume.b && k_ >= 0 && k_ < volume.c)
 				{
-					x = (float)i * voxelSize;
-					y = (float)j * voxelSize;
-					z = (float)k * voxelSize;
+					iVoxel_ = RVL3DARRAY_INDEX(volume, i_, j_, k_);
 
-					f[nx * (ny * (k - iBox.minz) + j - iBox.miny) + i - iBox.minx] = sqrt(x * x + y * y + z * z);
+					pVoxel = volume.Element + iVoxel_;
+
+					if (pVoxel->bOut)
+						continue;
+
+					if (pVoxel->PtList.pFirst)
+						continue;
+
+					pVoxel->bOut = true;
+
+					*(pPut++) = iVoxel_;
 				}
+			}
+		}
 
-		vtkSmartPointer<vtkPolyData> polyData = DisplayIsoSurface(f, r, box, voxelSize);
+		delete[] volume.Element;
+		delete[] PtMem;
+		delete[] RGBuff;
 
-		// Create a mapper and actor.
-		vtkSmartPointer<vtkPolyDataMapper> mapper = vtkSmartPointer<vtkPolyDataMapper>::New();
-		mapper->SetInputData(polyData);
-		vtkSmartPointer<vtkActor> actor = vtkSmartPointer<vtkActor>::New();
-		actor->SetMapper(mapper);
+		//vtkSmartPointer<vtkPolyData> polyData = DisplayIsoSurface(f, r, box, voxelSize);
 
-		visualizer.renderer->AddActor(actor);
-		visualizer.Run();
+		//// Create a mapper and actor.
+		//vtkSmartPointer<vtkPolyDataMapper> mapper = vtkSmartPointer<vtkPolyDataMapper>::New();
+		//mapper->SetInputData(polyData);
+		//vtkSmartPointer<vtkActor> actor = vtkSmartPointer<vtkActor>::New();
+		//actor->SetMapper(mapper);
 
-		delete[] f;
+		//visualizer.renderer->AddActor(actor);
+		//visualizer.Run();
+
+		//delete[] f;
 	}	// if (method == RVLRECOGNITION_METHOD_VN)
 
 	// free memory
