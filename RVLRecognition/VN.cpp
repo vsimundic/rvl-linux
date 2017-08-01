@@ -38,8 +38,10 @@ VN::~VN()
 void VN::Create(
 	Mesh *pMesh,
 	SurfelGraph *pSurfels,
-	float voxelSize,
+	CRVLMem *pMem,
+	float voxelSize_,
 	int sampleVoxelDistance,
+	float eps,
 	Visualizer *pVisualizer)
 {
 	Box<float> boundingBox;
@@ -301,3 +303,9 @@ void VN::DisplaySampledMesh(
 	delete[] f.Element;
 }
 
+void VN::Display(
+	Visualizer *pVisualizer,
+	Box<float> box,
+	float resolution)
+{
+}

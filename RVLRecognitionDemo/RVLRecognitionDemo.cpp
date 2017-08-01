@@ -580,7 +580,6 @@ int main(int argc, char ** argv)
 
 				printf("Scene %s...\n", filePath);
 
-
 				recognition.SetSceneFileName(filePath);
 				//recognition.InterpretCTIS(&mesh);
 
@@ -1017,16 +1016,84 @@ int main(int argc, char ** argv)
 	}	// if (method == RVLRECOGNITION_METHOD_PSGM)
 	else if (method == RVLRECOGNITION_METHOD_VN)
 	{
-		float voxelSize = 5.0f;
+		// Parameters
+
+		//float voxelSize = 5.0f;
+		//int sampleVoxelDistance = 1;
+		//float eps = 2.0f;
+		//float resolution = 1.0f;
+		float voxelSize = 0.02f;
 		int sampleVoxelDistance = 1;
+		float eps = 0.01f;
+		float resolution = 0.01f;
+
+		// Load mesh.
 
 		Mesh mesh;
 
 		LoadMesh(&meshBuilder, sceneMeshFileName, &mesh, false);
 
+		// Reset memory.
+
+		mem.Clear();
+
+		// Detect surfels.
+
+		surfels.Init(&mesh);
+
+		surfelDetector.Init(&mesh, &surfels, &mem);
+
+		printf("Segmentation to surfels...");
+
+		surfelDetector.Segment(&mesh, &surfels);
+
+		printf("completed.\n");
+
+		int nSurfels = surfels.NodeArray.n;
+
+		printf("No. of surfels = %d\n", nSurfels);
+
+		surfels.DetectVertices(&mesh);
+
+		// Cluster surfels.
+
+		PSGM clustering;
+
+		clustering.pMem = &mem;
+
+		clustering.pMesh = &mesh;
+
+		clustering.pSurfels = &surfels;
+
+		clustering.pSurfelDetector = &surfelDetector;
+
+		clustering.Clusters();
+
+		surfels.NodeColors(SelectionColor);
+
+		clustering.InitDisplay(&visualizer, &mesh, SelectionColor);
+
+		clustering.Display();		
+
+		//surfels.InitDisplay(&visualizer, &mesh, &surfelDetector);		
+
+		//surfels.Display(&visualizer, &mesh);
+
+		visualizer.Run();
+		
+		// Create VN.
+
 		VN model;
 
-		model.Create(&mesh, &surfels, voxelSize, sampleVoxelDistance, &visualizer);
+		model.Create(&mesh, &surfels, &mem, voxelSize, sampleVoxelDistance, eps, &visualizer);
+
+		// Visualization
+
+		Box<float> box = model.boundingBox;
+
+		ExpandBox<float>(&box, 2.0f * resolution);
+
+		model.Display(&visualizer, box, resolution);
 
 		visualizer.Run();
 	}	// if (method == RVLRECOGNITION_METHOD_VN)

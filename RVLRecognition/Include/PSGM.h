@@ -379,6 +379,7 @@ namespace RVL
 			QList<QLIST::Index> surfelList,
 			RECOG::CTISet *pCTISet,
 			CRVLMem *pMem_);
+		void Clusters();
 		int CTIs(
 			QList<QLIST::Index> surfelList,
 			Array<int> iVertexArray,
@@ -530,7 +531,6 @@ namespace RVL
 		void CheckHypothesesToSegmentEnvelopmentAndCollision_DEBUG(int hyp, int segment, float d1, float d2); //Filko
 
 	private:
-		void Clusters();
 		void WholeMeshCluster();
 		void CreateTemplate66();
 		void CreateTemplateBox();
