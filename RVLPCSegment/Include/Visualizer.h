@@ -69,6 +69,59 @@ namespace RVL
 			int memSize = 5000000);
 		void ShowFigure(char *imageName);
 		void ShowFigure(Figure *pFig);
+		template <typename PointCoordinateType, typename PointType> void DisplayPointSet(
+			Array<PointType> pointArray,
+			unsigned char *color,
+			float pointMarkerSize)
+		{
+			vtkSmartPointer<vtkPolyData> polyData = vtkSmartPointer<vtkPolyData>::New();
+
+			vtkSmartPointer<vtkPolyData> ptsPolyData = vtkSmartPointer<vtkPolyData>::New();
+
+			vtkSmartPointer<vtkPoints> points = vtkSmartPointer<vtkPoints>::New();
+
+			vtkSmartPointer<vtkUnsignedCharArray> colors = vtkSmartPointer<vtkUnsignedCharArray>::New();
+			colors->SetNumberOfComponents(3);
+			colors->SetName("Colors");
+
+			int iPt;
+			PointCoordinateType *P;
+
+			for (iPt = 0; iPt < pointArray.n; iPt++)
+			{
+				P = pointArray.Element[iPt].P;
+
+				points->InsertNextPoint(P);
+
+				colors->InsertNextTupleValue(color);
+			}
+
+			ptsPolyData->SetPoints(points);
+
+			vtkSmartPointer<vtkVertexGlyphFilter> vertexFilter =
+				vtkSmartPointer<vtkVertexGlyphFilter>::New();
+
+			vertexFilter->SetInputData(ptsPolyData);
+
+			vertexFilter->Update();
+
+			polyData->ShallowCopy(vertexFilter->GetOutput());
+
+			polyData->SetPoints(points);
+
+			polyData->GetPointData()->SetScalars(colors);
+
+			// Setup the visualization pipeline
+			vtkSmartPointer<vtkPolyDataMapper> mapper = vtkSmartPointer<vtkPolyDataMapper>::New();
+
+			mapper->SetInputData(polyData);
+
+			actor = vtkSmartPointer<vtkActor>::New();
+			actor->SetMapper(mapper);
+			actor->GetProperty()->SetPointSize(pointMarkerSize);
+
+			renderer->AddActor(actor);
+		}
 
 	public:
 		CRVLMem *pMem;

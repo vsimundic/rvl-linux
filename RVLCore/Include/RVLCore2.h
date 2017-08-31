@@ -154,6 +154,16 @@ namespace RVL
 	{
 		return (pBox->maxx - pBox->minx) * (pBox->maxy - pBox->miny) * (pBox->maxz - pBox->minz);
 	}
+
+	template <typename T>
+	void BoxCenter(
+		Box<T> *pBox,
+		T *P)
+	{
+		P[0] = 0.5f * (pBox->minx + pBox->maxx);
+		P[1] = 0.5f * (pBox->miny + pBox->maxy);
+		P[2] = 0.5f * (pBox->minz + pBox->maxz);
+	}
 }
 
 
@@ -163,3 +173,8 @@ namespace RVL
 // RVLMem
 
 #define RVLMEM_SET_FREE(pMem, pFreeMem)		pMem->m_pFreeMem = (unsigned char *)(pFreeMem);
+
+// RVLArray
+
+#define RVL3DARRAY_INDICES(Array, idx, x, y, z) {x = idx % Array.a; y = (idx / Array.a); z = y / Array.b; y = y % Array.b;}
+#define RVL3DARRAY_INDEX(Array, x, y, z)	(Array.a * (Array.b * (z) + (y)) + (x))

@@ -48,6 +48,9 @@
     <ClInclude Include="Include\TGSet.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Include\VN.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="stdafx.cpp">
@@ -75,6 +78,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="TGSet.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="VN.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
