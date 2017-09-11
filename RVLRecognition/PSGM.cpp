@@ -167,6 +167,9 @@ PSGM::PSGM()
 	TemplateMatrix(STGSet.A);
 
 	createMatchGT = false;
+	createSegmentGT = false;
+	segmentGTLoaded = false;
+	modelColors.Element = NULL;
 
 	//depthImg = new unsigned short(480*640); //Vidovic
 	depth = cv::Mat(480, 640, CV_16UC1, cv::Scalar::all(0));
@@ -242,6 +245,8 @@ PSGM::~PSGM()
 	RVL_DELETE_ARRAY(scoreMatchMatrix.Element);
 
 	RVL_DELETE_ARRAY(scoreMatchMatrixICP.Element);
+
+	RVL_DELETE_ARRAY(modelColors.Element);
 
 	if (icpTMatrix)
 		delete[] icpTMatrix;
@@ -7239,6 +7244,7 @@ void PSGM::InitDisplay(
 	displayData.pVisualizer = pVisualizer;	
 	RVLCOPY3VECTOR(selectionColor, displayData.selectionColor);
 	displayData.iSelectedCluster = -1;
+	displayData.iSegmentGTModification = -1; //Vidovic
 		pSurfels->DisplayData.keyPressUserFunction = &RECOG::PSGM_::keyPressUserFunction;
 		pSurfels->DisplayData.mouseRButtonDownUserFunction = &RECOG::PSGM_::mouseRButtonDownUserFunction;
 		pSurfels->DisplayData.vpUserFunctionData = &displayData;
@@ -7881,6 +7887,102 @@ bool RVL::RECOG::PSGM_::keyPressUserFunction(
 		}
 	}
 
+	//visualize segmentGT
+	if (key == "F3")
+	{
+		pRecognition->createSegmentGT = !pRecognition->createSegmentGT;
+
+		if (pRecognition->createSegmentGT)
+		{
+			if (!pRecognition->segmentGTLoaded)
+			{
+				printf("Segment GT creation started!!\n");
+
+				pRecognition->FindBestGTHypothesis();
+				pRecognition->CreateSegmentGT();
+			}
+			else
+				printf("Segment GT modification started!!\n");
+
+
+			pVisualizer->renderer->RemoveAllViewProps();
+			pVisualizer->SetMesh(pMesh);
+			pRecognition->Display();
+			pRecognition->PaintGTSegments();
+
+			//pRecognition->PaintGTSegments();
+		}
+		else
+			if (!pRecognition->segmentGTLoaded)
+				printf("Segment GT modification stoped!!\n");
+			else
+				printf("Segment GT creation stoped!!\n");
+	}	
+
+	if (pRecognition->createSegmentGT)
+	{
+		if (pRecognition->displayData.iSegmentGTModification != -1)
+		{
+			if (key == "z")
+			{
+				pVisualizer->renderer->RemoveAllViewProps();
+				pVisualizer->SetMesh(pMesh);
+				pRecognition->Display();
+
+				pRecognition->AttachSegmentToModel(pRecognition->displayData.iSegmentGTModification, -1);
+				pRecognition->PaintGTSegments();
+
+				pRecognition->displayData.iSegmentGTModification = -1;
+			}
+			if (key == "u")
+			{
+				pVisualizer->renderer->RemoveAllViewProps();
+				pVisualizer->SetMesh(pMesh);
+				pRecognition->Display();
+
+				int iModel_;
+				printf("Enter model ID for segment %d:", pRecognition->displayData.iSegmentGTModification);
+				scanf("%d", &iModel_);
+				pRecognition->AttachSegmentToModel(pRecognition->displayData.iSegmentGTModification, iModel_);
+				pRecognition->PaintGTSegments();
+
+				pRecognition->displayData.iSegmentGTModification = -1;
+			}
+		}
+		if (key == "x")
+		{
+			printf("Automatic segment GT creation...\n");
+
+			pRecognition->FindBestGTHypothesis();
+			pRecognition->CreateSegmentGT();
+
+			pVisualizer->renderer->RemoveAllViewProps();
+			pVisualizer->SetMesh(pMesh);
+			pRecognition->Display();
+			pRecognition->PaintGTSegments();
+		}
+		if (key == "y")
+			pRecognition->PrintSegmentGT();
+		if (key == "s")
+			pRecognition->SaveSegmentGT();
+	}
+	else
+		if (key == "l")
+		{
+			if (pRecognition->LoadSegmentGT())
+			{
+				pRecognition->FindBestGTHypothesis();
+
+				pVisualizer->renderer->RemoveAllViewProps();
+				pVisualizer->SetMesh(pMesh);
+				pRecognition->Display();
+				pRecognition->PaintGTSegments();
+
+				//reset before the new scene
+				pRecognition->segmentGTLoaded = true;
+			}
+		}
+
 	return false;
 }
 
@@ -7905,7 +8007,8 @@ bool RVL::RECOG::PSGM_::mouseRButtonDownUserFunction(
 	{
 		RandomColor(color);
 
-		pRecognition->PaintCluster(pData->iSelectedCluster, color);
+		if (!pRecognition->createSegmentGT) //Vidovic
+			pRecognition->PaintCluster(pData->iSelectedCluster, color);
 
 		if (pSurfels->DisplayData.bVertices)
 		{
@@ -7930,6 +8033,44 @@ bool RVL::RECOG::PSGM_::mouseRButtonDownUserFunction(
 			pRecognition->PaintClusterVertices(iCluster, color);
 
 			pSurfels->UpdateVertexDisplayLines();
+		}
+
+		//Vidovic - create Segment GT
+		if (pRecognition->createSegmentGT)
+		{
+			/*int iModel_;
+			printf("Enter model ID for segment %d:", iCluster);
+			scanf("%d", &iModel_);
+			pRecognition->AttachSegmentToModel(iCluster, iModel_);
+			pRecognition->PaintGTSegments();*/
+
+			if (pData->iSegmentGTModification != -1)
+			{
+				SegmentGTInstance *pMSGTList = pRecognition->modelsSegmentGTList.pFirst;
+
+				//find modelID for selected segment
+				while (pMSGTList)
+				{
+					if (pMSGTList->iSSegment == iCluster)
+						break;
+
+					pMSGTList = pMSGTList->pNext;
+				}
+
+				//attach modelID of selected segment to the previously selected segment
+				if(pMSGTList)
+					pRecognition->AttachSegmentToModel(pData->iSegmentGTModification, pMSGTList->iModel);
+				else
+					pRecognition->AttachSegmentToModel(pData->iSegmentGTModification, -1);
+
+				//repaint segments
+				pRecognition->PaintGTSegments();
+
+				//reset modification segment id
+				pData->iSegmentGTModification = -1;
+			}
+			else
+				pData->iSegmentGTModification = iCluster;
 		}
 
 		pData->iSelectedCluster = iCluster;
@@ -10535,7 +10676,7 @@ void PSGM::ICP(RVL::PSGM::ICPfunction ICPFunction, int ICPvariant)
 
 	for (int i = 0; i < bestSceneSegmentMatches.n; i++)
 	{
-		cout << "Segment: " << i << ":\n";
+		//cout << "Segment: " << i << ":\n";
 
 		for (int j = 0; j < bestSceneSegmentMatches.Element[i].n; j++)
 		{
@@ -14639,8 +14780,12 @@ int PSGM::CheckHypothesesToSegmentEnvelopmentAndCollision(int hyp, int segment, 
 	TGNode* plane;
 	float* N;
 	float* minSegDist = new float[hypTG->A.h];
-	float *RMS = hypothesis->RICP_;
-	float *tMS = hypothesis->tICP_;
+	//float *RMS = hypothesis->RICP_;
+	//float *tMS = hypothesis->tICP_;
+
+	//changed on 30.08.2017. because MS transformation is saved to hypothesis->RICP and in hypothesis->RICP_ is saved relative ICP transformation
+	float *RMS = hypothesis->RICP;
+	float *tMS = hypothesis->tICP;
 
 	//Segment data
 	Array<SURFEL::Vertex *> *vertexArray = &this->pSurfels->vertexArray;	
@@ -14741,6 +14886,410 @@ int PSGM::CheckHypothesesToSegmentEnvelopmentAndCollision(int hyp, int segment, 
 // VIDOVIC
 //
 ///////////////////////////////////////////////////////////////////////////
+
+void PSGM::FindBestGTHypothesis()
+{
+	char *matchGTFileName;
+	
+	matchGTFileName = RVLCreateFileName(sceneFileName, ".ply", -1, ".mgt", pMem);
+	fpMatchGT = fopen(matchGTFileName, "r");
+
+	bool modelExist;
+
+	int iScene, iSegment, iModel, matchID, CTIrank, ICPrank;
+	QList<RECOG::PSGM_::MGT> *pMGTList = &MGTList;
+	RECOG::PSGM_::MGT *pNewMGT, *pMGT;
+
+	int nModels = 0;
+
+	RVLQLIST_INIT(pMGTList);
+
+	if (fpMatchGT)
+	{
+		while (!feof(fpMatchGT))
+		{
+			fscanf(fpMatchGT, "%d\t%d\t%d\t%d\t%d\t%d", &iScene, &iSegment, &iModel, &matchID, &CTIrank, &ICPrank);
+			pMGT = pMGTList->pFirst;
+			modelExist = false;
+			
+			while (pMGT)
+			{
+				if (iModel == pMGT->iModel)
+				{
+					modelExist = true;
+
+					if (CTIrank < pMGT->CTIrank)
+					{
+						pMGT->iScene = iScene;
+						pMGT->iSegment = iSegment;
+						pMGT->matchID = matchID;
+						pMGT->CTIrank = CTIrank;
+						pMGT->ICPrank = ICPrank;
+					}
+
+					break;
+				}
+
+				pMGT = pMGT->pNext;
+			}
+
+			if (!modelExist)
+			{
+				RVLMEM_ALLOC_STRUCT(pMem, RECOG::PSGM_::MGT, pNewMGT);
+
+				pNewMGT->iScene = iScene;
+				pNewMGT->iSegment = iSegment;
+				pNewMGT->iModel = iModel;
+				pNewMGT->matchID = matchID;
+				pNewMGT->CTIrank = CTIrank;
+				pNewMGT->ICPrank = ICPrank;
+				//RandomColor(pNewMGT->color);
+
+				RVLQLIST_ADD_ENTRY(pMGTList, pNewMGT);
+
+				nModels++;
+			}
+		}
+	}
+
+	RVL_DELETE_ARRAY(modelColors.Element);
+
+	//modelColors.Element = new RVL::ModelColor[nModels];
+	modelColors.Element = new RVL::ModelColor[35];
+	modelColors.n = nModels;
+
+	pMGT = pMGTList->pFirst;
+	int idx = 0;
+
+	while (pMGT)
+	{
+		modelColors.Element[idx].iModel = pMGT->iModel;
+		RandomColor(modelColors.Element[idx].color);
+
+		idx++;
+		pMGT = pMGT->pNext;
+	}
+
+	fclose(fpMatchGT);
+}
+
+bool PSGM::CheckHypothesesToSegmentEnvelopment(int iHypothesis, int iSegment, float thresh)
+{
+	//int retVal = 0;
+
+	//Hypothesis data
+	RECOG::PSGM_::MatchInstance* hypothesis = pCTImatchesArray.Element[iHypothesis];
+	VertexGraph * hypVG = MTGSet.vertexGraphs.at(MCTISet.pCTI.Element[hypothesis->iMCTI]->iModel);
+	TG* hypTG = MTGSet.TGs.at(MCTISet.pCTI.Element[hypothesis->iMCTI]->iModel);
+	TGNode* plane;
+	float* N;
+	float* minSegDist = new float[hypTG->A.h];
+	float *RMS = hypothesis->RICP;
+	float *tMS = hypothesis->tICP;
+
+	//Segment data
+	Array<SURFEL::Vertex *> *vertexArray = &this->pSurfels->vertexArray;
+	SURFEL::Vertex * rvlvertex;
+	float* minModDist = new float[hypTG->A.h];
+	RECOG::PSGM_::ModelInstance *pSCTI = CTISet.pCTI.Element[CTISet.SegmentCTIs.Element[iSegment].Element[0]];
+	RECOG::PSGM_::ModelInstanceElement *pSIE = pSCTI->modelInstance.Element;
+
+	float RMSCTI[9];
+	float tMSCTI[3];
+	float V3Tmp[3];
+
+	RVLCOMPTRANSF3DWITHINV(pSCTI->R, pSCTI->t, RMS, tMS, RMSCTI, tMSCTI, V3Tmp);
+
+	//Transformation vars?
+	float tPs[3];
+	float tPm[3];
+	float sPs[3];
+	float sPm[3];
+	float st[3] = { tMSCTI[0] / 1000, tMSCTI[1] / 1000, tMSCTI[2] / 1000 };
+
+	//Calculate distances segment vertices to model convex hull
+	int totalPts = this->clusters.Element[iSegment]->iVertexArray.n;
+	float distance;
+	float segMinDist = 1000000;
+	bool passedfirst = true;
+
+	for (int j = 0; j < hypTG->A.h; j++)
+	{
+		plane = hypTG->descriptor.Element[j].pFirst->ptr;
+		minSegDist[j] = 1000000;
+		//For each point
+		for (int i = 0; i < totalPts; i++)
+		{
+			rvlvertex = vertexArray->Element[this->clusters.Element[iSegment]->iVertexArray.Element[i]];
+
+			////Transform vertex to hyp model space
+			sPs[0] = 1000 * rvlvertex->P[0];
+			sPs[1] = 1000 * rvlvertex->P[1];
+			sPs[2] = 1000 * rvlvertex->P[2];
+			RVLINVTRANSF3(sPs, RMS, tMS, tPs, V3Tmp);
+
+			N = &hypTG->A.Element[hypTG->A.w * plane->i];
+
+			//sDistances[i * hypTG->A.h + j] = RVLDOTPRODUCT3(N, tPs) - plane->d;
+			distance = (RVLDOTPRODUCT3(N, tPs) - plane->d);
+
+#ifdef NEVER
+			if (MCTISet.pCTI.Element[hypothesis->iMCTI]->iModel == 32 && i == 0 && j == 0)
+			{
+				for (int i = 0; i < 9; i++)
+					printf("RMS[%d]: %f\n", i, RMS[i]);
+
+				printf("\n");
+
+				for (int i = 0; i < 3; i++)
+					printf("tMS[%d]: %f\n", i, tMS[i]);
+
+
+				printf("sPs[0]: %f\ttPs[0]: %f\n", sPs[0], tPs[0]);
+				printf("sPs[1]: %f\ttPs[0]: %f\n", sPs[1], tPs[1]);
+				printf("sPs[2]: %f\ttPs[0]: %f\n", sPs[2], tPs[2]);
+				printf("distance: %f\n", distance);
+			}
+#endif
+
+			if ((distance > thresh))
+				passedfirst = false;
+
+			if (minSegDist[j] > distance)
+				minSegDist[j] = distance;
+		}
+	}
+
+	return passedfirst;
+}
+
+void PSGM::CreateSegmentGT()
+{
+	int nSegments = CTISet.maxSegmentIdx + 1;
+	cout << "nClusters: " << clusters.n << endl;
+	int iSegment;
+
+	RECOG::PSGM_::MGT *pMGT;
+
+	QList<SegmentGTInstance> *pModelsSegmentGTList = &modelsSegmentGTList;
+	SegmentGTInstance *pNewMSGT, *pMSGTList;
+
+	RVLQLIST_INIT(pModelsSegmentGTList);
+
+	printf("***********************************************************************\n");
+	for (iSegment = 0; iSegment < nSegments; iSegment++)
+	{
+		pMGT = MGTList.pFirst;
+		pMSGTList = pModelsSegmentGTList->pFirst;
+
+		while (pMGT)
+		{
+			if (CheckHypothesesToSegmentEnvelopment(pMGT->matchID, iSegment, 30))
+			{
+				cout << "Segment: " << iSegment << "\t<=>\tModel: " << pMGT->iModel << endl;
+
+				RVLMEM_ALLOC_STRUCT(pMem, SegmentGTInstance, pNewMSGT);
+
+				pNewMSGT->iScene = pMGT->iScene;
+				pNewMSGT->iSSegment = iSegment;
+				pNewMSGT->iModel = pMGT->iModel;
+				pNewMSGT->iMSegment = -1;
+				pNewMSGT->valid = true;
+
+				RVLQLIST_ADD_ENTRY(pModelsSegmentGTList, pNewMSGT);
+
+				break;
+			}
+
+			pMGT = pMGT->pNext;
+		}
+	}
+	printf("-----------------------------------------------------------------------\n");
+
+	pMGT = MGTList.pFirst;
+
+	printf("Models on the scene: ");
+	while (pMGT)
+	{
+		printf("%d ", pMGT->iModel);
+		pMGT = pMGT->pNext;
+	}
+
+	printf("\n***********************************************************************\n");
+}
+
+void PSGM::AttachSegmentToModel(int iSegment, int iModel)
+{
+	QList<SegmentGTInstance> *pModelsSegmentGTList = &modelsSegmentGTList;
+	SegmentGTInstance *pNewMSGT, *pMSGTList;
+
+	pMSGTList = pModelsSegmentGTList->pFirst;
+	bool addNew = true;
+
+	while (pMSGTList)
+	{
+		if (pMSGTList->iSSegment == iSegment)
+		{
+			if (pMSGTList->iModel == iModel)
+				printf("Segment %d is already attached to model %d!\n", iSegment, iModel);
+			else
+			{
+				printf("Segment %d is deatached from model %d and attached to model %d!\n", iSegment, pMSGTList->iModel, iModel);
+				pMSGTList->iModel = iModel;
+			}
+
+			addNew = false;
+			break;
+		}
+
+		pMSGTList = pMSGTList->pNext;
+	}
+
+	pMSGTList = pModelsSegmentGTList->pFirst;
+
+	if (addNew)
+	{
+		RVLMEM_ALLOC_STRUCT(pMem, SegmentGTInstance, pNewMSGT);
+
+		pNewMSGT->iScene = pMSGTList->iScene;
+		pNewMSGT->iSSegment = iSegment;
+		pNewMSGT->iModel = iModel;
+		pNewMSGT->iMSegment = -1;
+		pNewMSGT->valid = true;
+
+		RVLQLIST_ADD_ENTRY(pModelsSegmentGTList, pNewMSGT);
+
+		printf("Segment %d is attached to model %d!\n", iSegment, iModel);
+	}
+}
+
+void PSGM::PaintGTSegments()
+{
+	unsigned char color[3];
+	SegmentGTInstance *pMSGTList;
+	pMSGTList = modelsSegmentGTList.pFirst;
+	int iSegment, idx;
+
+	RVLSET3VECTOR(color, 255, 0, 0);
+
+	for (iSegment = 0; iSegment < clusters.n; iSegment++)
+		PaintCluster(iSegment, color);
+
+	while (pMSGTList)
+	{
+		if (pMSGTList->iModel == -1)
+			PaintCluster(pMSGTList->iSSegment, color);
+		else
+		{
+			for (idx = 0; idx < modelColors.n; idx++)
+				if (pMSGTList->iModel == modelColors.Element[idx].iModel)
+					break;
+
+			if (idx == modelColors.n)
+			{
+				modelColors.n = modelColors.n + 1;
+				RandomColor(modelColors.Element[idx].color);
+				modelColors.Element[idx].iModel = pMSGTList->iModel;
+			}
+			
+			PaintCluster(pMSGTList->iSSegment, modelColors.Element[idx].color);
+		}
+
+		pMSGTList = pMSGTList->pNext;
+	}
+}
+
+void PSGM::PrintSegmentGT()
+{
+	SegmentGTInstance *pMSGTList;
+	pMSGTList = modelsSegmentGTList.pFirst;
+
+	RECOG::PSGM_::MGT *pMGT;
+	pMGT = MGTList.pFirst;
+
+	printf("*********************************INFO**********************************\n");
+	while (pMSGTList)
+	{
+		cout << "Segment: " << pMSGTList->iSSegment << "\t<=>\tModel: " << pMSGTList->iModel << endl;
+		pMSGTList = pMSGTList->pNext;
+	}
+	printf("-----------------------------------------------------------------------\n");
+
+	printf("Models on the scene: ");
+	while (pMGT)
+	{
+		printf("%d ", pMGT->iModel);
+		pMGT = pMGT->pNext;
+	}
+
+	printf("\n***********************************************************************\n");
+}
+
+void PSGM::SaveSegmentGT()
+{
+	char *segmentGTFileName;
+	FILE *fpSegmentGT;
+
+	segmentGTFileName = RVLCreateFileName(sceneFileName, ".ply", -1, ".sgtx", pMem);
+	fpSegmentGT = fopen(segmentGTFileName, "w");
+
+	SegmentGTInstance *pMSGTList;
+	pMSGTList = modelsSegmentGTList.pFirst;
+
+	while (pMSGTList)
+	{
+		fprintf(fpSegmentGT, "%d\t%d\t%d\n", pMSGTList->iScene, pMSGTList->iSSegment, pMSGTList->iModel);
+		pMSGTList = pMSGTList->pNext;
+	}
+
+	fclose(fpSegmentGT);
+	printf("Segment GT saved!\n");
+}
+
+bool PSGM::LoadSegmentGT()
+{
+	char *segmentGTFileName;
+	FILE *fpSegmentGT; //Vidovic
+
+	segmentGTFileName = RVLCreateFileName(sceneFileName, ".ply", -1, ".sgtx", pMem);
+	fpSegmentGT = fopen(segmentGTFileName, "r");
+
+	if (fpSegmentGT)
+	{
+		QList<SegmentGTInstance> *pModelsSegmentGTList = &modelsSegmentGTList;
+		SegmentGTInstance *pNewMSGT, *pMSGTList;
+
+		int iScene, iSegment, iModel;
+
+		RVLQLIST_INIT(pModelsSegmentGTList);
+
+		while (!feof(fpSegmentGT))
+		{
+			fscanf(fpSegmentGT, "%d\t%d\t%d\n", &iScene, &iSegment, &iModel);
+
+			RVLMEM_ALLOC_STRUCT(pMem, SegmentGTInstance, pNewMSGT);
+
+			pNewMSGT->iScene = iScene;
+			pNewMSGT->iSSegment = iSegment;
+			pNewMSGT->iModel = iModel;
+			pNewMSGT->iMSegment = -1;
+			pNewMSGT->valid = true;
+
+			RVLQLIST_ADD_ENTRY(pModelsSegmentGTList, pNewMSGT);
+		}
+
+		printf("Segment GT loaded!\n");
+		fclose(fpSegmentGT);
+
+		return true;
+	}
+	else
+	{
+		printf("File %s is missing!! Segment GT not loaded\n", segmentGTFileName);
+		return false;
+	}
+}
+
 
 ///////////////////////////////////////////////////////////////////////////
 //

@@ -71,6 +71,7 @@ namespace RVL
 				bool bClusters;
 				unsigned char selectionColor[3];
 				int iSelectedCluster;
+				int iSegmentGTModification; //Vidovic
 				vtkSmartPointer<vtkActor> referenceFrames;
 				DWORD hypothesisVisualizationMode;
 			};
@@ -145,6 +146,8 @@ namespace RVL
 				float ICPcost;
 				float gndDistance;
 				float transparencyRatio;
+				//unsigned char color[3];
+				MGT *pNext;
 			};
 			//END Vidovic
 
@@ -527,6 +530,16 @@ namespace RVL
 		std::map<int,std::vector<int>> GetSceneConsistancy(float nDist = 0.1, float d1 = 10.0, float d2 = 0.01, bool verbose = false);	//Filko
 		int CheckHypothesesToSegmentEnvelopmentAndCollision(int hyp, int segment, float d1, float d2); //Filko
 		void CheckHypothesesToSegmentEnvelopmentAndCollision_DEBUG(int hyp, int segment, float d1, float d2); //Filko
+		bool CheckHypothesesToSegmentEnvelopment(int iHypothesis, int iSegment, float thresh); //Vidovic
+		void FindBestGTHypothesis(); //Vidovic
+		void CreateSegmentGT(); //Vidovic
+		void AttachSegmentToModel(
+			int iSegment,
+			int iModel); //Vidovic
+		void PaintGTSegments(); //Vidovic
+		void PrintSegmentGT(); //Vidovic
+		void SaveSegmentGT(); //Vidovic
+		bool LoadSegmentGT(); //Vidovic
 
 	private:
 		void Clusters();
@@ -629,6 +642,8 @@ namespace RVL
 		DWORD scoreCalculation; //Vidovic - TO DO (Implement read from cfg file)
 		ECCVGTLoader *pECCVGT; //Vidovic
 		Array <RVL::SegmentGTInstance> segmentGT;
+		//Array <RVL::SegmentGTInstance> *pModelsSegmentGT;
+		QList<SegmentGTInstance> modelsSegmentGTList;
 		RECOG::CTISet CTISet;
 		RECOG::CTISet MCTISet;
 		RECOG::TGSet STGSet;
@@ -654,6 +669,10 @@ namespace RVL
 		int matchGTiRank; //Vidovic
 		FILE *fpMatchGT; //Vidovic
 		char *sceneFileName; //Vidovic
+		QList<RECOG::PSGM_::MGT> MGTList;
+		bool createSegmentGT; //Vidovic
+		bool segmentGTLoaded; //Vidovic
+		Array<RVL::ModelColor> modelColors;
 
 				
 		//Petra & Ivan

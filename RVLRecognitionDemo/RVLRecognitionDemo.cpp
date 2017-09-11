@@ -767,6 +767,9 @@ int main(int argc, char ** argv)
 
 				mem.Clear();
 
+				recognition.segmentGTLoaded = false;
+				recognition.createSegmentGT = false;
+
 				recognition.Interpret(&mesh);
 
 				
