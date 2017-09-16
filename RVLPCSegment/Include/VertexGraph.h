@@ -4,17 +4,6 @@
 
 namespace RVL
 {
-	namespace GRAPH
-	{
-		// Move to Graph.h.
-
-		struct Node
-		{
-			int idx;
-			QList<EdgePtr<Edge>> EdgeList;
-		};
-	}
-
 	class VertexGraph;
 
 	namespace SURFEL

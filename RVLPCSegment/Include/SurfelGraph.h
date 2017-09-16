@@ -282,6 +282,7 @@ namespace RVL
 			Visualizer *pVisualizer,
 			Mesh *pMesh);
 #endif
+		cv::Mat GenColoredSurfelImg();
 		cv::Mat GenColoredSurfelImgFromSSF(std::shared_ptr<SceneSegFile::SceneSegFile> ssf);
 		//Filko
 
@@ -311,6 +312,7 @@ namespace RVL
 		int nVertexSurfelRelations;
 		float TIVertexToleranceAngle;
 		QList<SURFEL::VertexEdge> vertexEdgeList;
+		Array<SURFEL::VertexEdge *> vertexEdgeArray;
 		int edgeDepth;
 		bool *bVertexAssigned;
 		int *iVertexMem;

@@ -57,6 +57,11 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 
 #define RVLRECOGNITION_DEMO_FLAG_SAVE_PLY			0x00000001
 #define RVLRECOGNITION_DEMO_FLAG_3D_VISUALIZATION	0x00000002
+#define RVLRECOGNITION_DEMO_FLAG_VISUALIZE_VN_MODEL	0x00000004
+
+#define RVLRECOGNITION_DEMO_VN_MODEL_TORUS	0
+#define RVLRECOGNITION_DEMO_VN_MODEL_BOTTLE	1
+#define RVLRECOGNITION_DEMO_VN_MODEL_HAMMER	2
 //END VIDOVIC
 
 using namespace RVL;
@@ -72,7 +77,8 @@ void CreateParamList(
 	char **pSegmentGTFileName,	//Vidovic
 	char **pResultsFolder,
 	DWORD &method,
-	DWORD &flags
+	DWORD &flags,
+	DWORD &VNModel
 	)
 {
 	pParamList->m_pMem = pMem;
@@ -96,6 +102,12 @@ void CreateParamList(
 	pParamList->AddID(pParamData, "yes", RVLRECOGNITION_DEMO_FLAG_SAVE_PLY); //VIDOVIC
 	pParamData = pParamList->AddParam("3D Visualization", RVLPARAM_TYPE_ID, &flags);
 	pParamList->AddID(pParamData, "yes", RVLRECOGNITION_DEMO_FLAG_3D_VISUALIZATION);
+	pParamData = pParamList->AddParam("VN.visualizeModel", RVLPARAM_TYPE_ID, &flags);
+	pParamList->AddID(pParamData, "yes", RVLRECOGNITION_DEMO_FLAG_VISUALIZE_VN_MODEL);
+	pParamData = pParamList->AddParam("VN.model", RVLPARAM_TYPE_ID, &VNModel);
+	pParamList->AddID(pParamData, "TORUS", RVLRECOGNITION_DEMO_VN_MODEL_TORUS);
+	pParamList->AddID(pParamData, "BOTTLE", RVLRECOGNITION_DEMO_VN_MODEL_BOTTLE);
+	pParamList->AddID(pParamData, "HAMMER", RVLRECOGNITION_DEMO_VN_MODEL_HAMMER);
 }
 
 void GenerateSegmentNeighbourhood(PSGM * psgm, double radius)
@@ -272,6 +284,7 @@ int main(int argc, char ** argv)
 	char *segmentGTFileName = NULL; //Vidovic
 	DWORD method = RVLRECOGNITION_METHOD_PSGM;
 	//DWORD method = RVLRECOGNITION_METHOD_RF; //VIDOVIC
+	DWORD VNModel;
 
 	DWORD flags = 0x00000000; //VIDOVIC
 
@@ -287,7 +300,8 @@ int main(int argc, char ** argv)
 		&segmentGTFileName,
 		&ResultsFolder,
 		method,
-		flags);	 //VIDOVIC
+		flags,
+		VNModel);	 //VIDOVIC
 
 	ParamList.LoadParams(cfgFileName);
 
@@ -1027,35 +1041,9 @@ int main(int argc, char ** argv)
 		float eps = 0.01f;
 		float resolution = 0.01f;
 
-		// Load mesh.
-
 		Mesh mesh;
 
-		LoadMesh(&meshBuilder, sceneMeshFileName, &mesh, false);
-
-		// Reset memory.
-
-		mem.Clear();
-
-		// Detect surfels.
-
-		surfels.Init(&mesh);
-
-		surfelDetector.Init(&mesh, &surfels, &mem);
-
-		printf("Segmentation to surfels...");
-
-		surfelDetector.Segment(&mesh, &surfels);
-
-		printf("completed.\n");
-
-		int nSurfels = surfels.NodeArray.n;
-
-		printf("No. of surfels = %d\n", nSurfels);
-
-		surfels.DetectVertices(&mesh);
-
-		// Cluster surfels.
+		// Create clustering tool.
 
 		PSGM clustering;
 
@@ -1067,35 +1055,222 @@ int main(int argc, char ** argv)
 
 		clustering.pSurfelDetector = &surfelDetector;
 
-		clustering.Clusters();
-
-		surfels.NodeColors(SelectionColor);
-
-		clustering.InitDisplay(&visualizer, &mesh, SelectionColor);
-
-		clustering.Display();		
-
-		//surfels.InitDisplay(&visualizer, &mesh, &surfelDetector);		
-
-		//surfels.Display(&visualizer, &mesh);
-
-		visualizer.Run();
-		
-		// Create VN.
+		// Create VN model.
 
 		VN model;
 
-		model.Create(&mesh, &surfels, &mem, voxelSize, sampleVoxelDistance, eps, &visualizer);
+		switch (VNModel){
+		case RVLRECOGNITION_DEMO_VN_MODEL_TORUS:
+			RECOG::VN_::CreateTorus(&model, &mem0);
 
-		// Visualization
+			break;
+		case RVLRECOGNITION_DEMO_VN_MODEL_BOTTLE:
+			RECOG::VN_::CreateBottle(&model, &mem0);
 
-		Box<float> box = model.boundingBox;
+			break;
+		case RVLRECOGNITION_DEMO_VN_MODEL_HAMMER:
+			RECOG::VN_::CreateHammer(&model, &mem0);
+		}
 
-		ExpandBox<float>(&box, 2.0f * resolution);
+		// Load VN match parameters.
 
-		model.Display(&visualizer, box, resolution);
+		CRVLParameterList paramList;
+		RECOG::VN_::Parameters VNMatchingParams;
 
-		visualizer.Run();
+		model.CreateParamList(&paramList, VNMatchingParams, &mem0);
+
+		paramList.LoadParams(cfgFileName);
+
+		VNMatchingParams.clusteringTolerance = 3.0f * clustering.kNoise * 2.0f / surfelDetector.kPlane;
+
+		model.boundingBox.minx = -0.5f;
+		model.boundingBox.maxx = 0.5f;
+		model.boundingBox.miny = -0.5f;
+		model.boundingBox.maxy = 0.5f;
+		model.boundingBox.minz = -0.5f;
+		model.boundingBox.maxz = 0.5f;
+		//model.boundingBox.minx = -0.4f;
+		//model.boundingBox.maxx = 0.4f;
+		//model.boundingBox.miny = -0.4f;
+		//model.boundingBox.maxy = 0.4f;
+		//model.boundingBox.minz = 0.0f;
+		//model.boundingBox.maxz = 1.2f;
+		//model.boundingBox.minx = -1.0f;
+		//model.boundingBox.maxx = 1.0f;
+		//model.boundingBox.miny = -1.0f;
+		//model.boundingBox.maxy = 1.0f;
+		//model.boundingBox.minz = -0.5f;
+		//model.boundingBox.maxz = 0.5f;
+	
+		FileSequenceLoader sceneSequence;
+
+		sceneSequence.Init(sceneSequenceFileName);
+
+		char filePath[200];
+
+		while (sceneSequence.GetNextPath(filePath))
+		{
+			printf("Scene: %s:\n", filePath);
+
+			// Load mesh.
+
+			LoadMesh(&meshBuilder, filePath, &mesh, false);
+
+			// Reset memory.
+
+			mem.Clear();
+
+			// Detect surfels.
+
+			surfels.Init(&mesh);
+
+			surfelDetector.Init(&mesh, &surfels, &mem);
+
+			printf("Segmentation to surfels...");
+
+			surfelDetector.Segment(&mesh, &surfels);
+
+			printf("completed.\n");
+
+			int nSurfels = surfels.NodeArray.n;
+
+			printf("No. of surfels = %d\n", nSurfels);
+
+			surfels.DetectVertices(&mesh);
+
+			// Cluster surfels.
+
+			clustering.Clusters();
+
+			//surfels.NodeColors(SelectionColor);
+
+			//clustering.InitDisplay(&visualizer, &mesh, SelectionColor);
+
+			//clustering.Display();
+
+			//visualizer.Run();
+
+			//surfels.NodeColors(SelectionColor);
+
+			//surfels.InitDisplay(&visualizer, &mesh, &surfelDetector);		
+
+			//surfels.Display(&visualizer, &mesh);
+
+			//visualizer.Run();
+
+			// Match mesh to model.
+
+			printf("Matching VN model to scene...");
+
+			Box<float> SBoundingBox;
+
+			InitBoundingBox<float>(&SBoundingBox, surfels.vertexArray.Element[0]->P);
+
+			int iVertex;
+
+			for (iVertex = 0; iVertex < surfels.vertexArray.n; iVertex++)
+				UpdateBoundingBox<float>(&SBoundingBox, surfels.vertexArray.Element[iVertex]->P);
+
+			float *dS = new float[model.featureArray.n];
+
+			bool *bdS = new bool[model.featureArray.n];
+
+			//Array<float> betaArray;
+
+			//betaArray.n = 7;
+			//betaArray.Element = new float[betaArray.n];
+
+			//float dBeta = PI / (float)(betaArray.n + 1);
+
+			//int i;
+
+			//for (i = 1; i <= betaArray.n; i++)
+			//	betaArray.Element[i - 1] = (float)i * dBeta;
+
+			//Array<float> alphaArray;
+
+			//alphaArray.n = 16;
+			//alphaArray.Element = new float[alphaArray.n];
+
+			//float dAlpha = PI / (float)(alphaArray.n);
+
+			//for (i = 0; i <= alphaArray.n; i++)
+			//	alphaArray.Element[i] = (float)i * dAlpha;
+
+			//FILE *fp = fopen("tangentRing.txt", "w");
+
+			//model.PrintTori(fp, &surfels, STClusters);
+
+			//fclose(fp);
+
+			//RECOG::VN_::Torus *pTorus = STClusters.Element[0];
+
+			//int id;
+			//int iAlpha, iBeta;
+			//RECOG::VN_::TorusRing *pRing;
+
+			//for (iBeta = 0; iBeta < pMCluster->betaArray.n; iBeta++)
+			//{
+			//	pRing = pTorus->ringArray.Element[iBeta];
+
+			//	if (pRing)
+			//	{
+			//		for (iAlpha = 0; iAlpha < pMCluster->alphaArray.n; iAlpha++)
+			//		{
+			//			id = iBeta * pMCluster->alphaArray.n + iAlpha;
+			//			dS[id] = pRing->d[iAlpha];
+			//			bdS[id] = true;
+			//		}
+			//	}
+			//	else
+			//	{
+			//		for (iAlpha = 0; iAlpha < pMCluster->alphaArray.n; iAlpha++)
+			//			bdS[iBeta * pMCluster->alphaArray.n + iAlpha] = false;
+			//	}
+			//}
+
+			//model.Match(&mesh, &surfels, SBoundingBox, VNMatchingParams, dS, bdS);
+
+			//model.Match2(&mesh, &surfels, SBoundingBox, VNMatchingParams, dS, bdS);
+
+			//model.Match3(&mesh, &surfels, clustering.clusters, SBoundingBox, VNMatchingParams, dS, bdS);
+
+			model.Match4(&mesh, &surfels, clustering.clusters, SBoundingBox, VNMatchingParams, &mem, dS, bdS);
+
+			printf("completed.\n");
+
+			// Visualization
+
+			Box<float> box;
+
+			if (flags & RVLRECOGNITION_DEMO_FLAG_VISUALIZE_VN_MODEL)
+			{
+				// Model visualization
+
+				box = model.boundingBox;
+
+				ExpandBox<float>(&box, 2.0f * resolution);
+
+				model.Display(&visualizer, box, resolution);
+			}
+			else
+			{
+				// Match visualization
+
+				box = SBoundingBox;
+
+				ExpandBox<float>(&box, 10.0f * resolution);
+
+				visualizer.renderer->RemoveAllViewProps();
+
+				model.Display(&visualizer, box, resolution, dS, bdS);
+			}
+
+			delete[] dS;
+			delete[] bdS;
+
+			visualizer.Run();
+		}
 	}	// if (method == RVLRECOGNITION_METHOD_VN)
 
 	// free memory

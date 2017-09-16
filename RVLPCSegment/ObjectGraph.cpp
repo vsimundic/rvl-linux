@@ -1341,7 +1341,8 @@ void ObjectGraph::WERSegmentation()
 	fclose(fp);
 #endif
 
-	GRAPH::WERAggregation<GRAPH::AggregateNode<AgEdge>, AgEdge, GRAPH::EdgePtr2<AgEdge>, float>(*this, objectMap, elementMem, WERSegmentationMinCostDiff, WERSegmentationCostResolution);
+	GRAPH::WERAggregation2<GRAPH::AggregateNode<AgEdge>, AgEdge, GRAPH::EdgePtr2<AgEdge>, float>(*this, &hierarchy, objectMap,
+		elementMem, WERSegmentationMinCostDiff, WERSegmentationCostResolution, pMem);
 
 	sortedObjectArray.n = -1;
 	nValidObjects = -1;

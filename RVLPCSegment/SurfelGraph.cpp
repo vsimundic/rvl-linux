@@ -91,6 +91,7 @@ SurfelGraph::SurfelGraph()
 	surfelVertexList.Element = NULL;
 	surfelVertexMem = NULL;
 	vertexArray.Element = NULL;
+	vertexEdgeArray.Element = NULL;
 	vertexDisplayLineArray.Element = NULL;
 	vertexDisplayLineArrayMem = NULL;
 	bVertexAssigned = NULL;
@@ -1143,6 +1144,39 @@ void SurfelGraph::AssignGroundTruthSegmentation(
 }
 #endif
 
+cv::Mat SurfelGraph::GenColoredSurfelImg()
+{
+	int w = 640;
+	int h = 480;
+
+	cv::Mat coloredSegLab(h, w, CV_8UC3, cv::Scalar::all(0));
+
+	int nPixels = w * h;
+
+	uchar noSurfelColor[] = { 0, 0, 0 };
+
+	int iPix;
+	uchar *labSegColor;
+	int iSurfel;
+	int x, y;
+
+	for (iPix = 0; iPix < nPixels; iPix++)
+	{
+		iSurfel = surfelMap[iPix];
+
+		labSegColor = (iSurfel >= 0 ? nodeColor + 3 * iSurfel : noSurfelColor);
+
+		x = iPix % w;
+		y = iPix / w;
+
+		coloredSegLab.at<cv::Vec3b>(y, x)[0] = labSegColor[0];
+		coloredSegLab.at<cv::Vec3b>(y, x)[1] = labSegColor[1];
+		coloredSegLab.at<cv::Vec3b>(y, x)[2] = labSegColor[2];
+	}
+
+	return coloredSegLab;
+}
+
 //Generate a colored opencv image based on surfel data from SSF
 cv::Mat SurfelGraph::GenColoredSurfelImgFromSSF(std::shared_ptr<SceneSegFile::SceneSegFile> ssf)
 {
@@ -1195,6 +1229,7 @@ void SurfelGraph::Clear()
 	RVL_DELETE_ARRAY(neighborEdge);
 	RVL_DELETE_ARRAY(EdgeArray.Element);
 	RVL_DELETE_ARRAY(vertexArray.Element);
+	RVL_DELETE_ARRAY(vertexEdgeArray.Element);
 	RVL_DELETE_ARRAY(surfelVertexList.Element);
 	RVL_DELETE_ARRAY(surfelVertexMem);
 	RVL_DELETE_ARRAY(vertexDisplayLineArray.Element);
@@ -1634,7 +1669,7 @@ void SurfelGraph::DetectVertices(
 
 	RVLQLIST_INIT(pVertexEdgeList);
 
-	int nVertexEdges = 0;
+	vertexEdgeArray.n = 0;
 
 	bool *bBelongsToRefVertex = new bool[NodeArray.n];
 
@@ -2076,7 +2111,13 @@ void SurfelGraph::DetectVertices(
 					while (pVertexEdgePtr)
 					{
 						if (RVLPCSEGMENT_GRAPH_GET_OPPOSITE_NODE(pVertexEdgePtr) == pVertex_->idx)
-							break;
+						{
+							pEdge = pVertexEdgePtr->pEdge;
+
+							if (pEdge->iSurfel[0] == iFeature && pEdge->iSurfel[1] == iNeighborSurfels[i].a ||
+								pEdge->iSurfel[1] == iFeature && pEdge->iSurfel[0] == iNeighborSurfels[i].a)
+								break;
+						}
 
 						pVertexEdgePtr = pVertexEdgePtr->pNext;
 					}
@@ -2107,6 +2148,7 @@ void SurfelGraph::DetectVertices(
 
 							pEdge->iSurfel[0] = iFeature;
 							pEdge->iSurfel[1] = iNeighborSurfels[i].a;
+							pEdge->idx = vertexEdgeArray.n;
 
 							// Only for debugging purpose!!!
 
@@ -2137,7 +2179,7 @@ void SurfelGraph::DetectVertices(
 
 							// Increment vertex edge counter.
 
-							nVertexEdges++;
+							vertexEdgeArray.n++;
 						}
 					}
 				}
@@ -2163,6 +2205,12 @@ void SurfelGraph::DetectVertices(
 	vertexArray.n = nVertices;
 
 	QLIST::CreatePtrArray<Vertex>(&vertexList, &vertexArray);
+
+	RVL_DELETE_ARRAY(vertexEdgeArray.Element);
+
+	vertexEdgeArray.Element = new SURFEL::VertexEdge *[vertexEdgeArray.n];
+
+	QLIST::CreatePtrArray<SURFEL::VertexEdge>(&vertexEdgeList, &vertexEdgeArray);
 
 	// Assign vertices to surfels.
 
