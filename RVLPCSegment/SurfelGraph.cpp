@@ -91,6 +91,7 @@ SurfelGraph::SurfelGraph()
 	surfelVertexList.Element = NULL;
 	surfelVertexMem = NULL;
 	vertexArray.Element = NULL;
+	vertexEdgeArray.Element = NULL;
 	vertexDisplayLineArray.Element = NULL;
 	vertexDisplayLineArrayMem = NULL;
 	bVertexAssigned = NULL;
@@ -1195,6 +1196,7 @@ void SurfelGraph::Clear()
 	RVL_DELETE_ARRAY(neighborEdge);
 	RVL_DELETE_ARRAY(EdgeArray.Element);
 	RVL_DELETE_ARRAY(vertexArray.Element);
+	RVL_DELETE_ARRAY(vertexEdgeArray.Element);
 	RVL_DELETE_ARRAY(surfelVertexList.Element);
 	RVL_DELETE_ARRAY(surfelVertexMem);
 	RVL_DELETE_ARRAY(vertexDisplayLineArray.Element);
@@ -1634,7 +1636,7 @@ void SurfelGraph::DetectVertices(
 
 	RVLQLIST_INIT(pVertexEdgeList);
 
-	int nVertexEdges = 0;
+	vertexEdgeArray.n = 0;
 
 	bool *bBelongsToRefVertex = new bool[NodeArray.n];
 
@@ -2076,7 +2078,13 @@ void SurfelGraph::DetectVertices(
 					while (pVertexEdgePtr)
 					{
 						if (RVLPCSEGMENT_GRAPH_GET_OPPOSITE_NODE(pVertexEdgePtr) == pVertex_->idx)
-							break;
+						{
+							pEdge = pVertexEdgePtr->pEdge;
+
+							if (pEdge->iSurfel[0] == iFeature && pEdge->iSurfel[1] == iNeighborSurfels[i].a ||
+								pEdge->iSurfel[1] == iFeature && pEdge->iSurfel[0] == iNeighborSurfels[i].a)
+								break;
+						}
 
 						pVertexEdgePtr = pVertexEdgePtr->pNext;
 					}
@@ -2107,6 +2115,7 @@ void SurfelGraph::DetectVertices(
 
 							pEdge->iSurfel[0] = iFeature;
 							pEdge->iSurfel[1] = iNeighborSurfels[i].a;
+							pEdge->idx = vertexEdgeArray.n;
 
 							// Only for debugging purpose!!!
 
@@ -2137,7 +2146,7 @@ void SurfelGraph::DetectVertices(
 
 							// Increment vertex edge counter.
 
-							nVertexEdges++;
+							vertexEdgeArray.n++;
 						}
 					}
 				}
@@ -2163,6 +2172,12 @@ void SurfelGraph::DetectVertices(
 	vertexArray.n = nVertices;
 
 	QLIST::CreatePtrArray<Vertex>(&vertexList, &vertexArray);
+
+	RVL_DELETE_ARRAY(vertexEdgeArray.Element);
+
+	vertexEdgeArray.Element = new SURFEL::VertexEdge *[vertexEdgeArray.n];
+
+	QLIST::CreatePtrArray<SURFEL::VertexEdge>(&vertexEdgeList, &vertexEdgeArray);
 
 	// Assign vertices to surfels.
 

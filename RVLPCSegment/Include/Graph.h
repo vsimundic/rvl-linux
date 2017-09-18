@@ -70,6 +70,12 @@ namespace RVL
 			GRAPH::Edge *pNext;
 		};
 
+		struct Node
+		{
+			int idx;
+			QList<EdgePtr<Edge>> EdgeList;
+		};
+
 		template<typename EdgeType> struct AggregateNode
 		{
 			QList<QLIST::Index> elementList;

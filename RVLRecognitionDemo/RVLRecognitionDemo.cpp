@@ -1029,6 +1029,8 @@ int main(int argc, char ** argv)
 
 		// Load mesh.
 
+		printf("Scene: %s:\n", sceneMeshFileName);
+
 		Mesh mesh;
 
 		LoadMesh(&meshBuilder, sceneMeshFileName, &mesh, false);
@@ -1069,31 +1071,171 @@ int main(int argc, char ** argv)
 
 		clustering.Clusters();
 
-		surfels.NodeColors(SelectionColor);
+		//surfels.NodeColors(SelectionColor);
 
-		clustering.InitDisplay(&visualizer, &mesh, SelectionColor);
+		//clustering.InitDisplay(&visualizer, &mesh, SelectionColor);
 
-		clustering.Display();		
+		//clustering.Display();
+
+		//visualizer.Run();
+
+		//surfels.NodeColors(SelectionColor);
 
 		//surfels.InitDisplay(&visualizer, &mesh, &surfelDetector);		
 
 		//surfels.Display(&visualizer, &mesh);
 
-		visualizer.Run();
+		//visualizer.Run();
 		
 		// Create VN.
 
+		//VN model;
+
+		//model.Create(&mesh, &surfels, &mem, voxelSize, sampleVoxelDistance, eps, &visualizer);
+
+		// Load VN.
+
 		VN model;
 
-		model.Create(&mesh, &surfels, &mem, voxelSize, sampleVoxelDistance, eps, &visualizer);
+		CRVLParameterList paramList;
+		RECOG::VN_::Parameters VNMatchingParams;
+
+		model.CreateParamList(&paramList, VNMatchingParams, &mem0);
+
+		paramList.LoadParams(cfgFileName);
+
+		VNMatchingParams.clusteringTolerance = 3.0f * clustering.kNoise * 2.0f / surfelDetector.kPlane;
+
+		//char modelFileName[] = "D:\\Documents\\New\\Projects\\ARP3D\\Research\\Matlab\\VNTorus.txt";
+		char modelFileName[] = "D:\\Documents\\New\\Projects\\ARP3D\\Research\\Matlab\\VNBottle.txt";
+		//char modelFileName[] = "D:\\Documents\\New\\Projects\\ARP3D\\Research\\Matlab\\VNHammer.txt";
+
+		//model.Load(modelFileName, &mem0);
+
+		RECOG::VN_::CreateTorus(&model, &mem0);
+
+		//model.boundingBox.minx = -0.5f;
+		//model.boundingBox.maxx = 0.5f;
+		//model.boundingBox.miny = -0.5f;
+		//model.boundingBox.maxy = 0.5f;
+		//model.boundingBox.minz = -0.35f;
+		//model.boundingBox.maxz = 0.35f;
+		//model.boundingBox.minx = -0.4f;
+		//model.boundingBox.maxx = 0.4f;
+		//model.boundingBox.miny = -0.4f;
+		//model.boundingBox.maxy = 0.4f;
+		//model.boundingBox.minz = 0.0f;
+		//model.boundingBox.maxz = 1.2f;
+		model.boundingBox.minx = -1.0f;
+		model.boundingBox.maxx = 1.0f;
+		model.boundingBox.miny = -1.0f;
+		model.boundingBox.maxy = 1.0f;
+		model.boundingBox.minz = -0.5f;
+		model.boundingBox.maxz = 0.5f;
+
+		// Match mesh to model.
+
+		printf("Matching VN model %s to scene", modelFileName);
+		
+		Box<float> SBoundingBox;
+
+		InitBoundingBox<float>(&SBoundingBox, surfels.vertexArray.Element[0]->P);
+
+		int iVertex;
+
+		for (iVertex = 0; iVertex < surfels.vertexArray.n; iVertex++)
+			UpdateBoundingBox<float>(&SBoundingBox, surfels.vertexArray.Element[iVertex]->P);
+
+		float *dS = new float[model.featureArray.n];
+
+		bool *bdS = new bool[model.featureArray.n];
+
+		//Array<float> betaArray;
+
+		//betaArray.n = 7;
+		//betaArray.Element = new float[betaArray.n];
+
+		//float dBeta = PI / (float)(betaArray.n + 1);
+
+		//int i;
+
+		//for (i = 1; i <= betaArray.n; i++)
+		//	betaArray.Element[i - 1] = (float)i * dBeta;
+
+		//Array<float> alphaArray;
+
+		//alphaArray.n = 16;
+		//alphaArray.Element = new float[alphaArray.n];
+
+		//float dAlpha = PI / (float)(alphaArray.n);
+
+		//for (i = 0; i <= alphaArray.n; i++)
+		//	alphaArray.Element[i] = (float)i * dAlpha;
+
+		//FILE *fp = fopen("tangentRing.txt", "w");
+
+		//model.PrintTori(fp, &surfels, STClusters);
+
+		//fclose(fp);
+
+		//RECOG::VN_::Torus *pTorus = STClusters.Element[0];
+
+		//int id;
+		//int iAlpha, iBeta;
+		//RECOG::VN_::TorusRing *pRing;
+
+		//for (iBeta = 0; iBeta < pMCluster->betaArray.n; iBeta++)
+		//{
+		//	pRing = pTorus->ringArray.Element[iBeta];
+
+		//	if (pRing)
+		//	{
+		//		for (iAlpha = 0; iAlpha < pMCluster->alphaArray.n; iAlpha++)
+		//		{
+		//			id = iBeta * pMCluster->alphaArray.n + iAlpha;
+		//			dS[id] = pRing->d[iAlpha];
+		//			bdS[id] = true;
+		//		}
+		//	}
+		//	else
+		//	{
+		//		for (iAlpha = 0; iAlpha < pMCluster->alphaArray.n; iAlpha++)
+		//			bdS[iBeta * pMCluster->alphaArray.n + iAlpha] = false;
+		//	}
+		//}
+
+		//model.Match(&mesh, &surfels, SBoundingBox, VNMatchingParams, dS, bdS);
+
+		//model.Match2(&mesh, &surfels, SBoundingBox, VNMatchingParams, dS, bdS);
+
+		//model.Match3(&mesh, &surfels, clustering.clusters, SBoundingBox, VNMatchingParams, dS, bdS);
+
+		model.Match4(&mesh, &surfels, clustering.clusters, SBoundingBox, VNMatchingParams, &mem, dS, bdS);
+
+		printf("completed.\n");
 
 		// Visualization
+		    
+		Box<float> box;
 
-		Box<float> box = model.boundingBox;
+		// Model visualization
 
-		ExpandBox<float>(&box, 2.0f * resolution);
+		//box = model.boundingBox;
 
-		model.Display(&visualizer, box, resolution);
+		//ExpandBox<float>(&box, 2.0f * resolution);
+
+		//model.Display(&visualizer, box, resolution);
+
+		// Match visualization
+
+		box = SBoundingBox;
+
+		ExpandBox<float>(&box, 10.0f * resolution);
+
+		model.Display(&visualizer, box, resolution, dS, bdS);
+
+		delete[] dS;
+		delete[] bdS;
 
 		visualizer.Run();
 	}	// if (method == RVLRECOGNITION_METHOD_VN)
