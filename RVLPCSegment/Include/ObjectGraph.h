@@ -286,6 +286,7 @@ namespace RVL
 				RVLQLIST_ADD_ENTRY(pHierarchy, pHierarchyNode);
 
 				pHierarchyNode->pChild[0] = pHierarchyNode->pChild[1] = pHierarchyNode->pParent = NULL;
+				pHierarchyNode->iElement = iNode;
 
 				pNode->pHierarchyNode = pHierarchyNode;
 			}
@@ -461,6 +462,8 @@ namespace RVL
 				pNode2->pHierarchyNode->pParent = pHierarchyNode;
 
 				pHierarchyNode->pChild[1] = pNode2->pHierarchyNode;
+
+				pHierarchyNode->pParent = NULL;
 
 				// Remove the edge connecting iNode1 and iNode2 from the edgeQueue.
 

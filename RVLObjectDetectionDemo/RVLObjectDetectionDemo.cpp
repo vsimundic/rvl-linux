@@ -243,6 +243,9 @@ int main(int argc, char ** argv)
 
 			printf("Scene %s...finished!\n\n", fileName);
 
+			if (objectDetector.bTrainingHMI)
+				objectDetector.TrainingHMI(fileName);
+
 			objectDetector.Evaluate(fp, filePath, selectedGTObjectsFileName);
 
 #ifdef RVLOBJECTDETECTIONDEMO_SELECT_GT_OBJECTS
@@ -272,6 +275,9 @@ int main(int argc, char ** argv)
 	{
 
 		objectDetector.DetectObjects(MeshFileName);
+
+		if (objectDetector.bTrainingHMI)
+			objectDetector.TrainingHMI(MeshFileName);
 
 		objectDetector.Evaluate(fp, MeshFileName, selectedGTObjectsFileName);
 
