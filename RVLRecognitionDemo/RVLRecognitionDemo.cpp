@@ -62,6 +62,8 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 #define RVLRECOGNITION_DEMO_VN_MODEL_TORUS	0
 #define RVLRECOGNITION_DEMO_VN_MODEL_BOTTLE	1
 #define RVLRECOGNITION_DEMO_VN_MODEL_HAMMER	2
+#define RVLRECOGNITION_DEMO_VN_MODEL_BOWL	3
+
 //END VIDOVIC
 
 using namespace RVL;
@@ -108,6 +110,7 @@ void CreateParamList(
 	pParamList->AddID(pParamData, "TORUS", RVLRECOGNITION_DEMO_VN_MODEL_TORUS);
 	pParamList->AddID(pParamData, "BOTTLE", RVLRECOGNITION_DEMO_VN_MODEL_BOTTLE);
 	pParamList->AddID(pParamData, "HAMMER", RVLRECOGNITION_DEMO_VN_MODEL_HAMMER);
+	pParamList->AddID(pParamData, "BOWL", RVLRECOGNITION_DEMO_VN_MODEL_BOWL);
 }
 
 void GenerateSegmentNeighbourhood(PSGM * psgm, double radius)
@@ -1043,17 +1046,29 @@ int main(int argc, char ** argv)
 
 		Mesh mesh;
 
-		// Create clustering tool.
+		// Create clustering tools.
 
-		PSGM clustering;
+		PSGM convexClustering;
 
-		clustering.pMem = &mem;
+		convexClustering.pMem = &mem;
 
-		clustering.pMesh = &mesh;
+		convexClustering.pMesh = &mesh;
 
-		clustering.pSurfels = &surfels;
+		convexClustering.pSurfels = &surfels;
 
-		clustering.pSurfelDetector = &surfelDetector;
+		convexClustering.pSurfelDetector = &surfelDetector;
+
+		PSGM concaveClustering;
+
+		concaveClustering.pMem = &mem;
+
+		concaveClustering.pMesh = &mesh;
+
+		concaveClustering.pSurfels = &surfels;
+
+		concaveClustering.pSurfelDetector = &surfelDetector;
+
+		concaveClustering.clusterType = -1.0f;
 
 		// Create VN model.
 
@@ -1070,6 +1085,10 @@ int main(int argc, char ** argv)
 			break;
 		case RVLRECOGNITION_DEMO_VN_MODEL_HAMMER:
 			RECOG::VN_::CreateHammer(&model, &mem0);
+
+			break;
+		case RVLRECOGNITION_DEMO_VN_MODEL_BOWL:
+			RECOG::VN_::CreateBowl(&model, &mem0);
 		}
 
 		// Load VN match parameters.
@@ -1081,7 +1100,7 @@ int main(int argc, char ** argv)
 
 		paramList.LoadParams(cfgFileName);
 
-		VNMatchingParams.clusteringTolerance = 3.0f * clustering.kNoise * 2.0f / surfelDetector.kPlane;
+		VNMatchingParams.clusteringTolerance = 3.0f * convexClustering.kNoise * 2.0f / surfelDetector.kPlane;
 
 		model.boundingBox.minx = -0.5f;
 		model.boundingBox.maxx = 0.5f;
@@ -1138,15 +1157,19 @@ int main(int argc, char ** argv)
 
 			surfels.DetectVertices(&mesh);
 
-			// Cluster surfels.
+			// Cluster surfels into convex surfaces.
 
-			clustering.Clusters();
+			convexClustering.Clusters();
+
+			// Cluster surfels into concave surfaces.
+
+			concaveClustering.Clusters();
 
 			//surfels.NodeColors(SelectionColor);
 
-			//clustering.InitDisplay(&visualizer, &mesh, SelectionColor);
+			//concaveClustering.InitDisplay(&visualizer, &mesh, SelectionColor);
 
-			//clustering.Display();
+			//concaveClustering.Display();
 
 			//visualizer.Run();
 
@@ -1235,7 +1258,8 @@ int main(int argc, char ** argv)
 
 			//model.Match3(&mesh, &surfels, clustering.clusters, SBoundingBox, VNMatchingParams, dS, bdS);
 
-			model.Match4(&mesh, &surfels, clustering.clusters, SBoundingBox, VNMatchingParams, &mem, dS, bdS);
+			model.Match4(&mesh, &surfels, convexClustering.clusters, concaveClustering.clusters, SBoundingBox, VNMatchingParams, 
+				&mem, dS, bdS);
 
 			printf("completed.\n");
 

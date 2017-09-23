@@ -256,11 +256,14 @@ void VN::Create(CRVLMem *pMem)
 	float alpha, beta;
 	float P[3], P_[3];
 	float a;
+	float fOperation;
 
 	pMCluster = modelClusterList.pFirst;
 
 	while (pMCluster)
 	{
+		fOperation = (pMCluster->type == RVLVN_CLUSTER_TYPE_CONVEX ? 1.0f : -1.0f);
+
 		float *R = pMCluster->R;
 
 		pMCluster->iFeatureInterval.a = pFeature - featureArray.Element;
@@ -318,7 +321,7 @@ void VN::Create(CRVLMem *pMem)
 			pFeature_ = featureArray.Element + iFeature;
 
 			if (pMCluster->type == RVLVN_CLUSTER_TYPE_CONVEX || pMCluster->type == RVLVN_CLUSTER_TYPE_CONCAVE)
-				pFeature_->d = RVLDOTPRODUCT3(pFeature_->N, pMCluster->t) + pMCluster->r;
+				pFeature_->d = RVLDOTPRODUCT3(pFeature_->N, pMCluster->t) + fOperation * pMCluster->r;
 			else if (pMCluster->type == RVLVN_CLUSTER_TYPE_XTORUS || pMCluster->type == RVLVN_CLUSTER_TYPE_ITORUS)
 			{
 				alpha = pMCluster->alphaArray.Element[pFeature_->iAlpha];
@@ -3559,7 +3562,8 @@ void VN::Match3(
 void VN::Match4(
 	Mesh *pMesh,
 	SurfelGraph *pSurfels,
-	Array<RECOG::PSGM_::Cluster *> SClusters,
+	Array<RECOG::PSGM_::Cluster *> SCClusters,
+	Array<RECOG::PSGM_::Cluster *> SUClusters,
 	Box<float> boundingBox,
 	RECOG::VN_::Parameters params,
 	CRVLMem *pMem,
@@ -3621,31 +3625,36 @@ void VN::Match4(
 
 	Array<RECOG::VN_::SceneCluster> SClusters_;
 
-	int nSCClusters = RVLMIN(SClusters.n, params.maxnSClusters);
+	int nSCClusters = RVLMIN(SCClusters.n, params.maxnSClusters);
+
+	int nSUClusters = RVLMIN(SUClusters.n, params.maxnSClusters);
 
 	int nSTClusters = RVLMIN(STClusters.n, params.maxnSClusters);
 
-	SClusters_.n = nSCClusters + nSTClusters;
+	SClusters_.n = nSCClusters + nSUClusters + nSTClusters;
 
 	SClusters_.Element = new RECOG::VN_::SceneCluster[SClusters_.n];
 
+	RECOG::VN_::SceneCluster *pSCluster = SClusters_.Element;
+
 	int iCluster;
-	RECOG::VN_::SceneCluster *pSCluster;
 
-	for (iCluster = 0; iCluster < nSCClusters; iCluster++)
+	for (iCluster = 0; iCluster < nSCClusters; iCluster++, pSCluster++)
 	{
-		pSCluster = SClusters_.Element + iCluster;
-
 		pSCluster->type = RVLVN_CLUSTER_TYPE_CONVEX;
-		pSCluster->vpCluster = SClusters.Element + iCluster;
+		pSCluster->vpCluster = SCClusters.Element + iCluster;
+	}
+
+	for (iCluster = 0; iCluster < nSUClusters; iCluster++, pSCluster++)
+	{
+		pSCluster->type = RVLVN_CLUSTER_TYPE_CONCAVE;
+		pSCluster->vpCluster = SUClusters.Element + iCluster;
 	}
 
 	if (bTorus)
 	{
-		for (iCluster = 0; iCluster < nSTClusters; iCluster++)
+		for (iCluster = 0; iCluster < nSTClusters; iCluster++, pSCluster++)
 		{
-			pSCluster = SClusters_.Element + nSCClusters + iCluster;
-
 			pSCluster->type = RVLVN_CLUSTER_TYPE_XTORUS;
 			pSCluster->vpCluster = STClusters.Element + iCluster;
 		}
@@ -3661,9 +3670,9 @@ void VN::Match4(
 	int j;
 	int iSCluster, iMCluster, iFeature, iVertex;
 	float *N, *P;
-	RECOG::PSGM_::Cluster *pSCCluster;
+	RECOG::PSGM_::Cluster *pSCCluster, *pSUCluster;
 	RECOG::VN_::Torus *pTCluster;
-	float d, maxd;
+	float d, maxd, mind;
 	float *dS__;
 	RECOG::VN_::Feature *pFeature;
 
@@ -3681,9 +3690,9 @@ void VN::Match4(
 		{
 			if (pMCluster->type == pSCluster->type)
 			{
-				if (pSCluster->type == RVLVN_CLUSTER_TYPE_CONVEX)
-				{
-					pSCCluster = SClusters.Element[iSCluster];
+				switch (pSCluster->type){
+				case RVLVN_CLUSTER_TYPE_CONVEX:
+					pSCCluster = SCClusters.Element[iSCluster];
 
 					for (iFeature = pMCluster->iFeatureInterval.a; iFeature <= pMCluster->iFeatureInterval.b; iFeature++)
 					{
@@ -3705,10 +3714,35 @@ void VN::Match4(
 
 						dS__[iFeature] = maxd;
 					}
-				}
-				else if (pSCluster->type == RVLVN_CLUSTER_TYPE_XTORUS)
-				{
-					pTCluster = STClusters.Element[iSCluster - nSCClusters];
+
+					break;
+				case RVLVN_CLUSTER_TYPE_CONCAVE:
+					pSUCluster = SUClusters.Element[iSCluster - nSCClusters];
+
+					for (iFeature = pMCluster->iFeatureInterval.a; iFeature <= pMCluster->iFeatureInterval.b; iFeature++)
+					{
+						N = featureArray.Element[iFeature].N;
+
+						P = pSurfels->vertexArray.Element[pSUCluster->iVertexArray.Element[0]]->P;
+
+						mind = RVLDOTPRODUCT3(N, P);
+
+						for (j = 1; j < pSUCluster->iVertexArray.n; j++)
+						{
+							P = pSurfels->vertexArray.Element[pSUCluster->iVertexArray.Element[j]]->P;
+
+							d = RVLDOTPRODUCT3(N, P);
+
+							if (d < mind)
+								mind = d;
+						}
+
+						dS__[iFeature] = mind;
+					}
+
+					break;
+				case RVLVN_CLUSTER_TYPE_XTORUS:
+					pTCluster = STClusters.Element[iSCluster - nSCClusters - nSUClusters];
 
 					for (iFeature = pMCluster->iFeatureInterval.a; iFeature <= pMCluster->iFeatureInterval.b; iFeature++)
 					{
@@ -5118,3 +5152,39 @@ void VN_::CreateHammer(
 
 	pVN->Create(pMem);
 }
+
+void VN_::CreateBowl(
+	VN *pVN,
+	CRVLMem *pMem)
+{
+	pVN->CreateEmpty();
+
+	float R[9];
+
+	RVLUNITMX3(R);
+
+	float t[3];
+
+	RVLSET3VECTOR(t, 0.0f, 0.0f, 0.0f);
+
+	Pair<int, int> iBetaInterval;
+
+	iBetaInterval.a = 0;
+	iBetaInterval.b = 8;
+
+	pVN->AddModelCluster(0, RVLVN_CLUSTER_TYPE_CONVEX, R, t, 0.5f, 16, 8, iBetaInterval, pMem);
+
+	RVLSET3VECTOR(t, 0.0f, 0.0f, 0.0f);
+
+	iBetaInterval.a = 0;
+	iBetaInterval.b = 4;
+
+	pVN->AddModelCluster(1, RVLVN_CLUSTER_TYPE_CONCAVE, R, t, 0.3f, 16, 8, iBetaInterval, pMem);
+
+	pVN->AddOperation(2, 1, 0, 1, pMem);
+
+	pVN->SetOutput(2);
+
+	pVN->Create(pMem);
+}
+

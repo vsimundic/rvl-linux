@@ -62,6 +62,7 @@ PSGM::PSGM()
 	minClusterNormalDistributionStd = 0.1f;
 	groundPlaneTolerance = 0.020f;
 	gndCTIThr = 0.015f;
+	clusterType = 1.0f;
 
 	convexTemplate66.n = 66;
 	convexTemplate66.Element = new RECOG::PSGM_::Plane[convexTemplate66.n];
@@ -3184,8 +3185,7 @@ bool PSGM::Inside(
 
 		e = RVLDOTPRODUCT3(pSurfel_->N, pVertex->P) - pSurfel_->d;
 
-		if (e > maxe)
-		//if (e < -maxe)
+		if (clusterType * e > maxe)
 			return false;
 	}
 
@@ -3209,8 +3209,7 @@ bool PSGM::BelowPlane(
 
 		e = RVLDOTPRODUCT3(pSurfel->N, pVertex->P) - pSurfel->d;
 
-		if (e > maxe)
-		//if (e < -maxe)
+		if (clusterType * e > maxe)
 			return false;
 	}
 

@@ -656,7 +656,7 @@ namespace RVL
 		int matchGTiRank; //Vidovic
 		FILE *fpMatchGT; //Vidovic
 		char *sceneFileName; //Vidovic
-
+		float clusterType;
 				
 		//Petra & Ivan
 		double *icpTMatrix;
