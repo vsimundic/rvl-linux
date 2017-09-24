@@ -344,6 +344,9 @@ namespace RVL
 			void CreateBowl(
 				VN *pVN,
 				CRVLMem *pMem);
+			void CreateMug(
+				VN *pVN,
+				CRVLMem *pMem);
 		}
 	}
 

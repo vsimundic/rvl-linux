@@ -5188,3 +5188,45 @@ void VN_::CreateBowl(
 	pVN->Create(pMem);
 }
 
+void VN_::CreateMug(
+	VN *pVN,
+	CRVLMem *pMem)
+{
+	pVN->CreateEmpty();
+
+	float R[9];
+
+	RVLUNITMX3(R);
+
+	float t[3];
+
+	RVLSET3VECTOR(t, 0.0f, 0.0f, 0.0f);
+
+	Pair<int, int> iBetaInterval;
+
+	iBetaInterval.a = 0;
+	iBetaInterval.b = 8;
+
+	pVN->AddModelCluster(0, RVLVN_CLUSTER_TYPE_CONVEX, R, t, 0.5f, 16, 8, iBetaInterval, pMem);
+
+	RVLSET3VECTOR(t, 0.0f, 0.0f, 0.0f);
+
+	iBetaInterval.a = 0;
+	iBetaInterval.b = 4;
+
+	pVN->AddModelCluster(1, RVLVN_CLUSTER_TYPE_CONCAVE, R, t, 0.3f, 16, 8, iBetaInterval, pMem);
+
+	iBetaInterval.a = 0;
+	iBetaInterval.b = 8;
+
+	pVN->AddModelCluster(2, RVLVN_CLUSTER_TYPE_CONVEX, R, t, 0.5f, 16, 8, iBetaInterval, pMem);
+
+	pVN->AddOperation(3, 1, 0, 1, pMem);
+
+	pVN->AddOperation(4, -1, 2, 3, pMem);
+
+	pVN->SetOutput(4);
+
+	pVN->Create(pMem);
+}
+

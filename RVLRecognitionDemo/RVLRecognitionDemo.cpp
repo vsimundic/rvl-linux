@@ -63,6 +63,7 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 #define RVLRECOGNITION_DEMO_VN_MODEL_BOTTLE	1
 #define RVLRECOGNITION_DEMO_VN_MODEL_HAMMER	2
 #define RVLRECOGNITION_DEMO_VN_MODEL_BOWL	3
+#define RVLRECOGNITION_DEMO_VN_MODEL_MUG	4
 
 //END VIDOVIC
 
@@ -111,6 +112,7 @@ void CreateParamList(
 	pParamList->AddID(pParamData, "BOTTLE", RVLRECOGNITION_DEMO_VN_MODEL_BOTTLE);
 	pParamList->AddID(pParamData, "HAMMER", RVLRECOGNITION_DEMO_VN_MODEL_HAMMER);
 	pParamList->AddID(pParamData, "BOWL", RVLRECOGNITION_DEMO_VN_MODEL_BOWL);
+	pParamList->AddID(pParamData, "MUG", RVLRECOGNITION_DEMO_VN_MODEL_MUG);
 }
 
 void GenerateSegmentNeighbourhood(PSGM * psgm, double radius)
@@ -1058,6 +1060,8 @@ int main(int argc, char ** argv)
 
 		convexClustering.pSurfelDetector = &surfelDetector;
 
+		convexClustering.bDetectGroundPlane = false;
+
 		PSGM concaveClustering;
 
 		concaveClustering.pMem = &mem;
@@ -1069,6 +1073,8 @@ int main(int argc, char ** argv)
 		concaveClustering.pSurfelDetector = &surfelDetector;
 
 		concaveClustering.clusterType = -1.0f;
+
+		concaveClustering.bDetectGroundPlane = false;
 
 		// Create VN model.
 
@@ -1089,6 +1095,10 @@ int main(int argc, char ** argv)
 			break;
 		case RVLRECOGNITION_DEMO_VN_MODEL_BOWL:
 			RECOG::VN_::CreateBowl(&model, &mem0);
+
+			break;
+		case RVLRECOGNITION_DEMO_VN_MODEL_MUG:
+			RECOG::VN_::CreateMug(&model, &mem0);
 		}
 
 		// Load VN match parameters.
@@ -1167,9 +1177,13 @@ int main(int argc, char ** argv)
 
 			//surfels.NodeColors(SelectionColor);
 
-			//concaveClustering.InitDisplay(&visualizer, &mesh, SelectionColor);
+			////concaveClustering.InitDisplay(&visualizer, &mesh, SelectionColor);
 
-			//concaveClustering.Display();
+			////concaveClustering.Display();
+
+			//convexClustering.InitDisplay(&visualizer, &mesh, SelectionColor);
+
+			//convexClustering.Display();
 
 			//visualizer.Run();
 
