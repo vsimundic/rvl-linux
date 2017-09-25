@@ -22,6 +22,7 @@
 #include "ObjectDetector.h"
 #include <Eigen\Eigenvalues>
 #include "VN.h"
+#include "VNClassifier.h"
 
 #define RVLVN_MATCH_DEBUG
 
@@ -3561,15 +3562,24 @@ void VN::Match3(
 
 void VN::Match4(
 	Mesh *pMesh,
-	SurfelGraph *pSurfels,
-	Array<RECOG::PSGM_::Cluster *> SCClusters,
-	Array<RECOG::PSGM_::Cluster *> SUClusters,
+	void *vpClassifier,	
 	Box<float> boundingBox,
-	RECOG::VN_::Parameters params,
-	CRVLMem *pMem,
 	float *dS,
 	bool *bdS)
+	//Mesh *pMesh,
+	//SurfelGraph *pSurfels,
+	//Array<RECOG::PSGM_::Cluster *> SCClusters,
+	//Array<RECOG::PSGM_::Cluster *> SUClusters,
+	//Box<float> boundingBox,
+	//RECOG::VN_::Parameters params,
+	//CRVLMem *pMem,
+	//float *dS,
+	//bool *bdS)
 {
+	VNClassifier *pClassifier = (VNClassifier *)vpClassifier;
+
+	SurfelGraph *pSurfels = pClassifier->pSurfels;
+
 	bool bTorus = false;
 
 	int nMClusters = 0;
@@ -3591,7 +3601,7 @@ void VN::Match4(
 
 	float size = GetMeshSize(boundingBox);
 
-	float maxDeviation = params.kMaxMatchCost * size;
+	float maxDeviation = pClassifier->kMaxMatchCost * size;
 
 	Array<int> iPtArray;
 
@@ -3620,16 +3630,19 @@ void VN::Match4(
 			pMCluster = pMCluster->pNext;
 		}
 
-		ToroidalClusters(pMesh, pSurfels, axis, pMCluster->alphaArray, pMCluster->betaArray, params.clusteringTolerance, STClusters, pMem);
+		ToroidalClusters(pMesh, pSurfels, axis, pMCluster->alphaArray, pMCluster->betaArray, pClassifier->clusteringTolerance, STClusters, pClassifier->pMem);
 	}
+
+	Array<RECOG::PSGM_::Cluster *> SCClusters = pClassifier->convexClustering.clusters;
+	Array<RECOG::PSGM_::Cluster *> SUClusters = pClassifier->concaveClustering.clusters;
 
 	Array<RECOG::VN_::SceneCluster> SClusters_;
 
-	int nSCClusters = RVLMIN(SCClusters.n, params.maxnSClusters);
+	int nSCClusters = RVLMIN(SCClusters.n, pClassifier->maxnSClusters);
 
-	int nSUClusters = RVLMIN(SUClusters.n, params.maxnSClusters);
+	int nSUClusters = RVLMIN(SUClusters.n, pClassifier->maxnSClusters);
 
-	int nSTClusters = RVLMIN(STClusters.n, params.maxnSClusters);
+	int nSTClusters = RVLMIN(STClusters.n, pClassifier->maxnSClusters);
 
 	SClusters_.n = nSCClusters + nSUClusters + nSTClusters;
 
@@ -5060,6 +5073,13 @@ void VN_::CreateTorus(
 	pVN->SetOutput(2);
 
 	pVN->Create(pMem);
+
+	pVN->boundingBox.minx = -0.5f;
+	pVN->boundingBox.maxx = 0.5f;
+	pVN->boundingBox.miny = -0.5f;
+	pVN->boundingBox.maxy = 0.5f;
+	pVN->boundingBox.minz = -0.5f;
+	pVN->boundingBox.maxz = 0.5f;
 }
 
 void VN_::CreateBottle(
@@ -5109,6 +5129,13 @@ void VN_::CreateBottle(
 	pVN->SetOutput(2);
 
 	pVN->Create(pMem);
+
+	pVN->boundingBox.minx = -0.5f;
+	pVN->boundingBox.maxx = 0.5f;
+	pVN->boundingBox.miny = -0.5f;
+	pVN->boundingBox.maxy = 0.5f;
+	pVN->boundingBox.minz = -0.5f;
+	pVN->boundingBox.maxz = 0.5f;
 }
 
 void VN_::CreateHammer(
@@ -5152,6 +5179,13 @@ void VN_::CreateHammer(
 	pVN->SetOutput(2);
 
 	pVN->Create(pMem);
+
+	pVN->boundingBox.minx = -0.5f;
+	pVN->boundingBox.maxx = 0.5f;
+	pVN->boundingBox.miny = -0.5f;
+	pVN->boundingBox.maxy = 0.5f;
+	pVN->boundingBox.minz = -0.5f;
+	pVN->boundingBox.maxz = 0.5f;
 }
 
 void VN_::CreateBowl(
@@ -5187,6 +5221,13 @@ void VN_::CreateBowl(
 	pVN->SetOutput(2);
 
 	pVN->Create(pMem);
+
+	pVN->boundingBox.minx = -0.5f;
+	pVN->boundingBox.maxx = 0.5f;
+	pVN->boundingBox.miny = -0.5f;
+	pVN->boundingBox.maxy = 0.5f;
+	pVN->boundingBox.minz = -0.5f;
+	pVN->boundingBox.maxz = 0.5f;
 }
 
 void VN_::CreateMug(
@@ -5229,5 +5270,12 @@ void VN_::CreateMug(
 	pVN->SetOutput(4);
 
 	pVN->Create(pMem);
+
+	pVN->boundingBox.minx = -0.5f;
+	pVN->boundingBox.maxx = 0.5f;
+	pVN->boundingBox.miny = -0.5f;
+	pVN->boundingBox.maxy = 0.5f;
+	pVN->boundingBox.minz = -0.5f;
+	pVN->boundingBox.maxz = 0.5f;
 }
 

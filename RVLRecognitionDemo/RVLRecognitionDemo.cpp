@@ -38,6 +38,7 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 #include "PCLMeshBuilder.h"
 #include "MarchingCubes.h"
 #include "VN.h"
+#include "VNClassifier.h"
 
 
 // VIDOVIC
@@ -1052,6 +1053,16 @@ int main(int argc, char ** argv)
 
 		Mesh mesh;
 
+		VNClassifier classifier;
+
+		classifier.pMem0 = &mem0;
+		classifier.pMem = &mem;
+		classifier.pSurfels = &surfels;
+		classifier.pSurfelDetector = &surfelDetector;
+
+		classifier.Create(cfgFileName);
+
+#ifdef NEVER
 		// Create clustering tools.
 
 		PSGM convexClustering;
@@ -1134,6 +1145,7 @@ int main(int argc, char ** argv)
 		//model.boundingBox.maxy = 1.0f;
 		//model.boundingBox.minz = -0.5f;
 		//model.boundingBox.maxz = 0.5f;
+#endif
 	
 		FileSequenceLoader sceneSequence;
 
@@ -1171,6 +1183,13 @@ int main(int argc, char ** argv)
 
 			surfels.DetectVertices(&mesh);
 
+			float *dS;
+			bool *bdS;
+			Box<float> SBoundingBox;
+
+			classifier.Classify(&mesh, dS, bdS, SBoundingBox, VNModel);
+
+#ifdef NEVER
 			// Cluster surfels into convex surfaces.
 
 			convexClustering.Clusters();
@@ -1179,17 +1198,17 @@ int main(int argc, char ** argv)
 
 			concaveClustering.Clusters();
 
-			//surfels.NodeColors(SelectionColor);
+			surfels.NodeColors(SelectionColor);
 
-			////concaveClustering.InitDisplay(&visualizer, &mesh, SelectionColor);
+			//concaveClustering.InitDisplay(&visualizer, &mesh, SelectionColor);
 
-			////concaveClustering.Display();
+			//concaveClustering.Display();
 
-			//convexClustering.InitDisplay(&visualizer, &mesh, SelectionColor);
+			convexClustering.InitDisplay(&visualizer, &mesh, SelectionColor);
 
-			//convexClustering.Display();
+			convexClustering.Display();
 
-			//visualizer.Run();
+			visualizer.Run();
 
 			//surfels.NodeColors(SelectionColor);
 
@@ -1280,8 +1299,11 @@ int main(int argc, char ** argv)
 				&mem, dS, bdS);
 
 			printf("completed.\n");
+#endif
 
 			// Visualization
+
+			VN *pModel = classifier.models[VNModel];
 
 			Box<float> box;
 
@@ -1289,11 +1311,11 @@ int main(int argc, char ** argv)
 			{
 				// Model visualization
 
-				box = model.boundingBox;
+				box = pModel->boundingBox;
 
 				ExpandBox<float>(&box, 2.0f * resolution);
 
-				model.Display(&visualizer, box, resolution, NULL, NULL, SDFSurfaceValue);
+				pModel->Display(&visualizer, box, resolution, NULL, NULL, SDFSurfaceValue);
 			}
 			else
 			{
@@ -1305,7 +1327,7 @@ int main(int argc, char ** argv)
 
 				visualizer.renderer->RemoveAllViewProps();
 
-				model.Display(&visualizer, box, resolution, dS, bdS, SDFSurfaceValue);
+				pModel->Display(&visualizer, box, resolution, dS, bdS, SDFSurfaceValue);
 			}
 
 			delete[] dS;
