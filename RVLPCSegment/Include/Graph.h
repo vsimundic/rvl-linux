@@ -76,10 +76,18 @@ namespace RVL
 			QList<EdgePtr<Edge>> EdgeList;
 		};
 
+		struct HierarchyNode
+		{
+			HierarchyNode *pParent;
+			HierarchyNode *pChild[2];
+			HierarchyNode *pNext;
+		};
+
 		template<typename EdgeType> struct AggregateNode
 		{
 			QList<QLIST::Index> elementList;
 			QList<EdgePtr2<EdgeType>> EdgeList;
+			HierarchyNode *pHierarchyNode;
 			int size;
 			BYTE flags;
 		};

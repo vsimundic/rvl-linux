@@ -274,6 +274,7 @@ namespace RVL
 			{
 				float kMaxMatchCost;
 				float clusteringTolerance;
+				int maxnSClusters;
 			};
 
 			struct FeatureNodeData
@@ -332,6 +333,12 @@ namespace RVL
 			};
 
 			void CreateTorus(
+				VN *pVN,
+				CRVLMem *pMem);
+			void CreateBottle(
+				VN *pVN,
+				CRVLMem *pMem);
+			void CreateHammer(
 				VN *pVN,
 				CRVLMem *pMem);
 		}

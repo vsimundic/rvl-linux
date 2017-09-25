@@ -282,6 +282,7 @@ namespace RVL
 			Visualizer *pVisualizer,
 			Mesh *pMesh);
 #endif
+		cv::Mat GenColoredSurfelImg();
 		cv::Mat GenColoredSurfelImgFromSSF(std::shared_ptr<SceneSegFile::SceneSegFile> ssf);
 		//Filko
 

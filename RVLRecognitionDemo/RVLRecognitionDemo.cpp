@@ -57,6 +57,11 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 
 #define RVLRECOGNITION_DEMO_FLAG_SAVE_PLY			0x00000001
 #define RVLRECOGNITION_DEMO_FLAG_3D_VISUALIZATION	0x00000002
+#define RVLRECOGNITION_DEMO_FLAG_VISUALIZE_VN_MODEL	0x00000004
+
+#define RVLRECOGNITION_DEMO_VN_MODEL_TORUS	0
+#define RVLRECOGNITION_DEMO_VN_MODEL_BOTTLE	1
+#define RVLRECOGNITION_DEMO_VN_MODEL_HAMMER	2
 //END VIDOVIC
 
 using namespace RVL;
@@ -72,7 +77,8 @@ void CreateParamList(
 	char **pSegmentGTFileName,	//Vidovic
 	char **pResultsFolder,
 	DWORD &method,
-	DWORD &flags
+	DWORD &flags,
+	DWORD &VNModel
 	)
 {
 	pParamList->m_pMem = pMem;
@@ -96,6 +102,12 @@ void CreateParamList(
 	pParamList->AddID(pParamData, "yes", RVLRECOGNITION_DEMO_FLAG_SAVE_PLY); //VIDOVIC
 	pParamData = pParamList->AddParam("3D Visualization", RVLPARAM_TYPE_ID, &flags);
 	pParamList->AddID(pParamData, "yes", RVLRECOGNITION_DEMO_FLAG_3D_VISUALIZATION);
+	pParamData = pParamList->AddParam("VN.visualizeModel", RVLPARAM_TYPE_ID, &flags);
+	pParamList->AddID(pParamData, "yes", RVLRECOGNITION_DEMO_FLAG_VISUALIZE_VN_MODEL);
+	pParamData = pParamList->AddParam("VN.model", RVLPARAM_TYPE_ID, &VNModel);
+	pParamList->AddID(pParamData, "TORUS", RVLRECOGNITION_DEMO_VN_MODEL_TORUS);
+	pParamList->AddID(pParamData, "BOTTLE", RVLRECOGNITION_DEMO_VN_MODEL_BOTTLE);
+	pParamList->AddID(pParamData, "HAMMER", RVLRECOGNITION_DEMO_VN_MODEL_HAMMER);
 }
 
 void GenerateSegmentNeighbourhood(PSGM * psgm, double radius)
@@ -272,6 +284,7 @@ int main(int argc, char ** argv)
 	char *segmentGTFileName = NULL; //Vidovic
 	DWORD method = RVLRECOGNITION_METHOD_PSGM;
 	//DWORD method = RVLRECOGNITION_METHOD_RF; //VIDOVIC
+	DWORD VNModel;
 
 	DWORD flags = 0x00000000; //VIDOVIC
 
@@ -287,7 +300,8 @@ int main(int argc, char ** argv)
 		&segmentGTFileName,
 		&ResultsFolder,
 		method,
-		flags);	 //VIDOVIC
+		flags,
+		VNModel);	 //VIDOVIC
 
 	ParamList.LoadParams(cfgFileName);
 
@@ -1027,37 +1041,9 @@ int main(int argc, char ** argv)
 		float eps = 0.01f;
 		float resolution = 0.01f;
 
-		// Load mesh.
-
-		printf("Scene: %s:\n", sceneMeshFileName);
-
 		Mesh mesh;
 
-		LoadMesh(&meshBuilder, sceneMeshFileName, &mesh, false);
-
-		// Reset memory.
-
-		mem.Clear();
-
-		// Detect surfels.
-
-		surfels.Init(&mesh);
-
-		surfelDetector.Init(&mesh, &surfels, &mem);
-
-		printf("Segmentation to surfels...");
-
-		surfelDetector.Segment(&mesh, &surfels);
-
-		printf("completed.\n");
-
-		int nSurfels = surfels.NodeArray.n;
-
-		printf("No. of surfels = %d\n", nSurfels);
-
-		surfels.DetectVertices(&mesh);
-
-		// Cluster surfels.
+		// Create clustering tool.
 
 		PSGM clustering;
 
@@ -1069,33 +1055,24 @@ int main(int argc, char ** argv)
 
 		clustering.pSurfelDetector = &surfelDetector;
 
-		clustering.Clusters();
-
-		//surfels.NodeColors(SelectionColor);
-
-		//clustering.InitDisplay(&visualizer, &mesh, SelectionColor);
-
-		//clustering.Display();
-
-		//visualizer.Run();
-
-		//surfels.NodeColors(SelectionColor);
-
-		//surfels.InitDisplay(&visualizer, &mesh, &surfelDetector);		
-
-		//surfels.Display(&visualizer, &mesh);
-
-		//visualizer.Run();
-		
-		// Create VN.
-
-		//VN model;
-
-		//model.Create(&mesh, &surfels, &mem, voxelSize, sampleVoxelDistance, eps, &visualizer);
-
-		// Load VN.
+		// Create VN model.
 
 		VN model;
+
+		switch (VNModel){
+		case RVLRECOGNITION_DEMO_VN_MODEL_TORUS:
+			RECOG::VN_::CreateTorus(&model, &mem0);
+
+			break;
+		case RVLRECOGNITION_DEMO_VN_MODEL_BOTTLE:
+			RECOG::VN_::CreateBottle(&model, &mem0);
+
+			break;
+		case RVLRECOGNITION_DEMO_VN_MODEL_HAMMER:
+			RECOG::VN_::CreateHammer(&model, &mem0);
+		}
+
+		// Load VN match parameters.
 
 		CRVLParameterList paramList;
 		RECOG::VN_::Parameters VNMatchingParams;
@@ -1106,138 +1083,194 @@ int main(int argc, char ** argv)
 
 		VNMatchingParams.clusteringTolerance = 3.0f * clustering.kNoise * 2.0f / surfelDetector.kPlane;
 
-		//char modelFileName[] = "D:\\Documents\\New\\Projects\\ARP3D\\Research\\Matlab\\VNTorus.txt";
-		char modelFileName[] = "D:\\Documents\\New\\Projects\\ARP3D\\Research\\Matlab\\VNBottle.txt";
-		//char modelFileName[] = "D:\\Documents\\New\\Projects\\ARP3D\\Research\\Matlab\\VNHammer.txt";
-
-		//model.Load(modelFileName, &mem0);
-
-		RECOG::VN_::CreateTorus(&model, &mem0);
-
-		//model.boundingBox.minx = -0.5f;
-		//model.boundingBox.maxx = 0.5f;
-		//model.boundingBox.miny = -0.5f;
-		//model.boundingBox.maxy = 0.5f;
-		//model.boundingBox.minz = -0.35f;
-		//model.boundingBox.maxz = 0.35f;
+		model.boundingBox.minx = -0.5f;
+		model.boundingBox.maxx = 0.5f;
+		model.boundingBox.miny = -0.5f;
+		model.boundingBox.maxy = 0.5f;
+		model.boundingBox.minz = -0.5f;
+		model.boundingBox.maxz = 0.5f;
 		//model.boundingBox.minx = -0.4f;
 		//model.boundingBox.maxx = 0.4f;
 		//model.boundingBox.miny = -0.4f;
 		//model.boundingBox.maxy = 0.4f;
 		//model.boundingBox.minz = 0.0f;
 		//model.boundingBox.maxz = 1.2f;
-		model.boundingBox.minx = -1.0f;
-		model.boundingBox.maxx = 1.0f;
-		model.boundingBox.miny = -1.0f;
-		model.boundingBox.maxy = 1.0f;
-		model.boundingBox.minz = -0.5f;
-		model.boundingBox.maxz = 0.5f;
+		//model.boundingBox.minx = -1.0f;
+		//model.boundingBox.maxx = 1.0f;
+		//model.boundingBox.miny = -1.0f;
+		//model.boundingBox.maxy = 1.0f;
+		//model.boundingBox.minz = -0.5f;
+		//model.boundingBox.maxz = 0.5f;
+	
+		FileSequenceLoader sceneSequence;
 
-		// Match mesh to model.
+		sceneSequence.Init(sceneSequenceFileName);
 
-		printf("Matching VN model %s to scene", modelFileName);
-		
-		Box<float> SBoundingBox;
+		char filePath[200];
 
-		InitBoundingBox<float>(&SBoundingBox, surfels.vertexArray.Element[0]->P);
+		while (sceneSequence.GetNextPath(filePath))
+		{
+			printf("Scene: %s:\n", filePath);
 
-		int iVertex;
+			// Load mesh.
 
-		for (iVertex = 0; iVertex < surfels.vertexArray.n; iVertex++)
-			UpdateBoundingBox<float>(&SBoundingBox, surfels.vertexArray.Element[iVertex]->P);
+			LoadMesh(&meshBuilder, filePath, &mesh, false);
 
-		float *dS = new float[model.featureArray.n];
+			// Reset memory.
 
-		bool *bdS = new bool[model.featureArray.n];
+			mem.Clear();
 
-		//Array<float> betaArray;
+			// Detect surfels.
 
-		//betaArray.n = 7;
-		//betaArray.Element = new float[betaArray.n];
+			surfels.Init(&mesh);
 
-		//float dBeta = PI / (float)(betaArray.n + 1);
+			surfelDetector.Init(&mesh, &surfels, &mem);
 
-		//int i;
+			printf("Segmentation to surfels...");
 
-		//for (i = 1; i <= betaArray.n; i++)
-		//	betaArray.Element[i - 1] = (float)i * dBeta;
+			surfelDetector.Segment(&mesh, &surfels);
 
-		//Array<float> alphaArray;
+			printf("completed.\n");
 
-		//alphaArray.n = 16;
-		//alphaArray.Element = new float[alphaArray.n];
+			int nSurfels = surfels.NodeArray.n;
 
-		//float dAlpha = PI / (float)(alphaArray.n);
+			printf("No. of surfels = %d\n", nSurfels);
 
-		//for (i = 0; i <= alphaArray.n; i++)
-		//	alphaArray.Element[i] = (float)i * dAlpha;
+			surfels.DetectVertices(&mesh);
 
-		//FILE *fp = fopen("tangentRing.txt", "w");
+			// Cluster surfels.
 
-		//model.PrintTori(fp, &surfels, STClusters);
+			clustering.Clusters();
 
-		//fclose(fp);
+			//surfels.NodeColors(SelectionColor);
 
-		//RECOG::VN_::Torus *pTorus = STClusters.Element[0];
+			//clustering.InitDisplay(&visualizer, &mesh, SelectionColor);
 
-		//int id;
-		//int iAlpha, iBeta;
-		//RECOG::VN_::TorusRing *pRing;
+			//clustering.Display();
 
-		//for (iBeta = 0; iBeta < pMCluster->betaArray.n; iBeta++)
-		//{
-		//	pRing = pTorus->ringArray.Element[iBeta];
+			//visualizer.Run();
 
-		//	if (pRing)
-		//	{
-		//		for (iAlpha = 0; iAlpha < pMCluster->alphaArray.n; iAlpha++)
-		//		{
-		//			id = iBeta * pMCluster->alphaArray.n + iAlpha;
-		//			dS[id] = pRing->d[iAlpha];
-		//			bdS[id] = true;
-		//		}
-		//	}
-		//	else
-		//	{
-		//		for (iAlpha = 0; iAlpha < pMCluster->alphaArray.n; iAlpha++)
-		//			bdS[iBeta * pMCluster->alphaArray.n + iAlpha] = false;
-		//	}
-		//}
+			//surfels.NodeColors(SelectionColor);
 
-		//model.Match(&mesh, &surfels, SBoundingBox, VNMatchingParams, dS, bdS);
+			//surfels.InitDisplay(&visualizer, &mesh, &surfelDetector);		
 
-		//model.Match2(&mesh, &surfels, SBoundingBox, VNMatchingParams, dS, bdS);
+			//surfels.Display(&visualizer, &mesh);
 
-		//model.Match3(&mesh, &surfels, clustering.clusters, SBoundingBox, VNMatchingParams, dS, bdS);
+			//visualizer.Run();
 
-		model.Match4(&mesh, &surfels, clustering.clusters, SBoundingBox, VNMatchingParams, &mem, dS, bdS);
+			// Match mesh to model.
 
-		printf("completed.\n");
+			printf("Matching VN model to scene...");
 
-		// Visualization
-		    
-		Box<float> box;
+			Box<float> SBoundingBox;
 
-		// Model visualization
+			InitBoundingBox<float>(&SBoundingBox, surfels.vertexArray.Element[0]->P);
 
-		//box = model.boundingBox;
+			int iVertex;
 
-		//ExpandBox<float>(&box, 2.0f * resolution);
+			for (iVertex = 0; iVertex < surfels.vertexArray.n; iVertex++)
+				UpdateBoundingBox<float>(&SBoundingBox, surfels.vertexArray.Element[iVertex]->P);
 
-		//model.Display(&visualizer, box, resolution);
+			float *dS = new float[model.featureArray.n];
 
-		// Match visualization
+			bool *bdS = new bool[model.featureArray.n];
 
-		box = SBoundingBox;
+			//Array<float> betaArray;
 
-		ExpandBox<float>(&box, 10.0f * resolution);
+			//betaArray.n = 7;
+			//betaArray.Element = new float[betaArray.n];
 
-		model.Display(&visualizer, box, resolution, dS, bdS);
+			//float dBeta = PI / (float)(betaArray.n + 1);
 
-		delete[] dS;
-		delete[] bdS;
+			//int i;
 
-		visualizer.Run();
+			//for (i = 1; i <= betaArray.n; i++)
+			//	betaArray.Element[i - 1] = (float)i * dBeta;
+
+			//Array<float> alphaArray;
+
+			//alphaArray.n = 16;
+			//alphaArray.Element = new float[alphaArray.n];
+
+			//float dAlpha = PI / (float)(alphaArray.n);
+
+			//for (i = 0; i <= alphaArray.n; i++)
+			//	alphaArray.Element[i] = (float)i * dAlpha;
+
+			//FILE *fp = fopen("tangentRing.txt", "w");
+
+			//model.PrintTori(fp, &surfels, STClusters);
+
+			//fclose(fp);
+
+			//RECOG::VN_::Torus *pTorus = STClusters.Element[0];
+
+			//int id;
+			//int iAlpha, iBeta;
+			//RECOG::VN_::TorusRing *pRing;
+
+			//for (iBeta = 0; iBeta < pMCluster->betaArray.n; iBeta++)
+			//{
+			//	pRing = pTorus->ringArray.Element[iBeta];
+
+			//	if (pRing)
+			//	{
+			//		for (iAlpha = 0; iAlpha < pMCluster->alphaArray.n; iAlpha++)
+			//		{
+			//			id = iBeta * pMCluster->alphaArray.n + iAlpha;
+			//			dS[id] = pRing->d[iAlpha];
+			//			bdS[id] = true;
+			//		}
+			//	}
+			//	else
+			//	{
+			//		for (iAlpha = 0; iAlpha < pMCluster->alphaArray.n; iAlpha++)
+			//			bdS[iBeta * pMCluster->alphaArray.n + iAlpha] = false;
+			//	}
+			//}
+
+			//model.Match(&mesh, &surfels, SBoundingBox, VNMatchingParams, dS, bdS);
+
+			//model.Match2(&mesh, &surfels, SBoundingBox, VNMatchingParams, dS, bdS);
+
+			//model.Match3(&mesh, &surfels, clustering.clusters, SBoundingBox, VNMatchingParams, dS, bdS);
+
+			model.Match4(&mesh, &surfels, clustering.clusters, SBoundingBox, VNMatchingParams, &mem, dS, bdS);
+
+			printf("completed.\n");
+
+			// Visualization
+
+			Box<float> box;
+
+			if (flags & RVLRECOGNITION_DEMO_FLAG_VISUALIZE_VN_MODEL)
+			{
+				// Model visualization
+
+				box = model.boundingBox;
+
+				ExpandBox<float>(&box, 2.0f * resolution);
+
+				model.Display(&visualizer, box, resolution);
+			}
+			else
+			{
+				// Match visualization
+
+				box = SBoundingBox;
+
+				ExpandBox<float>(&box, 10.0f * resolution);
+
+				visualizer.renderer->RemoveAllViewProps();
+
+				model.Display(&visualizer, box, resolution, dS, bdS);
+			}
+
+			delete[] dS;
+			delete[] bdS;
+
+			visualizer.Run();
+		}
 	}	// if (method == RVLRECOGNITION_METHOD_VN)
 
 	// free memory

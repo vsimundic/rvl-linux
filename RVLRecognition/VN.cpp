@@ -57,6 +57,7 @@ void VN::CreateParamList(
 	pParamList->Init();
 
 	pParamData = pParamList->AddParam("VN.kMaxMatchCost", RVLPARAM_TYPE_FLOAT, &(params.kMaxMatchCost));
+	pParamData = pParamList->AddParam("VN.maxnSClusters", RVLPARAM_TYPE_INT, &(params.maxnSClusters));
 }
 
 void VN::AddModelCluster(
@@ -463,6 +464,38 @@ void VN::Create(CRVLMem *pMem)
 		pMCluster = pMCluster->pNext;
 	}
 
+	VN_::Limit *pLimit = limitList.pFirst;
+
+	VN_::Edge *pEdge_;
+	VN_::ModelCluster *pMCluster_;
+
+	while (pLimit)
+	{
+		if (((pMCluster = GetModelCluster(pLimit->sourceClusterID)) != NULL) &&
+			((pMCluster_ = GetModelCluster(pLimit->targetClusterID)) != NULL))
+		{
+			for (iFeature = pMCluster->iFeatureInterval.a; iFeature <= pMCluster->iFeatureInterval.b; iFeature++)
+			{
+				pFeature = featureArray.Element + iFeature;
+
+				if (pFeature->iAlpha == pLimit->iAlpha && pFeature->iBeta == pLimit->iBeta)
+				{
+					RVLMEM_ALLOC_STRUCT(pMem, VN_::Edge, pEdge);
+
+					RVLQLIST_ADD_ENTRY(pEdgeList, pEdge);
+
+					pEdge->data.a = iFeature;
+					pEdge->data.b = pMCluster_->iNode;
+					pEdge->bPrimary = false;
+
+					break;
+				}
+			}
+		}
+
+		pLimit = pLimit->pNext;
+	}
+
 	pOperation = operationList.pFirst;
 
 	while (pOperation)
@@ -522,38 +555,6 @@ void VN::Create(CRVLMem *pMem)
 			iy = pOperation->iNode;
 		else
 			iy = -1;
-	}
-
-	VN_::Limit *pLimit = limitList.pFirst;
-
-	VN_::Edge *pEdge_;
-	VN_::ModelCluster *pMCluster_;
-
-	while (pLimit)
-	{
-		if (((pMCluster = GetModelCluster(pLimit->sourceClusterID)) != NULL) && 
-			((pMCluster_ = GetModelCluster(pLimit->targetClusterID)) != NULL))
-		{
-			for (iFeature = pMCluster->iFeatureInterval.a; iFeature <= pMCluster->iFeatureInterval.b; iFeature++)
-			{
-				pFeature = featureArray.Element + iFeature;
-
-				if (pFeature->iAlpha == pLimit->iAlpha && pFeature->iBeta == pLimit->iBeta)
-				{
-					RVLMEM_ALLOC_STRUCT(pMem, VN_::Edge, pEdge);
-
-					RVLQLIST_ADD_ENTRY(pEdgeList, pEdge);
-
-					pEdge->data.a = iFeature;
-					pEdge->data.b = pMCluster_->iNode;
-					pEdge->bPrimary = false;
-
-					break;
-				}
-			}
-		}
-		
-		pLimit = pLimit->pNext;
 	}
 }
 
@@ -3584,8 +3585,6 @@ void VN::Match4(
 	if (nMClusters == 0)
 		return;
 
-	int maxnSClusters = 2;
-
 	float size = GetMeshSize(boundingBox);
 
 	float maxDeviation = params.kMaxMatchCost * size;
@@ -3622,9 +3621,9 @@ void VN::Match4(
 
 	Array<RECOG::VN_::SceneCluster> SClusters_;
 
-	int nSCClusters = RVLMIN(SClusters.n, maxnSClusters);
+	int nSCClusters = RVLMIN(SClusters.n, params.maxnSClusters);
 
-	int nSTClusters = RVLMIN(STClusters.n, maxnSClusters);
+	int nSTClusters = RVLMIN(STClusters.n, params.maxnSClusters);
 
 	SClusters_.n = nSCClusters + nSTClusters;
 
@@ -5022,6 +5021,98 @@ void VN_::CreateTorus(
 	pVN->AddModelCluster(1, RVLVN_CLUSTER_TYPE_XTORUS, R, t, 0.2f, 16, 8, iBetaInterval, pMem, 0.1f);
 
 	pVN->AddOperation(2, 1, 0, 1, pMem);
+
+	pVN->SetOutput(2);
+
+	pVN->Create(pMem);
+}
+
+void VN_::CreateBottle(
+	VN *pVN,
+	CRVLMem *pMem)
+{
+	pVN->CreateEmpty();
+
+	float R[9];
+
+	RVLUNITMX3(R);
+
+	float t[3];
+
+	RVLSET3VECTOR(t, 0.0f, 0.0f, -0.25f);
+
+	Pair<int, int> iBetaInterval;
+
+	iBetaInterval.a = 1;
+	iBetaInterval.b = 8;
+
+	pVN->AddModelCluster(0, RVLVN_CLUSTER_TYPE_CONVEX, R, t, 0.25f, 16, 8, iBetaInterval, pMem);
+
+	RVLSET3VECTOR(t, 0.0f, 0.0f, 0.4f);
+
+	iBetaInterval.a = 0;
+	iBetaInterval.b = 4;
+
+	pVN->AddModelCluster(1, RVLVN_CLUSTER_TYPE_CONVEX, R, t, 0.1f, 16, 8, iBetaInterval, pMem);
+
+	pVN->AddLimit(1, 0, 0, 0, pMem);
+	
+	int iAlpha, iBeta;
+
+	for (iBeta = 1; iBeta <= 2; iBeta++)
+		for (iAlpha = 0; iAlpha < 16; iAlpha++)
+			pVN->AddLimit(1, iAlpha, iBeta, 0, pMem);	
+
+	for (iBeta = 5; iBeta <= 6; iBeta++)
+		for (iAlpha = 0; iAlpha <= 16; iAlpha++)
+			pVN->AddLimit(0, iAlpha, iBeta, 1, pMem);
+
+	pVN->AddLimit(0, 0, 7, 1, pMem);
+
+	pVN->AddOperation(2, -1, 0, 1, pMem);
+
+	pVN->SetOutput(2);
+
+	pVN->Create(pMem);
+}
+
+void VN_::CreateHammer(
+	VN *pVN,
+	CRVLMem *pMem)
+{
+	pVN->CreateEmpty();
+
+	float R[9];
+
+	RVLUNITMX3(R);
+
+	float t[3];
+
+	RVLSET3VECTOR(t, 0.0f, 0.0f, 0.25f);
+
+	Pair<int, int> iBetaInterval;
+
+	iBetaInterval.a = 0;
+	iBetaInterval.b = 8;
+
+	pVN->AddModelCluster(0, RVLVN_CLUSTER_TYPE_CONVEX, R, t, 0.25f, 16, 8, iBetaInterval, pMem);
+
+	RVLSET3VECTOR(t, 0.0f, 0.0f, -0.4f);
+
+	iBetaInterval.a = 4;
+	iBetaInterval.b = 8;
+
+	pVN->AddModelCluster(1, RVLVN_CLUSTER_TYPE_CONVEX, R, t, 0.1f, 16, 8, iBetaInterval, pMem);
+
+	pVN->AddLimit(0, 0, 0, 1, pMem);
+
+	int iAlpha, iBeta;
+
+	for (iBeta = 1; iBeta <= 2; iBeta++)
+		for (iAlpha = 0; iAlpha <= 16; iAlpha++)
+			pVN->AddLimit(0, iAlpha, iBeta, 1, pMem);
+
+	pVN->AddOperation(2, -1, 0, 1, pMem);
 
 	pVN->SetOutput(2);
 
