@@ -44,6 +44,7 @@ PSGM::PSGM()
 	bGroundPlaneRFDescriptors = false;
 	bMatchRANSAC = false;
 	bWholeMeshCluster = false;
+	bDetectGroundPlane = true;
 
 	nDominantClusters = 1;
 	kNoise = 1.2f;
@@ -62,6 +63,7 @@ PSGM::PSGM()
 	minClusterNormalDistributionStd = 0.1f;
 	groundPlaneTolerance = 0.020f;
 	gndCTIThr = 0.015f;
+	clusterType = 1.0f;
 
 	convexTemplate66.n = 66;
 	convexTemplate66.Element = new RECOG::PSGM_::Plane[convexTemplate66.n];
@@ -2067,65 +2069,68 @@ void PSGM::Clusters()
 
 	// Detect the ground plane and filter all clusters lying on the ground plane.
 
-	Array<int> PtArray;
-
-	PtArray.Element = new int[pMesh->NodeArray.n];
-
-	bGnd = false;
-
-	//int *piPt;
-	int iiSurfel;
-	//QLIST::Index2 *pPtIdx;
-	//MESH::Distribution PtDistribution;
-	//float *var;
-	//int idx[3];
-	//int iTmp;
-	float eGnd;
-	float *NGnd_;
-
-	for (i = 0; i < nValidClusters; i++)
+	if (bDetectGroundPlane)
 	{
-		iCluster = sortedClusterArray.Element[i].idx;
+		Array<int> PtArray;
 
-		pCluster = clusterMem + iCluster;
+		PtArray.Element = new int[pMesh->NodeArray.n];
 
-		if (bGnd)
+		bGnd = false;
+
+		//int *piPt;
+		int iiSurfel;
+		//QLIST::Index2 *pPtIdx;
+		//MESH::Distribution PtDistribution;
+		//float *var;
+		//int idx[3];
+		//int iTmp;
+		float eGnd;
+		float *NGnd_;
+
+		for (i = 0; i < nValidClusters; i++)
 		{
-			//ComputeClusterNormalDistribution(pCluster);
+			iCluster = sortedClusterArray.Element[i].idx;
 
-			//if (pCluster->normalDistributionStd1 < minClusterNormalDistributionStd && pCluster->normalDistributionStd2 < minClusterNormalDistributionStd)
+			pCluster = clusterMem + iCluster;
+
+			if (bGnd)
 			{
-				//if (RVLDOTPRODUCT3(NGnd, pCluster->N) >= 0.95)
+				//ComputeClusterNormalDistribution(pCluster);
+
+				//if (pCluster->normalDistributionStd1 < minClusterNormalDistributionStd && pCluster->normalDistributionStd2 < minClusterNormalDistributionStd)
 				{
-					for (iiSurfel = 0; iiSurfel < pCluster->iSurfelArray.n; iiSurfel++)
+					//if (RVLDOTPRODUCT3(NGnd, pCluster->N) >= 0.95)
 					{
-						iSurfel = pCluster->iSurfelArray.Element[iiSurfel];
+						for (iiSurfel = 0; iiSurfel < pCluster->iSurfelArray.n; iiSurfel++)
+						{
+							iSurfel = pCluster->iSurfelArray.Element[iiSurfel];
 
-						pSurfel = pSurfels->NodeArray.Element + iSurfel;
+							pSurfel = pSurfels->NodeArray.Element + iSurfel;
 
-						eGnd = RVLDOTPRODUCT3(NGnd, pSurfel->P) - dGnd;
+							eGnd = RVLDOTPRODUCT3(NGnd, pSurfel->P) - dGnd;
 
-						if (eGnd > groundPlaneTolerance)
-							break;
+							if (eGnd > groundPlaneTolerance)
+								break;
+						}
+
+						if (iiSurfel >= pCluster->iSurfelArray.n)
+							pCluster->bValid = false;
 					}
+				}
+			}
+			else
+			{
+				if (IsFlat(pCluster->iSurfelArray, NGnd, dGnd, PtArray))
+				{
+					pCluster->bValid = false;
 
-					if (iiSurfel >= pCluster->iSurfelArray.n)
-						pCluster->bValid = false;
+					bGnd = true;
 				}
 			}
 		}
-		else
-		{
-			if (IsFlat(pCluster->iSurfelArray, NGnd, dGnd, PtArray))
-			{
-				pCluster->bValid = false;
 
-				bGnd = true;
-			}
-		}
+		delete[] PtArray.Element;
 	}
-
-	delete[] PtArray.Element;
 
 	//// Filter and sort clusters.
 
@@ -3184,8 +3189,7 @@ bool PSGM::Inside(
 
 		e = RVLDOTPRODUCT3(pSurfel_->N, pVertex->P) - pSurfel_->d;
 
-		if (e > maxe)
-		//if (e < -maxe)
+		if (clusterType * e > maxe)
 			return false;
 	}
 
@@ -3209,8 +3213,7 @@ bool PSGM::BelowPlane(
 
 		e = RVLDOTPRODUCT3(pSurfel->N, pVertex->P) - pSurfel->d;
 
-		if (e > maxe)
-		//if (e < -maxe)
+		if (clusterType * e > maxe)
 			return false;
 	}
 

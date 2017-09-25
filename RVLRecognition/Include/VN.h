@@ -341,6 +341,12 @@ namespace RVL
 			void CreateHammer(
 				VN *pVN,
 				CRVLMem *pMem);
+			void CreateBowl(
+				VN *pVN,
+				CRVLMem *pMem);
+			void CreateMug(
+				VN *pVN,
+				CRVLMem *pMem);
 		}
 	}
 
@@ -491,7 +497,8 @@ namespace RVL
 		void Match4(
 			Mesh *pMesh,
 			SurfelGraph *pSurfels,
-			Array<RECOG::PSGM_::Cluster *> SClusters,
+			Array<RECOG::PSGM_::Cluster *> SCClusters,
+			Array<RECOG::PSGM_::Cluster *> SUClusters,
 			Box<float> boundingBox,
 			RECOG::VN_::Parameters params,
 			CRVLMem *pMem,
@@ -530,7 +537,8 @@ namespace RVL
 			Box<float> box,
 			float resolution,
 			float *d = NULL,
-			bool *bd = NULL);
+			bool *bd = NULL,
+			float SDFSurfaceValue = 0.0f);
 		void PrintTorus(
 			FILE *fp,
 			SurfelGraph *pSurfels,

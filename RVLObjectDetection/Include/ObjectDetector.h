@@ -10,11 +10,22 @@ namespace RVL
 
 	namespace OBJECT_DETECTION
 	{
+		struct TrainingHMIData
+		{
+			ObjectDetector *pObjectDetector;
+			cv::Mat RGB;
+			char *imageName;
+			GRAPH::HierarchyNode *pObject;
+			GRAPH::HierarchyNode *pObject2;
+		};
+
 		void Symmetry(
 			SURFEL::ObjectGraph *pObjects, 
 			int iObject1, 
 			int iObject2, 
 			void *vpData);
+
+		void TrainingHMIMouseCallback(int event, int x, int y, int flags, void* vpData);
 	}
 
 	class ObjectDetector
@@ -36,6 +47,12 @@ namespace RVL
 		static bool CheckIfWithinCTIBoundingBox(void * odObj, int iObject1, int iObject2, float dimThr = 0.30);	//Filko
 		void GroundTruthGroundPlane();
 		void SaveBoundingBoxSizes(char *imageFileName);
+		void TrainingHMI(char *meshFileName);
+		void DisplaySelectedObject(
+			GRAPH::HierarchyNode *pObject,
+			uchar *color,
+			cv::Mat RGB);
+		GRAPH::HierarchyNode * GetObject(int iPix);
 		
 	public:
 		DWORD flags;
@@ -60,6 +77,8 @@ namespace RVL
 		bool bGroundTruthBoundingBoxes;
 		bool bOwnsSurfelDetectionTool;
 		bool bOwnsPSGM;
+		bool bTrainingHMI;
+		bool bDisplay;
 		SurfelGraph *pSurfels;
 		PlanarSurfelDetector *pSurfelDetector;
 		SURFEL::ObjectGraph *pObjects;

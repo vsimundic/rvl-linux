@@ -614,6 +614,7 @@ namespace RVL
 		bool bMatchRANSAC; //Vidovic
 		bool bGnd;
 		bool bWholeMeshCluster;
+		bool bDetectGroundPlane;
 		Array<RECOG::PSGM_::ModelInstance> modelInstanceDB; //Vidovic
 		QList<RECOG::PSGM_::MatchInstance> CTImatches; //Vidovic
 		Array<RECOG::PSGM_::MatchInstance*> pCTImatchesArray; //Vidovic
@@ -656,7 +657,7 @@ namespace RVL
 		int matchGTiRank; //Vidovic
 		FILE *fpMatchGT; //Vidovic
 		char *sceneFileName; //Vidovic
-
+		float clusterType;
 				
 		//Petra & Ivan
 		double *icpTMatrix;

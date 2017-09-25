@@ -78,6 +78,7 @@ namespace RVL
 
 		struct HierarchyNode
 		{
+			int iElement;
 			HierarchyNode *pParent;
 			HierarchyNode *pChild[2];
 			HierarchyNode *pNext;
