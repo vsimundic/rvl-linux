@@ -54,7 +54,7 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 //#define RVLRECOGNITION_DEMO_CLASS_ALIGNMENT
 #define RVLPSGM_TRANSPARENCY_AND_COLLISION
 //#define RVLPSGM_RMSE_CALCULATION
-//#define RVLRECOGNITION_DEMO_CLASS_ALIGNMENT
+#define RVLRECOGNITION_DEMO_CLASS_ALIGNMENT
 
 #define RVLRECOGNITION_DEMO_FLAG_SAVE_PLY			0x00000001
 #define RVLRECOGNITION_DEMO_FLAG_3D_VISUALIZATION	0x00000002
@@ -537,16 +537,18 @@ int main(int argc, char ** argv)
 
 			recognition.LoadModelDataBase(); //Vidovic
 			
-#ifdef RVLRECOGNITION_DEMO_CLASS_ALIGNMENT
-			//Alignment:
-			recognition.LoadModelMeshDB(modelSequenceFileName, false, 0.4);
-			recognition.ObjectAlignment();
-#endif
+//#ifdef RVLRECOGNITION_DEMO_CLASS_ALIGNMENT
+//			//Alignment:
+//			recognition.LoadModelMeshDB(modelSequenceFileName, false, 0.4);
+//			recognition.ObjectAlignment();
+//#endif
 
 #ifdef RVLRECOGNITION_DEMO_CLASS_ALIGNMENT
 			//Alignment:
-			recognition.LoadModelMeshDB(modelSequenceFileName, false, 0.4); //Vidovic merge 20.07.2017 - potrebno izmijeniti poziv funkcije //recognition.LoadModelMeshDB(modelSequenceFileName, &recognition.vtkModelDB, false, 0.4);
-			recognition.ObjectAlignment();
+			//recognition.LoadModelMeshDB(modelSequenceFileName, false, 0.4); //Vidovic merge 20.07.2017 - potrebno izmijeniti poziv funkcije
+			recognition.LoadModelMeshDB(modelSequenceFileName, &recognition.vtkModelDB, false, 0.4);
+			//recognition.ObjectAlignment();
+			//recognition.Classify();
 #endif
 
 #ifdef RVLPSGM_ICP
@@ -792,6 +794,7 @@ int main(int argc, char ** argv)
 
 				mem.Clear();
 
+
 				recognition.Interpret(&mesh);
 
 				
@@ -816,7 +819,7 @@ int main(int argc, char ** argv)
 
 					recognition.pObjects->ObjectMapMask(&objectMask);
 
-					cv::imshow("Object mask", objectMask);
+					//cv::imshow("Object mask", objectMask);
 
 					cv::imwrite(objectMapFileName, objectMask);
 

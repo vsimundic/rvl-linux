@@ -89,4 +89,3 @@ namespace RVL
 		vtkSmartPointer<vtkPolyData> polyData;
 	};
 }
-

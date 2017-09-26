@@ -2116,7 +2116,7 @@ void SurfelGraph::DetectVertices(
 
 							if (pEdge->iSurfel[0] == iFeature && pEdge->iSurfel[1] == iNeighborSurfels[i].a ||
 								pEdge->iSurfel[1] == iFeature && pEdge->iSurfel[0] == iNeighborSurfels[i].a)
-								break;
+							break;
 						}
 
 						pVertexEdgePtr = pVertexEdgePtr->pNext;
