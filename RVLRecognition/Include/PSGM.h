@@ -119,6 +119,9 @@ namespace RVL
 				float RICP[9];		//final pose after ICP - Vidovic
 				float tICP[3];		//final pose after ICP - Vidovic
 				double cost_NN;
+				int iClass;
+				float s;		//scale for classification
+				float t_class[3];
 				// end Petra
 				bool bValid; //Vidovic
 				MatchInstance *pNext;
@@ -321,13 +324,10 @@ namespace RVL
 
 		void VisualizeAlignedModels(int iRefModel, int iModel); // Visualizes models after alignment - for easier debugging
 
-		void Classify(); // For a given object on the scene, returns its object class
+		void Classify(Mesh *pMesh); // For a given object on the scene, returns its object class
 
-		void VisualizeObjectClass( // Visualizes object on the scene and its class (most simmilar model from database)
-			int iModel, 
-			Visualizer *pVisualizer,
-			Mesh *pMesh,
-			unsigned char *selectionColor); 
+		void VisualizeObjectClass(int iModel, Mesh *pMesh);  // Visualizes object on the scene and its class (most simmilar model from database)
+			
 		//end Petra
 
 		float groundPlaneDistance(int iModel, double *MSTransform); //Vidovic
@@ -680,6 +680,7 @@ namespace RVL
 
 		//For alignment:
 		Eigen::MatrixXf T0i;
+		int iCorrectClass;
 
 
 	private:		
@@ -716,6 +717,7 @@ namespace RVL
 		int CTIIdx; //Vidovic
 		int nBestMatches; //n best matches for each scene segment
 		int debug1, debug2;
+		RECOG::PSGM_::MatchInstance *CTIMatchMem;
 	};
 
 	

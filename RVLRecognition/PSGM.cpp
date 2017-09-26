@@ -103,6 +103,7 @@ PSGM::PSGM()
 	bestSceneSegmentMatches.Element = NULL;
 	bestSceneSegmentMatchesArray.Element = NULL;
 	bestSceneSegmentMatchesArray.n = 0;
+	CTIMatchMem = NULL;
 
 	//nSamples = 20; //Vidovic
 	stdNoise = 2; //Vidovic
@@ -171,6 +172,8 @@ PSGM::PSGM()
 
 	//depthImg = new unsigned short(480*640); //Vidovic
 	depth = cv::Mat(480, 640, CV_16UC1, cv::Scalar::all(0));
+
+	iCorrectClass = 0;
 }
 
 
@@ -198,6 +201,7 @@ PSGM::~PSGM()
 	RVL_DELETE_ARRAY(sceneSegmentMatchesArray.Element);
 	RVL_DELETE_ARRAY(bestSceneSegmentMatches.Element);
 	RVL_DELETE_ARRAY(bestSceneSegmentMatchesArray.Element);
+	RVL_DELETE_ARRAY(CTIMatchMem);
 
 	//Vidovic
 	int iSSegment;
@@ -671,8 +675,8 @@ void PSGM::Interpret(
 		RVL_DELETE_ARRAY(groundPlaneSurfelArray.Element);
 
 		// Classification
-				
-		Classify();
+
+		Classify(pMesh);
 
 		// Create vertex graph.
 
@@ -3543,6 +3547,16 @@ void PSGM::LoadModelMeshDB(char *modelSequenceFileName, std::map<int, vtkSmartPo
 		normalsFilter->GetOutput()->GetPointData()->RemoveArray("RGB"); //Vidovic merging 20.07.2017
 		vtkModelDB->insert(std::make_pair(currentModelID, normalsFilter->GetOutput()));
 		currentModelID++;
+
+		//vtkSmartPointer<vtkPLYWriter> writer = vtkSmartPointer<vtkPLYWriter>::New();
+		//writer->SetFileName("test.ply");
+		//writer->SetInputData(normalsFilter->GetOutput());
+		////writer->SetFileTypeToASCII();
+		////writer->SetColorModeToDefault();
+		////writer->SetArrayName("RGB");
+		//writer->Write();
+
+
 	}
 
 	printf("VTK Model DB creation completed!\n");
@@ -13444,11 +13458,13 @@ vtkSmartPointer<vtkPolyData> PSGM::GetPoseCorrectedVisibleModel(int iMatch)
 
 void PSGM::ObjectAlignment()
 {
+	FILE *fpTranspose;
+	fpTranspose = fopen("D:\\ARP3D\\mug_transpose.txt", "w");
 
 	//apple-> 0, 10; banana -> 10, 6; bottle -> 16, 69; bowl -> 85, 15; car -> 100, 26 
 	//donut -> 126, 10; hammer -> 136, 32; tetra_pak -> 168, 22; toilet_paper -> 190, 6 mug ->196, 61
-	int iRefObject = 196;
-	int nObjectsInClass = 61;
+	int iRefObject = 0;
+	int nObjectsInClass = 3;
 
 	RECOG::PSGM_::ModelInstance *pMCTI;
 	RECOG::PSGM_::ModelInstanceElement *pMIE;
@@ -13626,11 +13642,16 @@ void PSGM::ObjectAlignment()
 		t11 = T0i(2, 2);
 		t12 = T0i(2, 3);
 
+		fprintf(fpTranspose, "%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\n", T0i(0, 0), T0i(0, 1), T0i(0, 2), T0i(0, 3), T0i(1, 0), T0i(1, 1), T0i(1, 2), T0i(1, 3), T0i(2, 0), T0i(2, 1), T0i(2, 2), T0i(2, 3), T0i(3, 0), T0i(3, 1), T0i(3, 2), T0i(3, 3));
+
+		
+
 		VisualizeAlignedModels(0, i);
 
 		iPrevClusters += m_i;
 
 	}
+	fclose(fpTranspose);
 }
 
 void PSGM::VisualizeAlignedModels(int iRefModel, int iModel)
@@ -13722,16 +13743,19 @@ void PSGM::VisualizeAlignedModels(int iRefModel, int iModel)
 
 }
 
-void PSGM::Classify()
+void PSGM::Classify(Mesh *pMesh)
 {
 	//apple-> 0, 10; banana -> 10, 6; bottle -> 16, 69; bowl -> 85, 15; car -> 100, 26 
 	//donut -> 126, 10; hammer -> 136, 32; tetra_pak -> 168, 22; toilet_paper -> 190, 6 mug ->196, 61
 	//int iRefObject = 196;
 	//int nObjectsInClass = 61;
 
+	int imodelfirst = 190;
+	int imodellast = 195; 
+	int firstCTIinClass = 15529; 
 	RECOG::PSGM_::ModelInstance *pMCTI, *pSCTI;
 	RECOG::PSGM_::ModelInstanceElement *pMIE, *pSIE;
-
+	RECOG::PSGM_::MatchInstance *pMatch;
 
 	Eigen::MatrixXf M(4, 66), P, D(66, 1), T(4, 4), T0p(4, 4), Tiq(4, 4), A(3, 66), S, E;
 
@@ -13751,18 +13775,22 @@ void PSGM::Classify()
 
 	//number of all CTI-s of all models in database:
 	int nCTIs = 0;
-//	for (int i = 196; i < 257; i++) //mugs
+	for (int i = imodelfirst; i < imodellast+1; i++) //mugs
 //	for (int i = 85; i < 100; i++) //bowls
-	for (int i = 0; i < nModels; i++)
+	//for (int i = 0; i < 10; i++) //apples
+	//for (int i = 0; i < nModels; i++)
 	{
 		nCTIs += MCTISet.SegmentCTIs.Element[i].n;
 	}
 
+	RVL_DELETE_ARRAY(CTIMatchMem);
+	CTIMatchMem = new RECOG::PSGM_::MatchInstance[m_l * nCTIs];
+
 	D.resize(66, nCTIs);
 	for (int k = 0; k < nCTIs; k++) //for all CTI-s of all models in database
 	{
-//		pMCTI = MCTISet.pCTI.Element[k+15879];
-		pMCTI = MCTISet.pCTI.Element[k];
+		pMCTI = MCTISet.pCTI.Element[k + firstCTIinClass];
+//		pMCTI = MCTISet.pCTI.Element[k];
 		pMIE = pMCTI->modelInstance.Element;
 
 		for (int di = 0; di < 66; di++)
@@ -13773,6 +13801,7 @@ void PSGM::Classify()
 	}
 
 	min = 1000;
+
 	for (int j = 0; j < m_l; j++) //for all CTI-s in reference (scene) model
 	{
 		pSCTI = CTISet.pCTI.Element[j];
@@ -13829,55 +13858,89 @@ void PSGM::Classify()
 			}
 			s_ = S(3, je);
 			sum /= (s_*s_); //in scene-space
-			if (sum < min)
-			{
-				min = sum;
-				p = j;
-				q = je;
-				t = S.block<3, 1>(0, q);
-				s = s_;
-				
-			}
+
+			//all matches
+			p = j;
+			q = je;
+			t = S.block<3, 1>(0, q);
+			s = s_;
+
+			pMatch = CTIMatchMem + j*E.cols() + je;
+
+			pMCTI = MCTISet.pCTI.Element[q + firstCTIinClass];
+			pMatch->iSCTI = p;
+			pMatch->iMCTI = q+firstCTIinClass;
+			pMatch->iClass = pMCTI->iModel;
+			pMatch->score = sum;
+			pMatch->s = s;
+			pMatch->t_class[0] = t(0);
+			pMatch->t_class[1] = t(1);
+			pMatch->t_class[2] = t(2);
+			pMatch->ID = j*E.cols() + je;
+
+
+
+			////the best match:
+			//if (sum < min)
+			//{
+			//	min = sum;
+			//	p = j;
+			//	q = je;
+			//	t = S.block<3, 1>(0, q);
+			//	s = s_;
+			//	IDbestMatch = j*E.cols() + je;
+			//	
+			//}
 
 		}
-
-
-
 	}
 
-	//q += 15879;
-	pMCTI = MCTISet.pCTI.Element[q];
-	int iClass = pMCTI->iModel;
+	int iMatch = 0, brojac, iCTI = 0;
+	float minScore;
+	int IDbestMatch=0;
+	pMatch = CTIMatchMem;
+	minScore = pMatch[0].score;
 
-	if (iClass<10) printf("Class - apple.\n");
-	if (iClass >= 10 && iClass<16) printf("Class - banana.\n");
-	if (iClass >= 16 && iClass<85) printf("Class - bottle.\n");
-	if (iClass >= 85 && iClass<100) printf("Class - bowl.\n");
-	if (iClass >= 100 && iClass<126) printf("Class - car.\n");
-	if (iClass >= 126 && iClass<136) printf("Class - donut.\n");
-	if (iClass >= 136 && iClass<168) printf("Class - hammer.\n");
-	if (iClass >= 168 && iClass<190) printf("Class - tetra_pak.\n");
-	if (iClass >= 190 && iClass<196) printf("Class - toilet_paper.\n");
-	if (iClass >= 196) printf("Class - mug.\n");
+	for (int iArr = 0; iArr < m_l*E.cols(); iArr++)
+	{
+		if (pMatch[iArr].score < minScore)
+		{
+			minScore = pMatch[iArr].score;
+			IDbestMatch = pMatch[iArr].ID;
+		}
 
-	FILE *fpClass;
-	fpClass = fopen("D:\\ARP3D\\matchClass.dat", "w");
+	}
+	
+	//SORT:
+	//Array<SortIndex<float>> ArrSum;
+	//ArrSum.n = m_l*E.cols();
+	//ArrSum.Element = new SortIndex<float>[ArrSum.n];
 
-	fprintf(fpClass, "%d\t%d\t%.3f\t%.3f\t%.3f\t%.3f", q, p, s, t(0), t(1), t(2));
+	//pMatch = CTIMatchMem;
 
-	fclose(fpClass);
 	
 
-	/*T.block<3, 3>(0, 0) << s, 0, 0, 0, s, 0, 0, 0, s;
-	T.block<3, 1>(0, 3) << t;
+	//for (int iArr = 0; iArr < ArrSum.n; iArr++)
+	//{
+	//	ArrSum.Element[iArr].idx = pMatch[iArr].ID;
+	//	ArrSum.Element[iArr].cost = pMatch[iArr].score;
+
+	//}
+
+	//BubbleSort<SortIndex<float>>(ArrSum);
+
+	//s = pMatch[ArrSum.Element[0].idx].s;
+
+	s = pMatch[IDbestMatch].s;
+
+	T.block<3, 3>(0, 0) << s, 0, 0, 0, s, 0, 0, 0, s;
+	//T.block<3, 1>(0, 3) << pMatch[ArrSum.Element[0].idx].t_class[0], pMatch[ArrSum.Element[0].idx].t_class[1], pMatch[ArrSum.Element[0].idx].t_class[2];
+	T.block<3, 1>(0, 3) << pMatch[IDbestMatch].t_class[0], pMatch[IDbestMatch].t_class[1], pMatch[IDbestMatch].t_class[2];
 	T.block<1, 3>(3, 0) << 0, 0, 0;
 	T.block<1, 1>(3, 3) << 1;
 
-
-
-
-
-	int iCTI = MCTISet.SegmentCTIs.Element[iRefObject + i].Element[q];
+	//int iCTI = MCTISet.SegmentCTIs.Element[iRefObject + i].Element[q];
+	iCTI = pMatch[IDbestMatch].iMCTI;
 	Tiq(0, 0) = MCTISet.pCTI.Element[iCTI]->R[0];
 	Tiq(0, 1) = MCTISet.pCTI.Element[iCTI]->R[1];
 	Tiq(0, 2) = MCTISet.pCTI.Element[iCTI]->R[2];
@@ -13906,19 +13969,20 @@ void PSGM::Classify()
 	float t11 = Tiq(2, 2);
 	float t12 = Tiq(2, 3);
 
-	iCTI = MCTISet.SegmentCTIs.Element[iRefObject].Element[p];
-	T0p(0, 0) = MCTISet.pCTI.Element[iCTI]->R[0];
-	T0p(0, 1) = MCTISet.pCTI.Element[iCTI]->R[1];
-	T0p(0, 2) = MCTISet.pCTI.Element[iCTI]->R[2];
-	T0p(0, 3) = MCTISet.pCTI.Element[iCTI]->t[0];
-	T0p(1, 0) = MCTISet.pCTI.Element[iCTI]->R[3];
-	T0p(1, 1) = MCTISet.pCTI.Element[iCTI]->R[4];
-	T0p(1, 2) = MCTISet.pCTI.Element[iCTI]->R[5];
-	T0p(1, 3) = MCTISet.pCTI.Element[iCTI]->t[1];
-	T0p(2, 0) = MCTISet.pCTI.Element[iCTI]->R[6];
-	T0p(2, 1) = MCTISet.pCTI.Element[iCTI]->R[7];
-	T0p(2, 2) = MCTISet.pCTI.Element[iCTI]->R[8];
-	T0p(2, 3) = MCTISet.pCTI.Element[iCTI]->t[2];
+	//iCTI = CTISet.SegmentCTIs.Element[iRefObject].Element[p];
+	iCTI = pMatch[IDbestMatch].iSCTI;
+	T0p(0, 0) = CTISet.pCTI.Element[iCTI]->R[0];
+	T0p(0, 1) = CTISet.pCTI.Element[iCTI]->R[1];
+	T0p(0, 2) = CTISet.pCTI.Element[iCTI]->R[2];
+	T0p(0, 3) = CTISet.pCTI.Element[iCTI]->t[0];
+	T0p(1, 0) = CTISet.pCTI.Element[iCTI]->R[3];
+	T0p(1, 1) = CTISet.pCTI.Element[iCTI]->R[4];
+	T0p(1, 2) = CTISet.pCTI.Element[iCTI]->R[5];
+	T0p(1, 3) = CTISet.pCTI.Element[iCTI]->t[1];
+	T0p(2, 0) = CTISet.pCTI.Element[iCTI]->R[6];
+	T0p(2, 1) = CTISet.pCTI.Element[iCTI]->R[7];
+	T0p(2, 2) = CTISet.pCTI.Element[iCTI]->R[8];
+	T0p(2, 3) = CTISet.pCTI.Element[iCTI]->t[2];
 	T0p.block<1, 3>(3, 0) << 0, 0, 0;
 	T0p(3, 3) = 1;
 
@@ -13935,17 +13999,90 @@ void PSGM::Classify()
 	t11 = T0p(2, 2);
 	t12 = T0p(2, 3);
 
-	T0i = Tiq*T*T0p.transpose();
-*/
-	//VisualizeObjectClass();
+	T0i = (Tiq*T*T0p.inverse()).inverse();
+	//T0i = (Tiq*T*T0p.inverse()).inverse();
+
+	int iModel = pMatch[IDbestMatch].iClass;
+//	delete[] ArrSum.Element;
+
+	////q += 15879;
+	//pMCTI = MCTISet.pCTI.Element[q];
+	//int iClass = pMCTI->iModel;
+	//if (iClass < 10)
+	//{
+	//	
+	//	//iCorrectClass++;
+	//	printf("Class - apple.\n");// %d\n", iCorrectClass);
+	//}
+	//
+	//if (iClass >= 10 && iClass<16) 	
+	//{
+	//	//iCorrectClass++;
+	//	printf("Class - banana.\n");// %d\n", iCorrectClass);
+	//}
+	//
+	//if (iClass >= 16 && iClass < 85) 
+	//{
+	//	//iCorrectClass++;
+	//	printf("Class - bottle.\n");// %d\n", iCorrectClass);
+	//}
+	//
+	//if (iClass >= 85 && iClass<100) 
+	//{
+	//	//iCorrectClass++;
+	//	printf("Class - bowl.\n");// %d\n", iCorrectClass);
+	//}
+	//if (iClass >= 100 && iClass<126) 	
+	//{
+	//	//iCorrectClass++;
+	//	printf("Class - car.\n");// %d\n", iCorrectClass);
+	//}
+	//if (iClass >= 126 && iClass<136) 
+	//{
+	//	//iCorrectClass++;
+	//	printf("Class - donnut.\n"); // %d\n", iCorrectClass);
+	//}
+	//if (iClass >= 136 && iClass<168)
+	//{
+	//	//iCorrectClass++;
+	//	printf("Class - hammer.\n");// %d\n", iCorrectClass);
+	//}
+	//if (iClass >= 168 && iClass<190)
+	//{
+	//	//iCorrectClass++;
+	//	printf("Class - tetra_pak.\n");// %d\n", iCorrectClass);
+	//}
+	//if (iClass >= 190 && iClass<196) 
+	//{
+	//	//iCorrectClass++;
+	//	printf("Class - toilet_paper.\n");//  %d\n", iCorrectClass);
+	//}
+	//if (iClass >= 196)
+	//{
+	//	//iCorrectClass++;
+	//	printf("Class - mug.\n");// %d\n", iCorrectClass);
+	//}
+
+	//FILE *fpClass;
+	//fpClass = fopen("D:\\ARP3D\\matchClass.dat", "w");
+
+	//fprintf(fpClass, "%d\t%d\t%.3f\t%.3f\t%.3f\t%.3f", q, p, s, t(0), t(1), t(2));
+
+	//fclose(fpClass);
+	
+	FILE *fpClassTranspose;
+	fpClassTranspose = fopen("D:\\ARP3D\\3DNet_dataset\\Cat10_ModelDatabase\\Cat10_ModelDatabase\\transposeToToiletPapers.txt", "a");
+	fprintf(fpClassTranspose, "%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\n", T0i(0, 0), T0i(0, 1), T0i(0, 2), T0i(0, 3), T0i(1, 0), T0i(1, 1), T0i(1, 2), T0i(1, 3), T0i(2, 0), T0i(2, 1), T0i(2, 2), T0i(2, 3), T0i(3, 0), T0i(3, 1), T0i(3, 2), T0i(3, 3));
+	fclose(fpClassTranspose);
+
+
+
+	
+	//VisualizeObjectClass(iModel, pMesh);
 
 }
 
-void PSGM::VisualizeObjectClass( //under construction
-	int iModel, 
-	Visualizer *pVisualizer,
-	Mesh *pMesh,
-	unsigned char *selectionColor)
+void PSGM::VisualizeObjectClass(int iModel, Mesh *pMesh)
 {
 	//Set transform
 	vtkSmartPointer<vtkTransform> transform = vtkSmartPointer<vtkTransform>::New();
@@ -13985,27 +14122,49 @@ void PSGM::VisualizeObjectClass( //under construction
 	transformFilter->SetTransform(transform);
 	transformFilter->Update();
 
-	// Initialize VTK.
-	vtkSmartPointer<vtkRenderer> renderer = vtkSmartPointer<vtkRenderer>::New();
-	vtkSmartPointer<vtkRenderWindow> window = vtkSmartPointer<vtkRenderWindow>::New();
-	vtkSmartPointer<vtkRenderWindowInteractor> interactor = vtkSmartPointer<vtkRenderWindowInteractor>::New();
-	window->AddRenderer(renderer);
-	window->SetSize(800, 600);
-	interactor->SetRenderWindow(window);
-	vtkSmartPointer<vtkInteractorStyleTrackballCamera> style = vtkSmartPointer<vtkInteractorStyleTrackballCamera>::New();
-	interactor->SetInteractorStyle(style);
-	renderer->SetBackground(0.5294, 0.8078, 0.9803);
+	vtkSmartPointer<vtkVertexGlyphFilter> vertexGlyphFilter = vtkSmartPointer<vtkVertexGlyphFilter>::New();
+	vertexGlyphFilter->AddInputData(transformFilter->GetOutput());
+
+
+	//// Initialize VTK.
+	//vtkSmartPointer<vtkRenderer> renderer = vtkSmartPointer<vtkRenderer>::New();
+	//vtkSmartPointer<vtkRenderWindow> window = vtkSmartPointer<vtkRenderWindow>::New();
+	//vtkSmartPointer<vtkRenderWindowInteractor> interactor = vtkSmartPointer<vtkRenderWindowInteractor>::New();
+	//window->AddRenderer(renderer);
+	//window->SetSize(800, 600);
+	//interactor->SetRenderWindow(window);
+	//vtkSmartPointer<vtkInteractorStyleTrackballCamera> style = vtkSmartPointer<vtkInteractorStyleTrackballCamera>::New();
+	//interactor->SetInteractorStyle(style);
+	//renderer->SetBackground(0.5294, 0.8078, 0.9803);
 
 	//Generate model polydata
-	vtkSmartPointer<vtkPolyData> modelPD = transformFilter->GetOutput();
+	//vtkSmartPointer<vtkPolyData> modelPD = transformFilter->GetOutput();
 	//vtkSmartPointer<vtkPolyData> modelPD = transformFilterScale->GetOutput();
 	vtkSmartPointer<vtkPolyDataMapper> modelMapper = vtkSmartPointer<vtkPolyDataMapper>::New();
-	modelMapper->SetInputData(modelPD);
+	//modelMapper->SetInputData(modelPD);
+	modelMapper->SetInputConnection(vertexGlyphFilter->GetOutputPort());
 	vtkSmartPointer<vtkActor> modelActor = vtkSmartPointer<vtkActor>::New();
 	modelActor->SetMapper(modelMapper);
-	modelActor->GetProperty()->SetColor(0, 1, 0);
-	renderer->AddActor(modelActor);
+	modelActor->GetProperty()->SetColor(1, 0, 0);
+	
+	unsigned char SelectionColor[3];
 
+	SelectionColor[0] = 0;
+	SelectionColor[1] = 255;
+	SelectionColor[2] = 0;
+
+	Visualizer visualizer;
+
+	visualizer.Create();
+
+	this->pSurfels->NodeColors(SelectionColor);
+	this->InitDisplay(&visualizer, pMesh, SelectionColor);
+	this->Display();
+	this->displayData.pVisualizer->renderer->AddActor(modelActor);
+	this->displayData.pVisualizer->Run();
+
+
+	
 	//Show current scene
 	//surfels.NodeColors(SelectionColor);
 	//recognition.InitDisplay(&visualizer, &mesh, SelectionColor);
@@ -14013,383 +14172,12 @@ void PSGM::VisualizeObjectClass( //under construction
 	//visualizer.Run();
 
 
-	//Start VTK
-	renderer->ResetCamera();
-	renderer->TwoSidedLightingOff();
-	window->Render();
-	interactor->Start();
+	////Start VTK
+	//renderer->ResetCamera();
+	//renderer->TwoSidedLightingOff();
+	//window->Render();
+	//interactor->Start();
 
-}
-
-//Returns XYZ oriented bounding box segment neighbourhood
-std::vector<std::vector<int>> PSGM::GetSegmentBBNeighbourhood(float dist, bool verbose)
-{
-	//number of segments
-	int noSegments = this->clusters.n;
-	//create list
-	std::vector<std::vector<int>> neighbourhood(noSegments);
-
-	//find bounding box for all segments
-	float* bbs = new float[noSegments * 2 * 3]; //XYZ, min, max
-	memset(bbs, 0, noSegments * 2 * 3 * sizeof(float));
-	Array<SURFEL::Vertex *> *vertexArray = &this->pSurfels->vertexArray;
-	//QList<QLIST::Index> *pSurfelVertexList;
-	//QLIST::Index *qlistelement;
-	float* P;
-	for (int i = 0; i < noSegments; i++)
-	{
-		//set the starting bounding box to be equal to first vertex of first surfel
-		P = &vertexArray->Element[this->clusters.Element[i]->iVertexArray.Element[0]]->P[0];
-		bbs[i * 6] = P[0];
-		bbs[i * 6 + 1] = P[0];
-		bbs[i * 6 + 2] = P[1];
-		bbs[i * 6 + 3] = P[1];
-		bbs[i * 6 + 4] = P[2];
-		bbs[i * 6 + 5] = P[2];
-		//Running through all segment vertices
-		for (int v = 1; v < this->clusters.Element[i]->iVertexArray.n; v++)
-		{
-			P = &vertexArray->Element[this->clusters.Element[i]->iVertexArray.Element[v]]->P[0];
-
-			//set min/max per dimension
-			//X
-			if (bbs[i * 6] > P[0])
-				bbs[i * 6] = P[0];
-			else if (bbs[i * 6 + 1] < P[0])
-				bbs[i * 6 + 1] = P[0];
-			//Y
-			if (bbs[i * 6 + 2] > P[1])
-				bbs[i * 6 + 2] = P[1];
-			else if (bbs[i * 6 + 3] < P[1])
-				bbs[i * 6 + 3] < P[1];
-			//Z
-			//Y
-			if (bbs[i * 6 + 4] > P[2])
-				bbs[i * 6 + 4] = P[2];
-			else if (bbs[i * 6 + 5] < P[2])
-				bbs[i * 6 + 5] < P[2];
-		}
-	}
-
-	//Find neighbourhoods for all segments
-	float distance = 0.0;
-	float distanceTemp;
-	int intersection = 0;
-	for (int i = 0; i < noSegments; i++)
-	{
-		//Check all segments
-		for (int j = i + 1; j < noSegments; j++)
-		{
-			////Check all dimensions
-			distance = 0.0;
-			intersection = 0;
-			for (int k = 0; k < 3; k++)
-			{
-				//Check intersection per dimension
-				if ((bbs[i * 6 + k * 2] < bbs[j * 6 + k * 2 + 1]) && bbs[i * 6 + k * 2] > bbs[j * 6 + k * 2])	//min_i < max_j & min_i > min_j
-					intersection++;
-				else if ((bbs[j * 6 + k * 2] < bbs[i * 6 + k * 2 + 1]) && (bbs[j * 6 + k * 2] > bbs[i * 6 + k * 2])) //min_j < max_i & min_j > min_i
-					intersection++;
-				else if ((bbs[j * 6 + k * 2] > bbs[i * 6 + k * 2]) && (bbs[j * 6 + k * 2 + 1] < bbs[i * 6 + k * 2 + 1])) //min_j > min_i & max_j < max_i
-					intersection++;
-				else if ((bbs[i * 6 + k * 2] > bbs[j * 6 + k * 2]) && (bbs[i * 6 + k * 2 + 1] < bbs[j * 6 + k * 2 + 1])) //min_i > min_j & max_i < max_j
-					intersection++;
-				
-				//Calculate distance per dimension
-				if (bbs[j * 6 + k * 2 + 1] < bbs[i * 6 + k * 2]) //max_j < min_i
-				{
-					distanceTemp = bbs[j * 6 + k * 2 + 1] - bbs[i * 6 + k * 2];
-					distance += distanceTemp * distanceTemp;
-				}
-				else if (bbs[j * 6 + k * 2] > bbs[i * 6 + k * 2 + 1])	//min_j > max_i
-				{
-					distanceTemp = bbs[j * 6 + k * 2] - bbs[i * 6 + k * 2 + 1];
-					distance += distanceTemp * distanceTemp;
-				}
-			}
-			distance = sqrtf(distance);
-			
-			//Check distance threshold and check if intersection
-			if ((distance < dist) || (intersection == 3))
-			{
-				//Add to neighbourhood
-				neighbourhood.at(i).push_back(j);
-				neighbourhood.at(j).push_back(i);
-
-				if (verbose)
-					std::cout << "Segments " << i << " and " << j << " are in the neighbourhood with distance of: " << distance << ", Intersection: " << intersection << std::endl;
-			}
-		}
-	}
-
-	//deref
-	delete[] bbs;
-
-	//return
-	return neighbourhood;
-}
-
-//FOR DEBUGGING PURPOSES ONLY!!!! Saves data to a file
-void PSGM::CheckHypothesesToSegmentEnvelopmentAndCollision_DEBUG(int hyp, int segment, float d1, float d2)
-{
-	std::fstream dat("CheckHypothesesToSegmentEnvelopment_DEBUG.txt", std::fstream::out);
-	dat << "Hypothesis: " << hyp << std::endl;
-	dat << "Segment: " << segment << std::endl;
-	
-	//Hypothesis data
-	RECOG::PSGM_::MatchInstance* hypothesis = pCTImatchesArray.Element[hyp];
-	VertexGraph * hypVG = MTGSet.vertexGraphs.at(MCTISet.pCTI.Element[hypothesis->iMCTI]->iModel);
-	TG* hypTG = MTGSet.TGs.at(MCTISet.pCTI.Element[hypothesis->iMCTI]->iModel);
-	TGNode* plane;
-	float* N;
-	float* minSegDist = new float[hypTG->A.h];
-	float *RMS = hypothesis->RICP_;
-	float *tMS = hypothesis->tICP_;
-
-	dat << "Model CTI: " << MCTISet.pCTI.Element[hypothesis->iMCTI]->iModel << std::endl;
-
-	//Segment data
-	Array<SURFEL::Vertex *> *vertexArray = &this->pSurfels->vertexArray;
-	SURFEL::Vertex * rvlvertex;
-	float* minModDist = new float[hypTG->A.h];
-	RECOG::PSGM_::ModelInstance *pSCTI = CTISet.pCTI.Element[CTISet.SegmentCTIs.Element[segment].Element[0]];
-	RECOG::PSGM_::ModelInstanceElement *pSIE = pSCTI->modelInstance.Element;
-
-	float RMSCTI[9];
-	float tMSCTI[3];
-	float V3Tmp[3];
-
-	RVLCOMPTRANSF3DWITHINV(pSCTI->R, pSCTI->t, RMS, tMS, RMSCTI, tMSCTI, V3Tmp);
-
-	//Transformation vars?
-	float tPs[3];
-	float tPm[3];
-	float sPs[3];
-	float sPm[3];
-	float st[3] = { tMSCTI[0] / 1000, tMSCTI[1] / 1000, tMSCTI[2] / 1000 };
-
-	//Calculate distances segment vertices to model convex hull
-	int totalPts = this->clusters.Element[segment]->iVertexArray.n;
-	float distance;
-	float segMinDist = 1000000;
-	for (int j = 0; j < hypTG->A.h; j++)
-	{
-		plane = hypTG->descriptor.Element[j].pFirst->ptr;
-		minSegDist[j] = 1000000;
-		//For each point
-		for (int i = 0; i < totalPts; i++)
-		{
-			rvlvertex = vertexArray->Element[this->clusters.Element[segment]->iVertexArray.Element[i]];
-
-			////Transform vertex to hyp model space
-			sPs[0] = 1000 * rvlvertex->P[0];
-			sPs[1] = 1000 * rvlvertex->P[1];
-			sPs[2] = 1000 * rvlvertex->P[2];
-			RVLINVTRANSF3(sPs, RMS, tMS, tPs, V3Tmp);
-
-			dat << tPs[0] << " " << tPs[1] << " " << tPs[2];
-
-			N = &hypTG->A.Element[hypTG->A.w * plane->i];
-
-			//sDistances[i * hypTG->A.h + j] = RVLDOTPRODUCT3(N, tPs) - plane->d;
-			distance = (RVLDOTPRODUCT3(N, tPs) - plane->d);
-			if (distance > d1)
-				dat << " " << 0;
-			else
-				dat << " " << 1;
-
-			if (distance > -d2)
-				dat << " " << 0 << std::endl;
-			else
-				dat << " " << 1 << std::endl;
-		}
-	}
-}
-
-//
-std::map<int, std::vector<int>> PSGM::GetSceneConsistancy(float nDist, float d1, float d2, bool verbose)
-{
-	//CheckHypothesesToSegmentEnvelopmentAndCollision_DEBUG(scoreMatchMatrixICP.Element[0].Element[0].idx, 0, d1, d2);
-
-	std::map<int, std::vector<int>> constL;
-
-	//Get segment neighbourhood
-	std::vector<std::vector<int>> neighbourhood = GetSegmentBBNeighbourhood(nDist);
-
-	//For every segment's hypothesis check if they envelop its source segment and neighbouring segments??? No longer true???
-	int resLab = 0;
-	for (int i = 0; i < scoreMatchMatrixICP.n; i++)	//Per segment
-	{
-		for (int j = 0; j < RVLMIN(7, scoreMatchMatrixICP.Element[i].n); j++)	//Per hypothesis
-		{
-			if (scoreMatchMatrixICP.Element[i].Element[j].idx >= 0) //If hypothesis is valid
-			{
-				//Check for source segment
-				resLab = CheckHypothesesToSegmentEnvelopmentAndCollision(scoreMatchMatrixICP.Element[i].Element[j].idx, i, d1, d2);
-				if (resLab == 2)
-				{
-					//It must be first entry for this hypothesis
-					//make new list
-					std::vector<int> l;
-					l.push_back(i);
-					constL.insert(std::make_pair(scoreMatchMatrixICP.Element[i].Element[j].idx, l));
-				}
-				else if (resLab == 0)
-				{
-					if (verbose)
-						std::cout << "Hypothesis " << scoreMatchMatrixICP.Element[i].Element[j].idx << " invalidated!" << std::endl;
-					scoreMatchMatrixICP.Element[i].Element[j].idx = -1;
-					continue;
-				}
-
-				//Check for neighbourhood segments
-				for (int k = 0; k < neighbourhood.at(i).size(); k++)
-				{
-					resLab = CheckHypothesesToSegmentEnvelopmentAndCollision(scoreMatchMatrixICP.Element[i].Element[j].idx, neighbourhood.at(i).at(k), d1, d2);
-					if (resLab == 2)
-					{
-						if (constL.count(scoreMatchMatrixICP.Element[i].Element[j].idx))
-							constL.at(scoreMatchMatrixICP.Element[i].Element[j].idx).push_back(neighbourhood.at(i).at(k)); //Add segment to hypothesis list
-						else
-						{
-							std::vector<int> l;
-							l.push_back(neighbourhood.at(i).at(k));
-							constL.insert(std::make_pair(scoreMatchMatrixICP.Element[i].Element[j].idx, l));
-						}
-					}
-					else if (resLab == 0)
-					{
-						if (verbose)
-							std::cout << "Hypothesis " << scoreMatchMatrixICP.Element[i].Element[j].idx << " invalidated!" << std::endl;
-						scoreMatchMatrixICP.Element[i].Element[j].idx = -1;
-						constL.erase(scoreMatchMatrixICP.Element[i].Element[j].idx);
-						break;
-					}
-				}
-			}
-		}
-	}
-
-	if (verbose)
-	{
-		std::map<int, std::vector<int>>::iterator it;
-		for (it = constL.begin(); it != constL.end(); it++)
-		{
-			for (int i = 0; i < it->second.size(); i++)
-				std::cout << "Created pair hypothesis/segment: " << it->first << "/" << it->second.at(i) << std::endl;
-		}
-	}
-
-	return constL;
-}
-
-//
-int PSGM::CheckHypothesesToSegmentEnvelopmentAndCollision(int hyp, int segment, float d1, float d2)
-{
-	int retVal = 0;
-
-	//Hypothesis data
-	RECOG::PSGM_::MatchInstance* hypothesis = pCTImatchesArray.Element[hyp];
-	VertexGraph * hypVG = MTGSet.vertexGraphs.at(MCTISet.pCTI.Element[hypothesis->iMCTI]->iModel);
-	TG* hypTG = MTGSet.TGs.at(MCTISet.pCTI.Element[hypothesis->iMCTI]->iModel);
-	TGNode* plane;
-	float* N;
-	float* minSegDist = new float[hypTG->A.h];
-	float *RMS = hypothesis->RICP_;
-	float *tMS = hypothesis->tICP_;
-
-	//Segment data
-	Array<SURFEL::Vertex *> *vertexArray = &this->pSurfels->vertexArray;	
-	SURFEL::Vertex * rvlvertex;
-	float* minModDist = new float[hypTG->A.h];
-	RECOG::PSGM_::ModelInstance *pSCTI = CTISet.pCTI.Element[CTISet.SegmentCTIs.Element[segment].Element[0]];
-	RECOG::PSGM_::ModelInstanceElement *pSIE = pSCTI->modelInstance.Element;
-
-	float RMSCTI[9];
-	float tMSCTI[3];
-	float V3Tmp[3];
-
-	RVLCOMPTRANSF3DWITHINV(pSCTI->R, pSCTI->t, RMS, tMS, RMSCTI, tMSCTI, V3Tmp);
-
-	//Transformation vars?
-	float tPs[3];
-	float tPm[3];
-	float sPs[3];
-	float sPm[3];
-	float st[3] = { tMSCTI[0] / 1000, tMSCTI[1] / 1000, tMSCTI[2] / 1000 };
-
-	//Calculate distances segment vertices to model convex hull
-	int totalPts = this->clusters.Element[segment]->iVertexArray.n;
-	float distance;
-	float segMinDist = 1000000;
-	bool passedfirst = true;
-	for (int j = 0; j < hypTG->A.h; j++)
-	{
-		plane = hypTG->descriptor.Element[j].pFirst->ptr;
-		minSegDist[j] = 1000000;
-		//For each point
-		for (int i = 0; i < totalPts; i++)
-		{
-			rvlvertex = vertexArray->Element[this->clusters.Element[segment]->iVertexArray.Element[i]];
-
-			////Transform vertex to hyp model space
-			sPs[0] = 1000 * rvlvertex->P[0];
-			sPs[1] = 1000 * rvlvertex->P[1];
-			sPs[2] = 1000 * rvlvertex->P[2];
-			RVLINVTRANSF3(sPs, RMS, tMS, tPs, V3Tmp);
-
-			N = &hypTG->A.Element[hypTG->A.w * plane->i];
-
-			//sDistances[i * hypTG->A.h + j] = RVLDOTPRODUCT3(N, tPs) - plane->d;
-			distance = (RVLDOTPRODUCT3(N, tPs) - plane->d);
-			if ((distance > d1))
-				passedfirst = false;
-
-			if (minSegDist[j] > distance)
-				minSegDist[j] = distance;
-		}
-	}
-
-	if (passedfirst)
-		return 2;
-
-	if (!passedfirst)
-	{
-		//Calcuate distnces model vertices to segment convex hull
-		totalPts = hypVG->NodeArray.n;
-		for (int j = 0; j < hypTG->A.h; j++)
-		{
-			plane = hypTG->descriptor.Element[j].pFirst->ptr;
-			minModDist[j] = 1000000;
-			//For each point
-			for (int i = 0; i < totalPts; i++)
-			{
-				rvlvertex = &hypVG->NodeArray.Element[i];
-
-				////Transform vertex to segment space
-				sPm[0] = rvlvertex->P[0] / 1000;
-				sPm[1] = rvlvertex->P[1] / 1000;
-				sPm[2] = rvlvertex->P[2] / 1000;
-				RVLTRANSF3(sPm, RMSCTI, st, tPm, V3Tmp);
-
-				N = &hypTG->A.Element[hypTG->A.w * plane->i];	//Same normal at same index as the model CTI?
-
-				//mDistances[i * hypTG->A.h + j] = RVLDOTPRODUCT3(N, tPm) - pMIE[0].d;
-				distance = RVLDOTPRODUCT3(N, tPm) - pSIE[j].d;
-				if (minModDist[j] > distance)
-					minModDist[j] = distance;
-			}
-		}
-
-		//find max?
-		for (int i = 0; i < hypTG->A.h; i++)
-		{
-			if ((minSegDist[i] > -d2) || (minModDist[i] > -d2/1000.0))
-				return 1;
-		}
-	}
-
-	return 0;
 }
 
 //Vidovic
@@ -14425,7 +14213,7 @@ void PSGM::EvaluateConsensusMatches(float &precision, float &recall, bool verbos
 	int iMatch, iHypothesis, iMCTI, iSCTI, iMatchedModel, iSSegment, iSegmentGT;
 	int TP_ = 0, FP_ = 0, FN_ = 0;
 	bool TPMatch;
-	RECOG::PSGM_::MatchInstance *pMatch;
+	RECOG::PSGM_::MatchInstance *pMatch ;
 
 	pECCVGT->ResetMatchFlag();
 
