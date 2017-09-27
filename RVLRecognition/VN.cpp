@@ -3562,6 +3562,7 @@ void VN::Match3(
 
 void VN::Match4(
 	Mesh *pMesh,
+	float *PArray,
 	void *vpClassifier,	
 	Box<float> boundingBox,
 	float *dS,
@@ -3630,7 +3631,7 @@ void VN::Match4(
 			pMCluster = pMCluster->pNext;
 		}
 
-		ToroidalClusters(pMesh, pSurfels, axis, pMCluster->alphaArray, pMCluster->betaArray, pClassifier->clusteringTolerance, STClusters, pClassifier->pMem);
+		ToroidalClusters(pMesh, PArray, pSurfels, axis, pMCluster->alphaArray, pMCluster->betaArray, pClassifier->clusteringTolerance, STClusters, pClassifier->pMem);
 	}
 
 	Array<RECOG::PSGM_::Cluster *> SCClusters = pClassifier->convexClustering.clusters;
@@ -3922,6 +3923,7 @@ void VN::Match4(
 
 void VN::ToroidalClusters(
 	Mesh *pMesh,
+	float *PArray,
 	SurfelGraph *pSurfels,
 	float *axis,
 	Array<float> alphaArray,
@@ -3959,7 +3961,7 @@ void VN::ToroidalClusters(
 
 	int i, j;
 	int iVertex, iVertex_;
-	SURFEL::Vertex *pVertex, *pVertex_;
+	SURFEL::Vertex *pVertex;
 	SURFEL::VertexEdge *pVEdge, *pVEdge_;
 	GRAPH::EdgePtr2<SURFEL::VertexEdge> *pVEdgePtr;
 	float dN[3];
@@ -3972,12 +3974,15 @@ void VN::ToroidalClusters(
 	VN_::EdgeTangent *pTangent, *pTangent_;
 	int nTangents;
 	float fTmp;
+	float *P, *P_;
 	float dP[3];
 	float d_, s_;
 
 	for (iVertex = 0; iVertex < pSurfels->vertexArray.n; iVertex++)
 	{
 		pVertex = pSurfels->vertexArray.Element[iVertex];
+
+		P = PArray + 3 * iVertex;
 
 		//if (iVertex == 110)
 		//	int debug_ = 0;
@@ -3996,14 +4001,14 @@ void VN::ToroidalClusters(
 			{
 				pVEdge = pVEdgePtr->pEdge;
 
-				if (pVEdge->idx == 75)
-					int debug = 0;
+				//if (pVEdge->idx == 75)
+				//	int debug = 0;
 
-				pVertex_ = pSurfels->vertexArray.Element[iVertex_];
+				P_ = PArray + 3 * iVertex_;
 
 				pTangentSet = tangentSet + pVEdge->idx;
 
-				RVLDIF3VECTORS(pVertex_->P, pVertex->P, dP);
+				RVLDIF3VECTORS(P, P_, dP);
 
 				pTangentSet->edgeLength = sqrt(RVLDOTPRODUCT3(dP, dP));
 
@@ -4092,9 +4097,9 @@ void VN::ToroidalClusters(
 							RVLSUM3VECTORS(N1, pTangent->N, pTangent->N);
 							RVLNORM3(pTangent->N, fTmp);
 
-							pTangent->d = RVLDOTPRODUCT3(pTangent->N, pVertex->P);
+							pTangent->d = RVLDOTPRODUCT3(pTangent->N, P);
 
-							d_ = RVLDOTPRODUCT3(pTangent->N, pVertex_->P);
+							d_ = RVLDOTPRODUCT3(pTangent->N, P_);
 
 							if (d_ < pTangent->d)
 								pTangent->d = d_;
@@ -4198,7 +4203,7 @@ void VN::ToroidalClusters(
 				{
 					pVEdge = pVEdgePtr->pEdge;
 
-					DetectTorusRings(pMesh, pSurfels, pVEdge, axis, iBeta, tangentSet, maxErr, pRingList, pMem, VEdgeBuff,
+					DetectTorusRings(pMesh, PArray, pSurfels, pVEdge, axis, iBeta, tangentSet, maxErr, pRingList, pMem, VEdgeBuff,
 						bEdgeJoined, bVertexJoined);				
 				}
 
@@ -4206,8 +4211,6 @@ void VN::ToroidalClusters(
 			}
 		}
 	}
-
-	float *P;
 
 	//FILE *fp = fopen("tangentRing.txt", "w");
 
@@ -4289,7 +4292,7 @@ void VN::ToroidalClusters(
 
 				iKeyVertex = pRing->iVertexArray.Element[0];
 
-				P = pSurfels->vertexArray.Element[iKeyVertex]->P;
+				P = PArray + 3 * iKeyVertex;
 
 				dmin = RVLDOTPRODUCT3(N, P);
 
@@ -4297,8 +4300,8 @@ void VN::ToroidalClusters(
 				{
 					iVertex = pRing->iVertexArray.Element[i];
 
-					P = pSurfels->vertexArray.Element[iVertex]->P;
-					
+					P = PArray + 3 * iVertex;
+			
 					d = RVLDOTPRODUCT3(N, P);
 
 					if (d < dmin)
@@ -4346,7 +4349,7 @@ void VN::ToroidalClusters(
 					N[1] = sa[iAlpha] * sb[iBeta];
 					N[2] = cb[iBeta];
 
-					P = pSurfels->vertexArray.Element[pPrevRing->iKeyVertex[iAlpha]]->P;
+					P = PArray + 3 * pPrevRing->iKeyVertex[iAlpha];
 
 					e = RVLDOTPRODUCT3(N, P) - pRing->d[iAlpha];
 
@@ -4362,7 +4365,7 @@ void VN::ToroidalClusters(
 						N[1] = sa[iAlpha] * sb[iPrevBeta];
 						N[2] = cb[iPrevBeta];
 
-						P = pSurfels->vertexArray.Element[pRing->iKeyVertex[iAlpha]]->P;
+						P = PArray + 3 * pRing->iKeyVertex[iAlpha];
 
 						e = RVLDOTPRODUCT3(N, P) - pPrevRing->d[iAlpha];
 
@@ -4491,6 +4494,7 @@ void VN::ToroidalClusters(
 
 void VN::DetectTorusRings(
 	Mesh *pMesh,
+	float *PArray,
 	SurfelGraph *pSurfels,
 	SURFEL::VertexEdge *pVEdge0,
 	float *axis,
@@ -4592,7 +4596,7 @@ void VN::DetectTorusRings(
 
 			for (l = 0; l < 2; l++)
 			{
-				P = pSurfels->vertexArray.Element[pVEdge_->iVertex[l]]->P;
+				P = PArray + 3 * pVEdge_->iVertex[l];
 
 				e = RVLDOTPRODUCT3(pTangent->N, P) - pTangent->d;
 
@@ -4608,7 +4612,7 @@ void VN::DetectTorusRings(
 
 				for (l = 0; l < 2; l++)
 				{
-					P = pSurfels->vertexArray.Element[pVEdge->iVertex[l]]->P;
+					P = PArray + 3 * pVEdge->iVertex[l];
 
 					e = RVLDOTPRODUCT3(pTangent_->N, P) - pTangent_->d;
 

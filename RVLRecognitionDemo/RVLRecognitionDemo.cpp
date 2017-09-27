@@ -1049,9 +1049,9 @@ int main(int argc, char ** argv)
 		//int sampleVoxelDistance = 1;
 		//float eps = 2.0f;
 		//float resolution = 1.0f;
-		float voxelSize = 0.02f;
-		int sampleVoxelDistance = 1;
-		float eps = 0.01f;
+		//float voxelSize = 0.02f;
+		//int sampleVoxelDistance = 1;
+		//float eps = 0.01f;
 		float resolution = 0.01f;
 
 		Mesh mesh;
@@ -1060,283 +1060,55 @@ int main(int argc, char ** argv)
 
 		classifier.pMem0 = &mem0;
 		classifier.pMem = &mem;
+		classifier.vpMeshBuilder = &meshBuilder;
+		classifier.LoadMesh = LoadMesh;
 		classifier.pSurfels = &surfels;
 		classifier.pSurfelDetector = &surfelDetector;
 
+		classifier.visualizationData.resolution = resolution;
+		classifier.visualizationData.SDFSurfaceValue = SDFSurfaceValue;
+
 		classifier.Create(cfgFileName);
 
-#ifdef NEVER
-		// Create clustering tools.
+		if (classifier.mode == RVLRECOGNITION_MODE_TRAINING)
+			classifier.Learn(modelSequenceFileName, VNModel, &visualizer); //Vidovic
+		else if (classifier.mode == RVLRECOGNITION_MODE_RECOGNITION)
+		{
+			FileSequenceLoader sceneSequence;
 
-		PSGM convexClustering;
+			sceneSequence.Init(sceneSequenceFileName);
 
-		convexClustering.pMem = &mem;
+			char filePath[200];
 
-		convexClustering.pMesh = &mesh;
+			while (sceneSequence.GetNextPath(filePath))
+			{
+				printf("Scene: %s:\n", filePath);
 
-		convexClustering.pSurfels = &surfels;
+				// Load mesh.
 
-		convexClustering.pSurfelDetector = &surfelDetector;
+				LoadMesh(&meshBuilder, filePath, &mesh, false);
 
-		convexClustering.bDetectGroundPlane = false;
+				// Reset memory.
 
-		PSGM concaveClustering;
+				mem.Clear();
 
-		concaveClustering.pMem = &mem;
-
-		concaveClustering.pMesh = &mesh;
-
-		concaveClustering.pSurfels = &surfels;
-
-		concaveClustering.pSurfelDetector = &surfelDetector;
-
-		concaveClustering.clusterType = -1.0f;
-
-		concaveClustering.bDetectGroundPlane = false;
-
-		// Create VN model.
-
-		VN model;
-
-		switch (VNModel){
-		case RVLRECOGNITION_DEMO_VN_MODEL_TORUS:
-			RECOG::VN_::CreateTorus(&model, &mem0);
-
-			break;
-		case RVLRECOGNITION_DEMO_VN_MODEL_BOTTLE:
-			RECOG::VN_::CreateBottle(&model, &mem0);
-
-			break;
-		case RVLRECOGNITION_DEMO_VN_MODEL_HAMMER:
-			RECOG::VN_::CreateHammer(&model, &mem0);
-
-			break;
-		case RVLRECOGNITION_DEMO_VN_MODEL_BOWL:
-			RECOG::VN_::CreateBowl(&model, &mem0);
-
-			break;
-		case RVLRECOGNITION_DEMO_VN_MODEL_MUG:
-			RECOG::VN_::CreateMug(&model, &mem0);
+				// Add classification code here ...
+			}
 		}
 
-		// Load VN match parameters.
+		VN *pModel = classifier.models[VNModel];
 
-		CRVLParameterList paramList;
-		RECOG::VN_::Parameters VNMatchingParams;
+		Box<float> box;
 
-		model.CreateParamList(&paramList, VNMatchingParams, &mem0);
-
-		paramList.LoadParams(cfgFileName);
-
-		VNMatchingParams.clusteringTolerance = 3.0f * convexClustering.kNoise * 2.0f / surfelDetector.kPlane;
-
-		model.boundingBox.minx = -0.5f;
-		model.boundingBox.maxx = 0.5f;
-		model.boundingBox.miny = -0.5f;
-		model.boundingBox.maxy = 0.5f;
-		model.boundingBox.minz = -0.5f;
-		model.boundingBox.maxz = 0.5f;
-		//model.boundingBox.minx = -0.4f;
-		//model.boundingBox.maxx = 0.4f;
-		//model.boundingBox.miny = -0.4f;
-		//model.boundingBox.maxy = 0.4f;
-		//model.boundingBox.minz = 0.0f;
-		//model.boundingBox.maxz = 1.2f;
-		//model.boundingBox.minx = -1.0f;
-		//model.boundingBox.maxx = 1.0f;
-		//model.boundingBox.miny = -1.0f;
-		//model.boundingBox.maxy = 1.0f;
-		//model.boundingBox.minz = -0.5f;
-		//model.boundingBox.maxz = 0.5f;
-#endif
-	
-		FileSequenceLoader sceneSequence;
-
-		sceneSequence.Init(sceneSequenceFileName);
-
-		char filePath[200];
-
-		while (sceneSequence.GetNextPath(filePath))
+		if (flags & RVLRECOGNITION_DEMO_FLAG_VISUALIZE_VN_MODEL)
 		{
-			printf("Scene: %s:\n", filePath);
+			// Model visualization
 
-			// Load mesh.
+			box = pModel->boundingBox;
 
-			LoadMesh(&meshBuilder, filePath, &mesh, false);
+			ExpandBox<float>(&box, 2.0f * resolution);
 
-			// Reset memory.
-
-			mem.Clear();
-
-			// Detect surfels.
-
-			surfels.Init(&mesh);
-
-			surfelDetector.Init(&mesh, &surfels, &mem);
-
-			printf("Segmentation to surfels...");
-
-			surfelDetector.Segment(&mesh, &surfels);
-
-			printf("completed.\n");
-
-			int nSurfels = surfels.NodeArray.n;
-
-			printf("No. of surfels = %d\n", nSurfels);
-
-			surfels.DetectVertices(&mesh);
-
-			float *dS;
-			bool *bdS;
-			Box<float> SBoundingBox;
-
-			classifier.Classify(&mesh, dS, bdS, SBoundingBox, VNModel);
-
-#ifdef NEVER
-			// Cluster surfels into convex surfaces.
-
-			convexClustering.Clusters();
-
-			// Cluster surfels into concave surfaces.
-
-			concaveClustering.Clusters();
-
-			surfels.NodeColors(SelectionColor);
-
-			//concaveClustering.InitDisplay(&visualizer, &mesh, SelectionColor);
-
-			//concaveClustering.Display();
-
-			convexClustering.InitDisplay(&visualizer, &mesh, SelectionColor);
-
-			convexClustering.Display();
-
-			visualizer.Run();
-
-			//surfels.NodeColors(SelectionColor);
-
-			//surfels.InitDisplay(&visualizer, &mesh, &surfelDetector);		
-
-			//surfels.Display(&visualizer, &mesh);
-
-			//visualizer.Run();
-
-			// Match mesh to model.
-
-			printf("Matching VN model to scene...");
-
-			Box<float> SBoundingBox;
-
-			InitBoundingBox<float>(&SBoundingBox, surfels.vertexArray.Element[0]->P);
-
-			int iVertex;
-
-			for (iVertex = 0; iVertex < surfels.vertexArray.n; iVertex++)
-				UpdateBoundingBox<float>(&SBoundingBox, surfels.vertexArray.Element[iVertex]->P);
-
-			float *dS = new float[model.featureArray.n];
-
-			bool *bdS = new bool[model.featureArray.n];
-
-			//Array<float> betaArray;
-
-			//betaArray.n = 7;
-			//betaArray.Element = new float[betaArray.n];
-
-			//float dBeta = PI / (float)(betaArray.n + 1);
-
-			//int i;
-
-			//for (i = 1; i <= betaArray.n; i++)
-			//	betaArray.Element[i - 1] = (float)i * dBeta;
-
-			//Array<float> alphaArray;
-
-			//alphaArray.n = 16;
-			//alphaArray.Element = new float[alphaArray.n];
-
-			//float dAlpha = PI / (float)(alphaArray.n);
-
-			//for (i = 0; i <= alphaArray.n; i++)
-			//	alphaArray.Element[i] = (float)i * dAlpha;
-
-			//FILE *fp = fopen("tangentRing.txt", "w");
-
-			//model.PrintTori(fp, &surfels, STClusters);
-
-			//fclose(fp);
-
-			//RECOG::VN_::Torus *pTorus = STClusters.Element[0];
-
-			//int id;
-			//int iAlpha, iBeta;
-			//RECOG::VN_::TorusRing *pRing;
-
-			//for (iBeta = 0; iBeta < pMCluster->betaArray.n; iBeta++)
-			//{
-			//	pRing = pTorus->ringArray.Element[iBeta];
-
-			//	if (pRing)
-			//	{
-			//		for (iAlpha = 0; iAlpha < pMCluster->alphaArray.n; iAlpha++)
-			//		{
-			//			id = iBeta * pMCluster->alphaArray.n + iAlpha;
-			//			dS[id] = pRing->d[iAlpha];
-			//			bdS[id] = true;
-			//		}
-			//	}
-			//	else
-			//	{
-			//		for (iAlpha = 0; iAlpha < pMCluster->alphaArray.n; iAlpha++)
-			//			bdS[iBeta * pMCluster->alphaArray.n + iAlpha] = false;
-			//	}
-			//}
-
-			//model.Match(&mesh, &surfels, SBoundingBox, VNMatchingParams, dS, bdS);
-
-			//model.Match2(&mesh, &surfels, SBoundingBox, VNMatchingParams, dS, bdS);
-
-			//model.Match3(&mesh, &surfels, clustering.clusters, SBoundingBox, VNMatchingParams, dS, bdS);
-
-			model.Match4(&mesh, &surfels, convexClustering.clusters, concaveClustering.clusters, SBoundingBox, VNMatchingParams, 
-				&mem, dS, bdS);
-
-			printf("completed.\n");
-#endif
-
-			// Visualization
-
-			VN *pModel = classifier.models[VNModel];
-
-			Box<float> box;
-
-			if (flags & RVLRECOGNITION_DEMO_FLAG_VISUALIZE_VN_MODEL)
-			{
-				// Model visualization
-
-				box = pModel->boundingBox;
-
-				ExpandBox<float>(&box, 2.0f * resolution);
-
-				pModel->Display(&visualizer, box, resolution, NULL, NULL, SDFSurfaceValue);
-			}
-			else
-			{
-				// Match visualization
-
-				box = SBoundingBox;
-
-				ExpandBox<float>(&box, 10.0f * resolution);
-
-				visualizer.renderer->RemoveAllViewProps();
-
-				pModel->Display(&visualizer, box, resolution, dS, bdS, SDFSurfaceValue);
-			}
-
-			delete[] dS;
-			delete[] bdS;
-
-			visualizer.Run();
+			pModel->Display(&visualizer, box, resolution, NULL, NULL, SDFSurfaceValue);
 		}
 	}	// if (method == RVLRECOGNITION_METHOD_VN)
 
@@ -1351,7 +1123,6 @@ int main(int argc, char ** argv)
 
 	if (modelSequenceFileName)
 		delete[] modelSequenceFileName;
-
 	
 	//if (segmentGTFileName)
 	//	delete[] segmentGTFileName;

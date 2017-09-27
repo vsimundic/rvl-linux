@@ -506,12 +506,14 @@ namespace RVL
 		//	bool *bdS);
 		void Match4(
 			Mesh *pMesh,
+			float *PArray,
 			void *vpClassifier,
 			Box<float> boundingBox,
 			float *dS,
 			bool *bdS);
 		void ToroidalClusters(
 			Mesh *pMesh,
+			float *PArray,
 			SurfelGraph *pSurfels,
 			float *axis,
 			Array<float> alphaArray,
@@ -521,6 +523,7 @@ namespace RVL
 			CRVLMem *pMem);
 		void DetectTorusRings(
 			Mesh *pMesh,
+			float *PArray,
 			SurfelGraph *pSurfels,
 			SURFEL::VertexEdge *pVEdge0,
 			float *axis,

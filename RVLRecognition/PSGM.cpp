@@ -3314,7 +3314,7 @@ void PSGM::SaveModelInstances(
 }
 
 
-bool PSGM::ModelExistInDB(char *modelFileName, FileSequenceLoader dbLoader)
+bool RECOG::ModelExistInDB(char *modelFileName, FileSequenceLoader dbLoader)
 {
 	char dbFileName[50];
 
@@ -3325,7 +3325,9 @@ bool PSGM::ModelExistInDB(char *modelFileName, FileSequenceLoader dbLoader)
 	return 0;
 }
 
-void PSGM::SaveModelID(FileSequenceLoader dbLoader)
+void RECOG::SaveModelID(
+	FileSequenceLoader dbLoader,
+	char *modelsInDataBase)
 {
 	FILE *fp = fopen(modelsInDataBase, "w");
 
@@ -3424,7 +3426,7 @@ void PSGM::Learn(
 	printf("Model DB creation completed!\n");
 
 	if (saveDBSequenceFile)
-		SaveModelID(dbLoader);
+		SaveModelID(dbLoader, modelsInDataBase);
 
 	fclose(fp);
 

@@ -29,6 +29,10 @@ using namespace RECOG;
 
 VNClassifier::VNClassifier()
 {
+	visualizationData.resolution = 0.01f;
+	visualizationData.SDFSurfaceValue = 0.0f;
+	modelDataBase = NULL; //Vidovic
+	modelsInDataBase = NULL; //Vidovic
 }
 
 
@@ -106,6 +110,11 @@ void VNClassifier::CreateParamList()
 
 	pParamData = paramList.AddParam("VN.kMaxMatchCost", RVLPARAM_TYPE_FLOAT, &kMaxMatchCost);
 	pParamData = paramList.AddParam("VN.maxnSClusters", RVLPARAM_TYPE_INT, &maxnSClusters);
+	pParamData = paramList.AddParam("Recognition.mode", RVLPARAM_TYPE_ID, &mode);
+	paramList.AddID(pParamData, "TRAINING", RVLRECOGNITION_MODE_TRAINING);
+	paramList.AddID(pParamData, "RECOGNITION", RVLRECOGNITION_MODE_RECOGNITION);
+	pParamData = paramList.AddParam("ModelDataBase", RVLPARAM_TYPE_STRING, &modelDataBase); //Vidovic
+	pParamData = paramList.AddParam("ModelsInDataBase", RVLPARAM_TYPE_STRING, &modelsInDataBase); //Vidovic
 }
 
 void VNClassifier::Init(Mesh *pMesh)
@@ -123,13 +132,71 @@ void VNClassifier::Clear()
 	models.clear();
 }
 
-void VNClassifier::Classify(
+void VNClassifier::ComputeDescriptor(
 	Mesh *pMesh,
+	float *RIn,
+	float *tIn,
 	float *&dS,
 	bool *&bdS,
 	Box<float> &SBoundingBox,
 	int iModel)
 {
+	// Transform vertices.
+
+	float R[9];
+
+	if (RIn)
+	{
+		RVLCOPYMX3X3(RIn, R);
+	}
+	else
+	{
+		RVLUNITMX3(R);
+	}
+
+	float t[3];
+
+	if (tIn)
+	{
+		RVLCOPY3VECTOR(tIn, t);
+	}
+	else
+	{
+		RVLNULL3VECTOR(t);
+	}
+
+	float *PArray = new float[3 * pSurfels->vertexArray.n];
+
+	float *P = PArray;
+
+	int iVertex;
+	SURFEL::Vertex *pVertex;
+
+	for (iVertex = 0; iVertex < pSurfels->vertexArray.n; iVertex++, P += 3)
+	{
+		pVertex = pSurfels->vertexArray.Element[iVertex];
+
+		RVLTRANSF3(pVertex->P, R, t, P);
+	}
+
+	// Detect surfels.
+
+	pSurfels->Init(pMesh);
+
+	pSurfelDetector->Init(pMesh, pSurfels, pMem);
+
+	printf("Segmentation to surfels...");
+
+	pSurfelDetector->Segment(pMesh, pSurfels);
+
+	printf("completed.\n");
+
+	int nSurfels = pSurfels->NodeArray.n;
+
+	printf("No. of surfels = %d\n", nSurfels);
+
+	pSurfels->DetectVertices(pMesh);
+
 	// Cluster surfels into convex surfaces.
 
 	convexClustering.pMesh = pMesh;
@@ -172,8 +239,6 @@ void VNClassifier::Classify(
 
 	InitBoundingBox<float>(&SBoundingBox, pSurfels->vertexArray.Element[0]->P);
 
-	int iVertex;
-
 	for (iVertex = 0; iVertex < pSurfels->vertexArray.n; iVertex++)
 		UpdateBoundingBox<float>(&SBoundingBox, pSurfels->vertexArray.Element[iVertex]->P);
 
@@ -183,7 +248,91 @@ void VNClassifier::Classify(
 
 	bdS = new bool[pModel->featureArray.n];
 
-	pModel->Match4(pMesh, this, SBoundingBox, dS, bdS);
+	pModel->Match4(pMesh, PArray, this, SBoundingBox, dS, bdS);
 
+	delete[] PArray;
+		 
 	printf("completed.\n");
+}
+
+void VNClassifier::Learn(
+	char *modelSequenceFileName,
+	int iModel,
+	Visualizer *pVisualizer)
+{
+	float resolution = 0.01f;
+
+	Mesh mesh;
+
+	FileSequenceLoader modelsLoader;
+	FileSequenceLoader dbLoader;
+
+	char modelFilePath[200];
+	char modelFileName[200];
+
+	if (!modelDataBase)
+		modelDataBase = "modelDB.dat";
+
+	if (!modelsInDataBase)
+		modelsInDataBase = "DBModels.txt";
+
+	modelsLoader.Init(modelSequenceFileName);
+	dbLoader.Init(modelsInDataBase);
+
+	FILE *fp = fopen(modelDataBase, "a");
+
+	bool saveDBSequenceFile = false;
+
+	printf("Model DB creation started...\n");
+
+	int currentModelID;
+	float *dS;
+	bool *bdS;
+	Box<float> SBoundingBox;
+	VN *pModel;
+
+	while (modelsLoader.GetNext(modelFilePath, modelFileName))
+	{
+		//if (ModelExistInDB(modelFileName, dbLoader))
+		//	continue;
+
+		printf("\nProcessing model %s!\n", modelFileName);
+
+		saveDBSequenceFile = true;
+
+		LoadMesh(vpMeshBuilder, modelFilePath, &mesh, false);
+
+		currentModelID = dbLoader.GetLastModelID() + 1;
+
+		pMem->Clear();
+
+
+
+		ComputeDescriptor(&mesh, NULL, NULL, dS, bdS, SBoundingBox, iModel);
+
+		dbLoader.AddModel(currentModelID, modelFilePath, modelFileName);
+
+		if (pVisualizer)
+		{
+			pModel = models[iModel];
+
+			ExpandBox<float>(&SBoundingBox, 10.0f * resolution);
+
+			pVisualizer->renderer->RemoveAllViewProps();
+
+			pModel->Display(pVisualizer, SBoundingBox, visualizationData.resolution, dS, bdS, visualizationData.SDFSurfaceValue);
+
+			pVisualizer->Run();
+		}
+
+		delete[] dS;
+		delete[] bdS;
+	}
+
+	printf("Model DB creation completed!\n");
+
+	if (saveDBSequenceFile)
+		SaveModelID(dbLoader, modelsInDataBase);
+
+	fclose(fp);
 }

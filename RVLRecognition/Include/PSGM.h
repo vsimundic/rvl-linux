@@ -188,7 +188,14 @@ namespace RVL
 				int iSelectedSurfel,
 				void *vpData);
 		}	// namespace PSGM_
-		}
+
+		bool ModelExistInDB(
+			char *modelFileName,
+			FileSequenceLoader dbLoader); //Vidovic
+		void SaveModelID(
+			FileSequenceLoader dbLoader,
+			char *modelsInDataBase); //Vidovic
+	}	// namespace RECOG
 	//class CTISet
 	//{
 	//public:
@@ -358,10 +365,6 @@ namespace RVL
 			unsigned char *color);
 		void DisplayReferenceFrames();
 		void SetSceneFileName(char *sceneFileName_);
-		bool ModelExistInDB(
-			char *modelFileName,
-			FileSequenceLoader dbLoader); //Vidovic
-		void SaveModelID(FileSequenceLoader dbLoader); //Vidovic
 		void Learn(
 			char *modelSequenceFileName,
 			Visualizer *visualizer = NULL); //Vidovic
