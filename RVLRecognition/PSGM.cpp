@@ -15303,7 +15303,8 @@ void PSGM::ObjectAlignment(
 	RECOG::PSGM_::ModelInstance **MCTIArray,
 	Eigen::MatrixXf A,
 	float *R,
-	float *t)
+	float *t,
+	bool bTSM)
 {
 	Eigen::MatrixXf M(4, 66), P, D(66, 1), T(4, 4), T0p(4, 4), Tiq(4, 4), d(1, 66), S, E;
 
@@ -15454,18 +15455,23 @@ void PSGM::ObjectAlignment(
 
 	T0i = Tiq*T*T0p.transpose();
 
-	RVLMXEL(R,3,0,0) = T0i(0, 0);
-	RVLMXEL(R,3,0,1) = T0i(0, 1);
-	RVLMXEL(R,3,0,2) = T0i(0, 2);
-	t[0] = T0i(0, 3);
-	RVLMXEL(R,3,1,0) = T0i(1, 0);
-	RVLMXEL(R,3,1,1) = T0i(1, 1);
-	RVLMXEL(R,3,1,2) = T0i(1, 2);
-	t[1] = T0i(1, 3);
-	RVLMXEL(R,3,2,0) = T0i(2, 0);
-	RVLMXEL(R,3,2,1) = T0i(2, 1);
-	RVLMXEL(R,3,2,2) = T0i(2, 2);
-	t[2] = T0i(2, 3);
+	if (bTSM)
+		T = T0i.inverse();
+	else
+		T = T0i;
+
+	RVLMXEL(R,3,0,0) = T(0, 0);
+	RVLMXEL(R,3,0,1) = T(0, 1);
+	RVLMXEL(R,3,0,2) = T(0, 2);
+	t[0] = T(0, 3);
+	RVLMXEL(R,3,1,0) = T(1, 0);
+	RVLMXEL(R,3,1,1) = T(1, 1);
+	RVLMXEL(R,3,1,2) = T(1, 2);
+	t[1] = T(1, 3);
+	RVLMXEL(R,3,2,0) = T(2, 0);
+	RVLMXEL(R,3,2,1) = T(2, 1);
+	RVLMXEL(R,3,2,2) = T(2, 2);
+	t[2] = T(2, 3);
 }
 
 void PSGM::ObjectAlignment()

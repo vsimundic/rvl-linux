@@ -60,12 +60,6 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 #define RVLRECOGNITION_DEMO_FLAG_3D_VISUALIZATION	0x00000002
 #define RVLRECOGNITION_DEMO_FLAG_VISUALIZE_VN_MODEL	0x00000004
 
-#define RVLRECOGNITION_DEMO_VN_MODEL_TORUS	0
-#define RVLRECOGNITION_DEMO_VN_MODEL_BOTTLE	1
-#define RVLRECOGNITION_DEMO_VN_MODEL_HAMMER	2
-#define RVLRECOGNITION_DEMO_VN_MODEL_BOWL	3
-#define RVLRECOGNITION_DEMO_VN_MODEL_MUG	4
-
 //END VIDOVIC
 
 using namespace RVL;
@@ -82,7 +76,7 @@ void CreateParamList(
 	char **pResultsFolder,
 	DWORD &method,
 	DWORD &flags,
-	DWORD &VNModel,
+	DWORD &iClass,
 	float &SDFSurfaceValue
 	)
 {
@@ -109,12 +103,7 @@ void CreateParamList(
 	pParamList->AddID(pParamData, "yes", RVLRECOGNITION_DEMO_FLAG_3D_VISUALIZATION);
 	pParamData = pParamList->AddParam("VN.visualizeModel", RVLPARAM_TYPE_ID, &flags);
 	pParamList->AddID(pParamData, "yes", RVLRECOGNITION_DEMO_FLAG_VISUALIZE_VN_MODEL);
-	pParamData = pParamList->AddParam("VN.model", RVLPARAM_TYPE_ID, &VNModel);
-	pParamList->AddID(pParamData, "TORUS", RVLRECOGNITION_DEMO_VN_MODEL_TORUS);
-	pParamList->AddID(pParamData, "BOTTLE", RVLRECOGNITION_DEMO_VN_MODEL_BOTTLE);
-	pParamList->AddID(pParamData, "HAMMER", RVLRECOGNITION_DEMO_VN_MODEL_HAMMER);
-	pParamList->AddID(pParamData, "BOWL", RVLRECOGNITION_DEMO_VN_MODEL_BOWL);
-	pParamList->AddID(pParamData, "MUG", RVLRECOGNITION_DEMO_VN_MODEL_MUG);
+	pParamData = pParamList->AddParam("VN.class", RVLPARAM_TYPE_INT, &iClass);
 	pParamData = pParamList->AddParam("VN.visualization.SDFSurfaceValue", RVLPARAM_TYPE_FLOAT, &SDFSurfaceValue);
 }
 
@@ -292,7 +281,7 @@ int main(int argc, char ** argv)
 	char *segmentGTFileName = NULL; //Vidovic
 	DWORD method = RVLRECOGNITION_METHOD_PSGM;
 	//DWORD method = RVLRECOGNITION_METHOD_RF; //VIDOVIC
-	DWORD VNModel;
+	DWORD iClass;
 	float SDFSurfaceValue = 0.0f;
 
 	DWORD flags = 0x00000000; //VIDOVIC
@@ -310,7 +299,7 @@ int main(int argc, char ** argv)
 		&ResultsFolder,
 		method,
 		flags,
-		VNModel,
+		iClass,
 		SDFSurfaceValue);	 //VIDOVIC
 
 	ParamList.LoadParams(cfgFileName);
@@ -1070,18 +1059,10 @@ int main(int argc, char ** argv)
 
 		classifier.Create(cfgFileName);
 
-		classifier.classArray.n = 10;
-
-		classifier.classArray.Element = new RECOG::ClassData[classifier.classArray.n];
-
-		RECOG::ClassData *pClass = classifier.classArray.Element + RVLRECOGNITION_DEMO_VN_MODEL_MUG;
-
-		pClass->iFirstInstance = 196;
-		pClass->nInstances = 61;
-		pClass->iRefInstance = 196;
+		RECOG::VN_::_3DNetDatabaseClasses(&classifier);
 
 		if (classifier.mode == RVLRECOGNITION_MODE_TRAINING)
-			classifier.Learn(modelSequenceFileName, VNModel, &visualizer); //Vidovic
+			classifier.Learn(modelSequenceFileName, iClass, &visualizer); //Vidovic
 		else if (classifier.mode == RVLRECOGNITION_MODE_RECOGNITION)
 		{
 			FileSequenceLoader sceneSequence;
@@ -1106,7 +1087,9 @@ int main(int argc, char ** argv)
 			}
 		}
 
-		VN *pModel = classifier.models[VNModel];
+		int iMetaModel = classifier.classArray.Element[iClass].iMetaModel;
+
+		VN *pModel = classifier.models[iMetaModel];
 
 		Box<float> box;
 

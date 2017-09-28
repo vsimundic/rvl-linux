@@ -2585,6 +2585,51 @@ float VN::Evaluate(
 	return e;
 }
 
+float VN::Evaluate(
+	float *PArray,
+	int nP,
+	float *SDF,
+	float *d,
+	bool *bd,
+	float maxe)
+{
+	float *P = PArray;
+
+	float e = 0.0f;
+
+	int iSample;
+	int iActiveFeature;
+	float e_;
+
+	for (iSample = 0; iSample < nP; iSample++, P += 3)
+	{
+		e_ = Evaluate(P, SDF, iActiveFeature, true, d, bd);
+
+		// sum of absolute distances
+
+		//if (e_ < 0.0f)
+		//	e_ = -e_;
+		//e += e_;
+
+		// maximum absolute distance
+
+		//if (e_ < 0.0f)
+		//	e_ = -e_;
+		//if (e_ > e)
+		//	e = e_;
+
+		// sum of saturated absolute distances
+
+		if (e_ < 0.0f)
+			e_ = -e_;
+		if (e_ > maxe)
+			e_ = maxe;
+		e += (e_ / maxe);
+	}
+
+	return e;
+}
+
 float VN::GetMeshSize(Box<float> boundingBox)
 {
 	float a = boundingBox.maxx - boundingBox.minx;
@@ -3563,6 +3608,9 @@ void VN::Match3(
 void VN::Match4(
 	Mesh *pMesh,
 	float *PArray,
+	float *NArray,
+	float *R,
+	float *t,
 	void *vpClassifier,	
 	Box<float> boundingBox,
 	float *dS,
@@ -3604,13 +3652,31 @@ void VN::Match4(
 
 	float maxDeviation = pClassifier->kMaxMatchCost * size;
 
+	// Sample the mesh surface and transform the sampled points using R and t.
+
+	int nSamplePts = 300;
+
 	Array<int> iPtArray;
 
 	iPtArray.n = pMesh->NodeArray.n;
 
 	RandomIndices(iPtArray);
 
-	iPtArray.n = 300;
+	float *PSampleArray = new float[3 * nSamplePts];
+
+	float *P = PSampleArray;
+
+	int i;
+	float *P_;
+
+	for (i = 0; i < nSamplePts; i++, PSampleArray += 3)
+	{
+		P_ = pMesh->NodeArray.Element[iPtArray.Element[i]].P;
+
+		RVLTRANSF3(P_, R, t, P);
+	}
+
+	// Detect toroidal clusters.
 
 	Array<RECOG::VN_::Torus *> STClusters;
 
@@ -3631,8 +3697,11 @@ void VN::Match4(
 			pMCluster = pMCluster->pNext;
 		}
 
-		ToroidalClusters(pMesh, PArray, pSurfels, axis, pMCluster->alphaArray, pMCluster->betaArray, pClassifier->clusteringTolerance, STClusters, pClassifier->pMem);
+		ToroidalClusters(pMesh, PArray, NArray, pSurfels, axis, pMCluster->alphaArray, pMCluster->betaArray, 
+			pClassifier->clusteringTolerance, STClusters, pClassifier->pMem);
 	}
+	
+	// Join all clusters into array SClusters_.
 
 	Array<RECOG::PSGM_::Cluster *> SCClusters = pClassifier->convexClustering.clusters;
 	Array<RECOG::PSGM_::Cluster *> SUClusters = pClassifier->concaveClustering.clusters;
@@ -3674,6 +3743,8 @@ void VN::Match4(
 		}
 	}
 
+	// Compute descriptor valuses for all correspondences (scene cluster, model cluster).
+
 	float *dS_ = new float[SClusters_.n * featureArray.n];
 
 	Array<float *> descriptors;
@@ -3683,7 +3754,7 @@ void VN::Match4(
 
 	int j;
 	int iSCluster, iMCluster, iFeature, iVertex;
-	float *N, *P;
+	float *N;
 	RECOG::PSGM_::Cluster *pSCCluster, *pSUCluster;
 	RECOG::VN_::Torus *pTCluster;
 	float d, maxd, mind;
@@ -3770,6 +3841,8 @@ void VN::Match4(
 			pMCluster = pMCluster->pNext;
 		}
 	}
+
+	// Try all combinations of correspondences (scene cluster, model cluster) and find the best one.
 
 	CRVLMem mem;
 
@@ -3867,7 +3940,7 @@ void VN::Match4(
 
 			if (pMCluster == NULL)
 			{
-				e = Evaluate(pMesh, iPtArray, SDF, dSEval, bdSEval, maxDeviation);
+				e = Evaluate(PArray, nSamplePts, SDF, dSEval, bdSEval, maxDeviation);
 
 				if (mine < 0.0f || e < mine)
 				{
@@ -3912,6 +3985,8 @@ void VN::Match4(
 		pCorresp = pCorresp->pNext;
 	}
 
+	// Deallocate memory.
+
 	RVL_DELETE_ARRAY(STClusters.Element);
 	delete[] SClusters_.Element;
 	delete[] dS_;
@@ -3924,6 +3999,7 @@ void VN::Match4(
 void VN::ToroidalClusters(
 	Mesh *pMesh,
 	float *PArray,
+	float *NArray,
 	SurfelGraph *pSurfels,
 	float *axis,
 	Array<float> alphaArray,
@@ -4014,8 +4090,8 @@ void VN::ToroidalClusters(
 
 				pTangentSet->miniBeta = pTangentSet->maxiBeta = -1;
 
-				N1 = pSurfels->NodeArray.Element[pVEdge->iSurfel[0]].N;
-				N2 = pSurfels->NodeArray.Element[pVEdge->iSurfel[1]].N;
+				N1 = NArray + 3 * pVEdge->iSurfel[0];
+				N2 = NArray + 3 * pVEdge->iSurfel[1];
 
 				RVLDIF3VECTORS(N2, N1, dN);
 

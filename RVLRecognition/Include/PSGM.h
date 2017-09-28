@@ -334,7 +334,8 @@ namespace RVL
 			RECOG::PSGM_::ModelInstance **MCTIArray,
 			Eigen::MatrixXf A,
 			float *R,
-			float *t);
+			float *t,
+			bool bTSM = false);
 		
 		void ObjectAlignment(); // Calculates transformation matrix to align object with a reference object (for classification)
 

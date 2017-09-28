@@ -102,7 +102,11 @@ void VNClassifier::Create(char *cfgFileName)
 
 	alignment.modelDataBase = RVLCreateString(modelDataBase);
 
+	printf("Loading CTI database...");
+
 	alignment.LoadModelDataBase();
+
+	printf("completed.\n");
 }
 
 void VNClassifier::CreateParamList()
@@ -166,7 +170,7 @@ void VNClassifier::ComputeDescriptor(
 
 	pSurfels->DetectVertices(pMesh);
 
-	// Transform vertices.
+	// Transform vertices and normals.
 
 	float R[9];
 
@@ -202,6 +206,20 @@ void VNClassifier::ComputeDescriptor(
 		pVertex = pSurfels->vertexArray.Element[iVertex];
 
 		RVLTRANSF3(pVertex->P, R, t, P);
+	}
+
+	float *NArray = new float[3 * pSurfels->NodeArray.n];
+
+	float *N = NArray;
+
+	int iSurfel;
+	Surfel *pSurfel;
+
+	for (iSurfel = 0; iSurfel < pSurfels->NodeArray.n; iSurfel++, N += 3)
+	{
+		pSurfel = pSurfels->NodeArray.Element + iSurfel;
+
+		RVLMULMX3X3VECT(R, pSurfel->N, N);
 	}
 
 	// Cluster surfels into convex surfaces.
@@ -244,10 +262,14 @@ void VNClassifier::ComputeDescriptor(
 
 	printf("Matching VN model to scene...");
 
-	InitBoundingBox<float>(&SBoundingBox, pSurfels->vertexArray.Element[0]->P);
+	P = PArray;
 
-	for (iVertex = 0; iVertex < pSurfels->vertexArray.n; iVertex++)
-		UpdateBoundingBox<float>(&SBoundingBox, pSurfels->vertexArray.Element[iVertex]->P);
+	InitBoundingBox<float>(&SBoundingBox, P);
+
+	P += 3;
+
+	for (iVertex = 1; iVertex < pSurfels->vertexArray.n; iVertex++, P += 3)
+		UpdateBoundingBox<float>(&SBoundingBox, P);
 
 	VN *pModel = models[iModel];
 
@@ -255,16 +277,17 @@ void VNClassifier::ComputeDescriptor(
 
 	bdS = new bool[pModel->featureArray.n];
 
-	pModel->Match4(pMesh, PArray, this, SBoundingBox, dS, bdS);
+	pModel->Match4(pMesh, PArray, NArray, R, t, this, SBoundingBox, dS, bdS);
 
 	delete[] PArray;
+	delete[] NArray;
 		 
 	printf("completed.\n");
 }
 
 void VNClassifier::Learn(
 	char *modelSequenceFileName,
-	int iModel,
+	int iClass,
 	Visualizer *pVisualizer)
 {
 	float resolution = 0.01f;
@@ -272,6 +295,8 @@ void VNClassifier::Learn(
 	Eigen::MatrixXf A(3, 66);
 
 	A = alignment.ConvexTemplatenT();
+
+	int iMetaModel = classArray.Element[iClass].iMetaModel;
 
 	Mesh mesh;
 
@@ -340,19 +365,19 @@ void VNClassifier::Learn(
 		{
 			alignment.ObjectAlignment(alignment.MCTISet.SegmentCTIs.Element[modelID],
 				alignment.MCTISet.pCTI.Element,
-				alignment.MCTISet.SegmentCTIs.Element[classArray.Element[iModel].iRefInstance],
-				alignment.MCTISet.pCTI.Element, A, R, t);
+				alignment.MCTISet.SegmentCTIs.Element[classArray.Element[iClass].iRefInstance],
+				alignment.MCTISet.pCTI.Element, A, R, t, true);
 
 			//RVLUNITMX3(R);
 			//RVLNULL3VECTOR(t);
 
-			ComputeDescriptor(&mesh, R, t, dS, bdS, SBoundingBox, iModel);
+			ComputeDescriptor(&mesh, R, t, dS, bdS, SBoundingBox, iMetaModel);
 
 			dbLoader.AddModel(currentModelID, modelFilePath, modelFileName);
 
 			if (pVisualizer)
 			{
-				pModel = models[iModel];
+				pModel = models[iMetaModel];
 
 				ExpandBox<float>(&SBoundingBox, 10.0f * resolution);
 
@@ -374,4 +399,29 @@ void VNClassifier::Learn(
 		SaveModelID(dbLoader, modelsInDataBase);
 
 	fclose(fp);
+}
+
+void VN_::_3DNetDatabaseClasses(VNClassifier *pClassifier)
+{
+	pClassifier->classArray.n = 10;
+
+	pClassifier->classArray.Element = new RECOG::ClassData[pClassifier->classArray.n];
+
+	RECOG::ClassData *pClass;
+
+	// class donut
+
+	pClass = pClassifier->classArray.Element + 5;
+	pClass->iMetaModel = RVLVN_METAMODEL_TORUS;
+	pClass->iFirstInstance = 126;
+	pClass->nInstances = 10;
+	pClass->iRefInstance = 126;
+
+	// class mug
+
+	pClass = pClassifier->classArray.Element + 9;
+	pClass->iMetaModel = RVLVN_METAMODEL_MUG;
+	pClass->iFirstInstance = 196;
+	pClass->nInstances = 61;
+	pClass->iRefInstance = 199;
 }

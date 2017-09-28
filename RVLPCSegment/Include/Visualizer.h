@@ -136,6 +136,7 @@ namespace RVL
 		vtkSmartPointer<vtkCornerAnnotation> text;
 		vtkSmartPointer<vtkCallbackCommand> keypressCallback;
 		vtkSmartPointer<vtkCallbackCommand> mouseRButtonDownCallback;	
+		vtkSmartPointer<vtkOrientationMarkerWidget> widget;
 		double normalLength;
 		bool bNormals;
 		bool bNormalsVisible;

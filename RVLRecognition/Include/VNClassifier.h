@@ -2,6 +2,8 @@
 
 namespace RVL
 {
+	class VNClassifier;
+
 	namespace RECOG
 	{
 		namespace VN_
@@ -11,10 +13,13 @@ namespace RVL
 				float resolution;
 				float SDFSurfaceValue;
 			};
+
+			void _3DNetDatabaseClasses(VNClassifier *pClassifier);
 		}
 
 		struct ClassData
 		{
+			int iMetaModel;
 			int iRefInstance;
 			int iFirstInstance;
 			int nInstances;
@@ -40,7 +45,7 @@ namespace RVL
 			int iModel = -1);
 		void Learn(
 			char *modelSequenceFileName,
-			int iModel = -1,
+			int iClass = -1,
 			Visualizer *pVisualizer = NULL); //Vidovic)
 
 	public:

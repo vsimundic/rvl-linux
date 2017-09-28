@@ -5,6 +5,12 @@
 #define RVLVN_CLUSTER_TYPE_XTORUS	2
 #define RVLVN_CLUSTER_TYPE_ITORUS	3
 
+#define RVLVN_METAMODEL_TORUS	0
+#define RVLVN_METAMODEL_BOTTLE	1
+#define RVLVN_METAMODEL_HAMMER	2
+#define RVLVN_METAMODEL_BOWL	3
+#define RVLVN_METAMODEL_MUG		4
+
 // Move to Util.h.
 
 #define RVLRND(n, iRnd, nRnd, iiRnd, x)	{x = iRnd[iiRnd] % n; iiRnd = (iiRnd + 1) % nRnd;}
@@ -426,6 +432,13 @@ namespace RVL
 			float *d = NULL,
 			bool *bd = NULL,
 			float maxe = 0.0f);
+		float Evaluate(
+			float *PArray,
+			int nP,
+			float *SDF,
+			float *d = NULL,
+			bool *bd = NULL,
+			float maxe = 0.0f);
 		void ComputeFeatureSDFs(
 			float *P,
 			float *SDF,
@@ -507,6 +520,9 @@ namespace RVL
 		void Match4(
 			Mesh *pMesh,
 			float *PArray,
+			float *NArray,
+			float *R,
+			float *t,
 			void *vpClassifier,
 			Box<float> boundingBox,
 			float *dS,
@@ -514,6 +530,7 @@ namespace RVL
 		void ToroidalClusters(
 			Mesh *pMesh,
 			float *PArray,
+			float *NArray,
 			SurfelGraph *pSurfels,
 			float *axis,
 			Array<float> alphaArray,

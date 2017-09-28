@@ -69,6 +69,7 @@
 #include "vtkLandmarkTransform.h"
 #include "vtkMatrix4x4.h"
 #include "vtkVertexGlyphFilter.h"
+#include "vtkOrientationMarkerWidget.h"
 
 #include "opencv2\opencv.hpp"
 
