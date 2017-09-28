@@ -12,6 +12,13 @@ namespace RVL
 				float SDFSurfaceValue;
 			};
 		}
+
+		struct ClassData
+		{
+			int iRefInstance;
+			int iFirstInstance;
+			int nInstances;
+		};
 	}
 
 	class VNClassifier
@@ -58,6 +65,7 @@ namespace RVL
 			Mesh *pMesh,
 			bool bSavePLY);
 		RECOG::VN_::VisualizationData visualizationData;
+		Array<RECOG::ClassData> classArray;
 	};
 }
 

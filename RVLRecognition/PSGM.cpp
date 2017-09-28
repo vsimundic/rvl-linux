@@ -3597,11 +3597,11 @@ void PSGM::LoadModelDataBase()
 		tBestMatch.Element[i].n = 3;
 	}
 
-	char *TGFileName = RVLCreateFileName(modelDataBase, ".dat", -1, ".tgr");
+	//char *TGFileName = RVLCreateFileName(modelDataBase, ".dat", -1, ".tgr");
 
-	MTGSet.Load(TGFileName);
+	//MTGSet.Load(TGFileName);
 
-	delete[] TGFileName;
+	//delete[] TGFileName;
 }
 
 void PSGM::LoadCTI(char *fileName)
@@ -13461,6 +13461,7 @@ vtkSmartPointer<vtkPolyData> PSGM::GetPoseCorrectedVisibleModel(int iMatch)
 	return finPD;
 }
 
+#ifdef NEVER	// Old version
 void PSGM::ObjectAlignment()
 {
 	FILE *fpTranspose;
@@ -13658,6 +13659,7 @@ void PSGM::ObjectAlignment()
 	}
 	fclose(fpTranspose);
 }
+#endif
 
 void PSGM::VisualizeAlignedModels(int iRefModel, int iModel)
 {
@@ -14645,7 +14647,7 @@ void PSGM::CreateDilatedDepthImage()
 
 // cupec_branch3
 
-#ifdef NEVER		// Old version
+#ifdef NEVER		// Even older version
 void PSGM::ObjectAlignment()
 {
 	RECOG::PSGM_::ModelInstance *pMCTI;
@@ -15293,6 +15295,229 @@ int PSGM::CheckHypothesesToSegmentEnvelopmentAndCollision(int hyp, int segment, 
 // PETRA
 //
 ///////////////////////////////////////////////////////////////////////////
+
+void PSGM::ObjectAlignment(
+	Array<int> iSCTIArray,
+	RECOG::PSGM_::ModelInstance **SCTIArray,
+	Array<int> iMCTIArray,
+	RECOG::PSGM_::ModelInstance **MCTIArray,
+	Eigen::MatrixXf A,
+	float *R,
+	float *t)
+{
+	Eigen::MatrixXf M(4, 66), P, D(66, 1), T(4, 4), T0p(4, 4), Tiq(4, 4), d(1, 66), S, E;
+
+	D.resize(66, iSCTIArray.n);
+
+	RECOG::PSGM_::ModelInstance *pMCTI;
+	RECOG::PSGM_::ModelInstanceElement *pMIE;
+
+	for (int k = 0; k < iSCTIArray.n; k++) //for all CTI-s in current model
+	{
+		pMCTI = SCTIArray[iSCTIArray.Element[k]];
+		pMIE = pMCTI->modelInstance.Element;
+
+		for (int di = 0; di < 66; di++)
+		{
+			D.block<1, 1>(di, k) << pMIE->d;
+			pMIE++;
+		}
+		//if (k!=m_i-1) D.conservativeResize(D.rows(), D.cols() + 1);
+		//D.conservativeResize(D.rows(), D.cols() + 1);
+	}
+
+	float min = 1000;
+
+	float sum, s;
+	int p, q;
+	Eigen::VectorXf t_(3);
+
+	for (int j = 0; j < iMCTIArray.n; j++) //for all CTI-s in reference model
+	{
+		pMCTI = MCTIArray[iMCTIArray.Element[j]];
+		pMIE = pMCTI->modelInstance.Element;
+
+		for (int di = 0; di < 66; di++)
+		{
+			d(0, di) = pMIE->d;
+			pMIE++;
+		}
+		M.block<3, 66>(0, 0) << A;
+		M.block<1, 66>(3, 0) << d;
+		Eigen::MatrixXf Mt = M.transpose();
+		P = (Mt.transpose()*Mt).inverse()*Mt.transpose();
+		S = P*D;
+		E = D - Mt*S;
+
+		for (int je = 0; je < E.cols(); je++)
+		{
+			sum = 0;
+			for (int ie = 0; ie < E.rows(); ie++)
+			{
+				sum += E(ie, je)*E(ie, je);
+			}
+			if (sum < min)
+			{
+				min = sum;
+				p = j;
+				q = je;
+				t_ = S.block<3, 1>(0, q);
+				//s = *(float*)(&S.data()[3 * S.cols() + q]);
+				s = S(3, q);
+			}
+		}
+
+	}
+	//I = Eigen::Matrix<float, 3, 3>::Identity();			
+
+	T.block<3, 3>(0, 0) << s, 0, 0, 0, s, 0, 0, 0, s;
+	T.block<3, 1>(0, 3) << t_;
+	T.block<1, 3>(3, 0) << 0, 0, 0;
+	T.block<1, 1>(3, 3) << 1;
+
+
+	//memcpy(Tiq.block<3, 3>(0, 0).data(), MCTISet.pCTI.Element[iPrevClusters + q]->R, 9 * sizeof(float));
+	//memcpy(Tiq.block<3, 1>(0, 3).data(), MCTISet.pCTI.Element[iPrevClusters + q]->t, 3 * sizeof(float));
+
+
+	//Tiq(0, 0) = MCTISet.pCTI.Element[iPrevClusters + q]->R[0];
+	//Tiq(0, 1) = MCTISet.pCTI.Element[iPrevClusters + q]->R[1];
+	//Tiq(0, 2) = MCTISet.pCTI.Element[iPrevClusters + q]->R[2];
+	//Tiq(0, 3) = MCTISet.pCTI.Element[iPrevClusters + q]->t[0];
+	//Tiq(1, 0) = MCTISet.pCTI.Element[iPrevClusters + q]->R[3];
+	//Tiq(1, 1) = MCTISet.pCTI.Element[iPrevClusters + q]->R[4];
+	//Tiq(1, 2) = MCTISet.pCTI.Element[iPrevClusters + q]->R[5];
+	//Tiq(1, 3) = MCTISet.pCTI.Element[iPrevClusters + q]->t[1];
+	//Tiq(2, 0) = MCTISet.pCTI.Element[iPrevClusters + q]->R[6];
+	//Tiq(2, 1) = MCTISet.pCTI.Element[iPrevClusters + q]->R[7];
+	//Tiq(2, 2) = MCTISet.pCTI.Element[iPrevClusters + q]->R[8];
+	//Tiq(2, 3) = MCTISet.pCTI.Element[iPrevClusters + q]->t[2];
+	pMCTI = SCTIArray[iSCTIArray.Element[q]];
+	Tiq(0, 0) = pMCTI->R[0];
+	Tiq(0, 1) = pMCTI->R[1];
+	Tiq(0, 2) = pMCTI->R[2];
+	Tiq(0, 3) = pMCTI->t[0];
+	Tiq(1, 0) = pMCTI->R[3];
+	Tiq(1, 1) = pMCTI->R[4];
+	Tiq(1, 2) = pMCTI->R[5];
+	Tiq(1, 3) = pMCTI->t[1];
+	Tiq(2, 0) = pMCTI->R[6];
+	Tiq(2, 1) = pMCTI->R[7];
+	Tiq(2, 2) = pMCTI->R[8];
+	Tiq(2, 3) = pMCTI->t[2];
+	Tiq.block<1, 3>(3, 0) << 0, 0, 0;
+	Tiq(3, 3) = 1;
+
+	float t1 = Tiq(0, 0);
+	float t2 = Tiq(0, 1);
+	float t3 = Tiq(0, 2);
+	float t4 = Tiq(0, 3);
+	float t5 = Tiq(1, 0);
+	float t6 = Tiq(1, 1);
+	float t7 = Tiq(1, 2);
+	float t8 = Tiq(1, 3);
+	float t9 = Tiq(2, 0);
+	float t10 = Tiq(2, 1);
+	float t11 = Tiq(2, 2);
+	float t12 = Tiq(2, 3);
+
+	//memcpy(T0p.block<3, 3>(0, 0).data(), MCTISet.pCTI.Element[p]->R, 9 * sizeof(float));
+	//memcpy(T0p.block<3, 1>(0, 3).data(), MCTISet.pCTI.Element[p]->t, 3 * sizeof(float));
+	pMCTI = MCTIArray[iMCTIArray.Element[p]];
+	T0p(0, 0) = pMCTI->R[0];
+	T0p(0, 1) = pMCTI->R[1];
+	T0p(0, 2) = pMCTI->R[2];
+	T0p(0, 3) = pMCTI->t[0];
+	T0p(1, 0) = pMCTI->R[3];
+	T0p(1, 1) = pMCTI->R[4];
+	T0p(1, 2) = pMCTI->R[5];
+	T0p(1, 3) = pMCTI->t[1];
+	T0p(2, 0) = pMCTI->R[6];
+	T0p(2, 1) = pMCTI->R[7];
+	T0p(2, 2) = pMCTI->R[8];
+	T0p(2, 3) = pMCTI->t[2];
+	T0p.block<1, 3>(3, 0) << 0, 0, 0;
+	T0p(3, 3) = 1;
+
+	t1 = T0p(0, 0);
+	t2 = T0p(0, 1);
+	t3 = T0p(0, 2);
+	t4 = T0p(0, 3);
+	t5 = T0p(1, 0);
+	t6 = T0p(1, 1);
+	t7 = T0p(1, 2);
+	t8 = T0p(1, 3);
+	t9 = T0p(2, 0);
+	t10 = T0p(2, 1);
+	t11 = T0p(2, 2);
+	t12 = T0p(2, 3);
+
+	T0i = Tiq*T*T0p.transpose();
+
+	RVLMXEL(R,3,0,0) = T0i(0, 0);
+	RVLMXEL(R,3,0,1) = T0i(0, 1);
+	RVLMXEL(R,3,0,2) = T0i(0, 2);
+	t[0] = T0i(0, 3);
+	RVLMXEL(R,3,1,0) = T0i(1, 0);
+	RVLMXEL(R,3,1,1) = T0i(1, 1);
+	RVLMXEL(R,3,1,2) = T0i(1, 2);
+	t[1] = T0i(1, 3);
+	RVLMXEL(R,3,2,0) = T0i(2, 0);
+	RVLMXEL(R,3,2,1) = T0i(2, 1);
+	RVLMXEL(R,3,2,2) = T0i(2, 2);
+	t[2] = T0i(2, 3);
+}
+
+void PSGM::ObjectAlignment()
+{
+	FILE *fpTranspose;
+	fpTranspose = fopen("D:\\ARP3D\\mug_transpose.txt", "w");
+
+	//apple-> 0, 10; banana -> 10, 6; bottle -> 16, 69; bowl -> 85, 15; car -> 100, 26 
+	//donut -> 126, 10; hammer -> 136, 32; tetra_pak -> 168, 22; toilet_paper -> 190, 6 mug ->196, 61
+	int iRefObject = 0;
+	int nObjectsInClass = 3;
+
+	Eigen::MatrixXf A(3, 66);
+
+	A = ConvexTemplatenT(); //normals
+
+	//int n = MCTISet.nModels; // number of models in database
+	int n = nObjectsInClass;
+
+	RECOG::PSGM_::ModelInstance **MCTIArray = MCTISet.pCTI.Element;
+
+	Array<int> iMCTIArray = MCTISet.SegmentCTIs.Element[iRefObject];
+
+	Array<int> iSCTIArray;
+	float R[9];
+	float t[3];
+		
+	for (int i = 1; i < n; i++) //for all non-reference models
+	{
+		iSCTIArray = MCTISet.SegmentCTIs.Element[iRefObject + i];
+
+		ObjectAlignment(iSCTIArray, MCTIArray, iMCTIArray, MCTIArray, A, R, t);
+
+		fprintf(fpTranspose, "%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\n", 
+			RVLMXEL(R, 3, 0, 0),
+			RVLMXEL(R, 3, 0, 1),
+			RVLMXEL(R, 3, 0, 2),
+			t[0],
+			RVLMXEL(R, 3, 1, 0),
+			RVLMXEL(R, 3, 1, 1),
+			RVLMXEL(R, 3, 1, 2),
+			t[1],
+			RVLMXEL(R, 3, 0, 0),
+			RVLMXEL(R, 3, 2, 0),
+			RVLMXEL(R, 3, 2, 1),
+			t[2]);
+
+		VisualizeAlignedModels(0, i);
+	}
+	fclose(fpTranspose);
+}
+
 
 ///////////////////////////////////////////////////////////////////////////
 //

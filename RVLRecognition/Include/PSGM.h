@@ -326,6 +326,15 @@ namespace RVL
 		void CalculateNNCost(Visualizer *pVisualizer, RVL::PSGM::ICPfunction ICPFunction, int ICPvariant); // For each pair of scene segment and visible part of the matched model, calls NNCost.
 
 		float NNCost(int iCluster, vtkSmartPointer<vtkPolyData> sourcePD, vtkSmartPointer<vtkPolyData> targetPD, int similarityMeasure = 0); // Calculates cost based on sum of distances between scene segment points and their nearest neighbours in visible part of the matched model.
+
+		void ObjectAlignment(
+			Array<int> iSCTIArray,
+			RECOG::PSGM_::ModelInstance **SCTIArray,
+			Array<int> iMCTIArray,
+			RECOG::PSGM_::ModelInstance **MCTIArray,
+			Eigen::MatrixXf A,
+			float *R,
+			float *t);
 		
 		void ObjectAlignment(); // Calculates transformation matrix to align object with a reference object (for classification)
 
@@ -685,7 +694,7 @@ namespace RVL
 		//For alignment:
 		Eigen::MatrixXf T0i;
 		int iCorrectClass;
-
+		char *modelDataBase; //Vidovic
 
 	private:		
 		RECOG::PSGM_::Cluster *clusterMem;
@@ -694,7 +703,6 @@ namespace RVL
 		//RECOG::PSGM_::ModelInstanceElement *modelInstanceMem;
 		vtkSmartPointer<vtkPolyData> referenceFramesPolyData;
 		//char *sceneFileName; //moved to public - Vidovic
-		char *modelDataBase; //Vidovic
 		char *modelsInDataBase; //Vidovic
 		//int nSamples; //RANSAC //Vidovic
 		int stdNoise; //RANSAC //Vidovic

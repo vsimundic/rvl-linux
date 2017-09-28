@@ -1070,6 +1070,16 @@ int main(int argc, char ** argv)
 
 		classifier.Create(cfgFileName);
 
+		classifier.classArray.n = 10;
+
+		classifier.classArray.Element = new RECOG::ClassData[classifier.classArray.n];
+
+		RECOG::ClassData *pClass = classifier.classArray.Element + RVLRECOGNITION_DEMO_VN_MODEL_MUG;
+
+		pClass->iFirstInstance = 196;
+		pClass->nInstances = 61;
+		pClass->iRefInstance = 196;
+
 		if (classifier.mode == RVLRECOGNITION_MODE_TRAINING)
 			classifier.Learn(modelSequenceFileName, VNModel, &visualizer); //Vidovic
 		else if (classifier.mode == RVLRECOGNITION_MODE_RECOGNITION)

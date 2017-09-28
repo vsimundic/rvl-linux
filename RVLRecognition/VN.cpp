@@ -3712,13 +3712,13 @@ void VN::Match4(
 					{
 						N = featureArray.Element[iFeature].N;
 
-						P = pSurfels->vertexArray.Element[pSCCluster->iVertexArray.Element[0]]->P;
+						P = PArray + 3 * pSCCluster->iVertexArray.Element[0];
 
 						maxd = RVLDOTPRODUCT3(N, P);
 
 						for (j = 1; j < pSCCluster->iVertexArray.n; j++)
 						{
-							P = pSurfels->vertexArray.Element[pSCCluster->iVertexArray.Element[j]]->P;
+							P = PArray + 3 * pSCCluster->iVertexArray.Element[j];
 
 							d = RVLDOTPRODUCT3(N, P);
 
@@ -3737,13 +3737,13 @@ void VN::Match4(
 					{
 						N = featureArray.Element[iFeature].N;
 
-						P = pSurfels->vertexArray.Element[pSUCluster->iVertexArray.Element[0]]->P;
+						P = PArray + 3 * pSUCluster->iVertexArray.Element[0];
 
 						mind = RVLDOTPRODUCT3(N, P);
 
 						for (j = 1; j < pSUCluster->iVertexArray.n; j++)
 						{
-							P = pSurfels->vertexArray.Element[pSUCluster->iVertexArray.Element[j]]->P;
+							P = PArray + 3 * pSUCluster->iVertexArray.Element[j];
 
 							d = RVLDOTPRODUCT3(N, P);
 

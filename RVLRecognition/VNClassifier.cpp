@@ -33,6 +33,7 @@ VNClassifier::VNClassifier()
 	visualizationData.SDFSurfaceValue = 0.0f;
 	modelDataBase = NULL; //Vidovic
 	modelsInDataBase = NULL; //Vidovic
+	classArray.Element = NULL;
 }
 
 
@@ -98,6 +99,10 @@ void VNClassifier::Create(char *cfgFileName)
 	paramList.LoadParams(cfgFileName);
 
 	clusteringTolerance = 3.0f * convexClustering.kNoise * 2.0f / pSurfelDetector->kPlane;
+
+	alignment.modelDataBase = RVLCreateString(modelDataBase);
+
+	alignment.LoadModelDataBase();
 }
 
 void VNClassifier::CreateParamList()
@@ -130,6 +135,8 @@ void VNClassifier::Clear()
 		delete[] models[iModel];
 
 	models.clear();
+
+	RVL_DELETE_ARRAY(classArray.Element);
 }
 
 void VNClassifier::ComputeDescriptor(
@@ -141,6 +148,24 @@ void VNClassifier::ComputeDescriptor(
 	Box<float> &SBoundingBox,
 	int iModel)
 {
+	// Detect surfels.
+
+	pSurfels->Init(pMesh);
+
+	pSurfelDetector->Init(pMesh, pSurfels, pMem);
+
+	printf("Segmentation to surfels...");
+
+	pSurfelDetector->Segment(pMesh, pSurfels);
+
+	printf("completed.\n");
+
+	int nSurfels = pSurfels->NodeArray.n;
+
+	printf("No. of surfels = %d\n", nSurfels);
+
+	pSurfels->DetectVertices(pMesh);
+
 	// Transform vertices.
 
 	float R[9];
@@ -178,24 +203,6 @@ void VNClassifier::ComputeDescriptor(
 
 		RVLTRANSF3(pVertex->P, R, t, P);
 	}
-
-	// Detect surfels.
-
-	pSurfels->Init(pMesh);
-
-	pSurfelDetector->Init(pMesh, pSurfels, pMem);
-
-	printf("Segmentation to surfels...");
-
-	pSurfelDetector->Segment(pMesh, pSurfels);
-
-	printf("completed.\n");
-
-	int nSurfels = pSurfels->NodeArray.n;
-
-	printf("No. of surfels = %d\n", nSurfels);
-
-	pSurfels->DetectVertices(pMesh);
 
 	// Cluster surfels into convex surfaces.
 
@@ -262,6 +269,10 @@ void VNClassifier::Learn(
 {
 	float resolution = 0.01f;
 
+	Eigen::MatrixXf A(3, 66);
+
+	A = alignment.ConvexTemplatenT();
+
 	Mesh mesh;
 
 	FileSequenceLoader modelsLoader;
@@ -290,6 +301,11 @@ void VNClassifier::Learn(
 	bool *bdS;
 	Box<float> SBoundingBox;
 	VN *pModel;
+	float R[9];
+	float t[3];
+	char modelFilePath_[200];
+	char modelFileName_[200];
+	int modelID, modelID_;
 
 	while (modelsLoader.GetNext(modelFilePath, modelFileName))
 	{
@@ -306,27 +322,50 @@ void VNClassifier::Learn(
 
 		pMem->Clear();
 
+		dbLoader.ResetID();
 
+		modelID = -1;
 
-		ComputeDescriptor(&mesh, NULL, NULL, dS, bdS, SBoundingBox, iModel);
+		while (dbLoader.GetNext(modelFilePath_, modelFileName_, &modelID_))
+			if (strcmp(modelFileName, modelFileName_) == 0)
+			{
+				modelID = modelID_;
 
-		dbLoader.AddModel(currentModelID, modelFilePath, modelFileName);
+				break;
+			}
 
-		if (pVisualizer)
+		if (modelID < 0)
+			printf("CTI of the considered model is not available!");
+		else
 		{
-			pModel = models[iModel];
+			alignment.ObjectAlignment(alignment.MCTISet.SegmentCTIs.Element[modelID],
+				alignment.MCTISet.pCTI.Element,
+				alignment.MCTISet.SegmentCTIs.Element[classArray.Element[iModel].iRefInstance],
+				alignment.MCTISet.pCTI.Element, A, R, t);
 
-			ExpandBox<float>(&SBoundingBox, 10.0f * resolution);
+			//RVLUNITMX3(R);
+			//RVLNULL3VECTOR(t);
 
-			pVisualizer->renderer->RemoveAllViewProps();
+			ComputeDescriptor(&mesh, R, t, dS, bdS, SBoundingBox, iModel);
 
-			pModel->Display(pVisualizer, SBoundingBox, visualizationData.resolution, dS, bdS, visualizationData.SDFSurfaceValue);
+			dbLoader.AddModel(currentModelID, modelFilePath, modelFileName);
 
-			pVisualizer->Run();
+			if (pVisualizer)
+			{
+				pModel = models[iModel];
+
+				ExpandBox<float>(&SBoundingBox, 10.0f * resolution);
+
+				pVisualizer->renderer->RemoveAllViewProps();
+
+				pModel->Display(pVisualizer, SBoundingBox, visualizationData.resolution, dS, bdS, visualizationData.SDFSurfaceValue);
+
+				pVisualizer->Run();
+			}
+
+			delete[] dS;
+			delete[] bdS;
 		}
-
-		delete[] dS;
-		delete[] bdS;
 	}
 
 	printf("Model DB creation completed!\n");
