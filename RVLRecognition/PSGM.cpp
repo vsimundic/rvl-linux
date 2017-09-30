@@ -7449,8 +7449,6 @@ void PSGM::DisplayCTIs(
 
 		DisplayCTI(pVisualizer, pCTI);
 	}
-
-	RVL_DELETE_ARRAY(CTIArray.Element);
 }
 
 void PSGM::DisplayCTI(

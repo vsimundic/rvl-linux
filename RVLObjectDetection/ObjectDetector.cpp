@@ -940,7 +940,7 @@ void ObjectDetector::DetectObjects(char *MeshFilePathName)
 				//pPSGM->CTIs(pObjects, &CTIs);
 				pPSGM->convexTemplate = pPSGM->convexTemplateBox;
 				pPSGM->CTIs(-1, pObjects, &boundingBoxes, pMem);
-				SaveBoundingBoxSizes(MeshFilePathName);
+				//SaveBoundingBoxSizes(MeshFilePathName);
 				//pPSGM->convexTemplate = pPSGM->convexTemplate66;
 				pObjects->pMesh = &mesh;
 				pObjects->DetermineObjectConvexityData(convexityThr, 0.15, false);
