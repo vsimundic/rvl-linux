@@ -353,8 +353,24 @@ namespace RVL
 			void CreateMug(
 				VN *pVN,
 				CRVLMem *pMem);
-		}
-	}
+		}	// namespace VN_
+	}	// namespace RECOG
+
+	void SampleMeshDistanceFunction(
+		Mesh *pMesh,
+		SurfelGraph *pSurfels,
+		float voxelSize,
+		int sampleVoxelDistance,
+		Array3D<RECOG::VN_::Voxel> &volume,
+		float *P0,
+		Array<RECOG::VN_::Sample> &sampleArray,
+		Box<float> &boundingBox);
+
+	void DisplaySampledMesh(
+		Visualizer *pVisualizer,
+		Array3D<RECOG::VN_::Voxel> volume,
+		float *P0,
+		float voxelSize);
 
 	class VN
 	{
@@ -557,7 +573,6 @@ namespace RVL
 		void Load(
 			char *fileName,
 			CRVLMem *pMem);
-		void DisplaySampledMesh(Visualizer *pVisualizer);
 		void Display(
 			Visualizer *pVisualizer,
 			Box<float> box,

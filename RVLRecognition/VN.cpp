@@ -605,311 +605,10 @@ void VN::Create(
 
 	voxelSize = voxelSize_;
 
-	pMesh->BoundingBox(&boundingBox);
-
-	int border = sampleVoxelDistance + 1;
-
-	int nx = (int)ceil(0.5f * (boundingBox.maxx - boundingBox.minx) / voxelSize) + border;
-	int ny = (int)ceil(0.5f * (boundingBox.maxy - boundingBox.miny) / voxelSize) + border;
-	int nz = (int)ceil(0.5f * (boundingBox.maxz - boundingBox.minz) / voxelSize) + border;
-
-	float a = voxelSize * (float)nx;
-	float b = voxelSize * (float)ny;
-	float c = voxelSize * (float)nz;
-
-	float center[3];
-
-	BoxCenter<float>(&boundingBox, center);
-
-	Box<float> box;
-
-	box.minx = center[0] - a;
-	box.miny = center[1] - b;
-	box.minz = center[2] - c;
-	box.maxx = center[0] + a;
-	box.maxy = center[1] + b;
-	box.maxz = center[2] + c;
-
-	volume.a = 2 * nx;
-	volume.b = 2 * ny;
-	volume.c = 2 * nz;
-
-	int nVoxels = volume.a * volume.b * volume.c;
-
-	volume.Element = new RECOG::VN_::Voxel[nVoxels];
-
-	//int maxVoxelDistance = volume.a + volume.b + volume.c;
-
-	int maxVoxelDistance = sampleVoxelDistance + 1;
-
-	int i;
-	QList<QLIST::Index> *pPtList;
-	RECOG::VN_::Voxel *pVoxel;
-
-	for (i = 0; i < nVoxels; i++)
-	{
-		pVoxel = volume.Element + i;
-
-		pPtList = &(pVoxel->PtList);
-
-		RVLQLIST_INIT(pPtList);
-
-		pVoxel->voxelDistance = -1;
-	}
-
-	QLIST::Index *PtMem = new QLIST::Index[pMesh->NodeArray.n];
-
-	QLIST::Index *pPtIdx = PtMem;
-
-	float *P;
-	int iPt;
-	int j, k;
-
-	for (iPt = 0; iPt < pMesh->NodeArray.n; iPt++)
-	{
-		P = pMesh->NodeArray.Element[iPt].P;
-
-		i = (int)floor((P[0] - box.minx) / voxelSize);
-		j = (int)floor((P[1] - box.miny) / voxelSize);
-		k = (int)floor((P[2] - box.minz) / voxelSize);
-
-		pVoxel = RVL3DARRAY_ELEMENT(volume, i, j, k);
-
-		pPtList = &(pVoxel->PtList);
-
-		pPtIdx->Idx = iPt;
-
-		RVLQLIST_ADD_ENTRY(pPtList, pPtIdx);
-
-		pPtIdx++;
-	}
-
-	int *RGBuff = new int[nVoxels];
-
-	int *pPut = RGBuff;
-	int *pFetch = RGBuff;
-
-	Array<int> zeroDistanceVoxelArray;
-
-	zeroDistanceVoxelArray.Element = new int[nVoxels];
-
-	zeroDistanceVoxelArray.n = 0;
-
-	*(pPut++) = 0;
-
-	int dijk[][3] = {
-		{ -1, 0, 0 },
-		{ 1, 0, 0 },
-		{ 0, -1, 0 },
-		{ 0, 1, 0 },
-		{ 0, 0, -1 },
-		{ 0, 0, 1 } };
-
-	int iVoxel, iVoxel_;
-	int i_, j_, k_, l;
-
-	while (pPut > pFetch)
-	{
-		iVoxel = (*pFetch++);
-
-		RVL3DARRAY_INDICES(volume, iVoxel, i, j, k);
-
-		for (l = 0; l < 6; l++)
-		{
-			i_ = i + dijk[l][0];
-			j_ = j + dijk[l][1];
-			k_ = k + dijk[l][2];
-
-			if (i_ >= 0 && i_ < volume.a && j_ >= 0 && j_ < volume.b && k_ >= 0 && k_ < volume.c)
-			{
-				iVoxel_ = RVL3DARRAY_INDEX(volume, i_, j_, k_);
-
-				pVoxel = volume.Element + iVoxel_;
-
-				if (pVoxel->voxelDistance >= 0)
-					continue;
-
-				if (pVoxel->PtList.pFirst)
-				{
-					pVoxel->voxelDistance = 0;
-
-					zeroDistanceVoxelArray.Element[zeroDistanceVoxelArray.n++] = iVoxel_;
-				}
-				else
-				{
-					pVoxel->voxelDistance = maxVoxelDistance;
-
-					*(pPut++) = iVoxel_;
-				}
-			}
-		}
-	}
-
 	Array<RECOG::VN_::Sample> sampleArray;
+	float P0[3];
 
-	sampleArray.Element = new RECOG::VN_::Sample[nVoxels];
-
-	sampleArray.n = 0;
-
-	float halfVoxelSize = 0.5f * voxelSize;
-
-	P0[0] = box.minx + halfVoxelSize;
-	P0[1] = box.miny + halfVoxelSize;
-	P0[2] = box.minz + halfVoxelSize;
-
-	pPut = RGBuff + zeroDistanceVoxelArray.n;
-
-	pFetch = RGBuff;
-
-	memcpy(RGBuff, zeroDistanceVoxelArray.Element, zeroDistanceVoxelArray.n * sizeof(int));
-
-	float maxeSDF = voxelSize * (sampleVoxelDistance + 2);
-
-	float maxDist = maxeSDF * maxeSDF;
-
-	int voxelDistance;
-	int i__, j__, k__;
-	int p, q, r;
-	float dist, minDist;
-	int iVoxel__;
-	float *P_;
-	float dP[3];
-	int iClosestPt;
-	VN_::Sample *pSample;
-	float SDF, eSDF, mineSDF;
-	Surfel *pFeature;
-	int iFeature;
-
-	while (pPut > pFetch)
-	{
-		iVoxel = (*pFetch++);
-
-		pVoxel = volume.Element + iVoxel;
-
-		voxelDistance = pVoxel->voxelDistance + 1;
-
-		RVL3DARRAY_INDICES(volume, iVoxel, i, j, k);
-
-		for (l = 0; l < 6; l++)
-		{
-			i_ = i + dijk[l][0];
-			j_ = j + dijk[l][1];
-			k_ = k + dijk[l][2];
-
-			if (i_ >= 0 && i_ < volume.a && j_ >= 0 && j_ < volume.b && k_ >= 0 && k_ < volume.c)
-			{
-				iVoxel_ = RVL3DARRAY_INDEX(volume, i_, j_, k_);
-
-				pVoxel = volume.Element + iVoxel_;
-
-				if (pVoxel->voxelDistance > voxelDistance)
-				{
-					pVoxel->voxelDistance = voxelDistance;
-
-					*(pPut++) = iVoxel_;
-
-					if (voxelDistance == sampleVoxelDistance)
-					{
-						pSample = sampleArray.Element + sampleArray.n;
-
-						P = pSample->P;
-
-						P[0] = (float)i_ * voxelSize;
-						P[1] = (float)j_ * voxelSize;
-						P[2] = (float)k_ * voxelSize;
-
-						RVLSUM3VECTORS(P, P0, P);
-
-						minDist = maxDist;
-
-						iClosestPt = -1;
-
-						for (k__ = k_ - 1; k__ <= k_ + 1; k__++)
-							for (j__ = j_ - 1; j__ <= j_ + 1; j__++)
-								for (i__ = i_ - 1; i__ <= i_ + 1; i__++)
-								{
-									if (i__ == i_ && j__ == j_ && k__ == k_)
-										continue;
-
-									iVoxel__ = RVL3DARRAY_INDEX(volume, i__, j__, k__);
-
-									pPtIdx = volume.Element[iVoxel__].PtList.pFirst;
-
-									while (pPtIdx)
-									{
-										P_ = pMesh->NodeArray.Element[pPtIdx->Idx].P;
-
-										RVLDIF3VECTORS(P_, P, dP);
-
-										dist = RVLDOTPRODUCT3(dP, dP);
-
-										if (dist < minDist)
-										{
-											minDist = dist;
-
-											iClosestPt = pPtIdx->Idx;
-
-											p = i__;
-											q = j__;
-											r = k__;
-										}
-
-										pPtIdx = pPtIdx->pNext;
-									}
-								}
-
-						pSample->iFeature = -1;
-
-						mineSDF = maxeSDF;
-
-						if (iClosestPt >= 0)
-						{
-							pSample->SDF = sqrt(minDist);
-
-							for (k__ = r - 1; k__ <= r + 1; k__++)
-								for (j__ = q - 1; j__ <= q + 1; j__++)
-									for (i__ = p - 1; i__ <= p + 1; i__++)
-									{
-										iVoxel__ = RVL3DARRAY_INDEX(volume, i__, j__, k__);
-
-										pPtIdx = volume.Element[iVoxel__].PtList.pFirst;
-
-										while (pPtIdx)
-										{
-											iFeature = pSurfels->surfelMap[pPtIdx->Idx];
-
-											if (iFeature >= 0)
-											{
-												pFeature = pSurfels->NodeArray.Element + iFeature;
-
-												if (pFeature->size > 1)
-												{
-													SDF = RVLDOTPRODUCT3(pFeature->N, P) - pFeature->d;
-
-													eSDF = pSample->SDF - SDF;
-
-													eSDF = RVLABS(eSDF);
-
-													if (eSDF < mineSDF)
-													{
-														mineSDF = eSDF;
-
-														pSample->iFeature = iFeature;
-													}
-												}
-											}
-
-											pPtIdx = pPtIdx->pNext;
-										}
-									}
-
-							sampleArray.n++;
-						}	// if (iClosestPt >= 0)
-					}	// if (voxelDistance == sampleVoxelDistance)
-				}	// if (pVoxel->voxelDistance > voxelDistance)
-			}	// if (i_ >= 0 && i_ < volume.a && j_ >= 0 && j_ < volume.b && k_ >= 0 && k_ < volume.c)
-		}	// for (l = 0; l < 6; l++)
-	}	// while (pPut > pFetch)
+	SampleMeshDistanceFunction(pMesh, pSurfels, voxelSize, sampleVoxelDistance, volume, P0, sampleArray, boundingBox);
 
 	Array<QList<QLIST::Index>> surfelSampleAssignmentArray;
 
@@ -918,6 +617,7 @@ void VN::Create(
 	surfelSampleAssignmentArray.n = pSurfels->NodeArray.n;
 
 	QList<QLIST::Index> *pSurfelSampleList;
+	int i;
 
 	for (i = 0; i < surfelSampleAssignmentArray.n; i++) 
 	{
@@ -929,7 +629,7 @@ void VN::Create(
 
 	QLIST::Index *pSampleIdx = surfelSampleAssignmentMem;
 
-	int iSample;
+	int iSample, iFeature;
 
 	for (iSample = 0; iSample < sampleArray.n; iSample++)
 	{
@@ -1030,6 +730,7 @@ void VN::Create(
 
 	RECOG::VN_::Feature *pFeature_ = featureArray.Element;
 	float *N;
+	Surfel *pFeature;
 
 	for (iFeature = 0; iFeature < featureArray.n; iFeature++, pFeature_++)
 	{
@@ -1052,6 +753,8 @@ void VN::Create(
 
 	float *SDF_ = new float[featureArray.n * sortedSampleArray.n];
 
+	float *P;
+
 	for (i = 0; i < sortedSampleArray.n; i++)
 	{
 		P = sampleArray.Element[sortedSampleArray.Element[i]].P;
@@ -1061,7 +764,7 @@ void VN::Create(
 
 	iSample = sortedSampleArray.Element[0];
 
-	pSample = sampleArray.Element + iSample;
+	VN_::Sample *pSample = sampleArray.Element + iSample;
 
 	Array<int> cluster;
 
@@ -1084,6 +787,7 @@ void VN::Create(
 	RECOG::VN_::Edge *pEdge;
 	int iClusterNode;
 	int iActiveFeature;
+	float SDF, eSDF;
 
 	for (i = 1; i < sortedSampleArray.n; i++)
 	{
@@ -1114,6 +818,8 @@ void VN::Create(
 		cluster.Element[0] = featureNodeMap[pSample->iFeature];
 		cluster.n = 1;
 		bInCluster[cluster.Element[0]] = true;
+
+		int j, k, l;
 
 		for (j = 0; j < i; j++)
 		{
@@ -1267,7 +973,7 @@ void VN::Create(
 
 	//if (pVisualizer)
 	//{
-	//	DisplaySampledMesh(pVisualizer);
+	//	DisplaySampledMesh(pVisualizer, volume, P0, voxelSize);
 
 	//	unsigned char color[] = { 0, 128, 255 };
 
@@ -1275,9 +981,6 @@ void VN::Create(
 	//}
 
 	delete[] volume.Element;
-	delete[] PtMem;
-	delete[] RGBuff;
-	delete[] zeroDistanceVoxelArray.Element;
 	delete[] sampleArray.Element;
 	delete[] surfelSampleAssignmentArray.Element;
 	delete[] surfelSampleAssignmentMem;
@@ -4932,36 +4635,6 @@ void VN::Load(
 	fclose(fp);
 }
 
-void VN::DisplaySampledMesh(Visualizer *pVisualizer)
-{
-	Array3D<float> f;
-
-	f.a = volume.a;
-	f.b = volume.b;
-	f.c = volume.c;
-
-	int nVoxels = volume.a * volume.b * volume.c;
-
-	f.Element = new float[nVoxels];
-
-	int iVoxel;
-
-	for (iVoxel = 0; iVoxel < nVoxels; iVoxel++)
-		f.Element[iVoxel] = (volume.Element[iVoxel].voxelDistance > 0 ? 1.0f : -1.0f);
-
-	vtkSmartPointer<vtkPolyData> polyData = DisplayIsoSurface(f, P0, voxelSize, 0.0f);
-
-	// Create a mapper and actor.
-	vtkSmartPointer<vtkPolyDataMapper> mapper = vtkSmartPointer<vtkPolyDataMapper>::New();
-	mapper->SetInputData(polyData);
-	vtkSmartPointer<vtkActor> actor = vtkSmartPointer<vtkActor>::New();
-	actor->SetMapper(mapper);
-
-	pVisualizer->renderer->AddActor(actor);
-
-	delete[] f.Element;
-}
-
 void VN::Display(
 	Visualizer *pVisualizer,
 	Box<float> box,
@@ -5359,3 +5032,366 @@ void VN_::CreateMug(
 	pVN->boundingBox.maxz = 0.5f;
 }
 
+void SampleMeshDistanceFunction(
+	Mesh *pMesh,
+	SurfelGraph *pSurfels,
+	float voxelSize,
+	int sampleVoxelDistance,
+	Array3D<RECOG::VN_::Voxel> &volume,
+	float *P0,
+	Array<RECOG::VN_::Sample> &sampleArray,
+	Box<float> &boundingBox)
+{
+	// volume <- empty 3D voxel array with voxel size specified by voxelSize.
+	// It is larger than the bounding box of pMesh for sampleVoxelDistance + 1 on each side.
+
+	pMesh->BoundingBox(&boundingBox);
+
+	int border = sampleVoxelDistance + 1;
+
+	int nx = (int)ceil(0.5f * (boundingBox.maxx - boundingBox.minx) / voxelSize) + border;
+	int ny = (int)ceil(0.5f * (boundingBox.maxy - boundingBox.miny) / voxelSize) + border;
+	int nz = (int)ceil(0.5f * (boundingBox.maxz - boundingBox.minz) / voxelSize) + border;
+
+	float a = voxelSize * (float)nx;
+	float b = voxelSize * (float)ny;
+	float c = voxelSize * (float)nz;
+
+	float center[3];
+
+	BoxCenter<float>(&boundingBox, center);
+
+	Box<float> box;
+
+	box.minx = center[0] - a;
+	box.miny = center[1] - b;
+	box.minz = center[2] - c;
+	box.maxx = center[0] + a;
+	box.maxy = center[1] + b;
+	box.maxz = center[2] + c;
+
+	volume.a = 2 * nx;
+	volume.b = 2 * ny;
+	volume.c = 2 * nz;
+
+	int nVoxels = volume.a * volume.b * volume.c;
+
+	volume.Element = new RECOG::VN_::Voxel[nVoxels];
+
+	// Assign mesh points to volume voxels.
+	// Set voxelDistance field of all voxels to -1.
+
+	int i;
+	QList<QLIST::Index> *pPtList;
+	RECOG::VN_::Voxel *pVoxel;
+
+	for (i = 0; i < nVoxels; i++)
+	{
+		pVoxel = volume.Element + i;
+
+		pPtList = &(pVoxel->PtList);
+
+		RVLQLIST_INIT(pPtList);
+
+		pVoxel->voxelDistance = -1;
+	}
+
+	QLIST::Index *PtMem = new QLIST::Index[pMesh->NodeArray.n];
+
+	QLIST::Index *pPtIdx = PtMem;
+
+	float *P;
+	int iPt;
+	int j, k;
+
+	for (iPt = 0; iPt < pMesh->NodeArray.n; iPt++)
+	{
+		P = pMesh->NodeArray.Element[iPt].P;
+
+		i = (int)floor((P[0] - box.minx) / voxelSize);
+		j = (int)floor((P[1] - box.miny) / voxelSize);
+		k = (int)floor((P[2] - box.minz) / voxelSize);
+
+		pVoxel = RVL3DARRAY_ELEMENT(volume, i, j, k);
+
+		pPtList = &(pVoxel->PtList);
+
+		pPtIdx->Idx = iPt;
+
+		RVLQLIST_ADD_ENTRY(pPtList, pPtIdx);
+
+		pPtIdx++;
+	}
+
+	// Assign distance function value to all voxels outside pMesh.
+
+	int *RGBuff = new int[nVoxels];
+
+	int *pPut = RGBuff;
+	int *pFetch = RGBuff;
+
+	Array<int> zeroDistanceVoxelArray;
+
+	zeroDistanceVoxelArray.Element = new int[nVoxels];
+
+	zeroDistanceVoxelArray.n = 0;
+
+	*(pPut++) = 0;
+
+	int dijk[][3] = {
+		{ -1, 0, 0 },
+		{ 1, 0, 0 },
+		{ 0, -1, 0 },
+		{ 0, 1, 0 },
+		{ 0, 0, -1 },
+		{ 0, 0, 1 } };
+
+	//int maxVoxelDistance = volume.a + volume.b + volume.c;
+
+	int maxVoxelDistance = sampleVoxelDistance + 1;
+
+	int iVoxel, iVoxel_;
+	int i_, j_, k_, l;
+
+	while (pPut > pFetch)
+	{
+		iVoxel = (*pFetch++);
+
+		RVL3DARRAY_INDICES(volume, iVoxel, i, j, k);
+
+		for (l = 0; l < 6; l++)
+		{
+			i_ = i + dijk[l][0];
+			j_ = j + dijk[l][1];
+			k_ = k + dijk[l][2];
+
+			if (i_ >= 0 && i_ < volume.a && j_ >= 0 && j_ < volume.b && k_ >= 0 && k_ < volume.c)
+			{
+				iVoxel_ = RVL3DARRAY_INDEX(volume, i_, j_, k_);
+
+				pVoxel = volume.Element + iVoxel_;
+
+				if (pVoxel->voxelDistance >= 0)
+					continue;
+
+				if (pVoxel->PtList.pFirst)
+				{
+					pVoxel->voxelDistance = 0;
+
+					zeroDistanceVoxelArray.Element[zeroDistanceVoxelArray.n++] = iVoxel_;
+				}
+				else
+				{
+					pVoxel->voxelDistance = maxVoxelDistance;
+
+					*(pPut++) = iVoxel_;
+				}
+			}
+		}
+	}
+
+	// sampleArray <- array of sample points at distance approximatelly equal to sampleVoxelDistance.
+	// Field SDF of every sample represents the distance function value.
+
+	sampleArray.Element = new RECOG::VN_::Sample[nVoxels];
+
+	sampleArray.n = 0;
+
+	float halfVoxelSize = 0.5f * voxelSize;
+
+	P0[0] = box.minx + halfVoxelSize;
+	P0[1] = box.miny + halfVoxelSize;
+	P0[2] = box.minz + halfVoxelSize;
+
+	pPut = RGBuff + zeroDistanceVoxelArray.n;
+
+	pFetch = RGBuff;
+
+	memcpy(RGBuff, zeroDistanceVoxelArray.Element, zeroDistanceVoxelArray.n * sizeof(int));
+
+	float maxeSDF = voxelSize * (sampleVoxelDistance + 2);
+
+	float maxDist = maxeSDF * maxeSDF;
+
+	int voxelDistance;
+	int i__, j__, k__;
+	int p, q, r;
+	float dist, minDist;
+	int iVoxel__;
+	float *P_;
+	float dP[3];
+	int iClosestPt;
+	VN_::Sample *pSample;
+	float SDF, eSDF, mineSDF;
+	Surfel *pFeature;
+	int iFeature;
+
+	while (pPut > pFetch)
+	{
+		iVoxel = (*pFetch++);
+
+		pVoxel = volume.Element + iVoxel;
+
+		voxelDistance = pVoxel->voxelDistance + 1;
+
+		RVL3DARRAY_INDICES(volume, iVoxel, i, j, k);
+
+		for (l = 0; l < 6; l++)
+		{
+			i_ = i + dijk[l][0];
+			j_ = j + dijk[l][1];
+			k_ = k + dijk[l][2];
+
+			if (i_ >= 0 && i_ < volume.a && j_ >= 0 && j_ < volume.b && k_ >= 0 && k_ < volume.c)
+			{
+				iVoxel_ = RVL3DARRAY_INDEX(volume, i_, j_, k_);
+
+				pVoxel = volume.Element + iVoxel_;
+
+				if (pVoxel->voxelDistance > voxelDistance)
+				{
+					pVoxel->voxelDistance = voxelDistance;
+
+					*(pPut++) = iVoxel_;
+
+					if (voxelDistance == sampleVoxelDistance)
+					{
+						pSample = sampleArray.Element + sampleArray.n;
+
+						P = pSample->P;
+
+						P[0] = (float)i_ * voxelSize;
+						P[1] = (float)j_ * voxelSize;
+						P[2] = (float)k_ * voxelSize;
+
+						RVLSUM3VECTORS(P, P0, P);
+
+						minDist = maxDist;
+
+						iClosestPt = -1;
+
+						for (k__ = k_ - 1; k__ <= k_ + 1; k__++)
+							for (j__ = j_ - 1; j__ <= j_ + 1; j__++)
+								for (i__ = i_ - 1; i__ <= i_ + 1; i__++)
+								{
+									if (i__ == i_ && j__ == j_ && k__ == k_)
+										continue;
+
+									iVoxel__ = RVL3DARRAY_INDEX(volume, i__, j__, k__);
+
+									pPtIdx = volume.Element[iVoxel__].PtList.pFirst;
+
+									while (pPtIdx)
+									{
+										P_ = pMesh->NodeArray.Element[pPtIdx->Idx].P;
+
+										RVLDIF3VECTORS(P_, P, dP);
+
+										dist = RVLDOTPRODUCT3(dP, dP);
+
+										if (dist < minDist)
+										{
+											minDist = dist;
+
+											iClosestPt = pPtIdx->Idx;
+
+											p = i__;
+											q = j__;
+											r = k__;
+										}
+
+										pPtIdx = pPtIdx->pNext;
+									}
+								}
+
+						pSample->iFeature = -1;
+
+						mineSDF = maxeSDF;
+
+						if (iClosestPt >= 0)
+						{
+							pSample->SDF = sqrt(minDist);
+
+							for (k__ = r - 1; k__ <= r + 1; k__++)
+								for (j__ = q - 1; j__ <= q + 1; j__++)
+									for (i__ = p - 1; i__ <= p + 1; i__++)
+									{
+										iVoxel__ = RVL3DARRAY_INDEX(volume, i__, j__, k__);
+
+										pPtIdx = volume.Element[iVoxel__].PtList.pFirst;
+
+										while (pPtIdx)
+										{
+											iFeature = pSurfels->surfelMap[pPtIdx->Idx];
+
+											if (iFeature >= 0)
+											{
+												pFeature = pSurfels->NodeArray.Element + iFeature;
+
+												if (pFeature->size > 1)
+												{
+													SDF = RVLDOTPRODUCT3(pFeature->N, P) - pFeature->d;
+
+													eSDF = pSample->SDF - SDF;
+
+													eSDF = RVLABS(eSDF);
+
+													if (eSDF < mineSDF)
+													{
+														mineSDF = eSDF;
+
+														pSample->iFeature = iFeature;
+													}
+												}
+											}
+
+											pPtIdx = pPtIdx->pNext;
+										}
+									}
+
+							sampleArray.n++;
+						}	// if (iClosestPt >= 0)
+					}	// if (voxelDistance == sampleVoxelDistance)
+				}	// if (pVoxel->voxelDistance > voxelDistance)
+			}	// if (i_ >= 0 && i_ < volume.a && j_ >= 0 && j_ < volume.b && k_ >= 0 && k_ < volume.c)
+		}	// for (l = 0; l < 6; l++)
+	}	// while (pPut > pFetch)
+
+	delete[] PtMem;
+	delete[] RGBuff;
+	delete[] zeroDistanceVoxelArray.Element;
+}
+
+void DisplaySampledMesh(
+	Visualizer *pVisualizer,
+	Array3D<RECOG::VN_::Voxel> volume,
+	float *P0,
+	float voxelSize)
+{
+	Array3D<float> f;
+
+	f.a = volume.a;
+	f.b = volume.b;
+	f.c = volume.c;
+
+	int nVoxels = volume.a * volume.b * volume.c;
+
+	f.Element = new float[nVoxels];
+
+	int iVoxel;
+
+	for (iVoxel = 0; iVoxel < nVoxels; iVoxel++)
+		f.Element[iVoxel] = (volume.Element[iVoxel].voxelDistance > 0 ? 1.0f : -1.0f);
+
+	vtkSmartPointer<vtkPolyData> polyData = DisplayIsoSurface(f, P0, voxelSize, 0.0f);
+
+	// Create a mapper and actor.
+	vtkSmartPointer<vtkPolyDataMapper> mapper = vtkSmartPointer<vtkPolyDataMapper>::New();
+	mapper->SetInputData(polyData);
+	vtkSmartPointer<vtkActor> actor = vtkSmartPointer<vtkActor>::New();
+	actor->SetMapper(mapper);
+
+	pVisualizer->renderer->AddActor(actor);
+
+	delete[] f.Element;
+}
