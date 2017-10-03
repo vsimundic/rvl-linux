@@ -470,6 +470,12 @@ namespace RVL
 			float *d = NULL,
 			bool *bd = NULL,
 			float maxe = 0.0f);
+		float Evaluate(
+			Array<RECOG::VN_::Sample> sampleArray,
+			float *SDF,
+			float *d = NULL,
+			bool *bd = NULL,
+			float maxe = 0.0f);
 		void ComputeFeatureSDFs(
 			float *P,
 			float *SDF,

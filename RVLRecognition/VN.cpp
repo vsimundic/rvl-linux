@@ -2333,6 +2333,51 @@ float VN::Evaluate(
 	return e;
 }
 
+float VN::Evaluate(
+	Array<RECOG::VN_::Sample> sampleArray,
+	float *SDF,
+	float *d,
+	bool *bd,
+	float maxe)
+{
+	float e = 0.0f;
+
+	int iSample;
+	int iActiveFeature;
+	float e_;
+	RECOG::VN_::Sample *pSample;
+
+	for (iSample = 0; iSample < sampleArray.n; iSample++)
+	{
+		pSample = sampleArray.Element + iSample;
+
+		e_ = Evaluate(pSample->P, SDF, iActiveFeature, true, d, bd) - pSample->SDF;
+
+		// sum of absolute distances
+
+		//if (e_ < 0.0f)
+		//	e_ = -e_;
+		//e += e_;
+
+		// maximum absolute distance
+
+		//if (e_ < 0.0f)
+		//	e_ = -e_;
+		//if (e_ > e)
+		//	e = e_;
+
+		// sum of saturated absolute distances
+
+		if (e_ < 0.0f)
+			e_ = -e_;
+		if (e_ > maxe)
+			e_ = maxe;
+		e += (e_ / maxe);
+	}
+
+	return e;
+}
+
 float VN::GetMeshSize(Box<float> boundingBox)
 {
 	float a = boundingBox.maxx - boundingBox.minx;
@@ -3357,29 +3402,31 @@ void VN::Match4(
 
 	float maxDeviation = pClassifier->kMaxMatchCost * size;
 
-	// Sample the mesh surface and transform the sampled points using R and t.
+	float *P;
 
-	int nSamplePts = 300;
+	//// Sample the mesh surface and transform the sampled points using R and t.
 
-	Array<int> iPtArray;
+	//int nSamplePts = 300;
 
-	iPtArray.n = pMesh->NodeArray.n;
+	//Array<int> iPtArray;
 
-	RandomIndices(iPtArray);
+	//iPtArray.n = pMesh->NodeArray.n;
 
-	float *PSampleArray = new float[3 * nSamplePts];
+	//RandomIndices(iPtArray);
 
-	float *P = PSampleArray;
+	//float *PSampleArray = new float[3 * nSamplePts];
 
-	int i;
-	float *P_;
+	//P = PSampleArray;
 
-	for (i = 0; i < nSamplePts; i++, PSampleArray += 3)
-	{
-		P_ = pMesh->NodeArray.Element[iPtArray.Element[i]].P;
+	//int i;
+	//float *P_;
 
-		RVLTRANSF3(P_, R, t, P);
-	}
+	//for (i = 0; i < nSamplePts; i++, PSampleArray += 3)
+	//{
+	//	P_ = pMesh->NodeArray.Element[iPtArray.Element[i]].P;
+
+	//	RVLTRANSF3(P_, R, t, P);
+	//}
 
 	// Detect toroidal clusters.
 
@@ -3645,7 +3692,7 @@ void VN::Match4(
 
 			if (pMCluster == NULL)
 			{
-				e = Evaluate(PArray, nSamplePts, SDF, dSEval, bdSEval, maxDeviation);
+				e = Evaluate(sceneObject.sampleArray, SDF, dSEval, bdSEval, maxDeviation);
 
 				if (mine < 0.0f || e < mine)
 				{
@@ -5034,7 +5081,7 @@ void VN_::CreateMug(
 	pVN->boundingBox.maxz = 0.5f;
 }
 
-void SampleMesh(
+void RVL::SampleMesh(
 	Mesh *pMesh,
 	float *R,
 	float *t,
@@ -5079,7 +5126,7 @@ void RVL::SampleMeshDistanceFunction(
 
 	pMesh->BoundingBox(&boundingBox);
 
-	int border = sampleVoxelDistance + 1;
+	int border = 2 * sampleVoxelDistance + 1;
 
 	int nx = (int)ceil(0.5f * (boundingBox.maxx - boundingBox.minx) / voxelSize) + border;
 	int ny = (int)ceil(0.5f * (boundingBox.maxy - boundingBox.miny) / voxelSize) + border;
@@ -5302,9 +5349,9 @@ void RVL::SampleMeshDistanceFunction(
 
 						iClosestPt = -1;
 
-						for (k__ = k_ - 1; k__ <= k_ + 1; k__++)
-							for (j__ = j_ - 1; j__ <= j_ + 1; j__++)
-								for (i__ = i_ - 1; i__ <= i_ + 1; i__++)
+						for (k__ = k_ - sampleVoxelDistance; k__ <= k_ + sampleVoxelDistance; k__++)
+							for (j__ = j_ - sampleVoxelDistance; j__ <= j_ + sampleVoxelDistance; j__++)
+								for (i__ = i_ - sampleVoxelDistance; i__ <= i_ + sampleVoxelDistance; i__++)
 								{
 									if (i__ == i_ && j__ == j_ && k__ == k_)
 										continue;
@@ -5394,7 +5441,7 @@ void RVL::SampleMeshDistanceFunction(
 	delete[] zeroDistanceVoxelArray.Element;
 }
 
-void DisplaySampledMesh(
+void RVL::DisplaySampledMesh(
 	Visualizer *pVisualizer,
 	Array3D<RECOG::VN_::Voxel> volume,
 	float *P0,

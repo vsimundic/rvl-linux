@@ -73,6 +73,7 @@ namespace RVL
 			bool bSavePLY);
 		RECOG::VN_::VisualizationData visualizationData;
 		Array<RECOG::ClassData> classArray;
+		RECOG::VN_::SceneObject sceneObject;
 	};
 }
 
