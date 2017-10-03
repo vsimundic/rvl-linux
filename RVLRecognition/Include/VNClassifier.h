@@ -62,6 +62,8 @@ namespace RVL
 		float kMaxMatchCost;
 		float clusteringTolerance;
 		int maxnSClusters;
+		float voxelSize;
+		int sampleVoxelDistance;
 		char *modelDataBase; //Vidovic
 		char *modelsInDataBase; //Vidovic
 		void *vpMeshBuilder;

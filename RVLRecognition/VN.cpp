@@ -3310,10 +3310,7 @@ void VN::Match3(
 
 void VN::Match4(
 	Mesh *pMesh,
-	float *PArray,
-	float *NArray,
-	float *R,
-	float *t,
+	RECOG::VN_::SceneObject sceneObject,
 	void *vpClassifier,	
 	Box<float> boundingBox,
 	float *dS,
@@ -3331,6 +3328,11 @@ void VN::Match4(
 	VNClassifier *pClassifier = (VNClassifier *)vpClassifier;
 
 	SurfelGraph *pSurfels = pClassifier->pSurfels;
+
+	float *PArray = sceneObject.vertexArray;
+	float *NArray = sceneObject.NArray;
+	float *R = sceneObject.R;
+	float *t = sceneObject.t;
 
 	bool bTorus = false;
 
@@ -5032,7 +5034,37 @@ void VN_::CreateMug(
 	pVN->boundingBox.maxz = 0.5f;
 }
 
-void SampleMeshDistanceFunction(
+void SampleMesh(
+	Mesh *pMesh,
+	float *R,
+	float *t,
+	Array<VN_::Sample> &sampleArray)
+{
+	int nSamplePts = sampleArray.n;
+
+	Array<int> iPtArray;
+
+	iPtArray.n = pMesh->NodeArray.n;
+
+	RandomIndices(iPtArray);
+
+	int i;
+	float *P_;
+	VN_::Sample *pSample;
+
+	for (i = 0; i < nSamplePts; i++)
+	{
+		pSample = sampleArray.Element + i;
+
+		P_ = pMesh->NodeArray.Element[iPtArray.Element[i]].P;
+
+		RVLTRANSF3(P_, R, t, pSample->P);
+
+		pSample->SDF = 0.0f;
+	}
+}
+
+void RVL::SampleMeshDistanceFunction(
 	Mesh *pMesh,
 	SurfelGraph *pSurfels,
 	float voxelSize,

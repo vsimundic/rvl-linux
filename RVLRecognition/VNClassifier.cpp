@@ -29,6 +29,8 @@ using namespace RECOG;
 
 VNClassifier::VNClassifier()
 {
+	voxelSize = 0.01f;
+	sampleVoxelDistance = 4;
 	visualizationData.resolution = 0.01f;
 	visualizationData.SDFSurfaceValue = 0.0f;
 	modelDataBase = NULL; //Vidovic
@@ -170,9 +172,11 @@ void VNClassifier::ComputeDescriptor(
 
 	pSurfels->DetectVertices(pMesh);
 
-	// Transform vertices and normals.
+	// Create scene object.
 
-	float R[9];
+	VN_::SceneObject sceneObject;
+
+	float *R = sceneObject.R;
 
 	if (RIn)
 	{
@@ -183,7 +187,7 @@ void VNClassifier::ComputeDescriptor(
 		RVLUNITMX3(R);
 	}
 
-	float t[3];
+	float *t = sceneObject.t;
 
 	if (tIn)
 	{
@@ -194,9 +198,9 @@ void VNClassifier::ComputeDescriptor(
 		RVLNULL3VECTOR(t);
 	}
 
-	float *PArray = new float[3 * pSurfels->vertexArray.n];
+	sceneObject.vertexArray = new float[3 * pSurfels->vertexArray.n];
 
-	float *P = PArray;
+	float *P = sceneObject.vertexArray;
 
 	int iVertex;
 	SURFEL::Vertex *pVertex;
@@ -208,9 +212,9 @@ void VNClassifier::ComputeDescriptor(
 		RVLTRANSF3(pVertex->P, R, t, P);
 	}
 
-	float *NArray = new float[3 * pSurfels->NodeArray.n];
+	sceneObject.NArray = new float[3 * pSurfels->NodeArray.n];
 
-	float *N = NArray;
+	float *N = sceneObject.NArray;
 
 	int iSurfel;
 	Surfel *pSurfel;
@@ -221,6 +225,13 @@ void VNClassifier::ComputeDescriptor(
 
 		RVLMULMX3X3VECT(R, pSurfel->N, N);
 	}
+
+	Array<RECOG::VN_::Sample> sampleArray;
+	Array3D<RECOG::VN_::Voxel> volume;
+	float P0[3];
+	Box<float> boundingBox;
+
+	SampleMeshDistanceFunction(pMesh, pSurfels, voxelSize, sampleVoxelDistance, volume, P0, sampleArray, boundingBox);
 
 	// Cluster surfels into convex surfaces.
 
@@ -262,7 +273,7 @@ void VNClassifier::ComputeDescriptor(
 
 	printf("Matching VN model to scene...");
 
-	P = PArray;
+	P = sceneObject.vertexArray;
 
 	InitBoundingBox<float>(&SBoundingBox, P);
 
@@ -277,10 +288,11 @@ void VNClassifier::ComputeDescriptor(
 
 	bdS = new bool[pModel->featureArray.n];
 
-	pModel->Match4(pMesh, PArray, NArray, R, t, this, SBoundingBox, dS, bdS);
+	pModel->Match4(pMesh, sceneObject, this, SBoundingBox, dS, bdS);
 
-	delete[] PArray;
-	delete[] NArray;
+	delete[] sceneObject.vertexArray;
+	delete[] sceneObject.NArray;
+	delete[] sceneObject.sampleArray.Element;
 		 
 	printf("completed.\n");
 }

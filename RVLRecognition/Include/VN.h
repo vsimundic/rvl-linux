@@ -338,6 +338,15 @@ namespace RVL
 				TorusTreeNode *pNext;
 			};
 
+			struct SceneObject
+			{
+				float *vertexArray;
+				float *NArray;
+				Array<Sample> sampleArray;
+				float R[9];
+				float t[3];
+			};
+
 			void CreateTorus(
 				VN *pVN,
 				CRVLMem *pMem);
@@ -355,6 +364,12 @@ namespace RVL
 				CRVLMem *pMem);
 		}	// namespace VN_
 	}	// namespace RECOG
+
+	void SampleMesh(
+		Mesh *pMesh,
+		float *R,
+		float *t,
+		Array<RECOG::VN_::Sample> &sampleArray);
 
 	void SampleMeshDistanceFunction(
 		Mesh *pMesh,
@@ -535,10 +550,7 @@ namespace RVL
 		//	bool *bdS);
 		void Match4(
 			Mesh *pMesh,
-			float *PArray,
-			float *NArray,
-			float *R,
-			float *t,
+			RECOG::VN_::SceneObject sceneObject,
 			void *vpClassifier,
 			Box<float> boundingBox,
 			float *dS,
