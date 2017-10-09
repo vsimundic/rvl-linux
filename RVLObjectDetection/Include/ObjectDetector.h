@@ -35,7 +35,10 @@ namespace RVL
 		virtual ~ObjectDetector();
 		void Init(PSGM *pPSGM_ = NULL);
 		void CreateParamList();
-		void DetectObjects(char *MeshFilePathName);
+		void DetectObjects(
+			char *MeshFilePathName,
+			Array2D<short int> *pDepthImage = NULL,
+			IplImage *pRGBImage = NULL);
 		void Evaluate(
 			FILE *fp,
 			char *fileName,
@@ -86,10 +89,16 @@ namespace RVL
 		Mesh mesh;
 		char *cfgFileName;
 		void *vpMeshBuilder;
-		bool (*LoadMesh)(void *vpMeshBuilder,
+		bool (*LoadMesh)(
+			void *vpMeshBuilder,
 			char *FileName,
 			Mesh *pMesh,
 			bool bSavePLY);
+		void(*CreateMesh)(
+			void *vpMeshBuilder,
+			Array2D<short int> *pDepthImage,
+			IplImage *pRGBImage,
+			Mesh *pMesh);
 		RECOG::CTISet CTIs;
 		RECOG::CTISet boundingBoxes;
 	};

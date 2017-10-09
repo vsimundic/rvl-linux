@@ -10,6 +10,11 @@ namespace RVL
 		char *FileName,
 		Mesh *pMesh,
 		bool bSavePLY);
+	void CreateMesh(
+		void *vpMeshBuilder,
+		Array2D<short int> *pDepthImage,
+		IplImage *pRGBImage,
+		Mesh *pMesh);
 
 	class PCLMeshBuilder
 	{

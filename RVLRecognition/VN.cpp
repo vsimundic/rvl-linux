@@ -2333,6 +2333,51 @@ float VN::Evaluate(
 	return e;
 }
 
+float VN::Evaluate(
+	Array<RECOG::VN_::Sample> sampleArray,
+	float *SDF,
+	float *d,
+	bool *bd,
+	float maxe)
+{
+	float e = 0.0f;
+
+	int iSample;
+	int iActiveFeature;
+	float e_;
+	RECOG::VN_::Sample *pSample;
+
+	for (iSample = 0; iSample < sampleArray.n; iSample++)
+	{
+		pSample = sampleArray.Element + iSample;
+
+		e_ = Evaluate(pSample->P, SDF, iActiveFeature, true, d, bd) - pSample->SDF;
+
+		// sum of absolute distances
+
+		//if (e_ < 0.0f)
+		//	e_ = -e_;
+		//e += e_;
+
+		// maximum absolute distance
+
+		//if (e_ < 0.0f)
+		//	e_ = -e_;
+		//if (e_ > e)
+		//	e = e_;
+
+		// sum of saturated absolute distances
+
+		if (e_ < 0.0f)
+			e_ = -e_;
+		if (e_ > maxe)
+			e_ = maxe;
+		e += (e_ / maxe);
+	}
+
+	return e;
+}
+
 float VN::GetMeshSize(Box<float> boundingBox)
 {
 	float a = boundingBox.maxx - boundingBox.minx;
@@ -3310,10 +3355,7 @@ void VN::Match3(
 
 void VN::Match4(
 	Mesh *pMesh,
-	float *PArray,
-	float *NArray,
-	float *R,
-	float *t,
+	RECOG::VN_::SceneObject sceneObject,
 	void *vpClassifier,	
 	Box<float> boundingBox,
 	float *dS,
@@ -3332,7 +3374,13 @@ void VN::Match4(
 
 	SurfelGraph *pSurfels = pClassifier->pSurfels;
 
+	float *PArray = sceneObject.vertexArray;
+	float *NArray = sceneObject.NArray;
+	float *R = sceneObject.R;
+	float *t = sceneObject.t;
+
 	bool bTorus = false;
+	bool bConcavity = false;
 
 	int nMClusters = 0;
 
@@ -3340,7 +3388,9 @@ void VN::Match4(
 
 	while (pMCluster)
 	{
-		if (pMCluster->type == RVLVN_CLUSTER_TYPE_XTORUS)
+		if (pMCluster->type == RVLVN_CLUSTER_TYPE_CONCAVE)
+			bConcavity = true;
+		else if (pMCluster->type == RVLVN_CLUSTER_TYPE_XTORUS)
 			bTorus = true;
 
 		nMClusters++;
@@ -3355,29 +3405,31 @@ void VN::Match4(
 
 	float maxDeviation = pClassifier->kMaxMatchCost * size;
 
-	// Sample the mesh surface and transform the sampled points using R and t.
+	float *P;
 
-	int nSamplePts = 300;
+	//// Sample the mesh surface and transform the sampled points using R and t.
 
-	Array<int> iPtArray;
+	//int nSamplePts = 300;
 
-	iPtArray.n = pMesh->NodeArray.n;
+	//Array<int> iPtArray;
 
-	RandomIndices(iPtArray);
+	//iPtArray.n = pMesh->NodeArray.n;
 
-	float *PSampleArray = new float[3 * nSamplePts];
+	//RandomIndices(iPtArray);
 
-	float *P = PSampleArray;
+	//float *PSampleArray = new float[3 * nSamplePts];
 
-	int i;
-	float *P_;
+	//P = PSampleArray;
 
-	for (i = 0; i < nSamplePts; i++, PSampleArray += 3)
-	{
-		P_ = pMesh->NodeArray.Element[iPtArray.Element[i]].P;
+	//int i;
+	//float *P_;
 
-		RVLTRANSF3(P_, R, t, P);
-	}
+	//for (i = 0; i < nSamplePts; i++, PSampleArray += 3)
+	//{
+	//	P_ = pMesh->NodeArray.Element[iPtArray.Element[i]].P;
+
+	//	RVLTRANSF3(P_, R, t, P);
+	//}
 
 	// Detect toroidal clusters.
 
@@ -3423,19 +3475,129 @@ void VN::Match4(
 
 	RECOG::VN_::SceneCluster *pSCluster = SClusters_.Element;
 
-	int iCluster;
+	bool *bCovered = new bool[pSurfels->NodeArray.n];
 
-	for (iCluster = 0; iCluster < nSCClusters; iCluster++, pSCluster++)
+	memset(bCovered, 0, pSurfels->NodeArray.n * sizeof(bool));
+
+	bool *bCopied[2];
+
+	bCopied[0] = new bool[SCClusters.n];
+
+	memset(bCopied[0], 0, SCClusters.n * sizeof(bool));
+
+	bCopied[1] = new bool[SUClusters.n];
+
+	memset(bCopied[1], 0, SUClusters.n * sizeof(bool));
+
+	int iSCluster__[2];
+
+	iSCluster__[0] = iSCluster__[1] = 0;
+
+	Array<RECOG::PSGM_::Cluster *> SClusterArray[2];
+
+	SClusterArray[0] = SCClusters;
+	SClusterArray[1] = SUClusters;
+
+	int iLargestCluster[2];
+
+	int iFirstArray = 0;
+	int iLastArray = 1;
+
+	int *clusterMap[2];
+
+	clusterMap[0] = pClassifier->convexClustering.clusterMap;
+	clusterMap[1] = pClassifier->concaveClustering.clusterMap;
+
+	int nSClusters[2];
+
+	nSClusters[0] = nSCClusters;
+	nSClusters[1] = nSUClusters;
+
+	RECOG::PSGM_::Cluster *pCopiedCluster;
+	int i, j, iFirstClusterToUpdate;
+	int iSurfel, iCluster;
+	int iClusterArray;
+	int largestClusterOrig;
+
+	while (iSCluster__[0] < nSCClusters || iSCluster__[1] < nSUClusters)
 	{
-		pSCluster->type = RVLVN_CLUSTER_TYPE_CONVEX;
-		pSCluster->vpCluster = SCClusters.Element + iCluster;
+		for (i = iFirstArray; i <= iLastArray; i++)
+		{
+			for (iCluster = 0; iCluster < SClusterArray[i].n; iCluster++)
+				if (!bCopied[i][iCluster])
+					break;
+
+			iLargestCluster[i] = iCluster;
+			
+			largestClusterOrig = SClusterArray[i].Element[iCluster]->orig;
+
+			iCluster++;
+
+			for (; iCluster < SClusterArray[i].n; iCluster++)
+				if (!bCopied[i][iCluster])
+					if (SClusterArray[i].Element[iCluster]->orig > largestClusterOrig)
+					{
+						iLargestCluster[i] = iCluster; 
+						
+						largestClusterOrig = SClusterArray[i].Element[iCluster]->orig;
+					}
+		}
+
+		if (iFirstArray < iLastArray)
+			iClusterArray = (SClusterArray[0].Element[iLargestCluster[0]]->orig >= SClusterArray[1].Element[iLargestCluster[1]]->orig ? 0 : 1);
+		else
+			iClusterArray = iFirstArray;
+
+		pCopiedCluster = SClusterArray[iClusterArray].Element[iLargestCluster[iClusterArray]];
+
+		pSCluster = SClusters_.Element + iClusterArray * nSCClusters + iSCluster__[iClusterArray];
+
+		pSCluster->type = (iClusterArray == 0 ? RVLVN_CLUSTER_TYPE_CONVEX : RVLVN_CLUSTER_TYPE_CONCAVE);
+		pSCluster->vpCluster = pCopiedCluster;
+
+		for (i = 0; i < pCopiedCluster->iSurfelArray.n; i++)
+		{
+			iSurfel = pCopiedCluster->iSurfelArray.Element[i];
+			
+			if (!bCovered[iSurfel])
+			{
+				for (j = iFirstArray; j <= iLastArray; j++)
+				{
+					iCluster = clusterMap[j][iSurfel];
+
+					if (!bCopied[j][iCluster])
+						SClusterArray[j].Element[iCluster]->orig -= pSurfels->NodeArray.Element[iSurfel].size;
+				}
+
+				bCovered[iSurfel] = true;
+			}
+		}
+
+		bCopied[iClusterArray][iLargestCluster[iClusterArray]] = true;
+				
+		iSCluster__[iClusterArray]++;
+
+		if (iSCluster__[iClusterArray] >= nSClusters[iClusterArray])
+			iFirstArray = iLastArray = 1 - iClusterArray;
 	}
 
-	for (iCluster = 0; iCluster < nSUClusters; iCluster++, pSCluster++)
-	{
-		pSCluster->type = RVLVN_CLUSTER_TYPE_CONCAVE;
-		pSCluster->vpCluster = SUClusters.Element + iCluster;
-	}
+	delete[] bCovered;
+	delete[] bCopied[0];
+	delete[] bCopied[1];
+
+	pSCluster = SClusters_.Element + nSCClusters + nSUClusters;
+
+	//for (iCluster = 0; iCluster < nSCClusters; iCluster++, pSCluster++)
+	//{
+	//	pSCluster->type = RVLVN_CLUSTER_TYPE_CONVEX;
+	//	pSCluster->vpCluster = SCClusters.Element + iCluster;
+	//}
+
+	//for (iCluster = 0; iCluster < nSUClusters; iCluster++, pSCluster++)
+	//{
+	//	pSCluster->type = RVLVN_CLUSTER_TYPE_CONCAVE;
+	//	pSCluster->vpCluster = SUClusters.Element + iCluster;
+	//}
 
 	if (bTorus)
 	{
@@ -3455,7 +3617,6 @@ void VN::Match4(
 	descriptors.Element = new float *[SClusters_.n];
 	descriptors.n = SClusters_.n;
 
-	int j;
 	int iSCluster, iMCluster, iFeature, iVertex;
 	float *N;
 	RECOG::PSGM_::Cluster *pSCCluster, *pSUCluster;
@@ -3480,7 +3641,7 @@ void VN::Match4(
 			{
 				switch (pSCluster->type){
 				case RVLVN_CLUSTER_TYPE_CONVEX:
-					pSCCluster = SCClusters.Element[iSCluster];
+					pSCCluster = (RECOG::PSGM_::Cluster *)(pSCluster->vpCluster);
 
 					for (iFeature = pMCluster->iFeatureInterval.a; iFeature <= pMCluster->iFeatureInterval.b; iFeature++)
 					{
@@ -3505,7 +3666,7 @@ void VN::Match4(
 
 					break;
 				case RVLVN_CLUSTER_TYPE_CONCAVE:
-					pSUCluster = SUClusters.Element[iSCluster - nSCClusters];
+					pSUCluster = (RECOG::PSGM_::Cluster *)(pSCluster->vpCluster);
 
 					for (iFeature = pMCluster->iFeatureInterval.a; iFeature <= pMCluster->iFeatureInterval.b; iFeature++)
 					{
@@ -3530,7 +3691,7 @@ void VN::Match4(
 
 					break;
 				case RVLVN_CLUSTER_TYPE_XTORUS:
-					pTCluster = STClusters.Element[iSCluster - nSCClusters - nSUClusters];
+					pTCluster = (RECOG::VN_::Torus *)(pSCluster->vpCluster);
 
 					for (iFeature = pMCluster->iFeatureInterval.a; iFeature <= pMCluster->iFeatureInterval.b; iFeature++)
 					{
@@ -3643,7 +3804,7 @@ void VN::Match4(
 
 			if (pMCluster == NULL)
 			{
-				e = Evaluate(PArray, nSamplePts, SDF, dSEval, bdSEval, maxDeviation);
+				e = Evaluate(sceneObject.sampleArray, SDF, dSEval, bdSEval, maxDeviation);
 
 				if (mine < 0.0f || e < mine)
 				{
@@ -5016,9 +5177,9 @@ void VN_::CreateMug(
 
 	pVN->AddModelCluster(2, RVLVN_CLUSTER_TYPE_CONVEX, R, t, 0.5f, 16, 8, iBetaInterval, pMem);
 
-	pVN->AddOperation(3, 1, 0, 1, pMem);
+	pVN->AddOperation(3, -1, 0, 2, pMem);
 
-	pVN->AddOperation(4, -1, 2, 3, pMem);
+	pVN->AddOperation(4, 1, 3, 1, pMem);
 
 	pVN->SetOutput(4);
 
@@ -5032,7 +5193,37 @@ void VN_::CreateMug(
 	pVN->boundingBox.maxz = 0.5f;
 }
 
-void SampleMeshDistanceFunction(
+void RVL::SampleMesh(
+	Mesh *pMesh,
+	float *R,
+	float *t,
+	Array<VN_::Sample> &sampleArray)
+{
+	int nSamplePts = sampleArray.n;
+
+	Array<int> iPtArray;
+
+	iPtArray.n = pMesh->NodeArray.n;
+
+	RandomIndices(iPtArray);
+
+	int i;
+	float *P_;
+	VN_::Sample *pSample;
+
+	for (i = 0; i < nSamplePts; i++)
+	{
+		pSample = sampleArray.Element + i;
+
+		P_ = pMesh->NodeArray.Element[iPtArray.Element[i]].P;
+
+		RVLTRANSF3(P_, R, t, pSample->P);
+
+		pSample->SDF = 0.0f;
+	}
+}
+
+void RVL::SampleMeshDistanceFunction(
 	Mesh *pMesh,
 	SurfelGraph *pSurfels,
 	float voxelSize,
@@ -5047,7 +5238,7 @@ void SampleMeshDistanceFunction(
 
 	pMesh->BoundingBox(&boundingBox);
 
-	int border = sampleVoxelDistance + 1;
+	int border = 2 * sampleVoxelDistance + 1;
 
 	int nx = (int)ceil(0.5f * (boundingBox.maxx - boundingBox.minx) / voxelSize) + border;
 	int ny = (int)ceil(0.5f * (boundingBox.maxy - boundingBox.miny) / voxelSize) + border;
@@ -5270,9 +5461,9 @@ void SampleMeshDistanceFunction(
 
 						iClosestPt = -1;
 
-						for (k__ = k_ - 1; k__ <= k_ + 1; k__++)
-							for (j__ = j_ - 1; j__ <= j_ + 1; j__++)
-								for (i__ = i_ - 1; i__ <= i_ + 1; i__++)
+						for (k__ = k_ - sampleVoxelDistance; k__ <= k_ + sampleVoxelDistance; k__++)
+							for (j__ = j_ - sampleVoxelDistance; j__ <= j_ + sampleVoxelDistance; j__++)
+								for (i__ = i_ - sampleVoxelDistance; i__ <= i_ + sampleVoxelDistance; i__++)
 								{
 									if (i__ == i_ && j__ == j_ && k__ == k_)
 										continue;
@@ -5362,7 +5553,7 @@ void SampleMeshDistanceFunction(
 	delete[] zeroDistanceVoxelArray.Element;
 }
 
-void DisplaySampledMesh(
+void RVL::DisplaySampledMesh(
 	Visualizer *pVisualizer,
 	Array3D<RECOG::VN_::Voxel> volume,
 	float *P0,

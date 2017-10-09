@@ -29,11 +29,14 @@ using namespace RECOG;
 
 VNClassifier::VNClassifier()
 {
+	voxelSize = 0.01f;
+	sampleVoxelDistance = 2;
 	visualizationData.resolution = 0.01f;
 	visualizationData.SDFSurfaceValue = 0.0f;
 	modelDataBase = NULL; //Vidovic
 	modelsInDataBase = NULL; //Vidovic
 	classArray.Element = NULL;
+	sceneObject.sampleArray.Element = NULL;
 }
 
 
@@ -124,6 +127,7 @@ void VNClassifier::CreateParamList()
 	paramList.AddID(pParamData, "RECOGNITION", RVLRECOGNITION_MODE_RECOGNITION);
 	pParamData = paramList.AddParam("ModelDataBase", RVLPARAM_TYPE_STRING, &modelDataBase); //Vidovic
 	pParamData = paramList.AddParam("ModelsInDataBase", RVLPARAM_TYPE_STRING, &modelsInDataBase); //Vidovic
+	pParamData = paramList.AddParam("VN.voxelSize", RVLPARAM_TYPE_FLOAT, &voxelSize);
 }
 
 void VNClassifier::Init(Mesh *pMesh)
@@ -141,6 +145,7 @@ void VNClassifier::Clear()
 	models.clear();
 
 	RVL_DELETE_ARRAY(classArray.Element);
+	RVL_DELETE_ARRAY(sceneObject.sampleArray.Element);
 }
 
 void VNClassifier::ComputeDescriptor(
@@ -170,9 +175,9 @@ void VNClassifier::ComputeDescriptor(
 
 	pSurfels->DetectVertices(pMesh);
 
-	// Transform vertices and normals.
+	// Create scene object.	
 
-	float R[9];
+	float *R = sceneObject.R;
 
 	if (RIn)
 	{
@@ -183,7 +188,7 @@ void VNClassifier::ComputeDescriptor(
 		RVLUNITMX3(R);
 	}
 
-	float t[3];
+	float *t = sceneObject.t;
 
 	if (tIn)
 	{
@@ -194,9 +199,9 @@ void VNClassifier::ComputeDescriptor(
 		RVLNULL3VECTOR(t);
 	}
 
-	float *PArray = new float[3 * pSurfels->vertexArray.n];
+	sceneObject.vertexArray = new float[3 * pSurfels->vertexArray.n];
 
-	float *P = PArray;
+	float *P = sceneObject.vertexArray;
 
 	int iVertex;
 	SURFEL::Vertex *pVertex;
@@ -208,9 +213,9 @@ void VNClassifier::ComputeDescriptor(
 		RVLTRANSF3(pVertex->P, R, t, P);
 	}
 
-	float *NArray = new float[3 * pSurfels->NodeArray.n];
+	sceneObject.NArray = new float[3 * pSurfels->NodeArray.n];
 
-	float *N = NArray;
+	float *N = sceneObject.NArray;
 
 	int iSurfel;
 	Surfel *pSurfel;
@@ -221,6 +226,60 @@ void VNClassifier::ComputeDescriptor(
 
 		RVLMULMX3X3VECT(R, pSurfel->N, N);
 	}
+
+	int nSamplePts = 300;
+
+	sceneObject.sampleArray.n = 2 * nSamplePts;
+
+	RVL_DELETE_ARRAY(sceneObject.sampleArray.Element);
+
+	sceneObject.sampleArray.Element = new VN_::Sample[2 * nSamplePts];
+
+	SampleMesh(pMesh, R, t, sceneObject.sampleArray);
+
+	Array<RECOG::VN_::Sample> sampleArray;
+	Array3D<RECOG::VN_::Voxel> volume;
+	float P0[3];
+	Box<float> boundingBox;
+
+	SampleMeshDistanceFunction(pMesh, pSurfels, voxelSize, sampleVoxelDistance, volume, P0, sampleArray, boundingBox);
+
+	Array<int> iPtArray;
+
+	iPtArray.n = sampleArray.n;
+
+	RandomIndices(iPtArray);
+
+	int iSample;
+	float *P_;
+	VN_::Sample *pSample, *pSample_;
+
+	for (iSample = 0; iSample < nSamplePts; iSample++)
+	{
+		pSample = sampleArray.Element + iPtArray.Element[iSample];
+
+		pSample_ = sceneObject.sampleArray.Element + nSamplePts + iSample;
+
+		RVLTRANSF3(pSample->P, R, t, pSample_->P);
+
+		pSample_->SDF = pSample->SDF;
+	}
+
+	//// Sample visualization
+
+	//Visualizer visualizer;
+
+	//visualizer.Create();
+
+	//DisplaySampledMesh(&visualizer, volume, P0, voxelSize);
+
+	//unsigned char color[] = { 0, 128, 255 };
+
+	//visualizer.DisplayPointSet<float, VN_::Sample>(sampleArray, color, 6.0f);
+
+	//visualizer.Run();
+
+	delete[] sampleArray.Element;
 
 	// Cluster surfels into convex surfaces.
 
@@ -234,23 +293,27 @@ void VNClassifier::ComputeDescriptor(
 
 	concaveClustering.Clusters();
 
+	// Cluster visualization.
+
 	uchar SelectionColor[] = {0, 255, 0};
 
 	pSurfels->NodeColors(SelectionColor);
 
-	//Visualizer visualizer;
+	Visualizer visualizer;
 
-	//visualizer.Create();
+	visualizer.Create();
 
-	////concaveClustering.InitDisplay(&visualizer, &mesh, SelectionColor);
+	//concaveClustering.InitDisplay(&visualizer, &mesh, SelectionColor);
 
-	////concaveClustering.Display();
+	//concaveClustering.Display();
 
-	//convexClustering.InitDisplay(&visualizer, pMesh, SelectionColor);
+	convexClustering.InitDisplay(&visualizer, pMesh, SelectionColor);
 
-	//convexClustering.Display();
+	convexClustering.Display();
 
-	//visualizer.Run();
+	visualizer.Run();
+
+	// Surfel visualization.
 
 	//surfels.NodeColors(SelectionColor);
 
@@ -262,7 +325,7 @@ void VNClassifier::ComputeDescriptor(
 
 	printf("Matching VN model to scene...");
 
-	P = PArray;
+	P = sceneObject.vertexArray;
 
 	InitBoundingBox<float>(&SBoundingBox, P);
 
@@ -277,10 +340,10 @@ void VNClassifier::ComputeDescriptor(
 
 	bdS = new bool[pModel->featureArray.n];
 
-	pModel->Match4(pMesh, PArray, NArray, R, t, this, SBoundingBox, dS, bdS);
+	pModel->Match4(pMesh, sceneObject, this, SBoundingBox, dS, bdS);
 
-	delete[] PArray;
-	delete[] NArray;
+	delete[] sceneObject.vertexArray;
+	delete[] sceneObject.NArray;
 		 
 	printf("completed.\n");
 }
@@ -320,6 +383,8 @@ void VNClassifier::Learn(
 	bool saveDBSequenceFile = false;
 
 	printf("Model DB creation started...\n");
+
+	unsigned char color[] = { 0, 128, 255 };
 
 	int currentModelID;
 	float *dS;
@@ -385,6 +450,8 @@ void VNClassifier::Learn(
 
 				pModel->Display(pVisualizer, SBoundingBox, visualizationData.resolution, dS, bdS, visualizationData.SDFSurfaceValue);
 
+				pVisualizer->DisplayPointSet<float, VN_::Sample>(sceneObject.sampleArray, color, 6.0f);
+
 				pVisualizer->Run();
 			}
 
@@ -408,6 +475,14 @@ void VN_::_3DNetDatabaseClasses(VNClassifier *pClassifier)
 	pClassifier->classArray.Element = new RECOG::ClassData[pClassifier->classArray.n];
 
 	RECOG::ClassData *pClass;
+
+	// class banana
+
+	pClass = pClassifier->classArray.Element + 1;
+	pClass->iMetaModel = RVLVN_METAMODEL_TORUS;
+	pClass->iFirstInstance = 10;
+	pClass->nInstances = 6;
+	pClass->iRefInstance = 15;
 
 	// class donut
 

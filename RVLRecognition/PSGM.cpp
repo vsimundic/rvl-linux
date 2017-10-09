@@ -2039,6 +2039,8 @@ void PSGM::Clusters()
 			}
 		}	// region growing loop
 
+		pCluster->orig = pCluster->size;
+
 		if(pCluster->bValid = (pCluster->size >= minClusterSize))
 			nValidClusters++;
 	}	// for each cluster
@@ -2065,7 +2067,7 @@ void PSGM::Clusters()
 
 		if (pCluster->bValid)
 		{
-			pSortIndex->cost = pCluster->size;
+			pSortIndex->cost = pCluster->orig;
 			pSortIndex->idx = i;
 			pSortIndex++;
 		}
