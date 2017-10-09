@@ -777,13 +777,16 @@ void LaplaceSmooting(Mesh *pMesh, int noIter, bool useCotan)
 	//interactor->Start();
 }
 
-void ObjectDetector::DetectObjects(char *MeshFilePathName)
+void ObjectDetector::DetectObjects(
+	char *MeshFilePathName,
+	Array2D<short int> *pDepthImage,
+	IplImage *pRGBImage)
 {
 	// Segmentation to surfels.
 
 	bSurfelsFromSSF = false;
 
-	char *fileExtension = RVLGETFILEEXTENSION(MeshFilePathName);	
+	char *fileExtension = (MeshFilePathName ? RVLGETFILEEXTENSION(MeshFilePathName) : "");
 
 	if (strcmp(fileExtension, "ssf") == 0)
 	{
@@ -803,14 +806,27 @@ void ObjectDetector::DetectObjects(char *MeshFilePathName)
 	}
 	else
 	{
-		// Read mesh from file.
+		if (MeshFilePathName)
+		{
+			// Read mesh from file.
 
-		printf("Creating mesh from %s:\n", MeshFilePathName);
+			printf("Creating mesh from %s:\n", MeshFilePathName);
 
-		if (LoadMesh(vpMeshBuilder, MeshFilePathName, &mesh, (flags & RVLOBJECTDETECTION_FLAG_SAVE_PLY) != 0))
+			if (LoadMesh(vpMeshBuilder, MeshFilePathName, &mesh, (flags & RVLOBJECTDETECTION_FLAG_SAVE_PLY) != 0))
+				printf("Mesh created.\n");
+			else
+				printf("ERROR: Mesh can't be created!\n");
+		}
+		else if (pDepthImage)
+		{
+			printf("Creating mesh from depth image.\n");
+
+			CreateMesh(vpMeshBuilder, pDepthImage, pRGBImage, &mesh);
+
 			printf("Mesh created.\n");
+		}
 		else
-			printf("ERROR: Mesh can't be created!\n");
+			printf("ERROR: No mesh or depth image specified!\n");
 
 		//SmoothMesh(&mesh, 30);
 		//LaplaceSmooting(&mesh, 30);

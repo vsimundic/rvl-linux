@@ -93,27 +93,47 @@ void RGBDCamera::GetPointCloud(
 
 	// fill in the RGB values
 
-	char *RGB = pRGBImage->imageData;
-
 	point_idx = 0;
 	RGBValue color;
 	color.Alpha = 0xff;
 
-	for (unsigned yIdx = 0; yIdx < h; ++yIdx, point_idx += skip)
+	if (pRGBImage)
 	{
-		for (unsigned xIdx = 0; xIdx < w; ++xIdx, point_idx += step)
+		char *RGB = pRGBImage->imageData;
+
+		for (unsigned yIdx = 0; yIdx < h; ++yIdx, point_idx += skip)
 		{
-			value_idx = 3 * (xIdx / 2 + (yIdx / 2) * (w / 2));
+			for (unsigned xIdx = 0; xIdx < w; ++xIdx, point_idx += step)
+			{
+				value_idx = 3 * (xIdx / 2 + (yIdx / 2) * (w / 2));
 
-			pcl::PointXYZRGBA &pt = PC->points[point_idx];
+				pcl::PointXYZRGBA &pt = PC->points[point_idx];
 
-			color.Blue = RGB[value_idx];
-			color.Green = RGB[value_idx + 1];
-			color.Red = RGB[value_idx + 2];
+				color.Blue = RGB[value_idx];
+				color.Green = RGB[value_idx + 1];
+				color.Red = RGB[value_idx + 2];
 
-			pt.rgba = color.long_value;
+				pt.rgba = color.long_value;
+			}
 		}
 	}
+	else	// If pRGBImage == NULL, then assign white color to all points.
+	{
+		color.Red = color.Green = color.Blue = 0xff;
+
+		for (unsigned yIdx = 0; yIdx < h; ++yIdx, point_idx += skip)
+		{
+			for (unsigned xIdx = 0; xIdx < w; ++xIdx, point_idx += step)
+			{
+				value_idx = 3 * (xIdx / 2 + (yIdx / 2) * (w / 2));
+
+				pcl::PointXYZRGBA &pt = PC->points[point_idx];
+
+				pt.rgba = color.long_value;
+			}
+		}
+	}
+
 	PC->sensor_origin_.setZero();
 	PC->sensor_orientation_.setIdentity();
 }

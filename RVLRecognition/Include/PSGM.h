@@ -40,6 +40,7 @@ namespace RVL
 				Array<int> iSurfelArray;
 				Array<int> iVertexArray;
 				int size;
+				int orig;
 				int boundaryDiscontinuityPerc;
 				float N[3];
 				float normalDistributionStd1;

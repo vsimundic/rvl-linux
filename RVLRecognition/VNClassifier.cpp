@@ -293,23 +293,27 @@ void VNClassifier::ComputeDescriptor(
 
 	concaveClustering.Clusters();
 
+	// Cluster visualization.
+
 	uchar SelectionColor[] = {0, 255, 0};
 
 	pSurfels->NodeColors(SelectionColor);
 
-	//Visualizer visualizer;
+	Visualizer visualizer;
 
-	//visualizer.Create();
+	visualizer.Create();
 
-	////concaveClustering.InitDisplay(&visualizer, &mesh, SelectionColor);
+	//concaveClustering.InitDisplay(&visualizer, &mesh, SelectionColor);
 
-	////concaveClustering.Display();
+	//concaveClustering.Display();
 
-	//convexClustering.InitDisplay(&visualizer, pMesh, SelectionColor);
+	convexClustering.InitDisplay(&visualizer, pMesh, SelectionColor);
 
-	//convexClustering.Display();
+	convexClustering.Display();
 
-	//visualizer.Run();
+	visualizer.Run();
+
+	// Surfel visualization.
 
 	//surfels.NodeColors(SelectionColor);
 
