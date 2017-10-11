@@ -501,6 +501,14 @@ void VN_::_3DNetDatabaseClasses(VNClassifier *pClassifier)
 	pClass->nInstances = 6;
 	pClass->iRefInstance = 15;
 
+	// class car
+
+	pClass = pClassifier->classArray.Element + 4;
+	pClass->iMetaModel = RVLVN_METAMODEL_HAMMER;
+	pClass->iFirstInstance = 100;
+	pClass->nInstances = 26;
+	pClass->iRefInstance = 100;
+
 	// class donut
 
 	pClass = pClassifier->classArray.Element + 5;
@@ -516,6 +524,15 @@ void VN_::_3DNetDatabaseClasses(VNClassifier *pClassifier)
 	pClass->iFirstInstance = 136;
 	pClass->nInstances = 32;
 	pClass->iRefInstance = 136;
+
+	// class toilet paper
+
+	pClass = pClassifier->classArray.Element + 8;
+	pClass->iMetaModel = RVLVN_METAMODEL_TORUS;
+	pClass->iFirstInstance = 190;
+	pClass->nInstances = 6;
+	pClass->iRefInstance = 190;
+
 
 	// class mug
 
