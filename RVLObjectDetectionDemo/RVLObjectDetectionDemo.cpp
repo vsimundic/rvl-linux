@@ -210,6 +210,7 @@ int main(int argc, char ** argv)
 
 	objectDetector.vpMeshBuilder = &meshBuilder;
 	objectDetector.LoadMesh = LoadMesh;
+	objectDetector.CreateMesh = CreateMesh;
 
 	objectDetector.pSurfelDetector->pTimer = new CRVLTimer;
 
@@ -237,11 +238,13 @@ int main(int argc, char ** argv)
 		{
 			mem.Clear();
 
-			printf("Scene %s...\n", fileName);
 
-			objectDetector.DetectObjects(filePath);
 
-			printf("Scene %s...finished!\n\n", fileName);
+			//printf("Scene %s...\n", fileName);
+
+			//objectDetector.DetectObjects(filePath);
+
+			//printf("Scene %s...finished!\n\n", fileName);
 
 			if (objectDetector.bTrainingHMI)
 				objectDetector.TrainingHMI(fileName);

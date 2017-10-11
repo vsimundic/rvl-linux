@@ -37,6 +37,9 @@ VNClassifier::VNClassifier()
 	modelsInDataBase = NULL; //Vidovic
 	classArray.Element = NULL;
 	sceneObject.sampleArray.Element = NULL;
+	maxnSCClusters = 4;
+	maxnSUClusters = 2;
+	maxnSTClusters = 2;
 }
 
 
@@ -54,6 +57,7 @@ void VNClassifier::Create(char *cfgFileName)
 	convexClustering.pSurfelDetector = pSurfelDetector;
 
 	convexClustering.bDetectGroundPlane = false;
+	convexClustering.bOverlappingClusters = true;
 
 	concaveClustering.pMem = pMem;
 
@@ -64,6 +68,7 @@ void VNClassifier::Create(char *cfgFileName)
 	concaveClustering.clusterType = -1.0f;
 
 	concaveClustering.bDetectGroundPlane = false;
+	concaveClustering.bOverlappingClusters = true;
 
 	VN *pModel;
 
@@ -121,7 +126,9 @@ void VNClassifier::CreateParamList()
 	paramList.Init();
 
 	pParamData = paramList.AddParam("VN.kMaxMatchCost", RVLPARAM_TYPE_FLOAT, &kMaxMatchCost);
-	pParamData = paramList.AddParam("VN.maxnSClusters", RVLPARAM_TYPE_INT, &maxnSClusters);
+	pParamData = paramList.AddParam("VN.maxnSCClusters", RVLPARAM_TYPE_INT, &maxnSCClusters);
+	pParamData = paramList.AddParam("VN.maxnSUClusters", RVLPARAM_TYPE_INT, &maxnSUClusters);
+	pParamData = paramList.AddParam("VN.maxnSTClusters", RVLPARAM_TYPE_INT, &maxnSTClusters);
 	pParamData = paramList.AddParam("Recognition.mode", RVLPARAM_TYPE_ID, &mode);
 	paramList.AddID(pParamData, "TRAINING", RVLRECOGNITION_MODE_TRAINING);
 	paramList.AddID(pParamData, "RECOGNITION", RVLRECOGNITION_MODE_RECOGNITION);
@@ -293,23 +300,37 @@ void VNClassifier::ComputeDescriptor(
 
 	concaveClustering.Clusters();
 
+	// Selection color for visualization.
+
 	uchar SelectionColor[] = {0, 255, 0};
 
-	pSurfels->NodeColors(SelectionColor);
+	//// Cluster visualization.
+
+	//pSurfels->NodeColors(SelectionColor);
 
 	//Visualizer visualizer;
 
 	//visualizer.Create();
 
-	//concaveClustering.InitDisplay(&visualizer, pMesh, SelectionColor);
+	//RVL_DELETE_ARRAY(convexClustering.clusterColor);
 
-	//concaveClustering.Display();
+	//RandomColors(SelectionColor, convexClustering.clusterColor, convexClustering.clusters.n);
 
-	////convexClustering.InitDisplay(&visualizer, pMesh, SelectionColor);
+	//convexClustering.InitDisplay(&visualizer, pMesh, SelectionColor);
 
-	////convexClustering.Display();
+	//convexClustering.Display();
+
+	////RVL_DELETE_ARRAY(concaveClustering.clusterColor);
+
+	////RandomColors(SelectionColor, concaveClustering.clusterColor, concaveClustering.clusters.n);
+
+	////concaveClustering.InitDisplay(&visualizer, &mesh, SelectionColor);
+
+	////concaveClustering.Display();
 
 	//visualizer.Run();
+
+	// Surfel visualization.
 
 	//surfels.NodeColors(SelectionColor);
 
@@ -487,6 +508,14 @@ void VN_::_3DNetDatabaseClasses(VNClassifier *pClassifier)
 	pClass->iFirstInstance = 126;
 	pClass->nInstances = 10;
 	pClass->iRefInstance = 126;
+
+	// class hammer
+
+	pClass = pClassifier->classArray.Element + 6;
+	pClass->iMetaModel = RVLVN_METAMODEL_HAMMER;
+	pClass->iFirstInstance = 136;
+	pClass->nInstances = 32;
+	pClass->iRefInstance = 136;
 
 	// class mug
 

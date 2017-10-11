@@ -61,7 +61,9 @@ namespace RVL
 		std::vector<VN *> models;
 		float kMaxMatchCost;
 		float clusteringTolerance;
-		int maxnSClusters;
+		int maxnSCClusters;
+		int maxnSUClusters;
+		int maxnSTClusters;
 		float voxelSize;
 		int sampleVoxelDistance;
 		char *modelDataBase; //Vidovic

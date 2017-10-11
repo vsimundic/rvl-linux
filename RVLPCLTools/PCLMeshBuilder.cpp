@@ -322,6 +322,36 @@ bool PCLMeshBuilder::Load(
 	return true;
 }
 
+void RVL::CreateMesh(
+	void *vpMeshBuilder,
+	Array2D<short int> *pDepthImage,
+	IplImage *pRGBImage,
+	Mesh *pMesh)
+{
+	PCLMeshBuilder *pMeshBuilder = (PCLMeshBuilder *)vpMeshBuilder;
+
+	RGBDCamera camera;
+
+	camera.GetPointCloud(pDepthImage, pRGBImage, pMeshBuilder->PC);
+
+	pMeshBuilder->CreateMesh(pMeshBuilder->PC, pMeshBuilder->PCLMesh);
+
+	vtkSmartPointer<vtkPolyData> pd = vtkSmartPointer<vtkPolyData>::New();
+	PCLMeshToPolygonData(pMeshBuilder->PCLMesh, pd);
+	pMesh->pPolygonData = vtkSmartPointer<vtkPolyData>::New();
+	pMesh->pPolygonData->DeepCopy(pd);
+
+	pMesh->bOrganizedPC = true;
+	pMesh->width = pDepthImage->w;
+	pMesh->height = pDepthImage->h;
+
+	printf("Creating ordered mesh from PCL mesh...");
+
+	pMesh->CreateOrderedMeshFromPolyData();
+
+	printf("completed.\n");
+}
+
 bool RVL::LoadMesh(
 	void *vpMeshBuilder,
 	char *FileName,

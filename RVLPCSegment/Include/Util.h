@@ -62,6 +62,10 @@ namespace RVL
 
 	void QuickSort(int *Key, int *Index, int n);
 	void RandomColor(unsigned char *color);
+	void RandomColors(
+		unsigned char *SelectionColor,
+		unsigned char *&colorArray,
+		int n);
 
 	// created by Damir Filko
 	// adapted for general case by Robert Cupec

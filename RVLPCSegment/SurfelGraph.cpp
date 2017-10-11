@@ -3030,38 +3030,9 @@ void SurfelGraph::Centroid(
 
 void SurfelGraph::NodeColors(unsigned char *SelectionColor)
 {
-	int SelectionColor_[3];
-
-	RVLCONVTOINT3(SelectionColor, SelectionColor_);
-
 	RVL_DELETE_ARRAY(nodeColor);
 
-	nodeColor = new unsigned char[3 * NodeArray.n];
-
-	Surfel *pSurfel;
-	int iNode;
-	int Color[3], dColor[3];
-	unsigned char *NodeColor_;
-
-	for (iNode = 0; iNode < NodeArray.n; iNode++)
-	{
-		pSurfel = NodeArray.Element + iNode;
-
-		do
-		{
-			Color[0] = rand() % 256;
-			Color[1] = rand() % 256;
-			Color[2] = rand() % 256;
-
-			RVLDIF3VECTORS(Color, SelectionColor, dColor);
-		} while (RVLDOTPRODUCT3(dColor, dColor) < 128 * 128);
-
-		NodeColor_ = nodeColor + 3 * iNode;
-
-		NodeColor_[0] = (unsigned char)Color[0];
-		NodeColor_[1] = (unsigned char)Color[1];
-		NodeColor_[2] = (unsigned char)Color[2];
-	}
+	RandomColors(SelectionColor, nodeColor, NodeArray.n);
 }
 
 void SurfelGraph::DisplayHardEdges(

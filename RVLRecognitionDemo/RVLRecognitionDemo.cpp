@@ -76,7 +76,7 @@ void CreateParamList(
 	char **pResultsFolder,
 	DWORD &method,
 	DWORD &flags,
-	DWORD &iClass,
+	int &iClass,
 	float &SDFSurfaceValue
 	)
 {
@@ -281,7 +281,7 @@ int main(int argc, char ** argv)
 	char *segmentGTFileName = NULL; //Vidovic
 	DWORD method = RVLRECOGNITION_METHOD_PSGM;
 	//DWORD method = RVLRECOGNITION_METHOD_RF; //VIDOVIC
-	DWORD iClass;
+	int iClass;
 	float SDFSurfaceValue = 0.0f;
 
 	DWORD flags = 0x00000000; //VIDOVIC
@@ -1061,6 +1061,27 @@ int main(int argc, char ** argv)
 
 		RECOG::VN_::_3DNetDatabaseClasses(&classifier);
 
+		// Model visualization.
+
+		if (flags & RVLRECOGNITION_DEMO_FLAG_VISUALIZE_VN_MODEL)
+		{
+			int iMetaModel = classifier.classArray.Element[iClass].iMetaModel;
+
+			VN *pModel = classifier.models[iMetaModel];
+
+			Box<float> box;
+
+			box = pModel->boundingBox;
+
+			ExpandBox<float>(&box, 2.0f * resolution);
+
+			pModel->Display(&visualizer, box, resolution, NULL, NULL, SDFSurfaceValue);
+
+			visualizer.Run();
+		}
+
+		/////
+
 		if (classifier.mode == RVLRECOGNITION_MODE_TRAINING)
 			classifier.Learn(modelSequenceFileName, iClass, &visualizer); //Vidovic
 		else if (classifier.mode == RVLRECOGNITION_MODE_RECOGNITION)
@@ -1085,23 +1106,6 @@ int main(int argc, char ** argv)
 
 				// Add classification code here ...
 			}
-		}
-
-		int iMetaModel = classifier.classArray.Element[iClass].iMetaModel;
-
-		VN *pModel = classifier.models[iMetaModel];
-
-		Box<float> box;
-
-		if (flags & RVLRECOGNITION_DEMO_FLAG_VISUALIZE_VN_MODEL)
-		{
-			// Model visualization
-
-			box = pModel->boundingBox;
-
-			ExpandBox<float>(&box, 2.0f * resolution);
-
-			pModel->Display(&visualizer, box, resolution, NULL, NULL, SDFSurfaceValue);
 		}
 	}	// if (method == RVLRECOGNITION_METHOD_VN)
 

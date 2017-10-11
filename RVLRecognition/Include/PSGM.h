@@ -40,6 +40,7 @@ namespace RVL
 				Array<int> iSurfelArray;
 				Array<int> iVertexArray;
 				int size;
+				int orig;
 				int boundaryDiscontinuityPerc;
 				float N[3];
 				float normalDistributionStd1;
@@ -370,6 +371,7 @@ namespace RVL
 		void PaintCluster(
 			int iCluster,
 			unsigned char *color);
+		void ResetClusterColor(int iCluster);
 		void PaintClusterVertices(
 			int iCluster,
 			unsigned char *color);
@@ -636,6 +638,7 @@ namespace RVL
 		bool bGnd;
 		bool bWholeMeshCluster;
 		bool bDetectGroundPlane;
+		bool bOverlappingClusters;
 		Array<RECOG::PSGM_::ModelInstance> modelInstanceDB; //Vidovic
 		QList<RECOG::PSGM_::MatchInstance> CTImatches; //Vidovic
 		Array<RECOG::PSGM_::MatchInstance*> pCTImatchesArray; //Vidovic
@@ -648,6 +651,7 @@ namespace RVL
 		Array<SortIndex<float>> sceneSegmentMatchesArray;
 		Array<Array<SortIndex<float>>> bestSceneSegmentMatches;
 		Array<SortIndex<float>> bestSceneSegmentMatchesArray;
+		unsigned char *clusterColor;
 		//Array2D<Array<int>> matchMatrix;
 		//int *matchMatrixMem;
 		DWORD scoreCalculation; //Vidovic - TO DO (Implement read from cfg file)

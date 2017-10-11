@@ -803,4 +803,39 @@ namespace RVL
 
 		return polyData;
 	}
-}
+
+	void RandomColors(
+		unsigned char *SelectionColor,
+		unsigned char *&colorArray,
+		int n)
+	{
+		int SelectionColor_[3];
+
+		RVLCONVTOINT3(SelectionColor, SelectionColor_);
+
+		colorArray = new unsigned char[3 * n];
+
+		int iNode;
+		int Color[3], dColor[3];
+		unsigned char *NodeColor_;
+
+		for (iNode = 0; iNode < n; iNode++)
+		{
+			do
+			{
+				Color[0] = rand() % 256;
+				Color[1] = rand() % 256;
+				Color[2] = rand() % 256;
+
+				RVLDIF3VECTORS(Color, SelectionColor, dColor);
+			} while (RVLDOTPRODUCT3(dColor, dColor) < 128 * 128);
+
+			NodeColor_ = colorArray + 3 * iNode;
+
+			NodeColor_[0] = (unsigned char)Color[0];
+			NodeColor_[1] = (unsigned char)Color[1];
+			NodeColor_[2] = (unsigned char)Color[2];
+		}
+	}
+}	// namespace RVL
+
