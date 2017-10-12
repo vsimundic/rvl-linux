@@ -16137,7 +16137,7 @@ void PSGM::ObjectAlignment(
 	t11 = T0p(2, 2);
 	t12 = T0p(2, 3);
 
-	T0i = Tiq*T*T0p.transpose();
+	T0i = Tiq*T*T0p.inverse();
 
 	if (bTSM)
 		T = T0i.inverse();

@@ -3465,9 +3465,9 @@ void VN::Match4(
 
 	int nSCClusters = RVLMIN(SCClusters.n, pClassifier->maxnSCClusters);
 
-	int nSUClusters = RVLMIN(SUClusters.n, pClassifier->maxnSUClusters);
+	int nSUClusters = (bConcavity ? RVLMIN(SUClusters.n, pClassifier->maxnSUClusters) : 0);
 
-	int nSTClusters = RVLMIN(STClusters.n, pClassifier->maxnSTClusters);
+	int nSTClusters = (bTorus ? RVLMIN(STClusters.n, pClassifier->maxnSTClusters) : 0);
 
 	SClusters_.n = nSCClusters + nSUClusters + nSTClusters;
 
@@ -3485,9 +3485,14 @@ void VN::Match4(
 
 	memset(bCopied[0], 0, SCClusters.n * sizeof(bool));
 
-	bCopied[1] = new bool[SUClusters.n];
+	if (SUClusters.n > 0)
+	{
+		bCopied[1] = new bool[SUClusters.n];
 
-	memset(bCopied[1], 0, SUClusters.n * sizeof(bool));
+		memset(bCopied[1], 0, SUClusters.n * sizeof(bool));
+	}
+	else
+		bCopied[1] = NULL;
 
 	int iSCluster__[2];
 
@@ -3501,7 +3506,7 @@ void VN::Match4(
 	int iLargestCluster[2];
 
 	int iFirstArray = 0;
-	int iLastArray = 1;
+	int iLastArray = (nSUClusters ? 1 : 0);
 
 	int *clusterMap[2];
 
@@ -3583,7 +3588,7 @@ void VN::Match4(
 
 	delete[] bCovered;
 	delete[] bCopied[0];
-	delete[] bCopied[1];
+	RVL_DELETE_ARRAY(bCopied[1]);
 
 	pSCluster = SClusters_.Element + nSCClusters + nSUClusters;
 
@@ -3604,13 +3609,17 @@ void VN::Match4(
 		for (iCluster = 0; iCluster < nSTClusters; iCluster++, pSCluster++)
 		{
 			pSCluster->type = RVLVN_CLUSTER_TYPE_XTORUS;
-			pSCluster->vpCluster = STClusters.Element + iCluster;
+			pSCluster->vpCluster = STClusters.Element[iCluster];
 		}
 	}
 
 	// Compute descriptor valuses for all correspondences (scene cluster, model cluster).
 
 	float *dS_ = new float[SClusters_.n * featureArray.n];
+
+	bool *bdS_ = new bool[SClusters_.n * featureArray.n];
+
+	memset(bdS_, 0, SClusters_.n * featureArray.n * sizeof(bool));
 
 	Array<float *> descriptors;
 
@@ -3619,17 +3628,21 @@ void VN::Match4(
 
 	int iSCluster, iMCluster, iFeature, iVertex;
 	float *N;
-	RECOG::PSGM_::Cluster *pSCCluster, *pSUCluster;
-	RECOG::VN_::Torus *pTCluster;
+	PSGM_::Cluster *pSCCluster, *pSUCluster;
+	VN_::Torus *pTCluster;
 	float d, maxd, mind;
 	float *dS__;
-	RECOG::VN_::Feature *pFeature;
+	bool *bdS__;
+	VN_::Feature *pFeature;
+	VN_::TorusRing *pTorusRing;
 
 	for (iSCluster = 0; iSCluster < SClusters_.n; iSCluster++)
 	{
 		pSCluster = SClusters_.Element + iSCluster;
 
 		dS__ = dS_ + iSCluster * featureArray.n;
+
+		bdS__ = bdS_ + iSCluster * featureArray.n;
 
 		descriptors.Element[iSCluster] = dS__;
 
@@ -3662,6 +3675,7 @@ void VN::Match4(
 						}
 
 						dS__[iFeature] = maxd;
+						bdS__[iFeature] = true;
 					}
 
 					break;
@@ -3687,6 +3701,7 @@ void VN::Match4(
 						}
 
 						dS__[iFeature] = mind;
+						bdS__[iFeature] = true;
 					}
 
 					break;
@@ -3697,7 +3712,13 @@ void VN::Match4(
 					{
 						pFeature = featureArray.Element + iFeature;
 
-						dS__[iFeature] = pTCluster->ringArray.Element[pFeature->iBeta]->d[pFeature->iAlpha];
+						pTorusRing = pTCluster->ringArray.Element[pFeature->iBeta];
+
+						if (pTorusRing)
+						{
+							dS__[iFeature] = pTorusRing->d[pFeature->iAlpha];
+							bdS__[iFeature] = true;
+						}
 					}
 				}
 			}
@@ -3767,18 +3788,23 @@ void VN::Match4(
 				{
 					dS__ = descriptors.Element[pCorresp_->iSCluster];
 
+					bdS__ = bdS_ + pCorresp_->iSCluster * featureArray.n;
+
 					operation = (pMCluster->type == RVLVN_CLUSTER_TYPE_CONVEX ? 1.0f : -1.0f);
 
 					for (iFeature = pMCluster->iFeatureInterval.a; iFeature <= pMCluster->iFeatureInterval.b; iFeature++)
-						if (bdSEval[iFeature])
+						if (bdS__[iFeature])
 						{
-							if (operation * dS__[iFeature] > operation * dSEval[iFeature])
+							if (bdSEval[iFeature])
+							{
+								if (operation * dS__[iFeature] > operation * dSEval[iFeature])
+									dSEval[iFeature] = dS__[iFeature];
+							}
+							else
+							{
 								dSEval[iFeature] = dS__[iFeature];
-						}
-						else
-						{
-							dSEval[iFeature] = dS__[iFeature];
-							bdSEval[iFeature] = true;
+								bdSEval[iFeature] = true;
+							}
 						}
 				}
 
@@ -3854,6 +3880,7 @@ void VN::Match4(
 	RVL_DELETE_ARRAY(STClusters.Element);
 	delete[] SClusters_.Element;
 	delete[] dS_;
+	delete[] bdS_;
 	delete[] dSEval;
 	delete[] bdSEval;
 	delete[] descriptors.Element;
