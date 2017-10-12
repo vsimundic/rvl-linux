@@ -501,6 +501,14 @@ void VN_::_3DNetDatabaseClasses(VNClassifier *pClassifier)
 	pClass->nInstances = 6;
 	pClass->iRefInstance = 15;
 
+	// class bottle
+
+	pClass = pClassifier->classArray.Element + 2;
+	pClass->iMetaModel = RVLVN_METAMODEL_BOTTLE;
+	pClass->iFirstInstance = 16;
+	pClass->nInstances = 69;
+	pClass->iRefInstance = 16;
+
 	// class donut
 
 	pClass = pClassifier->classArray.Element + 5;
