@@ -74,6 +74,12 @@ void VNClassifier::Create(char *cfgFileName)
 
 	pModel = new VN;
 
+	VN_::CreateConvex(pModel, pMem0);
+
+	models.push_back(pModel);
+
+	pModel = new VN;
+
 	VN_::CreateTorus(pModel, pMem0);
 
 	models.push_back(pModel);

@@ -4107,6 +4107,8 @@ void VN::ToroidalClusters(
 
 	//iBeta = 2;
 
+	//SURFEL::Vertex *pVertex_;
+
 	//for (iVertex = 0; iVertex < pSurfels->vertexArray.n; iVertex++)
 	//{
 	//	pVertex = pSurfels->vertexArray.Element[iVertex];
@@ -4179,13 +4181,13 @@ void VN::ToroidalClusters(
 		}
 	}
 
+	int iRing;
+
 	//FILE *fp = fopen("tangentRing.txt", "w");
 
-	//int iRing = 0;
+	//iRing = 0;
 
 	//pRingList = ringListArray.Element + 0;
-
-	//float *P_;
 
 	//RECOG::VN_::TorusRing *pRingDebug = pRingList->pFirst;
 
@@ -4224,7 +4226,7 @@ void VN::ToroidalClusters(
 		sa[iAlpha] = sin(alphaArray.Element[iAlpha]);
 	}
 
-	int iRing = 0;
+	iRing = 0;
 
 	VN_::TorusRing *pRing;
 	float N[3];
@@ -4657,7 +4659,8 @@ void VN::DetectTorusRings(
 			ringEdgeArray.Element[ringEdgeArray.n++] = i_;
 	}
 
-	if (ringEdgeArray.n >= minnEdges && ringEdgeArray.n > nEdges / 2)
+	//if (ringEdgeArray.n >= minnEdges && ringEdgeArray.n > nEdges / 2)
+	if (ringEdgeArray.n >= minnEdges)
 	{
 		for (i = 0; i < ringEdgeArray.n; i++)
 		{
@@ -4981,6 +4984,39 @@ void VN::PrintTori(
 
 	for (iTorus = 0; iTorus < torusArray.n; iTorus++)
 		PrintTorus(fp, pSurfels, torusArray.Element[iTorus], iTorus);
+}
+
+void VN_::CreateConvex(
+	VN *pVN,
+	CRVLMem *pMem)
+{
+	pVN->CreateEmpty();
+
+	float R[9];
+
+	RVLUNITMX3(R);
+
+	float t[3];
+
+	RVLNULL3VECTOR(t);
+
+	Pair<int, int> iBetaInterval;
+
+	iBetaInterval.a = 0;
+	iBetaInterval.b = 8;
+
+	pVN->AddModelCluster(0, RVLVN_CLUSTER_TYPE_CONVEX, R, t, 0.5f, 16, 8, iBetaInterval, pMem);
+
+	pVN->SetOutput(0);
+
+	pVN->Create(pMem);
+
+	pVN->boundingBox.minx = -0.5f;
+	pVN->boundingBox.maxx = 0.5f;
+	pVN->boundingBox.miny = -0.5f;
+	pVN->boundingBox.maxy = 0.5f;
+	pVN->boundingBox.minz = -0.5f;
+	pVN->boundingBox.maxz = 0.5f;
 }
 
 void VN_::CreateTorus(

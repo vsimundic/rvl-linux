@@ -5,11 +5,12 @@
 #define RVLVN_CLUSTER_TYPE_XTORUS	2
 #define RVLVN_CLUSTER_TYPE_ITORUS	3
 
-#define RVLVN_METAMODEL_TORUS	0
-#define RVLVN_METAMODEL_BOTTLE	1
-#define RVLVN_METAMODEL_HAMMER	2
-#define RVLVN_METAMODEL_BOWL	3
-#define RVLVN_METAMODEL_MUG		4
+#define RVLVN_METAMODEL_CONVEX	0
+#define RVLVN_METAMODEL_TORUS	1
+#define RVLVN_METAMODEL_BOTTLE	2
+#define RVLVN_METAMODEL_HAMMER	3
+#define RVLVN_METAMODEL_BOWL	4
+#define RVLVN_METAMODEL_MUG		5
 
 // Move to Util.h.
 
@@ -347,6 +348,9 @@ namespace RVL
 				float t[3];
 			};
 
+			void CreateConvex(
+				VN *pVN,
+				CRVLMem *pMem);
 			void CreateTorus(
 				VN *pVN,
 				CRVLMem *pMem);
