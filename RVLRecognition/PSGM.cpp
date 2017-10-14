@@ -399,22 +399,9 @@ void PSGM::Interpret(
 	{
 		groundPlaneSurfelArray.Element = new int[pSurfels->NodeArray.n];
 
-		pSurfels->DetectDominantPlane(groundPlaneSurfelArray);
-
-		int i;
-
-		for (i = 0; i < groundPlaneSurfelArray.n; i++)
-			pSurfels->NodeArray.Element[groundPlaneSurfelArray.Element[i]].flags |= RVLSURFEL_FLAG_GND;
+		pSurfels->DetectDominantPlane(groundPlaneSurfelArray, NGnd, dGnd);
 
 		bGnd = true;
-
-		Surfel *pGndSurfel = pSurfels->NodeArray.Element + groundPlaneSurfelArray.Element[0];
-
-		float *NGnd_ = pGndSurfel->N;
-
-		RVLCOPY3VECTOR(NGnd_, NGnd);
-
-		dGnd = pGndSurfel->d;
 	}
 
 	// Detect vertices.
@@ -685,7 +672,10 @@ void PSGM::Interpret(
 
 		// Classification
 
-		Classify(pMesh);
+		int iModel;
+		float R[9], t[3];
+
+		Classify(pMesh, 0, 9, iModel, R, t);
 
 		// Create vertex graph.
 
@@ -13786,16 +13776,26 @@ void PSGM::VisualizeAlignedModels(int iRefModel, int iModel)
 
 }
 
-void PSGM::Classify(Mesh *pMesh)
+void PSGM::Classify(
+	Mesh *pMesh,
+	int imodelfirst,
+	int imodellast,
+	int &iModel,
+	float *R,
+	float *t,
+	bool bTSM)
 {
 	//apple-> 0, 10; banana -> 10, 6; bottle -> 16, 69; bowl -> 85, 15; car -> 100, 26 
 	//donut -> 126, 10; hammer -> 136, 32; tetra_pak -> 168, 22; toilet_paper -> 190, 6 mug ->196, 61
 	//int iRefObject = 196;
 	//int nObjectsInClass = 61;
 
-	int imodelfirst = 190;
-	int imodellast = 195; 
-	int firstCTIinClass = 15529; 
+	//int imodelfirst = 190;
+	//int imodellast = 195; 
+	//int firstCTIinClass = 15529; 
+
+	int firstCTIinClass = MCTISet.SegmentCTIs.Element[imodelfirst].Element[0];
+
 	RECOG::PSGM_::ModelInstance *pMCTI, *pSCTI;
 	RECOG::PSGM_::ModelInstanceElement *pMIE, *pSIE;
 	RECOG::PSGM_::MatchInstance *pMatch;
@@ -13806,7 +13806,7 @@ void PSGM::Classify(Mesh *pMesh)
 	double sum;
 	double min;
 	int p, q;
-	Eigen::VectorXf t(3), d(66);
+	Eigen::VectorXf t_(3), d(66);
 	double s, s_;
 
 	A = ConvexTemplatenT(); //normals
@@ -13818,7 +13818,7 @@ void PSGM::Classify(Mesh *pMesh)
 
 	//number of all CTI-s of all models in database:
 	int nCTIs = 0;
-	for (int i = imodelfirst; i < imodellast+1; i++) //mugs
+	for (int i = imodelfirst; i < imodellast+1; i++)
 //	for (int i = 85; i < 100; i++) //bowls
 	//for (int i = 0; i < 10; i++) //apples
 	//for (int i = 0; i < nModels; i++)
@@ -13905,7 +13905,7 @@ void PSGM::Classify(Mesh *pMesh)
 			//all matches
 			p = j;
 			q = je;
-			t = S.block<3, 1>(0, q);
+			t_ = S.block<3, 1>(0, q);
 			s = s_;
 
 			pMatch = CTIMatchMem + j*E.cols() + je;
@@ -13916,9 +13916,9 @@ void PSGM::Classify(Mesh *pMesh)
 			pMatch->iClass = pMCTI->iModel;
 			pMatch->score = sum;
 			pMatch->s = s;
-			pMatch->t_class[0] = t(0);
-			pMatch->t_class[1] = t(1);
-			pMatch->t_class[2] = t(2);
+			pMatch->t_class[0] = t_(0);
+			pMatch->t_class[1] = t_(1);
+			pMatch->t_class[2] = t_(2);
 			pMatch->ID = j*E.cols() + je;
 
 
@@ -14040,12 +14040,27 @@ void PSGM::Classify(Mesh *pMesh)
 	t9 = T0p(2, 0);
 	t10 = T0p(2, 1);
 	t11 = T0p(2, 2);
-	t12 = T0p(2, 3);
+	t12 = T0p(2, 3);	
+	
+	if (!bTSM)
+		T0i = (Tiq*T*T0p.inverse()).inverse();
+	
+	T = T0i;
 
-	T0i = (Tiq*T*T0p.inverse()).inverse();
-	//T0i = (Tiq*T*T0p.inverse()).inverse();
+	RVLMXEL(R, 3, 0, 0) = T(0, 0);
+	RVLMXEL(R, 3, 0, 1) = T(0, 1);
+	RVLMXEL(R, 3, 0, 2) = T(0, 2);
+	t[0] = T(0, 3);
+	RVLMXEL(R, 3, 1, 0) = T(1, 0);
+	RVLMXEL(R, 3, 1, 1) = T(1, 1);
+	RVLMXEL(R, 3, 1, 2) = T(1, 2);
+	t[1] = T(1, 3);
+	RVLMXEL(R, 3, 2, 0) = T(2, 0);
+	RVLMXEL(R, 3, 2, 1) = T(2, 1);
+	RVLMXEL(R, 3, 2, 2) = T(2, 2);
+	t[2] = T(2, 3);
 
-	int iModel = pMatch[IDbestMatch].iClass;
+	iModel = pMatch[IDbestMatch].iClass;
 //	delete[] ArrSum.Element;
 
 	////q += 15879;
@@ -14113,10 +14128,10 @@ void PSGM::Classify(Mesh *pMesh)
 
 	//fclose(fpClass);
 	
-	FILE *fpClassTranspose;
-	fpClassTranspose = fopen("D:\\ARP3D\\3DNet_dataset\\Cat10_ModelDatabase\\Cat10_ModelDatabase\\transposeToToiletPapers.txt", "a");
-	fprintf(fpClassTranspose, "%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\n", T0i(0, 0), T0i(0, 1), T0i(0, 2), T0i(0, 3), T0i(1, 0), T0i(1, 1), T0i(1, 2), T0i(1, 3), T0i(2, 0), T0i(2, 1), T0i(2, 2), T0i(2, 3), T0i(3, 0), T0i(3, 1), T0i(3, 2), T0i(3, 3));
-	fclose(fpClassTranspose);
+	//FILE *fpClassTranspose;
+	//fpClassTranspose = fopen("D:\\ARP3D\\3DNet_dataset\\Cat10_ModelDatabase\\Cat10_ModelDatabase\\transposeToToiletPapers.txt", "a");
+	//fprintf(fpClassTranspose, "%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\n", T0i(0, 0), T0i(0, 1), T0i(0, 2), T0i(0, 3), T0i(1, 0), T0i(1, 1), T0i(1, 2), T0i(1, 3), T0i(2, 0), T0i(2, 1), T0i(2, 2), T0i(2, 3), T0i(3, 0), T0i(3, 1), T0i(3, 2), T0i(3, 3));
+	//fclose(fpClassTranspose);
 
 
 

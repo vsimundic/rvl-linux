@@ -46,7 +46,10 @@ namespace RVL
 		void Learn(
 			char *modelSequenceFileName,
 			int iClass = -1,
-			Visualizer *pVisualizer = NULL); //Vidovic)
+			Visualizer *pVisualizer = NULL); //Vidovic
+		void Interpret(
+			Mesh *pMesh,
+			int iClass);
 
 	public:
 		CRVLMem *pMem0;
@@ -54,6 +57,7 @@ namespace RVL
 		CRVLParameterList paramList;
 		DWORD mode;
 		SurfelGraph *pSurfels;
+		SURFEL::ObjectGraph *pObjects;
 		PlanarSurfelDetector *pSurfelDetector;
 		PSGM alignment;
 		PSGM convexClustering;
@@ -76,6 +80,9 @@ namespace RVL
 		RECOG::VN_::VisualizationData visualizationData;
 		Array<RECOG::ClassData> classArray;
 		RECOG::VN_::SceneObject sceneObject;
+		float NGnd[3];
+		float dGnd;
+		bool bGnd;
 	};
 }
 

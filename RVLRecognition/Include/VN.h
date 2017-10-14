@@ -11,6 +11,7 @@
 #define RVLVN_METAMODEL_HAMMER	3
 #define RVLVN_METAMODEL_BOWL	4
 #define RVLVN_METAMODEL_MUG		5
+#define RVLVN_METAMODEL_BANANA	6
 
 // Move to Util.h.
 
@@ -18,6 +19,14 @@
 
 namespace RVL
 {
+	template <typename Type> struct Rect
+	{
+		Type minx;
+		Type maxx;
+		Type miny;
+		Type maxy;
+	};
+
 	void RandomIndices(Array<int> &A);
 }
 
@@ -354,6 +363,9 @@ namespace RVL
 			void CreateTorus(
 				VN *pVN,
 				CRVLMem *pMem);
+			void CreateBanana(
+				VN *pVN,
+				CRVLMem *pMem);
 			void CreateBottle(
 				VN *pVN,
 				CRVLMem *pMem);
@@ -592,6 +604,18 @@ namespace RVL
 			bool *bVertexJoined);
 		RECOG::VN_::ModelCluster *GetModelCluster(int ID);
 		RECOG::VN_::Operation *GetOperation(int ID);
+		void Project(
+			float *d,
+			float *R,
+			float *t,
+			float fu,
+			float fv,
+			float uc,
+			float vc,
+			Array2D<float> PtArray);
+		float Project(
+			float *d,
+			float *r);
 		void Load(
 			char *fileName,
 			CRVLMem *pMem);
@@ -627,6 +651,11 @@ namespace RVL
 		int iy;
 		Box<float> boundingBox;	
 		std::vector<RECOG::VN_::Cluster> clusters;
+
+	private:
+		Array<QLIST::Entry<Pair<float, float>>> projectionIntervals;
+		QLIST::Entry<Pair<float, float>> *projectionIntervalBuff;
+		float *dc;
 	};
 }
 

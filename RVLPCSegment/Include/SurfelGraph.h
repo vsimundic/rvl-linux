@@ -186,7 +186,10 @@ namespace RVL
 		void Centroid(
 			Array<int> iSurfelArray,
 			float *centroid);
-		void DetectDominantPlane(Array<int> &dominantPlaneSurfelArray);
+		void DetectDominantPlane(
+			Array<int> &dominantPlaneSurfelArray,
+			float *N,
+			float &d);
 		void NodeColors(unsigned char *SelectionColor);
 		void Display(
 			Visualizer *pVisualizer,

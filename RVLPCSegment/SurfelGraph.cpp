@@ -4319,7 +4319,10 @@ void SurfelGraph::CalculateSurfelsColorHistograms(cv::Mat img, int colorspace, b
 }
 #endif
 
-void SurfelGraph::DetectDominantPlane(Array<int> &dominantPlaneSurfelArray)
+void SurfelGraph::DetectDominantPlane(
+	Array<int> &dominantPlaneSurfelArray,
+	float *N,
+	float &d)
 {
 	// Detect largest surfel.
 
@@ -4375,6 +4378,19 @@ void SurfelGraph::DetectDominantPlane(Array<int> &dominantPlaneSurfelArray)
 	dominantPlaneSurfelArray.n = piSurfelBuffEnd - dominantPlaneSurfelArray.Element;
 
 	delete[] RGData.bVisited;
+
+	// Set GND flag of all surfels belonging to the dominant plane. 
+
+	int i;
+
+	for (i = 0; i < dominantPlaneSurfelArray.n; i++)
+		NodeArray.Element[dominantPlaneSurfelArray.Element[i]].flags |= RVLSURFEL_FLAG_GND;
+
+	Surfel *pGndSurfel = NodeArray.Element + dominantPlaneSurfelArray.Element[0];
+
+	RVLCOPY3VECTOR(pGndSurfel->N, N);
+
+	d = pGndSurfel->d;
 }
 
 int SURFEL::PlaneDetectionRG(

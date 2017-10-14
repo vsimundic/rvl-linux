@@ -1096,6 +1096,8 @@ int main(int argc, char ** argv)
 			{
 				printf("Scene: %s:\n", filePath);
 
+				classifier.alignment.SetSceneFileName(filePath);
+
 				// Load mesh.
 
 				LoadMesh(&meshBuilder, filePath, &mesh, false);
@@ -1104,7 +1106,9 @@ int main(int argc, char ** argv)
 
 				mem.Clear();
 
-				// Add classification code here ...
+				// Classification.
+
+				classifier.Interpret(&mesh, iClass);
 			}
 		}
 	}	// if (method == RVLRECOGNITION_METHOD_VN)
