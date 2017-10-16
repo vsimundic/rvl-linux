@@ -33,6 +33,9 @@ VN::VN()
 {
 	NodeArray.Element = NULL;
 	featureArray.Element = NULL;
+	projectionIntervals.Element = NULL;
+	projectionIntervalBuff = NULL;
+	dc = NULL;
 
 	QList<RECOG::VN_::ModelCluster> *pModelClusterList = &modelClusterList;
 
@@ -44,6 +47,9 @@ VN::~VN()
 {
 	RVL_DELETE_ARRAY(NodeArray.Element);
 	RVL_DELETE_ARRAY(featureArray.Element);
+	RVL_DELETE_ARRAY(projectionIntervals.Element);
+	RVL_DELETE_ARRAY(projectionIntervalBuff);
+	RVL_DELETE_ARRAY(dc);
 }
 
 void VN::CreateParamList(
@@ -560,6 +566,20 @@ void VN::Create(CRVLMem *pMem)
 		else
 			iy = -1;
 	}
+
+	projectionIntervals.n = NodeArray.n;
+
+	RVL_DELETE_ARRAY(projectionIntervals.Element);
+
+	projectionIntervals.Element = new QLIST::Entry<Pair<float, float>>[projectionIntervals.n];
+
+	RVL_DELETE_ARRAY(projectionIntervalBuff);
+
+	projectionIntervalBuff = new QLIST::Entry<Pair<float, float>>[projectionIntervals.n];
+
+	RVL_DELETE_ARRAY(dc);
+	
+	dc = new float[featureArray.n];
 }
 
 VN_::ModelCluster * VN::GetModelCluster(int ID)
@@ -4757,6 +4777,257 @@ void VN::DetectTorusRings(
 	delete[] ringEdgeArray.Element;
 }
 
+void VN::Project(
+	float *d,
+	float *R,
+	float *t,
+	Camera camera,
+	Array2D<float> imgPtArray,
+	Array2D<float> PtArray)
+{
+	float PcM[3];
+
+	RVLMULMX3X3TVECT(R, t, PcM);
+	RVLNEGVECT3(PcM, PcM);
+
+	int iNode;
+	VN_::Node *pNode;
+	Pair<float, float> *pProjectionInterval;
+	float *N;
+
+	for (iNode = 0; iNode < featureArray.n; iNode++)
+	{
+		pNode = NodeArray.Element + iNode;
+
+		N = pNode->pFeature->N;
+
+		dc[iNode] = d[iNode] - RVLDOTPRODUCT3(N, PcM);
+	}
+
+	int iPt;
+	float *m, *P;
+	float r[3], rM[3];
+	float fTmp;
+	float s;
+
+	for (iPt = 0; iPt < imgPtArray.h; iPt++)
+	{
+		m = imgPtArray.Element + imgPtArray.w * iPt;
+
+		r[0] = (m[0] - camera.uc) / camera.fu;
+		r[1] = (m[1] - camera.vc) / camera.fv;
+		r[2] = 1.0f;
+
+		RVLNORM3(r, fTmp);
+
+		RVLMULMX3X3TVECT(R, r, rM);
+
+		P = PtArray.Element + PtArray.w * iPt;
+
+		s = Project(d, rM);
+
+		RVLSCALE3VECTOR(r, s, P);
+	}
+}
+
+float VN::Project(
+	float *d,
+	float *r)
+{
+	int iNode;
+	VN_::Node *pNode;
+	QLIST::Entry<Pair<float, float>> *pProjectionInterval;
+	float *N;
+	float d_;
+	float c;
+
+	for (iNode = 0; iNode < featureArray.n; iNode++)
+	{
+		pNode = NodeArray.Element + iNode;
+
+		pProjectionInterval = projectionIntervals.Element + iNode;
+
+		N = pNode->pFeature->N;
+
+		c = RVLDOTPRODUCT3(N, r);
+
+		if (c < -1e-6)
+		{
+			pProjectionInterval->data.a = d[iNode] / c;
+			pProjectionInterval->data.b = 1e6;
+			pProjectionInterval->pNext = NULL;
+			pNode->bOutput = true;
+		}
+		else if (c < 1e-6)
+			pNode->bOutput = false;
+		else
+		{
+			pProjectionInterval->data.a = -1e6;
+			pProjectionInterval->data.b = d[iNode] / c;
+			pProjectionInterval->pNext = NULL;
+			pNode->bOutput = true;
+		}
+	}
+
+	for (; iNode < NodeArray.n; iNode++)
+		NodeArray.Element[iNode].bOutput = false;	
+
+	RECOG::VN_::Edge *pEdge = EdgeList.pFirst;
+
+	VN_::Node *pChildNode, *pParentNode;
+	QLIST::Entry<Pair<float, float>> *pChildInterval, *pParentInterval;
+	QLIST::Entry<Pair<float, float>> *pChildInterval_, *pParentInterval_;
+	QLIST::Entry<Pair<float, float>> *pInterval[2], *pInterval_[2], *pInterval__;
+	int i, iPrev, j;
+	
+	while (pEdge)
+	{
+		pChildNode = NodeArray.Element + pEdge->data.a;
+
+		if (pChildNode->bOutput)
+		{
+			pParentNode = NodeArray.Element + pEdge->data.b;
+
+			pChildInterval = projectionIntervals.Element + pEdge->data.a;
+			pParentInterval = projectionIntervals.Element + pEdge->data.b;
+
+			if (pParentNode->bOutput)
+			{
+				pInterval[0] = pChildInterval;
+				pInterval[1] = pParentInterval;
+
+				pParentInterval = NULL;
+
+				iPrev = -1;
+
+				if (pParentNode->operation < 0)
+				{
+					while (true)
+					{
+						if (pInterval[0] == NULL)
+							i = 1;
+						else if (pInterval[1] == NULL)
+							i = 0;
+						else
+							i = (pInterval[0]->data.a <= pInterval[1]->data.a ? 0 : 1);
+
+						if (pInterval[i] == NULL)
+							break;
+
+						if (iPrev < 0)
+							pParentInterval = pInterval[i];
+						else
+							pInterval[iPrev]->pNext = pInterval[i];
+
+						j = 1 - i;
+
+						if (pInterval[j])
+						{
+							if (pInterval[j]->data.a <= pInterval[i]->data.b)
+							{
+								if (pInterval[j]->data.b <= pInterval[i]->data.b)
+									pInterval[j] = pInterval[j]->pNext;
+								else
+								{
+									pInterval[j]->data.a = pInterval[i]->data.a;
+
+									if (iPrev < 0)
+										pParentInterval = pInterval[j];
+									else
+										pInterval[iPrev]->pNext = pInterval[j];
+
+									iPrev = j;
+
+									pInterval[i] = pInterval[i]->pNext;
+								}
+							}
+							else
+							{
+								iPrev = i;
+
+								pInterval[i] = pInterval[i]->pNext;
+							}
+						}	// if (pInterval[j])
+						else
+						{
+							iPrev = i;
+
+							pInterval[i] = pInterval[i]->pNext;
+						}
+					}	// while (true)
+				}
+				else	// if (pParentNode->operation > 0)
+				{
+					while (true)
+					{
+						if (pInterval[0] == NULL)
+							i = 1;
+						else if (pInterval[1] == NULL)
+							i = 0;
+						else
+							i = (pInterval[0]->data.a <= pInterval[1]->data.a ? 0 : 1);
+
+						if (pInterval[i] == NULL)
+							break;
+
+						j = 1 - i;
+
+						if (pInterval[j])
+						{
+							if (pInterval[j]->data.a <= pInterval[i]->data.b)
+							{
+								if (pInterval[j]->data.b <= pInterval[i]->data.b)
+								{
+									pInterval[i]->data.a = pInterval[j]->data.b;
+
+									if (iPrev < 0)
+										pParentInterval = pInterval[j];
+									else
+										pInterval[iPrev]->pNext = pInterval[j];
+
+									iPrev = j;
+
+									pInterval[j] = pInterval[j]->pNext;
+								}
+								else
+								{
+									pInterval[i]->data.a = pInterval[j]->data.a;
+
+									pInterval[j]->data.a = pInterval[i]->data.b;
+
+									if (iPrev < 0)
+										pParentInterval = pInterval[i];
+									else
+										pInterval[iPrev]->pNext = pInterval[i];
+
+									iPrev = i;
+
+									pInterval[i] = pInterval[i]->pNext;
+								}
+							}
+							else
+								pInterval[i] = pInterval[i]->pNext;
+						}	// if (pInterval[j])
+						else
+							break;
+					}	// while (true)
+				}	// if (pParentNode->operation > 0)
+			}	// if (pParentNode->bOutput)
+			else
+			{
+				*pParentInterval = *pChildInterval;
+				pParentNode->bOutput = true;
+			}
+		}
+
+		pEdge = pEdge->pNext;
+	}	// while (pEdge)
+
+	pInterval__ = projectionIntervals.Element + iy;
+
+	return (pInterval__ ? pInterval__->data.a : 1e6);
+}
+
 void VN::Load(
 	char *fileName,
 	CRVLMem *pMem)
@@ -4890,60 +5161,6 @@ void VN::Display(
 	delete[] f.Element;
 }
 
-namespace RVL
-{
-	// Move to Util.h and remove the identical function from PlanarSurfelDetector class.
-
-	void RandomIndices(Array<int> &A)
-	{
-#ifdef RVLPLANARSURFELDETECTOR_PSEUDO_RANDOM_DEBUG
-		FILE *fp = fopen("..\\pseudorandom1000000.dat", "rb");
-
-		int *iRnd = new int[A.n];
-
-		//for (int i = 0; i < 1000000; i++)
-		//	iRnd[i] = (rand() % 0x100) + (rand() % 0x100) * 0x100 + (rand() % 0x100) * 0x10000 + (rand() % 0x80) * 0x1000000;
-
-		//fwrite(iRnd, sizeof(int), 1000000, fp);
-
-		fread(iRnd, sizeof(int), A.n, fp);
-
-		fclose(fp);
-
-		int *piRnd = iRnd;
-#endif
-
-		A.Element = new int[A.n];
-
-		int iPt;
-
-		for (iPt = 0; iPt < A.n; iPt++)
-			A.Element[iPt] = iPt;
-
-		int iPt_;
-		int iTmp;
-
-		//srand(time(NULL)); //VIDOVIC RANDOM TEST
-
-		for (iPt = 0; iPt < A.n; iPt++)
-		{
-#ifdef RVLPLANARSURFELDETECTOR_PSEUDO_RANDOM_DEBUG
-			iPt_ = (*(piRnd++)) % A.n;
-#else
-			iPt_ = rand() % A.n;
-#endif
-
-			iTmp = A.Element[iPt];
-			A.Element[iPt] = A.Element[iPt_];
-			A.Element[iPt_] = iTmp;
-		}
-
-#ifdef RVLPLANARSURFELDETECTOR_PSEUDO_RANDOM_DEBUG
-		delete[] iRnd;
-#endif
-	}
-}
-
 void VN::PrintTorus(
 	FILE *fp,
 	SurfelGraph *pSurfels,
@@ -5044,6 +5261,51 @@ void VN_::CreateTorus(
 	iBetaInterval.b = 7;
 
 	pVN->AddModelCluster(1, RVLVN_CLUSTER_TYPE_XTORUS, R, t, 0.2f, 16, 8, iBetaInterval, pMem, 0.1f);
+
+	pVN->AddOperation(2, 1, 0, 1, pMem);
+
+	pVN->SetOutput(2);
+
+	pVN->Create(pMem);
+
+	pVN->boundingBox.minx = -0.5f;
+	pVN->boundingBox.maxx = 0.5f;
+	pVN->boundingBox.miny = -0.5f;
+	pVN->boundingBox.maxy = 0.5f;
+	pVN->boundingBox.minz = -0.5f;
+	pVN->boundingBox.maxz = 0.5f;
+}
+
+void VN_::CreateBanana(
+	VN *pVN,
+	CRVLMem *pMem)
+{
+	pVN->CreateEmpty();
+
+	float R[9];
+
+	RVLUNITMX3(R);
+
+	float t[3];
+
+	RVLNULL3VECTOR(t);
+
+	Pair<int, int> iBetaInterval;
+
+	iBetaInterval.a = 0;
+	iBetaInterval.b = 8;
+
+	pVN->AddModelCluster(0, RVLVN_CLUSTER_TYPE_CONVEX, R, t, 0.5f, 16, 8, iBetaInterval, pMem);
+
+	Pair<int, int> iAlphaInterval;
+
+	iAlphaInterval.a = 9;
+	iAlphaInterval.b = 13;
+
+	iBetaInterval.a = 1;
+	iBetaInterval.b = 7;
+
+	pVN->AddModelCluster(1, RVLVN_CLUSTER_TYPE_XTORUS, R, t, 0.2f, 16, 8, iBetaInterval, pMem, 0.1f, iAlphaInterval);
 
 	pVN->AddOperation(2, 1, 0, 1, pMem);
 

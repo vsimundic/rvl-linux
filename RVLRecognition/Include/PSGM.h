@@ -342,7 +342,14 @@ namespace RVL
 
 		void VisualizeAlignedModels(int iRefModel, int iModel); // Visualizes models after alignment - for easier debugging
 
-		void Classify(Mesh *pMesh); // For a given object on the scene, returns its object class
+		void Classify(
+			Mesh *pMesh,
+			int iModelFirst,
+			int iModelLast,
+			int &iModel,
+			float *R,
+			float *t,
+			bool bTSM = false); // For a given object on the scene, returns its object class
 
 		void VisualizeObjectClass(int iModel, Mesh *pMesh);  // Visualizes object on the scene and its class (most simmilar model from database)
 			
@@ -552,6 +559,9 @@ namespace RVL
 		std::map<int,std::vector<int>> GetSceneConsistancy(float nDist = 0.1, float d1 = 10.0, float d2 = 0.01, bool verbose = false);	//Filko
 		int CheckHypothesesToSegmentEnvelopmentAndCollision(int hyp, int segment, float d1, float d2); //Filko
 		void CheckHypothesesToSegmentEnvelopmentAndCollision_DEBUG(int hyp, int segment, float d1, float d2); //Filko
+		void SaveModelInstances(
+			FILE *fp,
+			int iModel = -1);
 
 	private:
 		void WholeMeshCluster();
@@ -587,9 +597,6 @@ namespace RVL
 			//int iCluster, //Vidovic
 			float *R = NULL,
 			float *t = NULL);
-		void SaveModelInstances(
-			FILE *fp,
-			int iModel = - 1);
 		void PrintCTIMeshFaces(FILE *fp, Eigen::MatrixXi F, Eigen::MatrixXi Fn, int n, Eigen::MatrixXi nP);
 
 	public:

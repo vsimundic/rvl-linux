@@ -209,7 +209,6 @@ bool FileSequenceLoader::Init(char *sequenceFileName)
 				break;
 			}
 
-
 			lineCnt++;
 
 			tabChar = strrchr(line, '\t');
@@ -836,6 +835,57 @@ namespace RVL
 			NodeColor_[1] = (unsigned char)Color[1];
 			NodeColor_[2] = (unsigned char)Color[2];
 		}
+	}
+
+	// Remove the identical function from PlanarSurfelDetector class.
+
+	void RandomIndices(Array<int> &A)
+	{
+#ifdef RVLPLANARSURFELDETECTOR_PSEUDO_RANDOM_DEBUG
+		FILE *fp = fopen("..\\pseudorandom1000000.dat", "rb");
+
+		int *iRnd = new int[A.n];
+
+		//for (int i = 0; i < 1000000; i++)
+		//	iRnd[i] = (rand() % 0x100) + (rand() % 0x100) * 0x100 + (rand() % 0x100) * 0x10000 + (rand() % 0x80) * 0x1000000;
+
+		//fwrite(iRnd, sizeof(int), 1000000, fp);
+
+		fread(iRnd, sizeof(int), A.n, fp);
+
+		fclose(fp);
+
+		int *piRnd = iRnd;
+#endif
+
+		A.Element = new int[A.n];
+
+		int iPt;
+
+		for (iPt = 0; iPt < A.n; iPt++)
+			A.Element[iPt] = iPt;
+
+		int iPt_;
+		int iTmp;
+
+		//srand(time(NULL)); //VIDOVIC RANDOM TEST
+
+		for (iPt = 0; iPt < A.n; iPt++)
+		{
+#ifdef RVLPLANARSURFELDETECTOR_PSEUDO_RANDOM_DEBUG
+			iPt_ = (*(piRnd++)) % A.n;
+#else
+			iPt_ = rand() % A.n;
+#endif
+
+			iTmp = A.Element[iPt];
+			A.Element[iPt] = A.Element[iPt_];
+			A.Element[iPt_] = iTmp;
+		}
+
+#ifdef RVLPLANARSURFELDETECTOR_PSEUDO_RANDOM_DEBUG
+		delete[] iRnd;
+#endif
 	}
 }	// namespace RVL
 

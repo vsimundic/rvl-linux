@@ -108,11 +108,28 @@ void VNClassifier::Create(char *cfgFileName)
 
 	models.push_back(pModel);
 
+	pModel = new VN;
+
+	VN_::CreateBanana(pModel, pMem0);
+
+	models.push_back(pModel);
+
 	CreateParamList();
 
 	paramList.LoadParams(cfgFileName);
 
 	clusteringTolerance = 3.0f * convexClustering.kNoise * 2.0f / pSurfelDetector->kPlane;
+
+	alignment.pMem0 = pMem0;
+	alignment.pMem = pMem;
+	alignment.pSurfels = pSurfels;
+	alignment.pSurfelDetector = pSurfelDetector;
+
+	alignment.problem = RVLRECOGNITION_PROBLEM_CLASSIFICATION;
+
+	alignment.Init(cfgFileName);
+
+	pObjects = alignment.pObjects;
 
 	alignment.modelDataBase = RVLCreateString(modelDataBase);
 
@@ -491,6 +508,159 @@ void VNClassifier::Learn(
 	fclose(fp);
 }
 
+void VNClassifier::Interpret(
+	Mesh *pMesh,
+	int iClass)
+{
+	// Detect surfels.
+
+	pSurfels->Init(pMesh);
+
+	pSurfelDetector->Init(pMesh, pSurfels, pMem);
+
+	printf("Segmentation to surfels...");
+
+	pSurfelDetector->Segment(pMesh, pSurfels);
+
+	printf("completed.\n");
+
+	int nSurfels = pSurfels->NodeArray.n;
+
+	printf("No. of surfels = %d\n", nSurfels);
+
+	// Relations between adjacent surfels.
+
+#ifdef RVLSURFEL_IMAGE_ADJACENCY
+	pSurfels->SurfelRelations(pMesh);
+#endif
+
+	// Detect ground plane.
+
+	Array<int> groundPlaneSurfelArray;
+
+	groundPlaneSurfelArray.Element = NULL;
+
+	if (pSurfels->bGroundContactVertices)
+	{
+		groundPlaneSurfelArray.Element = new int[pSurfels->NodeArray.n];
+
+		pSurfels->DetectDominantPlane(groundPlaneSurfelArray, NGnd, dGnd);
+
+		bGnd = true;
+	}
+
+	// Detect vertices.
+
+	printf("Detect vertices.\n");
+
+	pSurfels->DetectVertices(pMesh);
+
+	// Detect objects as connected surfel sets.
+
+	pObjects->pMesh = pMesh;
+
+	pObjects->CreateObjectsAsConnectedComponents(groundPlaneSurfelArray);
+
+	RVL_DELETE_ARRAY(groundPlaneSurfelArray.Element);
+
+	// Sort objects.
+
+	pObjects->nValidObjects = -1;
+	pObjects->sortedObjectArray.n = -1;
+
+	pObjects->SortObjects();
+
+	// Assign vertices to objects.
+
+	pObjects->GetVertices();
+
+	// Detect objects in VOI
+
+	if (pObjects->b3DNetVOI)
+		pObjects->ObjectsInVOI();
+
+	// Get foreground object.
+
+	int iObject = pObjects->GetForegroundObject();
+
+	// Create CTIs.
+
+	alignment.CTISet.Init();
+
+	if (iObject >= 0)
+	{
+		SURFEL::Object *pObject = pObjects->objectArray.Element + iObject;
+
+		alignment.CTIs(pObject->surfelList, pObject->iVertexArray, 0, iObject, &(alignment.CTISet), pMem);
+
+		alignment.CTISet.CopyCTIsToArray();
+
+		// Save model instances to a file.
+
+		printf("Save model instances to a file.\n");
+
+		char *PSGModelInstanceFileName = RVLCreateString(alignment.sceneFileName);
+
+		sprintf(PSGModelInstanceFileName + strlen(PSGModelInstanceFileName) - 3, "cti");
+
+		FILE *fp = fopen(PSGModelInstanceFileName, "w");
+
+		delete[] PSGModelInstanceFileName;
+
+		alignment.SaveModelInstances(fp); //Vidovic
+
+		fclose(fp);
+
+		// Align tbe scene object with a model.
+
+		int iModel;
+		float R[9], t[3];
+
+		alignment.Classify(pMesh, classArray.Element[iClass].iRefInstance, classArray.Element[iClass].iRefInstance, iModel, R, t);
+
+		FILE *fpR = fopen("R.txt", "w");
+
+		PrintMatrix<float>(fpR, R, 3, 3);
+
+		fclose(fpR);
+
+		///
+
+		Camera camera;
+
+		camera.fu = 500;
+		camera.fv = 500;
+		camera.uc = 320;
+		camera.vc = 240;
+
+		Rect<float> ROI;
+
+		pSurfels->GetDepthImageROI(pObject->iVertexArray, camera, ROI);
+
+		Array2D<float> imagePtArray;
+
+		SampleRect<float>(&ROI, 10.0f, 11, imagePtArray);
+
+		int iMetaModel = classArray.Element[iClass].iMetaModel;
+
+		VN *pModel = models[iMetaModel];
+
+		Array2D<float> PtArray;
+
+		PtArray.w = 3;
+		PtArray.h = imagePtArray.h;
+
+		PtArray.Element = new float[PtArray.w * PtArray.h];
+
+		float *d;		// Compute d, or load it from a file.
+
+		pModel->Project(d, R, t, camera, imagePtArray, PtArray);
+
+		delete[] imagePtArray.Element;
+		delete[] PtArray.Element;
+	}
+}
+
 void VN_::_3DNetDatabaseClasses(VNClassifier *pClassifier)
 {
 	pClassifier->classArray.n = 10;
@@ -502,7 +672,7 @@ void VN_::_3DNetDatabaseClasses(VNClassifier *pClassifier)
 	// class banana
 
 	pClass = pClassifier->classArray.Element + 1;
-	pClass->iMetaModel = RVLVN_METAMODEL_TORUS;
+	pClass->iMetaModel = RVLVN_METAMODEL_BANANA;
 	pClass->iFirstInstance = 10;
 	pClass->nInstances = 6;
 	pClass->iRefInstance = 15;
@@ -522,6 +692,14 @@ void VN_::_3DNetDatabaseClasses(VNClassifier *pClassifier)
 	pClass->iFirstInstance = 16;
 	pClass->nInstances = 69;
 	pClass->iRefInstance = 16;
+
+	// class bowl
+
+	pClass = pClassifier->classArray.Element + 3;
+	pClass->iMetaModel = RVLVN_METAMODEL_BOWL;
+	pClass->iFirstInstance = 85;
+	pClass->nInstances = 15;
+	pClass->iRefInstance = 88;
 
 	// class donut
 
@@ -546,7 +724,6 @@ void VN_::_3DNetDatabaseClasses(VNClassifier *pClassifier)
 	pClass->iFirstInstance = 190;
 	pClass->nInstances = 6;
 	pClass->iRefInstance = 190;
-
 
 	// class mug
 

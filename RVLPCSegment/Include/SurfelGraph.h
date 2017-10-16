@@ -186,7 +186,10 @@ namespace RVL
 		void Centroid(
 			Array<int> iSurfelArray,
 			float *centroid);
-		void DetectDominantPlane(Array<int> &dominantPlaneSurfelArray);
+		void DetectDominantPlane(
+			Array<int> &dominantPlaneSurfelArray,
+			float *N,
+			float &d);
 		void NodeColors(unsigned char *SelectionColor);
 		void Display(
 			Visualizer *pVisualizer,
@@ -284,6 +287,10 @@ namespace RVL
 #endif
 		cv::Mat GenColoredSurfelImg();
 		cv::Mat GenColoredSurfelImgFromSSF(std::shared_ptr<SceneSegFile::SceneSegFile> ssf);
+		void GetDepthImageROI(
+			Array<int> iVertexArray,
+			Camera camera,
+			Rect<float> &ROI);
 		//Filko
 
 	public:	

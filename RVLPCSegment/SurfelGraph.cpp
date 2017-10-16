@@ -4319,7 +4319,10 @@ void SurfelGraph::CalculateSurfelsColorHistograms(cv::Mat img, int colorspace, b
 }
 #endif
 
-void SurfelGraph::DetectDominantPlane(Array<int> &dominantPlaneSurfelArray)
+void SurfelGraph::DetectDominantPlane(
+	Array<int> &dominantPlaneSurfelArray,
+	float *N,
+	float &d)
 {
 	// Detect largest surfel.
 
@@ -4375,6 +4378,46 @@ void SurfelGraph::DetectDominantPlane(Array<int> &dominantPlaneSurfelArray)
 	dominantPlaneSurfelArray.n = piSurfelBuffEnd - dominantPlaneSurfelArray.Element;
 
 	delete[] RGData.bVisited;
+
+	// Set GND flag of all surfels belonging to the dominant plane. 
+
+	int i;
+
+	for (i = 0; i < dominantPlaneSurfelArray.n; i++)
+		NodeArray.Element[dominantPlaneSurfelArray.Element[i]].flags |= RVLSURFEL_FLAG_GND;
+
+	Surfel *pGndSurfel = NodeArray.Element + dominantPlaneSurfelArray.Element[0];
+
+	RVLCOPY3VECTOR(pGndSurfel->N, N);
+
+	d = pGndSurfel->d;
+}
+
+void SurfelGraph::GetDepthImageROI(
+	Array<int> iVertexArray,
+	Camera camera,
+	Rect<float> &ROI)
+{
+	float *P = vertexArray.Element[iVertexArray.Element[0]]->P;
+
+	float m[2];
+
+	m[0] = camera.fu * P[0] / P[2] + camera.uc;
+	m[1] = camera.fv * P[1] / P[2] + camera.vc;
+
+	InitRect<float>(&ROI, m);
+
+	int i;
+
+	for (i = 1; i < iVertexArray.n; i++)
+	{
+		P = vertexArray.Element[iVertexArray.Element[i]]->P;
+
+		m[0] = camera.fu * P[0] / P[2] + camera.uc;
+		m[1] = camera.fv * P[1] / P[2] + camera.vc;
+
+		UpdateRect<float>(&ROI, m);
+	}
 }
 
 int SURFEL::PlaneDetectionRG(
