@@ -521,7 +521,7 @@ void VN_::_3DNetDatabaseClasses(VNClassifier *pClassifier)
 	pClass->iMetaModel = RVLVN_METAMODEL_BOTTLE;
 	pClass->iFirstInstance = 16;
 	pClass->nInstances = 69;
-	pClass->iRefInstance = 19;
+	pClass->iRefInstance = 16;
 
 	// class donut
 
