@@ -34,7 +34,10 @@ VN::VN()
 	NodeArray.Element = NULL;
 	featureArray.Element = NULL;
 	projectionIntervals.Element = NULL;
-	projectionIntervalBuff = NULL;
+	projectionIntervalMem = NULL;
+	projectionIntervals.Element = NULL;
+	projectionIntervalMem = NULL;
+	projectionIntervalBuff.Element = NULL;
 	dc = NULL;
 
 	QList<RECOG::VN_::ModelCluster> *pModelClusterList = &modelClusterList;
@@ -48,7 +51,8 @@ VN::~VN()
 	RVL_DELETE_ARRAY(NodeArray.Element);
 	RVL_DELETE_ARRAY(featureArray.Element);
 	RVL_DELETE_ARRAY(projectionIntervals.Element);
-	RVL_DELETE_ARRAY(projectionIntervalBuff);
+	RVL_DELETE_ARRAY(projectionIntervalMem);
+	RVL_DELETE_ARRAY(projectionIntervalBuff.Element);
 	RVL_DELETE_ARRAY(dc);
 }
 
@@ -571,11 +575,44 @@ void VN::Create(CRVLMem *pMem)
 
 	RVL_DELETE_ARRAY(projectionIntervals.Element);
 
-	projectionIntervals.Element = new QLIST::Entry<Pair<float, float>>[projectionIntervals.n];
+	projectionIntervals.Element = new Array<Pair<float, float>>[projectionIntervals.n];
 
-	RVL_DELETE_ARRAY(projectionIntervalBuff);
+	RVL_DELETE_ARRAY(projectionIntervalMem);
 
-	projectionIntervalBuff = new QLIST::Entry<Pair<float, float>>[projectionIntervals.n];
+	for (iNode = 0; iNode < featureArray.n; iNode++)
+		projectionIntervals.Element[iNode].n = 1;
+
+	for (; iNode < NodeArray.n; iNode++)
+		projectionIntervals.Element[iFeature].n = 0;
+
+	pEdge = EdgeList.pFirst;
+
+	while (pEdge)
+	{
+		projectionIntervals.Element[pEdge->data.b].n += projectionIntervals.Element[pEdge->data.a].n;
+
+		pEdge = pEdge->pNext;
+	}
+
+	int maxnIntervals = 0;
+
+	for (iNode = 0; iNode < NodeArray.n; iNode++)
+		maxnIntervals += projectionIntervals.Element[iNode].n;
+
+	projectionIntervalMem = new Pair<float, float>[maxnIntervals];
+
+	Pair<float, float> *pInterval = projectionIntervalMem;
+
+	for (iNode = 0; iNode < NodeArray.n; iNode++)
+	{
+		projectionIntervals.Element[iNode].Element = pInterval;
+
+		pInterval += projectionIntervals.Element[iNode].n;
+	}
+
+	RVL_DELETE_ARRAY(projectionIntervalBuff.Element);
+
+	projectionIntervalBuff.Element = new Pair<float, float >[featureArray.n];
 
 	RVL_DELETE_ARRAY(dc);
 	
@@ -4836,7 +4873,7 @@ float VN::Project(
 {
 	int iNode;
 	VN_::Node *pNode;
-	QLIST::Entry<Pair<float, float>> *pProjectionInterval;
+	Array<Pair<float, float>> *pProjectionInterval;
 	float *N;
 	float d_;
 	float c;
@@ -4853,179 +4890,96 @@ float VN::Project(
 
 		if (c < -1e-6)
 		{
-			pProjectionInterval->data.a = d[iNode] / c;
-			pProjectionInterval->data.b = 1e6;
-			pProjectionInterval->pNext = NULL;
-			pNode->bOutput = true;
+			pProjectionInterval->Element[0].a = d[iNode] / c;
+			pProjectionInterval->Element[0].b = 1e6;
+			pProjectionInterval->n = 1;
 		}
 		else if (c < 1e-6)
-			pNode->bOutput = false;
+			pProjectionInterval->n = 0;
 		else
 		{
-			pProjectionInterval->data.a = -1e6;
-			pProjectionInterval->data.b = d[iNode] / c;
-			pProjectionInterval->pNext = NULL;
+			pProjectionInterval->Element[0].a = -1e6;
+			pProjectionInterval->Element[0].b = d[iNode] / c;
+			pProjectionInterval->n = 1;
 			pNode->bOutput = true;
 		}
 	}
 
 	for (; iNode < NodeArray.n; iNode++)
-		NodeArray.Element[iNode].bOutput = false;	
+		projectionIntervals.Element[iNode].n = 0;
 
 	RECOG::VN_::Edge *pEdge = EdgeList.pFirst;
 
-	VN_::Node *pChildNode, *pParentNode;
-	QLIST::Entry<Pair<float, float>> *pChildInterval, *pParentInterval;
-	QLIST::Entry<Pair<float, float>> *pChildInterval_, *pParentInterval_;
-	QLIST::Entry<Pair<float, float>> *pInterval[2], *pInterval_[2], *pInterval__;
+	VN_::Node *pParentNode;
+	Array<Pair<float, float>> *pChildInterval, *pParentInterval;
 	int i, iPrev, j;
+	int bOpen[2];
+	int iInterval[2];
+	int iNewInterval;
+	float nextPt[2];
+	int iNext;
+	bool b1, b2, nb, nbPrev;
+	int nOpen, nClosed;
 	
 	while (pEdge)
 	{
-		pChildNode = NodeArray.Element + pEdge->data.a;
+		pChildInterval = projectionIntervals.Element + pEdge->data.a;
 
-		if (pChildNode->bOutput)
+		if (pChildInterval->n > 0)
 		{
-			pParentNode = NodeArray.Element + pEdge->data.b;
-
-			pChildInterval = projectionIntervals.Element + pEdge->data.a;
 			pParentInterval = projectionIntervals.Element + pEdge->data.b;
 
-			if (pParentNode->bOutput)
+			pParentNode = NodeArray.Element + pEdge->data.b;
+
+			nOpen = (pParentNode->operation > 0 ? 2 : 1);
+
+			nClosed = nOpen - 1;
+
+			projectionIntervalBuff.n = pParentInterval->n;
+
+			for (i = 0; i < pParentInterval->n; i++)
+				projectionIntervalBuff.Element[i] = pParentInterval->Element[i];
+
+			bOpen[0] = bOpen[1] = 0;
+
+			iInterval[0] = iInterval[1] = 0;
+
+			nb = 0;
+
+			iNewInterval = 0;
+
+			while (true)
 			{
-				pInterval[0] = pChildInterval;
-				pInterval[1] = pParentInterval;
-
-				pParentInterval = NULL;
-
-				iPrev = -1;
-
-				if (pParentNode->operation < 0)
+				if (b1 = (iInterval[0] < pChildInterval->n))
+					nextPt[0] = (bOpen[0] > 0 ? pChildInterval->Element[iInterval[0]].b : pChildInterval->Element[iInterval[0]].a);
+				if (b2 = (iInterval[1] < projectionIntervalBuff.n))
+					nextPt[1] = (bOpen[1] > 0 ? projectionIntervalBuff.Element[iInterval[1]].b : projectionIntervalBuff.Element[iInterval[1]].a);
+				if (b1 && b2)
+					iNext = (nextPt[0] <= nextPt[1] ? 0 : 1);
+				else if (b1)
+					iNext = 0;
+				else if (b2)
+					iNext = 1;
+				else
+					break;
+				bOpen[iNext] = 1 - bOpen[iNext];
+				nbPrev = nb;
+				nb = bOpen[0] + bOpen[1];
+				if (nb == nOpen && nbPrev == nClosed)
+					pParentInterval->Element[iNewInterval].a = nextPt[iNext];
+				else if (nb == nClosed && nbPrev == nOpen)
 				{
-					while (true)
-					{
-						if (pInterval[0] == NULL)
-							i = 1;
-						else if (pInterval[1] == NULL)
-							i = 0;
-						else
-							i = (pInterval[0]->data.a <= pInterval[1]->data.a ? 0 : 1);
-
-						if (pInterval[i] == NULL)
-							break;
-
-						if (iPrev < 0)
-							pParentInterval = pInterval[i];
-						else
-							pInterval[iPrev]->pNext = pInterval[i];
-
-						j = 1 - i;
-
-						if (pInterval[j])
-						{
-							if (pInterval[j]->data.a <= pInterval[i]->data.b)
-							{
-								if (pInterval[j]->data.b <= pInterval[i]->data.b)
-									pInterval[j] = pInterval[j]->pNext;
-								else
-								{
-									pInterval[j]->data.a = pInterval[i]->data.a;
-
-									if (iPrev < 0)
-										pParentInterval = pInterval[j];
-									else
-										pInterval[iPrev]->pNext = pInterval[j];
-
-									iPrev = j;
-
-									pInterval[i] = pInterval[i]->pNext;
-								}
-							}
-							else
-							{
-								iPrev = i;
-
-								pInterval[i] = pInterval[i]->pNext;
-							}
-						}	// if (pInterval[j])
-						else
-						{
-							iPrev = i;
-
-							pInterval[i] = pInterval[i]->pNext;
-						}
-					}	// while (true)
+					pParentInterval->Element[iNewInterval].b = nextPt[iNext];
+					iNewInterval++;
 				}
-				else	// if (pParentNode->operation > 0)
-				{
-					while (true)
-					{
-						if (pInterval[0] == NULL)
-							i = 1;
-						else if (pInterval[1] == NULL)
-							i = 0;
-						else
-							i = (pInterval[0]->data.a <= pInterval[1]->data.a ? 0 : 1);
-
-						if (pInterval[i] == NULL)
-							break;
-
-						j = 1 - i;
-
-						if (pInterval[j])
-						{
-							if (pInterval[j]->data.a <= pInterval[i]->data.b)
-							{
-								if (pInterval[j]->data.b <= pInterval[i]->data.b)
-								{
-									pInterval[i]->data.a = pInterval[j]->data.b;
-
-									if (iPrev < 0)
-										pParentInterval = pInterval[j];
-									else
-										pInterval[iPrev]->pNext = pInterval[j];
-
-									iPrev = j;
-
-									pInterval[j] = pInterval[j]->pNext;
-								}
-								else
-								{
-									pInterval[i]->data.a = pInterval[j]->data.a;
-
-									pInterval[j]->data.a = pInterval[i]->data.b;
-
-									if (iPrev < 0)
-										pParentInterval = pInterval[i];
-									else
-										pInterval[iPrev]->pNext = pInterval[i];
-
-									iPrev = i;
-
-									pInterval[i] = pInterval[i]->pNext;
-								}
-							}
-							else
-								pInterval[i] = pInterval[i]->pNext;
-						}	// if (pInterval[j])
-						else
-							break;
-					}	// while (true)
-				}	// if (pParentNode->operation > 0)
-			}	// if (pParentNode->bOutput)
-			else
-			{
-				*pParentInterval = *pChildInterval;
-				pParentNode->bOutput = true;
+				iInterval[iNext]++;
 			}
-		}
+		}		
 
 		pEdge = pEdge->pNext;
 	}	// while (pEdge)
 
-	pInterval__ = projectionIntervals.Element + iy;
-
-	return (pInterval__ ? pInterval__->data.a : 1e6);
+	return (projectionIntervals.Element[iy].n > 0 ? projectionIntervals.Element[iy].Element[0].a : 1e6);
 }
 
 void VN::Load(

@@ -634,8 +634,9 @@ namespace RVL
 		std::vector<RECOG::VN_::Cluster> clusters;
 
 	private:
-		Array<QLIST::Entry<Pair<float, float>>> projectionIntervals;
-		QLIST::Entry<Pair<float, float>> *projectionIntervalBuff;
+		Array<Array<Pair<float, float>>> projectionIntervals;
+		Pair<float, float> *projectionIntervalMem;
+		Array<Pair<float, float>> projectionIntervalBuff;
 		float *dc;
 	};
 }
