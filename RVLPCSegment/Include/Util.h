@@ -219,7 +219,7 @@ namespace RVL
 		PtArray.w = 2;
 		PtArray.h = (nh + 1) * (nw + 1);
 
-		PtArray.Element = new T[PtArray.h];
+		PtArray.Element = new T[PtArray.w * PtArray.h];
 
 		int iPt = 0;
 
@@ -227,7 +227,7 @@ namespace RVL
 		float *m;
 
 		for (i = 0; i <= nh; i++)
-			for (j = 0; j <= nh; j++, iPt++)
+			for (j = 0; j <= nw; j++, iPt++)
 			{
 				m = PtArray.Element + PtArray.w * iPt;
 

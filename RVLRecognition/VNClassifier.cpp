@@ -640,8 +640,8 @@ void VNClassifier::Interpret(
 
 		Camera camera;
 
-		camera.fu = 500;
-		camera.fv = 500;
+		camera.fu = 525;
+		camera.fv = 525;
 		camera.uc = 320;
 		camera.vc = 240;
 
@@ -664,12 +664,29 @@ void VNClassifier::Interpret(
 
 		PtArray.Element = new float[PtArray.w * PtArray.h];
 
-		float *d;		// Compute d, or load it from a file.
+		fp = fopen("D:\\Documents\\BenchmarkDatasets\\3DNet_Dataset\\Cat10_ModelDatabase\\Processed\\bowl\\Resampled\\ms_68582543c4c6d0bccfdfe3f21f42a111.vnd", "r");
+
+		float *d = new float[pModel->featureArray.n];
+		bool *bd = new bool[pModel->featureArray.n];
+
+		int iModel_, iMetaModel_;
+
+		LoadDescriptor(fp, d, bd, iModel_, iMetaModel_);
+
+		fclose(fp);
 
 		pModel->Project(d, R, t, camera, imagePtArray, PtArray);
 
+		fp = fopen("P.txt", "w");
+
+		PrintMatrix<float>(fp, PtArray.Element, PtArray.h, PtArray.w);
+
+		fclose(fp);
+
 		delete[] imagePtArray.Element;
 		delete[] PtArray.Element;
+		delete[] d;
+		delete[] bd;
 	}
 }
 
@@ -707,7 +724,7 @@ void VNClassifier::LoadDescriptor(
 	int i;
 
 	for (i = 0; i < pModel->featureArray.n; i++)
-		fscanf(fp, "%f\t", d[i]);
+		fscanf(fp, "%f\t", d + i);
 
 	int ibd;
 

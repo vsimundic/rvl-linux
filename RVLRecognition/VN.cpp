@@ -4822,10 +4822,12 @@ void VN::Project(
 	Array2D<float> imgPtArray,
 	Array2D<float> PtArray)
 {
+	float s = RVLDOTPRODUCT3(R, R);
+
 	float PcM[3];
 
 	RVLMULMX3X3TVECT(R, t, PcM);
-	RVLNEGVECT3(PcM, PcM);
+	RVLSCALE3VECTOR2(PcM, -s, PcM);
 
 	int iNode;
 	VN_::Node *pNode;
@@ -4843,27 +4845,34 @@ void VN::Project(
 
 	int iPt;
 	float *m, *P;
-	float r[3], rM[3];
+	float r[3], rM[3], PM[3];
 	float fTmp;
-	float s;
 
 	for (iPt = 0; iPt < imgPtArray.h; iPt++)
 	{
+		if (iPt == 90)
+			int debug = 0;
+
 		m = imgPtArray.Element + imgPtArray.w * iPt;
 
 		r[0] = (m[0] - camera.uc) / camera.fu;
 		r[1] = (m[1] - camera.vc) / camera.fv;
 		r[2] = 1.0f;
 
-		RVLNORM3(r, fTmp);
-
 		RVLMULMX3X3TVECT(R, r, rM);
+
+		RVLNORM3(rM, fTmp);
+
+		s = Project(dc, rM);
+
+		//if (s < 0.0f)
+		//	int debug = 0;
+
+		RVLSCALE3VECTOR(rM, s, PM);
 
 		P = PtArray.Element + PtArray.w * iPt;
 
-		s = Project(d, rM);
-
-		RVLSCALE3VECTOR(r, s, P);
+		RVLTRANSF3(PM, R, t, P);
 	}
 }
 
@@ -4895,18 +4904,39 @@ float VN::Project(
 			pProjectionInterval->n = 1;
 		}
 		else if (c < 1e-6)
-			pProjectionInterval->n = 0;
+		{
+			if (d[iNode] >= 0.0f)
+			{
+				pProjectionInterval->Element[0].a = -1e6;
+				pProjectionInterval->Element[0].b = 1e6;
+				pProjectionInterval->n = 1;
+			}
+			else
+				pProjectionInterval->n = 0;
+		}
 		else
 		{
 			pProjectionInterval->Element[0].a = -1e6;
 			pProjectionInterval->Element[0].b = d[iNode] / c;
 			pProjectionInterval->n = 1;
-			pNode->bOutput = true;
 		}
 	}
 
 	for (; iNode < NodeArray.n; iNode++)
-		projectionIntervals.Element[iNode].n = 0;
+	{
+		pNode = NodeArray.Element + iNode;
+
+		pProjectionInterval = projectionIntervals.Element + iNode;
+
+		if (pNode->operation > 0)
+		{
+			pProjectionInterval->Element[0].a = -1e6;
+			pProjectionInterval->Element[0].b = 1e6;
+			pProjectionInterval->n = 1;
+		}
+		else
+			pProjectionInterval->n = 0;
+	}
 
 	RECOG::VN_::Edge *pEdge = EdgeList.pFirst;
 
@@ -4918,63 +4948,65 @@ float VN::Project(
 	int iNewInterval;
 	float nextPt[2];
 	int iNext;
-	bool b1, b2, nb, nbPrev;
+	bool b1, b2;
+	int nb, nbPrev;
 	int nOpen, nClosed;
 	
 	while (pEdge)
 	{
+		//if (pEdge->data.b == 181)
+		//	int debug = 0;
+
 		pChildInterval = projectionIntervals.Element + pEdge->data.a;
 
-		if (pChildInterval->n > 0)
+		pParentInterval = projectionIntervals.Element + pEdge->data.b;
+
+		pParentNode = NodeArray.Element + pEdge->data.b;
+
+		nOpen = (pParentNode->operation > 0 ? 2 : 1);
+
+		nClosed = nOpen - 1;
+
+		projectionIntervalBuff.n = pParentInterval->n;
+
+		for (i = 0; i < pParentInterval->n; i++)
+			projectionIntervalBuff.Element[i] = pParentInterval->Element[i];
+
+		bOpen[0] = bOpen[1] = 0;
+
+		iInterval[0] = iInterval[1] = 0;
+
+		nb = 0;
+
+		pParentInterval->n = 0;
+
+		while (true)
 		{
-			pParentInterval = projectionIntervals.Element + pEdge->data.b;
-
-			pParentNode = NodeArray.Element + pEdge->data.b;
-
-			nOpen = (pParentNode->operation > 0 ? 2 : 1);
-
-			nClosed = nOpen - 1;
-
-			projectionIntervalBuff.n = pParentInterval->n;
-
-			for (i = 0; i < pParentInterval->n; i++)
-				projectionIntervalBuff.Element[i] = pParentInterval->Element[i];
-
-			bOpen[0] = bOpen[1] = 0;
-
-			iInterval[0] = iInterval[1] = 0;
-
-			nb = 0;
-
-			iNewInterval = 0;
-
-			while (true)
+			if (b1 = (iInterval[0] < pChildInterval->n))
+				nextPt[0] = (bOpen[0] > 0 ? pChildInterval->Element[iInterval[0]].b : pChildInterval->Element[iInterval[0]].a);
+			if (b2 = (iInterval[1] < projectionIntervalBuff.n))
+				nextPt[1] = (bOpen[1] > 0 ? projectionIntervalBuff.Element[iInterval[1]].b : projectionIntervalBuff.Element[iInterval[1]].a);
+			if (b1 && b2)
+				iNext = (nextPt[0] <= nextPt[1] ? 0 : 1);
+			else if (b1)
+				iNext = 0;
+			else if (b2)
+				iNext = 1;
+			else
+				break;
+			bOpen[iNext] = 1 - bOpen[iNext];
+			nbPrev = nb;
+			nb = bOpen[0] + bOpen[1];
+			if (nb == nOpen && nbPrev == nClosed)
+				pParentInterval->Element[pParentInterval->n].a = nextPt[iNext];
+			else if (nb == nClosed && nbPrev == nOpen)
 			{
-				if (b1 = (iInterval[0] < pChildInterval->n))
-					nextPt[0] = (bOpen[0] > 0 ? pChildInterval->Element[iInterval[0]].b : pChildInterval->Element[iInterval[0]].a);
-				if (b2 = (iInterval[1] < projectionIntervalBuff.n))
-					nextPt[1] = (bOpen[1] > 0 ? projectionIntervalBuff.Element[iInterval[1]].b : projectionIntervalBuff.Element[iInterval[1]].a);
-				if (b1 && b2)
-					iNext = (nextPt[0] <= nextPt[1] ? 0 : 1);
-				else if (b1)
-					iNext = 0;
-				else if (b2)
-					iNext = 1;
-				else
-					break;
-				bOpen[iNext] = 1 - bOpen[iNext];
-				nbPrev = nb;
-				nb = bOpen[0] + bOpen[1];
-				if (nb == nOpen && nbPrev == nClosed)
-					pParentInterval->Element[iNewInterval].a = nextPt[iNext];
-				else if (nb == nClosed && nbPrev == nOpen)
-				{
-					pParentInterval->Element[iNewInterval].b = nextPt[iNext];
-					iNewInterval++;
-				}
-				iInterval[iNext]++;
+				pParentInterval->Element[pParentInterval->n].b = nextPt[iNext];
+				pParentInterval->n++;
 			}
-		}		
+			if (bOpen[iNext] == 0)
+				iInterval[iNext]++;
+		}
 
 		pEdge = pEdge->pNext;
 	}	// while (pEdge)
