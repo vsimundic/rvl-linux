@@ -50,6 +50,18 @@ namespace RVL
 		void Interpret(
 			Mesh *pMesh,
 			int iClass);
+		void SaveDescriptor(
+			FILE *fp,
+			float *d,
+			bool *bd,
+			int iModel,
+			int iMetaModel);
+		void LoadDescriptor(
+			FILE *fp,
+			float *d,
+			bool *bd,
+			int &iModel,
+			int &iMetaModel);
 
 	public:
 		CRVLMem *pMem0;

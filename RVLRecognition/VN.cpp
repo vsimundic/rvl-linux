@@ -583,7 +583,7 @@ void VN::Create(CRVLMem *pMem)
 		projectionIntervals.Element[iNode].n = 1;
 
 	for (; iNode < NodeArray.n; iNode++)
-		projectionIntervals.Element[iFeature].n = 0;
+		projectionIntervals.Element[iNode].n = 0;
 
 	pEdge = EdgeList.pFirst;
 

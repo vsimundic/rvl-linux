@@ -435,7 +435,9 @@ void VNClassifier::Learn(
 	float t[3];
 	char modelFilePath_[200];
 	char modelFileName_[200];
+	char *modelDescriptorFileName;
 	int modelID, modelID_;
+	FILE *fpDescriptor;
 
 	while (modelsLoader.GetNext(modelFilePath, modelFileName))
 	{
@@ -479,6 +481,16 @@ void VNClassifier::Learn(
 			ComputeDescriptor(&mesh, R, t, dS, bdS, SBoundingBox, iMetaModel);
 
 			dbLoader.AddModel(currentModelID, modelFilePath, modelFileName);
+
+			modelDescriptorFileName = RVLCreateFileName(modelFilePath, ".ply", -1, ".vnd");
+
+			fpDescriptor = fopen(modelDescriptorFileName, "w");
+
+			delete[] modelDescriptorFileName;
+
+			SaveDescriptor(fpDescriptor, dS, bdS, modelID_, iMetaModel);
+
+			fclose(fpDescriptor);
 
 			if (pVisualizer)
 			{
@@ -658,6 +670,52 @@ void VNClassifier::Interpret(
 
 		delete[] imagePtArray.Element;
 		delete[] PtArray.Element;
+	}
+}
+
+void VNClassifier::SaveDescriptor(
+	FILE *fp,
+	float *d,
+	bool *bd,
+	int iModel,
+	int iMetaModel)
+{
+	VN *pModel = models[iMetaModel];
+
+	fprintf(fp, "%d\t%d\t", iModel, iMetaModel);
+
+	int i;
+
+	for (i = 0; i < pModel->featureArray.n; i++)
+		fprintf(fp, "%f\t", d[i]);
+
+	for (i = 0; i < pModel->featureArray.n; i++)
+		fprintf(fp, "%d\t", (int)(bd[i]));
+}
+
+void VNClassifier::LoadDescriptor(
+	FILE *fp,
+	float *d,
+	bool *bd,
+	int &iModel,
+	int &iMetaModel)
+{
+	fscanf(fp, "%d\t%d\t", &iModel, &iMetaModel);
+
+	VN *pModel = models[iMetaModel];
+
+	int i;
+
+	for (i = 0; i < pModel->featureArray.n; i++)
+		fscanf(fp, "%f\t", d[i]);
+
+	int ibd;
+
+	for (i = 0; i < pModel->featureArray.n; i++)
+	{
+		fscanf(fp, "%d\t", &ibd);
+
+		bd[i] = (bool)ibd;
 	}
 }
 
