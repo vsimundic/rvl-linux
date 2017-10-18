@@ -3868,7 +3868,10 @@ bool ObjectGraph::MergeSmallObjects(int sizeThr, float maxDistThr, bool verbose)
 #endif
 }
 
-void ObjectGraph::CreateObjectsAsConnectedComponents(Array<int> &groundPlaneObjectArray)
+void ObjectGraph::CreateObjectsAsConnectedComponents(
+	Array<int> &groundPlaneObjectArray,
+	float maxDist,
+	int minSize)
 {
 	// Create objects from surfels;
 
@@ -3917,6 +3920,10 @@ void ObjectGraph::CreateObjectsAsConnectedComponents(Array<int> &groundPlaneObje
 	int *iObjectBuff = new int[NodeArray.n];
 
 	ConnectedSetRGData RGData;
+
+	RGData.maxDist = maxDist;
+	RGData.minSize = minSize;
+
 	int *piObjectPut, *piObjectFetch, *piObjectBuffEnd;
 
 	for (iObject = 0; iObject < NodeArray.n; iObject++)
@@ -4062,16 +4069,19 @@ int SURFEL::ConnectedSetRG(
 	if (pObjects->objectMap[iObject] >= 0)
 		return 0;
 
-	if (pEdge->desc.minDist > 0.050f)
+	if (pEdge->desc.minDist > pData->maxDist)
+		return 0;
+
+	GRAPH::AggregateNode<AgEdge> *pObject_ = pObjects->NodeArray.Element + iObject;
+
+	if (pObject_->size < pData->minSize)
 		return 0;
 
 	pObjects->objectMap[iObject] = pData->iRefObject;
 
 	GRAPH::AggregateNode<AgEdge> *pObject = pObjects->NodeArray.Element + pData->iRefObject;
 
-	QList<QLIST::Index> *pElementList = &(pObject->elementList);
-
-	GRAPH::AggregateNode<AgEdge> *pObject_ = pObjects->NodeArray.Element + iObject;
+	QList<QLIST::Index> *pElementList = &(pObject->elementList);	
 
 	QList<QLIST::Index> *pElementList_ = &(pObject_->elementList);
 

@@ -340,6 +340,12 @@ namespace RVL
 				float t[3];
 			};
 
+			struct Instance
+			{
+				float *d;
+				bool *bd;
+			};
+
 			void CreateConvex(
 				VN *pVN,
 				CRVLMem *pMem);

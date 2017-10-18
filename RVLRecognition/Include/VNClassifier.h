@@ -82,6 +82,8 @@ namespace RVL
 		int maxnSTClusters;
 		float voxelSize;
 		int sampleVoxelDistance;
+		float connectedComponentMaxDist;
+		int connectedComponentMinSize;
 		char *modelDataBase; //Vidovic
 		char *modelsInDataBase; //Vidovic
 		void *vpMeshBuilder;
@@ -95,6 +97,7 @@ namespace RVL
 		float NGnd[3];
 		float dGnd;
 		bool bGnd;
+		RECOG::VN_::Instance refModel;
 	};
 }
 

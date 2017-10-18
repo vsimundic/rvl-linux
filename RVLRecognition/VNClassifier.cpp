@@ -37,9 +37,13 @@ VNClassifier::VNClassifier()
 	modelsInDataBase = NULL; //Vidovic
 	classArray.Element = NULL;
 	sceneObject.sampleArray.Element = NULL;
+	refModel.d = NULL;
+	refModel.bd = NULL;
 	maxnSCClusters = 4;
 	maxnSUClusters = 2;
 	maxnSTClusters = 2;
+	connectedComponentMaxDist = 0.050f;
+	connectedComponentMinSize = 100;
 }
 
 
@@ -158,6 +162,8 @@ void VNClassifier::CreateParamList()
 	pParamData = paramList.AddParam("ModelDataBase", RVLPARAM_TYPE_STRING, &modelDataBase); //Vidovic
 	pParamData = paramList.AddParam("ModelsInDataBase", RVLPARAM_TYPE_STRING, &modelsInDataBase); //Vidovic
 	pParamData = paramList.AddParam("VN.voxelSize", RVLPARAM_TYPE_FLOAT, &voxelSize);
+	pParamData = paramList.AddParam("VN.connectedComponentMaxDist", RVLPARAM_TYPE_FLOAT, &connectedComponentMaxDist);
+	pParamData = paramList.AddParam("VN.connectedComponentMinSize", RVLPARAM_TYPE_INT, &connectedComponentMinSize);
 }
 
 void VNClassifier::Init(Mesh *pMesh)
@@ -176,6 +182,8 @@ void VNClassifier::Clear()
 
 	RVL_DELETE_ARRAY(classArray.Element);
 	RVL_DELETE_ARRAY(sceneObject.sampleArray.Element);
+	RVL_DELETE_ARRAY(refModel.d);
+	RVL_DELETE_ARRAY(refModel.bd);
 }
 
 void VNClassifier::ComputeDescriptor(
@@ -571,7 +579,7 @@ void VNClassifier::Interpret(
 
 	pObjects->pMesh = pMesh;
 
-	pObjects->CreateObjectsAsConnectedComponents(groundPlaneSurfelArray);
+	pObjects->CreateObjectsAsConnectedComponents(groundPlaneSurfelArray, connectedComponentMaxDist, connectedComponentMinSize);
 
 	RVL_DELETE_ARRAY(groundPlaneSurfelArray.Element);
 
@@ -651,7 +659,7 @@ void VNClassifier::Interpret(
 
 		Array2D<float> imagePtArray;
 
-		SampleRect<float>(&ROI, 10.0f, 11, imagePtArray);
+		SampleRect<float>(&ROI, 10.0f, 16, imagePtArray);
 
 		int iMetaModel = classArray.Element[iClass].iMetaModel;
 
@@ -664,19 +672,7 @@ void VNClassifier::Interpret(
 
 		PtArray.Element = new float[PtArray.w * PtArray.h];
 
-		//fp = fopen("D:\\Documents\\BenchmarkDatasets\\3DNet_Dataset\\Cat10_ModelDatabase\\Processed\\bowl\\Resampled\\ms_68582543c4c6d0bccfdfe3f21f42a111.vnd", "r");
-		fp = fopen("D:\\Cupec\\Documents\\Datasets\\3DNet\\Cat10_ModelDatabase\\Processed\\bowl\\Resampled\\ms_68582543c4c6d0bccfdfe3f21f42a111.vnd", "r");
-
-		float *d = new float[pModel->featureArray.n];
-		bool *bd = new bool[pModel->featureArray.n];
-
-		int iModel_, iMetaModel_;
-
-		LoadDescriptor(fp, d, bd, iModel_, iMetaModel_);
-
-		fclose(fp);
-
-		pModel->Project(d, R, t, camera, imagePtArray, PtArray);
+		pModel->Project(refModel.d, R, t, camera, imagePtArray, PtArray);
 
 		fp = fopen("P.txt", "w");
 
@@ -726,8 +722,6 @@ void VNClassifier::Interpret(
 
 		delete[] imagePtArray.Element;
 		delete[] PtArray.Element;
-		delete[] d;
-		delete[] bd;
 	}
 }
 

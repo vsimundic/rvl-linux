@@ -35,6 +35,7 @@ ObjectDetector::ObjectDetector()
 	convexityThr = 0.010f;
 	convexityRatioThr1 = 0.77f;
 	convexityRatioThr2 = 0.75f;
+	connectedComponentMaxDist = 0.100f;
 
 	nMultilateralFilterIterations = 10;
 	joinSmallObjectsToLargestNeighborSizeThr = 1000;
@@ -181,6 +182,7 @@ void ObjectDetector::CreateParamList()
 	pParamData = ParamList.AddParam("ObjectDetector.convexityThr", RVLPARAM_TYPE_FLOAT, &convexityThr);
 	pParamData = ParamList.AddParam("ObjectDetector.convexityRatioThr1", RVLPARAM_TYPE_FLOAT, &convexityRatioThr1);
 	pParamData = ParamList.AddParam("ObjectDetector.convexityRatioThr2", RVLPARAM_TYPE_FLOAT, &convexityRatioThr2);
+	pParamData = ParamList.AddParam("ObjectDetector.connectedComponentMaxDist", RVLPARAM_TYPE_FLOAT, &connectedComponentMaxDist);
 	pParamData = ParamList.AddParam("ObjectDetector.multilateralFilterIterations", RVLPARAM_TYPE_INT, &nMultilateralFilterIterations);
 	pParamData = ParamList.AddParam("ObjectDetector.joinSmallObjectsToLargestNeighborSizeThr", RVLPARAM_TYPE_INT, &joinSmallObjectsToLargestNeighborSizeThr);
 	pParamData = ParamList.AddParam("ObjectDetector.joinSmallObjectsToLargestNeighborDistThr", RVLPARAM_TYPE_FLOAT, &joinSmallObjectsToLargestNeighborDistThr);

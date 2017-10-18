@@ -1086,6 +1086,36 @@ int main(int argc, char ** argv)
 			classifier.Learn(modelSequenceFileName, iClass, &visualizer); //Vidovic
 		else if (classifier.mode == RVLRECOGNITION_MODE_RECOGNITION)
 		{
+			FileSequenceLoader dbLoader;
+
+			dbLoader.Init(classifier.modelsInDataBase);
+
+			char refModelFileName[200];
+
+			dbLoader.GetFilePath(classifier.classArray.Element[iClass].iRefInstance, refModelFileName);
+
+			int iMetaModel = classifier.classArray.Element[iClass].iMetaModel;
+
+			VN *pModel = classifier.models[iMetaModel];
+
+			RVL_DELETE_ARRAY(classifier.refModel.d);
+			RVL_DELETE_ARRAY(classifier.refModel.bd);
+
+			classifier.refModel.d = new float[pModel->featureArray.n];
+			classifier.refModel.bd = new bool[pModel->featureArray.n];
+
+			int iModel_, iMetaModel_;
+
+			char *refModelDescriptorFileName = RVLCreateFileName(refModelFileName, ".ply", -1, ".vnd");
+
+			FILE *fpVNDescriptor = fopen(refModelDescriptorFileName, "r");
+
+			delete[] refModelDescriptorFileName;
+
+			classifier.LoadDescriptor(fpVNDescriptor, classifier.refModel.d, classifier.refModel.bd, iModel_, iMetaModel_);
+
+			fclose(fpVNDescriptor);
+
 			FileSequenceLoader sceneSequence;
 
 			sceneSequence.Init(sceneSequenceFileName);

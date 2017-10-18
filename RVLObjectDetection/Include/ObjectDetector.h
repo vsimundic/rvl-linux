@@ -66,6 +66,7 @@ namespace RVL
 		float convexityThr;
 		float convexityRatioThr1;
 		float convexityRatioThr2;
+		float connectedComponentMaxDist;
 		int nMultilateralFilterIterations;
 		int joinSmallObjectsToLargestNeighborSizeThr;
 		float joinSmallObjectsToLargestNeighborDistThr;

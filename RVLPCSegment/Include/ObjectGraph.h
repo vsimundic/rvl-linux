@@ -75,6 +75,8 @@ namespace RVL
 		struct ConnectedSetRGData
 		{
 			int iRefObject;
+			float maxDist;
+			int minSize;
 		};
 
 		int ConnectedSetRG(
@@ -164,7 +166,10 @@ namespace RVL
 			void SortObjects();
 			void CountValidObjects();
 			void GetVertices();
-			void CreateObjectsAsConnectedComponents(Array<int> &groundPlaneObjectArray);
+			void CreateObjectsAsConnectedComponents(
+				Array<int> &groundPlaneObjectArray,
+				float maxDist,
+				int minSize);
 			void ObjectsInVOI();
 			void InitDisplay(
 				Visualizer *pVisualizer,

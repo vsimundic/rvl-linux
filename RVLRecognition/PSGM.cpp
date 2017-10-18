@@ -617,7 +617,7 @@ void PSGM::Interpret(
 
 		pObjects->pMesh = pMesh;
 
-		pObjects->CreateObjectsAsConnectedComponents(groundPlaneSurfelArray);
+		pObjects->CreateObjectsAsConnectedComponents(groundPlaneSurfelArray, 0.05f, 100);
 
 		// Sort objects.
 
