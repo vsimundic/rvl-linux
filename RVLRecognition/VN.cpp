@@ -4822,12 +4822,14 @@ void VN::Project(
 	Array2D<float> imgPtArray,
 	Array2D<float> PtArray)
 {
-	float s = RVLDOTPRODUCT3(R, R);
+	float s_ = RVLDOTPRODUCT3(R, R);
 
 	float PcM[3];
 
 	RVLMULMX3X3TVECT(R, t, PcM);
-	RVLSCALE3VECTOR2(PcM, -s, PcM);
+	RVLSCALE3VECTOR2(PcM, -s_, PcM);
+
+	s_ = sqrt(s_);
 
 	int iNode;
 	VN_::Node *pNode;
@@ -4845,8 +4847,9 @@ void VN::Project(
 
 	int iPt;
 	float *m, *P;
-	float r[3], rM[3], PM[3];
+	float r[3], rM[3];
 	float fTmp;
+	float sM, s;
 
 	for (iPt = 0; iPt < imgPtArray.h; iPt++)
 	{
@@ -4859,20 +4862,22 @@ void VN::Project(
 		r[1] = (m[1] - camera.vc) / camera.fv;
 		r[2] = 1.0f;
 
+		RVLNORM3(r, fTmp);
+
 		RVLMULMX3X3TVECT(R, r, rM);
 
 		RVLNORM3(rM, fTmp);
 
-		s = Project(dc, rM);
+		sM = Project(dc, rM);
 
-		//if (s < 0.0f)
+		//if (s < 1000.0f)
 		//	int debug = 0;
-
-		RVLSCALE3VECTOR(rM, s, PM);
 
 		P = PtArray.Element + PtArray.w * iPt;
 
-		RVLTRANSF3(PM, R, t, P);
+		s = sM * s_;
+
+		RVLSCALE3VECTOR(r, s, P);
 	}
 }
 

@@ -664,7 +664,8 @@ void VNClassifier::Interpret(
 
 		PtArray.Element = new float[PtArray.w * PtArray.h];
 
-		fp = fopen("D:\\Documents\\BenchmarkDatasets\\3DNet_Dataset\\Cat10_ModelDatabase\\Processed\\bowl\\Resampled\\ms_68582543c4c6d0bccfdfe3f21f42a111.vnd", "r");
+		//fp = fopen("D:\\Documents\\BenchmarkDatasets\\3DNet_Dataset\\Cat10_ModelDatabase\\Processed\\bowl\\Resampled\\ms_68582543c4c6d0bccfdfe3f21f42a111.vnd", "r");
+		fp = fopen("D:\\Cupec\\Documents\\Datasets\\3DNet\\Cat10_ModelDatabase\\Processed\\bowl\\Resampled\\ms_68582543c4c6d0bccfdfe3f21f42a111.vnd", "r");
 
 		float *d = new float[pModel->featureArray.n];
 		bool *bd = new bool[pModel->featureArray.n];
@@ -682,6 +683,46 @@ void VNClassifier::Interpret(
 		PrintMatrix<float>(fp, PtArray.Element, PtArray.h, PtArray.w);
 
 		fclose(fp);
+
+		// Visualization
+
+		unsigned char SelectionColor[] = {0, 255, 0};
+
+		pSurfels->NodeColors(SelectionColor);
+
+		Visualizer visualizer;
+
+		visualizer.Create();
+
+		pObjects->InitDisplay(&visualizer, pMesh, SelectionColor);
+		pObjects->Display();
+
+		unsigned char color[] = { 0, 128, 255 };
+
+		Array<Point> PtArray_;
+
+		PtArray_.Element = new Point[PtArray.h];
+
+		PtArray_.n = 0;
+
+		int iPt;
+		float *P, *P_;
+
+		for (iPt = 0; iPt < PtArray.h; iPt++)
+		{
+			P = PtArray.Element + PtArray.w * iPt;
+
+			if (P[2] <= 2.0f)
+			{
+				P_ = PtArray_.Element[PtArray_.n++].P;
+
+				RVLCOPY3VECTOR(P, P_);
+			}
+		}
+
+		visualizer.DisplayPointSet<float, Point>(PtArray_, color, 6.0f);
+
+		visualizer.Run();
 
 		delete[] imagePtArray.Element;
 		delete[] PtArray.Element;
