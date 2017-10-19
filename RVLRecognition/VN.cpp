@@ -5539,22 +5539,21 @@ void RVL::SampleMesh(
 	}
 }
 
-void RVL::SampleMeshDistanceFunction(
+void RVL::CreateVisibleMesh(
 	Mesh *pMesh,
-	SurfelGraph *pSurfels,
 	float voxelSize,
-	int sampleVoxelDistance,
+	int border,
 	Array3D<RECOG::VN_::Voxel> &volume,
 	float *P0,
-	Array<RECOG::VN_::Sample> &sampleArray,
-	Box<float> &boundingBox)
+	Box<float> &boundingBox,
+	Box<float> &box,
+	Array<int> &zeroDistanceVoxelArray,
+	QLIST::Index *&PtMem)
 {
 	// volume <- empty 3D voxel array with voxel size specified by voxelSize.
 	// It is larger than the bounding box of pMesh for sampleVoxelDistance + 1 on each side.
 
 	pMesh->BoundingBox(&boundingBox);
-
-	int border = 2 * sampleVoxelDistance + 1;
 
 	int nx = (int)ceil(0.5f * (boundingBox.maxx - boundingBox.minx) / voxelSize) + border;
 	int ny = (int)ceil(0.5f * (boundingBox.maxy - boundingBox.miny) / voxelSize) + border;
@@ -5567,8 +5566,6 @@ void RVL::SampleMeshDistanceFunction(
 	float center[3];
 
 	BoxCenter<float>(&boundingBox, center);
-
-	Box<float> box;
 
 	box.minx = center[0] - a;
 	box.miny = center[1] - b;
@@ -5603,7 +5600,7 @@ void RVL::SampleMeshDistanceFunction(
 		pVoxel->voxelDistance = -1;
 	}
 
-	QLIST::Index *PtMem = new QLIST::Index[pMesh->NodeArray.n];
+	PtMem = new QLIST::Index[pMesh->NodeArray.n];
 
 	QLIST::Index *pPtIdx = PtMem;
 
@@ -5637,8 +5634,6 @@ void RVL::SampleMeshDistanceFunction(
 	int *pPut = RGBuff;
 	int *pFetch = RGBuff;
 
-	Array<int> zeroDistanceVoxelArray;
-
 	zeroDistanceVoxelArray.Element = new int[nVoxels];
 
 	zeroDistanceVoxelArray.n = 0;
@@ -5652,10 +5647,6 @@ void RVL::SampleMeshDistanceFunction(
 		{ 0, 1, 0 },
 		{ 0, 0, -1 },
 		{ 0, 0, 1 } };
-
-	//int maxVoxelDistance = volume.a + volume.b + volume.c;
-
-	int maxVoxelDistance = sampleVoxelDistance + 1;
 
 	int iVoxel, iVoxel_;
 	int i_, j_, k_, l;
@@ -5689,7 +5680,7 @@ void RVL::SampleMeshDistanceFunction(
 				}
 				else
 				{
-					pVoxel->voxelDistance = maxVoxelDistance;
+					pVoxel->voxelDistance = 1;
 
 					*(pPut++) = iVoxel_;
 				}
@@ -5697,8 +5688,46 @@ void RVL::SampleMeshDistanceFunction(
 		}
 	}
 
+	delete[] RGBuff;
+}
+
+void RVL::SampleMeshDistanceFunction(
+	Mesh *pMesh,
+	SurfelGraph *pSurfels,
+	float voxelSize,
+	int sampleVoxelDistance,
+	Array3D<RECOG::VN_::Voxel> &volume,
+	float *P0,
+	Array<RECOG::VN_::Sample> &sampleArray,
+	Box<float> &boundingBox)
+{
+	int border = 2 * sampleVoxelDistance + 1;
+
+	Box<float> box;
+	Array<int> zeroDistanceVoxelArray;
+	QLIST::Index *PtMem;
+
+	CreateVisibleMesh(pMesh, voxelSize, border, volume, P0, boundingBox, box, zeroDistanceVoxelArray, PtMem);
+
 	// sampleArray <- array of sample points at distance approximatelly equal to sampleVoxelDistance.
 	// Field SDF of every sample represents the distance function value.
+
+	int nVoxels = volume.a * volume.b * volume.c;
+
+	//int maxVoxelDistance = volume.a + volume.b + volume.c;
+
+	int maxVoxelDistance = sampleVoxelDistance + 1;
+	
+	int iVoxel;
+	VN_::Voxel *pVoxel;
+
+	for (iVoxel = 0; iVoxel < nVoxels; iVoxel++)
+	{
+		pVoxel = volume.Element + iVoxel;
+
+		if (pVoxel->voxelDistance > 0)
+			pVoxel->voxelDistance = maxVoxelDistance;
+	}
 
 	sampleArray.Element = new RECOG::VN_::Sample[nVoxels];
 
@@ -5710,9 +5739,11 @@ void RVL::SampleMeshDistanceFunction(
 	P0[1] = box.miny + halfVoxelSize;
 	P0[2] = box.minz + halfVoxelSize;
 
-	pPut = RGBuff + zeroDistanceVoxelArray.n;
+	int *RGBuff = new int[nVoxels];
 
-	pFetch = RGBuff;
+	int *pPut = RGBuff + zeroDistanceVoxelArray.n;
+
+	int *pFetch = RGBuff;
 
 	memcpy(RGBuff, zeroDistanceVoxelArray.Element, zeroDistanceVoxelArray.n * sizeof(int));
 
@@ -5720,11 +5751,21 @@ void RVL::SampleMeshDistanceFunction(
 
 	float maxDist = maxeSDF * maxeSDF;
 
+	int dijk[][3] = {
+		{ -1, 0, 0 },
+		{ 1, 0, 0 },
+		{ 0, -1, 0 },
+		{ 0, 1, 0 },
+		{ 0, 0, -1 },
+		{ 0, 0, 1 } };
+
+	int i, j, k, l;
+	int i_, j_, k_;
 	int voxelDistance;
 	int i__, j__, k__;
 	int p, q, r;
 	float dist, minDist;
-	int iVoxel__;
+	int iVoxel_, iVoxel__;
 	float *P_;
 	float dP[3];
 	int iClosestPt;
@@ -5732,6 +5773,8 @@ void RVL::SampleMeshDistanceFunction(
 	float SDF, eSDF, mineSDF;
 	Surfel *pFeature;
 	int iFeature;
+	QLIST::Index *pPtIdx;
+	float *P;
 
 	while (pPut > pFetch)
 	{

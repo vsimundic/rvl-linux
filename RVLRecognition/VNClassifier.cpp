@@ -284,6 +284,8 @@ void VNClassifier::ComputeDescriptor(
 
 	SampleMeshDistanceFunction(pMesh, pSurfels, voxelSize, sampleVoxelDistance, volume, P0, sampleArray, boundingBox);
 
+	delete[] volume.Element;
+
 	Array<int> iPtArray;
 
 	iPtArray.n = sampleArray.n;

@@ -370,6 +370,17 @@ namespace RVL
 		}	// namespace VN_
 	}	// namespace RECOG
 
+	void CreateVisibleMesh(
+		Mesh *pMesh,
+		float voxelSize,
+		int border,
+		Array3D<RECOG::VN_::Voxel> &volume,
+		float *P0,
+		Box<float> &boundingBox,
+		Box<float> &box,
+		Array<int> &zeroDistanceVoxelArray,
+		QLIST::Index *&PtMem);
+
 	void SampleMesh(
 		Mesh *pMesh,
 		float *R,
@@ -645,5 +656,5 @@ namespace RVL
 		Array<Pair<float, float>> projectionIntervalBuff;
 		float *dc;
 	};
-}
+}	// namespace RVL
 
