@@ -142,6 +142,8 @@ void VNClassifier::Create(char *cfgFileName)
 	alignment.LoadModelDataBase();
 
 	printf("completed.\n");
+
+	//alignment.bGroundPlaneRFDescriptors = true;
 }
 
 void VNClassifier::CreateParamList()
@@ -609,6 +611,10 @@ void VNClassifier::Interpret(
 
 	if (iObject >= 0)
 	{
+		RVLCOPY3VECTOR(NGnd, alignment.NGnd);
+		alignment.dGnd = dGnd;
+		alignment.bGnd = true;
+
 		SURFEL::Object *pObject = pObjects->objectArray.Element + iObject;
 
 		alignment.CTIs(pObject->surfelList, pObject->iVertexArray, 0, iObject, &(alignment.CTISet), pMem);
