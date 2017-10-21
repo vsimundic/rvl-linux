@@ -5546,7 +5546,6 @@ void RVL::CreateVisibleMesh(
 	Array3D<RECOG::VN_::Voxel> &volume,
 	float *P0,
 	Box<float> &boundingBox,
-	Box<float> &box,
 	Array<int> &zeroDistanceVoxelArray,
 	QLIST::Index *&PtMem)
 {
@@ -5567,12 +5566,20 @@ void RVL::CreateVisibleMesh(
 
 	BoxCenter<float>(&boundingBox, center);
 
+	Box<float> box;
+
 	box.minx = center[0] - a;
 	box.miny = center[1] - b;
 	box.minz = center[2] - c;
 	box.maxx = center[0] + a;
 	box.maxy = center[1] + b;
 	box.maxz = center[2] + c;
+
+	float halfVoxelSize = 0.5f * voxelSize;
+
+	P0[0] = box.minx + halfVoxelSize;
+	P0[1] = box.miny + halfVoxelSize;
+	P0[2] = box.minz + halfVoxelSize;
 
 	volume.a = 2 * nx;
 	volume.b = 2 * ny;
@@ -5691,6 +5698,67 @@ void RVL::CreateVisibleMesh(
 	delete[] RGBuff;
 }
 
+void RVL::FilterSDF(
+	Array3D<VN_::Voxel> volume,
+	Array3D<float> filter,
+	int n,
+	Array3D<float> &SDF)
+{
+	int nVoxels = volume.a * volume.b * volume.c;
+
+	float *SDFSrc = new float[nVoxels];
+
+	SDF.Element = new float[nVoxels];
+	SDF.a = volume.a;
+	SDF.b = volume.b;
+	SDF.c = volume.c;
+
+	int iVoxel;
+	VN_::Voxel *pVoxel;
+	float f;
+
+	for (iVoxel = 0; iVoxel < nVoxels; iVoxel++)
+	{
+		pVoxel = volume.Element + iVoxel;
+		f = (float)(pVoxel->voxelDistance);
+		SDFSrc[iVoxel] = f;
+		SDF.Element[iVoxel] = f;
+	}
+
+	int nf = (filter.a - 1) / 2;
+
+	int iend = volume.a - nf;
+	int jend = volume.b - nf;
+	int kend = volume.c - nf;
+
+	int i, j, k, i_, j_, k_, l;
+	int iFilter;
+
+	for (l = 0; l < n; l++)
+	{
+		for (i = nf; i < iend; i++)
+			for (j = nf; j < jend; j++)
+				for (k = nf; k < kend; k++)
+				{
+					f = 0.0f;
+
+					iFilter = 0;
+
+					for (i_ = -nf; i_ <= nf; i_++)
+						for (j_ = -nf; j_ <= nf; j_++)
+							for (k_ = -nf; k_ <= nf; k_++, iFilter++)
+								f += filter.Element[iFilter] * SDFSrc[RVL3DARRAY_INDEX(volume, i + i_, j + j_, k + k_)];
+
+					SDF.Element[RVL3DARRAY_INDEX(volume, i, j, k)] = f;
+				}
+
+		if (l < n - 1)
+			memcpy(SDFSrc, SDF.Element, nVoxels * sizeof(float));
+	}
+
+	delete[] SDFSrc;
+}
+
 void RVL::SampleMeshDistanceFunction(
 	Mesh *pMesh,
 	SurfelGraph *pSurfels,
@@ -5703,11 +5771,10 @@ void RVL::SampleMeshDistanceFunction(
 {
 	int border = 2 * sampleVoxelDistance + 1;
 
-	Box<float> box;
 	Array<int> zeroDistanceVoxelArray;
 	QLIST::Index *PtMem;
 
-	CreateVisibleMesh(pMesh, voxelSize, border, volume, P0, boundingBox, box, zeroDistanceVoxelArray, PtMem);
+	CreateVisibleMesh(pMesh, voxelSize, border, volume, P0, boundingBox, zeroDistanceVoxelArray, PtMem);
 
 	// sampleArray <- array of sample points at distance approximatelly equal to sampleVoxelDistance.
 	// Field SDF of every sample represents the distance function value.
@@ -5732,12 +5799,6 @@ void RVL::SampleMeshDistanceFunction(
 	sampleArray.Element = new RECOG::VN_::Sample[nVoxels];
 
 	sampleArray.n = 0;
-
-	float halfVoxelSize = 0.5f * voxelSize;
-
-	P0[0] = box.minx + halfVoxelSize;
-	P0[1] = box.miny + halfVoxelSize;
-	P0[2] = box.minz + halfVoxelSize;
 
 	int *RGBuff = new int[nVoxels];
 

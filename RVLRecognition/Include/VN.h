@@ -377,9 +377,14 @@ namespace RVL
 		Array3D<RECOG::VN_::Voxel> &volume,
 		float *P0,
 		Box<float> &boundingBox,
-		Box<float> &box,
 		Array<int> &zeroDistanceVoxelArray,
 		QLIST::Index *&PtMem);
+
+	void FilterSDF(
+		Array3D<RECOG::VN_::Voxel> volume,
+		Array3D<float> filter,
+		int n,
+		Array3D<float> &SDF);
 
 	void SampleMesh(
 		Mesh *pMesh,

@@ -462,6 +462,57 @@ void VNClassifier::Learn(
 
 		LoadMesh(vpMeshBuilder, modelFilePath, &mesh, false);
 
+		// Process mesh.
+
+		float voxelSize_ = 0.01f;
+
+		Array3D<RECOG::VN_::Voxel> volume;
+		float P0[3];
+		Box<float> boundingBox;
+		Array<int> zeroDistanceVoxelArray;
+		QLIST::Index *PtMem;
+
+		CreateVisibleMesh(&mesh, voxelSize_, 1, volume, P0, boundingBox, zeroDistanceVoxelArray, PtMem);
+
+		Array3D<float> filter;
+
+		filter.a = filter.b = filter.c = 3;
+
+		int nf = filter.a * filter.b * filter.c;
+
+		filter.Element = new float[nf];
+
+		float w = 1.0f / (float)nf;
+
+		int iFilter;
+
+		for (iFilter = 0; iFilter < nf; iFilter++)
+			filter.Element[iFilter] = w;
+
+		Array3D<float> SDF;
+
+		FilterSDF(volume, filter, 5, SDF);
+
+		delete[] PtMem;
+		delete[] zeroDistanceVoxelArray.Element;
+		delete[] filter.Element;
+
+		vtkSmartPointer<vtkPolyData> polyData = DisplayIsoSurface(SDF, P0, voxelSize_, 0.0f);
+
+		delete[] SDF.Element;
+
+		// Create a mapper and actor.
+		vtkSmartPointer<vtkPolyDataMapper> mapper = vtkSmartPointer<vtkPolyDataMapper>::New();
+		mapper->SetInputData(polyData);
+		vtkSmartPointer<vtkActor> actor = vtkSmartPointer<vtkActor>::New();
+		actor->SetMapper(mapper);
+
+		pVisualizer->renderer->AddActor(actor);
+
+		pVisualizer->Run();
+
+		///
+
 		currentModelID = dbLoader.GetLastModelID() + 1;
 
 		pMem->Clear();
