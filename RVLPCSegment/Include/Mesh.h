@@ -96,6 +96,12 @@ namespace RVL
 		float N[3];
 	};
 
+	struct Voxel
+	{
+		QList<QLIST::Index> PtList;
+		int voxelDistance;
+	};
+
 	namespace MESH
 	{
 		struct PointEdge
@@ -104,7 +110,30 @@ namespace RVL
 			MeshEdgePtr *pEdgePtr;	// connector connecting an edge E to the vertex iPt
 			unsigned char side;		// side of the edge E to which the iPt is connected
 		};
+
+		void BoundingBox(
+			vtkSmartPointer<vtkPolyData> pPolygonData,
+			Box<float> *pBox);
+		void CreateVisibleSurfaceMesh(
+			vtkSmartPointer<vtkPolyData> pPolyData,
+			float voxelSize,
+			int border,
+			Array3D<Voxel> &volume,
+			float *P0,
+			Box<float> &boundingBox,
+			Array<int> &zeroDistanceVoxelArray,
+			QLIST::Index *&PtMem);
+		vtkSmartPointer<vtkPolyData> CreateVisibleSurfaceMesh(
+			vtkSmartPointer<vtkPolyData> pPolygonDataSrc,
+			float voxelSize,
+			int nFilter);
 	}
+
+	void FilterSDF(
+		Array3D<Voxel> volume,
+		Array3D<float> filter,
+		int n,
+		Array3D<float> &SDF);
 
 	class Mesh : public Graph<Point, MeshEdge, MeshEdgePtr>
 	{
@@ -119,6 +148,7 @@ namespace RVL
 			//	bool bSavePLY = false);
 			void LoadPolyDataFromPLY(char *PLYFileName);
 			void SavePolyDataToPLY(char *PLYFileName);
+			void SaveNoisedPolyDataToPLY(char *PLYFileName);
 			bool CreateOrderedMeshFromPolyData();
 			void ComputeDistribution(
 				Array<int> &PtArray,

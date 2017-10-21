@@ -77,7 +77,8 @@ void CreateParamList(
 	DWORD &method,
 	DWORD &flags,
 	int &iClass,
-	float &SDFSurfaceValue
+	float &SDFSurfaceValue,
+	bool &bCreateVisibleSurfaceMesh
 	)
 {
 	pParamList->m_pMem = pMem;
@@ -105,6 +106,7 @@ void CreateParamList(
 	pParamList->AddID(pParamData, "yes", RVLRECOGNITION_DEMO_FLAG_VISUALIZE_VN_MODEL);
 	pParamData = pParamList->AddParam("VN.class", RVLPARAM_TYPE_INT, &iClass);
 	pParamData = pParamList->AddParam("VN.visualization.SDFSurfaceValue", RVLPARAM_TYPE_FLOAT, &SDFSurfaceValue);
+	pParamData = pParamList->AddParam("Create visible surface mesh", RVLPARAM_TYPE_BOOL, &bCreateVisibleSurfaceMesh);
 }
 
 void GenerateSegmentNeighbourhood(PSGM * psgm, double radius)
@@ -283,6 +285,7 @@ int main(int argc, char ** argv)
 	//DWORD method = RVLRECOGNITION_METHOD_RF; //VIDOVIC
 	int iClass;
 	float SDFSurfaceValue = 0.0f;
+	bool bCreateVisibleSurfaceMesh;
 
 	DWORD flags = 0x00000000; //VIDOVIC
 
@@ -300,7 +303,8 @@ int main(int argc, char ** argv)
 		method,
 		flags,
 		iClass,
-		SDFSurfaceValue);	 //VIDOVIC
+		SDFSurfaceValue,
+		bCreateVisibleSurfaceMesh);	 //VIDOVIC
 
 	ParamList.LoadParams(cfgFileName);
 
@@ -318,6 +322,13 @@ int main(int argc, char ** argv)
 	pcl::PointCloud<pcl::PointXYZRGBA>::Ptr PC(new pcl::PointCloud<pcl::PointXYZRGBA>(w, h));
 
 	meshBuilder.PC = PC;
+
+	if (bCreateVisibleSurfaceMesh)
+	{
+		meshBuilder.flags |= RVLPCLMESHBUILDER_FLAG_VISIBLE_SURFACE;
+		meshBuilder.voxelSize = 0.01f;
+		meshBuilder.nSDFFilter = 5;
+	}
 
 	if (flags & RVLRECOGNITION_DEMO_FLAG_SAVE_PLY)
 	{

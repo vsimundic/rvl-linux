@@ -278,7 +278,7 @@ void VNClassifier::ComputeDescriptor(
 	SampleMesh(pMesh, R, t, sceneObject.sampleArray);
 
 	Array<RECOG::VN_::Sample> sampleArray;
-	Array3D<RECOG::VN_::Voxel> volume;
+	Array3D<Voxel> volume;
 	float P0[3];
 	Box<float> boundingBox;
 
@@ -453,6 +453,24 @@ void VNClassifier::Learn(
 
 	while (modelsLoader.GetNext(modelFilePath, modelFileName))
 	{
+		// Process mesh.
+
+		//mesh.LoadPolyDataFromPLY(modelFilePath);
+
+		//vtkSmartPointer<vtkPolyData> polyData = MESH::CreateVisibleSurfaceMesh(mesh.pPolygonData, 0.01f, 5);
+
+		//// Create a mapper and actor.
+		//vtkSmartPointer<vtkPolyDataMapper> mapper = vtkSmartPointer<vtkPolyDataMapper>::New();
+		//mapper->SetInputData(polyData);
+		//vtkSmartPointer<vtkActor> actor = vtkSmartPointer<vtkActor>::New();
+		//actor->SetMapper(mapper);
+
+		//pVisualizer->renderer->AddActor(actor);
+
+		//pVisualizer->Run();
+
+		///
+
 		//if (ModelExistInDB(modelFileName, dbLoader))
 		//	continue;
 
@@ -460,86 +478,40 @@ void VNClassifier::Learn(
 
 		saveDBSequenceFile = true;
 
-		LoadMesh(vpMeshBuilder, modelFilePath, &mesh, false);
-
-		// Process mesh.
-
-		float voxelSize_ = 0.01f;
-
-		Array3D<RECOG::VN_::Voxel> volume;
-		float P0[3];
-		Box<float> boundingBox;
-		Array<int> zeroDistanceVoxelArray;
-		QLIST::Index *PtMem;
-
-		CreateVisibleMesh(&mesh, voxelSize_, 1, volume, P0, boundingBox, zeroDistanceVoxelArray, PtMem);
-
-		Array3D<float> filter;
-
-		filter.a = filter.b = filter.c = 3;
-
-		int nf = filter.a * filter.b * filter.c;
-
-		filter.Element = new float[nf];
-
-		float w = 1.0f / (float)nf;
-
-		int iFilter;
-
-		for (iFilter = 0; iFilter < nf; iFilter++)
-			filter.Element[iFilter] = w;
-
-		Array3D<float> SDF;
-
-		FilterSDF(volume, filter, 5, SDF);
-
-		delete[] PtMem;
-		delete[] zeroDistanceVoxelArray.Element;
-		delete[] filter.Element;
-
-		vtkSmartPointer<vtkPolyData> polyData = DisplayIsoSurface(SDF, P0, voxelSize_, 0.0f);
-
-		delete[] SDF.Element;
-
-		// Create a mapper and actor.
-		vtkSmartPointer<vtkPolyDataMapper> mapper = vtkSmartPointer<vtkPolyDataMapper>::New();
-		mapper->SetInputData(polyData);
-		vtkSmartPointer<vtkActor> actor = vtkSmartPointer<vtkActor>::New();
-		actor->SetMapper(mapper);
-
-		pVisualizer->renderer->AddActor(actor);
-
-		pVisualizer->Run();
-
-		///
-
-		currentModelID = dbLoader.GetLastModelID() + 1;
-
-		pMem->Clear();
-
-		dbLoader.ResetID();
-
-		modelID = -1;
-
-		while (dbLoader.GetNext(modelFilePath_, modelFileName_, &modelID_))
-			if (strcmp(modelFileName, modelFileName_) == 0)
-			{
-				modelID = modelID_;
-
-				break;
-			}
-
-		if (modelID < 0)
-			printf("CTI of the considered model is not available!");
-		else
+		if (LoadMesh(vpMeshBuilder, modelFilePath, &mesh, false))
 		{
-			alignment.ObjectAlignment(alignment.MCTISet.SegmentCTIs.Element[modelID],
-				alignment.MCTISet.pCTI.Element,
-				alignment.MCTISet.SegmentCTIs.Element[classArray.Element[iClass].iRefInstance],
-				alignment.MCTISet.pCTI.Element, A, R, t, true);
+			currentModelID = dbLoader.GetLastModelID() + 1;
 
-			//RVLUNITMX3(R);
-			//RVLNULL3VECTOR(t);
+			pMem->Clear();
+
+			dbLoader.ResetID();
+
+			modelID = -1;
+
+			while (dbLoader.GetNext(modelFilePath_, modelFileName_, &modelID_))
+				if (strcmp(modelFileName, modelFileName_) == 0)
+				{
+					modelID = modelID_;
+
+					break;
+				}
+
+			if (modelID < 0)
+			{
+				printf("CTI of the considered model is not available!\n");
+
+				RVLUNITMX3(R);
+				RVLNULL3VECTOR(t);
+			}
+			else
+			{
+				printf("CTI alignment.\n");
+
+				alignment.ObjectAlignment(alignment.MCTISet.SegmentCTIs.Element[modelID],
+					alignment.MCTISet.pCTI.Element,
+					alignment.MCTISet.SegmentCTIs.Element[classArray.Element[iClass].iRefInstance],
+					alignment.MCTISet.pCTI.Element, A, R, t, true);
+			}
 
 			ComputeDescriptor(&mesh, R, t, dS, bdS, SBoundingBox, iMetaModel);
 
@@ -573,6 +545,8 @@ void VNClassifier::Learn(
 			delete[] dS;
 			delete[] bdS;
 		}
+		else
+			printf("VN descriptor cannot be computed for this mesh!\n");
 	}
 
 	printf("Model DB creation completed!\n");

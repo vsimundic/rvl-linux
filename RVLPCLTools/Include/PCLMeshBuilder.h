@@ -2,6 +2,7 @@
 
 #define RVLPCLMESHBUILDER_FLAG_BILATERAL_FILTER		0x00000001
 #define RVLPCLMESHBUILDER_FLAG_ORGANIZED_PC			0x00000002
+#define RVLPCLMESHBUILDER_FLAG_VISIBLE_SURFACE		0x00000004
 
 namespace RVL
 {
@@ -49,6 +50,8 @@ namespace RVL
 		CRVLParameterList ParamList;
 		pcl::PointCloud<pcl::PointXYZRGBA>::Ptr PC;
 		pcl::PolygonMesh PCLMesh;
+		float voxelSize;
+		int nSDFFilter;
 	private:				
 		pcl::PointCloud<pcl::PointXYZRGBA> FPC;
 		pcl::PointCloud<pcl::Normal> N;

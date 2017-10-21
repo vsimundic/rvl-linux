@@ -27,6 +27,8 @@ PCLMeshBuilder::PCLMeshBuilder()
 	sigmaS = 5.0f;
 	sigmaR = 0.05f;	
 	normalEstR = 0.010f;
+	voxelSize = 0.01f;
+	nSDFFilter = 5;
 	flags = 0x00000000;
 
 	vpBilateralFilter = new pcl::FastBilateralFilter<pcl::PointXYZRGBA>;
@@ -151,9 +153,9 @@ void PCLMeshBuilder::CreateMesh(
 		pNormalEstimator->compute(N);
 		pcl::toPCLPointCloud2(N, N2);
 
-	pcl::concatenateFields(N2, mesh.cloud, aux);
-	mesh.cloud = aux;
-}
+		pcl::concatenateFields(N2, mesh.cloud, aux);
+		mesh.cloud = aux;
+	}
 
 	///
 }
@@ -237,7 +239,37 @@ bool PCLMeshBuilder::Load(
 	char *fileExtension = RVLGETFILEEXTENSION(FileName);
 
 	if (strcmp(fileExtension, "ply") == 0)
-		pMesh->LoadPolyDataFromPLY(FileName);
+	{
+		if (flags & RVLPCLMESHBUILDER_FLAG_VISIBLE_SURFACE)
+		{
+			vtkSmartPointer<vtkPLYReader> reader = vtkSmartPointer<vtkPLYReader>::New();
+			reader->SetFileName(FileName);
+			reader->Update();
+			vtkSmartPointer<vtkPolyData> pPolygonData = reader->GetOutput();
+
+			printf("Creating visible surface mesh...");
+
+			pMesh->pPolygonData = MESH::CreateVisibleSurfaceMesh(pPolygonData, voxelSize, nSDFFilter);
+
+			printf("completed.\n");
+
+			pMesh->bOrganizedPC = false;
+
+			char *PLYFileName = RVLCreateFileName(FileName, ".ply", -1, "_vs.ply");
+
+			printf("Saving mesh to %s...", PLYFileName);
+
+			pMesh->SavePolyDataToPLY(PLYFileName);
+
+			printf("completed.\n");
+
+			delete[] PLYFileName;
+
+			return false;
+		}
+		else
+			pMesh->LoadPolyDataFromPLY(FileName);
+	}
 	else
 	{
 		if (strcmp(fileExtension, "pcd") == 0)
@@ -362,3 +394,4 @@ bool RVL::LoadMesh(
 
 	return pMeshBuilder->Load(FileName, pMesh, pMeshBuilder->PC, pMeshBuilder->PCLMesh, bSavePLY);
 }
+

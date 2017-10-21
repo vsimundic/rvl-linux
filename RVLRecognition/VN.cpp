@@ -5539,232 +5539,12 @@ void RVL::SampleMesh(
 	}
 }
 
-void RVL::CreateVisibleMesh(
-	Mesh *pMesh,
-	float voxelSize,
-	int border,
-	Array3D<RECOG::VN_::Voxel> &volume,
-	float *P0,
-	Box<float> &boundingBox,
-	Array<int> &zeroDistanceVoxelArray,
-	QLIST::Index *&PtMem)
-{
-	// volume <- empty 3D voxel array with voxel size specified by voxelSize.
-	// It is larger than the bounding box of pMesh for sampleVoxelDistance + 1 on each side.
-
-	pMesh->BoundingBox(&boundingBox);
-
-	int nx = (int)ceil(0.5f * (boundingBox.maxx - boundingBox.minx) / voxelSize) + border;
-	int ny = (int)ceil(0.5f * (boundingBox.maxy - boundingBox.miny) / voxelSize) + border;
-	int nz = (int)ceil(0.5f * (boundingBox.maxz - boundingBox.minz) / voxelSize) + border;
-
-	float a = voxelSize * (float)nx;
-	float b = voxelSize * (float)ny;
-	float c = voxelSize * (float)nz;
-
-	float center[3];
-
-	BoxCenter<float>(&boundingBox, center);
-
-	Box<float> box;
-
-	box.minx = center[0] - a;
-	box.miny = center[1] - b;
-	box.minz = center[2] - c;
-	box.maxx = center[0] + a;
-	box.maxy = center[1] + b;
-	box.maxz = center[2] + c;
-
-	float halfVoxelSize = 0.5f * voxelSize;
-
-	P0[0] = box.minx + halfVoxelSize;
-	P0[1] = box.miny + halfVoxelSize;
-	P0[2] = box.minz + halfVoxelSize;
-
-	volume.a = 2 * nx;
-	volume.b = 2 * ny;
-	volume.c = 2 * nz;
-
-	int nVoxels = volume.a * volume.b * volume.c;
-
-	volume.Element = new RECOG::VN_::Voxel[nVoxels];
-
-	// Assign mesh points to volume voxels.
-	// Set voxelDistance field of all voxels to -1.
-
-	int i;
-	QList<QLIST::Index> *pPtList;
-	RECOG::VN_::Voxel *pVoxel;
-
-	for (i = 0; i < nVoxels; i++)
-	{
-		pVoxel = volume.Element + i;
-
-		pPtList = &(pVoxel->PtList);
-
-		RVLQLIST_INIT(pPtList);
-
-		pVoxel->voxelDistance = -1;
-	}
-
-	PtMem = new QLIST::Index[pMesh->NodeArray.n];
-
-	QLIST::Index *pPtIdx = PtMem;
-
-	float *P;
-	int iPt;
-	int j, k;
-
-	for (iPt = 0; iPt < pMesh->NodeArray.n; iPt++)
-	{
-		P = pMesh->NodeArray.Element[iPt].P;
-
-		i = (int)floor((P[0] - box.minx) / voxelSize);
-		j = (int)floor((P[1] - box.miny) / voxelSize);
-		k = (int)floor((P[2] - box.minz) / voxelSize);
-
-		pVoxel = RVL3DARRAY_ELEMENT(volume, i, j, k);
-
-		pPtList = &(pVoxel->PtList);
-
-		pPtIdx->Idx = iPt;
-
-		RVLQLIST_ADD_ENTRY(pPtList, pPtIdx);
-
-		pPtIdx++;
-	}
-
-	// Assign distance function value to all voxels outside pMesh.
-
-	int *RGBuff = new int[nVoxels];
-
-	int *pPut = RGBuff;
-	int *pFetch = RGBuff;
-
-	zeroDistanceVoxelArray.Element = new int[nVoxels];
-
-	zeroDistanceVoxelArray.n = 0;
-
-	*(pPut++) = 0;
-
-	int dijk[][3] = {
-		{ -1, 0, 0 },
-		{ 1, 0, 0 },
-		{ 0, -1, 0 },
-		{ 0, 1, 0 },
-		{ 0, 0, -1 },
-		{ 0, 0, 1 } };
-
-	int iVoxel, iVoxel_;
-	int i_, j_, k_, l;
-
-	while (pPut > pFetch)
-	{
-		iVoxel = (*pFetch++);
-
-		RVL3DARRAY_INDICES(volume, iVoxel, i, j, k);
-
-		for (l = 0; l < 6; l++)
-		{
-			i_ = i + dijk[l][0];
-			j_ = j + dijk[l][1];
-			k_ = k + dijk[l][2];
-
-			if (i_ >= 0 && i_ < volume.a && j_ >= 0 && j_ < volume.b && k_ >= 0 && k_ < volume.c)
-			{
-				iVoxel_ = RVL3DARRAY_INDEX(volume, i_, j_, k_);
-
-				pVoxel = volume.Element + iVoxel_;
-
-				if (pVoxel->voxelDistance >= 0)
-					continue;
-
-				if (pVoxel->PtList.pFirst)
-				{
-					pVoxel->voxelDistance = 0;
-
-					zeroDistanceVoxelArray.Element[zeroDistanceVoxelArray.n++] = iVoxel_;
-				}
-				else
-				{
-					pVoxel->voxelDistance = 1;
-
-					*(pPut++) = iVoxel_;
-				}
-			}
-		}
-	}
-
-	delete[] RGBuff;
-}
-
-void RVL::FilterSDF(
-	Array3D<VN_::Voxel> volume,
-	Array3D<float> filter,
-	int n,
-	Array3D<float> &SDF)
-{
-	int nVoxels = volume.a * volume.b * volume.c;
-
-	float *SDFSrc = new float[nVoxels];
-
-	SDF.Element = new float[nVoxels];
-	SDF.a = volume.a;
-	SDF.b = volume.b;
-	SDF.c = volume.c;
-
-	int iVoxel;
-	VN_::Voxel *pVoxel;
-	float f;
-
-	for (iVoxel = 0; iVoxel < nVoxels; iVoxel++)
-	{
-		pVoxel = volume.Element + iVoxel;
-		f = (float)(pVoxel->voxelDistance);
-		SDFSrc[iVoxel] = f;
-		SDF.Element[iVoxel] = f;
-	}
-
-	int nf = (filter.a - 1) / 2;
-
-	int iend = volume.a - nf;
-	int jend = volume.b - nf;
-	int kend = volume.c - nf;
-
-	int i, j, k, i_, j_, k_, l;
-	int iFilter;
-
-	for (l = 0; l < n; l++)
-	{
-		for (i = nf; i < iend; i++)
-			for (j = nf; j < jend; j++)
-				for (k = nf; k < kend; k++)
-				{
-					f = 0.0f;
-
-					iFilter = 0;
-
-					for (i_ = -nf; i_ <= nf; i_++)
-						for (j_ = -nf; j_ <= nf; j_++)
-							for (k_ = -nf; k_ <= nf; k_++, iFilter++)
-								f += filter.Element[iFilter] * SDFSrc[RVL3DARRAY_INDEX(volume, i + i_, j + j_, k + k_)];
-
-					SDF.Element[RVL3DARRAY_INDEX(volume, i, j, k)] = f;
-				}
-
-		if (l < n - 1)
-			memcpy(SDFSrc, SDF.Element, nVoxels * sizeof(float));
-	}
-
-	delete[] SDFSrc;
-}
-
 void RVL::SampleMeshDistanceFunction(
 	Mesh *pMesh,
 	SurfelGraph *pSurfels,
 	float voxelSize,
 	int sampleVoxelDistance,
-	Array3D<RECOG::VN_::Voxel> &volume,
+	Array3D<Voxel> &volume,
 	float *P0,
 	Array<RECOG::VN_::Sample> &sampleArray,
 	Box<float> &boundingBox)
@@ -5774,7 +5554,7 @@ void RVL::SampleMeshDistanceFunction(
 	Array<int> zeroDistanceVoxelArray;
 	QLIST::Index *PtMem;
 
-	CreateVisibleMesh(pMesh, voxelSize, border, volume, P0, boundingBox, zeroDistanceVoxelArray, PtMem);
+	MESH::CreateVisibleSurfaceMesh(pMesh->pPolygonData, voxelSize, border, volume, P0, boundingBox, zeroDistanceVoxelArray, PtMem);
 
 	// sampleArray <- array of sample points at distance approximatelly equal to sampleVoxelDistance.
 	// Field SDF of every sample represents the distance function value.
@@ -5786,7 +5566,7 @@ void RVL::SampleMeshDistanceFunction(
 	int maxVoxelDistance = sampleVoxelDistance + 1;
 	
 	int iVoxel;
-	VN_::Voxel *pVoxel;
+	Voxel *pVoxel;
 
 	for (iVoxel = 0; iVoxel < nVoxels; iVoxel++)
 	{
@@ -5975,7 +5755,7 @@ void RVL::SampleMeshDistanceFunction(
 
 void RVL::DisplaySampledMesh(
 	Visualizer *pVisualizer,
-	Array3D<RECOG::VN_::Voxel> volume,
+	Array3D<Voxel> volume,
 	float *P0,
 	float voxelSize)
 {

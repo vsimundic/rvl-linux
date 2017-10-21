@@ -111,12 +111,6 @@ namespace RVL
 	{
 		namespace VN_
 		{
-			struct Voxel
-			{
-				QList<QLIST::Index> PtList;
-				int voxelDistance;
-			};
-
 			struct Sample
 			{
 				float P[3];
@@ -370,41 +364,23 @@ namespace RVL
 		}	// namespace VN_
 	}	// namespace RECOG
 
-	void CreateVisibleMesh(
-		Mesh *pMesh,
-		float voxelSize,
-		int border,
-		Array3D<RECOG::VN_::Voxel> &volume,
-		float *P0,
-		Box<float> &boundingBox,
-		Array<int> &zeroDistanceVoxelArray,
-		QLIST::Index *&PtMem);
-
-	void FilterSDF(
-		Array3D<RECOG::VN_::Voxel> volume,
-		Array3D<float> filter,
-		int n,
-		Array3D<float> &SDF);
-
 	void SampleMesh(
 		Mesh *pMesh,
 		float *R,
 		float *t,
 		Array<RECOG::VN_::Sample> &sampleArray);
-
 	void SampleMeshDistanceFunction(
 		Mesh *pMesh,
 		SurfelGraph *pSurfels,
 		float voxelSize,
 		int sampleVoxelDistance,
-		Array3D<RECOG::VN_::Voxel> &volume,
+		Array3D<Voxel> &volume,
 		float *P0,
 		Array<RECOG::VN_::Sample> &sampleArray,
 		Box<float> &boundingBox);
-
 	void DisplaySampledMesh(
 		Visualizer *pVisualizer,
-		Array3D<RECOG::VN_::Voxel> volume,
+		Array3D<Voxel> volume,
 		float *P0,
 		float voxelSize);
 
@@ -647,7 +623,7 @@ namespace RVL
 		QList<RECOG::VN_::Operation> operationList;
 		QList<RECOG::VN_::Limit> limitList;
 		int outputID;
-		Array3D<RECOG::VN_::Voxel> volume;
+		Array3D<Voxel> volume;
 		float voxelSize;
 		float P0[3];
 		SurfelGraph *pFeatures;
