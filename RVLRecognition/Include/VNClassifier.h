@@ -84,6 +84,7 @@ namespace RVL
 		int sampleVoxelDistance;
 		float connectedComponentMaxDist;
 		int connectedComponentMinSize;
+		bool bVisualization;
 		char *modelDataBase; //Vidovic
 		char *modelsInDataBase; //Vidovic
 		void *vpMeshBuilder;

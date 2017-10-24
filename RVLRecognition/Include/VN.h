@@ -124,6 +124,7 @@ namespace RVL
 				float d;
 				int iAlpha;
 				int iBeta;
+				int iN;
 			};
 
 			struct Node
@@ -151,6 +152,7 @@ namespace RVL
 				int sourceClusterID;
 				int iAlpha;
 				int iBeta;
+				int iN;
 				int targetClusterID;
 				Limit *pNext;
 			};
@@ -195,6 +197,7 @@ namespace RVL
 				float rT;
 				Array<float> alphaArray;
 				Array<float> betaArray;
+				Array2D<float> NArray;
 				ModelCluster *pNext;
 				Pair<int, int> iFeatureInterval;
 			};
@@ -361,6 +364,10 @@ namespace RVL
 			void CreateMug(
 				VN *pVN,
 				CRVLMem *pMem);
+			void CreateMug2(
+				VN *pVN,
+				Array<RECOG::PSGM_::Plane> convexTemplate,
+				CRVLMem *pMem);
 		}	// namespace VN_
 	}	// namespace RECOG
 
@@ -395,7 +402,7 @@ namespace RVL
 			CRVLMem *pMem);
 		void CreateEmpty();
 		void Create(CRVLMem *pMem);
-		void AddModelCluster(
+		RECOG::VN_::ModelCluster * AddModelCluster(
 			int ID,
 			BYTE type,
 			float *R,
@@ -403,9 +410,10 @@ namespace RVL
 			float r,			
 			Array<float> alphaArray,
 			Array<float> betaArray,
+			Array2D<float> NArray,
 			CRVLMem *pMem,
 			float rT);
-		void AddModelCluster(
+		RECOG::VN_::ModelCluster * AddModelCluster(
 			int ID,
 			BYTE type,
 			float *R,
@@ -417,6 +425,16 @@ namespace RVL
 			CRVLMem *pMem,
 			float rT = 0.0f,
 			Pair<int, int> iAlphaInterval = {0, 0});
+		RECOG::VN_::ModelCluster * AddModelCluster(
+			int ID,
+			BYTE type,
+			float *R,
+			float *t,
+			float r,
+			Array<RECOG::PSGM_::Plane> convexTemplate,
+			Pair<float, float> betaInterval,
+			Array2D<float> NArrayIn,
+			CRVLMem *pMem);
 		void AddOperation(
 			int ID,
 			int operation,
@@ -427,6 +445,7 @@ namespace RVL
 			int sourceClusterID,
 			int iAlpha,
 			int iBeta,
+			int iN,
 			int targetClusterID,
 			CRVLMem *pMem);
 		void SetOutput(int outputID);
@@ -614,6 +633,7 @@ namespace RVL
 			FILE *fp,
 			SurfelGraph *pSurfels,
 			Array<RECOG::VN_::Torus *> torusArray);
+		void SaveFeatures(FILE *fp);
 
 	public:
 		Array<RECOG::VN_::Node> NodeArray;

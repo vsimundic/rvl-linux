@@ -17,6 +17,7 @@ namespace RVL
 			char *imageName;
 			GRAPH::HierarchyNode *pObject;
 			GRAPH::HierarchyNode *pObject2;
+			int iPix;
 		};
 
 		void Symmetry(

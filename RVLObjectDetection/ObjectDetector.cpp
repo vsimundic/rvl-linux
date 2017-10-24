@@ -1334,8 +1334,18 @@ void ObjectDetector::TrainingHMI(char *meshFileName)
 
 				pNode->pParent = pNode_->pParent = NULL;
 
-				data.pObject = pNode;
-				data.pObject2 = pNode_;
+				GRAPH::HierarchyNode *pNewSelectionNode = GetObject(data.iPix);
+
+				if (pNode == pNewSelectionNode)
+				{
+					data.pObject = pNode;
+					data.pObject2 = pNode_;
+				}
+				else
+				{
+					data.pObject = pNode_;
+					data.pObject2 = pNode;
+				}
 			}
 			else
 				data.pObject2 = NULL;
@@ -1460,7 +1470,7 @@ void OBJECT_DETECTION::TrainingHMIMouseCallback(int event, int x, int y, int fla
 
 	int w = pData->RGB.cols;
 
-	int iPix = x + y * w;
+	pData->iPix = x + y * w;
 
 	uchar color[] = { 0, 255, 255 };
 
@@ -1470,7 +1480,7 @@ void OBJECT_DETECTION::TrainingHMIMouseCallback(int event, int x, int y, int fla
 	case CV_EVENT_LBUTTONDOWN:
 		pData->RGB.copyTo(RGB);
 
-		pData->pObject = pObjectDetector->GetObject(iPix);
+		pData->pObject = pObjectDetector->GetObject(pData->iPix);
 
 		pData->pObject2 = NULL;
 
@@ -1487,7 +1497,7 @@ void OBJECT_DETECTION::TrainingHMIMouseCallback(int event, int x, int y, int fla
 
 			pObjectDetector->DisplaySelectedObject(pData->pObject, color, RGB);
 
-			pData->pObject2 = pObjectDetector->GetObject(iPix);
+			pData->pObject2 = pObjectDetector->GetObject(pData->iPix);
 
 			if (pData->pObject2)
 				pObjectDetector->DisplaySelectedObject(pData->pObject2, color, RGB);

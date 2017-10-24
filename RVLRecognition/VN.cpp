@@ -71,7 +71,7 @@ void VN::CreateParamList(
 	pParamData = pParamList->AddParam("VN.maxnSClusters", RVLPARAM_TYPE_INT, &(params.maxnSClusters));
 }
 
-void VN::AddModelCluster(
+VN_::ModelCluster * VN::AddModelCluster(
 	int ID,
 	BYTE type,
 	float *R,
@@ -79,6 +79,7 @@ void VN::AddModelCluster(
 	float r,
 	Array<float> alphaArray,
 	Array<float> betaArray,
+	Array2D<float> NArray,
 	CRVLMem *pMem,
 	float rT)
 {
@@ -98,9 +99,12 @@ void VN::AddModelCluster(
 	pMCluster->rT = rT;
 	pMCluster->alphaArray = alphaArray;
 	pMCluster->betaArray = betaArray;
+	pMCluster->NArray = NArray;
+
+	return pMCluster;
 }
 
-void VN::AddModelCluster(
+VN_::ModelCluster * VN::AddModelCluster(
 	int ID,
 	BYTE type,
 	float *R,
@@ -151,8 +155,76 @@ void VN::AddModelCluster(
 	for (iBeta = iBetaInterval.a; iBeta <= iBetaInterval.b; iBeta++, iBeta_++)
 		betaArray.Element[iBeta_] = dBeta * (float)iBeta;
 
-	AddModelCluster(ID, type, R, t, r, alphaArray, betaArray, pMem, rT);
+	Array2D<float> NArray;
+
+	NArray.h = 0;
+
+	return AddModelCluster(ID, type, R, t, r, alphaArray, betaArray, NArray, pMem, rT);
 }
+
+VN_::ModelCluster * VN::AddModelCluster(
+	int ID,
+	BYTE type,
+	float *R,
+	float *t,
+	float r,
+	Array<RECOG::PSGM_::Plane> convexTemplate,
+	Pair<float, float> betaInterval,
+	Array2D<float> NArrayIn,
+	CRVLMem *pMem)
+{
+	float mincs = cos(betaInterval.a);
+	float maxcs = cos(betaInterval.b);
+
+	Array2D<float> NArray;
+	NArray.w = 3;
+	NArray.h = convexTemplate.n + NArrayIn.h;
+
+	RVLMEM_ALLOC_STRUCT_ARRAY(pMem, float, NArray.w * NArray.h, NArray.Element);
+
+	NArray.h = 0;
+
+	int i;
+	float *NSrc, *NTgt;
+
+	for (i = 0; i < convexTemplate.n; i++)
+	{
+		NSrc = convexTemplate.Element[i].N;
+
+		if (NSrc[2] <= mincs && NSrc[2] >= maxcs)
+		{
+			NTgt = NArray.Element + NArray.w * NArray.h;
+
+			RVLCOPY3VECTOR(NSrc, NTgt);
+
+			NArray.h++;
+		}
+	}
+
+	for (i = 0; i < NArrayIn.h; i++)
+	{
+		NSrc = NArrayIn.Element + NArrayIn.w * i;
+
+		NTgt = NArray.Element + NArray.w * NArray.h;
+
+		RVLCOPY3VECTOR(NSrc, NTgt);
+
+		NArray.h++;
+	}
+
+	Array<float> alphaArray;
+
+	alphaArray.n = 0;
+
+	Array<float> betaArray;
+
+	betaArray.n = 0;
+
+	float rT = 0.0f;
+
+	return AddModelCluster(ID, type, R, t, r, alphaArray, betaArray, NArray, pMem, rT);
+}
+
 
 void VN::AddOperation(
 	int ID,
@@ -179,6 +251,7 @@ void VN::AddLimit(
 	int sourceClusterID,
 	int iAlpha,
 	int iBeta,
+	int iN,
 	int targetClusterID,
 	CRVLMem *pMem)
 {
@@ -193,6 +266,7 @@ void VN::AddLimit(
 	pLimit->sourceClusterID = sourceClusterID;
 	pLimit->iAlpha = iAlpha;
 	pLimit->iBeta = iBeta;
+	pLimit->iN = iN;
 	pLimit->targetClusterID = targetClusterID;
 }
 
@@ -228,9 +302,14 @@ void VN::Create(CRVLMem *pMem)
 
 	while (pMCluster)
 	{
-		for (iBeta = 0; iBeta < pMCluster->betaArray.n; iBeta++)
-			featureArray.n += (pMCluster->betaArray.Element[iBeta] < 0.001f || pMCluster->betaArray.Element[iBeta] > PI - 0.001f ?
-			1 : pMCluster->alphaArray.n);
+		if (pMCluster->NArray.h > 0)
+			featureArray.n += pMCluster->NArray.h;
+		else
+		{
+			for (iBeta = 0; iBeta < pMCluster->betaArray.n; iBeta++)
+				featureArray.n += (pMCluster->betaArray.Element[iBeta] < 0.001f || pMCluster->betaArray.Element[iBeta] > PI - 0.001f ?
+				1 : pMCluster->alphaArray.n);
+		}
 
 		if (pMCluster->type == RVLVN_CLUSTER_TYPE_CONVEX || pMCluster->type == RVLVN_CLUSTER_TYPE_CONCAVE)
 			NodeArray.n += 1;
@@ -257,7 +336,7 @@ void VN::Create(CRVLMem *pMem)
 
 	VN_::Feature *pFeature = featureArray.Element;
 
-	int iAlpha;
+	int iAlpha, iN;
 	float N[3];
 	float ca, sa, cb, sb;
 	float *R, *t;
@@ -268,6 +347,7 @@ void VN::Create(CRVLMem *pMem)
 	float P[3], P_[3];
 	float a;
 	float fOperation;
+	float *N_;
 
 	pMCluster = modelClusterList.pFirst;
 
@@ -279,46 +359,65 @@ void VN::Create(CRVLMem *pMem)
 
 		pMCluster->iFeatureInterval.a = pFeature - featureArray.Element;
 
-		for (iBeta = 0; iBeta < pMCluster->betaArray.n; iBeta++)
+		if (pMCluster->NArray.h > 0)
 		{
-			if (pMCluster->betaArray.Element[iBeta] < 0.001f)
+			for (iN = 0; iN < pMCluster->NArray.h; iN++, pFeature++)
 			{
-				RVLCOPYCOLMX3X3(R, 2, pFeature->N);
+				N_ = pMCluster->NArray.Element + pMCluster->NArray.w * iN;
 
-				pFeature->iAlpha = 0;
-				pFeature->iBeta = iBeta;
-			
-				pFeature++;
+				RVLMULMX3X3VECT(R, N_, pFeature->N);
+
+				pFeature->iAlpha = -1;
+				pFeature->iBeta = -1;
+				pFeature->iN = iN;
 			}
-			else if (pMCluster->betaArray.Element[iBeta] > PI - 0.001f)
+		}
+		else
+		{
+			for (iBeta = 0; iBeta < pMCluster->betaArray.n; iBeta++)
 			{
-				RVLCOPYCOLMX3X3(R, 2, N);
-
-				RVLNEGVECT3(N, pFeature->N);
-				
-				pFeature->iAlpha = 0;
-				pFeature->iBeta = iBeta;
-
-				pFeature++;
-			}
-			else
-			{
-				cb = cos(pMCluster->betaArray.Element[iBeta]);
-				sb = sin(pMCluster->betaArray.Element[iBeta]);
-
-				for (iAlpha = 0; iAlpha < pMCluster->alphaArray.n; iAlpha++, pFeature++)
+				if (pMCluster->betaArray.Element[iBeta] < 0.001f)
 				{
-					ca = cos(pMCluster->alphaArray.Element[iAlpha]);
-					sa = sin(pMCluster->alphaArray.Element[iAlpha]);
+					RVLCOPYCOLMX3X3(R, 2, pFeature->N);
 
-					N[0] = ca * sb;
-					N[1] = sa * sb;
-					N[2] = cb;
-
-					RVLMULMX3X3VECT(R, N, pFeature->N);
-
-					pFeature->iAlpha = iAlpha;
+					pFeature->iAlpha = 0;
 					pFeature->iBeta = iBeta;
+					pFeature->iN = -1;
+
+					pFeature++;
+				}
+				else if (pMCluster->betaArray.Element[iBeta] > PI - 0.001f)
+				{
+					RVLCOPYCOLMX3X3(R, 2, N);
+
+					RVLNEGVECT3(N, pFeature->N);
+
+					pFeature->iAlpha = 0;
+					pFeature->iBeta = iBeta;
+					pFeature->iN = -1;
+
+					pFeature++;
+				}
+				else
+				{
+					cb = cos(pMCluster->betaArray.Element[iBeta]);
+					sb = sin(pMCluster->betaArray.Element[iBeta]);
+
+					for (iAlpha = 0; iAlpha < pMCluster->alphaArray.n; iAlpha++, pFeature++)
+					{
+						ca = cos(pMCluster->alphaArray.Element[iAlpha]);
+						sa = sin(pMCluster->alphaArray.Element[iAlpha]);
+
+						N[0] = ca * sb;
+						N[1] = sa * sb;
+						N[2] = cb;
+
+						RVLMULMX3X3VECT(R, N, pFeature->N);
+
+						pFeature->iAlpha = iAlpha;
+						pFeature->iBeta = iBeta;
+						pFeature->iN = -1;
+					}
 				}
 			}
 		}
@@ -394,18 +493,9 @@ void VN::Create(CRVLMem *pMem)
 			pNode->iFeature = -1;
 		}
 
-		for (iBeta = 0; iBeta < pMCluster->betaArray.n; iBeta++)
+		if (pMCluster->NArray.h > 0)
 		{
-			if (bTorus)
-			{
-				pNode = NodeArray.Element + iNode;
-
-				pNode->operation = (pMCluster->type == RVLVN_CLUSTER_TYPE_ITORUS ? 1 : -1);
-				pNode->fOperation = (float)(pNode->operation);
-				pNode->iFeature = -1;
-			}
-
-			if (pMCluster->betaArray.Element[iBeta] < 0.001f)
+			for (iN = 0; iN < pMCluster->NArray.h; iN++)
 			{
 				RVLMEM_ALLOC_STRUCT(pMem, VN_::Edge, pEdge);
 
@@ -417,21 +507,21 @@ void VN::Create(CRVLMem *pMem)
 
 				iFeature++;
 			}
-			else if (pMCluster->betaArray.Element[iBeta] > PI - 0.001f)
+		}
+		else
+		{
+			for (iBeta = 0; iBeta < pMCluster->betaArray.n; iBeta++)
 			{
-				RVLMEM_ALLOC_STRUCT(pMem, VN_::Edge, pEdge);
+				if (bTorus)
+				{
+					pNode = NodeArray.Element + iNode;
 
-				RVLQLIST_ADD_ENTRY(pEdgeList, pEdge);
+					pNode->operation = (pMCluster->type == RVLVN_CLUSTER_TYPE_ITORUS ? 1 : -1);
+					pNode->fOperation = (float)(pNode->operation);
+					pNode->iFeature = -1;
+				}
 
-				pEdge->data.a = iFeature;
-				pEdge->data.b = iNode;
-				pEdge->bPrimary = true;
-
-				iFeature++;
-			}
-			else
-			{
-				for (iAlpha = 0; iAlpha < pMCluster->alphaArray.n; iAlpha++)
+				if (pMCluster->betaArray.Element[iBeta] < 0.001f)
 				{
 					RVLMEM_ALLOC_STRUCT(pMem, VN_::Edge, pEdge);
 
@@ -443,10 +533,37 @@ void VN::Create(CRVLMem *pMem)
 
 					iFeature++;
 				}
-			}
+				else if (pMCluster->betaArray.Element[iBeta] > PI - 0.001f)
+				{
+					RVLMEM_ALLOC_STRUCT(pMem, VN_::Edge, pEdge);
 
-			if (bTorus)
-				iNode++;
+					RVLQLIST_ADD_ENTRY(pEdgeList, pEdge);
+
+					pEdge->data.a = iFeature;
+					pEdge->data.b = iNode;
+					pEdge->bPrimary = true;
+
+					iFeature++;
+				}
+				else
+				{
+					for (iAlpha = 0; iAlpha < pMCluster->alphaArray.n; iAlpha++)
+					{
+						RVLMEM_ALLOC_STRUCT(pMem, VN_::Edge, pEdge);
+
+						RVLQLIST_ADD_ENTRY(pEdgeList, pEdge);
+
+						pEdge->data.a = iFeature;
+						pEdge->data.b = iNode;
+						pEdge->bPrimary = true;
+
+						iFeature++;
+					}
+				}
+
+				if (bTorus)
+					iNode++;
+			}
 		}
 
 		if (bTorus)
@@ -492,7 +609,7 @@ void VN::Create(CRVLMem *pMem)
 			{
 				pFeature = featureArray.Element + iFeature;
 
-				if (pFeature->iAlpha == pLimit->iAlpha && pFeature->iBeta == pLimit->iBeta)
+				if (pFeature->iAlpha == pLimit->iAlpha && pFeature->iBeta == pLimit->iBeta || pFeature->iN == pLimit->iN)
 				{
 					RVLMEM_ALLOC_STRUCT(pMem, VN_::Edge, pEdge);
 
@@ -5194,6 +5311,19 @@ void VN::PrintTori(
 		PrintTorus(fp, pSurfels, torusArray.Element[iTorus], iTorus);
 }
 
+void VN::SaveFeatures(FILE *fp)
+{
+	int iFeature;
+	float *N;
+
+	for (iFeature = 0; iFeature < featureArray.n; iFeature++)
+	{
+		N = featureArray.Element[iFeature].N;
+
+		fprintf(fp, "%f\t%f\t%f\n", N[0], N[1], N[2]);
+	}
+}
+
 void VN_::CreateConvex(
 	VN *pVN,
 	CRVLMem *pMem)
@@ -5340,19 +5470,19 @@ void VN_::CreateBottle(
 
 	pVN->AddModelCluster(1, RVLVN_CLUSTER_TYPE_CONVEX, R, t, 0.1f, 16, 8, iBetaInterval, pMem);
 
-	pVN->AddLimit(1, 0, 0, 0, pMem);
+	pVN->AddLimit(1, 0, 0, 0, 0, pMem);
 	
 	int iAlpha, iBeta;
 
 	for (iBeta = 1; iBeta <= 2; iBeta++)
 		for (iAlpha = 0; iAlpha < 16; iAlpha++)
-			pVN->AddLimit(1, iAlpha, iBeta, 0, pMem);	
+			pVN->AddLimit(1, iAlpha, iBeta, 0, 0, pMem);	
 
 	for (iBeta = 5; iBeta <= 6; iBeta++)
 		for (iAlpha = 0; iAlpha <= 16; iAlpha++)
-			pVN->AddLimit(0, iAlpha, iBeta, 1, pMem);
+			pVN->AddLimit(0, iAlpha, iBeta, 0, 1, pMem);
 
-	pVN->AddLimit(0, 0, 7, 1, pMem);
+	pVN->AddLimit(0, 0, 7, 0, 1, pMem);
 
 	pVN->AddOperation(2, -1, 0, 1, pMem);
 
@@ -5400,9 +5530,9 @@ void VN_::CreateHammer(
 
 	for (iBeta = 6; iBeta <= 7; iBeta++)
 		for (iAlpha = 0; iAlpha <= 16; iAlpha++)
-			pVN->AddLimit(0, iAlpha, iBeta, 1, pMem);
+			pVN->AddLimit(0, iAlpha, iBeta, 0, 1, pMem);
 
-	pVN->AddLimit(0, 0, 8, 1, pMem);
+	pVN->AddLimit(0, 0, 8, 0, 1, pMem);
 
 	pVN->AddOperation(2, -1, 0, 1, pMem);
 
@@ -5503,6 +5633,99 @@ void VN_::CreateMug(
 
 	pVN->boundingBox.minx = -0.5f;
 	pVN->boundingBox.maxx = 0.5f;
+	pVN->boundingBox.miny = -0.5f;
+	pVN->boundingBox.maxy = 0.5f;
+	pVN->boundingBox.minz = -0.5f;
+	pVN->boundingBox.maxz = 0.5f;
+}
+
+void VN_::CreateMug2(
+	VN *pVN,
+	Array<RECOG::PSGM_::Plane> convexTemplate,
+	CRVLMem *pMem)
+{
+	pVN->CreateEmpty();
+
+	float R[9];
+
+	RVLUNITMX3(R);
+
+	float t[3];
+
+	RVLSET3VECTOR(t, 0.0f, 0.0f, 0.0f);
+
+	Pair<float, float> betaInterval;
+
+	betaInterval.a = 0.5f * PI - 1e-3;
+	betaInterval.b = -PI;
+
+	Array2D<float> NArray;
+
+	NArray.w = 3;
+	NArray.h = 1;
+
+	float N0[3];
+	
+	RVLSET3VECTOR(N0, 0.0f, 0.0f, 1.0f);
+
+	NArray.Element = N0;
+
+	VN_::ModelCluster *pMCluster0 = pVN->AddModelCluster(0, RVLVN_CLUSTER_TYPE_CONVEX, R, t, 0.5f, convexTemplate, betaInterval, NArray, pMem);
+
+	betaInterval.a = 0.0f;
+	betaInterval.b = 0.5f * PI + 1e-3;
+
+	NArray.h = 0;
+
+	pVN->AddModelCluster(1, RVLVN_CLUSTER_TYPE_CONCAVE, R, t, 0.3f, convexTemplate, betaInterval, NArray, pMem);
+
+	RVLMXEL(R, 3, 0, 0) = 0.0f;
+	RVLMXEL(R, 3, 1, 0) = 0.0f;
+	RVLMXEL(R, 3, 2, 0) = 1.0f;
+
+	RVLMXEL(R, 3, 0, 1) = -1.0f;
+	RVLMXEL(R, 3, 1, 1) = 0.0f;
+	RVLMXEL(R, 3, 2, 1) = 0.0f;
+
+	RVLMXEL(R, 3, 0, 2) = 0.0f;
+	RVLMXEL(R, 3, 1, 2) = -1.0f;
+	RVLMXEL(R, 3, 2, 2) = 0.0f;
+
+	Pair<int, int> iAlphaInterval;
+
+	iAlphaInterval.a = 8;
+	iAlphaInterval.b = 16;
+
+	Pair<int, int> iBetaInterval;
+
+	iBetaInterval.a = 0;
+	iBetaInterval.b = 2;
+
+	RVLSET3VECTOR(t, 0.6f, 0.0f, 0.2f);
+
+	pVN->AddModelCluster(2, RVLVN_CLUSTER_TYPE_CONVEX, R, t, 0.1f, 16, 2, iBetaInterval, pMem, 0.0f, iAlphaInterval);
+
+	int iN;
+	float *N;
+	
+	for (iN = 0; iN < pMCluster0->NArray.h; iN++)
+	{
+		N = pMCluster0->NArray.Element + pMCluster0->NArray.w * iN;
+
+		if (N[0] < -1e-3)
+			pVN->AddLimit(0, 0, 0, iN, 2, pMem);
+	}
+
+	pVN->AddOperation(3, -1, 0, 2, pMem);
+
+	pVN->AddOperation(4, 1, 3, 1, pMem);
+
+	pVN->SetOutput(4);
+
+	pVN->Create(pMem);
+
+	pVN->boundingBox.minx = -0.5f;
+	pVN->boundingBox.maxx = 0.7f;
 	pVN->boundingBox.miny = -0.5f;
 	pVN->boundingBox.maxy = 0.5f;
 	pVN->boundingBox.minz = -0.5f;

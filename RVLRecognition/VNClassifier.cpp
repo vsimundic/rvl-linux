@@ -44,6 +44,7 @@ VNClassifier::VNClassifier()
 	maxnSTClusters = 2;
 	connectedComponentMaxDist = 0.050f;
 	connectedComponentMinSize = 100;
+	bVisualization = true;
 }
 
 
@@ -108,7 +109,18 @@ void VNClassifier::Create(char *cfgFileName)
 
 	pModel = new VN;
 
-	VN_::CreateMug(pModel, pMem0);
+	//VN_::CreateMug(pModel, pMem0);
+	VN_::CreateMug2(pModel, alignment.convexTemplate66, pMem0);
+
+	char metaModelFileName[] = "metamodel0.dat";
+
+	sprintf(metaModelFileName + strlen(metaModelFileName) - 5, "%1d.dat", models.size());
+
+	FILE *fp = fopen(metaModelFileName, "w");
+
+	pModel->SaveFeatures(fp);
+
+	fclose(fp);
 
 	models.push_back(pModel);
 
@@ -166,6 +178,7 @@ void VNClassifier::CreateParamList()
 	pParamData = paramList.AddParam("VN.voxelSize", RVLPARAM_TYPE_FLOAT, &voxelSize);
 	pParamData = paramList.AddParam("VN.connectedComponentMaxDist", RVLPARAM_TYPE_FLOAT, &connectedComponentMaxDist);
 	pParamData = paramList.AddParam("VN.connectedComponentMinSize", RVLPARAM_TYPE_INT, &connectedComponentMinSize);
+	pParamData = paramList.AddParam("VN.visualization", RVLPARAM_TYPE_BOOL, &bVisualization);
 }
 
 void VNClassifier::Init(Mesh *pMesh)
@@ -432,6 +445,10 @@ void VNClassifier::Learn(
 
 	FILE *fp = fopen(modelDataBase, "a");
 
+	char *VNModelDataBaseFileName = RVLCreateFileName(modelDataBase, ".dat", -1, ".vn.dat");
+
+	FILE *fpVNDB = fopen(VNModelDataBaseFileName, "w");
+
 	bool saveDBSequenceFile = false;
 
 	printf("Model DB creation started...\n");
@@ -525,21 +542,26 @@ void VNClassifier::Learn(
 
 			SaveDescriptor(fpDescriptor, dS, bdS, modelID_, iMetaModel);
 
+			SaveDescriptor(fpVNDB, dS, bdS, modelID_, iMetaModel);
+
 			fclose(fpDescriptor);
 
-			if (pVisualizer)
+			if (bVisualization)
 			{
-				pModel = models[iMetaModel];
+				if (pVisualizer)
+				{
+					pModel = models[iMetaModel];
 
-				ExpandBox<float>(&SBoundingBox, 10.0f * resolution);
+					ExpandBox<float>(&SBoundingBox, 10.0f * resolution);
 
-				pVisualizer->renderer->RemoveAllViewProps();
+					pVisualizer->renderer->RemoveAllViewProps();
 
-				pModel->Display(pVisualizer, SBoundingBox, visualizationData.resolution, dS, bdS, visualizationData.SDFSurfaceValue);
+					pModel->Display(pVisualizer, SBoundingBox, visualizationData.resolution, dS, bdS, visualizationData.SDFSurfaceValue);
 
-				pVisualizer->DisplayPointSet<float, VN_::Sample>(sceneObject.sampleArray, color, 6.0f);
+					pVisualizer->DisplayPointSet<float, VN_::Sample>(sceneObject.sampleArray, color, 6.0f);
 
-				pVisualizer->Run();
+					pVisualizer->Run();
+				}
 			}
 
 			delete[] dS;
@@ -548,6 +570,8 @@ void VNClassifier::Learn(
 		else
 			printf("VN descriptor cannot be computed for this mesh!\n");
 	}
+
+	fclose(fpVNDB);
 
 	printf("Model DB creation completed!\n");
 
@@ -776,6 +800,8 @@ void VNClassifier::SaveDescriptor(
 
 	for (i = 0; i < pModel->featureArray.n; i++)
 		fprintf(fp, "%d\t", (int)(bd[i]));
+
+	fprintf(fp, "\n");
 }
 
 void VNClassifier::LoadDescriptor(
