@@ -58,8 +58,8 @@ namespace RVL
 			int iMetaModel);
 		void LoadDescriptor(
 			FILE *fp,
-			float *d,
-			bool *bd,
+			float *&d,
+			bool *&bd,
 			int &iModel,
 			int &iMetaModel);
 
@@ -84,6 +84,7 @@ namespace RVL
 		int sampleVoxelDistance;
 		float connectedComponentMaxDist;
 		int connectedComponentMinSize;
+		bool bLoadCTIDataBase;
 		bool bVisualization;
 		char *modelDataBase; //Vidovic
 		char *modelsInDataBase; //Vidovic

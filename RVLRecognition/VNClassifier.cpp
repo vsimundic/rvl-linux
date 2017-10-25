@@ -45,6 +45,7 @@ VNClassifier::VNClassifier()
 	connectedComponentMaxDist = 0.050f;
 	connectedComponentMinSize = 100;
 	bVisualization = true;
+	bLoadCTIDataBase = true;
 }
 
 
@@ -149,11 +150,14 @@ void VNClassifier::Create(char *cfgFileName)
 
 	alignment.modelDataBase = RVLCreateString(modelDataBase);
 
-	printf("Loading CTI database...");
+	if (bLoadCTIDataBase)
+	{
+		printf("Loading CTI database...");
 
-	alignment.LoadModelDataBase();
+		alignment.LoadModelDataBase();
 
-	printf("completed.\n");
+		printf("completed.\n");
+	}
 
 	//alignment.bGroundPlaneRFDescriptors = true;
 }
@@ -493,7 +497,7 @@ void VNClassifier::Learn(
 
 		printf("\nProcessing model %s!\n", modelFileName);
 
-		saveDBSequenceFile = true;
+		//saveDBSequenceFile = true;
 
 		if (LoadMesh(vpMeshBuilder, modelFilePath, &mesh, false))
 		{
@@ -806,8 +810,8 @@ void VNClassifier::SaveDescriptor(
 
 void VNClassifier::LoadDescriptor(
 	FILE *fp,
-	float *d,
-	bool *bd,
+	float *&d,
+	bool *&bd,
 	int &iModel,
 	int &iMetaModel)
 {
@@ -815,10 +819,14 @@ void VNClassifier::LoadDescriptor(
 
 	VN *pModel = models[iMetaModel];
 
+	d = new float[pModel->featureArray.n];
+
 	int i;
 
 	for (i = 0; i < pModel->featureArray.n; i++)
 		fscanf(fp, "%f\t", d + i);
+
+	bd = new bool[pModel->featureArray.n];
 
 	int ibd;
 
