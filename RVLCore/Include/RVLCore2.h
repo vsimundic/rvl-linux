@@ -150,6 +150,30 @@ namespace RVL
 	}
 
 	template <typename T>
+	void BoxSize(
+		Box<T> *pBox,
+		T &a,
+		T &b,
+		T &c)
+	{
+		a = pBox->maxx - pBox->minx;
+		b = pBox->maxy - pBox->miny;
+		c = pBox->maxz - pBox->minz;
+	}
+
+	template <typename T>
+	T BoxSize(Box<T> *pBox)
+	{
+		T a, b, c;
+		
+		BoxSize(pBox, a, b, c);
+
+		T tmp = RVLMAX(a, b);
+
+		return RVLMAX(tmp, c);
+	}
+
+	template <typename T>
 	T BoxVolume(Box<T> *pBox)
 	{
 		return (pBox->maxx - pBox->minx) * (pBox->maxy - pBox->miny) * (pBox->maxz - pBox->minz);

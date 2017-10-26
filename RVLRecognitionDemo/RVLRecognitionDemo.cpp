@@ -1115,26 +1115,17 @@ int main(int argc, char ** argv)
 
 			VN *pModel = classifier.models[iMetaModel];
 
-			FileSequenceLoader modelsLoader;
-
-			modelsLoader.Init(modelSequenceFileName);
-
-			char modelFilePath[200];
-			char modelFileName[200];
-
-			modelsLoader.GetNext(modelFilePath, modelFileName);
-
-			LoadMesh(&meshBuilder, modelFilePath, &mesh, false);
-
 			Box<float> box;
 
-			mesh.BoundingBox(&box);
+			pModel->BoundingBox(d, box);
 
-			ExpandBox<float>(&box, 10.0f * classifier.visualizationData.resolution);
+			float resolution = 0.01f * BoxSize(&box);
+
+			ExpandBox<float>(&box, 10.0f * resolution);
 
 			visualizer.renderer->RemoveAllViewProps();
 
-			pModel->Display(&visualizer, box, classifier.visualizationData.resolution, d, bd, classifier.visualizationData.SDFSurfaceValue);
+			pModel->Display(&visualizer, box, resolution, d, bd, classifier.visualizationData.SDFSurfaceValue);
 
 			visualizer.Run();
 		}
