@@ -5136,6 +5136,99 @@ float VN::Project(
 	return (projectionIntervals.Element[iy].n > 0 ? projectionIntervals.Element[iy].Element[0].a : 1e6);
 }
 
+void VN::BoundingBox(
+	float *d,
+	Box<float> &box)
+{
+	Box<bool> bbox;
+
+	bbox.minx = bbox.maxx = bbox.miny = bbox.maxy = bbox.minz = bbox.maxz = false;
+
+	int iFeature;
+
+	for (iFeature = 0; iFeature < featureArray.n; iFeature++)
+	{
+		if (featureArray.Element[iFeature].N[0] < -1.0f + 1e-3)
+		{
+			if (bbox.minx)
+			{
+				if (-d[iFeature] < box.minx)
+					box.minx = -d[iFeature];
+			}
+			else
+			{
+				box.minx = -d[iFeature];
+				bbox.minx = true;
+			}
+		}
+		else if (featureArray.Element[iFeature].N[0] > 1.0f - 1e-3)
+		{
+			if (bbox.maxx)
+			{
+				if (d[iFeature] > box.maxx)
+					box.maxx = d[iFeature];
+			}
+			else
+			{
+				box.maxx = d[iFeature];
+				bbox.maxx = true;
+			}
+		}
+		else if (featureArray.Element[iFeature].N[1] < -1.0f + 1e-3)
+		{
+			if (bbox.miny)
+			{
+				if (-d[iFeature] < box.miny)
+					box.miny = -d[iFeature];
+			}
+			else
+			{
+				box.miny = -d[iFeature];
+				bbox.miny = true;
+			}
+		}
+		else if (featureArray.Element[iFeature].N[1] > 1.0f - 1e-3)
+		{
+			if (bbox.maxy)
+			{
+				if (d[iFeature] > box.maxy)
+					box.maxy = d[iFeature];
+			}
+			else
+			{
+				box.maxy = d[iFeature];
+				bbox.maxy = true;
+			}
+		}
+		else if (featureArray.Element[iFeature].N[2] < -1.0f + 1e-3)
+		{
+			if (bbox.minz)
+			{
+				if (-d[iFeature] < box.minz)
+					box.minz = -d[iFeature];
+			}
+			else
+			{
+				box.minz = -d[iFeature];
+				bbox.minz = true;
+			}
+		}
+		else if (featureArray.Element[iFeature].N[2] > 1.0f - 1e-3)
+		{
+			if (bbox.maxz)
+			{
+				if (d[iFeature] > box.maxz)
+					box.maxz = d[iFeature];
+			}
+			else
+			{
+				box.maxz = d[iFeature];
+				bbox.maxz = true;
+			}
+		}
+	}
+}
+
 void VN::Load(
 	char *fileName,
 	CRVLMem *pMem)

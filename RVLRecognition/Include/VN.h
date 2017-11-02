@@ -614,6 +614,9 @@ namespace RVL
 		float Project(
 			float *d,
 			float *r);
+		void BoundingBox(
+			float *d,
+			Box<float> &box);
 		void Load(
 			char *fileName,
 			CRVLMem *pMem);
