@@ -126,7 +126,8 @@ namespace RVL
 		vtkSmartPointer<vtkPolyData> CreateVisibleSurfaceMesh(
 			vtkSmartPointer<vtkPolyData> pPolygonDataSrc,
 			float voxelSize,
-			int nFilter);
+			int nFilter,
+			float SDFIsoValue = 0.0f);
 	}
 
 	void FilterSDF(

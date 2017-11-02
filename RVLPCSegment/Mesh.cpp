@@ -1333,7 +1333,8 @@ void RVL::MESH::CreateVisibleSurfaceMesh(
 vtkSmartPointer<vtkPolyData> RVL::MESH::CreateVisibleSurfaceMesh(
 	vtkSmartPointer<vtkPolyData> pPolygonDataSrc,
 	float voxelSize,
-	int nFilter)
+	int nFilter,
+	float SDFIsoValue)
 {
 	Array3D<Voxel> volume;
 	float P0[3];
@@ -1366,7 +1367,7 @@ vtkSmartPointer<vtkPolyData> RVL::MESH::CreateVisibleSurfaceMesh(
 	delete[] zeroDistanceVoxelArray.Element;
 	delete[] filter.Element;
 
-	vtkSmartPointer<vtkPolyData> polyDataTgt = DisplayIsoSurface(SDF, P0, voxelSize, 0.5f);
+	vtkSmartPointer<vtkPolyData> polyDataTgt = DisplayIsoSurface(SDF, P0, voxelSize, SDFIsoValue);
 
 	delete[] SDF.Element;
 

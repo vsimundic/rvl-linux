@@ -56,9 +56,10 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 //#define RVLPSGM_RMSE_CALCULATION
 #define RVLRECOGNITION_DEMO_CLASS_ALIGNMENT
 
-#define RVLRECOGNITION_DEMO_FLAG_SAVE_PLY			0x00000001
-#define RVLRECOGNITION_DEMO_FLAG_3D_VISUALIZATION	0x00000002
-#define RVLRECOGNITION_DEMO_FLAG_VISUALIZE_VN_MODEL	0x00000004
+#define RVLRECOGNITION_DEMO_FLAG_SAVE_PLY				0x00000001
+#define RVLRECOGNITION_DEMO_FLAG_3D_VISUALIZATION		0x00000002
+#define RVLRECOGNITION_DEMO_FLAG_VISUALIZE_VN_MODEL		0x00000004
+#define RVLRECOGNITION_DEMO_FLAG_VISUALIZE_VN_INSTANCE	0x00000008
 
 //END VIDOVIC
 
@@ -74,6 +75,7 @@ void CreateParamList(
 	char **pGTFolder,	//VIDOVIC
 	char **pSegmentGTFileName,	//Vidovic
 	char **pResultsFolder,
+	char **pInstanceFileName,
 	DWORD &method,
 	DWORD &flags,
 	int &iClass,
@@ -94,16 +96,19 @@ void CreateParamList(
 	pParamData = pParamList->AddParam("GTFolder", RVLPARAM_TYPE_STRING, pGTFolder);	//VIDOVIC
 	pParamData = pParamList->AddParam("ResultsFolder", RVLPARAM_TYPE_STRING, pResultsFolder);
 	pParamData = pParamList->AddParam("SegmentGTFileName", RVLPARAM_TYPE_STRING, pSegmentGTFileName);	//Vidovic
+	pParamData = pParamList->AddParam("VN.instanceFileName", RVLPARAM_TYPE_STRING, pInstanceFileName);
 	pParamData = pParamList->AddParam("Recognition.method", RVLPARAM_TYPE_ID, &method);
 	pParamList->AddID(pParamData, "PSGM", RVLRECOGNITION_METHOD_PSGM);
 	pParamList->AddID(pParamData, "RF", RVLRECOGNITION_METHOD_RF); //VIDOVIC
 	pParamList->AddID(pParamData, "VN", RVLRECOGNITION_METHOD_VN);
-	pParamData = pParamList->AddParam("Save PLY", RVLPARAM_TYPE_ID, &flags); //VIDOVIC
+	pParamData = pParamList->AddParam("Save PLY", RVLPARAM_TYPE_FLAG, &flags); //VIDOVIC
 	pParamList->AddID(pParamData, "yes", RVLRECOGNITION_DEMO_FLAG_SAVE_PLY); //VIDOVIC
-	pParamData = pParamList->AddParam("3D Visualization", RVLPARAM_TYPE_ID, &flags);
+	pParamData = pParamList->AddParam("3D Visualization", RVLPARAM_TYPE_FLAG, &flags);
 	pParamList->AddID(pParamData, "yes", RVLRECOGNITION_DEMO_FLAG_3D_VISUALIZATION);
-	pParamData = pParamList->AddParam("VN.visualizeModel", RVLPARAM_TYPE_ID, &flags);
+	pParamData = pParamList->AddParam("VN.visualizeModel", RVLPARAM_TYPE_FLAG, &flags);
 	pParamList->AddID(pParamData, "yes", RVLRECOGNITION_DEMO_FLAG_VISUALIZE_VN_MODEL);
+	pParamData = pParamList->AddParam("VN.visualizeInstance", RVLPARAM_TYPE_FLAG, &flags);
+	pParamList->AddID(pParamData, "yes", RVLRECOGNITION_DEMO_FLAG_VISUALIZE_VN_INSTANCE);
 	pParamData = pParamList->AddParam("VN.class", RVLPARAM_TYPE_INT, &iClass);
 	pParamData = pParamList->AddParam("VN.visualization.SDFSurfaceValue", RVLPARAM_TYPE_FLOAT, &SDFSurfaceValue);
 	pParamData = pParamList->AddParam("Create visible surface mesh", RVLPARAM_TYPE_BOOL, &bCreateVisibleSurfaceMesh);
@@ -281,6 +286,7 @@ int main(int argc, char ** argv)
 	char *GTFolder = NULL; //VIDOVIC
 	char *ResultsFolder = NULL;
 	char *segmentGTFileName = NULL; //Vidovic
+	char *instanceFileName = NULL;
 	DWORD method = RVLRECOGNITION_METHOD_PSGM;
 	//DWORD method = RVLRECOGNITION_METHOD_RF; //VIDOVIC
 	int iClass;
@@ -300,6 +306,7 @@ int main(int argc, char ** argv)
 		&GTFolder,
 		&segmentGTFileName,
 		&ResultsFolder,
+		&instanceFileName,
 		method,
 		flags,
 		iClass,
@@ -324,11 +331,7 @@ int main(int argc, char ** argv)
 	meshBuilder.PC = PC;
 
 	if (bCreateVisibleSurfaceMesh)
-	{
 		meshBuilder.flags |= RVLPCLMESHBUILDER_FLAG_VISIBLE_SURFACE;
-		meshBuilder.voxelSize = 0.01f;
-		meshBuilder.nSDFFilter = 5;
-	}
 
 	if (flags & RVLRECOGNITION_DEMO_FLAG_SAVE_PLY)
 	{
@@ -1068,6 +1071,9 @@ int main(int argc, char ** argv)
 		classifier.visualizationData.resolution = resolution;
 		classifier.visualizationData.SDFSurfaceValue = SDFSurfaceValue;
 
+		if (flags & (RVLRECOGNITION_DEMO_FLAG_VISUALIZE_VN_MODEL | RVLRECOGNITION_DEMO_FLAG_VISUALIZE_VN_INSTANCE))
+			classifier.bLoadCTIDataBase = false;
+
 		classifier.Create(cfgFileName);
 
 		RECOG::VN_::_3DNetDatabaseClasses(&classifier);
@@ -1090,10 +1096,45 @@ int main(int argc, char ** argv)
 
 			visualizer.Run();
 		}
+		else if (flags & RVLRECOGNITION_DEMO_FLAG_VISUALIZE_VN_INSTANCE)
+		{
+			FILE *fp = fopen(instanceFileName, "r");
 
-		/////
+			int iModel;
+			int iMetaModel;
+			float *d;
+			bool *bd;
 
-		if (classifier.mode == RVLRECOGNITION_MODE_TRAINING)
+			classifier.LoadDescriptor(fp, d, bd, iModel, iMetaModel);
+
+			fclose(fp);
+
+			VN *pModel = classifier.models[iMetaModel];
+
+			FileSequenceLoader modelsLoader;
+
+			modelsLoader.Init(modelSequenceFileName);
+
+			char modelFilePath[200];
+			char modelFileName[200];
+
+			modelsLoader.GetNext(modelFilePath, modelFileName);
+
+			LoadMesh(&meshBuilder, modelFilePath, &mesh, false);
+
+			Box<float> box;
+
+			mesh.BoundingBox(&box);
+
+			ExpandBox<float>(&box, 10.0f * classifier.visualizationData.resolution);
+
+			visualizer.renderer->RemoveAllViewProps();
+
+			pModel->Display(&visualizer, box, classifier.visualizationData.resolution, d, bd, classifier.visualizationData.SDFSurfaceValue);
+
+			visualizer.Run();
+		}
+		else if (classifier.mode == RVLRECOGNITION_MODE_TRAINING)
 			classifier.Learn(modelSequenceFileName, iClass, &visualizer); //Vidovic
 		else if (classifier.mode == RVLRECOGNITION_MODE_RECOGNITION)
 		{
@@ -1111,9 +1152,6 @@ int main(int argc, char ** argv)
 
 			RVL_DELETE_ARRAY(classifier.refModel.d);
 			RVL_DELETE_ARRAY(classifier.refModel.bd);
-
-			classifier.refModel.d = new float[pModel->featureArray.n];
-			classifier.refModel.bd = new bool[pModel->featureArray.n];
 
 			int iModel_, iMetaModel_;
 
