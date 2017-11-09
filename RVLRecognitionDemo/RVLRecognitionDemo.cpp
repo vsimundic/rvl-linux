@@ -331,11 +331,7 @@ int main(int argc, char ** argv)
 	meshBuilder.PC = PC;
 
 	if (bCreateVisibleSurfaceMesh)
-	{
 		meshBuilder.flags |= RVLPCLMESHBUILDER_FLAG_VISIBLE_SURFACE;
-		meshBuilder.voxelSize = 0.01f;
-		meshBuilder.nSDFFilter = 5;
-	}
 
 	if (flags & RVLRECOGNITION_DEMO_FLAG_SAVE_PLY)
 	{

@@ -52,6 +52,7 @@ namespace RVL
 		pcl::PolygonMesh PCLMesh;
 		float voxelSize;
 		int nSDFFilter;
+		float SDFIsoValue;
 	private:				
 		pcl::PointCloud<pcl::PointXYZRGBA> FPC;
 		pcl::PointCloud<pcl::Normal> N;

@@ -29,6 +29,7 @@ PCLMeshBuilder::PCLMeshBuilder()
 	normalEstR = 0.010f;
 	voxelSize = 0.01f;
 	nSDFFilter = 5;
+	SDFIsoValue = 0.0f;
 	flags = 0x00000000;
 
 	vpBilateralFilter = new pcl::FastBilateralFilter<pcl::PointXYZRGBA>;
@@ -227,6 +228,9 @@ void PCLMeshBuilder::CreateParamList(CRVLMem *pMem)
 	ParamList.AddID(pParamData, "yes", RVLPCLMESHBUILDER_FLAG_ORGANIZED_PC);
 	pParamData = ParamList.AddParam("MeshBuilder.width", RVLPARAM_TYPE_INT, &width);
 	pParamData = ParamList.AddParam("MeshBuilder.height", RVLPARAM_TYPE_INT, &height);
+	pParamData = ParamList.AddParam("MeshBuilder.voxelSize", RVLPARAM_TYPE_FLOAT, &voxelSize);
+	pParamData = ParamList.AddParam("MeshBuilder.nSDFFilter", RVLPARAM_TYPE_INT, &nSDFFilter);
+	pParamData = ParamList.AddParam("MeshBuilder.SDFIsoValue", RVLPARAM_TYPE_FLOAT, &SDFIsoValue);
 }
 
 bool PCLMeshBuilder::Load(
