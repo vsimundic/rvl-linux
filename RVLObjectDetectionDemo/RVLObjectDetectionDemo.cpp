@@ -238,13 +238,11 @@ int main(int argc, char ** argv)
 		{
 			mem.Clear();
 
+			printf("Scene %s...\n", fileName);
 
+			objectDetector.DetectObjects(filePath);
 
-			//printf("Scene %s...\n", fileName);
-
-			//objectDetector.DetectObjects(filePath);
-
-			//printf("Scene %s...finished!\n\n", fileName);
+			printf("Scene %s...finished!\n\n", fileName);
 
 			if (objectDetector.bTrainingHMI)
 				objectDetector.TrainingHMI(fileName);

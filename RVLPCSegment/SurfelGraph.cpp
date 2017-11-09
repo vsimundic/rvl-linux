@@ -4420,6 +4420,43 @@ void SurfelGraph::GetDepthImageROI(
 	}
 }
 
+void SurfelGraph::TransformVertices(
+	Array<int> iVertexArray,
+	float scale,
+	float *R,
+	float *t,
+	float *PArray)
+{
+	float sR[9];
+	float st[3];
+
+	// sR <- scale * R
+
+	RVLSCALEMX3X3(R, scale, sR);
+	RVLSCALE3VECTOR2(t, scale, st);
+
+	// Transform vertices to TG RF.
+
+	int j, iVertex;
+	SURFEL::Vertex *pVertex;
+	float *P;
+	float V3Tmp[3];
+
+	for (j = 0; j < iVertexArray.n; j++)
+	{
+		iVertex = iVertexArray.Element[j];
+
+		pVertex = vertexArray.Element[iVertex];
+
+		//if (pVertex->normalHull.n < 3)
+		//	continue;
+
+		P = PArray + 3 * j;
+
+		RVLINVTRANSF3(pVertex->P, sR, st, P, V3Tmp);
+	}
+}
+
 int SURFEL::PlaneDetectionRG(
 	int iSurfel,
 	int iSurfel_,

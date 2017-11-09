@@ -3355,88 +3355,88 @@ void PSGM::Learn(
 
 	if (problem == RVLRECOGNITION_PROBLEM_SHAPE_INSTANCE_DETECTION)
 	{
-	FileSequenceLoader modelsLoader;
-	FileSequenceLoader dbLoader;
+		FileSequenceLoader modelsLoader;
+		FileSequenceLoader dbLoader;
 
-	char modelFilePath[200];
-	char modelFileName[200];
+		char modelFilePath[200];
+		char modelFileName[200];
 
-	Mesh mesh;
+		Mesh mesh;
 
-	//int iCluster;
-	int nClusters, currentModelID;
+		//int iCluster;
+		int nClusters, currentModelID;
 
-	//RVL_DELETE_ARRAY(modelDataBase);
-	//RVL_DELETE_ARRAY(modelsInDataBase);
+		//RVL_DELETE_ARRAY(modelDataBase);
+		//RVL_DELETE_ARRAY(modelsInDataBase);
 
-	MTGSet.Clear();
+		MTGSet.Clear();
 
-	if (!modelDataBase)
-		modelDataBase = "modelDB.dat";
+		if (!modelDataBase)
+			modelDataBase = "modelDB.dat";
 
-	if (!modelsInDataBase)
-		modelsInDataBase = "DBModels.txt";
+		if (!modelsInDataBase)
+			modelsInDataBase = "DBModels.txt";
 
-	modelsLoader.Init(modelSequenceFileName);
-	dbLoader.Init(modelsInDataBase);
+		modelsLoader.Init(modelSequenceFileName);
+		dbLoader.Init(modelsInDataBase);
 
-	FILE *fp = fopen(modelDataBase, "a");
+		FILE *fp = fopen(modelDataBase, "a");
 
-	bool saveDBSequenceFile = false;
+		bool saveDBSequenceFile = false;
 
-	printf("Model DB creation started...\n");
+		printf("Model DB creation started...\n");
 
-	while (modelsLoader.GetNext(modelFilePath, modelFileName))
-	{
-		if (ModelExistInDB(modelFileName, dbLoader))
-			continue;
-
-		printf("\nProcessing model %s!\n", modelFileName);
-
-		saveDBSequenceFile = true;
-
-		//mesh.LoadPolyDataFromPLY(modelFilePath);
-		LoadMesh(vpMeshBuilder, modelFilePath, &mesh, false);
-
-		SetSceneFileName(modelFilePath);
-
-		currentModelID = dbLoader.GetLastModelID() + 1;
-
-		Interpret(&mesh, currentModelID);
-
-		nClusters = RVLMIN(clusters.n, nDominantClusters);
-
-		//Add vtkPolyData to vtkModelDB
-		vtkModelDB.insert(std::make_pair(currentModelID, mesh.pPolygonData));
-
-		SaveModelInstances(fp, currentModelID);
-
-		dbLoader.AddModel(currentModelID, modelFilePath, modelFileName);
-
-		if (visualizer)
+		while (modelsLoader.GetNext(modelFilePath, modelFileName))
 		{
-			pSurfels->NodeColors(SelectionColor);
-			InitDisplay(visualizer, &mesh, SelectionColor);
-			Display();
-			visualizer->Run();
+			if (ModelExistInDB(modelFileName, dbLoader))
+				continue;
 
-			visualizer->renderer->RemoveAllViewProps();
+			printf("\nProcessing model %s!\n", modelFileName);
+
+			saveDBSequenceFile = true;
+
+			//mesh.LoadPolyDataFromPLY(modelFilePath);
+			LoadMesh(vpMeshBuilder, modelFilePath, &mesh, false);
+
+			SetSceneFileName(modelFilePath);
+
+			currentModelID = dbLoader.GetLastModelID() + 1;
+
+			Interpret(&mesh, currentModelID);
+
+			nClusters = RVLMIN(clusters.n, nDominantClusters);
+
+			//Add vtkPolyData to vtkModelDB
+			vtkModelDB.insert(std::make_pair(currentModelID, mesh.pPolygonData));
+
+			SaveModelInstances(fp, currentModelID);
+
+			dbLoader.AddModel(currentModelID, modelFilePath, modelFileName);
+
+			if (visualizer)
+			{
+				pSurfels->NodeColors(SelectionColor);
+				InitDisplay(visualizer, &mesh, SelectionColor);
+				Display();
+				visualizer->Run();
+
+				visualizer->renderer->RemoveAllViewProps();
+			}
 		}
+
+		printf("Model DB creation completed!\n");
+
+		if (saveDBSequenceFile)
+			SaveModelID(dbLoader, modelsInDataBase);
+
+		fclose(fp);
+
+		char *TGFileName = RVLCreateFileName(modelDataBase, ".dat", -1, ".tgr");
+
+		MTGSet.Save(TGFileName);
+
+		delete[] TGFileName;
 	}
-
-	printf("Model DB creation completed!\n");
-
-	if (saveDBSequenceFile)
-		SaveModelID(dbLoader, modelsInDataBase);
-
-	fclose(fp);
-
-	char *TGFileName = RVLCreateFileName(modelDataBase, ".dat", -1, ".tgr");
-
-	MTGSet.Save(TGFileName);
-
-	delete[] TGFileName;
-}
 	else if (problem == RVLRECOGNITION_PROBLEM_CLASSIFICATION)
 	{
 		ObjectDetector *pObjectDetector = (ObjectDetector *)vpObjectDetector;

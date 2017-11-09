@@ -190,6 +190,12 @@ namespace RVL
 			Array<int> &dominantPlaneSurfelArray,
 			float *N,
 			float &d);
+		void TransformVertices(
+			Array<int> iVertexArray,
+			float scale,
+			float *R,
+			float *t,
+			float *PArray);
 		void NodeColors(unsigned char *SelectionColor);
 		void Display(
 			Visualizer *pVisualizer,
