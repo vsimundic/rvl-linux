@@ -3598,11 +3598,13 @@ void PSGM::LoadModelDataBase()
 		tBestMatch.Element[i].n = 3;
 	}
 
-	//char *TGFileName = RVLCreateFileName(modelDataBase, ".dat", -1, ".tgr");
+#ifdef RVLVERSION_170601
+	char *TGFileName = RVLCreateFileName(modelDataBase, ".dat", -1, ".tgr");
 
-	//MTGSet.Load(TGFileName);
+	MTGSet.Load(TGFileName);
 
-	//delete[] TGFileName;
+	delete[] TGFileName;
+#endif
 }
 
 void PSGM::LoadCTI(char *fileName)
