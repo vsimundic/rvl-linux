@@ -14544,6 +14544,12 @@ void PSGM::checkVersionTestFile(bool verbose)
 	printf("***********************************************************************\n");
 	printf("Version Test File checking started...");
 
+	FILE *fpRes = fopen("RVL170601test.log", "a");
+
+	fprintf(fpRes, "Processing scene %s\n", sceneFileName);
+
+	fprintf(fpRes, "Version Test File checking started...\n");
+
 	if (fpTF)
 	{
 		while (!feof(fpTF))
@@ -14553,7 +14559,10 @@ void PSGM::checkVersionTestFile(bool verbose)
 			if (checkVersionTestFile(MGTinstance, verbose))
 			{
 				if (!verbose)
+				{
 					printf("\nDifference between current and old version found in match %d!!", MGTinstance.matchID);
+					fprintf(fpRes, "\nDifference between current and old version found in match %d!!\n", MGTinstance.matchID);
+				}
 
 				diff = true;
 				nDiff++;
@@ -14562,15 +14571,27 @@ void PSGM::checkVersionTestFile(bool verbose)
 	
 
 		if (diff)
+		{
 			printf("\nVersion Test File checking completed with %d differences!!\n", nDiff);
+			fprintf(fpRes, "\nVersion Test File checking completed with %d differences!!\n", nDiff);
+		}
 		else
+		{
 			printf(" completed with no differences!!\n");
+			fprintf(fpRes, "completed with no differences!!\n");
+		}
 	}
 	else
+	{
 		printf("\nVersion Test File %s is missing!!\n", versionTestFileName);
+		fprintf(fpRes, "\nVersion Test File %s is missing!!\n", versionTestFileName);
+	}
 
 
 	printf("***********************************************************************\n");
+
+	fprintf(fpRes, "\n\n\n");
+	fclose(fpRes);
 }
 
 bool PSGM::checkVersionTestFile(RECOG::PSGM_::MGT MGTinstance, bool verbose)
