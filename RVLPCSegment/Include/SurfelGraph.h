@@ -23,7 +23,14 @@
 
 #define RVLSURFEL_VERSION_0		0
 
+#define RVLVERSION_171111
 #define RVLVERSION_170601
+
+#ifndef RVLVERSION_170601
+#ifdef RVLVERSION_171111
+#define RVLVERSION_170601
+#endif
+#endif
 
 namespace RVL
 {
@@ -196,6 +203,11 @@ namespace RVL
 			float *R,
 			float *t,
 			float *PArray);
+		void ProjectVerticesOntoGroundPlane(
+			Array<int> iVertexArray,
+			float *NGnd,
+			float dGnd,
+			float *PGnd);
 		void NodeColors(unsigned char *SelectionColor);
 		void Display(
 			Visualizer *pVisualizer,

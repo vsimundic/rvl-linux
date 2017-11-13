@@ -4457,6 +4457,35 @@ void SurfelGraph::TransformVertices(
 	}
 }
 
+void SurfelGraph::ProjectVerticesOntoGroundPlane(
+	Array<int> iVertexArray,
+	float *NGnd,
+	float dGnd,
+	float *PGnd)
+{
+	float s;
+	int i;
+	float *PGnd_;
+	int iVertex;
+	SURFEL::Vertex *pVertex;
+	float *P;
+
+	for (i = 0; i < iVertexArray.n; i++)
+	{
+		PGnd_ = PGnd + 3 * i;
+
+		iVertex = iVertexArray.Element[i];
+
+		pVertex = vertexArray.Element[iVertex];
+
+		P = pVertex->P;
+
+		s = dGnd / RVLDOTPRODUCT3(NGnd, P);
+
+		RVLSCALE3VECTOR(P, s, PGnd_);
+	}
+}
+
 int SURFEL::PlaneDetectionRG(
 	int iSurfel,
 	int iSurfel_,
