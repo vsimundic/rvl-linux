@@ -120,7 +120,7 @@ PSGM::PSGM()
 	scoreMatchMatrixICP.n = 0;
 
 	nBestMatches = 100; //add loading from file
-	//nBestMatches = 20; //add loading from file
+	//nBestMatches = 5; //add loading from file
 
 	//Arrays allocation for Match function
 	iValidSampleCandidate.Element = new QLIST::Index[convexTemplate.n];
@@ -4899,6 +4899,7 @@ void PSGM::Match()
 	bestSceneSegmentMatches.n = nClusters;
 
 	int nBestMatchesPerCluster = 100;
+	//int nBestMatchesPerCluster = 5;
 
 	int nBestMatchesTotal = nBestMatchesPerCluster * nClusters;
 
@@ -8332,6 +8333,8 @@ void PSGM::AddOneModelToVisualizer(Visualizer *pVisualizer, int iMatch, int iRan
 	int iSCTI = pCTImatchesArray.Element[iMatch]->iSCTI;
 	int iCluster, iModel;
 
+	
+
 	//Getting scene and model pointers:
 	RECOG::PSGM_::ModelInstance *pMCTI;
 	RECOG::PSGM_::ModelInstanceElement *pMIE;
@@ -8344,6 +8347,8 @@ void PSGM::AddOneModelToVisualizer(Visualizer *pVisualizer, int iMatch, int iRan
 
 	iCluster = pSCTI->iCluster;
 	iModel = pMCTI->iModel;
+
+	//printf("\nMATCH: %d\t MODEL: %d\n", iMatch, iModel);
 
 	//For a chosen hypothesis, prints which scene segment is matched to which model
 	if (iRank != -1)
@@ -13151,6 +13156,7 @@ void PSGM::BoundingBoxSize(
 	size[2] = RVLABS(a);
 }
 
+
 //Return a consensus of hypotheses where no one is in collision
 void PSGM::GetHypothesesCollisionConsensus(std::vector<int> *noCollisionHypotheses, Array<Array<SortIndex<float>>> *scoreMatchMatrix, float thr)
 {
@@ -13198,10 +13204,19 @@ void PSGM::GetHypothesesCollisionConsensus(std::vector<int> *noCollisionHypothes
 
 	for (int i = 0; i < scoreMatchMatrix->n; i++)
 	{
-		for (j = 0; j < RVLMIN(1, scoreMatchMatrix->Element[i].n); j++)
+		for (j = 0; j < RVLMIN(nBestMatches, scoreMatchMatrix->Element[i].n); j++)
+		{
 			//if (scoreMatchMatrix->Element[i].Element[j].idx >= 0)
 			if (!(std::find(transparentHypotheses.begin(), transparentHypotheses.end(), scoreMatchMatrix->Element[i].Element[j].idx) != transparentHypotheses.end()))
-				hypotheses.push_back(Hyp(i, scoreMatchMatrix->Element[i].Element[j].idx, scoreMatchMatrix->Element[i].Element[j].cost));
+				if (!(std::find(envelopmentColisionHypotheses.begin(), envelopmentColisionHypotheses.end(), scoreMatchMatrix->Element[i].Element[j].idx) != envelopmentColisionHypotheses.end()))
+				{
+					hypotheses.push_back(Hyp(i, scoreMatchMatrix->Element[i].Element[j].idx, scoreMatchMatrix->Element[i].Element[j].cost));
+					break;
+				}
+
+			//if (scoreMatchMatrix->Element[i].Element[j].idx == -1)
+			//	printf("SCMM = -1 i:%d j:%d\n", i, j);
+		}
 	}
 
 	//Sort it
@@ -13249,7 +13264,7 @@ void PSGM::GetHypothesesCollisionConsensus(std::vector<int> *noCollisionHypothes
 }
 
 //Check if two objects are in collision. Return true if they are.
-bool PSGM::CheckHypothesesCollision(int firstHyp, int secondHyp, float thr)
+bool PSGM::CheckHypothesesCollision(int firstHyp, int secondHyp, float thr, float *collisionValue)
 {
 	bool inCollision = false;
 	//First hypothesis data
@@ -13340,6 +13355,11 @@ bool PSGM::CheckHypothesesCollision(int firstHyp, int secondHyp, float thr)
 			maxVal = minDistPlane[i];
 	}
 	delete[] minDistPlane;
+
+	//Vidovic
+	if (collisionValue)
+		*collisionValue = maxVal;
+
 	//Check
 	if (maxVal < -thr)
 		return true;
@@ -13450,7 +13470,7 @@ void PSGM::FilterHypothesesUsingTransparency(float tranThr, float depthThr, bool
 						std::cout << "Hypothesis " << scoreMatchMatrixICP.Element[i].Element[j].idx << " Model: " << MCTISet.pCTI.Element[pCTImatchesArray.Element[scoreMatchMatrixICP.Element[i].Element[j].idx]->iMCTI]->iModel << " for segment " << i << " has been invalidated by transparency ratio of: " << tranRatio << "(rank: " << j << ")" << std::endl;
 					}
 					transparentHypotheses.push_back(scoreMatchMatrixICP.Element[i].Element[j].idx);
-					scoreMatchMatrixICP.Element[i].Element[j].idx = -1;
+					//scoreMatchMatrixICP.Element[i].Element[j].idx = -1; //Comented on 13.11.2017.
 				}
 				//else //Commented to get transparency ratio for all matches - Vidovic
 				//	break; //Break transparency check for this segment
@@ -13460,7 +13480,7 @@ void PSGM::FilterHypothesesUsingTransparency(float tranThr, float depthThr, bool
 }
 
 //Uses T_ICP transformation matrix
-vtkSmartPointer<vtkPolyData> PSGM::GetPoseCorrectedVisibleModel(int iMatch)
+vtkSmartPointer<vtkPolyData> PSGM::GetPoseCorrectedVisibleModel(int iMatch, bool ICPPose)
 {
 	//Get model instance
 	RECOG::PSGM_::ModelInstance *pMCTI;
@@ -13473,15 +13493,24 @@ vtkSmartPointer<vtkPolyData> PSGM::GetPoseCorrectedVisibleModel(int iMatch)
 	
 	//Set transform
 	vtkSmartPointer<vtkTransform> transform = vtkSmartPointer<vtkTransform>::New();
-	double T_M_S[16], tICPm[3];
+	double T_M_S[16], tICPm[3], tm[3];
 
 	//Commented on 14.06.2017 - Vidovic
 	//for (int i = 0; i < 16; i++)
 	//	T_M_S[i] = pMatch->T_ICP[i];	//FROM ICP???
 
 	//Added on 14.06.2017. - Vidovic
-	RVLSCALE3VECTOR2(pMatch->tICP, 1000, tICPm);
-	RVLHTRANSFMX(pMatch->RICP, tICPm, T_M_S);
+	//Changed on 26.10.2017. - Vidovic (for the purpose of calculating transparencyRatio for CTI pose) 
+	if (ICPPose)
+	{
+		RVLSCALE3VECTOR2(pMatch->tICP, 1000, tICPm);
+		RVLHTRANSFMX(pMatch->RICP, tICPm, T_M_S);
+	}
+	else
+	{
+		RVLSCALE3VECTOR2(pMatch->t, 1000, tm);
+		RVLHTRANSFMX(pMatch->R, tm, T_M_S);
+	}
 
 	transform->SetMatrix(T_M_S);
 
@@ -13912,7 +13941,9 @@ void PSGM::PrintICPMatches()
 
 		for (int j = 0; j < scoreMatchMatrixICP.Element[i].n; j++)
 			if (scoreMatchMatrixICP.Element[i].Element[j].idx != -1)
-				cout << "Match: " << j << " ModelID:" << GetMCTI(GetMatch(scoreMatchMatrixICP.Element[i].Element[j].idx))->iModel << "\tICP cost: " << GetMatch(scoreMatchMatrixICP.Element[i].Element[j].idx)->cost_NN << " gndDistance: " << GetMatch(scoreMatchMatrixICP.Element[i].Element[j].idx)->gndDistance << " transparency ratio:" << GetMatch(scoreMatchMatrixICP.Element[i].Element[j].idx)->transparencyRatio << " (matchID: " << scoreMatchMatrixICP.Element[i].Element[j].idx << ")" << "\n";
+				if (!(std::find(transparentHypotheses.begin(), transparentHypotheses.end(), scoreMatchMatrixICP.Element[i].Element[j].idx) != transparentHypotheses.end()))
+					if (!(std::find(envelopmentColisionHypotheses.begin(), envelopmentColisionHypotheses.end(), scoreMatchMatrixICP.Element[i].Element[j].idx) != envelopmentColisionHypotheses.end()))
+						cout << "Match: " << j << " ModelID:" << GetMCTI(GetMatch(scoreMatchMatrixICP.Element[i].Element[j].idx))->iModel << "\tICP cost: " << GetMatch(scoreMatchMatrixICP.Element[i].Element[j].idx)->cost_NN << " gndDistance: " << GetMatch(scoreMatchMatrixICP.Element[i].Element[j].idx)->gndDistance << " transparency ratio:" << GetMatch(scoreMatchMatrixICP.Element[i].Element[j].idx)->transparencyRatio << " (matchID: " << scoreMatchMatrixICP.Element[i].Element[j].idx << ")" << "\n";
 
 		cout << "---------------------------------------------------\n";
 	}
@@ -14702,15 +14733,27 @@ std::map<int, std::vector<int>> PSGM::GetSceneConsistancy(float nDist, float d1,
 	std::vector<std::vector<int>> neighbourhood = GetSegmentBBNeighbourhood(nDist);
 
 	//For every segment's hypothesis check if they envelop its source segment and neighbouring segments??? No longer true???
+	PSGM_::ModelInstance SCTI;
+
+	SCTI.modelInstance.Element = new PSGM_::ModelInstanceElement[convexTemplate.n];
+
+	RVLUNITMX3(SCTI.R);
+	RVLNULL3VECTOR(SCTI.t);
+
 	int resLab = 0;
+	PSGM_::Cluster *pCluster;
 	for (int i = 0; i < scoreMatchMatrixICP.n; i++)	//Per segment
 	{
-		for (int j = 0; j < RVLMIN(7, scoreMatchMatrixICP.Element[i].n); j++)	//Per hypothesis
+		pCluster = clusters.Element[i];
+
+		FitModel(pCluster->iVertexArray, &SCTI, true);
+
+		for (int j = 0; j < RVLMIN(nBestMatches, scoreMatchMatrixICP.Element[i].n); j++)	//Per hypothesis
 		{
 			if (scoreMatchMatrixICP.Element[i].Element[j].idx >= 0) //If hypothesis is valid
 			{
 				//Check for source segment
-				resLab = CheckHypothesesToSegmentEnvelopmentAndCollision(scoreMatchMatrixICP.Element[i].Element[j].idx, i, d1, d2);
+				resLab = CheckHypothesesToSegmentEnvelopmentAndCollision(scoreMatchMatrixICP.Element[i].Element[j].idx, i, d1, d2, &SCTI);
 				if (resLab == 2)
 				{
 					//It must be first entry for this hypothesis
@@ -14730,7 +14773,7 @@ std::map<int, std::vector<int>> PSGM::GetSceneConsistancy(float nDist, float d1,
 				//Check for neighbourhood segments
 				for (int k = 0; k < neighbourhood.at(i).size(); k++)
 				{
-					resLab = CheckHypothesesToSegmentEnvelopmentAndCollision(scoreMatchMatrixICP.Element[i].Element[j].idx, neighbourhood.at(i).at(k), d1, d2);
+					resLab = CheckHypothesesToSegmentEnvelopmentAndCollision(scoreMatchMatrixICP.Element[i].Element[j].idx, neighbourhood.at(i).at(k), d1, d2, &SCTI);
 					if (resLab == 2)
 					{
 						if (constL.count(scoreMatchMatrixICP.Element[i].Element[j].idx))
@@ -14755,6 +14798,8 @@ std::map<int, std::vector<int>> PSGM::GetSceneConsistancy(float nDist, float d1,
 		}
 	}
 
+	delete[] SCTI.modelInstance.Element;
+
 	if (verbose)
 	{
 		std::map<int, std::vector<int>>::iterator it;
@@ -14769,7 +14814,7 @@ std::map<int, std::vector<int>> PSGM::GetSceneConsistancy(float nDist, float d1,
 }
 
 //
-int PSGM::CheckHypothesesToSegmentEnvelopmentAndCollision(int hyp, int segment, float d1, float d2)
+int PSGM::CheckHypothesesToSegmentEnvelopmentAndCollision(int hyp, int segment, float d1, float d2, RECOG::PSGM_::ModelInstance *pSCTI)
 {
 	int retVal = 0;
 
@@ -14788,24 +14833,24 @@ int PSGM::CheckHypothesesToSegmentEnvelopmentAndCollision(int hyp, int segment, 
 	float *tMS = hypothesis->tICP;
 
 	//Segment data
-	Array<SURFEL::Vertex *> *vertexArray = &this->pSurfels->vertexArray;	
+	Array<SURFEL::Vertex *> *vertexArray = &this->pSurfels->vertexArray;
 	SURFEL::Vertex * rvlvertex;
 	float* minModDist = new float[hypTG->A.h];
-	RECOG::PSGM_::ModelInstance *pSCTI = CTISet.pCTI.Element[CTISet.SegmentCTIs.Element[segment].Element[0]];
+	//RECOG::PSGM_::ModelInstance *pSCTI = CTISet.pCTI.Element[CTISet.SegmentCTIs.Element[segment].Element[0]];
 	RECOG::PSGM_::ModelInstanceElement *pSIE = pSCTI->modelInstance.Element;
 
-	float RMSCTI[9];
-	float tMSCTI[3];
+	//float RMSCTI[9];
+	//float tMSCTI[3];
 	float V3Tmp[3];
 
-	RVLCOMPTRANSF3DWITHINV(pSCTI->R, pSCTI->t, RMS, tMS, RMSCTI, tMSCTI, V3Tmp);
+	//RVLCOMPTRANSF3DWITHINV(pSCTI->R, pSCTI->t, RMS, tMS, RMSCTI, tMSCTI, V3Tmp);
 
 	//Transformation vars?
 	float tPs[3];
 	float tPm[3];
 	float sPs[3];
 	float sPm[3];
-	float st[3] = { tMSCTI[0] / 1000, tMSCTI[1] / 1000, tMSCTI[2] / 1000 };
+	float st[3] = { tMS[0] / 1000, tMS[1] / 1000, tMS[2] / 1000 };
 
 	//Calculate distances segment vertices to model convex hull
 	int totalPts = this->clusters.Element[segment]->iVertexArray.n;
@@ -14859,7 +14904,7 @@ int PSGM::CheckHypothesesToSegmentEnvelopmentAndCollision(int hyp, int segment, 
 				sPm[0] = rvlvertex->P[0] / 1000;
 				sPm[1] = rvlvertex->P[1] / 1000;
 				sPm[2] = rvlvertex->P[2] / 1000;
-				RVLTRANSF3(sPm, RMSCTI, st, tPm, V3Tmp);
+				RVLTRANSF3(sPm, RMS, st, tPm, V3Tmp);
 
 				N = &hypTG->A.Element[hypTG->A.w * plane->i];	//Same normal at same index as the model CTI?
 
@@ -14873,13 +14918,14 @@ int PSGM::CheckHypothesesToSegmentEnvelopmentAndCollision(int hyp, int segment, 
 		//find max?
 		for (int i = 0; i < hypTG->A.h; i++)
 		{
-			if ((minSegDist[i] > -d2) || (minModDist[i] > -d2/1000.0))
+			if ((minSegDist[i] > -d2) || (minModDist[i] > -d2 / 1000.0))
 				return 1;
 		}
 	}
 
 	return 0;
 }
+
 
 ///////////////////////////////////////////////////////////////////////////
 //
@@ -15257,7 +15303,7 @@ bool PSGM::LoadSegmentGT()
 	if (fpSegmentGT)
 	{
 		QList<SegmentGTInstance> *pModelsSegmentGTList = &modelsSegmentGTList;
-		SegmentGTInstance *pNewMSGT, *pMSGTList;
+		SegmentGTInstance *pNewMSGT;
 
 		int iScene, iSegment, iModel;
 
@@ -15288,6 +15334,572 @@ bool PSGM::LoadSegmentGT()
 		printf("File %s is missing!! Segment GT not loaded\n", segmentGTFileName);
 		return false;
 	}
+}
+
+void PSGM::DetermineThresholds()
+{
+	printf("Calculating thresholds!\n");
+	
+	/*fpSegmentEnvelopment = fopen("C:\\RVL\\segment_envelopment.txt", "a");
+	fpSegmentEnvelopmentCTI = fopen("C:\\RVL\\segment_envelopmentCTI.txt", "a");
+	fpSegmentCollision = fopen("C:\\RVL\\segment_collision.txt", "a");
+	fpSegmentCollisionCTI = fopen("C:\\RVL\\segment_collisionCTI.txt", "a");
+	fpHypothesisCollision = fopen("C:\\RVL\\hypothesis_collision.txt", "a");
+	fpHypothesisTransparency = fopen("C:\\RVL\\hypothesis_transparency.txt", "a");
+	fpHypothesisTransparencyCTI = fopen("C:\\RVL\\hypothesis_transparencyCTI.txt", "a");
+	fpHypothesisGndDistance = fopen("C:\\RVL\\hypothesis_ground_distance.txt", "a");
+	fpHypothesisGndDistanceCTI = fopen("C:\\RVL\\hypothesis_ground_distanceCTI.txt", "a");*/
+
+	LoadSegmentGT();
+	FindBestGTHypothesis();
+	CreateSegmentGT();
+
+	SegmentGTInstance *pMSGT = modelsSegmentGTList.pFirst;
+	RECOG::PSGM_::MGT *pMGT = MGTList.pFirst;
+	RECOG::PSGM_::MGT *pMGT_;
+	int matchID, matchID_;
+	float maxEnvelopmentDistance;
+	float minCollisionDistance;
+
+	PSGM_::ModelInstance SCTI;
+	SCTI.modelInstance.Element = new PSGM_::ModelInstanceElement[convexTemplate.n];
+
+	RVLUNITMX3(SCTI.R);
+	RVLNULL3VECTOR(SCTI.t);
+
+	PSGM_::Cluster *pCluster;
+
+	if (iScene == 1)
+	{
+		fpDetermineThresh = fopen("C:\\RVL\\hypothesis_ground_distance.txt", "w");
+		fpDetermineThresh_ = fopen("C:\\RVL\\hypothesis_ground_distanceCTI.txt", "w");
+	}
+	else
+	{
+		fpDetermineThresh = fopen("C:\\RVL\\hypothesis_ground_distance.txt", "a");
+		fpDetermineThresh_ = fopen("C:\\RVL\\hypothesis_ground_distanceCTI.txt", "a");
+	}
+
+
+	// 1) Calculate distance from the ground plane for all GT hypotheses
+	printf("1) Calculate distance from the ground plane for all GT hypotheses\n");
+
+	double T[16];
+	int iMCTI;
+	float gndDistance;
+
+	pMGT = MGTList.pFirst;
+	while (pMGT)
+	{
+		matchID = FindMGTHypothesis(pMGT->iModel);
+
+		//pose after ICP		
+		//printf("%d\t%d\t%d\t%f\n", pMGT->iScene, pMGT->iModel, matchID, pCTImatchesArray.Element[matchID]->gndDistance);
+		fprintf(fpDetermineThresh, "%d\t%d\t%d\t%f\n", pMGT->iScene, pMGT->iModel, matchID, pCTImatchesArray.Element[matchID]->gndDistance);
+
+		//pose before ICP
+		float st[3] = { pCTImatchesArray.Element[matchID]->t[0] / 1000, pCTImatchesArray.Element[matchID]->t[1] / 1000, pCTImatchesArray.Element[matchID]->t[2] / 1000 };
+		RVLHTRANSFMX(pCTImatchesArray.Element[matchID]->R, st, T);
+		iMCTI = pCTImatchesArray.Element[matchID]->iMCTI;
+		gndDistance = groundPlaneDistance(MCTISet.pCTI.Element[iMCTI]->iModel, T);
+		//printf("%d\t%d\t%d\t%f\n", pMGT->iScene, pMGT->iModel, matchID, gndDistance);
+		fprintf(fpDetermineThresh_, "%d\t%d\t%d\t%f\n", pMGT->iScene, pMGT->iModel, matchID, gndDistance);
+
+		pMGT = pMGT->pNext;
+	}
+
+	fclose(fpDetermineThresh);
+	fclose(fpDetermineThresh_);
+
+	// 2) Calculate max "distance" from GT hypothesis to corresponding segment
+	printf("2) Calculate max 'distance' from GT hypothesis to corresponding segment\n");
+
+	if (iScene == 1)
+	{
+		fpDetermineThresh = fopen("C:\\RVL\\segment_envelopment.txt", "w");
+		fpDetermineThresh_ = fopen("C:\\RVL\\segment_envelopmentCTI.txt", "w");
+	}
+	else
+	{
+		fpDetermineThresh = fopen("C:\\RVL\\segment_envelopment.txt", "a");
+		fpDetermineThresh_ = fopen("C:\\RVL\\segment_envelopmentCTI.txt", "a");
+	}
+
+	while (pMSGT)
+	{
+		matchID = FindMGTHypothesis(pMSGT->iModel);
+
+		pCluster = clusters.Element[pMSGT->iSSegment];
+		FitModel(pCluster->iVertexArray, &SCTI, true);
+		
+		//pose after ICP		
+		maxEnvelopmentDistance = HypothesesToSegmentEnvelopment(matchID, pMSGT->iSSegment, &SCTI);
+		//printf("%d\t%d\t%d\t%f\n", pMSGT->iScene, pMSGT->iSSegment, matchID, maxEnvelopmentDistance);
+		fprintf(fpDetermineThresh, "%d\t%d\t%d\t%f\n", pMSGT->iScene, pMSGT->iSSegment, matchID, maxEnvelopmentDistance);
+
+		//pose before ICP
+		maxEnvelopmentDistance = HypothesesToSegmentEnvelopment(matchID, pMSGT->iSSegment, &SCTI, false);
+		//printf("%d\t%d\t%d\t%f\n", pMSGT->iScene, pMSGT->iSSegment, matchID, maxEnvelopmentDistance);
+		fprintf(fpDetermineThresh_, "%d\t%d\t%d\t%f\n", pMSGT->iScene, pMSGT->iSSegment, matchID, maxEnvelopmentDistance);
+
+		pMSGT = pMSGT->pNext;
+	}
+
+	fclose(fpDetermineThresh);
+	fclose(fpDetermineThresh_);
+
+	// 3) Calculate min "distance" from other hypothesis on the scene (all except GT) to corresponding segment
+	printf("3) Calculate min 'distance' from other hypothesis on the scene (all except GT) to corresponding segment\n");
+
+	if (iScene == 1)
+	{
+		fpDetermineThresh = fopen("C:\\RVL\\segment_collision.txt", "w");
+		fpDetermineThresh_ = fopen("C:\\RVL\\segment_collisionCTI.txt", "w");
+	}
+	else
+	{
+		fpDetermineThresh = fopen("C:\\RVL\\segment_collision.txt", "a");
+		fpDetermineThresh_ = fopen("C:\\RVL\\segment_collisionCTI.txt", "a");
+	}
+
+	pMSGT = modelsSegmentGTList.pFirst;
+
+	while (pMSGT)
+	{
+		pCluster = clusters.Element[pMSGT->iSSegment];
+		FitModel(pCluster->iVertexArray, &SCTI, true);
+
+		//find other models on the scene
+		pMGT = MGTList.pFirst;
+		while (pMGT)
+		{
+			if (pMSGT->iModel != pMGT->iModel)
+			{
+				matchID = FindMGTHypothesis(pMGT->iModel);
+
+				//pose after ICP				
+				minCollisionDistance = HypothesesToSegmentCollision(matchID, pMSGT->iSSegment, &SCTI);
+				//printf("%d\t%d\t%d\t%f\n", pMSGT->iScene, pMSGT->iSSegment, pMGT->matchID, minCollisionDistance);
+				fprintf(fpDetermineThresh, "%d\t%d\t%d\t%f\n", pMSGT->iScene, pMSGT->iSSegment, pMGT->matchID, minCollisionDistance);
+
+				//pose before ICP
+				minCollisionDistance = HypothesesToSegmentCollision(matchID, pMSGT->iSSegment, &SCTI, false);
+				//printf("%d\t%d\t%d\t%f\n", pMSGT->iScene, pMSGT->iSSegment, pMGT->matchID, minCollisionDistance);
+				fprintf(fpDetermineThresh_, "%d\t%d\t%d\t%f\n", pMSGT->iScene, pMSGT->iSSegment, pMGT->matchID, minCollisionDistance);
+
+			}
+			pMGT = pMGT->pNext;
+		}
+		pMSGT = pMSGT->pNext;
+	}
+
+	fclose(fpDetermineThresh);
+	fclose(fpDetermineThresh_);
+
+	// 4) Calculate transparency for GT hypothesis
+	printf("4) Calculate transparency for GT hypothesis\n");
+
+	if (iScene == 1)
+	{
+		fpDetermineThresh = fopen("C:\\RVL\\hypothesis_transparency.txt", "w");
+		fpDetermineThresh_ = fopen("C:\\RVL\\hypothesis_transparencyCTI.txt", "w");
+	}
+	else
+	{
+		fpDetermineThresh = fopen("C:\\RVL\\hypothesis_transparency.txt", "a");
+		fpDetermineThresh_ = fopen("C:\\RVL\\hypothesis_transparencyCTI.txt", "a");
+	}
+
+	float transparencyRatio;
+	pMGT = MGTList.pFirst;
+	
+	while (pMGT)
+	{
+		matchID = FindMGTHypothesis(pMGT->iModel);
+		matchID = pMGT->matchID;
+		
+		//pose after ICP
+		//printf("%d\t%d\t%d\t%f\n", pMGT->iScene, pMGT->iModel, matchID, pCTImatchesArray.Element[matchID]->transparencyRatio);
+		fprintf(fpDetermineThresh, "%d\t%d\t%d\t%f\n", pMGT->iScene, pMGT->iModel, matchID, pCTImatchesArray.Element[matchID]->transparencyRatio);
+
+		//pose before ICP
+		vtkSmartPointer<vtkPolyData> object = GetPoseCorrectedVisibleModel(matchID, false);
+		transparencyRatio = GetObjectTransparencyRatio(object, (unsigned short *)depth.data, 10, 640, 480, 525, 525, 320, 240); //HARDCODED FOR ECCV DATASET CAMERA
+		//printf("%d\t%d\t%d\t%f\n", pMGT->iScene, pMGT->iModel, matchID, transparencyRatio);
+		fprintf(fpDetermineThresh_, "%d\t%d\t%d\t%f\n", pMGT->iScene, pMGT->iModel, matchID, transparencyRatio);
+		
+		pMGT = pMGT->pNext;
+	}
+
+	fclose(fpDetermineThresh);
+	fclose(fpDetermineThresh_);
+
+	// 5) Calculate collision between GT hypotheses on the scene
+	printf("5) Calculate collision between GT hypotheses on the scene\n");
+
+	if (iScene == 1)
+		fpDetermineThresh = fopen("C:\\RVL\\hypothesis_collision.txt", "w");
+	else
+		fpDetermineThresh = fopen("C:\\RVL\\hypothesis_collision.txt", "a");
+
+	float collisionValue;
+	int nFinished = 1;
+
+	pMGT = MGTList.pFirst;
+	while (pMGT)
+	{
+		pMGT_ = MGTList.pFirst;
+
+		//avoid calculating collisionValue in both directions
+		for (int i = 0; i < nFinished; i++)
+			pMGT_ = pMGT_->pNext;
+
+		while (pMGT_)
+		{
+			matchID = FindMGTHypothesis(pMGT->iModel);
+			matchID_ = FindMGTHypothesis(pMGT_->iModel);
+			CheckHypothesesCollision(matchID, matchID_, -1, &collisionValue);
+
+			//printf("%d\t%d\t%d\t%d\t%d\t%f\n", pMGT->iScene, pMGT->iModel, matchID, pMGT_->iModel, matchID_, collisionValue);
+			fprintf(fpDetermineThresh, "%d\t%d\t%d\t%d\t%d\t%f\n", pMGT->iScene, pMGT->iModel, matchID, pMGT_->iModel, matchID_, collisionValue);
+
+			pMGT_ = pMGT_->pNext;
+		}
+
+		nFinished++;
+		pMGT = pMGT->pNext;
+	}
+
+	fclose(fpDetermineThresh);
+}
+
+float PSGM::HypothesesToSegmentEnvelopment(int iHypothesis, int iSegment, RECOG::PSGM_::ModelInstance *pSCTI, bool ICPPose)
+{
+	//Hypothesis data
+	RECOG::PSGM_::MatchInstance* hypothesis = pCTImatchesArray.Element[iHypothesis];
+	VertexGraph * hypVG = MTGSet.vertexGraphs.at(MCTISet.pCTI.Element[hypothesis->iMCTI]->iModel);
+	TG* hypTG = MTGSet.TGs.at(MCTISet.pCTI.Element[hypothesis->iMCTI]->iModel);
+	TGNode* plane;
+	float* N;
+	//float* minSegDist = new float[hypTG->A.h];
+
+	float *RMS, *tMS;
+
+	if (ICPPose)
+	{
+		RMS = hypothesis->RICP;
+		tMS = hypothesis->tICP;
+	}
+	else
+	{
+		RMS = hypothesis->R;
+		tMS = hypothesis->t;
+	}
+
+	//Segment data
+	Array<SURFEL::Vertex *> *vertexArray = &this->pSurfels->vertexArray;
+	SURFEL::Vertex * rvlvertex;
+	//float* minModDist = new float[hypTG->A.h];
+	//RECOG::PSGM_::ModelInstance *pSCTI = CTISet.pCTI.Element[CTISet.SegmentCTIs.Element[iSegment].Element[0]];
+	RECOG::PSGM_::ModelInstanceElement *pSIE = pSCTI->modelInstance.Element;
+
+	//float RMSCTI[9];
+	//float tMSCTI[3];
+	float V3Tmp[3];
+
+	//RVLCOMPTRANSF3DWITHINV(pSCTI->R, pSCTI->t, RMS, tMS, RMSCTI, tMSCTI, V3Tmp);
+
+	//Transformation vars?
+	float tPs[3];
+	float tPm[3];
+	float sPs[3];
+	float sPm[3];
+	float st[3] = { tMS[0] / 1000, tMS[1] / 1000, tMS[2] / 1000 };
+
+	//Calculate distances segment vertices to model convex hull
+	int totalPts = this->clusters.Element[iSegment]->iVertexArray.n;
+	float distance, maxDistance = -10000;
+	float segMinDist = 1000000;
+	//bool passedfirst = true;
+
+	for (int j = 0; j < hypTG->A.h; j++)
+	{
+		plane = hypTG->descriptor.Element[j].pFirst->ptr;
+		//minSegDist[j] = 1000000;
+		//For each point
+		for (int i = 0; i < totalPts; i++)
+		{
+			rvlvertex = vertexArray->Element[this->clusters.Element[iSegment]->iVertexArray.Element[i]];
+
+			////Transform vertex to hyp model space
+			sPs[0] = 1000 * rvlvertex->P[0];
+			sPs[1] = 1000 * rvlvertex->P[1];
+			sPs[2] = 1000 * rvlvertex->P[2];
+			RVLINVTRANSF3(sPs, RMS, tMS, tPs, V3Tmp);
+
+			N = &hypTG->A.Element[hypTG->A.w * plane->i];
+
+			//sDistances[i * hypTG->A.h + j] = RVLDOTPRODUCT3(N, tPs) - plane->d;
+			distance = (RVLDOTPRODUCT3(N, tPs) - plane->d);
+
+			if (distance > maxDistance)
+				maxDistance = distance;
+
+			//if (minSegDist[j] > distance)
+			//	minSegDist[j] = distance;
+
+			//NEW
+			//sDistances[i * hypTG->A.h + j] = RVLDOTPRODUCT3(N, tPs) - plane->d;
+			//distance = (RVLDOTPRODUCT3(N, tPs) - plane->d);
+
+			//if (minSegDist[j] > distance)
+			//	minSegDist[j] = distance;
+			//END NEW
+		}
+
+		//if (minSegDist[j] > maxDistance)
+		//	maxDistance = minSegDist[j];
+	}
+
+	//delete[] minSegDist;
+
+	return maxDistance;
+}
+
+float PSGM::HypothesesToSegmentCollision(int iHypothesis, int iSegment, RECOG::PSGM_::ModelInstance *pSCTI, bool ICPPose)
+{
+	int retVal = 0;
+
+	//Hypothesis data
+	RECOG::PSGM_::MatchInstance* hypothesis = pCTImatchesArray.Element[iHypothesis];
+	VertexGraph * hypVG = MTGSet.vertexGraphs.at(MCTISet.pCTI.Element[hypothesis->iMCTI]->iModel);
+	TG* hypTG = MTGSet.TGs.at(MCTISet.pCTI.Element[hypothesis->iMCTI]->iModel);
+	TGNode* plane;
+	float* N;
+	//float* minSegDist = new float[hypTG->A.h];
+	//float *RMS = hypothesis->RICP_;
+	//float *tMS = hypothesis->tICP_;
+
+	//changed on 30.08.2017. because MS transformation is saved to hypothesis->RICP and in hypothesis->RICP_ is saved relative ICP transformation
+	float *RMS, *tMS;
+
+	if (ICPPose)
+	{
+		RMS = hypothesis->RICP;
+		tMS = hypothesis->tICP;
+	}
+	else
+	{
+		RMS = hypothesis->R;
+		tMS = hypothesis->t;
+	}
+
+	//Segment data
+	Array<SURFEL::Vertex *> *vertexArray = &this->pSurfels->vertexArray;
+	SURFEL::Vertex * rvlvertex;
+	//float* minModDist = new float[hypTG->A.h];
+	//RECOG::PSGM_::ModelInstance *pSCTI = CTISet.pCTI.Element[CTISet.SegmentCTIs.Element[iSegment].Element[0]];
+	RECOG::PSGM_::ModelInstanceElement *pSIE = pSCTI->modelInstance.Element;
+
+	//float RMSCTI[9];
+	//float tMSCTI[3];
+	float V3Tmp[3];
+
+	//RVLCOMPTRANSF3DWITHINV(pSCTI->R, pSCTI->t, RMS, tMS, RMSCTI, tMSCTI, V3Tmp);
+
+	//Transformation vars?
+	float tPs[3];
+	float tPm[3];
+	float sPs[3];
+	float sPm[3];
+	float st[3] = { tMS[0] / 1000, tMS[1] / 1000, tMS[2] / 1000 };
+
+	//Calculate distances segment vertices to model convex hull
+	int totalPts = this->clusters.Element[iSegment]->iVertexArray.n;
+	float distance, maxDistance = -10000;
+	float planeMinDist;
+
+	//First loop
+	for (int j = 0; j < hypTG->A.h; j++)
+	{
+		plane = hypTG->descriptor.Element[j].pFirst->ptr;
+		planeMinDist = 1000000;
+
+		//For each point
+		for (int i = 0; i < totalPts; i++)
+		{
+			rvlvertex = vertexArray->Element[this->clusters.Element[iSegment]->iVertexArray.Element[i]];
+
+			////Transform vertex to hyp model space
+			sPs[0] = 1000 * rvlvertex->P[0];
+			sPs[1] = 1000 * rvlvertex->P[1];
+			sPs[2] = 1000 * rvlvertex->P[2];
+			RVLINVTRANSF3(sPs, RMS, tMS, tPs, V3Tmp);
+
+			N = &hypTG->A.Element[hypTG->A.w * plane->i];
+
+			//sDistances[i * hypTG->A.h + j] = RVLDOTPRODUCT3(N, tPs) - plane->d;
+			distance = (RVLDOTPRODUCT3(N, tPs) - plane->d);
+
+			if (distance < planeMinDist)
+				planeMinDist = distance;
+		}
+
+		if (planeMinDist > maxDistance)
+			maxDistance = planeMinDist;
+	}
+
+
+	//Second loop
+	totalPts = hypVG->NodeArray.n;
+	for (int j = 0; j < hypTG->A.h; j++)
+	{
+		plane = hypTG->descriptor.Element[j].pFirst->ptr;
+		planeMinDist = 1000000;
+
+		//For each point
+		for (int i = 0; i < totalPts; i++)
+		{
+			rvlvertex = &hypVG->NodeArray.Element[i];
+
+			////Transform vertex to segment space
+			sPm[0] = rvlvertex->P[0] / 1000;
+			sPm[1] = rvlvertex->P[1] / 1000;
+			sPm[2] = rvlvertex->P[2] / 1000;
+			RVLTRANSF3(sPm, RMS, st, tPm, V3Tmp);
+
+			N = &hypTG->A.Element[hypTG->A.w * plane->i];	//Same normal at same index as the model CTI?
+
+			//mDistances[i * hypTG->A.h + j] = RVLDOTPRODUCT3(N, tPm) - pMIE[0].d;
+			distance = RVLDOTPRODUCT3(N, tPm) - pSIE[j].d;
+			//if (minModDist[j] > distance)
+			//	minModDist[j] = distance;
+			distance *= 1000;
+
+			if (distance < planeMinDist)
+				planeMinDist = distance;
+		}
+
+		if (planeMinDist > maxDistance)
+			maxDistance = planeMinDist;
+	}
+
+		//find max?
+		//for (int i = 0; i < hypTG->A.h; i++)
+		//{
+		//	if ((minSegDist[i] > -d2) || (minModDist[i] > -d2 / 1000.0))
+		//		return 1;
+		//}
+	//}
+
+	return maxDistance;
+}
+
+int PSGM::FindMGTHypothesis(int iModel)
+{
+	RECOG::PSGM_::MGT *pMGT = MGTList.pFirst;
+
+	while (pMGT)
+	{
+		if (iModel == pMGT->iModel)
+			return pMGT->matchID;
+
+		pMGT = pMGT->pNext;
+	}
+}
+
+//same as Filko's GetSceneConsistancy() function, but parameter *scoreMatchMatrix is added to function parameter list
+std::map<int, std::vector<int>> PSGM::GetSceneConsistancy(Array<Array<SortIndex<float>>> *scoreMatchMatrix, float nDist, float d1, float d2, bool verbose)
+{
+	//CheckHypothesesToSegmentEnvelopmentAndCollision_DEBUG(scoreMatchMatrixICP.Element[0].Element[0].idx, 0, d1, d2);
+	envelopmentColisionHypotheses.clear();
+
+	std::map<int, std::vector<int>> constL;
+
+	//Get segment neighbourhood
+	std::vector<std::vector<int>> neighbourhood = GetSegmentBBNeighbourhood(nDist);
+
+	//For every segment's hypothesis check if they envelop its source segment and neighbouring segments??? No longer true???
+	PSGM_::ModelInstance SCTI;
+
+	SCTI.modelInstance.Element = new PSGM_::ModelInstanceElement[convexTemplate.n];
+
+	RVLUNITMX3(SCTI.R);
+	RVLNULL3VECTOR(SCTI.t);
+
+	int resLab = 0;
+	PSGM_::Cluster *pCluster;
+	for (int i = 0; i < scoreMatchMatrix->n; i++)	//Per segment
+	{
+		pCluster = clusters.Element[i];
+
+		FitModel(pCluster->iVertexArray, &SCTI, true);
+
+		for (int j = 0; j < RVLMIN(nBestMatches, scoreMatchMatrix->Element[i].n); j++)	//Per hypothesis
+		{
+			if (scoreMatchMatrix->Element[i].Element[j].idx >= 0) //If hypothesis is valid
+			{
+				//Check for source segment
+				resLab = CheckHypothesesToSegmentEnvelopmentAndCollision(scoreMatchMatrix->Element[i].Element[j].idx, i, d1, d2, &SCTI);
+				if (resLab == 2)
+				{
+					//It must be first entry for this hypothesis
+					//make new list
+					std::vector<int> l;
+					l.push_back(i);
+					constL.insert(std::make_pair(scoreMatchMatrix->Element[i].Element[j].idx, l));
+				}
+				else if (resLab == 0)
+				{
+					if (verbose)
+						std::cout << "Hypothesis " << scoreMatchMatrix->Element[i].Element[j].idx << " invalidated!" << std::endl;
+					envelopmentColisionHypotheses.push_back(scoreMatchMatrix->Element[i].Element[j].idx);
+					//scoreMatchMatrix->Element[i].Element[j].idx = -1;
+					continue;
+				}
+
+				//Check for neighbourhood segments
+				for (int k = 0; k < neighbourhood.at(i).size(); k++)
+				{
+					resLab = CheckHypothesesToSegmentEnvelopmentAndCollision(scoreMatchMatrix->Element[i].Element[j].idx, neighbourhood.at(i).at(k), d1, d2, &SCTI);
+					if (resLab == 2)
+					{
+						if (constL.count(scoreMatchMatrix->Element[i].Element[j].idx))
+							constL.at(scoreMatchMatrix->Element[i].Element[j].idx).push_back(neighbourhood.at(i).at(k)); //Add segment to hypothesis list
+						else
+						{
+							std::vector<int> l;
+							l.push_back(neighbourhood.at(i).at(k));
+							constL.insert(std::make_pair(scoreMatchMatrix->Element[i].Element[j].idx, l));
+						}
+					}
+					else if (resLab == 0)
+					{
+						if (verbose)
+							std::cout << "Hypothesis " << scoreMatchMatrix->Element[i].Element[j].idx << " invalidated!" << std::endl;
+						envelopmentColisionHypotheses.push_back(scoreMatchMatrix->Element[i].Element[j].idx);
+						//scoreMatchMatrix->Element[i].Element[j].idx = -1;
+						constL.erase(scoreMatchMatrix->Element[i].Element[j].idx);
+						break;
+					}
+				}
+			}
+		}
+	}
+
+	delete[] SCTI.modelInstance.Element;
+
+	if (verbose)
+	{
+		std::map<int, std::vector<int>>::iterator it;
+		for (it = constL.begin(); it != constL.end(); it++)
+		{
+			for (int i = 0; i < it->second.size(); i++)
+				std::cout << "Created pair hypothesis/segment: " << it->first << "/" << it->second.at(i) << std::endl;
+		}
+	}
+
+	return constL;
 }
 
 

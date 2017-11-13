@@ -863,6 +863,9 @@ int main(int argc, char ** argv)
 				recognition.FilterHypothesesUsingTransparency(0.15, 10, true);
 				recognition.CreateScoreMatchMatrixICP_TMP(); //because of sorting - TEST
 
+				//Get scene consistency
+				//recognition.GetSceneConsistancy(&recognition.scoreMatchMatrixICP, 0.1, 30, 20, true);
+
 				//Colision check
 				recognition.noCollisionHypotheses.clear();
 				recognition.GetHypothesesCollisionConsensus(&recognition.noCollisionHypotheses, &recognition.scoreMatchMatrixICP, 10);
@@ -876,6 +879,9 @@ int main(int argc, char ** argv)
 
 				//recognition.createVersionTestFile();
 				recognition.checkVersionTestFile();
+
+				//determine thresholds for SHAPE_INSTANCE_DETECTION
+				recognition.DetermineThresholds();
 #endif
 				
 //#ifdef RVLVERSION_170601

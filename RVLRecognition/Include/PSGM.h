@@ -504,10 +504,10 @@ namespace RVL
 			RECOG::PSGM_::ModelInstance *pBoundingBox,
 			float *size);
 		void GetHypothesesCollisionConsensus(std::vector<int> *noCollisionHypotheses, Array<Array<SortIndex<float>>> *scoreMatchMatrix, float thr);	//Filko
-		bool CheckHypothesesCollision(int firstHyp, int secondHyp, float thr); //Filko
+		bool CheckHypothesesCollision(int firstHyp, int secondHyp, float thr, float *collisionValue = NULL); //Filko //float *collisionValue added by Vidovic
 		float GetObjectTransparencyRatio(vtkSmartPointer<vtkPolyData> object, unsigned short *depthImg, float depthThr, int width, int height, float c_fu, float c_fv, float c_uc, float c_vc); //Filko
 		void FilterHypothesesUsingTransparency(float tranThr, float depthThr, bool verbose = false); //Filko
-		vtkSmartPointer<vtkPolyData> GetPoseCorrectedVisibleModel(int iMatch); //Filko
+		vtkSmartPointer<vtkPolyData> GetPoseCorrectedVisibleModel(int iMatch, bool ICPPose = true); //Filko
 		void GetTransparencyAndCollisionConsensus(Visualizer *pVisualizer = NULL); //Vidovic
 		void EvaluateConsensusMatches(float &precision, float &recall, bool verbose = false); //Vidovic
 		RECOG::PSGM_::MatchInstance* GetMatch(int matchID); //Vidovic
@@ -528,7 +528,8 @@ namespace RVL
 		void CreateDilatedDepthImage();
 		std::vector<std::vector<int>> GetSegmentBBNeighbourhood(float dist, bool verbose = false);	//Filko
 		std::map<int,std::vector<int>> GetSceneConsistancy(float nDist = 0.1, float d1 = 10.0, float d2 = 0.01, bool verbose = false);	//Filko
-		int CheckHypothesesToSegmentEnvelopmentAndCollision(int hyp, int segment, float d1, float d2); //Filko
+		std::map<int, std::vector<int>> GetSceneConsistancy(Array<Array<SortIndex<float>>> *scoreMatchMatrix, float nDist = 0.1, float d1 = 10.0, float d2 = 0.01, bool verbose = false);	//Vidovic - added scoreMatchMatrix to function parameters
+		int CheckHypothesesToSegmentEnvelopmentAndCollision(int hyp, int segment, float d1, float d2, RECOG::PSGM_::ModelInstance *pSCTI); //Filko
 		void CheckHypothesesToSegmentEnvelopmentAndCollision_DEBUG(int hyp, int segment, float d1, float d2); //Filko
 		bool CheckHypothesesToSegmentEnvelopment(int iHypothesis, int iSegment, float thresh); //Vidovic
 		void FindBestGTHypothesis(); //Vidovic
@@ -540,6 +541,10 @@ namespace RVL
 		void PrintSegmentGT(); //Vidovic
 		void SaveSegmentGT(); //Vidovic
 		bool LoadSegmentGT(); //Vidovic
+		void DetermineThresholds(); //Vidovic
+		float HypothesesToSegmentEnvelopment(int iHypothesis, int iSegment, RECOG::PSGM_::ModelInstance *pSCTI, bool ICPPose = true); //Vidovic
+		float HypothesesToSegmentCollision(int iHypothesis, int iSegment, RECOG::PSGM_::ModelInstance *pSCTI, bool ICPPose = true); //Vidovic
+		int FindMGTHypothesis(int iSegment); //Vidovic
 
 	private:
 		void Clusters();
@@ -664,6 +669,7 @@ namespace RVL
 		std::vector<int> transparentHypotheses; //Vidovic
 		std::vector<int> consensusHypotheses; //Vidovic
 		std::vector<int> noCollisionHypotheses; //Vidovic
+		std::vector<int> envelopmentColisionHypotheses; //Vidovic
 		bool createMatchGT; //Vidovic
 		int matchGTiS; //Vidovic
 		int matchGTiRank; //Vidovic
@@ -673,6 +679,8 @@ namespace RVL
 		bool createSegmentGT; //Vidovic
 		bool segmentGTLoaded; //Vidovic
 		Array<RVL::ModelColor> modelColors;
+		FILE *fpDetermineThresh, *fpDetermineThresh_;
+		//FILE *fpSegmentEnvelopment, *fpSegmentEnvelopmentCTI, *fpSegmentCollision, *fpSegmentCollisionCTI, *fpHypothesisCollision, *fpHypothesisTransparency, *fpHypothesisTransparencyCTI, *fpHypothesisGndDistance, *fpHypothesisGndDistanceCTI;
 
 				
 		//Petra & Ivan
