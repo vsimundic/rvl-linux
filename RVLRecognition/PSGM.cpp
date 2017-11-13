@@ -108,8 +108,13 @@ PSGM::PSGM()
 	sceneSegmentMatchesArray.Element = NULL;
 	sceneSegmentMatchesArray.n = 0;
 	bestSceneSegmentMatches.Element = NULL;
+	bestSceneSegmentMatches2.Element = NULL;
 	bestSceneSegmentMatchesArray.Element = NULL;
 	bestSceneSegmentMatchesArray.n = 0;
+	bestSceneSegmentMatchesArray2.Element = NULL;
+	bestSceneSegmentMatchesArray2.n = 0;
+	hullCTIDescriptorArray.Element = NULL;
+	hullCTIDescriptorArray.h = hullCTIDescriptorArray.w = 0;
 	CTIMatchMem = NULL;
 	clusterColor = NULL;
 
@@ -208,7 +213,10 @@ PSGM::~PSGM()
 	RVL_DELETE_ARRAY(sceneSegmentMatches.Element);
 	RVL_DELETE_ARRAY(sceneSegmentMatchesArray.Element);
 	RVL_DELETE_ARRAY(bestSceneSegmentMatches.Element);
+	RVL_DELETE_ARRAY(bestSceneSegmentMatches2.Element);
 	RVL_DELETE_ARRAY(bestSceneSegmentMatchesArray.Element);
+	RVL_DELETE_ARRAY(bestSceneSegmentMatchesArray2.Element);
+	RVL_DELETE_ARRAY(hullCTIDescriptorArray.Element);
 	RVL_DELETE_ARRAY(CTIMatchMem);
 	RVL_DELETE_ARRAY(clusterColor);
 
@@ -2472,6 +2480,39 @@ void PSGM::TemplateMatrix(Array2D<float> &A)
 	}
 }
 
+void PSGM::CreateHullCTIs()
+{
+	if (MTGSet.TGs.size() * convexTemplate.n > hullCTIDescriptorArray.w * hullCTIDescriptorArray.h)
+	{
+		RVL_DELETE_ARRAY(hullCTIDescriptorArray.Element);
+
+		hullCTIDescriptorArray.w = convexTemplate.n;
+		hullCTIDescriptorArray.h = MTGSet.TGs.size();
+
+		hullCTIDescriptorArray.Element = new float[hullCTIDescriptorArray.w * hullCTIDescriptorArray.h];
+	}
+
+	int iModel;
+	TG* hypTG;
+	int i;
+	float *d;
+	TGNode* plane;
+
+	for (iModel = 0; iModel < MTGSet.TGs.size(); iModel++)
+	{
+		hypTG = MTGSet.TGs.at(iModel);
+
+		d = hullCTIDescriptorArray.Element + hullCTIDescriptorArray.w * iModel;
+
+		for (i = 0; i < hypTG->descriptor.n; i++)
+		{
+			plane = hypTG->descriptor.Element[i].pFirst->ptr;
+
+			d[i] = plane->d;
+		}
+	}
+}
+
 void PSGM::FitModel(
 	Array<int> iVertexArray,
 	RECOG::PSGM_::ModelInstance *pModelInstance,
@@ -3604,6 +3645,8 @@ void PSGM::LoadModelDataBase()
 	MTGSet.Load(TGFileName);
 
 	delete[] TGFileName;
+
+	CreateHullCTIs();
 #endif
 }
 
@@ -5090,6 +5133,52 @@ void PSGM::Match()
 	////Transparency check
 
 	//FilterHypothesesUsingTransparency(0.5, 0.01, true);
+
+#ifdef RVLVERSION_171111
+	if (bGnd)
+	{
+		float *PGnd = new float[3 * pSurfels->vertexArray.n];
+
+		int iMatch;
+		RECOG::PSGM_::MatchInstance *pMatch;
+
+		for (iSCluster = 0; iSCluster < nClusters; iSCluster++)
+		{
+			pSCluster = clusters.Element[iSCluster];
+
+			pSurfels->ProjectVerticesOntoGroundPlane(pSCluster->iVertexArray, NGnd, dGnd, PGnd);
+
+			for (iMatch = 0; iMatch < bestSceneSegmentMatches.Element[iSCluster].n; iMatch++)
+			{
+				iMatch = bestSceneSegmentMatches.Element[iSCluster].Element[iMatch].idx;
+
+				if (iMatch != -1)
+				{
+					//Setting indices:
+					iMCTI = pCTImatchesArray.Element[iMatch]->iMCTI;
+					iSCTI = pCTImatchesArray.Element[iMatch]->iSCTI;
+
+					//Getting scene and model pointers:
+					pMModelInstance = MCTISet.pCTI.Element[iMCTI];
+					//pMIE = pMModelInstance->modelInstance.Element;
+					pSModelInstance = CTISet.pCTI.Element[iSCTI];
+					//pSIE = pSModelInstance->modelInstance.Element;
+
+					iModel = pMModelInstance->iModel;
+
+					//cout << "Match: " << j << " ModelID:" << iModel << "\n";
+
+					//Getting match pointer and calculating pose:
+					pMatch = pCTImatchesArray.Element[iMatch];
+
+					FitModel(pSCluster->iVertexArray, pSModelInstance, true, PGnd);
+				}
+			}
+		}
+
+		delete[] PGnd;
+	}
+#endif
 
 	printf("completed.\n");
 
@@ -12125,27 +12214,7 @@ int PSGM::CTIs(
 	{
 		PGnd = new float[3 * iVertexArray.n];
 
-		float s;
-		int i;
-		float *PGnd_;
-		int iVertex;
-		SURFEL::Vertex *pVertex;
-		float *P;
-
-		for (i = 0; i < iVertexArray.n; i++)
-		{
-			PGnd_ = PGnd + 3 * i;
-
-			iVertex = iVertexArray.Element[i];
-
-			pVertex = pSurfels->vertexArray.Element[iVertex];
-
-			P = pVertex->P;
-
-			s = dGnd / RVLDOTPRODUCT3(NGnd, P);
-
-			RVLSCALE3VECTOR(P, s, PGnd_);
-		}
+		pSurfels->ProjectVerticesOntoGroundPlane(iVertexArray, NGnd, dGnd, PGnd);
 	}
 
 	// Create CTI descriptors.

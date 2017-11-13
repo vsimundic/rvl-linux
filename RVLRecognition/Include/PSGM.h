@@ -422,6 +422,7 @@ namespace RVL
 			SURFEL::ObjectGraph *pObjects,
 			RECOG::CTISet *pCTISet,
 			CRVLMem *pMem);
+		void CreateHullCTIs();
 		void FitModel(
 			Array<int> iVertexArray,
 			RECOG::PSGM_::ModelInstance *pModelInstance,
@@ -657,7 +658,10 @@ namespace RVL
 		Array<Array<SortIndex<float>>> sceneSegmentMatches;
 		Array<SortIndex<float>> sceneSegmentMatchesArray;
 		Array<Array<SortIndex<float>>> bestSceneSegmentMatches;
+		Array<Array<SortIndex<float>>> bestSceneSegmentMatches2;
 		Array<SortIndex<float>> bestSceneSegmentMatchesArray;
+		Array<SortIndex<float>> bestSceneSegmentMatchesArray2;
+		Array2D<float> hullCTIDescriptorArray;
 		unsigned char *clusterColor;
 		//Array2D<Array<int>> matchMatrix;
 		//int *matchMatrixMem;
