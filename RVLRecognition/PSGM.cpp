@@ -5148,6 +5148,22 @@ void PSGM::Match()
 		int iMatch;
 		RECOG::PSGM_::MatchInstance *pMatch;
 
+		//Alocate memory for bestSceneSegmentMatches2
+		RVL_DELETE_ARRAY(bestSceneSegmentMatches2.Element);
+
+		bestSceneSegmentMatches2.Element = new Array<SortIndex<float>>[nClusters];
+
+		bestSceneSegmentMatches2.n = nClusters;
+
+		if (nBestMatchesTotal > bestSceneSegmentMatchesArray2.n)
+		{
+			RVL_DELETE_ARRAY(bestSceneSegmentMatchesArray2.Element);
+
+			bestSceneSegmentMatchesArray2.n = nBestMatchesTotal;
+
+			bestSceneSegmentMatchesArray2.Element = new SortIndex<float>[bestSceneSegmentMatchesArray2.n];
+		}
+
 		for (iSCluster = 0; iSCluster < nClusters; iSCluster++)
 		{
 			pSCluster = clusters.Element[iSCluster];
