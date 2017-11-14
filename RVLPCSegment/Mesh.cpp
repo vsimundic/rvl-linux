@@ -45,6 +45,21 @@ void Mesh::LoadPolyDataFromPLY(char *PLYFileName)
 //VIDOVIC
 void Mesh::SavePolyDataToPLY(char *PLYFileName)
 {
+	vtkSmartPointer<vtkPLYWriter> writer = vtkSmartPointer<vtkPLYWriter>::New();
+
+	writer->SetFileName(PLYFileName);
+
+#if VTK_MAJOR_VERSION <= 5
+	writer->SetInput(pPolygonData);
+#else
+	writer->SetInputData(pPolygonData);
+#endif
+
+	writer->Write();
+}
+
+void Mesh::SaveNoisedPolyDataToPLY(char *PLYFileName)
+{
 	char *sceneNoisedMeshFileName = new char[100];
 
 	vtkSmartPointer<vtkPLYWriter> writer = vtkSmartPointer<vtkPLYWriter>::New();
@@ -1070,6 +1085,51 @@ void Mesh::Boundary(
 //	return true;
 //}
 
+void RVL::MESH::BoundingBox(
+	vtkSmartPointer<vtkPolyData> pPolygonData,
+	Box<float> *pBox)
+{
+	int nPts = pPolygonData->GetNumberOfPoints();
+
+	if (nPts == 0)
+		return;
+
+	vtkSmartPointer<vtkFloatArray> pointData = pointData->SafeDownCast(pPolygonData->GetPoints()->GetData());
+
+	if (pointData == NULL)
+		return;
+
+	float P[3];
+
+	pointData->GetTupleValue(0, P);
+
+	pBox->minx = pBox->maxx = P[0];
+	pBox->miny = pBox->maxy = P[1];
+	pBox->minz = pBox->maxz = P[2];
+
+	int iPt;
+
+	for (iPt = 1; iPt < nPts; iPt++)
+	{
+		pointData->GetTupleValue(iPt, P);
+
+		if (P[0] < pBox->minx)
+			pBox->minx = P[0];
+		else if (P[0] > pBox->maxx)
+			pBox->maxx = P[0];
+
+		if (P[1] < pBox->miny)
+			pBox->miny = P[1];
+		else if (P[1] > pBox->maxy)
+			pBox->maxy = P[1];
+
+		if (P[2] < pBox->minz)
+			pBox->minz = P[2];
+		else if (P[2] > pBox->maxz)
+			pBox->maxz = P[2];
+	}
+}
+
 void Mesh::BoundingBox(Box<float> *pBox)
 {
 	if (NodeArray.n == 0)
@@ -1102,4 +1162,275 @@ void Mesh::BoundingBox(Box<float> *pBox)
 		else if (P[2] > pBox->maxz)
 			pBox->maxz = P[2];
 	}
+}
+
+void RVL::MESH::CreateVisibleSurfaceMesh(
+	vtkSmartPointer<vtkPolyData> pPolygonData,
+	float voxelSize,
+	int border,
+	Array3D<Voxel> &volume,
+	float *P0,
+	Box<float> &boundingBox,
+	Array<int> &zeroDistanceVoxelArray,
+	QLIST::Index *&PtMem)
+{
+	int nPts = pPolygonData->GetNumberOfPoints();
+
+	vtkSmartPointer<vtkFloatArray> pointData = pointData->SafeDownCast(pPolygonData->GetPoints()->GetData());
+	if (pointData == NULL)
+		return;
+
+	// volume <- empty 3D voxel array with voxel size specified by voxelSize.
+	// It is larger than the bounding box of pMesh for sampleVoxelDistance + 1 on each side.
+
+	MESH::BoundingBox(pPolygonData, &boundingBox);
+
+	int nx = (int)ceil(0.5f * (boundingBox.maxx - boundingBox.minx) / voxelSize) + border;
+	int ny = (int)ceil(0.5f * (boundingBox.maxy - boundingBox.miny) / voxelSize) + border;
+	int nz = (int)ceil(0.5f * (boundingBox.maxz - boundingBox.minz) / voxelSize) + border;
+
+	float a = voxelSize * (float)nx;
+	float b = voxelSize * (float)ny;
+	float c = voxelSize * (float)nz;
+
+	float center[3];
+
+	BoxCenter<float>(&boundingBox, center);
+
+	Box<float> box;
+
+	box.minx = center[0] - a;
+	box.miny = center[1] - b;
+	box.minz = center[2] - c;
+	box.maxx = center[0] + a;
+	box.maxy = center[1] + b;
+	box.maxz = center[2] + c;
+
+	float halfVoxelSize = 0.5f * voxelSize;
+
+	P0[0] = box.minx + halfVoxelSize;
+	P0[1] = box.miny + halfVoxelSize;
+	P0[2] = box.minz + halfVoxelSize;
+
+	volume.a = 2 * nx;
+	volume.b = 2 * ny;
+	volume.c = 2 * nz;
+
+	int nVoxels = volume.a * volume.b * volume.c;
+
+	volume.Element = new Voxel[nVoxels];
+
+	// Assign mesh points to volume voxels.
+	// Set voxelDistance field of all voxels to -1.
+
+	int i;
+	QList<QLIST::Index> *pPtList;
+	Voxel *pVoxel;
+
+	for (i = 0; i < nVoxels; i++)
+	{
+		pVoxel = volume.Element + i;
+
+		pPtList = &(pVoxel->PtList);
+
+		RVLQLIST_INIT(pPtList);
+
+		pVoxel->voxelDistance = -1;
+	}
+
+	PtMem = new QLIST::Index[nPts];
+
+	QLIST::Index *pPtIdx = PtMem;
+
+	float P[3];
+	int iPt;
+	int j, k;
+
+	for (iPt = 0; iPt < nPts; iPt++)
+	{
+		//P = pMesh->NodeArray.Element[iPt].P;
+		pointData->GetTupleValue(iPt, P);
+
+		i = (int)floor((P[0] - box.minx) / voxelSize);
+		j = (int)floor((P[1] - box.miny) / voxelSize);
+		k = (int)floor((P[2] - box.minz) / voxelSize);
+
+		pVoxel = RVL3DARRAY_ELEMENT(volume, i, j, k);
+
+		pPtList = &(pVoxel->PtList);
+
+		pPtIdx->Idx = iPt;
+
+		RVLQLIST_ADD_ENTRY(pPtList, pPtIdx);
+
+		pPtIdx++;
+	}
+
+	// Assign distance function value to all voxels outside pMesh.
+
+	int *RGBuff = new int[nVoxels];
+
+	int *pPut = RGBuff;
+	int *pFetch = RGBuff;
+
+	zeroDistanceVoxelArray.Element = new int[nVoxels];
+
+	zeroDistanceVoxelArray.n = 0;
+
+	*(pPut++) = 0;
+
+	int dijk[][3] = {
+		{ -1, 0, 0 },
+		{ 1, 0, 0 },
+		{ 0, -1, 0 },
+		{ 0, 1, 0 },
+		{ 0, 0, -1 },
+		{ 0, 0, 1 } };
+
+	int iVoxel, iVoxel_;
+	int i_, j_, k_, l;
+
+	while (pPut > pFetch)
+	{
+		iVoxel = (*pFetch++);
+
+		RVL3DARRAY_INDICES(volume, iVoxel, i, j, k);
+
+		for (l = 0; l < 6; l++)
+		{
+			i_ = i + dijk[l][0];
+			j_ = j + dijk[l][1];
+			k_ = k + dijk[l][2];
+
+			if (i_ >= 0 && i_ < volume.a && j_ >= 0 && j_ < volume.b && k_ >= 0 && k_ < volume.c)
+			{
+				iVoxel_ = RVL3DARRAY_INDEX(volume, i_, j_, k_);
+
+				pVoxel = volume.Element + iVoxel_;
+
+				if (pVoxel->voxelDistance >= 0)
+					continue;
+
+				if (pVoxel->PtList.pFirst)
+				{
+					pVoxel->voxelDistance = 0;
+
+					zeroDistanceVoxelArray.Element[zeroDistanceVoxelArray.n++] = iVoxel_;
+				}
+				else
+				{
+					pVoxel->voxelDistance = 1;
+
+					*(pPut++) = iVoxel_;
+				}
+			}
+		}
+	}
+
+	delete[] RGBuff;
+}
+
+vtkSmartPointer<vtkPolyData> RVL::MESH::CreateVisibleSurfaceMesh(
+	vtkSmartPointer<vtkPolyData> pPolygonDataSrc,
+	float voxelSize,
+	int nFilter,
+	float SDFIsoValue)
+{
+	Array3D<Voxel> volume;
+	float P0[3];
+	Box<float> boundingBox;
+	Array<int> zeroDistanceVoxelArray;
+	QLIST::Index *PtMem;
+
+	CreateVisibleSurfaceMesh(pPolygonDataSrc, voxelSize, 1, volume, P0, boundingBox, zeroDistanceVoxelArray, PtMem);
+
+	Array3D<float> filter;
+
+	filter.a = filter.b = filter.c = 3;
+
+	int nf = filter.a * filter.b * filter.c;
+
+	filter.Element = new float[nf];
+
+	float w = 1.0f / (float)nf;
+
+	int iFilter;
+
+	for (iFilter = 0; iFilter < nf; iFilter++)
+		filter.Element[iFilter] = w;
+
+	Array3D<float> SDF;
+
+	FilterSDF(volume, filter, nFilter, SDF);
+
+	delete[] PtMem;
+	delete[] zeroDistanceVoxelArray.Element;
+	delete[] filter.Element;
+
+	vtkSmartPointer<vtkPolyData> polyDataTgt = DisplayIsoSurface(SDF, P0, voxelSize, SDFIsoValue);
+
+	delete[] SDF.Element;
+
+	return polyDataTgt;
+}
+
+void RVL::FilterSDF(
+	Array3D<Voxel> volume,
+	Array3D<float> filter,
+	int n,
+	Array3D<float> &SDF)
+{
+	int nVoxels = volume.a * volume.b * volume.c;
+
+	float *SDFSrc = new float[nVoxels];
+
+	SDF.Element = new float[nVoxels];
+	SDF.a = volume.a;
+	SDF.b = volume.b;
+	SDF.c = volume.c;
+
+	int iVoxel;
+	Voxel *pVoxel;
+	float f;
+
+	for (iVoxel = 0; iVoxel < nVoxels; iVoxel++)
+	{
+		pVoxel = volume.Element + iVoxel;
+		f = (float)(pVoxel->voxelDistance);
+		SDFSrc[iVoxel] = f;
+		SDF.Element[iVoxel] = f;
+	}
+
+	int nf = (filter.a - 1) / 2;
+
+	int iend = volume.a - nf;
+	int jend = volume.b - nf;
+	int kend = volume.c - nf;
+
+	int i, j, k, i_, j_, k_, l;
+	int iFilter;
+
+	for (l = 0; l < n; l++)
+	{
+		for (i = nf; i < iend; i++)
+			for (j = nf; j < jend; j++)
+				for (k = nf; k < kend; k++)
+				{
+					f = 0.0f;
+
+					iFilter = 0;
+
+					for (i_ = -nf; i_ <= nf; i_++)
+						for (j_ = -nf; j_ <= nf; j_++)
+							for (k_ = -nf; k_ <= nf; k_++, iFilter++)
+								f += filter.Element[iFilter] * SDFSrc[RVL3DARRAY_INDEX(volume, i + i_, j + j_, k + k_)];
+
+					SDF.Element[RVL3DARRAY_INDEX(volume, i, j, k)] = f;
+				}
+
+		if (l < n - 1)
+			memcpy(SDFSrc, SDF.Element, nVoxels * sizeof(float));
+	}
+
+	delete[] SDFSrc;
 }

@@ -1,6 +1,7 @@
 //#include "stdafx.h"
 #include "RVLVTK.h"
 #include <vtkLine.h>
+#include <vtkAxesActor.h>
 #include "RVLCore2.h"
 #include "Util.h"
 #include "Graph.h"
@@ -80,6 +81,19 @@ void Visualizer::Create()
 		//text->SetText(0, "Text...");
 		text->GetTextProperty()->SetColor(1, 1, 0);
 		renderer->AddViewProp(text);
+
+		//Coordinate system
+
+		vtkSmartPointer<vtkAxesActor> axes =
+			vtkSmartPointer<vtkAxesActor>::New();
+
+		widget = vtkSmartPointer<vtkOrientationMarkerWidget>::New();
+		widget->SetOutlineColor(0.9300, 0.5700, 0.1300);
+		widget->SetOrientationMarker(axes);
+		widget->SetInteractor(interactor);
+		widget->SetViewport(0.0, 0.0, 0.4, 0.4);
+		widget->SetEnabled(1);
+		widget->InteractiveOn();
 
 		////Keypress callback
 		//keypressCallback = vtkSmartPointer<vtkCallbackCommand>::New();

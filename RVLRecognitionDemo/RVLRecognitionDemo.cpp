@@ -10,6 +10,7 @@ VTK_MODULE_INIT(vtkRenderingOpenGL2);
 VTK_MODULE_INIT(vtkInteractionStyle);
 VTK_MODULE_INIT(vtkRenderingFreeType);
 #include "RVLVTK.h"
+#include <vtkTriangle.h>		// Remove after completion of MarchingCubes.
 #include "RVLCore2.h"
 #include "Util.h"
 #include "Space3DGrid.h"
@@ -35,6 +36,10 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 #include "PCLTools.h"
 #include "RGBDCamera.h"
 #include "PCLMeshBuilder.h"
+#include "MarchingCubes.h"
+#include "VN.h"
+#include "VNClassifier.h"
+
 
 
 // VIDOVIC
@@ -50,16 +55,18 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 //#define RVLRECOGNITION_DEMO_CLASS_ALIGNMENT
 #define RVLPSGM_TRANSPARENCY_AND_COLLISION
 //#define RVLPSGM_RMSE_CALCULATION
-//#define RVLRECOGNITION_DEMO_CLASS_ALIGNMENT
+#ifndef RVLVERSION_170601
+#define RVLRECOGNITION_DEMO_CLASS_ALIGNMENT
+#endif
 
-#define RVLRECOGNITION_DEMO_FLAG_SAVE_PLY			0x00000001
-#define RVLRECOGNITION_DEMO_FLAG_3D_VISUALIZATION	0x00000002
+#define RVLRECOGNITION_DEMO_FLAG_SAVE_PLY				0x00000001
+#define RVLRECOGNITION_DEMO_FLAG_3D_VISUALIZATION		0x00000002
+#define RVLRECOGNITION_DEMO_FLAG_VISUALIZE_VN_MODEL		0x00000004
+#define RVLRECOGNITION_DEMO_FLAG_VISUALIZE_VN_INSTANCE	0x00000008
+
 //END VIDOVIC
 
 using namespace RVL;
-
-#define RVLRECOGNITION_METHOD_RF		0
-#define RVLRECOGNITION_METHOD_PSGM		1
 
 void CreateParamList(
 	CRVLParameterList *pParamList,
@@ -71,8 +78,12 @@ void CreateParamList(
 	char **pGTFolder,	//VIDOVIC
 	char **pSegmentGTFileName,	//Vidovic
 	char **pResultsFolder,
+	char **pInstanceFileName,
 	DWORD &method,
-	DWORD &flags
+	DWORD &flags,
+	int &iClass,
+	float &SDFSurfaceValue,
+	bool &bCreateVisibleSurfaceMesh
 	)
 {
 	pParamList->m_pMem = pMem;
@@ -88,13 +99,22 @@ void CreateParamList(
 	pParamData = pParamList->AddParam("GTFolder", RVLPARAM_TYPE_STRING, pGTFolder);	//VIDOVIC
 	pParamData = pParamList->AddParam("ResultsFolder", RVLPARAM_TYPE_STRING, pResultsFolder);
 	pParamData = pParamList->AddParam("SegmentGTFileName", RVLPARAM_TYPE_STRING, pSegmentGTFileName);	//Vidovic
+	pParamData = pParamList->AddParam("VN.instanceFileName", RVLPARAM_TYPE_STRING, pInstanceFileName);
 	pParamData = pParamList->AddParam("Recognition.method", RVLPARAM_TYPE_ID, &method);
 	pParamList->AddID(pParamData, "PSGM", RVLRECOGNITION_METHOD_PSGM);
 	pParamList->AddID(pParamData, "RF", RVLRECOGNITION_METHOD_RF); //VIDOVIC
-	pParamData = pParamList->AddParam("Save PLY", RVLPARAM_TYPE_ID, &flags); //VIDOVIC
+	pParamList->AddID(pParamData, "VN", RVLRECOGNITION_METHOD_VN);
+	pParamData = pParamList->AddParam("Save PLY", RVLPARAM_TYPE_FLAG, &flags); //VIDOVIC
 	pParamList->AddID(pParamData, "yes", RVLRECOGNITION_DEMO_FLAG_SAVE_PLY); //VIDOVIC
-	pParamData = pParamList->AddParam("3D Visualization", RVLPARAM_TYPE_ID, &flags);
+	pParamData = pParamList->AddParam("3D Visualization", RVLPARAM_TYPE_FLAG, &flags);
 	pParamList->AddID(pParamData, "yes", RVLRECOGNITION_DEMO_FLAG_3D_VISUALIZATION);
+	pParamData = pParamList->AddParam("VN.visualizeModel", RVLPARAM_TYPE_FLAG, &flags);
+	pParamList->AddID(pParamData, "yes", RVLRECOGNITION_DEMO_FLAG_VISUALIZE_VN_MODEL);
+	pParamData = pParamList->AddParam("VN.visualizeInstance", RVLPARAM_TYPE_FLAG, &flags);
+	pParamList->AddID(pParamData, "yes", RVLRECOGNITION_DEMO_FLAG_VISUALIZE_VN_INSTANCE);
+	pParamData = pParamList->AddParam("VN.class", RVLPARAM_TYPE_INT, &iClass);
+	pParamData = pParamList->AddParam("VN.visualization.SDFSurfaceValue", RVLPARAM_TYPE_FLOAT, &SDFSurfaceValue);
+	pParamData = pParamList->AddParam("Create visible surface mesh", RVLPARAM_TYPE_BOOL, &bCreateVisibleSurfaceMesh);
 }
 
 void GenerateSegmentNeighbourhood(PSGM * psgm, double radius)
@@ -269,8 +289,12 @@ int main(int argc, char ** argv)
 	char *GTFolder = NULL; //VIDOVIC
 	char *ResultsFolder = NULL;
 	char *segmentGTFileName = NULL; //Vidovic
+	char *instanceFileName = NULL;
 	DWORD method = RVLRECOGNITION_METHOD_PSGM;
 	//DWORD method = RVLRECOGNITION_METHOD_RF; //VIDOVIC
+	int iClass;
+	float SDFSurfaceValue = 0.0f;
+	bool bCreateVisibleSurfaceMesh;
 
 	DWORD flags = 0x00000000; //VIDOVIC
 
@@ -285,8 +309,12 @@ int main(int argc, char ** argv)
 		&GTFolder,
 		&segmentGTFileName,
 		&ResultsFolder,
+		&instanceFileName,
 		method,
-		flags);	 //VIDOVIC
+		flags,
+		iClass,
+		SDFSurfaceValue,
+		bCreateVisibleSurfaceMesh);	 //VIDOVIC
 
 	ParamList.LoadParams(cfgFileName);
 
@@ -304,6 +332,9 @@ int main(int argc, char ** argv)
 	pcl::PointCloud<pcl::PointXYZRGBA>::Ptr PC(new pcl::PointCloud<pcl::PointXYZRGBA>(w, h));
 
 	meshBuilder.PC = PC;
+
+	if (bCreateVisibleSurfaceMesh)
+		meshBuilder.flags |= RVLPCLMESHBUILDER_FLAG_VISIBLE_SURFACE;
 
 	if (flags & RVLRECOGNITION_DEMO_FLAG_SAVE_PLY)
 	{
@@ -512,19 +543,22 @@ int main(int argc, char ** argv)
 
 			recognition.LoadModelDataBase(); //Vidovic
 			
-#ifdef RVLRECOGNITION_DEMO_CLASS_ALIGNMENT
-			//Alignment:
-			recognition.LoadModelMeshDB(modelSequenceFileName, false, 0.4);
-			recognition.ObjectAlignment();
-#endif
+//#ifdef RVLRECOGNITION_DEMO_CLASS_ALIGNMENT
+//			//Alignment:
+//			recognition.LoadModelMeshDB(modelSequenceFileName, false, 0.4);
+//			recognition.ObjectAlignment();
+//#endif
 
 #ifdef RVLRECOGNITION_DEMO_CLASS_ALIGNMENT
 			//Alignment:
-			recognition.LoadModelMeshDB(modelSequenceFileName, false, 0.4); //Vidovic merge 20.07.2017 - potrebno izmijeniti poziv funkcije //recognition.LoadModelMeshDB(modelSequenceFileName, &recognition.vtkModelDB, false, 0.4);
-			recognition.ObjectAlignment();
+			//recognition.LoadModelMeshDB(modelSequenceFileName, false, 0.4); //Vidovic merge 20.07.2017 - potrebno izmijeniti poziv funkcije
+			recognition.LoadModelMeshDB(modelSequenceFileName, &recognition.vtkModelDB, false, 0.4);
+			//recognition.ObjectAlignment();
+			//recognition.Classify();
 #endif
 
 #ifdef RVLPSGM_ICP
+			if (recognition.problem == RVLRECOGNITION_PROBLEM_SHAPE_INSTANCE_DETECTION)
 			recognition.LoadModelMeshDB(modelSequenceFileName, &recognition.vtkModelDB, true, 0.4);
 #endif
 
@@ -577,7 +611,6 @@ int main(int argc, char ** argv)
 				QueryPerformanceCounter((LARGE_INTEGER *)&ctr1);
 
 				printf("Scene %s...\n", filePath);
-
 
 				recognition.SetSceneFileName(filePath);
 				//recognition.InterpretCTIS(&mesh);
@@ -794,7 +827,7 @@ int main(int argc, char ** argv)
 
 					recognition.pObjects->ObjectMapMask(&objectMask);
 
-					cv::imshow("Object mask", objectMask);
+					//cv::imshow("Object mask", objectMask);
 
 					cv::imwrite(objectMapFileName, objectMask);
 
@@ -1022,6 +1055,144 @@ int main(int argc, char ** argv)
 			visualizer.Run();
 		}
 	}	// if (method == RVLRECOGNITION_METHOD_PSGM)
+	else if (method == RVLRECOGNITION_METHOD_VN)
+	{
+		// Parameters
+
+		//float voxelSize = 5.0f;
+		//int sampleVoxelDistance = 1;
+		//float eps = 2.0f;
+		//float resolution = 1.0f;
+		//float voxelSize = 0.02f;
+		//int sampleVoxelDistance = 1;
+		//float eps = 0.01f;
+		float resolution = 0.01f;
+
+		Mesh mesh;
+
+		VNClassifier classifier;
+
+		classifier.pMem0 = &mem0;
+		classifier.pMem = &mem;
+		classifier.vpMeshBuilder = &meshBuilder;
+		classifier.LoadMesh = LoadMesh;
+		classifier.pSurfels = &surfels;
+		classifier.pSurfelDetector = &surfelDetector;
+
+		classifier.visualizationData.resolution = resolution;
+		classifier.visualizationData.SDFSurfaceValue = SDFSurfaceValue;
+
+		if (flags & (RVLRECOGNITION_DEMO_FLAG_VISUALIZE_VN_MODEL | RVLRECOGNITION_DEMO_FLAG_VISUALIZE_VN_INSTANCE))
+			classifier.bLoadCTIDataBase = false;
+
+		classifier.Create(cfgFileName);
+
+		RECOG::VN_::_3DNetDatabaseClasses(&classifier);
+
+		// Model visualization.
+
+		if (flags & RVLRECOGNITION_DEMO_FLAG_VISUALIZE_VN_MODEL)
+		{
+			int iMetaModel = classifier.classArray.Element[iClass].iMetaModel;
+
+			VN *pModel = classifier.models[iMetaModel];
+
+			Box<float> box;
+
+			box = pModel->boundingBox;
+
+			ExpandBox<float>(&box, 2.0f * resolution);
+
+			pModel->Display(&visualizer, box, resolution, NULL, NULL, SDFSurfaceValue);
+
+			visualizer.Run();
+		}
+		else if (flags & RVLRECOGNITION_DEMO_FLAG_VISUALIZE_VN_INSTANCE)
+		{
+			FILE *fp = fopen(instanceFileName, "r");
+
+			int iModel;
+			int iMetaModel;
+			float *d;
+			bool *bd;
+
+			classifier.LoadDescriptor(fp, d, bd, iModel, iMetaModel);
+
+			fclose(fp);
+
+			VN *pModel = classifier.models[iMetaModel];
+
+			Box<float> box;
+
+			pModel->BoundingBox(d, box);
+
+			float resolution = 0.01f * BoxSize(&box);
+
+			ExpandBox<float>(&box, 10.0f * resolution);
+
+			visualizer.renderer->RemoveAllViewProps();
+
+			pModel->Display(&visualizer, box, resolution, d, bd, classifier.visualizationData.SDFSurfaceValue);
+
+			visualizer.Run();
+		}
+		else if (classifier.mode == RVLRECOGNITION_MODE_TRAINING)
+			classifier.Learn(modelSequenceFileName, iClass, &visualizer); //Vidovic
+		else if (classifier.mode == RVLRECOGNITION_MODE_RECOGNITION)
+		{
+			FileSequenceLoader dbLoader;
+
+			dbLoader.Init(classifier.modelsInDataBase);
+
+			char refModelFileName[200];
+
+			dbLoader.GetFilePath(classifier.classArray.Element[iClass].iRefInstance, refModelFileName);
+
+			int iMetaModel = classifier.classArray.Element[iClass].iMetaModel;
+
+			VN *pModel = classifier.models[iMetaModel];
+
+			RVL_DELETE_ARRAY(classifier.refModel.d);
+			RVL_DELETE_ARRAY(classifier.refModel.bd);
+
+			int iModel_, iMetaModel_;
+
+			char *refModelDescriptorFileName = RVLCreateFileName(refModelFileName, ".ply", -1, ".vnd");
+
+			FILE *fpVNDescriptor = fopen(refModelDescriptorFileName, "r");
+
+			delete[] refModelDescriptorFileName;
+
+			classifier.LoadDescriptor(fpVNDescriptor, classifier.refModel.d, classifier.refModel.bd, iModel_, iMetaModel_);
+
+			fclose(fpVNDescriptor);
+
+			FileSequenceLoader sceneSequence;
+
+			sceneSequence.Init(sceneSequenceFileName);
+
+			char filePath[200];
+
+			while (sceneSequence.GetNextPath(filePath))
+			{
+				printf("Scene: %s:\n", filePath);
+
+				classifier.alignment.SetSceneFileName(filePath);
+
+				// Load mesh.
+
+				LoadMesh(&meshBuilder, filePath, &mesh, false);
+
+				// Reset memory.
+
+				mem.Clear();
+
+				// Classification.
+
+				classifier.Interpret(&mesh, iClass);
+			}
+		}
+	}	// if (method == RVLRECOGNITION_METHOD_VN)
 
 	// free memory
 
@@ -1035,7 +1206,6 @@ int main(int argc, char ** argv)
 	if (modelSequenceFileName)
 		delete[] modelSequenceFileName;
 
-	
 	//if (segmentGTFileName)
 	//	delete[] segmentGTFileName;
 

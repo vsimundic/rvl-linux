@@ -60,6 +60,13 @@ namespace RVL
 			float e;
 		};
 		
+		struct TangentVertexCorrespondence
+		{
+			int iTangent;
+			int iVertex;
+			float e;
+		};
+		
 		struct TGConnectNodesRGData
 		{
 			BYTE *mFlags;
@@ -80,6 +87,23 @@ namespace RVL
 			SURFEL::VertexEdge *pEdge,
 			VertexGraph *pVertexGraph,
 			TGConnectNodesRGData *pData);
+		void RotateTemplate(
+			Array2D<float> A,
+			float *R,
+			float *A_);
+		void TangentAlignment(
+			SurfelGraph *pSurfels,
+			Array<int> iVertexArray,
+			float scale,
+			Array2D<float> A,
+			float *descriptor,
+			float *RIn,
+			float *tIn,
+			float eThr,
+			float &score,
+			Array<TangentVertexCorrespondence> &correspondences,
+			float *R,
+			float *t);
 
 #ifdef NEVER
 		float ConnectNodesRG(
@@ -125,16 +149,6 @@ namespace RVL
 				float *ROut,
 				float *tOut
 				);
-			void TransformVertices(
-				SurfelGraph *pSurfels,
-				Array<int> iVertexArray,
-				float scale,
-				float *R,
-				float *t, 
-				float *PArray);
-			void RotateTemplate(
-				float *R,
-				float *A_);
 			void Save(
 				FILE *fp,
 				bool bSaveA = false);

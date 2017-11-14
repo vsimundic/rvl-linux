@@ -141,6 +141,8 @@
     <ClInclude Include="Include\RVLRecognition.h" />
     <ClInclude Include="Include\TG.h" />
     <ClInclude Include="Include\TGSet.h" />
+    <ClInclude Include="Include\VN.h" />
+    <ClInclude Include="Include\VNClassifier.h" />
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="targetver.h" />
   </ItemGroup>
@@ -159,6 +161,8 @@
     <ClCompile Include="TGSet.cpp" />
     <ClCompile Include="TSM.cpp" />
     <ClCompile Include="TSMSet.cpp" />
+    <ClCompile Include="VN.cpp" />
+    <ClCompile Include="VNClassifier.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

@@ -10,11 +10,23 @@ namespace RVL
 
 	namespace OBJECT_DETECTION
 	{
+		struct TrainingHMIData
+		{
+			ObjectDetector *pObjectDetector;
+			cv::Mat RGB;
+			char *imageName;
+			GRAPH::HierarchyNode *pObject;
+			GRAPH::HierarchyNode *pObject2;
+			int iPix;
+		};
+
 		void Symmetry(
 			SURFEL::ObjectGraph *pObjects, 
 			int iObject1, 
 			int iObject2, 
 			void *vpData);
+
+		void TrainingHMIMouseCallback(int event, int x, int y, int flags, void* vpData);
 	}
 
 	class ObjectDetector
@@ -24,7 +36,10 @@ namespace RVL
 		virtual ~ObjectDetector();
 		void Init(PSGM *pPSGM_ = NULL);
 		void CreateParamList();
-		void DetectObjects(char *MeshFilePathName);
+		void DetectObjects(
+			char *MeshFilePathName,
+			Array2D<short int> *pDepthImage = NULL,
+			IplImage *pRGBImage = NULL);
 		void Evaluate(
 			FILE *fp,
 			char *fileName,
@@ -36,6 +51,12 @@ namespace RVL
 		static bool CheckIfWithinCTIBoundingBox(void * odObj, int iObject1, int iObject2, float dimThr = 0.30);	//Filko
 		void GroundTruthGroundPlane();
 		void SaveBoundingBoxSizes(char *imageFileName);
+		void TrainingHMI(char *meshFileName);
+		void DisplaySelectedObject(
+			GRAPH::HierarchyNode *pObject,
+			uchar *color,
+			cv::Mat RGB);
+		GRAPH::HierarchyNode * GetObject(int iPix);
 		
 	public:
 		DWORD flags;
@@ -46,6 +67,7 @@ namespace RVL
 		float convexityThr;
 		float convexityRatioThr1;
 		float convexityRatioThr2;
+		float connectedComponentMaxDist;
 		int nMultilateralFilterIterations;
 		int joinSmallObjectsToLargestNeighborSizeThr;
 		float joinSmallObjectsToLargestNeighborDistThr;
@@ -60,6 +82,8 @@ namespace RVL
 		bool bGroundTruthBoundingBoxes;
 		bool bOwnsSurfelDetectionTool;
 		bool bOwnsPSGM;
+		bool bTrainingHMI;
+		bool bDisplay;
 		SurfelGraph *pSurfels;
 		PlanarSurfelDetector *pSurfelDetector;
 		SURFEL::ObjectGraph *pObjects;
@@ -67,10 +91,16 @@ namespace RVL
 		Mesh mesh;
 		char *cfgFileName;
 		void *vpMeshBuilder;
-		bool (*LoadMesh)(void *vpMeshBuilder,
+		bool (*LoadMesh)(
+			void *vpMeshBuilder,
 			char *FileName,
 			Mesh *pMesh,
 			bool bSavePLY);
+		void(*CreateMesh)(
+			void *vpMeshBuilder,
+			Array2D<short int> *pDepthImage,
+			IplImage *pRGBImage,
+			Mesh *pMesh);
 		RECOG::CTISet CTIs;
 		RECOG::CTISet boundingBoxes;
 	};

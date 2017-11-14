@@ -40,6 +40,7 @@ namespace RVL
 				Array<int> iSurfelArray;
 				Array<int> iVertexArray;
 				int size;
+				int orig;
 				int boundaryDiscontinuityPerc;
 				float N[3];
 				float normalDistributionStd1;
@@ -120,6 +121,9 @@ namespace RVL
 				float RICP[9];		//final pose after ICP - Vidovic
 				float tICP[3];		//final pose after ICP - Vidovic
 				double cost_NN;
+				int iClass;
+				float s;		//scale for classification
+				float t_class[3];
 				// end Petra
 				bool bValid; //Vidovic
 				MatchInstance *pNext;
@@ -188,7 +192,14 @@ namespace RVL
 				int iSelectedSurfel,
 				void *vpData);
 		}	// namespace PSGM_
-		}
+
+		bool ModelExistInDB(
+			char *modelFileName,
+			FileSequenceLoader dbLoader); //Vidovic
+		void SaveModelID(
+			FileSequenceLoader dbLoader,
+			char *modelsInDataBase); //Vidovic
+	}	// namespace RECOG
 	//class CTISet
 	//{
 	//public:
@@ -320,9 +331,31 @@ namespace RVL
 
 		float NNCost(int iCluster, vtkSmartPointer<vtkPolyData> sourcePD, vtkSmartPointer<vtkPolyData> targetPD, int similarityMeasure = 0); // Calculates cost based on sum of distances between scene segment points and their nearest neighbours in visible part of the matched model.
 		
+		void ObjectAlignment(
+			Array<int> iSCTIArray,
+			RECOG::PSGM_::ModelInstance **SCTIArray,
+			Array<int> iMCTIArray,
+			RECOG::PSGM_::ModelInstance **MCTIArray,
+			Eigen::MatrixXf A,
+			float *R,
+			float *t,
+			bool bTSM = false);
+		
 		void ObjectAlignment(); // Calculates transformation matrix to align object with a reference object (for classification)
 
-		void VisualizeAlignedModels(int iRefModel, int iModel);
+		void VisualizeAlignedModels(int iRefModel, int iModel); // Visualizes models after alignment - for easier debugging
+
+		void Classify(
+			Mesh *pMesh,
+			int iModelFirst,
+			int iModelLast,
+			int &iModel,
+			float *R,
+			float *t,
+			bool bTSM = false); // For a given object on the scene, returns its object class
+
+		void VisualizeObjectClass(int iModel, Mesh *pMesh);  // Visualizes object on the scene and its class (most simmilar model from database)
+			
 		//end Petra
 
 		float groundPlaneDistance(int iModel, double *MSTransform); //Vidovic
@@ -348,15 +381,12 @@ namespace RVL
 		void PaintCluster(
 			int iCluster,
 			unsigned char *color);
+		void ResetClusterColor(int iCluster);
 		void PaintClusterVertices(
 			int iCluster,
 			unsigned char *color);
 		void DisplayReferenceFrames();
 		void SetSceneFileName(char *sceneFileName_);
-		bool ModelExistInDB(
-			char *modelFileName,
-			FileSequenceLoader dbLoader); //Vidovic
-		void SaveModelID(FileSequenceLoader dbLoader); //Vidovic
 		void Learn(
 			char *modelSequenceFileName,
 			Visualizer *visualizer = NULL); //Vidovic
@@ -382,6 +412,7 @@ namespace RVL
 			QList<QLIST::Index> surfelList,
 			RECOG::CTISet *pCTISet,
 			CRVLMem *pMem_);
+		void Clusters();
 		int CTIs(
 			QList<QLIST::Index> surfelList,
 			Array<int> iVertexArray,
@@ -394,10 +425,12 @@ namespace RVL
 			SURFEL::ObjectGraph *pObjects,
 			RECOG::CTISet *pCTISet,
 			CRVLMem *pMem);
+		void CreateHullCTIs();
 		void FitModel(
 			Array<int> iVertexArray,
 			RECOG::PSGM_::ModelInstance *pModelInstance,
-			bool bMemAllocated = false);
+			bool bMemAllocated = false,
+			float *PGnd = NULL);
 		float Symmetry(
 			SURFEL::ObjectGraph *pObjects,
 			int iObject1,
@@ -545,9 +578,11 @@ namespace RVL
 		float HypothesesToSegmentEnvelopment(int iHypothesis, int iSegment, RECOG::PSGM_::ModelInstance *pSCTI, bool ICPPose = true); //Vidovic
 		float HypothesesToSegmentCollision(int iHypothesis, int iSegment, RECOG::PSGM_::ModelInstance *pSCTI, bool ICPPose = true); //Vidovic
 		int FindMGTHypothesis(int iSegment); //Vidovic
+		void SaveModelInstances(
+			FILE *fp,
+			int iModel = -1);
 
 	private:
-		void Clusters();
 		void WholeMeshCluster();
 		void CreateTemplate66();
 		void CreateTemplateBox();
@@ -581,9 +616,6 @@ namespace RVL
 			//int iCluster, //Vidovic
 			float *R = NULL,
 			float *t = NULL);
-		void SaveModelInstances(
-			FILE *fp,
-			int iModel = - 1);
 		void PrintCTIMeshFaces(FILE *fp, Eigen::MatrixXi F, Eigen::MatrixXi Fn, int n, Eigen::MatrixXi nP);
 
 	public:
@@ -616,6 +648,7 @@ namespace RVL
 		float kReferenceTangentSize;
 		float baseSeparationAngle;
 		float edgeTangentAngle;
+		float gndCTIThr;
 		int nModels; //Vidovic
 		int nMSegments; //Vidovic
 		int minClusterSize;
@@ -630,6 +663,8 @@ namespace RVL
 		bool bMatchRANSAC; //Vidovic
 		bool bGnd;
 		bool bWholeMeshCluster;
+		bool bDetectGroundPlane;
+		bool bOverlappingClusters;
 		Array<RECOG::PSGM_::ModelInstance> modelInstanceDB; //Vidovic
 		QList<RECOG::PSGM_::MatchInstance> CTImatches; //Vidovic
 		Array<RECOG::PSGM_::MatchInstance*> pCTImatchesArray; //Vidovic
@@ -641,7 +676,11 @@ namespace RVL
 		Array<Array<SortIndex<float>>> sceneSegmentMatches;
 		Array<SortIndex<float>> sceneSegmentMatchesArray;
 		Array<Array<SortIndex<float>>> bestSceneSegmentMatches;
+		Array<Array<SortIndex<float>>> bestSceneSegmentMatches2;
 		Array<SortIndex<float>> bestSceneSegmentMatchesArray;
+		Array<SortIndex<float>> bestSceneSegmentMatchesArray2;
+		Array2D<float> hullCTIDescriptorArray;
+		unsigned char *clusterColor;
 		//Array2D<Array<int>> matchMatrix;
 		//int *matchMatrixMem;
 		DWORD scoreCalculation; //Vidovic - TO DO (Implement read from cfg file)
@@ -682,6 +721,7 @@ namespace RVL
 		FILE *fpDetermineThresh, *fpDetermineThresh_;
 		//FILE *fpSegmentEnvelopment, *fpSegmentEnvelopmentCTI, *fpSegmentCollision, *fpSegmentCollisionCTI, *fpHypothesisCollision, *fpHypothesisTransparency, *fpHypothesisTransparencyCTI, *fpHypothesisGndDistance, *fpHypothesisGndDistanceCTI;
 
+		float clusterType;
 				
 		//Petra & Ivan
 		double *icpTMatrix;
@@ -697,7 +737,8 @@ namespace RVL
 
 		//For alignment:
 		Eigen::MatrixXf T0i;
-
+		int iCorrectClass;
+		char *modelDataBase; //Vidovic
 
 	private:		
 		RECOG::PSGM_::Cluster *clusterMem;
@@ -706,7 +747,6 @@ namespace RVL
 		//RECOG::PSGM_::ModelInstanceElement *modelInstanceMem;
 		vtkSmartPointer<vtkPolyData> referenceFramesPolyData;
 		//char *sceneFileName; //moved to public - Vidovic
-		char *modelDataBase; //Vidovic
 		char *modelsInDataBase; //Vidovic
 		//int nSamples; //RANSAC //Vidovic
 		int stdNoise; //RANSAC //Vidovic
@@ -733,6 +773,7 @@ namespace RVL
 		int CTIIdx; //Vidovic
 		int nBestMatches; //n best matches for each scene segment
 		int debug1, debug2;
+		RECOG::PSGM_::MatchInstance *CTIMatchMem;
 	};
 
 	
