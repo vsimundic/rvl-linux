@@ -58,6 +58,7 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 #ifndef RVLVERSION_170601
 #define RVLRECOGNITION_DEMO_CLASS_ALIGNMENT
 #endif
+//#define RVLPSGM_DETERMINE_THRESHOLDS
 
 #define RVLRECOGNITION_DEMO_FLAG_SAVE_PLY				0x00000001
 #define RVLRECOGNITION_DEMO_FLAG_3D_VISUALIZATION		0x00000002
@@ -804,8 +805,7 @@ int main(int argc, char ** argv)
 				recognition.createSegmentGT = false;
 
 				if (flags & RVLRECOGNITION_DEMO_FLAG_3D_VISUALIZATION)
-				{
-					surfels.NodeColors(SelectionColor);
+				{					
 					visualizer.renderer->RemoveAllViewProps();
 					recognition.InitDisplay(&visualizer, &mesh, SelectionColor);
 				}
@@ -852,7 +852,10 @@ int main(int argc, char ** argv)
 				//LoadMesh(&meshBuilder, filePath, &mesh, false);
 
 				if (flags & RVLRECOGNITION_DEMO_FLAG_3D_VISUALIZATION)
+				{
+					surfels.NodeColors(SelectionColor);
 					recognition.Display();
+				}
 				
 				////NEW FILKO - TEST COLLISION CONSENSUS
 				//std::vector<int> conHyp = recognition.GetHypothesesCollisionConsensus(20);
@@ -917,8 +920,10 @@ int main(int argc, char ** argv)
 					//recognition.createVersionTestFile();
 					recognition.checkVersionTestFile();
 
+#ifdef RVLPSGM_DETERMINE_THRESHOLDS
 					//determine thresholds for SHAPE_INSTANCE_DETECTION
 					recognition.DetermineThresholds();
+#endif
 #endif
 
 					//#ifdef RVLVERSION_170601

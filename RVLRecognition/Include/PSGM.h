@@ -343,6 +343,16 @@ namespace RVL
 		
 		void ObjectAlignment(); // Calculates transformation matrix to align object with a reference object (for classification)
 
+		void TangentAlignment(
+			int iMatch,
+			float eThr,
+			float *R,
+			float *t,
+			float &score,
+			Array<RECOG::TangentVertexCorrespondence> &correspondences,
+			Array<int> iVertexArray,
+			bool *bVertexAlreadyStored);
+
 		void VisualizeAlignedModels(int iRefModel, int iModel); // Visualizes models after alignment - for easier debugging
 
 		void Classify(

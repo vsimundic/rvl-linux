@@ -5147,8 +5147,6 @@ void PSGM::Match()
 #ifdef RVLVERSION_171111
 	if (bGnd)
 	{
-		float *PGnd = new float[3 * pSurfels->vertexArray.n];
-
 		Array<int> iVertexArray;
 
 		iVertexArray.Element = new int[pSurfels->vertexArray.n];
@@ -5196,22 +5194,7 @@ void PSGM::Match()
 
 				pMatch = pCTImatchesArray.Element[iMatch];
 
-				pSModelInstance = CTISet.pCTI.Element[pMatch->iSCTI];
-				pMModelInstance = MCTISet.pCTI.Element[pMatch->iMCTI];
-
-				pSCluster = clusters.Element[pSModelInstance->iCluster];
-
-				pSurfels->ProjectVerticesOntoGroundPlane(pSCluster->iVertexArray, NGnd, dGnd, PGnd);
-
-				GetVertices(iMatch, iVertexArray, bVertexAlreadyStored);
-
-				iModel = pMModelInstance->iModel;
-
-				pMTG = MTGSet.GetTG(iModel);
-
-				TangentAlignment(pSurfels, iVertexArray, 1000.0f, pMTG->A,
-					hullCTIDescriptorArray.Element + hullCTIDescriptorArray.w * iModel,
-					pMatch->R, pMatch->t, 20.0f, score, correspondences, pMatch->R, pMatch->t);
+				TangentAlignment(iMatch, 20.0f, pMatch->R, pMatch->t, score, correspondences, iVertexArray, bVertexAlreadyStored);
 
 				displayData.pVisualizer->renderer->RemoveAllViewProps();
 
@@ -5247,6 +5230,8 @@ void PSGM::Match()
 			bestSceneSegmentMatchesArray2.Element = new SortIndex<float>[bestSceneSegmentMatchesArray2.n];
 		}
 
+		//float *PGnd = new float[3 * pSurfels->vertexArray.n];
+
 		int matchID;
 		int iSCluster_;
 		int i;
@@ -5257,7 +5242,7 @@ void PSGM::Match()
 		{
 			pSCluster = clusters.Element[iSCluster];
 
-			pSurfels->ProjectVerticesOntoGroundPlane(pSCluster->iVertexArray, NGnd, dGnd, PGnd);
+			//pSurfels->ProjectVerticesOntoGroundPlane(pSCluster->iVertexArray, NGnd, dGnd, PGnd);
 
 			for (iMatch = 0; iMatch < bestSceneSegmentMatches.Element[iSCluster].n; iMatch++)
 			{
@@ -5284,7 +5269,7 @@ void PSGM::Match()
 
 		delete[] iVertexArray.Element;
 		delete[] bVertexAlreadyStored;
-		delete[] PGnd;
+		//delete[] PGnd;
 	}
 #endif
 
@@ -17381,6 +17366,33 @@ std::map<int, std::vector<int>> PSGM::GetSceneConsistancy(Array<Array<SortIndex<
 	return constL;
 }
 
+void PSGM::TangentAlignment(
+	int iMatch,
+	float eThr,
+	float *R,
+	float *t,
+	float &score,
+	Array<TangentVertexCorrespondence> &correspondences,
+	Array<int> iVertexArray,
+	bool *bVertexAlreadyStored)
+{
+	PSGM_::MatchInstance *pMatch = pCTImatchesArray.Element[iMatch];
+
+	PSGM_::ModelInstance *pSModelInstance = CTISet.pCTI.Element[pMatch->iSCTI];
+	PSGM_::ModelInstance *pMModelInstance = MCTISet.pCTI.Element[pMatch->iMCTI];
+
+	PSGM_::Cluster *pSCluster = clusters.Element[pSModelInstance->iCluster];
+
+	GetVertices(iMatch, iVertexArray, bVertexAlreadyStored);
+
+	int iModel = pMModelInstance->iModel;
+
+	TG *pMTG = MTGSet.GetTG(iModel);
+
+	RECOG::TangentAlignment(pSurfels, iVertexArray, 1000.0f, pMTG->A,
+		hullCTIDescriptorArray.Element + hullCTIDescriptorArray.w * iModel,
+		pMatch->R, pMatch->t, eThr, score, correspondences, R, t);
+}
 
 ///////////////////////////////////////////////////////////////////////////
 //
