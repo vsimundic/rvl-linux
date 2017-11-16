@@ -46,6 +46,7 @@ PSGM::PSGM()
 	bWholeMeshCluster = false;
 	bDetectGroundPlane = true;
 	bOverlappingClusters = false;
+	bICP = true;
 
 	nDominantClusters = 1;
 	kNoise = 1.2f;
@@ -190,6 +191,8 @@ PSGM::PSGM()
 	depth = cv::Mat(480, 640, CV_16UC1, cv::Scalar::all(0));
 
 	iCorrectClass = 0;
+
+	displayData.hypothesisVisualizationMode = RVLPSGM_HYPOTHESIS_VISUALIZATION_MODE_PLY;
 }
 
 
@@ -331,6 +334,7 @@ void PSGM::CreateParamList(CRVLMem *pMem)
 	pParamData = ParamList.AddParam("PSGM.zeroRFDescriptor", RVLPARAM_TYPE_BOOL, &bZeroRFDescriptor);	
 	pParamData = ParamList.AddParam("PSGM.GTRFDescriptors", RVLPARAM_TYPE_BOOL, &bGTRFDescriptors);
 	pParamData = ParamList.AddParam("PSGM.groundPlaneRFDescriptors", RVLPARAM_TYPE_BOOL, &bGroundPlaneRFDescriptors);
+	pParamData = ParamList.AddParam("PSGM.ICP", RVLPARAM_TYPE_BOOL, &bICP);
 	pParamData = ParamList.AddParam("PSGM.Visualization.hypothesisVisualizationMode", RVLPARAM_TYPE_ID, &(displayData.hypothesisVisualizationMode));
 	ParamList.AddID(pParamData, "CTI", RVLPSGM_HYPOTHESIS_VISUALIZATION_MODE_CTI);
 	ParamList.AddID(pParamData, "PLY", RVLPSGM_HYPOTHESIS_VISUALIZATION_MODE_PLY);
@@ -2509,7 +2513,7 @@ void PSGM::CreateHullCTIs()
 
 		d = hullCTIDescriptorArray.Element + hullCTIDescriptorArray.w * iModel;
 
-		for (i = 0; i < hypTG->descriptor.n; i++)
+		for (i = 0; i < hypTG->A.h; i++)
 		{
 			plane = hypTG->descriptor.Element[i].pFirst->ptr;
 
@@ -5145,8 +5149,87 @@ void PSGM::Match()
 	{
 		float *PGnd = new float[3 * pSurfels->vertexArray.n];
 
-		int iMatch;
+		Array<int> iVertexArray;
+
+		iVertexArray.Element = new int[pSurfels->vertexArray.n];
+
+		bool *bVertexAlreadyStored = new bool[pSurfels->vertexArray.n];
+
+		memset(bVertexAlreadyStored, 0, pSurfels->vertexArray.n * sizeof(bool));
+
+		// Only for debugging purposes!!!
+
+		char *versionTestFileName;
+		FILE *fpTF;
+
+		versionTestFileName = RVLCreateFileName(sceneFileName, ".ply", -1, ".tf", pMem);
+		fpTF = fopen(versionTestFileName, "r");
+
+		Array<TangentVertexCorrespondence> correspondences;
+
+		correspondences.Element = new TangentVertexCorrespondence[convexTemplate.n];
+
+		PSGM_::MGT MGTinstance;
+		TG *pMTG;
 		RECOG::PSGM_::MatchInstance *pMatch;
+		float score;
+
+		if (fpTF)
+		{
+			while (true)
+			{
+				//while (!feof(fpTF))
+				//{
+				//	fscanf(fpTF, "%d\t%d\t%d\t%d\t%d\t%d\t%f\t%f\t%f\t%f", &MGTinstance.iScene, &MGTinstance.iSegment, &MGTinstance.iModel, &MGTinstance.matchID, &MGTinstance.CTIrank, &MGTinstance.ICPrank, &MGTinstance.CTIscore, &MGTinstance.ICPcost, &MGTinstance.gndDistance, &MGTinstance.transparencyRatio);
+
+				//	if (MGTinstance.iModel == 18)
+				//		break;
+				//}
+
+				int iMatch;
+
+				printf("Enter match ID: ");
+				scanf("%d", &iMatch);
+
+				if (iMatch < 0)
+					break;
+
+				pMatch = pCTImatchesArray.Element[iMatch];
+
+				pSModelInstance = CTISet.pCTI.Element[pMatch->iSCTI];
+				pMModelInstance = MCTISet.pCTI.Element[pMatch->iMCTI];
+
+				pSCluster = clusters.Element[pSModelInstance->iCluster];
+
+				pSurfels->ProjectVerticesOntoGroundPlane(pSCluster->iVertexArray, NGnd, dGnd, PGnd);
+
+				GetVertices(iMatch, iVertexArray, bVertexAlreadyStored);
+
+				iModel = pMModelInstance->iModel;
+
+				pMTG = MTGSet.GetTG(iModel);
+
+				TangentAlignment(pSurfels, iVertexArray, 1000.0f, pMTG->A,
+					hullCTIDescriptorArray.Element + hullCTIDescriptorArray.w * iModel,
+					pMatch->R, pMatch->t, 20.0f, score, correspondences, pMatch->R, pMatch->t);
+
+				displayData.pVisualizer->renderer->RemoveAllViewProps();
+
+				displayData.pVisualizer->SetMesh(pMesh);
+
+				AddOneModelToVisualizer(displayData.pVisualizer, iMatch, -1, false, false, false, false);
+
+				displayData.pVisualizer->Run();
+			}
+
+			fclose(fpTF);
+		}
+
+		delete[] correspondences.Element;
+
+		/////
+
+		int iMatch;
 
 		//Alocate memory for bestSceneSegmentMatches2
 		RVL_DELETE_ARRAY(bestSceneSegmentMatches2.Element);
@@ -5164,6 +5247,12 @@ void PSGM::Match()
 			bestSceneSegmentMatchesArray2.Element = new SortIndex<float>[bestSceneSegmentMatchesArray2.n];
 		}
 
+		int matchID;
+		int iSCluster_;
+		int i;
+		PSGM_::Cluster *pSCluster_;
+		int iVertex;
+
 		for (iSCluster = 0; iSCluster < nClusters; iSCluster++)
 		{
 			pSCluster = clusters.Element[iSCluster];
@@ -5172,15 +5261,15 @@ void PSGM::Match()
 
 			for (iMatch = 0; iMatch < bestSceneSegmentMatches.Element[iSCluster].n; iMatch++)
 			{
-				iMatch = bestSceneSegmentMatches.Element[iSCluster].Element[iMatch].idx;
+				matchID = bestSceneSegmentMatches.Element[iSCluster].Element[iMatch].idx;
 
-				if (iMatch != -1)
+				if (matchID != -1)
 				{
-					//Setting indices:
-					iMCTI = pCTImatchesArray.Element[iMatch]->iMCTI;
-					iSCTI = pCTImatchesArray.Element[iMatch]->iSCTI;
+					pMatch = pCTImatchesArray.Element[matchID];
 
-					//Getting scene and model pointers:
+					iMCTI = pMatch->iMCTI;
+					iSCTI = pMatch->iSCTI;
+
 					pMModelInstance = MCTISet.pCTI.Element[iMCTI];
 					//pMIE = pMModelInstance->modelInstance.Element;
 					pSModelInstance = CTISet.pCTI.Element[iSCTI];
@@ -5188,16 +5277,13 @@ void PSGM::Match()
 
 					iModel = pMModelInstance->iModel;
 
-					//cout << "Match: " << j << " ModelID:" << iModel << "\n";
-
-					//Getting match pointer and calculating pose:
-					pMatch = pCTImatchesArray.Element[iMatch];
-
-					FitModel(pSCluster->iVertexArray, pSModelInstance, true, PGnd);
+					//FitModel(pSCluster->iVertexArray, pSModelInstance, true, PGnd);
 				}
 			}
 		}
 
+		delete[] iVertexArray.Element;
+		delete[] bVertexAlreadyStored;
 		delete[] PGnd;
 	}
 #endif
@@ -5220,6 +5306,49 @@ void PSGM::Match()
 	// Match TGs.
 
 	//MatchTGs();
+}
+
+// Given a match ID, function GetVertices identifies all vertices of all segments which are contained inside an expanded convex hull 
+// of the model corresponding to the considered match and stores their indices into iVertexArray.
+// The function requires a helper array bVertexAlreadyStored, which should be allocated before calling the function.
+// The allocated capacity of this array should be equal to the total number of scene vertices 
+// and all elements should be initially set to false.
+
+void PSGM::GetVertices(
+	int iMatch,
+	Array<int> &iVertexArray,
+	bool *bVertexAlreadyStored)
+{
+	iVertexArray.n = 0;
+
+	int i, iSCluster_, iVertex;
+	PSGM_::Cluster *pSCluster_;
+	float maxe;
+
+	for (iSCluster_ = 0; iSCluster_ < clusters.n; iSCluster_++)
+	{
+		maxe = HypothesesToSegmentEnvelopment(iMatch, iSCluster_, NULL, false);
+
+		if (maxe <= 50.0f)
+		{
+			pSCluster_ = clusters.Element[iSCluster_];
+
+			for (i = 0; i < pSCluster_->iVertexArray.n; i++)
+			{
+				iVertex = pSCluster_->iVertexArray.Element[i];
+
+				if (!bVertexAlreadyStored[iVertex])
+				{
+					bVertexAlreadyStored[iVertex] = true;
+
+					iVertexArray.Element[iVertexArray.n++] = iVertex;
+				}
+			}
+		}
+	}
+
+	for (i = 0; i < iVertexArray.n; i++)
+		bVertexAlreadyStored[iVertexArray.Element[i]] = false;
 }
 
 void PSGM::Match(
@@ -8515,7 +8644,7 @@ void PSGM::AddModelsToVisualizer(Visualizer *pVisualizer, bool align, RVL::PSGM:
 //	delete[] validS;
 //}
 
-void PSGM::AddOneModelToVisualizer(Visualizer *pVisualizer, int iMatch, int iRank, bool align, bool useTG, bool bICPPose)
+void PSGM::AddOneModelToVisualizer(Visualizer *pVisualizer, int iMatch, int iRank, bool align, bool useTG, bool bICPPose, bool bCalculatePose)
 {
 	//Setting indices:
 	int iMCTI = pCTImatchesArray.Element[iMatch]->iMCTI;
@@ -8578,7 +8707,8 @@ void PSGM::AddOneModelToVisualizer(Visualizer *pVisualizer, int iMatch, int iRan
 
 	//Getting match pointer and calculating pose:
 	RECOG::PSGM_::MatchInstance *pMatch = pCTImatchesArray.Element[iMatch];
-	CalculatePose(iMatch);
+	if (bCalculatePose)
+		CalculatePose(iMatch);
 	Eigen::MatrixXf nT = ConvexTemplatenT();
 
 	//Generate model polydata
@@ -16381,6 +16511,7 @@ bool PSGM::CheckHypothesesToSegmentEnvelopment(int iHypothesis, int iSegment, fl
 	float *RMS = hypothesis->RICP;
 	float *tMS = hypothesis->tICP;
 
+
 	//Segment data
 	Array<SURFEL::Vertex *> *vertexArray = &this->pSurfels->vertexArray;
 	SURFEL::Vertex * rvlvertex;
@@ -16948,8 +17079,8 @@ float PSGM::HypothesesToSegmentEnvelopment(int iHypothesis, int iSegment, RECOG:
 	Array<SURFEL::Vertex *> *vertexArray = &this->pSurfels->vertexArray;
 	SURFEL::Vertex * rvlvertex;
 	//float* minModDist = new float[hypTG->A.h];
-	//RECOG::PSGM_::ModelInstance *pSCTI = CTISet.pCTI.Element[CTISet.SegmentCTIs.Element[iSegment].Element[0]];
-	RECOG::PSGM_::ModelInstanceElement *pSIE = pSCTI->modelInstance.Element;
+	//RECOG::PSGM_::ModelInstance *pSCTI = CTISet.pCTI.Element[CTISet.SegmentCTIs.Element[iSegment].Element[0]];	
+	//RECOG::PSGM_::ModelInstanceElement *pSIE = pSCTI->modelInstance.Element;
 
 	//float RMSCTI[9];
 	//float tMSCTI[3];

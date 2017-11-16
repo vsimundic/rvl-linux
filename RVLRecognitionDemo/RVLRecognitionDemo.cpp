@@ -294,7 +294,7 @@ int main(int argc, char ** argv)
 	//DWORD method = RVLRECOGNITION_METHOD_RF; //VIDOVIC
 	int iClass;
 	float SDFSurfaceValue = 0.0f;
-	bool bCreateVisibleSurfaceMesh;
+	bool bCreateVisibleSurfaceMesh = false;
 
 	DWORD flags = 0x00000000; //VIDOVIC
 
@@ -803,6 +803,13 @@ int main(int argc, char ** argv)
 				recognition.segmentGTLoaded = false;
 				recognition.createSegmentGT = false;
 
+				if (flags & RVLRECOGNITION_DEMO_FLAG_3D_VISUALIZATION)
+				{
+					surfels.NodeColors(SelectionColor);
+					visualizer.renderer->RemoveAllViewProps();
+					recognition.InitDisplay(&visualizer, &mesh, SelectionColor);
+				}
+
 				recognition.Interpret(&mesh);
 
 				
@@ -845,12 +852,7 @@ int main(int argc, char ** argv)
 				//LoadMesh(&meshBuilder, filePath, &mesh, false);
 
 				if (flags & RVLRECOGNITION_DEMO_FLAG_3D_VISUALIZATION)
-				{
-					surfels.NodeColors(SelectionColor);
-					visualizer.renderer->RemoveAllViewProps();
-					recognition.InitDisplay(&visualizer, &mesh, SelectionColor);
 					recognition.Display();
-				}
 				
 				////NEW FILKO - TEST COLLISION CONSENSUS
 				//std::vector<int> conHyp = recognition.GetHypothesesCollisionConsensus(20);
@@ -862,74 +864,76 @@ int main(int argc, char ** argv)
 				QueryPerformanceCounter((LARGE_INTEGER *)&ctr1_);
 
 #ifdef RVLPSGM_ICP
-				//pcl::PointCloud<pcl::PointXYZINormal>::Ptr cloud_destination(new pcl::PointCloud<pcl::PointXYZINormal>);
-				////creating destination cloud
-				//cloud_destination->width = mesh.NodeArray.n;
-				//cloud_destination->height = 1;
-				//cloud_destination->is_dense = false;
-				//cloud_destination->points.resize(cloud_destination->width * cloud_destination->height);
+				if (recognition.bICP)
+				{
+					//pcl::PointCloud<pcl::PointXYZINormal>::Ptr cloud_destination(new pcl::PointCloud<pcl::PointXYZINormal>);
+					////creating destination cloud
+					//cloud_destination->width = mesh.NodeArray.n;
+					//cloud_destination->height = 1;
+					//cloud_destination->is_dense = false;
+					//cloud_destination->points.resize(cloud_destination->width * cloud_destination->height);
 
-				//for (int i = 0; i < mesh.NodeArray.n; i++)
-				//{
-				//	cloud_destination->points[i].x = mesh.NodeArray.Element[i].P[0];
-				//	cloud_destination->points[i].y = mesh.NodeArray.Element[i].P[1];
-				//	cloud_destination->points[i].z = mesh.NodeArray.Element[i].P[2];
+					//for (int i = 0; i < mesh.NodeArray.n; i++)
+					//{
+					//	cloud_destination->points[i].x = mesh.NodeArray.Element[i].P[0];
+					//	cloud_destination->points[i].y = mesh.NodeArray.Element[i].P[1];
+					//	cloud_destination->points[i].z = mesh.NodeArray.Element[i].P[2];
 
-				//	cloud_destination->points[i].normal_x = mesh.NodeArray.Element[i].N[0];
-				//	cloud_destination->points[i].normal_y = mesh.NodeArray.Element[i].N[1];
-				//	cloud_destination->points[i].normal_z = mesh.NodeArray.Element[i].N[2];
-				//}
-				//pcl::search::KdTree<pcl::PointXYZINormal>::Ptr kdtree = boost::make_shared<pcl::search::KdTree<pcl::PointXYZINormal>>((new pcl::search::KdTree<pcl::PointXYZINormal>));
-				//kdtree->setInputCloud(cloud_destination); //using this doesn't really improve anything
-				//recognition.CalculateICPCost(PCLICP, PCLICPVariants::Point_to_plane, &kdtree);
+					//	cloud_destination->points[i].normal_x = mesh.NodeArray.Element[i].N[0];
+					//	cloud_destination->points[i].normal_y = mesh.NodeArray.Element[i].N[1];
+					//	cloud_destination->points[i].normal_z = mesh.NodeArray.Element[i].N[2];
+					//}
+					//pcl::search::KdTree<pcl::PointXYZINormal>::Ptr kdtree = boost::make_shared<pcl::search::KdTree<pcl::PointXYZINormal>>((new pcl::search::KdTree<pcl::PointXYZINormal>));
+					//kdtree->setInputCloud(cloud_destination); //using this doesn't really improve anything
+					//recognition.CalculateICPCost(PCLICP, PCLICPVariants::Point_to_plane, &kdtree);
 
-				GenerateSegmentNeighbourhood(&recognition, 0.1);
-				//recognition.CalculateNNCost(&visualizer, PCLICP, PCLICPVariants::Point_to_plane);
-				
-				//TEST RVLPSGM_MATCHCTI_MATCH_MATRIX
-				recognition.ICP(PCLICP, PCLICPVariants::Point_to_plane);
+					GenerateSegmentNeighbourhood(&recognition, 0.1);
+					//recognition.CalculateNNCost(&visualizer, PCLICP, PCLICPVariants::Point_to_plane);
+
+					//TEST RVLPSGM_MATCHCTI_MATCH_MATRIX
+					recognition.ICP(PCLICP, PCLICPVariants::Point_to_plane);
 
 #ifdef RVLPSGM_TRANSPARENCY_AND_COLLISION
-				//Transparency check
-				//recognition.CreateScoreMatchMatrixICP();
-				recognition.CreateScoreMatchMatrixICP_TMP();
-				recognition.FilterHypothesesUsingTransparency(0.15, 10, true);
-				recognition.CreateScoreMatchMatrixICP_TMP(); //because of sorting - TEST
+					//Transparency check
+					//recognition.CreateScoreMatchMatrixICP();
+					recognition.CreateScoreMatchMatrixICP_TMP();
+					recognition.FilterHypothesesUsingTransparency(0.15, 10, true);
+					recognition.CreateScoreMatchMatrixICP_TMP(); //because of sorting - TEST
 
-				//Get scene consistency
-				//recognition.GetSceneConsistancy(&recognition.scoreMatchMatrixICP, 0.1, 30, 20, true);
+					//Get scene consistency
+					//recognition.GetSceneConsistancy(&recognition.scoreMatchMatrixICP, 0.1, 30, 20, true);
 
-				//Colision check
-				recognition.noCollisionHypotheses.clear();
-				recognition.GetHypothesesCollisionConsensus(&recognition.noCollisionHypotheses, &recognition.scoreMatchMatrixICP, 10);
+					//Colision check
+					recognition.noCollisionHypotheses.clear();
+					recognition.GetHypothesesCollisionConsensus(&recognition.noCollisionHypotheses, &recognition.scoreMatchMatrixICP, 10);
 
-				//Get transparency and collision consensus
-				recognition.GetTransparencyAndCollisionConsensus(&visualizer);
+					//Get transparency and collision consensus
+					recognition.GetTransparencyAndCollisionConsensus(&visualizer);
 
-				//Evaluate consesus matches
-				float precision, recall;
-				recognition.EvaluateConsensusMatches(precision, recall, true);
+					//Evaluate consesus matches
+					float precision, recall;
+					recognition.EvaluateConsensusMatches(precision, recall, true);
 
-				//recognition.createVersionTestFile();
-				recognition.checkVersionTestFile();
+					//recognition.createVersionTestFile();
+					recognition.checkVersionTestFile();
 
-				//determine thresholds for SHAPE_INSTANCE_DETECTION
-				recognition.DetermineThresholds();
+					//determine thresholds for SHAPE_INSTANCE_DETECTION
+					recognition.DetermineThresholds();
 #endif
-				
-//#ifdef RVLVERSION_170601
-//				//evaluate ICP
-//				recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, fpPoseError, fpnotFirstInfo, fpnotFirstPoseErr, 10, true);
-//#endif
+
+					//#ifdef RVLVERSION_170601
+					//				//evaluate ICP
+					//				recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, fpPoseError, fpnotFirstInfo, fpnotFirstPoseErr, 10, true);
+					//#endif
 
 #ifdef RVLPSGM_RMSE_CALCULATION
-				//Load models without decimation (used for calculatin RMSE)
-				recognition.LoadModelMeshDB(modelSequenceFileName, &recognition.vtkRMSEModelDB, false);
+					//Load models without decimation (used for calculatin RMSE)
+					recognition.LoadModelMeshDB(modelSequenceFileName, &recognition.vtkRMSEModelDB, false);
 
-				//Calculate RMSE
-				recognition.RMSE(fpRMSE, false);
+					//Calculate RMSE
+					recognition.RMSE(fpRMSE, false);
 #endif
-
+				}
 #else	// #ifndef RVLPSGM_ICP
 				//recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, fpPoseError, fpnotFirstInfo, fpnotFirstPoseErr, 7);
 #endif	// #ifndef RVLPSGM_ICP
