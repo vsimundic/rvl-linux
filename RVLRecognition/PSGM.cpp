@@ -5141,12 +5141,39 @@ void PSGM::Match()
 	//FilterHypothesesUsingTransparency(0.5, 0.01, true);
 
 #ifdef RVLVERSION_171111
+	float gndDistanceThresh = 0.02;
+	float transparencyThresh = 0.2;
+	float envelopmentThresh = 30;
+	float collisionThresh = 15;
+	bool bCollisionPassed = true;
+
+	LoadSegmentGT();
+	FindBestGTHypothesis();
+
+	if (iScene == 1)
+		fpHypothesesFiltering = fopen("C:\\RVL\\hypotheses_filtering.txt", "w");
+	else
+		fpHypothesesFiltering = fopen("C:\\RVL\\hypotheses_filtering.txt", "a");
+
+
 	if (bGnd)
 	{
 		float *PGnd = new float[3 * pSurfels->vertexArray.n];
 
-		int iMatch;
+		int iMatch, matchID, matchID_, iGTModel, nTPFiltered = 0, nFPFiltered = 0, nFNFiltered = 0, nTNFiltered = 0;
+		int iMatchFiltered = 0;
 		RECOG::PSGM_::MatchInstance *pMatch;
+
+		double T[16];
+		float gndDistance, transparencyRatio, maxEnvelopmentDistance, minCollisionDistance;
+
+		PSGM_::ModelInstance SCTI;
+		SCTI.modelInstance.Element = new PSGM_::ModelInstanceElement[convexTemplate.n];
+
+		RVLUNITMX3(SCTI.R);
+		RVLNULL3VECTOR(SCTI.t);
+
+		RECOG::PSGM_::MGT *pMGT;
 
 		//Alocate memory for bestSceneSegmentMatches2
 		RVL_DELETE_ARRAY(bestSceneSegmentMatches2.Element);
@@ -5164,21 +5191,41 @@ void PSGM::Match()
 			bestSceneSegmentMatchesArray2.Element = new SortIndex<float>[bestSceneSegmentMatchesArray2.n];
 		}
 
+		printf("Hypotheses filtering started...\n");
+		//filter hypotheses by segmwnt envelopment & collision
+		GetSceneConsistancy(&bestSceneSegmentMatches, 0.1, 30, 15, true);
+
 		for (iSCluster = 0; iSCluster < nClusters; iSCluster++)
 		{
+			iGTModel = segmentGT.Element[iScene * nDominantClusters + iSCluster].iModel;
+			printf("Segment: %d - TP model is %d\n", iSCluster, iGTModel);
 			pSCluster = clusters.Element[iSCluster];
 
 			pSurfels->ProjectVerticesOntoGroundPlane(pSCluster->iVertexArray, NGnd, dGnd, PGnd);
 
+			bestSceneSegmentMatches2.Element[iSCluster].Element = bestSceneSegmentMatchesArray2.Element + nBestMatchesPerCluster * iSCluster;
+
+			//pCluster = clusters.Element[iSCluster];
+			FitModel(pSCluster->iVertexArray, &SCTI, true);
+
+			iMatchFiltered = 0;
+			nTPFiltered = 0;
+			nFPFiltered = 0;
+			nFNFiltered = 0;
+			nTNFiltered = 0;
+
 			for (iMatch = 0; iMatch < bestSceneSegmentMatches.Element[iSCluster].n; iMatch++)
 			{
-				iMatch = bestSceneSegmentMatches.Element[iSCluster].Element[iMatch].idx;
+				bCollisionPassed = true;
+				matchID = bestSceneSegmentMatches.Element[iSCluster].Element[iMatch].idx;
 
-				if (iMatch != -1)
+				printf("Filtering match: %d for model: %d with old rank: %d...", matchID, GetMCTI(GetMatch(matchID))->iModel, iMatch);
+
+				if (matchID != -1)
 				{
 					//Setting indices:
-					iMCTI = pCTImatchesArray.Element[iMatch]->iMCTI;
-					iSCTI = pCTImatchesArray.Element[iMatch]->iSCTI;
+					iMCTI = pCTImatchesArray.Element[matchID]->iMCTI;
+					iSCTI = pCTImatchesArray.Element[matchID]->iSCTI;
 
 					//Getting scene and model pointers:
 					pMModelInstance = MCTISet.pCTI.Element[iMCTI];
@@ -5191,11 +5238,156 @@ void PSGM::Match()
 					//cout << "Match: " << j << " ModelID:" << iModel << "\n";
 
 					//Getting match pointer and calculating pose:
-					pMatch = pCTImatchesArray.Element[iMatch];
+					pMatch = pCTImatchesArray.Element[matchID];
 
-					FitModel(pSCluster->iVertexArray, pSModelInstance, true, PGnd);
+					//FitModel(pSCluster->iVertexArray, pSModelInstance, true, PGnd);
+
+					//filter hypotheses by ground distance
+					float st[3] = { pCTImatchesArray.Element[matchID]->t[0] / 1000, pCTImatchesArray.Element[matchID]->t[1] / 1000, pCTImatchesArray.Element[matchID]->t[2] / 1000 };
+
+					RVLHTRANSFMX(pCTImatchesArray.Element[matchID]->R, st, T);
+					iMCTI = pCTImatchesArray.Element[matchID]->iMCTI;
+					gndDistance = groundPlaneDistance(MCTISet.pCTI.Element[iMCTI]->iModel, T);
+
+					if ((gndDistance < gndDistanceThresh) & (gndDistance > -gndDistanceThresh))
+					{
+						//filter hypotheses by transparency
+						vtkSmartPointer<vtkPolyData> object = GetPoseCorrectedVisibleModel(matchID, false);
+						transparencyRatio = GetObjectTransparencyRatio(object, (unsigned short *)depth.data, 10, 640, 480, 525, 525, 320, 240); //HARDCODED FOR ECCV DATASET CAMERA
+
+						if (transparencyRatio < transparencyThresh)
+						{
+							if (!(std::find(envelopmentColisionHypotheses.begin(), envelopmentColisionHypotheses.end(), matchID) != envelopmentColisionHypotheses.end()))
+							{
+								bestSceneSegmentMatches2.Element[iSCluster].Element[iMatchFiltered].idx = matchID;
+								bestSceneSegmentMatches2.Element[iSCluster].Element[iMatchFiltered].cost = bestSceneSegmentMatches.Element[iSCluster].Element[iMatch].cost;
+
+								//printf("Match: %d passed filtering! Model: %d, old rank: %d, new rank: %d\n", matchID, GetMCTI(GetMatch(matchID))->iModel, iMatch, iMatchFiltered);
+								printf("PASSED! New rank is: %d", iMatchFiltered);
+								if (iModel == iGTModel)
+								{
+									printf(" (+)\n");
+									nTPFiltered++;
+								}
+								else
+								{
+									printf(" (-)\n");
+									nFPFiltered++;
+								}
+
+								iMatchFiltered++;
+							}
+							else
+							{
+								printf("INVALIDATED by segment envelopment & collision");
+
+								if (iModel == iGTModel)
+								{
+									printf(" (--)\n");
+									nFNFiltered++;
+								}
+								else
+								{
+									printf(" (++)\n");
+									nTNFiltered++;
+								}
+							}
+
+							/*
+							maxEnvelopmentDistance = HypothesesToSegmentEnvelopment(matchID, iSCluster, &SCTI, false);
+
+							if (maxEnvelopmentDistance < envelopmentThresh)
+							{
+								pMGT = MGTList.pFirst;
+								while (pMGT)
+								{
+									if (iModel != pMGT->iModel)
+									{
+										minCollisionDistance = HypothesesToSegmentCollision(pMGT->matchID, iSCluster, &SCTI, false);
+
+										if (minCollisionDistance < -collisionThresh)
+										{
+											bCollisionPassed = false;
+											break;
+										}
+
+									}
+									pMGT = pMGT->pNext;
+								}
+
+								if (bCollisionPassed)
+								{
+									bestSceneSegmentMatches2.Element[iSCluster].Element[iMatchFiltered].idx = matchID;
+									bestSceneSegmentMatches2.Element[iSCluster].Element[iMatchFiltered].cost = bestSceneSegmentMatches.Element[iSCluster].Element[iMatch].cost;
+
+									//printf("Match: %d passed filtering! Model: %d, old rank: %d, new rank: %d\n", matchID, GetMCTI(GetMatch(matchID))->iModel, iMatch, iMatchFiltered);
+									printf("PASSED! New rank is: %d", iMatchFiltered);
+									if (iModel == iGTModel)
+									{
+										printf(" (++)\n");
+										nTPFiltered++;
+									}
+									else
+									{
+										printf(" (--)\n");
+										nFPFiltered++;
+									}
+
+									iMatchFiltered++;
+								}
+								else
+								{
+									printf("INVALIDATED by segment collision: %f\n", minCollisionDistance);
+								}
+							}
+							else
+							{
+								printf("INVALIDATED by segment envelopment: %f\n", maxEnvelopmentDistance);
+							}*/
+						}
+						else
+						{
+							printf("INVALIDATED by transparency: %f", transparencyRatio);
+
+							if (iModel == iGTModel)
+							{
+								printf(" (--)\n");
+								nFNFiltered++;
+							}
+							else
+							{
+								printf(" (++)\n");
+								nTNFiltered++;
+							}
+						}
+					}
+					else
+					{
+						printf("INVALIDATED by ground distance: %f", gndDistance);
+
+						if (iModel == iGTModel)
+						{
+							printf(" (--)\n");
+							nFNFiltered++;
+						}
+						else
+						{
+							printf(" (++)\n");
+							nTNFiltered++;
+						}
+					}
 				}
 			}
+
+			printf("------------------------------------\n");
+			printf("Segment: %d => TP passed: %d, FP passed: %d, TP invalidated: %d, FP invalidated: %d\n", iSCluster, nTPFiltered, nFPFiltered, nFNFiltered, nTNFiltered);
+			printf("------------------------------------\n");
+
+			fprintf(fpHypothesesFiltering, "%d\t%d\t%d\t%d\t%d\t%d\t%d\n", iScene-1, iSCluster, iGTModel, nTPFiltered, nFPFiltered, nFNFiltered, nTNFiltered);
+
+			bestSceneSegmentMatches2.Element[iSCluster].n = iMatchFiltered;
+
+			//BubbleSort<SortIndex<float>>(bestSceneSegmentMatches2.Element[iSCluster]);
 		}
 
 		delete[] PGnd;
@@ -8537,7 +8729,7 @@ void PSGM::AddOneModelToVisualizer(Visualizer *pVisualizer, int iMatch, int iRan
 	iCluster = pSCTI->iCluster;
 	iModel = pMCTI->iModel;
 
-	//printf("\nMATCH: %d\t MODEL: %d\n", iMatch, iModel);
+	printf("\nMATCH: %d\t MODEL: %d\n", iMatch, iModel);
 
 	//For a chosen hypothesis, prints which scene segment is matched to which model
 	if (iRank != -1)
@@ -16700,7 +16892,7 @@ void PSGM::DetermineThresholds()
 
 	LoadSegmentGT();
 	FindBestGTHypothesis();
-	CreateSegmentGT();
+	//CreateSegmentGT();
 
 	SegmentGTInstance *pMSGT = modelsSegmentGTList.pFirst;
 	RECOG::PSGM_::MGT *pMGT = MGTList.pFirst;

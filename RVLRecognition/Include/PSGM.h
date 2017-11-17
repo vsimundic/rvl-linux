@@ -718,7 +718,7 @@ namespace RVL
 		bool createSegmentGT; //Vidovic
 		bool segmentGTLoaded; //Vidovic
 		Array<RVL::ModelColor> modelColors;
-		FILE *fpDetermineThresh, *fpDetermineThresh_;
+		FILE *fpDetermineThresh, *fpDetermineThresh_, *fpHypothesesFiltering;
 		//FILE *fpSegmentEnvelopment, *fpSegmentEnvelopmentCTI, *fpSegmentCollision, *fpSegmentCollisionCTI, *fpHypothesisCollision, *fpHypothesisTransparency, *fpHypothesisTransparencyCTI, *fpHypothesisGndDistance, *fpHypothesisGndDistanceCTI;
 
 		float clusterType;

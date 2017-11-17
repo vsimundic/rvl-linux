@@ -294,7 +294,7 @@ int main(int argc, char ** argv)
 	//DWORD method = RVLRECOGNITION_METHOD_RF; //VIDOVIC
 	int iClass;
 	float SDFSurfaceValue = 0.0f;
-	bool bCreateVisibleSurfaceMesh;
+	bool bCreateVisibleSurfaceMesh = false;
 
 	DWORD flags = 0x00000000; //VIDOVIC
 
