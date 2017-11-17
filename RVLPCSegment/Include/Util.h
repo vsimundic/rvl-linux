@@ -69,7 +69,16 @@ namespace RVL
 		int iSSegment;
 		int iModel;
 		int iMSegment;
+		int matchID;
 		bool valid;
+		//unsigned char color[3];
+		SegmentGTInstance *pNext;
+	};
+
+	struct ModelColor{
+		int iModel;
+		unsigned char color[3];
+		ModelColor *pNext;
 	};
 
 	bool GetAngleAxis(float *R, float *V, float &theta);
