@@ -312,7 +312,7 @@ namespace RVL
 		
 		//Recomended,
 		//Visualizes chosen hypotheses 0-6 for each segment on the scene, activated when pressed "c":
-		void AddOneModelToVisualizer(Visualizer *pVisualizer, int iMatch, int iRank, bool align, bool useTG = false, bool bICPPose = true);
+		void AddOneModelToVisualizer(Visualizer *pVisualizer, int iMatch, int iRank, bool align, bool useTG = false, bool bICPPose = true, bool bCalculatePose = true);
 		
 		//Visualizes GT models on the scene, activated when pressed "g":
 		void AddGTModelsToVisualizer(Visualizer *pVisualizer);
@@ -342,6 +342,16 @@ namespace RVL
 			bool bTSM = false);
 		
 		void ObjectAlignment(); // Calculates transformation matrix to align object with a reference object (for classification)
+
+		void TangentAlignment(
+			int iMatch,
+			float eThr,
+			float *R,
+			float *t,
+			float &score,
+			Array<RECOG::TangentVertexCorrespondence> &correspondences,
+			Array<int> iVertexArray,
+			bool *bVertexAlreadyStored);
 
 		void VisualizeAlignedModels(int iRefModel, int iModel); // Visualizes models after alignment - for easier debugging
 
@@ -581,6 +591,10 @@ namespace RVL
 		void SaveModelInstances(
 			FILE *fp,
 			int iModel = -1);
+		void GetVertices(
+			int iMatch,
+			Array<int> &iVertexArray,
+			bool *bVertexAlreadyStored);
 
 	private:
 		void WholeMeshCluster();
@@ -665,6 +679,7 @@ namespace RVL
 		bool bWholeMeshCluster;
 		bool bDetectGroundPlane;
 		bool bOverlappingClusters;
+		bool bICP;
 		Array<RECOG::PSGM_::ModelInstance> modelInstanceDB; //Vidovic
 		QList<RECOG::PSGM_::MatchInstance> CTImatches; //Vidovic
 		Array<RECOG::PSGM_::MatchInstance*> pCTImatchesArray; //Vidovic
