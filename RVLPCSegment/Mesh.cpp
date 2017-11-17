@@ -571,11 +571,17 @@ bool Mesh::CreateOrderedMeshFromPolyData()
 
 		//watchdog = 0;
 
+		//if (iPt == 88031)
+		//	int debug = 0;
+
 		iEdge = iEdge0;
 		
 		do
 		{
 			pEdge = EdgeArray.Element + iEdge;
+
+			//if (iEdge == 265106)
+			//	int debug = 0;
 
 			// Connect pEdge to the edge list of vertex pPt using the connector pMeshEdgePtr.
 
