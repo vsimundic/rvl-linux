@@ -563,7 +563,7 @@ namespace RVL
 		void PrintCTIMatches(); //Vidovic
 		void PrintICPMatches(); //Vidovic
 		void VisualizeConsensusHypotheses(Visualizer *pVisualizer); //Vidovic
-		void VisualizeGTMatch(Visualizer *pVisualizer); //Vidovic
+		void VisualizeGTMatch(Visualizer *pVisualizer, Array<Array<SortIndex<float>>> *scoreMatchMatrix_ = NULL, bool bICPPose = false); //Vidovic
 		int FindCTIMatchRank(int matchID, int iSegment); //Vidovic
 		int FindICPMatchRank(int matchID, int iSegment); //Vidovic
 		void createVersionTestFile(); //Vidovic
@@ -742,6 +742,8 @@ namespace RVL
 		QList<RECOG::PSGM_::MGT> MGTList;
 		bool createSegmentGT; //Vidovic
 		bool segmentGTLoaded; //Vidovic
+		bool visualizeTPHypotheses; //Vidovic
+		bool visualizeCTITPHypotheses; //Vidovic
 		Array<RVL::ModelColor> modelColors;
 		FILE *fpDetermineThresh, *fpDetermineThresh_, *fpHypothesesFiltering;
 		//FILE *fpSegmentEnvelopment, *fpSegmentEnvelopmentCTI, *fpSegmentCollision, *fpSegmentCollisionCTI, *fpHypothesisCollision, *fpHypothesisTransparency, *fpHypothesisTransparencyCTI, *fpHypothesisGndDistance, *fpHypothesisGndDistanceCTI;

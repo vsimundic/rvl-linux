@@ -188,6 +188,8 @@ PSGM::PSGM()
 	createMatchGT = false;
 	createSegmentGT = false;
 	segmentGTLoaded = false;
+	visualizeTPHypotheses = false;
+	visualizeCTITPHypotheses = false;
 	modelColors.Element = NULL;
 
 	//depthImg = new unsigned short(480*640); //Vidovic
@@ -8810,6 +8812,113 @@ bool RVL::RECOG::PSGM_::keyPressUserFunction(
 			}
 		}
 
+	//TP hypotheses visualization
+	if (key == "F4")
+	{
+		pRecognition->visualizeTPHypotheses = !pRecognition->visualizeTPHypotheses;
+
+		if (pRecognition->visualizeTPHypotheses)
+		{
+			printf("TP hypotheses visualization started!\n");
+
+			pRecognition->matchGTiS = 0;
+			pRecognition->matchGTiRank = -1;
+
+			char cSelection;
+
+			if (pRecognition->bICP)
+			{
+				do
+				{
+					printf("Enter 'c' for CTI hypotheses or 'i' for ICP hypotheses visualization: ");
+					scanf("%c", &cSelection);
+				} while (cSelection != 'c' && cSelection != 'i');
+
+				if (cSelection == 'c')
+				{
+					pRecognition->visualizeCTITPHypotheses = true;
+					printf("CTI hypothesis will be displayed! Press 'Enter' to select scene segment!\n");
+				}
+				else
+				{
+					pRecognition->visualizeCTITPHypotheses = false;
+					printf("ICP hypothesis will be displayed! Press 'Enter' to select scene segment!\n");
+				}
+			}
+			else
+			{
+				pRecognition->visualizeCTITPHypotheses = true;
+				printf("CTI hypothesis will be displayed! Press 'Enter' to select scene segment!\n");
+			}
+		}
+		else
+		{
+			printf("TP hypotheses visualization stoped!\n");
+		}
+	}
+
+	if (pRecognition->visualizeTPHypotheses)
+	{
+		if (key == "Return")
+		{
+			do{
+				printf("Enter segment ID: ");
+				scanf("%d", &pRecognition->matchGTiS);
+			} while (pRecognition->matchGTiS < 0 || pRecognition->matchGTiS > pRecognition->clusters.n);
+
+
+			pRecognition->matchGTiRank = -1;
+			printf("Segment %d selected. Visualize TP hypotheses by pressing 'Space'\n", pRecognition->matchGTiS);
+		}
+
+		//visualize next hypothesis
+		if (key == "space")
+		{
+			Array<Array<SortIndex<float>>> *scoreMatchMatrix_;
+
+			if (pRecognition->visualizeCTITPHypotheses)
+				scoreMatchMatrix_ = &pRecognition->bestSceneSegmentMatches2;
+			else
+				scoreMatchMatrix_ = &pRecognition->scoreMatchMatrixICP;
+
+			RECOG::PSGM_::MatchInstance *pMatch;
+
+			int iSegment, iSegmentGT, iMatchedModel;
+
+			do
+			{
+				if (pRecognition->matchGTiRank < scoreMatchMatrix_->Element[pRecognition->matchGTiS].n - 1)
+					pRecognition->matchGTiRank++;
+				else
+				{
+					printf("All TP hypotheses for segment %d are visualized! Press Enter to select new segment or Space to visualize hypothesis for segment %d!\n", pRecognition->matchGTiS, pRecognition->matchGTiS);
+					printf("-----------------------------------------------------------------------------------------------------------------------------------\n");
+					pRecognition->matchGTiRank = -1;
+				}
+					
+
+				if (pRecognition->matchGTiRank != -1)
+				{
+					pMatch = pRecognition->GetMatch(scoreMatchMatrix_->Element[pRecognition->matchGTiS].Element[pRecognition->matchGTiRank].idx);
+					iSegment = pRecognition->GetSCTI(pMatch)->iCluster;
+					iSegmentGT = pMatch->iScene * pRecognition->nDominantClusters + iSegment;
+					iMatchedModel = pRecognition->GetMCTI(pMatch)->iModel;
+				}
+
+			} while ((iMatchedModel != pRecognition->segmentGT.Element[iSegmentGT].iModel || !pRecognition->segmentGT.Element[iSegmentGT].valid) && pRecognition->visualizeTPHypotheses && pRecognition->matchGTiRank != -1); //TP model
+
+			if (pRecognition->visualizeTPHypotheses & pRecognition->matchGTiRank > -1)
+			{
+				cout << "TP hypotheses visualization:" << endl;
+				cout << "MatchID: " << scoreMatchMatrix_->Element[pRecognition->matchGTiS].Element[pRecognition->matchGTiRank].idx << endl;
+				cout << "Segment: " << iSegment << endl;
+				cout << "Model: " << iMatchedModel << endl;
+				cout << "Rank: " << pRecognition->matchGTiRank << endl;
+				pRecognition->VisualizeGTMatch(pVisualizer, scoreMatchMatrix_, !pRecognition->visualizeCTITPHypotheses);
+			}
+		}
+	}
+
 	return false;
 }
 
@@ -9181,19 +9290,19 @@ void PSGM::AddOneModelToVisualizer(Visualizer *pVisualizer, int iMatch, int iRan
 	iCluster = pSCTI->iCluster;
 	iModel = pMCTI->iModel;
 
-	printf("\nMATCH: %d\t MODEL: %d\n", iMatch, iModel);
+	//printf("\nMATCH: %d\t MODEL: %d\n", iMatch, iModel);
 
 	//For a chosen hypothesis, prints which scene segment is matched to which model
 	if (iRank != -1)
 	{
-#ifdef RVLPSGM_ICP
-		printf("SSegment: %d\tMatchedModel: %d (score: %f) - ID: %d\n", iCluster, iModel, scoreMatchMatrixICP.Element[iCluster].Element[iRank].cost, scoreMatchMatrixICP.Element[iCluster].Element[iRank].idx);
-#else
+		if(bICPPose)
+			printf("SSegment: %d\tMatchedModel: %d (score: %f) - ID: %d\n", iCluster, iModel, scoreMatchMatrixICP.Element[iCluster].Element[iRank].cost, scoreMatchMatrixICP.Element[iCluster].Element[iRank].idx);
+		else
 #ifdef RVLPSGM_MATCHCTI_MATCH_MATRIX
-		printf("SSegment: %d\tMatchedModel: %d (score: %f) - ID: %d\n", iCluster, iModel, bestSceneSegmentMatches.Element[iCluster].Element[iRank].cost, bestSceneSegmentMatches.Element[iCluster].Element[iRank].idx);
+			//printf("SSegment: %d\tMatchedModel: %d (score: %f) - ID: %d\n", iCluster, iModel, bestSceneSegmentMatches.Element[iCluster].Element[iRank].cost, bestSceneSegmentMatches.Element[iCluster].Element[iRank].idx);
+			printf("SSegment: %d\tMatchedModel: %d (score: %f) - ID: %d\n", iCluster, iModel, bestSceneSegmentMatches2.Element[iCluster].Element[iRank].cost, bestSceneSegmentMatches2.Element[iCluster].Element[iRank].idx);
 #else
 		printf("SSegment: %d\tMatchedModel: %d (score: %f) - ID: %d\n", iCluster, iModel, scoreMatchMatrix.Element[iCluster].Element[iRank].cost, scoreMatchMatrix.Element[iCluster].Element[iRank].idx);
-#endif
 #endif
 	}
 
@@ -15284,13 +15393,16 @@ void PSGM::VisualizeConsensusHypotheses(Visualizer *pVisualizer)
 		
 }
 
-void PSGM::VisualizeGTMatch(Visualizer *pVisualizer)
+void PSGM::VisualizeGTMatch(Visualizer *pVisualizer, Array<Array<SortIndex<float>>> *scoreMatchMatrix_, bool bICPPose)
 {
 	int iSegment, CTIRank, matchID, iSegmentGT, iMatchedModel;
 	char cSelection;
 
+	if (!scoreMatchMatrix_)
+		scoreMatchMatrix_ = &scoreMatchMatrixICP;
+
 	RECOG::PSGM_::MatchInstance *pMatch;
-	matchID = scoreMatchMatrixICP.Element[matchGTiS].Element[matchGTiRank].idx;
+	matchID = scoreMatchMatrix_->Element[matchGTiS].Element[matchGTiRank].idx;
 	pMatch = GetMatch(matchID);
 
 	//FILE *fp;
@@ -15308,7 +15420,7 @@ void PSGM::VisualizeGTMatch(Visualizer *pVisualizer)
 		Display();
 
 		//visualize new ICP matches on the scene
-		AddOneModelToVisualizer(pVisualizer, matchID, matchGTiRank, true);
+		AddOneModelToVisualizer(pVisualizer, matchID, -1, false, false, bICPPose, false);
 	}
 
 

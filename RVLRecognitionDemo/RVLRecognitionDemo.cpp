@@ -803,6 +803,7 @@ int main(int argc, char ** argv)
 
 				recognition.segmentGTLoaded = false;
 				recognition.createSegmentGT = false;
+				recognition.visualizeTPHypotheses = false;
 
 				if (flags & RVLRECOGNITION_DEMO_FLAG_3D_VISUALIZATION)
 				{					
