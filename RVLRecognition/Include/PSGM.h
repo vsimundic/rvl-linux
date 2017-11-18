@@ -350,7 +350,8 @@ namespace RVL
 			float *t,
 			float &score,
 			Array<RECOG::TangentVertexCorrespondence> &correspondences,
-			Array<int> iVertexArray,
+			Array<int> &iVertexArray,
+			Array<int> &iSSegmentArray,
 			bool *bVertexAlreadyStored);
 
 		void VisualizeAlignedModels(int iRefModel, int iModel); // Visualizes models after alignment - for easier debugging
@@ -550,7 +551,7 @@ namespace RVL
 		bool CheckHypothesesCollision(int firstHyp, int secondHyp, float thr, float *collisionValue = NULL); //Filko //float *collisionValue added by Vidovic
 		float GetObjectTransparencyRatio(vtkSmartPointer<vtkPolyData> object, unsigned short *depthImg, float depthThr, int width, int height, float c_fu, float c_fv, float c_uc, float c_vc); //Filko
 		void FilterHypothesesUsingTransparency(float tranThr, float depthThr, bool verbose = false); //Filko
-		vtkSmartPointer<vtkPolyData> GetPoseCorrectedVisibleModel(int iMatch, bool ICPPose = true); //Filko
+		vtkSmartPointer<vtkPolyData> GetPoseCorrectedVisibleModel(int iMatch, bool ICPPose = true, bool bCalculatePose = true); //Filko
 		void GetTransparencyAndCollisionConsensus(Visualizer *pVisualizer = NULL); //Vidovic
 		void EvaluateConsensusMatches(float &precision, float &recall, bool verbose = false); //Vidovic
 		RECOG::PSGM_::MatchInstance* GetMatch(int matchID); //Vidovic
@@ -594,7 +595,13 @@ namespace RVL
 		void GetVertices(
 			int iMatch,
 			Array<int> &iVertexArray,
+			Array<int> &iSSegmentArray,
 			bool *bVertexAlreadyStored);
+		void SampleScene();
+		float HypothesisEvaluation(
+			int iHypothesis,
+			Array<int> iSSegmentArray,
+			bool bVisualize = false);
 
 	private:
 		void WholeMeshCluster();
@@ -671,6 +678,7 @@ namespace RVL
 		int minClusterBoundaryDiscontinuityPerc;
 		float minClusterNormalDistributionStd;
 		float groundPlaneTolerance;
+		int sceneSamplingResolution;
 		bool bZeroRFDescriptor;
 		bool bGTRFDescriptors;
 		bool bGroundPlaneRFDescriptors;
@@ -695,6 +703,8 @@ namespace RVL
 		Array<SortIndex<float>> bestSceneSegmentMatchesArray;
 		Array<SortIndex<float>> bestSceneSegmentMatchesArray2;
 		Array2D<float> hullCTIDescriptorArray;
+		Array<QList<QLIST::Index>> sceneSegmentSampleArray;
+		QLIST::Index *sceneSegmentSampleMem;
 		unsigned char *clusterColor;
 		//Array2D<Array<int>> matchMatrix;
 		//int *matchMatrixMem;

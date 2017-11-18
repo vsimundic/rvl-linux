@@ -560,7 +560,7 @@ int main(int argc, char ** argv)
 
 #ifdef RVLPSGM_ICP
 			if (recognition.problem == RVLRECOGNITION_PROBLEM_SHAPE_INSTANCE_DETECTION)
-			recognition.LoadModelMeshDB(modelSequenceFileName, &recognition.vtkModelDB, true, 0.4);
+				recognition.LoadModelMeshDB(modelSequenceFileName, &recognition.vtkModelDB, false, 0.4);
 #endif
 
 			Mesh mesh;
