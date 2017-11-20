@@ -559,7 +559,10 @@ namespace RVL
 		RECOG::PSGM_::ModelInstance* GetMCTI(RECOG::PSGM_::MatchInstance *pMatch); //Vidovic
 		RECOG::PSGM_::ModelInstance* GetSCTI(int iSCTI); //Vidovic
 		RECOG::PSGM_::ModelInstance* GetSCTI(RECOG::PSGM_::MatchInstance *pMatch); //Vidovic
-		void ICP(RVL::PSGM::ICPfunction ICPFunction, int ICPvariant); //Vidovic //for multiple matches per model
+		void ICP(
+			RVL::PSGM::ICPfunction ICPFunction, 
+			int ICPvariant,
+			Array<Array<SortIndex<float>>> sceneSegmentHypotheses); //Vidovic //for multiple matches per model
 		void PrintCTIMatches(); //Vidovic
 		void PrintICPMatches(); //Vidovic
 		void VisualizeConsensusHypotheses(Visualizer *pVisualizer); //Vidovic
@@ -601,7 +604,11 @@ namespace RVL
 		float HypothesisEvaluation(
 			int iHypothesis,
 			Array<int> iSSegmentArray,
+			bool bICP = false,
 			bool bVisualize = false);
+		void HypothesisEvaluation(
+			Array<Array<SortIndex<float>>> segmentHypothesisArray,
+			bool bICP = false);
 
 	private:
 		void WholeMeshCluster();

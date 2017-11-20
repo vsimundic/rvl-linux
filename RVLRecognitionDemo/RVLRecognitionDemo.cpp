@@ -895,7 +895,21 @@ int main(int argc, char ** argv)
 					//recognition.CalculateNNCost(&visualizer, PCLICP, PCLICPVariants::Point_to_plane);
 
 					//TEST RVLPSGM_MATCHCTI_MATCH_MATRIX
-					recognition.ICP(PCLICP, PCLICPVariants::Point_to_plane);
+#ifdef RVLVERSION_171111
+					recognition.ICP(PCLICP, PCLICPVariants::Point_to_plane, recognition.bestSceneSegmentMatches2);
+
+					recognition.HypothesisEvaluation(recognition.bestSceneSegmentMatches2, true);
+
+					//Colision check
+					recognition.noCollisionHypotheses.clear();
+					recognition.transparentHypotheses.clear();
+					recognition.envelopmentColisionHypotheses.clear();
+					recognition.GetHypothesesCollisionConsensus(&recognition.noCollisionHypotheses, &recognition.bestSceneSegmentMatches2, 10);
+
+					//Get transparency and collision consensus
+					recognition.GetTransparencyAndCollisionConsensus(&visualizer);
+#else
+					recognition.ICP(PCLICP, PCLICPVariants::Point_to_plane, recognition.bestSceneSegmentMatches);
 
 #ifdef RVLPSGM_TRANSPARENCY_AND_COLLISION
 					//Transparency check
@@ -913,6 +927,7 @@ int main(int argc, char ** argv)
 
 					//Get transparency and collision consensus
 					recognition.GetTransparencyAndCollisionConsensus(&visualizer);
+#endif
 
 					//Evaluate consesus matches
 					float precision, recall;
@@ -925,7 +940,7 @@ int main(int argc, char ** argv)
 					//determine thresholds for SHAPE_INSTANCE_DETECTION
 					recognition.DetermineThresholds();
 #endif
-#endif
+#endif	// #ifndef RVLVERSION_171111
 
 					//#ifdef RVLVERSION_170601
 					//				//evaluate ICP
