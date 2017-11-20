@@ -908,6 +908,10 @@ int main(int argc, char ** argv)
 
 					//Get transparency and collision consensus
 					recognition.GetTransparencyAndCollisionConsensus(&visualizer);
+
+					//Evaluate consesus matches
+					float precision, recall;
+					recognition.EvaluateConsensusMatches(precision, recall, true);
 #else
 					recognition.ICP(PCLICP, PCLICPVariants::Point_to_plane, recognition.bestSceneSegmentMatches);
 
