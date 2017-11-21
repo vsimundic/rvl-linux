@@ -4814,7 +4814,7 @@ void PSGM::Match()
 
 void PSGM::Match()
 {
-	int nBestHypothesesPerSSegment = 3;
+	int nBestHypothesesPerSSegment = 5;
 
 	printf("Scene to model match started...");
 
@@ -5297,6 +5297,10 @@ void PSGM::Match()
 	//filter hypotheses by segmwnt envelopment & collision
 	GetSceneConsistancy(&bestSceneSegmentMatches, 0.1, 30, 15, false);
 
+#ifdef RVLPSGM_TANGENT_ALIGNMENT_VISUALIZATION
+	bool bVisualization = true;
+#endif
+
 	//int matchID;
 	//int iSCluster_;
 	int i, j;
@@ -5550,54 +5554,57 @@ void PSGM::Match()
 		//BubbleSort<SortIndex<float>>(bestSceneSegmentMatches2.Element[iSCluster], true);
 
 #ifdef RVLPSGM_TANGENT_ALIGNMENT_VISUALIZATION
-		int i = 0;
-
-		uchar command = '1';
-
-		while (command == '1' || command == '4')
+		if (bVisualization)
 		{
-			if (command == '4')
-			{
-				printf("Enter match ID: ");
-				scanf("%d", &matchID);
+			int i = 0;
 
-				for (i = 0; i < bestSceneSegmentMatches2.Element[iSCluster].n; i++)
-					if (bestSceneSegmentMatches2.Element[iSCluster].Element[i].idx == matchID)
-						break;
+			uchar command = '1';
+
+			while (command == '1' || command == '4')
+			{
+				if (command == '4')
+				{
+					printf("Enter match ID: ");
+					scanf("%d", &matchID);
+
+					for (i = 0; i < bestSceneSegmentMatches2.Element[iSCluster].n; i++)
+						if (bestSceneSegmentMatches2.Element[iSCluster].Element[i].idx == matchID)
+							break;
+
+					if (i >= bestSceneSegmentMatches2.Element[iSCluster].n)
+						i = -1;
+				}
+				else
+					matchID = bestSceneSegmentMatches2.Element[iSCluster].Element[i].idx;
+
+				pMatch = pCTImatchesArray.Element[matchID];
+
+				pMModelInstance = MCTISet.pCTI.Element[pMatch->iMCTI];
+
+				iModel = pMModelInstance->iModel;
+
+				GetVertices(matchID, iVertexArray, iSSegmentArray, bVertexAlreadyStored);
+
+				printf("segment %d model %d match %d rank %d", iSCluster, iModel, matchID, i);
+
+				score = HypothesisEvaluation(matchID, iSSegmentArray, false, true);
+
+				printf("Enter command: 1 - next hypothesis, 2 - next segment, 3 - next image, 4 - select hypothesis\n");
+
+				do
+					scanf("%c", &command);
+				while (command < '1' || command > '4');
+
+				if (command == '1')
+					i++;
 
 				if (i >= bestSceneSegmentMatches2.Element[iSCluster].n)
-					i = -1;
+					break;
 			}
-			else
-				matchID = bestSceneSegmentMatches2.Element[iSCluster].Element[i].idx;
 
-			pMatch = pCTImatchesArray.Element[matchID];
-
-			pMModelInstance = MCTISet.pCTI.Element[pMatch->iMCTI];
-
-			iModel = pMModelInstance->iModel;
-
-			GetVertices(matchID, iVertexArray, iSSegmentArray, bVertexAlreadyStored);
-
-			printf("segment %d model %d match %d rank %d", iSCluster, iModel, matchID, i);
-
-			score = HypothesisEvaluation(matchID, iSSegmentArray, true);
-
-			printf("Enter command: 1 - next hypothesis, 2 - next segment, 3 - next image, 4 - select hypothesis\n");
-
-			do
-				scanf("%c", &command);
-			while (command < '1' || command > '4');
-
-			if (command == '1')
-				i++;
-
-			if (i >= bestSceneSegmentMatches2.Element[iSCluster].n)
-				break;
+			if (command == '3')
+				bVisualization = false;
 		}
-
-		if (command == '3')
-			break;
 #endif
 		bestSceneSegmentMatches2.Element[iSCluster].n = nHypotheses;
 	}	// for every scene cluster
@@ -5752,6 +5759,7 @@ void PSGM::HypothesisEvaluation(
 
 	int i, iSSegment, iHypothesis;
 	float score;
+	PSGM_::MatchInstance *pHypothesis;
 
 	for (iSSegment = 0; iSSegment < segmentHypothesisArray.n; iSSegment++)
 	{
@@ -5761,8 +5769,13 @@ void PSGM::HypothesisEvaluation(
 
 			GetVertices(iHypothesis, iVertexArray, iSSegmentArray, bVertexAlreadyStored);
 
-			segmentHypothesisArray.Element[iSSegment].Element[i].cost = HypothesisEvaluation(iHypothesis, iSSegmentArray, bICP);
+			pHypothesis = pCTImatchesArray.Element[iHypothesis];
+
+			segmentHypothesisArray.Element[iSSegment].Element[i].cost = pHypothesis->cost_NN = 
+				HypothesisEvaluation(iHypothesis, iSSegmentArray, bICP);
 		}
+
+		BubbleSort<SortIndex<float>>(segmentHypothesisArray.Element[iSSegment], true);
 	}
 
 	delete[] iVertexArray.Element;
