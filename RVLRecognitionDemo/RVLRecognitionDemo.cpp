@@ -54,7 +54,7 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 //#define PSGM_RECOGNITION_VISUALIZE_SCENE
 //#define RVLRECOGNITION_DEMO_CLASS_ALIGNMENT
 #define RVLPSGM_TRANSPARENCY_AND_COLLISION
-//#define RVLPSGM_RMSE_CALCULATION
+#define RVLPSGM_RMSE_CALCULATION
 #ifndef RVLVERSION_170601
 #define RVLRECOGNITION_DEMO_CLASS_ALIGNMENT
 #endif
@@ -602,6 +602,12 @@ int main(int argc, char ** argv)
 
 			FILE *fpRMSE = fopen((resultsFolderName + "\\RMSE.txt").data(), "w");
 
+
+#ifdef RVLPSGM_RMSE_CALCULATION
+			//Load models without decimation (used for calculating RMSE)
+			recognition.LoadModelMeshDB(modelSequenceFileName, &recognition.vtkRMSEModelDB, false);
+#endif
+
 			recognition.LoadCompleteSegmentGT(sceneSequence);
 
 			LARGE_INTEGER ctr1, ctr2, freq;
@@ -900,7 +906,7 @@ int main(int argc, char ** argv)
 
 					recognition.HypothesisEvaluation(recognition.bestSceneSegmentMatches2, true);
 
-					recognition.VisualizeHypotheses(recognition.bestSceneSegmentMatches2, true);
+					//recognition.VisualizeHypotheses(recognition.bestSceneSegmentMatches2, true);
 
 					//Colision check
 					recognition.noCollisionHypotheses.clear();
@@ -910,6 +916,15 @@ int main(int argc, char ** argv)
 
 					//Get transparency and collision consensus
 					recognition.GetTransparencyAndCollisionConsensus(&visualizer);
+
+					//Evaluate consesus matches
+					float precision, recall;
+					recognition.EvaluateConsensusMatches(precision, recall, true);
+
+#ifdef RVLPSGM_RMSE_CALCULATION
+					//Calculate RMSE
+					recognition.RMSE_Consensus(fpRMSE, true);
+#endif
 #else
 					recognition.ICP(PCLICP, PCLICPVariants::Point_to_plane, recognition.bestSceneSegmentMatches);
 
@@ -949,7 +964,7 @@ int main(int argc, char ** argv)
 					//				recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, fpPoseError, fpnotFirstInfo, fpnotFirstPoseErr, 10, true);
 					//#endif
 
-#ifdef RVLPSGM_RMSE_CALCULATION
+#ifdef NEVER
 					//Load models without decimation (used for calculatin RMSE)
 					recognition.LoadModelMeshDB(modelSequenceFileName, &recognition.vtkRMSEModelDB, false);
 

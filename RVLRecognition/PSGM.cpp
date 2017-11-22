@@ -12124,6 +12124,28 @@ float PSGM::RMSE(int iModel, double *TGT, double *T)
 
 	RMSE_ = sqrt((RMSE_ / hypothesisPoints->GetNumberOfPoints()));
 
+	//Visualizer visualizer;
+
+	//visualizer.Create();
+
+	//vtkSmartPointer<vtkPolyDataMapper> GTmodelMapper = vtkSmartPointer<vtkPolyDataMapper>::New();
+	//vtkSmartPointer<vtkActor> GTmodelActor = vtkSmartPointer<vtkActor>::New();
+	//GTmodelMapper->SetInputData(GTtransformFilter->GetOutput());
+	//GTmodelActor->SetMapper(GTmodelMapper);
+	//GTmodelActor->GetProperty()->SetColor(0, 1, 0);
+	//GTmodelActor->GetProperty()->SetPointSize(3);
+	//visualizer.renderer->AddActor(GTmodelActor);
+
+	//vtkSmartPointer<vtkPolyDataMapper> HypothesisModelMapper = vtkSmartPointer<vtkPolyDataMapper>::New();
+	//vtkSmartPointer<vtkActor> HypothesisModelActor = vtkSmartPointer<vtkActor>::New();
+	//HypothesisModelMapper->SetInputData(transformFilter->GetOutput());
+	//HypothesisModelActor->SetMapper(HypothesisModelMapper);
+	//HypothesisModelActor->GetProperty()->SetColor(0, 0, 1);
+	//HypothesisModelActor->GetProperty()->SetPointSize(3);
+	//visualizer.renderer->AddActor(HypothesisModelActor);
+
+	//visualizer.Run();
+
 	return RMSE_;
 }
 
@@ -18155,6 +18177,78 @@ void PSGM::TangentAlignment(
 	RECOG::TangentAlignment(pSurfels, iVertexArray, 1000.0f, pMTG->A,
 		hullCTIDescriptorArray.Element + hullCTIDescriptorArray.w * iModel,
 		pMatch->R, pMatch->t, eThr, score, correspondences, R, t);
+}
+
+//calculate RMSE for all consensus hypothesis
+void PSGM::RMSE_Consensus(FILE *fp, bool onlyTPHypothesis)
+{
+	bool bVerbose = true;
+
+	printf("Calculating RMSE for consensus hypotheses...");
+	if (bVerbose)
+		printf("\n");
+
+	int iMatch, iGTS, iGTM, iMCTI, iSCTI, iMatchedModel, iSegmentGT, iSSegment, iHypothesis;
+	int nGTModels;
+	RVL::GTInstance *pGT;
+	RECOG::PSGM_::MatchInstance *pMatch;
+	float RMSE_ = 0.0;
+	double TGT[16], T[16], tICP[3], RGT[9], tGT[3];
+
+	iGTS = iScene - 1;
+	nGTModels = pECCVGT->GT.Element[iGTS].n;
+
+	//printf("RMSE for TP hypothesis:\n");
+
+
+	pGT = pECCVGT->GT.Element[iGTS].Element;
+
+	for (iGTM = 0; iGTM < nGTModels; iGTM++, pGT++)
+	{
+		for (iHypothesis = 0; iHypothesis < consensusHypotheses.size(); iHypothesis++)
+		{
+			iMatch = consensusHypotheses.at(iHypothesis);			
+
+			if (iMatch != -1)
+			{
+				pMatch = pCTImatchesArray.Element[iMatch];
+
+				//Compare to segment GT
+				iMCTI = pCTImatchesArray.Element[iMatch]->iMCTI;
+				iMatchedModel = MCTISet.pCTI.Element[iMCTI]->iModel;
+				iSCTI = pCTImatchesArray.Element[iMatch]->iSCTI;
+				iSSegment = CTISet.pCTI.Element[iSCTI]->iCluster;
+
+				iSegmentGT = pMatch->iScene * nDominantClusters + iSSegment;
+
+				if (segmentGT.Element[iSegmentGT].valid)
+				{
+					//if (iMatchedModel == segmentGT.Element[iSegmentGT].iModel && iMatchedModel == pGT->iModel)
+					if (segmentGT.Element[iSegmentGT].iModel == pGT->iModel)
+					{
+						if (onlyTPHypothesis)
+							if (iMatchedModel != pGT->iModel)
+								break; //skip FP hypothesis
+
+						RVLSCALEMX3X3(pGT->R, 1000, RGT);
+						//RVLSCALE3VECTOR(pGT->t, 1000, tGT);
+						RVLSCALE3VECTOR(pGT->t, 1000, tGT);
+						RVLHTRANSFMX(RGT, tGT, TGT);
+						RVLHTRANSFMX(pMatch->RICP, pMatch->tICP, T);
+
+						RMSE_ = RMSE(iMatchedModel, TGT, T);
+						if (bVerbose)
+							printf("Segment %d matched with model %d. RMSE is: %f\n", iSSegment, iMatchedModel, RMSE_);
+						fprintf(fp, "%d\t%d\t%d\t%f\t%d\n", pMatch->iScene, iSSegment, iMatchedModel, RMSE_, pGT->iModel == iMatchedModel);
+
+						break;
+					}
+				}
+			}
+		}
+	}
+
+	printf("completed!\n");
 }
 
 void PSGM::VisualizeHypotheses(

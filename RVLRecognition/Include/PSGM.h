@@ -375,6 +375,8 @@ namespace RVL
 
 		float RMSE(int iModel, double *TGT, double *T); //calculate RMSE for single model - Vidovic
 
+		void RMSE_Consensus(FILE *fp, bool onlyTPHypothesis = true); //calculate RMSE for consensus hypothesis - Vidovic
+
 		void InitDisplay(
 			Visualizer *pVisualizer,
 			Mesh *pMesh,
