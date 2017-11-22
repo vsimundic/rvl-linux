@@ -5255,7 +5255,7 @@ void PSGM::Match()
 	//int iMatch;
 
 	double T[16];
-	float gndDistance, transparencyRatio;
+	float gndDistance;
 	//float maxEnvelopmentDistance, minCollisionDistance;
 
 	PSGM_::ModelInstance SCTI;
@@ -5295,11 +5295,8 @@ void PSGM::Match()
 
 	printf("Hypotheses filtering started...\n");
 	//filter hypotheses by segmwnt envelopment & collision
+	CreateDilatedDepthImage();	// 171121
 	GetSceneConsistancy(&bestSceneSegmentMatches, 0.1, 30, 15, false);
-
-#ifdef RVLPSGM_TANGENT_ALIGNMENT_VISUALIZATION
-	bool bVisualization = true;
-#endif
 
 	//int matchID;
 	//int iSCluster_;
@@ -5381,9 +5378,9 @@ void PSGM::Match()
 				{
 					//filter hypotheses by transparency
 					vtkSmartPointer<vtkPolyData> object = GetPoseCorrectedVisibleModel(matchID, false, false);
-					transparencyRatio = GetObjectTransparencyRatio(object, (unsigned short *)depth.data, 10, 640, 480, 525, 525, 320, 240); //HARDCODED FOR ECCV DATASET CAMERA
+					pMatch->transparencyRatio = GetObjectTransparencyRatio(object, (unsigned short *)depth.data, 10, 640, 480, 525, 525, 320, 240); //HARDCODED FOR ECCV DATASET CAMERA
 
-					if (transparencyRatio < transparencyThresh)
+					if (pMatch->transparencyRatio < transparencyThresh)
 					{
 						if (!(std::find(envelopmentColisionHypotheses.begin(), envelopmentColisionHypotheses.end(), matchID) != envelopmentColisionHypotheses.end()))
 						{
@@ -5427,7 +5424,7 @@ void PSGM::Match()
 					else
 					{
 						if (bVerbose)
-							printf("INVALIDATED by transparency: %f", transparencyRatio);
+							printf("INVALIDATED by transparency: %f", pMatch->transparencyRatio);
 
 						if (iModel == iGTModel)
 						{
@@ -5553,59 +5550,6 @@ void PSGM::Match()
 
 		//BubbleSort<SortIndex<float>>(bestSceneSegmentMatches2.Element[iSCluster], true);
 
-#ifdef RVLPSGM_TANGENT_ALIGNMENT_VISUALIZATION
-		if (bVisualization)
-		{
-			int i = 0;
-
-			uchar command = '1';
-
-			while (command == '1' || command == '4')
-			{
-				if (command == '4')
-				{
-					printf("Enter match ID: ");
-					scanf("%d", &matchID);
-
-					for (i = 0; i < bestSceneSegmentMatches2.Element[iSCluster].n; i++)
-						if (bestSceneSegmentMatches2.Element[iSCluster].Element[i].idx == matchID)
-							break;
-
-					if (i >= bestSceneSegmentMatches2.Element[iSCluster].n)
-						i = -1;
-				}
-				else
-					matchID = bestSceneSegmentMatches2.Element[iSCluster].Element[i].idx;
-
-				pMatch = pCTImatchesArray.Element[matchID];
-
-				pMModelInstance = MCTISet.pCTI.Element[pMatch->iMCTI];
-
-				iModel = pMModelInstance->iModel;
-
-				GetVertices(matchID, iVertexArray, iSSegmentArray, bVertexAlreadyStored);
-
-				printf("segment %d model %d match %d rank %d", iSCluster, iModel, matchID, i);
-
-				score = HypothesisEvaluation(matchID, iSSegmentArray, false, true);
-
-				printf("Enter command: 1 - next hypothesis, 2 - next segment, 3 - next image, 4 - select hypothesis\n");
-
-				do
-					scanf("%c", &command);
-				while (command < '1' || command > '4');
-
-				if (command == '1')
-					i++;
-
-				if (i >= bestSceneSegmentMatches2.Element[iSCluster].n)
-					break;
-			}
-
-			if (command == '3')
-				bVisualization = false;
-		}
-#endif
 		bestSceneSegmentMatches2.Element[iSCluster].n = nHypotheses;
 	}	// for every scene cluster
 
@@ -5616,6 +5560,9 @@ void PSGM::Match()
 	delete[] bBestHypothesisInList;
 	//delete[] PGnd;
 
+#ifdef RVLPSGM_TANGENT_ALIGNMENT_VISUALIZATION
+	VisualizeHypotheses(bestSceneSegmentMatches2, false);
+#endif
 
 #endif	// #ifdef RVLVERSION_171111
 
@@ -5937,7 +5884,9 @@ float PSGM::HypothesisEvaluation(
 
 	if (bVisualize)
 	{
-		printf(" score %f\n", score);
+		PSGM_::ModelInstance *pSCTI = CTISet.pCTI.Element[pHypothesis->iSCTI];
+
+		printf("segment %d model %d match %d score %f transparency %f\n", pSCTI->iCluster, iModel, iHypothesis, score, pHypothesis->transparencyRatio);
 
 		Array<Point> MPC;
 
@@ -15886,8 +15835,10 @@ void PSGM::CreateDilatedDepthImage()
 				depth.at<uint16_t>(y, x) = 10000; //in milimeters
 		}
 	}
+#ifndef RVLVERSION_171111
 	cv::Mat elementE = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(17, 17));
 	cv::erode(depth, depth, elementE);
+#endif
 	//Set PSGM depth
 	//depthImg = (unsigned short*)depth.data; //Vidovic 21.07.2017. depth.data is deleted after this function finish
 
@@ -18204,6 +18155,81 @@ void PSGM::TangentAlignment(
 	RECOG::TangentAlignment(pSurfels, iVertexArray, 1000.0f, pMTG->A,
 		hullCTIDescriptorArray.Element + hullCTIDescriptorArray.w * iModel,
 		pMatch->R, pMatch->t, eThr, score, correspondences, R, t);
+}
+
+void PSGM::VisualizeHypotheses(
+	Array<Array<SortIndex<float>>> segmentHypothesisArray,
+	bool bICP)
+{
+	Array<int> iVertexArray;
+
+	iVertexArray.Element = new int[pSurfels->vertexArray.n];
+
+	Array<int> iSSegmentArray;
+
+	iSSegmentArray.Element = new int[clusters.n];
+
+	bool *bVertexAlreadyStored = new bool[pSurfels->vertexArray.n];
+
+	memset(bVertexAlreadyStored, 0, pSurfels->vertexArray.n * sizeof(bool));
+
+	int iSCluster = 0;
+
+	int i = 0;
+
+	uchar command = '1';
+
+	while (command != '3')
+	{
+		while (command == '1' || command == '4')
+		{
+			if (command == '4')
+			{
+				printf("Enter match ID: ");
+				scanf("%d", &matchID);
+
+				for (i = 0; i < segmentHypothesisArray.Element[iSCluster].n; i++)
+					if (segmentHypothesisArray.Element[iSCluster].Element[i].idx == matchID)
+						break;
+
+				if (i >= segmentHypothesisArray.Element[iSCluster].n)
+					i = -1;
+			}
+			else
+				matchID = segmentHypothesisArray.Element[iSCluster].Element[i].idx;
+
+			PSGM_::MatchInstance *pMatch = pCTImatchesArray.Element[matchID];
+
+			PSGM_::ModelInstance *pMModelInstance = MCTISet.pCTI.Element[pMatch->iMCTI];
+
+			int iModel = pMModelInstance->iModel;
+
+			GetVertices(matchID, iVertexArray, iSSegmentArray, bVertexAlreadyStored);
+
+			float score = HypothesisEvaluation(matchID, iSSegmentArray, bICP, true);
+
+			printf("Enter command: 1 - next hypothesis, 2 - next segment, 3 - next image, 4 - select hypothesis\n");
+
+			do
+				scanf("%c", &command);
+			while (command < '1' || command > '4');
+
+			if (command == '1')
+				i++;
+
+			if (i >= segmentHypothesisArray.Element[iSCluster].n)
+				break;
+		}
+
+		iSCluster++;
+
+		if (iSCluster >= segmentHypothesisArray.n)
+			break;
+	}
+
+	delete[] iVertexArray.Element;
+	delete[] iSSegmentArray.Element;
+	delete[] bVertexAlreadyStored;
 }
 
 ///////////////////////////////////////////////////////////////////////////

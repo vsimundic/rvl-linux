@@ -609,6 +609,9 @@ namespace RVL
 		void HypothesisEvaluation(
 			Array<Array<SortIndex<float>>> segmentHypothesisArray,
 			bool bICP = false);
+		void VisualizeHypotheses(
+			Array<Array<SortIndex<float>>> segmentHypothesisArray,
+			bool bICP = false);
 
 	private:
 		void WholeMeshCluster();
