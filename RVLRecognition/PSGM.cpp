@@ -31,7 +31,7 @@
 //#define RVLPSGM_MATCHTGS_CREATE_SCENE_VG
 #define RVLPSGM_MATCHCTI_MATCH_MATRIX //activate this flag regardless to version 170601 - Vidovic 20.07.2017
 #define RVLPSGM_MATCH_HYPOTHESIS_LOG
-#define RVLPSGM_TANGENT_ALIGNMENT_VISUALIZATION
+//#define RVLPSGM_TANGENT_ALIGNMENT_VISUALIZATION
 
 using namespace RVL;
 using namespace RECOG;
@@ -8934,14 +8934,18 @@ bool RVL::RECOG::PSGM_::keyPressUserFunction(
 
 		do
 		{
-			printf("Enter 'c' for CTI match or 'i' for ICP match dispaly: ");
+			printf("Enter\n1) 'c' for CTI match,\n2)'t' for tangent alignment match,\n3)'i' for ICP match dispaly or\n4)'x' for tangent alignment + ICP: ");
 			scanf("%c", &cSelection);
-		} while (cSelection != 'c' && cSelection != 'i');
+		} while (cSelection != 'c' && cSelection != 'i' && cSelection != 't'&& cSelection != 'x');
 
 		if (cSelection == 'c')
 			pRecognition->PrintCTIMatches();
-		else
+		else if (cSelection == 't')
+			pRecognition->PrintCTIMatches(true);
+		else if (cSelection == 'i')
 			pRecognition->PrintICPMatches();
+		else
+			pRecognition->PrintTAICPMatches();
 	}
 
 	//delete visualized matches from the scene
@@ -15716,7 +15720,7 @@ RECOG::PSGM_::ModelInstance* PSGM::GetSCTI(RECOG::PSGM_::MatchInstance *pMatch)
 	return CTISet.pCTI.Element[pMatch->iSCTI];
 }
 
-void PSGM::PrintCTIMatches()
+void PSGM::PrintCTIMatches(bool bTAMatches)
 {
 	cout << "\nCTI matches per segment:\n";
 	for (int i = 0; i < bestSceneSegmentMatches.n; i++)
@@ -15724,7 +15728,10 @@ void PSGM::PrintCTIMatches()
 		cout << "Segment: " << i << ":\n";
 
 		for (int j = 0; j < bestSceneSegmentMatches.Element[i].n; j++)
-			cout << "Match: " << j << " ModelID:" << GetMCTI(GetMatch(bestSceneSegmentMatches.Element[i].Element[j].idx))->iModel << "\tCTI score: " << GetMatch(bestSceneSegmentMatches.Element[i].Element[j].idx)->score << " (matchID: " << bestSceneSegmentMatches.Element[i].Element[j].idx << ")" << "\n";
+			if (bTAMatches)
+				cout << "Match: " << j << " ModelID:" << GetMCTI(GetMatch(bestSceneSegmentMatches2.Element[i].Element[j].idx))->iModel << "\tCTI score: " << GetMatch(bestSceneSegmentMatches2.Element[i].Element[j].idx)->score << " (matchID: " << bestSceneSegmentMatches2.Element[i].Element[j].idx << ")" << "\n";
+			else
+				cout << "Match: " << j << " ModelID:" << GetMCTI(GetMatch(bestSceneSegmentMatches.Element[i].Element[j].idx))->iModel << "\tCTI score: " << GetMatch(bestSceneSegmentMatches.Element[i].Element[j].idx)->score << " (matchID: " << bestSceneSegmentMatches.Element[i].Element[j].idx << ")" << "\n";
 
 		cout << "---------------------------------------------------\n";
 	}
@@ -15746,6 +15753,21 @@ void PSGM::PrintICPMatches()
 
 		cout << "---------------------------------------------------\n";
 	}
+}
+
+void PSGM::PrintTAICPMatches()
+{
+	cout << "\nTA + ICP matches per segment:\n";
+	for (int i = 0; i < bestSceneSegmentMatches.n; i++)
+	{
+		cout << "Segment: " << i << ":\n";
+
+		for (int j = 0; j < bestSceneSegmentMatches2.Element[i].n; j++)
+			cout << "Match: " << j << " ModelID:" << GetMCTI(GetMatch(bestSceneSegmentMatches2.Element[i].Element[j].idx))->iModel << "\t score: " << GetMatch(bestSceneSegmentMatches2.Element[i].Element[j].idx)->cost_NN << " provjera score-a: " << bestSceneSegmentMatches2.Element[i].Element[j].cost << " (matchID: " << bestSceneSegmentMatches2.Element[i].Element[j].idx << ")" << "\n";
+
+		cout << "---------------------------------------------------\n";
+	}
+
 }
 
 void PSGM::VisualizeConsensusHypotheses(Visualizer *pVisualizer)
@@ -18728,6 +18750,7 @@ void PSGM::VisualizeHypotheses(
 			//float score = HypothesisEvaluation(matchID, iSSegmentArray, bICP, true);
 			float score = HypothesisEvaluation2(matchID, bICP, 0.001f, true);
 
+			
 			printf("Enter command: 1 - next hypothesis, 2 - next segment, 3 - next image, 4 - select hypothesis\n");
 
 			do

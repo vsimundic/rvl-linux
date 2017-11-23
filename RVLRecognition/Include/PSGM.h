@@ -565,8 +565,9 @@ namespace RVL
 			RVL::PSGM::ICPfunction ICPFunction, 
 			int ICPvariant,
 			Array<Array<SortIndex<float>>> sceneSegmentHypotheses); //Vidovic //for multiple matches per model
-		void PrintCTIMatches(); //Vidovic
+		void PrintCTIMatches(bool bTAMatches = false); //Vidovic
 		void PrintICPMatches(); //Vidovic
+		void PrintTAICPMatches(); //Vidovic
 		void VisualizeConsensusHypotheses(Visualizer *pVisualizer); //Vidovic
 		void VisualizeGTMatch(Visualizer *pVisualizer, Array<Array<SortIndex<float>>> *scoreMatchMatrix_ = NULL, bool bICPPose = false); //Vidovic
 		int FindCTIMatchRank(int matchID, int iSegment); //Vidovic
