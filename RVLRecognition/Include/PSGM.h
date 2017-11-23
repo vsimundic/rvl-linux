@@ -312,7 +312,7 @@ namespace RVL
 		
 		//Recomended,
 		//Visualizes chosen hypotheses 0-6 for each segment on the scene, activated when pressed "c":
-		void AddOneModelToVisualizer(Visualizer *pVisualizer, int iMatch, int iRank, bool align, bool useTG = false, bool bICPPose = true, bool bCalculatePose = true);
+		void AddOneModelToVisualizer(Visualizer *pVisualizer, int iMatch, int iRank, bool align, bool useTG = false, bool bICPPose = true, bool bCalculatePose = true, double *color = NULL);
 		
 		//Visualizes GT models on the scene, activated when pressed "g":
 		void AddGTModelsToVisualizer(Visualizer *pVisualizer);
@@ -350,7 +350,8 @@ namespace RVL
 			float *t,
 			float &score,
 			Array<RECOG::TangentVertexCorrespondence> &correspondences,
-			Array<int> iVertexArray,
+			Array<int> &iVertexArray,
+			Array<int> &iSSegmentArray,
 			bool *bVertexAlreadyStored);
 
 		void VisualizeAlignedModels(int iRefModel, int iModel); // Visualizes models after alignment - for easier debugging
@@ -373,6 +374,8 @@ namespace RVL
 		void RMSE(FILE *fp, bool allTPHypotheses = false); //calculate RMSE for TP hypothesis on the scene (only 0-th placed TP hypotheses-> allTPHypothesis = false; all TP hypotheses -> allTPHypothesis = true) - Vidovic
 
 		float RMSE(int iModel, double *TGT, double *T); //calculate RMSE for single model - Vidovic
+
+		void RMSE_Consensus(FILE *fp, bool onlyTPHypothesis = true); //calculate RMSE for consensus hypothesis - Vidovic
 
 		void InitDisplay(
 			Visualizer *pVisualizer,
@@ -550,7 +553,7 @@ namespace RVL
 		bool CheckHypothesesCollision(int firstHyp, int secondHyp, float thr, float *collisionValue = NULL); //Filko //float *collisionValue added by Vidovic
 		float GetObjectTransparencyRatio(vtkSmartPointer<vtkPolyData> object, unsigned short *depthImg, float depthThr, int width, int height, float c_fu, float c_fv, float c_uc, float c_vc); //Filko
 		void FilterHypothesesUsingTransparency(float tranThr, float depthThr, bool verbose = false); //Filko
-		vtkSmartPointer<vtkPolyData> GetPoseCorrectedVisibleModel(int iMatch, bool ICPPose = true); //Filko
+		vtkSmartPointer<vtkPolyData> GetPoseCorrectedVisibleModel(int iMatch, bool ICPPose = true, bool bCalculatePose = true); //Filko
 		void GetTransparencyAndCollisionConsensus(Visualizer *pVisualizer = NULL); //Vidovic
 		void EvaluateConsensusMatches(float &precision, float &recall, bool verbose = false); //Vidovic
 		RECOG::PSGM_::MatchInstance* GetMatch(int matchID); //Vidovic
@@ -558,11 +561,14 @@ namespace RVL
 		RECOG::PSGM_::ModelInstance* GetMCTI(RECOG::PSGM_::MatchInstance *pMatch); //Vidovic
 		RECOG::PSGM_::ModelInstance* GetSCTI(int iSCTI); //Vidovic
 		RECOG::PSGM_::ModelInstance* GetSCTI(RECOG::PSGM_::MatchInstance *pMatch); //Vidovic
-		void ICP(RVL::PSGM::ICPfunction ICPFunction, int ICPvariant); //Vidovic //for multiple matches per model
+		void ICP(
+			RVL::PSGM::ICPfunction ICPFunction, 
+			int ICPvariant,
+			Array<Array<SortIndex<float>>> sceneSegmentHypotheses); //Vidovic //for multiple matches per model
 		void PrintCTIMatches(); //Vidovic
 		void PrintICPMatches(); //Vidovic
 		void VisualizeConsensusHypotheses(Visualizer *pVisualizer); //Vidovic
-		void VisualizeGTMatch(Visualizer *pVisualizer); //Vidovic
+		void VisualizeGTMatch(Visualizer *pVisualizer, Array<Array<SortIndex<float>>> *scoreMatchMatrix_ = NULL, bool bICPPose = false); //Vidovic
 		int FindCTIMatchRank(int matchID, int iSegment); //Vidovic
 		int FindICPMatchRank(int matchID, int iSegment); //Vidovic
 		void createVersionTestFile(); //Vidovic
@@ -594,7 +600,33 @@ namespace RVL
 		void GetVertices(
 			int iMatch,
 			Array<int> &iVertexArray,
+			Array<int> &iSSegmentArray,
 			bool *bVertexAlreadyStored);
+		void SampleScene();
+		float HypothesisEvaluation(
+			int iHypothesis,
+			Array<int> iSSegmentArray,
+			bool bICP = false,
+			bool bVisualize = false);
+		float HypothesisEvaluation2(
+			int iHypothesis,
+			bool bICP = false,
+			float scale = 1.0f,
+			bool bVisualize = false);
+		void HypothesisEvaluation(
+			Array<Array<SortIndex<float>>> segmentHypothesisArray,
+			bool bICP = false);
+		void VisualizeHypotheses(
+			Array<Array<SortIndex<float>>> segmentHypothesisArray,
+			bool bICP = false);
+		void Project(
+			Array<Point> PtArray,
+			float *R,
+			float *t,
+			float *Rs);
+		void CreateModelPCs();
+		void DeleteModelPCs();
+		void InitZBuffer(Mesh *pMesh);
 
 	private:
 		void WholeMeshCluster();
@@ -671,6 +703,7 @@ namespace RVL
 		int minClusterBoundaryDiscontinuityPerc;
 		float minClusterNormalDistributionStd;
 		float groundPlaneTolerance;
+		int sceneSamplingResolution;
 		bool bZeroRFDescriptor;
 		bool bGTRFDescriptors;
 		bool bGroundPlaneRFDescriptors;
@@ -695,6 +728,8 @@ namespace RVL
 		Array<SortIndex<float>> bestSceneSegmentMatchesArray;
 		Array<SortIndex<float>> bestSceneSegmentMatchesArray2;
 		Array2D<float> hullCTIDescriptorArray;
+		Array<QList<QLIST::Index>> sceneSegmentSampleArray;
+		QLIST::Index *sceneSegmentSampleMem;
 		unsigned char *clusterColor;
 		//Array2D<Array<int>> matchMatrix;
 		//int *matchMatrixMem;
@@ -724,6 +759,8 @@ namespace RVL
 		std::vector<int> consensusHypotheses; //Vidovic
 		std::vector<int> noCollisionHypotheses; //Vidovic
 		std::vector<int> envelopmentColisionHypotheses; //Vidovic
+		std::vector<Array<Point>> modelPCs;
+		
 		bool createMatchGT; //Vidovic
 		int matchGTiS; //Vidovic
 		int matchGTiRank; //Vidovic
@@ -732,8 +769,10 @@ namespace RVL
 		QList<RECOG::PSGM_::MGT> MGTList;
 		bool createSegmentGT; //Vidovic
 		bool segmentGTLoaded; //Vidovic
+		bool visualizeTPHypotheses; //Vidovic
+		bool visualizeCTITPHypotheses; //Vidovic
 		Array<RVL::ModelColor> modelColors;
-		FILE *fpDetermineThresh, *fpDetermineThresh_;
+		FILE *fpDetermineThresh, *fpDetermineThresh_, *fpHypothesesFiltering;
 		//FILE *fpSegmentEnvelopment, *fpSegmentEnvelopmentCTI, *fpSegmentCollision, *fpSegmentCollisionCTI, *fpHypothesisCollision, *fpHypothesisTransparency, *fpHypothesisTransparencyCTI, *fpHypothesisGndDistance, *fpHypothesisGndDistanceCTI;
 
 		float clusterType;
@@ -754,6 +793,10 @@ namespace RVL
 		Eigen::MatrixXf T0i;
 		int iCorrectClass;
 		char *modelDataBase; //Vidovic
+		Array2D<Point> ZBuffer;
+		Array<int> ZBufferActivePtArray;
+		int *subImageMap;
+		Camera camera;
 
 	private:		
 		RECOG::PSGM_::Cluster *clusterMem;

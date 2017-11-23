@@ -54,7 +54,7 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 //#define PSGM_RECOGNITION_VISUALIZE_SCENE
 //#define RVLRECOGNITION_DEMO_CLASS_ALIGNMENT
 #define RVLPSGM_TRANSPARENCY_AND_COLLISION
-//#define RVLPSGM_RMSE_CALCULATION
+#define RVLPSGM_RMSE_CALCULATION
 #ifndef RVLVERSION_170601
 #define RVLRECOGNITION_DEMO_CLASS_ALIGNMENT
 #endif
@@ -560,7 +560,7 @@ int main(int argc, char ** argv)
 
 #ifdef RVLPSGM_ICP
 			if (recognition.problem == RVLRECOGNITION_PROBLEM_SHAPE_INSTANCE_DETECTION)
-			recognition.LoadModelMeshDB(modelSequenceFileName, &recognition.vtkModelDB, true, 0.4);
+				recognition.LoadModelMeshDB(modelSequenceFileName, &recognition.vtkModelDB, false, 0.4);
 #endif
 
 			Mesh mesh;
@@ -601,6 +601,13 @@ int main(int argc, char ** argv)
 			FILE *fpLog = fopen((resultsFolderName + "\\evaluationLog.txt").data(), "w");
 
 			FILE *fpRMSE = fopen((resultsFolderName + "\\RMSE.txt").data(), "w");
+
+
+#ifdef RVLPSGM_RMSE_CALCULATION
+			//Load models without decimation (used for calculating RMSE)
+			//recognition.LoadModelMeshDB(modelSequenceFileName, &recognition.vtkRMSEModelDB, false);
+			recognition.vtkRMSEModelDB = recognition.vtkModelDB;
+#endif
 
 			recognition.LoadCompleteSegmentGT(sceneSequence);
 
@@ -803,6 +810,7 @@ int main(int argc, char ** argv)
 
 				recognition.segmentGTLoaded = false;
 				recognition.createSegmentGT = false;
+				recognition.visualizeTPHypotheses = false;
 
 				if (flags & RVLRECOGNITION_DEMO_FLAG_3D_VISUALIZATION)
 				{					
@@ -894,7 +902,32 @@ int main(int argc, char ** argv)
 					//recognition.CalculateNNCost(&visualizer, PCLICP, PCLICPVariants::Point_to_plane);
 
 					//TEST RVLPSGM_MATCHCTI_MATCH_MATRIX
-					recognition.ICP(PCLICP, PCLICPVariants::Point_to_plane);
+#ifdef RVLVERSION_171111
+					recognition.ICP(PCLICP, PCLICPVariants::Point_to_plane, recognition.bestSceneSegmentMatches2);
+
+					recognition.HypothesisEvaluation(recognition.bestSceneSegmentMatches2, true);
+
+					//recognition.VisualizeHypotheses(recognition.bestSceneSegmentMatches2, true);
+
+					//Colision check
+					recognition.noCollisionHypotheses.clear();
+					recognition.transparentHypotheses.clear();
+					recognition.envelopmentColisionHypotheses.clear();
+					recognition.GetHypothesesCollisionConsensus(&recognition.noCollisionHypotheses, &recognition.bestSceneSegmentMatches2, 10);
+
+					//Get transparency and collision consensus
+					recognition.GetTransparencyAndCollisionConsensus(&visualizer);
+
+					//Evaluate consesus matches
+					float precision, recall;
+					recognition.EvaluateConsensusMatches(precision, recall, true);
+
+#ifdef RVLPSGM_RMSE_CALCULATION
+					//Calculate RMSE
+					recognition.RMSE_Consensus(fpRMSE, true);
+#endif
+#else
+					recognition.ICP(PCLICP, PCLICPVariants::Point_to_plane, recognition.bestSceneSegmentMatches);
 
 #ifdef RVLPSGM_TRANSPARENCY_AND_COLLISION
 					//Transparency check
@@ -912,6 +945,7 @@ int main(int argc, char ** argv)
 
 					//Get transparency and collision consensus
 					recognition.GetTransparencyAndCollisionConsensus(&visualizer);
+#endif
 
 					//Evaluate consesus matches
 					float precision, recall;
@@ -924,14 +958,14 @@ int main(int argc, char ** argv)
 					//determine thresholds for SHAPE_INSTANCE_DETECTION
 					recognition.DetermineThresholds();
 #endif
-#endif
+#endif	// #ifndef RVLVERSION_171111
 
 					//#ifdef RVLVERSION_170601
 					//				//evaluate ICP
 					//				recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, fpPoseError, fpnotFirstInfo, fpnotFirstPoseErr, 10, true);
 					//#endif
 
-#ifdef RVLPSGM_RMSE_CALCULATION
+#ifdef NEVER
 					//Load models without decimation (used for calculatin RMSE)
 					recognition.LoadModelMeshDB(modelSequenceFileName, &recognition.vtkRMSEModelDB, false);
 
