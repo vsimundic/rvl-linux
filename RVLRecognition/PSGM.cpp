@@ -31,7 +31,7 @@
 //#define RVLPSGM_MATCHTGS_CREATE_SCENE_VG
 #define RVLPSGM_MATCHCTI_MATCH_MATRIX //activate this flag regardless to version 170601 - Vidovic 20.07.2017
 #define RVLPSGM_MATCH_HYPOTHESIS_LOG
-//#define RVLPSGM_TANGENT_ALIGNMENT_VISUALIZATION
+#define RVLPSGM_TANGENT_ALIGNMENT_VISUALIZATION
 
 using namespace RVL;
 using namespace RECOG;
@@ -122,6 +122,9 @@ PSGM::PSGM()
 	sceneSegmentSampleArray.Element = NULL;
 	sceneSegmentSampleMem = NULL;
 	clusterColor = NULL;
+	ZBuffer.Element = NULL;
+	ZBufferActivePtArray.Element = NULL;
+	subImageMap = NULL;
 
 	//nSamples = 20; //Vidovic
 	stdNoise = 2; //Vidovic
@@ -199,6 +202,11 @@ PSGM::PSGM()
 	iCorrectClass = 0;
 
 	displayData.hypothesisVisualizationMode = RVLPSGM_HYPOTHESIS_VISUALIZATION_MODE_PLY;
+
+	camera.fu = 525;
+	camera.fv = 525;
+	camera.uc = 320;
+	camera.vc = 240;
 }
 
 
@@ -233,6 +241,9 @@ PSGM::~PSGM()
 	RVL_DELETE_ARRAY(sceneSegmentSampleArray.Element);
 	RVL_DELETE_ARRAY(sceneSegmentSampleMem);
 	RVL_DELETE_ARRAY(clusterColor);
+	RVL_DELETE_ARRAY(ZBuffer.Element);
+	RVL_DELETE_ARRAY(ZBufferActivePtArray.Element);
+	RVL_DELETE_ARRAY(subImageMap);
 
 	//Vidovic
 	int iSSegment;
@@ -298,6 +309,8 @@ PSGM::~PSGM()
 
 	if (pSVertexGraph)
 		delete pSVertexGraph;
+
+	DeleteModelPCs();
 }
 
 void PSGM::CreateParamList(CRVLMem *pMem)
@@ -3623,6 +3636,8 @@ void PSGM::LoadModelMeshDB(char *modelSequenceFileName, std::map<int, vtkSmartPo
 
 	}
 
+	CreateModelPCs();
+
 	printf("VTK Model DB creation completed!\n");
 }
 
@@ -5189,6 +5204,8 @@ void PSGM::Match()
 
 	SampleScene();
 
+	InitZBuffer(pMesh);
+
 	int iMatch, matchID;
 	RECOG::PSGM_::MatchInstance *pMatch;
 	float score;
@@ -5377,10 +5394,10 @@ void PSGM::Match()
 				if ((gndDistance < gndDistanceThresh) & (gndDistance > -gndDistanceThresh))
 				{
 					//filter hypotheses by transparency
-					vtkSmartPointer<vtkPolyData> object = GetPoseCorrectedVisibleModel(matchID, false, false);
-					pMatch->transparencyRatio = GetObjectTransparencyRatio(object, (unsigned short *)depth.data, 10, 640, 480, 525, 525, 320, 240); //HARDCODED FOR ECCV DATASET CAMERA
+					//vtkSmartPointer<vtkPolyData> object = GetPoseCorrectedVisibleModel(matchID, false, false);
+					//pMatch->transparencyRatio = GetObjectTransparencyRatio(object, (unsigned short *)depth.data, 10, 640, 480, 525, 525, 320, 240); //HARDCODED FOR ECCV DATASET CAMERA
 
-					if (pMatch->transparencyRatio < transparencyThresh)
+					//if (pMatch->transparencyRatio < transparencyThresh)
 					{
 						if (!(std::find(envelopmentColisionHypotheses.begin(), envelopmentColisionHypotheses.end(), matchID) != envelopmentColisionHypotheses.end()))
 						{
@@ -5421,24 +5438,24 @@ void PSGM::Match()
 							}
 						}
 					}
-					else
-					{
-						if (bVerbose)
-							printf("INVALIDATED by transparency: %f", pMatch->transparencyRatio);
+					//else
+					//{
+					//	if (bVerbose)
+					//		printf("INVALIDATED by transparency: %f", pMatch->transparencyRatio);
 
-						if (iModel == iGTModel)
-						{
-							if (bVerbose)
-								printf(" (--)\n");
-							nFNFiltered++;
-						}
-						else
-						{
-							if (bVerbose)
-								printf(" (++)\n");
-							nTNFiltered++;
-						}
-					}
+					//	if (iModel == iGTModel)
+					//	{
+					//		if (bVerbose)
+					//			printf(" (--)\n");
+					//		nFNFiltered++;
+					//	}
+					//	else
+					//	{
+					//		if (bVerbose)
+					//			printf(" (++)\n");
+					//		nTNFiltered++;
+					//	}
+					//}
 				}	// if hypothesis matchID satisfies the ground plane constraint.
 				else
 				{
@@ -5461,7 +5478,8 @@ void PSGM::Match()
 
 				if (bConsistentWithScene)
 				{
-					score = HypothesisEvaluation(matchID, iSSegmentArray);
+					//score = HypothesisEvaluation(matchID, iSSegmentArray);
+					score = HypothesisEvaluation2(matchID, false, 0.001f);
 
 					bestSceneSegmentMatches2.Element[iSCluster].Element[iMatchFiltered].idx = matchID;
 					bestSceneSegmentMatches2.Element[iSCluster].Element[iMatchFiltered].cost = score * (1.0f - gndDistance * gndDistance / 0.0025f);
@@ -5718,8 +5736,10 @@ void PSGM::HypothesisEvaluation(
 
 			pHypothesis = pCTImatchesArray.Element[iHypothesis];
 
-			segmentHypothesisArray.Element[iSSegment].Element[i].cost = pHypothesis->cost_NN = 
-				HypothesisEvaluation(iHypothesis, iSSegmentArray, bICP);
+			//segmentHypothesisArray.Element[iSSegment].Element[i].cost = pHypothesis->cost_NN = 
+			//	HypothesisEvaluation(iHypothesis, iSSegmentArray, bICP);
+			segmentHypothesisArray.Element[iSSegment].Element[i].cost = pHypothesis->cost_NN =
+				HypothesisEvaluation2(iHypothesis, bICP, 0.001f);
 		}
 
 		BubbleSort<SortIndex<float>>(segmentHypothesisArray.Element[iSSegment], true);
@@ -5746,14 +5766,6 @@ float PSGM::HypothesisEvaluation(
 
 	int iModel = pMCTI->iModel;
 
-	//Scaling PLY model to meters
-	vtkSmartPointer<vtkTransform> transformScale = vtkSmartPointer<vtkTransform>::New();
-	transformScale->Scale(0.001, 0.001, 0.001);
-	vtkSmartPointer<vtkTransformPolyDataFilter> transformFilterScale = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
-	transformFilterScale->SetInputData(vtkModelDB.at(iModel));
-	transformFilterScale->SetTransform(transformScale);
-	transformFilterScale->Update();
-
 	//Generate visible scene model pointcloud - points are in model c.s.
 	double TMS[16];
 	float tMS[3];
@@ -5773,6 +5785,13 @@ float PSGM::HypothesisEvaluation(
 	}
 
 	RVLHTRANSFMX(pHypothesis->R, tMS, TMS);
+
+	vtkSmartPointer<vtkTransform> transformScale = vtkSmartPointer<vtkTransform>::New();
+	transformScale->Scale(0.001, 0.001, 0.001);
+	vtkSmartPointer<vtkTransformPolyDataFilter> transformFilterScale = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
+	transformFilterScale->SetInputData(vtkModelDB.at(iModel));
+	transformFilterScale->SetTransform(transformScale);
+	transformFilterScale->Update();
 
 	vtkSmartPointer<vtkPolyData> visiblePD = GetVisiblePart(transformFilterScale->GetOutput(), TMS);	
 
@@ -5955,6 +5974,212 @@ float PSGM::HypothesisEvaluation(
 	}
 
 	return score;
+}
+
+float PSGM::HypothesisEvaluation2(
+	int iHypothesis,
+	bool bICP,
+	float scale,
+	bool bVisualize)
+{
+	float maxe = 0.01f;
+
+	float maxe2 = maxe * maxe;
+
+	PSGM_::MatchInstance *pHypothesis = pCTImatchesArray.Element[iHypothesis];
+
+	PSGM_::ModelInstance *pMCTI = MCTISet.pCTI.Element[pHypothesis->iMCTI];
+
+	int iModel = pMCTI->iModel;
+
+	//Generate visible scene model pointcloud - points are in model c.s.
+	double TMS[16];
+	float tMS[3];
+	float *RMS;
+
+	if (bICP)
+	{
+		RMS = pHypothesis->RICP;
+
+		RVLSCALE3VECTOR(pHypothesis->tICP, scale, tMS);
+	}
+	else
+	{
+		RMS = pHypothesis->R;
+
+		RVLSCALE3VECTOR(pHypothesis->t, scale, tMS);
+	}
+
+	float RMSs[9];
+
+	if (scale > 1.000001 || scale < 0.999999)
+		RVLSCALEMX3X3(RMS, scale, RMSs)
+	else
+	{
+		RVLCOPYMX3X3(RMS, RMSs)
+	}
+
+	Array<Point> modelPC = modelPCs[iModel];
+
+	Project(modelPC, RMS, tMS, RMSs);
+
+	Point *PtArray = pMesh->NodeArray.Element;
+
+	int neighbor[9];
+
+	int w = ZBuffer.w;
+
+	neighbor[0] = -1 - w;
+	neighbor[1] = -w;
+	neighbor[2] = 1 - w;
+	neighbor[3] = -1;
+	neighbor[4] = 0;
+	neighbor[5] = 1;
+	neighbor[6] = -1 + w;
+	neighbor[7] = w;
+	neighbor[8] = 1 + w;
+
+	int nPts = ZBufferActivePtArray.n;
+
+	int *SMCorrespondence;
+
+	if (bVisualize)
+		SMCorrespondence = new int[nPts];
+
+	float score = 0.0f;
+	int nTransparentPts = 0;
+
+	int i, j, iPix, iMPt, iSPt, iMPt_, iClosestPt;
+	Point *pSPt, *pMPt;
+	float dP[3];
+	float e2, mine2;
+
+	for (i = 0; i < ZBufferActivePtArray.n; i++)
+	{
+		iMPt = ZBufferActivePtArray.Element[i];
+
+		pMPt = ZBuffer.Element + iMPt;
+
+		mine2 = maxe2;
+
+		iClosestPt = -1;
+
+		for (j = 0; j < 9; j++)
+		{
+			iMPt_ = iMPt + neighbor[j];
+
+			iSPt = subImageMap[iMPt_];
+
+			pSPt = PtArray + iSPt;
+
+			if (RVLDOTPRODUCT3(pSPt->N, pSPt->N) < 0.5f)
+				continue;
+
+			RVLDIF3VECTORS(pSPt->P, pMPt->P, dP);
+
+			e2 = RVLDOTPRODUCT3(dP, dP);
+
+			if (e2 < mine2)
+			{
+				mine2 = e2;
+
+				iClosestPt = iSPt;
+			}
+		}
+
+		if (iClosestPt >= 0)
+		{
+			pSPt = PtArray + iClosestPt;
+
+			score += ((1.0f - sqrt(mine2) / maxe) * RVLDOTPRODUCT3(pSPt->N, pMPt->N));
+
+			if (bVisualize)
+				SMCorrespondence[i] = iClosestPt;
+		}
+		else
+		{
+			iSPt = subImageMap[iMPt];
+
+			pSPt = PtArray + iSPt;
+
+			if (pSPt->P[2] > pMPt->P[2] + 0.02f)
+			{
+				nTransparentPts++;
+
+				if (bVisualize)
+					SMCorrespondence[i] = -2;
+			}
+			else if (bVisualize)
+				SMCorrespondence[i] = -1;
+		}
+	}
+
+	if (bVisualize)
+	{
+		PSGM_::ModelInstance *pSCTI = CTISet.pCTI.Element[pHypothesis->iSCTI];
+
+		printf("segment %d model %d match %d score %f transparency %d\n", pSCTI->iCluster, iModel, iHypothesis, score, nTransparentPts);
+
+		Point *PC = new Point[2 * nPts - nTransparentPts];
+
+		Array<Point> MatchedPC;
+
+		MatchedPC.Element = PC;
+		MatchedPC.n = 0;
+
+		Array<Point> TransparentPC;
+
+		TransparentPC.Element = PC + nPts - nTransparentPts;
+		TransparentPC.n = 0;
+
+		Array<Point> SPC;
+		
+		SPC.Element = PC + nPts;
+		SPC.n = 0;
+
+		for (i = 0; i < nPts; i++)
+		{
+			iMPt = ZBufferActivePtArray.Element[i];
+
+			pMPt = ZBuffer.Element + iMPt;
+
+			if (SMCorrespondence[i] >= 0)
+			{
+				MatchedPC.Element[MatchedPC.n++] = *pMPt;
+
+				pSPt = PtArray + SMCorrespondence[i];
+
+				SPC.Element[SPC.n++] = *pSPt;
+			}
+			else if (SMCorrespondence[i] == -2)
+				TransparentPC.Element[TransparentPC.n++] = *pMPt;
+		}
+
+		Visualizer visualizer;
+
+		visualizer.Create();
+
+		unsigned char color[3];
+
+		RVLSET3VECTOR(color, 0, 255, 0);
+
+		visualizer.DisplayPointSet<float, Point>(MatchedPC, color, 4.0f);
+
+		RVLSET3VECTOR(color, 0, 0, 255);
+
+		visualizer.DisplayPointSet<float, Point>(SPC, color, 4.0f);
+
+		RVLSET3VECTOR(color, 255, 0, 0);
+
+		visualizer.DisplayPointSet<float, Point>(TransparentPC, color, 4.0f);
+
+		visualizer.Run();
+
+		delete[] SMCorrespondence;
+		delete[] PC;
+	}
+
+	return score - (float)nTransparentPts;
 }
 
 void PSGM::Match(
@@ -16526,6 +16751,204 @@ int PSGM::CheckHypothesesToSegmentEnvelopmentAndCollision(int hyp, int segment, 
 	return 0;
 }
 
+void PSGM::CreateModelPCs()
+{
+	DeleteModelPCs();
+
+	int iModel, iPt, nPts;
+	vtkSmartPointer<vtkPolyData> pVTKModel;
+	Array<Point> modelPC;
+	vtkSmartPointer<vtkPoints> pdPoints;
+	double *P;
+	float N[3];
+	Point *pPt;
+	vtkSmartPointer<vtkFloatArray> normals;
+
+	for (iModel = 0; iModel < vtkModelDB.size(); iModel++)
+	{
+		pVTKModel = vtkModelDB[iModel];
+
+		nPts = pVTKModel->GetNumberOfPoints();
+
+		modelPC.Element = new Point[nPts];
+
+		modelPC.n = nPts;
+
+		pdPoints = pVTKModel->GetPoints();
+
+		normals = vtkFloatArray::SafeDownCast(pVTKModel->GetPointData()->GetNormals());
+
+		pPt = modelPC.Element;
+		
+		int iPt;
+
+		for (iPt = 0; iPt < nPts; iPt++, pPt++)
+		{
+			P = pdPoints->GetPoint(iPt);
+
+			RVLCOPY3VECTOR(P, pPt->P);
+
+			normals->GetTupleValue(iPt, N);
+
+			RVLCOPY3VECTOR(N, pPt->N);
+		}
+
+		modelPCs.push_back(modelPC);
+	}
+}
+
+void PSGM::DeleteModelPCs()
+{
+	int iModel;
+	Array<Point> modelPC;
+
+	for (iModel = 0; iModel < modelPCs.size(); iModel++)
+	{
+		modelPC = modelPCs[iModel];
+
+		RVL_DELETE_ARRAY(modelPC.Element);
+	}
+
+	modelPCs.clear();
+}
+
+void PSGM::InitZBuffer(Mesh *pMesh)
+{
+	if (!pMesh->bOrganizedPC)
+		return;
+
+	int w = (pMesh->width / sceneSamplingResolution + (pMesh->width % sceneSamplingResolution > 0 ? 1 : 0));
+	int h = (pMesh->height / sceneSamplingResolution + (pMesh->height % sceneSamplingResolution > 0 ? 1 : 0));
+
+	int n = w * h;
+
+	if (ZBuffer.Element)
+	{
+		if (ZBuffer.w * ZBuffer.h < n)
+		{
+			delete[] ZBuffer.Element;
+
+			ZBuffer.Element = new Point[n];
+
+			RVL_DELETE_ARRAY(ZBufferActivePtArray.Element);
+
+			ZBufferActivePtArray.Element = new int[n];
+
+			RVL_DELETE_ARRAY(subImageMap);
+
+			subImageMap = new int[n];
+		}
+	}
+	else
+	{
+		ZBuffer.Element = new Point[n];
+
+		RVL_DELETE_ARRAY(ZBufferActivePtArray.Element);
+
+		ZBufferActivePtArray.Element = new int[n];
+
+		RVL_DELETE_ARRAY(subImageMap);
+
+		subImageMap = new int[n];
+	}
+
+	ZBuffer.w = w;
+	ZBuffer.h = h;
+
+	int iPix, u, v;
+
+	for (iPix = 0; iPix < n; iPix++)
+	{
+		u = iPix % w;
+		v = iPix / w;
+
+		if (u == 0 || u == w - 1 || v == 0 || v == h - 1)
+		{
+			ZBuffer.Element[iPix].bValid = true;
+			ZBuffer.Element[iPix].P[2] = 0.0f;
+		}
+		else
+			ZBuffer.Element[iPix].bValid = false;
+
+		subImageMap[iPix] = sceneSamplingResolution * (u + v * pMesh->width);
+	}
+
+	ZBufferActivePtArray.n = 0;
+}
+
+void PSGM::Project(
+	Array<Point> PtArray,
+	float *R,
+	float *t,
+	float *Rs)
+{
+	int i;
+
+	for (i = 0; i < ZBufferActivePtArray.n; i++)
+		ZBuffer.Element[ZBufferActivePtArray.Element[i]].bValid = false;
+
+	ZBufferActivePtArray.n = 0;
+
+	int w = ZBuffer.w;
+	int h = ZBuffer.h;
+
+	float fSceneSamplingResolution = (float)sceneSamplingResolution;
+	float fu = camera.fu / fSceneSamplingResolution;
+	float fv = camera.fv / fSceneSamplingResolution;
+	float uc = camera.uc / fSceneSamplingResolution;
+	float vc = camera.vc / fSceneSamplingResolution;
+
+	float P[3], N[3];
+	Point *pPtSrc, *pPtTgt;
+	int u, v, iPix;
+
+	for (i = 0; i < PtArray.n; i++)
+	{
+		pPtSrc = PtArray.Element + i;
+
+		RVLTRANSF3(pPtSrc->P, Rs, t, P);
+
+		RVLMULMX3X3VECT(R, pPtSrc->N, N);
+
+		if (RVLDOTPRODUCT3(N, P) >= 0)
+			continue;
+
+		u = (int)(fu * P[0] / P[2] + uc + 0.5f);
+
+		if (u < 0)
+			continue;
+		else if (u >= w)
+			continue;
+
+		v = (int)(fv * P[1] / P[2] + vc + 0.5f);
+
+		if (v < 0)
+			continue;
+		else if (v >= h)
+			continue;
+
+		iPix = u + v * w;
+
+		pPtTgt = ZBuffer.Element + iPix;
+
+		if (pPtTgt->bValid)
+		{
+			if (P[2] < pPtTgt->P[2])
+			{
+				RVLCOPY3VECTOR(P, pPtTgt->P);
+				RVLCOPY3VECTOR(N, pPtTgt->N);
+			}
+		}
+		else
+		{
+			RVLCOPY3VECTOR(P, pPtTgt->P);
+			RVLCOPY3VECTOR(N, pPtTgt->N);
+			pPtTgt->bValid = true;
+			ZBufferActivePtArray.Element[ZBufferActivePtArray.n++] = iPix;
+		}
+	}
+}
+
 ///////////////////////////////////////////////////////////////////////////
 //
 // CUPEC
@@ -18275,6 +18698,8 @@ void PSGM::VisualizeHypotheses(
 
 	while (command != '3')
 	{
+		command = '1';
+
 		while (command == '1' || command == '4')
 		{
 			if (command == '4')
@@ -18300,7 +18725,8 @@ void PSGM::VisualizeHypotheses(
 
 			GetVertices(matchID, iVertexArray, iSSegmentArray, bVertexAlreadyStored);
 
-			float score = HypothesisEvaluation(matchID, iSSegmentArray, bICP, true);
+			//float score = HypothesisEvaluation(matchID, iSSegmentArray, bICP, true);
+			float score = HypothesisEvaluation2(matchID, bICP, 0.001f, true);
 
 			printf("Enter command: 1 - next hypothesis, 2 - next segment, 3 - next image, 4 - select hypothesis\n");
 

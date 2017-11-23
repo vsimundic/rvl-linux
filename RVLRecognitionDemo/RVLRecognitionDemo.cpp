@@ -605,7 +605,8 @@ int main(int argc, char ** argv)
 
 #ifdef RVLPSGM_RMSE_CALCULATION
 			//Load models without decimation (used for calculating RMSE)
-			recognition.LoadModelMeshDB(modelSequenceFileName, &recognition.vtkRMSEModelDB, false);
+			//recognition.LoadModelMeshDB(modelSequenceFileName, &recognition.vtkRMSEModelDB, false);
+			recognition.vtkRMSEModelDB = recognition.vtkModelDB;
 #endif
 
 			recognition.LoadCompleteSegmentGT(sceneSequence);

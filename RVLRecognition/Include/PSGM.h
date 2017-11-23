@@ -608,12 +608,25 @@ namespace RVL
 			Array<int> iSSegmentArray,
 			bool bICP = false,
 			bool bVisualize = false);
+		float HypothesisEvaluation2(
+			int iHypothesis,
+			bool bICP = false,
+			float scale = 1.0f,
+			bool bVisualize = false);
 		void HypothesisEvaluation(
 			Array<Array<SortIndex<float>>> segmentHypothesisArray,
 			bool bICP = false);
 		void VisualizeHypotheses(
 			Array<Array<SortIndex<float>>> segmentHypothesisArray,
 			bool bICP = false);
+		void Project(
+			Array<Point> PtArray,
+			float *R,
+			float *t,
+			float *Rs);
+		void CreateModelPCs();
+		void DeleteModelPCs();
+		void InitZBuffer(Mesh *pMesh);
 
 	private:
 		void WholeMeshCluster();
@@ -746,6 +759,8 @@ namespace RVL
 		std::vector<int> consensusHypotheses; //Vidovic
 		std::vector<int> noCollisionHypotheses; //Vidovic
 		std::vector<int> envelopmentColisionHypotheses; //Vidovic
+		std::vector<Array<Point>> modelPCs;
+		
 		bool createMatchGT; //Vidovic
 		int matchGTiS; //Vidovic
 		int matchGTiRank; //Vidovic
@@ -778,6 +793,10 @@ namespace RVL
 		Eigen::MatrixXf T0i;
 		int iCorrectClass;
 		char *modelDataBase; //Vidovic
+		Array2D<Point> ZBuffer;
+		Array<int> ZBufferActivePtArray;
+		int *subImageMap;
+		Camera camera;
 
 	private:		
 		RECOG::PSGM_::Cluster *clusterMem;
