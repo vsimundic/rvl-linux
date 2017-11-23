@@ -6053,6 +6053,7 @@ float PSGM::HypothesisEvaluation2(
 	Point *pSPt, *pMPt;
 	float dP[3];
 	float e2, mine2;
+	float csN;
 
 	for (i = 0; i < ZBufferActivePtArray.n; i++)
 	{
@@ -6071,6 +6072,9 @@ float PSGM::HypothesisEvaluation2(
 			iSPt = subImageMap[iMPt_];
 
 			pSPt = PtArray + iSPt;
+
+			if (pSPt->N[0] != pSPt->N[0])
+				continue;
 
 			if (RVLDOTPRODUCT3(pSPt->N, pSPt->N) < 0.5f)
 				continue;
@@ -6091,7 +6095,12 @@ float PSGM::HypothesisEvaluation2(
 		{
 			pSPt = PtArray + iClosestPt;
 
-			score += ((1.0f - sqrt(mine2) / maxe) * RVLDOTPRODUCT3(pSPt->N, pMPt->N));
+			csN = RVLDOTPRODUCT3(pSPt->N, pMPt->N);
+
+			if (csN < 0.0f)
+				csN = 0.0f;
+
+			score += ((1.0f - sqrt(mine2) / maxe) * csN);
 
 			if (bVisualize)
 				SMCorrespondence[i] = iClosestPt;
@@ -15731,7 +15740,7 @@ void PSGM::PrintCTIMatches(bool bTAMatches)
 			if (bTAMatches)
 				cout << "Match: " << j << " ModelID:" << GetMCTI(GetMatch(bestSceneSegmentMatches2.Element[i].Element[j].idx))->iModel << "\tCTI score: " << GetMatch(bestSceneSegmentMatches2.Element[i].Element[j].idx)->score << " (matchID: " << bestSceneSegmentMatches2.Element[i].Element[j].idx << ")" << "\n";
 			else
-				cout << "Match: " << j << " ModelID:" << GetMCTI(GetMatch(bestSceneSegmentMatches.Element[i].Element[j].idx))->iModel << "\tCTI score: " << GetMatch(bestSceneSegmentMatches.Element[i].Element[j].idx)->score << " (matchID: " << bestSceneSegmentMatches.Element[i].Element[j].idx << ")" << "\n";
+			cout << "Match: " << j << " ModelID:" << GetMCTI(GetMatch(bestSceneSegmentMatches.Element[i].Element[j].idx))->iModel << "\tCTI score: " << GetMatch(bestSceneSegmentMatches.Element[i].Element[j].idx)->score << " (matchID: " << bestSceneSegmentMatches.Element[i].Element[j].idx << ")" << "\n";
 
 		cout << "---------------------------------------------------\n";
 	}
