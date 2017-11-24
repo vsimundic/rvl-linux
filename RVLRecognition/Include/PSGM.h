@@ -610,6 +610,7 @@ namespace RVL
 			bool bVisualize = false);
 		float HypothesisEvaluation2(
 			int iHypothesis,
+			float wTransparency = 0.0f,
 			bool bICP = false,
 			float scale = 1.0f,
 			bool bVisualize = false);
@@ -695,6 +696,7 @@ namespace RVL
 		float baseSeparationAngle;
 		float edgeTangentAngle;
 		float gndCTIThr;
+		float tangentAlignmentThr;
 		int nModels; //Vidovic
 		int nMSegments; //Vidovic
 		int minClusterSize;

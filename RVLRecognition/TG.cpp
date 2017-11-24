@@ -1493,6 +1493,7 @@ void RECOG::TangentAlignment(
 	Eigen::VectorXd dw(6);
 	float dR[9], RNew[9];
 	int l;
+	//float eNormalHull;
 
 	while (true)
 	{
@@ -1539,14 +1540,24 @@ void RECOG::TangentAlignment(
 
 			if (RVLDOTPRODUCT3(pVertex->P, N_) < 0.0f)
 			{
-				pCorrespondence->iTangent = i;
-				pCorrespondence->e = descriptor[i] - dmax;
+				//eNormalHull = pSurfels->DistanceFromNormalHull(pVertex->normalHull, N_);
 
-				fTmp = pCorrespondence->e / eThr;
+				//if (eNormalHull <= 0.0f)
+				//if (pVertex->bForeground)
 
-				score += (1.0f - fTmp * fTmp);
+				e = descriptor[i] - dmax;
 
-				pCorrespondence++;
+				if (RVLABS(e) <= eThr)
+				{
+					pCorrespondence->iTangent = i;
+					pCorrespondence->e = e;
+
+					fTmp = e / eThr;
+
+					score += (1.0f - fTmp * fTmp);
+
+					pCorrespondence++;
+				}
 			}
 		}	// for every template normal
 

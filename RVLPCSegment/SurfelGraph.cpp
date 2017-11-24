@@ -1452,6 +1452,20 @@ void SurfelGraph::DetectVertices(
 
 									pVertex->type = (nFeatures >= 2 ? bConvex[0] + bConvex[1] + bConvex[2] : 4);
 
+									// Is the vertex on an occluded edge?
+
+									pVertex->bForeground = true;
+
+									for (i = 0; i < 3; i++)
+									{
+										if (pMesh->NodeArray.Element[iP[i]].flags & RVLMESH_POINT_FLAG_BACKGROUND)
+										{
+											pVertex->bForeground = false;
+
+											break;
+										}
+									}
+
 									// Fill iSurfelArray 
 
 									pVertex->iSurfelArray.n = nFeatures;

@@ -118,6 +118,7 @@ namespace RVL
 			Array<int> iSurfelArray;
 			Vertex *pNext;
 			bool bEdge;
+			bool bForeground;
 			BYTE type;
 			float VTX[3];
 			int iCluster;
