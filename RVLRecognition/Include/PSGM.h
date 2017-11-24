@@ -578,8 +578,8 @@ namespace RVL
 		void CreateDilatedDepthImage();
 		std::vector<std::vector<int>> GetSegmentBBNeighbourhood(float dist, bool verbose = false);	//Filko
 		std::map<int,std::vector<int>> GetSceneConsistancy(float nDist = 0.1, float d1 = 10.0, float d2 = 0.01, bool verbose = false);	//Filko
-		std::map<int, std::vector<int>> GetSceneConsistancy(Array<Array<SortIndex<float>>> *scoreMatchMatrix, float nDist = 0.1, float d1 = 10.0, float d2 = 0.01, bool verbose = false);	//Vidovic - added scoreMatchMatrix to function parameters
-		int CheckHypothesesToSegmentEnvelopmentAndCollision(int hyp, int segment, float d1, float d2, RECOG::PSGM_::ModelInstance *pSCTI); //Filko
+		std::map<int, std::vector<int>> GetSceneConsistancy(Array<Array<SortIndex<float>>> *scoreMatchMatrix, float nDist = 0.1, float d1 = 10.0, float d2 = 0.01, bool bICP = false, bool verbose = false);	//Vidovic - added scoreMatchMatrix to function parameters
+		int CheckHypothesesToSegmentEnvelopmentAndCollision(int hyp, int segment, float d1, float d2, RECOG::PSGM_::ModelInstance *pSCTI, bool bICP = false); //Filko
 		void CheckHypothesesToSegmentEnvelopmentAndCollision_DEBUG(int hyp, int segment, float d1, float d2); //Filko
 		bool CheckHypothesesToSegmentEnvelopment(int iHypothesis, int iSegment, float thresh); //Vidovic
 		void FindBestGTHypothesis(); //Vidovic

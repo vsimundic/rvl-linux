@@ -32,6 +32,7 @@
 #define RVLPSGM_MATCHCTI_MATCH_MATRIX //activate this flag regardless to version 170601 - Vidovic 20.07.2017
 #define RVLPSGM_MATCH_HYPOTHESIS_LOG
 //#define RVLPSGM_TANGENT_ALIGNMENT_VISUALIZATION
+//#define RVLPSGM_SCENE_CONSISTENCY_MATCH_FILTERING
 
 using namespace RVL;
 using namespace RECOG;
@@ -5179,10 +5180,10 @@ void PSGM::Match()
 	//LoadSegmentGT();
 	//FindBestGTHypothesis();
 
-	//if (iScene == 1)
-	//	fpHypothesesFiltering = fopen("C:\\RVL\\hypotheses_filtering.txt", "w");
-	//else
-	//	fpHypothesesFiltering = fopen("C:\\RVL\\hypotheses_filtering.txt", "a");
+	if (iScene == 1)
+		fpHypothesesFiltering = fopen("C:\\RVL\\hypotheses_filtering.txt", "w");
+	else
+		fpHypothesesFiltering = fopen("C:\\RVL\\hypotheses_filtering.txt", "a");
 
 	Array<int> iVertexArray;
 
@@ -5313,7 +5314,11 @@ void PSGM::Match()
 	printf("Hypotheses filtering started...\n");
 	//filter hypotheses by segmwnt envelopment & collision
 	CreateDilatedDepthImage();	// 171121
-	GetSceneConsistancy(&bestSceneSegmentMatches, 0.1, 30, 15, false);
+
+#ifdef RVLPSGM_SCENE_CONSISTENCY_MATCH_FILTERING
+	//GetSceneConsistancy(&bestSceneSegmentMatches, 0.1, 30, 15, false);
+	GetSceneConsistancy(&bestSceneSegmentMatches, 0.1, 40, 20, false);
+#endif
 
 	//int matchID;
 	//int iSCluster_;
@@ -5398,6 +5403,7 @@ void PSGM::Match()
 					//pMatch->transparencyRatio = GetObjectTransparencyRatio(object, (unsigned short *)depth.data, 10, 640, 480, 525, 525, 320, 240); //HARDCODED FOR ECCV DATASET CAMERA
 
 					//if (pMatch->transparencyRatio < transparencyThresh)
+#ifdef RVLPSGM_SCENE_CONSISTENCY_MATCH_FILTERING
 					{
 						if (!(std::find(envelopmentColisionHypotheses.begin(), envelopmentColisionHypotheses.end(), matchID) != envelopmentColisionHypotheses.end()))
 						{
@@ -5421,6 +5427,9 @@ void PSGM::Match()
 						}
 						else
 						{
+							//ONLY FOR DEBUG
+							fprintf(fpHypothesesFiltering, "Hypothesis %d on scene %d INVALIDATED by segment envelopment & collision (model: %d, segment: %d)\n", matchID, iScene - 1, iModel, iSCluster);
+							//END
 							if (bVerbose)
 								printf("INVALIDATED by segment envelopment & collision");
 
@@ -5438,6 +5447,25 @@ void PSGM::Match()
 							}
 						}
 					}
+#else
+					bConsistentWithScene = true;
+
+					//printf("Match: %d passed filtering! Model: %d, old rank: %d, new rank: %d\n", matchID, GetMCTI(GetMatch(matchID))->iModel, iMatch, iMatchFiltered);
+					if (bVerbose)
+						printf("PASSED! New rank is: %d", iMatchFiltered);
+					if (iModel == iGTModel)
+					{
+						if (bVerbose)
+							printf(" (+)\n");
+						nTPFiltered++;
+					}
+					else
+					{
+						if (bVerbose)
+							printf(" (-)\n");
+						nFPFiltered++;
+					}
+#endif
 					//else
 					//{
 					//	if (bVerbose)
@@ -5495,7 +5523,7 @@ void PSGM::Match()
 			printf("Segment: %d => TP passed: %d, FP passed: %d, TP invalidated: %d, FP invalidated: %d\n", iSCluster, nTPFiltered, nFPFiltered, nFNFiltered, nTNFiltered);
 			printf("------------------------------------\n");
 
-			fprintf(fpHypothesesFiltering, "%d\t%d\t%d\t%d\t%d\t%d\t%d\n", iScene - 1, iSCluster, iGTModel, nTPFiltered, nFPFiltered, nFNFiltered, nTNFiltered);
+			//fprintf(fpHypothesesFiltering, "%d\t%d\t%d\t%d\t%d\t%d\t%d\n", iScene - 1, iSCluster, iGTModel, nTPFiltered, nFPFiltered, nFNFiltered, nTNFiltered);
 		}
 
 		bestSceneSegmentMatches2.Element[iSCluster].n = iMatchFiltered;
@@ -5602,6 +5630,9 @@ void PSGM::Match()
 	// Match TGs.
 
 	//MatchTGs();
+
+	//ONLY FOR DEBUG
+	fclose(fpHypothesesFiltering);
 }
 
 // Given a match ID, function GetVertices identifies all vertices of all segments which are contained inside an expanded convex hull 
@@ -16670,7 +16701,7 @@ std::map<int, std::vector<int>> PSGM::GetSceneConsistancy(float nDist, float d1,
 }
 
 //
-int PSGM::CheckHypothesesToSegmentEnvelopmentAndCollision(int hyp, int segment, float d1, float d2, RECOG::PSGM_::ModelInstance *pSCTI)
+int PSGM::CheckHypothesesToSegmentEnvelopmentAndCollision(int hyp, int segment, float d1, float d2, RECOG::PSGM_::ModelInstance *pSCTI, bool bICP)
 {
 	int retVal = 0;
 
@@ -16683,10 +16714,20 @@ int PSGM::CheckHypothesesToSegmentEnvelopmentAndCollision(int hyp, int segment, 
 	float* minSegDist = new float[hypTG->A.h];
 	//float *RMS = hypothesis->RICP_;
 	//float *tMS = hypothesis->tICP_;
+	float *RMS;
+	float *tMS;
 
 	//changed on 30.08.2017. because MS transformation is saved to hypothesis->RICP and in hypothesis->RICP_ is saved relative ICP transformation
-	float *RMS = hypothesis->RICP;
-	float *tMS = hypothesis->tICP;
+	if (bICP)
+	{
+		RMS = hypothesis->RICP;
+		tMS = hypothesis->tICP;
+	}
+	else
+	{
+		RMS = hypothesis->R;
+		tMS = hypothesis->t;
+	}
 
 	//Segment data
 	Array<SURFEL::Vertex *> *vertexArray = &this->pSurfels->vertexArray;	
@@ -18511,7 +18552,7 @@ int PSGM::FindMGTHypothesis(int iModel)
 }
 
 //same as Filko's GetSceneConsistancy() function, but parameter *scoreMatchMatrix is added to function parameter list
-std::map<int, std::vector<int>> PSGM::GetSceneConsistancy(Array<Array<SortIndex<float>>> *scoreMatchMatrix, float nDist, float d1, float d2, bool verbose)
+std::map<int, std::vector<int>> PSGM::GetSceneConsistancy(Array<Array<SortIndex<float>>> *scoreMatchMatrix, float nDist, float d1, float d2, bool bICP, bool verbose)
 {
 	//CheckHypothesesToSegmentEnvelopmentAndCollision_DEBUG(scoreMatchMatrixICP.Element[0].Element[0].idx, 0, d1, d2);
 	envelopmentColisionHypotheses.clear();
@@ -18542,7 +18583,7 @@ std::map<int, std::vector<int>> PSGM::GetSceneConsistancy(Array<Array<SortIndex<
 			if (scoreMatchMatrix->Element[i].Element[j].idx >= 0) //If hypothesis is valid
 			{
 				//Check for source segment
-				resLab = CheckHypothesesToSegmentEnvelopmentAndCollision(scoreMatchMatrix->Element[i].Element[j].idx, i, d1, d2, &SCTI);
+				resLab = CheckHypothesesToSegmentEnvelopmentAndCollision(scoreMatchMatrix->Element[i].Element[j].idx, i, d1, d2, &SCTI, bICP);
 				if (resLab == 2)
 				{
 					//It must be first entry for this hypothesis
@@ -18563,7 +18604,7 @@ std::map<int, std::vector<int>> PSGM::GetSceneConsistancy(Array<Array<SortIndex<
 				//Check for neighbourhood segments
 				for (int k = 0; k < neighbourhood.at(i).size(); k++)
 				{
-					resLab = CheckHypothesesToSegmentEnvelopmentAndCollision(scoreMatchMatrix->Element[i].Element[j].idx, neighbourhood.at(i).at(k), d1, d2, &SCTI);
+					resLab = CheckHypothesesToSegmentEnvelopmentAndCollision(scoreMatchMatrix->Element[i].Element[j].idx, neighbourhood.at(i).at(k), d1, d2, &SCTI, bICP);
 					if (resLab == 2)
 					{
 						if (constL.count(scoreMatchMatrix->Element[i].Element[j].idx))
@@ -18590,7 +18631,7 @@ std::map<int, std::vector<int>> PSGM::GetSceneConsistancy(Array<Array<SortIndex<
 	}
 
 	delete[] SCTI.modelInstance.Element;
-
+	
 	if (verbose)
 	{
 		std::map<int, std::vector<int>>::iterator it;
