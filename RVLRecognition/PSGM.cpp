@@ -5776,6 +5776,8 @@ void PSGM::HypothesisEvaluation(
 	float score;
 	PSGM_::MatchInstance *pHypothesis;
 	int nTransparentPts;
+	float st[3];
+	double T[16];
 
 	for (iSSegment = 0; iSSegment < segmentHypothesisArray.n; iSSegment++)
 	{
@@ -5786,6 +5788,11 @@ void PSGM::HypothesisEvaluation(
 			GetVertices(iHypothesis, iVertexArray, iSSegmentArray, bVertexAlreadyStored);
 
 			pHypothesis = pCTImatchesArray.Element[iHypothesis];
+
+			//ground distance calculation
+			st[0] = pHypothesis->t[0] / 1000; st[1] = pHypothesis->t[1] / 1000; st[2] = pHypothesis->t[2] / 1000;
+			RVLHTRANSFMX(pHypothesis->R, st, T);
+			gndDistance = groundPlaneDistance(MCTISet.pCTI.Element[pHypothesis->iMCTI]->iModel, T);
 
 			//segmentHypothesisArray.Element[iSSegment].Element[i].cost = pHypothesis->cost_NN = 
 			//	HypothesisEvaluation(iHypothesis, iSSegmentArray, bICP);
