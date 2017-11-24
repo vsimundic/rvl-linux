@@ -610,7 +610,7 @@ namespace RVL
 			bool bVisualize = false);
 		float HypothesisEvaluation2(
 			int iHypothesis,
-			float wTransparency = 0.0f,
+			int &nTransparentPts,
 			bool bICP = false,
 			float scale = 1.0f,
 			bool bVisualize = false);
@@ -628,6 +628,8 @@ namespace RVL
 		void CreateModelPCs();
 		void DeleteModelPCs();
 		void InitZBuffer(Mesh *pMesh);
+		void SceneBackward();
+		void SetScene(int iSceneIn);
 
 	private:
 		void WholeMeshCluster();
@@ -697,6 +699,10 @@ namespace RVL
 		float edgeTangentAngle;
 		float gndCTIThr;
 		float tangentAlignmentThr;
+		float wTransparency1;
+		float wTransparency2;
+		float wGndDistance1;
+		float wGndDistance2;
 		int nModels; //Vidovic
 		int nMSegments; //Vidovic
 		int minClusterSize;

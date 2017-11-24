@@ -71,6 +71,10 @@ PSGM::PSGM()
 	groundPlaneTolerance = 0.020f;
 	gndCTIThr = 0.015f;
 	tangentAlignmentThr = 0.050f;
+	wTransparency1 = 0.0f;
+	wTransparency2 = 1.0f;
+	wGndDistance1 = 0.0f;
+	wGndDistance2 = 0.0f;
 	clusterType = 1.0f;
 	sceneSamplingResolution = 5;
 
@@ -337,6 +341,10 @@ void PSGM::CreateParamList(CRVLMem *pMem)
 	pParamData = ParamList.AddParam("PSGM.kReferenceTangentSize", RVLPARAM_TYPE_FLOAT, &kReferenceTangentSize);
 	pParamData = ParamList.AddParam("PSGM.baseSeparationAngle", RVLPARAM_TYPE_FLOAT, &baseSeparationAngle);
 	pParamData = ParamList.AddParam("PSGM.tangentAlignmentThr", RVLPARAM_TYPE_FLOAT, &tangentAlignmentThr);
+	pParamData = ParamList.AddParam("PSGM.wTransparency1", RVLPARAM_TYPE_FLOAT, &wTransparency1);
+	pParamData = ParamList.AddParam("PSGM.wTransparency2", RVLPARAM_TYPE_FLOAT, &wTransparency2);
+	pParamData = ParamList.AddParam("PSGM.wGndDistance1", RVLPARAM_TYPE_FLOAT, &wGndDistance1);
+	pParamData = ParamList.AddParam("PSGM.wGndDistance2", RVLPARAM_TYPE_FLOAT, &wGndDistance2);
 	pParamData = ParamList.AddParam("PSGM.wholeMeshCluster", RVLPARAM_TYPE_BOOL, &bWholeMeshCluster);
 	//pParamData = ParamList.AddParam("PSGM.edgeTangentAngle", RVLPARAM_TYPE_FLOAT, &edgeTangentAngle);
 	pParamData = ParamList.AddParam("ModelDataBase", RVLPARAM_TYPE_STRING, &modelDataBase); //Vidovic
@@ -5317,6 +5325,8 @@ void PSGM::Match()
 	CreateDilatedDepthImage();	// 171121
 	GetSceneConsistancy(&bestSceneSegmentMatches, 0.1, 30, 15, false);
 
+	float wGndDistance12 = wGndDistance1 * wGndDistance1;
+
 	//int matchID;
 	//int iSCluster_;
 	int i, j;
@@ -5327,6 +5337,7 @@ void PSGM::Match()
 	SortIndex<float> *pHypothesisIdx, *pBestHypothesisIdx;
 	float maxScore;
 	int nHypotheses;
+	int nTransparentPts;
 
 	for (iSCluster = 0; iSCluster < nClusters; iSCluster++)
 	{
@@ -5481,11 +5492,12 @@ void PSGM::Match()
 				if (bConsistentWithScene)
 				{
 					//score = HypothesisEvaluation(matchID, iSSegmentArray);
-					score = HypothesisEvaluation2(matchID, 0.0f, false, 0.001f);
+					score = HypothesisEvaluation2(matchID, nTransparentPts, false, 0.001f);
 
 					bestSceneSegmentMatches2.Element[iSCluster].Element[iMatchFiltered].idx = matchID;
 					//bestSceneSegmentMatches2.Element[iSCluster].Element[iMatchFiltered].cost = score * (1.0f - gndDistance * gndDistance / 0.0025f);
-					bestSceneSegmentMatches2.Element[iSCluster].Element[iMatchFiltered].cost = score;
+					bestSceneSegmentMatches2.Element[iSCluster].Element[iMatchFiltered].cost = 
+						score * (1.0f - wGndDistance12 * gndDistance * gndDistance) - wTransparency1 * (float)nTransparentPts;	// Total hypothesis score
 
 					iMatchFiltered++;
 				}
@@ -5725,9 +5737,14 @@ void PSGM::HypothesisEvaluation(
 
 	memset(bVertexAlreadyStored, 0, pSurfels->vertexArray.n * sizeof(bool));
 
+	float wGndDistance22 = wGndDistance2 * wGndDistance2;
+
+	float gndDistance = 0.0;		// Ovdje treba raèunati ground distance.
+
 	int i, iSSegment, iHypothesis;
 	float score;
 	PSGM_::MatchInstance *pHypothesis;
+	int nTransparentPts;
 
 	for (iSSegment = 0; iSSegment < segmentHypothesisArray.n; iSSegment++)
 	{
@@ -5741,8 +5758,11 @@ void PSGM::HypothesisEvaluation(
 
 			//segmentHypothesisArray.Element[iSSegment].Element[i].cost = pHypothesis->cost_NN = 
 			//	HypothesisEvaluation(iHypothesis, iSSegmentArray, bICP);
-			segmentHypothesisArray.Element[iSSegment].Element[i].cost = pHypothesis->cost_NN =
-				HypothesisEvaluation2(iHypothesis, 1.0f, bICP, 0.001f);
+
+			score = HypothesisEvaluation2(iHypothesis, nTransparentPts, bICP, 0.001f);
+
+			segmentHypothesisArray.Element[iSSegment].Element[i].cost = pHypothesis->cost_NN = 
+				score * (1.0f - wGndDistance22 * gndDistance * gndDistance) - wTransparency2 * (float)nTransparentPts;	// Total hypothesis score
 		}
 
 		BubbleSort<SortIndex<float>>(segmentHypothesisArray.Element[iSSegment], true);
@@ -5981,7 +6001,7 @@ float PSGM::HypothesisEvaluation(
 
 float PSGM::HypothesisEvaluation2(
 	int iHypothesis,
-	float wTransparency,
+	int &nTransparentPts,
 	bool bICP,
 	float scale,
 	bool bVisualize)
@@ -6051,7 +6071,8 @@ float PSGM::HypothesisEvaluation2(
 		SMCorrespondence = new int[nPts];
 
 	float score = 0.0f;
-	int nTransparentPts = 0;
+
+	nTransparentPts = 0;
 
 	int i, j, iPix, iMPt, iSPt, iMPt_, iClosestPt;
 	Point *pSPt, *pMPt;
@@ -6213,7 +6234,7 @@ float PSGM::HypothesisEvaluation2(
 		delete[] PC;
 	}
 
-	return score - wTransparency * (float)nTransparentPts;
+	return score;
 }
 
 void PSGM::Match(
@@ -14542,10 +14563,11 @@ void PSGM::GetHypothesesCollisionConsensus(std::vector<int> *noCollisionHypothes
 			//if (scoreMatchMatrix->Element[i].Element[j].idx >= 0)
 			if (!(std::find(transparentHypotheses.begin(), transparentHypotheses.end(), scoreMatchMatrix->Element[i].Element[j].idx) != transparentHypotheses.end()))
 				if (!(std::find(envelopmentColisionHypotheses.begin(), envelopmentColisionHypotheses.end(), scoreMatchMatrix->Element[i].Element[j].idx) != envelopmentColisionHypotheses.end()))
-				{
-				hypotheses.push_back(Hyp(i, scoreMatchMatrix->Element[i].Element[j].idx, scoreMatchMatrix->Element[i].Element[j].cost));
-					break;
-	}
+					if (scoreMatchMatrix->Element[i].Element[j].cost >= 0)
+					{
+						hypotheses.push_back(Hyp(i, scoreMatchMatrix->Element[i].Element[j].idx, scoreMatchMatrix->Element[i].Element[j].cost));
+						break;
+					}
 
 			//if (scoreMatchMatrix->Element[i].Element[j].idx == -1)
 			//	printf("SCMM = -1 i:%d j:%d\n", i, j);
@@ -16910,6 +16932,16 @@ void PSGM::InitZBuffer(Mesh *pMesh)
 	ZBufferActivePtArray.n = 0;
 }
 
+void PSGM::SceneBackward()
+{
+	iScene--;
+}
+
+void PSGM::SetScene(int iSceneIn)
+{
+	iScene = iSceneIn;
+}
+
 void PSGM::Project(
 	Array<Point> PtArray,
 	float *R,
@@ -18765,8 +18797,10 @@ void PSGM::VisualizeHypotheses(
 
 				GetVertices(matchID, iVertexArray, iSSegmentArray, bVertexAlreadyStored);
 
+				int nTransparentPts;
+
 				//float score = HypothesisEvaluation(matchID, iSSegmentArray, bICP, true);
-				float score = HypothesisEvaluation2(matchID, 0.0f, bICP, 0.001f, true);
+				float score = HypothesisEvaluation2(matchID, nTransparentPts, bICP, 0.001f, true);
 
 				printf("Enter command: 1 - next hypothesis, 2 - next segment, 3 - next image, 4 - select hypothesis\n");
 

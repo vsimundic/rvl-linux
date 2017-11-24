@@ -84,7 +84,8 @@ void CreateParamList(
 	DWORD &flags,
 	int &iClass,
 	float &SDFSurfaceValue,
-	bool &bCreateVisibleSurfaceMesh
+	bool &bCreateVisibleSurfaceMesh,
+	bool &bSceneBrowser
 	)
 {
 	pParamList->m_pMem = pMem;
@@ -116,6 +117,7 @@ void CreateParamList(
 	pParamData = pParamList->AddParam("VN.class", RVLPARAM_TYPE_INT, &iClass);
 	pParamData = pParamList->AddParam("VN.visualization.SDFSurfaceValue", RVLPARAM_TYPE_FLOAT, &SDFSurfaceValue);
 	pParamData = pParamList->AddParam("Create visible surface mesh", RVLPARAM_TYPE_BOOL, &bCreateVisibleSurfaceMesh);
+	pParamData = pParamList->AddParam("Scene Browser", RVLPARAM_TYPE_BOOL, &bSceneBrowser);
 }
 
 void GenerateSegmentNeighbourhood(PSGM * psgm, double radius)
@@ -296,6 +298,7 @@ int main(int argc, char ** argv)
 	int iClass;
 	float SDFSurfaceValue = 0.0f;
 	bool bCreateVisibleSurfaceMesh = false;
+	bool bSceneBrowser = false;
 
 	DWORD flags = 0x00000000; //VIDOVIC
 
@@ -315,7 +318,8 @@ int main(int argc, char ** argv)
 		flags,
 		iClass,
 		SDFSurfaceValue,
-		bCreateVisibleSurfaceMesh);	 //VIDOVIC
+		bCreateVisibleSurfaceMesh,
+		bSceneBrowser);	 //VIDOVIC
 
 	ParamList.LoadParams(cfgFileName);
 
@@ -611,11 +615,38 @@ int main(int argc, char ** argv)
 
 			recognition.LoadCompleteSegmentGT(sceneSequence);
 
+			int command = 1;
+
 			LARGE_INTEGER ctr1, ctr2, freq;
 			LARGE_INTEGER ctr1_, ctr2_, freq_;
 
-			while (sceneSequence.GetNextPath(filePath))
+			while (true)
 			{
+				switch (command)
+				{
+				case 0:
+					recognition.SceneBackward();
+
+					break;
+				case 1:
+					if (!sceneSequence.GetNextPath(filePath))
+						break;
+
+					break;
+				case 2:
+					printf("Select scene:\n");
+
+					int iScene;
+
+					scanf("%d", &iScene);
+
+					recognition.SetScene(iScene);
+
+					sceneSequence.GetFilePath(iScene, filePath);
+				}
+
+				recognition.ParamList.LoadParams(cfgFileName);
+
 				QueryPerformanceCounter((LARGE_INTEGER *)&ctr1);
 
 				printf("Scene %s...\n", filePath);
@@ -990,7 +1021,17 @@ int main(int argc, char ** argv)
 
 				if (flags & RVLRECOGNITION_DEMO_FLAG_3D_VISUALIZATION)
 					visualizer.Run();
-			}
+
+				if (bSceneBrowser)
+				{
+					printf("0 - repeate scene; 1 - next scene; 2 - select scene; 3 - exit\n");
+
+					scanf("%d", &command);
+
+					if (command == 3)
+						break;
+				}
+			}	// for every scene
 
 			RVL_DELETE_ARRAY(CTIFileName);
 
