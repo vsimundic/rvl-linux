@@ -14,7 +14,7 @@
 #define RVLPSGM_MATCH_SIMILARITY_MEASURE_MEAN_SATURATED_SQUARE_DISTANCE							4
 #define RVLPSGM_MATCH_SIMILARITY_MEASURE_MEDIAN_ABS_DISTANCE									5
 //#define RVLPSGM_RANSAC
-#ifdef RVLVERSION_170601
+#ifdef RVLVERSION_171125
 #define RVLPSGM_ICP		// 170601: ON
 #endif
 #define RVLPSGM_ICP_SIMILARITY_MEASURE_COSTNN				0
@@ -809,6 +809,7 @@ namespace RVL
 		Array<int> ZBufferActivePtArray;
 		int *subImageMap;
 		Camera camera;
+		char *falseHypothesesFileName;
 
 	private:		
 		RECOG::PSGM_::Cluster *clusterMem;

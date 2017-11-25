@@ -16,7 +16,7 @@
 #include "PlanarSurfelDetector.h"
 
 #define RVLPLANARSURFELDETECTOR_OCCLUSION_EDGES
-#ifndef RVLVERSION_170601
+#ifndef RVLVERSION_171125
 #define RVLPLANARSURFELDETECTOR_JOIN_SMALL_SURFELS_ONLY_TO_LARGE_NEIGHBORS		// 170601: OFF
 #endif
 
@@ -437,7 +437,7 @@ void PlanarSurfelDetector::Segment(
 
 	QList<SURFEL::Edge> *pSEdgeList_ = &SEdgeList;
 
-#ifndef RVLVERSION_170601
+#ifndef RVLVERSION_171125
 	Array<Pair<int, int>> iOcclusionEdgePtArray;
 
 	if (pMesh->bOrganizedPC)
@@ -603,7 +603,7 @@ void PlanarSurfelDetector::Segment(
 	//	pPtIdx++;
 	//}
 
-#ifndef RVLVERSION_170601
+#ifndef RVLVERSION_171125
 	if (pMesh->bOrganizedPC)
 	{
 		// Restore occlusion edges.
@@ -645,7 +645,7 @@ void PlanarSurfelDetector::Segment(
 		//if (pSurfel->size >= minSurfelSize)
 		if (pSurfel->size > 1)
 		{
-#ifndef RVLVERSION_170601
+#ifndef RVLVERSION_171125
 			//if (!pSurfel->bEdge)
 #endif
 			{
@@ -662,7 +662,7 @@ void PlanarSurfelDetector::Segment(
 		}
 	}
 
-#ifdef RVLVERSION_170601
+#ifdef RVLVERSION_171125
 	// Detect boundaries.
 
 	Boundaries(pMesh, pSurfels);
@@ -4506,7 +4506,7 @@ void PlanarSurfelDetector::Boundaries(
 
 					pEdgePtr = pPt_->EdgeList.pFirst;
 
-//#ifndef RVLVERSION_170601
+//#ifndef RVLVERSION_171125
 //					pEdgePtr_ = pEdgePtr;
 //
 //					while (pEdgePtr_)
@@ -4925,7 +4925,7 @@ int PlanarSurfelDetector::CreateEdgeFeatures(
 	float dE, e, maxe, maxe_;
 	float fTmp;
 	float *N, *R;
-#ifdef RVLVERSION_170601
+#ifdef RVLVERSION_171125
 	SURFEL::Edge *pSEdge;
 	int nTmp;
 	Array<MeshEdgePtr *> *pEdgePtArray;
@@ -5139,7 +5139,7 @@ int PlanarSurfelDetector::CreateEdgeFeatures(
 
 				RVLQLIST_INIT(pSEdgeList_);
 
-#ifdef RVLVERSION_170601
+#ifdef RVLVERSION_171125
 				iPointEdge = pSegmentEndpoint1->Idx;
 
 				while (iPointEdge != pSegmentEndpoint2->Idx)
@@ -5290,7 +5290,7 @@ int PlanarSurfelDetector::CreateEdgeFeatures(
 					if (iPt / 640 == 460)
 						int debug = 0;
 
-#ifdef RVLVERSION_170601
+#ifdef RVLVERSION_171125
 					pSurfels->edgeMap[iPt] = -nOcclusionEdges;
 #else
 					pSurfels->surfelMap[iPt] = -nOcclusionEdges;

@@ -55,7 +55,7 @@ PSGM::PSGM()
 	nDominantClusters = 1;
 	kNoise = 1.2f;
 	minInitialSurfelSize = 20;
-#ifdef RVLVERSION_170601
+#ifdef RVLVERSION_171125
 	minVertexPerc = 50;
 #else
 	minVertexPerc = 100;
@@ -215,6 +215,8 @@ PSGM::PSGM()
 	camera.fv = 525;
 	camera.uc = 320;
 	camera.vc = 240;
+
+	falseHypothesesFileName = NULL;
 }
 
 
@@ -629,7 +631,7 @@ void PSGM::Interpret(
 		//Match scene MI to model MI
 		if (mode == RVLRECOGNITION_MODE_RECOGNITION)
 		{
-#ifndef RVLVERSION_170601
+#ifndef RVLVERSION_171125
 			VertexGraph vertexGraph;
 
 			vertexGraph.idx = iScene;
@@ -651,7 +653,7 @@ void PSGM::Interpret(
 			fclose(fp);
 #endif
 
-#ifdef RVLVERSION_170601
+#ifdef RVLVERSION_171125
 			Match();
 #endif
 		}
@@ -1720,7 +1722,7 @@ void PSGM::VisualizeCTIMatch(float *nT, float *dM, float *dS, int *validS)
 //
 //
 
-#ifdef RVLVERSION_170601
+#ifdef RVLVERSION_171125
 void PSGM::Clusters()
 {
 	RVL_DELETE_ARRAY(clusterMap);
@@ -3686,7 +3688,7 @@ void PSGM::LoadModelDataBase()
 		tBestMatch.Element[i].n = 3;
 	}
 
-#ifdef RVLVERSION_170601
+#ifdef RVLVERSION_171125
 	char *TGFileName = RVLCreateFileName(modelDataBase, ".dat", -1, ".tgr");
 
 	MTGSet.Load(TGFileName);
@@ -5184,7 +5186,7 @@ void PSGM::Match()
 
 	//FilterHypothesesUsingTransparency(0.5, 0.01, true);
 
-#ifdef RVLVERSION_171111
+#ifdef RVLVERSION_171125
 	float gndDistanceThresh = 0.025;
 	float transparencyThresh = 0.2;
 	float envelopmentThresh = 30;
@@ -5632,7 +5634,7 @@ void PSGM::Match()
 	if (bVisualizeHypothesisEvaluationLevel1)
 		VisualizeHypotheses(bestSceneSegmentMatches2, false);
 
-#endif	// #ifdef RVLVERSION_171111
+#endif	// #ifdef RVLVERSION_171125
 
 	printf("completed.\n");
 
@@ -7719,7 +7721,15 @@ void PSGM::CountTPandFN(
 			FN++;
 
 			if (printMatchInfo)
+			{
 				printf("GT Model %d (ModelID: %d) NOT matched on scene %d!\n", iGTM, pGT->iModel, iScene - 1);
+
+				FILE *fp = fopen(falseHypothesesFileName, "a");
+
+				fprintf(fp, "%s: Model %d GT Model %d\n", sceneFileName, iGTM, pGT->iModel);
+
+				fclose(fp);
+			}
 		}
 		else
 		{
@@ -14651,11 +14661,8 @@ void PSGM::GetHypothesesCollisionConsensus(std::vector<int> *noCollisionHypothes
 	int currentMatch;
 	int currentSeg;
 	bool collision;
-#ifdef RVLVERSION_171111
+
 	for (int i = hypotheses.size() - 1; i >= 0; i--)
-#else
-	for (int i = 0; i < hypotheses.size(); i++)
-#endif
 	{
 		currentSeg = hypotheses.at(i).idSeg;
 		//Check is that segment is already finished
@@ -16222,7 +16229,7 @@ void PSGM::CreateDilatedDepthImage()
 				depth.at<uint16_t>(y, x) = 10000; //in milimeters
 		}
 	}
-#ifndef RVLVERSION_171111
+#ifndef RVLVERSION_171125
 	cv::Mat elementE = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(17, 17));
 	cv::erode(depth, depth, elementE);
 #endif
@@ -17115,7 +17122,7 @@ void PSGM::Project(
 //
 ///////////////////////////////////////////////////////////////////////////
 
-#ifndef RVLVERSION_170601
+#ifndef RVLVERSION_171125
 void PSGM::Clusters()
 {
 	RVL_DELETE_ARRAY(clusterMap);
