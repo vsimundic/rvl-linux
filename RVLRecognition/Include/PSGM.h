@@ -113,6 +113,7 @@ namespace RVL
 				float eSeg;
 				float gndDistance; //Vidovic
 				float transparencyRatio; //Vidovic
+				int nTransparentPts;
 				// Petra
 				double cost_ICP; 
 				//float T_ICP[16]; //transformation between current and ICP pose
@@ -721,6 +722,8 @@ namespace RVL
 		bool bDetectGroundPlane;
 		bool bOverlappingClusters;
 		bool bICP;
+		bool bVisualizeHypothesisEvaluationLevel1;
+		bool bVisualizeHypothesisEvaluationLevel2;
 		Array<RECOG::PSGM_::ModelInstance> modelInstanceDB; //Vidovic
 		QList<RECOG::PSGM_::MatchInstance> CTImatches; //Vidovic
 		Array<RECOG::PSGM_::MatchInstance*> pCTImatchesArray; //Vidovic

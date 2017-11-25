@@ -938,7 +938,8 @@ int main(int argc, char ** argv)
 
 					recognition.HypothesisEvaluation(recognition.bestSceneSegmentMatches2, true);
 
-					//recognition.VisualizeHypotheses(recognition.bestSceneSegmentMatches2, true);
+					if (recognition.bVisualizeHypothesisEvaluationLevel2)
+						recognition.VisualizeHypotheses(recognition.bestSceneSegmentMatches2, true);
 
 					//Colision check
 					recognition.noCollisionHypotheses.clear();

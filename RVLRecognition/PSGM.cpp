@@ -48,6 +48,8 @@ PSGM::PSGM()
 	bDetectGroundPlane = true;
 	bOverlappingClusters = false;
 	bICP = true;
+	bVisualizeHypothesisEvaluationLevel1 = false;
+	bVisualizeHypothesisEvaluationLevel2 = false;
 
 	nDominantClusters = 1;
 	kNoise = 1.2f;
@@ -372,6 +374,8 @@ void PSGM::CreateParamList(CRVLMem *pMem)
 	pParamData = ParamList.AddParam("PSGM.symmetryMatchThr", RVLPARAM_TYPE_FLOAT, &symmetryMatchThr);
 	pParamData = ParamList.AddParam("PSGM.debug1", RVLPARAM_TYPE_INT, &debug1);
 	pParamData = ParamList.AddParam("PSGM.debug2", RVLPARAM_TYPE_INT, &debug2);
+	pParamData = ParamList.AddParam("PSGM.Visualization.hypothesisEvaluationLevel1", RVLPARAM_TYPE_BOOL, &bVisualizeHypothesisEvaluationLevel1);
+	pParamData = ParamList.AddParam("PSGM.Visualization.hypothesisEvaluationLevel2", RVLPARAM_TYPE_BOOL, &bVisualizeHypothesisEvaluationLevel2);
 }
 
 void PSGM::Init(char *cfgFileName)
@@ -5494,6 +5498,10 @@ void PSGM::Match()
 					//score = HypothesisEvaluation(matchID, iSSegmentArray);
 					score = HypothesisEvaluation2(matchID, nTransparentPts, false, 0.001f);
 
+					pMatch->score = score;
+					pMatch->nTransparentPts = nTransparentPts;
+					pMatch->gndDistance = gndDistance;
+
 					bestSceneSegmentMatches2.Element[iSCluster].Element[iMatchFiltered].idx = matchID;
 					//bestSceneSegmentMatches2.Element[iSCluster].Element[iMatchFiltered].cost = score * (1.0f - gndDistance * gndDistance / 0.0025f);
 					bestSceneSegmentMatches2.Element[iSCluster].Element[iMatchFiltered].cost = 
@@ -5593,9 +5601,8 @@ void PSGM::Match()
 	delete[] bBestHypothesisInList;
 	//delete[] PGnd;
 
-#ifdef RVLPSGM_TANGENT_ALIGNMENT_VISUALIZATION
-	VisualizeHypotheses(bestSceneSegmentMatches2, false);
-#endif
+	if (bVisualizeHypothesisEvaluationLevel1)
+		VisualizeHypotheses(bestSceneSegmentMatches2, false);
 
 #endif	// #ifdef RVLVERSION_171111
 
@@ -5742,7 +5749,7 @@ void PSGM::HypothesisEvaluation(
 	float gndDistance = 0.0;		// Ovdje treba raèunati ground distance.
 
 	int i, iSSegment, iHypothesis;
-	float score;
+	float score, totalScore, prevScore;
 	PSGM_::MatchInstance *pHypothesis;
 	int nTransparentPts;
 
@@ -5761,8 +5768,24 @@ void PSGM::HypothesisEvaluation(
 
 			score = HypothesisEvaluation2(iHypothesis, nTransparentPts, bICP, 0.001f);
 
-			segmentHypothesisArray.Element[iSSegment].Element[i].cost = pHypothesis->cost_NN = 
-				score * (1.0f - wGndDistance22 * gndDistance * gndDistance) - wTransparency2 * (float)nTransparentPts;	// Total hypothesis score
+			totalScore = score * (1.0f - wGndDistance22 * gndDistance * gndDistance) - wTransparency2 * (float)nTransparentPts;
+
+			prevScore = pHypothesis->score * (1.0f - wGndDistance22 * pHypothesis->gndDistance * pHypothesis->gndDistance) - 
+				wTransparency2 * (float)(pHypothesis->nTransparentPts);
+
+			if (totalScore > prevScore)
+			{
+				pHypothesis->score = score;
+				pHypothesis->nTransparentPts = nTransparentPts;
+				pHypothesis->gndDistance = gndDistance;
+				segmentHypothesisArray.Element[iSSegment].Element[i].cost = pHypothesis->cost_NN = totalScore;
+			}
+			else
+			{
+				RVLCOPYMX3X3(pHypothesis->R, pHypothesis->RICP);
+				RVLCOPY3VECTOR(pHypothesis->t, pHypothesis->tICP);
+				pHypothesis->cost_NN = prevScore;
+			}
 		}
 
 		BubbleSort<SortIndex<float>>(segmentHypothesisArray.Element[iSSegment], true);
