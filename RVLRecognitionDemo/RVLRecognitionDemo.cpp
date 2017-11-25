@@ -54,8 +54,8 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 //#define PSGM_RECOGNITION_VISUALIZE_SCENE
 //#define RVLRECOGNITION_DEMO_CLASS_ALIGNMENT
 #define RVLPSGM_TRANSPARENCY_AND_COLLISION
-//#define RVLPSGM_RMSE_CALCULATION
-#ifndef RVLVERSION_170601
+#define RVLPSGM_RMSE_CALCULATION
+#ifndef RVLVERSION_171125
 #define RVLRECOGNITION_DEMO_CLASS_ALIGNMENT
 #endif
 //#define RVLPSGM_DETERMINE_THRESHOLDS
@@ -84,7 +84,8 @@ void CreateParamList(
 	DWORD &flags,
 	int &iClass,
 	float &SDFSurfaceValue,
-	bool &bCreateVisibleSurfaceMesh
+	bool &bCreateVisibleSurfaceMesh,
+	bool &bSceneBrowser
 	)
 {
 	pParamList->m_pMem = pMem;
@@ -116,6 +117,7 @@ void CreateParamList(
 	pParamData = pParamList->AddParam("VN.class", RVLPARAM_TYPE_INT, &iClass);
 	pParamData = pParamList->AddParam("VN.visualization.SDFSurfaceValue", RVLPARAM_TYPE_FLOAT, &SDFSurfaceValue);
 	pParamData = pParamList->AddParam("Create visible surface mesh", RVLPARAM_TYPE_BOOL, &bCreateVisibleSurfaceMesh);
+	pParamData = pParamList->AddParam("Scene Browser", RVLPARAM_TYPE_BOOL, &bSceneBrowser);
 }
 
 void GenerateSegmentNeighbourhood(PSGM * psgm, double radius)
@@ -296,6 +298,7 @@ int main(int argc, char ** argv)
 	int iClass;
 	float SDFSurfaceValue = 0.0f;
 	bool bCreateVisibleSurfaceMesh = false;
+	bool bSceneBrowser = false;
 
 	DWORD flags = 0x00000000; //VIDOVIC
 
@@ -315,7 +318,8 @@ int main(int argc, char ** argv)
 		flags,
 		iClass,
 		SDFSurfaceValue,
-		bCreateVisibleSurfaceMesh);	 //VIDOVIC
+		bCreateVisibleSurfaceMesh,
+		bSceneBrowser);	 //VIDOVIC
 
 	ParamList.LoadParams(cfgFileName);
 
@@ -560,7 +564,7 @@ int main(int argc, char ** argv)
 
 #ifdef RVLPSGM_ICP
 			if (recognition.problem == RVLRECOGNITION_PROBLEM_SHAPE_INSTANCE_DETECTION)
-			recognition.LoadModelMeshDB(modelSequenceFileName, &recognition.vtkModelDB, true, 0.4);
+				recognition.LoadModelMeshDB(modelSequenceFileName, &recognition.vtkModelDB, false, 0.4);
 #endif
 
 			Mesh mesh;
@@ -602,13 +606,58 @@ int main(int argc, char ** argv)
 
 			FILE *fpRMSE = fopen((resultsFolderName + "\\RMSE.txt").data(), "w");
 
+
+#ifdef RVLPSGM_RMSE_CALCULATION
+			//Load models without decimation (used for calculating RMSE)
+			//recognition.LoadModelMeshDB(modelSequenceFileName, &recognition.vtkRMSEModelDB, false);
+			recognition.vtkRMSEModelDB = recognition.vtkModelDB;
+#endif
+
 			recognition.LoadCompleteSegmentGT(sceneSequence);
+
+			recognition.falseHypothesesFileName = RVLCreateString((char *)((resultsFolderName + "\\falseHypotheses.txt").c_str()));
+				
+			FILE *fpFalseHypotheses = fopen(recognition.falseHypothesesFileName, "w");
+
+			fclose(fpFalseHypotheses);
+
+			int command = 1;
 
 			LARGE_INTEGER ctr1, ctr2, freq;
 			LARGE_INTEGER ctr1_, ctr2_, freq_;
 
-			while (sceneSequence.GetNextPath(filePath))
+			while (true)
 			{
+				if (bSceneBrowser)
+				{
+					switch (command)
+					{
+					case 0:
+						recognition.SceneBackward();
+
+						break;
+					case 1:
+						if (!sceneSequence.GetNextPath(filePath))
+							break;
+
+						break;
+					case 2:
+						printf("Select scene:\n");
+
+						int iScene;
+
+						scanf("%d", &iScene);
+
+						recognition.SetScene(iScene);
+
+						sceneSequence.GetFilePath(iScene, filePath);
+					}
+				}
+				else if (!sceneSequence.GetNextPath(filePath))
+					break;
+
+				recognition.ParamList.LoadParams(cfgFileName);
+
 				QueryPerformanceCounter((LARGE_INTEGER *)&ctr1);
 
 				printf("Scene %s...\n", filePath);
@@ -803,6 +852,7 @@ int main(int argc, char ** argv)
 
 				recognition.segmentGTLoaded = false;
 				recognition.createSegmentGT = false;
+				recognition.visualizeTPHypotheses = false;
 
 				if (flags & RVLRECOGNITION_DEMO_FLAG_3D_VISUALIZATION)
 				{					
@@ -894,7 +944,36 @@ int main(int argc, char ** argv)
 					//recognition.CalculateNNCost(&visualizer, PCLICP, PCLICPVariants::Point_to_plane);
 
 					//TEST RVLPSGM_MATCHCTI_MATCH_MATRIX
-					recognition.ICP(PCLICP, PCLICPVariants::Point_to_plane);
+#ifdef RVLVERSION_171125
+					recognition.ICP(PCLICP, PCLICPVariants::Point_to_plane, recognition.bestSceneSegmentMatches2);
+
+					recognition.HypothesisEvaluation(recognition.bestSceneSegmentMatches2, true);
+
+					if (recognition.bVisualizeHypothesisEvaluationLevel2)
+						recognition.VisualizeHypotheses(recognition.bestSceneSegmentMatches2, true);
+
+					//Colision check
+					recognition.noCollisionHypotheses.clear();
+					recognition.transparentHypotheses.clear();
+					recognition.envelopmentColisionHypotheses.clear();
+					recognition.GetHypothesesCollisionConsensus(&recognition.noCollisionHypotheses, &recognition.bestSceneSegmentMatches2, 10);
+
+					//Get transparency and collision consensus
+					if (flags & RVLRECOGNITION_DEMO_FLAG_3D_VISUALIZATION)
+						recognition.GetTransparencyAndCollisionConsensus(&visualizer);
+					else
+						recognition.GetTransparencyAndCollisionConsensus();
+
+					//Evaluate consesus matches
+					float precision, recall;
+					recognition.EvaluateConsensusMatches(precision, recall, true);
+
+#ifdef RVLPSGM_RMSE_CALCULATION
+					//Calculate RMSE
+					recognition.RMSE_Consensus(fpRMSE, true);
+#endif
+#else
+					recognition.ICP(PCLICP, PCLICPVariants::Point_to_plane, recognition.bestSceneSegmentMatches);
 
 #ifdef RVLPSGM_TRANSPARENCY_AND_COLLISION
 					//Transparency check
@@ -912,6 +991,7 @@ int main(int argc, char ** argv)
 
 					//Get transparency and collision consensus
 					recognition.GetTransparencyAndCollisionConsensus(&visualizer);
+#endif
 
 					//Evaluate consesus matches
 					float precision, recall;
@@ -924,14 +1004,14 @@ int main(int argc, char ** argv)
 					//determine thresholds for SHAPE_INSTANCE_DETECTION
 					recognition.DetermineThresholds();
 #endif
-#endif
+#endif	// #ifndef RVLVERSION_171125
 
-					//#ifdef RVLVERSION_170601
+					//#ifdef RVLVERSION_171125
 					//				//evaluate ICP
 					//				recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, fpPoseError, fpnotFirstInfo, fpnotFirstPoseErr, 10, true);
 					//#endif
 
-#ifdef RVLPSGM_RMSE_CALCULATION
+#ifdef NEVER
 					//Load models without decimation (used for calculatin RMSE)
 					recognition.LoadModelMeshDB(modelSequenceFileName, &recognition.vtkRMSEModelDB, false);
 
@@ -956,7 +1036,17 @@ int main(int argc, char ** argv)
 
 				if (flags & RVLRECOGNITION_DEMO_FLAG_3D_VISUALIZATION)
 					visualizer.Run();
-			}
+
+				if (bSceneBrowser)
+				{
+					printf("0 - repeate scene; 1 - next scene; 2 - select scene; 3 - exit\n");
+
+					scanf("%d", &command);
+
+					if (command == 3)
+						break;
+				}
+			}	// for every scene
 
 			RVL_DELETE_ARRAY(CTIFileName);
 

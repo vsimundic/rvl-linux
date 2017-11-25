@@ -23,14 +23,7 @@
 
 #define RVLSURFEL_VERSION_0		0
 
-//#define RVLVERSION_171111
-#define RVLVERSION_170601
-
-#ifndef RVLVERSION_170601
-#ifdef RVLVERSION_171111
-#define RVLVERSION_170601
-#endif
-#endif
+#define RVLVERSION_171125
 
 namespace RVL
 {
@@ -118,6 +111,7 @@ namespace RVL
 			Array<int> iSurfelArray;
 			Vertex *pNext;
 			bool bEdge;
+			bool bForeground;
 			BYTE type;
 			float VTX[3];
 			int iCluster;
