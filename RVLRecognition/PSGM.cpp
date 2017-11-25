@@ -5792,7 +5792,8 @@ void PSGM::HypothesisEvaluation(
 			//ground distance calculation
 			st[0] = pHypothesis->t[0] / 1000; st[1] = pHypothesis->t[1] / 1000; st[2] = pHypothesis->t[2] / 1000;
 			RVLHTRANSFMX(pHypothesis->R, st, T);
-			gndDistance = groundPlaneDistance(MCTISet.pCTI.Element[pHypothesis->iMCTI]->iModel, T);
+			pHypothesis->gndDistance = gndDistance = 
+				groundPlaneDistance(MCTISet.pCTI.Element[pHypothesis->iMCTI]->iModel, T);
 
 			//segmentHypothesisArray.Element[iSSegment].Element[i].cost = pHypothesis->cost_NN = 
 			//	HypothesisEvaluation(iHypothesis, iSSegmentArray, bICP);
@@ -15852,12 +15853,12 @@ void PSGM::PrintICPMatches()
 void PSGM::PrintTAICPMatches()
 {
 	cout << "\nTA + ICP matches per segment:\n";
-	for (int i = 0; i < bestSceneSegmentMatches.n; i++)
+	for (int i = 0; i < bestSceneSegmentMatches2.n; i++)
 	{
 		cout << "Segment: " << i << ":\n";
 
 		for (int j = 0; j < bestSceneSegmentMatches2.Element[i].n; j++)
-			cout << "Match: " << j << " ModelID:" << GetMCTI(GetMatch(bestSceneSegmentMatches2.Element[i].Element[j].idx))->iModel << "\t score: " << GetMatch(bestSceneSegmentMatches2.Element[i].Element[j].idx)->cost_NN << " provjera score-a: " << bestSceneSegmentMatches2.Element[i].Element[j].cost << " (matchID: " << bestSceneSegmentMatches2.Element[i].Element[j].idx << ")" << "\n";
+			cout << "Match: " << j << " ModelID:" << GetMCTI(GetMatch(bestSceneSegmentMatches2.Element[i].Element[j].idx))->iModel << "\t score: " << GetMatch(bestSceneSegmentMatches2.Element[i].Element[j].idx)->cost_NN << "(" << bestSceneSegmentMatches2.Element[i].Element[j].cost << ")" << " gndDistance: " << GetMatch(bestSceneSegmentMatches2.Element[i].Element[j].idx)->gndDistance << " transparency ratio: " << GetMatch(bestSceneSegmentMatches2.Element[i].Element[j].idx)->transparencyRatio << " (matchID: " << bestSceneSegmentMatches2.Element[i].Element[j].idx << ")" << "\n";
 
 		cout << "---------------------------------------------------\n";
 	}
