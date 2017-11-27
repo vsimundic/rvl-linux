@@ -55,7 +55,7 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 //#define RVLRECOGNITION_DEMO_CLASS_ALIGNMENT
 #define RVLPSGM_TRANSPARENCY_AND_COLLISION
 #define RVLPSGM_RMSE_CALCULATION
-#ifndef RVLVERSION_170601
+#ifndef RVLVERSION_171125
 #define RVLRECOGNITION_DEMO_CLASS_ALIGNMENT
 #endif
 //#define RVLPSGM_DETERMINE_THRESHOLDS
@@ -615,6 +615,12 @@ int main(int argc, char ** argv)
 
 			recognition.LoadCompleteSegmentGT(sceneSequence);
 
+			recognition.falseHypothesesFileName = RVLCreateString((char *)((resultsFolderName + "\\falseHypotheses.txt").c_str()));
+				
+			FILE *fpFalseHypotheses = fopen(recognition.falseHypothesesFileName, "w");
+
+			fclose(fpFalseHypotheses);
+
 			int command = 1;
 
 			LARGE_INTEGER ctr1, ctr2, freq;
@@ -622,28 +628,33 @@ int main(int argc, char ** argv)
 
 			while (true)
 			{
-				switch (command)
+				if (bSceneBrowser)
 				{
-				case 0:
-					recognition.SceneBackward();
+					switch (command)
+					{
+					case 0:
+						recognition.SceneBackward();
 
-					break;
-				case 1:
-					if (!sceneSequence.GetNextPath(filePath))
 						break;
+					case 1:
+						if (!sceneSequence.GetNextPath(filePath))
+							break;
 
-					break;
-				case 2:
-					printf("Select scene:\n");
+						break;
+					case 2:
+						printf("Select scene:\n");
 
-					int iScene;
+						int iScene;
 
-					scanf("%d", &iScene);
+						scanf("%d", &iScene);
 
-					recognition.SetScene(iScene);
+						recognition.SetScene(iScene);
 
-					sceneSequence.GetFilePath(iScene, filePath);
+						sceneSequence.GetFilePath(iScene, filePath);
+					}
 				}
+				else if (!sceneSequence.GetNextPath(filePath))
+					break;
 
 				recognition.ParamList.LoadParams(cfgFileName);
 
@@ -933,12 +944,13 @@ int main(int argc, char ** argv)
 					//recognition.CalculateNNCost(&visualizer, PCLICP, PCLICPVariants::Point_to_plane);
 
 					//TEST RVLPSGM_MATCHCTI_MATCH_MATRIX
-#ifdef RVLVERSION_171111
+#ifdef RVLVERSION_171125
 					recognition.ICP(PCLICP, PCLICPVariants::Point_to_plane, recognition.bestSceneSegmentMatches2);
 
 					recognition.HypothesisEvaluation(recognition.bestSceneSegmentMatches2, true);
 
-					//recognition.VisualizeHypotheses(recognition.bestSceneSegmentMatches2, true);
+					if (recognition.bVisualizeHypothesisEvaluationLevel2)
+						recognition.VisualizeHypotheses(recognition.bestSceneSegmentMatches2, true);
 
 					//Colision check
 					recognition.noCollisionHypotheses.clear();
@@ -947,7 +959,10 @@ int main(int argc, char ** argv)
 					recognition.GetHypothesesCollisionConsensus(&recognition.noCollisionHypotheses, &recognition.bestSceneSegmentMatches2, 10);
 
 					//Get transparency and collision consensus
-					recognition.GetTransparencyAndCollisionConsensus(&visualizer);
+					if (flags & RVLRECOGNITION_DEMO_FLAG_3D_VISUALIZATION)
+						recognition.GetTransparencyAndCollisionConsensus(&visualizer);
+					else
+						recognition.GetTransparencyAndCollisionConsensus();
 
 					//Evaluate consesus matches
 					float precision, recall;
@@ -989,9 +1004,9 @@ int main(int argc, char ** argv)
 					//determine thresholds for SHAPE_INSTANCE_DETECTION
 					recognition.DetermineThresholds();
 #endif
-#endif	// #ifndef RVLVERSION_171111
+#endif	// #ifndef RVLVERSION_171125
 
-					//#ifdef RVLVERSION_170601
+					//#ifdef RVLVERSION_171125
 					//				//evaluate ICP
 					//				recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, fpPoseError, fpnotFirstInfo, fpnotFirstPoseErr, 10, true);
 					//#endif

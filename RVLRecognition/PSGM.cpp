@@ -49,11 +49,13 @@ PSGM::PSGM()
 	bDetectGroundPlane = true;
 	bOverlappingClusters = false;
 	bICP = true;
+	bVisualizeHypothesisEvaluationLevel1 = false;
+	bVisualizeHypothesisEvaluationLevel2 = false;
 
 	nDominantClusters = 1;
 	kNoise = 1.2f;
 	minInitialSurfelSize = 20;
-#ifdef RVLVERSION_170601
+#ifdef RVLVERSION_171125
 	minVertexPerc = 50;
 #else
 	minVertexPerc = 100;
@@ -213,6 +215,8 @@ PSGM::PSGM()
 	camera.fv = 525;
 	camera.uc = 320;
 	camera.vc = 240;
+
+	falseHypothesesFileName = NULL;
 }
 
 
@@ -373,6 +377,8 @@ void PSGM::CreateParamList(CRVLMem *pMem)
 	pParamData = ParamList.AddParam("PSGM.symmetryMatchThr", RVLPARAM_TYPE_FLOAT, &symmetryMatchThr);
 	pParamData = ParamList.AddParam("PSGM.debug1", RVLPARAM_TYPE_INT, &debug1);
 	pParamData = ParamList.AddParam("PSGM.debug2", RVLPARAM_TYPE_INT, &debug2);
+	pParamData = ParamList.AddParam("PSGM.Visualization.hypothesisEvaluationLevel1", RVLPARAM_TYPE_BOOL, &bVisualizeHypothesisEvaluationLevel1);
+	pParamData = ParamList.AddParam("PSGM.Visualization.hypothesisEvaluationLevel2", RVLPARAM_TYPE_BOOL, &bVisualizeHypothesisEvaluationLevel2);
 }
 
 void PSGM::Init(char *cfgFileName)
@@ -625,7 +631,7 @@ void PSGM::Interpret(
 		//Match scene MI to model MI
 		if (mode == RVLRECOGNITION_MODE_RECOGNITION)
 		{
-#ifndef RVLVERSION_170601
+#ifndef RVLVERSION_171125
 			VertexGraph vertexGraph;
 
 			vertexGraph.idx = iScene;
@@ -647,7 +653,7 @@ void PSGM::Interpret(
 			fclose(fp);
 #endif
 
-#ifdef RVLVERSION_170601
+#ifdef RVLVERSION_171125
 			Match();
 #endif
 		}
@@ -1716,7 +1722,7 @@ void PSGM::VisualizeCTIMatch(float *nT, float *dM, float *dS, int *validS)
 //
 //
 
-#ifdef RVLVERSION_170601
+#ifdef RVLVERSION_171125
 void PSGM::Clusters()
 {
 	RVL_DELETE_ARRAY(clusterMap);
@@ -3682,7 +3688,7 @@ void PSGM::LoadModelDataBase()
 		tBestMatch.Element[i].n = 3;
 	}
 
-#ifdef RVLVERSION_170601
+#ifdef RVLVERSION_171125
 	char *TGFileName = RVLCreateFileName(modelDataBase, ".dat", -1, ".tgr");
 
 	MTGSet.Load(TGFileName);
@@ -5180,7 +5186,7 @@ void PSGM::Match()
 
 	//FilterHypothesesUsingTransparency(0.5, 0.01, true);
 
-#ifdef RVLVERSION_171111
+#ifdef RVLVERSION_171125
 	float gndDistanceThresh = 0.025;
 	float transparencyThresh = 0.2;
 	float envelopmentThresh = 30;
@@ -5522,6 +5528,10 @@ void PSGM::Match()
 					//score = HypothesisEvaluation(matchID, iSSegmentArray);
 					score = HypothesisEvaluation2(matchID, nTransparentPts, false, 0.001f);
 
+					pMatch->score = score;
+					pMatch->nTransparentPts = nTransparentPts;
+					pMatch->gndDistance = gndDistance;
+
 					bestSceneSegmentMatches2.Element[iSCluster].Element[iMatchFiltered].idx = matchID;
 					//bestSceneSegmentMatches2.Element[iSCluster].Element[iMatchFiltered].cost = score * (1.0f - gndDistance * gndDistance / 0.0025f);
 					bestSceneSegmentMatches2.Element[iSCluster].Element[iMatchFiltered].cost = 
@@ -5621,11 +5631,10 @@ void PSGM::Match()
 	delete[] bBestHypothesisInList;
 		//delete[] PGnd;
 
-#ifdef RVLPSGM_TANGENT_ALIGNMENT_VISUALIZATION
-	VisualizeHypotheses(bestSceneSegmentMatches2, false);
-#endif
+	if (bVisualizeHypothesisEvaluationLevel1)
+		VisualizeHypotheses(bestSceneSegmentMatches2, false);
 
-#endif	// #ifdef RVLVERSION_171111
+#endif	// #ifdef RVLVERSION_171125
 
 	printf("completed.\n");
 
@@ -5773,7 +5782,7 @@ void PSGM::HypothesisEvaluation(
 	float gndDistance = 0.0;		// Ovdje treba raèunati ground distance.
 
 	int i, iSSegment, iHypothesis;
-	float score;
+	float score, totalScore, prevScore;
 	PSGM_::MatchInstance *pHypothesis;
 	int nTransparentPts;
 	float st[3];
@@ -5800,8 +5809,24 @@ void PSGM::HypothesisEvaluation(
 
 			score = HypothesisEvaluation2(iHypothesis, nTransparentPts, bICP, 0.001f);
 
-			segmentHypothesisArray.Element[iSSegment].Element[i].cost = pHypothesis->cost_NN =
-				score * (1.0f - wGndDistance22 * gndDistance * gndDistance) - wTransparency2 * (float)nTransparentPts;	// Total hypothesis score
+			totalScore = score * (1.0f - wGndDistance22 * gndDistance * gndDistance) - wTransparency2 * (float)nTransparentPts;
+
+			prevScore = pHypothesis->score * (1.0f - wGndDistance22 * pHypothesis->gndDistance * pHypothesis->gndDistance) - 
+				wTransparency2 * (float)(pHypothesis->nTransparentPts);
+
+			if (totalScore > prevScore)
+			{
+				pHypothesis->score = score;
+				pHypothesis->nTransparentPts = nTransparentPts;
+				pHypothesis->gndDistance = gndDistance;
+				segmentHypothesisArray.Element[iSSegment].Element[i].cost = pHypothesis->cost_NN = totalScore;
+			}
+			else
+			{
+				RVLCOPYMX3X3(pHypothesis->R, pHypothesis->RICP);
+				RVLCOPY3VECTOR(pHypothesis->t, pHypothesis->tICP);
+				pHypothesis->cost_NN = prevScore;
+			}
 		}
 
 		BubbleSort<SortIndex<float>>(segmentHypothesisArray.Element[iSSegment], true);
@@ -6205,7 +6230,8 @@ float PSGM::HypothesisEvaluation2(
 	{
 		PSGM_::ModelInstance *pSCTI = CTISet.pCTI.Element[pHypothesis->iSCTI];
 
-		printf("segment %d model %d match %d score %f transparency %d\n", pSCTI->iCluster, iModel, iHypothesis, score, nTransparentPts);
+		printf("segment %d model %d match %d score %f transparency %d ground distance %f\n", 
+			pSCTI->iCluster, iModel, iHypothesis, score, nTransparentPts, pHypothesis->gndDistance);
 
 		Point *PC = new Point[2 * nPts];
 
@@ -7696,7 +7722,15 @@ void PSGM::CountTPandFN(
 			FN++;
 
 			if (printMatchInfo)
+			{
 				printf("GT Model %d (ModelID: %d) NOT matched on scene %d!\n", iGTM, pGT->iModel, iScene - 1);
+
+				FILE *fp = fopen(falseHypothesesFileName, "a");
+
+				fprintf(fp, "%s: Model %d GT Model %d\n", sceneFileName, iGTM, pGT->iModel);
+
+				fclose(fp);
+			}
 		}
 		else
 		{
@@ -12215,7 +12249,7 @@ void PSGM::ICP(
 				float tDistance;
 
 				tDistance = groundPlaneDistance(iModel, icpT2d);
-				pMatch->gndDistance = groundPlaneDistance(iModel, icpT2d);
+				//pMatch->gndDistance = groundPlaneDistance(iModel, icpT2d);
 
 	#ifdef RVLPSGM_GROUND_PLANE_DISTANCE_PENALIZATION
 				pMatch->cost_NN += tConst * RVLABS(pMatch->gndDistance) * pMatch->cost_NN;
@@ -14628,11 +14662,8 @@ void PSGM::GetHypothesesCollisionConsensus(std::vector<int> *noCollisionHypothes
 	int currentMatch;
 	int currentSeg;
 	bool collision;
-#ifdef RVLVERSION_171111
+
 	for (int i = hypotheses.size() - 1; i >= 0; i--)
-#else
-	for (int i = 0; i < hypotheses.size(); i++)
-#endif
 	{
 		currentSeg = hypotheses.at(i).idSeg;
 		//Check is that segment is already finished
@@ -16199,7 +16230,7 @@ void PSGM::CreateDilatedDepthImage()
 				depth.at<uint16_t>(y, x) = 10000; //in milimeters
 		}
 	}
-#ifndef RVLVERSION_171111
+#ifndef RVLVERSION_171125
 	cv::Mat elementE = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(17, 17));
 	cv::erode(depth, depth, elementE);
 #endif
@@ -17092,7 +17123,7 @@ void PSGM::Project(
 //
 ///////////////////////////////////////////////////////////////////////////
 
-#ifndef RVLVERSION_170601
+#ifndef RVLVERSION_171125
 void PSGM::Clusters()
 {
 	RVL_DELETE_ARRAY(clusterMap);

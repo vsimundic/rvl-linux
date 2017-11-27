@@ -14,7 +14,7 @@
 #define RVLPSGM_MATCH_SIMILARITY_MEASURE_MEAN_SATURATED_SQUARE_DISTANCE							4
 #define RVLPSGM_MATCH_SIMILARITY_MEASURE_MEDIAN_ABS_DISTANCE									5
 //#define RVLPSGM_RANSAC
-#ifdef RVLVERSION_170601
+#ifdef RVLVERSION_171125
 #define RVLPSGM_ICP		// 170601: ON
 #endif
 #define RVLPSGM_ICP_SIMILARITY_MEASURE_COSTNN				0
@@ -113,6 +113,7 @@ namespace RVL
 				float eSeg;
 				float gndDistance; //Vidovic
 				float transparencyRatio; //Vidovic
+				int nTransparentPts;
 				// Petra
 				double cost_ICP; 
 				//float T_ICP[16]; //transformation between current and ICP pose
@@ -722,6 +723,8 @@ namespace RVL
 		bool bDetectGroundPlane;
 		bool bOverlappingClusters;
 		bool bICP;
+		bool bVisualizeHypothesisEvaluationLevel1;
+		bool bVisualizeHypothesisEvaluationLevel2;
 		Array<RECOG::PSGM_::ModelInstance> modelInstanceDB; //Vidovic
 		QList<RECOG::PSGM_::MatchInstance> CTImatches; //Vidovic
 		Array<RECOG::PSGM_::MatchInstance*> pCTImatchesArray; //Vidovic
@@ -806,6 +809,7 @@ namespace RVL
 		Array<int> ZBufferActivePtArray;
 		int *subImageMap;
 		Camera camera;
+		char *falseHypothesesFileName;
 
 	private:		
 		RECOG::PSGM_::Cluster *clusterMem;
