@@ -502,7 +502,8 @@ namespace RVL
 		bool PSGM::CompareMatchToSegmentGT(
 			int iScene,
 			int iSSegment,
-			int iMatchedModel); //Vidovic
+			int iMatchedModel,
+			RECOG::PSGM_::MatchInstance *pMatch = NULL); //Vidovic
 		void PSGM::CountTPandFN(
 			int &TP,
 			int &FN,
@@ -810,6 +811,7 @@ namespace RVL
 		int *subImageMap;
 		Camera camera;
 		char *falseHypothesesFileName;
+		char *TPHypothesesCTIRankFileName; //Vidovic
 
 	private:		
 		RECOG::PSGM_::Cluster *clusterMem;

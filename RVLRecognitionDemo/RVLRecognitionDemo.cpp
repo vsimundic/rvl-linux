@@ -621,6 +621,12 @@ int main(int argc, char ** argv)
 
 			fclose(fpFalseHypotheses);
 
+			recognition.TPHypothesesCTIRankFileName = RVLCreateString((char *)((resultsFolderName + "\\TPHypothesesCTIRank.txt").c_str()));
+
+			FILE *fpTPHypothesesCTIRank = fopen(recognition.TPHypothesesCTIRankFileName, "w");
+
+			fclose(fpTPHypothesesCTIRank);
+
 			int command = 1;
 
 			LARGE_INTEGER ctr1, ctr2, freq;

@@ -150,8 +150,8 @@ PSGM::PSGM()
 	scoreMatchMatrixICP.Element = NULL;
 	scoreMatchMatrixICP.n = 0;
 
-	nBestMatches = 100; //add loading from file
-	//nBestMatches = 5; //add loading from file
+	//nBestMatches = 100; //add loading from file
+	nBestMatches = 50; //add loading from file
 
 	//Arrays allocation for Match function
 	iValidSampleCandidate.Element = new QLIST::Index[convexTemplate.n];
@@ -5044,8 +5044,8 @@ void PSGM::Match()
 
 	bestSceneSegmentMatches.n = nClusters;
 
-	int nBestMatchesPerCluster = 100;
-	//int nBestMatchesPerCluster = 5;
+	//int nBestMatchesPerCluster = 100;
+	int nBestMatchesPerCluster = 50;
 
 	int nBestMatchesTotal = nBestMatchesPerCluster * nClusters;
 
@@ -7671,7 +7671,8 @@ bool PSGM::CompareMatchToSegmentGT(
 bool PSGM::CompareMatchToSegmentGT(
 	int iScene,
 	int iSSegment,
-	int iMatchedModel)
+	int iMatchedModel,
+	RECOG::PSGM_::MatchInstance *pMatch)
 {
 	int iSegmentGT = iScene * nDominantClusters + iSSegment;
 
@@ -7688,7 +7689,18 @@ bool PSGM::CompareMatchToSegmentGT(
 		for (iGTM = 0; iGTM < nGTModels; iGTM++, pGT++)
 		{
 			if (iMatchedModel == pGT->iModel)
+			{
 				pGT->matched = true;
+
+				if (pMatch)
+				{
+					FILE *fp = fopen(TPHypothesesCTIRankFileName, "a");
+
+					fprintf(fp, "%s: Model %d GT Model %d CTI rank %d\n", sceneFileName, iGTM, pGT->iModel, FindCTIMatchRank(pMatch->ID, GetSCTI(pMatch)->iCluster));
+
+					fclose(fp);
+				}
+			}
 		}
 
 		return true;
@@ -15798,7 +15810,7 @@ void PSGM::EvaluateConsensusMatches(float &precision, float &recall, bool verbos
 		if (!segmentGT.Element[iSegmentGT].valid)
 			TPMatch = false;
 		else	
-			TPMatch = CompareMatchToSegmentGT(pMatch->iScene, iSSegment, iMatchedModel); //check if match is TP and update match flag
+			TPMatch = CompareMatchToSegmentGT(pMatch->iScene, iSSegment, iMatchedModel, pMatch); //check if match is TP and update match flag
 	
 		if (!TPMatch)
 		{
@@ -15853,11 +15865,13 @@ void PSGM::PrintCTIMatches(bool bTAMatches)
 	{
 		cout << "Segment: " << i << ":\n";
 
-		for (int j = 0; j < bestSceneSegmentMatches.Element[i].n; j++)
+		int nMAtches = bTAMatches ? bestSceneSegmentMatches2.Element[i].n : bestSceneSegmentMatches.Element[i].n;
+
+		for (int j = 0; j < nMAtches; j++)
 			if (bTAMatches)
 				cout << "Match: " << j << " ModelID:" << GetMCTI(GetMatch(bestSceneSegmentMatches2.Element[i].Element[j].idx))->iModel << "\tCTI score: " << GetMatch(bestSceneSegmentMatches2.Element[i].Element[j].idx)->score << " (matchID: " << bestSceneSegmentMatches2.Element[i].Element[j].idx << ")" << "\n";
 			else
-			cout << "Match: " << j << " ModelID:" << GetMCTI(GetMatch(bestSceneSegmentMatches.Element[i].Element[j].idx))->iModel << "\tCTI score: " << GetMatch(bestSceneSegmentMatches.Element[i].Element[j].idx)->score << " (matchID: " << bestSceneSegmentMatches.Element[i].Element[j].idx << ")" << "\n";
+				cout << "Match: " << j << " ModelID:" << GetMCTI(GetMatch(bestSceneSegmentMatches.Element[i].Element[j].idx))->iModel << "\tCTI score: " << GetMatch(bestSceneSegmentMatches.Element[i].Element[j].idx)->score << " (matchID: " << bestSceneSegmentMatches.Element[i].Element[j].idx << ")" << "\n";
 
 		cout << "---------------------------------------------------\n";
 	}
@@ -15889,7 +15903,7 @@ void PSGM::PrintTAICPMatches()
 		cout << "Segment: " << i << ":\n";
 
 		for (int j = 0; j < bestSceneSegmentMatches2.Element[i].n; j++)
-			cout << "Match: " << j << " ModelID:" << GetMCTI(GetMatch(bestSceneSegmentMatches2.Element[i].Element[j].idx))->iModel << "\t score: " << GetMatch(bestSceneSegmentMatches2.Element[i].Element[j].idx)->cost_NN << "(" << bestSceneSegmentMatches2.Element[i].Element[j].cost << ")" << " gndDistance: " << GetMatch(bestSceneSegmentMatches2.Element[i].Element[j].idx)->gndDistance << " transparency ratio: " << GetMatch(bestSceneSegmentMatches2.Element[i].Element[j].idx)->transparencyRatio << " (matchID: " << bestSceneSegmentMatches2.Element[i].Element[j].idx << ")" << "\n";
+			cout << "Match: " << j << " ModelID:" << GetMCTI(GetMatch(bestSceneSegmentMatches2.Element[i].Element[j].idx))->iModel << "\t score: " << GetMatch(bestSceneSegmentMatches2.Element[i].Element[j].idx)->cost_NN << "(" << bestSceneSegmentMatches2.Element[i].Element[j].cost << ")" << " gndDistance: " << GetMatch(bestSceneSegmentMatches2.Element[i].Element[j].idx)->gndDistance << " transparenct points: " << GetMatch(bestSceneSegmentMatches2.Element[i].Element[j].idx)->nTransparentPts << " (matchID: " << bestSceneSegmentMatches2.Element[i].Element[j].idx << ")" << "\n";
 
 		cout << "---------------------------------------------------\n";
 	}
