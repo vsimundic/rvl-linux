@@ -17116,6 +17116,103 @@ void PSGM::Project(
 	}
 }
 
+void PSGM::SaveZBuffer(char *fileName)
+{
+	cv::Mat depthImage(ZBuffer.h, ZBuffer.w, CV_16UC1);
+
+	uchar *pDepthImageRow = depthImage.data;
+
+	int u, v;
+	ushort *pDepthImagePix;
+	Point *pPt;
+
+	for (v = 0; v < ZBuffer.h; v++)
+	{
+		pDepthImagePix = (ushort *)pDepthImageRow;
+
+		for (u = 0; u < ZBuffer.w; u++, pDepthImagePix++)
+		{
+			pPt = ZBuffer.Element + u + v * ZBuffer.w;
+
+			*pDepthImagePix = (pPt->bValid ? (ushort)round(1000.0f * pPt->P[2]) : 0);
+		}
+
+		pDepthImageRow += depthImage.step;
+	}
+
+	cv::imwrite(fileName, depthImage);
+}
+
+void PSGM::SaveHypothesisProjection(int iHypothesis)
+{
+	char strHypothesisID[100];
+
+	sprintf(strHypothesisID, "_%d.png", iHypothesis);
+
+	char *ZBufferFileName = RVLCreateFileName(sceneFileName, ".ply", -1, strHypothesisID);
+
+	RECOG::PSGM_::MatchInstance *pHypothesis = pCTImatchesArray.Element[iHypothesis];
+
+	float RMSs[9], tMS[3];
+
+	RVLSCALE3VECTOR(pHypothesis->t, 0.001f, tMS);
+	RVLSCALEMX3X3(pHypothesis->R, 0.001f, RMSs);
+
+	PSGM_::ModelInstance *pMCTI = MCTISet.pCTI.Element[pHypothesis->iMCTI];
+
+	int iModel = pMCTI->iModel;
+
+	Array<Point> modelPC = modelPCs[iModel];
+
+	Project(modelPC, pHypothesis->R, tMS, RMSs);
+
+	SaveZBuffer(ZBufferFileName);
+
+	delete[] ZBufferFileName;
+}
+
+void PSGM::SaveSubsampledScene()
+{
+	char *depthImageFileName = RVLCreateFileName(sceneFileName, ".ply", -1, ".png");
+
+	cv::Mat depthImage(ZBuffer.h, ZBuffer.w, CV_16UC1);
+
+	uchar *pDepthImageRow = depthImage.data;
+
+	Point *PtArray = pMesh->NodeArray.Element;
+
+	int iPix = 0;
+
+	int u, v, iSPt;
+	ushort *pDepthImagePix;
+	Point *pPt;
+
+	for (v = 0; v < ZBuffer.h; v++)
+	{
+		pDepthImagePix = (ushort *)pDepthImageRow;
+
+		for (u = 0; u < ZBuffer.w; u++, pDepthImagePix++, iPix++)
+		{
+			iSPt = subImageMap[iPix];
+
+			pPt = PtArray + iSPt;
+
+			if (pPt->N[0] != pPt->N[0])
+				*pDepthImagePix = 0;
+			else if (RVLDOTPRODUCT3(pPt->N, pPt->N) < 0.5f)
+				*pDepthImagePix = 0;
+			else
+				*pDepthImagePix = (ushort)round(1000.0f * pPt->P[2]);
+		}
+
+		pDepthImageRow += depthImage.step;
+	}
+
+	cv::imwrite(depthImageFileName, depthImage);
+
+	delete[] depthImageFileName;
+}
+
 ///////////////////////////////////////////////////////////////////////////
 //
 // CUPEC
