@@ -19086,6 +19086,32 @@ void PSGM::createModelDepthImage(ushort *depthImage)
 	}
 }
 
+void PSGM::CreateSubsampledScene(ushort *depthImage)
+{
+	Point *PtArray = pMesh->NodeArray.Element;
+
+	int iPix = 0;
+	int u, v, iSPt;
+	Point *pPt;
+
+	for (v = 0; v < ZBuffer.h; v++)
+	{
+		for (u = 0; u < ZBuffer.w; u++, depthImage++, iPix++)
+		{
+			iSPt = subImageMap[iPix];
+
+			pPt = PtArray + iSPt;
+
+			if (pPt->N[0] != pPt->N[0])
+				*depthImage = 0;
+			else if (RVLDOTPRODUCT3(pPt->N, pPt->N) < 0.5f)
+				*depthImage = 0;
+			else
+				*depthImage = (ushort)round(1000.0f * pPt->P[2]);
+		}
+	}
+}
+
 ///////////////////////////////////////////////////////////////////////////
 //
 // END VIDOVIC

@@ -643,6 +643,7 @@ namespace RVL
 		void SaveHypothesisProjection(int iHypothesis);
 		void SaveSubsampledScene();
 		void createModelDepthImage(ushort *depthImage); //Vidovic
+		void CreateSubsampledScene(ushort *depthImage); //Vidovic
 
 	private:
 		void WholeMeshCluster();
