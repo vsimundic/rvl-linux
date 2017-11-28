@@ -5309,23 +5309,23 @@ void PSGM::Match()
 
 	//PSGM_::MGT *pMGT;
 
-		//Alocate memory for bestSceneSegmentMatches2
-		RVL_DELETE_ARRAY(bestSceneSegmentMatches2.Element);
+	//Alocate memory for bestSceneSegmentMatches2
+	RVL_DELETE_ARRAY(bestSceneSegmentMatches2.Element);
 
-		bestSceneSegmentMatches2.Element = new Array<SortIndex<float>>[nClusters];
+	bestSceneSegmentMatches2.Element = new Array<SortIndex<float>>[nClusters];
 
-		bestSceneSegmentMatches2.n = nClusters;
+	bestSceneSegmentMatches2.n = nClusters;
 
-		if (nBestMatchesTotal > bestSceneSegmentMatchesArray2.n)
-		{
-			RVL_DELETE_ARRAY(bestSceneSegmentMatchesArray2.Element);
+	if (nBestMatchesTotal > bestSceneSegmentMatchesArray2.n)
+	{
+		RVL_DELETE_ARRAY(bestSceneSegmentMatchesArray2.Element);
 
-			bestSceneSegmentMatchesArray2.n = nBestMatchesTotal;
+		bestSceneSegmentMatchesArray2.n = nBestMatchesTotal;
 
-			bestSceneSegmentMatchesArray2.Element = new SortIndex<float>[bestSceneSegmentMatchesArray2.n];
-		}
+		bestSceneSegmentMatchesArray2.Element = new SortIndex<float>[bestSceneSegmentMatchesArray2.n];
+	}
 
-		//float *PGnd = new float[3 * pSurfels->vertexArray.n];
+	//float *PGnd = new float[3 * pSurfels->vertexArray.n];
 
 	bool bVerbose = false;
 
@@ -5359,8 +5359,15 @@ void PSGM::Match()
 	int nHypotheses;
 	int nTransparentPts;
 
-		for (iSCluster = 0; iSCluster < nClusters; iSCluster++)
-		{
+	//allocate memory for modelsDepthImage
+	RVL_DELETE_ARRAY(modelsDepthImage.Element);
+	modelsDepthImage.Element = new ushort *[clusters.n * nBestHypothesesPerSSegment];
+	modelsDepthImage.n = 0;
+
+	ushort *pModelDepthImage;
+
+	for (iSCluster = 0; iSCluster < nClusters; iSCluster++)
+	{
 		iGTModel = segmentGT.Element[iScene * nDominantClusters + iSCluster].iModel;
 
 		if (bVerbose)
@@ -5569,6 +5576,11 @@ void PSGM::Match()
 			maxScore = 0.0f;
 
 			pBestHypothesisIdx = NULL;
+
+			//allocate memory for depthImage
+			modelsDepthImage.Element[iSCluster*nBestHypothesesPerSSegment + j] = new ushort[ZBuffer.w * ZBuffer.h];
+			modelsDepthImage.n++;
+			pModelDepthImage = modelsDepthImage.Element[iSCluster*nBestHypothesesPerSSegment + j];
 
 			for (i = j; i < bestSceneSegmentMatches2.Element[iSCluster].n; i++)
 			{
@@ -19056,6 +19068,22 @@ void PSGM::VisualizeHypotheses(
 	delete[] iVertexArray.Element;
 	delete[] iSSegmentArray.Element;
 	delete[] bVertexAlreadyStored;
+}
+
+void PSGM::createModelDepthImage(ushort *depthImage)
+{
+	int u, v;
+	Point *pPt;
+
+	for (v = 0; v < ZBuffer.h; v++)
+	{
+		for (u = 0; u < ZBuffer.w; u++, depthImage++)
+		{
+			pPt = ZBuffer.Element + u + v * ZBuffer.w;
+
+			*depthImage = (pPt->bValid ? (ushort)round(1000.0f * pPt->P[2]) : 0);
+		}
+	}
 }
 
 ///////////////////////////////////////////////////////////////////////////

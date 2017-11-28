@@ -642,6 +642,7 @@ namespace RVL
 		void SaveZBuffer(char *fileName);
 		void SaveHypothesisProjection(int iHypothesis);
 		void SaveSubsampledScene();
+		void createModelDepthImage(ushort *depthImage); //Vidovic
 
 	private:
 		void WholeMeshCluster();
@@ -825,7 +826,7 @@ namespace RVL
 		int nSmallSegments; //Vidovic - only for debug
 
 		//for ICP CUDA
-		Array<unsigned short *> modelsDepthImage;
+		Array<ushort *> modelsDepthImage;
 
 	private:		
 		RECOG::PSGM_::Cluster *clusterMem;
