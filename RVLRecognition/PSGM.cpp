@@ -220,6 +220,9 @@ PSGM::PSGM()
 	TPHypothesesCTIRankFileName = NULL;
 
 	nSmallSegments = 0; //Vidovic - only for debug
+
+	//CUDAICP
+	modelsDepthImage.Element = NULL;
 }
 
 
@@ -324,6 +327,9 @@ PSGM::~PSGM()
 		delete pSVertexGraph;
 
 	DeleteModelPCs();
+
+	//CUDAICP
+	RVL_DELETE_ARRAY(modelsDepthImage.Element);
 }
 
 void PSGM::CreateParamList(CRVLMem *pMem)
@@ -12287,6 +12293,13 @@ void PSGM::ICP(
 			else continue;
 		}
 	}
+}
+
+//CUDA ICP
+void ICP(RVL::PSGM::CUDAICPfunction CUDAICPFunction, Array<Array<SortIndex<float>>> sceneSegmentHypotheses)
+{
+
+
 }
 
 float PSGM::groundPlaneDistance(int iModel, double *MSTransform)

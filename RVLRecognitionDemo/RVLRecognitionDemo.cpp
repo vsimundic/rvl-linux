@@ -39,6 +39,8 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 #include "MarchingCubes.h"
 #include "VN.h"
 #include "VNClassifier.h"
+#include "ICPCUDAv1.h"
+//#include "ICPCUDAv2.h"
 
 
 
@@ -68,6 +70,9 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 //END VIDOVIC
 
 using namespace RVL;
+
+ICPcudaV1 *pCUDAICPObjv1;
+//ICPcudaV2 *pCUDAICPObjv2;
 
 void CreateParamList(
 	CRVLParameterList *pParamList,
@@ -266,6 +271,24 @@ void FilterImage(cv::Mat img)
 	}
 	newImg.copyTo(img);
 }
+
+//sceneDepth is depth image of models (ZBuffer)
+void RunCUDAICPv1(unsigned short *modelDepth, float *T)
+{
+	pCUDAICPObjv1->SetIcpScene(modelDepth);
+	Eigen::Matrix4f pose;
+	pCUDAICPObjv1->CalcIncrementalTransformation(pose);
+	memcpy(T, pose.data(), 16 * sizeof(float));
+}
+
+////sceneDepth is depth image of models (ZBuffer)
+//void RunCUDAICPv2(unsigned short *modelDepth, float *T)
+//{
+//	pCUDAICPObjv2->SetIcpScene(modelDepth);
+//	Sophus::SE3d pose;
+//	pCUDAICPObjv2->CalcIncrementalTransformation(pose);
+//	memcpy(T, pose.matrix()->data(), 16 * sizeof(float));
+//}
 
 int main(int argc, char ** argv)
 {

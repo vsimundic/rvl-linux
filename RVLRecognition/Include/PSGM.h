@@ -127,6 +127,7 @@ namespace RVL
 				float t_class[3];
 				// end Petra
 				bool bValid; //Vidovic
+				unsigned short *pModelDepthImage;
 				MatchInstance *pNext;
 			};
 
@@ -304,6 +305,8 @@ namespace RVL
 		void CalculatePose(int iMatch);
 
 		typedef void(*ICPfunction)(vtkSmartPointer<vtkPolyData>, vtkSmartPointer<vtkPolyData>, float*, int, float, int, double*, void*);
+
+		typedef void(*CUDAICPfunction)(unsigned short *, unsigned short *, float *);
 
 		//For a given scene segment adds desired ranked hypotheses to visualizer:
 		void AddModelsToVisualizer(Visualizer *pVisualizer, bool align, ICPfunction ICPFunction, int ICPvariant, void *kdTreePtr = NULL);
@@ -567,6 +570,9 @@ namespace RVL
 			RVL::PSGM::ICPfunction ICPFunction, 
 			int ICPvariant,
 			Array<Array<SortIndex<float>>> sceneSegmentHypotheses); //Vidovic //for multiple matches per model
+		void ICP(
+			RVL::PSGM::CUDAICPfunction CUDAICPFunction,
+			Array<Array<SortIndex<float>>> sceneSegmentHypotheses);
 		void PrintCTIMatches(bool bTAMatches = false); //Vidovic
 		void PrintICPMatches(); //Vidovic
 		void PrintTAICPMatches(); //Vidovic
@@ -814,6 +820,9 @@ namespace RVL
 		char *TPHypothesesCTIRankFileName; //Vidovic
 
 		int nSmallSegments; //Vidovic - only for debug
+
+		//for ICP CUDA
+		Array<unsigned short *> modelsDepthImage;
 
 	private:		
 		RECOG::PSGM_::Cluster *clusterMem;
