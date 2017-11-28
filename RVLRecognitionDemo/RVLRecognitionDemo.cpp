@@ -891,6 +891,13 @@ int main(int argc, char ** argv)
 
 				recognition.Interpret(&mesh);
 
+				//// Only for debugging purpose!!!
+
+				//int iMatch = recognition.bestSceneSegmentMatches2.Element[0].Element[0].idx;
+
+				//recognition.SaveHypothesisProjection(iMatch);
+
+				//recognition.SaveSubsampledScene();
 				
 				//recognition.SaveMatches();
 

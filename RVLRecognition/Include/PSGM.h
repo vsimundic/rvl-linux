@@ -639,6 +639,9 @@ namespace RVL
 		void InitZBuffer(Mesh *pMesh);
 		void SceneBackward();
 		void SetScene(int iSceneIn);
+		void SaveZBuffer(char *fileName);
+		void SaveHypothesisProjection(int iHypothesis);
+		void SaveSubsampledScene();
 
 	private:
 		void WholeMeshCluster();
