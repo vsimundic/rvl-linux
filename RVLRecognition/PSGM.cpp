@@ -217,6 +217,9 @@ PSGM::PSGM()
 	camera.vc = 240;
 
 	falseHypothesesFileName = NULL;
+	TPHypothesesCTIRankFileName = NULL;
+
+	nSmallSegments = 0; //Vidovic - only for debug
 }
 
 
@@ -5799,8 +5802,8 @@ void PSGM::HypothesisEvaluation(
 			pHypothesis = pCTImatchesArray.Element[iHypothesis];
 
 			//ground distance calculation
-			st[0] = pHypothesis->t[0] / 1000; st[1] = pHypothesis->t[1] / 1000; st[2] = pHypothesis->t[2] / 1000;
-			RVLHTRANSFMX(pHypothesis->R, st, T);
+			st[0] = pHypothesis->tICP[0] / 1000; st[1] = pHypothesis->tICP[1] / 1000; st[2] = pHypothesis->tICP[2] / 1000;
+			RVLHTRANSFMX(pHypothesis->RICP, st, T);
 			pHypothesis->gndDistance = gndDistance = 
 				groundPlaneDistance(MCTISet.pCTI.Element[pHypothesis->iMCTI]->iModel, T);
 
@@ -7697,6 +7700,7 @@ bool PSGM::CompareMatchToSegmentGT(
 					FILE *fp = fopen(TPHypothesesCTIRankFileName, "a");
 
 					fprintf(fp, "%s: Model %d GT Model %d CTI rank %d\n", sceneFileName, iGTM, pGT->iModel, FindCTIMatchRank(pMatch->ID, GetSCTI(pMatch)->iCluster));
+					//fprintf(fp, "scene: %d\tGT Model: %d\tCTI rank: %d\tsegment: %d/%d\tsegment size: %d\n", iScene, pGT->iModel, FindCTIMatchRank(pMatch->ID, GetSCTI(pMatch)->iCluster), GetSCTI(pMatch)->iCluster, clusters.n, clusters.Element[GetSCTI(pMatch)->iCluster]->size);
 
 					fclose(fp);
 				}

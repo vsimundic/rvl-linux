@@ -813,6 +813,8 @@ namespace RVL
 		char *falseHypothesesFileName;
 		char *TPHypothesesCTIRankFileName; //Vidovic
 
+		int nSmallSegments; //Vidovic - only for debug
+
 	private:		
 		RECOG::PSGM_::Cluster *clusterMem;
 		int *clusterSurfelMem;
