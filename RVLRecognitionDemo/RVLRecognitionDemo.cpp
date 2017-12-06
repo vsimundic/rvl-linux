@@ -73,8 +73,10 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 
 using namespace RVL;
 
+#ifdef RVLPSGM_CUDA_ICP
 ICPcudaV1 *pCUDAICPObjv1;
 //ICPcudaV2 *pCUDAICPObjv2;
+#endif
 
 void CreateParamList(
 	CRVLParameterList *pParamList,
@@ -315,6 +317,7 @@ void FilterImage(cv::Mat img)
 	newImg.copyTo(img);
 }
 
+#ifdef RVLPSGM_CUDA_ICP
 //sceneDepth is depth image of models (ZBuffer)
 void RunCUDAICPv1(unsigned short *modelDepth, float *T)
 {
@@ -338,6 +341,7 @@ void RunCUDAICPv1(unsigned short *modelDepth, float *T)
 //	pCUDAICPObjv2->CalcIncrementalTransformation(pose);
 //	memcpy(T, pose.matrix().data(), 16 * sizeof(float));
 //}
+#endif
 
 int main(int argc, char ** argv)
 {
