@@ -156,12 +156,14 @@ void RVL::PCLICP(
 	}
 	else if (ICPvariant == PCLICPVariants::Point_to_plane)
 	{
+		//pcl::search::KdTree<pcl::PointXYZINormal>* pKDTREE_ = (pcl::search::KdTree<pcl::PointXYZINormal>*)kdTreePtr;
+		//pcl::search::KdTree<pcl::PointXYZINormal>::Ptr kdtree = boost::make_shared<pcl::search::KdTree<pcl::PointXYZINormal>>(*pKDTREE_);
 		pcl::IterativeClosestPointWithNormals<pcl::PointXYZINormal, pcl::PointXYZINormal> icp_plane;
 		icp_plane.setMaximumIterations(maxIterations);
 		icp_plane.setMaxCorrespondenceDistance(maxCorrespondenceDist);
 		icp_plane.setInputCloud(cloud_source);
-		if (kdTreePtr)
-			icp_plane.setSearchMethodTarget(*((pcl::search::KdTree<pcl::PointXYZINormal>::Ptr*)kdTreePtr), true);
+		//if (kdTreePtr)
+		//	icp_plane.setSearchMethodTarget(kdtree, true);
 		icp_plane.setInputTarget(cloud_destination);
 		pcl::PointCloud<pcl::PointXYZINormal> Final;
 		icp_plane.align(Final);

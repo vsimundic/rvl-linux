@@ -41,6 +41,7 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 #include "VNClassifier.h"
 #include "ICPCUDAv1.h"
 //#include "ICPCUDAv2.h"
+//#include <sophus/se3.hpp>
 
 
 
@@ -61,6 +62,7 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 #define RVLRECOGNITION_DEMO_CLASS_ALIGNMENT
 #endif
 //#define RVLPSGM_DETERMINE_THRESHOLDS
+//#define RVLPSGM_CUDA_ICP
 
 #define RVLRECOGNITION_DEMO_FLAG_SAVE_PLY				0x00000001
 #define RVLRECOGNITION_DEMO_FLAG_3D_VISUALIZATION		0x00000002
@@ -236,6 +238,47 @@ void GenerateSegmentNeighbourhood(PSGM * psgm, double radius)
 	
 }
 
+//ONLY FOR DEBUG
+pcl::search::KdTree<pcl::PointXYZINormal> *pKDTREE_;
+void *pKDTREE_void;
+//END
+
+void CreateSceneKdTree(PSGM * psgm)
+{
+	pcl::PointCloud<pcl::PointXYZINormal>::Ptr cloud_destination(new pcl::PointCloud<pcl::PointXYZINormal>);
+	//creating PCL point cloud
+	cloud_destination->width = psgm->pMesh->NodeArray.n;
+	cloud_destination->height = 1;
+	cloud_destination->is_dense = false;
+	cloud_destination->points.resize(cloud_destination->width * cloud_destination->height);
+
+
+	int idx = 0;
+	for (int i = 0; i <psgm->pMesh->NodeArray.n; i++)
+	{
+		if (psgm->clusterMap[psgm->pSurfels->surfelMap[i]] == -1)
+			continue;
+
+		cloud_destination->points[idx].x = psgm->pMesh->NodeArray.Element[i].P[0];
+		cloud_destination->points[idx].y = psgm->pMesh->NodeArray.Element[i].P[1];
+		cloud_destination->points[idx].z = psgm->pMesh->NodeArray.Element[i].P[2];
+
+		cloud_destination->points[idx].normal_x = psgm->pMesh->NodeArray.Element[i].N[0];
+		cloud_destination->points[idx].normal_y = psgm->pMesh->NodeArray.Element[i].N[1];
+		cloud_destination->points[idx].normal_z = psgm->pMesh->NodeArray.Element[i].N[2];
+
+		idx++;
+	}
+
+	pcl::search::KdTree<pcl::PointXYZINormal>* kdtree = new pcl::search::KdTree<pcl::PointXYZINormal>();
+	kdtree->setInputCloud(cloud_destination);
+
+	psgm->pKdTree = kdtree;
+
+	pKDTREE_void = kdtree;
+	pKDTREE_ = (pcl::search::KdTree<pcl::PointXYZINormal>*)pKDTREE_void;
+}
+
 void FilterImage(cv::Mat img)
 {
 	cv::Mat newImg(480, 640, CV_16UC1, cv::Scalar::all(0));
@@ -275,19 +318,25 @@ void FilterImage(cv::Mat img)
 //sceneDepth is depth image of models (ZBuffer)
 void RunCUDAICPv1(unsigned short *modelDepth, float *T)
 {
+	//ONLY FOR DEBUG
+	//cv::Mat depthImage(240, 320, CV_16UC1);
+	//memcpy(depthImage.data, modelDepth, 320 * 240 * sizeof(unsigned short));
+	//cv::imwrite("C:\\RVL\\test2.png", depthImage);
+
 	pCUDAICPObjv1->SetIcpScene(modelDepth);
 	Eigen::Matrix4f pose;
+	pose = Eigen::Matrix4f::Identity();
 	pCUDAICPObjv1->CalcIncrementalTransformation(pose);
 	memcpy(T, pose.data(), 16 * sizeof(float));
 }
 
-////sceneDepth is depth image of models (ZBuffer)
+//sceneDepth is depth image of models (ZBuffer)
 //void RunCUDAICPv2(unsigned short *modelDepth, float *T)
 //{
 //	pCUDAICPObjv2->SetIcpScene(modelDepth);
 //	Sophus::SE3d pose;
 //	pCUDAICPObjv2->CalcIncrementalTransformation(pose);
-//	memcpy(T, pose.matrix()->data(), 16 * sizeof(float));
+//	memcpy(T, pose.matrix().data(), 16 * sizeof(float));
 //}
 
 int main(int argc, char ** argv)
@@ -629,6 +678,22 @@ int main(int argc, char ** argv)
 
 			FILE *fpRMSE = fopen((resultsFolderName + "\\RMSE.txt").data(), "w");
 
+#ifdef RVLPSGM_CUDA_ICP
+			//create object for CUDA ICP
+			pCUDAICPObjv1 = new ICPcudaV1();
+			pCUDAICPObjv1->fx = 525 / 2.0;
+			pCUDAICPObjv1->fy = 525 / 2.0;
+			pCUDAICPObjv1->cx = 320 / 2.0;
+			pCUDAICPObjv1->cy = 240 / 2.0;
+			pCUDAICPObjv1->width = 320;
+			pCUDAICPObjv1->height = 240;
+			pCUDAICPObjv1->noCudaThreads = 128;
+			pCUDAICPObjv1->noCudaBlocks = 32;
+			pCUDAICPObjv1->searchDistanceThr = 0.05;
+			pCUDAICPObjv1->searchAngleThreshold = 0.64278760968f;
+			pCUDAICPObjv1->InitICP();
+			pCUDAICPObjv1->SetICPIterations(15, 10, 10);
+#endif
 
 #ifdef RVLPSGM_RMSE_CALCULATION
 			//Load models without decimation (used for calculating RMSE)
@@ -981,7 +1046,22 @@ int main(int argc, char ** argv)
 
 					//TEST RVLPSGM_MATCHCTI_MATCH_MATRIX
 #ifdef RVLVERSION_171125
-					recognition.ICP(PCLICP, PCLICPVariants::Point_to_plane, recognition.bestSceneSegmentMatches2);
+#ifdef RVLPSGM_CUDA_ICP
+					//CUDA ICP
+					pCUDAICPObjv1->SetIcpModel(recognition.pSubsampledSceneDepthImage, Eigen::Matrix4f::Identity());
+
+					//cv::Mat depthImage(240, 320, CV_16UC1);
+					//memcpy(depthImage.data, recognition.pSubsampledSceneDepthImage, 320 * 240 * sizeof(unsigned short));
+					//cv::imwrite("C:\\RVL\\scena.png", depthImage);
+
+					recognition.ICP(RunCUDAICPv1, recognition.bestSceneSegmentMatches2);
+#else
+					//Create KDTree
+					//CreateSceneKdTree(&recognition);
+					
+					//recognition.ICP(PCLICP, PCLICPVariants::Point_to_plane, recognition.bestSceneSegmentMatches2);
+					recognition.ICP_refined(PCLICP, PCLICPVariants::Point_to_plane, recognition.bestSceneSegmentMatches2);
+#endif
 
 					recognition.HypothesisEvaluation(recognition.bestSceneSegmentMatches2, true);
 
