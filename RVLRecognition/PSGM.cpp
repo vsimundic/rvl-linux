@@ -6544,7 +6544,7 @@ void PSGM::Match(
 						}
 					}
 				}
-			}
+			}	// if (bMatchRANSAC)
 			else
 				iConsensus.n = iValid.n;
 
@@ -6594,9 +6594,9 @@ void PSGM::Match(
 					B(i) = 0;
 					for (j = 0; j < iConsensus.n; j++)
 						B(i) += nTc[i * iConsensus.n + j] * dISMc[j];
-				}				
-				
-				t = A.colPivHouseholderQr().solve(B);							
+				}
+
+				t = A.colPivHouseholderQr().solve(B);
 
 				E = 0;
 
@@ -6625,7 +6625,7 @@ void PSGM::Match(
 				{
 					tBestMatch.Element[iMCTI].Element[i] = t(i);
 					pCTIMatch->tMatch[i] = t(i);
-				}				
+				}
 
 				pCTIMatch->ID = matchID++;
 				pCTIMatch->iScene = iScene;
@@ -6650,8 +6650,8 @@ void PSGM::Match(
 				//E = 66;
 				E = 412.5;
 			}
-		}
-	}	//for all model MI
+		}	// 	if (nValidSampleCandidates > 2)
+	}	//for all model CTIs
 }
 
 void PSGM::MatchTGs()

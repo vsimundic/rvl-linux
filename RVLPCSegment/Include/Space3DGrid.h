@@ -259,8 +259,8 @@ namespace RVL
 
 				while (pData)
 				{
-					if (pData->iMatch == 174)
-						int debug = 0;
+					//if (pData->iMatch == 174)
+					//	int debug = 0;
 
 					dataArray.Element[dataArray.n++] = pData;
 
