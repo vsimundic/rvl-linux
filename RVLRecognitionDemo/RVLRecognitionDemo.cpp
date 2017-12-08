@@ -39,7 +39,10 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 #include "MarchingCubes.h"
 #include "VN.h"
 #include "VNClassifier.h"
+//#define RVLPSGM_CUDA_ICP
+#ifdef RVLPSGM_CUDA_ICP
 #include "ICPCUDAv1.h"
+#endif
 //#include "ICPCUDAv2.h"
 //#include <sophus/se3.hpp>
 
@@ -62,7 +65,7 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 #define RVLRECOGNITION_DEMO_CLASS_ALIGNMENT
 #endif
 //#define RVLPSGM_DETERMINE_THRESHOLDS
-//#define RVLPSGM_CUDA_ICP
+
 
 #define RVLRECOGNITION_DEMO_FLAG_SAVE_PLY				0x00000001
 #define RVLRECOGNITION_DEMO_FLAG_3D_VISUALIZATION		0x00000002
