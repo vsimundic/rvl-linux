@@ -5799,8 +5799,8 @@ void PSGM::HypothesisEvaluation(
 			pHypothesis = pCTImatchesArray.Element[iHypothesis];
 
 			//ground distance calculation
-			st[0] = pHypothesis->t[0] / 1000; st[1] = pHypothesis->t[1] / 1000; st[2] = pHypothesis->t[2] / 1000;
-			RVLHTRANSFMX(pHypothesis->R, st, T);
+			st[0] = pHypothesis->tICP[0] / 1000; st[1] = pHypothesis->tICP[1] / 1000; st[2] = pHypothesis->tICP[2] / 1000;
+			RVLHTRANSFMX(pHypothesis->RICP, st, T);
 			gndDistance = groundPlaneDistance(MCTISet.pCTI.Element[pHypothesis->iMCTI]->iModel, T);
 
 			//segmentHypothesisArray.Element[iSSegment].Element[i].cost = pHypothesis->cost_NN = 
