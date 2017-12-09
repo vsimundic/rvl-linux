@@ -127,6 +127,7 @@ namespace RVL
 				float t_class[3];
 				// end Petra
 				bool bValid; //Vidovic
+				ushort *pModelDepthImage;
 				MatchInstance *pNext;
 			};
 
@@ -304,6 +305,8 @@ namespace RVL
 		void CalculatePose(int iMatch);
 
 		typedef void(*ICPfunction)(vtkSmartPointer<vtkPolyData>, vtkSmartPointer<vtkPolyData>, float*, int, float, int, double*, void*);
+
+		typedef void(*CUDAICPfunction)(unsigned short *, float *);
 
 		//For a given scene segment adds desired ranked hypotheses to visualizer:
 		void AddModelsToVisualizer(Visualizer *pVisualizer, bool align, ICPfunction ICPFunction, int ICPvariant, void *kdTreePtr = NULL);
@@ -502,7 +505,8 @@ namespace RVL
 		bool PSGM::CompareMatchToSegmentGT(
 			int iScene,
 			int iSSegment,
-			int iMatchedModel); //Vidovic
+			int iMatchedModel,
+			RECOG::PSGM_::MatchInstance *pMatch = NULL); //Vidovic
 		void PSGM::CountTPandFN(
 			int &TP,
 			int &FN,
@@ -566,6 +570,13 @@ namespace RVL
 			RVL::PSGM::ICPfunction ICPFunction, 
 			int ICPvariant,
 			Array<Array<SortIndex<float>>> sceneSegmentHypotheses); //Vidovic //for multiple matches per model
+		void ICP_refined(
+			RVL::PSGM::ICPfunction ICPFunction,
+			int ICPvariant,
+			Array<Array<SortIndex<float>>> sceneSegmentHypotheses); //Vidovic //for multiple matches per model
+		void ICP(
+			RVL::PSGM::CUDAICPfunction CUDAICPFunction,
+			Array<Array<SortIndex<float>>> sceneSegmentHypotheses);
 		void PrintCTIMatches(bool bTAMatches = false); //Vidovic
 		void PrintICPMatches(); //Vidovic
 		void PrintTAICPMatches(); //Vidovic
@@ -635,6 +646,8 @@ namespace RVL
 		void SaveZBuffer(char *fileName);
 		void SaveHypothesisProjection(int iHypothesis);
 		void SaveSubsampledScene();
+		void createModelDepthImage(ushort *depthImage); //Vidovic
+		void CreateSubsampledSceneDepthImage(ushort *depthImage); //Vidovic
 
 	private:
 		void WholeMeshCluster();
@@ -813,6 +826,18 @@ namespace RVL
 		int *subImageMap;
 		Camera camera;
 		char *falseHypothesesFileName;
+		char *TPHypothesesCTIRankFileName; //Vidovic
+
+		int nSmallSegments; //Vidovic - only for debug
+
+		//for ICP CUDA
+		Array<ushort *> modelsDepthImage;
+		ushort *pSubsampledSceneDepthImage;
+
+		int nBestHypothesesPerSSegment;
+
+		//Pointer to KdTree of whole scene
+		void *pKdTree;
 
 	private:		
 		RECOG::PSGM_::Cluster *clusterMem;
