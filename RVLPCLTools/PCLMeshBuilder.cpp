@@ -27,6 +27,9 @@ PCLMeshBuilder::PCLMeshBuilder()
 	sigmaS = 5.0f;
 	sigmaR = 0.05f;	
 	normalEstR = 0.010f;
+	voxelSize = 0.01f;
+	nSDFFilter = 5;
+	SDFIsoValue = 0.0f;
 	flags = 0x00000000;
 
 	vpBilateralFilter = new pcl::FastBilateralFilter<pcl::PointXYZRGBA>;
@@ -48,65 +51,65 @@ void PCLMeshBuilder::CreateMesh(
 {
 	if (flags & RVLPCLMESHBUILDER_FLAG_ORGANIZED_PC)
 	{
-		pcl::PointCloud<pcl::PointXYZRGBA>::Ptr PC_;
+	pcl::PointCloud<pcl::PointXYZRGBA>::Ptr PC_;
 
-		int i;
+	int i;
 
-		// Bilateral filtering
+	// Bilateral filtering
 
-		if (flags & RVLPCLMESHBUILDER_FLAG_BILATERAL_FILTER)
+	if (flags & RVLPCLMESHBUILDER_FLAG_BILATERAL_FILTER)
+	{
+		pcl::FastBilateralFilter<pcl::PointXYZRGBA> *pBilateralFilter = (pcl::FastBilateralFilter<pcl::PointXYZRGBA> *)vpBilateralFilter;
+
+		pBilateralFilter->setSigmaS((float)sigmaS);
+		pBilateralFilter->setSigmaR((float)sigmaR);
+
+		pBilateralFilter->setInputCloud(PC);
+
+		pBilateralFilter->applyFilter(FPC);
+
+		PC_ = { boost::make_shared<pcl::PointCloud<pcl::PointXYZRGBA>>(FPC) };
+	}
+	else
+		PC_ = PC;
+
+	// Compute normals
+
+	pcl::search::OrganizedNeighbor<pcl::PointXYZRGBA>::Ptr tree(new pcl::search::OrganizedNeighbor<pcl::PointXYZRGBA>());
+
+	pcl::NormalEstimationOMP<pcl::PointXYZRGBA, pcl::Normal> *pNormalEstimator = (pcl::NormalEstimationOMP<pcl::PointXYZRGBA, pcl::Normal> *)vpNormalEstimator;
+
+	pNormalEstimator->setRadiusSearch((float)normalEstR);
+	pNormalEstimator->setInputCloud(PC_);
+	pNormalEstimator->setSearchMethod(tree);
+	pNormalEstimator->compute(N);
+
+	for (i = 0; i < N.points.size(); i++)
+		if (!isfinite(N.points[i].normal_x))
 		{
-			pcl::FastBilateralFilter<pcl::PointXYZRGBA> *pBilateralFilter = (pcl::FastBilateralFilter<pcl::PointXYZRGBA> *)vpBilateralFilter;
-
-			pBilateralFilter->setSigmaS((float)sigmaS);
-			pBilateralFilter->setSigmaR((float)sigmaR);
-
-			pBilateralFilter->setInputCloud(PC);
-
-			pBilateralFilter->applyFilter(FPC);
-
-			PC_ = { boost::make_shared<pcl::PointCloud<pcl::PointXYZRGBA>>(FPC) };
+		N.points[i].normal_x = 0.0f;
+		N.points[i].normal_y = 0.0f;
+		N.points[i].normal_z = 0.0f;
+		N.points[i].curvature = 0.0f;
 		}
-		else
-			PC_ = PC;
-
-		// Compute normals
-
-		pcl::search::OrganizedNeighbor<pcl::PointXYZRGBA>::Ptr tree(new pcl::search::OrganizedNeighbor<pcl::PointXYZRGBA>());
-
-		pcl::NormalEstimationOMP<pcl::PointXYZRGBA, pcl::Normal> *pNormalEstimator = (pcl::NormalEstimationOMP<pcl::PointXYZRGBA, pcl::Normal> *)vpNormalEstimator;
-
-		pNormalEstimator->setRadiusSearch((float)normalEstR);
-		pNormalEstimator->setInputCloud(PC_);
-		pNormalEstimator->setSearchMethod(tree);
-		pNormalEstimator->compute(N);
-
-		for (i = 0; i < N.points.size(); i++)
-			if (!isfinite(N.points[i].normal_x))
-			{
-				N.points[i].normal_x = 0.0f;
-				N.points[i].normal_y = 0.0f;
-				N.points[i].normal_z = 0.0f;
-				N.points[i].curvature = 0.0f;
-			}
 
 
-		// Create OrganizedFastMesh
+	// Create OrganizedFastMesh
 
-		pcl::OrganizedFastMesh<pcl::PointXYZRGBA> *pOFM = (pcl::OrganizedFastMesh<pcl::PointXYZRGBA> *)vpOFM;
+	pcl::OrganizedFastMesh<pcl::PointXYZRGBA> *pOFM = (pcl::OrganizedFastMesh<pcl::PointXYZRGBA> *)vpOFM;
 
-		pOFM->setTriangulationType(pcl::OrganizedFastMesh<pcl::PointXYZRGBA>::TRIANGLE_ADAPTIVE_CUT);
+	pOFM->setTriangulationType(pcl::OrganizedFastMesh<pcl::PointXYZRGBA>::TRIANGLE_ADAPTIVE_CUT);
 
-		pOFM->setInputCloud(PC_);
+	pOFM->setInputCloud(PC_);
+	
+	pOFM->reconstruct(mesh);	// Conditions for adding a triangle are defined in function isShadowed in organized_fast_mesh.h.
+	// This function is applied to endpoints of every triangle edge.
+	// The meaning of most of the parameters of OrganizedFastMesh method can be understood from the code of this function.
 
-		pOFM->reconstruct(mesh);	// Conditions for adding a triangle are defined in function isShadowed in organized_fast_mesh.h.
-		// This function is applied to endpoints of every triangle edge.
-		// The meaning of most of the parameters of OrganizedFastMesh method can be understood from the code of this function.
+	// Add normals to mesh
 
-		// Add normals to mesh
-
-		//pcl::toPCLPointCloud2(*N, N2);
-		pcl::toPCLPointCloud2(N, N2);
+	//pcl::toPCLPointCloud2(*N, N2);
+	pcl::toPCLPointCloud2(N, N2);	
 		pcl::concatenateFields(N2, mesh.cloud, aux);
 		mesh.cloud = aux;
 	}
@@ -225,6 +228,9 @@ void PCLMeshBuilder::CreateParamList(CRVLMem *pMem)
 	ParamList.AddID(pParamData, "yes", RVLPCLMESHBUILDER_FLAG_ORGANIZED_PC);
 	pParamData = ParamList.AddParam("MeshBuilder.width", RVLPARAM_TYPE_INT, &width);
 	pParamData = ParamList.AddParam("MeshBuilder.height", RVLPARAM_TYPE_INT, &height);
+	pParamData = ParamList.AddParam("MeshBuilder.voxelSize", RVLPARAM_TYPE_FLOAT, &voxelSize);
+	pParamData = ParamList.AddParam("MeshBuilder.nSDFFilter", RVLPARAM_TYPE_INT, &nSDFFilter);
+	pParamData = ParamList.AddParam("MeshBuilder.SDFIsoValue", RVLPARAM_TYPE_FLOAT, &SDFIsoValue);
 }
 
 bool PCLMeshBuilder::Load(
@@ -237,7 +243,37 @@ bool PCLMeshBuilder::Load(
 	char *fileExtension = RVLGETFILEEXTENSION(FileName);
 
 	if (strcmp(fileExtension, "ply") == 0)
-		pMesh->LoadPolyDataFromPLY(FileName);
+	{
+		if (flags & RVLPCLMESHBUILDER_FLAG_VISIBLE_SURFACE)
+		{
+			vtkSmartPointer<vtkPLYReader> reader = vtkSmartPointer<vtkPLYReader>::New();
+			reader->SetFileName(FileName);
+			reader->Update();
+			vtkSmartPointer<vtkPolyData> pPolygonData = reader->GetOutput();
+
+			printf("Creating visible surface mesh...");
+
+			pMesh->pPolygonData = MESH::CreateVisibleSurfaceMesh(pPolygonData, voxelSize, nSDFFilter);
+
+			printf("completed.\n");
+
+			pMesh->bOrganizedPC = false;
+
+			char *PLYFileName = RVLCreateFileName(FileName, ".ply", -1, "_vs.ply");
+
+			printf("Saving mesh to %s...", PLYFileName);
+
+			pMesh->SavePolyDataToPLY(PLYFileName);
+
+			printf("completed.\n");
+
+			delete[] PLYFileName;
+
+			return false;
+		}
+		else
+			pMesh->LoadPolyDataFromPLY(FileName);
+	}
 	else
 	{
 		if (strcmp(fileExtension, "pcd") == 0)
@@ -322,6 +358,36 @@ bool PCLMeshBuilder::Load(
 	return true;
 }
 
+void RVL::CreateMesh(
+	void *vpMeshBuilder,
+	Array2D<short int> *pDepthImage,
+	IplImage *pRGBImage,
+	Mesh *pMesh)
+{
+	PCLMeshBuilder *pMeshBuilder = (PCLMeshBuilder *)vpMeshBuilder;
+
+	RGBDCamera camera;
+
+	camera.GetPointCloud(pDepthImage, pRGBImage, pMeshBuilder->PC);
+
+	pMeshBuilder->CreateMesh(pMeshBuilder->PC, pMeshBuilder->PCLMesh);
+
+	vtkSmartPointer<vtkPolyData> pd = vtkSmartPointer<vtkPolyData>::New();
+	PCLMeshToPolygonData(pMeshBuilder->PCLMesh, pd);
+	pMesh->pPolygonData = vtkSmartPointer<vtkPolyData>::New();
+	pMesh->pPolygonData->DeepCopy(pd);
+
+	pMesh->bOrganizedPC = true;
+	pMesh->width = pDepthImage->w;
+	pMesh->height = pDepthImage->h;
+
+	printf("Creating ordered mesh from PCL mesh...");
+
+	pMesh->CreateOrderedMeshFromPolyData();
+
+	printf("completed.\n");
+}
+
 bool RVL::LoadMesh(
 	void *vpMeshBuilder,
 	char *FileName,
@@ -332,3 +398,4 @@ bool RVL::LoadMesh(
 
 	return pMeshBuilder->Load(FileName, pMesh, pMeshBuilder->PC, pMeshBuilder->PCLMesh, bSavePLY);
 }
+

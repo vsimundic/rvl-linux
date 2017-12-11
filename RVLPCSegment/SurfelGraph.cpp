@@ -14,7 +14,7 @@
 //#include <Eigen\Eigenvalues>
 
 //#define RVLSURFELGRAPH_VERTEX_DETECTION_VERSION_0
-#ifdef RVLVERSION_170601
+#ifdef RVLVERSION_171125
 #define RVLSURFELGRAPH_VERTEX_DETECTION_VERSION_1
 #else
 #define RVLSURFELGRAPH_VERTEX_DETECTION_VERSION_2
@@ -91,6 +91,7 @@ SurfelGraph::SurfelGraph()
 	surfelVertexList.Element = NULL;
 	surfelVertexMem = NULL;
 	vertexArray.Element = NULL;
+	vertexEdgeArray.Element = NULL;
 	vertexDisplayLineArray.Element = NULL;
 	vertexDisplayLineArrayMem = NULL;
 	bVertexAssigned = NULL;
@@ -1143,6 +1144,39 @@ void SurfelGraph::AssignGroundTruthSegmentation(
 }
 #endif
 
+cv::Mat SurfelGraph::GenColoredSurfelImg()
+{
+	int w = 640;
+	int h = 480;
+
+	cv::Mat coloredSegLab(h, w, CV_8UC3, cv::Scalar::all(0));
+
+	int nPixels = w * h;
+
+	uchar noSurfelColor[] = { 0, 0, 0 };
+
+	int iPix;
+	uchar *labSegColor;
+	int iSurfel;
+	int x, y;
+
+	for (iPix = 0; iPix < nPixels; iPix++)
+	{
+		iSurfel = surfelMap[iPix];
+
+		labSegColor = (iSurfel >= 0 ? nodeColor + 3 * iSurfel : noSurfelColor);
+
+		x = iPix % w;
+		y = iPix / w;
+
+		coloredSegLab.at<cv::Vec3b>(y, x)[0] = labSegColor[0];
+		coloredSegLab.at<cv::Vec3b>(y, x)[1] = labSegColor[1];
+		coloredSegLab.at<cv::Vec3b>(y, x)[2] = labSegColor[2];
+	}
+
+	return coloredSegLab;
+}
+
 //Generate a colored opencv image based on surfel data from SSF
 cv::Mat SurfelGraph::GenColoredSurfelImgFromSSF(std::shared_ptr<SceneSegFile::SceneSegFile> ssf)
 {
@@ -1195,6 +1229,7 @@ void SurfelGraph::Clear()
 	RVL_DELETE_ARRAY(neighborEdge);
 	RVL_DELETE_ARRAY(EdgeArray.Element);
 	RVL_DELETE_ARRAY(vertexArray.Element);
+	RVL_DELETE_ARRAY(vertexEdgeArray.Element);
 	RVL_DELETE_ARRAY(surfelVertexList.Element);
 	RVL_DELETE_ARRAY(surfelVertexMem);
 	RVL_DELETE_ARRAY(vertexDisplayLineArray.Element);
@@ -1417,6 +1452,20 @@ void SurfelGraph::DetectVertices(
 
 									pVertex->type = (nFeatures >= 2 ? bConvex[0] + bConvex[1] + bConvex[2] : 4);
 
+									// Is the vertex on an occluded edge?
+
+									pVertex->bForeground = true;
+
+									for (i = 0; i < 3; i++)
+									{
+										if (pMesh->NodeArray.Element[iP[i]].flags & RVLMESH_POINT_FLAG_BACKGROUND)
+										{
+											pVertex->bForeground = false;
+
+											break;
+										}
+									}
+
 									// Fill iSurfelArray 
 
 									pVertex->iSurfelArray.n = nFeatures;
@@ -1634,7 +1683,7 @@ void SurfelGraph::DetectVertices(
 
 	RVLQLIST_INIT(pVertexEdgeList);
 
-	int nVertexEdges = 0;
+	vertexEdgeArray.n = 0;
 
 	bool *bBelongsToRefVertex = new bool[NodeArray.n];
 
@@ -2076,7 +2125,13 @@ void SurfelGraph::DetectVertices(
 					while (pVertexEdgePtr)
 					{
 						if (RVLPCSEGMENT_GRAPH_GET_OPPOSITE_NODE(pVertexEdgePtr) == pVertex_->idx)
+						{
+							pEdge = pVertexEdgePtr->pEdge;
+
+							if (pEdge->iSurfel[0] == iFeature && pEdge->iSurfel[1] == iNeighborSurfels[i].a ||
+								pEdge->iSurfel[1] == iFeature && pEdge->iSurfel[0] == iNeighborSurfels[i].a)
 							break;
+						}
 
 						pVertexEdgePtr = pVertexEdgePtr->pNext;
 					}
@@ -2107,6 +2162,7 @@ void SurfelGraph::DetectVertices(
 
 							pEdge->iSurfel[0] = iFeature;
 							pEdge->iSurfel[1] = iNeighborSurfels[i].a;
+							pEdge->idx = vertexEdgeArray.n;
 
 							// Only for debugging purpose!!!
 
@@ -2137,7 +2193,7 @@ void SurfelGraph::DetectVertices(
 
 							// Increment vertex edge counter.
 
-							nVertexEdges++;
+							vertexEdgeArray.n++;
 						}
 					}
 				}
@@ -2163,6 +2219,12 @@ void SurfelGraph::DetectVertices(
 	vertexArray.n = nVertices;
 
 	QLIST::CreatePtrArray<Vertex>(&vertexList, &vertexArray);
+
+	RVL_DELETE_ARRAY(vertexEdgeArray.Element);
+
+	vertexEdgeArray.Element = new SURFEL::VertexEdge *[vertexEdgeArray.n];
+
+	QLIST::CreatePtrArray<SURFEL::VertexEdge>(&vertexEdgeList, &vertexEdgeArray);
 
 	// Assign vertices to surfels.
 
@@ -2982,39 +3044,10 @@ void SurfelGraph::Centroid(
 
 void SurfelGraph::NodeColors(unsigned char *SelectionColor)
 {
-	int SelectionColor_[3];
-
-	RVLCONVTOINT3(SelectionColor, SelectionColor_);
-
 	RVL_DELETE_ARRAY(nodeColor);
 
-	nodeColor = new unsigned char[3 * NodeArray.n];
-
-	Surfel *pSurfel;
-	int iNode;
-	int Color[3], dColor[3];
-	unsigned char *NodeColor_;
-
-	for (iNode = 0; iNode < NodeArray.n; iNode++)
-	{
-		pSurfel = NodeArray.Element + iNode;
-
-		do
-		{
-			Color[0] = rand() % 256;
-			Color[1] = rand() % 256;
-			Color[2] = rand() % 256;
-
-			RVLDIF3VECTORS(Color, SelectionColor, dColor);
-		} while (RVLDOTPRODUCT3(dColor, dColor) < 128 * 128);
-
-		NodeColor_ = nodeColor + 3 * iNode;
-
-		NodeColor_[0] = (unsigned char)Color[0];
-		NodeColor_[1] = (unsigned char)Color[1];
-		NodeColor_[2] = (unsigned char)Color[2];
+	RandomColors(SelectionColor, nodeColor, NodeArray.n);
 	}
-}
 
 void SurfelGraph::DisplayHardEdges(
 	Visualizer *pVisualizer,
@@ -4300,7 +4333,10 @@ void SurfelGraph::CalculateSurfelsColorHistograms(cv::Mat img, int colorspace, b
 }
 #endif
 
-void SurfelGraph::DetectDominantPlane(Array<int> &dominantPlaneSurfelArray)
+void SurfelGraph::DetectDominantPlane(
+	Array<int> &dominantPlaneSurfelArray,
+	float *N,
+	float &d)
 {
 	// Detect largest surfel.
 
@@ -4356,6 +4392,112 @@ void SurfelGraph::DetectDominantPlane(Array<int> &dominantPlaneSurfelArray)
 	dominantPlaneSurfelArray.n = piSurfelBuffEnd - dominantPlaneSurfelArray.Element;
 
 	delete[] RGData.bVisited;
+
+	// Set GND flag of all surfels belonging to the dominant plane. 
+
+	int i;
+
+	for (i = 0; i < dominantPlaneSurfelArray.n; i++)
+		NodeArray.Element[dominantPlaneSurfelArray.Element[i]].flags |= RVLSURFEL_FLAG_GND;
+
+	Surfel *pGndSurfel = NodeArray.Element + dominantPlaneSurfelArray.Element[0];
+
+	RVLCOPY3VECTOR(pGndSurfel->N, N);
+
+	d = pGndSurfel->d;
+}
+
+void SurfelGraph::GetDepthImageROI(
+	Array<int> iVertexArray,
+	Camera camera,
+	Rect<float> &ROI)
+{
+	float *P = vertexArray.Element[iVertexArray.Element[0]]->P;
+
+	float m[2];
+
+	m[0] = camera.fu * P[0] / P[2] + camera.uc;
+	m[1] = camera.fv * P[1] / P[2] + camera.vc;
+
+	InitRect<float>(&ROI, m);
+
+	int i;
+
+	for (i = 1; i < iVertexArray.n; i++)
+	{
+		P = vertexArray.Element[iVertexArray.Element[i]]->P;
+
+		m[0] = camera.fu * P[0] / P[2] + camera.uc;
+		m[1] = camera.fv * P[1] / P[2] + camera.vc;
+
+		UpdateRect<float>(&ROI, m);
+	}
+}
+
+void SurfelGraph::TransformVertices(
+	Array<int> iVertexArray,
+	float scale,
+	float *R,
+	float *t,
+	float *PArray)
+{
+	float sR[9];
+	float st[3];
+
+	// sR <- scale * R
+
+	RVLSCALEMX3X3(R, scale, sR);
+	RVLSCALE3VECTOR2(t, scale, st);
+
+	// Transform vertices to TG RF.
+
+	int j, iVertex;
+	SURFEL::Vertex *pVertex;
+	float *P;
+	float V3Tmp[3];
+
+	for (j = 0; j < iVertexArray.n; j++)
+	{
+		iVertex = iVertexArray.Element[j];
+
+		pVertex = vertexArray.Element[iVertex];
+
+		//if (pVertex->normalHull.n < 3)
+		//	continue;
+
+		P = PArray + 3 * j;
+
+		RVLINVTRANSF3(pVertex->P, sR, st, P, V3Tmp);
+	}
+}
+
+void SurfelGraph::ProjectVerticesOntoGroundPlane(
+	Array<int> iVertexArray,
+	float *NGnd,
+	float dGnd,
+	float *PGnd)
+{
+	float s;
+	int i;
+	float *PGnd_;
+	int iVertex;
+	SURFEL::Vertex *pVertex;
+	float *P;
+
+	for (i = 0; i < iVertexArray.n; i++)
+	{
+		PGnd_ = PGnd + 3 * i;
+
+		iVertex = iVertexArray.Element[i];
+
+		pVertex = vertexArray.Element[iVertex];
+
+		P = pVertex->P;
+
+		s = dGnd / RVLDOTPRODUCT3(NGnd, P);
+
+		RVLSCALE3VECTOR(P, s, PGnd_);
+	}
 }
 
 int SURFEL::PlaneDetectionRG(

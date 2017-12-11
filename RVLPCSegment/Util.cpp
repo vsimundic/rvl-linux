@@ -1,19 +1,8 @@
-#include "RVLPlatform.h"
-#include <stdlib.h>
-#include <stdio.h>
-#include <math.h>
-#include <string.h>
-#include "opencv2\opencv.hpp"
-#define _CRT_SECURE_NO_WARNINGS 
-#include "RVLConst.h"
-#ifndef ushort
-#define ushort unsigned short int
-#endif
-#include "RVLArray.h"
-#include "RVLKinect.h"
-#include "RVLMem.h"
-#include "RVLQListArray.h"
+#include "RVLVTK.h"
+#include <vtkTriangle.h>
+#include "RVLCore2.h"
 #include "Util.h"
+#include "MarchingCubes.h"
 
 using namespace RVL;
 
@@ -219,7 +208,6 @@ bool FileSequenceLoader::Init(char *sequenceFileName)
 				nFileNames = lineCnt;
 				break;
 			}
-
 
 			lineCnt++;
 
@@ -708,3 +696,196 @@ void ECCVGTLoader::ResetMatchFlag()
 	}
 }
 //END VIDOVIC
+
+namespace RVL
+{
+	vtkSmartPointer<vtkPolyData>  DisplayIsoSurface(
+		Array3D<float> f,
+		float *P0,
+		float voxelSize,
+		float isolevel
+		)
+	{
+		CRVLMem mem;
+
+		mem.Create(5 * sizeof(QLIST::Entry<Triangle<float>>));
+
+		QList<QLIST::Entry<Triangle<float>>> triangleList;
+
+		QList<QLIST::Entry<Triangle<float>>> *pTriangleList = &triangleList;
+
+		MarchingCubes MC;
+
+		MC.ComputeTables();
+
+		vtkSmartPointer<vtkPoints> points =
+			vtkSmartPointer<vtkPoints>::New();
+
+		vtkSmartPointer<vtkCellArray> triangles =
+			vtkSmartPointer<vtkCellArray>::New();
+
+		int iTriangle = 0;
+
+		int maxi = f.a - 2;
+		int maxj = f.b - 2;
+		int maxk = f.c - 2;
+
+		float P[8][3];
+		float F[8];
+		QLIST::Entry<Triangle<float>> *pTriangle;
+		vtkSmartPointer<vtkTriangle> triangle;
+		int i, j, k;
+		float x, y, z;
+
+		for (k = 0; k <= maxk; k++)
+			for (j = 0; j <= maxj; j++)
+				for (i = 0; i <= maxi; i++)
+				{
+					x = (float)i * voxelSize + P0[0];
+					y = (float)j * voxelSize + P0[1];
+					z = (float)k * voxelSize + P0[2];
+
+					RVLQLIST_INIT(pTriangleList);
+
+					RVLSET3VECTOR(P[0], x, y, z);
+					RVLSET3VECTOR(P[1], x + voxelSize, y, z);
+					RVLSET3VECTOR(P[2], x + voxelSize, y + voxelSize, z);
+					RVLSET3VECTOR(P[3], x, y + voxelSize, z);
+					RVLSET3VECTOR(P[4], x, y, z + voxelSize);
+					RVLSET3VECTOR(P[5], x + voxelSize, y, z + voxelSize);
+					RVLSET3VECTOR(P[6], x + voxelSize, y + voxelSize, z + voxelSize);
+					RVLSET3VECTOR(P[7], x, y + voxelSize, z + voxelSize);
+
+					F[0] = f.Element[f.a * (f.b * k + j) + i];
+					F[1] = f.Element[f.a * (f.b * k + j) + i + 1];
+					F[2] = f.Element[f.a * (f.b * k + j + 1) + i + 1];
+					F[3] = f.Element[f.a * (f.b * k + j + 1) + i];
+					F[4] = f.Element[f.a * (f.b * (k + 1) + j) + i];
+					F[5] = f.Element[f.a * (f.b * (k + 1) + j) + i + 1];
+					F[6] = f.Element[f.a * (f.b * (k + 1) + j + 1) + i + 1];
+					F[7] = f.Element[f.a * (f.b * (k + 1) + j + 1) + i];
+
+					MC.ComputeTriangles(P, F, isolevel, pTriangleList, &mem);
+
+					pTriangle = pTriangleList->pFirst;
+
+					while (pTriangle)
+					{
+						points->InsertNextPoint(pTriangle->data.P[0][0], pTriangle->data.P[0][1], pTriangle->data.P[0][2]);
+						points->InsertNextPoint(pTriangle->data.P[1][0], pTriangle->data.P[1][1], pTriangle->data.P[1][2]);
+						points->InsertNextPoint(pTriangle->data.P[2][0], pTriangle->data.P[2][1], pTriangle->data.P[2][2]);
+
+						triangle = vtkSmartPointer<vtkTriangle>::New();
+						triangle->GetPointIds()->SetId(0, 3 * iTriangle);
+						triangle->GetPointIds()->SetId(1, 3 * iTriangle + 1);
+						triangle->GetPointIds()->SetId(2, 3 * iTriangle + 2);
+
+						triangles->InsertNextCell(triangle);
+
+						iTriangle++;
+
+						pTriangle = pTriangle->pNext;
+					}
+				}
+
+		printf("no. of pts. = %d\n", points->GetNumberOfPoints());
+
+		printf("no. of triangles = %d\n", triangles->GetNumberOfCells());
+
+		// Create a polydata object
+		vtkSmartPointer<vtkPolyData> polyData =
+			vtkSmartPointer<vtkPolyData>::New();
+
+		// Add the geometry and topology to the polydata
+		polyData->SetPoints(points);
+		polyData->SetPolys(triangles);
+
+		return polyData;
+	}
+
+	void RandomColors(
+		unsigned char *SelectionColor,
+		unsigned char *&colorArray,
+		int n)
+	{
+		int SelectionColor_[3];
+
+		RVLCONVTOINT3(SelectionColor, SelectionColor_);
+
+		colorArray = new unsigned char[3 * n];
+
+		int iNode;
+		int Color[3], dColor[3];
+		unsigned char *NodeColor_;
+
+		for (iNode = 0; iNode < n; iNode++)
+		{
+			do
+			{
+				Color[0] = rand() % 256;
+				Color[1] = rand() % 256;
+				Color[2] = rand() % 256;
+
+				RVLDIF3VECTORS(Color, SelectionColor, dColor);
+			} while (RVLDOTPRODUCT3(dColor, dColor) < 128 * 128);
+
+			NodeColor_ = colorArray + 3 * iNode;
+
+			NodeColor_[0] = (unsigned char)Color[0];
+			NodeColor_[1] = (unsigned char)Color[1];
+			NodeColor_[2] = (unsigned char)Color[2];
+		}
+	}
+
+	// Remove the identical function from PlanarSurfelDetector class.
+
+	void RandomIndices(Array<int> &A)
+	{
+#ifdef RVLPLANARSURFELDETECTOR_PSEUDO_RANDOM_DEBUG
+		FILE *fp = fopen("..\\pseudorandom1000000.dat", "rb");
+
+		int *iRnd = new int[A.n];
+
+		//for (int i = 0; i < 1000000; i++)
+		//	iRnd[i] = (rand() % 0x100) + (rand() % 0x100) * 0x100 + (rand() % 0x100) * 0x10000 + (rand() % 0x80) * 0x1000000;
+
+		//fwrite(iRnd, sizeof(int), 1000000, fp);
+
+		fread(iRnd, sizeof(int), A.n, fp);
+
+		fclose(fp);
+
+		int *piRnd = iRnd;
+#endif
+
+		A.Element = new int[A.n];
+
+		int iPt;
+
+		for (iPt = 0; iPt < A.n; iPt++)
+			A.Element[iPt] = iPt;
+
+		int iPt_;
+		int iTmp;
+
+		//srand(time(NULL)); //VIDOVIC RANDOM TEST
+
+		for (iPt = 0; iPt < A.n; iPt++)
+		{
+#ifdef RVLPLANARSURFELDETECTOR_PSEUDO_RANDOM_DEBUG
+			iPt_ = (*(piRnd++)) % A.n;
+#else
+			iPt_ = rand() % A.n;
+#endif
+
+			iTmp = A.Element[iPt];
+			A.Element[iPt] = A.Element[iPt_];
+			A.Element[iPt_] = iTmp;
+		}
+
+#ifdef RVLPLANARSURFELDETECTOR_PSEUDO_RANDOM_DEBUG
+		delete[] iRnd;
+#endif
+	}
+}	// namespace RVL
+

@@ -10,6 +10,7 @@ VTK_MODULE_INIT(vtkRenderingOpenGL2);
 VTK_MODULE_INIT(vtkInteractionStyle);
 VTK_MODULE_INIT(vtkRenderingFreeType);
 #include "RVLVTK.h"
+#include <vtkTriangle.h>		// Remove after completion of MarchingCubes.
 #include "RVLCore2.h"
 #include "Util.h"
 #include "Space3DGrid.h"
@@ -35,6 +36,16 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 #include "PCLTools.h"
 #include "RGBDCamera.h"
 #include "PCLMeshBuilder.h"
+#include "MarchingCubes.h"
+#include "VN.h"
+#include "VNClassifier.h"
+//#define RVLPSGM_CUDA_ICP
+#ifdef RVLPSGM_CUDA_ICP
+#include "ICPCUDAv1.h"
+#endif
+//#include "ICPCUDAv2.h"
+//#include <sophus/se3.hpp>
+
 
 
 // VIDOVIC
@@ -48,15 +59,27 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 //#define PSGM_LOAD_CTI_FROM_FILE
 //#define PSGM_RECOGNITION_VISUALIZE_SCENE
 //#define RVLRECOGNITION_DEMO_CLASS_ALIGNMENT
+#define RVLPSGM_TRANSPARENCY_AND_COLLISION
+#define RVLPSGM_RMSE_CALCULATION
+#ifndef RVLVERSION_171125
+#define RVLRECOGNITION_DEMO_CLASS_ALIGNMENT
+#endif
+//#define RVLPSGM_DETERMINE_THRESHOLDS
 
-#define RVLRECOGNITION_DEMO_FLAG_SAVE_PLY			0x00000001
-#define RVLRECOGNITION_DEMO_FLAG_3D_VISUALIZATION	0x00000002
+
+#define RVLRECOGNITION_DEMO_FLAG_SAVE_PLY				0x00000001
+#define RVLRECOGNITION_DEMO_FLAG_3D_VISUALIZATION		0x00000002
+#define RVLRECOGNITION_DEMO_FLAG_VISUALIZE_VN_MODEL		0x00000004
+#define RVLRECOGNITION_DEMO_FLAG_VISUALIZE_VN_INSTANCE	0x00000008
+
 //END VIDOVIC
 
 using namespace RVL;
 
-#define RVLRECOGNITION_METHOD_RF		0
-#define RVLRECOGNITION_METHOD_PSGM		1
+#ifdef RVLPSGM_CUDA_ICP
+ICPcudaV1 *pCUDAICPObjv1;
+//ICPcudaV2 *pCUDAICPObjv2;
+#endif
 
 void CreateParamList(
 	CRVLParameterList *pParamList,
@@ -68,8 +91,13 @@ void CreateParamList(
 	char **pGTFolder,	//VIDOVIC
 	char **pSegmentGTFileName,	//Vidovic
 	char **pResultsFolder,
+	char **pInstanceFileName,
 	DWORD &method,
-	DWORD &flags
+	DWORD &flags,
+	int &iClass,
+	float &SDFSurfaceValue,
+	bool &bCreateVisibleSurfaceMesh,
+	bool &bSceneBrowser
 	)
 {
 	pParamList->m_pMem = pMem;
@@ -85,13 +113,23 @@ void CreateParamList(
 	pParamData = pParamList->AddParam("GTFolder", RVLPARAM_TYPE_STRING, pGTFolder);	//VIDOVIC
 	pParamData = pParamList->AddParam("ResultsFolder", RVLPARAM_TYPE_STRING, pResultsFolder);
 	pParamData = pParamList->AddParam("SegmentGTFileName", RVLPARAM_TYPE_STRING, pSegmentGTFileName);	//Vidovic
+	pParamData = pParamList->AddParam("VN.instanceFileName", RVLPARAM_TYPE_STRING, pInstanceFileName);
 	pParamData = pParamList->AddParam("Recognition.method", RVLPARAM_TYPE_ID, &method);
 	pParamList->AddID(pParamData, "PSGM", RVLRECOGNITION_METHOD_PSGM);
 	pParamList->AddID(pParamData, "RF", RVLRECOGNITION_METHOD_RF); //VIDOVIC
-	pParamData = pParamList->AddParam("Save PLY", RVLPARAM_TYPE_ID, &flags); //VIDOVIC
+	pParamList->AddID(pParamData, "VN", RVLRECOGNITION_METHOD_VN);
+	pParamData = pParamList->AddParam("Save PLY", RVLPARAM_TYPE_FLAG, &flags); //VIDOVIC
 	pParamList->AddID(pParamData, "yes", RVLRECOGNITION_DEMO_FLAG_SAVE_PLY); //VIDOVIC
-	pParamData = pParamList->AddParam("3D Visualization", RVLPARAM_TYPE_ID, &flags);
+	pParamData = pParamList->AddParam("3D Visualization", RVLPARAM_TYPE_FLAG, &flags);
 	pParamList->AddID(pParamData, "yes", RVLRECOGNITION_DEMO_FLAG_3D_VISUALIZATION);
+	pParamData = pParamList->AddParam("VN.visualizeModel", RVLPARAM_TYPE_FLAG, &flags);
+	pParamList->AddID(pParamData, "yes", RVLRECOGNITION_DEMO_FLAG_VISUALIZE_VN_MODEL);
+	pParamData = pParamList->AddParam("VN.visualizeInstance", RVLPARAM_TYPE_FLAG, &flags);
+	pParamList->AddID(pParamData, "yes", RVLRECOGNITION_DEMO_FLAG_VISUALIZE_VN_INSTANCE);
+	pParamData = pParamList->AddParam("VN.class", RVLPARAM_TYPE_INT, &iClass);
+	pParamData = pParamList->AddParam("VN.visualization.SDFSurfaceValue", RVLPARAM_TYPE_FLOAT, &SDFSurfaceValue);
+	pParamData = pParamList->AddParam("Create visible surface mesh", RVLPARAM_TYPE_BOOL, &bCreateVisibleSurfaceMesh);
+	pParamData = pParamList->AddParam("Scene Browser", RVLPARAM_TYPE_BOOL, &bSceneBrowser);
 }
 
 void GenerateSegmentNeighbourhood(PSGM * psgm, double radius)
@@ -205,6 +243,47 @@ void GenerateSegmentNeighbourhood(PSGM * psgm, double radius)
 	
 }
 
+//ONLY FOR DEBUG
+pcl::search::KdTree<pcl::PointXYZINormal> *pKDTREE_;
+void *pKDTREE_void;
+//END
+
+void CreateSceneKdTree(PSGM * psgm)
+{
+	pcl::PointCloud<pcl::PointXYZINormal>::Ptr cloud_destination(new pcl::PointCloud<pcl::PointXYZINormal>);
+	//creating PCL point cloud
+	cloud_destination->width = psgm->pMesh->NodeArray.n;
+	cloud_destination->height = 1;
+	cloud_destination->is_dense = false;
+	cloud_destination->points.resize(cloud_destination->width * cloud_destination->height);
+
+
+	int idx = 0;
+	for (int i = 0; i <psgm->pMesh->NodeArray.n; i++)
+	{
+		if (psgm->clusterMap[psgm->pSurfels->surfelMap[i]] == -1)
+			continue;
+
+		cloud_destination->points[idx].x = psgm->pMesh->NodeArray.Element[i].P[0];
+		cloud_destination->points[idx].y = psgm->pMesh->NodeArray.Element[i].P[1];
+		cloud_destination->points[idx].z = psgm->pMesh->NodeArray.Element[i].P[2];
+
+		cloud_destination->points[idx].normal_x = psgm->pMesh->NodeArray.Element[i].N[0];
+		cloud_destination->points[idx].normal_y = psgm->pMesh->NodeArray.Element[i].N[1];
+		cloud_destination->points[idx].normal_z = psgm->pMesh->NodeArray.Element[i].N[2];
+
+		idx++;
+	}
+
+	pcl::search::KdTree<pcl::PointXYZINormal>* kdtree = new pcl::search::KdTree<pcl::PointXYZINormal>();
+	kdtree->setInputCloud(cloud_destination);
+
+	psgm->pKdTree = kdtree;
+
+	pKDTREE_void = kdtree;
+	pKDTREE_ = (pcl::search::KdTree<pcl::PointXYZINormal>*)pKDTREE_void;
+}
+
 void FilterImage(cv::Mat img)
 {
 	cv::Mat newImg(480, 640, CV_16UC1, cv::Scalar::all(0));
@@ -241,6 +320,32 @@ void FilterImage(cv::Mat img)
 	newImg.copyTo(img);
 }
 
+#ifdef RVLPSGM_CUDA_ICP
+//sceneDepth is depth image of models (ZBuffer)
+void RunCUDAICPv1(unsigned short *modelDepth, float *T)
+{
+	//ONLY FOR DEBUG
+	//cv::Mat depthImage(240, 320, CV_16UC1);
+	//memcpy(depthImage.data, modelDepth, 320 * 240 * sizeof(unsigned short));
+	//cv::imwrite("C:\\RVL\\test2.png", depthImage);
+
+	pCUDAICPObjv1->SetIcpScene(modelDepth);
+	Eigen::Matrix4f pose;
+	pose = Eigen::Matrix4f::Identity();
+	pCUDAICPObjv1->CalcIncrementalTransformation(pose);
+	memcpy(T, pose.data(), 16 * sizeof(float));
+}
+
+//sceneDepth is depth image of models (ZBuffer)
+//void RunCUDAICPv2(unsigned short *modelDepth, float *T)
+//{
+//	pCUDAICPObjv2->SetIcpScene(modelDepth);
+//	Sophus::SE3d pose;
+//	pCUDAICPObjv2->CalcIncrementalTransformation(pose);
+//	memcpy(T, pose.matrix().data(), 16 * sizeof(float));
+//}
+#endif
+
 int main(int argc, char ** argv)
 {
 	// Create memory storage.
@@ -266,8 +371,13 @@ int main(int argc, char ** argv)
 	char *GTFolder = NULL; //VIDOVIC
 	char *ResultsFolder = NULL;
 	char *segmentGTFileName = NULL; //Vidovic
+	char *instanceFileName = NULL;
 	DWORD method = RVLRECOGNITION_METHOD_PSGM;
 	//DWORD method = RVLRECOGNITION_METHOD_RF; //VIDOVIC
+	int iClass;
+	float SDFSurfaceValue = 0.0f;
+	bool bCreateVisibleSurfaceMesh = false;
+	bool bSceneBrowser = false;
 
 	DWORD flags = 0x00000000; //VIDOVIC
 
@@ -282,8 +392,13 @@ int main(int argc, char ** argv)
 		&GTFolder,
 		&segmentGTFileName,
 		&ResultsFolder,
+		&instanceFileName,
 		method,
-		flags);	 //VIDOVIC
+		flags,
+		iClass,
+		SDFSurfaceValue,
+		bCreateVisibleSurfaceMesh,
+		bSceneBrowser);	 //VIDOVIC
 
 	ParamList.LoadParams(cfgFileName);
 
@@ -301,6 +416,9 @@ int main(int argc, char ** argv)
 	pcl::PointCloud<pcl::PointXYZRGBA>::Ptr PC(new pcl::PointCloud<pcl::PointXYZRGBA>(w, h));
 
 	meshBuilder.PC = PC;
+
+	if (bCreateVisibleSurfaceMesh)
+		meshBuilder.flags |= RVLPCLMESHBUILDER_FLAG_VISIBLE_SURFACE;
 
 	if (flags & RVLRECOGNITION_DEMO_FLAG_SAVE_PLY)
 	{
@@ -509,14 +627,23 @@ int main(int argc, char ** argv)
 
 			recognition.LoadModelDataBase(); //Vidovic
 			
+//#ifdef RVLRECOGNITION_DEMO_CLASS_ALIGNMENT
+//			//Alignment:
+//			recognition.LoadModelMeshDB(modelSequenceFileName, false, 0.4);
+//			recognition.ObjectAlignment();
+//#endif
+
 #ifdef RVLRECOGNITION_DEMO_CLASS_ALIGNMENT
 			//Alignment:
-			recognition.LoadModelMeshDB(modelSequenceFileName, false, 0.4);
-			recognition.ObjectAlignment();
+			//recognition.LoadModelMeshDB(modelSequenceFileName, false, 0.4); //Vidovic merge 20.07.2017 - potrebno izmijeniti poziv funkcije
+			recognition.LoadModelMeshDB(modelSequenceFileName, &recognition.vtkModelDB, false, 0.4);
+			//recognition.ObjectAlignment();
+			//recognition.Classify();
 #endif
 
 #ifdef RVLPSGM_ICP
-			recognition.LoadModelMeshDB(modelSequenceFileName, true, 0.4);
+			if (recognition.problem == RVLRECOGNITION_PROBLEM_SHAPE_INSTANCE_DETECTION)
+				recognition.LoadModelMeshDB(modelSequenceFileName, &recognition.vtkModelDB, false, 0.4);
 #endif
 
 			Mesh mesh;
@@ -556,13 +683,82 @@ int main(int argc, char ** argv)
 
 			FILE *fpLog = fopen((resultsFolderName + "\\evaluationLog.txt").data(), "w");
 
+			FILE *fpRMSE = fopen((resultsFolderName + "\\RMSE.txt").data(), "w");
+
+#ifdef RVLPSGM_CUDA_ICP
+			//create object for CUDA ICP
+			pCUDAICPObjv1 = new ICPcudaV1();
+			pCUDAICPObjv1->fx = 525 / 2.0;
+			pCUDAICPObjv1->fy = 525 / 2.0;
+			pCUDAICPObjv1->cx = 320 / 2.0;
+			pCUDAICPObjv1->cy = 240 / 2.0;
+			pCUDAICPObjv1->width = 320;
+			pCUDAICPObjv1->height = 240;
+			pCUDAICPObjv1->noCudaThreads = 128;
+			pCUDAICPObjv1->noCudaBlocks = 32;
+			pCUDAICPObjv1->searchDistanceThr = 0.05;
+			pCUDAICPObjv1->searchAngleThreshold = 0.64278760968f;
+			pCUDAICPObjv1->InitICP();
+			pCUDAICPObjv1->SetICPIterations(15, 10, 10);
+#endif
+
+#ifdef RVLPSGM_RMSE_CALCULATION
+			//Load models without decimation (used for calculating RMSE)
+			//recognition.LoadModelMeshDB(modelSequenceFileName, &recognition.vtkRMSEModelDB, false);
+			recognition.vtkRMSEModelDB = recognition.vtkModelDB;
+#endif
+
 			recognition.LoadCompleteSegmentGT(sceneSequence);
+
+			recognition.falseHypothesesFileName = RVLCreateString((char *)((resultsFolderName + "\\falseHypotheses.txt").c_str()));
+				
+			FILE *fpFalseHypotheses = fopen(recognition.falseHypothesesFileName, "w");
+
+			fclose(fpFalseHypotheses);
+
+			recognition.TPHypothesesCTIRankFileName = RVLCreateString((char *)((resultsFolderName + "\\TPHypothesesCTIRank.txt").c_str()));
+
+			FILE *fpTPHypothesesCTIRank = fopen(recognition.TPHypothesesCTIRankFileName, "w");
+
+			fclose(fpTPHypothesesCTIRank);
+
+			int command = 1;
 
 			LARGE_INTEGER ctr1, ctr2, freq;
 			LARGE_INTEGER ctr1_, ctr2_, freq_;
 
-			while (sceneSequence.GetNextPath(filePath))
+			while (true)
 			{
+				if (bSceneBrowser)
+				{
+					switch (command)
+					{
+					case 0:
+						recognition.SceneBackward();
+
+						break;
+					case 1:
+						if (!sceneSequence.GetNextPath(filePath))
+							break;
+
+						break;
+					case 2:
+						printf("Select scene:\n");
+
+						int iScene;
+
+						scanf("%d", &iScene);
+
+						recognition.SetScene(iScene);
+
+						sceneSequence.GetFilePath(iScene, filePath);
+					}
+				}
+				else if (!sceneSequence.GetNextPath(filePath))
+					break;
+
+				recognition.ParamList.LoadParams(cfgFileName);
+
 				QueryPerformanceCounter((LARGE_INTEGER *)&ctr1);
 
 				printf("Scene %s...\n", filePath);
@@ -586,7 +782,12 @@ int main(int argc, char ** argv)
 				//mesh.LoadPolyDataFromPLY(filePath);
 				LoadMesh(&meshBuilder, filePath, &mesh, false);
 
-				////Generate scene depth
+#ifdef NEVER 
+				//Generate scene depth
+				//************************************************************************************************************
+				//Vidovic commented on 21.07.2017.
+				//because function PSGM::CreateDilatedDepthImage(); is called inside PSGM::FilterHypothesesUsingTransparency()
+				//************************************************************************************************************
 				//double point[3];
 				//int u, v;
 				//cv::Mat depth(480, 640, CV_16UC1, cv::Scalar::all(0));
@@ -608,10 +809,14 @@ int main(int argc, char ** argv)
 				//			depth.at<uint16_t>(y, x) = 10000; //in milimeters
 				//	}
 				//}
-				//cv::Mat elementE = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(9, 9));
+				//cv::Mat elementE = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(17, 17));
 				//cv::erode(depth, depth, elementE);
 				////Set PSGM depth
 				//recognition.depthImg = (unsigned short*)depth.data;
+				//************************************************************************************************************
+				//END Vidovic commented
+				//************************************************************************************************************
+
 
 				/*cv::Mat depthShow(480, 640, CV_8UC1);
 				double minVal, maxVal;
@@ -742,11 +947,30 @@ int main(int argc, char ** argv)
 				//cv::waitKey();
 				////interactor->Start();
 				////
+#endif
 
 				mem.Clear();
 
+				recognition.segmentGTLoaded = false;
+				recognition.createSegmentGT = false;
+				recognition.visualizeTPHypotheses = false;
+
+				if (flags & RVLRECOGNITION_DEMO_FLAG_3D_VISUALIZATION)
+				{					
+					visualizer.renderer->RemoveAllViewProps();
+					recognition.InitDisplay(&visualizer, &mesh, SelectionColor);
+				}
+
 				recognition.Interpret(&mesh);
 
+				//// Only for debugging purpose!!!
+
+				//int iMatch = recognition.bestSceneSegmentMatches2.Element[0].Element[0].idx;
+
+				//recognition.SaveHypothesisProjection(iMatch);
+
+				//recognition.SaveSubsampledScene();
+				
 				//recognition.SaveMatches();
 
 #ifdef PSGM_RECOGNITION_VISUALIZE_SCENE
@@ -768,7 +992,7 @@ int main(int argc, char ** argv)
 
 					recognition.pObjects->ObjectMapMask(&objectMask);
 
-					cv::imshow("Object mask", objectMask);
+					//cv::imshow("Object mask", objectMask);
 
 					cv::imwrite(objectMapFileName, objectMask);
 
@@ -776,7 +1000,7 @@ int main(int argc, char ** argv)
 
 					cv::waitKey();
 				}
-#endif
+#endif	// #ifndef PSGM_LOAD_CTI_FROM_FILE
 				//Evaluate CTI match
 				//recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, 7);
 
@@ -788,11 +1012,9 @@ int main(int argc, char ** argv)
 				if (flags & RVLRECOGNITION_DEMO_FLAG_3D_VISUALIZATION)
 				{
 					surfels.NodeColors(SelectionColor);
-					visualizer.renderer->RemoveAllViewProps();
-					recognition.InitDisplay(&visualizer, &mesh, SelectionColor);
 					recognition.Display();
 				}
-
+				
 				////NEW FILKO - TEST COLLISION CONSENSUS
 				//std::vector<int> conHyp = recognition.GetHypothesesCollisionConsensus(20);
 				//for (int i = 0; i < conHyp.size(); i++)
@@ -803,42 +1025,126 @@ int main(int argc, char ** argv)
 				QueryPerformanceCounter((LARGE_INTEGER *)&ctr1_);
 
 #ifdef RVLPSGM_ICP
-				//pcl::PointCloud<pcl::PointXYZINormal>::Ptr cloud_destination(new pcl::PointCloud<pcl::PointXYZINormal>);
-				////creating destination cloud
-				//cloud_destination->width = mesh.NodeArray.n;
-				//cloud_destination->height = 1;
-				//cloud_destination->is_dense = false;
-				//cloud_destination->points.resize(cloud_destination->width * cloud_destination->height);
+				if (recognition.bICP)
+				{
+					//pcl::PointCloud<pcl::PointXYZINormal>::Ptr cloud_destination(new pcl::PointCloud<pcl::PointXYZINormal>);
+					////creating destination cloud
+					//cloud_destination->width = mesh.NodeArray.n;
+					//cloud_destination->height = 1;
+					//cloud_destination->is_dense = false;
+					//cloud_destination->points.resize(cloud_destination->width * cloud_destination->height);
 
-				//for (int i = 0; i < mesh.NodeArray.n; i++)
-				//{
-				//	cloud_destination->points[i].x = mesh.NodeArray.Element[i].P[0];
-				//	cloud_destination->points[i].y = mesh.NodeArray.Element[i].P[1];
-				//	cloud_destination->points[i].z = mesh.NodeArray.Element[i].P[2];
+					//for (int i = 0; i < mesh.NodeArray.n; i++)
+					//{
+					//	cloud_destination->points[i].x = mesh.NodeArray.Element[i].P[0];
+					//	cloud_destination->points[i].y = mesh.NodeArray.Element[i].P[1];
+					//	cloud_destination->points[i].z = mesh.NodeArray.Element[i].P[2];
 
-				//	cloud_destination->points[i].normal_x = mesh.NodeArray.Element[i].N[0];
-				//	cloud_destination->points[i].normal_y = mesh.NodeArray.Element[i].N[1];
-				//	cloud_destination->points[i].normal_z = mesh.NodeArray.Element[i].N[2];
-				//}
-				//pcl::search::KdTree<pcl::PointXYZINormal>::Ptr kdtree = boost::make_shared<pcl::search::KdTree<pcl::PointXYZINormal>>((new pcl::search::KdTree<pcl::PointXYZINormal>));
-				//kdtree->setInputCloud(cloud_destination); //using this doesn't really improve anything
-				//recognition.CalculateICPCost(PCLICP, PCLICPVariants::Point_to_plane, &kdtree);
+					//	cloud_destination->points[i].normal_x = mesh.NodeArray.Element[i].N[0];
+					//	cloud_destination->points[i].normal_y = mesh.NodeArray.Element[i].N[1];
+					//	cloud_destination->points[i].normal_z = mesh.NodeArray.Element[i].N[2];
+					//}
+					//pcl::search::KdTree<pcl::PointXYZINormal>::Ptr kdtree = boost::make_shared<pcl::search::KdTree<pcl::PointXYZINormal>>((new pcl::search::KdTree<pcl::PointXYZINormal>));
+					//kdtree->setInputCloud(cloud_destination); //using this doesn't really improve anything
+					//recognition.CalculateICPCost(PCLICP, PCLICPVariants::Point_to_plane, &kdtree);
 
-				GenerateSegmentNeighbourhood(&recognition, 0.1);
-				recognition.CalculateNNCost(&visualizer, PCLICP, PCLICPVariants::Point_to_plane);
-				
-#ifdef RVLVERSION_170601
-				//evaluate ICP
-				recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, fpPoseError, fpnotFirstInfo, fpnotFirstPoseErr, 10, true);
+					GenerateSegmentNeighbourhood(&recognition, 0.1);
+					//recognition.CalculateNNCost(&visualizer, PCLICP, PCLICPVariants::Point_to_plane);
+
+					//TEST RVLPSGM_MATCHCTI_MATCH_MATRIX
+#ifdef RVLVERSION_171125
+#ifdef RVLPSGM_CUDA_ICP
+					//CUDA ICP
+					pCUDAICPObjv1->SetIcpModel(recognition.pSubsampledSceneDepthImage, Eigen::Matrix4f::Identity());
+
+					//cv::Mat depthImage(240, 320, CV_16UC1);
+					//memcpy(depthImage.data, recognition.pSubsampledSceneDepthImage, 320 * 240 * sizeof(unsigned short));
+					//cv::imwrite("C:\\RVL\\scena.png", depthImage);
+
+					recognition.ICP(RunCUDAICPv1, recognition.bestSceneSegmentMatches2);
 #else
-				//Transparency check
-				recognition.CreateScoreMatchMatrixICP();
-				recognition.FilterHypothesesUsingTransparency(0.15, 10, true);
+					//Create KDTree
+					//CreateSceneKdTree(&recognition);
+					
+					//recognition.ICP(PCLICP, PCLICPVariants::Point_to_plane, recognition.bestSceneSegmentMatches2);
+					recognition.ICP_refined(PCLICP, PCLICPVariants::Point_to_plane, recognition.bestSceneSegmentMatches2);
 #endif
 
+					recognition.HypothesisEvaluation(recognition.bestSceneSegmentMatches2, true);
+
+					if (recognition.bVisualizeHypothesisEvaluationLevel2)
+						recognition.VisualizeHypotheses(recognition.bestSceneSegmentMatches2, true);
+
+					//Colision check
+					recognition.noCollisionHypotheses.clear();
+					recognition.transparentHypotheses.clear();
+					recognition.envelopmentColisionHypotheses.clear();
+					recognition.GetHypothesesCollisionConsensus(&recognition.noCollisionHypotheses, &recognition.bestSceneSegmentMatches2, 10);
+
+					//Get transparency and collision consensus
+					if (flags & RVLRECOGNITION_DEMO_FLAG_3D_VISUALIZATION)
+						recognition.GetTransparencyAndCollisionConsensus(&visualizer);
+					else
+						recognition.GetTransparencyAndCollisionConsensus();
+
+					//Evaluate consesus matches
+					float precision, recall;
+					recognition.EvaluateConsensusMatches(precision, recall, true);
+
+#ifdef RVLPSGM_RMSE_CALCULATION
+					//Calculate RMSE
+					recognition.RMSE_Consensus(fpRMSE, true);
+#endif
 #else
+					recognition.ICP(PCLICP, PCLICPVariants::Point_to_plane, recognition.bestSceneSegmentMatches);
+
+#ifdef RVLPSGM_TRANSPARENCY_AND_COLLISION
+					//Transparency check
+					//recognition.CreateScoreMatchMatrixICP();
+					recognition.CreateScoreMatchMatrixICP_TMP();
+					recognition.FilterHypothesesUsingTransparency(0.15, 10, true);
+					recognition.CreateScoreMatchMatrixICP_TMP(); //because of sorting - TEST
+
+					//Get scene consistency
+					//recognition.GetSceneConsistancy(&recognition.scoreMatchMatrixICP, 0.1, 30, 20, true);
+
+					//Colision check
+					recognition.noCollisionHypotheses.clear();
+					recognition.GetHypothesesCollisionConsensus(&recognition.noCollisionHypotheses, &recognition.scoreMatchMatrixICP, 10);
+
+					//Get transparency and collision consensus
+					recognition.GetTransparencyAndCollisionConsensus(&visualizer);
+#endif
+
+					//Evaluate consesus matches
+					float precision, recall;
+					recognition.EvaluateConsensusMatches(precision, recall, true);
+
+					//recognition.createVersionTestFile();
+					recognition.checkVersionTestFile();
+
+#ifdef RVLPSGM_DETERMINE_THRESHOLDS
+					//determine thresholds for SHAPE_INSTANCE_DETECTION
+					recognition.DetermineThresholds();
+#endif
+#endif	// #ifndef RVLVERSION_171125
+
+					//#ifdef RVLVERSION_171125
+					//				//evaluate ICP
+					//				recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, fpPoseError, fpnotFirstInfo, fpnotFirstPoseErr, 10, true);
+					//#endif
+
+#ifdef NEVER
+					//Load models without decimation (used for calculatin RMSE)
+					recognition.LoadModelMeshDB(modelSequenceFileName, &recognition.vtkRMSEModelDB, false);
+
+					//Calculate RMSE
+					recognition.RMSE(fpRMSE, false);
+#endif
+				}
+#else	// #ifndef RVLPSGM_ICP
 				//recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, fpPoseError, fpnotFirstInfo, fpnotFirstPoseErr, 7);
-#endif
+#endif	// #ifndef RVLPSGM_ICP
 				//recognition.AddModelsToVisualizer(&visualizer, true, PCLICP, PCLICPVariants::Point_to_plane, NULL/*&kdtree*/);
 				QueryPerformanceCounter((LARGE_INTEGER *)&ctr2_);
 				QueryPerformanceFrequency((LARGE_INTEGER *)&freq_);
@@ -853,7 +1159,17 @@ int main(int argc, char ** argv)
 
 				if (flags & RVLRECOGNITION_DEMO_FLAG_3D_VISUALIZATION)
 					visualizer.Run();
-			}
+
+				if (bSceneBrowser)
+				{
+					printf("0 - repeate scene; 1 - next scene; 2 - select scene; 3 - exit\n");
+
+					scanf("%d", &command);
+
+					if (command == 3)
+						break;
+				}
+			}	// for every scene
 
 			RVL_DELETE_ARRAY(CTIFileName);
 
@@ -864,6 +1180,7 @@ int main(int argc, char ** argv)
 			fclose(fpHypothesisEvaluation);
 			fclose(fpLog);
 			fclose(fpPoseError);
+			fclose(fpRMSE);
 
 			//END Vidovic
 		}	// if (recognition.mode == RVLRECOGNITION_MODE_RECOGNITION)
@@ -960,6 +1277,144 @@ int main(int argc, char ** argv)
 			visualizer.Run();
 		}
 	}	// if (method == RVLRECOGNITION_METHOD_PSGM)
+	else if (method == RVLRECOGNITION_METHOD_VN)
+	{
+		// Parameters
+
+		//float voxelSize = 5.0f;
+		//int sampleVoxelDistance = 1;
+		//float eps = 2.0f;
+		//float resolution = 1.0f;
+		//float voxelSize = 0.02f;
+		//int sampleVoxelDistance = 1;
+		//float eps = 0.01f;
+		float resolution = 0.01f;
+
+		Mesh mesh;
+
+		VNClassifier classifier;
+
+		classifier.pMem0 = &mem0;
+		classifier.pMem = &mem;
+		classifier.vpMeshBuilder = &meshBuilder;
+		classifier.LoadMesh = LoadMesh;
+		classifier.pSurfels = &surfels;
+		classifier.pSurfelDetector = &surfelDetector;
+
+		classifier.visualizationData.resolution = resolution;
+		classifier.visualizationData.SDFSurfaceValue = SDFSurfaceValue;
+
+		if (flags & (RVLRECOGNITION_DEMO_FLAG_VISUALIZE_VN_MODEL | RVLRECOGNITION_DEMO_FLAG_VISUALIZE_VN_INSTANCE))
+			classifier.bLoadCTIDataBase = false;
+
+		classifier.Create(cfgFileName);
+
+		RECOG::VN_::_3DNetDatabaseClasses(&classifier);
+
+		// Model visualization.
+
+		if (flags & RVLRECOGNITION_DEMO_FLAG_VISUALIZE_VN_MODEL)
+		{
+			int iMetaModel = classifier.classArray.Element[iClass].iMetaModel;
+
+			VN *pModel = classifier.models[iMetaModel];
+
+			Box<float> box;
+
+			box = pModel->boundingBox;
+
+			ExpandBox<float>(&box, 2.0f * resolution);
+
+			pModel->Display(&visualizer, box, resolution, NULL, NULL, SDFSurfaceValue);
+
+			visualizer.Run();
+		}
+		else if (flags & RVLRECOGNITION_DEMO_FLAG_VISUALIZE_VN_INSTANCE)
+		{
+			FILE *fp = fopen(instanceFileName, "r");
+
+			int iModel;
+			int iMetaModel;
+			float *d;
+			bool *bd;
+
+			classifier.LoadDescriptor(fp, d, bd, iModel, iMetaModel);
+
+			fclose(fp);
+
+			VN *pModel = classifier.models[iMetaModel];
+
+			Box<float> box;
+
+			pModel->BoundingBox(d, box);
+
+			float resolution = 0.01f * BoxSize(&box);
+
+			ExpandBox<float>(&box, 10.0f * resolution);
+
+			visualizer.renderer->RemoveAllViewProps();
+
+			pModel->Display(&visualizer, box, resolution, d, bd, classifier.visualizationData.SDFSurfaceValue);
+
+			visualizer.Run();
+		}
+		else if (classifier.mode == RVLRECOGNITION_MODE_TRAINING)
+			classifier.Learn(modelSequenceFileName, iClass, &visualizer); //Vidovic
+		else if (classifier.mode == RVLRECOGNITION_MODE_RECOGNITION)
+		{
+			FileSequenceLoader dbLoader;
+
+			dbLoader.Init(classifier.modelsInDataBase);
+
+			char refModelFileName[200];
+
+			dbLoader.GetFilePath(classifier.classArray.Element[iClass].iRefInstance, refModelFileName);
+
+			int iMetaModel = classifier.classArray.Element[iClass].iMetaModel;
+
+			VN *pModel = classifier.models[iMetaModel];
+
+			RVL_DELETE_ARRAY(classifier.refModel.d);
+			RVL_DELETE_ARRAY(classifier.refModel.bd);
+
+			int iModel_, iMetaModel_;
+
+			char *refModelDescriptorFileName = RVLCreateFileName(refModelFileName, ".ply", -1, ".vnd");
+
+			FILE *fpVNDescriptor = fopen(refModelDescriptorFileName, "r");
+
+			delete[] refModelDescriptorFileName;
+
+			classifier.LoadDescriptor(fpVNDescriptor, classifier.refModel.d, classifier.refModel.bd, iModel_, iMetaModel_);
+
+			fclose(fpVNDescriptor);
+
+			FileSequenceLoader sceneSequence;
+
+			sceneSequence.Init(sceneSequenceFileName);
+
+			char filePath[200];
+
+			while (sceneSequence.GetNextPath(filePath))
+			{
+				printf("Scene: %s:\n", filePath);
+
+				classifier.alignment.SetSceneFileName(filePath);
+
+				// Load mesh.
+
+				LoadMesh(&meshBuilder, filePath, &mesh, false);
+
+				// Reset memory.
+
+				mem.Clear();
+
+				// Classification.
+
+				classifier.Interpret(&mesh, iClass);
+			}
+		}
+	}	// if (method == RVLRECOGNITION_METHOD_VN)
 
 	// free memory
 
@@ -973,7 +1428,6 @@ int main(int argc, char ** argv)
 	if (modelSequenceFileName)
 		delete[] modelSequenceFileName;
 
-	
 	//if (segmentGTFileName)
 	//	delete[] segmentGTFileName;
 

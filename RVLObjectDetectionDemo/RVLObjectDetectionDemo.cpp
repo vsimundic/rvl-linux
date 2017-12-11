@@ -9,6 +9,7 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 #include "RVLVTK.h"
 #include "RVLCore2.h"
 #include "Util.h"
+#include "Space3DGrid.h"
 #include "Graph.h"
 #include "Mesh.h"
 #include "Visualizer.h"
@@ -209,6 +210,7 @@ int main(int argc, char ** argv)
 
 	objectDetector.vpMeshBuilder = &meshBuilder;
 	objectDetector.LoadMesh = LoadMesh;
+	objectDetector.CreateMesh = CreateMesh;
 
 	objectDetector.pSurfelDetector->pTimer = new CRVLTimer;
 
@@ -242,6 +244,9 @@ int main(int argc, char ** argv)
 
 			printf("Scene %s...finished!\n\n", fileName);
 
+			if (objectDetector.bTrainingHMI)
+				objectDetector.TrainingHMI(fileName);
+
 			objectDetector.Evaluate(fp, filePath, selectedGTObjectsFileName);
 
 #ifdef RVLOBJECTDETECTIONDEMO_SELECT_GT_OBJECTS
@@ -266,11 +271,14 @@ int main(int argc, char ** argv)
 		}
 		printf("Sequence completed.\n");
 		system("pause");
-	}
+	}	// if (bSequence)
 	else
 	{
 
 		objectDetector.DetectObjects(MeshFileName);
+
+		if (objectDetector.bTrainingHMI)
+			objectDetector.TrainingHMI(MeshFileName);
 
 		objectDetector.Evaluate(fp, MeshFileName, selectedGTObjectsFileName);
 
@@ -351,17 +359,31 @@ int main(int argc, char ** argv)
 
 			// END DEMO
 
+			Array<int> boundingBoxArray;
+
+			boundingBoxArray.Element = new int[objectDetector.boundingBoxes.SegmentCTIs.n];
+
+			boundingBoxArray.n = 0;
+
+			int iObject;
+
+			for (iObject = 0; iObject < objectDetector.boundingBoxes.SegmentCTIs.n; iObject++)
+				if (objectDetector.boundingBoxes.SegmentCTIs.Element[iObject].n > 0)
+					boundingBoxArray.Element[boundingBoxArray.n++] = objectDetector.boundingBoxes.SegmentCTIs.Element[iObject].Element[0];
+
 			objectDetector.pPSGM->convexTemplate = objectDetector.pPSGM->convexTemplateBox;
 
-			objectDetector.pPSGM->DisplayCTIs(&visualizer, &(objectDetector.boundingBoxes));
+			objectDetector.pPSGM->DisplayCTIs(&visualizer, &(objectDetector.boundingBoxes), &boundingBoxArray);
 
 			objectDetector.pPSGM->convexTemplate = objectDetector.pPSGM->convexTemplate66;
 
+			delete[] boundingBoxArray.Element;
+
 			//detector.DisplaySoftEdges(&visualizer, &mesh, &surfels, SelectionColor);
 			visualizer.Run();
-		}
+		}	// if (objectDetector.bSurfelsFromSSF)
 
-	}
+	}	// if (!bSequence)
 		
 	// Memory deallocation.
 

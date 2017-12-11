@@ -3,6 +3,7 @@
 #include <vtkTriangle.h>
 #include <vtkAxesActor.h>
 #include <vtkLine.h>
+#include <vtkVertexGlyphFilter.h>
 #include "RVLCore2.h"
 #include "Util.h"
 #include "Graph.h"
@@ -764,6 +765,71 @@ bool VertexGraph::BoundingBox(Box<float> *pBox)
 	}
 
 	return true;
+}
+
+void VertexGraph::Display(Visualizer *pVisualizer)
+{
+	polyData = vtkSmartPointer<vtkPolyData>::New();
+
+	vtkSmartPointer<vtkPolyData> ptsPolyData = vtkSmartPointer<vtkPolyData>::New();
+
+	vtkSmartPointer<vtkPoints> points =	vtkSmartPointer<vtkPoints>::New();
+
+	vtkSmartPointer<vtkUnsignedCharArray> colors = vtkSmartPointer<vtkUnsignedCharArray>::New();
+	colors->SetNumberOfComponents(3);
+	colors->SetName("Colors");
+
+	unsigned char color[3] = {0, 128, 255};
+
+	int iVertex;
+	Vertex *pVertex;
+
+	for (iVertex = 0; iVertex < NodeArray.n; iVertex++)
+	{
+		pVertex = NodeArray.Element + iVertex;
+
+		points->InsertNextPoint(pVertex->P);
+
+		colors->InsertNextTupleValue(color);
+	}
+
+	ptsPolyData->SetPoints(points);
+
+	vtkSmartPointer<vtkVertexGlyphFilter> vertexFilter =
+		vtkSmartPointer<vtkVertexGlyphFilter>::New();
+
+	vertexFilter->SetInputData(ptsPolyData);
+
+	vertexFilter->Update();
+
+	polyData->ShallowCopy(vertexFilter->GetOutput());
+
+	polyData->SetPoints(points);
+
+	polyData->GetPointData()->SetScalars(colors);
+
+	// Setup the visualization pipeline
+	vtkSmartPointer<vtkPolyDataMapper> mapper =	vtkSmartPointer<vtkPolyDataMapper>::New();
+
+	mapper->SetInputData(polyData);
+
+	actor = vtkSmartPointer<vtkActor>::New();
+	actor->SetMapper(mapper);
+	actor->GetProperty()->SetPointSize(10);
+
+	pVisualizer->renderer->AddActor(actor);
+
+	//vtkActorCollection* actorCollection = pVisualizer->renderer->GetActors();
+	//actorCollection->InitTraversal();
+
+	//for (vtkIdType i = 0; i < actorCollection->GetNumberOfItems(); i++)
+	//{
+	//	vtkActor* pActor_ = actorCollection->GetNextActor();
+
+	//	vtkPolyDataMapper *pMapper_ = (vtkPolyDataMapper *)(pActor_->GetMapper());
+
+	//	pMapper_->GetInputDataObject();
+	//}
 }
 
 int SURFEL::ConnectNodesRG(

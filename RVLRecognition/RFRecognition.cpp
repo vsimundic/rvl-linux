@@ -1269,7 +1269,7 @@ void RFRecognition::CoordinateSystemNoiseStabilityTest(char *sceneMeshFileName, 
 		noiser.AddWhiteNoise(&mesh);
 
 		//save noised object
-		//mesh.SavePolyDataToPLY(sceneMeshFileName, &mesh);
+		//mesh.SaveNoisedPolyDataToPLY(sceneMeshFileName, &mesh);
 
 		FindObjects(&mesh);
 

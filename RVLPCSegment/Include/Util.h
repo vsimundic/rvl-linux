@@ -23,6 +23,7 @@
 	if(right > maxx)\
 		right = maxx;\
 }
+#define RVLRND(n, iRnd, nRnd, iiRnd, x)	{x = iRnd[iiRnd] % n; iiRnd = (iiRnd + 1) % nRnd;}
 
 namespace RVL
 {
@@ -36,6 +37,22 @@ namespace RVL
 	{
 		T1 a;
 		T2 b;
+	};
+
+	template <typename Type> struct Rect
+	{
+		Type minx;
+		Type maxx;
+		Type miny;
+		Type maxy;
+	};
+
+	struct Camera
+	{
+		float fu;
+		float fv;
+		float uc;
+		float vc;
 	};
 
 	//VIDOVIC
@@ -52,7 +69,16 @@ namespace RVL
 		int iSSegment;
 		int iModel;
 		int iMSegment;
+		int matchID;
 		bool valid;
+		//unsigned char color[3];
+		SegmentGTInstance *pNext;
+	};
+
+	struct ModelColor{
+		int iModel;
+		unsigned char color[3];
+		ModelColor *pNext;
 	};
 
 	bool GetAngleAxis(float *R, float *V, float &theta);
@@ -62,6 +88,11 @@ namespace RVL
 
 	void QuickSort(int *Key, int *Index, int n);
 	void RandomColor(unsigned char *color);
+	void RandomColors(
+		unsigned char *SelectionColor,
+		unsigned char *&colorArray,
+		int n);
+	void RandomIndices(Array<int> &A);
 
 	// created by Damir Filko
 	// adapted for general case by Robert Cupec
@@ -134,6 +165,84 @@ namespace RVL
 		p[0] = C[0] * C[3] - C[1] * C[2];
 
 		return RVL::Roots2<Type>(p, eig);
+	}
+
+	template <typename T>
+	void InitRect(Rect<T> *pRect, T *P)
+	{
+		pRect->minx = pRect->maxx = P[0];
+		pRect->miny = pRect->maxy = P[1];
+	}
+
+	template <typename T>
+	void UpdateRect(Rect<T> *pRect, T *P)
+	{
+		if (P[0] < pRect->minx)
+			pRect->minx = P[0];
+		else if (P[0] > pRect->maxx)
+			pRect->maxx = P[0];
+
+		if (P[1] < pRect->miny)
+			pRect->miny = P[1];
+		else if (P[1] > pRect->maxy)
+			pRect->maxy = P[1];
+	}
+
+	template <typename T>
+	void ExpandRect(Rect<T> *pRect, T extension)
+	{
+		pRect->minx -= extension;
+		pRect->maxx += extension;
+		pRect->miny -= extension;
+		pRect->maxy += extension;
+	}
+
+	template <typename T>
+	void SampleRect(
+		Rect<T> *pRect,
+		float border,
+		int nSamplesPerMaxSide,
+		Array2D<T> &PtArray)
+	{
+		ExpandRect<T>(pRect, border);
+
+		T w = pRect->maxx - pRect->minx;
+		T h = pRect->maxy - pRect->miny;
+
+		float u0 = (float)(pRect->minx);
+		float v0 = (float)(pRect->miny);
+		float fw = (float)w;
+		float fh = (float)h;
+
+		T a = RVLMAX(w, h);
+
+		float da = (float)a / (float)(nSamplesPerMaxSide - 1);
+
+		float fnw = round(fw / da);
+		float dw = fw / fnw;
+		int nw = (int)fnw;
+		float fnh = round(fh / da);
+		float dh = fh / fnh;
+		int nh = (int)fnh;
+
+		PtArray.w = 2;
+		PtArray.h = (nh + 1) * (nw + 1);
+
+		PtArray.Element = new T[PtArray.w * PtArray.h];
+
+		int iPt = 0;
+
+		int i, j;
+		float *m;
+
+		for (i = 0; i <= nh; i++)
+			for (j = 0; j <= nw; j++, iPt++)
+			{
+				m = PtArray.Element + PtArray.w * iPt;
+
+				m[0] = u0 + (float)j * dw;
+				m[1] = v0 + (float)i * dh;
+			}
 	}
 
 	void GetFileNameAndPath(
@@ -410,5 +519,11 @@ namespace RVL
 			delete[] n[i];
 		}
 	}
+
+	vtkSmartPointer<vtkPolyData>  DisplayIsoSurface(
+		Array3D<float> f,
+		float *P0,
+		float voxelSize,
+		float isolevel);
 }	// namespace RVL
 

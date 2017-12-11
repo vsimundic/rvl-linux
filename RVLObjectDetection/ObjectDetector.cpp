@@ -23,6 +23,7 @@
 #include "ObjectDetector.h"
 
 using namespace RVL;
+using namespace OBJECT_DETECTION;
 
 ObjectDetector::ObjectDetector()
 {
@@ -34,6 +35,7 @@ ObjectDetector::ObjectDetector()
 	convexityThr = 0.010f;
 	convexityRatioThr1 = 0.77f;
 	convexityRatioThr2 = 0.75f;
+	connectedComponentMaxDist = 0.100f;
 
 	nMultilateralFilterIterations = 10;
 	joinSmallObjectsToLargestNeighborSizeThr = 1000;
@@ -42,6 +44,8 @@ ObjectDetector::ObjectDetector()
 	bSegmentToObjects = false;
 	bObjectAggregationLevel2 = false;
 	bCTIBasedObjectAggregation = false;
+	bTrainingHMI = false;
+	bDisplay = false;
 	bMultilateralFilter = false;
 	bJoinSmallObjectsToLargestNeighbor = false;
 	bGroundTruthSegmentation = false;
@@ -149,6 +153,7 @@ void ObjectDetector::Init(PSGM *pPSGM_)
 		pObjects->InitSVMClassifier(SVMClassifierParamsFileName);
 	}
 
+	pObjects->pMem = pMem;
 	pObjects->pSurfels = pSurfels;
 	pObjects->objectAggregationLevel2Criterion = OBJECT_DETECTION::Symmetry;
 	pObjects->vpObjectAggregationLevel2CriterionData = this;
@@ -177,12 +182,15 @@ void ObjectDetector::CreateParamList()
 	pParamData = ParamList.AddParam("ObjectDetector.convexityThr", RVLPARAM_TYPE_FLOAT, &convexityThr);
 	pParamData = ParamList.AddParam("ObjectDetector.convexityRatioThr1", RVLPARAM_TYPE_FLOAT, &convexityRatioThr1);
 	pParamData = ParamList.AddParam("ObjectDetector.convexityRatioThr2", RVLPARAM_TYPE_FLOAT, &convexityRatioThr2);
+	pParamData = ParamList.AddParam("ObjectDetector.connectedComponentMaxDist", RVLPARAM_TYPE_FLOAT, &connectedComponentMaxDist);
 	pParamData = ParamList.AddParam("ObjectDetector.multilateralFilterIterations", RVLPARAM_TYPE_INT, &nMultilateralFilterIterations);
 	pParamData = ParamList.AddParam("ObjectDetector.joinSmallObjectsToLargestNeighborSizeThr", RVLPARAM_TYPE_INT, &joinSmallObjectsToLargestNeighborSizeThr);
 	pParamData = ParamList.AddParam("ObjectDetector.joinSmallObjectsToLargestNeighborDistThr", RVLPARAM_TYPE_FLOAT, &joinSmallObjectsToLargestNeighborDistThr);
 	pParamData = ParamList.AddParam("ObjectDetector.multilateralFilter", RVLPARAM_TYPE_BOOL, &bMultilateralFilter);
 	pParamData = ParamList.AddParam("ObjectDetector.joinSmallObjectsToLargestNeighbor", RVLPARAM_TYPE_BOOL, &bJoinSmallObjectsToLargestNeighbor);
 	pParamData = ParamList.AddParam("ObjectDetector.GroundTruthSegmentation", RVLPARAM_TYPE_BOOL, &bGroundTruthSegmentation);
+	pParamData = ParamList.AddParam("ObjectDetector.TrainingHMI", RVLPARAM_TYPE_BOOL, &bTrainingHMI);
+	pParamData = ParamList.AddParam("ObjectDetector.Display", RVLPARAM_TYPE_BOOL, &bDisplay);
 }
 
 //Dirk Holz and Sven Behnke: "Approximate Triangulation and Region Growing for Efficient Segmentation and Smoothing of Range Images"
@@ -771,13 +779,16 @@ void LaplaceSmooting(Mesh *pMesh, int noIter, bool useCotan)
 	//interactor->Start();
 }
 
-void ObjectDetector::DetectObjects(char *MeshFilePathName)
+void ObjectDetector::DetectObjects(
+	char *MeshFilePathName,
+	Array2D<short int> *pDepthImage,
+	IplImage *pRGBImage)
 {
 	// Segmentation to surfels.
 
 	bSurfelsFromSSF = false;
 
-	char *fileExtension = RVLGETFILEEXTENSION(MeshFilePathName);	
+	char *fileExtension = (MeshFilePathName ? RVLGETFILEEXTENSION(MeshFilePathName) : "");
 
 	if (strcmp(fileExtension, "ssf") == 0)
 	{
@@ -797,14 +808,27 @@ void ObjectDetector::DetectObjects(char *MeshFilePathName)
 	}
 	else
 	{
-		// Read mesh from file.
+		if (MeshFilePathName)
+		{
+			// Read mesh from file.
 
-		printf("Creating mesh from %s:\n", MeshFilePathName);
+			printf("Creating mesh from %s:\n", MeshFilePathName);
 
-		if (LoadMesh(vpMeshBuilder, MeshFilePathName, &mesh, (flags & RVLOBJECTDETECTION_FLAG_SAVE_PLY) != 0))
+			if (LoadMesh(vpMeshBuilder, MeshFilePathName, &mesh, (flags & RVLOBJECTDETECTION_FLAG_SAVE_PLY) != 0))
+				printf("Mesh created.\n");
+			else
+				printf("ERROR: Mesh can't be created!\n");
+		}
+		else if (pDepthImage)
+		{
+			printf("Creating mesh from depth image.\n");
+
+			CreateMesh(vpMeshBuilder, pDepthImage, pRGBImage, &mesh);
+
 			printf("Mesh created.\n");
+		}
 		else
-			printf("ERROR: Mesh can't be created!\n");
+			printf("ERROR: No mesh or depth image specified!\n");
 
 		//SmoothMesh(&mesh, 30);
 		//LaplaceSmooting(&mesh, 30);
@@ -922,8 +946,11 @@ void ObjectDetector::DetectObjects(char *MeshFilePathName)
 				////Filko
 				//objects.DetermineObjectConvexityData(0.005, 0.5);
 				//ObjectAggregationLevel2(&objects, &surfels, &mesh, MeshFileName);
-				cv::imshow("Level1", pObjects->CreateSegmentationImage());
-				cv::waitKey(1);
+				if (bDisplay)
+				{
+					cv::imshow("Level1", pObjects->CreateSegmentationImage());
+					cv::waitKey(1);
+				}
 				/*VisualizeObjectGraphVertexPointCloud(&objects, 100);*/
 				//if (bCTIBasedObjectAggregation)
 				pObjects->GetVertices();
@@ -931,14 +958,14 @@ void ObjectDetector::DetectObjects(char *MeshFilePathName)
 				//pPSGM->CTIs(pObjects, &CTIs);
 				pPSGM->convexTemplate = pPSGM->convexTemplateBox;
 				pPSGM->CTIs(-1, pObjects, &boundingBoxes, pMem);
-				SaveBoundingBoxSizes(MeshFilePathName);
+				//SaveBoundingBoxSizes(MeshFilePathName);
 				//pPSGM->convexTemplate = pPSGM->convexTemplate66;
 				pObjects->pMesh = &mesh;
 				pObjects->DetermineObjectConvexityData(convexityThr, 0.15, false);
 				pObjects->vpObjectAggregationLevel2CriterionData = this;
 				pObjects->ExtFuncCheckIfWithinVolume = &RVL::ObjectDetector::CheckIfWithinCTIBoundingBox;
 				pObjects->ObjectAggregationLevel2_ViaObjectPairConvexity(convexityThr, convexityRatioThr1, convexityRatioThr2, pObjects->minObjectSize, false);
-				if (!bJoinSmallObjectsToLargestNeighbor)
+				if (bDisplay && !bJoinSmallObjectsToLargestNeighbor)
 					cv::imshow("Level2", pObjects->CreateSegmentationImage());
 
 				////
@@ -960,7 +987,8 @@ void ObjectDetector::DetectObjects(char *MeshFilePathName)
 					//std::cout << "Merged iteration: " << mergedIt << std::endl;
 					mergedIt++;
 				}
-				cv::imshow("level2 + merge small objects", pObjects->CreateSegmentationImage());
+				if (bDisplay)
+					cv::imshow("level2 + merge small objects", pObjects->CreateSegmentationImage());
 				//cv::waitKey(1);
 			}
 
@@ -1236,4 +1264,276 @@ void ObjectDetector::SaveBoundingBoxSizes(char *imageFileName)
 	}		
 
 	fclose(fpBoundingBoxes);
+}
+
+void ObjectDetector::TrainingHMI(char *meshFileName)
+{
+	char *RGBFileName = RVLCreateFileName(meshFileName, ".ply", -1, ".png");
+
+	cv::Mat RGB = cv::imread(RGBFileName);
+
+	cv::imshow(cv::String(RGBFileName), RGB);
+
+	TrainingHMIData data;
+
+	data.pObjectDetector = this;
+	data.RGB = RGB;
+	data.imageName = RGBFileName;
+	data.pObject = data.pObject2 = NULL;
+
+	cvSetMouseCallback(RGBFileName, TrainingHMIMouseCallback, &data);
+
+	QList<GRAPH::HierarchyNode> *pHierarchy = &(pObjects->hierarchy);
+
+	uchar color[] = { 0, 255, 255 };
+
+	int key;
+	GRAPH::HierarchyNode *pNode, *pNode_;
+	cv::Mat RGB_;
+
+	do
+	{		
+		key = cv::waitKey();
+
+		switch (key){
+		case 'm':
+			if (data.pObject != NULL && data.pObject2 != NULL && data.pObject != data.pObject2)
+			{
+				RVLMEM_ALLOC_STRUCT(pMem, GRAPH::HierarchyNode, pNode);
+
+				RVLQLIST_ADD_ENTRY(pHierarchy, pNode);
+
+				data.pObject->pParent = pNode;
+
+				pNode->pChild[0] = data.pObject;
+
+				data.pObject2->pParent = pNode;
+
+				pNode->pChild[1] = data.pObject2;
+
+				pNode->pParent = NULL;
+
+				data.pObject = pNode;
+
+				data.pObject2 = NULL;
+
+				RGB.copyTo(RGB_);
+
+				DisplaySelectedObject(data.pObject, color, RGB_);
+
+				cv::imshow(RGBFileName, RGB_);
+			}
+
+			break;
+		case 's':
+			pNode = data.pObject->pChild[0];
+
+			if (pNode)
+			{
+				pNode_ = data.pObject->pChild[1];
+
+				pNode->pParent = pNode_->pParent = NULL;
+
+				GRAPH::HierarchyNode *pNewSelectionNode = GetObject(data.iPix);
+
+				if (pNode == pNewSelectionNode)
+				{
+					data.pObject = pNode;
+					data.pObject2 = pNode_;
+				}
+				else
+				{
+					data.pObject = pNode_;
+					data.pObject2 = pNode;
+				}
+			}
+			else
+				data.pObject2 = NULL;
+
+			RGB.copyTo(RGB_);
+
+			DisplaySelectedObject(data.pObject, color, RGB_);
+			DisplaySelectedObject(data.pObject2, color, RGB_);
+
+			cv::imshow(RGBFileName, RGB_);
+		}
+	} while (key != 27);
+	
+	delete[] RGBFileName;
+}
+
+void ObjectDetector::DisplaySelectedObject(
+	GRAPH::HierarchyNode *pObject,
+	uchar *color,
+	cv::Mat RGB)
+{
+	if (pObject == NULL)
+		return;
+
+	int w = RGB.cols;
+	int h = RGB.rows;
+
+	bool *bSelectedObject = new bool[pSurfels->NodeArray.n];
+
+	memset(bSelectedObject, 0, pSurfels->NodeArray.n * sizeof(bool));
+
+	GRAPH::HierarchyNode **nodeBuff = new GRAPH::HierarchyNode *[pSurfels->NodeArray.n];
+
+	GRAPH::HierarchyNode **pNodeFetch, **pNodePut;
+
+	pNodePut = pNodeFetch = nodeBuff;
+
+	*(pNodePut++) = pObject;
+
+	GRAPH::HierarchyNode *pNode;
+
+	while (pNodeFetch < pNodePut)
+	{
+		pNode = *(pNodeFetch++);
+
+		if (pNode->pChild[0])
+		{
+			*(pNodePut++) = pNode->pChild[0];
+			*(pNodePut++) = pNode->pChild[1];
+		}
+		else
+			bSelectedObject[pNode->iElement] = true;
+	}
+	
+	int i;
+	int iSurfel;
+	Surfel *pSurfel;
+	QLIST::Index2 *pPtIdx;
+	uchar *pix;
+	int u, v, du, dv, u0, v0, du_;
+
+	for (pNodeFetch = nodeBuff; pNodeFetch < pNodePut; pNodeFetch++)
+	{
+		pNode = *pNodeFetch;
+
+		if (pNode->pChild[0] == NULL)
+		{
+			pSurfel = pSurfels->NodeArray.Element + pNode->iElement;
+
+			pPtIdx = pSurfel->PtList.pFirst;
+
+			while (pPtIdx)
+			{
+				u0 = pPtIdx->Idx % w;
+				v0 = pPtIdx->Idx / w;
+
+				du = 1;
+				dv = 0;
+
+				for (i = 0; i < 4; i++)
+				{
+					u = u0 + du;
+					v = v0 + dv;
+
+					if (u >= 0 && u < w && v >= 0 && v < h)
+					{
+						iSurfel = pSurfels->surfelMap[u + v * w];
+
+						if (iSurfel < 0)
+							break;
+
+						if (!bSelectedObject[iSurfel])
+							break;
+					}
+
+					du_ = du;
+					du = dv;
+					dv = -du_;
+				}
+
+				if (i < 4)
+				{
+					pix = RGB.data + 3 * u0 + v0 * RGB.step;
+
+					RVLCOPY3VECTOR(color, pix);
+				}
+
+				pPtIdx = pPtIdx->pNext;
+			}	// for every surfel pixel
+		}	// if pNode is a surfel node
+	}	// for (pNodeFetch = nodeBuff; pNodeFetch < pNodePut; pNodeFetch++) 				
+
+	delete[] bSelectedObject;
+	delete[] nodeBuff;
+}
+
+void OBJECT_DETECTION::TrainingHMIMouseCallback(int event, int x, int y, int flags, void* vpData)
+{
+	TrainingHMIData *pData = (TrainingHMIData *)vpData;
+
+	ObjectDetector *pObjectDetector = pData->pObjectDetector;
+
+	int w = pData->RGB.cols;
+
+	pData->iPix = x + y * w;
+
+	uchar color[] = { 0, 255, 255 };
+
+	cv::Mat RGB;
+
+	switch (event){
+	case CV_EVENT_LBUTTONDOWN:
+		pData->RGB.copyTo(RGB);
+
+		pData->pObject = pObjectDetector->GetObject(pData->iPix);
+
+		pData->pObject2 = NULL;
+
+		if (pData->pObject)
+			pObjectDetector->DisplaySelectedObject(pData->pObject, color, RGB);
+
+		cv::imshow(pData->imageName, RGB);
+
+		break;
+	case CV_EVENT_RBUTTONDOWN:
+		if (pData->pObject)
+		{
+			pData->RGB.copyTo(RGB);
+
+			pObjectDetector->DisplaySelectedObject(pData->pObject, color, RGB);
+
+			pData->pObject2 = pObjectDetector->GetObject(pData->iPix);
+
+			if (pData->pObject2)
+				pObjectDetector->DisplaySelectedObject(pData->pObject2, color, RGB);
+
+			cv::imshow(pData->imageName, RGB);
+		}
+	}	// switch (event)
+}
+
+GRAPH::HierarchyNode * ObjectDetector::GetObject(int iPix)
+{
+	int iSurfel = pSurfels->surfelMap[iPix];
+
+	if (iSurfel < 0)
+		return NULL;
+	
+	GRAPH::HierarchyNode *pNode = pObjects->hierarchy.pFirst;
+
+	while (pNode)
+	{
+		if (pNode->iElement == iSurfel)
+			break;
+
+		pNode = pNode->pNext;
+	}
+
+	if (pNode == NULL)
+		return NULL;
+
+	while (true)
+	{
+		if (pNode->pParent == NULL)
+			return pNode;
+
+		pNode = pNode->pParent;
+	}
+
+	return NULL;
 }

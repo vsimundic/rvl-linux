@@ -70,10 +70,25 @@ namespace RVL
 			GRAPH::Edge *pNext;
 		};
 
+		struct Node
+		{
+			int idx;
+			QList<EdgePtr<Edge>> EdgeList;
+		};
+
+		struct HierarchyNode
+		{
+			int iElement;
+			HierarchyNode *pParent;
+			HierarchyNode *pChild[2];
+			HierarchyNode *pNext;
+		};
+
 		template<typename EdgeType> struct AggregateNode
 		{
 			QList<QLIST::Index> elementList;
 			QList<EdgePtr2<EdgeType>> EdgeList;
+			HierarchyNode *pHierarchyNode;
 			int size;
 			BYTE flags;
 		};
