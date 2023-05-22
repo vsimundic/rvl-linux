@@ -1,7 +1,7 @@
 # Door opening pipeline from Human demonstration
 
 This repository contains a Docker container which involves:
-- Robot Vision Library (RVL),
+- Robotic Vision Library (RVL),
 - ROS with packages for controlling the UR5 robot and
 - TensorMask from detectron2.
 
