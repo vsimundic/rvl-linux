@@ -1,0 +1,2 @@
+plivanje()
+textmsg("poziv funkcije")

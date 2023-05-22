@@ -1,0 +1,6 @@
+    textmsg("kill thread")
+
+    kill thread_handler_1
+
+    end_force_mode()
+
