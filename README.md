@@ -100,6 +100,10 @@ In another terminal, navigate to the ur5_ws directory:
 ```bash
 cd /home/RVLuser/ur5_ws
 ```
+build the packages:
+```bash
+catkin_make
+```
 source the project:
 ```bash
 source devel/setup.bash
