@@ -10,7 +10,6 @@ docker run --ipc=host --gpus all --runtime=runc --interactive -it \
 --volume="/tmp/.X11-unix:/tmp/.X11-unix:rw" \
 --volume="/dev:/dev" \
 --workdir="/home/RVLuser" \
-# -p 6018:6018 \
 --privileged \
 --name=rvl_ur5_detectron2 rvl:ur5_detectron2
 
