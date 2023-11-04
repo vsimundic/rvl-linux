@@ -9,154 +9,206 @@
 #define RVLFILEPATH_SEPARATOR_ "\\"
 #endif
 
-#define RVL_DELETE_ARRAY(Array) {if(Array)delete[] Array; Array = NULL;}
-#define RVLSCALECOLOR(SrcColor, a, TgtColor)\
-{\
-	TgtColor[0] = (unsigned char)((int)(SrcColor[0]) * a / 100);\
-	TgtColor[1] = (unsigned char)((int)(SrcColor[1]) * a / 100);\
-	TgtColor[2] = (unsigned char)((int)(SrcColor[2]) * a / 100);\
+#define RVL_DELETE_ARRAY(Array) \
+    {                           \
+        if (Array)              \
+            delete[] Array;     \
+        Array = NULL;           \
 }
-#define RVLSCALECOLOR2(SrcColor, scale, TgtColor)\
-{\
-	TgtColor[0] = (unsigned char)((int)(SrcColor[0]) * scale[0] / 100);\
-	TgtColor[1] = (unsigned char)((int)(SrcColor[1]) * scale[1] / 100);\
-	TgtColor[2] = (unsigned char)((int)(SrcColor[2]) * scale[2] / 100);\
+#define RVLSCALECOLOR(SrcColor, a, TgtColor)                         \
+    {                                                                \
+        TgtColor[0] = (unsigned char)((int)(SrcColor[0]) * a / 100); \
+        TgtColor[1] = (unsigned char)((int)(SrcColor[1]) * a / 100); \
+        TgtColor[2] = (unsigned char)((int)(SrcColor[2]) * a / 100); \
 }
-#define RVLGETFILEEXTENSION(FileName)	(strrchr(FileName, '.') + 1)
-#define RVLCROPRECT(minx, maxx, miny, maxy, left, right, top, bottom)\
-{\
-	if(top < miny)\
-		top = miny;\
-	if (bottom > maxy)\
-		bottom = maxy;\
-	if (left < minx)\
-		left = minx;\
-	if(right > maxx)\
-		right = maxx;\
+#define RVLSCALECOLOR2(SrcColor, scale, TgtColor)                           \
+    {                                                                       \
+        TgtColor[0] = (unsigned char)((int)(SrcColor[0]) * scale[0] / 100); \
+        TgtColor[1] = (unsigned char)((int)(SrcColor[1]) * scale[1] / 100); \
+        TgtColor[2] = (unsigned char)((int)(SrcColor[2]) * scale[2] / 100); \
 }
-#define RVLNEIGHBORHOOD(x0, y0, halfNeighborhoodSize, minx, maxx, miny, maxy, left, right, top, bottom)\
-{\
-	left   = x0 - halfNeighborhoodSize;\
-	right  = x0 + halfNeighborhoodSize;\
-	top    = y0 - halfNeighborhoodSize;\
-	bottom = y0 + halfNeighborhoodSize;\
-	RVLCROPRECT(minx, maxx, miny, maxy, left, right, top, bottom)\
+#define RVLGETFILEEXTENSION(FileName) (strrchr(FileName, '.') + 1)
+#define RVLCROPRECT(minx, maxx, miny, maxy, left, right, top, bottom) \
+    {                                                                 \
+        if (top < miny)                                               \
+            top = miny;                                               \
+        if (bottom > maxy)                                            \
+            bottom = maxy;                                            \
+        if (left < minx)                                              \
+            left = minx;                                              \
+        if (right > maxx)                                             \
+            right = maxx;                                             \
 }
-#define RVLRND(n, iRnd, nRnd, iiRnd, x)	{x = iRnd[iiRnd] % n; iiRnd = (iiRnd + 1) % nRnd;}
+#define RVLNEIGHBORHOOD(x0, y0, halfNeighborhoodSize, minx, maxx, miny, maxy, left, right, top, bottom) \
+    {                                                                                                   \
+        left = x0 - halfNeighborhoodSize;                                                               \
+        right = x0 + halfNeighborhoodSize;                                                              \
+        top = y0 - halfNeighborhoodSize;                                                                \
+        bottom = y0 + halfNeighborhoodSize;                                                             \
+        RVLCROPRECT(minx, maxx, miny, maxy, left, right, top, bottom)                                   \
+    }
+#define RVLRND(n, iRnd, nRnd, iiRnd, x) \
+    {                                   \
+        x = iRnd[iiRnd] % n;            \
+        iiRnd = (iiRnd + 1) % nRnd;     \
+    }
 // y = s * x
-#define RVLSCALEVECTOR(x, s, y, n, i)	{for (i = 0; i < n; i++) y[i] = s * x[i];}
+#define RVLSCALEVECTOR(x, s, y, n, i) \
+    {                                 \
+        for (i = 0; i < n; i++)       \
+            y[i] = s * x[i];          \
+    }
 // c = a + b;
-#define RVLSUMVECTORS(a, b, n, c, i) {for (i = 0; i < n; i++) c[i] = a[i] + b[i];}
+#define RVLSUMVECTORS(a, b, n, c, i) \
+    {                                \
+        for (i = 0; i < n; i++)      \
+            c[i] = a[i] + b[i];      \
+    }
 // c = a - b;
-#define RVLDIFVECTORS(a, b, n, c, i) {for (i = 0; i < n; i++) c[i] = a[i] - b[i];}
+#define RVLDIFVECTORS(a, b, n, c, i) \
+    {                                \
+        for (i = 0; i < n; i++)      \
+            c[i] = a[i] - b[i];      \
+    }
 // c = a' * b
-#define RVLDOTPRODUCT(a, b, n, c, i) {c = 0; for (i = 0; i < n; i++) c += a[i] * b[i];}
+#define RVLDOTPRODUCT(a, b, n, c, i) \
+    {                                \
+        c = 0;                       \
+        for (i = 0; i < n; i++)      \
+            c += a[i] * b[i];        \
+    }
 // c = A(mxn) * b
-#define RVLMULMXVECT(A, b, m, n, c, i, j, a) {for (j = 0; j < m; j++) {a = A + j * n; RVLDOTPRODUCT(a, b, n, c[j], i)}};
+#define RVLMULMXVECT(A, b, m, n, c, i, j, a) \
+    {                                        \
+        for (j = 0; j < m; j++)              \
+        {                                    \
+            a = A + j * n;                   \
+            RVLDOTPRODUCT(a, b, n, c[j], i)  \
+        }                                    \
+    };
 // c = A(mxn)' * b
-#define RVLMULMXTVECT(A, b, m, n, c, i, j, a)\
-{\
-	for (j = 0; j < n; j++)\
-	{\
-		c[j] = 0;\
-		a = A + j;\
-		for (i = 0; i < m; i++)\
-			 c[j] += (a[i*n] * b[i]);\
-	}\
+#define RVLMULMXTVECT(A, b, m, n, c, i, j, a) \
+    {                                         \
+        for (j = 0; j < n; j++)               \
+        {                                     \
+            c[j] = 0;                         \
+            a = A + j;                        \
+            for (i = 0; i < m; i++)           \
+                c[j] += (a[i * n] * b[i]);    \
+        }                                     \
 }
 // Z(n1 x n3) = A(n1 x n2) * B(n2 * n3)
-#define RVLMXMUL(A, B, Z, n1, n2, n3)\
-{\
-	int i, j, k;\
-	double z;\
-	for (i = 0; i < n1; i++)\
-		for (j = 0; j < n3; j++)\
-		{\
-			z = 0.0;\
-			for (k = 0; k < n2; k++)\
-				z += A[i * n2 + k] * B[k * n3 + j];\
-			Z[i * n3 + j] = z;\
-		}\
+#define RVLMXMUL(A, B, Z, n1, n2, n3)                   \
+    {                                                   \
+        int i, j, k;                                    \
+        double z;                                       \
+        for (i = 0; i < n1; i++)                        \
+            for (j = 0; j < n3; j++)                    \
+            {                                           \
+                z = 0.0;                                \
+                for (k = 0; k < n2; k++)                \
+                    z += A[i * n2 + k] * B[k * n3 + j]; \
+                Z[i * n3 + j] = z;                      \
+            }                                           \
 }
 // Bresenham line drawing algorithm - initialization
-#define RVLBRESENHAMINIT(x0, y0, x1, y1, x, y, data)\
-{\
-	data.xEnd = x1;\
-	data.yEnd = y1;\
-	data.dx = x1 - x0;\
-	data.dy = y1 - y0;\
-	data.absdx = RVLABS(data.dx);\
-	data.absdy = RVLABS(data.dy);\
-	if (RVLABS(data.dy) < RVLABS(data.dx))\
-	{\
-		data.xi = 0;\
-		data.yi = (data.dy > 0 ? 1 : -1);\
-		data.xii = (data.dx > 0 ? 1 : -1);\
-		data.yii = 0;\
-		data.dD1 = data.absdx;\
-		data.dD2 = data.absdy;\
-	}\
-	else\
-	{\
-		data.xi = (data.dx > 0 ? 1 : -1);\
-		data.yi = 0;\
-		data.xii = 0;\
-		data.yii = (data.dy > 0 ? 1 : -1);\
-		data.dD1 = data.absdy;\
-		data.dD2 = data.absdx;\
-	}\
-	data.D = 2 * data.dD2 - data.dD1;\
-	x = x0;\
-	y = y0;\
-	data.bCompleted = false;\
+#define RVLBRESENHAMINIT(x0, y0, x1, y1, x, y, data) \
+    {                                                \
+        data.xEnd = x1;                              \
+        data.yEnd = y1;                              \
+        data.dx = x1 - x0;                           \
+        data.dy = y1 - y0;                           \
+        data.absdx = RVLABS(data.dx);                \
+        data.absdy = RVLABS(data.dy);                \
+        if (RVLABS(data.dy) < RVLABS(data.dx))       \
+        {                                            \
+            data.xi = 0;                             \
+            data.yi = (data.dy > 0 ? 1 : -1);        \
+            data.xii = (data.dx > 0 ? 1 : -1);       \
+            data.yii = 0;                            \
+            data.dD1 = data.absdx;                   \
+            data.dD2 = data.absdy;                   \
+        }                                            \
+        else                                         \
+        {                                            \
+            data.xi = (data.dx > 0 ? 1 : -1);        \
+            data.yi = 0;                             \
+            data.xii = 0;                            \
+            data.yii = (data.dy > 0 ? 1 : -1);       \
+            data.dD1 = data.absdy;                   \
+            data.dD2 = data.absdx;                   \
+        }                                            \
+        data.D = 2 * data.dD2 - data.dD1;            \
+        x = x0;                                      \
+        y = y0;                                      \
+        data.bCompleted = false;                     \
 }
 // Bresenham line drawing algorithm - update
-#define RVLBRESENHAMUPDATE(data, x, y)\
-{\
-	if(data.D > 0)\
-	{\
-		x += data.xi;\
-		y += data.yi;\
-		data.D -= (2 * data.dD1);\
-	}\
-	data.D += (2 * data.dD2);\
-	x += data.xii;\
-	y += data.yii;\
-	data.bCompleted = (x == data.xEnd && y == data.yEnd);\
+#define RVLBRESENHAMUPDATE(data, x, y)                        \
+    {                                                         \
+        if (data.D > 0)                                       \
+        {                                                     \
+            x += data.xi;                                     \
+            y += data.yi;                                     \
+            data.D -= (2 * data.dD1);                         \
+        }                                                     \
+        data.D += (2 * data.dD2);                             \
+        x += data.xii;                                        \
+        y += data.yii;                                        \
+        data.bCompleted = (x == data.xEnd && y == data.yEnd); \
 }
 // This is how you use the Bresenham macros:
 //
-//int x1, y1, x2, y2; // Input: line endpoint coordinates
-//BresenhamData bresenhamData;
-//int x, y;
-//RVLBRESENHAMINIT(x1, y1, x2, y2, x, y, bresenhamData);
-//while (true)
+// int x1, y1, x2, y2; // Input: line endpoint coordinates
+// BresenhamData bresenhamData;
+// int x, y;
+// RVLBRESENHAMINIT(x1, y1, x2, y2, x, y, bresenhamData);
+// while (true)
 //{
 //	// Do whatever you want with (x, y).
 //	if (bresenhamData.bCompleted)
 //		break;
 //	RVLBRESENHAMUPDATE(bresenhamData, x, y);
 //}
+// Given a unit vector uS and rotation matrix R, determine the closest convex template element.
+#define RVLGET_CLOSEST_CONVEX_TEMPLATE_ELEMENT(convexTemplateLUT, uS, R, uM, i, j, k, iCorrespondence)             \
+    {                                                                                                              \
+        if (R)                                                                                                     \
+        {                                                                                                          \
+            RVLMULMX3X3TVECT(R, uS, uM)                                                                            \
+        }                                                                                                          \
+        else                                                                                                       \
+        {                                                                                                          \
+            RVLCOPY3VECTOR(uS, uM);                                                                                \
+        }                                                                                                          \
+        i = (int)(uM[0] / convexTemplateLUT.quant + convexTemplateLUT.halfRange);                                  \
+        j = (int)(uM[1] / convexTemplateLUT.quant + convexTemplateLUT.halfRange);                                  \
+        k = (int)(uM[2] / convexTemplateLUT.quant + convexTemplateLUT.halfRange);                                  \
+        iCorrespondence = convexTemplateLUT.LUT.Element[RVL3DARRAY_ELEMENT_INDEX(convexTemplateLUT.LUT, i, j, k)]; \
+    }
 
-#define RVL_DATASET_FLAG_TUW_KINECT						0
-#define RVL_DATASET_FLAG_WILLOW_AND_CHALLENGE			1
-#define RVL_DATASET_FLAG_ICL							2
+#define RVL_DATASET_FLAG_TUW_KINECT 0
+#define RVL_DATASET_FLAG_WILLOW_AND_CHALLENGE 1
+#define RVL_DATASET_FLAG_ICL 2
 
 namespace RVL
 {
-	template <typename T> struct SortIndex
+    template <typename T>
+    struct SortIndex
 	{
 		int idx;
 		T cost;
 	};
 
-	template <typename T1, typename T2> struct Pair
+    template <typename T1, typename T2>
+    struct Pair
 	{
 		T1 a;
 		T2 b;
 	};
 
-	template <typename Type> struct Rect
+    template <typename Type>
+    struct Rect
 	{
 		Type minx;
 		Type maxx;
@@ -174,8 +226,9 @@ namespace RVL
 		int h;
 	};
 
-	//VIDOVIC
-	struct GTInstance{
+    // VIDOVIC
+    struct GTInstance
+    {
 		int iScene;
 		int iModel;
 		float R[9];
@@ -183,18 +236,20 @@ namespace RVL
 		bool matched;
 	};
 
-	struct SegmentGTInstance{
+    struct SegmentGTInstance
+    {
 		int iScene;
 		int iSSegment;
 		int iModel;
 		int iMSegment;
 		int matchID;
 		bool valid;
-		//unsigned char color[3];
+        // unsigned char color[3];
 		SegmentGTInstance *pNext;
 	};
 
-	struct ModelColor{
+    struct ModelColor
+    {
 		int iModel;
 		unsigned char color[3];
 		ModelColor *pNext;
@@ -218,9 +273,17 @@ namespace RVL
 		bool bCompleted;
 	};
 
+    struct ConvexTemplateLookUpTable
+    {
+        float quant;
+        int iHalfRange;
+        float halfRange;
+        Array3D<int> LUT;
+    };
+
 	bool GetAngleAxis(float *R, float *V, float &theta);
 	void GetDistance(float *t, float &distance);
-	//END VIDOVIC
+    // END VIDOVIC
 	void PrintMatrix(FILE *fp, double *A, int n, int m);
 
 	void QuickSort(int *Key, int *Index, int n);
@@ -247,16 +310,23 @@ namespace RVL
 	void CreateImage3x3NeighborhoodLT(
 		int w,
 		int *neighbor);
-	void CreateGrayScaleImage(Array2D<float> inputImage, cv::Mat& outputImage);
+    void CreateGrayScaleImage(Array2D<float> inputImage, cv::Mat &outputImage);
 	void SetCameraParams(Camera &camera, float fu, float fv, float uc, float vc, int w, int h);
 	void ReadLine(
 		FILE *fp,
 		int nCharacters,
 		char *line);
 	int FurthestPoint(
-		float* P,
+        float *P,
 		Array<Vector3<float>> points,
-		float* V = NULL);
+        float *V = NULL);
+    void CreateConvexTemplate6(float *A);
+    void CreateConvexTemplate18(float *A);
+    void CreateConvexTemplate66(float *A);
+    void CreateTemplateLookUpTable(
+        Array2D<float> A,
+        int resolution,
+        ConvexTemplateLookUpTable &CTLUT);
 
 	// created by Damir Filko
 	// adapted for general case by Robert Cupec
@@ -352,7 +422,7 @@ namespace RVL
 			pRect->maxy = P[1];
 	}
 
-	template<typename T>
+    template <typename T>
 	bool IsInRect(T x, T y, Rect<T> rect)
 	{
 		if (x < rect.minx)
@@ -370,7 +440,7 @@ namespace RVL
 		return true;
 	}
 
-	template<typename T>
+    template <typename T>
 	bool IsContainedInRect(Rect<T> rectQuery, Rect<T> rect)
 	{
 		if (rectQuery.minx < rect.minx)
@@ -492,9 +562,9 @@ namespace RVL
 	void LoadCameraParametersFromFile(
 		char *cfgFileName,
 		Camera &camera,
-		CRVLMem* pMem);
+        CRVLMem *pMem);
 
-	//VIDOVIC
+    // VIDOVIC
 	class FileSequenceLoader
 	{
 	public:
@@ -562,9 +632,10 @@ namespace RVL
 	void TransformWillowAndChallengeGT2ECCVFormat(char *sceneGTPath);
 	void TransformICLGT2ECCVFormat(char *sceneGTPath);
 	void TransformCorrectedICLGT2ECCVFormat(char *sceneGTPath);
-	//END VIDOVIC
+    // END VIDOVIC
 
-	template<typename T> struct QList2Array		// Move to RVLQList.h
+    template <typename T>
+    struct QList2Array // Move to RVLQList.h
 	{
 		Array<QList<T>> listArray;
 		T *mem;
@@ -776,14 +847,14 @@ namespace RVL
 	class RVLVTKPLYWriter : public vtkPLYWriter
 	{
 	public:
-		static RVLVTKPLYWriter* New();
+        static RVLVTKPLYWriter *New();
 		void WriteDataWithNormals();
 		void WritePolyData(
 			std::string fileName,
 			vtkSmartPointer<vtkPolyData> pPolygonData);
 	};
 
-	vtkSmartPointer<vtkPolyData>  DisplayIsoSurface(
+    vtkSmartPointer<vtkPolyData> DisplayIsoSurface(
 		Array3D<float> f,
 		float *P0,
 		float voxelSize,
@@ -794,7 +865,8 @@ namespace RVL
 
 	// dM = dX' * inv(C) * dX
 
-	template <typename T> T MahalanobisDistance(CvMat *dX, CvMat *C, CvMat *Tmp)
+    template <typename T>
+    T MahalanobisDistance(CvMat *dX, CvMat *C, CvMat *Tmp)
 	{
 		if (cvSolve(C, dX, Tmp))
 			return cvDotProduct(dX, Tmp);
@@ -836,8 +908,8 @@ namespace RVL
 		{
 			T w = sqrt(fabs(r));
 			T cp = s / (w * w * w);
-			//z[0] = - 2.0 * w * cp - q2 / 3.0;
-			//T phi = acos(w);
+            // z[0] = - 2.0 * w * cp - q2 / 3.0;
+            // T phi = acos(w);
 			T phi = acos(cp);
 			z[0] = -2.0 * w * cos(phi / 3.0) - q2 / 3.0;
 			/////
@@ -981,7 +1053,7 @@ namespace RVL
 		}
 	}
 
-	template<typename T> 
+    template <typename T>
 	T GaussRandBM(T std)
 	{
 		T z;
@@ -1001,8 +1073,8 @@ namespace RVL
 		std::string dataName,
 		int nDims,
 		H5::DataType dataType,
-		T*& data,
-		hsize_t* dims)
+        T *&data,
+        hsize_t *dims)
 	{
 		H5::H5File depthImageFile(std::string(fileName), H5F_ACC_RDONLY);
 		H5::DataSet depthImageTensor = depthImageFile.openDataSet(dataName);
@@ -1020,9 +1092,9 @@ namespace RVL
 		std::string fileName,
 		std::string dataName,
 		int nDims,
-		hsize_t* dims,
+        hsize_t *dims,
 		H5::DataType dataType,
-		T* data)
+        T *data)
 	{
 		H5::H5File featureTensorFile(fileName, H5F_ACC_TRUNC);
 
@@ -1038,7 +1110,7 @@ namespace RVL
 	}
 #endif
 
-	//Vidovic
+    // Vidovic
 	void UnionOfIndices(
 		Array<int> &iInArray1,
 		Array<int> &iInArray2,
@@ -1048,4 +1120,4 @@ namespace RVL
 	bool CheckFlag(unsigned char flags, unsigned char flagToCheck);
 	bool CheckFlags(unsigned char flags, unsigned char flagsToCheck);
 
-}	// namespace RVL
+} // namespace RVL

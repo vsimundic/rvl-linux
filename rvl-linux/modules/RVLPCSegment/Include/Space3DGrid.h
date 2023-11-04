@@ -1,6 +1,6 @@
 namespace RVL
 {
-	template<typename DataType, typename CoordinateType>
+	template <typename DataType, typename CoordinateType>
 	class Space3DGrid
 	{
 	public:
@@ -41,7 +41,7 @@ namespace RVL
 			grid.a = a;
 			grid.b = b;
 			grid.c = c;
-			
+
 			nCells = a * b * c + 1;
 
 			if (nCells > cellMemSize)
@@ -129,8 +129,8 @@ namespace RVL
 		}
 
 		inline int Cell(
-			int i, 
-			int j, 
+			int i,
+			int j,
 			int k)
 		{
 			return (i >= 0 && i < grid.a && j >= 0 && j < grid.b && k >= 0 && k < grid.c ? (k * grid.b + j) * grid.a + i : iOutCell);
@@ -155,7 +155,7 @@ namespace RVL
 				activeCellArray.Element[activeCellArray.n++] = iCell;
 
 				bActiveCell[iCell] = true;
-			}				
+			}
 
 			RVLQLIST_ADD_ENTRY2(pCellDataList, pNewData);
 
@@ -217,7 +217,7 @@ namespace RVL
 				}
 				else
 					bOutCell = true;
-			}	
+			}
 
 			if (bOutCell)
 				neighborCellArray.Element[neighborCellArray.n++] = iOutCell;
@@ -269,7 +269,7 @@ namespace RVL
 
 				while (pData)
 				{
-					//if (pData->iMatch == 174)
+					// if (pData->iMatch == 174)
 					//	int debug = 0;
 
 					dataArray.Element[dataArray.n++] = pData;
@@ -281,8 +281,8 @@ namespace RVL
 
 		void CopyData(
 			QList<DataType> *pTgtList,
-			CRVLMem *pMem,
-			int dataSize)
+			int dataSize,
+			CRVLMem *pMem)
 		{
 			int i;
 			DataType *pDataSrc, *pDataTgt;
@@ -296,13 +296,12 @@ namespace RVL
 
 				while (pDataSrc)
 				{
-					//if (!(pDataSrc->flags & 0x80))
+					// if (!(pDataSrc->flags & 0x80))
 					//	int debug = 0;
 
 					RVLMEM_ALLOC_STRUCT(pMem, DataType, pDataTgt);
 
 					memcpy(pDataTgt, pDataSrc, dataSize);
-					//memcpy(pDataTgt, pDataSrc, sizeof(VN_::Hypothesis2));
 
 					RVLQLIST_ADD_ENTRY(pTgtList, pDataTgt);
 
@@ -318,8 +317,8 @@ namespace RVL
 			float score,
 			CoordinateType eqThr,
 			float o = 1.0f
-			//FILE *fpDebug = NULL	// Only for debugging purpose!!!
-			)
+			// FILE *fpDebug = NULL	// Only for debugging purpose!!!
+		)
 		{
 			float *X = R;
 			float *Z = R + 6;
@@ -363,15 +362,15 @@ namespace RVL
 					iMergingCandidates.Element[iMergingCandidates.n++] = i;
 				else if (scoreDiff > 0.0f)
 				{
-					//fprintf(fpDebug, "H%d: better pose: %d\n\n", ID, pPose->iMatch);
+					// fprintf(fpDebug, "H%d: better pose: %d\n\n", ID, pPose->iMatch);
 
 					return false;
 				}
 			}
 
-			//fprintf(fpDebug, "M%d\n", ID);
+			// fprintf(fpDebug, "M%d\n", ID);
 
-			//fprintf(fpDebug, "Removing poses:\n");
+			// fprintf(fpDebug, "Removing poses:\n");
 
 			for (i = 0; i < iMergingCandidates.n; i++)
 			{
@@ -379,10 +378,10 @@ namespace RVL
 
 				RemoveData(pPose);
 
-				//fprintf(fpDebug, "R%d\n", pPose->iMatch);
+				// fprintf(fpDebug, "R%d\n", pPose->iMatch);
 			}
 
-			//fprintf(fpDebug, "\n");
+			// fprintf(fpDebug, "\n");
 
 			return true;
 		}
@@ -413,7 +412,7 @@ namespace RVL
 			CoordinateType eqThr,
 			float o = 1.0f)
 		{
-			//FILE *fpDebug = fopen("C:\\RVL\\Debug\\prune3DPoses.log", "w");
+			// FILE *fpDebug = fopen("C:\\RVL\\Debug\\prune3DPoses.log", "w");
 
 			int nLocalMaxima = 0;
 
@@ -439,12 +438,12 @@ namespace RVL
 					{
 						if (!(pPose->flags & 0x80))
 						{
-							//if (IsLocalMaximum(pPose->iMatch, pPose->R, pPose->P, pPose->score, eqThr, o, fpDebug))
+							// if (IsLocalMaximum(pPose->iMatch, pPose->R, pPose->P, pPose->score, eqThr, o, fpDebug))
 							if (IsLocalMaximum(pPose->iMatch, pPose->R, pPose->P, pPose->score, eqThr, o))
-							{							
+							{
 								pPose->flags |= 0x80;
 
-								nLocalMaxima++;								
+								nLocalMaxima++;
 							}
 						}
 
@@ -453,7 +452,7 @@ namespace RVL
 				}
 			} while (nLocalMaxima > nLocalMaximaPrev);
 
-			//fclose(fpDebug);
+			// fclose(fpDebug);
 
 			return nLocalMaxima;
 		}

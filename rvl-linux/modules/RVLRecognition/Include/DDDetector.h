@@ -288,6 +288,35 @@ namespace RVL
 				RECOG::DDD::RectStruct MRS;
 			};
 
+            struct EdgeLineSegmentPixel
+            {
+                int iPix;
+                float e;
+                RECOG::DDD::EdgeLineSegmentPixel *pNext;
+            };
+
+            struct EdgeLineSegment
+            {
+                int iCluster;
+                float P[2][2];
+                QList<RECOG::DDD::EdgeLineSegmentPixel> pix;
+                Array<int> pix_;
+                float w;
+                float N[2];
+                float P0[2];
+            };
+
+            struct Line2D
+            {
+                float P[2][2];
+                float N[2];
+                float d;
+            };
+
+            struct Detect3CallBackFuncData
+            {
+            };
+
 			bool ProjectToBase(
 				float *a,
 				int n,
@@ -296,13 +325,16 @@ namespace RVL
 				float *r,
 				float *b,
 				float &c);
-
 			bool SortCompare(SortIndex<float> x1, SortIndex<float> x2);
-
 			void MapMeshRGB(
 				Mesh *pMesh,
 				cv::Mat mapping,
 				cv::Mat &tgtImg);
+            void MapImageC1(
+                cv::Mat srcImg,
+                cv::Mat mapping,
+                cv::Mat &tgtImg);
+            void Detect3CallBackFunc(int event, int x, int y, int flags, void *userdata);
 		}
 	}
 
@@ -314,6 +346,39 @@ namespace RVL
 		void Create(char *cfgFileName);
 		void Clear();
 		void CreateParamList();
+        void DetectRGBEdgeLineSegments(
+            cv::Mat RGB,
+            int cannyThrL,
+            int cannyThrH,
+            int minHoughLineSize,
+            cv::Mat &edges,
+            cv::Mat &sobelx,
+            cv::Mat &sobely,
+            Array<RECOG::DDD::EdgeLineSegment> &lineSegments,
+            int *&lineSegmentPixIdxMem,
+            int *&lineSegmentMap);
+        void SegmentEdgeLines(
+            cv::Mat &edges,
+            double *IuMap,
+            double *IvMap,
+            Array<RECOG::DDD::Line2D> lines,
+            int linePtTolIn,
+            float mincsN,
+            int maxLineGap,
+            Array<RECOG::DDD::EdgeLineSegment> &lineSegments,
+            RECOG::DDD::EdgeLineSegmentPixel *&edgeLineSegmentMem,
+            int &nClusterElements);
+        void SegmentEdgeLines2(
+            cv::Mat &edges,
+            double *IuMap,
+            double *IvMap,
+            Array<RECOG::DDD::Line2D> lines,
+            int linePtTolIn,
+            float mincsN,
+            int maxLineGap,
+            Array<RECOG::DDD::EdgeLineSegment> &lineSegments,
+            RECOG::DDD::EdgeLineSegmentPixel *&edgeLineSegmentMem,
+            int &nClusterElements);
 		void CreateModels(
 			Array<Mesh> models,
 			std::vector<std::string> modelFileNames);
@@ -331,6 +396,7 @@ namespace RVL
 			float *q,
 			RECOG::DDD::Model *pModel,
 			bool bVisualize = false);
+        void BoxNormals(float *A);
 		void CreateCuboidModel2(
 			float *size,
 			float minSamplingDensity,
@@ -346,7 +412,10 @@ namespace RVL
 			RECOG::DDD::HypothesisDoorDrawer *pFinalHyp,
 			char *hypFileName = NULL,
 			std::vector<cv::Mat> *pRGBSeq = NULL);
-		void Detect2(Array<Mesh> meshSeq);
+        void Detect3(
+            Array2D<uchar> mask,
+            Array<RECOG::DDD::Line2D> *pOrthogonalViewLines,
+            Array<Rect<int>> *pDDRects);
 		bool GenerateHypotheses(
 			Mesh *pMesh,
 			std::vector<AffinePose3D> ROIs,
@@ -377,9 +446,13 @@ namespace RVL
 		void DetectStorageVolumes(Mesh *pMesh);
 		void DDOrthogonalView(
 			RECOG::DDD::RectStruct *pRectStruct,
+            Array<RECOG::DDD::EdgeLineSegment> edgeLineSegments,
 			float *verticalAxis,
 			int nOrthogonalViews,
+            Pose3D *&poseFCOut,
 			std::vector<cv::Mat> &orthogonalViews,
+            Array<Array2D<uchar>> &masks,
+            Array<RECOG::DDD::Line2D> *&orthogonalViewLines,
 			bool bVisualize = false,
 			Mesh *pMesh = NULL);
 		void SampleImage(Mesh *pMesh);
@@ -532,6 +605,7 @@ namespace RVL
 			int minSurfelSize,
 			int minEdgeSize);
 		void PlanarSurfaceEdges(Mesh *pMesh);
+        void AccuratePlaneFitting(Mesh *pMesh);
 		void InitVisualizer(Visualizer *pVisualizer = NULL);
 		void RunVisualizer();
 		void ClearVisualization();
@@ -544,6 +618,11 @@ namespace RVL
 			PointAssociationData *pPointAssociationData,
 			Array<Point> pointsMS,
 			Array<OrientedPoint> *pPointsQ = NULL);
+        void Display(
+            cv::Mat BGR,
+            Pose3D *poseFC,
+            int nOrthogonalViews,
+            Array<Rect<int>> *DDRects);
 		void SetSceneForHypothesisVisualization(Mesh *pMesh);
 		void SetBBoxForHypothesisVisualization(RECOG::DDD::Hypothesis *pHyp);
 		void RemoveHypothesisFromVisualization();
@@ -1020,6 +1099,8 @@ namespace RVL
 		float frontFaceThickness;
 		int maxROIStep;
 		float rectStructAlignmentCorrectionBounds[3];
+        float orthogonalViewEdgeLineAngleTol;
+        float orthogonalViewPixSize;
 
 	private:
 		RECOG::DDD::DisplayCallbackData *pVisualizationData;

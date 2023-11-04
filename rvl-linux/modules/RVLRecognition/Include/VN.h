@@ -1,56 +1,56 @@
 #pragma once
 
-#define RVLVN_GET_NEXT_QUEUE_ENTRY(queue, pNode, pNextNode, iTopQueueBin, iBottomQueueBin, bCompleted, pQueueBin)\
-{\
-	if(pNode->pNext)\
-		pNextNode = pNode->pNext;\
-	else\
-	{\
-		while (true)\
-		{\
-			if (iTopQueueBin >= iBottomQueueBin)\
-			{\
-				bCompleted = true;\
-				break;\
-			}\
-			else\
-			{\
-				iTopQueueBin++;\
-				if (queue[iTopQueueBin])\
-				{\
-					pQueueBin = queue[iTopQueueBin];\
-					if (pQueueBin->pFirst)\
-					{\
-						pNextNode = pQueueBin->pFirst;\
-						break;\
-					}\
-				}\
-			}\
-		}\
-	}\
-}
+#define RVLVN_GET_NEXT_QUEUE_ENTRY(queue, pNode, pNextNode, iTopQueueBin, iBottomQueueBin, bCompleted, pQueueBin) \
+	{                                                                                                             \
+		if (pNode->pNext)                                                                                         \
+			pNextNode = pNode->pNext;                                                                             \
+		else                                                                                                      \
+		{                                                                                                         \
+			while (true)                                                                                          \
+			{                                                                                                     \
+				if (iTopQueueBin >= iBottomQueueBin)                                                              \
+				{                                                                                                 \
+					bCompleted = true;                                                                            \
+					break;                                                                                        \
+				}                                                                                                 \
+				else                                                                                              \
+				{                                                                                                 \
+					iTopQueueBin++;                                                                               \
+					if (queue[iTopQueueBin])                                                                      \
+					{                                                                                             \
+						pQueueBin = queue[iTopQueueBin];                                                          \
+						if (pQueueBin->pFirst)                                                                    \
+						{                                                                                         \
+							pNextNode = pQueueBin->pFirst;                                                        \
+							break;                                                                                \
+						}                                                                                         \
+					}                                                                                             \
+				}                                                                                                 \
+			}                                                                                                     \
+		}                                                                                                         \
+	}
 
-#define RVLVN_ADD_QUEUE_ENTRY(pNode, NodeType, e, queue, minMatchCostDiff, nMatchCostLevels, iTopQueueBin, iBottomQueueBin, pMem, iBin, pQueueBin)\
-{\
-	iBin = (int)(e / minMatchCostDiff);\
-	if (iBin < nMatchCostLevels)\
-	{\
-		pQueueBin = queue[iBin];\
-		if (pQueueBin == NULL)\
-		{\
-			RVLMEM_ALLOC_STRUCT(pMem, QList<NodeType>, pQueueBin);\
-			queue[iBin] = pQueueBin;\
-			RVLQLIST_INIT(pQueueBin);\
-		}\
-		RVLQLIST_ADD_ENTRY(pQueueBin, pNode);\
-		if (iBin < iTopQueueBin)\
-			iTopQueueBin = iBin;\
-		else if (iBin > iBottomQueueBin)\
-			iBottomQueueBin = iBin;\
-	}\
-}
+#define RVLVN_ADD_QUEUE_ENTRY(pNode, NodeType, e, queue, minMatchCostDiff, nMatchCostLevels, iTopQueueBin, iBottomQueueBin, pMem, iBin, pQueueBin) \
+	{                                                                                                                                              \
+		iBin = (int)(e / minMatchCostDiff);                                                                                                        \
+		if (iBin < nMatchCostLevels)                                                                                                               \
+		{                                                                                                                                          \
+			pQueueBin = queue[iBin];                                                                                                               \
+			if (pQueueBin == NULL)                                                                                                                 \
+			{                                                                                                                                      \
+				RVLMEM_ALLOC_STRUCT(pMem, QList<NodeType>, pQueueBin);                                                                             \
+				queue[iBin] = pQueueBin;                                                                                                           \
+				RVLQLIST_INIT(pQueueBin);                                                                                                          \
+			}                                                                                                                                      \
+			RVLQLIST_ADD_ENTRY(pQueueBin, pNode);                                                                                                  \
+			if (iBin < iTopQueueBin)                                                                                                               \
+				iTopQueueBin = iBin;                                                                                                               \
+			else if (iBin > iBottomQueueBin)                                                                                                       \
+				iBottomQueueBin = iBin;                                                                                                            \
+		}                                                                                                                                          \
+	}
 
-#define RVLVN_HYPOTHESIS2_FLAG_LEVEL1			0x01
+#define RVLVN_HYPOTHESIS2_FLAG_LEVEL1 0x01
 
 namespace RVL
 {
@@ -122,7 +122,7 @@ namespace RVL
 				int iCorrespondence;
 				ITNode *pParent;
 				int iLevel;
-				//float *e;
+				// float *e;
 				float e;
 				bool bExpanded;
 				ITNode *pNext;
@@ -155,7 +155,7 @@ namespace RVL
 			{
 				int idx;
 				int iBeta;
-				//float beta;
+				// float beta;
 				Array<int> iVertexArray;
 				Array<int> iEdgeArray;
 				float *d;
@@ -184,7 +184,7 @@ namespace RVL
 
 			struct Edge
 			{
-				Pair < int, int > data;
+				Pair<int, int> data;
 				bool bPrimary;
 				Edge *pNext;
 			};
@@ -241,6 +241,13 @@ namespace RVL
 				int iLevel;
 				Correspondence4 *pParent;
 				Correspondence4 *pNext;
+			};
+
+			struct Correspondence5
+			{
+				int iSPoint;
+				int iMCluster;
+				int iBeta;
 			};
 
 			struct EdgeTangent
@@ -301,7 +308,7 @@ namespace RVL
 				float cosSurfaceRayAngleThr;
 				int maxnIterations;
 				int nFitRotLSIterations;
-				bool bInit;	
+				bool bInit;
 				bool bGnd;
 				bool bGnd2;
 				FILE *fpScore;
@@ -324,8 +331,8 @@ namespace RVL
 				float sqrtbeta;
 				float Pc[3];
 				float *P;
-				//float *d;
-				//uchar *bd;
+				// float *d;
+				// uchar *bd;
 			};
 
 			struct SurfaceRayIntersection
@@ -366,8 +373,8 @@ namespace RVL
 				int nOutliers;
 				float cost;
 				float score;
-				int estStage; //The hypothesis estimation is complete
-				std::vector<int> objects;	//list of objects
+				int estStage;			  // The hypothesis estimation is complete
+				std::vector<int> objects; // list of objects
 				int iMatch;
 				int iCell;
 				Hypothesis *pNext;
@@ -381,16 +388,16 @@ namespace RVL
 				int iModel;
 				float R[9];
 				float P[3];
-				float R_CHAL[9];	//Only for debuging purpose
-				float P_CHAL[3];	//Only for debuging purpose
+				float R_CHAL[9]; // Only for debuging purpose
+				float P_CHAL[3]; // Only for debuging purpose
 				float score;
-				float CTIcost;		//Only for debuging purpose
+				float CTIcost; // Only for debuging purpose
 				int iMatch;
-				int iMCTI;			// Only for debugging purpose!
-				//float tLMLS[3];		// Only for debugging purpose!
+				int iMCTI; // Only for debugging purpose!
+				// float tLMLS[3];		// Only for debugging purpose!
 				int rank;
 				int iCell;
-				float EBB;			// Only for debugging purpose!
+				float EBB; // Only for debugging purpose!
 				float gndPlaneDistance;
 				float CHMatchingMetric;
 				float matchedPtsPercentage;
@@ -404,7 +411,7 @@ namespace RVL
 			{
 				int mTotal;
 				float *y;
-				float *q;		
+				float *q;
 				float *R;
 				float *JR;
 			};
@@ -485,7 +492,7 @@ namespace RVL
 				float maxz,
 				float cThr,
 				int &nOutliers,
-				//float transparencyDepthThr,
+				// float transparencyDepthThr,
 				bool bVisualize = false);
 			float SceneFittingScore2(
 				SURFEL::SceneSamples sceneSamples,
@@ -496,7 +503,7 @@ namespace RVL
 				int &nSamples,
 				float &chamferDist,
 				int &nOutliers,
-				//float transparencyDepthThr,
+				// float transparencyDepthThr,
 				bool bVisualize = false);
 			void Init(
 				RECOG::VN_::FitData &fitData,
@@ -514,7 +521,7 @@ namespace RVL
 				CRVLMem *pMem,
 				VN *pVN);
 			bool TorusDetectionKeyPressCallback(
-				//vtkObject* caller, unsigned long eid, void* clientdata, void *calldata)
+				// vtkObject* caller, unsigned long eid, void* clientdata, void *calldata)
 				Mesh *pMesh,
 				SurfelGraph *pSurfels,
 				std::string &keySym,
@@ -524,10 +531,9 @@ namespace RVL
 				SurfelGraph *pSurfels,
 				PlanarSurfelDetector *pSurfelDetector,
 				QList<RECOG::VN_::Torus> torusList,
-				std::vector<RVL::Point> MidPointCH
-				);
-		}	// namespace VN_
-	}	// namespace RECOG
+				std::vector<RVL::Point> MidPointCH);
+		} // namespace VN_
+	}	  // namespace RECOG
 
 	class VN
 	{
@@ -535,24 +541,24 @@ namespace RVL
 		VN();
 		virtual ~VN();
 		void CreateParamList(
-			CRVLParameterList *pParamList, 
+			CRVLParameterList *pParamList,
 			RECOG::VN_::Parameters &params,
 			CRVLMem *pMem);
 		void CreateEmpty();
 		void Create(CRVLMem *pMem);
-		RECOG::VN_::ModelCluster * AddModelCluster(
+		RECOG::VN_::ModelCluster *AddModelCluster(
 			int ID,
 			BYTE type,
 			float *R,
 			float *t,
-			float r,			
+			float r,
 			Array<float> alphaArray,
 			Array<float> betaArray,
 			Array2D<float> NArray,
 			CRVLMem *pMem,
 			float rT,
 			int *iN = NULL);
-		RECOG::VN_::ModelCluster * AddModelCluster(
+		RECOG::VN_::ModelCluster *AddModelCluster(
 			int ID,
 			BYTE type,
 			float *R,
@@ -564,7 +570,7 @@ namespace RVL
 			CRVLMem *pMem,
 			float rT = 0.0f,
 			Pair<int, int> iAlphaInterval = {0, 0});
-		RECOG::VN_::ModelCluster * AddModelCluster(
+		RECOG::VN_::ModelCluster *AddModelCluster(
 			int ID,
 			BYTE type,
 			float *R,
@@ -574,7 +580,7 @@ namespace RVL
 			Pair<float, float> betaInterval,
 			Array2D<float> NArrayIn,
 			CRVLMem *pMem);
-		RECOG::VN_::ModelCluster * AddModelCluster(
+		RECOG::VN_::ModelCluster *AddModelCluster(
 			int ID,
 			BYTE type,
 			float *R,
@@ -585,13 +591,12 @@ namespace RVL
 			Pair<float, float> betaInterval,
 			Array2D<float> NArrayIn,
 			CRVLMem *pMem);
-		RECOG::VN_::ModelCluster * AddModelCluster( 
+		RECOG::VN_::ModelCluster *AddModelCluster(
 			RECOG::VN_::ModelCluster *pMCluster,
 			int *valid,
 			float *R,
 			float *t,
-			CRVLMem *pMem
-			);
+			CRVLMem *pMem);
 		void AddOperation(
 			int ID,
 			int operation,
@@ -614,6 +619,14 @@ namespace RVL
 			int sampleVoxelDistance = 2,
 			float eps = 2.0f,
 			Visualizer *pVisualizer = NULL);
+		void UpdateClusterOrientations();
+		void SetFeatureOffsets(float *d);
+		void GetEdges(Array<RECOG::VN_::Edge> &edges);
+		void Descriptor(float *d);
+		void Descriptor(
+			Array<Vector3<float>> points,
+			Array<RECOG::VN_::Correspondence5> assoc,
+			float *d);
 		float Evaluate(
 			float *P,
 			float *SDF,
@@ -622,7 +635,7 @@ namespace RVL
 			float *d = NULL,
 			bool *bd = NULL);
 		float Evaluate(
-			Array<float *>PArray,
+			Array<float *> PArray,
 			Array<Array<RECOG::VN_::SceneFeature>> correspondenceArray,
 			int *solution,
 			float *SDF,
@@ -649,6 +662,12 @@ namespace RVL
 			float *d = NULL,
 			bool *bd = NULL,
 			float maxe = 0.0f);
+		float LocalConstraints(
+			float *P,
+			float *SDF,
+			int &iActiveFeature,
+			bool bComputeSDFs = true,
+			float *d = NULL);
 		void ComputeFeatureSDFs(
 			float *P,
 			float *SDF,
@@ -678,7 +697,7 @@ namespace RVL
 		void Fit(
 			Mesh *pMesh,
 			SurfelGraph *pSurfels,
-			QList<QLIST::Index> surfelList, 
+			QList<QLIST::Index> surfelList,
 			Array<int> iVertexArray,
 			Camera camera,
 			Array2D<float> M,
@@ -801,7 +820,7 @@ namespace RVL
 			RECOG::VN_::Parameters params,
 			float *dS,
 			bool *bdS);
-		//void Match4(
+		// void Match4(
 		//	Mesh *pMesh,
 		//	SurfelGraph *pSurfels,
 		//	Array<RECOG::PSGM_::Cluster *> SCClusters,
@@ -842,7 +861,7 @@ namespace RVL
 			Array<float> betaArray,
 			float maxErr,
 			QList<RECOG::VN_::Torus> *pTorusList,
-			//Array<RECOG::VN_::Torus *> &SClusters,
+			// Array<RECOG::VN_::Torus *> &SClusters,
 			CRVLMem *pMem,
 			bool *vertexCH,
 			int &nToruses,
@@ -878,6 +897,11 @@ namespace RVL
 			float *r,
 			RECOG::VN_::SurfaceRayIntersection *pSurfaceRayIntersectionEnd = NULL,
 			bool *bd = NULL);
+		Array<Pair<RECOG::VN_::SurfaceRayIntersection, RECOG::VN_::SurfaceRayIntersection>> *VolumeCylinderIntersection(
+			float *d,
+			float *P1,
+			float *P2,
+			float r);
 		void Transform(
 			float *dSrc,
 			float *R,
@@ -949,17 +973,18 @@ namespace RVL
 		float P0[3];
 		SurfelGraph *pFeatures;
 		int iy;
-		Box<float> boundingBox;	
+		Box<float> boundingBox;
 		std::vector<RECOG::VN_::Cluster> clusters;
 		FILE *fpDebug;
 		VN *pNext;
 		float score;
+		Array<int> *localConstraints;
 
 	private:
 		Array<Array<Pair<RECOG::VN_::SurfaceRayIntersection, RECOG::VN_::SurfaceRayIntersection>>> projectionIntervals;
 		Pair<RECOG::VN_::SurfaceRayIntersection, RECOG::VN_::SurfaceRayIntersection> *projectionIntervalMem;
 		Array<Pair<RECOG::VN_::SurfaceRayIntersection, RECOG::VN_::SurfaceRayIntersection>> projectionIntervalBuff;
 		float *dc;
+		int *localConstraintsMem;
 	};
-}	// namespace RVL
-
+} // namespace RVL

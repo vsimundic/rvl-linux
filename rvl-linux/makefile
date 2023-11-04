@@ -377,8 +377,50 @@ RVLPYDDDETECTOR_LIBS := -lRVLRecognition -lRVLPCSegment -lRVLCore $(EXTERNAL_LIB
 
 
 #=============================================================================
+# RVLMotion library
+
+# Object file directory.
+RVLMOTION_OBJ_DIR = $(CMAKE_BINARY_DIR)/obj/RVLMotion
+
+# Source directory.
+RVLMOTION_SRC_DIR = $(CMAKE_SOURCE_DIR)/modules/RVLMotion
+
+# Include directory.
+RVLMOTION_INCLUDE_DIR = $(RVLMOTION_SRC_DIR)/Include
+
+# Includes.
+RVLMOTION_INCLUDES = -I$(RVLCORE_INCLUDE_DIR) -I$(RVLPCSEGMENT_INCLUDE_DIR) -I$(RVLMOTION_INCLUDE_DIR) -I$(RVLOBJECTDETECTION_INCLUDE_DIR) -I$(RVLRECOGNITION_INCLUDE_DIR) $(EXTERNAL_INCLUDES) -I$(NANOFLANN_INCLUDE_DIR)
+# RVLMOTION_INCLUDES = -I$(RVLCORE_INCLUDE_DIR) -I$(RVLPCSEGMENT_INCLUDE_DIR) -I$(RVLMOTION_INCLUDE_DIR) $(EXTERNAL_INCLUDES) -I$(NANOFLANN_INCLUDE_DIR)
+
+# Output library.
+RVLMOTION_LIB := $(RVL_LIB_DIR)/libRVLMotion.a
+RVLMOTION_DLIB := $(RVL_LIB_DIR)/libRVLMotion.so
 
 
+#=============================================================================
+# RVLMotionDemo
+
+# Object file directory.
+RVLMOTIONDEMO_OBJ_DIR = $(CMAKE_BINARY_DIR)/obj/RVLMotionDemo
+
+# Source directory.
+RVLMOTIONDEMO_SRC_DIR = $(CMAKE_SOURCE_DIR)/modules/RVLMotionDemo
+
+# Library directories.
+#RVLMESHER_LIB_DIR = -L$()
+
+# Includes.
+RVLMOTIONDEMO_INCLUDES = -I$(RVLCORE_INCLUDE_DIR) -I$(RVLPCSEGMENT_INCLUDE_DIR) -I$(RVLOBJECTDETECTION_INCLUDE_DIR) -I$(RVLRECOGNITION_INCLUDE_DIR) $(EXTERNAL_INCLUDES)
+
+# Libraries.
+RVLMOTIONDEMO_LIBS := $(RVLCORE_LIB) $(RVLPCSEGMENT_LIB)
+RVLMOTIONDEMO_LIBS_ := -lRVLCore -lRVLPCSegment $(EXTERNAL_LIBS)
+
+# Output app.
+RVLMOTIONDEMO_APP := $(CMAKE_BINARY_DIR)/bin/RVLMotionDemo
+
+
+#=============================================================================
 
 
 # Collect.
@@ -400,6 +442,7 @@ LIBS := $(RVLCORE_LIB) $(RVLCORE_DLIB) \
  $(RVLPCSEGMENT_LIB) $(RVLPCSEGMENT_DLIB) \
  $(RVLOBJECTDETECTION_LIB) \
  $(RVLRECOGNITION_LIB) \
+ $(RVLMOTION_LIB) \
  $(RVLNN_LIB) $(RVLNN_DLIB) \
  $(RVLPY_LIB_DIR)/RVLPYNN$(PYTHON_SUFFIX) \
  $(RVLPY_LIB_DIR)/RVLPYVisualizer$(PYTHON_SUFFIX) \
@@ -408,7 +451,7 @@ LIBS := $(RVLCORE_LIB) $(RVLCORE_DLIB) \
 
 # Apps.
 # APPS := $(RVLMESHER_APP) $(RVLRECOGNITIONDEMO_APP) $(RVLNNDEMO_APP)
-APPS := $(RVLRECOGNITIONDEMO_APP)
+APPS := $(RVLRECOGNITIONDEMO_APP) $(RVLMOTIONDEMO_APP)
 
 # Linker flags.
 LINKERFLAG = -lm
@@ -459,6 +502,19 @@ $(CMAKE_APP_DIR)/RVLRecognitionDemo: $(RVLRECOGNITIONDEMO_OBJ_DIR)/RVLRecognitio
 $(RVLRECOGNITIONDEMO_OBJ_DIR)/%.o: $(RVLRECOGNITIONDEMO_SRC_DIR)/%.cpp
 	$(MKDIR_BUILDS)
 	${CC} $(RVLRECOGNITIONDEMO_INCLUDES) -c $< -o $@ -ggdb
+
+
+# RVLMotionDemo
+
+$(CMAKE_APP_DIR)/RVLMotionDemo: $(RVLMOTIONDEMO_OBJ_DIR)/RVLMotionDemo.o
+	@echo "Linking RVLMotionDemo..."
+	${LINK} -L$(RVL_LIB_DIR) $(EXTERNAL_LIB_DIR) $< -o $@ -lRVLRecognition -lRVLObjectDetection -lRVLPCSegment -lRVLCore $(EXTERNAL_LIBS) -ggdb -fpermissive
+	@echo "RVLMotionDemo built."
+
+$(RVLMOTIONDEMO_OBJ_DIR)/%.o: $(RVLMOTIONDEMO_SRC_DIR)/%.cpp
+	$(MKDIR_BUILDS)
+	${CC} $(RVLMOTIONDEMO_INCLUDES) -c $< -o $@ -ggdb -fpermissive
+
 
 # RVLNNDemo
 
@@ -572,6 +628,19 @@ $(RVLRECOGNITION_LIB): $(patsubst $(RVLRECOGNITION_SRC_DIR)/%.cpp, $(RVLRECOGNIT
 $(RVLRECOGNITION_OBJ_DIR)/%.o: $(RVLRECOGNITION_SRC_DIR)/%.cpp
 	$(MKDIR_BUILDS)
 	${CC} $(RVLRECOGNITION_INCLUDES) -c $< -o $@ -ggdb
+
+
+# RVLMotion
+
+$(RVLMOTION_LIB): $(patsubst $(RVLMOTION_SRC_DIR)/%.cpp, $(RVLMOTION_OBJ_DIR)/%.o, $(wildcard $(RVLMOTION_SRC_DIR)/*.cpp))
+	@echo "Creating RVLMotion library..."
+	ar rcs $@ $^
+	@echo "RVLMotion library created."
+
+$(RVLMOTION_OBJ_DIR)/%.o: $(RVLMOTION_SRC_DIR)/%.cpp
+	$(MKDIR_BUILDS)
+	${CC} $(RVLMOTION_INCLUDES) -c $< -o $@ -ggdb -fpermissive
+
 
 # RVLNN
 

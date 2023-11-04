@@ -16,110 +16,18 @@
 using namespace RVL;
 using namespace RECOG;
 
-void RECOG::CreateConvexTemplate66(float* A)
-{
-	float h = 0.25f * PI;
-	float q = 0.5f * h;
-	float sh = sin(h);
-	float ch = cos(h);
-	float sq = sin(q);
-	float cq = cos(q);
-
-	float* NT = new float[3 * 13];
-
-	float* N;
-
-	N = NT;
-	RVLSET3VECTOR(N, 0.0f, 0.0f, 1.0f);
-	N = NT + 3;
-	RVLSET3VECTOR(N, 0.0f, -ch, ch);
-	N = NT + 2 * 3;
-	RVLSET3VECTOR(N, ch, 0.0f, ch);
-	N = NT + 11 * 3;
-	RVLSET3VECTOR(N, 0.0f, ch, ch);
-	N = NT + 12 * 3;
-	RVLSET3VECTOR(N, -ch, 0.0f, ch);
-
-	int templ[] = {
-		3, 0, 1,
-		4, 0, 2,
-		5, 1, 2,
-		6, 0, 11,
-		7, 0, 12,
-		8, 2, 11,
-		9, 1, 12,
-		10, 11, 12 };
-
-	int i;
-	float* N_, * N__;
-	float fTmp;
-
-	for (i = 0; i < 8; i++)
-	{
-		N = NT + 3 * templ[3 * i];
-		N_ = NT + 3 * templ[3 * i + 1];
-		N__ = NT + 3 * templ[3 * i + 2];
-		RVLSUM3VECTORS(N_, N__, N);
-		RVLNORM3(N, fTmp);
-	}
-
-	float R[] = {
-		0.0f, 0.0f, -1.0f,
-		1.0f, 0.0f, 0.0f,
-		0.0f, -1.0f, 0.0f };
-
-	float R_[9];
-
-	RVLMXMUL3X3(R, R, R_);
-
-	int j;
-	int i_;
-
-	for (i = 0; i < 6; i++)
-	{
-		for (j = 0; j < 11; j++)
-		{
-			N = A + 3 * (11 * i + j);
-
-			N_ = NT + 3 * j;
-
-			i_ = i % 3;
-
-			if (i_ == 0)
-			{
-				RVLCOPY3VECTOR(N_, N);
-			}
-			else if (i_ == 1)
-			{
-				RVLMULMX3X3VECT(R, N_, N)
-			}
-			else
-			{
-				RVLMULMX3X3VECT(R_, N_, N)
-			}
-
-			if (i >= 3)
-			{
-				RVLNEGVECT3(N, N);
-			}
-		}
-	}
-
-	delete[] NT;
-}
-
 void RECOG::CreateDilatedDepthImage(
-	Mesh* pMesh,
+	Mesh *pMesh,
 	cv::Mat &depth)
 {
-	//Generate scene depth
+	// Generate scene depth
 	double point[3];
 	int u, v;
 
 	depth.setTo(cv::Scalar(0));
-	//memset(depth.data, 0, 640 * 480 * sizeof(ushort));
+	// memset(depth.data, 0, 640 * 480 * sizeof(ushort));
 
-	//cv::Mat depth(480, 640, CV_16UC1, cv::Scalar::all(0));
+	// cv::Mat depth(480, 640, CV_16UC1, cv::Scalar::all(0));
 	for (int i = 0; i < pMesh->pPolygonData->GetNumberOfPoints(); i++)
 	{
 		pMesh->pPolygonData->GetPoint(i, point);
@@ -127,39 +35,39 @@ void RECOG::CreateDilatedDepthImage(
 			continue;
 		v = floor(float(i) / 640);
 		u = i - v * 640;
-		depth.at<uint16_t>(v, u) = (uint16_t)(point[2] * 1000); //in milimeters
+		depth.at<uint16_t>(v, u) = (uint16_t)(point[2] * 1000); // in milimeters
 	}
-	//Postprocessing
+	// Postprocessing
 	for (int y = 0; y < depth.rows; y++)
 	{
 		for (int x = 0; x < depth.cols; x++)
 		{
 			if (depth.at<uint16_t>(y, x) == 0)
-				depth.at<uint16_t>(y, x) = 10000; //in milimeters
+				depth.at<uint16_t>(y, x) = 10000; // in milimeters
 		}
 	}
 #ifndef RVLVERSION_171125
 	cv::Mat elementE = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(17, 17));
 	cv::erode(depth, depth, elementE);
 #endif
-	//Set PSGM depth
-	//depthImg = (unsigned short*)depth.data; //Vidovic 21.07.2017. depth.data is deleted after this function finish
+	// Set PSGM depth
+	// depthImg = (unsigned short*)depth.data; //Vidovic 21.07.2017. depth.data is deleted after this function finish
 
-	//Vidovic
-	//unsigned short *depthTMP;
-	//depthTMP = (unsigned short*)depth.data;
-	//int a = sizeof(unsigned short);
-	//int s = sizeof(depthImg);
-	//memcpy(&depthImg, &depthTMP, depth.rows * depth.cols * sizeof(unsigned short));
+	// Vidovic
+	// unsigned short *depthTMP;
+	// depthTMP = (unsigned short*)depth.data;
+	// int a = sizeof(unsigned short);
+	// int s = sizeof(depthImg);
+	// memcpy(&depthImg, &depthTMP, depth.rows * depth.cols * sizeof(unsigned short));
 	////END Vidovic
 }
 
 bool RECOG::InitZBuffer(
-	Mesh* pMesh,
+	Mesh *pMesh,
 	int sceneSamplingResolution,
-	Array2D<Point>& ZBuffer,
-	Array<int>& ZBufferActivePtArray,
-	int*& subImageMap)
+	Array2D<Point> &ZBuffer,
+	Array<int> &ZBufferActivePtArray,
+	int *&subImageMap)
 {
 	if (!pMesh->bOrganizedPC)
 		return false;
@@ -226,31 +134,31 @@ bool RECOG::InitZBuffer(
 }
 
 float RECOG::EvaluateHypothesis2(
-	Mesh* pMesh,
-	SurfelGraph* pSurfels,
-	bool* surfelMask,
+	Mesh *pMesh,
+	SurfelGraph *pSurfels,
+	bool *surfelMask,
 	Array2D<Point> ZBuffer,
 	Array<int> ZBufferActivePtArray,
-	int* subImageMap,
+	int *subImageMap,
 	int *image3x3Neighborhood,
 	float maxe,
 	float transparencyDepthThr,
-	int& nTransparentPts,
-	int* SMCorrespondence,
-	RECOG::SceneFittingError* errorRecord)
+	int &nTransparentPts,
+	int *SMCorrespondence,
+	RECOG::SceneFittingError *errorRecord)
 {
 	float maxe2 = maxe * maxe;
 
-	int* surfelMap = pSurfels->surfelMap;
+	int *surfelMap = pSurfels->surfelMap;
 
-	Point* PtArray = pMesh->NodeArray.Element;
+	Point *PtArray = pMesh->NodeArray.Element;
 
 	float score = 0.0f;
 
 	nTransparentPts = 0;
 
 	int i, j, iPix, iMPt, iSPt, iMPt_, iClosestPt;
-	Point* pSPt, * pMPt;
+	Point *pSPt, *pMPt;
 	float dP[3];
 	float e2, mine2;
 	float csN;
@@ -327,11 +235,11 @@ float RECOG::EvaluateHypothesis2(
 
 			if (pSPt->P[2] > pMPt->P[2] + transparencyDepthThr)
 			{
-				//RVLDIF3VECTORS(pSPt->P, pMPt->P, dP);
+				// RVLDIF3VECTORS(pSPt->P, pMPt->P, dP);
 
-				//ePlane = RVLDOTPRODUCT3(pMPt->N, dP);
+				// ePlane = RVLDOTPRODUCT3(pMPt->N, dP);
 
-				//if (ePlane < 0.02f)
+				// if (ePlane < 0.02f)
 				{
 					bTransparent = true;
 
@@ -352,60 +260,60 @@ float RECOG::EvaluateHypothesis2(
 				errorRecord[i].dz = pSPt->P[2] - pMPt->P[2];
 			}
 		}
-	}	// for every point in ZBufferActivePtArray
+	} // for every point in ZBufferActivePtArray
 
 	return score;
 }
 
 float RECOG::EvaluateHypothesis3(
-	Mesh* pMesh,
-	SurfelGraph* pSurfels,
-	bool* surfelMask,
+	Mesh *pMesh,
+	SurfelGraph *pSurfels,
+	bool *surfelMask,
 	Array2D<Point> ZBuffer,
 	Array<int> ZBufferActivePtArray,
-	int* subImageMap,
-	int* image3x3Neighborhood,
+	int *subImageMap,
+	int *image3x3Neighborhood,
 	float maxe,
 	float transparencyDepthThr,
-	int& nTransparentPts,
-	int* SMCorrespondence,
-	RECOG::SceneFittingError* errorRecord)
+	int &nTransparentPts,
+	int *SMCorrespondence,
+	RECOG::SceneFittingError *errorRecord)
 {
-	int* surfelMap = pSurfels->surfelMap;
-	Point* PtArray = pMesh->NodeArray.Element;
+	int *surfelMap = pSurfels->surfelMap;
+	Point *PtArray = pMesh->NodeArray.Element;
 	float score = 0.0f;
 	nTransparentPts = 0;
 	int i, j, iPix, iMPt, iSPt, iMPt_, iClosestPt;
-	Point* pSPt, * pMPt;
+	Point *pSPt, *pMPt;
 	float dP[3];
 	float e, mine;
 	float csN;
 	float ePlane;
 	bool bTransparent;
 	int iSurfel;
-	Surfel* pSurfel;
-	//Visualizer visualizer;
-	//visualizer.Create();
-	//visualizer.SetMesh(pMesh);
-	//Array<Point> visPts;
-	//visPts.n = 3;
-	//Point visPtsMem[3];
-	//visPts.Element = visPtsMem;
-	//iMPt = ZBufferActivePtArray.Element[1];
-	//pMPt = ZBuffer.Element + iMPt;
-	//visPts.Element[0] = *pMPt;
-	//iSPt = subImageMap[iMPt];
-	//pSPt = PtArray + iSPt;
-	//visPts.Element[1] = *pSPt;
-	//iSurfel = surfelMap[iSPt];
-	//pSurfel = pSurfels->NodeArray.Element + iSurfel;
-	//e = RVLDOTPRODUCT3(pSurfel->N, pMPt->P) - pSurfel->d;
-	//float* PS = visPts.Element[2].P;
-	//RVLSCALE3VECTOR(pSurfel->N, e, PS);
-	//RVLDIF3VECTORS(pMPt->P, PS, PS);
-	//uchar color[] = {255, 0, 0, 0, 255, 0, 0, 0, 255};
-	//visualizer.DisplayPointSet<float, Point>(visPts, color, 4, true);
-	//visualizer.Run();
+	Surfel *pSurfel;
+	// Visualizer visualizer;
+	// visualizer.Create();
+	// visualizer.SetMesh(pMesh);
+	// Array<Point> visPts;
+	// visPts.n = 3;
+	// Point visPtsMem[3];
+	// visPts.Element = visPtsMem;
+	// iMPt = ZBufferActivePtArray.Element[1];
+	// pMPt = ZBuffer.Element + iMPt;
+	// visPts.Element[0] = *pMPt;
+	// iSPt = subImageMap[iMPt];
+	// pSPt = PtArray + iSPt;
+	// visPts.Element[1] = *pSPt;
+	// iSurfel = surfelMap[iSPt];
+	// pSurfel = pSurfels->NodeArray.Element + iSurfel;
+	// e = RVLDOTPRODUCT3(pSurfel->N, pMPt->P) - pSurfel->d;
+	// float* PS = visPts.Element[2].P;
+	// RVLSCALE3VECTOR(pSurfel->N, e, PS);
+	// RVLDIF3VECTORS(pMPt->P, PS, PS);
+	// uchar color[] = {255, 0, 0, 0, 255, 0, 0, 0, 255};
+	// visualizer.DisplayPointSet<float, Point>(visPts, color, 4, true);
+	// visualizer.Run();
 	for (i = 0; i < ZBufferActivePtArray.n; i++)
 	{
 		iMPt = ZBufferActivePtArray.Element[i];
@@ -421,14 +329,15 @@ float RECOG::EvaluateHypothesis3(
 			if (iSurfel < 0 || iSurfel > pSurfels->NodeArray.n)
 				continue;
 			pSurfel = pSurfels->NodeArray.Element + iSurfel;
-			//if (RVLDOTPRODUCT3(pSurfel->N, pMPt->N) < 0.5f)
+			// if (RVLDOTPRODUCT3(pSurfel->N, pMPt->N) < 0.5f)
 			csN = RVLDOTPRODUCT3(pSPt->N, pMPt->N);
 			if (csN < 0.5f || csN != csN)
 				continue;
 			if (!surfelMask[iSurfel])
 				continue;
 			e = RVLDOTPRODUCT3(pSurfel->N, pMPt->P) - pSurfel->d;
-			if (e < 0.0f) e = -e;
+			if (e < 0.0f)
+				e = -e;
 			if (e < mine)
 			{
 				mine = e;
@@ -439,7 +348,7 @@ float RECOG::EvaluateHypothesis3(
 		{
 			iSurfel = surfelMap[iClosestPt];
 			pSurfel = pSurfels->NodeArray.Element + iSurfel;
-			//csN = RVLDOTPRODUCT3(pSurfel->N, pMPt->N);
+			// csN = RVLDOTPRODUCT3(pSurfel->N, pMPt->N);
 			pSPt = PtArray + iClosestPt;
 			csN = RVLDOTPRODUCT3(pSPt->N, pMPt->N);
 			score += ((1.0f - mine / maxe) * csN);
@@ -473,24 +382,24 @@ float RECOG::EvaluateHypothesis3(
 				errorRecord[i].dz = pSPt->P[2] - pMPt->P[2];
 			}
 		}
-	}	// for every point in ZBufferActivePtArray
+	} // for every point in ZBufferActivePtArray
 
 	return score;
 }
 
 void RECOG::DisplayHypothesisEvaluation(
-	Visualizer* pVisualizer,
-	Mesh* pMesh,
+	Visualizer *pVisualizer,
+	Mesh *pMesh,
 	Array2D<Point> ZBuffer,
 	Array<int> ZBufferActivePtArray,
-	int* subImageMap,
-	int* SMCorrespondence,
+	int *subImageMap,
+	int *SMCorrespondence,
 	int nTransparentPts,
-	vtkSmartPointer<vtkActor>* actor)
+	vtkSmartPointer<vtkActor> *actor)
 {
 	int nPts = ZBufferActivePtArray.n;
 
-	Point* PC = new Point[2 * nPts];
+	Point *PC = new Point[2 * nPts];
 
 	Array<Point> MatchedPC;
 
@@ -507,10 +416,10 @@ void RECOG::DisplayHypothesisEvaluation(
 	SPC.Element = PC + nPts;
 	SPC.n = 0;
 
-	Point* PtArray = pMesh->NodeArray.Element;
+	Point *PtArray = pMesh->NodeArray.Element;
 
 	int i, iMPt, iSPt;
-	Point* pMPt, * pSPt;
+	Point *pMPt, *pSPt;
 
 	for (i = 0; i < nPts; i++)
 	{
@@ -555,17 +464,17 @@ void RECOG::DisplayHypothesisEvaluation(
 }
 
 void RECOG::DisplayHypothesisEvaluation2(
-	Visualizer* pVisualizer,
-	Mesh* pMesh,
+	Visualizer *pVisualizer,
+	Mesh *pMesh,
 	Array2D<Point> ZBuffer,
 	Array<int> ZBufferActivePtArray,
-	int* subImageMap,
-	int* SMCorrespondence,
+	int *subImageMap,
+	int *SMCorrespondence,
 	int nTransparentPts,
-	vtkSmartPointer<vtkActor>* actor)
+	vtkSmartPointer<vtkActor> *actor)
 {
 	int nPts = ZBufferActivePtArray.n;
-	Point* PC = new Point[4 * nPts];
+	Point *PC = new Point[4 * nPts];
 	Array<Point> MatchedPC;
 	MatchedPC.Element = PC;
 	MatchedPC.n = 0;
@@ -583,14 +492,14 @@ void RECOG::DisplayHypothesisEvaluation2(
 	ptAssocs.n = 0;
 	Array<Point> ptAssocPts;
 	ptAssocPts.Element = new Point[2 * nPts];
-	Point* PtArray = pMesh->NodeArray.Element;
+	Point *PtArray = pMesh->NodeArray.Element;
 	int i, iMPt, iSPt;
-	Point* pMPt, * pSPt;
+	Point *pMPt, *pSPt;
 	bool bAssoc;
 	for (i = 0; i < nPts; i++)
 	{
 		iMPt = ZBufferActivePtArray.Element[i];
-		pMPt = ZBuffer.Element + iMPt;	
+		pMPt = ZBuffer.Element + iMPt;
 		if (SMCorrespondence[i] >= 0)
 		{
 			MatchedPC.Element[MatchedPC.n++] = *pMPt;
@@ -639,7 +548,6 @@ void RECOG::DisplayHypothesisEvaluation2(
 	delete[] PC;
 }
 
-
 Grid::Grid()
 {
 	mem = NULL;
@@ -653,14 +561,14 @@ Grid::~Grid()
 
 void Grid::Create(
 	Array<Point> points,
-	Camera* pCameraIn,
+	Camera *pCameraIn,
 	int cellSizeIn)
 {
 	cellSize = cellSizeIn;
 	fCellSize = (float)cellSize;
 	pCamera = pCameraIn;
 	mem = new QLIST::Index[points.n];
-	QLIST::Index* pPtIdx = mem;
+	QLIST::Index *pPtIdx = mem;
 	cells.w = pCamera->w / cellSize;
 	cells.h = pCamera->h / cellSize;
 	int nCells = cells.w * cells.h;
@@ -670,25 +578,25 @@ void Grid::Create(
 	idxRect.miny = 0;
 	idxRect.maxy = cells.h - 1;
 	int iCell;
-	QList<QLIST::Index>* pCellPtList;
+	QList<QLIST::Index> *pCellPtList;
 	for (iCell = 0; iCell < nCells; iCell++)
 	{
 		pCellPtList = cells.Element + iCell;
 		RVLQLIST_INIT(pCellPtList);
 	}
 	int iPt;
-	Point* pPt;
+	Point *pPt;
 	for (iPt = 0; iPt < points.n; iPt++)
 	{
 		pPt = points.Element + iPt;
 		if (pPt->bValid)
 			break;
 	}
-	Box<float> bbox;	
+	Box<float> bbox;
 	InitBoundingBox<float>(&bbox, pPt->P);
 	iPt = 0;
 	int u, v, iu, iv;
-	for(v = 0; v < pCamera->h; v++)
+	for (v = 0; v < pCamera->h; v++)
 		for (u = 0; u < pCamera->w; u++, iPt++)
 		{
 			pPt = points.Element + iPt;
@@ -715,8 +623,8 @@ void Grid::Clear()
 }
 
 bool Grid::GetNeighbors(
-	float* P,
-	Array<int>& points)
+	float *P,
+	Array<int> &points)
 {
 	float u_ = pCamera->fu * P[0] / P[2] + pCamera->uc;
 	int u = (int)(u_ + 0.5f);
@@ -738,8 +646,8 @@ bool Grid::GetNeighbors(
 	CropRect<int>(ROI, idxRect);
 	points.n = 0;
 	int ix, iy, iCell;
-	QList<QLIST::Index>* pCellPtList;
-	QLIST::Index* pPtIdx;
+	QList<QLIST::Index> *pCellPtList;
+	QLIST::Index *pPtIdx;
 	for (iy = ROI.miny; iy <= ROI.maxy; iy++)
 		for (ix = ROI.minx; ix <= ROI.maxx; ix++)
 		{
@@ -758,7 +666,7 @@ bool Grid::GetNeighbors(
 void Grid::SubSample(
 	Array<Point> srcPoints,
 	float normalDiffThr,
-	Array<int>& pointSubset)
+	Array<int> &pointSubset)
 {
 	// Constants.
 
@@ -774,15 +682,15 @@ void Grid::SubSample(
 	cellPointSubset.Element = pointSubset.Element;
 	Array<int> cellPoints;
 	cellPoints.Element = new int[srcPoints.n];
-	float* dist = new float[srcPoints.n];
+	float *dist = new float[srcPoints.n];
 
-	QList<QLIST::Index>* pCellPtList = cells.Element;
+	QList<QLIST::Index> *pCellPtList = cells.Element;
 
 	int i, j, iPt, iPt_, iCell;
 	float fTmp, minDist;
 	float c[3], PNrm[3];
-	QLIST::Index* pPtIdx;
-	Point* pPt, * pPt_;
+	QLIST::Index *pPtIdx;
+	Point *pPt, *pPt_;
 	bool bPointAdded;
 	for (iCell = 0; iCell < nCells; iCell++, pCellPtList++)
 	{
@@ -857,13 +765,13 @@ VoxelGrid::~VoxelGrid()
 void VoxelGrid::Create(
 	Array<Point> points,
 	float cellSizeIn,
-	int* ptIdx)
+	int *ptIdx)
 {
 	cellSize = cellSizeIn;
 
 	// Compute bounding box of pQMesh.
 
-	float* P = points.Element[0].P;
+	float *P = points.Element[0].P;
 
 	InitBoundingBox<float>(&BBox, P);
 
@@ -890,7 +798,7 @@ void VoxelGrid::Create(
 
 	mem = new QLIST::Index[points.n];
 
-	QLIST::Index* pPtIdx = mem;
+	QLIST::Index *pPtIdx = mem;
 
 	cells.a = (int)ceil((BBox.maxx - BBox.minx) / cellSize);
 	cells.b = (int)ceil((BBox.maxy - BBox.miny) / cellSize);
@@ -906,7 +814,7 @@ void VoxelGrid::Create(
 	idxBox.maxz = cells.c - 1;
 
 	int iVoxel;
-	QList<QLIST::Index>* pVoxelPtList;
+	QList<QLIST::Index> *pVoxelPtList;
 
 	for (iVoxel = 0; iVoxel < nVoxels; iVoxel++)
 	{
@@ -951,7 +859,7 @@ void VoxelGrid::Clear()
 
 void VoxelGrid::GetPointsWithinBlock(
 	Box<float> boxIn,
-	Array<int>& points)
+	Array<int> &points)
 {
 	points.n = 0;
 
@@ -979,8 +887,8 @@ void VoxelGrid::GetPointsWithinBlock(
 	int izEnd = (int)floor(PMaxNrm[2]);
 
 	int ix, iy, iz, iVoxel;
-	QList<QLIST::Index>* pVoxelPtList;
-	QLIST::Index* pPtIdx;
+	QList<QLIST::Index> *pVoxelPtList;
+	QLIST::Index *pPtIdx;
 
 	for (iz = izStart; iz <= izEnd; iz++)
 		for (iy = iyStart; iy <= iyEnd; iy++)
@@ -1002,8 +910,8 @@ void VoxelGrid::GetPointsWithinBlock(
 }
 
 void VoxelGrid::GetNeighbors(
-	float* P,
-	Array<int>& points)
+	float *P,
+	Array<int> &points)
 {
 	points.n = 0;
 
@@ -1020,8 +928,8 @@ void VoxelGrid::GetNeighbors(
 	BoxIntersection<int>(&ROI, &idxBox, &ROI);
 
 	int ix, iy, iz, iVoxel;
-	QList<QLIST::Index>* pVoxelPtList;
-	QLIST::Index* pPtIdx;
+	QList<QLIST::Index> *pVoxelPtList;
+	QLIST::Index *pPtIdx;
 
 	for (iz = ROI.minz; iz <= ROI.maxz; iz++)
 		for (iy = ROI.miny; iy <= ROI.maxy; iy++)
@@ -1044,10 +952,10 @@ void VoxelGrid::GetNeighbors(
 
 void VoxelGrid::GetPointsWithinSphere(
 	Array<Point> srcPoints,
-	float* P,
+	float *P,
 	float r,
-	Array<int>& tgtPoints,
-	int* pointBuffMem)
+	Array<int> &tgtPoints,
+	int *pointBuffMem)
 {
 	float r2 = r * r;
 
@@ -1068,7 +976,7 @@ void VoxelGrid::GetPointsWithinSphere(
 
 	int i, iPt;
 	float dP[3];
-	float* P_;
+	float *P_;
 
 	for (i = 0; i < pointBuff.n; i++)
 	{
@@ -1083,7 +991,7 @@ void VoxelGrid::GetPointsWithinSphere(
 void VoxelGrid::SubSample(
 	Array<Point> srcPoints,
 	float normalDiffThr,
-	Array<int>& pointSubset)
+	Array<int> &pointSubset)
 {
 	// Constants.
 
@@ -1099,21 +1007,21 @@ void VoxelGrid::SubSample(
 	cellPointSubset.Element = pointSubset.Element;
 	Array<int> cellPoints;
 	cellPoints.Element = new int[srcPoints.n];
-	float* dist = new float[srcPoints.n];
+	float *dist = new float[srcPoints.n];
 
-	QList<QLIST::Index>* pVoxelPtList = cells.Element;
+	QList<QLIST::Index> *pVoxelPtList = cells.Element;
 
 	int i, j, iPt, iPt_, iVoxel;
 	float fTmp, minDist;
 	float c[3], PNrm[3];
-	QLIST::Index* pPtIdx;
-	Point* pPt, * pPt_;
+	QLIST::Index *pPtIdx;
+	Point *pPt, *pPt_;
 	bool bPointAdded;
 	for (iVoxel = 0; iVoxel < nVoxels; iVoxel++, pVoxelPtList++)
 	{
 		if (iVoxel == 603)
-		//	int debug = 0;
-		pPtIdx = pVoxelPtList->pFirst;
+			//	int debug = 0;
+			pPtIdx = pVoxelPtList->pFirst;
 		if (pPtIdx == NULL)
 			continue;
 		cellPoints.n = 0;
@@ -1143,7 +1051,7 @@ void VoxelGrid::SubSample(
 			{
 				iPt = cellPoints.Element[i];
 				pPt = srcPoints.Element + iPt;
-				//if (pPt->P[0] * pPt->P[0] + pPt->P[2] * pPt->P[2] < 0.001f)
+				// if (pPt->P[0] * pPt->P[0] + pPt->P[2] * pPt->P[2] < 0.001f)
 				//	int debug = 0;
 				for (j = 0; j < cellPointSubset.n; j++)
 				{
@@ -1192,8 +1100,7 @@ PointAssociationData::~PointAssociationData()
 void PointAssociationData::Create(
 	int nMPts,
 	int nQPts,
-	bool bNormals
-)
+	bool bNormals)
 {
 	MNN = new int[nQPts];
 	QNN = new int[nMPts];
@@ -1206,8 +1113,8 @@ void PointAssociationData::Create(
 }
 
 void PointAssociationData::Create(
-	Mesh* pMMesh,
-	Mesh* pQMesh,
+	Mesh *pMMesh,
+	Mesh *pQMesh,
 	bool bNormals)
 {
 	Create(pMMesh->NodeArray.n, pQMesh->NodeArray.n, bNormals);

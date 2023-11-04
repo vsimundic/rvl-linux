@@ -1,4 +1,4 @@
-//#include "stdafx.h"
+// #include "stdafx.h"
 #include "RVLCore2.h"
 #include "RVLVTK.h"
 #include <vtkLine.h>
@@ -15,6 +15,7 @@
 #include "ObjectGraph.h"
 #include "PlanarSurfelDetector.h"
 #include "RVLRecognition.h"
+#include "RVLRecognitionCommon.h"
 #include "PSGMCommon.h"
 #include "CTISet.h"
 #include "VertexGraph.h"
@@ -26,7 +27,7 @@
 #include <Eigen/Eigenvalues>
 #else
 #include <Eigen\Eigenvalues>
-#endif
+#endif 
 #include "NeighborhoodTool.h"
 #include "VN.h"
 #include "VNClass.h"
@@ -40,6 +41,7 @@ using namespace RECOG;
 
 VN::VN()
 {
+	NodeArray.n = 0;
 	NodeArray.Element = NULL;
 	featureArray.Element = NULL;
 	projectionIntervals.Element = NULL;
@@ -51,12 +53,13 @@ VN::VN()
 	parallelDescriptorComponentArray.Element = NULL;
 	parallelDescriptorComponentIdxMem = NULL;
 	fpDebug = NULL;
+	localConstraints = NULL;
+	localConstraintsMem = NULL;
 
 	QList<RECOG::VN_::ModelCluster> *pModelClusterList = &modelClusterList;
 
 	RVLQLIST_INIT(pModelClusterList);
 }
-
 
 VN::~VN()
 {
@@ -68,6 +71,8 @@ VN::~VN()
 	RVL_DELETE_ARRAY(dc);
 	RVL_DELETE_ARRAY(parallelDescriptorComponentArray.Element);
 	RVL_DELETE_ARRAY(parallelDescriptorComponentIdxMem);
+	RVL_DELETE_ARRAY(localConstraints);
+	RVL_DELETE_ARRAY(localConstraintsMem);
 }
 
 void VN::CreateParamList(
@@ -85,7 +90,7 @@ void VN::CreateParamList(
 	pParamData = pParamList->AddParam("VN.maxnSClusters", RVLPARAM_TYPE_INT, &(params.maxnSClusters));
 }
 
-VN_::ModelCluster * VN::AddModelCluster(
+VN_::ModelCluster *VN::AddModelCluster(
 	int ID,
 	BYTE type,
 	float *R,
@@ -120,7 +125,7 @@ VN_::ModelCluster * VN::AddModelCluster(
 	return pMCluster;
 }
 
-VN_::ModelCluster * VN::AddModelCluster(
+VN_::ModelCluster *VN::AddModelCluster(
 	int ID,
 	BYTE type,
 	float *R,
@@ -178,7 +183,7 @@ VN_::ModelCluster * VN::AddModelCluster(
 	return AddModelCluster(ID, type, R, t, r, alphaArray, betaArray, NArray, pMem, rT);
 }
 
-VN_::ModelCluster * VN::AddModelCluster(
+VN_::ModelCluster *VN::AddModelCluster(
 	int ID,
 	BYTE type,
 	float *R,
@@ -196,7 +201,7 @@ VN_::ModelCluster * VN::AddModelCluster(
 	NArray.w = 3;
 	NArray.h = convexTemplate.n + NArrayIn.h;
 
-	RVLMEM_ALLOC_STRUCT_ARRAY(pMem, float, NArray.w * NArray.h, NArray.Element);
+	RVLMEM_ALLOC_STRUCT_ARRAY(pMem, float, NArray.w *NArray.h, NArray.Element);
 
 	int *iN;
 
@@ -249,7 +254,7 @@ VN_::ModelCluster * VN::AddModelCluster(
 	return AddModelCluster(ID, type, R, t, r, alphaArray, betaArray, NArray, pMem, rT, iN);
 }
 
-VN_::ModelCluster * VN::AddModelCluster(
+VN_::ModelCluster *VN::AddModelCluster(
 	int ID,
 	BYTE type,
 	float *R,
@@ -268,7 +273,7 @@ VN_::ModelCluster * VN::AddModelCluster(
 	NArray.w = 3;
 	NArray.h = convexTemplate.n + NArrayIn.h;
 
-	RVLMEM_ALLOC_STRUCT_ARRAY(pMem, float, NArray.w * NArray.h, NArray.Element);
+	RVLMEM_ALLOC_STRUCT_ARRAY(pMem, float, NArray.w *NArray.h, NArray.Element);
 
 	NArray.h = 0;
 
@@ -316,8 +321,7 @@ VN_::ModelCluster * VN::AddModelCluster(
 	return AddModelCluster(ID, type, R, t, r, alphaArray, betaArray, NArray, pMem, rT);
 }
 
-
-VN_::ModelCluster * VN::AddModelCluster(
+VN_::ModelCluster *VN::AddModelCluster(
 	VN_::ModelCluster *pMCluster,
 	int *valid,
 	float *R,
@@ -340,18 +344,18 @@ VN_::ModelCluster * VN::AddModelCluster(
 	{
 		int nFeatures = pMCluster->NArray.h;
 
-		RVLMEM_ALLOC_STRUCT_ARRAY(pMem, float, NArray.w * nFeatures, NArray.Element);		
+		RVLMEM_ALLOC_STRUCT_ARRAY(pMem, float, NArray.w *nFeatures, NArray.Element);
 
 		RVLMEM_ALLOC_STRUCT_ARRAY(pMem, int, nFeatures, iN);
 
 		float *R_ = pMCluster->R;
-		
+
 		int i;
 		float *NSrc, *NTgt;
 
 		for (i = 0; i < pMCluster->NArray.h; i++)
 		{
-			NSrc = pMCluster->NArray.Element + NArray.w*i;
+			NSrc = pMCluster->NArray.Element + NArray.w * i;
 
 			if (valid[i] == 1)
 			{
@@ -402,7 +406,7 @@ VN_::ModelCluster * VN::AddModelCluster(
 			}
 
 		alphaArray.n = imaxAlpha - iminAlpha + 1;
-		
+
 		RVLMEM_ALLOC_STRUCT_ARRAY(pMem, float, alphaArray.n, alphaArray.Element);
 
 		alphaArray.n = 0;
@@ -419,15 +423,15 @@ VN_::ModelCluster * VN::AddModelCluster(
 		for (iBeta = iminBeta; iBeta <= imaxBeta; iBeta++)
 			betaArray.Element[betaArray.n++] = pMCluster->betaArray.Element[iBeta];
 
-		//nFeatures = 0;
+		// nFeatures = 0;
 
-		//for (iBeta = 0; iBeta < pMCluster->betaArray.n; iBeta++)
+		// for (iBeta = 0; iBeta < pMCluster->betaArray.n; iBeta++)
 		//	nFeatures += (pMCluster->betaArray.Element[iBeta] < 0.001f || pMCluster->betaArray.Element[iBeta] > PI - 0.001f ?
 		//	1 : pMCluster->alphaArray.n);
 
-		//int i = 0;
+		// int i = 0;
 
-		//for (iBeta = 0; iBeta < pMCluster->betaArray.n; iBeta++)
+		// for (iBeta = 0; iBeta < pMCluster->betaArray.n; iBeta++)
 		//{
 		//	if (pMCluster->betaArray.Element[iBeta] < 0.001f)
 		//	{
@@ -484,8 +488,8 @@ VN_::ModelCluster * VN::AddModelCluster(
 		//		}
 		//	}
 		//}	// for (iBeta = 0; iBeta < pMCluster->betaArray.n; iBeta++)
-	}	// if (pMCluster->NArray.h == 0)
-		
+	} // if (pMCluster->NArray.h == 0)
+
 	float rT = 0.0f;
 
 	return AddModelCluster(pMCluster->ID, pMCluster->type, R, t, 0.0f, alphaArray, betaArray, NArray, pMem, rT, iN);
@@ -579,8 +583,7 @@ void VN::Create(CRVLMem *pMem)
 			nFeatures = 0;
 
 			for (iBeta = 0; iBeta < pMCluster->betaArray.n; iBeta++)
-				nFeatures += (pMCluster->betaArray.Element[iBeta] < 0.001f || pMCluster->betaArray.Element[iBeta] > PI - 0.001f ?
-				1 : pMCluster->alphaArray.n);
+				nFeatures += (pMCluster->betaArray.Element[iBeta] < 0.001f || pMCluster->betaArray.Element[iBeta] > PI - 0.001f ? 1 : pMCluster->alphaArray.n);
 		}
 
 		featureArray.n += nFeatures;
@@ -656,6 +659,9 @@ void VN::Create(CRVLMem *pMem)
 		}
 		else
 		{
+			pMCluster->NArray.w = 3;
+			RVLMEM_ALLOC_STRUCT_ARRAY(pMem, float, pMCluster->alphaArray.n * pMCluster->betaArray.n * pMCluster->NArray.w, pMCluster->NArray.Element);
+
 			for (iBeta = 0; iBeta < pMCluster->betaArray.n; iBeta++)
 			{
 				if (pMCluster->betaArray.Element[iBeta] < 0.001f)
@@ -667,6 +673,10 @@ void VN::Create(CRVLMem *pMem)
 					pFeature->iN = -1;
 
 					pFeature++;
+
+					N_ = pMCluster->NArray.Element + pMCluster->NArray.w * pMCluster->NArray.h;
+					RVLSET3VECTOR(N_, 0.0f, 0.0f, 1.0f);
+					pMCluster->NArray.h++;
 				}
 				else if (pMCluster->betaArray.Element[iBeta] > PI - 0.001f)
 				{
@@ -679,13 +689,17 @@ void VN::Create(CRVLMem *pMem)
 					pFeature->iN = -1;
 
 					pFeature++;
+
+					N_ = pMCluster->NArray.Element + pMCluster->NArray.w * pMCluster->NArray.h;
+					RVLSET3VECTOR(N_, 0.0f, 0.0f, -1.0f);
+					pMCluster->NArray.h++;
 				}
 				else
 				{
 					cb = cos(pMCluster->betaArray.Element[iBeta]);
 					sb = sin(pMCluster->betaArray.Element[iBeta]);
 
-					for (iAlpha = 0; iAlpha < pMCluster->alphaArray.n; iAlpha++, pFeature++)
+					for (iAlpha = 0; iAlpha < pMCluster->alphaArray.n; iAlpha++, pFeature++, pMCluster->NArray.h++)
 					{
 						ca = cos(pMCluster->alphaArray.Element[iAlpha]);
 						sa = sin(pMCluster->alphaArray.Element[iAlpha]);
@@ -699,6 +713,9 @@ void VN::Create(CRVLMem *pMem)
 						pFeature->iAlpha = iAlpha;
 						pFeature->iBeta = iBeta;
 						pFeature->iN = -1;
+
+						N_ = pMCluster->NArray.Element + pMCluster->NArray.w * pMCluster->NArray.h;
+						RVLCOPY3VECTOR(N, N_);
 					}
 				}
 			}
@@ -778,24 +795,25 @@ void VN::Create(CRVLMem *pMem)
 			pNode->operation = (pMCluster->type == RVLVN_CLUSTER_TYPE_CONVEX ? 1 : -1);
 			pNode->fOperation = (float)(pNode->operation);
 			pNode->iFeature = -1;
-		}
 
-		if (pMCluster->NArray.h > 0)
-		{
-			for (iN = 0; iN < pMCluster->NArray.h; iN++)
+			if (pMCluster->NArray.h > 0)
 			{
-				RVLMEM_ALLOC_STRUCT(pMem, VN_::Edge, pEdge);
+				for (iN = 0; iN < pMCluster->NArray.h; iN++)
+				{
+					RVLMEM_ALLOC_STRUCT(pMem, VN_::Edge, pEdge);
 
-				RVLQLIST_ADD_ENTRY(pEdgeList, pEdge);
+					RVLQLIST_ADD_ENTRY(pEdgeList, pEdge);
 
-				pEdge->data.a = iFeature;
-				pEdge->data.b = iNode;
-				pEdge->bPrimary = true;
+					pEdge->data.a = iFeature;
+					pEdge->data.b = iNode;
+					pEdge->bPrimary = true;
 
-				iFeature++;
+					iFeature++;
+				}
 			}
 		}
-		else
+
+		if (bTorus || pMCluster->NArray.h == 0)
 		{
 			for (iBeta = 0; iBeta < pMCluster->betaArray.n; iBeta++)
 			{
@@ -948,9 +966,9 @@ void VN::Create(CRVLMem *pMem)
 			pEdge->data.b = pOperation->iNode;
 			pEdge->bPrimary = true;
 
-			if(pMCluster = GetModelCluster(pOperation->operand[iOperand]))
+			if (pMCluster = GetModelCluster(pOperation->operand[iOperand]))
 				pEdge->data.a = pMCluster->iNode;
-			
+
 			if (pEdge->data.a < 0)
 			{
 				if (pOperation_ = GetOperation(pOperation->operand[iOperand]))
@@ -1019,7 +1037,7 @@ void VN::Create(CRVLMem *pMem)
 	projectionIntervalBuff.Element = new Pair<RECOG::VN_::SurfaceRayIntersection, RECOG::VN_::SurfaceRayIntersection>[featureArray.n];
 
 	RVL_DELETE_ARRAY(dc);
-	
+
 	dc = new float[featureArray.n];
 
 	// Parallel descriptor components.
@@ -1102,10 +1120,10 @@ void VN::Create(CRVLMem *pMem)
 
 						if (pEdge_ == NULL)
 							break;
-					}	// if (pMCluster_->type == RVLVN_CLUSTER_TYPE_CONVEX)
+					} // if (pMCluster_->type == RVLVN_CLUSTER_TYPE_CONVEX)
 
 					pMCluster_ = pMCluster_->pNext;
-				}	// while (pMCluster_)
+				} // while (pMCluster_)
 
 				if (pMCluster_ == NULL)
 				{
@@ -1126,14 +1144,23 @@ void VN::Create(CRVLMem *pMem)
 					else
 						break;
 				}
-			}	// if (pEdge->data.b == pMCluster->iNode)
+			} // if (pEdge->data.b == pMCluster->iNode)
 
 			pEdge = pEdge->pNext;
-		}	// while (pEdge)
-	}	// if (nConvexClusters >= 1)
+		} // while (pEdge)
+	}	  // if (nConvexClusters >= 1)
+
+	// Allocate memory for local constraints.
+
+	RVL_DELETE_ARRAY(localConstraints);
+	localConstraints = new Array<int>[NodeArray.n];
+	RVL_DELETE_ARRAY(localConstraintsMem);
+	localConstraintsMem = new int[NodeArray.n * featureArray.n];
+	for (iNode = 0; iNode < NodeArray.n; iNode++)
+		localConstraints[iNode].Element = localConstraintsMem + iNode * featureArray.n;
 }
 
-VN_::ModelCluster * VN::GetModelCluster(int ID)
+VN_::ModelCluster *VN::GetModelCluster(int ID)
 {
 	VN_::ModelCluster *pMCluster = modelClusterList.pFirst;
 
@@ -1148,7 +1175,7 @@ VN_::ModelCluster * VN::GetModelCluster(int ID)
 	return NULL;
 }
 
-VN_::Operation * VN::GetOperation(int ID)
+VN_::Operation *VN::GetOperation(int ID)
 {
 	VN_::Operation *pOperation_ = operationList.pFirst;
 
@@ -1190,9 +1217,9 @@ void VN::Create(
 	QList<QLIST::Index> *pSurfelSampleList;
 	int i;
 
-	for (i = 0; i < surfelSampleAssignmentArray.n; i++) 
+	for (i = 0; i < surfelSampleAssignmentArray.n; i++)
 	{
-		pSurfelSampleList = surfelSampleAssignmentArray.Element + i; 
+		pSurfelSampleList = surfelSampleAssignmentArray.Element + i;
 		RVLQLIST_INIT(pSurfelSampleList);
 	}
 
@@ -1362,7 +1389,7 @@ void VN::Create(
 
 	for (i = 1; i < sortedSampleArray.n; i++)
 	{
-		//if (i == 3639)
+		// if (i == 3639)
 		//	int debug = 0;
 
 		iSample = sortedSampleArray.Element[i];
@@ -1384,7 +1411,7 @@ void VN::Create(
 			operation = -1;
 
 		fOperation = (float)operation;
-			
+
 		bAllSamplesPreserved = true;
 		cluster.Element[0] = featureNodeMap[pSample->iFeature];
 		cluster.n = 1;
@@ -1440,7 +1467,7 @@ void VN::Create(
 							{
 								eSDFBestCandidate = eSDF;
 								iBestCandidate = k;
-							}					
+							}
 						}
 						else
 						{
@@ -1458,7 +1485,7 @@ void VN::Create(
 
 						bInCluster[iBestCandidate] = true;
 
-						//if (cluster.n > nFeatures)
+						// if (cluster.n > nFeatures)
 						//	int debug = 0;
 					}
 				}
@@ -1468,8 +1495,8 @@ void VN::Create(
 
 					break;
 				}
-			}	// if (fOperation * eSDF > eps)
-		}	// for (j = 0; j < i; j++)
+			} // if (fOperation * eSDF > eps)
+		}	  // for (j = 0; j < i; j++)
 
 		for (j = 0; j < cluster.n; j++)
 			bInCluster[cluster.Element[j]] = false;
@@ -1525,7 +1552,7 @@ void VN::Create(
 				RVLQLIST_ADD_ENTRY(pEdgeList, pEdge);
 			}
 		}
-	}	// for (i = 1; i < sortedSampleArray.n; i++)
+	} // for (i = 1; i < sortedSampleArray.n; i++)
 
 	printf("completed.\n");
 
@@ -1542,7 +1569,7 @@ void VN::Create(
 
 	fclose(fp);
 
-	//if (pVisualizer)
+	// if (pVisualizer)
 	//{
 	//	DisplaySampledMesh(pVisualizer, volume, P0, voxelSize);
 
@@ -1561,6 +1588,132 @@ void VN::Create(
 	delete[] cluster.Element;
 	delete[] featureNodeMap;
 	delete[] bInCluster;
+}
+
+void VN::UpdateClusterOrientations()
+{
+	VN_::ModelCluster *pMCluster = modelClusterList.pFirst;
+	int iFeature;
+	VN_::Feature *pFeature;
+	float *N;
+	int i;
+	while (pMCluster)
+	{
+		N = pMCluster->NArray.Element;
+		for (iFeature = pMCluster->iFeatureInterval.a; iFeature <= pMCluster->iFeatureInterval.b; iFeature++, N += 3)
+		{
+			pFeature = featureArray.Element + iFeature;
+			RVLMULMX3X3VECT(pMCluster->R, N, pFeature->N);
+		}
+		pMCluster = pMCluster->pNext;
+	}
+}
+
+void VN::SetFeatureOffsets(float *d)
+{
+	int iFeature;
+	for (iFeature = 0; iFeature < featureArray.n; iFeature++)
+		featureArray.Element[iFeature].d = d[iFeature];
+}
+
+void VN::GetEdges(Array<VN_::Edge> &edges)
+{
+	if (edges.Element == NULL)
+		edges.Element = new VN_::Edge[NodeArray.n - 1];
+	RECOG::VN_::Edge *pEdge = EdgeList.pFirst;
+	QLIST::CopyToArray<RECOG::VN_::Edge>(&(EdgeList), &edges);
+}
+
+void VN::Descriptor(float *d)
+{
+	UpdateClusterOrientations();
+	int iFeature;
+	VN_::Feature *pFeature;
+	VN_::ModelCluster *pMCluster = modelClusterList.pFirst;
+	while (pMCluster)
+	{
+		for (iFeature = pMCluster->iFeatureInterval.a; iFeature <= pMCluster->iFeatureInterval.b; iFeature++)
+		{
+			pFeature = featureArray.Element + iFeature;
+			d[iFeature] = pFeature->d + RVLDOTPRODUCT3(pFeature->N, pMCluster->t);
+		}
+		pMCluster = pMCluster->pNext;
+	}
+}
+
+void VN::Descriptor(
+	Array<Vector3<float>> points,
+	Array<VN_::Correspondence5> assoc,
+	float *d)
+{
+	// int nMClusters = 0;
+	// VN_::ModelCluster* pMCluster = modelClusterList.pFirst;
+	// while (pMCluster)
+	//{
+	//	nMClusters++;
+	//	pMCluster = pMCluster->pNext;
+	// }
+	bool *bd = new bool[featureArray.n];
+	memset(bd, 0, featureArray.n * sizeof(bool));
+	int iAssoc;
+	VN_::Correspondence5 *pAssoc;
+	VN_::ModelCluster *pMCluster;
+	int iFeature;
+	VN_::Feature *pFeature;
+	int iFirstFeature, iLastFeature;
+	float d_;
+	float *PS;
+	for (iAssoc = 0; iAssoc < assoc.n; iAssoc++)
+	{
+		if (iAssoc == 24)
+			int debug = 0;
+		pAssoc = assoc.Element + iAssoc;
+		pMCluster = modelClusterList.pFirst;
+		while (pMCluster)
+		{
+			if (pMCluster->ID == pAssoc->iMCluster)
+				break;
+			pMCluster = pMCluster->pNext;
+		}
+		if (pMCluster == NULL)
+			continue;
+		if (pMCluster->type == RVLVN_CLUSTER_TYPE_CONVEX || pMCluster->type == RVLVN_CLUSTER_TYPE_CONCAVE)
+		{
+			iFirstFeature = pMCluster->iFeatureInterval.a;
+			iLastFeature = pMCluster->iFeatureInterval.b;
+		}
+		else if (pMCluster->type == RVLVN_CLUSTER_TYPE_XTORUS || pMCluster->type == RVLVN_CLUSTER_TYPE_ITORUS)
+		{
+			iFirstFeature = pMCluster->iFeatureInterval.a + pAssoc->iBeta * pMCluster->alphaArray.n;
+			iLastFeature = iFirstFeature + pMCluster->alphaArray.n - 1;
+		}
+		PS = points.Element[pAssoc->iSPoint].Element;
+		for (iFeature = iFirstFeature; iFeature <= iLastFeature; iFeature++)
+		{
+			pFeature = featureArray.Element + iFeature;
+			d_ = RVLDOTPRODUCT3(pFeature->N, PS);
+			if (bd[iFeature])
+			{
+				if (pMCluster->type == RVLVN_CLUSTER_TYPE_CONVEX || pMCluster->type == RVLVN_CLUSTER_TYPE_ITORUS)
+				{
+					if (d_ > d[iFeature])
+						d[iFeature] = d_;
+				}
+				else if (pMCluster->type == RVLVN_CLUSTER_TYPE_CONCAVE || pMCluster->type == RVLVN_CLUSTER_TYPE_XTORUS)
+				{
+					if (d_ < d[iFeature])
+						d[iFeature] = d_;
+				}
+			}
+			else
+			{
+				d[iFeature] = d_;
+				bd[iFeature] = true;
+			}
+		}
+	}
+
+	delete[] bd;
 }
 
 void VN::ComputeFeatureSDFs(
@@ -1588,12 +1741,11 @@ float VN::Evaluate(
 	int &iActiveFeature,
 	bool bComputeSDFs,
 	float *d,
-	bool *bd
-	)
+	bool *bd)
 {
 	if (bComputeSDFs)
 		ComputeFeatureSDFs(P, SDF, d);
-	
+
 	int iNode;
 	VN_::Node *pNode;
 
@@ -1734,7 +1886,7 @@ void VN::Match(
 				continue;
 
 			distFromNormalHull = pSurfels->DistanceFromNormalHull(pVertex->normalHull, N);
-			
+
 			if (distFromNormalHull > 0.0f)
 				continue;
 
@@ -1756,7 +1908,8 @@ void VN::Match(
 
 			nodeCorrespArray.Element[i].bPrevMerged = true;
 
-			do{
+			do
+			{
 				sumd = 0.0f;
 				nd = 0;
 
@@ -1893,7 +2046,7 @@ void VN::Match(
 
 		fprintf(fp, "\n");
 #endif
-	}	// for every feature node
+	} // for every feature node
 
 #ifdef RVLVN_MATCH_DEBUG
 	fclose(fp);
@@ -1904,9 +2057,9 @@ void VN::Match(
 
 	///
 
-	//float maxMatchCost = kMaxMatchCost * size;
+	// float maxMatchCost = kMaxMatchCost * size;
 
-	//MatchByBuildingInterpretationTree(pSurfels, correspondenceArray, maxMatchCost, minMatchCostDiff, maxnGITNodes, dS, bdS, pMem2);
+	// MatchByBuildingInterpretationTree(pSurfels, correspondenceArray, maxMatchCost, minMatchCostDiff, maxnGITNodes, dS, bdS, pMem2);
 
 	GeneticAlg(pMesh, pSurfels, correspondenceArray, dS, bdS);
 
@@ -1954,7 +2107,7 @@ void VN::Match(
 		}
 
 		pEdge = pEdge->pNext;
-	}	
+	}
 #endif
 
 	delete[] correspondenceArray.Element;
@@ -2073,8 +2226,7 @@ bool VN::MatchCluster(
 	SurfelGraph *pSurfels,
 	RECOG::VN_::ITNode *pITNodeIn,
 	VN_::Queue &Q,
-	VN_::ITNode *&pITNodeOut
-	)
+	VN_::ITNode *&pITNodeOut)
 {
 #ifdef RVLVN_MATCH_DEBUG
 	FILE *fp = fopen("VNMatchCluster.txt", "w");
@@ -2119,16 +2271,16 @@ bool VN::MatchCluster(
 		fprintf(fp, "Expanding node %d instance %d:\n", pITNode->iNode, pITNode->iCorrespondence);
 #endif
 
-		//pQueueBin->pFirst = pITNode->pNext;
+		// pQueueBin->pFirst = pITNode->pNext;
 
-		//if (pQueueBin->pFirst == NULL)
+		// if (pQueueBin->pFirst == NULL)
 		//	pQueueBin->ppNext = &(pQueueBin->pFirst);
 
 		iLevel = pITNode->iLevel + 1;
 
-		//printf("%d\n", Q.iTopQueueBin);
+		// printf("%d\n", Q.iTopQueueBin);
 
-		//if (iLevel == 66)
+		// if (iLevel == 66)
 		//	int debug = 0;
 
 		if (iLevel == pCluster->iChild.size())
@@ -2154,14 +2306,14 @@ bool VN::MatchCluster(
 			{
 				// Only for debugging purpose!!!
 
-				//if (pCluster->iParent = clusters.at(0).iParent)
+				// if (pCluster->iParent = clusters.at(0).iParent)
 				//{
 				//	if (iNode >= 65 && iNode <= 80)
 				//		if (pCorrespondenceArray->Element[i].d > 0.1f)
 				//			continue;
-				//}
+				// }
 
-				//if (iNode == 65)
+				// if (iNode == 65)
 				//	int debug = 0;
 
 				//
@@ -2276,13 +2428,13 @@ bool VN::MatchCluster(
 #endif
 
 				RVLVN_ADD_QUEUE_ENTRY(pITNode_, VN_::ITNode, pITNode_->e, queue, Q.minMatchCostDiff, Q.nMatchCostLevels, Q.iTopQueueBin, Q.iBottomQueueBin, pMem2, iBin, pQueueBin);
-			}	// for each node instance
-		}	// if(!pITNode->bExpanded)
+			} // for each node instance
+		}	  // if(!pITNode->bExpanded)
 
 #ifdef RVLVN_MATCH_DEBUG
 		fprintf(fp, "\n");
 #endif
-	}	// main loop
+	} // main loop
 
 #ifdef RVLVN_MATCH_DEBUG
 	fclose(fp);
@@ -2335,14 +2487,14 @@ void VN::MatchByBuildingInterpretationTree(
 	VN_::ITNode *pITNode;
 	VN_::ITNode initITNode;
 
-	//for (i = 0; i < 2; i++)
+	// for (i = 0; i < 2; i++)
 	for (iCluster = 0; iCluster < nClusters; iCluster++)
 	{
-		//iCluster = (i == 0 ? iLargestCluster : 0);
+		// iCluster = (i == 0 ? iLargestCluster : 0);
 
 		cluster = clusters.at(iCluster);
 
-		//Q[iCluster].maxMatchCost = size * (float)(pSurfels->vertexArray.n);
+		// Q[iCluster].maxMatchCost = size * (float)(pSurfels->vertexArray.n);
 		Q[iCluster].maxMatchCost = maxMatchCost;
 		Q[iCluster].minMatchCostDiff = minMatchCostDiff;
 		Q[iCluster].pMem = pMem2;
@@ -2429,17 +2581,17 @@ void VN::MatchByBuildingInterpretationTree(
 	do
 	{
 		minmaxe_ = -1.0f;
-		//int maxDebugCounter = 0;
+		// int maxDebugCounter = 0;
 
 		while (maxe > maxMatchCost)
 		{
 			// Only for debugging purpose!
 
-			//int debugCounter = 0;
+			// int debugCounter = 0;
 
-			//VN_::ITNode *pDebugITNode = pGITNode->ITPtr_[0].pLITNode;
+			// VN_::ITNode *pDebugITNode = pGITNode->ITPtr_[0].pLITNode;
 
-			//while (pDebugITNode)
+			// while (pDebugITNode)
 			//{
 			//	if (pDebugITNode->iNode >= 65 && pDebugITNode->iNode <= 80)
 			//	{
@@ -2452,9 +2604,9 @@ void VN::MatchByBuildingInterpretationTree(
 			//	pDebugITNode = pDebugITNode->pParent;
 			//}
 
-			//printf("\n");
+			// printf("\n");
 
-			//if (debugCounter > maxDebugCounter)
+			// if (debugCounter > maxDebugCounter)
 			//{
 			//	maxDebugCounter = debugCounter;
 
@@ -2503,7 +2655,7 @@ void VN::MatchByBuildingInterpretationTree(
 					}
 				}
 
-				RVLVN_ADD_QUEUE_ENTRY(pGITNode_, VN_::GITNode, pGITNode_->e, GQueue, minMatchCostDiff, nMatchCostLevels, iTopGQueueBin, iBottomGQueueBin, pMem2, iBin, pQueueBin)\
+				RVLVN_ADD_QUEUE_ENTRY(pGITNode_, VN_::GITNode, pGITNode_->e, GQueue, minMatchCostDiff, nMatchCostLevels, iTopGQueueBin, iBottomGQueueBin, pMem2, iBin, pQueueBin)
 			}
 
 			RVLVN_GET_NEXT_QUEUE_ENTRY(GQueue, pGITNode, pGITNode, iTopGQueueBin, iBottomGQueueBin, bCompleted, pQueueBin);
@@ -2518,7 +2670,7 @@ void VN::MatchByBuildingInterpretationTree(
 
 				pGITNodeSuboptimal = pGITNode;
 
-				//printf("e=%f\n", minmaxe_);
+				// printf("e=%f\n", minmaxe_);
 			}
 
 			if (nGITNodes > maxnGITNodes)
@@ -2561,7 +2713,7 @@ void VN::ModelClusters()
 	VN_::Cluster cluster;
 
 	VN_::Edge *pEdge = EdgeList.pFirst;
-	
+
 	int iCluster;
 
 	while (pEdge)
@@ -2638,7 +2790,7 @@ void VN::GeneticAlg(
 
 	memset(bVisited, 0, pMesh->NodeArray.n * sizeof(bool));
 
-	int iSurfel;	
+	int iSurfel;
 	Surfel *pSurfel;
 	QLIST::Index2 *pPtIdx;
 
@@ -2664,13 +2816,13 @@ void VN::GeneticAlg(
 		}
 	}
 
-	Array<float *>PArray;
-	
+	Array<float *> PArray;
+
 	PArray.Element = new float *[nSamples];
 	PArray.n = nSamples;
 
 	int diPt = iPtArray.n / nSamples;
-	
+
 	int iSample;
 
 	for (iSample = 0; iSample < nSamples; iSample++)
@@ -2729,7 +2881,7 @@ void VN::GeneticAlg(
 		if (iGeneration == nGenerations - 1)
 			break;
 
-		//if (iGeneration % 10 == 9)
+		// if (iGeneration % 10 == 9)
 		//	printf(".");
 		printf("%d\t%f\n", iGeneration, E.Element[0].cost);
 
@@ -2745,7 +2897,9 @@ void VN::GeneticAlg(
 
 			parent1 = solution + featureArray.n * E.Element[iParent1].idx;
 
-			do RVLRND(nSelection, iRnd, nRnd, iiRnd, iParent2) while (iParent2 == iParent1);
+			do
+				RVLRND(nSelection, iRnd, nRnd, iiRnd, iParent2)
+				while (iParent2 == iParent1);
 
 			parent2 = solution + featureArray.n * E.Element[iParent2].idx;
 
@@ -2790,7 +2944,7 @@ void VN::GeneticAlg(
 }
 
 float VN::Evaluate(
-	Array<float *>PArray,
+	Array<float *> PArray,
 	Array<Array<RECOG::VN_::SceneFeature>> correspondenceArray,
 	int *solution,
 	float *SDF,
@@ -2815,9 +2969,9 @@ float VN::Evaluate(
 
 		// sum of absolute distances
 
-		//if (e_ < 0.0f)
+		// if (e_ < 0.0f)
 		//	e_ = -e_;
-		//e += e_;
+		// e += e_;
 
 		// maximum absolute distance
 
@@ -2853,15 +3007,15 @@ float VN::Evaluate(
 
 		// sum of absolute distances
 
-		//if (e_ < 0.0f)
+		// if (e_ < 0.0f)
 		//	e_ = -e_;
-		//e += e_;
+		// e += e_;
 
 		// maximum absolute distance
 
-		//if (e_ < 0.0f)
+		// if (e_ < 0.0f)
 		//	e_ = -e_;
-		//if (e_ > e)
+		// if (e_ > e)
 		//	e = e_;
 
 		// sum of saturated absolute distances
@@ -2898,15 +3052,15 @@ float VN::Evaluate(
 
 		// sum of absolute distances
 
-		//if (e_ < 0.0f)
+		// if (e_ < 0.0f)
 		//	e_ = -e_;
-		//e += e_;
+		// e += e_;
 
 		// maximum absolute distance
 
-		//if (e_ < 0.0f)
+		// if (e_ < 0.0f)
 		//	e_ = -e_;
-		//if (e_ > e)
+		// if (e_ > e)
 		//	e = e_;
 
 		// sum of saturated absolute distances
@@ -2943,15 +3097,15 @@ float VN::Evaluate(
 
 		// sum of absolute distances
 
-		//if (e_ < 0.0f)
+		// if (e_ < 0.0f)
 		//	e_ = -e_;
-		//e += e_;
+		// e += e_;
 
 		// maximum absolute distance
 
-		//if (e_ < 0.0f)
+		// if (e_ < 0.0f)
 		//	e_ = -e_;
-		//if (e_ > e)
+		// if (e_ > e)
 		//	e = e_;
 
 		// sum of saturated absolute distances
@@ -2964,6 +3118,99 @@ float VN::Evaluate(
 	}
 
 	return e;
+}
+
+float VN::LocalConstraints(
+	float *P,
+	float *SDF,
+	int &iActiveFeature,
+	bool bComputeSDFs,
+	float *d)
+{
+	if (bComputeSDFs)
+		ComputeFeatureSDFs(P, SDF, d);
+
+	int iNode;
+	VN_::Node *pNode;
+
+	for (iNode = 0; iNode < featureArray.n; iNode++)
+	{
+		pNode = NodeArray.Element + iNode;
+
+		pNode->output = SDF[iNode];
+		pNode->iActiveFeature = pNode->iFeature;
+		localConstraints[iNode].n = 1;
+		localConstraints[iNode].Element[0] = iNode;
+		pNode->bOutput = true;
+	}
+
+	for (; iNode < NodeArray.n; iNode++)
+	{
+		NodeArray.Element[iNode].bOutput = false;
+		localConstraints[iNode].n = 0;
+	}
+
+	RECOG::VN_::Edge *pEdge = EdgeList.pFirst;
+
+	VN_::Node *pChildNode, *pParentNode;
+
+	int iParentNode, iChildNode, iConstraint;
+	Array<int> *pChildNodeLocalConstraints, *pParentNodeLocalConstraints;
+	while (pEdge)
+	{
+		iChildNode = pEdge->data.a;
+		pChildNode = NodeArray.Element + iChildNode;
+
+		if (pChildNode->bOutput)
+		{
+			iParentNode = pEdge->data.b;
+			pParentNode = NodeArray.Element + iParentNode;
+			pChildNodeLocalConstraints = localConstraints + iChildNode;
+			pParentNodeLocalConstraints = localConstraints + iParentNode;
+
+			if (pParentNode->bOutput)
+			{
+				if (pParentNode->operation < 0)
+				{
+					if (pChildNode->output < pParentNode->output)
+					{
+						pParentNode->output = pChildNode->output;
+						pParentNode->iActiveFeature = pChildNode->iActiveFeature;
+					}
+					if (pChildNodeLocalConstraints->n > 0)
+						for (iConstraint = 0; iConstraint < pChildNodeLocalConstraints->n; iConstraint++)
+							pParentNodeLocalConstraints->Element[pParentNodeLocalConstraints->n++] = pChildNodeLocalConstraints->Element[iConstraint];
+				}
+				else
+				{
+					if (pChildNode->output > pParentNode->output)
+					{
+						pParentNode->output = pChildNode->output;
+						pParentNode->iActiveFeature = pChildNode->iActiveFeature;
+						pParentNodeLocalConstraints->n = 0;
+						if (pChildNodeLocalConstraints->n > 0)
+							for (iConstraint = 0; iConstraint < pChildNodeLocalConstraints->n; iConstraint++)
+								pParentNodeLocalConstraints->Element[pParentNodeLocalConstraints->n++] = pChildNodeLocalConstraints->Element[iConstraint];
+					}
+				}
+			}
+			else
+			{
+				pParentNode->output = pChildNode->output;
+				pParentNode->iActiveFeature = pChildNode->iActiveFeature;
+				pParentNode->bOutput = true;
+				if (pChildNodeLocalConstraints->n > 0)
+					for (iConstraint = 0; iConstraint < pChildNodeLocalConstraints->n; iConstraint++)
+						pParentNodeLocalConstraints->Element[pParentNodeLocalConstraints->n++] = pChildNodeLocalConstraints->Element[iConstraint];
+			}
+		}
+
+		pEdge = pEdge->pNext;
+	}
+
+	iActiveFeature = NodeArray.Element[iy].iActiveFeature;
+
+	return NodeArray.Element[iy].output;
 }
 
 // The method implemened by function Fit is described in ARP3D.TR4.11, Section "Classification Criterion".
@@ -3117,7 +3364,7 @@ void VN::Fit(
 						minDist = dist;
 
 						sClosest = s;
-						
+
 						bFirst = false;
 					}
 					else if (dist < minDist)
@@ -3134,11 +3381,11 @@ void VN::Fit(
 
 				g[PtArray.n] = sqrt(minDist);
 
-				PtArray.Element[PtArray.n++] = PExternal;				
+				PtArray.Element[PtArray.n++] = PExternal;
 
 				PExternal += 3;
 			}
-		}		
+		}
 	}
 
 	// q <- projection of d0 to the latent space defined by M
@@ -3172,7 +3419,7 @@ void VN::Fit(
 	float *d = new float[featureArray.n];
 
 	float *NS_ = new float[3 * featureArray.n];
-	
+
 	int iFeature;
 	float *NM, *NS;
 
@@ -3200,7 +3447,7 @@ void VN::Fit(
 
 	float *SDF = new float[featureArray.n];
 
-	float *Jd = new float[featureArray.n];	
+	float *Jd = new float[featureArray.n];
 
 	float *Jq = new float[M.h];
 
@@ -3220,11 +3467,11 @@ void VN::Fit(
 
 		// Visualization
 
-		//visualizer.renderer->RemoveAllViewProps();
+		// visualizer.renderer->RemoveAllViewProps();
 
-		//Display(&visualizer, 0.01f, d, bd, 0.0f);
+		// Display(&visualizer, 0.01f, d, bd, 0.0f);
 
-		//visualizer.Run();
+		// visualizer.Run();
 
 		// Compute the cost function and Jd = df/dd.
 
@@ -3237,7 +3484,7 @@ void VN::Fit(
 			// e <- f(p; d)
 
 			SDF0_ = SDF0 + featureArray.n * i;
-			
+
 			RVLDIFVECTORS(SDF0_, d, M.w, SDF, j);
 
 			P = PtArray.Element[i];
@@ -3269,7 +3516,7 @@ void VN::Fit(
 
 		// If the magnitude of gradient Jq is too low, stop the procedure.
 
-		//if (absJq2 < minAbsJq2)
+		// if (absJq2 < minAbsJq2)
 		//	break;
 
 		// s <- gamma * E / absJq2
@@ -3308,7 +3555,7 @@ void VN::Fit(
 	delete[] SDF;
 	delete[] SDF0;
 	delete[] NS_;
-	//delete[] J;
+	// delete[] J;
 	delete[] Jd;
 	delete[] Jq;
 	delete[] g;
@@ -3332,7 +3579,7 @@ void VN::FitLM(
 	int maxnIterations = 10;
 	float lambdaUp = 2.0f;
 	float lambdaDown = 1.0f / lambdaUp;
-	//float kMinAbsJq = 0.1f;
+	// float kMinAbsJq = 0.1f;
 	int imageNeighborhood = 7;
 
 	// Determine image ROI containing the object.
@@ -3624,11 +3871,11 @@ void VN::FitLM(
 
 		// Visualization
 
-		//visualizer.renderer->RemoveAllViewProps();
+		// visualizer.renderer->RemoveAllViewProps();
 
-		//Display(&visualizer, 0.01f, d, bd, 0.0f);
+		// Display(&visualizer, 0.01f, d, bd, 0.0f);
 
-		//visualizer.Run();
+		// visualizer.Run();
 
 		// Compute the cost function and Jd = df/dd.
 
@@ -3652,7 +3899,7 @@ void VN::FitLM(
 
 			e = g[i] - Evaluate(P, SDF, iActiveFeature, false);
 
-			//Jd[iActiveFeature] += e;
+			// Jd[iActiveFeature] += e;
 
 			M_ = M.Element + iActiveFeature;
 
@@ -3748,7 +3995,7 @@ void VN::FitLM(
 	delete[] SDF;
 	delete[] SDF0;
 	delete[] NS_;
-	//delete[] J;
+	// delete[] J;
 	delete[] Jd;
 	delete[] Jq;
 	delete[] g;
@@ -3772,11 +4019,11 @@ float VN::FitRotLM(
 {
 	// Parameters.
 
-	//uchar level1EvaluationFitting = 0;	// RotLM (best, slowest)
-	uchar level1EvaluationFitting = 1;	// LS translation and scale
+	// uchar level1EvaluationFitting = 0;	// RotLM (best, slowest)
+	uchar level1EvaluationFitting = 1; // LS translation and scale
 
-	//uchar level1EvaluationCriterion = 0;	// scene fitting score (best, slowest)
-	uchar level1EvaluationCriterion = 1;	// CTI descriptor distance
+	// uchar level1EvaluationCriterion = 0;	// scene fitting score (best, slowest)
+	uchar level1EvaluationCriterion = 1; // CTI descriptor distance
 
 	int nBestProposals = 50;
 
@@ -3786,7 +4033,7 @@ float VN::FitRotLM(
 
 	Array2D<float> M = pClass->M;
 
-	//float *q = new float[M.h];
+	// float *q = new float[M.h];
 
 	float *d = new float[M.w];
 
@@ -3844,7 +4091,7 @@ float VN::FitRotLM(
 	float *R__;
 
 	for (iq0 = 0; iq0 < pClass->nq0; iq0++)
-	{	
+	{
 		for (iRotSample = 0; iRotSample < nRotSamples; iRotSample++, q += M.h, iProposal++)
 		{
 			R__ = pClassifier->SO3Samples.Element + 9 * iRotSample;
@@ -3871,7 +4118,7 @@ float VN::FitRotLM(
 
 				pProposal->cost = -score;
 
-				//if (score > scoreOpt)
+				// if (score > scoreOpt)
 				//{
 				//	scoreOpt = score;
 
@@ -3884,7 +4131,7 @@ float VN::FitRotLM(
 			{
 				E = EHull;
 
-				//if (EOpt < 0.0f || E < EOpt)
+				// if (EOpt < 0.0f || E < EOpt)
 				//{
 				//	EOpt = E;
 
@@ -3948,7 +4195,7 @@ float VN::FitRotLM(
 		params.bInit = false;
 		params.bGnd = params.bGnd2;
 
-		//if (i == 12)
+		// if (i == 12)
 		//	int debug = 0;
 
 		FitRotLMCC(pSurfels, iVertexArray, sceneSamples, pClass, d0, NULL, R_, params, q, R_, EHullOpt, false, &camera);
@@ -3961,11 +4208,11 @@ float VN::FitRotLM(
 
 		Project(d, R_, t, camera, sceneSamples.imagePtArray, PtArray, pClassifier->NGnd, &zMin);
 
-		zMin -= pClassifier->dGnd;		
+		zMin -= pClassifier->dGnd;
 
 		sceneSupport = VN_::SceneFittingScore(sceneSamples, PtArray, params.maxe, 2.0f, params.cosSurfaceRayAngleThr, nOutliers, false);
 
-		//score = params.kSceneSupport * sceneSupport - params.kOutliers * (float)nOutliers - params.kHull * EHull;
+		// score = params.kSceneSupport * sceneSupport - params.kOutliers * (float)nOutliers - params.kHull * EHull;
 		score = params.kSceneSupport * sceneSupport - params.kOutliers * (float)nOutliers - params.kZMin * RVLABS(zMin);
 
 		if (score > scoreOpt)
@@ -4006,7 +4253,7 @@ float VN::FitRotLM(
 
 	RVLCOPYMX3X3(ROpt, R_);
 
-	//FitRotLMCC(pSurfels, iVertexArray, sceneSamples, pClass, d0, R__, params, qOpt, ROpt, EHullOpt, false, &camera);
+	// FitRotLMCC(pSurfels, iVertexArray, sceneSamples, pClass, d0, R__, params, qOpt, ROpt, EHullOpt, false, &camera);
 	FitRotLMCC(pSurfels, iVertexArray, sceneSamples, pClass, d0, NULL, R_, params, q, R_, EHull, false, &camera);
 
 	params.bInit = true;
@@ -4018,11 +4265,11 @@ float VN::FitRotLM(
 
 	zMin -= pClassifier->dGnd;
 
-	//memcpy(sceneSamples.SDF, SDFOpt, sceneSamples.imagePtArray.h * sizeof(float));	// If FitRotLMCC is used, this line shoule be commented!
+	// memcpy(sceneSamples.SDF, SDFOpt, sceneSamples.imagePtArray.h * sizeof(float));	// If FitRotLMCC is used, this line shoule be commented!
 
 	sceneSupport = VN_::SceneFittingScore(sceneSamples, PtArray, params.maxe, 2.0f, params.cosSurfaceRayAngleThr, nOutliers, false);
 
-	//score = params.kSceneSupport * sceneSupport - params.kOutliers * (float)nOutliers - params.kHull * EHull;
+	// score = params.kSceneSupport * sceneSupport - params.kOutliers * (float)nOutliers - params.kHull * EHull;
 	score = params.kSceneSupport * sceneSupport - params.kOutliers * (float)nOutliers - params.kZMin * RVLABS(zMin);
 
 	if (score > scoreOpt)
@@ -4084,7 +4331,7 @@ float VN::FitRotLM(
 			bd = new bool[featureArray.n];
 
 			for (i = 0; i < featureArray.n; i++)
-				bd[i] = true;		
+				bd[i] = true;
 
 			visualizer.renderer->RemoveAllViewProps();
 
@@ -4123,7 +4370,7 @@ float VN::FitRotLM(
 	int maxnIterations = 10;
 	float lambdaUp = 2.0f;
 	float lambdaDown = 1.0f / lambdaUp;
-	//float kMinAbsJq = 0.1f;
+	// float kMinAbsJq = 0.1f;
 	int imageNeighborhood = 7;
 	bool bExternalSamples = false;
 
@@ -4131,53 +4378,53 @@ float VN::FitRotLM(
 	float *g = sceneSamples.g;
 	uchar *status = sceneSamples.status;
 
-	//int halfImageNeighborhood = (imageNeighborhood - 1) / 2;
+	// int halfImageNeighborhood = (imageNeighborhood - 1) / 2;
 
-	//Rect<int> cropWin;
-	//cropWin.minx = 0;
-	//cropWin.maxx = camera.w - 1;
-	//cropWin.miny = 0;
-	//cropWin.maxy = camera.h - 1;
+	// Rect<int> cropWin;
+	// cropWin.minx = 0;
+	// cropWin.maxx = camera.w - 1;
+	// cropWin.miny = 0;
+	// cropWin.maxy = camera.h - 1;
 
-	//bool *bBelongsToObject = new bool[pSurfels->NodeArray.n];
+	// bool *bBelongsToObject = new bool[pSurfels->NodeArray.n];
 
-	//memset(bBelongsToObject, 0, pSurfels->NodeArray.n * sizeof(bool));
+	// memset(bBelongsToObject, 0, pSurfels->NodeArray.n * sizeof(bool));
 
-	//QLIST::Index *pSurfelIdx = surfelList.pFirst;
+	// QLIST::Index *pSurfelIdx = surfelList.pFirst;
 
-	//while (pSurfelIdx)
+	// while (pSurfelIdx)
 	//{
 	//	bBelongsToObject[pSurfelIdx->Idx] = true;
 
 	//	pSurfelIdx = pSurfelIdx->pNext;
 	//}
 
-	//Array<float *> PtArray;
+	// Array<float *> PtArray;
 
-	//PtArray.Element = new float *[imagePtArray.h];
+	// PtArray.Element = new float *[imagePtArray.h];
 
-	//PtArray.n = 0;
+	// PtArray.n = 0;
 
-	//float *g = new float[imagePtArray.h];
+	// float *g = new float[imagePtArray.h];
 
-	//float *PMem = new float[3 * imagePtArray.h];
+	// float *PMem = new float[3 * imagePtArray.h];
 
-	//float *P__ = PMem;
+	// float *P__ = PMem;
 
-	//int i;
-	//float *P;
-	//float *m;
-	//int u, v;
-	//int iPt;
-	//int iSurfel;
-	//int u_, v_;
-	//Rect<int> neighborhood;
-	//float Ray[3], dP[3], P_[3];
-	//float s, fTmp, sClosest;
-	//float dist, minDist;
-	//bool bFirst;
+	// int i;
+	// float *P;
+	// float *m;
+	// int u, v;
+	// int iPt;
+	// int iSurfel;
+	// int u_, v_;
+	// Rect<int> neighborhood;
+	// float Ray[3], dP[3], P_[3];
+	// float s, fTmp, sClosest;
+	// float dist, minDist;
+	// bool bFirst;
 
-	//for (i = 0; i < imagePtArray.h; i++)
+	// for (i = 0; i < imagePtArray.h; i++)
 	//{
 	//	m = imagePtArray.Element + imagePtArray.w * i;
 
@@ -4272,27 +4519,27 @@ float VN::FitRotLM(
 
 	//// Compute centroid of scene points.
 
-	//float Pc[3];
+	// float Pc[3];
 
-	//RVLNULL3VECTOR(Pc);
+	// RVLNULL3VECTOR(Pc);
 
-	//int i;
-	//float *P;
+	// int i;
+	// float *P;
 
-	//for (i = 0; i < PtArray.n; i++)
+	// for (i = 0; i < PtArray.n; i++)
 	//{
 	//	P = PtArray.Element[i];
 
 	//	RVLSUM3VECTORS(Pc, P, Pc);
 	//}
 
-	//float fTmp = (float)(PtArray.n);
+	// float fTmp = (float)(PtArray.n);
 
-	//RVLSCALE3VECTOR2(Pc, fTmp, Pc);
+	// RVLSCALE3VECTOR2(Pc, fTmp, Pc);
 
 	//// Center PtArray in Pc.
 
-	//for (i = 0; i < PtArray.n; i++)
+	// for (i = 0; i < PtArray.n; i++)
 	//{
 	//	P = PtArray.Element[i];
 
@@ -4397,7 +4644,7 @@ float VN::FitRotLM(
 
 	int nqs = M.h - 4;
 
-	float *qs = q + 4;	
+	float *qs = q + 4;
 
 	float *dqs = dx_ + 7;
 
@@ -4450,11 +4697,11 @@ float VN::FitRotLM(
 
 		// Visualization
 
-		//visualizer.renderer->RemoveAllViewProps();
+		// visualizer.renderer->RemoveAllViewProps();
 
-		//Display(&visualizer, 0.01f, d, bd, 0.0f);
+		// Display(&visualizer, 0.01f, d, bd, 0.0f);
 
-		//visualizer.Run();
+		// visualizer.Run();
 
 		// Compute the cost function and Jd = df/dd.
 
@@ -4486,7 +4733,7 @@ float VN::FitRotLM(
 
 			e = g[i] - SDF_;
 
-			//Jd[iActiveFeature] += e;
+			// Jd[iActiveFeature] += e;
 
 			M_ = M.Element + iActiveFeature;
 
@@ -4507,7 +4754,7 @@ float VN::FitRotLM(
 				b_[j] += (J[j] * e);
 
 			E = E + e * e;
-		}	// for every sample point
+		} // for every sample point
 
 		EHull = FitConvexHullIteration(pSurfels, iVertexArray, sceneSamples.Pc, PGnd, d, M, M.h, true, params.alpha, R, A_, b_, J);
 
@@ -4673,7 +4920,7 @@ float VN::FitRotLM(
 
 		// Only for debugging purpose!
 
-		//for (i = 0; i < nqs; i++)
+		// for (i = 0; i < nqs; i++)
 		//	if (qs[i] < qMin_[i] - 1e-8 || qs[i] > qMax_[i] + 1e-8)
 		//		printf("latent vector component %d out of limits!\n", i);
 
@@ -4701,9 +4948,9 @@ float VN::FitRotLM(
 
 	// If q is outside the class limits, then q <- the closest point within the class limits.
 
-	//float qn;
+	// float qn;
 
-	//for (i = 0; i < nqs; i++)
+	// for (i = 0; i < nqs; i++)
 	//{
 	//	qn = qs[i] / q[3];
 
@@ -4713,9 +4960,9 @@ float VN::FitRotLM(
 	//		q[i] = pClass->qMin[i] * q[3];
 	//}
 
-	//float mins = 1.0f;
+	// float mins = 1.0f;
 
-	//for (i = 0; i < nqs; i++)
+	// for (i = 0; i < nqs; i++)
 	//{
 	//	qn = qs[i] / q[3];
 
@@ -4728,7 +4975,7 @@ float VN::FitRotLM(
 	//		mins = s;
 	//}
 
-	//for (i = 0; i < nqs; i++)
+	// for (i = 0; i < nqs; i++)
 	//	qs[i] *= s;
 
 	// Translate q to the scene RF.
@@ -4803,7 +5050,7 @@ float VN::FitRotLMCC(
 	int maxnStepReductionIterations = 10;
 	float lambdaUp = 2.0f;
 	float lambdaDown = 1.0f / lambdaUp;
-	//float kMinAbsJq = 0.1f;
+	// float kMinAbsJq = 0.1f;
 	int imageNeighborhood = 7;
 	bool bExternalSamples = false;
 	float alpha0 = 0.5f;
@@ -4859,25 +5106,25 @@ float VN::FitRotLMCC(
 	}
 	else
 	{
-		//RVLMULMXTVECT(M.Element, q, M.h, M.w, d, i, j, a);
+		// RVLMULMXTVECT(M.Element, q, M.h, M.w, d, i, j, a);
 
-		//float t[3];
+		// float t[3];
 
-		//RVLNULL3VECTOR(t);
+		// RVLNULL3VECTOR(t);
 
-		//Array<OrientedPoint> PtArray_;
+		// Array<OrientedPoint> PtArray_;
 
-		//PtArray_.n = sceneSamples.imagePtArray.h;
+		// PtArray_.n = sceneSamples.imagePtArray.h;
 
-		//PtArray_.Element = new OrientedPoint[PtArray_.n];
+		// PtArray_.Element = new OrientedPoint[PtArray_.n];
 
-		//Project(d, R, t, *pCamera, sceneSamples.imagePtArray, PtArray_);
+		// Project(d, R, t, *pCamera, sceneSamples.imagePtArray, PtArray_);
 
-		//int nOutliersOpt;
+		// int nOutliersOpt;
 
-		//VN_::SceneFittingScore(sceneSamples, PtArray_, params.maxe, 2.0f, params.cosSurfaceRayAngleThr, nOutliersOpt, true);
+		// VN_::SceneFittingScore(sceneSamples, PtArray_, params.maxe, 2.0f, params.cosSurfaceRayAngleThr, nOutliersOpt, true);
 
-		//delete[] PtArray_.Element;
+		// delete[] PtArray_.Element;
 
 		// Translate q to the scene RF.
 
@@ -4906,7 +5153,7 @@ float VN::FitRotLMCC(
 
 		dq[3] = 0.0f;
 
-		//for (iFeature = 0; iFeature < featureArray.n; iFeature++)
+		// for (iFeature = 0; iFeature < featureArray.n; iFeature++)
 		//{
 		//	NM = featureArray.Element[iFeature].N;
 
@@ -4917,7 +5164,7 @@ float VN::FitRotLMCC(
 
 		//// q <- M' * d
 
-		//RVLMULMXVECT(M.Element, d, M.h, M.w, q, i, j, a);
+		// RVLMULMXVECT(M.Element, d, M.h, M.w, q, i, j, a);
 	}
 
 	// Initialize visualization.
@@ -4943,14 +5190,14 @@ float VN::FitRotLMCC(
 
 	cv::Mat A;
 
-	//A.create(nx, nx, CV_32FC1);
+	// A.create(nx, nx, CV_32FC1);
 	A.create(7, 7, CV_32FC1);
 
 	float *A_ = (float *)(A.data);
 
 	cv::Mat b;
 
-	//b.create(nx, 1.0f, CV_32FC1);
+	// b.create(nx, 1.0f, CV_32FC1);
 	b.create(7, 1, CV_32FC1);
 
 	float *b_ = new float[nx];
@@ -4967,11 +5214,11 @@ float VN::FitRotLMCC(
 
 	float E_ = -1.0f;
 
-	//Array<int> iFreeArray;
+	// Array<int> iFreeArray;
 
-	//iFreeArray.Element = new int[nx];
+	// iFreeArray.Element = new int[nx];
 
-	//for (i = 0; i < 7; i++)
+	// for (i = 0; i < 7; i++)
 	//	iFreeArray.Element[i] = i;
 
 	float *bq = b_ + 3;
@@ -4980,23 +5227,23 @@ float VN::FitRotLMCC(
 
 	float s0 = q[3];
 
-	//float *qMin_ = new float[nqs];
+	// float *qMin_ = new float[nqs];
 
-	//float *qMax_ = new float[nqs];
+	// float *qMax_ = new float[nqs];
 
-	//for (i = 0; i < nqs; i++)
+	// for (i = 0; i < nqs; i++)
 	//{
 	//	qMin_[i] = pClass->qMin[i] * s0;
 	//	qMax_[i] = pClass->qMax[i] * s0;
-	//}
+	// }
 
 	int *limit = new int[nqs];
 
 	memset(limit, 0, nqs * sizeof(int));
 
-	//float *Ar_ = new float[nx * nx];
-	//float *br_ = new float[nx];
-	//float *dxr_ = new float[nx];
+	// float *Ar_ = new float[nx * nx];
+	// float *br_ = new float[nx];
+	// float *dxr_ = new float[nx];
 
 	float *qs_ = new float[nqs];
 
@@ -5065,11 +5312,11 @@ float VN::FitRotLMCC(
 
 			// Visualization
 
-			//visualizer.renderer->RemoveAllViewProps();
+			// visualizer.renderer->RemoveAllViewProps();
 
-			//Display(&visualizer, 0.01f, d, bd, 0.0f);
+			// Display(&visualizer, 0.01f, d, bd, 0.0f);
 
-			//visualizer.Run();
+			// visualizer.Run();
 
 			// Compute the cost function and Jd = df/dd.
 
@@ -5097,7 +5344,7 @@ float VN::FitRotLMCC(
 
 				e = g[i] - SDF_;
 
-				//Jd[iActiveFeature] += e;
+				// Jd[iActiveFeature] += e;
 
 				M_ = M.Element + iActiveFeature;
 
@@ -5118,13 +5365,13 @@ float VN::FitRotLMCC(
 					b_[j] += (J[j] * e);
 
 				E = E + e * e;
-			}	// for every sample point
+			} // for every sample point
 
 			EHull = FitConvexHullIteration(pSurfels, iVertexArray, sceneSamples.Pc, PGnd, d, M, 4, true, params.alpha, R, A_, b_, J);
 
 			E += EHull;
 
-			if (E_ > 0.0f && E > E_)	// If E increased, then return q and R to their previous values.
+			if (E_ > 0.0f && E > E_) // If E increased, then return q and R to their previous values.
 			{
 				RVLDIFVECTORS(q, dq, M.h, q, i);
 
@@ -5150,7 +5397,7 @@ float VN::FitRotLMCC(
 				if (k >= params.maxnIterations - 1)
 					break;
 			}
-			else if (E_ < 0.0f)	// First iteration
+			else if (E_ < 0.0f) // First iteration
 			{
 				maxTrA = 0.0;
 
@@ -5170,11 +5417,11 @@ float VN::FitRotLMCC(
 
 				RVLCOPYMX3X3(R, R_);
 			}
-			else	// If E decreased.
+			else // If E decreased.
 			{
 				// Only for debugging purpose!
 
-				//if (pCamera)
+				// if (pCamera)
 				//{
 				//	RVLMULMXTVECT(M.Element, q, M.h, M.w, d, i, j, a);
 
@@ -5225,7 +5472,7 @@ float VN::FitRotLMCC(
 
 				RVLCOPYMX3X3(R, R_);
 			}
-		}	// if (!bInit)
+		} // if (!bInit)
 
 		if (bInit)
 			k = -1;
@@ -5257,11 +5504,11 @@ float VN::FitRotLMCC(
 
 				// Only for debugging purpose!
 
-				//RVLDOTPRODUCT(dqs, dqs, nqs, fTmp, i);
+				// RVLDOTPRODUCT(dqs, dqs, nqs, fTmp, i);
 
-				//float eq = sqrt(fTmp);
+				// float eq = sqrt(fTmp);
 
-				//int debug = 0;
+				// int debug = 0;
 			}
 			else
 			{
@@ -5381,9 +5628,9 @@ float VN::FitRotLMCC(
 
 		// Only for debugging purpose!
 
-		//float *eqs_ = new float[pClass->nHull];
+		// float *eqs_ = new float[pClass->nHull];
 
-		//for (i = 0; i < pClass->nHull; i++)
+		// for (i = 0; i < pClass->nHull; i++)
 		//{
 		//	AH = pClass->A + nqs * i;
 
@@ -5399,13 +5646,13 @@ float VN::FitRotLMCC(
 		//	eqs_[i] = eqs;
 		//}
 
-		//delete[] eqs_;
+		// delete[] eqs_;
 
 		/////
 
 		// Only for debugging purpose!
 
-		//for (i = 0; i < nqs; i++)
+		// for (i = 0; i < nqs; i++)
 		//	if (qs[i] < qMin_[i] - 1e-8 || qs[i] > qMax_[i] + 1e-8)
 		//		printf("latent vector component %d out of limits!\n", i);
 
@@ -5434,13 +5681,13 @@ float VN::FitRotLMCC(
 				RVLCOPYMX3X3(R__, R);
 			}
 		}
-	}	// for (k = 0; k <= params.maxnIterations; k++)
+	} // for (k = 0; k <= params.maxnIterations; k++)
 
 	// Only for debugging purpose!
 
-	//float *eqs_ = new float[pClass->nHull];
+	// float *eqs_ = new float[pClass->nHull];
 
-	//for (i = 0; i < pClass->nHull; i++)
+	// for (i = 0; i < pClass->nHull; i++)
 	//{
 	//	AH = pClass->A + nqs * i;
 
@@ -5456,16 +5703,16 @@ float VN::FitRotLMCC(
 	//	eqs_[i] = eqs;
 	//}
 
-	//delete[] eqs_;
-	//delete[] qsGoal;
+	// delete[] eqs_;
+	// delete[] qsGoal;
 
 	/////
 
 	// If q is outside the class limits, then q <- the closest point within the class limits.
 
-	//float qn;
+	// float qn;
 
-	//for (i = 0; i < nqs; i++)
+	// for (i = 0; i < nqs; i++)
 	//{
 	//	qn = qs[i] / q[3];
 
@@ -5475,9 +5722,9 @@ float VN::FitRotLMCC(
 	//		q[i] = pClass->qMin[i] * q[3];
 	//}
 
-	//float mins = 1.0f;
+	// float mins = 1.0f;
 
-	//for (i = 0; i < nqs; i++)
+	// for (i = 0; i < nqs; i++)
 	//{
 	//	qn = qs[i] / q[3];
 
@@ -5490,7 +5737,7 @@ float VN::FitRotLMCC(
 	//		mins = s;
 	//}
 
-	//for (i = 0; i < nqs; i++)
+	// for (i = 0; i < nqs; i++)
 	//	qs[i] *= s;
 
 	// Compute SDF.
@@ -5556,13 +5803,13 @@ float VN::FitRotLMCC(
 	delete[] d;
 	delete[] SDF;
 	delete[] J;
-	//delete[] iFreeArray.Element;
-	//delete[] qMin_;
-	//delete[] qMax_;
+	// delete[] iFreeArray.Element;
+	// delete[] qMin_;
+	// delete[] qMax_;
 	delete[] limit;
-	//delete[] Ar_;
-	//delete[] br_;
-	//delete[] dxr_;
+	// delete[] Ar_;
+	// delete[] br_;
+	// delete[] dxr_;
 	delete[] qs_;
 	delete[] bLimit;
 	delete[] iLimitArray.Element;
@@ -5580,7 +5827,7 @@ float VN::FitConvexHull(
 	Array<int> iVertexArray,
 	float *Pc,
 	float *PGnd,
-	Array2D<float> M,	
+	Array2D<float> M,
 	float *R,
 	float *q,
 	float *qs0)
@@ -5593,12 +5840,12 @@ float VN::FitConvexHull(
 
 	memcpy(q + 4, qs0, nqs * sizeof(float));
 
-	//q[4] = -0.0633420970093849;
-	//q[5] = -0.0790493006858217;
-	//q[6] = -0.0329341087239083;
-	//q[7] = 0.0237768445331545;
-	//q[8] = 5.11683007640849e-005;
-	//q[9] = 0.0090215808494636;
+	// q[4] = -0.0633420970093849;
+	// q[5] = -0.0790493006858217;
+	// q[6] = -0.0329341087239083;
+	// q[7] = 0.0237768445331545;
+	// q[8] = 5.11683007640849e-005;
+	// q[9] = 0.0090215808494636;
 
 	float *d = new float[M.w];
 
@@ -5792,7 +6039,7 @@ float VN::FitConvexHullIteration(
 		}
 
 		E = E + alpha * e * e;
-	}	// for every parallel descriptor component
+	} // for every parallel descriptor component
 
 	return E;
 }
@@ -5838,7 +6085,7 @@ void VN::Match2(
 	Graph<GRAPH::Node, GRAPH::Edge, GRAPH::EdgePtr<GRAPH::Edge>> featureGraph;
 
 	featureGraph.NodeArray.Element = new GRAPH::Node[pSurfels->NodeArray.n];
-	
+
 	featureGraph.NodeArray.n = 0;
 
 	int nPts = 0;
@@ -5877,7 +6124,7 @@ void VN::Match2(
 	QList<QLIST::Entry<float>> FEdgeCostList;
 
 	QList<QLIST::Entry<float>> *pFEdgeCostList = &FEdgeCostList;
-	
+
 	RVLQLIST_INIT(pFEdgeCostList);
 
 	int nFEdges = 0;
@@ -5952,7 +6199,7 @@ void VN::Match2(
 	}
 
 	Array<float> FEdgeCostarray;
-	
+
 	FEdgeCostarray.Element = new float[nFEdges];
 
 	QLIST::CopyToArray<float>(pFEdgeCostList, &FEdgeCostarray);
@@ -5995,7 +6242,7 @@ void VN::Match2(
 
 	correspondences.n = nClusters;
 	correspondences.Element = new Array<VN_::Correspondence2>[correspondences.n];
-	
+
 	memset(bdS, 0, featureArray.n * sizeof(bool));
 
 	int *clusterMap = new int[featureGraph.NodeArray.n];
@@ -6156,7 +6403,7 @@ void VN::Match2(
 			{
 				iFNode = pQueue->pFirst->data.a;
 
-				//if (iFNode == 15)
+				// if (iFNode == 15)
 				//	int debug = 0;
 
 				pQueue->pFirst = pQueue->pFirst->pNext;
@@ -6231,11 +6478,11 @@ void VN::Match2(
 
 						pFEdgePtr = pFNode->EdgeList.pFirst;
 
-						while (pFEdgePtr)	// For every neighbor of iFNode
+						while (pFEdgePtr) // For every neighbor of iFNode
 						{
 							iFNode_ = RVLPCSEGMENT_GRAPH_GET_OPPOSITE_NODE(pFEdgePtr);
 
-							//if (iFNode_ == 15)
+							// if (iFNode_ == 15)
 							//	int debug = 0;
 
 							pFNodeData = FNodeData_ + iFNode_;
@@ -6274,10 +6521,10 @@ void VN::Match2(
 							}
 
 							pFEdgePtr = pFEdgePtr->pNext;
-						}	// for every neighbor of iFNode
+						} // for every neighbor of iFNode
 					}
 				}
-			}	// while queue is not empty
+			} // while queue is not empty
 
 			for (i = 0; i < iVisitedFNodeArray.n; i++)
 				bVisited[iVisitedFNodeArray.Element[i]] = false;
@@ -6313,7 +6560,7 @@ void VN::Match2(
 
 				iNode = FNodeData_[iFNode].iNode;
 
-				iFNode_ = pCorresp->data.iFNode[iNode];				
+				iFNode_ = pCorresp->data.iFNode[iNode];
 
 				if (iFNode_ >= 0)
 					bUpdateFNode = (size > pSurfels->NodeArray.Element[featureGraph.NodeArray.Element[iFNode_].idx].size);
@@ -6327,7 +6574,7 @@ void VN::Match2(
 			nRemainingPts -= pCorresp->data.cost;
 
 			iSCluster++;
-		}	// while (100 * nRemainingPts / nPts > 5)
+		} // while (100 * nRemainingPts / nPts > 5)
 
 		pCorrespArray = correspondences.Element + iCluster;
 
@@ -6337,7 +6584,7 @@ void VN::Match2(
 		QLIST::CopyToArray<VN_::Correspondence2>(pCorrespList, pCorrespArray);
 
 		BubbleSort<VN_::Correspondence2>(correspondences.Element[iCluster], true);
-	}	// for each cluster
+	} // for each cluster
 
 	int maxGQueueSize = 1;
 
@@ -6433,7 +6680,7 @@ void VN::Match2(
 
 					SClusterSize += pSurfels->NodeArray.Element[featureGraph.NodeArray.Element[iFNode].idx].size;
 				}
-				//else
+				// else
 				//	int debug = 0;
 			}
 
@@ -6514,16 +6761,16 @@ void VN::Match3(
 	int i;
 	float *P;
 
-	//FILE *fp = fopen("sampledMesh.txt", "w");
+	// FILE *fp = fopen("sampledMesh.txt", "w");
 
-	//for (i = 0; i < iPtArray.n; i++)
+	// for (i = 0; i < iPtArray.n; i++)
 	//{
 	//	P = pMesh->NodeArray.Element[iPtArray.Element[i]].P;
 
 	//	fprintf(fp, "%f\t%f\t%f\n", P[0], P[1], P[2]);
 	//}
 
-	//fclose(fp);
+	// fclose(fp);
 
 	ModelClusters();
 
@@ -6719,8 +6966,8 @@ void VN::Match3(
 					pCorresp_->cost = 0;
 
 				RVLVN_ADD_QUEUE_ENTRY(pCorresp_, VN_::Correspondence4, pCorresp_->cost, queue, 1, maxQueueSize, iTopQueueBin, iBottomQueueBin, pMem2, iBin, pQueueBin);
-			}	// for (iSCluster = 0; iSCluster < SClusters.n; iSCluster++)
-		}	// if (pCorresp->iLevel < maxLevel)
+			} // for (iSCluster = 0; iSCluster < SClusters.n; iSCluster++)
+		}	  // if (pCorresp->iLevel < maxLevel)
 	}
 
 	for (i = 1; i < iBottomQueueBin; i++)
@@ -6775,21 +7022,21 @@ void VN::Match3(
 void VN::Match4(
 	Mesh *pMesh,
 	RECOG::VN_::SceneObject sceneObject,
-	void *vpClassifier,	
+	void *vpClassifier,
 	Array<RECOG::SceneCluster> &SClusters_,
 	Box<float> boundingBox,
 	float *dS,
 	bool *bdS,
 	bool bValidateDescriptorComponents)
-	//Mesh *pMesh,
-	//SurfelGraph *pSurfels,
-	//Array<RECOG::PSGM_::Cluster *> SCClusters,
-	//Array<RECOG::PSGM_::Cluster *> SUClusters,
-	//Box<float> boundingBox,
-	//RECOG::VN_::Parameters params,
-	//CRVLMem *pMem,
-	//float *dS,
-	//bool *bdS)
+// Mesh *pMesh,
+// SurfelGraph *pSurfels,
+// Array<RECOG::PSGM_::Cluster *> SCClusters,
+// Array<RECOG::PSGM_::Cluster *> SUClusters,
+// Box<float> boundingBox,
+// RECOG::VN_::Parameters params,
+// CRVLMem *pMem,
+// float *dS,
+// bool *bdS)
 {
 	VNClassifier *pClassifier = (VNClassifier *)vpClassifier;
 
@@ -6823,22 +7070,22 @@ void VN::Match4(
 
 	//// Sample the mesh surface and transform the sampled points using R and t.
 
-	//int nSamplePts = 300;
+	// int nSamplePts = 300;
 
-	//Array<int> iPtArray;
+	// Array<int> iPtArray;
 
-	//iPtArray.n = pMesh->NodeArray.n;
+	// iPtArray.n = pMesh->NodeArray.n;
 
-	//RandomIndices(iPtArray);
+	// RandomIndices(iPtArray);
 
-	//float *PSampleArray = new float[3 * nSamplePts];
+	// float *PSampleArray = new float[3 * nSamplePts];
 
-	//P = PSampleArray;
+	// P = PSampleArray;
 
-	//int i;
-	//float *P_;
+	// int i;
+	// float *P_;
 
-	//for (i = 0; i < nSamplePts; i++, PSampleArray += 3)
+	// for (i = 0; i < nSamplePts; i++, PSampleArray += 3)
 	//{
 	//	P_ = pMesh->NodeArray.Element[iPtArray.Element[i]].P;
 
@@ -6856,7 +7103,7 @@ void VN::Match4(
 
 	if (bTorus)
 	{
-		float axis[] = { 0.0f, 0.0f, 1.0f };
+		float axis[] = {0.0f, 0.0f, 1.0f};
 
 		pMCluster = modelClusterList.pFirst;
 
@@ -6868,74 +7115,74 @@ void VN::Match4(
 			pMCluster = pMCluster->pNext;
 		}
 
-		ToroidalClusters(pMesh, PArray, NArray, pSurfels, axis, pMCluster->alphaArray, pMCluster->betaArray, 
-			pClassifier->clusteringTolerance, STClusters, pClassifier->pMem);
+		ToroidalClusters(pMesh, PArray, NArray, pSurfels, axis, pMCluster->alphaArray, pMCluster->betaArray,
+						 pClassifier->clusteringTolerance, STClusters, pClassifier->pMem);
 	}
-	
+
 	// Join all clusters into array SClusters_.
 
 	int nSTClusters = (bTorus ? RVLMIN(STClusters.n, pClassifier->maxnSTClusters) : 0);
 
-	//int nSCClusters = RVLMIN(SCClusters.n, pClassifier->maxnSCClusters);
+	// int nSCClusters = RVLMIN(SCClusters.n, pClassifier->maxnSCClusters);
 
-	//int nSUClusters = (bConcavity ? RVLMIN(SUClusters.n, pClassifier->maxnSUClusters) : 0);
+	// int nSUClusters = (bConcavity ? RVLMIN(SUClusters.n, pClassifier->maxnSUClusters) : 0);
 
-	//SClusters_.n = nSCClusters + nSUClusters + nSTClusters;
+	// SClusters_.n = nSCClusters + nSUClusters + nSTClusters;
 
-	//SClusters_.Element = new RECOG::SceneCluster[SClusters_.n];
+	// SClusters_.Element = new RECOG::SceneCluster[SClusters_.n];
 
-	//RECOG::SceneCluster *pSCluster = SClusters_.Element;
+	// RECOG::SceneCluster *pSCluster = SClusters_.Element;
 
-	//bool *bCovered = new bool[pSurfels->NodeArray.n];
+	// bool *bCovered = new bool[pSurfels->NodeArray.n];
 
-	//memset(bCovered, 0, pSurfels->NodeArray.n * sizeof(bool));
+	// memset(bCovered, 0, pSurfels->NodeArray.n * sizeof(bool));
 
-	//bool *bCopied[2];
+	// bool *bCopied[2];
 
-	//bCopied[0] = new bool[SCClusters.n];
+	// bCopied[0] = new bool[SCClusters.n];
 
-	//memset(bCopied[0], 0, SCClusters.n * sizeof(bool));
+	// memset(bCopied[0], 0, SCClusters.n * sizeof(bool));
 
-	//if (SUClusters.n > 0)
+	// if (SUClusters.n > 0)
 	//{
 	//	bCopied[1] = new bool[SUClusters.n];
 
 	//	memset(bCopied[1], 0, SUClusters.n * sizeof(bool));
 	//}
-	//else
+	// else
 	//	bCopied[1] = NULL;
 
-	//int iSCluster__[2];
+	// int iSCluster__[2];
 
-	//iSCluster__[0] = iSCluster__[1] = 0;
+	// iSCluster__[0] = iSCluster__[1] = 0;
 
-	//Array<RECOG::PSGM_::Cluster *> SClusterArray[2];
+	// Array<RECOG::PSGM_::Cluster *> SClusterArray[2];
 
-	//SClusterArray[0] = SCClusters;
-	//SClusterArray[1] = SUClusters;
+	// SClusterArray[0] = SCClusters;
+	// SClusterArray[1] = SUClusters;
 
-	//int iLargestCluster[2];
+	// int iLargestCluster[2];
 
-	//int iFirstArray = 0;
-	//int iLastArray = (nSUClusters ? 1 : 0);
+	// int iFirstArray = 0;
+	// int iLastArray = (nSUClusters ? 1 : 0);
 
-	//int *clusterMap[2];
+	// int *clusterMap[2];
 
-	//clusterMap[0] = pClassifier->convexClustering.clusterMap;
-	//clusterMap[1] = pClassifier->concaveClustering.clusterMap;
+	// clusterMap[0] = pClassifier->convexClustering.clusterMap;
+	// clusterMap[1] = pClassifier->concaveClustering.clusterMap;
 
-	//int nSClusters[2];
+	// int nSClusters[2];
 
-	//nSClusters[0] = nSCClusters;
-	//nSClusters[1] = nSUClusters;
+	// nSClusters[0] = nSCClusters;
+	// nSClusters[1] = nSUClusters;
 
-	//RECOG::PSGM_::Cluster *pCopiedCluster;
-	//int i, j;
-	//int iSurfel, iCluster;
-	//int iClusterArray;
-	//int largestClusterOrig;
+	// RECOG::PSGM_::Cluster *pCopiedCluster;
+	// int i, j;
+	// int iSurfel, iCluster;
+	// int iClusterArray;
+	// int largestClusterOrig;
 
-	//while (iSCluster__[0] < nSCClusters || iSCluster__[1] < nSUClusters)
+	// while (iSCluster__[0] < nSCClusters || iSCluster__[1] < nSUClusters)
 	//{
 	//	for (i = iFirstArray; i <= iLastArray; i++)
 	//	{
@@ -6944,7 +7191,7 @@ void VN::Match4(
 	//				break;
 
 	//		iLargestCluster[i] = iCluster;
-	//		
+	//
 	//		largestClusterOrig = SClusterArray[i].Element[iCluster]->orig;
 
 	//		iCluster++;
@@ -6953,8 +7200,8 @@ void VN::Match4(
 	//			if (!bCopied[i][iCluster])
 	//				if (SClusterArray[i].Element[iCluster]->orig > largestClusterOrig)
 	//				{
-	//					iLargestCluster[i] = iCluster; 
-	//					
+	//					iLargestCluster[i] = iCluster;
+	//
 	//					largestClusterOrig = SClusterArray[i].Element[iCluster]->orig;
 	//				}
 	//	}
@@ -6974,7 +7221,7 @@ void VN::Match4(
 	//	for (i = 0; i < pCopiedCluster->iSurfelArray.n; i++)
 	//	{
 	//		iSurfel = pCopiedCluster->iSurfelArray.Element[i];
-	//		
+	//
 	//		if (!bCovered[iSurfel])
 	//		{
 	//			for (j = iFirstArray; j <= iLastArray; j++)
@@ -6990,31 +7237,31 @@ void VN::Match4(
 	//	}
 
 	//	bCopied[iClusterArray][iLargestCluster[iClusterArray]] = true;
-	//			
+	//
 	//	iSCluster__[iClusterArray]++;
 
 	//	if (iSCluster__[iClusterArray] >= nSClusters[iClusterArray])
 	//		iFirstArray = iLastArray = 1 - iClusterArray;
 	//}
 
-	//delete[] bCovered;
-	//delete[] bCopied[0];
-	//RVL_DELETE_ARRAY(bCopied[1]);
+	// delete[] bCovered;
+	// delete[] bCopied[0];
+	// RVL_DELETE_ARRAY(bCopied[1]);
 
 	RECOG::SceneCluster *pSCluster = SClusters_.Element + SClusters_.n;
 
-	//for (iCluster = 0; iCluster < nSCClusters; iCluster++, pSCluster++)
+	// for (iCluster = 0; iCluster < nSCClusters; iCluster++, pSCluster++)
 	//{
 	//	pSCluster->type = RVLVN_CLUSTER_TYPE_CONVEX;
 	//	pSCluster->vpCluster = SCClusters.Element + iCluster;
-	//}
+	// }
 
-	//for (iCluster = 0; iCluster < nSUClusters; iCluster++, pSCluster++)
+	// for (iCluster = 0; iCluster < nSUClusters; iCluster++, pSCluster++)
 	//{
 	//	pSCluster->type = RVLVN_CLUSTER_TYPE_CONCAVE;
 	//	pSCluster->vpCluster = SUClusters.Element + iCluster;
-	//}
-	
+	// }
+
 	int iCluster;
 
 	if (bTorus)
@@ -7069,7 +7316,8 @@ void VN::Match4(
 		{
 			if (pMCluster->type == pSCluster->type)
 			{
-				switch (pSCluster->type){
+				switch (pSCluster->type)
+				{
 				case RVLVN_CLUSTER_TYPE_CONVEX:
 					pSCCluster = (RECOG::PSGM_::Cluster *)(pSCluster->vpCluster);
 
@@ -7077,8 +7325,8 @@ void VN::Match4(
 					{
 						N = featureArray.Element[iFeature].N;
 
-						pSurfels->ComputeTangent(pSCCluster->iVertexArray, PArray, N, 1.0f, false, false, pClassifier->tangentOrientationTolerance, tangentDistanceTolerance, 
-							dS__[iFeature], bd, iVertex);
+						pSurfels->ComputeTangent(pSCCluster->iVertexArray, PArray, N, 1.0f, false, false, pClassifier->tangentOrientationTolerance, tangentDistanceTolerance,
+												 dS__[iFeature], bd, iVertex);
 
 						bdS__[iFeature] = true;
 					}
@@ -7092,7 +7340,7 @@ void VN::Match4(
 						N = featureArray.Element[iFeature].N;
 
 						pSurfels->ComputeTangent(pSUCluster->iVertexArray, PArray, N, -1.0f, false, false, pClassifier->tangentOrientationTolerance, tangentDistanceTolerance,
-							dS__[iFeature], bd, iVertex);
+												 dS__[iFeature], bd, iVertex);
 
 						bdS__[iFeature] = true;
 					}
@@ -7206,13 +7454,13 @@ void VN::Match4(
 				pCorresp_ = pCorresp_->pParent;
 			}
 
-			//int debugMClusterID[] = {-1, -1, -1, -1, -1, -1, 0, -1};
+			// int debugMClusterID[] = {-1, -1, -1, -1, -1, -1, 0, -1};
 
-			//int iDebug = 0;
+			// int iDebug = 0;
 
-			//VN_::Correspondence4 *pDebugCorresp = pCorresp;
+			// VN_::Correspondence4 *pDebugCorresp = pCorresp;
 
-			//while (pDebugCorresp)
+			// while (pDebugCorresp)
 			//{
 			//	if (pDebugCorresp->iMCluster != debugMClusterID[iDebug++])
 			//		break;
@@ -7220,7 +7468,7 @@ void VN::Match4(
 			//	pDebugCorresp = pDebugCorresp->pParent;
 			//}
 
-			//if (pDebugCorresp == NULL)
+			// if (pDebugCorresp == NULL)
 			//	int debug = 0;
 
 			pMCluster = modelClusterList.pFirst;
@@ -7258,7 +7506,7 @@ void VN::Match4(
 				if (mine < 0.0f || e < mine)
 				{
 					mine = e;
-					
+
 					memcpy(dS, dSEval, featureArray.n * sizeof(float));
 					memcpy(bdS, bdSEval, featureArray.n * sizeof(bool));
 					pBestCorresp = pCorresp;
@@ -7401,15 +7649,15 @@ void VN::Match4(
 
 	// NHull <- convex hull of normals of all surfels grouped in a particular model cluster.
 
-	//Array<SURFEL::NormalHullElement> *NHull = new Array<SURFEL::NormalHullElement>[nMClusters];
+	// Array<SURFEL::NormalHullElement> *NHull = new Array<SURFEL::NormalHullElement>[nMClusters];
 
-	//SURFEL::NormalHullElement *NHullMem = new SURFEL::NormalHullElement[nMClusters * pSurfels->NodeArray.n];
+	// SURFEL::NormalHullElement *NHullMem = new SURFEL::NormalHullElement[nMClusters * pSurfels->NodeArray.n];
 
-	//Surfel *pSurfel;
+	// Surfel *pSurfel;
 
-	//pMCluster = modelClusterList.pFirst;
+	// pMCluster = modelClusterList.pFirst;
 
-	//while (pMCluster)
+	// while (pMCluster)
 	//{
 	//	NHull[pMCluster->ID].Element = NHullMem + pMCluster->ID * pSurfels->NodeArray.n;
 	//	NHull[pMCluster->ID].n = 0;
@@ -7428,13 +7676,13 @@ void VN::Match4(
 
 	// Validate descriptor components using normal hulls of surfels.
 
-	//memset(bdS, 0, featureArray.n * sizeof(bool));
+	// memset(bdS, 0, featureArray.n * sizeof(bool));
 
-	//float distFromNHull;
+	// float distFromNHull;
 
-	//pMCluster = modelClusterList.pFirst;
+	// pMCluster = modelClusterList.pFirst;
 
-	//while (pMCluster)
+	// while (pMCluster)
 	//{
 	//	for (iFeature = pMCluster->iFeatureInterval.a; iFeature <= pMCluster->iFeatureInterval.b; iFeature++)
 	//	{
@@ -7452,7 +7700,7 @@ void VN::Match4(
 
 	Array<SURFEL::NormalHullElement> *NHull = new Array<SURFEL::NormalHullElement>[pSurfels->vertexArray.n];
 
-	SURFEL::NormalHullElement *NHullMem = new SURFEL::NormalHullElement[3 * pSurfels->vertexArray.n];	
+	SURFEL::NormalHullElement *NHullMem = new SURFEL::NormalHullElement[3 * pSurfels->vertexArray.n];
 
 	if (bValidateDescriptorComponents)
 	{
@@ -7488,14 +7736,15 @@ void VN::Match4(
 				}
 			}
 
-			switch (pMCluster->type){
+			switch (pMCluster->type)
+			{
 			case RVLVN_CLUSTER_TYPE_CONVEX:
 				for (iFeature = pMCluster->iFeatureInterval.a; iFeature <= pMCluster->iFeatureInterval.b; iFeature++)
 				{
 					N = featureArray.Element[iFeature].N;
 
 					pSurfels->ComputeTangent(iVertexArrayArray[pMCluster->ID], PArray, NHull, N, 1.0f, true, false, pClassifier->tangentOrientationTolerance,
-						tangentDistanceTolerance, fTmp, bdS[iFeature], iVertex);
+											 tangentDistanceTolerance, fTmp, bdS[iFeature], iVertex);
 				}
 
 				break;
@@ -7504,11 +7753,11 @@ void VN::Match4(
 				{
 					N = featureArray.Element[iFeature].N;
 
-					//if (iFeature == 66+33)
+					// if (iFeature == 66+33)
 					//	int debug = 0;
 
 					pSurfels->ComputeTangent(iVertexArrayArray[pMCluster->ID], PArray, NHull, N, -1.0f, true, false, pClassifier->tangentOrientationTolerance,
-						tangentDistanceTolerance, fTmp, bdS[iFeature], iVertex);
+											 tangentDistanceTolerance, fTmp, bdS[iFeature], iVertex);
 				}
 
 				break;
@@ -7527,19 +7776,18 @@ void VN::Match4(
 
 					if (pTorusRing)
 						pSurfels->ComputeTangent(pTorusRing->iVertexArray, PArray, NS, -1.0f, true, false, pClassifier->tangentOrientationTolerance,
-						tangentDistanceTolerance, fTmp, bdS[iFeature], iVertex);
+												 tangentDistanceTolerance, fTmp, bdS[iFeature], iVertex);
 				}
 			}
-
 
 			pMCluster = pMCluster->pNext;
 		}
 	}
 
-	//for (int iF = 0; iF < featureArray.n; iF++)
+	// for (int iF = 0; iF < featureArray.n; iF++)
 	//{
 	//	bdS[iF] = 1;
-	//}
+	// }
 
 	///
 
@@ -7598,7 +7846,7 @@ void VN::ToroidalClusters(
 		cb[iBeta] = cos(betaArray.Element[iBeta]);
 		sb[iBeta] = sin(betaArray.Element[iBeta]);
 		cb2[iBeta] = cb[iBeta] * cb[iBeta];
-	}	
+	}
 
 	float sign[] = {1.0f, -1.0f};
 
@@ -7633,12 +7881,12 @@ void VN::ToroidalClusters(
 
 		P = PArray + 3 * iVertex;
 
-		//if (iVertex == 110)
+		// if (iVertex == 110)
 		//	int debug_ = 0;
 
-		//int debug = 0;
+		// int debug = 0;
 
-		//int debug__;
+		// int debug__;
 
 		pVEdgePtr = pVertex->EdgeList.pFirst;
 
@@ -7650,7 +7898,7 @@ void VN::ToroidalClusters(
 			{
 				pVEdge = pVEdgePtr->pEdge;
 
-				//if (pVEdge->idx == 75)
+				// if (pVEdge->idx == 75)
 				//	int debug = 0;
 
 				P_ = PArray + 3 * iVertex_;
@@ -7692,9 +7940,9 @@ void VN::ToroidalClusters(
 					}
 					else
 					{
-						a = adn*adn - cb2[iBeta] * dndn;
-						b = 2.0f * (adn*an1 - cb2[iBeta] * n1dn);
-						c = an1*an1 - cb2[iBeta];
+						a = adn * adn - cb2[iBeta] * dndn;
+						b = 2.0f * (adn * an1 - cb2[iBeta] * n1dn);
+						c = an1 * an1 - cb2[iBeta];
 
 						k = b * b - 4 * a * c;
 
@@ -7763,7 +8011,7 @@ void VN::ToroidalClusters(
 								pTangent_ = pTangent;
 						}
 					}
-				}	// for (iBeta = 0; iBeta < betaArray.n; iBeta++)
+				} // for (iBeta = 0; iBeta < betaArray.n; iBeta++)
 
 				pTangentSet->tangentArray.n = pTangentSet->maxiBeta - pTangentSet->miniBeta + 1;
 
@@ -7772,26 +8020,26 @@ void VN::ToroidalClusters(
 				j = 0;
 
 				for (i = pTangentSet->miniBeta; i <= pTangentSet->maxiBeta; i++, j++)
-					pTangentSet->tangentArray.Element[j] = tangentArray[i];				
-			}	// if (iVertex_ > iVertex)
+					pTangentSet->tangentArray.Element[j] = tangentArray[i];
+			} // if (iVertex_ > iVertex)
 
 			pVEdgePtr = pVEdgePtr->pNext;
-		}	// while (pVEdgePtr)
+		} // while (pVEdgePtr)
 
-		//if (debug == 1)
+		// if (debug == 1)
 		//	int debug_ = 0;
-	}	// for (iVertex = 0; iVertex < pSurfels->vertexArray.n; iVertex++)
+	} // for (iVertex = 0; iVertex < pSurfels->vertexArray.n; iVertex++)
 
 	delete[] cb2;
 	delete[] tangentArray;
 
-	//FILE *fp = fopen("tangentRing.txt", "w");
+	// FILE *fp = fopen("tangentRing.txt", "w");
 
-	//iBeta = 2;
+	// iBeta = 2;
 
-	//SURFEL::Vertex *pVertex_;
+	// SURFEL::Vertex *pVertex_;
 
-	//for (iVertex = 0; iVertex < pSurfels->vertexArray.n; iVertex++)
+	// for (iVertex = 0; iVertex < pSurfels->vertexArray.n; iVertex++)
 	//{
 	//	pVertex = pSurfels->vertexArray.Element[iVertex];
 
@@ -7815,7 +8063,7 @@ void VN::ToroidalClusters(
 	//	}
 	//}
 
-	//fclose(fp);
+	// fclose(fp);
 
 	// Detect torus rings for each beta. The detected rings are stored in ringListArray.
 
@@ -7834,13 +8082,13 @@ void VN::ToroidalClusters(
 
 	SURFEL::VertexEdge **VEdgeBuff = new SURFEL::VertexEdge *[pSurfels->vertexEdgeArray.n];
 
-	for (iBeta = 0; iBeta < betaArray.n; iBeta++)	// line 4
+	for (iBeta = 0; iBeta < betaArray.n; iBeta++) // line 4
 	{
 		pRingList = ringListArray.Element + iBeta;
 
 		RVLQLIST_INIT(pRingList);
 
-		memset(bEdgeJoined, 0, pSurfels->vertexEdgeArray.n * sizeof(bool));	// line 7
+		memset(bEdgeJoined, 0, pSurfels->vertexEdgeArray.n * sizeof(bool)); // line 7
 
 		for (iVertex = 0; iVertex < pSurfels->vertexArray.n; iVertex++)
 		{
@@ -7857,7 +8105,7 @@ void VN::ToroidalClusters(
 					pVEdge = pVEdgePtr->pEdge;
 
 					DetectTorusRings(pMesh, PArray, pSurfels, pVEdge, axis, iBeta, tangentSet, maxErr, pRingList, pMem, VEdgeBuff,
-						bEdgeJoined, bVertexJoined);				
+									 bEdgeJoined, bVertexJoined);
 				}
 
 				pVEdgePtr = pVEdgePtr->pNext;
@@ -7867,15 +8115,15 @@ void VN::ToroidalClusters(
 
 	int iRing;
 
-	//FILE *fp = fopen("tangentRing.txt", "w");
+	// FILE *fp = fopen("tangentRing.txt", "w");
 
-	//iRing = 0;
+	// iRing = 0;
 
-	//pRingList = ringListArray.Element + 0;
+	// pRingList = ringListArray.Element + 0;
 
-	//RECOG::VN_::TorusRing *pRingDebug = pRingList->pFirst;
+	// RECOG::VN_::TorusRing *pRingDebug = pRingList->pFirst;
 
-	//while (pRingDebug)
+	// while (pRingDebug)
 	//{
 	//	for (i = 0; i < pRingDebug->iEdgeArray.n; i++)
 	//	{
@@ -7892,7 +8140,7 @@ void VN::ToroidalClusters(
 	//	pRingDebug = pRingDebug->pNext;
 	//}
 
-	//fclose(fp);
+	// fclose(fp);
 
 	delete[] tangentSet;
 	delete[] bEdgeJoined;
@@ -7900,7 +8148,7 @@ void VN::ToroidalClusters(
 	delete[] VEdgeBuff;
 
 	// Compute CTI descriptors for all rings. (lines 15-19)
-	// For each alpha, the index of the kex vertex, i.e. the vertex defining the tangent corresponding to this alpha 
+	// For each alpha, the index of the kex vertex, i.e. the vertex defining the tangent corresponding to this alpha
 	// is stored in iKeyVertex array of each ring.
 
 	float *ca = new float[alphaArray.n];
@@ -7958,7 +8206,7 @@ void VN::ToroidalClusters(
 					iVertex = pRing->iVertexArray.Element[i];
 
 					P = PArray + 3 * iVertex;
-			
+
 					d = RVLDOTPRODUCT3(N, P);
 
 					if (d < dmin)
@@ -7979,7 +8227,7 @@ void VN::ToroidalClusters(
 
 	// For each pair of rings (pPrevRing, pRing), where pRing is a ring form the ring list of a particular beta
 	// and pPrevRing is a ring form the ring list of the previous beta in betaArray, a convexity test is applied.
-	// This test checks whether for each alpha, the key vertex of pPrevRing assigned to this alpha is below the tangent 
+	// This test checks whether for each alpha, the key vertex of pPrevRing assigned to this alpha is below the tangent
 	// of pRing corresponding to the same alpha and opposite.
 	// If the pair (pPrevRing, pRing) passes the convexity test, then pPrevRing is added to pRing->compList. (lines 20-24)
 
@@ -7987,7 +8235,7 @@ void VN::ToroidalClusters(
 
 	VN_::TorusRing *pPrevRing;
 	float e;
-	QList<RECOG::VN_::TorusRing> *pPrevRingList;	
+	QList<RECOG::VN_::TorusRing> *pPrevRingList;
 	QLIST::Ptr<RECOG::VN_::TorusRing> *pCompListEntry;
 
 	for (iBeta = 1; iBeta < betaArray.n; iBeta++, iPrevBeta++)
@@ -7995,7 +8243,7 @@ void VN::ToroidalClusters(
 		pRingList = ringListArray.Element + iBeta;
 
 		pRing = pRingList->pFirst;
-		
+
 		while (pRing)
 		{
 			pCompList = &(pRing->compList);
@@ -8180,7 +8428,7 @@ void VN::DetectTorusRings(
 	bool *bEdgeJoined,
 	bool *bVertexJoined)
 {
-	if (iBeta < tangentSet[pVEdge0->idx].miniBeta || iBeta > tangentSet[pVEdge0->idx].maxiBeta || bEdgeJoined[pVEdge0->idx])	// line 6
+	if (iBeta < tangentSet[pVEdge0->idx].miniBeta || iBeta > tangentSet[pVEdge0->idx].maxiBeta || bEdgeJoined[pVEdge0->idx]) // line 6
 		return;
 
 	// Identify the connected set of edges containing pVEdge0 such that all edges in this set have a tangent in the tangent set iBeta.
@@ -8211,7 +8459,7 @@ void VN::DetectTorusRings(
 	{
 		pVEdge = *(pVEdgeFetch++);
 
-		for (j = 0; j < 2; j++)	// for every endpoint of pVEdge
+		for (j = 0; j < 2; j++) // for every endpoint of pVEdge
 		{
 			pVEdgePtr = pSurfels->vertexArray.Element[pVEdge->iVertex[j]]->EdgeList.pFirst;
 
@@ -8221,21 +8469,21 @@ void VN::DetectTorusRings(
 
 				if (iBeta >= tangentSet[pVEdge_->idx].miniBeta && iBeta <= tangentSet[pVEdge_->idx].maxiBeta && !bEdgeJoined[pVEdge_->idx])
 				{
-					bEdgeJoined[pVEdge_->idx] = true;	// line 11
+					bEdgeJoined[pVEdge_->idx] = true; // line 11
 
 					*(pVEdgePush++) = pVEdge_;
-				}	// if (!bJoined[pVEdge_->idx])
+				} // if (!bJoined[pVEdge_->idx])
 
 				pVEdgePtr = pVEdgePtr->pNext;
-			}	// for every neighbor edge
-		}	// for (j = 0; j < 2; j++)
-	}	// main loop
+			} // for every neighbor edge
+		}	  // for (j = 0; j < 2; j++)
+	}		  // main loop
 
 	SURFEL::VertexEdge **pVEdgeBuffEnd = pVEdgeFetch;
 
 	int nEdges = pVEdgeBuffEnd - VEdgeBuff;
 
-	if (nEdges < minnEdges)	// line 12
+	if (nEdges < minnEdges) // line 12
 		return;
 
 	/// The following code implements line 13.
@@ -8249,7 +8497,7 @@ void VN::DetectTorusRings(
 	bool *bComp = new bool[nEdges2];
 
 	float *EMem = new float[2 * nEdges2];
-	
+
 	float *E[2];
 
 	E[0] = EMem;
@@ -8320,9 +8568,9 @@ void VN::DetectTorusRings(
 	// The compatibility score of an edge is computed by summing the lengths of all edges, which are not compatible with this edge
 	// and subtracting this sum from the length of the considered edge.
 	// The sorted edges are stored in sortedTangentArray.
-	
+
 	Array<SortIndex<float>> sortedTangentArray;
-	
+
 	sortedTangentArray.Element = new SortIndex<float>[nEdges];
 	sortedTangentArray.n = nEdges;
 
@@ -8384,8 +8632,8 @@ void VN::DetectTorusRings(
 
 	// If ringEdgeArray.n < minnEdges, then no ring is created.
 
-	//if (ringEdgeArray.n >= minnEdges && ringEdgeArray.n > nEdges / 2)
-	if (ringEdgeArray.n >= minnEdges)	// line 14
+	// if (ringEdgeArray.n >= minnEdges && ringEdgeArray.n > nEdges / 2)
+	if (ringEdgeArray.n >= minnEdges) // line 14
 	{
 		// If there is an edge in ringEdgeArray such that all other edges lie on its tangent within tolerance maxError,
 		// then no ring is created.
@@ -8442,7 +8690,7 @@ void VN::DetectTorusRings(
 				{
 					iVertex = pVEdge->iVertex[j];
 
-					//if (iVertex >= pSurfels->vertexArray.n)
+					// if (iVertex >= pSurfels->vertexArray.n)
 					//	int debug = 0;
 
 					if (!bVertexJoined[iVertex])
@@ -8456,10 +8704,10 @@ void VN::DetectTorusRings(
 
 			for (i = 0; i < pRing->iVertexArray.n; i++)
 				bVertexJoined[pRing->iVertexArray.Element[i]] = false;
-		}	// if (i >= ringEdgeArray.n)
-	}	// if (ringEdgeArray.n >= minnEdges)
+		} // if (i >= ringEdgeArray.n)
+	}	  // if (ringEdgeArray.n >= minnEdges)
 
-	//if (iBeta == 2)
+	// if (iBeta == 2)
 	//{
 	//	FILE *fp = fopen("tangentRing.txt", "w");
 
@@ -8475,8 +8723,8 @@ void VN::DetectTorusRings(
 	//		pVertex = pSurfels->vertexArray.Element[VEdgeBuff[i]->iVertex[0]];
 	//		pVertex_ = pSurfels->vertexArray.Element[VEdgeBuff[i]->iVertex[1]];
 
-	//		fprintf(fp, "%f\t%f\t%f\t%f\t%f\t%f\t%d\n", 
-	//			pVertex->P[0], pVertex->P[1], pVertex->P[2], pVertex_->P[0], pVertex_->P[1], pVertex_->P[2], 
+	//		fprintf(fp, "%f\t%f\t%f\t%f\t%f\t%f\t%d\n",
+	//			pVertex->P[0], pVertex->P[1], pVertex->P[2], pVertex_->P[0], pVertex_->P[1], pVertex_->P[2],
 	//			(bRingMember[i] ? 1 : 0));
 	//	}
 
@@ -8543,7 +8791,7 @@ void VN::Project(
 
 	for (iPt = 0; iPt < imgPtArray.h; iPt++)
 	{
-		//if (iPt == 325)
+		// if (iPt == 325)
 		//	int debug = 0;
 
 		m = imgPtArray.Element + imgPtArray.w * iPt;
@@ -8564,7 +8812,7 @@ void VN::Project(
 
 		s = surfaceRayIntersection.s * s_;
 
-		//if (s > 0.0f && s < 2000.0f)
+		// if (s > 0.0f && s < 2000.0f)
 		//	int debug = 0;
 
 		RVLSCALE3VECTOR(r, s, pPt->P);
@@ -8685,7 +8933,7 @@ VN_::SurfaceRayIntersection VN::Project(
 
 	while (pEdge)
 	{
-		//if (pEdge->data.b == 181)
+		// if (pEdge->data.b == 181)
 		//	int debug = 0;
 
 		pChildInterval = projectionIntervals.Element + pEdge->data.a;
@@ -8740,7 +8988,7 @@ VN_::SurfaceRayIntersection VN::Project(
 		}
 
 		pEdge = pEdge->pNext;
-	}	// while (pEdge)
+	} // while (pEdge)
 
 	if (projectionIntervals.Element[iy].n > 0)
 	{
@@ -8761,6 +9009,173 @@ VN_::SurfaceRayIntersection VN::Project(
 
 		return surfaceRayIntersection;
 	}
+}
+
+Array<Pair<RECOG::VN_::SurfaceRayIntersection, RECOG::VN_::SurfaceRayIntersection>> *VN::VolumeCylinderIntersection(
+	float *d,
+	float *P1,
+	float *P2,
+	float r)
+{
+	float V[3];
+	RVLDIF3VECTORS(P2, P1, V);
+	float l = sqrt(RVLDOTPRODUCT3(V, V));
+	RVLSCALE3VECTOR2(V, l, V);
+
+	int iNode;
+	VN_::Node *pNode;
+	Array<Pair<VN_::SurfaceRayIntersection, VN_::SurfaceRayIntersection>> *pProjectionInterval;
+	float *N;
+	float d_;
+	float c;
+	Pair<VN_::SurfaceRayIntersection, VN_::SurfaceRayIntersection> *pInterval;
+	float s0;
+
+	for (iNode = 0; iNode < featureArray.n; iNode++)
+	{
+		pNode = NodeArray.Element + iNode;
+
+		pProjectionInterval = projectionIntervals.Element + iNode;
+
+		pInterval = pProjectionInterval->Element;
+
+		N = pNode->pFeature->N;
+
+		c = RVLDOTPRODUCT3(N, V);
+
+		if (c < -1e-6)
+		{
+			s0 = -(RVLDOTPRODUCT3(N, P1) - d[iNode] - r) / c;
+			if (s0 <= l)
+			{
+				pInterval->a.s = s0;
+				pInterval->a.iFeature = iNode;
+				pInterval->b.s = 1e6;
+				pInterval->b.iFeature = -1;
+				pProjectionInterval->n = 1;
+			}
+			else
+				pProjectionInterval->n = 0;
+		}
+		else if (c < 1e-6)
+		{
+			if (d[iNode] >= 0.0f)
+			{
+				pInterval->a.s = -1e6;
+				pInterval->a.iFeature = -1;
+				pInterval->b.s = 1e6;
+				pInterval->b.iFeature = -1;
+				pProjectionInterval->n = 1;
+			}
+			else
+				pProjectionInterval->n = 0;
+		}
+		else
+		{
+			s0 = -(RVLDOTPRODUCT3(N, P1) - d[iNode] - r) / c;
+			if (s0 >= 0.0f)
+			{
+				pInterval->a.s = -1e6;
+				pInterval->a.iFeature = -1;
+				pInterval->b.s = s0;
+				pInterval->b.iFeature = iNode;
+				pProjectionInterval->n = 1;
+			}
+			else
+				pProjectionInterval->n = 0;
+		}
+	}
+
+	for (; iNode < NodeArray.n; iNode++)
+	{
+		pNode = NodeArray.Element + iNode;
+
+		pProjectionInterval = projectionIntervals.Element + iNode;
+
+		if (pNode->operation > 0)
+		{
+			pInterval = pProjectionInterval->Element;
+			pInterval->a.s = -1e6;
+			pInterval->a.iFeature = -1;
+			pInterval->b.s = 1e6;
+			pInterval->b.iFeature = -1;
+			pProjectionInterval->n = 1;
+		}
+		else
+			pProjectionInterval->n = 0;
+	}
+
+	VN_::Edge *pEdge = EdgeList.pFirst;
+
+	VN_::Node *pParentNode;
+	Array<Pair<VN_::SurfaceRayIntersection, VN_::SurfaceRayIntersection>> *pChildInterval, *pParentInterval;
+	int i, iPrev, j;
+	int bOpen[2];
+	int iInterval[2];
+	int iNewInterval;
+	VN_::SurfaceRayIntersection nextPt[2];
+	int iNext;
+	bool b1, b2;
+	int nb, nbPrev;
+	int nOpen, nClosed;
+
+	while (pEdge)
+	{
+		pChildInterval = projectionIntervals.Element + pEdge->data.a;
+
+		pParentInterval = projectionIntervals.Element + pEdge->data.b;
+
+		pParentNode = NodeArray.Element + pEdge->data.b;
+
+		nOpen = (pParentNode->operation > 0 ? 2 : 1);
+
+		nClosed = nOpen - 1;
+
+		projectionIntervalBuff.n = pParentInterval->n;
+
+		for (i = 0; i < pParentInterval->n; i++)
+			projectionIntervalBuff.Element[i] = pParentInterval->Element[i];
+
+		bOpen[0] = bOpen[1] = 0;
+
+		iInterval[0] = iInterval[1] = 0;
+
+		nb = 0;
+
+		pParentInterval->n = 0;
+
+		while (true)
+		{
+			if (b1 = (iInterval[0] < pChildInterval->n))
+				nextPt[0] = (bOpen[0] > 0 ? pChildInterval->Element[iInterval[0]].b : pChildInterval->Element[iInterval[0]].a);
+			if (b2 = (iInterval[1] < projectionIntervalBuff.n))
+				nextPt[1] = (bOpen[1] > 0 ? projectionIntervalBuff.Element[iInterval[1]].b : projectionIntervalBuff.Element[iInterval[1]].a);
+			if (b1 && b2)
+				iNext = (nextPt[0].s <= nextPt[1].s ? 0 : 1);
+			else if (b1)
+				iNext = 0;
+			else if (b2)
+				iNext = 1;
+			else
+				break;
+			bOpen[iNext] = 1 - bOpen[iNext];
+			nbPrev = nb;
+			nb = bOpen[0] + bOpen[1];
+			if (nb == nOpen && nbPrev == nClosed)
+				pParentInterval->Element[pParentInterval->n].a = nextPt[iNext];
+			else if (nb == nClosed && nbPrev == nOpen)
+			{
+				pParentInterval->Element[pParentInterval->n].b = nextPt[iNext];
+				pParentInterval->n++;
+			}
+			if (bOpen[iNext] == 0)
+				iInterval[iNext]++;
+		}
+
+		pEdge = pEdge->pNext;
+	} // while (pEdge)
+
+	return projectionIntervals.Element + iy;
 }
 
 void VN::Transform(
@@ -8977,7 +9392,7 @@ float VN::SceneFittingScore(
 	timer.Start();
 
 	float sceneSupport = RECOG::VN_::SceneFittingScore2(sceneSamples, PtArray, maxe, maxz,
-		cThr, nSamples, chamferDist, nOutliers, bVisualize);
+														cThr, nSamples, chamferDist, nOutliers, bVisualize);
 
 	delete[] PtArray.Element;
 
@@ -8994,7 +9409,7 @@ void VN::Load(
 	char *fileName,
 	CRVLMem *pMem)
 {
-	FILE *fp = fopen(fileName, "r");	
+	FILE *fp = fopen(fileName, "r");
 
 	int nEdges;
 
@@ -9025,7 +9440,7 @@ void VN::Load(
 	}
 
 	int iNode;
-	
+
 	for (iNode = featureArray.n; iNode < NodeArray.n; iNode++)
 	{
 		pNode = NodeArray.Element + iNode;
@@ -9077,7 +9492,7 @@ void VN::Display(
 			d[i] = featureArray.Element[i].d;
 
 	Box<float> box;
-	
+
 	BoundingBox(d, box);
 
 	float resolution = kResolution * BoxSize(&box);
@@ -9109,14 +9524,14 @@ void VN::Display(
 	for (k = 0; k < f.c; k++)
 		for (j = 0; j < f.b; j++)
 			for (i = 0; i < f.a; i++)
-	{
-		P[0] = (float)i * resolution + box.minx;
-		P[1] = (float)j * resolution + box.miny;
-		P[2] = (float)k * resolution + box.minz;
+			{
+				P[0] = (float)i * resolution + box.minx;
+				P[1] = (float)j * resolution + box.miny;
+				P[2] = (float)k * resolution + box.minz;
 
-		f.Element[f.a * (f.b * k + j) + i] = Evaluate(P, SDF, iActiveFeature, true, d, bd);
-	}
-		
+				f.Element[f.a * (f.b * k + j) + i] = Evaluate(P, SDF, iActiveFeature, true, d, bd);
+			}
+
 	delete[] SDF;
 
 	printf("completed.\n");
@@ -9303,7 +9718,7 @@ void VN_::CreateTorus(
 	VN_::ModelCluster *pMCluster0 = pVN->AddModelCluster(0, RVLVN_CLUSTER_TYPE_CONVEX, R, t, 0.5f, convexTemplate, betaInterval, NArray, pMem);
 
 	Pair<int, int> iBetaInterval;
-	
+
 	iBetaInterval.a = 1;
 	iBetaInterval.b = 7;
 
@@ -9583,7 +9998,6 @@ void VN_::CreateBowl2(
 	pVN->boundingBox.maxz = 0.5f;
 }
 
-
 void VN_::CreateTwoConvex(
 	VN *pVN,
 	Array<RECOG::PSGM_::Plane> convexTemplate,
@@ -9626,7 +10040,6 @@ void VN_::CreateTwoConvex(
 	pVN->boundingBox.minz = -0.5f;
 	pVN->boundingBox.maxz = 0.5f;
 }
-
 
 void VN_::CreateMug(
 	VN *pVN,
@@ -9703,7 +10116,7 @@ void VN_::CreateMug2(
 	NArray.h = 1;
 
 	float N0[3];
-	
+
 	RVLSET3VECTOR(N0, 0.0f, 0.0f, 1.0f);
 
 	NArray.Element = N0;
@@ -9745,7 +10158,7 @@ void VN_::CreateMug2(
 
 	int iN;
 	float *N;
-	
+
 	for (iN = 0; iN < pMCluster0->NArray.h; iN++)
 	{
 		N = pMCluster0->NArray.Element + pMCluster0->NArray.w * iN;
@@ -9873,7 +10286,7 @@ void VN_::CreateMug4(
 
 	pVN->AddOperation(3, -1, 0, 2, pMem);
 
-	//pVN->SetOutput(3);
+	// pVN->SetOutput(3);
 
 	pVN->AddOperation(4, 1, 3, 1, pMem);
 
@@ -9922,7 +10335,7 @@ void VN_::CreateMug5(
 
 	pVN->AddOperation(3, 1, 0, 1, pMem);
 
-	//pVN->SetOutput(3);
+	// pVN->SetOutput(3);
 
 	pVN->AddOperation(4, -1, 3, 2, pMem);
 
@@ -9937,7 +10350,6 @@ void VN_::CreateMug5(
 	pVN->boundingBox.minz = -0.5f;
 	pVN->boundingBox.maxz = 0.5f;
 }
-
 
 void VN_::CreatePipe(
 	VN *pVN,
@@ -10111,26 +10523,26 @@ float VN_::SceneFittingScore(
 	float maxz,
 	float cosSurfaceRayAngleThr,
 	int &nOutliers,
-	//float transparencyDepthThr,
+	// float transparencyDepthThr,
 	bool bVisualize)
 {
 	int neighborhoodSize = 5;
 
 	int halfNeighborhoodSize = (neighborhoodSize - 1) / 2;
 
-	//int neighbor[9];
+	// int neighbor[9];
 
-	//int w = ZBuffer.w;
+	// int w = ZBuffer.w;
 
-	//neighbor[0] = -1 - w;
-	//neighbor[1] = -w;
-	//neighbor[2] = 1 - w;
-	//neighbor[3] = -1;
-	//neighbor[4] = 0;
-	//neighbor[5] = 1;
-	//neighbor[6] = -1 + w;
-	//neighbor[7] = w;
-	//neighbor[8] = 1 + w;
+	// neighbor[0] = -1 - w;
+	// neighbor[1] = -w;
+	// neighbor[2] = 1 - w;
+	// neighbor[3] = -1;
+	// neighbor[4] = 0;
+	// neighbor[5] = 1;
+	// neighbor[6] = -1 + w;
+	// neighbor[7] = w;
+	// neighbor[8] = 1 + w;
 
 	int maxmaxu = sceneSamples.w - 1;
 	int maxmaxv = sceneSamples.h - 1;
@@ -10169,7 +10581,7 @@ float VN_::SceneFittingScore(
 				bVisible[i] = true;
 		}
 	}
-	
+
 	bool *bMInlier;
 	bool *bSInlier;
 
@@ -10277,7 +10689,7 @@ float VN_::SceneFittingScore(
 				}
 			}
 
-			//if (PM[2] > maxz)
+			// if (PM[2] > maxz)
 			//{
 			//	nOutliers++;
 
@@ -10288,7 +10700,7 @@ float VN_::SceneFittingScore(
 			//		nSOutliers++;
 			//	}
 			//}
-			//else
+			// else
 			//{
 			//	RVLDIF3VECTORS(PS_, PM, dP);
 
@@ -10317,7 +10729,7 @@ float VN_::SceneFittingScore(
 			//	}
 			//}
 		}
-		//else if (sceneSamples.status[i] == 2)
+		// else if (sceneSamples.status[i] == 2)
 		//{
 		//	if (PM[2] <= maxz)
 		//	{
@@ -10341,9 +10753,9 @@ float VN_::SceneFittingScore(
 
 	if (bVisualize)
 	{
-		//PSGM_::ModelInstance *pSCTI = CTISet.pCTI.Element[pHypothesis->iSCTI];
+		// PSGM_::ModelInstance *pSCTI = CTISet.pCTI.Element[pHypothesis->iSCTI];
 
-		//printf("segment %d model %d match %d score %f transparency %d ground distance %f\n",
+		// printf("segment %d model %d match %d score %f transparency %d ground distance %f\n",
 		//	pSCTI->iCluster, iModel, iHypothesis, score, nTransparentPts, pHypothesis->gndDistance);
 
 		int nPts = sceneSamples.imagePtArray.h;
@@ -10394,7 +10806,7 @@ float VN_::SceneFittingScore(
 
 					RVLCOPY3VECTOR(PS, pSPt->P);
 				}
-			}			
+			}
 
 			if (bVisible[i])
 			{
@@ -10441,12 +10853,12 @@ float VN_::SceneFittingScore(
 
 		visualizer.DisplayPointSet<float, Point>(SOutlierPC, color, 4.0f);
 
-		//visualizer.Run();
+		// visualizer.Run();
 
 		delete[] PC;
 		delete[] bMInlier;
 		delete[] bSInlier;
-	}	// if (bVisualize)
+	} // if (bVisualize)
 
 	delete[] PS_;
 	delete[] bVisible;
@@ -10463,26 +10875,26 @@ float VN_::SceneFittingScore2(
 	int &nSamples,
 	float &chamferDist,
 	int &nOutliers,
-	//float transparencyDepthThr,
+	// float transparencyDepthThr,
 	bool bVisualize)
 {
 	int neighborhoodSize = 5;
 
 	int halfNeighborhoodSize = (neighborhoodSize - 1) / 2;
 
-	//int neighbor[9];
+	// int neighbor[9];
 
-	//int w = ZBuffer.w;
+	// int w = ZBuffer.w;
 
-	//neighbor[0] = -1 - w;
-	//neighbor[1] = -w;
-	//neighbor[2] = 1 - w;
-	//neighbor[3] = -1;
-	//neighbor[4] = 0;
-	//neighbor[5] = 1;
-	//neighbor[6] = -1 + w;
-	//neighbor[7] = w;
-	//neighbor[8] = 1 + w;
+	// neighbor[0] = -1 - w;
+	// neighbor[1] = -w;
+	// neighbor[2] = 1 - w;
+	// neighbor[3] = -1;
+	// neighbor[4] = 0;
+	// neighbor[5] = 1;
+	// neighbor[6] = -1 + w;
+	// neighbor[7] = w;
+	// neighbor[8] = 1 + w;
 
 	int maxmaxu = sceneSamples.w - 1;
 	int maxmaxv = sceneSamples.h - 1;
@@ -10500,7 +10912,7 @@ float VN_::SceneFittingScore2(
 
 	for (i = 0; i < sceneSamples.imagePtArray.h; i++, PS__ += 3)
 	{
-		//if (i == 100)
+		// if (i == 100)
 		//	int debug = 0;
 
 		bVisible[i] = false;
@@ -10512,7 +10924,7 @@ float VN_::SceneFittingScore2(
 
 		if (sceneSamples.bCentered)
 		{
-		RVLSUM3VECTORS(PS, sceneSamples.Pc, PS__);
+			RVLSUM3VECTORS(PS, sceneSamples.Pc, PS__);
 		}
 		else
 		{
@@ -10658,7 +11070,7 @@ float VN_::SceneFittingScore2(
 				}
 			}
 
-			//if (PM[2] > maxz)
+			// if (PM[2] > maxz)
 			//{
 			//	nOutliers++;
 
@@ -10669,7 +11081,7 @@ float VN_::SceneFittingScore2(
 			//		nSOutliers++;
 			//	}
 			//}
-			//else
+			// else
 			//{
 			//	RVLDIF3VECTORS(PS_, PM, dP);
 
@@ -10698,7 +11110,7 @@ float VN_::SceneFittingScore2(
 			//	}
 			//}
 		}
-		//else if (sceneSamples.status[i] == 2)
+		// else if (sceneSamples.status[i] == 2)
 		//{
 		//	if (PM[2] <= maxz)
 		//	{
@@ -10722,9 +11134,9 @@ float VN_::SceneFittingScore2(
 
 	if (bVisualize)
 	{
-		//PSGM_::ModelInstance *pSCTI = CTISet.pCTI.Element[pHypothesis->iSCTI];
+		// PSGM_::ModelInstance *pSCTI = CTISet.pCTI.Element[pHypothesis->iSCTI];
 
-		//printf("segment %d model %d match %d score %f transparency %d ground distance %f\n",
+		// printf("segment %d model %d match %d score %f transparency %d ground distance %f\n",
 		//	pSCTI->iCluster, iModel, iHypothesis, score, nTransparentPts, pHypothesis->gndDistance);
 
 		int nPts = sceneSamples.imagePtArray.h;
@@ -10827,7 +11239,7 @@ float VN_::SceneFittingScore2(
 		delete[] PC;
 		delete[] bMInlier;
 		delete[] bSInlier;
-	}	// if (bVisualize)
+	} // if (bVisualize)
 
 	delete[] PS_;
 	delete[] bVisible;
@@ -10882,7 +11294,6 @@ void VN_::Delete(RECOG::VN_::FitData &fitData)
 	delete[] fitData.P;
 }
 
-
 void VN_::Create(
 	VN *pMetaModel,
 	int *valid,
@@ -10912,7 +11323,7 @@ void VN_::Create(
 		pMCluster = pMCluster->pNext;
 	}
 
-	//if (nConvex >= 2)
+	// if (nConvex >= 2)
 	//	int debug = 1;
 	VN_::ModelCluster **convexCluster = new VN_::ModelCluster *[nConvex];
 	int *valid_ = valid;
@@ -10945,10 +11356,9 @@ void VN_::Create(
 		pMOperation = pMOperation->pNext;
 	}
 
-
 	VN_::ModelCluster *pMCluster2;
 	bool bN;
-	//if 2 or more convex
+	// if 2 or more convex
 	if (nConvex >= 2)
 	{
 		pMCluster = convexCluster[0];
@@ -10957,13 +11367,13 @@ void VN_::Create(
 			pMCluster2 = convexCluster[i];
 			for (int n = 0; n < pMCluster->NArray.h; n++)
 			{
-				//if (pMCluster->NArray.Element[n]==1 && pMCluster2->NArray.Element[n]==0)
+				// if (pMCluster->NArray.Element[n]==1 && pMCluster2->NArray.Element[n]==0)
 				//	pVN->AddLimit(convexCluster[0]->ID, 0, 0, pMCluster->NArray.Element[n], convexCluster[i]->ID, pMem); //[i]
-				
+
 				bN = false;
 				for (int n2 = 0; n2 < pMCluster2->NArray.h; n2++)
 				{
-					//if (pMCluster->NArray.Element[n] == pMCluster2->NArray.Element[n2])
+					// if (pMCluster->NArray.Element[n] == pMCluster2->NArray.Element[n2])
 					if (pMCluster->iN[n] == pMCluster2->iN[n2])
 					{
 						bN = true;
@@ -10973,32 +11383,28 @@ void VN_::Create(
 
 				if (!bN)
 					pVN->AddLimit(convexCluster[0]->ID, 0, 0, n, convexCluster[i]->ID, pMem); //[i]
-					
 			}
 		}
-
-
 	}
-	
+
 	delete[] valid__;
 	delete[] convexCluster;
 
-
-	//pVN->AddOperation(2, 1, 0, 1, pMem);
+	// pVN->AddOperation(2, 1, 0, 1, pMem);
 
 	pVN->SetOutput(pMetaModel->outputID);
 
 	pVN->Create(pMem);
 
-	//pVN->boundingBox.minx = -0.5f;
-	//pVN->boundingBox.maxx = 0.5f;
-	//pVN->boundingBox.miny = -0.5f;
-	//pVN->boundingBox.maxy = 0.5f;
-	//pVN->boundingBox.minz = -0.5f;
-	//pVN->boundingBox.maxz = 0.5f;
+	// pVN->boundingBox.minx = -0.5f;
+	// pVN->boundingBox.maxx = 0.5f;
+	// pVN->boundingBox.miny = -0.5f;
+	// pVN->boundingBox.maxy = 0.5f;
+	// pVN->boundingBox.minz = -0.5f;
+	// pVN->boundingBox.maxz = 0.5f;
 }
 
-// Created by Robert Cupec and modified by Sini�a Stani�.
+// Created by Robert Cupec and modified by Siniï¿½a Staniï¿½.
 
 void VN::DetectTorusRings(
 	Mesh *pMesh,
@@ -11016,7 +11422,7 @@ void VN::DetectTorusRings(
 	bool *bVertexJoined,
 	bool *vertexCH)
 {
-	if (iBeta < tangentSet[pVEdge0->idx].miniBeta || iBeta > tangentSet[pVEdge0->idx].maxiBeta || bEdgeJoined[pVEdge0->idx])	// line 6
+	if (iBeta < tangentSet[pVEdge0->idx].miniBeta || iBeta > tangentSet[pVEdge0->idx].maxiBeta || bEdgeJoined[pVEdge0->idx]) // line 6
 		return;
 
 	// Identify the connected set of edges containing pVEdge0 such that all edges in this set have a tangent in the tangent set iBeta.
@@ -11047,7 +11453,7 @@ void VN::DetectTorusRings(
 	{
 		pVEdge = *(pVEdgeFetch++);
 
-		for (j = 0; j < 2; j++)	// for every endpoint of pVEdge
+		for (j = 0; j < 2; j++) // for every endpoint of pVEdge
 		{
 			pVEdgePtr = pSurfels->vertexArray.Element[pVEdge->iVertex[j]]->EdgeList.pFirst;
 
@@ -11058,31 +11464,30 @@ void VN::DetectTorusRings(
 				// Stanic: provjeriti jesu li oba verteksa pVEdge_ unutar CH. (Y)
 
 				if (vertexCH)
-					if (!*(vertexCH + pVEdge_->iVertex[0]) && !*(vertexCH + pVEdge_->iVertex[1])){
+					if (!*(vertexCH + pVEdge_->iVertex[0]) && !*(vertexCH + pVEdge_->iVertex[1]))
+					{
 						pVEdgePtr = pVEdgePtr->pNext;
 						continue;
 					}
 
-
 				if (iBeta >= tangentSet[pVEdge_->idx].miniBeta && iBeta <= tangentSet[pVEdge_->idx].maxiBeta && !bEdgeJoined[pVEdge_->idx])
 				{
-					bEdgeJoined[pVEdge_->idx] = true;	// line 11
+					bEdgeJoined[pVEdge_->idx] = true; // line 11
 
 					*(pVEdgePush++) = pVEdge_;
-				}	// if (!bJoined[pVEdge_->idx])
-
+				} // if (!bJoined[pVEdge_->idx])
 
 				pVEdgePtr = pVEdgePtr->pNext;
 
-			}	// for every neighbor edge
-		}	// for (j = 0; j < 2; j++)
-	}	// main loop
+			} // for every neighbor edge
+		}	  // for (j = 0; j < 2; j++)
+	}		  // main loop
 
 	SURFEL::VertexEdge **pVEdgeBuffEnd = pVEdgeFetch;
 
 	int nEdges = pVEdgeBuffEnd - VEdgeBuff;
 
-	if (nEdges < minnEdges)	// line 12
+	if (nEdges < minnEdges) // line 12
 		return;
 
 	/// The following code implements line 13.
@@ -11231,8 +11636,8 @@ void VN::DetectTorusRings(
 
 	// If ringEdgeArray.n < minnEdges, then no ring is created.
 
-	//if (ringEdgeArray.n >= minnEdges && ringEdgeArray.n > nEdges / 2)
-	if (ringEdgeArray.n >= minnEdges)	// line 14
+	// if (ringEdgeArray.n >= minnEdges && ringEdgeArray.n > nEdges / 2)
+	if (ringEdgeArray.n >= minnEdges) // line 14
 	{
 		// If there is an edge in ringEdgeArray such that all other edges lie on its tangent within tolerance maxError,
 		// then no ring is created.
@@ -11289,7 +11694,7 @@ void VN::DetectTorusRings(
 				{
 					iVertex = pVEdge->iVertex[j];
 
-					//if (iVertex >= pSurfels->vertexArray.n)
+					// if (iVertex >= pSurfels->vertexArray.n)
 					//	int debug = 0;
 
 					if (!bVertexJoined[iVertex])
@@ -11303,10 +11708,10 @@ void VN::DetectTorusRings(
 
 			for (i = 0; i < pRing->iVertexArray.n; i++)
 				bVertexJoined[pRing->iVertexArray.Element[i]] = false;
-		}	// if (i >= ringEdgeArray.n)
-	}	// if (ringEdgeArray.n >= minnEdges)
+		} // if (i >= ringEdgeArray.n)
+	}	  // if (ringEdgeArray.n >= minnEdges)
 
-	//if (iBeta == 2)
+	// if (iBeta == 2)
 	//{
 	//	FILE *fp = fopen("tangentRing.txt", "w");
 
@@ -11322,8 +11727,8 @@ void VN::DetectTorusRings(
 	//		pVertex = pSurfels->vertexArray.Element[VEdgeBuff[i]->iVertex[0]];
 	//		pVertex_ = pSurfels->vertexArray.Element[VEdgeBuff[i]->iVertex[1]];
 
-	//		fprintf(fp, "%f\t%f\t%f\t%f\t%f\t%f\t%d\n", 
-	//			pVertex->P[0], pVertex->P[1], pVertex->P[2], pVertex_->P[0], pVertex_->P[1], pVertex_->P[2], 
+	//		fprintf(fp, "%f\t%f\t%f\t%f\t%f\t%f\t%d\n",
+	//			pVertex->P[0], pVertex->P[1], pVertex->P[2], pVertex_->P[0], pVertex_->P[1], pVertex_->P[2],
 	//			(bRingMember[i] ? 1 : 0));
 	//	}
 
@@ -11338,7 +11743,7 @@ void VN::DetectTorusRings(
 	delete[] ringEdgeArray.Element;
 }
 
-// Created by Robert Cupec and modified by Sini�a Stani�.
+// Created by Robert Cupec and modified by Siniï¿½a Staniï¿½.
 
 void VN::ToroidalClusters2(
 	Mesh *pMesh,
@@ -11351,13 +11756,12 @@ void VN::ToroidalClusters2(
 	Array<float> betaArray,
 	float maxErr,
 	QList<RECOG::VN_::Torus> *pTorusList,
-	//Array<RECOG::VN_::Torus *> &SClusters,
+	// Array<RECOG::VN_::Torus *> &SClusters,
 	CRVLMem *pMem,
 	bool *vertexCH,
 	int &nToruses,
 	int iSuperSegment)
 {
-
 
 	// Assign tangents to all vertex edges. (line 1)
 
@@ -11380,7 +11784,7 @@ void VN::ToroidalClusters2(
 		cb2[iBeta] = cb[iBeta] * cb[iBeta];
 	}
 
-	float sign[] = { 1.0f, -1.0f };
+	float sign[] = {1.0f, -1.0f};
 
 	VN_::EdgeTangent **tangentArray;
 
@@ -11411,7 +11815,8 @@ void VN::ToroidalClusters2(
 	{
 		// provjeriti je li iVertex unutar CH. (Y)
 
-		if (!*(vertexCH + iVertex)){
+		if (!*(vertexCH + iVertex))
+		{
 			continue;
 		}
 
@@ -11419,12 +11824,12 @@ void VN::ToroidalClusters2(
 
 		P = PArray + 3 * iVertex;
 
-		//if (iVertex == 110)
+		// if (iVertex == 110)
 		//	int debug_ = 0;
 
-		//int debug = 0;
+		// int debug = 0;
 
-		//int debug__;
+		// int debug__;
 
 		pVEdgePtr = pVertex->EdgeList.pFirst;
 
@@ -11433,7 +11838,8 @@ void VN::ToroidalClusters2(
 			iVertex_ = RVLPCSEGMENT_GRAPH_GET_OPPOSITE_NODE(pVEdgePtr);
 
 			// provjeriti je li iVertex_ unutar CH. (Y)
-			if (!*(vertexCH + iVertex_)){
+			if (!*(vertexCH + iVertex_))
+			{
 				pVEdgePtr = pVEdgePtr->pNext;
 				continue;
 			}
@@ -11442,7 +11848,7 @@ void VN::ToroidalClusters2(
 			{
 				pVEdge = pVEdgePtr->pEdge;
 
-				//if (pVEdge->idx == 75)
+				// if (pVEdge->idx == 75)
 				//	int debug = 0;
 
 				P_ = PArray + 3 * iVertex_;
@@ -11484,9 +11890,9 @@ void VN::ToroidalClusters2(
 					}
 					else
 					{
-						a = adn*adn - cb2[iBeta] * dndn;
-						b = 2.0f * (adn*an1 - cb2[iBeta] * n1dn);
-						c = an1*an1 - cb2[iBeta];
+						a = adn * adn - cb2[iBeta] * dndn;
+						b = 2.0f * (adn * an1 - cb2[iBeta] * n1dn);
+						c = an1 * an1 - cb2[iBeta];
 
 						k = b * b - 4 * a * c;
 
@@ -11555,7 +11961,7 @@ void VN::ToroidalClusters2(
 								pTangent_ = pTangent;
 						}
 					}
-				}	// for (iBeta = 0; iBeta < betaArray.n; iBeta++)
+				} // for (iBeta = 0; iBeta < betaArray.n; iBeta++)
 
 				pTangentSet->tangentArray.n = pTangentSet->maxiBeta - pTangentSet->miniBeta + 1;
 
@@ -11565,25 +11971,25 @@ void VN::ToroidalClusters2(
 
 				for (i = pTangentSet->miniBeta; i <= pTangentSet->maxiBeta; i++, j++)
 					pTangentSet->tangentArray.Element[j] = tangentArray[i];
-			}	// if (iVertex_ > iVertex)
+			} // if (iVertex_ > iVertex)
 
 			pVEdgePtr = pVEdgePtr->pNext;
-		}	// while (pVEdgePtr)
+		} // while (pVEdgePtr)
 
-		//if (debug == 1)
+		// if (debug == 1)
 		//	int debug_ = 0;
-	}	// for (iVertex = 0; iVertex < pSurfels->vertexArray.n; iVertex++)
+	} // for (iVertex = 0; iVertex < pSurfels->vertexArray.n; iVertex++)
 
 	delete[] cb2;
 	delete[] tangentArray;
 
-	//FILE *fp = fopen("tangentRing.txt", "w");
+	// FILE *fp = fopen("tangentRing.txt", "w");
 
-	//iBeta = 2;
+	// iBeta = 2;
 
-	//SURFEL::Vertex *pVertex_;
+	// SURFEL::Vertex *pVertex_;
 
-	//for (iVertex = 0; iVertex < pSurfels->vertexArray.n; iVertex++)
+	// for (iVertex = 0; iVertex < pSurfels->vertexArray.n; iVertex++)
 	//{
 	//	pVertex = pSurfels->vertexArray.Element[iVertex];
 
@@ -11607,7 +12013,7 @@ void VN::ToroidalClusters2(
 	//	}
 	//}
 
-	//fclose(fp);
+	// fclose(fp);
 
 	// Detect torus rings for each beta. The detected rings are stored in ringListArray.
 
@@ -11626,13 +12032,13 @@ void VN::ToroidalClusters2(
 
 	SURFEL::VertexEdge **VEdgeBuff = new SURFEL::VertexEdge *[pSurfels->vertexEdgeArray.n];
 
-	for (iBeta = 0; iBeta < betaArray.n; iBeta++)	// line 4
+	for (iBeta = 0; iBeta < betaArray.n; iBeta++) // line 4
 	{
 		pRingList = ringListArray.Element + iBeta;
 
 		RVLQLIST_INIT(pRingList);
 
-		memset(bEdgeJoined, 0, pSurfels->vertexEdgeArray.n * sizeof(bool));	// line 7
+		memset(bEdgeJoined, 0, pSurfels->vertexEdgeArray.n * sizeof(bool)); // line 7
 
 		for (iVertex = 0; iVertex < pSurfels->vertexArray.n; iVertex++)
 		{
@@ -11644,7 +12050,7 @@ void VN::ToroidalClusters2(
 
 			pVertex = pSurfels->vertexArray.Element[iVertex];
 
-			//if ()
+			// if ()
 
 			pVEdgePtr = pVertex->EdgeList.pFirst;
 
@@ -11654,7 +12060,8 @@ void VN::ToroidalClusters2(
 
 				// provjeriti je li iVertex_ unutar CH. (Y)
 
-				if (!*(vertexCH + iVertex_)){
+				if (!*(vertexCH + iVertex_))
+				{
 					pVEdgePtr = pVEdgePtr->pNext;
 					continue;
 				}
@@ -11664,7 +12071,7 @@ void VN::ToroidalClusters2(
 					pVEdge = pVEdgePtr->pEdge;
 
 					DetectTorusRings(pMesh, PArray, pSurfels, pVEdge, axis, iBeta, tangentSet, maxErr, pRingList, pMem, VEdgeBuff,
-						bEdgeJoined, bVertexJoined, vertexCH);
+									 bEdgeJoined, bVertexJoined, vertexCH);
 				}
 
 				pVEdgePtr = pVEdgePtr->pNext;
@@ -11674,15 +12081,15 @@ void VN::ToroidalClusters2(
 
 	int iRing;
 
-	//FILE *fp = fopen("tangentRing.txt", "w");
+	// FILE *fp = fopen("tangentRing.txt", "w");
 
-	//iRing = 0;
+	// iRing = 0;
 
-	//pRingList = ringListArray.Element + 0;
+	// pRingList = ringListArray.Element + 0;
 
-	//RECOG::VN_::TorusRing *pRingDebug = pRingList->pFirst;
+	// RECOG::VN_::TorusRing *pRingDebug = pRingList->pFirst;
 
-	//while (pRingDebug)
+	// while (pRingDebug)
 	//{
 	//	for (i = 0; i < pRingDebug->iEdgeArray.n; i++)
 	//	{
@@ -11699,7 +12106,7 @@ void VN::ToroidalClusters2(
 	//	pRingDebug = pRingDebug->pNext;
 	//}
 
-	//fclose(fp);
+	// fclose(fp);
 
 	delete[] tangentSet;
 	delete[] bEdgeJoined;
@@ -11707,7 +12114,7 @@ void VN::ToroidalClusters2(
 	delete[] VEdgeBuff;
 
 	// Compute CTI descriptors for all rings. (lines 15-19)
-	// For each alpha, the index of the kex vertex, i.e. the vertex defining the tangent corresponding to this alpha 
+	// For each alpha, the index of the kex vertex, i.e. the vertex defining the tangent corresponding to this alpha
 	// is stored in iKeyVertex array of each ring.
 
 	float *ca = new float[alphaArray.n];
@@ -11786,7 +12193,7 @@ void VN::ToroidalClusters2(
 
 	// For each pair of rings (pPrevRing, pRing), where pRing is a ring form the ring list of a particular beta
 	// and pPrevRing is a ring form the ring list of the previous beta in betaArray, a convexity test is applied.
-	// This test checks whether for each alpha, the key vertex of pPrevRing assigned to this alpha is below the tangent 
+	// This test checks whether for each alpha, the key vertex of pPrevRing assigned to this alpha is below the tangent
 	// of pRing corresponding to the same alpha and opposite.
 	// If the pair (pPrevRing, pRing) passes the convexity test, then pPrevRing is added to pRing->compList. (lines 20-24)
 
@@ -11826,11 +12233,12 @@ void VN::ToroidalClusters2(
 
 					e = RVLDOTPRODUCT3(N, P) - pRing->d[iAlpha];
 
-					if (e > maxErr){
+					if (e > maxErr)
+					{
 
 #ifdef RVLVN_TOROIDALCLUSTERS_VERBOSE
 						fprintf(pFileTorusInfo, "SuperSegment: no.%d\nStopped at pPrevRing condition!\nCurrent e:%f\nMaxErr:%f\nRingID:%d\nPrevious RingID:%d\nCurrent beta:%d\n\n",
-							iSuperSegment, e, maxErr, pRing->idx, pPrevRing->idx, iBeta);
+								iSuperSegment, e, maxErr, pRing->idx, pPrevRing->idx, iBeta);
 #endif
 						break;
 					}
@@ -11848,11 +12256,12 @@ void VN::ToroidalClusters2(
 
 						e = RVLDOTPRODUCT3(N, P) - pPrevRing->d[iAlpha];
 
-						if (e > maxErr){
+						if (e > maxErr)
+						{
 
 #ifdef RVLVN_TOROIDALCLUSTERS_VERBOSE
 							fprintf(pFileTorusInfo, "SuperSegment: no.%d\nStopped at pRing condition!\nCurrent e:%f\nMaxErr:%f\nRingID:%d\nPrevious RingID:%d\nCurrent beta:%d\n\n",
-								iSuperSegment, e, maxErr, pRing->idx, pPrevRing->idx, iBeta);
+									iSuperSegment, e, maxErr, pRing->idx, pPrevRing->idx, iBeta);
 #endif
 							break;
 						}
@@ -11917,7 +12326,7 @@ void VN::ToroidalClusters2(
 	// For each sequence of rings, where each ring in a sequence is contained in compList of any the previous ring in the sequence,
 	// create a torus and add it to torusList.
 
-	//zakomentiran ptoruslist
+	// zakomentiran ptoruslist
 	/*
 	QList<VN_::Torus> torusList;
 
@@ -11927,11 +12336,6 @@ void VN::ToroidalClusters2(
 
 	SClusters.n = 0;
 	*/
-
-
-
-
-
 
 	VN_::TorusTreeNode *pTorusTreeNode_;
 	VN_::Torus *pTorus;
@@ -11963,8 +12367,7 @@ void VN::ToroidalClusters2(
 
 			RVLQLIST_ADD_ENTRY(pTorusList, pTorus);
 			nToruses++;
-			//ovdje promijeniti
-
+			// ovdje promijeniti
 
 			RVLMEM_ALLOC_STRUCT_ARRAY(pMem, VN_::TorusRing *, betaArray.n, pTorus->ringArray.Element);
 
@@ -11981,7 +12384,7 @@ void VN::ToroidalClusters2(
 				pTorusTreeNode_ = pTorusTreeNode_->pParent;
 			}
 
-			//SClusters.n++;
+			// SClusters.n++;
 		}
 
 		pTorusTreeNode = pTorusTreeNode->pNext;
@@ -11995,15 +12398,15 @@ void VN::ToroidalClusters2(
 
 	// Copy all toruses from pTorusList to SClusters.
 
-	//SClusters.Element = new VN_::Torus *[SClusters.n];
+	// SClusters.Element = new VN_::Torus *[SClusters.n];
 
-	//QLIST::CreatePtrArray<VN_::Torus>(pTorusList, &SClusters);	
+	// QLIST::CreatePtrArray<VN_::Torus>(pTorusList, &SClusters);
 }
 
-// Created Sini�a Stani�.
+// Created Siniï¿½a Staniï¿½.
 
 bool RECOG::VN_::TorusDetectionKeyPressCallback(
-	//vtkObject* caller, unsigned long eid, void* clientdata, void *calldata)
+	// vtkObject* caller, unsigned long eid, void* clientdata, void *calldata)
 	Mesh *pMesh,
 	SurfelGraph *pSurfels,
 	std::string &keySym,
@@ -12011,11 +12414,11 @@ bool RECOG::VN_::TorusDetectionKeyPressCallback(
 {
 	VN_::TorusDetectionDisplayData *pData = (VN_::TorusDetectionDisplayData *)vpData;
 
-	//vtkSmartPointer<vtkRenderWindowInteractor> interactor =
+	// vtkSmartPointer<vtkRenderWindowInteractor> interactor =
 	//	reinterpret_cast<vtkRenderWindowInteractor*>(caller);
 
-	//std::string keySym = "";
-	//keySym = interactor->GetKeySym();
+	// std::string keySym = "";
+	// keySym = interactor->GetKeySym();
 
 	if (keySym == "s")
 	{
@@ -12029,25 +12432,27 @@ bool RECOG::VN_::TorusDetectionKeyPressCallback(
 
 		sscanf(line.data(), "%d", &iSelectedTorus);
 
-		//VNClassifier *pClassifier = (VNClassifier *)clientdata;
+		// VNClassifier *pClassifier = (VNClassifier *)clientdata;
 		Visualizer *pVisualizer = pData->pVisualizer;
 
-		vtkPropCollection* props = pVisualizer->renderer->GetViewProps();
+		vtkPropCollection *props = pVisualizer->renderer->GetViewProps();
 		props->InitTraversal();
 		for (int i = 0; i < props->GetNumberOfItems(); i++)
 		{
 
-			if (i == (pData->nProps + iSelectedTorus)){
+			if (i == (pData->nProps + iSelectedTorus))
+			{
 				props->GetNextProp()->VisibilityOn();
 			}
-			else if (i >= pData->nProps){
+			else if (i >= pData->nProps)
+			{
 				props->GetNextProp()->VisibilityOff();
 			}
 			else
 				props->GetNextProp();
 		}
 
-		//interactor->GetRenderWindow()->Render();
+		// interactor->GetRenderWindow()->Render();
 
 		return true;
 	}
@@ -12055,23 +12460,21 @@ bool RECOG::VN_::TorusDetectionKeyPressCallback(
 	return false;
 }
 
-// Created Sini�a Stani�.
+// Created Siniï¿½a Staniï¿½.
 
 void RECOG::VN_::TorusVisualization(
 	Mesh *pMesh,
 	SurfelGraph *pSurfels,
 	PlanarSurfelDetector *pSurfelDetector,
 	QList<RECOG::VN_::Torus> torusList,
-	std::vector<RVL::Point> MidPointCH
-	)
+	std::vector<RVL::Point> MidPointCH)
 {
-
 
 	RECOG::VN_::Torus *pTorus;
 	Visualizer vTorus;
 
 	vTorus.Create();
-	//vTorus.SetMesh(pMesh);
+	// vTorus.SetMesh(pMesh);
 
 	VN_::TorusDetectionDisplayData displayData;
 
@@ -12081,28 +12484,28 @@ void RECOG::VN_::TorusVisualization(
 	pSurfels->DisplayData.vpUserFunctionData = &displayData;
 	pSurfels->DisplayData.bCallbackFunctionsDefined = false;
 
-	uchar SelectionColor[] = { 0, 255, 0 };
+	uchar SelectionColor[] = {0, 255, 0};
 	pSurfels->NodeColors(SelectionColor);
 
-	//RandomColors(SelectionColor, pSurfels-visualizationData.clusterColor, pSurfels->NodeArray.n);
+	// RandomColors(SelectionColor, pSurfels-visualizationData.clusterColor, pSurfels->NodeArray.n);
 
 	pSurfels->InitDisplay(&vTorus, pMesh, pSurfelDetector);
 
-	//pSurfels->Display(&vTorus, pMesh);
+	// pSurfels->Display(&vTorus, pMesh);
 
-	//pSurfels->DisplayEdgeFeatures();
+	// pSurfels->DisplayEdgeFeatures();
 
 	pTorus = torusList.pFirst;
 
-	//vTorus.SetKeyPressCallback(TorusDetectionKeyPressCallback(),this);
+	// vTorus.SetKeyPressCallback(TorusDetectionKeyPressCallback(),this);
 
-	//vtkSmartPointer<vtkPolyData> ringPolyData = vtkSmartPointer<vtkPolyData>::New();
-	//vtkSmartPointer<vtkPolyDataMapper> mapper = vtkSmartPointer<vtkPolyDataMapper>::New();
-	//vtkSmartPointer<vtkActor> actor = vtkSmartPointer<vtkActor>::New();
+	// vtkSmartPointer<vtkPolyData> ringPolyData = vtkSmartPointer<vtkPolyData>::New();
+	// vtkSmartPointer<vtkPolyDataMapper> mapper = vtkSmartPointer<vtkPolyDataMapper>::New();
+	// vtkSmartPointer<vtkActor> actor = vtkSmartPointer<vtkActor>::New();
 
-	//vtkSmartPointer<vtkPoints> ringPts = vtkSmartPointer<vtkPoints>::New();
-	//vtkSmartPointer<vtkCellArray> ringEdges = vtkSmartPointer<vtkCellArray>::New();
-	//vtkSmartPointer<vtkUnsignedCharArray> ringColors = vtkSmartPointer<vtkUnsignedCharArray>::New();
+	// vtkSmartPointer<vtkPoints> ringPts = vtkSmartPointer<vtkPoints>::New();
+	// vtkSmartPointer<vtkCellArray> ringEdges = vtkSmartPointer<vtkCellArray>::New();
+	// vtkSmartPointer<vtkUnsignedCharArray> ringColors = vtkSmartPointer<vtkUnsignedCharArray>::New();
 
 	SURFEL::VertexEdge *pVEdgeS;
 	vtkSmartPointer<vtkLine> edge_helper = vtkSmartPointer<vtkLine>::New();
@@ -12114,20 +12517,20 @@ void RECOG::VN_::TorusVisualization(
 	std::vector<vtkSmartPointer<vtkCellArray>> ringEdgesList;
 	std::vector<vtkSmartPointer<vtkUnsignedCharArray>> ringColorsList;
 
-	//ringColors->SetNumberOfComponents(3);
+	// ringColors->SetNumberOfComponents(3);
 
-	unsigned char one_red[3] = { 255, 0, 0 };
-	unsigned char two_green[3] = { 0, 255, 0 };
-	unsigned char three_blue[3] = { 0, 0, 255 };
-	unsigned char four_yellow[3] = { 255, 255, 0 };
-	unsigned char five_magenta[3] = { 255, 0, 255 };
-	unsigned char six_orange[3] = { 255, 165, 0 };
-	unsigned char axis_white[3] = { 255, 255, 255 };
-	unsigned char seven_cyan[3] = { 0, 255, 255 };
+	unsigned char one_red[3] = {255, 0, 0};
+	unsigned char two_green[3] = {0, 255, 0};
+	unsigned char three_blue[3] = {0, 0, 255};
+	unsigned char four_yellow[3] = {255, 255, 0};
+	unsigned char five_magenta[3] = {255, 0, 255};
+	unsigned char six_orange[3] = {255, 165, 0};
+	unsigned char axis_white[3] = {255, 255, 255};
+	unsigned char seven_cyan[3] = {0, 255, 255};
 
-	RECOG::VN_::TorusRing* pRingS;
+	RECOG::VN_::TorusRing *pRingS;
 
-	vtkPropCollection* props = vTorus.renderer->GetViewProps();
+	vtkPropCollection *props = vTorus.renderer->GetViewProps();
 
 	displayData.nProps = props->GetNumberOfItems();
 
@@ -12144,13 +12547,16 @@ void RECOG::VN_::TorusVisualization(
 
 		ringColorsList[torusID]->SetNumberOfComponents(3);
 
-		for (int iRing = 0; iRing < pTorus->ringArray.n; iRing++){ //prodi kroz sve prstene torusa
+		for (int iRing = 0; iRing < pTorus->ringArray.n; iRing++)
+		{ // prodi kroz sve prstene torusa
 			pRingS = pTorus->ringArray.Element[iRing];
 
-			if (pRingS != NULL){
-				for (int iEdge = 0; iEdge < pRingS->iEdgeArray.n; iEdge++){ //prodi kroz sve edgeve prstena
+			if (pRingS != NULL)
+			{
+				for (int iEdge = 0; iEdge < pRingS->iEdgeArray.n; iEdge++)
+				{ // prodi kroz sve edgeve prstena
 
-					pVEdgeS = pSurfels->vertexEdgeArray.Element[pRingS->iEdgeArray.Element[iEdge]]; //dohvati edge ciji indeks odgovara i-tom edgeu prstena
+					pVEdgeS = pSurfels->vertexEdgeArray.Element[pRingS->iEdgeArray.Element[iEdge]]; // dohvati edge ciji indeks odgovara i-tom edgeu prstena
 
 					int iVertex0 = pVEdgeS->iVertex[0];
 					int iVertex1 = pVEdgeS->iVertex[1];
@@ -12158,39 +12564,39 @@ void RECOG::VN_::TorusVisualization(
 					ringPtsList[torusID]->InsertNextPoint(pSurfels->vertexArray.Element[iVertex0]->P);
 					ringPtsList[torusID]->InsertNextPoint(pSurfels->vertexArray.Element[iVertex1]->P);
 
-					edge_helper->GetPointIds()->SetId(0, ringPtsList[torusID]->GetNumberOfPoints() - 2); //jer sam vec dodao 2 tocke, pa mi za nulti index num of pts bude 2
+					edge_helper->GetPointIds()->SetId(0, ringPtsList[torusID]->GetNumberOfPoints() - 2); // jer sam vec dodao 2 tocke, pa mi za nulti index num of pts bude 2
 					edge_helper->GetPointIds()->SetId(1, ringPtsList[torusID]->GetNumberOfPoints() - 1); // uvecano za 1
 
 					ringEdgesList[torusID]->InsertNextCell(edge_helper);
 
-					switch (pRingS->iBeta){
+					switch (pRingS->iBeta)
+					{
 					case 0:
-						ringColorsList[torusID]->InsertNextTupleValue(one_red);
+						ringColorsList[torusID]->InsertNextTypedTuple(one_red);
 						break;
 					case 1:
-						ringColorsList[torusID]->InsertNextTupleValue(two_green);
+						ringColorsList[torusID]->InsertNextTypedTuple(two_green);
 						break;
 					case 2:
-						ringColorsList[torusID]->InsertNextTupleValue(three_blue);
+						ringColorsList[torusID]->InsertNextTypedTuple(three_blue);
 						break;
 					case 3:
-						ringColorsList[torusID]->InsertNextTupleValue(four_yellow);
+						ringColorsList[torusID]->InsertNextTypedTuple(four_yellow);
 						break;
 					case 4:
-						ringColorsList[torusID]->InsertNextTupleValue(five_magenta);
+						ringColorsList[torusID]->InsertNextTypedTuple(five_magenta);
 						break;
 					case 5:
-						ringColorsList[torusID]->InsertNextTupleValue(six_orange);
+						ringColorsList[torusID]->InsertNextTypedTuple(six_orange);
 						break;
 					case 6:
-						ringColorsList[torusID]->InsertNextTupleValue(seven_cyan);
+						ringColorsList[torusID]->InsertNextTypedTuple(seven_cyan);
 						break;
 					}
 				}
 			}
-
 		}
-		//crtanje axis_s
+		// crtanje axis_s
 
 		if (torusID == MidPointCH[CurrentAxisID].label)
 			CurrentAxisID++;
@@ -12202,9 +12608,7 @@ void RECOG::VN_::TorusVisualization(
 		edge_helper->GetPointIds()->SetId(1, ringPtsList[torusID]->GetNumberOfPoints() - 1);
 
 		ringEdgesList[torusID]->InsertNextCell(edge_helper);
-		ringColorsList[torusID]->InsertNextTupleValue(axis_white);
-
-
+		ringColorsList[torusID]->InsertNextTypedTuple(axis_white);
 
 		ringPolyDataList[torusID]->SetPoints(ringPtsList[torusID]);
 		ringPolyDataList[torusID]->SetLines(ringEdgesList[torusID]);
@@ -12224,19 +12628,18 @@ void RECOG::VN_::TorusVisualization(
 	props->InitTraversal();
 	for (int i = 0; i < props->GetNumberOfItems(); i++)
 	{
-		//za i = 2 props je mesh, nakon kojeg slijede prstenovi,
-		if (i >= displayData.nProps){
+		// za i = 2 props je mesh, nakon kojeg slijede prstenovi,
+		if (i >= displayData.nProps)
+		{
 			props->GetNextProp()->VisibilityOff();
 		}
-		else{
+		else
+		{
 			props->GetNextProp();
 		}
-
 	}
 
-	//vTorus.SetKeyPressCallback(VN_::TorusDetectionKeyPressCallback,	&vTorus);	
+	// vTorus.SetKeyPressCallback(VN_::TorusDetectionKeyPressCallback,	&vTorus);
 
 	vTorus.Run();
-
-
 }
