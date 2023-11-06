@@ -2002,16 +2002,128 @@ int main(int argc, char **argv)
 				RECOG::DDD::RectStruct rectStruct;
 				float verticalAxis[3];
 				RVLSET3VECTOR(verticalAxis, 0.0f, -1.0f, 0.0f);
+				Array<RECOG::DDD::EdgeLineSegment> edgeLineSegments;
+				int *edgeLineSegmentPixIdxMem;
+				int *edgeLineSegmentMap;
 				for (int iModel = 0; iModel < models.n; iModel++)
 				{
-					if (detector.RectangularStructures(models.Element + iModel, &rectStruct))
+					pMesh = models.Element + iModel;
+					if (detector.RectangularStructures(pMesh, &rectStruct))
 					{
-						std::string modelInFileName = modelFileNames[iModel];
-						std::string modelOutFileName = modelInFileName.substr(0, modelInFileName.rfind('.') + 1) + "dat";
-						detector.SaveRectangularStructure(modelOutFileName, &rectStruct);
+						// std::string modelInFileName = modelFileNames[iModel];
+						// std::string modelOutFileName = modelInFileName.substr(0, modelInFileName.rfind('.') + 1) + "dat";
+						// detector.SaveRectangularStructure(modelOutFileName, &rectStruct);
+						cv::Mat BGR;
+						pMesh->GetBGR(BGR);
+
+						// SLIC test.
+
+						// IplImage BGR_ = cvIplImage(BGR);
+						// IplImage* lab_image = cvCloneImage(&BGR_);
+						// cvCvtColor(&BGR_, lab_image, CV_BGR2Lab);
+						// int w = BGR.cols, h = BGR.rows;
+						// int nr_superpixels = 400;
+						// int nc = 10;
+						// double step = sqrt((w * h) / (double)nr_superpixels);
+						// Slic slic;
+						// slic.generate_superpixels(lab_image, step, nc);
+						// slic.create_connectivity(lab_image);
+						// slic.display_contours(&BGR_, CV_RGB(255, 0, 0));
+						// cvShowImage("result", &BGR_);
+						// cvWaitKey(0);
+
+						//
+
+						cv::Mat edges, sobelx, sobely;
+						// detector.DetectRGBEdges2(BGR, edges, sobelx, sobely, edgeLineSegments, edgeLineSegmentPixIdxMem, edgeLineSegmentMap);
+						detector.DetectRGBEdgeLineSegments(BGR, 20, 100, 50, edges, sobelx, sobely, edgeLineSegments, edgeLineSegmentPixIdxMem, edgeLineSegmentMap);
+
+						// Display edges on disparity image.
+
+						// Array2D<short> depthImg;
+						// pMesh->GetDepth(depthImg);
+						// cv::Mat depthDisplayImg(depthImg.h, depthImg.w, CV_8UC3);
+						// DisplayDisparityMap(depthImg, (uchar*)(depthDisplayImg.data), false, RVLRGB_DEPTH_FORMAT_1MM);
+						// int nPix = depthImg.w * depthImg.h;
+						// uchar* visPix = depthDisplayImg.data;
+						// for (int iPix = 0; iPix < nPix; iPix++, visPix += 3)
+						//	if (edges.data[iPix])
+						//		RVLSET3VECTOR(visPix, 0, 255, 0)
+						// cv::imshow("depth and edges", depthDisplayImg);
+						// cv::waitKey();
+						// delete[] depthImg.Element;
+
+						// Orthogonal views.
+
 						std::vector<cv::Mat> orthogonalViews;
 						int nOrthogonalViews = 3;
-						detector.DDOrthogonalView(&rectStruct, verticalAxis, nOrthogonalViews, orthogonalViews, true, models.Element + iModel);
+						Array<Array2D<uchar>> masks;
+						Array<RECOG::DDD::Line2D> *orthogonalViewLines;
+						Pose3D *poseFC;
+						detector.DDOrthogonalView(&rectStruct, edgeLineSegments, verticalAxis, nOrthogonalViews, poseFC, orthogonalViews, masks, orthogonalViewLines, false, pMesh);
+						delete[] edgeLineSegments.Element;
+						delete[] edgeLineSegmentPixIdxMem;
+						delete[] edgeLineSegmentMap;
+
+						// Detect doors and drawers on orthogonal views.
+
+						Array<Rect<int>> *DDRects = new Array<Rect<int>>[nOrthogonalViews];
+						for (int iView = 0; iView < nOrthogonalViews; iView++)
+							detector.Detect3(masks.Element[iView], orthogonalViewLines + iView, DDRects + iView);
+
+						// Display doors and drawers.
+
+						cv::Mat displayImg = BGR.clone();
+						detector.Display(displayImg, poseFC, nOrthogonalViews, DDRects);
+						cv::imshow("Doors and Drawers", displayImg);
+						cv::waitKey();
+
+						//
+
+						for (int iView = 0; iView < nOrthogonalViews; iView++)
+						{
+							delete[] orthogonalViewLines[iView].Element;
+							delete[] DDRects[iView].Element;
+						}
+						delete[] orthogonalViewLines;
+						delete[] DDRects;
+						delete[] poseFC;
+
+						// Display edges on orthogonal views.
+
+						// for (int iView = 0; iView < nOrthogonalViews; iView++)
+						//{
+						//	int w = orthogonalViews[iView].cols;
+						//	int h = orthogonalViews[iView].rows;
+						//	cv::Mat transfImg;
+						//	transfImg.create(orthogonalViews[iView].size(), CV_8UC1);
+						//	RECOG::DDD::MapImageC1(edges, orthogonalViews[iView], transfImg);
+						//	cv::Mat displayImg;
+						//	displayImg.create(orthogonalViews[iView].size(), CV_8UC3);
+						//	uchar* pSrcPix = transfImg.data;
+						//	uchar* pTgtPix = displayImg.data;
+						//	uchar* pMaskPix = masks.Element[iView].Element;
+						//	for (int iPix = 0; iPix < w * h; iPix++, pSrcPix++, pTgtPix += 3, pMaskPix++)
+						//	{
+						//		if (*pMaskPix)
+						//		{
+						//			if(*pSrcPix)
+						//				RVLSET3VECTOR(pTgtPix, 255, 255, 255)
+						//			else
+						//				RVLSET3VECTOR(pTgtPix, 0, 0, 0)
+						//		}
+						//		else
+						//			RVLSET3VECTOR(pTgtPix, 255, 0, 0)
+						//	}
+						//	cv::imshow("orthogonal view edges", displayImg);
+						//	cv::waitKey();
+						// }
+
+						//
+
+						for (int i = 0; i < nOrthogonalViews; i++)
+							delete[] masks.Element[i].Element;
+						delete[] masks.Element;
 					}
 					delete[] rectStruct.rects.Element;
 				}

@@ -1,19 +1,19 @@
 #pragma once
 
-#define RVLMESH_POINT_FLAG_FOREGROUND		0x01
-#define RVLMESH_POINT_FLAG_BACKGROUND		0x02
-#define RVLMESH_POINT_FLAG_EDGE_CLASS		0x03
+#define RVLMESH_POINT_FLAG_FOREGROUND 0x01
+#define RVLMESH_POINT_FLAG_BACKGROUND 0x02
+#define RVLMESH_POINT_FLAG_EDGE_CLASS 0x03
 
-#define RVLMESH_FLAG_NORMALS				0x00000001
-#define RVLMESH_FLAG_COLOR					0x00000002
+#define RVLMESH_FLAG_NORMALS 0x00000001
+#define RVLMESH_FLAG_COLOR 0x00000002
 
-#define RVLMESH_FACE_FLAG_REJECTED			0x01
-#define RVLMESH_FACE_FLAG_VISIBLE			0x02
+#define RVLMESH_FACE_FLAG_REJECTED 0x01
+#define RVLMESH_FACE_FLAG_VISIBLE 0x02
 
-//#define RVLMESH_BOUNDARY_DEBUG
+// #define RVLMESH_BOUNDARY_DEBUG
 
-// Input:  mesh pMesh, 
-//         vertex idx. iPt, 
+// Input:  mesh pMesh,
+//         vertex idx. iPt,
 //         connector pEdgePtr connecting an edge E to the vertex iPt,
 //         array map defining a region R (map[i] = map[iPt] for all vertices i of the mesh pMesh belonging to the region R)
 // Output: pEdge <- the next edge E' in EdgeList[iPt] following E, such that Opp(E', iPt) is in R, where Opp is defined in ARP3D.TR3
@@ -22,44 +22,45 @@
 // Temporary variables: pPt, pEdgeList, side
 
 #ifdef RVLMESH_BOUNDARY_DEBUG
-#define RVLMESH_GET_NEXT_IN_REGION(pMesh, iPt, pEdgePtr, side, map, iNeighborPt, pPt, pEdgeList, pEdge)\
-{\
-	pPt = pMesh->NodeArray.Element + iPt;\
-	pEdgeList = &(pPt->EdgeList);\
-	do\
-	{\
-		RVLQLIST_GET_NEXT_CIRCULAR(pEdgeList, pEdgePtr)\
-		RVLPCSEGMENT_GRAPH_GET_NEIGHBOR2(iPt, pEdgePtr, pEdge, iNeighborPt, side)\
-		fprintf(fpDebug, "%d (%d) ", iNeighborPt, map[iNeighborPt]);\
-	}while (map[iNeighborPt] != map[iPt]);\
-}
+#define RVLMESH_GET_NEXT_IN_REGION(pMesh, iPt, pEdgePtr, side, map, iNeighborPt, pPt, pEdgeList, pEdge) \
+	{                                                                                                   \
+		pPt = pMesh->NodeArray.Element + iPt;                                                           \
+		pEdgeList = &(pPt->EdgeList);                                                                   \
+		do                                                                                              \
+		{                                                                                               \
+			RVLQLIST_GET_NEXT_CIRCULAR(pEdgeList, pEdgePtr)                                             \
+			RVLPCSEGMENT_GRAPH_GET_NEIGHBOR2(iPt, pEdgePtr, pEdge, iNeighborPt, side)                   \
+			fprintf(fpDebug, "%d (%d) ", iNeighborPt, map[iNeighborPt]);                                \
+		} while (map[iNeighborPt] != map[iPt]);                                                         \
+	}
 #else
-#define RVLMESH_GET_NEXT_IN_REGION(pMesh, iPt, pEdgePtr, side, map, iNeighborPt, pPt, pEdgeList, pEdge)\
-{\
-	pPt = pMesh->NodeArray.Element + iPt;\
-	pEdgeList = &(pPt->EdgeList);\
-	do\
-	{\
-		RVLQLIST_GET_NEXT_CIRCULAR(pEdgeList, pEdgePtr)\
-		RVLPCSEGMENT_GRAPH_GET_NEIGHBOR2(iPt, pEdgePtr, pEdge, iNeighborPt, side)\
-	}while (map[iNeighborPt] != map[iPt]);\
-}
+#define RVLMESH_GET_NEXT_IN_REGION(pMesh, iPt, pEdgePtr, side, map, iNeighborPt, pPt, pEdgeList, pEdge) \
+	{                                                                                                   \
+		pPt = pMesh->NodeArray.Element + iPt;                                                           \
+		pEdgeList = &(pPt->EdgeList);                                                                   \
+		do                                                                                              \
+		{                                                                                               \
+			RVLQLIST_GET_NEXT_CIRCULAR(pEdgeList, pEdgePtr)                                             \
+			RVLPCSEGMENT_GRAPH_GET_NEIGHBOR2(iPt, pEdgePtr, pEdge, iNeighborPt, side)                   \
+		} while (map[iNeighborPt] != map[iPt]);                                                         \
+	}
 #endif
 
 // Input: pEdge, side
 // Output: iPt <- point on the side side of the edge pEdge; pEdgePtr <- connector of point iPt and pEdge
 
-#define RVLMESH_GET_POINT(pEdge, side, iPt, pEdgePtr)\
-{\
-	iPt = pEdge->iVertex[side];\
-	pEdgePtr = pEdge->pVertexEdgePtr[side];\
-}
+#define RVLMESH_GET_POINT(pEdge, side, iPt, pEdgePtr) \
+	{                                                 \
+		iPt = pEdge->iVertex[side];                   \
+		pEdgePtr = pEdge->pVertexEdgePtr[side];       \
+	}
 
 namespace RVL
 {
 	// Move to RVL3DTools.h
 
-	template <typename Type>  struct GaussianDistribution3D
+	template <typename Type>
+	struct GaussianDistribution3D
 	{
 		Type P[3];
 		Type C[9];
@@ -73,10 +74,10 @@ namespace RVL
 	{
 		struct Distribution
 		{
-			float t[3];		// centroid 
-			float R[9];		// principal axes (each row is one axis)
-			float var[3];	// point variances in directions of the principal axes
-			int RGB[3];		// average color
+			float t[3];	  // centroid
+			float R[9];	  // principal axes (each row is one axis)
+			float var[3]; // point variances in directions of the principal axes
+			int RGB[3];	  // average color
 		};
 
 		struct Sample
@@ -122,13 +123,13 @@ namespace RVL
 
 	struct Point
 	{
-		uint8_t RGB[3];			// color
-		float P[3];						// position
-		float N[3];						// normal
-		int label;			// label
-		QList<MeshEdgePtr> EdgeList;	// edge list (list of edge connectors)
-		bool bBoundary;					// true if the point is on the image boundary, on a depth discontinuity contur or on the boundary of a region of undefined depth,
-										// i.e. if there is a boundary edge connected to this point.
+		uint8_t RGB[3];				 // color
+		float P[3];					 // position
+		float N[3];					 // normal
+		int label;					 // label
+		QList<MeshEdgePtr> EdgeList; // edge list (list of edge connectors)
+		bool bBoundary;				 // true if the point is on the image boundary, on a depth discontinuity contur or on the boundary of a region of undefined depth,
+									 // i.e. if there is a boundary edge connected to this point.
 		bool bValid;
 		BYTE flags;
 	};
@@ -149,9 +150,9 @@ namespace RVL
 	{
 		struct PointEdge
 		{
-			int iPt;				// vertex index
-			MeshEdgePtr *pEdgePtr;	// connector connecting an edge E to the vertex iPt
-			unsigned char side;		// side of the edge E to which the iPt is connected
+			int iPt;			   // vertex index
+			MeshEdgePtr *pEdgePtr; // connector connecting an edge E to the vertex iPt
+			unsigned char side;	   // side of the edge E to which the iPt is connected
 		};
 
 		struct Triangle
@@ -178,7 +179,8 @@ namespace RVL
 			CRVLMem mem;
 		};
 
-		template <typename T> void BoundingBox(
+		template <typename T>
+		void BoundingBox(
 			vtkSmartPointer<vtkPolyData> pPolygonData,
 			Box<T> *pBox)
 		{
@@ -242,6 +244,12 @@ namespace RVL
 			float *P0,
 			Box<float> &boundingBox,
 			float &voxelSize);
+		void OrientedPCFromRGBD(
+			Array2D<short int> depthImage,
+			Camera camera,
+			Array2D<OrientedPoint> &PC,
+			int winSize,
+			float maxdz);
 		void PointTDF(
 			vtkSmartPointer<vtkPolyData> pPolyData,
 			float resolution,
@@ -313,12 +321,12 @@ namespace RVL
 			float maxTriangleEdgeLen);
 		void MapRGBImageToVTKPolyData(
 			vtkSmartPointer<vtkPolyData> pPolygonData,
-			char* rgbImageData,
+			char *rgbImageData,
 			int rgbImageWidth,
 			int rgbImageHeight);
 		void MapRGBImageToVTKPolyData(
 			vtkSmartPointer<vtkPolyData> pPolygonData,
-			IplImage* rgbImagePNG);
+			IplImage *rgbImagePNG);
 		vtkSmartPointer<vtkPolyData> RGBD2VTKPolyData(
 			std::string RGBFileName,
 			std::string depthFileName,
@@ -335,12 +343,19 @@ namespace RVL
 			Array<OrientedPoint> PtArray,
 			Array<Point> &PtArray_,
 			float maxZ = 1e6);
+		void CreateOrientedPointArrayFromPointArray(
+			Array<Point> PtArraySrc,
+			Array<OrientedPoint> &PtArrayTgt);
+		void CreateOrientedPointArrayFromPointArray(
+			Array<Point> PtArraySrc,
+			Array<int> PtIdx,
+			Array<OrientedPoint> &PtArrayTgt);
 		void LoadTetrahedrons(
 			char *fileName,
 			RVL::MESH::Tetrahedrons &tetrahedrons);
 		void ComputeTetrahedronData(RVL::MESH::Tetrahedrons &tetrahedrons);
 		void ClearTetrahedronData(RVL::MESH::Tetrahedrons tetrahedrons);
-		void MouseRButtonDown(vtkObject* caller, unsigned long eid, void* clientdata, void *calldata);
+		void MouseRButtonDown(vtkObject *caller, unsigned long eid, void *clientdata, void *calldata);
 		void LabelParts(
 			vtkSmartPointer<vtkPolyData> pDensePolygonData,
 			vtkSmartPointer<vtkPolyData> pSparsePolygonData,
@@ -356,7 +371,7 @@ namespace RVL
 			MESH::Distribution &distribution,
 			float *N,
 			float &d);
-	}	// namespace MESH
+	} // namespace MESH
 
 	void FilterSDF(
 		Array3D<Voxel> volume,
@@ -367,9 +382,9 @@ namespace RVL
 		Array3D<float> SDFSrc,
 		Array3D<float> filter,
 		int n,
-		Array3D<float>& SDF);
+		Array3D<float> &SDF);
 	void CreateMeanFilter(
-		Array3D<float>& filter,
+		Array3D<float> &filter,
 		int n = 3);
 	float PointSetToPlaneDistance(
 		Array<Point> points,
@@ -380,254 +395,256 @@ namespace RVL
 
 	class Mesh : public Graph<Point, MeshEdge, MeshEdgePtr>
 	{
-		public:
-			Mesh();
-			virtual ~Mesh();
-			//bool Load(
-			//	char *FileName,
-			//	PCLMeshBuilder *pMeshBuilder,
-			//	pcl::PointCloud<pcl::PointXYZRGBA>::Ptr PC,
-			//	pcl::PolygonMesh &PCLMesh,
-			//	bool bSavePLY = false);
-			void LoadFromPLY(
-				char* PLYFileName,
-				float maxMeshTriangleEdgeLen,
-				bool bOrganizedPC = false,
-				Camera *pCamera = NULL);
-			void LoadPolyDataFromPLY(char *PLYFileName);
-			void SavePolyDataToPLY(char *PLYFileName);
-			void SaveNoisedPolyDataToPLY(char *PLYFileName);
-			bool CreateOrderedMeshFromPolyData(
-				int *pixMap = NULL,
-				int pixMapSize = 0,
-				float maxPolyEdgeLen = -1.0f);
-			void ComputeMoments(Array<int>& PtArray,
-				Moments<float> &moments);
-			void ComputeMoments(Array<int>& PtArray,
-				Moments<double>& moments);
-			void ComputeDistribution(
-				Array<int> &PtArray,
-				GaussianDistribution3D<float> *pDistribution);
-			void ComputeDistribution(
-				Array<int> &PtArray,
-				MESH::Distribution &distribution);
-			void ComputeDistributionDouble(
-				Array<int> &PtArray,
-				MESH::Distribution &distribution);
-			bool FindBoundaryEdge(
-				QList<QLIST::Index> *pInPtList,
-				QLIST::Index *&pPtIdx,
-				int *map,
-				int &iPt,
-				MeshEdgePtr *&pEdgePtr);
-			void Boundary(
-				QList<QLIST::Index2> *pInPtList,
-				int *Map,
-				QList<QLIST::Index> *pOutPtArray,
-				QLIST::Index *pMem);
-			void Boundary(
-				QList<QLIST::Index2> *pInPtList,
-				int *map,
-				Array<Array<MeshEdgePtr *>> &BoundaryArray,
-				MeshEdgePtr **&pBoundaryMem, 
-				unsigned char *edgeMarkMap);
-			void BoundingBox(Box<float> *pBox);
-			bool ConvexHull(
-				Array2D<float> points,
-				CRVLMem *pMem,
-				bool bClearMem = true,
-				bool bDepthImage = true);
-			bool ConvexHull2(
-				Array2D<float> points,
-				CRVLMem *pMem,
-				bool bClearMem = true,
-				bool bDepthImage = true);
-			void VisibleSurface(
-				Array2D<float> &N,
-				float *&d);
-			void VoxelGridFilter(
-				float voxelSize,
-				Array<OrientedPoint> &outputPts,
-				Array3D<int> &grid,
-				Box<double> &boundingBox,
-				Array<int> &voxels,
-				float scale = 1.0f,
-				Array<int> *pSubset = NULL,
-				bool bHollow = false);
-			void VoxelGridFilter(
-				float voxelSize,
-				float normalProxThr,
-				Array<OrientedPoint> &outputPts,
-				Array3D<QList<QLIST::Index>> &grid,
-				Box<double> &boundingBox,
-				Array<int> &voxels,
-				float scale = 1.0f,
-				Array<int> *pSubset = NULL);
-			void DistanceTransform(
-				Array3D<int> grid,
-				Box<double> boundingBox,
-				Array<int> voxels);
-			void CreateVTKPolyData(
-				float *R = NULL,
-				float *t = NULL,
-				bool bVisibleFacesOnly = false);
-			void Transform(
-				float *R,
-				float *t);
-			int FurthestPoint(
-				float* P,
-				QList<QLIST::Index2> ptList);
-			int FurthestPoint(
-				float* P,
-				Array<MeshEdgePtr*> ptArray,
-				float* V = NULL);			
-			void LoadLabels(char *labelFileName);
-			void SaveConvexHullVertices(FILE *fp);
+	public:
+		Mesh();
+		virtual ~Mesh();
+		// bool Load(
+		//	char *FileName,
+		//	PCLMeshBuilder *pMeshBuilder,
+		//	pcl::PointCloud<pcl::PointXYZRGBA>::Ptr PC,
+		//	pcl::PolygonMesh &PCLMesh,
+		//	bool bSavePLY = false);
+		void LoadFromPLY(
+			char *PLYFileName,
+			float maxMeshTriangleEdgeLen,
+			bool bOrganizedPC = false,
+			Camera *pCamera = NULL);
+		void LoadPolyDataFromPLY(char *PLYFileName);
+		void SavePolyDataToPLY(char *PLYFileName);
+		void SaveNoisedPolyDataToPLY(char *PLYFileName);
+		bool CreateOrderedMeshFromPolyData(
+			int *pixMap = NULL,
+			int pixMapSize = 0,
+			float maxPolyEdgeLen = -1.0f);
+		void ComputeMoments(Array<int> &PtArray,
+							Moments<float> &moments);
+		void ComputeMoments(Array<int> &PtArray,
+							Moments<double> &moments);
+		void ComputeDistribution(
+			Array<int> &PtArray,
+			GaussianDistribution3D<float> *pDistribution);
+		void ComputeDistribution(
+			Array<int> &PtArray,
+			MESH::Distribution &distribution);
+		void ComputeDistributionDouble(
+			Array<int> &PtArray,
+			MESH::Distribution &distribution);
+		bool FindBoundaryEdge(
+			QList<QLIST::Index> *pInPtList,
+			QLIST::Index *&pPtIdx,
+			int *map,
+			int &iPt,
+			MeshEdgePtr *&pEdgePtr);
+		void Boundary(
+			QList<QLIST::Index2> *pInPtList,
+			int *Map,
+			QList<QLIST::Index> *pOutPtArray,
+			QLIST::Index *pMem);
+		void Boundary(
+			QList<QLIST::Index2> *pInPtList,
+			int *map,
+			Array<Array<MeshEdgePtr *>> &BoundaryArray,
+			MeshEdgePtr **&pBoundaryMem,
+			unsigned char *edgeMarkMap);
+		void BoundingBox(Box<float> *pBox);
+		bool ConvexHull(
+			Array2D<float> points,
+			CRVLMem *pMem,
+			bool bClearMem = true,
+			bool bDepthImage = true);
+		bool ConvexHull2(
+			Array2D<float> points,
+			CRVLMem *pMem,
+			bool bClearMem = true,
+			bool bDepthImage = true);
+		void VisibleSurface(
+			Array2D<float> &N,
+			float *&d);
+		void VoxelGridFilter(
+			float voxelSize,
+			Array<OrientedPoint> &outputPts,
+			Array3D<int> &grid,
+			Box<double> &boundingBox,
+			Array<int> &voxels,
+			float scale = 1.0f,
+			Array<int> *pSubset = NULL,
+			bool bHollow = false);
+		void VoxelGridFilter(
+			float voxelSize,
+			float normalProxThr,
+			Array<OrientedPoint> &outputPts,
+			Array3D<QList<QLIST::Index>> &grid,
+			Box<double> &boundingBox,
+			Array<int> &voxels,
+			float scale = 1.0f,
+			Array<int> *pSubset = NULL);
+		void DistanceTransform(
+			Array3D<int> grid,
+			Box<double> boundingBox,
+			Array<int> voxels);
+		void CreateVTKPolyData(
+			float *R = NULL,
+			float *t = NULL,
+			bool bVisibleFacesOnly = false);
+		void Transform(
+			float *R,
+			float *t);
+		int FurthestPoint(
+			float *P,
+			QList<QLIST::Index2> ptList);
+		int FurthestPoint(
+			float *P,
+			Array<MeshEdgePtr *> ptArray,
+			float *V = NULL);
+		void GetDepth(Array2D<short> &depthImg);
+		void LoadLabels(char *labelFileName);
+		void SaveConvexHullVertices(FILE *fp);
+		void GetBGR(cv::Mat &BGR);
 
-			// For a mesh point index iPt, the function returns true if the point is on the boundary of a region in the map map containing elements with value idx. 
-			// pEdgePtr <- the connector connecting the first region boundar edge in CCW direction.
+		// For a mesh point index iPt, the function returns true if the point is on the boundary of a region in the map map containing elements with value idx.
+		// pEdgePtr <- the connector connecting the first region boundar edge in CCW direction.
 
-			inline bool IsBoundaryPoint(
-				int iPt,
-				int *map,
-				int idx,
-				MeshEdgePtr *&pEdgePtr)
+		inline bool IsBoundaryPoint(
+			int iPt,
+			int *map,
+			int idx,
+			MeshEdgePtr *&pEdgePtr)
+		{
+			Point *pPt = NodeArray.Element + iPt;
+
+			bool bOut = false; // A neighboring vertex belonging to another region is found.
+
+			pEdgePtr = pPt->EdgeList.pFirst;
+
+			int iPt_;
+			MeshEdge *pEdge;
+
+			// If the vertex is a boundary point and the first neighbor belongs to the same region,
+			// then the first edge is the first region boundary edge in CCW direction.
+			// An example of this case is shown in ARP3D.TR3, Fig: Detection of region boundary (a).
+
+			if (pPt->bBoundary)
 			{
-				Point *pPt = NodeArray.Element + iPt;
+				RVLPCSEGMENT_GRAPH_GET_NEIGHBOR(iPt, pEdgePtr, pEdge, iPt_);
 
-				bool bOut = false;		// A neighboring vertex belonging to another region is found.
-
-				pEdgePtr = pPt->EdgeList.pFirst;
-
-				int iPt_;
-				MeshEdge *pEdge;
-
-				// If the vertex is a boundary point and the first neighbor belongs to the same region, 
-				// then the first edge is the first region boundary edge in CCW direction.
-				// An example of this case is shown in ARP3D.TR3, Fig: Detection of region boundary (a).
-
-				if (pPt->bBoundary)
-				{
-					RVLPCSEGMENT_GRAPH_GET_NEIGHBOR(iPt, pEdgePtr, pEdge, iPt_);
-
-					if (map[iPt_] == idx)
-						return true;
-				}
-
-				// If a neighbor belonging to another region is already found and the currently processed neighbor belongs to the query region, 
-				// then the query edge is the first region boundary edge in CCW direction.
-				// An example of this case is shown in ARP3D.TR3, Fig: Detection of region boundary (b).
-
-				while (pEdgePtr)
-				{
-					RVLPCSEGMENT_GRAPH_GET_NEIGHBOR(iPt, pEdgePtr, pEdge, iPt_);
-
-					if (map[iPt_] == idx)
-					{
-						if (bOut)
-							return true;
-					}
-					else
-						bOut = true;
-
-					pEdgePtr = pEdgePtr->pNext;
-				}
-
-				// If no neighbors belonging to the query region are found after a neighbor belonging to another region is found,
-				// then the only possibility that a region boundary edge is connected to the vertex iPt is that this is the first edge in the edge list.
-				// An example of this case is shown in ARP3D.TR3, Fig: Detection of region boundary (c).
-
-				if (bOut)
-				{
-					pEdgePtr = pPt->EdgeList.pFirst;
-
-					RVLPCSEGMENT_GRAPH_GET_NEIGHBOR(iPt, pEdgePtr, pEdge, iPt_);
-
-					if (map[iPt_] == idx)
-						return true;
-				}
-
-				// (all neighbors of vertex iPt belong to another region) or 
-				// ((all neighbors belong to the query region) and (there is no mesh boundary edges in the edge list))
-				// In either case, vertex iPt is not a region boundary point.
-
-				return false;
+				if (map[iPt_] == idx)
+					return true;
 			}
 
-			// Input:  iPt - index of a boundary vertex,
-			//         map - map,
-			//         pEdgePtr - the connector connecting edge E to the vertex iPt, where E is the first region boundar edge in CCW direction
-			// Output: pEdgePtr - the connector connecting an edge E' to the vertex iPt, where E' is the next first region boundar edge in CCW direction after E.
+			// If a neighbor belonging to another region is already found and the currently processed neighbor belongs to the query region,
+			// then the query edge is the first region boundary edge in CCW direction.
+			// An example of this case is shown in ARP3D.TR3, Fig: Detection of region boundary (b).
 
-			inline bool GetNextBoundaryEdge(
-				int iPt,
-				int *map,
-				MeshEdgePtr *&pEdgePtr)
+			while (pEdgePtr)
 			{
-				int idx = map[iPt];
+				RVLPCSEGMENT_GRAPH_GET_NEIGHBOR(iPt, pEdgePtr, pEdge, iPt_);
 
-				bool bOut = false;
-
-				MeshEdgePtr *pEdgePtr0 = pEdgePtr;
+				if (map[iPt_] == idx)
+				{
+					if (bOut)
+						return true;
+				}
+				else
+					bOut = true;
 
 				pEdgePtr = pEdgePtr->pNext;
+			}
 
-				int iPt_;
-				MeshEdge *pEdge;
+			// If no neighbors belonging to the query region are found after a neighbor belonging to another region is found,
+			// then the only possibility that a region boundary edge is connected to the vertex iPt is that this is the first edge in the edge list.
+			// An example of this case is shown in ARP3D.TR3, Fig: Detection of region boundary (c).
 
-				while (pEdgePtr)
-				{
-					RVLPCSEGMENT_GRAPH_GET_NEIGHBOR(iPt, pEdgePtr, pEdge, iPt_);
-
-					if (map[iPt_] == idx)
-					{
-						if (bOut)
-							return (pEdgePtr != pEdgePtr0);
-					}
-					else
-						bOut = true;
-
-					pEdgePtr = pEdgePtr->pNext;
-				}
-
-				if (!bOut)
-					return false;
-
-				Point *pPt = NodeArray.Element + iPt;
-
-				if (pPt->bBoundary)
-					return false;
-
+			if (bOut)
+			{
 				pEdgePtr = pPt->EdgeList.pFirst;
 
 				RVLPCSEGMENT_GRAPH_GET_NEIGHBOR(iPt, pEdgePtr, pEdge, iPt_);
 
 				if (map[iPt_] == idx)
-					return (pEdgePtr != pEdgePtr0);
-
-				return false;
+					return true;
 			}
 
-		public:
-			Array<MESH::Face *> faces;
-			MESH::Face* faceMem;
-			vtkSmartPointer<vtkPolyData> pPolygonData;
-			int *mapNodesToPolyData;
-			DWORD flags;
-			float normalEstimationRadius;
-			int nBoundaryPts;
-			bool bOrganizedPC;
-			int width;
-			int height;
-			Array<int> iValidVertices;
-			Array<int> iVisibleFaces;
-			bool bLabels;
-			char *name;
-			int idPrimitive;
-			int idCluster;
+			// (all neighbors of vertex iPt belong to another region) or
+			// ((all neighbors belong to the query region) and (there is no mesh boundary edges in the edge list))
+			// In either case, vertex iPt is not a region boundary point.
 
-#ifdef RVLMESH_BOUNDARY_DEBUG		
-			int debugState;
+			return false;
+		}
+
+		// Input:  iPt - index of a boundary vertex,
+		//         map - map,
+		//         pEdgePtr - the connector connecting edge E to the vertex iPt, where E is the first region boundar edge in CCW direction
+		// Output: pEdgePtr - the connector connecting an edge E' to the vertex iPt, where E' is the next first region boundar edge in CCW direction after E.
+
+		inline bool GetNextBoundaryEdge(
+			int iPt,
+			int *map,
+			MeshEdgePtr *&pEdgePtr)
+		{
+			int idx = map[iPt];
+
+			bool bOut = false;
+
+			MeshEdgePtr *pEdgePtr0 = pEdgePtr;
+
+			pEdgePtr = pEdgePtr->pNext;
+
+			int iPt_;
+			MeshEdge *pEdge;
+
+			while (pEdgePtr)
+			{
+				RVLPCSEGMENT_GRAPH_GET_NEIGHBOR(iPt, pEdgePtr, pEdge, iPt_);
+
+				if (map[iPt_] == idx)
+				{
+					if (bOut)
+						return (pEdgePtr != pEdgePtr0);
+				}
+				else
+					bOut = true;
+
+				pEdgePtr = pEdgePtr->pNext;
+			}
+
+			if (!bOut)
+				return false;
+
+			Point *pPt = NodeArray.Element + iPt;
+
+			if (pPt->bBoundary)
+				return false;
+
+			pEdgePtr = pPt->EdgeList.pFirst;
+
+			RVLPCSEGMENT_GRAPH_GET_NEIGHBOR(iPt, pEdgePtr, pEdge, iPt_);
+
+			if (map[iPt_] == idx)
+				return (pEdgePtr != pEdgePtr0);
+
+			return false;
+		}
+
+	public:
+		Array<MESH::Face *> faces;
+		MESH::Face *faceMem;
+		vtkSmartPointer<vtkPolyData> pPolygonData;
+		int *mapNodesToPolyData;
+		DWORD flags;
+		float normalEstimationRadius;
+		int nBoundaryPts;
+		bool bOrganizedPC;
+		int width;
+		int height;
+		Array<int> iValidVertices;
+		Array<int> iVisibleFaces;
+		bool bLabels;
+		char *name;
+		int idPrimitive;
+		int idCluster;
+
+#ifdef RVLMESH_BOUNDARY_DEBUG
+		int debugState;
 #endif
 	};
 }

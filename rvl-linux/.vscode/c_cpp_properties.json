@@ -31,6 +31,8 @@
                 "${workspaceFolder}/modules/RVLVisualServo/Include",
                 "${workspaceFolder}/modules/RVLVisualServoDemo",
                 "${workspaceFolder}/modules/RVLWork",
+                "${workspaceFolder}/modules/RVLMotion/Include",
+                "${workspaceFolder}/modules/RVLMotionDemo",
                 // "/home/valentin/RVL/rvl-linux-master/modules/RVLCore/Include",
                 // "/home/valentin/Documents/LIBS/INSTALL/opencv-3.4.17/include/*",
                 // "/home/valentin/Documents/LIBS/INSTALL/pcl-1.8.1/**",
