@@ -15,6 +15,7 @@
 #include "PlanarSurfelDetector.h"
 #include "ObjectGraph.h"
 #include "RVLRecognition.h"
+#include "RVLRecognitionCommon.h"
 #include "PSGMCommon.h"
 #include "CTISet.h"
 #include "VertexGraph.h"

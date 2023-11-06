@@ -22,7 +22,7 @@ namespace RVL
 	{
 	public:
 		Voter3D();
-		void Vote(Array<Vector3<float>> data, float* cellSizeIn);
+		bool Vote(Array<Vector3<float>> data, float* cellSizeIn);
 		Vector3<float>	GetCellValue(int* cellIdx);
 		Vector3<float>	GetCellValue(int cellIdx);
 		int GetCellVotes(int* cellIdx);

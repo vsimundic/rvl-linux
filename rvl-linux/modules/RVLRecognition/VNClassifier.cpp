@@ -1,15 +1,14 @@
 // #include "stdafx.h"
 
-#define RVLVN_TIME_MESUREMENT // Vidovic
+#include "RVLCore2.h"
+// #define RVLVN_TIME_MESUREMENT // Vidovic
 #ifdef RVLVN_TIME_MESUREMENT
 #define RVLVN_RECORD_RESULTS
 #undef RVLVN_VERBOSE
+#endif
 #ifndef RVLLINUX
 #include <Windows.h>
 #endif
-#endif
-
-#include "RVLCore2.h"
 #include <algorithm>
 #include "RVLVTK.h"
 #include <vtkTriangle.h>
@@ -26,7 +25,7 @@
 #include "ObjectGraph.h"
 #include "PlanarSurfelDetector.h"
 #include "RVLRecognition.h"
-#include "RVLRecognitionCommon.h"
+// #include "RVLRecognitionCommon.h"
 #include "PSGMCommon.h"
 #include "CTISet.h"
 #include "VertexGraph.h"
@@ -6462,6 +6461,8 @@ void VNClassifier::Interpret2(Mesh *pMesh)
 
 void VNClassifier::Interpret3(Mesh *pMesh)
 {
+#ifdef RVLVN_TIME_MESUREMENT
+
     double StartTime, ExecTime, StartTime_;
     LARGE_INTEGER start, end, start_, end_;
     LARGE_INTEGER frequency;
@@ -6477,7 +6478,7 @@ void VNClassifier::Interpret3(Mesh *pMesh)
         QueryPerformanceCounter((LARGE_INTEGER *)&start);
         QueryPerformanceCounter((LARGE_INTEGER *)&start_);
     }
-
+#endif
     //// Segment mesh to surfels.
 
     pSurfels->Init(pMesh);
@@ -6485,21 +6486,21 @@ void VNClassifier::Interpret3(Mesh *pMesh)
     pSurfelDetector->Init(pMesh, pSurfels, pMem);
 
     printf("Segmentation to surfels... ");
-
+#ifdef RVLVN_TIME_MESUREMENT
     if (pSurfelDetector->pTimer)
         StartTime = pSurfelDetector->pTimer->GetTime();
-
+#endif
     pSurfelDetector->Segment(pMesh, pSurfels);
-
+#ifdef RVLVN_TIME_MESUREMENT
     if (pSurfelDetector->pTimer)
         ExecTime = pSurfelDetector->pTimer->GetTime() - StartTime;
-
+#endif
     printf("completed.\n");
     printf("No. of surfels = %d\n", pSurfels->NodeArray.n);
-
+#ifdef RVLVN_TIME_MESUREMENT
     if (pSurfelDetector->pTimer)
         printf("Total segmentation time = %lf s\n", ExecTime);
-
+#endif
     pSurfels->DetectVertices(pMesh);
 
     // pSurfels->DetectOcclusionVertices(pMesh, camera); //commented for PR18 Experiment 5 - NEW BASELINE
@@ -6515,6 +6516,7 @@ void VNClassifier::Interpret3(Mesh *pMesh)
         // surfelTime = pTimer->GetTime() - StartTime_;
 
         // StartTime_ = pTimer->GetTime();
+#ifdef RVLVN_TIME_MESUREMENT
 
         // HPC timer
         QueryPerformanceCounter((LARGE_INTEGER *)&end_);
@@ -6524,6 +6526,7 @@ void VNClassifier::Interpret3(Mesh *pMesh)
         printf("surfelTime2=%lf\n", surfelTime2);
 
         QueryPerformanceCounter((LARGE_INTEGER *)&start_);
+#endif
     }
 
     //// Detection of planar and convex surfaces
@@ -6573,6 +6576,7 @@ void VNClassifier::Interpret3(Mesh *pMesh)
         // planarAndConvexSurfacesTime = pTimer->GetTime() - StartTime_;
 
         // StartTime_ = pTimer->GetTime();
+#ifdef RVLVN_TIME_MESUREMENT
 
         // HPC timer
         QueryPerformanceCounter((LARGE_INTEGER *)&end_);
@@ -6582,6 +6586,7 @@ void VNClassifier::Interpret3(Mesh *pMesh)
         printf("planarAndConvexSurfacesTime2=%lf\n", planarAndConvexSurfacesTime2);
 
         QueryPerformanceCounter((LARGE_INTEGER *)&start_);
+#endif
     }
 
     //// Hypothesis generation and LEVEL 1 evaluation.
@@ -7046,6 +7051,7 @@ void VNClassifier::Interpret3(Mesh *pMesh)
         // hypGenAndLEVEL1Time = pTimer->GetTime() - StartTime_;
 
         // StartTime_ = pTimer->GetTime();
+#ifdef RVLVN_TIME_MESUREMENT
 
         // HPC timer
         QueryPerformanceCounter((LARGE_INTEGER *)&end_);
@@ -7053,6 +7059,7 @@ void VNClassifier::Interpret3(Mesh *pMesh)
         hypGenAndLEVEL1Time2 = (end_.QuadPart - start_.QuadPart) * 1000.0 / frequency.QuadPart;
 
         QueryPerformanceCounter((LARGE_INTEGER *)&start_);
+#endif
     }
 
     //// LEVEL2 Evaluation:
@@ -7393,13 +7400,14 @@ void VNClassifier::Interpret3(Mesh *pMesh)
         // LEVEL2Time = pTimer->GetTime() - StartTime_;
 
         // StartTime_ = pTimer->GetTime();
-
+#ifdef RVLVN_TIME_MESUREMENT
         // HPC timer
         QueryPerformanceCounter((LARGE_INTEGER *)&end_);
 
         LEVEL2Time2 = (end_.QuadPart - start_.QuadPart) * 1000.0 / frequency.QuadPart;
 
         QueryPerformanceCounter((LARGE_INTEGER *)&start_);
+#endif
     }
 
     //// LEVEL3 Evaluation:
@@ -7563,6 +7571,7 @@ void VNClassifier::Interpret3(Mesh *pMesh)
         // LEVEL3Time = pTimer->GetTime() - StartTime_;
 
         // StartTime_ = pTimer->GetTime();
+#ifdef RVLVN_TIME_MESUREMENT
 
         // HPC timer
         QueryPerformanceCounter((LARGE_INTEGER *)&end_);
@@ -7570,6 +7579,7 @@ void VNClassifier::Interpret3(Mesh *pMesh)
         LEVEL3Time2 = (end_.QuadPart - start_.QuadPart) * 1000.0 / frequency.QuadPart;
 
         QueryPerformanceCounter((LARGE_INTEGER *)&start_);
+#endif
     }
 
     //// Create interpretation by greedy search.
@@ -7581,6 +7591,7 @@ void VNClassifier::Interpret3(Mesh *pMesh)
 
     ////
 
+#ifdef RVLVN_TIME_MESUREMENT
     if (pTimer)
     {
         pTimer->Stop();
@@ -7598,7 +7609,6 @@ void VNClassifier::Interpret3(Mesh *pMesh)
         QueryPerformanceCounter((LARGE_INTEGER *)&end);
 
         greedyInterpretationTime2 = (end_.QuadPart - start_.QuadPart) * 1000.0 / frequency.QuadPart;
-
         // calculate total time
         totalTime = surfelTime + planarAndConvexSurfacesTime + hypGenAndLEVEL1Time + LEVEL2Time + LEVEL3Time + greedyInterpretationTime;
 
@@ -7618,6 +7628,7 @@ void VNClassifier::Interpret3(Mesh *pMesh)
 
         fclose(fpTime);
     }
+#endif
 
     /*if (pTimer)
     {

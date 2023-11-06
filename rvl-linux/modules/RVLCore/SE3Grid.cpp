@@ -1,5 +1,5 @@
-#include "RVLVTK.h"
 #include "RVLCore2.h"
+#include "RVLVTK.h"
 #include "Util.h"
 #include "SE3Grid.h"
 

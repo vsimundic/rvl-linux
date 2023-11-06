@@ -1,6 +1,9 @@
 #pragma once
+// #include "RVLCore2.h"
 #include "RVLVTK.h"
-
+#ifdef RVLLINUX
+// #include "RVLRecognitionCommon.h"
+#endif
 // #define RVLPSGM_NORMAL_HULL
 #define RVLPSGM_MATCH_SATURATION // VIDOVIC
 // #define RVLPSGM_MATCH_SEGMENT_CENTROID //VIDOVIC
@@ -849,23 +852,23 @@ namespace RVL
             float *t);            // Vidovic
         void SaveMatches();       // Vidovic
         void SaveMatchesMatrix(); // Vidovic
-        bool PSGM::CompareMatchToGT(
+        bool CompareMatchToGT(
             RECOG::PSGM_::MatchInstance *pMatch,
             bool poseCheck,
             float angleThresh,
             float distanceThresh); // Vidovic
-        bool PSGM::CompareMatchToSegmentGT(
+        bool CompareMatchToSegmentGT(
             RECOG::PSGM_::MatchInstance *pMatch); // Vidovic
-        bool PSGM::CompareMatchToSegmentGT(
+        bool CompareMatchToSegmentGT(
             int iScene,
             int iSSegment,
             int iMatchedModel,
             RECOG::PSGM_::MatchInstance *pMatch = NULL); // Vidovic
-        void PSGM::CountTPandFN(
+        void CountTPandFN(
             int &TP,
             int &FN,
             bool printMatchInfo); // Vidovic
-        void PSGM::CalculatePR(
+        void CalculatePR(
             int TP,
             int FP,
             int FN,

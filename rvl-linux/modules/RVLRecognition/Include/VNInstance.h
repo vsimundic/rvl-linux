@@ -187,6 +187,7 @@ namespace RVL
 			VNInstance *pVNModel = NULL,
 			std::vector<int> *modelComponentLabels = NULL
 			); //Vidovic
+		// void VNInstance::AssignLabelsToUnassignedPoints(
 		void AssignLabelsToUnassignedPoints(
 			RECOG::VN_::PartAssociation *association,
 			void *vpClassifier,
@@ -301,6 +302,14 @@ namespace RVL
 			RECOG::VN_::PartAssociation *cellAssociation,
 			int label = -1,
 			int assignLabelToUnassigned = -1); //Vidovic
+		// void VNInstance::VisualizeGTLabels(
+		void VisualizeGTLabels(
+			Mesh *pMesh,
+			void *vpClassifier); //Vidovic
+		// void VNInstance::VisualizeSparseGTLabels(
+		void VisualizeSparseGTLabels(
+			Mesh *pMesh,
+			void *vpClassifier); //Vidovic
 		void ProbabilisticAssociationInit(
 			void *vpClassifier,
 			int iClass,

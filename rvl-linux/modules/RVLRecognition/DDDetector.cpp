@@ -81,6 +81,8 @@ DDDetector::DDDetector()
 	frontFaceThickness = 0.018f;
 	maxROIStep = 3;
 	RVLSET3VECTOR(rectStructAlignmentCorrectionBounds, 0.2f, 0.2f, 0.2f); // m
+	orthogonalViewEdgeLineAngleTol = 10.0f;								  // deg
+	orthogonalViewPixSize = 0.005f;										  // m
 }
 
 DDDetector::~DDDetector()
@@ -178,6 +180,710 @@ void DDDetector::CreateParamList()
 	pParamData = paramList.AddParam("DDD.no_RANSAC_iterations", RVLPARAM_TYPE_INT, &nRANSACIterations);
 	pParamData = paramList.AddParam("DDD.pointAssociationGridCellSize", RVLPARAM_TYPE_INT, &pointAssociationGridCellSize);
 	pParamData = paramList.AddParam("DDD.maxCoPlanarSurfelRefPtDist", RVLPARAM_TYPE_FLOAT, &maxCoPlanarSurfelRefPtDist);
+}
+
+#define RVLDDD_DETECTRGBEDGES_VISUALIZE
+// #define RVLDDD_DETECTRGBEDGES_VISUALIZE_HOUGH
+#define RVLDDD_DETECTRGBEDGES_VISUALIZE_LINES
+
+void DDDetector::DetectRGBEdgeLineSegments(
+	cv::Mat RGB,
+	int cannyThrL,
+	int cannyThrH,
+	int minHoughLineSize,
+	cv::Mat &edges,
+	cv::Mat &sobelx,
+	cv::Mat &sobely,
+	Array<RECOG::DDD::EdgeLineSegment> &lineSegmentsOut,
+	int *&lineSegmentPixIdxMem,
+	int *&lineSegmentMap)
+{
+	// Parameters.
+
+	int linePtTol = 2;	// pix
+	int maxLineGap = 5; // pix
+	float mincsN = 0.8f;
+	float lineSegmentRankingResolution = 0.1f;
+	float minLineSegmentWeight = 20.0f;
+
+	// Constants.
+
+	int w = RGB.cols;
+	int h = RGB.rows;
+	int nPix = w * h;
+
+	// Convert to graycsale.
+
+	cv::Mat I;
+	cv::cvtColor(RGB, I, cv::COLOR_BGR2GRAY);
+
+	// Blur the image for better edge detection.
+
+	cv::Mat IBlured;
+	cv::GaussianBlur(I, IBlured, cv::Size(3, 3), 0);
+
+	// Canny edge detection.
+
+	cv::Canny(IBlured, edges, cannyThrL, cannyThrH, 3, false);
+
+	// Display canny edge detected image.
+
+	// cv::imshow("Canny edge detection", edges);
+	// cv::waitKey(0);
+
+	// Diference of Gausian.
+
+	cv::GaussianBlur(I, IBlured, cv::Size(7, 7), 0);
+	cv::Sobel(IBlured, sobelx, CV_64F, 1, 0, 5);
+	cv::Sobel(IBlured, sobely, CV_64F, 0, 1, 5);
+	double *IuMap = (double *)(sobelx.data);
+	double *IvMap = (double *)(sobely.data);
+
+	// Hough transform.
+
+	std::vector<cv::Vec2f> houghLines;
+	cv::HoughLines(edges, houghLines, 1, CV_PI / 180, minHoughLineSize, 0, 0);
+
+	// Display Hough lines.
+
+#ifdef RVLDDD_DETECTRGBEDGES_VISUALIZE
+	cv::cvtColor(edges, *pVisualizationData->displayImg, cv::COLOR_GRAY2BGR);
+#ifdef RVLDDD_DETECTRGBEDGES_VISUALIZE_HOUGH
+	for (size_t i = 0; i < houghLines.size(); i++)
+	{
+		float rho = houghLines[i][0], theta = houghLines[i][1];
+		cv::Point pt1, pt2;
+		double a = cos(theta), b = sin(theta);
+		double x0 = a * rho, y0 = b * rho;
+		double c = w + h;
+		pt1.x = cvRound(x0 + c * (-b));
+		pt1.y = cvRound(y0 + c * (a));
+		pt2.x = cvRound(x0 - c * (-b));
+		pt2.y = cvRound(y0 - c * (a));
+		cv::line(pVisualizationData->displayImg, pt1, pt2, cv::Scalar(0, 255, 0), 1, cv::LINE_AA);
+		printf("line %d\n", i);
+		if (i % 10 == 9)
+		{
+			cv::imshow("Hough Lines", pVisualizationData->displayImg);
+			cv::waitKey();
+		}
+	}
+#endif
+#endif
+
+	// Lines for segmentation.
+
+	cv::Vec2f houghLine;
+	int nHoughLines = houghLines.size();
+	float rho, th;
+	Array<RECOG::DDD::Line2D> houghLines_;
+	houghLines_.Element = new RECOG::DDD::Line2D[nHoughLines];
+	houghLines_.n = nHoughLines;
+	RECOG::DDD::Line2D *pHoughLine = houghLines_.Element;
+	size_t iHoughLine;
+	for (iHoughLine = 0; iHoughLine < nHoughLines; iHoughLine++, pHoughLine++)
+	{
+		houghLine = houghLines[iHoughLine];
+		th = houghLine[1];
+		pHoughLine->N[0] = cos(th);
+		pHoughLine->N[1] = sin(th);
+		pHoughLine->d = houghLine[0];
+	}
+
+	// Segment lines.
+
+	Array<RECOG::DDD::EdgeLineSegment> lineSegments;
+	RECOG::DDD::EdgeLineSegmentPixel *edgeLineSegmentMem;
+	int nClusterElements;
+	// SegmentEdgeLines(edges, IuMap, IvMap, houghLines_, linePtTol, mincsN, maxLineGap, lineSegments, edgeLineSegmentMem, nClusterElements);
+	SegmentEdgeLines2(edges, IuMap, IvMap, houghLines_, linePtTol, mincsN, maxLineGap, lineSegments, edgeLineSegmentMem, nClusterElements);
+
+	// Remove redundant line segments.
+
+	Array<QList<QLIST::Index>> Queue;
+	Queue.n = w / lineSegmentRankingResolution + 1;
+	Queue.Element = new QList<QLIST::Index>[Queue.n];
+	QLIST::Index *lineSegmentIdxMem = new QLIST::Index[nClusterElements];
+	QLIST::Index *pLineSegmentIdx = lineSegmentIdxMem;
+	int iBin;
+	QList<QLIST::Index> *pBin = Queue.Element;
+	for (iBin = 0; iBin < Queue.n; iBin++, pBin++)
+		RVLQLIST_INIT(pBin);
+	int iLineSegment;
+	int maxiBin = 0;
+	RECOG::DDD::EdgeLineSegment *pLineSegment;
+	for (iLineSegment = 0; iLineSegment < lineSegments.n; iLineSegment++)
+	{
+		pLineSegment = lineSegments.Element + iLineSegment;
+		pLineSegmentIdx->Idx = iLineSegment;
+		iBin = (int)floor(pLineSegment->w / lineSegmentRankingResolution);
+		pBin = Queue.Element + iBin;
+		RVLQLIST_ADD_ENTRY(pBin, pLineSegmentIdx);
+		pLineSegmentIdx++;
+		if (iBin > maxiBin)
+			maxiBin = iBin;
+	}
+	int miniBin = (int)floor(minLineSegmentWeight / lineSegmentRankingResolution);
+	lineSegmentMap = new int[nPix];
+	memset(lineSegmentMap, 0xff, nPix * sizeof(int));
+	float newLineSegmentWeight;
+	int iBin_;
+	QList<QLIST::Index> *pBin_;
+	QLIST::Index **ppLineSegmentIdx;
+	RECOG::DDD::EdgeLineSegmentPixel *pEdgeLineSegmentPix;
+	QList<RECOG::DDD::EdgeLineSegmentPixel> *pSegmentPixList;
+	RECOG::DDD::EdgeLineSegmentPixel **ppEdgeLineSegmentPix;
+	int iPix;
+	for (iBin = maxiBin; iBin >= miniBin; iBin--)
+	{
+		pBin = Queue.Element + iBin;
+		pLineSegmentIdx = pBin->pFirst;
+		ppLineSegmentIdx = &(pBin->pFirst);
+		while (pLineSegmentIdx)
+		{
+			iLineSegment = pLineSegmentIdx->Idx;
+			// if (iLineSegment == 57)
+			//	int debug = 0;
+			pLineSegment = lineSegments.Element + iLineSegment;
+			pSegmentPixList = &(pLineSegment->pix);
+			newLineSegmentWeight = pLineSegment->w;
+			pEdgeLineSegmentPix = pSegmentPixList->pFirst;
+			ppEdgeLineSegmentPix = &(pSegmentPixList->pFirst);
+			while (pEdgeLineSegmentPix)
+			{
+				iPix = pEdgeLineSegmentPix->iPix;
+				if (lineSegmentMap[iPix] >= 0 && lineSegmentMap[iPix] != iLineSegment)
+				{
+					newLineSegmentWeight -= pEdgeLineSegmentPix->e;
+					RVLQLIST_REMOVE_ENTRY(pSegmentPixList, pEdgeLineSegmentPix, ppEdgeLineSegmentPix);
+				}
+				else
+				{
+					lineSegmentMap[iPix] = iLineSegment;
+					ppEdgeLineSegmentPix = &(pEdgeLineSegmentPix->pNext);
+				}
+				pEdgeLineSegmentPix = *ppEdgeLineSegmentPix;
+			}
+			if (newLineSegmentWeight < pLineSegment->w)
+			{
+				pLineSegment->w = (newLineSegmentWeight >= 0.0f ? newLineSegmentWeight : 0.0f);
+				RVLQLIST_REMOVE_ENTRY(pBin, pLineSegmentIdx, ppLineSegmentIdx);
+				iBin_ = (int)floor(pLineSegment->w / lineSegmentRankingResolution);
+				pBin_ = Queue.Element + iBin_;
+				RVLQLIST_ADD_ENTRY(pBin_, pLineSegmentIdx);
+			}
+			else
+				ppLineSegmentIdx = &(pLineSegmentIdx->pNext);
+			pLineSegmentIdx = *ppLineSegmentIdx;
+		}
+	}
+	delete[] Queue.Element;
+	delete[] lineSegmentIdxMem;
+	int iLineSegmentEndPix[2];
+	int nValidLineSegments = 0;
+	int nLineSegmentPixelsTotal = 0;
+	int i;
+	float e;
+	float P[2];
+	for (iLineSegment = 0; iLineSegment < lineSegments.n; iLineSegment++)
+	{
+		pLineSegment = lineSegments.Element + iLineSegment;
+		if (pLineSegment->w < minLineSegmentWeight)
+			continue;
+		nValidLineSegments++;
+		pSegmentPixList = &(pLineSegment->pix);
+		pEdgeLineSegmentPix = pSegmentPixList->pFirst;
+		iLineSegmentEndPix[0] = pEdgeLineSegmentPix->iPix;
+		while (pEdgeLineSegmentPix)
+		{
+			iLineSegmentEndPix[1] = pEdgeLineSegmentPix->iPix;
+			nLineSegmentPixelsTotal++;
+			pEdgeLineSegmentPix = pEdgeLineSegmentPix->pNext;
+		}
+		iHoughLine = pLineSegment->iCluster / 2;
+		pHoughLine = houghLines_.Element + iHoughLine;
+		for (i = 0; i < 2; i++)
+		{
+			iPix = iLineSegmentEndPix[i];
+			P[0] = (float)(iPix % w);
+			P[1] = (float)(iPix / w);
+			e = pHoughLine->N[0] * P[0] + pHoughLine->N[1] * P[1] - pHoughLine->d;
+			pLineSegment->P[i][0] = P[0] - e * pHoughLine->N[0];
+			pLineSegment->P[i][1] = P[1] - e * pHoughLine->N[1];
+		}
+	}
+
+	// Copy valid line segments and their belonging pixels to lineSegmentsOut.
+
+	lineSegmentsOut.Element = new RECOG::DDD::EdgeLineSegment[nValidLineSegments];
+	lineSegmentsOut.n = 0;
+	lineSegmentPixIdxMem = new int[nLineSegmentPixelsTotal];
+	int *piLineSegmentPix = lineSegmentPixIdxMem;
+	memset(lineSegmentMap, 0xff, nPix * sizeof(int));
+	RECOG::DDD::EdgeLineSegment *pLineSegment_;
+	Moments2D<double> moments;
+	double P_[2], P0[2];
+	cv::Mat cvC(2, 2, CV_64FC1);
+	double *C = (double *)(cvC.data);
+	cv::Mat cvEigC, cvEigVC;
+	// double* eigC;
+	double *eigVC;
+	for (iLineSegment = 0; iLineSegment < lineSegments.n; iLineSegment++)
+	{
+		pLineSegment = lineSegments.Element + iLineSegment;
+		if (pLineSegment->w < minLineSegmentWeight)
+			continue;
+		pLineSegment_ = lineSegmentsOut.Element + lineSegmentsOut.n;
+		pLineSegment_->iCluster = pLineSegment->iCluster;
+		pLineSegment_->w = pLineSegment->w;
+		InitMoments2D<double>(moments);
+		pLineSegment_->pix_.Element = piLineSegmentPix;
+		pSegmentPixList = &(pLineSegment_->pix);
+		RVLQLIST_INIT(pSegmentPixList);
+		pSegmentPixList = &(pLineSegment->pix);
+		pEdgeLineSegmentPix = pSegmentPixList->pFirst;
+		while (pEdgeLineSegmentPix)
+		{
+			iPix = pEdgeLineSegmentPix->iPix;
+			*(piLineSegmentPix++) = iPix;
+			lineSegmentMap[iPix] = lineSegmentsOut.n;
+			P_[0] = (float)(iPix % w);
+			P_[1] = (float)(iPix / w);
+			UpdateMoments2D<double>(moments, P_);
+			pEdgeLineSegmentPix = pEdgeLineSegmentPix->pNext;
+		}
+		pLineSegment_->pix_.n = moments.n;
+		GetCovMatrix2<double>(&moments, C, P0);
+		pLineSegment_->P0[0] = P0[0];
+		pLineSegment_->P0[1] = P0[1];
+		cv::eigen(cvC, cvEigC, cvEigVC);
+		// eigC = (double*)(cvEigC.data);
+		eigVC = (double *)(cvEigVC.data);
+		pLineSegment_->N[0] = eigVC[2];
+		pLineSegment_->N[1] = eigVC[3];
+		for (i = 0; i < 2; i++)
+		{
+			e = pLineSegment_->N[0] * (pLineSegment->P[i][0] - pLineSegment_->P0[0]) + pLineSegment_->N[1] * (pLineSegment->P[i][1] - pLineSegment_->P0[1]);
+			pLineSegment_->P[i][0] = pLineSegment->P[i][0] - e * pLineSegment_->N[0];
+			pLineSegment_->P[i][1] = pLineSegment->P[i][1] - e * pLineSegment_->N[1];
+		}
+		lineSegmentsOut.n++;
+	}
+
+	// Display line segments.
+
+	cv::cvtColor(edges, *pVisualizationData->displayImg, cv::COLOR_GRAY2BGR);
+	for (iLineSegment = 0; iLineSegment < lineSegmentsOut.n; iLineSegment++)
+	{
+		pLineSegment = lineSegmentsOut.Element + iLineSegment;
+		cv::line(*pVisualizationData->displayImg,
+				 cv::Point(pLineSegment->P[0][0], pLineSegment->P[0][1]),
+				 cv::Point(pLineSegment->P[1][0], pLineSegment->P[1][1]),
+				 cv::Scalar(0, 255, 0), 1, cv::LINE_AA);
+	}
+	cv::imshow("Hough Lines", *pVisualizationData->displayImg);
+	cv::waitKey();
+
+	delete[] houghLines_.Element;
+	delete[] lineSegments.Element;
+	delete[] edgeLineSegmentMem;
+}
+
+void DDDetector::SegmentEdgeLines(
+	cv::Mat &edges,
+	double *IuMap,
+	double *IvMap,
+	Array<RECOG::DDD::Line2D> lines,
+	int linePtTolIn,
+	float mincsN,
+	int maxLineGap,
+	Array<RECOG::DDD::EdgeLineSegment> &lineSegments,
+	RECOG::DDD::EdgeLineSegmentPixel *&edgeLineSegmentMem,
+	int &nClusterElements)
+{
+	// Constants.
+
+	int w = edges.cols;
+	int h = edges.rows;
+	int nPix = w * h;
+	float linePtTol = (float)linePtTolIn;
+
+	// Edge pixels.
+
+	Array<int> iEdgePix;
+	iEdgePix.Element = new int[nPix];
+	iEdgePix.n = 0;
+	int iPix;
+	for (iPix = 0; iPix < nPix; iPix++)
+		if (edges.data[iPix])
+			iEdgePix.Element[iEdgePix.n++] = iPix;
+
+	// Line clusters.
+
+	struct LineCluster
+	{
+		std::vector<RECOG::DDD::EdgeLineSegmentPixel> pix;
+	};
+	int i, j;
+	float e;
+	float P[2], N[2];
+	Array<LineCluster> lineClusters;
+	lineClusters.Element = new LineCluster[2 * lines.n];
+	float gradIMagnitude;
+	float Iu, Iv;
+	float csN;
+	RECOG::DDD::EdgeLineSegmentPixel clusterElement;
+	RECOG::DDD::Line2D *pLine;
+	int iLine;
+	for (i = 0; i < iEdgePix.n; i++)
+	{
+		iPix = iEdgePix.Element[i];
+		P[0] = (float)(iPix % w);
+		P[1] = (float)(iPix / w);
+		Iu = IuMap[iPix];
+		Iv = IvMap[iPix];
+		gradIMagnitude = sqrt(Iu * Iu + Iv * Iv);
+		N[0] = Iu / gradIMagnitude;
+		N[1] = Iv / gradIMagnitude;
+		pLine = lines.Element;
+		for (iLine = 0; iLine < lines.n; iLine++, pLine++)
+		{
+			e = pLine->N[0] * P[0] + pLine->N[1] * P[1] - pLine->d;
+			if (e < 0.0f)
+				e = -e;
+			if (e > linePtTol)
+				continue;
+			csN = pLine->N[0] * N[0] + pLine->N[1] * N[1];
+			if (csN > mincsN)
+				j = 0;
+			else if (csN < -mincsN)
+				j = 1;
+			else
+				continue;
+			clusterElement.iPix = iPix;
+			clusterElement.e = e;
+			lineClusters.Element[2 * iLine + j].pix.push_back(clusterElement);
+		}
+	}
+	delete[] iEdgePix.Element;
+
+	// Line segments.
+
+	nClusterElements = 0;
+	int nLineClusters = 2 * lines.n;
+	int iLineCluster;
+	for (iLineCluster = 0; iLineCluster < nLineClusters; iLineCluster++)
+		nClusterElements += lineClusters.Element[iLineCluster].pix.size();
+	edgeLineSegmentMem = new RECOG::DDD::EdgeLineSegmentPixel[nClusterElements];
+	RECOG::DDD::EdgeLineSegmentPixel *pEdgeLineSegmentPix = edgeLineSegmentMem;
+	LineCluster *pLineCluster;
+	lineSegments.Element = new RECOG::DDD::EdgeLineSegment[nClusterElements];
+	lineSegments.n = 0;
+	RECOG::DDD::EdgeLineSegment *pLineSegment = lineSegments.Element - 1;
+	QList<RECOG::DDD::EdgeLineSegmentPixel> *pSegmentPixList;
+	int imageSize = RVLMAX(w, h);
+	RECOG::DDD::EdgeLineSegmentPixel *linePixBuff = new RECOG::DDD::EdgeLineSegmentPixel[imageSize];
+	memset(linePixBuff, 0xff, imageSize * sizeof(Pair<int, float>));
+	Array<int> idxInLinePixBuff;
+	idxInLinePixBuff.Element = new int[imageSize];
+	int iP[2];
+	int lineDir;
+	int s;
+	int mins, maxs;
+	int gap;
+	for (iLineCluster = 0; iLineCluster < nLineClusters; iLineCluster++)
+	{
+		pLineCluster = lineClusters.Element + iLineCluster;
+		iLine = iLineCluster / 2;
+		// if (iHoughLine == 9)
+		//	int debug = 0;
+		pLine = lines.Element + iLine;
+		lineDir = (RVLABS(pLine->N[0]) >= RVLABS(pLine->N[1]) ? 1 : 0);
+		idxInLinePixBuff.n = 0;
+		mins = w;
+		maxs = -1;
+		for (i = 0; i < pLineCluster->pix.size(); i++)
+		{
+			clusterElement = pLineCluster->pix[i];
+			iPix = clusterElement.iPix;
+			iP[0] = iPix % w;
+			iP[1] = iPix / w;
+			s = iP[lineDir];
+			if (linePixBuff[s].iPix < 0)
+				linePixBuff[s] = clusterElement;
+			else if (clusterElement.e < linePixBuff[s].e)
+				linePixBuff[s] = clusterElement;
+			idxInLinePixBuff.Element[idxInLinePixBuff.n++] = s;
+			if (s < mins)
+				mins = s;
+			if (s > maxs)
+				maxs = s;
+		}
+		gap = w;
+		for (s = mins; s <= maxs; s++)
+		{
+			iPix = linePixBuff[s].iPix;
+			if (iPix >= 0)
+			{
+				if (gap > maxLineGap)
+				{
+					pLineSegment++;
+					pSegmentPixList = &(pLineSegment->pix);
+					RVLQLIST_INIT(pSegmentPixList);
+					pLineSegment->w = 0.0f;
+					pLineSegment->iCluster = iLineCluster;
+				}
+				gap = 0;
+				pEdgeLineSegmentPix->iPix = iPix;
+				pEdgeLineSegmentPix->e = (1.0f - linePixBuff[s].e / linePtTol);
+				RVLQLIST_ADD_ENTRY(pSegmentPixList, pEdgeLineSegmentPix);
+				pLineSegment->w += pEdgeLineSegmentPix->e;
+				pEdgeLineSegmentPix++;
+			}
+			else
+				gap++;
+		}
+		for (i = 0; i < idxInLinePixBuff.n; i++)
+			linePixBuff[idxInLinePixBuff.Element[i]].iPix = -1;
+	}
+	lineSegments.n = pLineSegment - lineSegments.Element + 1;
+
+	delete[] lineClusters.Element;
+	delete[] linePixBuff;
+	delete[] idxInLinePixBuff.Element;
+}
+
+void DDDetector::SegmentEdgeLines2(
+	cv::Mat &edges,
+	double *IuMap,
+	double *IvMap,
+	Array<RECOG::DDD::Line2D> lines,
+	int linePtTol,
+	float mincsN,
+	int maxLineGap,
+	Array<RECOG::DDD::EdgeLineSegment> &lineSegments,
+	RECOG::DDD::EdgeLineSegmentPixel *&edgeLineSegmentMem,
+	int &nClusterElements)
+{
+	// Constants.
+
+	int w = edges.cols;
+	int h = edges.rows;
+	int nPix = w * h;
+	float fLinePtTol = (float)linePtTol;
+
+	/// Line segments.
+
+	float imgRectNMem[8];
+	memset(imgRectNMem, 0, 8 * sizeof(float));
+	imgRectNMem[0 * 2 + 0] = 1.0f;
+	imgRectNMem[1 * 2 + 0] = -1.0f;
+	imgRectNMem[2 * 2 + 1] = 1.0f;
+	imgRectNMem[3 * 2 + 1] = -1.0f;
+	float *imgRectN;
+	float imgRectd[4];
+	imgRectd[0] = (float)w;
+	imgRectd[1] = 0.0f;
+	imgRectd[2] = (float)h;
+	imgRectd[3] = 0.0f;
+	float imgDiagonal = sqrt(imgRectd[0] * imgRectd[0] + imgRectd[2] * imgRectd[2]);
+	float s, smin, smax;
+	float V[2];
+	float C[2];
+	float N[2];
+	int i, j;
+	float k;
+	float lineEndPt[2][2];
+	int x1, y1, x2, y2;
+	BresenhamData bresenhamData;
+	int x, y;
+	int imgRectSize = RVLMAX(w, h);
+	uchar *visPix;
+	int u, v, iPix;
+	int move[5] = {0, 1, -1, 2, -2};
+	int nMoves = 2 * linePtTol + 1;
+	RECOG::DDD::Line2D *pLine = lines.Element;
+	int iLine;
+	float gradIMagnitude;
+	float Iu, Iv;
+	float csN;
+	bool bHorizontal;
+	int iLineOrient;
+	float lineN[2];
+	edgeLineSegmentMem = new RECOG::DDD::EdgeLineSegmentPixel[lines.n * imgRectSize];
+	RECOG::DDD::EdgeLineSegmentPixel **firstPixBuff = new RECOG::DDD::EdgeLineSegmentPixel *[lines.n * imgRectSize];
+	RECOG::DDD::EdgeLineSegmentPixel **ppFirstPix = firstPixBuff - 1;
+	RECOG::DDD::EdgeLineSegmentPixel *pPix = edgeLineSegmentMem;
+	RECOG::DDD::EdgeLineSegmentPixel *pPixDummy;
+	RECOG::DDD::EdgeLineSegmentPixel **ppPix = &pPixDummy;
+	int gap;
+	float e;
+	int *lineIdxMem = new int[lines.n * imgRectSize];
+	int *pLineIdx = lineIdxMem;
+	for (iLine = 0; iLine < lines.n; iLine++, pLine++)
+	{
+		V[0] = -pLine->N[1];
+		V[1] = pLine->N[0];
+		C[0] = pLine->d * pLine->N[0];
+		C[1] = pLine->d * pLine->N[1];
+		bHorizontal = (RVLABS(V[0]) >= RVLABS(V[1]));
+
+		// Crop line to fit in the image.
+
+		smin = -imgDiagonal;
+		smax = imgDiagonal;
+		imgRectN = imgRectNMem;
+		for (i = 0; i < 4; i++, imgRectN += 2)
+		{
+			k = imgRectN[0] * V[0] + imgRectN[1] * V[1];
+			if (RVLABS(k) < 1e-7)
+				continue;
+			s = (imgRectd[i] - (imgRectN[0] * C[0] + imgRectN[1] * C[1])) / k;
+			if (k < 0.0f)
+			{
+				if (s > smin)
+					smin = s;
+			}
+			else
+			{
+				if (s < smax)
+					smax = s;
+			}
+		}
+		lineEndPt[0][0] = C[0] + smin * V[0];
+		lineEndPt[0][1] = C[1] + smin * V[1];
+		lineEndPt[1][0] = C[0] + smax * V[0];
+		lineEndPt[1][1] = C[1] + smax * V[1];
+
+		// Line segments along the Hough line.
+
+		x1 = (int)lineEndPt[0][0];
+		if (x1 < 0)
+			x1 = 0;
+		else if (x1 >= w)
+			x1 = w - 1;
+		y1 = (int)lineEndPt[0][1];
+		if (y1 < 0)
+			y1 = 0;
+		else if (y1 >= h)
+			y1 = h - 1;
+		x2 = (int)lineEndPt[1][0];
+		if (x2 < 0)
+			x2 = 0;
+		else if (x2 >= w)
+			x2 = w - 1;
+		y2 = (int)lineEndPt[1][1];
+		if (y2 < 0)
+			y2 = 0;
+		else if (y2 >= h)
+			y2 = h - 1;
+
+		lineN[0] = pLine->N[0];
+		lineN[1] = pLine->N[1];
+		for (iLineOrient = 0; iLineOrient < 2; iLineOrient++, lineN[0] = -lineN[0], lineN[1] = -lineN[1])
+		{
+			RVLBRESENHAMINIT(x1, y1, x2, y2, x, y, bresenhamData);
+			gap = imgRectSize;
+
+			while (true)
+			{
+				if (bHorizontal)
+					u = x;
+				else
+					v = y;
+				for (i = 0; i < nMoves; i++)
+				{
+					if (bHorizontal)
+					{
+						v = y + move[i];
+						if (v < 0)
+							continue;
+						if (v >= h)
+							continue;
+					}
+					else
+					{
+						u = x + move[i];
+						if (u < 0)
+							continue;
+						if (u >= w)
+							continue;
+					}
+					iPix = u + v * w;
+					if (!edges.data[iPix])
+						continue;
+					e = pLine->N[0] * (float)u + pLine->N[1] * (float)v - pLine->d;
+					if (e < 0.0f)
+						e = -e;
+					if (e > fLinePtTol)
+						continue;
+					Iu = IuMap[iPix];
+					Iv = IvMap[iPix];
+					gradIMagnitude = sqrt(Iu * Iu + Iv * Iv);
+					N[0] = Iu / gradIMagnitude;
+					N[1] = Iv / gradIMagnitude;
+					csN = lineN[0] * N[0] + lineN[1] * N[1];
+					if (csN >= mincsN)
+						break;
+				}
+				if (i < nMoves)
+				{
+					if (gap > maxLineGap)
+					{
+						*ppPix = NULL;
+						ppFirstPix++;
+						ppPix = ppFirstPix;
+						*(pLineIdx++) = 2 * iLine + iLineOrient;
+					}
+					gap = 0;
+					pPix->iPix = iPix;
+					pPix->e = (1.0f - e / fLinePtTol);
+					*ppPix = pPix;
+					ppPix = &(pPix->pNext);
+					pPix++;
+#ifdef RVLDDD_DETECTRGBEDGES_VISUALIZE
+#ifdef RVLDDD_DETECTRGBEDGES_VISUALIZE_LINES
+					visPix = (unsigned char*) *pVisualizationData->displayImg->data + 3 * iPix;
+					RVLSET3VECTOR(visPix, 255, 0, 0);
+#endif
+#endif
+				}
+				else
+					gap++;
+				if (bresenhamData.bCompleted)
+					break;
+				RVLBRESENHAMUPDATE(bresenhamData, x, y);
+			}
+		}
+	}
+	nClusterElements = pPix - edgeLineSegmentMem;
+	lineSegments.n = ppFirstPix - firstPixBuff;
+	lineSegments.Element = new RECOG::DDD::EdgeLineSegment[lineSegments.n];
+	int iLineSegment;
+	RECOG::DDD::EdgeLineSegment *pLineSegment;
+	for (iLineSegment = 0; iLineSegment < lineSegments.n; iLineSegment++)
+	{
+		pLineSegment = lineSegments.Element + iLineSegment;
+		pLineSegment->iCluster = lineIdxMem[iLineSegment];
+		pPix = pLineSegment->pix.pFirst = firstPixBuff[iLineSegment];
+		pLineSegment->w = 0;
+		while (pPix)
+		{
+			pLineSegment->w += pPix->e;
+			pPix = pPix->pNext;
+		}
+	}
+	delete[] firstPixBuff;
+	delete[] lineIdxMem;
+
+	///
+
+#ifdef RVLDDD_DETECTRGBEDGES_VISUALIZE
+	cv::imshow("Lines", *pVisualizationData->displayImg);
+	cv::waitKey();
+#endif
+
+	///
 }
 
 void DDDetector::CreateModels(
@@ -1947,13 +2653,29 @@ void DDDetector::Detect(
 	// Eliminating static hypotheses.
 
 	float q, q0;
+	int imgID0;
 	for (iHyp = 0; iHyp < movingPartHyps.size(); iHyp++)
 	{
 		pMovingPartHyp = movingPartHyps.data() + iHyp;
+		imgID0 = -1;
+		RECOG::DDD::AOHypothesisState *pState;
 		float minq, maxq;
-		minq = maxq = q0 = pMovingPartHyp->state.Element[0].q;
-		pMovingPartHyp->score -= pMovingPartHyp->state.Element[0].score;
-		for (m = 1; m < pMovingPartHyp->state.n; m++)
+		minq = maxq = pMovingPartHyp->state.Element[0].q;
+		for (m = 0; m < pMovingPartHyp->state.n; m++)
+		{
+			pState = pMovingPartHyp->state.Element + m;
+			q = pState->q;
+			if (pState->imgID < imgID0 || imgID0 < 0)
+			{
+				imgID0 = pState->imgID;
+				q0 = q;
+			}
+			if (q < minq)
+				minq = q;
+			else if (q > maxq)
+				maxq = q;
+		}
+		for (m = 0; m < pMovingPartHyp->state.n; m++)
 		{
 			q = pMovingPartHyp->state.Element[m].q;
 			e = q - q0;
@@ -1969,10 +2691,6 @@ void DDDetector::Detect(
 			else if (movingPartHyp.objClass == RVLDDD_MODEL_DRAWER)
 				if (RVLABS(e) <= minDrawerStateChange)
 					pMovingPartHyp->score -= pMovingPartHyp->state.Element[m].score;
-			if (q < minq)
-				minq = q;
-			else if (q > maxq)
-				maxq = q;
 		}
 		float minStateRange = (pMovingPartHyp->objClass == RVLDDD_MODEL_DOOR ? minDoorStateRangeRad : minDrawerStateRange);
 		if (maxq - minq < minStateRange)
@@ -1994,10 +2712,11 @@ void DDDetector::Detect(
 			iBestHyp = iHyp;
 		}
 	}
-	printf("The best hypothesis is %d\n\n", iBestHyp);
 
 	if (bestScore > 0.0f)
 	{
+		printf("The best hypothesis is %d\n\n", iBestHyp);
+
 		// Zeroing of the best hypothesis.
 
 		pMovingPartHyp = movingPartHyps.data() + iBestHyp;
@@ -2143,6 +2862,283 @@ void DDDetector::Detect(
 	RVL_DELETE_ARRAY(ZBufferActivePtArray.Element);
 	RVL_DELETE_ARRAY(subImageMap);
 	RVL_DELETE_ARRAY(SMCorrespondence);
+}
+
+void DDDetector::Detect3(
+	Array2D<uchar> mask,
+	Array<RECOG::DDD::Line2D> *pOrthogonalViewLines,
+	Array<Rect<int>> *pDDRects)
+{
+	// Parameters.
+
+	int samplingRate = 5;
+	int minDDSize = 20;
+	int NMSThr = 5;
+	float wTexture = 0.0f;
+	int maskedThr = 10; // %
+
+	// Constants.
+
+	int w = mask.w;
+	int h = mask.h;
+	int nPix = h * w;
+	int maxDDCost = w * h;
+
+	// Edge image.
+
+	cv::Mat cvHEdges(h, w, CV_8SC1);
+	uchar *bHEdge = cvHEdges.data;
+	memset(bHEdge, 0, nPix);
+	cv::Mat cvVEdges(h, w, CV_8SC1);
+	uchar *bVEdge = cvVEdges.data;
+	memset(bVEdge, 0, nPix);
+	RECOG::DDD::Line2D *pEdgeLine = pOrthogonalViewLines->Element;
+	int iEdgeLine;
+	for (iEdgeLine = 0; iEdgeLine < pOrthogonalViewLines->n; iEdgeLine++, pEdgeLine++)
+		if (RVLABS(pEdgeLine->N[0]) >= RVLABS(pEdgeLine->N[1]))
+			cv::line(cvVEdges, cv::Point(pEdgeLine->P[0][0], pEdgeLine->P[0][1]), cv::Point(pEdgeLine->P[1][0], pEdgeLine->P[1][1]), cv::Scalar(1));
+		else
+			cv::line(cvHEdges, cv::Point(pEdgeLine->P[0][0], pEdgeLine->P[0][1]), cv::Point(pEdgeLine->P[1][0], pEdgeLine->P[1][1]), cv::Scalar(1));
+	cv::line(cvHEdges, cv::Point(0, 0), cv::Point(w - 1, 0), cv::Scalar(1));
+	cv::line(cvVEdges, cv::Point(0, 0), cv::Point(0, h - 1), cv::Scalar(1));
+	cv::line(cvHEdges, cv::Point(w - 1, 0), cv::Point(w - 1, h - 1), cv::Scalar(1));
+	cv::line(cvVEdges, cv::Point(0, h - 1), cv::Point(w - 1, h - 1), cv::Scalar(1));
+
+	// Integral images.
+
+	int u, v, iPix, dist;
+
+	int *leftDist = new int[nPix];
+	iPix = 0;
+	for (v = 0; v < h; v++)
+	{
+		dist = -1;
+		for (u = 0; u < w; u++, iPix++)
+		{
+			if (bVEdge[iPix])
+				dist = 0;
+			else
+				dist++;
+			leftDist[iPix] = dist;
+		}
+	}
+
+	int *rightDist = new int[nPix];
+	iPix = -w - 1;
+	for (v = 0; v < h; v++)
+	{
+		dist = -1;
+		iPix += (2 * w);
+		for (u = w - 1; u >= 0; u--, iPix--)
+		{
+			if (bVEdge[iPix])
+				dist = 0;
+			else
+				dist++;
+			rightDist[iPix] = dist;
+		}
+	}
+
+	int *upDist = new int[nPix];
+	for (u = 0; u < w; u++)
+	{
+		dist = -1;
+		iPix = u;
+		for (v = 0; v < h; v++, iPix += w)
+		{
+			if (bHEdge[iPix])
+				dist = 0;
+			else
+				dist++;
+			upDist[iPix] = dist;
+		}
+	}
+
+	int *downDist = new int[nPix];
+	for (u = 0; u < w; u++)
+	{
+		dist = -1;
+		iPix = u + w * (h - 1);
+		for (v = h - 1; v >= 0; v--, iPix -= w)
+		{
+			if (bHEdge[iPix])
+				dist = 0;
+			else
+				dist++;
+			downDist[iPix] = dist;
+		}
+	}
+
+	int *nEdgePoints = new int[nPix];
+	int *nMaskedPoints = new int[nPix];
+	int nEdgePoints_ = 0;
+	int nMaskedPoints_ = 0;
+	iPix = 0;
+	for (u = 0; u < w; u++, iPix++)
+	{
+		if (bHEdge[iPix] || bVEdge[iPix])
+			nEdgePoints_++;
+		nEdgePoints[iPix] = nEdgePoints_;
+		if (mask.Element[iPix] == 0)
+			nMaskedPoints_++;
+		nMaskedPoints[iPix] = nMaskedPoints_;
+	}
+	for (v = 1; v < h; v++)
+	{
+		nEdgePoints_ = 0;
+		nMaskedPoints_ = 0;
+		for (u = 0; u < w; u++, iPix++)
+		{
+			if (bHEdge[iPix] || bVEdge[iPix])
+				nEdgePoints_++;
+			nEdgePoints[iPix] = nEdgePoints[iPix - w] + nEdgePoints_;
+			if (mask.Element[iPix] == 0)
+				nMaskedPoints_++;
+			nMaskedPoints[iPix] = nMaskedPoints[iPix - w] + nMaskedPoints_;
+		}
+	}
+
+	float *scoreH = new float[nPix];
+	float score;
+	iPix = 0;
+	for (v = 0; v < h; v++)
+	{
+		score = 0.0f;
+		for (u = 0; u < w; u++, iPix++)
+		{
+			dist = RVLMIN(upDist[iPix], downDist[iPix]);
+			score += exp(-0.5 * (float)(dist * dist));
+			scoreH[iPix] = score;
+		}
+	}
+
+	float *scoreV = new float[nPix];
+	for (u = 0; u < w; u++)
+	{
+		score = 0.0f;
+		iPix = u;
+		for (v = 0; v < h; v++, iPix += w)
+		{
+			dist = RVLMIN(leftDist[iPix], rightDist[iPix]);
+			score += exp(-0.5 * (float)(dist * dist));
+			scoreV[iPix] = score;
+		}
+	}
+
+	// Hypothesis generation.
+
+	Rect<int> imgRect;
+	imgRect.minx = 0;
+	imgRect.maxx = w - 1;
+	imgRect.miny = 0;
+	imgRect.maxy = h - 1;
+	int samplingOffset = (samplingRate - 1) / 2;
+	int maxnSamples = (w / samplingRate + 1) * (h / samplingRate + 1);
+	Array<Rect<int>> DDRects;
+	DDRects.Element = new Rect<int>[maxnSamples];
+	Rect<int> *pRect;
+	int iPixTL, iPixTR, iPixBL, iPixBR;
+	float edgeScore;
+	int textureCost;
+	int ddWidth, ddHeight, ddArea;
+	std::vector<SortIndex<float>> ddIdxSorted(maxnSamples);
+	DDRects.n = 0;
+	for (v = samplingOffset; v < h; v += samplingRate)
+	{
+		for (u = samplingOffset; u < w; u += samplingRate)
+		{
+			pRect = DDRects.Element + DDRects.n;
+			iPix = u + v * w;
+			pRect->minx = u - leftDist[iPix];
+			pRect->maxx = u + rightDist[iPix];
+			pRect->miny = v - upDist[iPix];
+			pRect->maxy = v + downDist[iPix];
+			ddWidth = pRect->maxx - pRect->minx + 1;
+			ddHeight = pRect->maxy - pRect->miny + 1;
+			if (ddWidth < minDDSize || ddHeight < minDDSize)
+				continue;
+			iPixTL = pRect->minx + pRect->miny * w;
+			iPixTR = pRect->maxx + pRect->miny * w;
+			iPixBL = pRect->minx + pRect->maxy * w;
+			iPixBR = pRect->maxx + pRect->maxy * w;
+			nMaskedPoints_ = nMaskedPoints[iPixBR - 2 - 2 * w] - nMaskedPoints[iPixBL + 2 - 2 * w] - nMaskedPoints[iPixTR - 2 + 2 * w] + nMaskedPoints[iPixTL + 2 + 2 * w];
+			ddArea = ddWidth * ddHeight;
+			if (100 * nMaskedPoints_ / ddArea > maskedThr)
+				continue;
+			edgeScore = scoreH[iPixTR] + scoreH[iPixBR] + scoreV[iPixBL] + scoreV[iPixBR];
+			textureCost = nEdgePoints[iPixBR - 2 - 2 * w] - nEdgePoints[iPixBL + 2 - 2 * w] - nEdgePoints[iPixTR - 2 + 2 * w] + nEdgePoints[iPixTL + 2 + 2 * w];
+			if (pRect->minx > 0)
+				edgeScore -= (scoreH[iPixTL - 1] + scoreH[iPixBL - 1]);
+			if (pRect->miny > 0)
+				edgeScore -= (scoreV[iPixTL - w] + scoreV[iPixTR - w]);
+			ddIdxSorted[DDRects.n].cost = (float)(2 * (ddWidth + ddHeight) - 4) - edgeScore + wTexture * (float)textureCost;
+			ddIdxSorted[DDRects.n].idx = DDRects.n;
+			DDRects.n++;
+		}
+	}
+	ddIdxSorted.resize(DDRects.n);
+	std::sort(ddIdxSorted.begin(), ddIdxSorted.end(), RECOG::DDD::SortCompare);
+
+	// Non-maximum suppression.
+
+	Array<int> validDDs;
+	validDDs.Element = new int[DDRects.n];
+	validDDs.n = 0;
+	int i;
+	int iDD, iDD_;
+	Rect<int> *pRect_;
+	Rect<int> intersection;
+	int NMSThr_ = NMSThr - 1;
+	for (i = 0; i < DDRects.n; i++)
+	{
+		iDD = ddIdxSorted[i].idx;
+		pRect = DDRects.Element + iDD;
+		for (iDD_ = 0; iDD_ < validDDs.n; iDD_++)
+		{
+			pRect_ = DDRects.Element + validDDs.Element[iDD_];
+			intersection = *pRect;
+			CropRect<int>(intersection, *pRect_);
+			if (intersection.maxx - intersection.minx > NMSThr_ && intersection.maxy - intersection.miny > NMSThr_)
+				break;
+		}
+		if (iDD_ < validDDs.n)
+			continue;
+		validDDs.Element[validDDs.n++] = iDD;
+	}
+	pDDRects->Element = new Rect<int>[validDDs.n];
+	pDDRects->n = validDDs.n;
+	for (iDD = 0; iDD < validDDs.n; iDD++)
+		pDDRects->Element[iDD] = DDRects.Element[validDDs.Element[iDD]];
+	delete[] DDRects.Element;
+	delete[] validDDs.Element;
+
+	// Visualization.
+
+	cv::Mat displayImg(h, w, CV_8UC3);
+	uchar *visPix = displayImg.data;
+	for (iPix = 0; iPix < nPix; iPix++, visPix += 3)
+		if (bHEdge[iPix] || bVEdge[iPix])
+			RVLSET3VECTOR(visPix, 255, 255, 255)
+		else
+			RVLSET3VECTOR(visPix, 0, 0, 0)
+	for (iDD = 0; iDD < pDDRects->n; iDD++)
+	{
+		pRect = pDDRects->Element + iDD;
+		cv::rectangle(displayImg, cv::Point(pRect->minx, pRect->miny), cv::Point(pRect->maxx, pRect->maxy), cv::Scalar(0, 255, 0));
+	}
+	cv::imshow("detected door/drawer", displayImg);
+	cv::waitKey();
+
+	//
+
+	delete[] leftDist;
+	delete[] rightDist;
+	delete[] upDist;
+	delete[] downDist;
+	delete[] nEdgePoints;
+	delete[] nMaskedPoints;
+	delete[] scoreH;
+	delete[] scoreV;
 }
 
 bool DDDetector::GenerateHypotheses(
@@ -4243,15 +5239,27 @@ void DDDetector::DetectStorageVolumes(Mesh *pMesh)
 
 void DDDetector::DDOrthogonalView(
 	RECOG::DDD::RectStruct *pRectStruct,
+	Array<RECOG::DDD::EdgeLineSegment> edgeLineSegments,
 	float *verticalAxis,
 	int nOrthogonalViews,
+	Pose3D *&poseFCOut,
 	std::vector<cv::Mat> &orthogonalViews,
+	Array<Array2D<uchar>> &masks,
+	Array<RECOG::DDD::Line2D> *&orthogonalViewLines,
 	bool bVisualize,
 	Mesh *pMesh)
 {
 	// Parameters.
 
-	float pixSize = 0.005f; // m
+	float planeDistTol = 0.040f;   // m
+	float normalOrientTol = 30.0f; // deg
+	int dilationSize = 6;		   // pix
+
+	// Constants.
+
+	float pixSize = orthogonalViewPixSize;
+	float mincsN = cos(normalOrientTol * DEG2RAD);
+	float csEdgeLineAngleTol = cos(orthogonalViewEdgeLineAngleTol * DEG2RAD);
 
 	// Determine vertical axis.
 
@@ -4297,15 +5305,31 @@ void DDDetector::DDOrthogonalView(
 		return;
 	std::sort(sortedVerticalRects.begin(), sortedVerticalRects.end(), RECOG::DDD::SortCompare);
 
-	// Create orthogonal views.
+	/// Create orthogonal views.
 
+	orthogonalViewLines = new Array<RECOG::DDD::Line2D>[nOrthogonalViews];
+	Array<RECOG::DDD::Line2D> *pOrthogonalViewLines = orthogonalViewLines;
+	int i;
 	cv::Mat orthogonalView;
-	for (int iOrthogonalView = 0; iOrthogonalView < nOrthogonalViews; iOrthogonalView++)
+	masks.Element = new Array2D<uchar>[nOrthogonalViews];
+	Array2D<uchar> *pMask;
+	int iPix, nPix;
+	Point *pPt;
+	int *piSrcPt;
+	int iSrcPt, iTgtPt;
+	float e;
+	float dP[3];
+	uchar *pMaskPix;
+	poseFCOut = new Pose3D[nOrthogonalViews];
+	for (int iOrthogonalView = 0; iOrthogonalView < nOrthogonalViews; iOrthogonalView++, pOrthogonalViewLines++)
 	{
+		// Pose of the face reference frame (F) with respect to the camera reference frame (C).
+
 		pRect = pRectStruct->rects.Element + sortedVerticalRects[iOrthogonalView].idx;
 		;
 		Pose3D poseFC;
-		float RCF[9];
+		Pose3D poseCF;
+		float *RCF = poseCF.R;
 		float *XFC = RCF;
 		float *YFC = RCF + 3;
 		float *ZFC = RCF + 6;
@@ -4343,8 +5367,13 @@ void DDDetector::DDOrthogonalView(
 		RVLSUM3VECTORS(PcC, V3Tmp, poseFC.t);
 		RVLSCALE3VECTOR(YFC, -half_fh, V3Tmp);
 		RVLSUM3VECTORS(poseFC.t, V3Tmp, poseFC.t);
+		poseFCOut[iOrthogonalView] = poseFC;
+
+		// Mapping between the original image and the orthogonal view.
+
 		int w = (int)floor(fw / pixSize);
 		int h = (int)floor(fh / pixSize);
+		nPix = w * h;
 		orthogonalView.create(h, w, CV_32SC1);
 		orthogonalView.setTo(-1);
 		int *tgtPix = (int *)(orthogonalView.data);
@@ -4353,13 +5382,14 @@ void DDDetector::DDOrthogonalView(
 		PF[2] = 0.0f;
 		float delta;
 		Array<Point> visPts;
-		bool bVisualize3D = (bVisualize && pMesh != NULL);
+		Point *pVisPt;
+		bool bVisualize3D = (pVisualizationData->b3DVisualization && pMesh != NULL);
 		if (bVisualize3D)
 		{
-			visPts.Element = new Point[w * h];
-			visPts.n = w * h;
+			visPts.Element = new Point[nPix];
+			visPts.n = nPix;
+			pVisPt = visPts.Element;
 		}
-		Point *pVisPt = visPts.Element;
 		for (y = 0; y < h; y++)
 			for (x = 0; x < w; x++, tgtPix++)
 			{
@@ -4375,9 +5405,89 @@ void DDDetector::DDOrthogonalView(
 				v = (int)round(camera.fv * PC[1] / PC[2] + camera.vc);
 				if (u < 0 || u >= camera.w || v < 0 || v >= camera.h)
 					continue;
-				*tgtPix = u + v * camera.w;
+				iPix = u + v * camera.w;
+				*tgtPix = iPix;
 			}
 		orthogonalViews.push_back(orthogonalView);
+
+		// Mask the points which don't lie on the face.
+
+		pMask = masks.Element + iOrthogonalView;
+		pMask->Element = new uchar[nPix];
+		pMask->w = w;
+		pMask->h = h;
+		memset(pMask->Element, 0, nPix * sizeof(uchar));
+		pMaskPix = pMask->Element;
+		piSrcPt = (int *)(orthogonalView.data);
+		for (iTgtPt = 0; iTgtPt < nPix; iTgtPt++, piSrcPt++, pMaskPix++)
+		{
+			iSrcPt = *piSrcPt;
+			pPt = pMesh->NodeArray.Element + iSrcPt;
+			RVLDIF3VECTORS(pPt->P, poseFC.t, dP);
+			e = RVLDOTPRODUCT3(ZFC, dP);
+			if (RVLABS(e) > planeDistTol)
+				continue;
+			// if (-RVLDOTPRODUCT3(pPt->N, ZFC) < mincsN)
+			//	continue;
+			*pMaskPix = 1;
+		}
+
+		// Orthogonal projection of the edge line segments.
+
+		RVLINVTRANSL(poseFC.R, poseFC.t, poseCF.t);
+		Rect<float> ROI;
+		ROI.minx = 0.0f;
+		ROI.maxx = (float)w;
+		ROI.miny = 0.0f;
+		ROI.maxy = (float)h;
+		int iEdgeLine;
+		RECOG::DDD::EdgeLineSegment *pEdgeLine;
+		float rayC[3];
+		rayC[2] = 1.0f;
+		float rayF[3];
+
+		pOrthogonalViewLines->Element = new RECOG::DDD::Line2D[edgeLineSegments.n];
+		float s;
+		RECOG::DDD::Line2D *pEdgeLineF = pOrthogonalViewLines->Element;
+		bool bInROI;
+		float edgeLineLen;
+		float V[2];
+		float vx, vy;
+		for (iEdgeLine = 0; iEdgeLine < edgeLineSegments.n; iEdgeLine++)
+		{
+			pEdgeLine = edgeLineSegments.Element + iEdgeLine;
+			bInROI = false;
+			for (i = 0; i < 2; i++)
+			{
+				rayC[0] = (pEdgeLine->P[i][0] - camera.uc) / camera.fu;
+				rayC[1] = (pEdgeLine->P[i][1] - camera.vc) / camera.fv;
+				RVLMULMX3X3VECT(poseCF.R, rayC, rayF);
+				s = -poseCF.t[2] / rayF[2];
+				RVLSCALE3VECTOR(rayF, s, V3Tmp);
+				pEdgeLineF->P[i][0] = (poseCF.t[0] + V3Tmp[0]) / pixSize;
+				pEdgeLineF->P[i][1] = (poseCF.t[1] + V3Tmp[1]) / pixSize;
+				if (IsInRect<float>(pEdgeLineF->P[i][0], pEdgeLineF->P[i][1], ROI))
+					bInROI = true;
+			}
+			if (!bInROI)
+				continue;
+			dP[0] = pEdgeLineF->P[1][0] - pEdgeLineF->P[0][0];
+			dP[1] = pEdgeLineF->P[1][1] - pEdgeLineF->P[0][1];
+			edgeLineLen = sqrt(dP[0] * dP[0] + dP[1] * dP[1]);
+			V[0] = dP[0] / edgeLineLen;
+			V[1] = dP[1] / edgeLineLen;
+			vx = (V[0] >= 0.0f ? V[0] : -V[0]);
+			vy = (V[1] >= 0.0f ? V[1] : -V[1]);
+			if (RVLMAX(vx, vy) < csEdgeLineAngleTol)
+				continue;
+			pEdgeLineF->N[0] = -V[1];
+			pEdgeLineF->N[1] = V[0];
+			pEdgeLineF++;
+		}
+		pOrthogonalViewLines->n = pEdgeLineF - pOrthogonalViewLines->Element;
+
+		// Visualization.
+
 		if (bVisualize)
 		{
 			if (bVisualize3D)
@@ -4391,7 +5501,21 @@ void DDDetector::DDOrthogonalView(
 			}
 			cv::Mat displayImg;
 			RECOG::DDD::MapMeshRGB(pMesh, orthogonalView, displayImg);
+			uchar *displayPix = (uchar *)(displayImg.data);
+			cv::Mat cvMask(h, w, CV_8UC1, pMask->Element);
+			cv::Mat dilatedMask;
+			int dilationStructElementSize = 2 * dilationSize + 1;
+			cv::Mat dilationStructElement = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(dilationStructElementSize, dilationStructElementSize), cv::Point(dilationSize, dilationSize));
+			cv::dilate(cvMask, dilatedMask, dilationStructElement);
+			// pMaskPix = (uchar*)(dilatedMask.data);
+			pMaskPix = pMask->Element;
+			for (iPix = 0; iPix < nPix; iPix++, displayPix += 3, pMaskPix++)
+				if (*pMaskPix == 0)
+					RVLSET3VECTOR(displayPix, 255, 0, 0);
 			std::string displayName = "Orthogonal view " + std::to_string(iOrthogonalView);
+			pEdgeLineF = pOrthogonalViewLines->Element;
+			for (i = 0; i < pOrthogonalViewLines->n; i++, pEdgeLineF++)
+				cv::line(displayImg, cv::Point(pEdgeLineF->P[0][0], pEdgeLineF->P[0][1]), cv::Point(pEdgeLineF->P[1][0], pEdgeLineF->P[1][1]), cv::Scalar(0, 255, 0));
 			cv::imshow(displayName, displayImg);
 			cv::waitKey();
 		}
@@ -6051,18 +7175,40 @@ bool DDDetector::RectangularStructures(
 	// Display surfels.
 
 	uchar green[] = {0, 255, 0};
-	if (pVisualizationData->bVisualizeSurfels)
-	{
-		pSurfels->NodeColors(green);
-		pSurfels->InitDisplay(pVisualizationData->pVisualizer, pMesh, pSurfelDetector);
-		pSurfels->Display(pVisualizationData->pVisualizer, pMesh);
-		pSurfels->DisplayEdgeFeatures();
-		pVisualizationData->pVisualizer->Run();
-	}
+
+	// if (pVisualizationData->bVisualizeSurfels)
+	//{
+	//	pSurfels->NodeColors(green);
+	//	pSurfels->InitDisplay(pVisualizationData->pVisualizer, pMesh, pSurfelDetector);
+	//	pSurfels->Display(pVisualizationData->pVisualizer, pMesh);
+	//	pSurfels->DisplayEdgeFeatures();
+	//	pVisualizationData->pVisualizer->Run();
+	// }
 
 	// Merge approximatelly coplanar adjacent surfels into planar surfaces.
 
 	pSurfelDetector->MergeSurfels(pMesh, pSurfels, minSurfelSize, minEdgeSize, maxCoPlanarSurfelNormalAngle, maxCoPlanarSurfelRefPtDist, &planarSurfaces);
+
+	// Only for testing purpose! Remove later!
+
+	// AccuratePlaneFitting(pMesh);
+
+	// Only for measuring the camera error for RO-MAN23! Remove later!
+	Surfel *pSurfel__ = planarSurfaces.NodeArray.Element;
+	float e;
+	float std = 0.0f;
+	int nPts = 0;
+	Point *pPt;
+	QLIST::Index2 *pPtIdx = pSurfel__->PtList.pFirst;
+	while (pPtIdx)
+	{
+		pPt = pMesh->NodeArray.Element + pPtIdx->Idx;
+		e = RVLDOTPRODUCT3(pSurfel__->N, pPt->P) - pSurfel__->d;
+		std += (e * e);
+		nPts++;
+		pPtIdx = pPtIdx->pNext;
+	}
+	std = sqrt(std / (float)nPts);
 
 	// Assign edges to surfels.
 
@@ -6179,7 +7325,7 @@ bool DDDetector::RectangularStructures(
 		RVLCOPYMX3X3(bestRRS, pRectStruct->RRS);
 		RectangularStructure(-1, -1, false, beta, pRectStruct, false, true, pMesh);
 
-		// Rectange edge rectangles.
+		// Rectangle edge rectangles.
 
 		if (bRectEdgeRects)
 		{
@@ -7078,9 +8224,19 @@ void DDDetector::DetectDominantShiftPoints2(
 	RVLCOPYMX3X3(R, pose.R);
 
 	// pMeshM = meshSeq.Element + meshSeq.n - 1;
+
+#ifdef RVLLINUX
 	// CreateOrientedPointArrayFromPointArray(pMeshM->NodeArray, pointsM);
 	MeshSubsample(pMeshQ, &pointsQSubsampledIdx);
 	CreateOrientedPointArrayFromPointArray(pMeshQ->NodeArray, pointsQSubsampledIdx, pointsQSubsampled);
+#else
+	// MESH::CreateOrientedPointArrayFromPointArray(pMeshM->NodeArray, pointsM);
+	MeshSubsample(pMeshQ, &pointsQSubsampledIdx);
+	MESH::CreateOrientedPointArrayFromPointArray(pMeshQ->NodeArray, pointsQSubsampledIdx, pointsQSubsampled);
+	// pMeshQ = meshSeq.Element + meshSeq.n - 1 - ROICalculationStep;
+	MESH::CreateOrientedPointArrayFromPointArray(pMeshM->NodeArray, pointsM);
+#endif
+
 	// pMeshQ = meshSeq.Element + meshSeq.n - 1 - ROICalculationStep;
 	CreateOrientedPointArrayFromPointArray(pMeshM->NodeArray, pointsM);
 	pointAssociationData.Create(pointsQSubsampled.n, pointsM.n, true);
@@ -7604,6 +8760,185 @@ void DDDetector::PlanarSurfaceEdges(Mesh *pMesh)
 	delete[] bJoined;
 }
 
+#define RVLMOMENTS3UPDATEWITHWEIGHTS(x, w, M, C, n) \
+	{                                               \
+		n += w;                                     \
+		M[0] += (w * x[0]);                         \
+		M[1] += (w * x[1]);                         \
+		M[2] += (w * x[2]);                         \
+		C[0] += (w * x[0] * x[0]);                  \
+		C[1] += (w * x[0] * x[1]);                  \
+		C[2] += (w * x[0] * x[2]);                  \
+		C[4] += (w * x[1] * x[1]);                  \
+		C[5] += (w * x[1] * x[2]);                  \
+		C[8] += (w * x[2] * x[2]);                  \
+	}
+
+template <class Type>
+void GetCovMatrix3W(
+	Moments<Type> *pMoments,
+	Type w,
+	Type *C,
+	Type *M)
+{
+	M[0] = pMoments->S[0] / w;
+	M[1] = pMoments->S[1] / w;
+	M[2] = pMoments->S[2] / w;
+	C[0] = pMoments->S2[0] / w - M[0] * M[0];
+	C[1] = pMoments->S2[1] / w - M[0] * M[1];
+	C[2] = pMoments->S2[2] / w - M[0] * M[2];
+	C[3] = C[1];
+	C[4] = pMoments->S2[4] / w - M[1] * M[1];
+	C[5] = pMoments->S2[5] / w - M[1] * M[2];
+	C[6] = C[2];
+	C[7] = C[5];
+	C[8] = pMoments->S2[8] / w - M[2] * M[2];
+}
+
+void DDDetector::AccuratePlaneFitting(Mesh *pMesh)
+{
+	// Parameters.
+
+	int nIterations = 100;
+	float c = 0.010f; // m
+
+	// Constants.
+
+	float c2 = c * c;
+
+	//
+
+	Surfel *pSurfel = planarSurfaces.NodeArray.Element + 1;
+	int nPts = pSurfel->size;
+	Array<Point> visPts[2];
+	int iPtSubset;
+	for (iPtSubset = 0; iPtSubset < 2; iPtSubset++)
+	{
+		visPts[iPtSubset].Element = new Point[nPts];
+		visPts[iPtSubset].n = 0;
+	}
+	float *N = pSurfel->N;
+	float d = pSurfel->d;
+	float r;
+	Point *pPt, *pPt_;
+	QLIST::Index2 *pPtIdx;
+	uchar green[] = {0, 255, 0};
+	uchar blue[] = {0, 0, 255};
+	Moments<double> moments;
+	double P[3];
+	int iPt;
+	double *w = new double[nPts];
+	for (iPt = 0; iPt < nPts; iPt++)
+		w[iPt] = 1.0f;
+	float r2max = 0.0f;
+	float r2;
+	pPtIdx = pSurfel->PtList.pFirst;
+	while (pPtIdx)
+	{
+		pPt = pMesh->NodeArray.Element + pPtIdx->Idx;
+		r = RVLDOTPRODUCT3(N, pPt->P) - d;
+		r2 = r * r;
+		if (r2 > r2max)
+			r2max = r2;
+		pPtIdx = pPtIdx->pNext;
+	}
+	double mu = c2 / (2.0f * r2max - c2);
+	double fTmp;
+	double a;
+	double b1, b2;
+	float wTotal;
+	double M[3];
+	cv::Mat cvC(3, 3, CV_64FC1);
+	double *C = (double *)(cvC.data);
+	cv::Mat cvEigC, cvEigVC;
+	double *eigC;
+	double *eigVC;
+	double *minEigVC;
+	vtkSmartPointer<vtkActor> ptActor[2];
+	pVisualizationData->pVisualizer->SetMesh(pMesh);
+	cv::Mat displayImg(pMesh->height, pMesh->width, CV_8UC3);
+	uchar *pixArray = (uchar *)(displayImg.data);
+	uchar *pix;
+	for (int k = 0; k < nIterations; k++)
+	{
+		if (k > 0)
+		{
+			fTmp = mu + 1.0f;
+			a = c * sqrt(mu * fTmp);
+			b1 = mu / fTmp * c2;
+			b2 = fTmp / mu * c2;
+			iPt = 0;
+			pPtIdx = pSurfel->PtList.pFirst;
+			while (pPtIdx)
+			{
+				pPt = pMesh->NodeArray.Element + pPtIdx->Idx;
+				r = RVLDOTPRODUCT3(N, pPt->P) - d;
+				r2 = r * r;
+				if (r2 <= b1)
+					w[iPt] = 1.0f;
+				else if (r2 < b2)
+					w[iPt] = a / RVLABS(r) - mu;
+				else
+					w[iPt] = 0.0f;
+				iPt++;
+				pPtIdx = pPtIdx->pNext;
+			}
+			InitMoments<double>(moments);
+			iPt = 0;
+			wTotal = 0.0f;
+			pPtIdx = pSurfel->PtList.pFirst;
+			while (pPtIdx)
+			{
+				pPt = pMesh->NodeArray.Element + pPtIdx->Idx;
+				RVLCOPY3VECTOR(pPt->P, P);
+				RVLMOMENTS3UPDATEWITHWEIGHTS(P, w[iPt], moments.S, moments.S2, wTotal);
+				iPt++;
+				pPtIdx = pPtIdx->pNext;
+			}
+			GetCovMatrix3W<double>(&moments, wTotal, C, M);
+			cv::eigen(cvC, cvEigC, cvEigVC);
+			eigC = (double *)(cvEigC.data);
+			eigVC = (double *)(cvEigVC.data);
+			minEigVC = eigVC + 6;
+			if (RVLDOTPRODUCT3(minEigVC, M) <= 0.0f)
+			{
+				RVLCOPY3VECTOR(minEigVC, N);
+			}
+			else
+			{
+				RVLNEGVECT3(minEigVC, N);
+			}
+			d = RVLDOTPRODUCT3(N, M);
+		}
+		visPts[0].n = visPts[1].n = 0;
+		displayImg.setTo(cv::Scalar(255, 0, 0));
+		pPtIdx = pSurfel->PtList.pFirst;
+		while (pPtIdx)
+		{
+			pPt = pMesh->NodeArray.Element + pPtIdx->Idx;
+			r = RVLDOTPRODUCT3(N, pPt->P) - d;
+			iPtSubset = (r >= 0.0f ? 0 : 1);
+			pPt_ = visPts[iPtSubset].Element + visPts[iPtSubset].n;
+			visPts[iPtSubset].n++;
+			RVLCOPY3VECTOR(pPt->P, pPt_->P);
+			pix = pixArray + 3 * pPtIdx->Idx;
+			if (r >= 0.0f)
+				RVLSET3VECTOR(pix, 255, 255, 255)
+			else
+				RVLSET3VECTOR(pix, 0, 0, 0)
+			pPtIdx = pPtIdx->pNext;
+		}
+		// ptActor[0] = pVisualizationData->pVisualizer->DisplayPointSet<float, Point>(visPts[0], green, 4);
+		// ptActor[1] = pVisualizationData->pVisualizer->DisplayPointSet<float, Point>(visPts[1], blue, 4);
+		// RunVisualizer();
+		// pVisualizationData->pVisualizer->renderer->RemoveActor(ptActor[0]);
+		// pVisualizationData->pVisualizer->renderer->RemoveActor(ptActor[1]);
+		cv::imshow("error map", displayImg);
+		cv::waitKey();
+	}
+	delete[] w;
+}
+
 void DDDetector::InitVisualizer(Visualizer *pVisualizerIn)
 {
 	if (pVisualizationData == NULL)
@@ -7835,6 +9170,48 @@ void DDDetector::VisualizeHypothesis(
 	//	RVLCOPY3VECTOR(red, bboxColor);
 	//	pVisualizationData->bboxActor = pVisualizationData->pVisualizer->DisplayBox(pVisualizationData->bboxSize[0], pVisualizationData->bboxSize[1], pVisualizationData->bboxSize[2], &bboxPose, bboxColor[0], bboxColor[1], bboxColor[2], true);
 	// }
+}
+
+void DDDetector::Display(
+	cv::Mat BGR,
+	Pose3D *poseFC,
+	int nOrthogonalViews,
+	Array<Rect<int>> *DDRects)
+{
+	int i;
+	int iView;
+	int iDDRect;
+	int DDRectVertex[4][2];
+	float PF[3], PC[3];
+	cv::Point imgP[4];
+	Array<Rect<int>> *pDDRects = DDRects;
+	Rect<int> *pDDRect;
+	for (iView = 0; iView < nOrthogonalViews; iView++, pDDRects++)
+	{
+		for (iDDRect = 0; iDDRect < pDDRects->n; iDDRect++)
+		{
+			pDDRect = pDDRects->Element + iDDRect;
+			DDRectVertex[0][0] = pDDRect->minx;
+			DDRectVertex[0][1] = pDDRect->miny;
+			DDRectVertex[1][0] = pDDRect->maxx;
+			DDRectVertex[1][1] = pDDRect->miny;
+			DDRectVertex[2][0] = pDDRect->maxx;
+			DDRectVertex[2][1] = pDDRect->maxy;
+			DDRectVertex[3][0] = pDDRect->minx;
+			DDRectVertex[3][1] = pDDRect->maxy;
+			for (i = 0; i < 4; i++)
+			{
+				PF[0] = (float)DDRectVertex[i][0] * orthogonalViewPixSize;
+				PF[1] = (float)DDRectVertex[i][1] * orthogonalViewPixSize;
+				PF[2] = 0.0f;
+				RVLTRANSF3(PF, poseFC[iView].R, poseFC[iView].t, PC);
+				imgP[i].x = camera.fu * PC[0] / PC[2] + camera.uc;
+				imgP[i].y = camera.fv * PC[1] / PC[2] + camera.vc;
+			}
+			for (i = 0; i < 4; i++)
+				cv::line(BGR, imgP[(i + 1) % 4], imgP[i], cv::Scalar(0, 255, 0), 2);
+		}
+	}
 }
 
 void DDDetector::SetSceneForHypothesisVisualization(Mesh *pMesh)
@@ -8322,7 +9699,7 @@ void DDDetector::Fit3DTo2D(
 	float eThr = 0.2f;
 	float eN = 30.0f;
 	float rotStD = 0.125 * PI; // rad
-	float tStD = 0.05;		   // m
+	float tStD = 0.05;         // m
 	float chamferThr = 3.0f;   // pix
 	int i;
 	float csNThr = cos(eN * DEG2RAD);
@@ -10132,6 +11509,28 @@ bool RECOG::DDD::SortCompare(SortIndex<float> x1, SortIndex<float> x2)
 	return (x1.cost < x2.cost);
 }
 
+// The following function could be moved to some general purpose utility cpp file, e.g. Util.cpp.
+
+void RECOG::DDD::MapImageC1(
+	cv::Mat srcImg,
+	cv::Mat mapping,
+	cv::Mat &tgtImg)
+{
+	int w = mapping.cols;
+	int h = mapping.rows;
+	tgtImg.create(mapping.size(), CV_8UC1);
+	int nTgtPix = w * h;
+	int iSrcPt, iTgtPix;
+	int *piSrcPt = (int *)(mapping.data);
+	for (iTgtPix = 0; iTgtPix < nTgtPix; iTgtPix++, piSrcPt++)
+	{
+		iSrcPt = *piSrcPt;
+		tgtImg.data[iTgtPix] = (iSrcPt >= 0 ? srcImg.data[iSrcPt] : 0);
+	}
+}
+
+// The following function could be moved to Mesh.cpp.
+
 void RECOG::DDD::MapMeshRGB(
 	Mesh *pMesh,
 	cv::Mat mapping,
@@ -10151,13 +11550,15 @@ void RECOG::DDD::MapMeshRGB(
 		if (iSrcPt >= 0)
 		{
 			srcPix = pMesh->NodeArray.Element[iSrcPt].RGB;
-			tgtPix[0] = srcPix[2];
-			tgtPix[1] = srcPix[1];
-			tgtPix[2] = srcPix[0];
+			RVLSET3VECTOR(tgtPix, srcPix[2], srcPix[1], srcPix[0]);
 		}
 		else
 			RVLSET3VECTOR(tgtPix, 255, 0, 0);
 	}
+}
+
+void RECOG::DDD::Detect3CallBackFunc(int event, int x, int y, int flags, void *userdata)
+{
 }
 
 // The following three functions could be moved to some general purpose utility cpp file, e.g. Util.cpp.
@@ -10334,6 +11735,114 @@ bool RVL::LineConvexSetIntersection2D(
 	}
 }
 
+bool DDDetector::GetVisualizeDoorHypotheses()
+{
+	return pVisualizationData->bVisualizeDoorHypotheses;
+}
+
+bool DDDetector::GetRGBImageVisualization()
+{
+	return pVisualizationData->bRGBImageVisualization;
+}
+
+void DDDetector::VisualizeDDHypothesis(
+	RECOG::DDD::HypothesisDoorDrawer hyp,
+	int imgID)
+{
+	int m;
+	AffinePose3D box;
+	Pose3D poseBC;
+	float lineWidth = (imgID >= 0 ? 5.0f : 1.0f);
+	float scale;
+	std::string unit;
+	if (hyp.objClass == RVLDDD_MODEL_DOOR)
+	{
+		scale = RAD2DEG;
+		unit = "deg";
+	}
+	else if (hyp.objClass == RVLDDD_MODEL_DRAWER)
+	{
+		scale = 1.0f;
+		unit = "m";
+	}
+	for (m = 0; m < hyp.state.n; m++)
+		if ((imgID < 0 || hyp.state.Element[m].imgID == imgID))
+		{
+			printf("State=%f %s\n", hyp.state.Element[m].q * scale, unit.data());
+			DDBox(&hyp, m, &box);
+			RVLCOPY3DPOSE(box.R, box.t, poseBC.R, poseBC.t);
+			pVisualizationData->pVisualizer->DisplayBox(box.s[0], box.s[1], box.s[2], &poseBC, 255.0, 0.0, 0.0, false, lineWidth);
+		}
+	if (hyp.objClass == RVLDDD_MODEL_DOOR)
+	{
+		float Z[3];
+		RVLCOPYCOLMX3X3(hyp.pose.R, 2, Z);
+		float fTmp = hyp.s[1];
+		float V3Tmp[3];
+		RVLSCALE3VECTOR(Z, fTmp, V3Tmp);
+		Point jointAxisEndPt[2];
+		Point *pPt = jointAxisEndPt;
+		RVLSUM3VECTORS(hyp.pose.t, V3Tmp, pPt->P);
+		pPt++;
+		RVLDIF3VECTORS(hyp.pose.t, V3Tmp, pPt->P);
+		uchar green[] = {0, 255, 0};
+		pVisualizationData->pVisualizer->DisplayLine(jointAxisEndPt, green, 5.0f);
+	}
+}
+
+void DDDetector::VisualizeDoorHypothesis(
+	RECOG::DDD::HypothesisDoorDrawer doorHyp,
+	int imgID)
+{
+	Pose3D poseBC;
+	Pose3D poseBA;
+	float tBB_[3];
+	RVLSET3VECTOR(tBB_, doorHyp.r[0], doorHyp.r[1], 0.0f);
+	float q;
+	int m;
+	float lineWidth = (imgID >= 0 ? 5.0f : 1.0f);
+	for (m = 0; m < doorHyp.state.n; m++)
+		if (imgID < 0 || doorHyp.state.Element[m].imgID == imgID)
+		{
+			q = doorHyp.state.Element[m].q;
+			RVLROTZ(cos(q), sin(q), poseBA.R);
+			RVLMULMX3X3VECT(poseBA.R, tBB_, poseBA.t);
+			RVLCOMPTRANSF3D(doorHyp.pose.R, doorHyp.pose.t, poseBA.R, poseBA.t, poseBC.R, poseBC.t);
+			pVisualizationData->pVisualizer->DisplayBox(models.Element[0].bboxSize[2], doorHyp.s[0], doorHyp.s[1], &poseBC, 255.0, 0.0, 0.0, false, lineWidth);
+		}
+	float Z[3];
+	RVLCOPYCOLMX3X3(doorHyp.pose.R, 2, Z);
+	float fTmp = doorHyp.s[1];
+	float V3Tmp[3];
+	RVLSCALE3VECTOR(Z, fTmp, V3Tmp);
+	Point jointAxisEndPt[2];
+	Point *pPt = jointAxisEndPt;
+	RVLSUM3VECTORS(doorHyp.pose.t, V3Tmp, pPt->P);
+	pPt++;
+	RVLDIF3VECTORS(doorHyp.pose.t, V3Tmp, pPt->P);
+	uchar green[] = {0, 255, 0};
+	pVisualizationData->pVisualizer->DisplayLine(jointAxisEndPt, green, 5.0f);
+}
+
+void DDDetector::VisualizeDrawerHypothesis(
+	RECOG::DDD::HypothesisDoorDrawer drawerHyp,
+	int imgID)
+{
+	int m;
+	float lineWidth = (imgID >= 0 ? 5.0f : 1.0f);
+	Pose3D poseBC;
+	float tBA[3];
+	tBA[1] = tBA[2] = 0.0f;
+	RVLCOPYMX3X3(drawerHyp.pose.R, poseBC.R);
+	for (m = 0; m < drawerHyp.state.n; m++)
+		if (imgID < 0 || drawerHyp.state.Element[m].imgID == imgID)
+		{
+			tBA[0] = drawerHyp.state.Element[m].q;
+			RVLTRANSF3(tBA, drawerHyp.pose.R, drawerHyp.pose.t, poseBC.t);
+			pVisualizationData->pVisualizer->DisplayBox(models.Element[0].bboxSize[2], drawerHyp.s[0], drawerHyp.s[1], &poseBC, 255.0, 0.0, 0.0, false, lineWidth);
+		}
+}
+
 // I. Vidovic
 void DDDetector::Detect2(Array<Mesh> meshSeq)
 {
@@ -10435,7 +11944,11 @@ void DDDetector::Detect2(Array<Mesh> meshSeq)
 
 		// Perform AICP on generated hypothesis
 		imgGrid.Create(pMesh->NodeArray, &camera, pointAssociationGridCellSize);
+		#ifdef RVLLINUX
 		CreateOrientedPointArrayFromPointArray(pMesh->NodeArray, pointsS);
+		#else
+		MESH::CreateOrientedPointArrayFromPointArray(pMesh->NodeArray, pointsS);
+		#endif
 		pointAssociationData.Create(pModel->points.n, pointsS.n, true);
 		// PointAssociation(pModel->points, &(hyp.pose), pointsS, pointAssociationData, ptBuff, true, &pointsMS);
 		SetSceneForHypothesisVisualization(pMesh);
@@ -10776,11 +12289,19 @@ void DDDetector::DetectDominantShiftPoints(Array<Mesh> meshSeq, Array<int> *domi
 	RVLCOPYMX3X3(R, pose.R);
 
 	pMeshM = meshSeq.Element + meshSeq.n - 1;
+#ifdef RVLLINUX
 	// CreateOrientedPointArrayFromPointArray(pMeshM->NodeArray, pointsM);
 	MeshSubsample(pMeshM, &pointsMSubsampledIdx);
 	CreateOrientedPointArrayFromPointArray(pMeshM->NodeArray, pointsMSubsampledIdx, pointsMSubsampled);
 	pMeshQ = meshSeq.Element + meshSeq.n - 1 - ROICalculationStep;
 	CreateOrientedPointArrayFromPointArray(pMeshQ->NodeArray, pointsQ);
+#else
+	// MESH::CreateOrientedPointArrayFromPointArray(pMeshM->NodeArray, pointsM);
+	MeshSubsample(pMeshM, &pointsMSubsampledIdx);
+	MESH::CreateOrientedPointArrayFromPointArray(pMeshM->NodeArray, pointsMSubsampledIdx, pointsMSubsampled);
+	pMeshQ = meshSeq.Element + meshSeq.n - 1 - ROICalculationStep;
+	MESH::CreateOrientedPointArrayFromPointArray(pMeshQ->NodeArray, pointsQ);
+#endif
 	pointAssociationData.Create(pointsMSubsampled.n, pointsQ.n, true);
 	imgGrid.Create(pMeshQ->NodeArray, &camera, ROIPointAssociationGridCellSize);
 	// imgGrid.Create(pMeshQ->NodeArray, &camera, pointAssociationGridCellSize);
@@ -10792,15 +12313,21 @@ void DDDetector::DetectDominantShiftPoints(Array<Mesh> meshSeq, Array<int> *domi
 	Voter3D voter;
 	float cellSize[3] = {votingCellSizeX, votingCellSizeY, votingCellSizeZ};
 	CalculatePointsShiftVector(pMeshM->NodeArray, pointsMSubsampledIdx, pointsQ, &pointAssociationData, &pointsShift, minPointShift, &pointsMValidShiftIdx);
+#ifdef RVLLINUX
 	CreateOrientedPointArrayFromPointArray(pMeshM->NodeArray, pointsMValidShiftIdx, pointsMValidShift);
-
+#else
+	MESH::CreateOrientedPointArrayFromPointArray(pMeshM->NodeArray, pointsMValidShiftIdx, pointsMValidShift);
+#endif
 	voter.Vote(pointsShift, cellSize);
 	Vector3<float> dominantShift = voter.GetMax();
 
 	float shiftThresh[3] = {shiftThreshX, shiftThreshY, shiftThreshZ};
 	FindPointsWithShift(pMeshM->NodeArray, pointsMSubsampledIdx, pointsQ, &pointAssociationData, &dominantShift, shiftThresh, dominantShiftPointsIdx);
-
+#ifdef RVLLINUX
 	CreateOrientedPointArrayFromPointArray(pMeshM->NodeArray, *dominantShiftPointsIdx, dominantShiftPoints);
+#else
+	MESH::CreateOrientedPointArrayFromPointArray(pMeshM->NodeArray, *dominantShiftPointsIdx, dominantShiftPoints);
+#endif
 
 	if (bVisualize && pVisualizationData->bVisualizeROIDetection)
 	{
@@ -10875,12 +12402,20 @@ void DDDetector::DetectDominantShiftPoints(Mesh *pMeshM, Mesh *pMeshQ, Array<int
 	RVLCOPY3VECTOR(t, pose.t);
 	RVLCOPYMX3X3(R, pose.R);
 
-	// pMeshM = meshSeq.Element + meshSeq.n - 1;
+// pMeshM = meshSeq.Element + meshSeq.n - 1;
+#ifdef RVLLINUX
 	// CreateOrientedPointArrayFromPointArray(pMeshM->NodeArray, pointsM);
 	MeshSubsample(pMeshM, &pointsMSubsampledIdx);
 	CreateOrientedPointArrayFromPointArray(pMeshM->NodeArray, pointsMSubsampledIdx, pointsMSubsampled);
 	// pMeshQ = meshSeq.Element + meshSeq.n - 1 - ROICalculationStep;
 	CreateOrientedPointArrayFromPointArray(pMeshQ->NodeArray, pointsQ);
+#else
+	// MESH::CreateOrientedPointArrayFromPointArray(pMeshM->NodeArray, pointsM);
+	MeshSubsample(pMeshM, &pointsMSubsampledIdx);
+	MESH::CreateOrientedPointArrayFromPointArray(pMeshM->NodeArray, pointsMSubsampledIdx, pointsMSubsampled);
+	// pMeshQ = meshSeq.Element + meshSeq.n - 1 - ROICalculationStep;
+	MESH::CreateOrientedPointArrayFromPointArray(pMeshQ->NodeArray, pointsQ);
+#endif
 	pointAssociationData.Create(pointsMSubsampled.n, pointsQ.n, true);
 	imgGrid.Create(pMeshQ->NodeArray, &camera, ROIPointAssociationGridCellSize);
 	// imgGrid.Create(pMeshQ->NodeArray, &camera, pointAssociationGridCellSize);
@@ -10892,41 +12427,50 @@ void DDDetector::DetectDominantShiftPoints(Mesh *pMeshM, Mesh *pMeshQ, Array<int
 	Voter3D voter;
 	float cellSize[3] = {votingCellSizeX, votingCellSizeY, votingCellSizeZ};
 	CalculatePointsShiftVector(pMeshM->NodeArray, pointsMSubsampledIdx, pointsQ, &pointAssociationData, &pointsShift, minPointShift, &pointsMValidShiftIdx);
+#ifdef RVLLINUX
 	CreateOrientedPointArrayFromPointArray(pMeshM->NodeArray, pointsMValidShiftIdx, pointsMValidShift);
+#else
+	MESH::CreateOrientedPointArrayFromPointArray(pMeshM->NodeArray, pointsMValidShiftIdx, pointsMValidShift);
+#endif
 
-	// Visualization.
-
-	voter.Vote(pointsShift, cellSize);
-	dominantShift = voter.GetMax();
-
-	float shiftThresh[3] = {shiftThreshX, shiftThreshY, shiftThreshZ};
-	FindPointsWithShift(pMeshM->NodeArray, pointsMSubsampledIdx, pointsQ, &pointAssociationData, &dominantShift, shiftThresh, dominantShiftPointsIdx);
-
-	CreateOrientedPointArrayFromPointArray(pMeshM->NodeArray, *dominantShiftPointsIdx, dominantShiftPoints);
-
-	if (bVisualize && pVisualizationData->bVisualizeROIDetection)
+	if (voter.Vote(pointsShift, cellSize))
 	{
-		Visualizer *pVisualizer;
-		pVisualizer = pVisualizationData->pVisualizer;
+		dominantShift = voter.GetMax();
 
-		uchar green[] = {0, 255, 0};
-		uchar blue[] = {0, 0, 255};
-		uchar red[] = {255, 0, 0};
-		uchar cyan[] = {0, 255, 255};
-		uchar white[] = {255, 255, 255};
+		float shiftThresh[3] = {shiftThreshX, shiftThreshY, shiftThreshZ};
+		FindPointsWithShift(pMeshM->NodeArray, pointsMSubsampledIdx, pointsQ, &pointAssociationData, &dominantShift, shiftThresh, dominantShiftPointsIdx);
 
-		float meanPoint[3];
-		FindMeanPoint(&pointsMValidShift, meanPoint);
+#ifdef RVLLINUX
+		CreateOrientedPointArrayFromPointArray(pMeshM->NodeArray, *dominantShiftPointsIdx, dominantShiftPoints);
+#else
+		MESH::CreateOrientedPointArrayFromPointArray(pMeshM->NodeArray, *dominantShiftPointsIdx, dominantShiftPoints);
+#endif
+		// Visualization.
+		
+		if (bVisualize && pVisualizationData->bVisualizeROIDetection)
+		{
+			Visualizer *pVisualizer;
+			pVisualizer = pVisualizationData->pVisualizer;
 
-		SetPointsForPointToPointAssociationVisualization(pointsMSubsampled, pMeshQ, &pointAssociationData);
-		SetShiftVectorForVisualization(meanPoint, dominantShift, blue);
-		// SetPointsForVisualization(pointsMSubsampled, blue, 1.0);
-		// SetPointsForVisualization(pointsQ, red, 1.0);
-		SetPointsForVisualization(pointsMValidShift, blue, 2.0);
-		SetPointsForVisualization(dominantShiftPoints, green, 6.0);
+			uchar green[] = {0, 255, 0};
+			uchar blue[] = {0, 0, 255};
+			uchar red[] = {255, 0, 0};
+			uchar cyan[] = {0, 255, 255};
+			uchar white[] = {255, 255, 255};
 
-		pVisualizer->Run();
-		pVisualizer->renderer->RemoveAllViewProps();
+			float meanPoint[3];
+			FindMeanPoint(&pointsMValidShift, meanPoint);
+
+			SetPointsForPointToPointAssociationVisualization(pointsMSubsampled, pMeshQ, &pointAssociationData);
+			SetShiftVectorForVisualization(meanPoint, dominantShift, blue);
+			// SetPointsForVisualization(pointsMSubsampled, blue, 1.0);
+			// SetPointsForVisualization(pointsQ, red, 1.0);
+			SetPointsForVisualization(pointsMValidShift, blue, 2.0);
+			SetPointsForVisualization(dominantShiftPoints, green, 6.0);
+
+			pVisualizer->Run();
+			pVisualizer->renderer->RemoveAllViewProps();
+		}
 	}
 
 	RVL_DELETE_ARRAY(ptBuff.Element);
@@ -11122,7 +12666,7 @@ void DDDetector::RecognizeArticulatedObjectState(
 	float openingDirectionTolRad = openingDirectionTol * DEG2RAD;
 	bool bAlignWithSurfel = true;
 	bool bDebug = false;
-	float surfOrientTol = 30.0;	  // deg
+	float surfOrientTol = 30.0;   // deg
 	float surfPositionTol = 0.05; // m
 
 	// Constants.
@@ -11442,7 +12986,7 @@ float DDDetector::CreateAndEvaluateAOHypothesis(
 {
 	// Parameters.
 
-	float stdZeroStateDoor = 5.0f;	 // deg
+	float stdZeroStateDoor = 5.0f;   // deg
 	float stdZeroStateDrawer = 0.05; // m
 
 	// Constants.
@@ -11931,114 +13475,6 @@ void DDDetector::VisualizeFittingScoreCalculation(Mesh *pMesh, int nTransparentP
 	// pVisualizationData->pVisualizer->renderer->RemoveAllViewProps();
 }
 
-bool DDDetector::GetVisualizeDoorHypotheses()
-{
-	return pVisualizationData->bVisualizeDoorHypotheses;
-}
-
-bool DDDetector::GetRGBImageVisualization()
-{
-	return pVisualizationData->bRGBImageVisualization;
-}
-
-void DDDetector::VisualizeDDHypothesis(
-	RECOG::DDD::HypothesisDoorDrawer hyp,
-	int imgID)
-{
-	int m;
-	AffinePose3D box;
-	Pose3D poseBC;
-	float lineWidth = (imgID >= 0 ? 5.0f : 1.0f);
-	float scale;
-	std::string unit;
-	if (hyp.objClass == RVLDDD_MODEL_DOOR)
-	{
-		scale = RAD2DEG;
-		unit = "deg";
-	}
-	else if (hyp.objClass == RVLDDD_MODEL_DRAWER)
-	{
-		scale = 1.0f;
-		unit = "m";
-	}
-	for (m = 0; m < hyp.state.n; m++)
-		if ((imgID < 0 || hyp.state.Element[m].imgID == imgID))
-		{
-			printf("State=%f %s\n", hyp.state.Element[m].q * scale, unit.data());
-			DDBox(&hyp, m, &box);
-			RVLCOPY3DPOSE(box.R, box.t, poseBC.R, poseBC.t);
-			pVisualizationData->pVisualizer->DisplayBox(box.s[0], box.s[1], box.s[2], &poseBC, 255.0, 0.0, 0.0, false, lineWidth);
-		}
-	if (hyp.objClass == RVLDDD_MODEL_DOOR)
-	{
-		float Z[3];
-		RVLCOPYCOLMX3X3(hyp.pose.R, 2, Z);
-		float fTmp = hyp.s[1];
-		float V3Tmp[3];
-		RVLSCALE3VECTOR(Z, fTmp, V3Tmp);
-		Point jointAxisEndPt[2];
-		Point *pPt = jointAxisEndPt;
-		RVLSUM3VECTORS(hyp.pose.t, V3Tmp, pPt->P);
-		pPt++;
-		RVLDIF3VECTORS(hyp.pose.t, V3Tmp, pPt->P);
-		uchar green[] = {0, 255, 0};
-		pVisualizationData->pVisualizer->DisplayLine(jointAxisEndPt, green, 5.0f);
-	}
-}
-
-void DDDetector::VisualizeDoorHypothesis(
-	RECOG::DDD::HypothesisDoorDrawer doorHyp,
-	int imgID)
-{
-	Pose3D poseBC;
-	Pose3D poseBA;
-	float tBB_[3];
-	RVLSET3VECTOR(tBB_, doorHyp.r[0], doorHyp.r[1], 0.0f);
-	float q;
-	int m;
-	float lineWidth = (imgID >= 0 ? 5.0f : 1.0f);
-	for (m = 0; m < doorHyp.state.n; m++)
-		if (imgID < 0 || doorHyp.state.Element[m].imgID == imgID)
-		{
-			q = doorHyp.state.Element[m].q;
-			RVLROTZ(cos(q), sin(q), poseBA.R);
-			RVLMULMX3X3VECT(poseBA.R, tBB_, poseBA.t);
-			RVLCOMPTRANSF3D(doorHyp.pose.R, doorHyp.pose.t, poseBA.R, poseBA.t, poseBC.R, poseBC.t);
-			pVisualizationData->pVisualizer->DisplayBox(models.Element[0].bboxSize[2], doorHyp.s[0], doorHyp.s[1], &poseBC, 255.0, 0.0, 0.0, false, lineWidth);
-		}
-	float Z[3];
-	RVLCOPYCOLMX3X3(doorHyp.pose.R, 2, Z);
-	float fTmp = doorHyp.s[1];
-	float V3Tmp[3];
-	RVLSCALE3VECTOR(Z, fTmp, V3Tmp);
-	Point jointAxisEndPt[2];
-	Point *pPt = jointAxisEndPt;
-	RVLSUM3VECTORS(doorHyp.pose.t, V3Tmp, pPt->P);
-	pPt++;
-	RVLDIF3VECTORS(doorHyp.pose.t, V3Tmp, pPt->P);
-	uchar green[] = {0, 255, 0};
-	pVisualizationData->pVisualizer->DisplayLine(jointAxisEndPt, green, 5.0f);
-}
-
-void DDDetector::VisualizeDrawerHypothesis(
-	RECOG::DDD::HypothesisDoorDrawer drawerHyp,
-	int imgID)
-{
-	int m;
-	float lineWidth = (imgID >= 0 ? 5.0f : 1.0f);
-	Pose3D poseBC;
-	float tBA[3];
-	tBA[1] = tBA[2] = 0.0f;
-	RVLCOPYMX3X3(drawerHyp.pose.R, poseBC.R);
-	for (m = 0; m < drawerHyp.state.n; m++)
-		if (imgID < 0 || drawerHyp.state.Element[m].imgID == imgID)
-		{
-			tBA[0] = drawerHyp.state.Element[m].q;
-			RVLTRANSF3(tBA, drawerHyp.pose.R, drawerHyp.pose.t, poseBC.t);
-			pVisualizationData->pVisualizer->DisplayBox(models.Element[0].bboxSize[2], drawerHyp.s[0], drawerHyp.s[1], &poseBC, 255.0, 0.0, 0.0, false, lineWidth);
-		}
-}
-
 void DDDetector::Voter1DTest()
 {
 	// VOTE1D test
@@ -12182,7 +13618,7 @@ void DDDetector::getPolarLineFromCartPoints(float *params, cv::Point pt1, cv::Po
 	float theta, rho;
 
 	theta = atan2((float)pt2.x - pt1.x, (float)pt2.y - pt1.y + std::numeric_limits<float>::epsilon()); // theta
-	rho = b_ / (sin(params[0]) - m * cos(params[0]));												   // rho
+	rho = b_ / (sin(params[0]) - m * cos(params[0]));                                                  // rho
 
 	rho = params[0];
 	theta = params[1];
@@ -12255,7 +13691,7 @@ void DDDetector::HoughLinesPtAssociationCylinder(
 		cv::waitKey(0);
 	}
 
-	int offsetFromTop = 100;	// Offset pixels from top of the image
+	int offsetFromTop = 100;    // Offset pixels from top of the image
 	int offsetFromBottom = 450; // Offset pixels from bottom of the image
 
 	// Set 4 points on the two longest lines
@@ -12281,7 +13717,7 @@ void DDDetector::HoughLinesPtAssociationCylinder(
 	// Select random points on the lines and check if the pixels at the coordinates are "white"
 	int x_temp, y_temp; // random point coordinates on a line
 	int y_temps[4];
-	int iiQPix;					   // Index of the point on the image
+	int iiQPix;                    // Index of the point on the image
 	for (size_t i = 0; i < 2; i++) // take 2 points on the first detected line
 	{
 		while (1)
@@ -15673,9 +17109,9 @@ RVL::Pose3D DDDetector::Fit3DTo2DStereo2(
 				Visualize3DModelImageProjection(*pVisualizationData->displayImg, pMesh, edge);
 				std::string displayImgName = "ICP iteration " + std::to_string(iIteration) + " image " + std::to_string(iImg);
 				cv::imshow(displayImgName, *pVisualizationData->displayImg);
-		cv::waitKey(0);
+				cv::waitKey(0);
 				cv::destroyWindow(displayImgName);
-	}
+			}
 		}
 	}
 	pVisualizationData->bVisualizeICPSteps = bVisualizeICPSteps;
@@ -16158,7 +17594,7 @@ void DDDetector::loadBaslerCamerasParams(std::string loadPath, cv::Mat *&camsMat
 #ifdef RVLLINUX
 	char slash = '/';
 #else
-		char slash = '\\';
+			char slash = '\\';
 #endif
 
 	for (int i = 0; i < 2; i++)
@@ -16192,7 +17628,7 @@ void DDDetector::loadBaslerExtrinsicParams(std::string loadPath, RVL::Pose3D *po
 #ifdef RVLLINUX
 	char slash = '/';
 #else
-		char slash = '\\';
+			char slash = '\\';
 #endif
 	std::string cameraParamsFilePath = loadPath + slash + "extrinsicCalibration.yaml";
 	cv::Mat R, t, TC1C0;

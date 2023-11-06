@@ -26,7 +26,7 @@
 #include "ObjectGraph.h"
 #include "PlanarSurfelDetector.h"
 #include "RVLRecognition.h"
-#include "RVLRecognitionCommon.h"
+// #include "RVLRecognitionCommon.h"
 #include "PSGMCommon.h"
 #include "CTISet.h"
 #include "VertexGraph.h"
@@ -20653,7 +20653,7 @@ int PSGM::CheckHypothesesToSegmentEnvelopmentAndCollision(int hyp, int segment, 
                 sPm[0] = rvlvertex->P[0] / 1000;
                 sPm[1] = rvlvertex->P[1] / 1000;
                 sPm[2] = rvlvertex->P[2] / 1000;
-                RVLTRANSF3(sPm, RMS, st, tPm, V3Tmp);
+                RVLINVTRANSF3(sPm, RMS, st, tPm, V3Tmp);
 
                 N = &hypTG->A.Element[hypTG->A.w * plane->i]; // Same normal at same index as the model CTI?
 
@@ -23672,7 +23672,7 @@ float PSGM::HypothesesToSegmentCollision(int iHypothesis, int iSegment, RECOG::P
             sPm[0] = rvlvertex->P[0] / 1000;
             sPm[1] = rvlvertex->P[1] / 1000;
             sPm[2] = rvlvertex->P[2] / 1000;
-            RVLTRANSF3(sPm, RMS, st, tPm, V3Tmp);
+            RVLINVTRANSF3(sPm, RMS, st, tPm, V3Tmp);
 
             N = &hypTG->A.Element[hypTG->A.w * plane->i]; // Same normal at same index as the model CTI?
 

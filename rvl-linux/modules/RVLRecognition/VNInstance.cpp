@@ -152,11 +152,10 @@ void VNInstance::Match(
 
 	FILE *fCorrespondences;
 
-#ifdef RVLVN_TIME_MESUREMENT
 	pClassifier->pTimer->Start();
 
 	double StartTime = pClassifier->pTimer->GetTime();
-
+#ifdef RVLVN_TIME_MESUREMENT
 	LARGE_INTEGER CNTRSegmentationSTART, CNTRSegmentationEND;
 	LARGE_INTEGER CNTRDescriptorGenerationSTART, CNTRDescriptorGenerationEND;
 
@@ -164,8 +163,7 @@ void VNInstance::Match(
 	QueryPerformanceFrequency((LARGE_INTEGER *)&frequency);
 
 	QueryPerformanceCounter((LARGE_INTEGER *)&CNTRSegmentationSTART);
-#endif
-
+	#endif
 #ifdef RVLVN_PART_SEGMENTATION_MATCH_LOG
 	FILE *fpMatch = fopen((std::string(pClassifier->resultsFolder) + "\\VNInstanceToClassMatch.dat").data(), "w");
 #endif
@@ -238,18 +236,16 @@ void VNInstance::Match(
 		pVNModelInstance = pVNModelInstance->pNext;
 	}
 
-#ifdef RVLVN_TIME_MESUREMENT
 	pClassifier->pTimer->Stop();
 
 	double ExecTime = pClassifier->pTimer->GetTime();
 
 	//double ExecTime = pClassifier->pTimer->GetTime() - StartTime;
 
-
+#ifdef RVLVN_TIME_MESUREMENT
 	QueryPerformanceCounter((LARGE_INTEGER *)&CNTRSegmentationEND);
 	double timeSegmentation = (CNTRSegmentationEND.QuadPart - CNTRSegmentationSTART.QuadPart) * 1000.0 / frequency.QuadPart;
-#endif
-
+	#endif
 #ifdef RVLVN_PART_SEGMENTATION_MATCH_LOG
 	fclose(fpMatch);
 #endif
@@ -1968,7 +1964,8 @@ void VNInstance::AssignLabelsToUnassignedPoints(
 			if (pMesh->NodeArray.Element[iPt].label == -1)
 			{
 				//find colsest matched object
-				modelComponentID = association[iObject].iMetaModel;
+				//modelComponentID = association[iObject].iMetaModel;
+				modelComponentID = association[iObject].label; //2019.11.10
 
 				//if current object has match
 				if (modelComponentID != -1)
@@ -1994,7 +1991,7 @@ void VNInstance::AssignLabelsToUnassignedPoints(
 
 		//assign labels to unassigned points
 		if (!bFirstObject)
-			if (pMesh->NodeArray.Element[iPt].label == -1)
+			if (pMesh->NodeArray.Element[iPt].label == -1)				
 				pMesh->NodeArray.Element[iPt].label = association[closestObject].label;
 
 
@@ -4457,40 +4454,6 @@ void VNInstance::VisualizePartAssociation(
 
 			piSurfelIdx = piSurfelIdx->pNext;
 		}
-
-	//for (int iComponent = 0; iComponent < pVNScene->nComponents; iComponent++)
-	//{
-	//	if (association[iComponent].label == -1)
-	//		continue;
-
-	//	for (int iCell = 0; iCell < pVNScene->componentSurfelCells[iComponent].n; iCell++)
-	//	{			
-	//		k = pVNScene->componentSurfelCells[iComponent].Element[iCell];
-	//		if (cellS[k] != 0)
-	//			continue;
-
-	//		cellS[k]++;
-
-	//		pCell = pVNScene->surfelCells.Element + pVNScene->componentSurfelCells[iComponent].Element[iCell];
-
-	//		piSurfelIdx = pCell->surfelList.pFirst;
-
-	//		while (piSurfelIdx)
-	//		{
-	//			pSurfel = pClassifier->pSurfels->NodeArray.Element + piSurfelIdx->Idx;
-
-	//			piPtIdx = pSurfel->PtList.pFirst;
-
-	//			while (piPtIdx)
-	//			{
-	//				pMesh->NodeArray.Element[piPtIdx->Idx].label = association[iComponent].label;
-	//				piPtIdx = piPtIdx->pNext;
-	//			}
-
-	//			piSurfelIdx = piSurfelIdx->pNext;
-	//		}
-
-	//	}
 	}
 
 	if (assignLabelToUnassigned != -1)
@@ -4531,11 +4494,12 @@ void VNInstance::VisualizePartAssociation(
 		uchar UnassignedColor[] = { 255, 255, 255 };
 
 		float *P_;
+		int debugCnt = 0;
 
 		//Visualize association
 		if (label == -1)
 		{
-			uchar colors[5][3] = { { 0, 0, 0 }, { 0, 255, 0 }, { 255, 0, 0 }, { 0, 255, 255 }, {0, 0, 255} };
+			uchar colors[5][3] = { { 0, 0, 0 }, { 0, 255, 0 }, { 255, 0, 0 }, { 0, 255, 255 }, { 0, 0, 255 } };
 
 			//RandomColors(UnassignedColor, colors, pClassifier->maxGTPartLabel);			
 
@@ -4557,6 +4521,9 @@ void VNInstance::VisualizePartAssociation(
 				{
 					if (iLabel == pMesh->NodeArray.Element[i].label)
 					{
+						if (iLabel == -1)
+							debugCnt++;
+
 						P_ = Pts.Element[Pts.n++].P;
 
 						RVLCOPY3VECTOR(pMesh->NodeArray.Element[i].P, P_);
@@ -4568,6 +4535,8 @@ void VNInstance::VisualizePartAssociation(
 				else
 					pVisualizer->DisplayPointSet<float, Point>(Pts, colors[iLabel], 2.0f);
 			}
+
+			printf("Number of unassigned points: %d\n", debugCnt);
 
 			delete[] Pts.Element;
 
@@ -4690,6 +4659,169 @@ void VNInstance::VisualizePartAssociation(
 	}
 	else
 		printf("There is no GT file %s\n", RVLCreateFileName(pClassifier->sceneFileName, ".ply", -1, "_.seg"));
+}
+
+void VNInstance::VisualizeGTLabels(
+	Mesh *pMesh,
+	void *vpClassifier)
+{
+	VNClassifier *pClassifier = (VNClassifier *)vpClassifier;
+
+	Visualizer *pVisualizer = pClassifier->visualizationData.pVisualizer;
+
+	pVisualizer->renderer->RemoveAllViewProps();
+
+	//Load GT labels and find max label ID
+	FILE *fGTlabeledPoints;
+
+	fGTlabeledPoints = fopen(RVLCreateFileName(pClassifier->sceneFileName, ".ply", -1, "_.seg"), "r");
+
+	if (fGTlabeledPoints)
+	{
+
+		int GTLabel_;
+		pClassifier->maxGTPartLabel = -1;
+
+		int *GTlabel = new int[pMesh->NodeArray.n];
+
+		for (int ipt = 0; ipt < pMesh->NodeArray.n; ipt++)
+		{
+			fscanf(fGTlabeledPoints, "%d\n", &GTLabel_);
+			GTlabel[ipt] = GTLabel_;
+
+			if (GTLabel_ > pClassifier->maxGTPartLabel)
+				pClassifier->maxGTPartLabel = GTLabel_;
+		}
+
+		fclose(fGTlabeledPoints);
+
+		Array<Point> Pts;
+		Pts.Element = new Point[pMesh->NodeArray.n];
+		Pts.n = 0;
+
+		float *P_;
+
+		uchar colors[5][3] = { { 0, 0, 0 }, { 0, 255, 0 }, { 255, 0, 0 }, { 0, 255, 255 }, { 0, 0, 255 } };
+
+		for (int iLabel = 1; iLabel <= pClassifier->maxGTPartLabel; iLabel++)
+		{
+			Pts.n = 0;
+
+			for (int i = 0; i < pMesh->NodeArray.n; i++)
+			{
+				if (GTlabel[i] == iLabel)
+				{
+					P_ = Pts.Element[Pts.n++].P;
+					RVLCOPY3VECTOR(pMesh->NodeArray.Element[i].P, P_);
+				}
+			}
+
+			pVisualizer->DisplayPointSet<float, Point>(Pts, colors[iLabel], 2.0f);
+		}
+
+		pVisualizer->Run();
+
+		delete[] Pts.Element;
+		delete[] GTlabel;
+	}
+	else
+		printf("There is no GT file %s\n", RVLCreateFileName(pClassifier->sceneFileName, ".ply", -1, "_.seg"));
+}
+
+void VNInstance::VisualizeSparseGTLabels(
+	Mesh *pMesh,
+	void *vpClassifier)
+{
+	VNClassifier *pClassifier = (VNClassifier *)vpClassifier;
+
+	Visualizer *pVisualizer = pClassifier->visualizationData.pVisualizer;
+
+	pVisualizer->renderer->RemoveAllViewProps();
+
+	Array<Point> sparsePts;
+	sparsePts.Element = new Point[pMesh->NodeArray.n];
+	sparsePts.n = 0;
+
+	Array<Point> Pts;
+	Pts.Element = new Point[pMesh->NodeArray.n];
+	Pts.n = 0;
+
+	float P[3];
+	int nPts;
+
+	FILE *fSparseGTlabeledPoints, *fSparsePoints;
+
+	fSparseGTlabeledPoints = fopen(RVLCreateFileName(pClassifier->sceneFileName, ".ply", -1, ".seg"), "r");
+	fSparsePoints = fopen(RVLCreateFileName(pClassifier->sceneFileName, ".ply", -1, ".pts"), "r");
+
+	char *fileName = RVLCreateFileName(pClassifier->sceneFileName, ".ply", -1, ".pts");
+
+	if (fSparsePoints)
+	{
+		while (!feof(fSparsePoints))
+		{
+			fscanf(fSparsePoints, "%f %f %f\n", &sparsePts.Element[sparsePts.n].P[0], &sparsePts.Element[sparsePts.n].P[1], &sparsePts.Element[sparsePts.n].P[2]);
+			sparsePts.n++;
+		}
+
+		int *GTlabel = new int[sparsePts.n];
+
+		if (fSparseGTlabeledPoints)
+		{
+			for (int i = 0; i < sparsePts.n; i++)
+			{
+				fscanf(fSparseGTlabeledPoints, "%d\n", &GTlabel[i]);
+
+				if (GTlabel[i] > pClassifier->maxGTPartLabel)
+					pClassifier->maxGTPartLabel = GTlabel[i];
+			}
+
+
+			Array<Point> Pts;
+			Pts.Element = new Point[sparsePts.n];
+			Pts.n = 0;
+
+			float *P_;
+
+			uchar colors[5][3] = { { 0, 0, 0 }, { 0, 255, 0 }, { 255, 0, 0 }, { 0, 255, 255 }, { 0, 0, 255 } };
+
+			for (int iLabel = 1; iLabel <= pClassifier->maxGTPartLabel; iLabel++)
+			{
+				Pts.n = 0;
+
+				for (int i = 0; i < sparsePts.n; i++)
+				{
+					if (GTlabel[i] == iLabel)
+					{
+						P_ = Pts.Element[Pts.n++].P;
+						RVLCOPY3VECTOR(sparsePts.Element[i].P, P_);
+					}
+				}
+
+				pVisualizer->DisplayPointSet<float, Point>(Pts, colors[iLabel], 2.0f);
+			}
+
+			pVisualizer->Run();
+
+			delete[] Pts.Element;
+
+		}
+		else
+			printf("There is no GT file %s\n", RVLCreateFileName(pClassifier->sceneFileName, ".ply", -1, ".seg"));
+
+		delete[] GTlabel;
+	}
+	else
+		printf("There is no PTS file %s\n", RVLCreateFileName(pClassifier->sceneFileName, ".ply", -1, ".pts"));
+
+	
+
+
+
+
+
+	delete[] sparsePts.Element;
+	
 }
 
 void VNInstance::ProbabilisticAssociationInit(
@@ -6139,7 +6271,7 @@ void VNInstance::Display(
 	{
 		Array2D<float> *pPC = (pPCIn ? pPCIn : &PC);
 
-		uchar green[] = { 0, 255, 0 };
+		uchar green[] = { 0, 255, 0};
 
 		Array<Point> ptArray;
 

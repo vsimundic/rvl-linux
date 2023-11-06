@@ -85,7 +85,7 @@ Voter3D::Voter3D()
 	}
 }
 
-void Voter3D::Vote(Array<Vector3<float>> data, float* cellSizeIn)
+bool Voter3D::Vote(Array<Vector3<float>> data, float* cellSizeIn)
 {
 	for (int i = 0; i < nDimensions; i++)
 	{
@@ -123,6 +123,9 @@ void Voter3D::Vote(Array<Vector3<float>> data, float* cellSizeIn)
 		totalCells *= nCells[iDimension];
 	}
 
+	if (totalCells == 0)
+		return false;
+
 	votes.Element = new int[totalCells];
 	votes.n = totalCells;
 
@@ -146,6 +149,8 @@ void Voter3D::Vote(Array<Vector3<float>> data, float* cellSizeIn)
 		int idx = nCells[2] * (iCell[0] * nCells[1] + iCell[1]) + iCell[2];
 		votes.Element[idx]++;
 	}
+
+	return true;
 }
 
 Vector3<float> Voter3D::GetCellValue(int* cellIdx)

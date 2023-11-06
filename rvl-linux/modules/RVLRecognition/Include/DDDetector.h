@@ -405,13 +405,15 @@ namespace RVL
 		void CreateStorageVolumeModel(
 			RECOG::DDD::Model *pModel,
 			bool bVisualize = false);
-		void BoxNormals(float *A);
+		// void BoxNormals(float *A);
 		void LoadModels(std::vector<std::string> modelFileNames);
 		void Detect(
 			Array<Mesh> meshSeq,
 			RECOG::DDD::HypothesisDoorDrawer *pFinalHyp,
 			char *hypFileName = NULL,
 			std::vector<cv::Mat> *pRGBSeq = NULL);
+		//I. Vidovic
+		void Detect2(Array<Mesh> meshSeq);
         void Detect3(
             Array2D<uchar> mask,
             Array<RECOG::DDD::Line2D> *pOrthogonalViewLines,
