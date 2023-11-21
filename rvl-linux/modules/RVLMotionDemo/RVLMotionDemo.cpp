@@ -30,19 +30,26 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 #include "DDManipulator.h"
 #include "cnpy.h"
 
+#define RVLRECOGNITION_DEMO_USE_DEFAULT_GRIPPER 0x00000001
+
 using namespace RVL;
 
 void CreateParamList(
     CRVLParameterList* pParamList,
     CRVLMem* pMem,
+    DWORD &flags,
     char** pFeasibleToolContactPosesFileName,
+    char** pGripperModelFileName, 
     float &dd_state_angle_deg)
 {
     pParamList->m_pMem = pMem;
     RVLPARAM_DATA* pParamData;
     pParamList->Init();
 
+    pParamData = pParamList->AddParam("UseDefaultGripper", RVLPARAM_TYPE_FLAG, &flags);
+    pParamList->AddID(pParamData, "yes", RVLRECOGNITION_DEMO_USE_DEFAULT_GRIPPER);
     pParamData = pParamList->AddParam("FeasibleToolContactPosesFileName", RVLPARAM_TYPE_STRING, pFeasibleToolContactPosesFileName);
+    pParamData = pParamList->AddParam("GripperModelFileName", RVLPARAM_TYPE_STRING, pGripperModelFileName);
     pParamData = pParamList->AddParam("DoorSateAngle(deg)", RVLPARAM_TYPE_FLOAT, &dd_state_angle_deg);
 }
 
@@ -398,13 +405,19 @@ int main(int argc, char** argv)
     if (cfgFileName == NULL)
         return 1;
     printf("Configuration file: %s\n", cfgFileName);
-    char* feasibleToolContactPosesFileName = NULL;
+    
+    char *feasibleToolContactPosesFileName = NULL;
+    char *gripperModelFileName = NULL;
     float dd_state_angle_deg = 10.0f;
+    DWORD flags = 0x00000000; // VIDOVIC
+
     CRVLParameterList ParamList;
     CreateParamList(&ParamList,
-        &mem0,
-        &feasibleToolContactPosesFileName,
-        dd_state_angle_deg);
+                    &mem0,
+                    flags,
+                    &feasibleToolContactPosesFileName,
+                    &gripperModelFileName,
+                    dd_state_angle_deg);
     ParamList.LoadParams(cfgFileName);
 
     // Test DDManipulator::LocalFreePose()

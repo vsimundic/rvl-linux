@@ -94,6 +94,12 @@ namespace RVL
 		void VisualizeTool(
 			Pose3D pose_G_S,
 			std::vector<vtkSmartPointer<vtkActor>> *pActors);
+		// void DDManipulator::VisualizeTool(
+		// 	Pose3D pose_G_S,
+		// 	bool useDefaultGripper,
+		// 	std::string gripperModelFileName,
+		// 	std::vector<vtkSmartPointer<vtkActor>> *pActors);
+
 		void SetVisualizeVNEnvironmentModel();
 
 	public:
@@ -134,7 +140,8 @@ namespace RVL
 		float tool_finger_distance;
 		Vector3<float> tool_palm_size;
 		Array<MOTION::Sphere> tool_sample_spheres;
-
+		bool useDefaultGripper;
+		char *gripperModelFileName;
 		// Path planning.
 
 		int maxnSE3Points;

@@ -7514,7 +7514,7 @@ void PSGM::HypothesisEvaluation(
 
     float wGndDistance22 = wGndDistance2 * wGndDistance2;
 
-    float gndDistance = 0.0; // Ovdje treba raï¿½unati ground distance.
+    float gndDistance = 0.0; // Ovdje treba racunati ground distance.
 
     int i, iSSegment, iHypothesis;
     float score, totalScore, prevScore;
@@ -13150,7 +13150,7 @@ float PSGM::NNCost(int iCluster, vtkSmartPointer<vtkPolyData> sourcePD, vtkSmart
         }
 
         // if (iCluster == 3)
-        //	printf("Broj toï¿½aka: %d, Score: %f\n", sourcePoints->GetNumberOfPoints(), score);
+        //	printf("Broj tocaka: %d, Score: %f\n", sourcePoints->GetNumberOfPoints(), score);
 
         return score / sourcePoints->GetNumberOfPoints();
 
@@ -14534,11 +14534,11 @@ void PSGM::ICP(
 
                 // VTK ICP
                 // vtkSmartPointer<vtkIterativeClosestPointTransform> vtkicp = vtkSmartPointer<vtkIterativeClosestPointTransform>::New();
-                // vtkicp->SetSource(visiblePD); //Ulazni objekt (poï¿½etna poza objekta)
-                // vtkicp->SetTarget(this->segmentN_PD.at(iCluster)); //Konaï¿½ni objekt (ï¿½eljena poza objekta)
-                // vtkicp->GetLandmarkTransform()->SetModeToRigidBody(); //Potrebni naï¿½in rada je transformacija za kruta tijela
-                // vtkicp->SetMaximumNumberOfIterations(10); //ï¿½eljeni broj iteracija
-                // vtkicp->SetMaximumNumberOfLandmarks(1000); //Koliko parova toï¿½aka da se koristi prilikom minimiziranja cost funkcije
+                // vtkicp->SetSource(visiblePD); //Ulazni objekt (po�etna poza objekta)
+                // vtkicp->SetTarget(this->segmentN_PD.at(iCluster)); //Kona�ni objekt (�eljena poza objekta)
+                // vtkicp->GetLandmarkTransform()->SetModeToRigidBody(); //Potrebni na�in rada je transformacija za kruta tijela
+                // vtkicp->SetMaximumNumberOfIterations(10); //�eljeni broj iteracija
+                // vtkicp->SetMaximumNumberOfLandmarks(1000); //Koliko parova to�aka da se koristi prilikom minimiziranja cost funkcije
                 // vtkicp->Update(); //Provedi algoritam
                 // vtkSmartPointer<vtkMatrix4x4> m = vtkSmartPointer<vtkMatrix4x4>::New();
                 // vtkicp->GetMatrix(m);

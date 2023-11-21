@@ -180,11 +180,13 @@ void DDDetector::CreateParamList()
 	pParamData = paramList.AddParam("DDD.no_RANSAC_iterations", RVLPARAM_TYPE_INT, &nRANSACIterations);
 	pParamData = paramList.AddParam("DDD.pointAssociationGridCellSize", RVLPARAM_TYPE_INT, &pointAssociationGridCellSize);
 	pParamData = paramList.AddParam("DDD.maxCoPlanarSurfelRefPtDist", RVLPARAM_TYPE_FLOAT, &maxCoPlanarSurfelRefPtDist);
+    pParamData = paramList.AddParam("DDD.orthogonalView.maskedThr", RVLPARAM_TYPE_INT, &orthogonalViewMaskedThr);
+    pParamData = paramList.AddParam("DDD.orthogonalView.wTexture", RVLPARAM_TYPE_FLOAT, &orthogonalViewwTexture);
 }
 
-#define RVLDDD_DETECTRGBEDGES_VISUALIZE
+// #define RVLDDD_DETECTRGBEDGES_VISUALIZE
 // #define RVLDDD_DETECTRGBEDGES_VISUALIZE_HOUGH
-#define RVLDDD_DETECTRGBEDGES_VISUALIZE_LINES
+// #define RVLDDD_DETECTRGBEDGES_VISUALIZE_LINES
 
 void DDDetector::DetectRGBEdgeLineSegments(
 	cv::Mat RGB,
@@ -472,17 +474,24 @@ void DDDetector::DetectRGBEdgeLineSegments(
 
 	// Display line segments.
 
-	cv::cvtColor(edges, *pVisualizationData->displayImg, cv::COLOR_GRAY2BGR);
+#ifdef RVLDDD_DETECTRGBEDGES_VISUALIZE
+#ifdef RVLDDD_DETECTRGBEDGES_VISUALIZE_LINES
+    cv::cvtColor(edges, *pVisualizationData->displayImg, cv::COLOR_GRAY2BGR);
+    pVisualizationData->displayImg.create(h, w, CV_8UC3);
+    pVisualizationData->displayImg.setTo(cv::Scalar(255, 255, 255));
 	for (iLineSegment = 0; iLineSegment < lineSegmentsOut.n; iLineSegment++)
 	{
 		pLineSegment = lineSegmentsOut.Element + iLineSegment;
 		cv::line(*pVisualizationData->displayImg,
 				 cv::Point(pLineSegment->P[0][0], pLineSegment->P[0][1]),
 				 cv::Point(pLineSegment->P[1][0], pLineSegment->P[1][1]),
-				 cv::Scalar(0, 255, 0), 1, cv::LINE_AA);
+                 // cv::Scalar(0, 255, 0), 1, cv::LINE_AA);
+                 cv::Scalar(0, 0, 0), 1, cv::LINE_AA);
 	}
 	cv::imshow("Hough Lines", *pVisualizationData->displayImg);
 	cv::waitKey();
+#endif
+#endif
 
 	delete[] houghLines_.Element;
 	delete[] lineSegments.Element;
@@ -2874,8 +2883,6 @@ void DDDetector::Detect3(
 	int samplingRate = 5;
 	int minDDSize = 20;
 	int NMSThr = 5;
-	float wTexture = 0.0f;
-	int maskedThr = 10; // %
 
 	// Constants.
 
@@ -3063,7 +3070,7 @@ void DDDetector::Detect3(
 			iPixBR = pRect->maxx + pRect->maxy * w;
 			nMaskedPoints_ = nMaskedPoints[iPixBR - 2 - 2 * w] - nMaskedPoints[iPixBL + 2 - 2 * w] - nMaskedPoints[iPixTR - 2 + 2 * w] + nMaskedPoints[iPixTL + 2 + 2 * w];
 			ddArea = ddWidth * ddHeight;
-			if (100 * nMaskedPoints_ / ddArea > maskedThr)
+            if (100 * nMaskedPoints_ / ddArea > orthogonalViewMaskedThr)
 				continue;
 			edgeScore = scoreH[iPixTR] + scoreH[iPixBR] + scoreV[iPixBL] + scoreV[iPixBR];
 			textureCost = nEdgePoints[iPixBR - 2 - 2 * w] - nEdgePoints[iPixBL + 2 - 2 * w] - nEdgePoints[iPixTR - 2 + 2 * w] + nEdgePoints[iPixTL + 2 + 2 * w];
@@ -3071,7 +3078,7 @@ void DDDetector::Detect3(
 				edgeScore -= (scoreH[iPixTL - 1] + scoreH[iPixBL - 1]);
 			if (pRect->miny > 0)
 				edgeScore -= (scoreV[iPixTL - w] + scoreV[iPixTR - w]);
-			ddIdxSorted[DDRects.n].cost = (float)(2 * (ddWidth + ddHeight) - 4) - edgeScore + wTexture * (float)textureCost;
+            ddIdxSorted[DDRects.n].cost = (float)(2 * (ddWidth + ddHeight) - 4) - edgeScore + orthogonalViewwTexture * (float)textureCost;
 			ddIdxSorted[DDRects.n].idx = DDRects.n;
 			DDRects.n++;
 		}
@@ -3118,9 +3125,9 @@ void DDDetector::Detect3(
 	uchar *visPix = displayImg.data;
 	for (iPix = 0; iPix < nPix; iPix++, visPix += 3)
 		if (bHEdge[iPix] || bVEdge[iPix])
+            RVLSET3VECTOR(visPix, 0, 0, 0)
+        else
 			RVLSET3VECTOR(visPix, 255, 255, 255)
-		else
-			RVLSET3VECTOR(visPix, 0, 0, 0)
 	for (iDD = 0; iDD < pDDRects->n; iDD++)
 	{
 		pRect = pDDRects->Element + iDD;
@@ -3128,6 +3135,7 @@ void DDDetector::Detect3(
 	}
 	cv::imshow("detected door/drawer", displayImg);
 	cv::waitKey();
+    cv::destroyWindow("detected door/drawer");
 
 	//
 
@@ -4565,7 +4573,12 @@ void DDDetector::DetectCuboids(Mesh *pMesh)
 	imgGrid.Create(pMesh->NodeArray, &camera, 8);
 	Array<OrientedPoint> pointsS;
 	pointsS.Element = new OrientedPoint[camera.w * camera.h];
+#ifdef RVLLINUX
 	CreateOrientedPointArrayFromPointArray(pMesh->NodeArray, pointsS);
+#else
+	MESH::CreateOrientedPointArrayFromPointArray(pMesh->NodeArray, pointsS);
+
+#endif
 	PointAssociationData pointAssociationData;
 	RECOG::DDD::Model *pModel = models.Element;
 	pointAssociationData.Create(pModel->points.n, pointsS.n, true);
@@ -5518,6 +5531,7 @@ void DDDetector::DDOrthogonalView(
 				cv::line(displayImg, cv::Point(pEdgeLineF->P[0][0], pEdgeLineF->P[0][1]), cv::Point(pEdgeLineF->P[1][0], pEdgeLineF->P[1][1]), cv::Scalar(0, 255, 0));
 			cv::imshow(displayName, displayImg);
 			cv::waitKey();
+            cv::destroyWindow(displayName);
 		}
 	}
 }
@@ -7238,6 +7252,12 @@ bool DDDetector::RectangularStructures(
 		planarSurfaces.InitDisplay(pVisualizationData->pVisualizer, pMesh, pSurfelDetector);
 		planarSurfaces.Display(pVisualizationData->pVisualizer, pMesh);
 		pVisualizationData->pVisualizer->Run();
+        pVisualizationData->pVisualizer->renderer->RemoveAllViewProps();
+        cv::Mat displayImg(pMesh->height, pMesh->width, CV_8UC3);
+        displayImg.setTo(cv::Scalar(0, 0, 0));
+        planarSurfaces.DisplayRGB(displayImg);
+        cv::imshow("Surfels", displayImg);
+        cv::waitKey();
 	}
 
 	// Sort planar surfaces according to their size.
@@ -7374,6 +7394,7 @@ bool DDDetector::RectangularStructures(
 			// RectangularStructure(-1, -1, false, surfelRefPtMem, beta, pRectStruct, false);
 			pVisualizationData->pVisualizer->SetMesh(pMesh);
 			VisualizeRectangularStructure(pMesh, pRectStruct);
+            // VisualizeRectangularStructure(NULL, pRectStruct);
 			pVisualizationData->pVisualizer->Run();
 			pVisualizationData->pVisualizer->renderer->RemoveAllViewProps();
 		}

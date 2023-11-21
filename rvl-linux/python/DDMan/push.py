@@ -83,8 +83,8 @@ class push():
     def z_shift(self, R, contact_point, visualization = False):
         # Tool contact surface (TCS).
 
-        tcs_vertices_G = np.stack((self.tool.tool_contact_surface_params[0,:], self.tool.tool_contact_surface_params[0,:],
-            self.tool.tool_contact_surface_params[1,:], self.tool.tool_contact_surface_params[1,:]))
+        tcs_vertices_G = np.stack((self.tool.tool_contact_surface_params[0][:], self.tool.tool_contact_surface_params[0][:],
+            self.tool.tool_contact_surface_params[1][:], self.tool.tool_contact_surface_params[1][:]))
         tcs_vertices_G[1,1] = -tcs_vertices_G[1,1]
         tcs_vertices_G[3,1] = -tcs_vertices_G[3,1]
         tcs_triangles = np.array([[0, 1, 2], [1, 3, 2]]).astype(np.int32)
@@ -699,12 +699,12 @@ def demo_push_poses():
     load_valid_contact_poses_from_file = False
     load_feasible_poses_from_file = False
     
-    use_default_gripper = False
+    use_default_gripper = True
 
     if use_default_gripper:
         custom_gripper_spheres_path = ''
         custom_gripper_model_path = ''
-        tool_contact_surface_params = np.array([[0.0, 0.01, 0.0], [0.0, 0.01, -0.02]]),
+        tool_contact_surface_params = np.array([[0.0, 0.01, 0.0], [0.0, 0.01, -0.02]])
         tool_finger_distances = [-0.155/2., 0., -0.102] # x, y, z
         tool_finger_distances = [0.06/2., 0., 0.] # x, y, z
         sphere_to_TCS_distance = 0.

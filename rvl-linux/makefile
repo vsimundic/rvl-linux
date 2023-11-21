@@ -508,12 +508,12 @@ $(RVLRECOGNITIONDEMO_OBJ_DIR)/%.o: $(RVLRECOGNITIONDEMO_SRC_DIR)/%.cpp
 
 $(CMAKE_APP_DIR)/RVLMotionDemo: $(RVLMOTIONDEMO_OBJ_DIR)/RVLMotionDemo.o
 	@echo "Linking RVLMotionDemo..."
-	${LINK} -L$(RVL_LIB_DIR) $(EXTERNAL_LIB_DIR) $< -o $@ -lRVLMotion -lRVLObjectDetection -lRVLRecognition -lRVLObjectDetection -lRVLRecognition -lRVLPCSegment -lRVLCore $(EXTERNAL_LIBS) -ggdb
+	${LINK} -L$(RVL_LIB_DIR) $(EXTERNAL_LIB_DIR) $< -o $@ -lRVLMotion -lRVLObjectDetection -lRVLRecognition -lRVLObjectDetection -lRVLRecognition -lRVLPCSegment -lRVLCore $(EXTERNAL_LIBS) -ggdb -fpermissive
 	@echo "RVLMotionDemo built."
 
 $(RVLMOTIONDEMO_OBJ_DIR)/%.o: $(RVLMOTIONDEMO_SRC_DIR)/%.cpp
 	$(MKDIR_BUILDS)
-	${CC} $(RVLMOTIONDEMO_INCLUDES) -c $< -o $@ -ggdb
+	${CC} $(RVLMOTIONDEMO_INCLUDES) -c $< -o $@ -ggdb -fpermissive
 
 
 # RVLNNDemo
@@ -639,7 +639,7 @@ $(RVLMOTION_LIB): $(patsubst $(RVLMOTION_SRC_DIR)/%.cpp, $(RVLMOTION_OBJ_DIR)/%.
 
 $(RVLMOTION_OBJ_DIR)/%.o: $(RVLMOTION_SRC_DIR)/%.cpp
 	$(MKDIR_BUILDS)
-	${CC} $(RVLMOTION_INCLUDES) -c $< -o $@ -ggdb
+	${CC} $(RVLMOTION_INCLUDES) -c $< -o $@ -ggdb -fpermissive
 
 
 # RVLNN

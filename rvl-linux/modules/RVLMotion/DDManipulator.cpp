@@ -1,5 +1,6 @@
 #include "RVLCore2.h"
 #include "RVLVTK.h"
+#include "vtkSTLReader.h"
 #include "Util.h"
 #include "Space3DGrid.h"
 #include "SE3Grid.h"
@@ -22,11 +23,17 @@
 #include "RRT.h"
 #include "DDManipulator.h"
 #include "cnpy.h"
+#include "vtkQuaternion.h"
 
 using namespace RVL;
 
 DDManipulator::DDManipulator()
 {
+
+    // Cfg params
+    gripperModelFileName = NULL;
+    // gripperModelFileName = "/home/RVLuser/rvl-linux/python/DDMan/3finger_gripper/robotiq_3f_gripper_simplified.ply";
+    // gripperModelFileName = "/home/RVLuser/rvl-linux/python/DDMan/3finger_gripper/ros_point_cloud.ply";
     // Door model parameters.
 
     dd_contact_surface_params[0] = dd_contact_surface_params[1] = 0.1f;
@@ -92,6 +99,9 @@ DDManipulator::DDManipulator()
 DDManipulator::~DDManipulator()
 {
 	Clear();
+
+    // Cfg params
+    // RVL_DELETE_ARRAY(gripperModelFileName)
 }
 
 void DDManipulator::Create(char* cfgFileNameIn)
@@ -283,6 +293,8 @@ void DDManipulator::CreateParamList()
     RVLPARAM_DATA* pParamData;
     paramList.Init();
     pParamData = paramList.AddParam("DDM.maxnSE3Points", RVLPARAM_TYPE_INT, &maxnSE3Points);
+    pParamData = paramList.AddParam("DDM.UseDefaultGripper", RVLPARAM_TYPE_BOOL, &useDefaultGripper);
+    pParamData = paramList.AddParam("DDM.GripperModelFileName", RVLPARAM_TYPE_STRING, &gripperModelFileName);
 }
 
 void DDManipulator::Clear()
@@ -583,8 +595,8 @@ void DDManipulator::Path(Pose3D* pPose_G_S_init)
     for (iTemplatePose = 0; iTemplatePose < feasibleTCPs.n; iTemplatePose++)
     {
         pPose_G_DD = feasibleTCPs.Element + iTemplatePose;
-        if (pPose_G_DD->R[6] > -csMaxSurfaceContactAngle)
-            continue;
+        // if (pPose_G_DD->R[6] > -csMaxSurfaceContactAngle)
+        //     continue;
         RVLMOTION_TCP(pPose_G_DD, half_tool_finger_distance, TCP_DD);
         if (TCP_DD[0] < visionTol || TCP_DD[1] < visionTol)
             continue;
@@ -1181,48 +1193,95 @@ void DDManipulator::Visualize(
 
 void DDManipulator::VisualizeTool(
     Pose3D pose_G_S,
-    std::vector<vtkSmartPointer<vtkActor>>* pActors)
+    // bool useDefaultGripper,
+    // std::string gripperModelFileName,
+    std::vector<vtkSmartPointer<vtkActor>> *pActors)
 {
-    Visualizer* pVisualizer = pVisualizationData->pVisualizer;
-    Pose3D pose_F1_G;
-    RVLUNITMX3(pose_F1_G.R);
-    float xF = 0.5f * (tool_finger_distance + tool_finger_size.Element[0]);
-    float zF = -0.5 * tool_finger_size.Element[2];
-    RVLSET3VECTOR(pose_F1_G.t, -xF, 0.0f, zF);
-    Pose3D pose_F1_S;
-    RVLCOMPTRANSF3D(pose_G_S.R, pose_G_S.t, pose_F1_G.R, pose_F1_G.t, pose_F1_S.R, pose_F1_S.t);
-    pActors->push_back(pVisualizer->DisplayBox(tool_finger_size.Element[0], tool_finger_size.Element[1], tool_finger_size.Element[2],
-        &pose_F1_S, 255.0, 0.0, 0.0));
-    Pose3D pose_F2_G;
-    RVLUNITMX3(pose_F2_G.R);
-    RVLSET3VECTOR(pose_F2_G.t, xF, 0.0f, zF);
-    Pose3D pose_F2_S;
-    RVLCOMPTRANSF3D(pose_G_S.R, pose_G_S.t, pose_F2_G.R, pose_F2_G.t, pose_F2_S.R, pose_F2_S.t);
-    pActors->push_back(pVisualizer->DisplayBox(tool_finger_size.Element[0], tool_finger_size.Element[1], tool_finger_size.Element[2],
-        &pose_F2_S, 255.0, 0.0, 0.0));
-    Pose3D pose_P_G;
-    RVLUNITMX3(pose_P_G.R);
-    RVLSET3VECTOR(pose_P_G.t, 0.0f, 0.0f, -(tool_finger_size.Element[2] + 0.5 * tool_palm_size.Element[2]));
-    Pose3D pose_P_S;
-    RVLCOMPTRANSF3D(pose_G_S.R, pose_G_S.t, pose_P_G.R, pose_P_G.t, pose_P_S.R, pose_P_S.t);
-    pActors->push_back(pVisualizer->DisplayBox(tool_palm_size.Element[0], tool_palm_size.Element[1], tool_palm_size.Element[2],
-        &pose_P_S, 255.0, 0.0, 0.0));
-    Array<Point> toolSampleSphereCentersPC;
-    toolSampleSphereCentersPC.n = tool_sample_spheres.n + 1;
-    toolSampleSphereCentersPC.Element = new Point[toolSampleSphereCentersPC.n];
-    float* PSrc, * PTgt;
-    for (int iSphere = 0; iSphere < tool_sample_spheres.n; iSphere++)
+    if (useDefaultGripper)
     {
-        PSrc = tool_sample_spheres.Element[iSphere].c.Element;
-        PTgt = toolSampleSphereCentersPC.Element[iSphere].P;
-        RVLTRANSF3(PSrc, pose_G_S.R, pose_G_S.t, PTgt);
+        Visualizer* pVisualizer = pVisualizationData->pVisualizer;
+        Pose3D pose_F1_G;
+        RVLUNITMX3(pose_F1_G.R);
+        float xF = 0.5f * (tool_finger_distance + tool_finger_size.Element[0]);
+        float zF = -0.5 * tool_finger_size.Element[2];
+        RVLSET3VECTOR(pose_F1_G.t, -xF, 0.0f, zF);
+        Pose3D pose_F1_S;
+        RVLCOMPTRANSF3D(pose_G_S.R, pose_G_S.t, pose_F1_G.R, pose_F1_G.t, pose_F1_S.R, pose_F1_S.t);
+        pActors->push_back(pVisualizer->DisplayBox(tool_finger_size.Element[0], tool_finger_size.Element[1], tool_finger_size.Element[2],
+            &pose_F1_S, 255.0, 0.0, 0.0));
+        Pose3D pose_F2_G;
+        RVLUNITMX3(pose_F2_G.R);
+        RVLSET3VECTOR(pose_F2_G.t, xF, 0.0f, zF);
+        Pose3D pose_F2_S;
+        RVLCOMPTRANSF3D(pose_G_S.R, pose_G_S.t, pose_F2_G.R, pose_F2_G.t, pose_F2_S.R, pose_F2_S.t);
+        pActors->push_back(pVisualizer->DisplayBox(tool_finger_size.Element[0], tool_finger_size.Element[1], tool_finger_size.Element[2],
+            &pose_F2_S, 255.0, 0.0, 0.0));
+        Pose3D pose_P_G;
+        RVLUNITMX3(pose_P_G.R);
+        RVLSET3VECTOR(pose_P_G.t, 0.0f, 0.0f, -(tool_finger_size.Element[2] + 0.5 * tool_palm_size.Element[2]));
+        Pose3D pose_P_S;
+        RVLCOMPTRANSF3D(pose_G_S.R, pose_G_S.t, pose_P_G.R, pose_P_G.t, pose_P_S.R, pose_P_S.t);
+        pActors->push_back(pVisualizer->DisplayBox(tool_palm_size.Element[0], tool_palm_size.Element[1], tool_palm_size.Element[2],
+            &pose_P_S, 255.0, 0.0, 0.0));
+        Array<Point> toolSampleSphereCentersPC;
+        toolSampleSphereCentersPC.n = tool_sample_spheres.n + 1;
+        toolSampleSphereCentersPC.Element = new Point[toolSampleSphereCentersPC.n];
+        float* PSrc, * PTgt;
+        for (int iSphere = 0; iSphere < tool_sample_spheres.n; iSphere++)
+        {
+            PSrc = tool_sample_spheres.Element[iSphere].c.Element;
+            PTgt = toolSampleSphereCentersPC.Element[iSphere].P;
+            RVLTRANSF3(PSrc, pose_G_S.R, pose_G_S.t, PTgt);
+        }
+        PTgt = toolSampleSphereCentersPC.Element[tool_sample_spheres.n].P;
+        Pose3D *pPose_G_S = &pose_G_S;
+        RVLMOTION_TCP(pPose_G_S, half_tool_finger_distance, PTgt);
+        uchar red[] = {255, 0, 0};
+        pActors->push_back(pVisualizer->DisplayPointSet<float, Point>(toolSampleSphereCentersPC, red, 6));
+        delete[] toolSampleSphereCentersPC.Element;
     }
-    PTgt = toolSampleSphereCentersPC.Element[tool_sample_spheres.n].P;
-    Pose3D *pPose_G_S = &pose_G_S;
-    RVLMOTION_TCP(pPose_G_S, half_tool_finger_distance, PTgt);
-    uchar red[] = {255, 0, 0};
-    pActors->push_back(pVisualizer->DisplayPointSet<float, Point>(toolSampleSphereCentersPC, red, 6));
-    delete[] toolSampleSphereCentersPC.Element;
+    else
+    {
+        // RotMat [9] to RotMat[3][3]
+        double R3x3[3][3];
+        int index = 0;
+        for(int i = 0; i < 3; ++i)
+        {
+            for (int j = 0; j < 3; ++j)
+            {
+                R3x3[i][j] = (double) pose_G_S.R[index];
+                ++index;
+            }
+        }
+
+        double q[4];
+        vtkMath::Matrix3x3ToQuaternion(R3x3, q);
+
+
+        double T[16];
+        RVLHTRANSFMX(pose_G_S.R, pose_G_S.t, T);
+
+        vtkSmartPointer<vtkTransform> transform = vtkSmartPointer<vtkTransform>::New();
+        
+        transform->SetMatrix(T);
+        // transform->Translate(pose_G_S.t);
+        // transform->RotateWXYZ(q[0], q[1], q[2], q[3]);
+        // transform->Update();
+
+        vtkSmartPointer<vtkPLYReader> reader = vtkSmartPointer<vtkPLYReader>::New();
+        reader->SetFileName(gripperModelFileName);
+        reader->Update();
+        vtkSmartPointer<vtkPolyData> polyData = reader->GetOutput();
+
+        vtkSmartPointer<vtkTransformPolyDataFilter> transformFilter = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
+        transformFilter->SetInputData(polyData);
+        transformFilter->SetTransform(transform);
+        transformFilter->Update();
+        vtkSmartPointer<vtkPolyData> polyDataTransformed = transformFilter->GetOutput();
+
+        pVisualizationData->pVisualizer->AddMesh(polyDataTransformed);
+    }
+
 }
 
 void DDManipulator::SetVisualizeVNEnvironmentModel()

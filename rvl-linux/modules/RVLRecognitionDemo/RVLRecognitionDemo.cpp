@@ -83,6 +83,7 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 #endif
 // #include "ICPCUDAv2.h"
 // #include <sophus/se3.hpp>
+#include "slic.h"
 
 bool bVerbose = false;
 
@@ -2060,7 +2061,7 @@ int main(int argc, char **argv)
 						Array<Array2D<uchar>> masks;
 						Array<RECOG::DDD::Line2D> *orthogonalViewLines;
 						Pose3D *poseFC;
-						detector.DDOrthogonalView(&rectStruct, edgeLineSegments, verticalAxis, nOrthogonalViews, poseFC, orthogonalViews, masks, orthogonalViewLines, false, pMesh);
+                        detector.DDOrthogonalView(&rectStruct, edgeLineSegments, verticalAxis, nOrthogonalViews, poseFC, orthogonalViews, masks, orthogonalViewLines, true, pMesh);
 						delete[] edgeLineSegments.Element;
 						delete[] edgeLineSegmentPixIdxMem;
 						delete[] edgeLineSegmentMap;
@@ -2075,6 +2076,12 @@ int main(int argc, char **argv)
 
 						cv::Mat displayImg = BGR.clone();
 						detector.Display(displayImg, poseFC, nOrthogonalViews, DDRects);
+                        RECOG::DDD::Detect3CallBackFuncData displayCallBackFuncData;
+                        displayCallBackFuncData.vpDetector = &detector;
+                        displayCallBackFuncData.nOrthogonalViews = nOrthogonalViews;
+                        displayCallBackFuncData.orthogonalViewLines = orthogonalViewLines;
+                        displayCallBackFuncData.DDRects = DDRects;
+                        cv::setMouseCallback("Doors and Drawers", RECOG::DDD::Detect3CallBackFunc, &displayCallBackFuncData);
 						cv::imshow("Doors and Drawers", displayImg);
 						cv::waitKey();
 
@@ -2796,6 +2803,36 @@ int main(int argc, char **argv)
 		RVL_DELETE_ARRAY(camsMatrix);
 		RVL_DELETE_ARRAY(camsDist);
 	}
+    else if (method == RVLRECOGNITION_METHOD_BM)
+    {
+        printf("Creating Branch Matcher...\n");
+        BranchMatcher detector;
+        detector.pMem0 = &mem0;
+        detector.Create(cfgFileName);
+        detector.camera = camera;
+        detector.InitVisualizer(&visualizer);
+        FileSequenceLoader sequenceLoader;
+        printf("Loading image sequence %s...\n", sceneSequenceFileName);
+        sequenceLoader.Init(sceneSequenceFileName);
+        char imgFilePath[200];
+        char imgFileName[200];
+        while (sequenceLoader.GetNext(imgFilePath, imgFileName))
+        {
+            printf("Loading image %s\n", imgFileName);
+            IOFileNames(sceneFolder, imgFileName, RGBImageFolder, depthImageFolder, PLYFolder, transformationsFolder, RGBFileName, depthFileName, PLYFileName, transformationsFileName);
+            Array2D<short int> depthImage;
+            cv::Mat depthImagePNG = cv::imread(depthFileName, CV_LOAD_IMAGE_ANYDEPTH);
+            depthImage.w = depthImagePNG.cols;
+            depthImage.h = depthImagePNG.rows;
+            depthImage.Element = (short int *)(depthImagePNG.data);
+            // IplImage* depthImageDisplay = cvCreateImage(cvSize(depthImage.w, depthImage.h), IPL_DEPTH_8U, 3);
+            // DisplayDisparityMap(depthImage, (unsigned char*)(depthImageDisplay->imageData), true, RVLRGB_DEPTH_FORMAT_1MM);
+            // cv::namedWindow(imgFileName);
+            // cvShowImage(imgFileName, depthImageDisplay);
+            // cv::waitKey();
+            detector.Detect(depthImage);
+        }
+    }
 
 	// free memory
 

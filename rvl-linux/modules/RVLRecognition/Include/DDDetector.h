@@ -315,6 +315,11 @@ namespace RVL
 
             struct Detect3CallBackFuncData
             {
+                void *vpDetector;
+                int nOrthogonalViews;
+                Array<RECOG::DDD::Line2D> *orthogonalViewLines;
+                Pose3D *poseFC;
+                Array<Rect<int>> *DDRects;
             };
 
 			bool ProjectToBase(
@@ -1103,6 +1108,8 @@ namespace RVL
 		float rectStructAlignmentCorrectionBounds[3];
         float orthogonalViewEdgeLineAngleTol;
         float orthogonalViewPixSize;
+        int orthogonalViewMaskedThr;
+        float orthogonalViewwTexture;
 
 	private:
 		RECOG::DDD::DisplayCallbackData *pVisualizationData;
