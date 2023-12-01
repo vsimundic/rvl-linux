@@ -753,7 +753,7 @@
 -->
     <!-- <xacro:robotiq-3f-gripper_articulated prefix=""/> -->
     <joint name="gripper_tool0_joint" type="fixed">
-        <origin rpy="-1.5707963267948966 -3.141592653589793 -1.5707963267948966" xyz="0 0 0.07" />
+        <origin rpy="-1.5707963267948966 -3.141592653589793 -1.5707963267948966" xyz="0 0 0.005" />
         <parent link="tool0" />
         <child link="palm" />
     </joint>

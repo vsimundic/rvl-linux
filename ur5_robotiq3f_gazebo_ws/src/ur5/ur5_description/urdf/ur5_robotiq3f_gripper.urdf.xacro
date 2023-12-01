@@ -7,7 +7,7 @@
   <!-- <xacro:robotiq-3f-gripper_articulated prefix=""/> -->
   
   <joint name="gripper_tool0_joint" type="fixed">
-    <origin xyz="0 0 1" rpy="${-pi/2.0} ${-pi} ${-pi/2.0}" />
+    <origin xyz="0 0 0.005" rpy="${-pi/2.0} ${-pi} ${-pi/2.0}" />
     <parent link="tool0"/>
     <child link="palm"/>
   </joint>
