@@ -2,3 +2,8 @@ rvl-linux/data/*
 human_segmentation_ws/build
 human_segmentation_ws/devel
 human_segmentation_ws/test/*
+ur5_ws/build
+ur5_ws/devel
+data
+ur5_robotiq3f_gazebo_ws/build
+ur5_robotiq3f_gazebo_ws/devel

@@ -9,7 +9,7 @@ from detectron2.engine import default_setup
 from tensormask import add_tensormask_config
 
 class Detectron2Tensormask:
-    def __init__(self, cfg_args, save_path_root=None):
+    def __init__(self, cfg_args, rgb_save_path, depth_save_path):
 
         # Setup configuration
         self.model_path = '/home/RVLuser/detectron2/projects/TensorMask/checkpoints/tensormask_R_50_FPN_1x.pkl'
@@ -20,9 +20,10 @@ class Detectron2Tensormask:
         self.predictor = DefaultPredictor(self.cfg)
 
         # Save paths
-        self.image_save_path_root = save_path_root
-        if self.image_save_path_root:
-            self.image_counter = len(os.listdir(os.path.join(self.image_save_path_root, 'rgb_seg')))
+        self.rgb_image_save_path_root = rgb_save_path
+        self.depth_image_save_path_root = depth_save_path
+        if self.rgb_image_save_path_root:
+            self.image_counter = len(os.listdir(self.rgb_image_save_path_root))
 
 
     def setup_tensormask(self, args):
@@ -40,8 +41,8 @@ class Detectron2Tensormask:
 
         return cfg
 
-    def segment_rgb_and_depth_images(self, rgb_image_in, depth_image_in, visualize_images=True, save_images=True):
-        def segment_rgb_image(img_in, human_threshold=0.4, visualize_images=True, save_images=False):
+    def segment_rgb_and_depth_images(self, rgb_image_in, depth_image_in, num_img, visualize_images=True, save_images=True):
+        def segment_rgb_image(img_in, human_threshold=0.4, num_img=0, visualize_images=True, save_images=False):
 
             out = self.predictor(img_in)
             instances = out["instances"] # get all instances from output
@@ -63,12 +64,12 @@ class Detectron2Tensormask:
                 cv2.waitKey(1)
 
             if save_images:
-                cv2.imwrite(os.path.join(self.image_save_path_root, 'rgb_seg', '%04d.png' % (self.image_counter,)), rgb_seg_image)
+                cv2.imwrite(os.path.join(self.rgb_image_save_path_root, '%04d.png' % num_img), rgb_seg_image)
                 self.image_counter += 1
             
-            return instance_mask
+            return rgb_seg_image, instance_mask
 
-        def segment_depth_image(img_in, instance_mask):
+        def segment_depth_image(img_in, num_img, instance_mask):
             
             depth_image_to_save = None
             
@@ -80,7 +81,9 @@ class Detectron2Tensormask:
             else:
                 depth_image_to_save = img_in
             
-            cv2.imwrite(os.path.join(self.image_save_path_root, 'depth_seg', '%04d.png' % (self.image_counter,)), depth_image_to_save)
-
-        instance_mask = segment_rgb_image(rgb_image_in, visualize_images=visualize_images, save_images=save_images)
-        segment_depth_image(depth_image_in, instance_mask=instance_mask)
+            cv2.imwrite(os.path.join(self.depth_image_save_path_root, '%04d.png' % num_img), depth_image_to_save)
+            return depth_image_to_save
+        
+        rgb_seg_image, instance_mask = segment_rgb_image(rgb_image_in, num_img=num_img, visualize_images=visualize_images, save_images=save_images)
+        depth_image_to_save = segment_depth_image(depth_image_in, num_img, instance_mask=instance_mask)
+        return rgb_seg_image, depth_image_to_save

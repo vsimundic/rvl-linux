@@ -80,16 +80,6 @@ install/local/fast: preinstall/fast
 	/usr/bin/cmake -DCMAKE_INSTALL_LOCAL_ONLY=1 -P cmake_install.cmake
 .PHONY : install/local/fast
 
-# Special rule for the target list_install_components
-list_install_components:
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --cyan "Available install components are: \"Unspecified\""
-.PHONY : list_install_components
-
-# Special rule for the target list_install_components
-list_install_components/fast: list_install_components
-
-.PHONY : list_install_components/fast
-
 # Special rule for the target install
 install: preinstall
 	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --cyan "Install the project..."
@@ -102,16 +92,15 @@ install/fast: preinstall/fast
 	/usr/bin/cmake -P cmake_install.cmake
 .PHONY : install/fast
 
-# Special rule for the target test
-test:
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --cyan "Running tests..."
-	/usr/bin/ctest --force-new-ctest-process $(ARGS)
-.PHONY : test
+# Special rule for the target list_install_components
+list_install_components:
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --cyan "Available install components are: \"Unspecified\""
+.PHONY : list_install_components
 
-# Special rule for the target test
-test/fast: test
+# Special rule for the target list_install_components
+list_install_components/fast: list_install_components
 
-.PHONY : test/fast
+.PHONY : list_install_components/fast
 
 # Special rule for the target rebuild_cache
 rebuild_cache:
@@ -134,6 +123,17 @@ edit_cache:
 edit_cache/fast: edit_cache
 
 .PHONY : edit_cache/fast
+
+# Special rule for the target test
+test:
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --cyan "Running tests..."
+	/usr/bin/ctest --force-new-ctest-process $(ARGS)
+.PHONY : test
+
+# Special rule for the target test
+test/fast: test
+
+.PHONY : test/fast
 
 # The main all target
 all: cmake_check_build_system
@@ -168,21 +168,6 @@ depend:
 .PHONY : depend
 
 # Convenience name for target.
-robotiq-noetic-devel/robotiq_ethercat/CMakeFiles/roscpp_generate_messages_cpp.dir/rule:
-	cd /home/RVLuser/ur5_ws/build && $(MAKE) -f CMakeFiles/Makefile2 robotiq-noetic-devel/robotiq_ethercat/CMakeFiles/roscpp_generate_messages_cpp.dir/rule
-.PHONY : robotiq-noetic-devel/robotiq_ethercat/CMakeFiles/roscpp_generate_messages_cpp.dir/rule
-
-# Convenience name for target.
-roscpp_generate_messages_cpp: robotiq-noetic-devel/robotiq_ethercat/CMakeFiles/roscpp_generate_messages_cpp.dir/rule
-
-.PHONY : roscpp_generate_messages_cpp
-
-# fast build rule for target.
-roscpp_generate_messages_cpp/fast:
-	cd /home/RVLuser/ur5_ws/build && $(MAKE) -f robotiq-noetic-devel/robotiq_ethercat/CMakeFiles/roscpp_generate_messages_cpp.dir/build.make robotiq-noetic-devel/robotiq_ethercat/CMakeFiles/roscpp_generate_messages_cpp.dir/build
-.PHONY : roscpp_generate_messages_cpp/fast
-
-# Convenience name for target.
 robotiq-noetic-devel/robotiq_ethercat/CMakeFiles/robotiq_ethercat.dir/rule:
 	cd /home/RVLuser/ur5_ws/build && $(MAKE) -f CMakeFiles/Makefile2 robotiq-noetic-devel/robotiq_ethercat/CMakeFiles/robotiq_ethercat.dir/rule
 .PHONY : robotiq-noetic-devel/robotiq_ethercat/CMakeFiles/robotiq_ethercat.dir/rule
@@ -196,141 +181,6 @@ robotiq_ethercat: robotiq-noetic-devel/robotiq_ethercat/CMakeFiles/robotiq_ether
 robotiq_ethercat/fast:
 	cd /home/RVLuser/ur5_ws/build && $(MAKE) -f robotiq-noetic-devel/robotiq_ethercat/CMakeFiles/robotiq_ethercat.dir/build.make robotiq-noetic-devel/robotiq_ethercat/CMakeFiles/robotiq_ethercat.dir/build
 .PHONY : robotiq_ethercat/fast
-
-# Convenience name for target.
-robotiq-noetic-devel/robotiq_ethercat/CMakeFiles/roscpp_generate_messages_eus.dir/rule:
-	cd /home/RVLuser/ur5_ws/build && $(MAKE) -f CMakeFiles/Makefile2 robotiq-noetic-devel/robotiq_ethercat/CMakeFiles/roscpp_generate_messages_eus.dir/rule
-.PHONY : robotiq-noetic-devel/robotiq_ethercat/CMakeFiles/roscpp_generate_messages_eus.dir/rule
-
-# Convenience name for target.
-roscpp_generate_messages_eus: robotiq-noetic-devel/robotiq_ethercat/CMakeFiles/roscpp_generate_messages_eus.dir/rule
-
-.PHONY : roscpp_generate_messages_eus
-
-# fast build rule for target.
-roscpp_generate_messages_eus/fast:
-	cd /home/RVLuser/ur5_ws/build && $(MAKE) -f robotiq-noetic-devel/robotiq_ethercat/CMakeFiles/roscpp_generate_messages_eus.dir/build.make robotiq-noetic-devel/robotiq_ethercat/CMakeFiles/roscpp_generate_messages_eus.dir/build
-.PHONY : roscpp_generate_messages_eus/fast
-
-# Convenience name for target.
-robotiq-noetic-devel/robotiq_ethercat/CMakeFiles/rosgraph_msgs_generate_messages_nodejs.dir/rule:
-	cd /home/RVLuser/ur5_ws/build && $(MAKE) -f CMakeFiles/Makefile2 robotiq-noetic-devel/robotiq_ethercat/CMakeFiles/rosgraph_msgs_generate_messages_nodejs.dir/rule
-.PHONY : robotiq-noetic-devel/robotiq_ethercat/CMakeFiles/rosgraph_msgs_generate_messages_nodejs.dir/rule
-
-# Convenience name for target.
-rosgraph_msgs_generate_messages_nodejs: robotiq-noetic-devel/robotiq_ethercat/CMakeFiles/rosgraph_msgs_generate_messages_nodejs.dir/rule
-
-.PHONY : rosgraph_msgs_generate_messages_nodejs
-
-# fast build rule for target.
-rosgraph_msgs_generate_messages_nodejs/fast:
-	cd /home/RVLuser/ur5_ws/build && $(MAKE) -f robotiq-noetic-devel/robotiq_ethercat/CMakeFiles/rosgraph_msgs_generate_messages_nodejs.dir/build.make robotiq-noetic-devel/robotiq_ethercat/CMakeFiles/rosgraph_msgs_generate_messages_nodejs.dir/build
-.PHONY : rosgraph_msgs_generate_messages_nodejs/fast
-
-# Convenience name for target.
-robotiq-noetic-devel/robotiq_ethercat/CMakeFiles/roscpp_generate_messages_py.dir/rule:
-	cd /home/RVLuser/ur5_ws/build && $(MAKE) -f CMakeFiles/Makefile2 robotiq-noetic-devel/robotiq_ethercat/CMakeFiles/roscpp_generate_messages_py.dir/rule
-.PHONY : robotiq-noetic-devel/robotiq_ethercat/CMakeFiles/roscpp_generate_messages_py.dir/rule
-
-# Convenience name for target.
-roscpp_generate_messages_py: robotiq-noetic-devel/robotiq_ethercat/CMakeFiles/roscpp_generate_messages_py.dir/rule
-
-.PHONY : roscpp_generate_messages_py
-
-# fast build rule for target.
-roscpp_generate_messages_py/fast:
-	cd /home/RVLuser/ur5_ws/build && $(MAKE) -f robotiq-noetic-devel/robotiq_ethercat/CMakeFiles/roscpp_generate_messages_py.dir/build.make robotiq-noetic-devel/robotiq_ethercat/CMakeFiles/roscpp_generate_messages_py.dir/build
-.PHONY : roscpp_generate_messages_py/fast
-
-# Convenience name for target.
-robotiq-noetic-devel/robotiq_ethercat/CMakeFiles/roscpp_generate_messages_nodejs.dir/rule:
-	cd /home/RVLuser/ur5_ws/build && $(MAKE) -f CMakeFiles/Makefile2 robotiq-noetic-devel/robotiq_ethercat/CMakeFiles/roscpp_generate_messages_nodejs.dir/rule
-.PHONY : robotiq-noetic-devel/robotiq_ethercat/CMakeFiles/roscpp_generate_messages_nodejs.dir/rule
-
-# Convenience name for target.
-roscpp_generate_messages_nodejs: robotiq-noetic-devel/robotiq_ethercat/CMakeFiles/roscpp_generate_messages_nodejs.dir/rule
-
-.PHONY : roscpp_generate_messages_nodejs
-
-# fast build rule for target.
-roscpp_generate_messages_nodejs/fast:
-	cd /home/RVLuser/ur5_ws/build && $(MAKE) -f robotiq-noetic-devel/robotiq_ethercat/CMakeFiles/roscpp_generate_messages_nodejs.dir/build.make robotiq-noetic-devel/robotiq_ethercat/CMakeFiles/roscpp_generate_messages_nodejs.dir/build
-.PHONY : roscpp_generate_messages_nodejs/fast
-
-# Convenience name for target.
-robotiq-noetic-devel/robotiq_ethercat/CMakeFiles/rosgraph_msgs_generate_messages_cpp.dir/rule:
-	cd /home/RVLuser/ur5_ws/build && $(MAKE) -f CMakeFiles/Makefile2 robotiq-noetic-devel/robotiq_ethercat/CMakeFiles/rosgraph_msgs_generate_messages_cpp.dir/rule
-.PHONY : robotiq-noetic-devel/robotiq_ethercat/CMakeFiles/rosgraph_msgs_generate_messages_cpp.dir/rule
-
-# Convenience name for target.
-rosgraph_msgs_generate_messages_cpp: robotiq-noetic-devel/robotiq_ethercat/CMakeFiles/rosgraph_msgs_generate_messages_cpp.dir/rule
-
-.PHONY : rosgraph_msgs_generate_messages_cpp
-
-# fast build rule for target.
-rosgraph_msgs_generate_messages_cpp/fast:
-	cd /home/RVLuser/ur5_ws/build && $(MAKE) -f robotiq-noetic-devel/robotiq_ethercat/CMakeFiles/rosgraph_msgs_generate_messages_cpp.dir/build.make robotiq-noetic-devel/robotiq_ethercat/CMakeFiles/rosgraph_msgs_generate_messages_cpp.dir/build
-.PHONY : rosgraph_msgs_generate_messages_cpp/fast
-
-# Convenience name for target.
-robotiq-noetic-devel/robotiq_ethercat/CMakeFiles/rosgraph_msgs_generate_messages_eus.dir/rule:
-	cd /home/RVLuser/ur5_ws/build && $(MAKE) -f CMakeFiles/Makefile2 robotiq-noetic-devel/robotiq_ethercat/CMakeFiles/rosgraph_msgs_generate_messages_eus.dir/rule
-.PHONY : robotiq-noetic-devel/robotiq_ethercat/CMakeFiles/rosgraph_msgs_generate_messages_eus.dir/rule
-
-# Convenience name for target.
-rosgraph_msgs_generate_messages_eus: robotiq-noetic-devel/robotiq_ethercat/CMakeFiles/rosgraph_msgs_generate_messages_eus.dir/rule
-
-.PHONY : rosgraph_msgs_generate_messages_eus
-
-# fast build rule for target.
-rosgraph_msgs_generate_messages_eus/fast:
-	cd /home/RVLuser/ur5_ws/build && $(MAKE) -f robotiq-noetic-devel/robotiq_ethercat/CMakeFiles/rosgraph_msgs_generate_messages_eus.dir/build.make robotiq-noetic-devel/robotiq_ethercat/CMakeFiles/rosgraph_msgs_generate_messages_eus.dir/build
-.PHONY : rosgraph_msgs_generate_messages_eus/fast
-
-# Convenience name for target.
-robotiq-noetic-devel/robotiq_ethercat/CMakeFiles/rosgraph_msgs_generate_messages_lisp.dir/rule:
-	cd /home/RVLuser/ur5_ws/build && $(MAKE) -f CMakeFiles/Makefile2 robotiq-noetic-devel/robotiq_ethercat/CMakeFiles/rosgraph_msgs_generate_messages_lisp.dir/rule
-.PHONY : robotiq-noetic-devel/robotiq_ethercat/CMakeFiles/rosgraph_msgs_generate_messages_lisp.dir/rule
-
-# Convenience name for target.
-rosgraph_msgs_generate_messages_lisp: robotiq-noetic-devel/robotiq_ethercat/CMakeFiles/rosgraph_msgs_generate_messages_lisp.dir/rule
-
-.PHONY : rosgraph_msgs_generate_messages_lisp
-
-# fast build rule for target.
-rosgraph_msgs_generate_messages_lisp/fast:
-	cd /home/RVLuser/ur5_ws/build && $(MAKE) -f robotiq-noetic-devel/robotiq_ethercat/CMakeFiles/rosgraph_msgs_generate_messages_lisp.dir/build.make robotiq-noetic-devel/robotiq_ethercat/CMakeFiles/rosgraph_msgs_generate_messages_lisp.dir/build
-.PHONY : rosgraph_msgs_generate_messages_lisp/fast
-
-# Convenience name for target.
-robotiq-noetic-devel/robotiq_ethercat/CMakeFiles/roscpp_generate_messages_lisp.dir/rule:
-	cd /home/RVLuser/ur5_ws/build && $(MAKE) -f CMakeFiles/Makefile2 robotiq-noetic-devel/robotiq_ethercat/CMakeFiles/roscpp_generate_messages_lisp.dir/rule
-.PHONY : robotiq-noetic-devel/robotiq_ethercat/CMakeFiles/roscpp_generate_messages_lisp.dir/rule
-
-# Convenience name for target.
-roscpp_generate_messages_lisp: robotiq-noetic-devel/robotiq_ethercat/CMakeFiles/roscpp_generate_messages_lisp.dir/rule
-
-.PHONY : roscpp_generate_messages_lisp
-
-# fast build rule for target.
-roscpp_generate_messages_lisp/fast:
-	cd /home/RVLuser/ur5_ws/build && $(MAKE) -f robotiq-noetic-devel/robotiq_ethercat/CMakeFiles/roscpp_generate_messages_lisp.dir/build.make robotiq-noetic-devel/robotiq_ethercat/CMakeFiles/roscpp_generate_messages_lisp.dir/build
-.PHONY : roscpp_generate_messages_lisp/fast
-
-# Convenience name for target.
-robotiq-noetic-devel/robotiq_ethercat/CMakeFiles/rosgraph_msgs_generate_messages_py.dir/rule:
-	cd /home/RVLuser/ur5_ws/build && $(MAKE) -f CMakeFiles/Makefile2 robotiq-noetic-devel/robotiq_ethercat/CMakeFiles/rosgraph_msgs_generate_messages_py.dir/rule
-.PHONY : robotiq-noetic-devel/robotiq_ethercat/CMakeFiles/rosgraph_msgs_generate_messages_py.dir/rule
-
-# Convenience name for target.
-rosgraph_msgs_generate_messages_py: robotiq-noetic-devel/robotiq_ethercat/CMakeFiles/rosgraph_msgs_generate_messages_py.dir/rule
-
-.PHONY : rosgraph_msgs_generate_messages_py
-
-# fast build rule for target.
-rosgraph_msgs_generate_messages_py/fast:
-	cd /home/RVLuser/ur5_ws/build && $(MAKE) -f robotiq-noetic-devel/robotiq_ethercat/CMakeFiles/rosgraph_msgs_generate_messages_py.dir/build.make robotiq-noetic-devel/robotiq_ethercat/CMakeFiles/rosgraph_msgs_generate_messages_py.dir/build
-.PHONY : rosgraph_msgs_generate_messages_py/fast
 
 src/ethercat_manager.o: src/ethercat_manager.cpp.o
 
@@ -367,22 +217,12 @@ help:
 	@echo "... depend"
 	@echo "... install/strip"
 	@echo "... install/local"
-	@echo "... list_install_components"
-	@echo "... roscpp_generate_messages_cpp"
-	@echo "... robotiq_ethercat"
-	@echo "... roscpp_generate_messages_eus"
-	@echo "... rosgraph_msgs_generate_messages_nodejs"
-	@echo "... roscpp_generate_messages_py"
 	@echo "... install"
-	@echo "... roscpp_generate_messages_nodejs"
-	@echo "... rosgraph_msgs_generate_messages_cpp"
-	@echo "... rosgraph_msgs_generate_messages_eus"
-	@echo "... rosgraph_msgs_generate_messages_lisp"
-	@echo "... test"
+	@echo "... list_install_components"
 	@echo "... rebuild_cache"
 	@echo "... edit_cache"
-	@echo "... roscpp_generate_messages_lisp"
-	@echo "... rosgraph_msgs_generate_messages_py"
+	@echo "... test"
+	@echo "... robotiq_ethercat"
 	@echo "... src/ethercat_manager.o"
 	@echo "... src/ethercat_manager.i"
 	@echo "... src/ethercat_manager.s"
