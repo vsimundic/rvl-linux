@@ -11,9 +11,16 @@
     <param name="depth_save_path" value="/home/RVLuser/data/summit_test/depth" />
     <param name="depth_seg_save_path" value="/home/RVLuser/data/summit_test/depth_seg" />
     <param name="ply_save_path" value="/home/RVLuser/data/summit_test/ply_seg" />
-    <param name="rvl_cfg_path" value="/home/RVLuser/rvl-linux/RVLRecognitionDemo_Cupec_DDD2_Detection.cfg" />
+    <param name="rvl_cfg_path"
+        value="/home/RVLuser/rvl-linux/RVLRecognitionDemo_Cupec_DDD2_Detection.cfg" />
 
-    <node name="save_images_node" pkg="ao_manipulation" type="save_images_plys.py" />
+    <!-- <node name="save_images_node" pkg="ao_manipulation" type="save_images_plys.py" /> -->
 
     <node name="detect_cabinet_model_node" pkg="ao_manipulation" type="detect_cabinet_model.py" />
+
+    <arg name="topic_name" default="/build_model" />
+    <arg name="message" default="true" />
+
+    <node pkg="rostopic" type="rostopic" name="rostopic_pub_node" output="screen"
+        args="pub $(arg topic_name) std_msgs/Bool 'data: $(arg message)'" />
 </launch>

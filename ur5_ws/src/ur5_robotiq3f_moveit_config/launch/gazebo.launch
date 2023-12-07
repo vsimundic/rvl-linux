@@ -26,10 +26,10 @@
     respawn="false" output="screen" />
 
   <!-- Spawn the CABINET in Gazebo -->
-  <param name="cabinet_description" command="$(find xacro)/xacro $(find dd_man)/cabinet_models/my_cabinet/my_cabinet_test.urdf" />
+  <!-- <param name="cabinet_description" command="$(find xacro)/xacro $(find dd_man)/cabinet_models/my_cabinet/my_cabinet_test.urdf" />
   <node name="spawn_gazebo_model_cabinet" pkg="gazebo_ros" type="spawn_model"
     args="-urdf -param cabinet_description -model my_cabinet $(arg unpause) -x -1 -y 0 -z 0.6 -J joint_0 -0.785398163"
-    respawn="false" output="screen" />
+    respawn="false" output="screen" /> -->
 
 
   <!-- Load the controller parameters onto the parameter server -->

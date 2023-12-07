@@ -7,7 +7,7 @@ from math import pi
 import numpy as np
 
 
-def generate_cabinet_urdf_from_door_panel(w_door, h_door, d_door, save_path):
+def generate_cabinet_urdf_from_door_panel(w_door, h_door, d_door=0.018, save_path=None):
     static_d = 0.3
     moving_to_static_part_distance = 0.005
     axis_distance = 0.01
@@ -159,9 +159,11 @@ def generate_cabinet_urdf_from_door_panel(w_door, h_door, d_door, save_path):
     # Prettify for writing in a file
     xmlstr = minidom.parseString(gfg.tostring(root)).toprettyxml(indent='\t')
 
-    with open (save_path, 'w') as f:
-        f.write(xmlstr)
+    if save_path:
+        with open (save_path, 'w') as f:
+            f.write(xmlstr)
 
+    return xmlstr
     
 if __name__ == '__main__':
     generate_cabinet_urdf_from_door_panel(0.3, 0.5, 0.018, '/home/RVLuser/ur5_ws/src/dd_man/cabinet_models/my_cabinet/my_cabinet_test.urdf')

@@ -12,6 +12,10 @@ import numpy as np
 import RVLPYRGBD2PLY
 import RVLPYDDDetector 
 import rosnode
+from gazebo_ros import gazebo_interface
+from generate_cabinet_urdf import generate_cabinet_urdf_from_door_panel
+from gazebo_msgs.srv import SpawnModel, SetModelConfiguration, SetModelConfigurationRequest
+from geometry_msgs.msg import Pose
 
 node_name = ''
 cfg_path = ''
@@ -21,9 +25,59 @@ ply_save_path = ''
 
 def callback(b_build_model_msg):
     global node_name, cfg_path, rgb_save_path, depth_save_path, ply_save_path
-    if b_build_model_msg:
-        detect_model(cfg_path, rgb_save_path, depth_save_path, ply_save_path)
+    if b_build_model_msg or True:
+        ao = detect_model(cfg_path, rgb_save_path, depth_save_path, ply_save_path)
+        print(ao)
+        
         rosnode.kill_nodes([node_name])
+
+def spawn_model(w_door, h_door):
+    model_xml = generate_cabinet_urdf_from_door_panel(w_door=w_door, h_door=h_door, d_door=0.018)
+
+    init_pose = Pose()
+    init_pose.position.x = -1.0
+    init_pose.position.y = 0.0
+    init_pose.position.z = 0.6
+    init_pose.orientation.x = 0.0
+    init_pose.orientation.y = 0.0
+    init_pose.orientation.z = 0.0
+    init_pose.orientation.w = 1.0
+
+    spawn_model_msg = SpawnModel()
+    spawn_model_msg.model_name = 'my_cabinet'
+    spawn_model_msg.model_xml = model_xml
+    spawn_model_msg.robot_namespace = '/'
+    spawn_model_msg.initial_pose = init_pose
+
+    rospy.wait_for_sservice('/gazebo/spawn_urdf_model')
+    try:
+        spawn_urdf_model_proxy = rospy.ServiceProxy('/gazebo/spawn_urdf_model', SpawnModel)
+        response = spawn_urdf_model_proxy(spawn_model_msg)
+        rospy.loginfo('URDF model spawned successfully')
+    except rospy.ServiceException as e:
+        rospy.logerr('Failed to spawn URDF model: %s' % e)
+
+    move_model_joint('my_cabinet', 'joint_0', np.radians(20))
+
+def move_model_joint(model_name, joint_name, joint_value):
+    rospy.wait_for_service('/gazebo/set_model_configuration')
+
+    try:
+        set_model_configuration = rospy.ServiceProxy('/gazebo/set_model_configuration', SetModelConfiguration)
+
+        req = SetModelConfigurationRequest()
+        req.model_name = model_name
+        req.urdf_param_name = "robot_description"  # Assuming your URDF is loaded with the parameter name "robot_description"
+
+        joint_position = {joint_name: joint_value}
+        req.joint_names = [joint_name]
+        req.joint_positions = [joint_value]
+
+        response = set_model_configuration(req)
+        rospy.loginfo(f"Joint {joint_name} set to {joint_value} for model {model_name}")
+    except rospy.ServiceException as e:
+        rospy.logerr(f"Failed to set joint configuration: {e}")
+
 
 def detect_model(cfg_path, rgb_save_path, depth_save_path, ply_save_path):
     detector = RVLPYDDDetector.PYDDDetector()
@@ -38,7 +92,8 @@ def detect_model(cfg_path, rgb_save_path, depth_save_path, ply_save_path):
         detector.add_rgb(rgb_path)
 
     ao = detector.detect()
-    print(ao)
+    
+    return ao
 
 
 if __name__ == '__main__':
