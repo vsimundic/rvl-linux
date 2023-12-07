@@ -22,5 +22,5 @@
     <arg name="message" default="true" />
 
     <node pkg="rostopic" type="rostopic" name="rostopic_pub_node" output="screen"
-        args="pub $(arg topic_name) std_msgs/Bool 'data: $(arg message)'" />
+        args="pub $(arg topic_name) std_msgs/Bool $(arg message)" />
 </launch>

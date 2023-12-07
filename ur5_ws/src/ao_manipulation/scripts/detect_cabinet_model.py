@@ -16,6 +16,7 @@ from gazebo_ros import gazebo_interface
 from generate_cabinet_urdf import generate_cabinet_urdf_from_door_panel
 from gazebo_msgs.srv import SpawnModel, SetModelConfiguration, SetModelConfigurationRequest
 from geometry_msgs.msg import Pose
+from tf.transformations import quaternion_from_matrix
 
 node_name = ''
 cfg_path = ''
@@ -28,28 +29,39 @@ def callback(b_build_model_msg):
     if b_build_model_msg or True:
         ao = detect_model(cfg_path, rgb_save_path, depth_save_path, ply_save_path)
         print(ao)
-        
+
+        TAC = np.eye(4)
+        TAC[:3, :3] = np.array(ao['R']).reshape((3,3))
+        TAC[:3, 3] = np.array(ao['t'])
+
+        model_name = 'my_cabient'
+
+        spawn_model(w_door=ao['s'][0], h_door=ao['s'][1], TAC=TAC, model_name=model_name)
+        move_model_joint(model_name, 'joint_0', np.radians(15))
         rosnode.kill_nodes([node_name])
 
-def spawn_model(w_door, h_door):
+def spawn_model(w_door, h_door, TAC, model_name):
     model_xml = generate_cabinet_urdf_from_door_panel(w_door=w_door, h_door=h_door, d_door=0.018)
 
     init_pose = Pose()
-    init_pose.position.x = -1.0
-    init_pose.position.y = 0.0
-    init_pose.position.z = 0.6
-    init_pose.orientation.x = 0.0
-    init_pose.orientation.y = 0.0
-    init_pose.orientation.z = 0.0
-    init_pose.orientation.w = 1.0
+    init_pose.position.x = TAC[0, 2]
+    init_pose.position.y = TAC[1, 2]
+    init_pose.position.z = TAC[2, 2]
+
+    q = quaternion_from_matrix(TAC)
+
+    init_pose.orientation.x = q[0]
+    init_pose.orientation.y = q[1]
+    init_pose.orientation.z = q[2]
+    init_pose.orientation.w = q[3]
 
     spawn_model_msg = SpawnModel()
-    spawn_model_msg.model_name = 'my_cabinet'
+    spawn_model_msg.model_name = model_name
     spawn_model_msg.model_xml = model_xml
     spawn_model_msg.robot_namespace = '/'
     spawn_model_msg.initial_pose = init_pose
 
-    rospy.wait_for_sservice('/gazebo/spawn_urdf_model')
+    rospy.wait_for_service('/gazebo/spawn_urdf_model')
     try:
         spawn_urdf_model_proxy = rospy.ServiceProxy('/gazebo/spawn_urdf_model', SpawnModel)
         response = spawn_urdf_model_proxy(spawn_model_msg)

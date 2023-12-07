@@ -55,9 +55,9 @@ class ImageSaver():
         camera_info_sub = Subscriber(self.camera_info_topic, CameraInfo)
 
         self.build_model_pub = rospy.Publisher('/build_model', Bool, queue_size=1)
-        
-        synchronizer = ApproximateTimeSynchronizer([rgb_image_sub, depth_image_sub, camera_info_sub], queue_size = 100, slop=0.1)
-        synchronizer.registerCallback(self.callback)
+        self.subscribers = [rgb_image_sub, depth_image_sub, camera_info_sub]
+        self.synchronizer = ApproximateTimeSynchronizer(self.subscribers, queue_size = 100, slop=0.1)
+        self.synchronizer.registerCallback(self.callback)
 
         self.counter_images = 0
         self.space_pressed = 0
@@ -103,6 +103,8 @@ class ImageSaver():
         
         if self.space_pressed == 2:
             
+            [sub.sub.unregister() for sub in self.subscribers]
+
             rospy.loginfo('Saving PLY files...')
 
             K = np.array(camera_info_msg.K).reshape([3, 3])
@@ -113,7 +115,7 @@ class ImageSaver():
             #     color_img = cv2.imread(os.path.join(self.rgb_save_path, '%04d.png' % i), cv2.IMREAD_COLOR)
             #     depth_img = cv2.imread(os.path.join(self.depth_save_path, '%04d.png' % i), cv2.IMREAD_ANYDEPTH)
 
-            
+
             rospy.loginfo('Number of images saved: %d' % self.counter_images)
             for i in range(self.counter_images):
                 rospy.loginfo('Saving ply file %d...' % i)
@@ -122,35 +124,6 @@ class ImageSaver():
                 
                 color_reversed = cv2.cvtColor(color_img, cv2.COLOR_BGR2RGB)
                 _, depth_seg_img = self.d2t.segment_rgb_and_depth_images(color_reversed, depth_img, i, False, True)
-
-                # # Open3D ply create
-                # intrinsics = o3d.camera.PinholeCameraIntrinsic(
-                #     width=camera_info_msg.width,
-                #     height=camera_info_msg.height,
-                #     fx=K[0, 0], # fx
-                #     fy=K[1, 1], # fy
-                #     cx=K[0, 2], # cx
-                #     cy=K[1, 2] # cy
-                #     )
-                # rgbd_image = o3d.geometry.RGBDImage.create_from_color_and_depth(
-                #     o3d.geometry.Image(color_reversed),
-                #     o3d.geometry.Image(depth_seg_img),
-                #     depth_scale=1000.0,  # depth values are in millimeters
-                #     depth_trunc=5.0,    # truncate depth values beyond 3.0 meters
-                #     convert_rgb_to_intensity=False
-                # )
-                # pcd = o3d.geometry.PointCloud.create_from_rgbd_image(
-                #     rgbd_image,
-                #     intrinsics
-                #     )
-                
-                # pcd.estimate_normals(search_param=o3d.geometry.KDTreeSearchParamHybrid(radius=0.1, max_nn=30))
-                # # pcd_with_normals = o3d.geometry.estimate_normals(pcd, search_param=o3d.geometry.KDTreeSearchParamHybrid(radius=0.1, max_nn=30))
-                # mesh, _ = o3d.geometry.TriangleMesh.create_from_point_cloud_poisson(pcd)
-                
-                # # o3d.io.write_point_cloud(os.path.join(self.ply_save_path, '%04d.ply' % i), pcd)
-                # o3d.io.write_triangle_mesh(os.path.join(self.ply_save_path, '%04d.ply' % i), mesh)
-
 
                 rgbd2ply.pixel_array_to_ply(color_img, 
                                             depth_seg_img, 
