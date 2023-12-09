@@ -13,7 +13,7 @@ import rosnode
 from human_segmentation import Detectron2Tensormask
 from detectron2.engine import default_argument_parser
 import open3d as o3d
-
+import rosbag
 
 class ImageSaver():
     def __init__(self, args):
@@ -28,6 +28,7 @@ class ImageSaver():
         self.camera_info_topic = rospy.get_param('/camera_info_topic')
         self.camera_fps = rospy.get_param('/camera_fps')
         self.wanted_fps = rospy.get_param('/wanted_fps')
+        self.bag_used = rospy.get_param('~bag_used')
         self.fps_scaler = self.camera_fps / self.wanted_fps
         self.fps_scaler_counter = 0
 
@@ -50,20 +51,95 @@ class ImageSaver():
         # Detectron2 + TensorMask
         self.d2t = Detectron2Tensormask(args, rgb_save_path=self.rgb_seg_save_path, depth_save_path=self.depth_seg_save_path)
 
-        rgb_image_sub = Subscriber(self.rgb_image_topic, Image)
-        depth_image_sub = Subscriber(self.depth_image_topic, Image)
-        camera_info_sub = Subscriber(self.camera_info_topic, CameraInfo)
-
         self.build_model_pub = rospy.Publisher('/build_model', Bool, queue_size=1)
-        self.subscribers = [rgb_image_sub, depth_image_sub, camera_info_sub]
-        self.synchronizer = ApproximateTimeSynchronizer(self.subscribers, queue_size = 100, slop=0.1)
-        self.synchronizer.registerCallback(self.callback)
 
-        self.counter_images = 0
-        self.space_pressed = 0
-        rospy.spin()
+        if not self.bag_used:
+            rgb_image_sub = Subscriber(self.rgb_image_topic, Image)
+            depth_image_sub = Subscriber(self.depth_image_topic, Image)
+            camera_info_sub = Subscriber(self.camera_info_topic, CameraInfo)
+            self.subscribers = [rgb_image_sub, depth_image_sub, camera_info_sub]
+            self.synchronizer = ApproximateTimeSynchronizer(self.subscribers, queue_size = 100, slop=0.1)
+            self.synchronizer.registerCallback(self.callback)
 
-    def reset_dirs(self, dirpath):
+            self.counter_images = 0
+            self.space_pressed = 0
+            rospy.spin()
+        else:
+            self.bag_path = rospy.get_param('/bag_path')
+            self.process_bag(self.bag_path)
+
+
+    def process_bag(self, bag_path):
+        bag = rosbag.Bag(bag_path)
+        rgb_counter = 0
+        depth_counter = 0
+        save_rgb_counter = 0
+        save_depth_counter = 0
+        fps_scaler = round(self.camera_fps / self.wanted_fps)
+        print(fps_scaler)
+        b_check_K = False
+        K = ''
+
+        for topic, msg, _ in bag.read_messages(topics=[self.rgb_image_topic, self.depth_image_topic, self.camera_info_topic]):
+            if topic == self.rgb_image_topic:
+                rgb_counter +=1
+                if rgb_counter % fps_scaler == 0:
+                    rgb_image = self.bridge.imgmsg_to_cv2(msg, 'bgr8')
+                    cv2.imwrite(os.path.join(self.rgb_save_path, '%04d.png' % save_rgb_counter), rgb_image)
+                    save_rgb_counter += 1
+            elif topic == self.depth_image_topic:
+                depth_counter += 1
+                if depth_counter % fps_scaler == 0:
+                    depth_image = self.bridge.imgmsg_to_cv2(msg, 'passthrough')
+
+                    if depth_image.dtype == 'float32':
+                        depth_image = (depth_image * 1000.0).astype(np.uint16)  
+                        depth_image = np.round(depth_image).astype(np.uint16)
+                        normalized_depth = cv2.normalize(depth_image, None, 0, 255, cv2.NORM_MINMAX)
+                        depth_image_8bit = np.uint8(normalized_depth)
+                    
+                    cv2.imwrite(os.path.join(self.depth_save_path, '%04d.png' % save_depth_counter), depth_image)
+                    save_depth_counter += 1
+            elif topic == self.camera_info_topic and not b_check_K:
+                b_check_K = True
+                K = np.array(msg.K).reshape([3, 3])
+        
+        rgbd2ply = RVLPYRGBD2PLY.RGBD2PLY()
+
+        rospy.loginfo('Saving %d PLY files...' % save_rgb_counter)
+        
+        for i in range(save_rgb_counter):
+
+            rospy.loginfo('Saving ply file %d...' % i)
+            color_img = cv2.imread(os.path.join(self.rgb_save_path, '%04d.png' % i), cv2.IMREAD_COLOR)
+            depth_img = cv2.imread(os.path.join(self.depth_save_path, '%04d.png' % i), cv2.IMREAD_UNCHANGED)
+            
+            color_reversed = cv2.cvtColor(color_img, cv2.COLOR_BGR2RGB)
+            _, depth_seg_img = self.d2t.segment_rgb_and_depth_images(color_reversed, depth_img, i, False, True)
+
+            rgbd2ply.pixel_array_to_ply(color_img, 
+                                        depth_seg_img, 
+                                        K[0, 0], # fx
+                                        K[1, 1], # fy
+                                        K[0, 2], # cx
+                                        K[1, 2], # cy
+                                        color_img.shape[1], # width
+                                        color_img.shape[0], # height
+                                        0.050,
+                                        os.path.join(self.ply_save_path, '%04d.ply' % i))
+        
+        rospy.loginfo('PLY files saved.')
+            
+        # Send signal to another node
+        b_build_model = Bool()
+        b_build_model.data = True
+        self.build_model_pub.publish(b_build_model)
+
+        # rosnode.kill_nodes([self.node_name])
+        rospy.signal_shutdown('Saving PLYs node done. Shutting down.')
+
+
+    def reset_dirs(self, dirpath):  
         if not os.path.exists(dirpath):
             os.makedirs(dirpath)
             return
