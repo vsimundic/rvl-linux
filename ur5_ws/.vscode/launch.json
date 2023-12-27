@@ -5,7 +5,7 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "ROS: Launch",
+            "name": "ROS: Launch Demo",
             "request": "launch",
             "target": "/home/RVLuser/ur5_ws/src/ao_manipulation/launch/demo.launch",
             "launch": [
@@ -15,6 +15,18 @@
                 "gzserver"
             ],
             "type": "ros"
-        }
+        },
+            {
+                "name": "ROS: Launch Demo Detect",
+                "request": "launch",
+                "target": "/home/RVLuser/ur5_ws/src/ao_manipulation/launch/demo_detect.launch",
+                "launch": [
+                    "rviz",
+                    "gz",
+                    "gzclient",
+                    "gzserver"
+                ],
+                "type": "ros"
+            }
     ]
 }

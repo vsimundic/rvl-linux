@@ -156,6 +156,10 @@ def generate_cabinet_urdf_from_door_panel(w_door, h_door, d_door=0.018, save_pat
     gazebo_material = gfg.SubElement(gazebo_, 'material')
     gazebo_material.text = 'Gazebo/Blue'
 
+    # TXA
+    TXA = np.eye(4)
+    TXA[:3, 3] = np.array([-static_d/2 + d/2, door_panel_dims[1]/2. - axis_distance, 0.])
+
     # Prettify for writing in a file
     xmlstr = minidom.parseString(gfg.tostring(root)).toprettyxml(indent='\t')
 
@@ -163,7 +167,7 @@ def generate_cabinet_urdf_from_door_panel(w_door, h_door, d_door=0.018, save_pat
         with open (save_path, 'w') as f:
             f.write(xmlstr)
 
-    return xmlstr
+    return xmlstr, TXA
     
 if __name__ == '__main__':
     generate_cabinet_urdf_from_door_panel(0.3, 0.5, 0.018, '/home/RVLuser/ur5_ws/src/dd_man/cabinet_models/my_cabinet/my_cabinet_test.urdf')

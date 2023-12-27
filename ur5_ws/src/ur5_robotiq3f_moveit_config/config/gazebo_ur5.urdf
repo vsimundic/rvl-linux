@@ -357,6 +357,14 @@
         <child link="base_link" />
         <origin rpy="0.0 0.0 0.0" xyz="0.0 0.0 0.0" />
     </joint>
+
+    <link name="camera_link"/>
+    <joint name="camera_joint" type="fixed">
+        <parent link="tool0"/>
+        <child link="camera_link"/>
+        <origin rpy="0.0 0.0 -1.570796" xyz="-0.1 0.0 0.0" />
+    </joint>
+
     <link name="finger_1_link_0">
         <visual>
             <origin rpy="0 0 0" xyz="0.020 0 0" />
@@ -753,7 +761,7 @@
 -->
     <!-- <xacro:robotiq-3f-gripper_articulated prefix=""/> -->
     <joint name="gripper_tool0_joint" type="fixed">
-        <origin rpy="-1.5707963267948966 -3.141592653589793 -1.5707963267948966" xyz="0 0 0.005" />
+        <origin rpy="-1.5707963267948966 -3.141592653589793 -1.5707963267948966" xyz="0 0 0.0535" />
         <parent link="tool0" />
         <child link="palm" />
     </joint>
@@ -871,4 +879,3 @@
         </actuator>
     </transmission> -->
 </robot>
-

@@ -1,7 +1,7 @@
 <?xml version="1.0" ?>
 <robot name="my_cabinet">
 	<link name="world"/>
-	<joint name="virtual_joint" type="fixed">
+	<joint name="virtual_joint_cabinet" type="fixed">
 		<parent link="world"/>
 		<child link="base_cabinet_link"/>
 		<origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>

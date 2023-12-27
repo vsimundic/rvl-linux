@@ -2819,6 +2819,7 @@ void DDDetector::Detect(
 				movingPartHyp = movingPartHyps[iHyp];
 				if (pVisualizationData->b3DVisualization)
 				{
+					// for (iMesh = 0; iMesh < 3; iMesh++)
 					for (iMesh = 0; iMesh < meshSeq.n; iMesh++)
 					{
 						pMesh = meshSeq.Element + iMesh;
@@ -2837,6 +2838,7 @@ void DDDetector::Detect(
 				cv::Mat display;
 				int iState;
 				for (iMesh = 0; iMesh < meshSeq.n; iMesh++)
+				// for (iMesh = 0; iMesh < 3; iMesh++)
 				{
 					for (iState = 0; iState < movingPartHyp.state.n; iState++)
 						if (movingPartHyp.state.Element[iState].imgID == iMesh)
@@ -4161,8 +4163,8 @@ void DDDetector::GenerateDoorHypotheses(
 							// Visualize door hypothesis.
 
 							VisualizeDoorHypothesis(doorHyp);
-							pVisualizationData->pVisualizer->Run();
-							pVisualizationData->pVisualizer->renderer->RemoveAllViewProps();
+							// pVisualizationData->pVisualizer->Run();
+							// pVisualizationData->pVisualizer->renderer->RemoveAllViewProps();
 						}
 		}
 		delete[] PAClusterID;

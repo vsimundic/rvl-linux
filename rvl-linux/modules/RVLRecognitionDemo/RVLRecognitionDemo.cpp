@@ -2468,6 +2468,7 @@ int main(int argc, char **argv)
 					hypFileName = hypFileName.substr(0, hypFileName.rfind(RVLFILEPATH_SEPARATOR_) + 1) + "hyps.txt";
 					RECOG::DDD::HypothesisDoorDrawer DDObject;
 					detector.Detect(meshSeq, &DDObject, (char *)hypFileName.data(), (detector.GetRGBImageVisualization() ? &RGBSeq : NULL));
+					cout << "HUH" << endl;
 					// detector.Detect2(meshSeq);
 
 					// // ************ IoU Hypothesis evaluation ************
