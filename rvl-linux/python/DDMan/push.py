@@ -12,7 +12,8 @@ from importlib import reload
 
 
 import rvlpyutil as rvl
-import vn_model as vn
+from DDMan import vn_model as vn
+# import vn_model as vn
 import copy
 
 def random_orientations(num_viewpoints = 300, num_rot_angles = 12):
@@ -313,7 +314,6 @@ class push():
             obstacles = np.reshape(obstacles, (num_samples_per_iteration, num_tool_sample_spheres, 2))
 
 
-
 class door_model():
     def __init__(self):
         self.dd_contact_surface_params = np.array([0.1, 0.1])
@@ -342,7 +342,7 @@ class door_model():
         self.vn_dd = vn.vn()
         A = self.vn_dd.create_base_18()    
         dd_plate_max_vertex_coordinates = self.dd_plate_params.copy()
-        dd_plate_max_vertex_coordinates[2] =-dd_plate_max_vertex_coordinates[2]
+        dd_plate_max_vertex_coordinates[2] = -dd_plate_max_vertex_coordinates[2]
         dd_plate_box = (self.vn_dd.unit_box_vertices() + 1.0) * 0.5 * dd_plate_max_vertex_coordinates
         d_mov = self.vn_dd.convex_hull(A, dd_plate_box)
         self.vn_dd.add_bl_nodes(A, d_mov)
@@ -370,6 +370,63 @@ class door_model():
         self.vn_env.add_hl_node(1.0, [22, 24])
         self.vn_env.add_hl_node(-1.0, [23, 25])
         self.vn_env.transform_bl_nodes(range(18), self.T_DD_W)                
+
+        return T_A_W, T_Arot_DD
+
+
+
+    def create2(self, dd_state_deg):
+        # Moving part pose with respect to the static part.
+
+        T_A_W = np.eye(4)
+        # T_A_W[0,3] = self.dd_static_side_width + 2.0 * self.dd_moving_to_static_part_distance + self.dd_plate_params[0] - self.dd_axis_distance
+        T_A_W[0,3] = self.dd_static_side_width + self.dd_moving_to_static_part_distance + self.dd_axis_distance/2
+        T_A_W[1,3] = self.dd_static_side_width + self.dd_moving_to_static_part_distance + 0.5 * self.dd_plate_params[1]
+        T_A_W[2,3] = 0.5 * self.dd_plate_params[2]
+        T_Arot_A = rvl.roty(np.deg2rad(dd_state_deg))
+        T_Arot_DD = np.eye(4)
+        # T_Arot_DD[0,3] = self.dd_plate_params[0] + self.dd_moving_to_static_part_distance - self.dd_axis_distance
+        T_Arot_DD[0,3] = -self.dd_plate_params[0] - self.dd_moving_to_static_part_distance + self.dd_axis_distance
+        T_Arot_DD[1,3] = 0.5 * self.dd_plate_params[1]
+        T_Arot_DD[2,3] = -0.5 * self.dd_plate_params[2]
+        self.T_DD_W = T_A_W @ T_Arot_A @ rvl.inv_transf(T_Arot_DD)
+
+        # Door/drawer VN model.
+
+        self.vn_dd = vn.vn()
+        A = self.vn_dd.create_base_18()    
+        dd_plate_max_vertex_coordinates = self.dd_plate_params.copy()
+        dd_plate_max_vertex_coordinates[2] = -dd_plate_max_vertex_coordinates[2]
+        dd_plate_box = (self.vn_dd.unit_box_vertices() + 1.0) * 0.5 * dd_plate_max_vertex_coordinates
+        d_mov = self.vn_dd.convex_hull(A, dd_plate_box)
+        self.vn_dd.add_bl_nodes(A, d_mov)
+        self.vn_dd.add_hl_node(1.0, range(18))
+
+        # Environment VN model.
+
+        self.vn_env = vn.vn()
+        self.vn_env.add_bl_nodes(A, d_mov)
+        A_storage_space = np.array([[1, 0, 0], [0, 1, 0], [-1, 0, 0], [0, -1, 0]])
+        dd_storage_space_max_vertex_coordinates = np.zeros(3)
+        dd_storage_space_max_vertex_coordinates[0] = self.dd_plate_params[0] + 2.0 * self.dd_moving_to_static_part_distance
+        dd_storage_space_max_vertex_coordinates[1] = self.dd_plate_params[1] + 2.0 * self.dd_moving_to_static_part_distance
+        dd_storage_space_max_vertex_coordinates[2] = self.dd_static_depth
+        dd_storage_space = (self.vn_env.unit_box_vertices() + 1.0) * 0.5 * dd_storage_space_max_vertex_coordinates
+        dd_storage_space[:,0] += self.dd_static_side_width
+        dd_storage_space[:,1] += self.dd_static_side_width
+        d_storage_space = self.vn_env.concave_hull(A_storage_space, dd_storage_space)
+        self.vn_env.add_bl_nodes(A_storage_space, d_storage_space)
+        A_front = np.array([[0, 0, -1]])
+        dd_front = self.vn_env.convex_hull(A_front, dd_storage_space)
+        self.vn_env.add_bl_nodes(A_front, dd_front)
+        self.vn_env.add_hl_node(1.0, range(18))
+        self.vn_env.add_hl_node(-1.0, range(18,22))
+        self.vn_env.add_hl_node(1.0, [22, 24])
+        self.vn_env.add_hl_node(-1.0, [23, 25])
+        self.vn_env.transform_bl_nodes(range(18), self.T_DD_W)
+        
+        return T_A_W, T_Arot_DD
+
 
     def create_mesh(self):
         dd_plate_mesh = o3d.geometry.TriangleMesh.create_box(width=self.dd_plate_params[0], height=self.dd_plate_params[1], depth=self.dd_plate_params[2])    
@@ -401,6 +458,38 @@ class door_model():
         dd_mesh = dd_plate_mesh + dd_static_mesh + dd_plate_rf
 
         return dd_mesh
+
+    def create_mesh2(self):
+        dd_plate_mesh = o3d.geometry.TriangleMesh.create_box(width=self.dd_plate_params[0], height=self.dd_plate_params[1], depth=self.dd_plate_params[2])    
+        dd_plate_mesh.translate((-self.dd_plate_params[0], 0.0, -self.dd_plate_params[2]))
+        dd_plate_mesh.transform(self.T_DD_W)
+        dd_plate_mesh.compute_vertex_normals()
+        dd_plate_mesh.paint_uniform_color([0.8, 0.8, 0.8])
+        dd_plate_rf = o3d.geometry.TriangleMesh.create_coordinate_frame(size = 0.05)
+        dd_plate_rf.transform(self.T_DD_W)
+
+        dd_static_top_mesh = o3d.geometry.TriangleMesh.create_box(width=self.dd_plate_params[0] + 2.0 * (self.dd_moving_to_static_part_distance + self.dd_static_side_width),
+            height=self.dd_static_side_width, depth=self.dd_static_depth)
+        dd_static_bottom_mesh = o3d.geometry.TriangleMesh.create_box(width=self.dd_plate_params[0] + 2.0 * (self.dd_moving_to_static_part_distance + self.dd_static_side_width),
+            height=self.dd_static_side_width, depth=self.dd_static_depth)
+        dd_static_bottom_mesh.translate((0.0, 2.0 * self.dd_moving_to_static_part_distance + self.dd_static_side_width + self.dd_plate_params[1], 0.0))
+        dd_static_left_mesh = o3d.geometry.TriangleMesh.create_box(width=self.dd_static_side_width, 
+            height=self.dd_plate_params[1] + 2.0 * self.dd_moving_to_static_part_distance, depth=self.dd_static_depth)
+        dd_static_left_mesh.translate((2.0 * self.dd_moving_to_static_part_distance + self.dd_static_side_width + self.dd_plate_params[0], 
+            self.dd_static_side_width, 0.0))
+        dd_static_right_mesh = o3d.geometry.TriangleMesh.create_box(width=self.dd_static_side_width, 
+            height=self.dd_plate_params[1] + 2.0 * self.dd_moving_to_static_part_distance, depth=self.dd_static_depth)
+        dd_static_right_mesh.translate((0.0, self.dd_static_side_width, 0.0))
+        dd_static_mesh = dd_static_top_mesh + dd_static_bottom_mesh + dd_static_left_mesh + dd_static_right_mesh
+        #dd_static_mesh.translate((-dd_moving_to_static_part_distance - dd_static_side_width,
+        #    -dd_moving_to_static_part_distance - dd_static_side_width, -dd_plate_params[2]))
+        dd_static_mesh.compute_vertex_normals()
+        dd_static_mesh.paint_uniform_color([0.8, 0.8, 0.8])
+
+        dd_mesh = dd_plate_mesh + dd_static_mesh + dd_plate_rf
+
+        return dd_mesh
+
 
 class tool_model():
     def __init__(self, gripper_params):
@@ -504,6 +593,29 @@ def visualize_push(collision, door, tool, T_G_DD):
     dd_mesh = door.create_mesh()
 
     return dd_mesh, tool_mesh, tool_mesh_wireframe, tool_sampling_sphere_centers_pcd
+
+def visualize_push2(collision, door, tool, T_G_DD):
+    if collision:
+        tool_color = [1.0, 0.0, 0.0]
+    else:
+        tool_color = [0.0, 0.5, 0.5]
+    # tool_mesh = tool.create_mesh(tool_color)
+    tool_mesh = tool.create_mesh(tool_color)
+    T_G_W = door.T_DD_W @ T_G_DD
+    tool_mesh.transform(T_G_W)
+    tool_mesh_wireframe = o3d.geometry.LineSet.create_from_triangle_mesh(tool_mesh)
+
+    tool_sampling_sphere_centers_pcd = o3d.geometry.PointCloud()
+    c_G = rvl.homogeneous(tool.tool_sample_spheres[:,:3])
+    c_DD = c_G @ T_G_DD.T
+    c_W = c_DD @ door.T_DD_W.T
+    tool_sampling_sphere_centers_pcd.points = o3d.utility.Vector3dVector(c_W[:,:3])
+    tool_sampling_sphere_centers_pcd.paint_uniform_color(tool_color)
+ 
+    dd_mesh = door.create_mesh2()
+
+    return dd_mesh, tool_mesh, tool_mesh_wireframe, tool_sampling_sphere_centers_pcd
+ 
  
 def demo_single_random():
     # Parameters.
@@ -780,4 +892,124 @@ def demo_push_poses():
         dd_mesh, tool_mesh, tool_mesh_wireframe, tool_sampling_sphere_centers_pcd = visualize_push(collision_[sample_idx], door, tool, T_G_DD)
         o3d.visualization.draw_geometries([tool_mesh_wireframe, tool_sampling_sphere_centers_pcd, dd_mesh])
 
+def demo_push_poses_ros(dd_state_deg: float, 
+                        num_viewpoints: int, 
+                        num_rot_angles: int,
+                        load_valid_contact_poses_from_file: bool=False, 
+                        load_feasible_poses_from_file: bool=False, 
+                        gripper_params: dict={},
+                        feasible_poses_path: str='',
+                        valid_contact_poses_path: str='',
+                        visualization: bool=False):
+    # Parameters.
+  
+    # dd_state_deg = -12.0
+    # num_viewpoints = 100
+    # num_rot_angles = 12
+    # load_valid_contact_poses_from_file = False
+    # load_feasible_poses_from_file = False
+    
+    use_default_gripper = False
 
+    if use_default_gripper:
+        custom_gripper_spheres_path = ''
+        custom_gripper_model_path = ''
+        tool_contact_surface_params = np.array([[0.0, 0.01, 0.0], [0.0, 0.01, -0.02]])
+        tool_finger_distances = [-0.155/2., 0., -0.102] # x, y, z
+        tool_finger_distances = [0.06/2., 0., 0.] # x, y, z
+        sphere_to_TCS_distance = 0.
+    else:
+        custom_gripper_spheres_path = '/home/RVLuser/rvl-linux/python/DDMan/3finger_gripper/gripper_spheres.npy'
+        custom_gripper_model_path = '/home/RVLuser/rvl-linux/python/DDMan/3finger_gripper/robotiq_3f_gripper_simplified.stl'
+        
+        tool_contact_surface_params = np.array([[0.0, -0.026, 0.0], [0.0, -0.031, -0.025]])
+        tool_finger_distances = [-0.155/2., 0., -0.102] # x, y, z
+        sphere_to_TCS_distance = 0.004609
+
+    gripper_params = {'is_default_gripper': use_default_gripper,
+                        'custom_gripper_spheres_path': custom_gripper_spheres_path, 
+                        'custom_gripper_model_path': custom_gripper_model_path,
+                        'tool_contact_surface_params': tool_contact_surface_params,
+                        'tool_finger_distances': tool_finger_distances,
+                        'sphere_to_TCS_distance': sphere_to_TCS_distance}
+    # Door model.
+    door = door_model()
+    door.create2(dd_state_deg)
+
+    # Tool model.
+    tool = tool_model(gripper_params)
+    tool.create()
+
+    # Contact points.
+    x = np.linspace(0.0, door.dd_contact_surface_params[0], 21)
+    y = np.linspace(0.0, door.dd_contact_surface_params[1], 21)
+    dd_grid_x, dd_grid_y = np.meshgrid(x, y)
+    contact_points = np.stack((dd_grid_x, dd_grid_y, np.zeros(dd_grid_x.shape)), axis=-1)
+    contact_points = np.reshape(contact_points, (contact_points.shape[0] * contact_points.shape[1], 3))
+
+    # contact_points = np.array([[0.1, 0.01, 0.0]])
+
+    # Push tool.
+
+    push_ = push(door, tool)
+
+    # Valid contact poses.
+        
+    if load_valid_contact_poses_from_file:
+        valid_contact_poses_ = np.load("valid_contact_poses.npy")
+    else:        
+        # valid_contact_poses_ = push_.valid_contact_poses(tool.tool_finger_distance, contact_points, num_viewpoints=num_viewpoints, num_rot_angles=num_rot_angles)
+        valid_contact_poses_ = push_.valid_contact_poses(tool.tool_finger_distances, tool.sphere_to_TCS_distance, contact_points, num_viewpoints=num_viewpoints, num_rot_angles=num_rot_angles)
+        np.save(valid_contact_poses_path, valid_contact_poses_)
+
+    # Feasible poses (no collision with the door/drawer plate).
+
+    if load_feasible_poses_from_file:
+        feasible_poses = np.load('feasible_poses.npy')
+    else:
+        collision = push_.collision_detection(valid_contact_poses_, door.vn_dd)
+        feasible_poses = valid_contact_poses_[np.logical_not(collision),:]
+        np.save(feasible_poses_path, feasible_poses)
+
+    # Collision-free poses.
+
+    T_G_W = door.T_DD_W @ feasible_poses
+    collision = push_.collision_detection(T_G_W, door.vn_env)
+    contact_free_poses = feasible_poses[np.logical_not(collision),:]
+
+    # Visualization.
+    if visualization:
+        samples = contact_free_poses
+        # samples = valid_contact_poses_
+        collision_ = np.zeros(samples.shape[0]).astype('bool')
+        for visualization_idx in range(10):
+            print('sample', visualization_idx)
+            sample_idx = np.random.randint(samples.shape[0])
+            # sample_idx = 0
+            T_G_DD = samples[sample_idx,:,:]
+            dd_mesh, tool_mesh, tool_mesh_wireframe, tool_sampling_sphere_centers_pcd = visualize_push2(collision_[sample_idx], door, tool, T_G_DD)
+            o3d.visualization.draw_geometries([tool_mesh_wireframe, tool_sampling_sphere_centers_pcd, dd_mesh])
+
+    
+    return feasible_poses
+
+
+def visualize_dd():
+    # Door model.
+    door = door_model()
+    T_A_W, T_Arot_DD = door.create2(90)
+    
+    dd_mesh = door.create_mesh2()
+    
+    origin_mesh = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.05)
+    
+    # T_Arot_DD_mesh = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.05)
+    # T_Arot_DD_mesh.transform(T_Arot_DD)
+
+    T_A_W_mesh = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.05)
+    T_A_W_mesh.transform(T_A_W)
+
+    # o3d.visualization.draw_geometries([dd_mesh, origin_mesh, T_Arot_DD_mesh, T_A_W_mesh])
+    o3d.visualization.draw_geometries([dd_mesh, origin_mesh, T_A_W_mesh])
+
+    

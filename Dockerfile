@@ -176,5 +176,6 @@ RUN /bin/bash -c '. /opt/ros/noetic/setup.bash; catkin_make'
 RUN ln -sf /usr/bin/python3 /usr/bin/python
 
 RUN pip3 install open3d
-
+RUN pip3 install Pillow==9.0.0
 ENV PYTHONPATH="${PYTHONPATH}:/home/RVLuser/rvl-linux/modules/RVLPY"
+ENV PYTHONPATH="${PYTHONPATH}:/home/RVLuser/rvl-linux/python"

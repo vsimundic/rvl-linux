@@ -1,0 +1,14 @@
+thread Force_properties_calculation_thread_1():
+
+      while (True):
+
+        force_mode(tool_pose(), [1, 1, 0, 0, 0, 0], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0], 2, [0.15, 0.15, 0.1, 0.1, 0.1, 0.1])
+
+        textmsg("thread force mode")
+
+        sync()
+
+
+      end
+
+    end

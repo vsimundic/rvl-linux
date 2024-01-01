@@ -1,0 +1,22 @@
+{
+    "python.autoComplete.extraPaths": [
+        "/home/RVLuser/ferit_ur5_ws/devel/lib/python3/dist-packages",
+        "/opt/ros/noetic/lib/python3/dist-packages",
+        "/home/RVLuser/rvl-linux/python/build/lib",
+        "/home/RVLuser/rvl-linux/python",
+        "/home/RVLuser/ferit_ur5_ws/src/core/src",
+        "/home/RVLuser/ferit_ur5_ws/src/gazebo_push_open/src",
+        "/home/RVLuser/ferit_ur5_ws/src/a_demo"
+    ],
+    "python.analysis.extraPaths": [
+        "/home/RVLuser/ferit_ur5_ws/devel/lib/python3/dist-packages",
+        "/opt/ros/noetic/lib/python3/dist-packages",
+        "/home/RVLuser/rvl-linux/python/build/lib",
+        "/home/RVLuser/rvl-linux/python",
+        "/home/RVLuser/ferit_ur5_ws/src/core/src",
+        "/home/RVLuser/ferit_ur5_ws/src/gazebo_push_open/src",
+        "/home/RVLuser/ferit_ur5_ws/src/a_demo"
+    ],
+    "cmake.configureOnOpen": false,
+    "ros.distro": "noetic"
+}

@@ -1,0 +1,11 @@
+def plivanje():\
+    while(True):\
+        textmsg("function force mode")\
+        sleep(0.02)\
+        force_mode(tool_pose(), [1, 1, 0, 0, 0, 0], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0], 2, [0.2, 0.2, 0.1, 0.35, 0.35, 0.35])\
+            movej(get_inverse_kin(p[-0.06,-0.42,0.5,1.4,-0.6,0.3], qnear=[4.91,-1.42,-1.51,2.99,-1.15,0.57]),a=1.4,v=1.04)\
+            movej(get_inverse_kin(p[-0.06,-0.5,0.5,1.4,-0.6,0.3], qnear=[4.8,-1.7,-1.16,2.98,-1.21,0.57]),a=1.4,v=1.04)\
+        end_force_mode()\       
+        stopl(5.0)\
+    end\
+end\

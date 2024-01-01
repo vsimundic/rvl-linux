@@ -1,0 +1,34 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://wiki.ros.org/xacro" name="ur5_robotiq-3f-gripper_robot">
+  <!--
+    This is a convenience top-level xacro which loads the macro for the UR5e
+    which defines the default values for the various "parameters files"
+    parameters for a UR5e.
+
+    This file is only useful when loading a stand-alone, completely isolated
+    robot with only default values for all parameters such as the kinematics,
+    visual and physical parameters and joint limits.
+
+    This file is not intended to be integrated into a larger scene or other
+    composite xacro.
+
+    Instead, xacro:include 'inc/ur5e_macro.xacro' and override the defaults
+    for the arguments to that macro.
+
+    Refer to 'inc/ur_macro.xacro' for more information.
+  -->
+  <xacro:include filename="$(find ur_description)/urdf/inc/ur5_macro.xacro"/>
+  <xacro:include filename="$(find robotiq_3f_gripper_visualization)/cfg/robotiq-3f-gripper_articulated.urdf"/>
+
+  <!-- <xacro:robotiq-3f-gripper_articulated prefix="" /> -->
+  <xacro:ur5_robot prefix="" />
+
+  <joint name="robotiq_coupler_joint" type="fixed">
+    <origin xyz="0 0 0.051" rpy="${-pi/2.0} ${-pi} ${-pi/2.0}" />
+    <parent link="tool0"/>
+    <child link="palm"/>
+  </joint>
+
+  <!-- <xacro:ur5_robotiq-3f-gripper_robot prefix=""/> -->
+
+</robot>

@@ -1,0 +1,8 @@
+<launch>
+
+    <group ns="gpo">
+        <param name="config_file" type="string" value="gazebo_push_open.yaml"/>
+        
+        <node name="node_generate_place_cabinet" pkg="gazebo_push_open" type="node_generate_cabinet.py" output="screen"/>
+    </group>
+</launch>

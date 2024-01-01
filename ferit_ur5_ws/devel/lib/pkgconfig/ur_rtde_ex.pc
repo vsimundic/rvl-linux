@@ -1,0 +1,8 @@
+prefix=/home/RVLuser/ferit_ur5_ws/devel
+
+Name: ur_rtde_ex
+Description: Description of ur_rtde_ex
+Version: 0.0.0
+Cflags: 
+Libs: -L${prefix}/lib 
+Requires: 

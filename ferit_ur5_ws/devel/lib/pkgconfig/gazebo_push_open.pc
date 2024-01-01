@@ -1,0 +1,8 @@
+prefix=/home/RVLuser/ferit_ur5_ws/devel
+
+Name: gazebo_push_open
+Description: Description of gazebo_push_open
+Version: 0.0.0
+Cflags: 
+Libs: -L${prefix}/lib 
+Requires: 

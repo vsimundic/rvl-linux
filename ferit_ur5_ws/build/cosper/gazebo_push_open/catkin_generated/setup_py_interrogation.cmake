@@ -1,0 +1,7 @@
+set(gazebo_push_open_SETUP_PY_SETUP_MODULE "distutils.core")
+set(gazebo_push_open_SETUP_PY_VERSION "0.0.0")
+set(gazebo_push_open_SETUP_PY_SCRIPTS "")
+set(gazebo_push_open_SETUP_PY_PACKAGES "gazebo_push_open")
+set(gazebo_push_open_SETUP_PY_PACKAGE_DIRS "src/gazebo_push_open")
+set(gazebo_push_open_SETUP_PY_MODULES "")
+set(gazebo_push_open_SETUP_PY_MODULE_DIRS "")
