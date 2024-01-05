@@ -67,7 +67,7 @@
 	"MOC_RELAXED_MODE" : false,
 	"MOC_SKIP" : [],
 	"MULTI_CONFIG" : false,
-	"PARALLEL" : 6,
+	"PARALLEL" : 8,
 	"PARSE_CACHE_FILE" : "/home/RVLuser/ferit_ur5_ws/build/ur5_configs/robotiq-noetic-devel/robotiq_3f_rviz/CMakeFiles/robotiq_3f_rviz_autogen.dir/ParseCache.txt",
 	"QT_MOC_EXECUTABLE" : "/usr/lib/qt5/bin/moc",
 	"QT_UIC_EXECUTABLE" : "/usr/lib/qt5/bin/uic",

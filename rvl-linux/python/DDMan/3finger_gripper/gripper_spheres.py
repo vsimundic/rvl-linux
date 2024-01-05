@@ -46,7 +46,7 @@ for i in range(spheres.shape[0]):
 
     sphere_meshes.append(sphere)
 
-tool_mesh = open3d.io.read_triangle_mesh('/home/RVLuser/rvl-linux/python/DDMan/3finger_gripper_spheres/robotiq_3f_gripper_simplified.stl')
+tool_mesh = open3d.io.read_triangle_mesh('/home/RVLuser/rvl-linux/python/DDMan/3finger_gripper/robotiq_3f_gripper_simplified.stl')
 
 sphere_meshes.append(tool_mesh)
 open3d.visualization.draw_geometries(sphere_meshes)

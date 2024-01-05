@@ -5,23 +5,24 @@ cabinet_dims:
   height: 0.4
   depth: 0.35
 cabinet_pose:
-  min_x: 0
-  max_x: 0
-  min_y: 0.45
-  max_y: 0.65
+  min_x: 0.55
+  max_x: 0.75
+  min_y: -0.1
+  max_y: 0.1
   rot_angle_min_deg: -5
   rot_angle_max_deg: 5
+  axis_pos: -1
 
 cabinet_urdf_save_path: "/home/RVLuser/ferit_ur5_ws/cabinet.urdf"
 
 
 ## Feasible poses setup
 feasible_poses:
-  dd_state_deg: 12.0
+  dd_state_deg: 12
   num_viewpoints: 100
   num_rot_angles: 12
-  load_valid_contact_poses_from_file: False
-  load_feasible_poses_from_file: False
+  load_valid_contact_poses_from_file: True
+  load_feasible_poses_from_file: True
   gripper_params:
     is_default_gripper: False
     custom_gripper_spheres_path: '/home/RVLuser/rvl-linux/python/DDMan/3finger_gripper/gripper_spheres.npy'
@@ -31,5 +32,5 @@ feasible_poses:
     sphere_to_TCS_distance: 0.004609
   feasible_poses_path: "/home/RVLuser/rvl-linux/python/DDMan/feasible_poses_3f_gripper.npy"
   valid_contact_poses_path: "/home/RVLuser/rvl-linux/python/DDMan/valid_contact_poses.npy"
-  visualization: True
+  visualization: False
 
