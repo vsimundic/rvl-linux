@@ -1,2 +1,0 @@
-plivanje()
-textmsg("poziv funkcije")

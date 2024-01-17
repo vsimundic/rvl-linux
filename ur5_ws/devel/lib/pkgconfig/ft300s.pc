@@ -1,8 +1,0 @@
-prefix=/home/RVLuser/ur5_ws/devel
-
-Name: ft300s
-Description: Description of ft300s
-Version: 0.0.0
-Cflags: 
-Libs: -L${prefix}/lib 
-Requires: 

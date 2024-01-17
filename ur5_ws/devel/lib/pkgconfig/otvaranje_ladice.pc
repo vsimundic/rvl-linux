@@ -1,8 +1,0 @@
-prefix=/home/RVLuser/ur5_ws/devel
-
-Name: otvaranje_ladice
-Description: Description of otvaranje_ladice
-Version: 0.0.0
-Cflags: 
-Libs: -L${prefix}/lib 
-Requires: 

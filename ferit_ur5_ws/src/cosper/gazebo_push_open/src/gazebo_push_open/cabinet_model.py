@@ -10,22 +10,29 @@ from gazebo_msgs.srv import SpawnModel, SetModelConfiguration, SetModelConfigura
 from geometry_msgs.msg import Pose
 from tf.transformations import quaternion_from_matrix
 import open3d as o3d
-# from core.transforms import rot_z
+from core.transforms import rot_z
 
-def rot_z(angle_rad):
-    s = np.sin(angle_rad)
-    c = np.cos(angle_rad)
-    T = np.array([[c, -s, 0],
-                  [s, c, 0],
-                  [0, 0, 1]])
-    return T
+# def rot_z(angle_rad):
+#     s = np.sin(angle_rad)
+#     c = np.cos(angle_rad)
+#     R = np.array([[c, -s, 0],
+#                   [s, c, 0],
+#                   [0, 0, 1]])
+#     return R
 
 class Cabinet():
-    def __init__(self, w_door: float, h_door: float, d_door: float=0.018, static_d: float=0.3, axis_pos: int=1, save_path:str=None):
-        self.w_door = w_door
-        self.h_door = h_door
-        self.d_door = d_door
-        self.static_d = static_d
+    # def __init__(self, w_door: float, h_door: float, d_door: float=0.018, static_d: float=0.3, axis_pos: int=1, position: np.array=np.array([0, 0, 0]), angle_deg:float=0, save_path:str=None):
+    def __init__(self, door_params:np.array=np.array([0.1, 0.1, 0.1, 0.018]), axis_pos: int=1, position: np.array=np.array([0, 0, 0]), spawn_angle_deg:float=0, save_path:str=None):
+        # 0 = World
+        # X = centroid of cabinet
+        # S = top left corner of static part of cabinet
+        # A = Door axis
+        # DD = inner left upper point on door panel
+
+        self.w_door = door_params[0]
+        self.h_door = door_params[1]
+        self.d_door = door_params[3]
+        self.static_d = door_params[2]
         self.moving_to_static_part_distance = 0.005
         self.axis_distance = 0.01
         self.static_side_width = 0.018
@@ -34,57 +41,55 @@ class Cabinet():
         self.door_joint_name = 'door_joint'
         self.cabinet_name = 'my_cabinet'
         self.save_path = save_path
-
+        self.position = position
+        self.current_angle_state_deg = spawn_angle_deg
         if not axis_pos == 1 and not axis_pos == -1:
-            self.axis_pos = 1
+            self.axis_pos = -1
         else:
             self.axis_pos = axis_pos
 
         self.xml_model = self.generate_cabinet_urdf_from_door_panel()
         
+        self.setup_matrices()
+
         self.mesh = self.create_mesh()
-        
-        
-        # S = top left corner of static part of cabinet
-        # X = centroid of cabinet
-        # A = Door axis
-        # DD = inner left upper point on door panel
-        
+        # self.change_door_angle(angle_deg)
+
+
+    def setup_matrices(self):
         # Top left corner (S-frame) w.r.t. centroid of cabinet
-        self.TSX = np.eye(4)
-        self.TSX[:3, :3] = np.array([[0, 0, -1],
+        self.T_S_X = np.eye(4)
+        self.T_S_X[:3, :3] = np.array([[0, 0, -1],
                                 [1, 0, 0],
                                 [0, -1, 0]])
-        self.TSX[:3, 3] = np.array([self.static_d/2., 
+        self.T_S_X[:3, 3] = np.array([self.static_d/2., 
                                -(self.w_door/2. + self.moving_to_static_part_distance + self.d_door), 
                                 self.h_door/2. + self.moving_to_static_part_distance + self.d_door])
-
-        # self.TDDX0 = np.eye(4)
-        # self.TDDX0[:3, :3] = np.array([[0, 0, -1],
-        #                         [1, 0, 0],
-        #                         [0, -1, 0]])
-        # self.TDDX0[:3, 3] = np.array([self.static_d/2. - self.d_door, 
-        #                        -(self.w_door/2.), 
-        #                         self.h_door/2.])
-        # self.TDDX = self.TDDX0.copy()
         
         Tz = np.eye(4)
-        Tz[:3, :3] = rot_z(np.pi).copy()
+        Tz[:3, :3] = rot_z(np.pi)
         
-        # TAX
-        self.TAX = np.eye(4)
-        self.TAX = Tz @ self.TAX.copy()
-        self.TAX[:3, 3] = np.array([self.static_d/2. - self.d_door/2., self.axis_pos*(-self.w_door/2. + self.axis_distance), 0.])
-        print(self.TAX)
+        self.T_A_X = np.eye(4)
+        self.T_A_X = Tz @ self.T_A_X.copy()
+        self.T_A_X[:3, 3] = np.array([self.static_d/2. - self.d_door/2., self.axis_pos*(-self.w_door/2. + self.axis_distance), 0.])
+        self.T_A0_X = self.T_A_X.copy()
+
+        # Cabinet centroid to world
+        self.T_X_0 = self.get_world_pose(self.position[0], self.position[1], self.position[2], spawn_angle_deg=self.current_angle_state_deg)
+        
         # Panel point to axis
-        self.TDDA = np.eye(4)
-        self.TDDA[:3, :3] = np.array([[0, -1, 0],
-                                      [0, 0, -1],
-                                      [1, 0, 0]])
-        self.TDDA[:3, 3] = np.array([d_door/2.,
-                                     self.w_door - self.axis_distance,
+        self.T_DD_A = np.eye(4)
+        self.T_DD_A[:3, :3] = np.array([[0, 0, 1],
+                                      [-1, 0, 0],
+                                      [0, -1, 0]])
+        self.T_DD_A[:3, 3] = np.array([self.d_door/2.,
+                                     -self.axis_pos*(self.w_door - self.axis_distance),
                                      self.h_door/2.])
-        
+
+        # Door panel centroid to axis
+        self.T_DD0_A = np.eye(4)
+        self.T_DD0_A[:3, 3] = np.array([0, -self.axis_pos*(self.w_door/2. - self.axis_distance), 0])
+
     def generate_cabinet_urdf_from_door_panel(self):
         static_d = self.static_d
         moving_to_static_part_distance = self.moving_to_static_part_distance
@@ -255,37 +260,37 @@ class Cabinet():
         return xmlstr
 
 
-    def get_world_pose(self, x: float, y: float, z: float, angle_deg: float):
+    def get_world_pose(self, x: float, y: float, z: float, spawn_angle_deg: float):
         TA0 = np.eye(4)
         TA0[:3, 3] = np.array([x, y, z])
 
-        theta0_deg = 180
+        theta = np.radians(spawn_angle_deg)
         Tz = np.eye(4)
-        theta = np.radians(angle_deg + theta0_deg)
-        s = np.sin(theta)
-        c = np.cos(theta)
-        Tz[:3, :3] = np.array([[c, -s, 0.],
-                                [s, c, 0.],
-                                [0., 0., 1.]])
+        Tz[:3, :3] = rot_z(theta)
 
-        TAX = self.get_centroid_to_axis_pose()
-        TX0 = TA0 @ TAX @ Tz
+        T_X_0 = TA0 @ self.T_A_X @ Tz
 
-        return TX0
+        return T_X_0
 
 
-    def update_TDDX(self, angle_rad):
-        self.TDDX = self.TAX @ self.TDDX0
+    def change_door_angle(self, angle_deg):
+        self.current_angle_state_deg = angle_deg
+        angle_rad = np.radians(angle_deg)
 
-    def spawn_model_gazebo(self, x: float, y: float, z: float, angle_deg: float):
-        TX0 = self.get_world_pose(x, y, z, angle_deg)
+        Tz = np.eye(4)
+        Tz[:3, :3] = rot_z(angle_rad)
+        self.T_A_X = self.T_A0_X @ Tz
 
+        # self.mesh = self.create_mesh()
+
+
+    def spawn_model_gazebo(self):
         init_pose = Pose()
-        init_pose.position.x = TX0[0, 3]
-        init_pose.position.y = TX0[1, 3]
-        init_pose.position.z = TX0[2, 3]
+        init_pose.position.x = self.T_X_0[0, 3]
+        init_pose.position.y = self.T_X_0[1, 3]
+        init_pose.position.z = self.T_X_0[2, 3]
 
-        q = quaternion_from_matrix(TX0)
+        q = quaternion_from_matrix(self.T_X_0)
 
         init_pose.orientation.x = q[0]
         init_pose.orientation.y = q[1]
@@ -349,38 +354,12 @@ class Cabinet():
             rospy.logerr(f'Failed to set joint configuration: {e}')
 
 
-    # def get_gripper_pose_from_feasible_pose(self, feasible_pose: np.ndarray, TX0: np.ndarray, TB0: np.ndarray):
-    def get_feasible_pose_wrt_X(self, feasible_pose: np.ndarray):
-        # feasible pose = TGS
+    # def get_gripper_pose_from_feasible_pose(self, T_F_DD: np.ndarray, TX0: np.ndarray, TB0: np.ndarray):
+    def get_feasible_pose_wrt_world(self, T_F_DD: np.ndarray):
+        return self.T_X_0 @ self.T_A_X @ self.T_DD_A @ T_F_DD
 
-        # TSX = np.eye(4)
-        
-        # TSX[:3, :3] = np.array([[0, 0, -1],
-        #                         [1, 0, 0],
-        #                         [0, -1, 0]])
-        # TSX[:3, 3] = np.array([self.static_d/2., 
-        #                        -(self.w_door/2. + self.moving_to_static_part_distance + self.d_door/2.), 
-        #                         self.h_door/2. + self.moving_to_static_part_distance + self.d_door/2.])
-
-        # X_mesh = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.1)
-        # S_mesh = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.05)
-        # S_mesh.transform(TSX)
-
-        # o3d.visualization.draw_geometries([X_mesh, S_mesh])
-
-        # return TB0.T @ TX0 @ TSX @ feasible_pose
-        return self.TSX @ feasible_pose
 
     def create_mesh(self):
-        # dd_plate_mesh = o3d.geometry.TriangleMesh.create_box(width=self.dd_plate_params[0], height=self.dd_plate_params[1], depth=self.dd_plate_params[2])    
-        # dd_plate_mesh.translate((0.0, 0.0, -self.dd_plate_params[2]))
-        # dd_plate_mesh.transform(self.T_DD_W)
-        # dd_plate_mesh.compute_vertex_normals()
-        # dd_plate_mesh.paint_uniform_color([0.8, 0.8, 0.8])
-        # dd_plate_rf = o3d.geometry.TriangleMesh.create_coordinate_frame(size = 0.05)
-        # dd_plate_rf.transform(self.T_DD_W)
-        
-
         dd_static_top_mesh = o3d.geometry.TriangleMesh.create_box(width=self.static_d,
                                                                   height=self.w_door + 2*(self.moving_to_static_part_distance + self.d_door), 
                                                                   depth=self.d_door)
@@ -388,6 +367,7 @@ class Cabinet():
                                          -(self.w_door/2. + self.moving_to_static_part_distance + self.d_door), 
                                          (self.h_door/2. + self.moving_to_static_part_distance)))
         
+
         dd_static_bottom_mesh = o3d.geometry.TriangleMesh.create_box(width=self.static_d,
                                                                      height=self.w_door + 2*(self.moving_to_static_part_distance + self.d_door), 
                                                                      depth=self.d_door)
@@ -399,86 +379,110 @@ class Cabinet():
         dd_static_left_mesh = o3d.geometry.TriangleMesh.create_box(width=self.static_d,
                                                                    height=self.d_door, 
                                                                    depth=(self.h_door + 2*self.moving_to_static_part_distance + 2*self.d_door))
-        
         dd_static_left_mesh.translate((-self.static_d/2., 
                                        -(self.w_door/2. + self.moving_to_static_part_distance + self.d_door), 
                                        -(self.h_door/2. + self.moving_to_static_part_distance + self.d_door)))
         
         
-        
         dd_static_right_mesh = o3d.geometry.TriangleMesh.create_box(width=self.static_d,
                                                                    height=self.d_door, 
                                                                    depth=(self.h_door + 2*self.moving_to_static_part_distance + 2*self.d_door))
-        
         dd_static_right_mesh.translate((-self.static_d/2., 
                                        (self.w_door/2. + self.moving_to_static_part_distance), 
                                        -(self.h_door/2. + self.moving_to_static_part_distance + self.d_door)))
-
-        
-        
-        # dd_static_right_mesh = o3d.geometry.TriangleMesh.create_box(width=self.dd_static_side_width, 
-        #     height=self.dd_plate_params[1] + 2.0 * self.dd_moving_to_static_part_distance, depth=self.dd_static_depth)
-        # dd_static_right_mesh.translate((0.0, self.dd_static_side_width, 0.0))
-        # dd_static_mesh = dd_static_top_mesh + dd_static_bottom_mesh + dd_static_left_mesh + dd_static_right_mesh
-        # #dd_static_mesh.translate((-dd_moving_to_static_part_distance - dd_static_side_width,
-        # #    -dd_moving_to_static_part_distance - dd_static_side_width, -dd_plate_params[2]))
-        # dd_static_mesh.compute_vertex_normals()
-        # dd_static_mesh.paint_uniform_color([0.8, 0.8, 0.8])
-
-        # dd_mesh = dd_plate_mesh + dd_static_mesh + dd_plate_rf
 
         dd_static_mesh = dd_static_top_mesh + dd_static_bottom_mesh + dd_static_left_mesh + dd_static_right_mesh
         dd_static_mesh.paint_uniform_color([0.4, 0.4, 0.4])
         dd_static_mesh.compute_vertex_normals()
         
-        dd_plate_mesh = o3d.geometry.TriangleMesh.create_box(width=self.d_door, 
-                                                             height=self.w_door, 
-                                                             depth=self.h_door)    
-        dd_plate_mesh.translate(((self.static_d/2. - self.d_door), 
-                                 -self.w_door/2., 
-                                 -self.h_door/2.))
+        dd_plate_mesh = o3d.geometry.TriangleMesh.create_box(width=self.w_door, 
+                                                             height=self.h_door, 
+                                                             depth=self.d_door)
+        
+        if self.axis_pos == -1:
+            dd_plate_mesh.translate((0.0, 0.0, -self.d_door))
+        else:
+            dd_plate_mesh.translate((-self.w_door, 0.0, -self.d_door))
+
+        dd_plate_mesh.transform(self.T_A_X @ self.T_DD_A)
         dd_plate_mesh.paint_uniform_color([0.7, 0.7, 0.7])
         dd_plate_mesh.compute_vertex_normals()
 
-        # dd_plate_mesh.transform(self.T_DD_W)
-        # dd_plate_mesh.compute_vertex_normals()
-        # dd_plate_mesh.paint_uniform_color([0.8, 0.8, 0.8])
-        # dd_plate_rf = o3d.geometry.TriangleMesh.create_coordinate_frame(size = 0.05)
-        # dd_plate_rf.transform(self.T_DD_W)
-        
-        
-        
         dd_mesh = dd_static_mesh + dd_plate_mesh
         
         return dd_mesh
 
 
-    def visualize(self, gripper_pose):
+    def save_mesh(self, filename):
+        T_A_X_ = self.T_A_X.copy()
+        self.T_A_X = self.T_A0_X
+        self.update_mesh()
+        o3d.io.write_triangle_mesh(filename, self.mesh)
+        
+        self.T_A_X = T_A_X_
+        self.update_mesh()
+        
+
+
+    def update_mesh(self):
+        self.mesh = self.create_mesh()
+
+
+    def visualize(self, gripper_pose=None):
+        geometries = [self.mesh]
+
         origin_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.05)
+        geometries.append(origin_frame)
         
         left_cf = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.05)
         left_cf.translate((-self.static_d/2., 
                         -(self.w_door/2. + self.moving_to_static_part_distance + self.d_door), 
                         -(self.h_door/2. + self.moving_to_static_part_distance + self.d_door)))
-
+        geometries.append(left_cf)
 
         topleft_mesh = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.05)
-        topleft_mesh.transform(self.TSX)
+        topleft_mesh.transform(self.T_S_X)
+        geometries.append(topleft_mesh)
         
         axis_mesh = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.05)
-        axis_mesh.transform(self.TAX)
+        axis_mesh.transform(self.T_A_X)
+        geometries.append(axis_mesh)
+
+        point_panel_mesh = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.05)
+        point_panel_mesh.transform(self.T_A_X @ self.T_DD_A)
+        geometries.append(point_panel_mesh)
+                
+        if gripper_pose is not None: # Gripper pose is w.r.t. world
+            gpose = np.linalg.inv(self.T_X_0) @ gripper_pose
+            gripper_pose_mesh = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.05)
+            gripper_pose_mesh.transform(gpose)
+            geometries.append(gripper_pose_mesh)
         
-        # panel_mesh = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.05)
-        # panel_mesh.transform(self.TDDX0)
+        # o3d.visualization.draw_geometries([origin_frame, self.mesh, axis_mesh, point_panel_mesh, topleft_mesh])
+        o3d.visualization.draw_geometries(geometries)
+
+
+    def generate_opening_passing_poses(self, T_G0_DD0: np.ndarray, max_angle_deg: float=70., num_poses: int=10):
+        current_angle_deg = self.current_angle_state_deg
+
+        opening_angles = np.linspace(current_angle_deg, max_angle_deg, num=num_poses)
         
+        T_G0_0s = []
+
+        for angle_deg in opening_angles:
+            self.change_door_angle(angle_deg)
+            T_G0_0_current = self.get_feasible_pose_wrt_world(T_G0_DD0)
+            T_G0_0s.append(T_G0_0_current)
         
-        o3d.visualization.draw_geometries([origin_frame, self.mesh, axis_mesh])
+        self.change_door_angle(current_angle_deg)
+        return T_G0_0s
+
 
 if __name__ == '__main__':
-
-    cabinet_model = Cabinet(0.3, 0.5, 0.018, 0.4, 1, None)
+    door_params = np.array([0.3, 0.5, 0.4, 0.018])
+    cabinet_model = Cabinet(door_params, axis_pos=-1, angle_deg=12, save_path=None)
     # cabinet_model.get_gripper_pose_from_feasible_pose(np.eye(4))
 
-    cabinet_model.visualize(np.eye(4))
+    cabinet_model.visualize(None)
 
     print('Done')

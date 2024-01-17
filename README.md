@@ -98,7 +98,7 @@ roscore
 ```
 In another terminal, navigate to the ur5_ws directory:
 ```bash
-cd /home/RVLuser/ur5_ws
+cd /home/RVLuser/ferit_ur5_ws
 ```
 build the packages:
 ```bash
@@ -108,10 +108,10 @@ source the project:
 ```bash
 source devel/setup.bash
 ```
-and run the Python node that takes images from a camera, generates PLY files and runs DDDetector to detect the doors: <!-- (TODO: add the node for detecting state and opening doors) -->
+<!-- and run the Python node that takes images from a camera, generates PLY files and runs DDDetector to detect the doors:
 ```bash
 rosrun ao_manipulation detect_AO_model_node.py
-```
+``` -->
 
 ### Detectron2 usage
 Inside the container, navigate to TensorMask directory:
@@ -123,10 +123,28 @@ Run an example: (needs testing)
 python3 train_net.py --config-file configs/tensormask_R_50_FPN_1x.yaml --eval-only MODEL.WEIGHTS checkpoints/tensormask_R_50_FPN_1x.pkl
 ```
 
-## Contributing
+### Path planning & Gazebo
+
+Enter the ferit_ur5_ws directory and source:
+```bash
+cd /home/RVLuser/ferit_ur5_ws
+source devel/setup.bash
+```
+Run the Gazebo simulation with:
+```bash
+roslaunch ur5_robotiq3f_moveit_config demo_gazebo.launch
+```
+
+In another terminal (also sourced), start the node for opening a cabinet from one feasible point:
+```bash
+roslaunch a_demo gazebo_push_open_demo.launch
+```
+
+
+<!-- ## Contributing
 
 Pull requests are welcome. For major changes, please open an issue first
-to discuss what you would like to change.
+to discuss what you would like to change. -->
 
 
 ## License

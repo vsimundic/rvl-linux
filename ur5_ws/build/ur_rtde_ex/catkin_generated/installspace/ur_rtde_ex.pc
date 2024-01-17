@@ -1,8 +1,0 @@
-prefix=/home/RVLuser/ur5_ws/install
-
-Name: ur_rtde_ex
-Description: Description of ur_rtde_ex
-Version: 0.0.0
-Cflags: 
-Libs: -L${prefix}/lib 
-Requires: 
