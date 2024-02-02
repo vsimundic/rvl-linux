@@ -102,7 +102,8 @@ cd /home/RVLuser/ferit_ur5_ws
 ```
 build the packages:
 ```bash
-catkin_make
+# ~catkin_make~
+catkin build
 ```
 source the project:
 ```bash

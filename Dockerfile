@@ -164,15 +164,15 @@ RUN pip3 install pymodbus --upgrade
 RUN pip3 install ur-rtde
 RUN pip3 install pyyaml
 
-RUN mkdir -p /home/RVLuser/ur5_ws/src
-COPY ur5_ws/src/ /home/RVLuser/ur5_ws/src/
-RUN ls /opt/ros/noetic
-RUN rosdep init
-RUN rosdep update
-WORKDIR /home/RVLuser/ur5_ws
-RUN rosdep install --from-paths src --ignore-src -r --rosdistro noetic -y
+# RUN mkdir -p /home/RVLuser/ur5_ws/src
+# COPY ur5_ws/src/ /home/RVLuser/ur5_ws/src/
+# RUN ls /opt/ros/noetic
+# RUN rosdep init
+# RUN rosdep update
+# WORKDIR /home/RVLuser/ur5_ws
+# RUN rosdep install --from-paths src --ignore-src -r --rosdistro noetic -y
 
-RUN /bin/bash -c '. /opt/ros/noetic/setup.bash; catkin_make'
+# RUN /bin/bash -c '. /opt/ros/noetic/setup.bash; catkin_make'
 
 # ENV PYTHONPATH="${PYTHONPATH}:/home/RVLuser/detectron2/detectron2"
 
