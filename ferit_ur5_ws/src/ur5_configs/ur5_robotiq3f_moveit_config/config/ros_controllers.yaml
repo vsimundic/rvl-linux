@@ -1,3 +1,46 @@
+# arm_controller:
+#   type: effort_controllers/JointTrajectoryController
+#   joints:
+#     - shoulder_pan_joint
+#     - shoulder_lift_joint
+#     - elbow_joint
+#     - wrist_1_joint
+#     - wrist_2_joint
+#     - wrist_3_joint
+#   gains:
+#     shoulder_pan_joint:
+#       p: 100
+#       d: 1
+#       i: 1
+#       i_clamp: 1
+#     shoulder_lift_joint:
+#       p: 100
+#       d: 1
+#       i: 1
+#       i_clamp: 1
+#     elbow_joint:
+#       p: 100
+#       d: 1
+#       i: 1
+#       i_clamp: 1
+#     wrist_1_joint:
+#       p: 100
+#       d: 1
+#       i: 1
+#       i_clamp: 1
+#     wrist_2_joint:
+#       p: 100
+#       d: 1
+#       i: 1
+#       i_clamp: 1
+#     wrist_3_joint:
+#       p: 100
+#       d: 1
+#       i: 1
+#       i_clamp: 1
+
+
+
 # Simulation settings for using moveit_sim_controllers
 moveit_sim_hw_interface:
   joint_model_group: arm
@@ -24,7 +67,7 @@ joint_state_controller:
 
 
 # Trajectory controller
-trajectory_controller:
+arm_controller:
   type: position_controllers/JointTrajectoryController
   joints:
     - shoulder_pan_joint
@@ -54,7 +97,7 @@ trajectory_controller:
     wrist_3_joint: {p: 100.0, i: 1.0, d: 1.0}
 
 controller_list:
-  - name: "trajectory_controller"
+  - name: "arm_controller"
     action_ns: follow_joint_trajectory
     type: FollowJointTrajectory
     default: true

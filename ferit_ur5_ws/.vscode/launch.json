@@ -27,6 +27,31 @@
                 "gzserver"
             ],
             "type": "ros"
+        },
+        {
+            "name": "ROS: green matrix summit",
+            "request": "launch",
+            "target": "${workspaceFolder}/src/other/green_matrix_summit/launch/demo.launch",
+            "launch": [
+                "rviz",
+                "gz",
+                "gzclient",
+                "gzserver"
+            ],
+            "type": "ros"
+        },
+        {
+            "name": "ROS: calibration",
+            "request": "launch",
+            "target": "${workspaceFolder}/src/other/calibration_program/launch/calibration.launch",
+            "launch": [
+                "rviz",
+                "gz",
+                "gzclient",
+                "gzserver"
+            ],
+            "type": "ros"
         }
+
     ]
 }

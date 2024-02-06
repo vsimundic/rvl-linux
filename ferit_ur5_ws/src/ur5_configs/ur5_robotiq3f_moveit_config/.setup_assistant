@@ -1,11 +1,11 @@
 moveit_setup_assistant_config:
   URDF:
-    package: ur5_description
-    relative_path: urdf/ur5_robotiq3f_gripper.urdf.xacro
+    package: ur_description
+    relative_path: urdf/ur5_robotiq-3f-gripper.xacro
     xacro_args: ""
   SRDF:
-    relative_path: config/ur5.srdf
+    relative_path: config/ur5_robotiq-3f-gripper_robot.srdf
   CONFIG:
     author_name: Valentin Simundic
     author_email: valentin.simundic@ferit.hr
-    generated_timestamp: 1696424238
+    generated_timestamp: 1706954349

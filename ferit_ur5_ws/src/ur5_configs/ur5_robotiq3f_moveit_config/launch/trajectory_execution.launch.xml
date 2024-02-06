@@ -1,6 +1,6 @@
 <launch>
   <!-- This file summarizes all settings required for trajectory execution  -->
-
+<arg name="sim" default="false" />
   <!-- Define moveit controller manager plugin: fake, simple, or ros_control -->
   <arg name="moveit_controller_manager" />
   <arg name="fake_execution_type" default="interpolate" />

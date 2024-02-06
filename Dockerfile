@@ -158,7 +158,7 @@ RUN apt-get install -y ros-noetic-ros-control
 RUN apt-get install -y ros-noetic-soem
 RUN apt-get install -y ros-noetic-moveit
 RUN apt-get install -y ros-noetic-trac-ik
-RUN apt-get install -y ros-noetic-industrial-core ros-noetic-ros-industrial-cmake-boilerplate
+RUN apt-get install -y ros-noetic-industrial-core ros-noetic-ros-industrial-cmake-boilerplate ros-noetic-socketcan-interface ros-noetic-industrial-robot-status-interface ros-noetic-ros-controllers ros-noetic-scaled-joint-trajectory-controller ros-noetic-speed-scaling-interface ros-noetic-speed-scaling-state-controller ros-noetic-ur-msgs ros-noetic-pass-through-controllers ros-noetic-ur-client-library
 
 RUN pip3 install pymodbus --upgrade
 RUN pip3 install ur-rtde
@@ -180,5 +180,17 @@ RUN ln -sf /usr/bin/python3 /usr/bin/python
 
 RUN pip3 install open3d
 RUN pip3 install Pillow==9.0.0
+
+# Install aruco lib
+WORKDIR /
+RUN wget https://sourceforge.net/projects/aruco/files/latest/download -O aruco-3.1.12.zip
+RUN unzip aruco-3.1.12.zip
+RUN cd aruco-3.1.12 && mkdir build && cd build && cmake .. && make -j$(nproc) && make install
+RUN sh -c 'echo "/usr/local/include/aruco/" > /etc/ld.so.conf.d/aruco.conf'
+RUN ldconfig
+RUN pip3 install aruco
+RUN pip3 install pytransform3d
+
+
 ENV PYTHONPATH="${PYTHONPATH}:/home/RVLuser/rvl-linux/modules/RVLPY"
 ENV PYTHONPATH="${PYTHONPATH}:/home/RVLuser/rvl-linux/python"

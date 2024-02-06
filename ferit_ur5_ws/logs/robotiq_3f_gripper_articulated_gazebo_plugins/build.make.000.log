@@ -1,4 +1,0 @@
-[35m[1mScanning dependencies of target RobotiqHandPlugin[0m
-[ 50%] [32mBuilding CXX object CMakeFiles/RobotiqHandPlugin.dir/src/RobotiqHandPlugin.cpp.o[0m
-[100%] [32m[1mLinking CXX shared library /home/RVLuser/ferit_ur5_ws/devel/.private/robotiq_3f_gripper_articulated_gazebo_plugins/lib/libRobotiqHandPlugin.so[0m
-[100%] Built target RobotiqHandPlugin

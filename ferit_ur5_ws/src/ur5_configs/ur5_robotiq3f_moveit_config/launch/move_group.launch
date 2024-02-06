@@ -1,5 +1,5 @@
 <launch>
-
+  <arg name="sim" default="false" />
   <!-- GDB Debug Option -->
   <arg name="debug" default="false" />
   <arg unless="$(arg debug)" name="launch_prefix" value="" />
@@ -37,7 +37,7 @@
                 " />
   -->
 
-  <arg name="load_robot_description" default="false" />
+  <arg name="load_robot_description" default="true" />
   <!-- load URDF, SRDF and joint_limits configuration -->
   <include file="$(dirname)/planning_context.launch">
     <arg name="load_robot_description" value="$(arg load_robot_description)" />
@@ -73,11 +73,12 @@
     <arg name="moveit_manage_controllers" value="true" />
     <arg name="moveit_controller_manager" value="$(arg moveit_controller_manager)" />
     <arg name="fake_execution_type" value="$(arg fake_execution_type)" />
+    <arg name="sim" default="$(arg sim)" />
   </include>
 
   <!-- Sensors Functionality -->
   <include ns="move_group" file="$(dirname)/sensor_manager.launch.xml" if="$(arg allow_trajectory_execution)">
-    <arg name="moveit_sensor_manager" value="ur5" />
+    <arg name="moveit_sensor_manager" value="ur5_robotiq-3f-gripper_robot" />
   </include>
 
   <!-- Start the actual move_group node/action server -->

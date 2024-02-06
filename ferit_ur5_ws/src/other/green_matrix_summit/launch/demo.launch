@@ -21,19 +21,19 @@
 
     <param name="load_model" type="bool" value="true" />
     
-    <node name="move_robot_home_node" pkg="ao_manipulation" type="node_move_robot_home.py" output="screen"/>
-    <node name="place_environment_node" pkg="ao_manipulation" type="node_place_environment.py"
+    <node name="move_robot_home_node" pkg="green_matrix_summit" type="node_move_robot_home.py" output="screen"/>
+    <node name="place_environment_node" pkg="green_matrix_summit" type="node_place_environment.py"
         output="screen" />
 
-    <node name="save_images_node" pkg="ao_manipulation" type="node_save_images_plys.py"
+    <node name="save_images_node" pkg="green_matrix_summit" type="node_save_images_plys.py"
         output="screen" >
         <param name="bag_used" type="bool" value="true" />
         <param name="skip" type="bool" value="true" />
     </node>
     
-    <node name="detect_cabinet_model_node" pkg="ao_manipulation" type="node_detect_cabinet_model.py"
+    <node name="detect_cabinet_model_node" pkg="green_matrix_summit" type="node_detect_cabinet_model.py"
         output="screen" />
-    <node name="push_operation_node" pkg="ao_manipulation" type="node_push_operation.py"
+    <node name="push_operation_node" pkg="green_matrix_summit" type="node_push_operation.py"
         output="screen" />
 
 

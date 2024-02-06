@@ -209,7 +209,8 @@ class PushOperator():
                     goal_poses.append(pose_goal)
 
                     # self.send_pose_to_robot(TT_B, wait=True, cartesian=True)
-                    # self.send_pose_to_robot(self.group, TT_B, wait=True)
+                    # print(len(goal_poses))
+                    # self.send_pose_to_robot(TT_B, wait=True)
             
             plan, _ = self.group.compute_cartesian_path(goal_poses, 0.01, 0.0)
             self.group.execute(plan, wait=True)

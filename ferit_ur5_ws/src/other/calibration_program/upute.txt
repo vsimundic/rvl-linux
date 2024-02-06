@@ -1,0 +1,105 @@
+* program za kalibraciju
+** postavljanje ros-a
+  Koraci preuzeti iz dokumentacije ROS-a.
+  $ sudo apt-get update && sudo apt-get dist-upgrade -y
+  $ sudo sh -c 'echo "deb http://packages.ros.org/ros/ubuntu $(lsb_release -sc) main" > /etc/apt/sources.list.d/ros-latest.list'
+  $ sudo apt-get install curl gnupg -y
+  $ curl -s https://raw.githubusercontent.com/ros/rosdistro/master/ros.asc | sudo apt-key add -
+  $ sudo apt-get update
+  $ sudo apt-get install ros-noetic-desktop-full -y
+  $ source /opt/ros/noetic/setup.bash
+  $ echo "source /opt/ros/noetic/setup.bash" >> ~/.bashrc
+  $ source ~/.bashrc
+  $ sudo apt install -y python3-rosdep python3-rosinstall python3-rosinstall-generator python3-wstool build-essential
+  $ sudo rosdep init
+  $ rosdep update
+  $ sudo apt-get install screen
+
+** postavljanje aruco programa
+  Instalacija python paketa https://pypi.org/project/aruco/
+  Koraci preuzeti sa http://miloq.blogspot.com/2012/12/install-aruco-ubuntu-linux.html
+  uz to dodao sam neke korake kako bi popravio greške koje su se pojavile.
+  Koraci se izvršavaju u otpakiranom direktoriju aruco 3.1.12 biblioteke preuzete sa https://sourceforge.net/projects/aruco/
+  
+  $ sudo apt-get install -y libopencv-core4.2 libopencv-core-dev python3-opencv python3-pip
+  $ mkdir build
+  $ cd build
+  $ cmake ..
+  $ make
+  $ sudo make install
+  $ sudo sh -c 'echo "/usr/local/include/aruco/" > /etc/ld.so.conf.d/aruco.conf'
+  $ sudo ln -s /usr/include/opencv4/ /usr/local/include/opencv4
+  $ sudo ldconfig
+  $ pip3 install aruco
+
+** postavljanje kamere
+  Koraci preuzeti iz https://docs.google.com/document/d/19OE_pc2tMfy3VETIK1PJH_OUdIKahD6PqMXgX4loG74/edit
+  Udev rules koji se dodaje preuzet je sa: https://github.com/IntelRealSense/librealsense/blob/master/config/99-realsense-libusb.rules
+
+  $ sudo apt-get install ros-noetic-realsense2-camera ros-noetic-rgbd-launch
+  $ sudo nano /etc/udev/rules.d/99-realsense-libusb.rules
+  
+  Kamera mi nije davala topic koji trebam kada sam pokrenuo.
+  $ roslaunch realsense2_camera rs_rgbd.launch enable_infra:=true filters:=pointcloud color_width:=1920 color_height:=1080
+  kada sam pokrenuo sa naredbom ispod kamera mi je dala topic koji trebam
+  $ roslaunch realsense2_camera rs_camera.launch enable_pointcloud:=true depth_width:=640 depth_height:=480 depth_fps:=15 color_width:=640 color_height:=480 color_fps:=15 align_depth:=true
+
+** instalacija MoveITa
+  $ sudo apt-get install ros-noetic-moveit -y
+  $ sudo apt-get install ros-noetic-trac-ik -y
+
+** postavljanje grippera
+  $ sudo apt-get install ros-noetic-soem
+  
+** biblioteka za pretvorbu između oblika pozicije i kvaterniona i oblika matrice
+ $ pip3 install transforms3d
+** postavljanje okruženja programa
+  $ mkdir -p calibration_program/catkin_ws/src && cd calibration_program/catkin_ws/src
+  $ git clone https://github.com/UniversalRobots/Universal_Robots_ROS_Driver.git 
+  $ git clone -b calibration_devel https://github.com/fmauch/universal_robot.git
+  $ git clone https://github.com/TAMS-Group/robotiq
+  $ cd robotiq
+  $ git checkout noetic-devel
+  $ cd ../..
+  $ sudo apt-get update && sudo apt-get upgrade -y
+  $ rosdep update
+  $ rosdep install --from-paths src --ignore-src -y
+  $ catkin_make
+
+** izrada kalibracije robota
+$ source devel/setup.bash
+Pokrenuti program za kalibraciju koji će stvoriti my_robot_calibration.yaml file
+
+$ mkdir ~/.ros/robot
+$ roslaunch ur_calibration calibration_correction.launch robot_ip:=192.168.22.14 target_filename:="robot/my_robot_calibration.yaml"
+
+$ cp ~/.ros/robot/my_robot_calibration.yaml $(pwd)/src/universal_robot/ur_description/urdf/my_robot_calibration.yaml
+Program za kalibraciju predanu putanju spaja sa "~/.ros/" te će se prikazanom naredbom stvoriti file ~/.ros/robot/my_robot_calibration.yaml koji sadrži rezultate kalibracije.
+
+** pokretanje programa za kalibraciju
+1. prozor
+ roscore
+
+2. prozor
+ roslaunch realsense2_camera rs_camera.launch enable_pointcloud:=true depth_width:=640 depth_height:=480 depth_fps:=15 color_width:=640 color_height:=480 color_fps:=15 align_depth:=true
+
+3. prozor
+ source devel/setup.bash
+ roslaunch ur_robot_driver ur5_bringup.launch robot_ip:=192.168.10.14 kinematics_config:="/home/RVLuser/ferit_ur5_ws/ur5_calibration.yaml"
+ roslaunch ur_robot_driver ur5_bringup.launch robot_ip:=192.168.22.14 kinematics_config:="my_robot_calibration.yaml"
+
+4. prozor
+  source devel/setup.bash
+  roslaunch ur5_moveit_config ur5_moveit_planning_execution.launch limited:=true
+
+5. prozor
+  source devel/setup.bash
+  roslaunch ur5_moveit_config moveit_rviz.launch config:=true
+
+6. prozor
+ source devel/setup.bash
+ rosrun robotiq_3f_gripper_control Robotiq3FGripperTcpNode.py 192.168.22.11
+
+7. prozor
+  source devel/setup.bash
+  rosrun calibration_program calibration.py
