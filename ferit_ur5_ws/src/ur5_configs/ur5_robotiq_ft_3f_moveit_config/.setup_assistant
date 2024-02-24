@@ -1,0 +1,11 @@
+moveit_setup_assistant_config:
+  URDF:
+    package: ur_description
+    relative_path: urdf/ur5_robotiq_ft_3f.urdf.xacro
+    xacro_args: ""
+  SRDF:
+    relative_path: config/ur5_robotiq_ft_3f.srdf
+  CONFIG:
+    author_name: Valentin Simundic
+    author_email: valentin.simundic@ferit.hr
+    generated_timestamp: 1708814235

@@ -1,0 +1,61 @@
+<?xml version="1.0"?>
+<robot name="ur5_robotiq_ft_3f" xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <xacro:include filename="$(find ur_description)/urdf/inc/ur5_macro.xacro"/>
+  <!-- <xacro:include filename="$(find robotiq_description)/urdf/robotiq_85_gripper.urdf.xacro" /> -->
+  <!-- <xacro:robotiq-3f-gripper_articulated prefix=""/> -->
+  <xacro:include filename="$(find robotiq_ft_sensor)/urdf/robotiq_ft300.urdf.xacro" />
+  <xacro:include filename="$(find robotiq_3f_gripper_visualization)/cfg/robotiq-3f-gripper_articulated_fixed_pinch_open.urdf"/>
+
+  <xacro:ur5_robot prefix="" />
+
+  <xacro:robotiq_ft300 parent="tool0" prefix="">
+      <origin xyz="0 0 -0.004" rpy="0 0 0"/> 
+  </xacro:robotiq_ft300>
+  
+  <link name="gripper_coupler">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <cylinder radius="0.04" length="0.013" />
+      </geometry>
+      <material name="Robotiq-Grey">
+          <color rgba="0.4 0.4 0.4 1.0"/>
+      </material>
+    </visual>
+
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <cylinder radius="0.04" length="0.013" />
+      </geometry>
+    </collision>
+  </link>
+
+  <joint name="ft_sensor_gripper_coupler_joint" type="fixed">
+    <!-- <origin xyz="0 0 0.0535" rpy="${-pi/2.0} ${-pi} ${-pi/4.0}" /> -->
+    <!-- <origin xyz="0 0 0.0065" rpy="0 0 0" /> -->
+    <origin xyz="0 0 -0.0065" rpy="${pi} 0 0" />
+    <parent link="ft300_sensor"/>
+    <child link="gripper_coupler"/>
+  </joint>
+
+  <joint name="gripper_coupler_robotiq_3f_joint" type="fixed">
+    <origin xyz="0 0 ${0.0535 + 0.0065}" rpy="${pi/2.0} ${0} ${-pi/4.0}" />
+    <parent link="gripper_coupler"/>
+    <child link="palm"/>
+  </joint>
+
+  <link name="world" />
+
+  <joint name="virtual_joint" type="fixed">
+    <parent link="world" />
+    <child link = "base_link" />
+    <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+  </joint>
+
+
+  <!-- Load gazebo_ros_control -->
+  <!-- <xacro:include filename="$(find ur5_description)/urdf/common.gazebo.xacro" /> -->
+
+</robot>
