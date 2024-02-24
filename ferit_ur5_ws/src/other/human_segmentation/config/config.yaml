@@ -1,0 +1,32 @@
+# Load path
+# load_path_root: "/home/RVLuser/human_segmentation_ws/test/Exp-Femto_test-20230918/femto_test/bags" # Path to bags
+load_path_root: "/home/RVLuser/ferit_ur5_ws/data/Exp-cabinet_open-20240217/bags" # Path to bags
+
+# Save path
+# save_path_root: "/home/RVLuser/human_segmentation_ws/test/Exp-Femto_test-20230918/femto_test/sequence_images"
+save_path_root: "/home/RVLuser/ferit_ur5_ws/data/Exp-cabinet_open-20240217/sequence_images"
+
+# Save folders
+rgb_folder: "rgb"
+rgb_seg_folder: "rgb_seg"
+depth_seg_folder: "depth_seg"
+ply_seg_folder: "PLY_seg"
+
+# Images and rosbag config
+camera_fps: 30
+wanted_fps: 5
+# rgb_topic: "/camera/color/image_raw"
+# depth_topic: "/camera/depth/image_raw"
+# camera_info_topic: "/camera/color/camera_info"
+rgb_topic: "/camera/rgb/image_raw"
+depth_topic: "/camera/depth_registered/image_raw"
+camera_info_topic: "/camera/rgb/camera_info"
+bag_reproduce_rate: 0.5
+
+# Detectron2 config
+model_path: "/home/RVLuser/detectron2/projects/TensorMask/checkpoints/tensormask_R_50_FPN_1x.pkl"
+config_path: "/home/RVLuser/detectron2/projects/TensorMask/configs/tensormask_R_50_FPN_1x.yaml"
+roi_heads_threshold: 0.6
+instance_threshold: 0.5
+visualize_images: True
+save_images: True

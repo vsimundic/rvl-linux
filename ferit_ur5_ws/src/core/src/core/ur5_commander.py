@@ -1,4 +1,5 @@
 import rospy
+import roslib
 import moveit_commander
 from geometry_msgs.msg import Pose, PoseStamped
 from tf.transformations import quaternion_from_matrix, quaternion_matrix
@@ -8,8 +9,13 @@ from core.paths_packages import get_package_path_from_name
 from trac_ik_python.trac_ik import IK
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 from control_msgs.msg import FollowJointTrajectoryAction, FollowJointTrajectoryGoal
+roslib.load_manifest('robotiq_3f_gripper_control')
+from robotiq_3f_gripper_articulated_msgs.msg import Robotiq3FGripperRobotOutput, Robotiq3FGripperRobotInput
 from actionlib import SimpleActionClient
-from core.transforms import get_frame_transform
+from core.transforms import get_frame_transform, matrix_to_pose
+import socket
+import time
+
 
 class UR5Commander():
     def __init__(self):
@@ -17,17 +23,25 @@ class UR5Commander():
         self.__group_name = 'arm'
         self.__group = moveit_commander.MoveGroupCommander(self.__group_name)
         self.__scene = moveit_commander.PlanningSceneInterface()
-        self.ik = IK('base_link', 'tool0', timeout=0.05, solve_type="Distance")
+        self.ik = IK('base_link', 'tool0', timeout=0.05, solve_type='Distance')
+        self.gripper_3f = Robotiq3FGripperRobotOutput()
+        self.__gripper_pub = rospy.Publisher('Robotiq3FGripperRobotOutput', Robotiq3FGripperRobotOutput, queue_size=10)   
+        self.robot_ip = '192.168.10.14'
+        self.robot_port = 30002
 
         self.T_B_S = np.array(np.load(os.path.join(get_package_path_from_name('gazebo_push_open'), 'config', 'T_B_S.npy')))
         self.T_G_T = np.array(np.load(os.path.join(get_package_path_from_name('gazebo_push_open'), 'config', 'T_G_T.npy')))
-        self.joint_values_init = np.array(np.load(os.path.join(get_package_path_from_name('gazebo_push_open'), 'config', 'joint_values_init.npy')))
-        # self.T_G_T[2, 3] -= 0.005
         self.T_G_T[2, 3] = 0.115
+        # self.T_G_T[2, 3] -= 0.005
+        self.T_C_T = np.array(np.load(os.path.join(get_package_path_from_name('gazebo_push_open'), 'config', 'T_C_T.npy')))
+        
+        self.joint_values_init = np.array(np.load(os.path.join(get_package_path_from_name('gazebo_push_open'), 'config', 'joint_values_init.npy')))
         self.T_T_B_home = np.array(np.load(os.path.join(get_package_path_from_name('gazebo_push_open'), 'config', 'T_T_B_home.npy')))
 
         self.__follow_joint_trajectory_client = SimpleActionClient('/trajectory_controller/follow_joint_trajectory', FollowJointTrajectoryAction)
         
+        self.URScript_save_path = os.path.join(get_package_path_from_name('gazebo_push_open'), 'config', 'script.txt')
+
         self.__create_init_scene()
 
         # test
@@ -52,7 +66,7 @@ class UR5Commander():
 
         if not is_on_scene:
             box_pose = PoseStamped()
-            box_pose.header.frame_id = "base_link"
+            box_pose.header.frame_id = 'base_link'
             box_pose.pose.orientation.w = 1.0
             box_pose.pose.position.z = -(0.01 + self.T_B_S[2, 3])
             box_name = 'ground_box'
@@ -154,6 +168,7 @@ class UR5Commander():
         joint_trajectory.joint_names = self.__robot.get_joint_names(self.__group_name)[:6]
         
         for i, joint_values in enumerate(joint_values_list):
+            print(joint_values)
             point = JointTrajectoryPoint()
             point.positions = joint_values
             # point.velocities = [0.1]*6
@@ -191,6 +206,119 @@ class UR5Commander():
         np.save(file_path, np.array(joint_values))
 
 
+    def generate_URScript(self, q_array:np.ndarray, with_force_mode:bool):
+        n = q_array.shape[0]
+        txt = ''
+        txt += 'def func():\n'
+        if with_force_mode:
+            txt += 'force_mode(tool_pose(), [0, 0, 1, 0, 0, 0], [0.0, 0.0, 25.0, 0.0, 0.0, 0.0], 2, [0.2, 0.2, 0.1, 0.60, 0.60, 0.35])\n'
+        for i in range(n):
+            txt += 'movej(' + str(q_array[i].tolist()) + ', a=1.4, v=0.2)\n'
+        
+        # if with_force_mode:
+        #     txt += 'end_force_mode()\n'
+        
+        txt += 'end\n'
+        txt += 'func()\n'
+
+        with open(self.URScript_save_path, 'w') as f:
+            f.write(txt)
+            f.close()
+
+    # def generate_URScript_poses(self, T_array:np.ndarray):
+    #     n = q_array.shape[0]
+    #     txt = ''
+    #     txt += 'def func():\n'
+    #     for i in range(n):
+    #         txt += 'movej(' + str(q_array[i].tolist()) + ', a=1.4, v=0.2)\n'
+    #     txt += 'end\n'
+    #     txt += 'func()\n'
+    #     with open(self.URScript_save_path, 'w') as f:
+    #         f.write(txt)
+    #         f.close()
+
+
+    def send_URScript(self):
+
+        s = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
+        s.connect((self.robot_ip, self.robot_port))
+        f = open(self.URScript_save_path, 'rb')
+        l = f.read()
+        s.sendall(l)
+    
+        print('URScript sent!')
+        data = s.recv(1024)
+        s.close()
+
+    def zero_ft_sensor(self):
+
+        s = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
+        s.connect((self.robot_ip, self.robot_port))
+
+        time.sleep(1)
+        s.sendall(("zero_ftsensor()" + "\n").encode('utf-8')) 
+        time.sleep(1)
+        data=s.recv(1024)
+        s.close()
+
+    def open_gripper_pinch(self):
+
+        self.gripper_3f.rACT = 1
+        self.gripper_3f.rGTO = 1
+        self.gripper_3f.rSPA = 255
+        self.gripper_3f.rFRA = 150
+        self.gripper_3f.rATR = 0
+        self.gripper_3f.rMOD = 1
+        self.gripper_3f.rPRA = 0
+        
+        # 3 second delay to let the gripper open
+        start_time = time.time()
+        
+        # TODO: wait with Robotiq3FGripperInput message
+        while True:
+            self.__gripper_pub.publish(self.gripper_3f)
+            rospy.sleep(0.1)
+            end_time = time.time()
+            if float(end_time - start_time) >= 3.0: # 3s
+                break
+
+    def close_gripper_pinch(self):
+
+        self.gripper_3f.rACT = 1
+        self.gripper_3f.rGTO = 1
+        self.gripper_3f.rSPA = 255
+        self.gripper_3f.rFRA = 150
+        self.gripper_3f.rATR = 0
+        self.gripper_3f.rMOD = 1
+        self.gripper_3f.rPRA = 255
+        
+        # 3 second delay to let the gripper open
+        start_time = time.time()
+        
+        # TODO: wait with Robotiq3FGripperInput message
+        while True:
+            self.__gripper_pub.publish(self.gripper_3f)
+            rospy.sleep(0.1)
+            end_time = time.time()
+            if float(end_time - start_time) >= 3.0: # 3s
+                break
+
+
+    def get_inverse_kin(self, q_init, T):
+
+        pose_ = matrix_to_pose(T)
+        
+        q = self.ik.get_ik(q_init, pose_.position.x, 
+                       pose_.position.y, 
+                       pose_.position.z,
+                       pose_.orientation.x, 
+                       pose_.orientation.y, 
+                       pose_.orientation.z, 
+                       pose_.orientation.w)
+        if q is None:
+            return None
+        return list(q)
+
     @staticmethod
     def __matrix_to_pose(T: np.ndarray):
         q = quaternion_from_matrix(T) # xyzw
@@ -204,6 +332,7 @@ class UR5Commander():
         pose.position.y = T[1, 3]
         pose.position.z = T[2, 3]
         return pose
+    
     
     @staticmethod
     def __matrix_to_pose_stamped(T: np.ndarray, frame_id: str):

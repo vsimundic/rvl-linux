@@ -99,6 +99,7 @@ namespace RVL
 			SE3Point pose;
 			float cost;
 			uchar flags;
+			int iSE3Point;
 			int iParent;
 			int iSibling;
 			int iFirstChild;

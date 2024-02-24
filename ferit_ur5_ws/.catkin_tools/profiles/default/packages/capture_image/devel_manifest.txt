@@ -1,0 +1,5 @@
+other/capture_image
+/home/RVLuser/ferit_ur5_ws/devel/.private/capture_image/cmake.lock /home/RVLuser/ferit_ur5_ws/devel/./cmake.lock
+/home/RVLuser/ferit_ur5_ws/devel/.private/capture_image/share/capture_image/cmake/capture_imageConfig-version.cmake /home/RVLuser/ferit_ur5_ws/devel/share/capture_image/cmake/capture_imageConfig-version.cmake
+/home/RVLuser/ferit_ur5_ws/devel/.private/capture_image/share/capture_image/cmake/capture_imageConfig.cmake /home/RVLuser/ferit_ur5_ws/devel/share/capture_image/cmake/capture_imageConfig.cmake
+/home/RVLuser/ferit_ur5_ws/devel/.private/capture_image/lib/pkgconfig/capture_image.pc /home/RVLuser/ferit_ur5_ws/devel/lib/pkgconfig/capture_image.pc

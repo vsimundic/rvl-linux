@@ -72,6 +72,14 @@ def pose_stamped_to_matrix(pose: PoseStamped):
     T[:3, 3] = np.array(t_)
     return T
 
+def pose_to_matrix(pose: Pose):
+    pose_ = pose
+    q_ = [pose_.orientation.x, pose_.orientation.y, pose_.orientation.z, pose_.orientation.w]
+    t_ = np.array([pose_.position.x, pose_.position.y, pose_.position.z])
+    T = quaternion_matrix(q_)
+    T[:3, 3] = np.array(t_)
+    return T
+
 def get_frame_transform(parent_frame: str, child_frame: str):
     listener = tf.TransformListener()
     rate = rospy.Rate(1)

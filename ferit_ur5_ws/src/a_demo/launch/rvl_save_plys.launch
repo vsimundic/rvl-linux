@@ -1,0 +1,5 @@
+<launch>
+    <param name="config_file" type="string" value="rvl_save_plys_config.yaml"/>
+    
+    <node name="node_rvl_save_plys" pkg="core" type="node_rvl_save_plys.py" output="screen"/>
+</launch>

@@ -42,14 +42,22 @@ if __name__ == '__main__':
     # Cabinet pose in world
     cabinet_position = [np.random.uniform(cabinet_pose['min_x'], cabinet_pose['max_x']),
                         np.random.uniform(cabinet_pose['min_y'], cabinet_pose['max_y']),
-                        door_params[1]/2 + 0.018 + 0.01] # half of door height + depth of bottom panel + double static moving part distance
+                        door_params[1]/2 + 0.018 + 0.01 + 0.02] # half of door height + depth of bottom panel + double static moving part distance
     rotz_deg = np.random.uniform(cabinet_pose['rot_angle_min_deg'], cabinet_pose['rot_angle_max_deg'])
+
+    T_A_S = np.eye(4)
+    T_A_S[:3, 3] = np.array(cabinet_position)
+    Tz = np.eye(4)
+    Tz[:3, :3] = rot_z(np.radians(rotz_deg))
+    T_A_S = T_A_S @ Tz
+
 
     # Create a cabinet object
     cabinet_model = Cabinet(door_params=np.array(door_params), 
                             axis_pos=cabinet_pose['axis_pos'],
-                            position=np.array(cabinet_position),
-                            rotz_deg=rotz_deg,
+                            T_A_S=T_A_S,
+                            # position=np.array(cabinet_position),
+                            # rotz_deg=rotz_deg,
                             save_path=config['cabinet_urdf_save_path'])
     
     # Save cabinet mesh to a file
@@ -85,7 +93,8 @@ if __name__ == '__main__':
     # path_planner.load_feasible_tool_contact_poses(feasible_poses_args['feasible_poses_path'])
     path_planner.load_feasible_tool_contact_poses(feasible_poses_args['feasible_poses_path'])
     path_planner.set_robot_pose(robot.T_B_S)
-    T_A_S = cabinet_model.T_O_S @ cabinet_model.T_A_O_init
+    # T_A_S = cabinet_model.T_O_S @ cabinet_model.T_A_O_init
+
     np.save('/home/RVLuser/ferit_ur5_ws/src/cosper/gazebo_push_open/config/T_A_S_temp.npy', T_A_S)
     path_planner.set_door_model_params(
                                        # T_A_S,
@@ -93,20 +102,42 @@ if __name__ == '__main__':
                                        cabinet_model.w_door,
                                        cabinet_model.h_door,
                                        0.0, # rx
-                                    #    -(cabinet_model.w_door/2. - cabinet_model.axis_distance), # ry
-                                       -0.14, # ry
-                                       1.0, # opening direction
+                                       -(cabinet_model.w_door/2. - cabinet_model.axis_distance), # ry
+                                       -1.0, # opening direction
                                        cabinet_model.static_side_width,
                                        cabinet_model.moving_to_static_part_distance) 
     path_planner.set_door_pose(T_A_S)
-    T_G_S_init = robot.T_B_S @ robot.T_T_B_home @ robot.T_G_T
-    np.save('/home/RVLuser/ferit_ur5_ws/src/cosper/gazebo_push_open/config/T_G_S_init_temp.npy', T_G_S_init)
     
+    # T_G_S_init = robot.T_B_S @ robot.T_T_B_home @ robot.T_G_T
+    # np.save('/home/RVLuser/ferit_ur5_ws/src/cosper/gazebo_push_open/config/T_G_S_init_temp.npy', T_G_S_init)
     
     # Get points for the whole path
-    T_D_S_gazebo = cabinet_model.get_door_panel_RF_wrt_world()
-    T_G_0, joint_values_list = path_planner.path2(T_G_S_init)
+    # T_D_S_gazebo = cabinet_model.get_door_panel_RF_wrt_world()
+    # T_G_0, joint_values_list = path_planner.path2(T_G_S_init)
 
+    # rospy.sleep(1.5)
+    # robot.send_named_pose('up', wait=True)
+    q_init = np.load('/home/RVLuser/ferit_ur5_ws/src/cosper/gazebo_push_open/config/q_init.npy')
+    # q_init = robot.get_current_joint_values()
+    # np.save('/home/RVLuser/ferit_ur5_ws/src/cosper/gazebo_push_open/config/q_init.npy', np.array(q_init))
+
+
+
+    robot.send_joint_values_to_robot(q_init.tolist())
+    # q_init = np.array(q_init)
+
+    q_init[0] += np.pi
+    q_init[5] += np.pi
+    q_init[q_init>np.pi]-=(2.0*np.pi)     
+    q_init[q_init<-np.pi]+=(2.0*np.pi)
+    # q_init[0, :] = robot.joint_values_init
+    
+    print(np.rad2deg(q_init[:]))
+
+    T_G_0_array, q = path_planner.path2(np.array(q_init))
+
+
+    """
     # path_planner.set_environment_state(config['feasible_poses']['dd_state_deg'])
     # T_D_S_rvl = path_planner.get_T_DD_S()
     # T_F_S_gazebo = cabinet_model.T_O_S @ cabinet_model.T_F_O
@@ -193,27 +224,31 @@ if __name__ == '__main__':
 
     # joint_values_list[joint_values_list[:,5]<-np.pi,0]+=(2.0*np.pi)
     # joint_values_list[joint_values_list[:,5]>np.pi,0]-=(2.0*np.pi)
+    """
 
-    joint_values_list[:, 0] += np.pi
-    joint_values_list[:, 5] += np.pi
-    joint_values_list[joint_values_list>np.pi]-=(2.0*np.pi)     
-    joint_values_list[joint_values_list<-np.pi]+=(2.0*np.pi)
-    joint_values_list[0, :] = robot.joint_values_init
+    q[:, 0] += np.pi
+    q[:, 5] += np.pi
+    q[q>np.pi]-=(2.0*np.pi)     
+    q[q<-np.pi]+=(2.0*np.pi)
+    # q[0, :] = robot.joint_values_init
 
-    for i in range(joint_values_list.shape[0]):
-        joints = list(joint_values_list[i])
-        joints = [float(joint) for joint in joints]
-        robot.send_joint_values_to_robot(joints)
+    # for i in range(q.shape[0]):
+    #     joints = list(q[i])
+    #     joints = [float(joint) for joint in joints]
+    #     robot.send_joint_values_to_robot(joints)
         
-        T_T_B = robot.get_current_tool_pose()
-        T_G_B = T_T_B @ robot.T_G_T
-        T_G_B_rvl = T_G_0[i]
-        pass
+    #     T_T_B = robot.get_current_tool_pose()
+    #     T_G_B = T_T_B @ robot.T_G_T
+    #     T_G_B_rvl = T_G_0[i]
+    #     pass
 
 
-    # robot.send_multiple_joint_space_poses_to_robot(joint_values_list, wait=True)
+
+
+    robot.send_multiple_joint_space_poses_to_robot(q, wait=True)
+    # q_init[0] += np.pi
+    # robot.send_multiple_joint_space_poses_to_robot([q_init], wait=True)
     
-
 
     # TEST
     # robot.send_multiple_joint_space_poses_to_robot([])
@@ -222,5 +257,5 @@ if __name__ == '__main__':
     # # Passing poses 
     # robot.send_multiple_poses_to_robot(T_T_B_arr, wait=True, cartesian=True)
 
-    rospy.sleep(1.5)
-    robot.send_named_pose('up')
+    # rospy.sleep(1.5)
+    # robot.send_named_pose('up')

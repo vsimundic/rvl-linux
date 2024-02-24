@@ -242,7 +242,7 @@ void PlanarSurfelDetector::RandomIndices(Array<int> &A)
 #ifdef RVLPLANARSURFELDETECTOR_PSEUDO_RANDOM_DEBUG
 #ifdef RVLLINUX
 	//FILE *fp = fopen((std::string(precomputesFolder) + "/pseudorandom1000000.dat").data(), "rb");
-	FILE *fp = fopen("/home/robert/Documents/RVL/RVL/pseudorandom1000000.dat", "rb");
+	FILE *fp = fopen("/home/RVLuser/rvl-linux/pseudorandom1000000.dat", "rb");
 #else
 	FILE *fp = fopen("..\\pseudorandom1000000.dat", "rb");
 #endif

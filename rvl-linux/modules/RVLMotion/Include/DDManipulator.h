@@ -140,9 +140,14 @@ namespace RVL
 			Vector3<float>* c_S_rot,
 			Vector3<float>* c_S,
 			Pose3D* pPose_G_S);
+		bool FeasiblePose(
+			Pose3D* pPose_G_0,
+			float* SDF,
+			float *q,
+			bool bApproach = false);
 		void Path(Pose3D * pPose_G_S_init);
 		bool Path2(
-			Pose3D* pPose_G_S_init,
+			float* qInit,
 			Array<Pose3D> &poses_G_0,
 			Array2D<float> &robotJoints);
 		void TileFeasibleToolContactPoses(
@@ -161,6 +166,7 @@ namespace RVL
 			float opening_direction,
 			float static_side_width,
 			float moving_to_static_part_distance);
+		void UpdateStaticParams();
 		void SetDoorPose(Pose3D pose_A_S);
 		void UpdateStaticPose();
 		void LoadFeasibleToolContactPoses(std::string contactPosesFileName);
@@ -180,6 +186,9 @@ namespace RVL
 		vtkSmartPointer<vtkActor> VisualizeRobot(float* q);
 		vtkSmartPointer<vtkActor> VisualizeDoorPenel();
 		void SetVisualizeVNEnvironmentModel();
+
+	private:
+		void UpdateDoorReferenceFrames();
 
 	public:
 		CRVLMem* pMem;
@@ -249,6 +258,7 @@ namespace RVL
 		float visionTol;    // m
 		float minDistanceToAxis;	// m
 		bool bLock_T_G_DD;
+		float posCostMaxDist = 0.03f;
 
 		// Feasible tool contact poses.
 
@@ -271,6 +281,8 @@ namespace RVL
 		float csMaxSurfaceContactAngle;
 		MOTION::Plane freeSpacePlanes_S[4];
 		Pose3D pose_DD_0;
+		float default_tool_P1_G[3];
+		float default_tool_P2_G[3];
 	};
 }
 

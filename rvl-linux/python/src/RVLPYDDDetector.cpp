@@ -113,7 +113,7 @@ void PYDDDetector::create(
 	detector.models.n = 1;
 	float cuboidSize[] = { 0.4f, 0.2f, 0.018f };
 	detector.CreateCuboidModel2(cuboidSize, 1.0f / 0.02f, detector.models.Element);
-	hypFileName = "";
+	hypFileName = "/home/RVLuser/ferit_ur5_ws/data/Exp-cabinet_open-20240215/sequence_images/cabinet_open2-20240215";
 }
 
 void PYDDDetector::set_memory_storage_size(

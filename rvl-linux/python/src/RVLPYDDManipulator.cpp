@@ -50,7 +50,7 @@ public:
 		int mem0Size,
 		int memSize);
 	void clear();
-	py::tuple path2(py::array T_G_S_init);
+	py::tuple path2(py::array q_init);
 	py::array approach_path(py::array T_G_S_contact);
 	void load_tool_model(std::string toolModelDir);
 	void set_environment_state(double state);
@@ -119,19 +119,22 @@ void PYDDManipulator::clear()
 	delete manipulator.pMem;
 }
 
-py::tuple PYDDManipulator::path2(py::array T_G_S_init)
+py::tuple PYDDManipulator::path2(py::array q_init)
 {
-	double *T_G_S_init_ = (double *)T_G_S_init.request().ptr;	
-	Pose3D pose_G_S_init;
-	RVLHTRANSFMXDECOMP(T_G_S_init_, pose_G_S_init.R, pose_G_S_init.t);
-	FILE *fpDebug = fopen("pose_G_S_init-2.txt", "w");
-    float T_G_S_init__[16];
-    RVLHTRANSFMX(pose_G_S_init.R, pose_G_S_init.t, T_G_S_init__);
-    PrintMatrix(fpDebug, T_G_S_init__, 4, 4);
-    fclose(fpDebug);
+	double *q_init_ = (double *)q_init.request().ptr;
+	float q_init__[6];
+	for(int i = 0; i < manipulator.robot.n; i++)
+		q_init__[i] = q_init_[i];
+	// Pose3D pose_G_S_init;
+	// RVLHTRANSFMXDECOMP(T_G_S_init_, pose_G_S_init.R, pose_G_S_init.t);
+	// FILE *fpDebug = fopen("pose_G_S_init-2.txt", "w");
+    // float T_G_S_init__[16];
+    // RVLHTRANSFMX(pose_G_S_init.R, pose_G_S_init.t, T_G_S_init__);
+    // PrintMatrix(fpDebug, T_G_S_init__, 4, 4);
+    // fclose(fpDebug);
 	Array<Pose3D> poses_G_0;
 	Array2D<float> robotJoints;	
-	if(!manipulator.Path2(&pose_G_S_init, poses_G_0, robotJoints))
+	if(!manipulator.Path2(q_init__, poses_G_0, robotJoints))
 		poses_G_0.n = 1;
 	auto T_G_0 = py::array(py::buffer_info(
 		nullptr,

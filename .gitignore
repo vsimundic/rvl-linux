@@ -3,9 +3,10 @@ rvl-linux/data/*
 human_segmentation_ws/build
 human_segmentation_ws/devel
 human_segmentation_ws/test/*
-ferit_ur5_ws/build/*
-ferit_ur5_ws/devel/*
-ferit_ur5_ws/logs/*
+ferit_ur5_ws/build
+ferit_ur5_ws/devel
+ferit_ur5_ws/logs
+ferit_ur5_ws/data
 ferit_ur5_ws/src/ur5_configs/stomp/
 ferit_ur5_ws/src/ur5_configs/stomp_ros/
 data

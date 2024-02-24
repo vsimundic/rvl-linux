@@ -43,7 +43,8 @@ if __name__ == '__main__':
     # image_topic = '/camera/color/image_raw'
     image_topic = '/camera/rgb/image_rect_color'
     move_group_name = 'arm'
-    camera_params_path = os.path.join(os.path.dirname(__file__), "camera_parameters_asus.yml")
+    # camera_params_path = os.path.join(os.path.dirname(__file__), "camera_parameters_asus.yml")
+    camera_params_path = os.path.join(os.path.dirname(__file__), "kamera-parameters.yml")
     aruco_dict_path = os.path.join(os.path.dirname(__file__), "4x4_1000.dict")
     save_E_T_C_path = os.path.join(os.path.dirname(__file__), "T_C_T.npy")
 

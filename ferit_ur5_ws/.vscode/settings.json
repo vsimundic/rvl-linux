@@ -5,6 +5,7 @@
         "/home/RVLuser/rvl-linux/python/build/lib",
         "/home/RVLuser/rvl-linux/python",
         "/home/RVLuser/ferit_ur5_ws/src/core/src",
+        "/home/RVLuser/ferit_ur5_ws/src/human_segmentation/src",
         "/home/RVLuser/ferit_ur5_ws/src/cosper/gazebo_push_open/src",
         "/home/RVLuser/ferit_ur5_ws/src/a_demo"
     ],
@@ -14,6 +15,7 @@
         "/home/RVLuser/rvl-linux/python/build/lib",
         "/home/RVLuser/rvl-linux/python",
         "/home/RVLuser/ferit_ur5_ws/src/core/src",
+        "/home/RVLuser/ferit_ur5_ws/src/human_segmentation/src",
         "/home/RVLuser/ferit_ur5_ws/src/cosper/gazebo_push_open/src",
         "/home/RVLuser/ferit_ur5_ws/src/a_demo"
     ],

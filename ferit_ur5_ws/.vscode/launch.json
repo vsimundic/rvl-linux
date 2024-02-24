@@ -51,7 +51,42 @@
                 "gzserver"
             ],
             "type": "ros"
+        },
+        {
+            "name": "ROS: capture images",
+            "request": "launch",
+            "target": "${workspaceFolder}/src/a_demo/launch/save_images.launch",
+            "launch": [
+                "rviz",
+                "gz",
+                "gzclient",
+                "gzserver"
+            ],
+            "type": "ros"
+        },
+        {
+            "name": "ROS: real robot",
+            "request": "launch",
+            "target": "${workspaceFolder}/src/a_demo/launch/test_real_robot.launch",
+            "launch": [
+                "rviz",
+                "gz",
+                "gzclient",
+                "gzserver"
+            ],
+            "type": "ros"
+        },
+        {
+            "name": "ROS: GT real robot",
+            "request": "launch",
+            "target": "${workspaceFolder}/src/a_demo/launch/test_gt_real_robot.launch",
+            "launch": [
+                "rviz",
+                "gz",
+                "gzclient",
+                "gzserver"
+            ],
+            "type": "ros"
         }
-
     ]
 }

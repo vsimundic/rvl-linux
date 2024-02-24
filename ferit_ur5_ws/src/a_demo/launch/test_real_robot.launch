@@ -1,0 +1,3 @@
+<launch>
+    <node name="node_test_real_cabinet" pkg="gazebo_push_open" type="test_real_cabinet.py" output="screen"/>
+</launch>

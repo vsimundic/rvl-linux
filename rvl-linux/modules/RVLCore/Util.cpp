@@ -107,7 +107,7 @@ void RVL::RandomColor(unsigned char *color)
 	color[2] = (unsigned char)(rand() % 256);
 }
 
-// VIDOVIC
+//VIDOVIC
 bool RVL::GetAngleAxis(float *R, float *V, float &theta)
 {
 	float k = 0.5 * (R[0 * 3 + 0] + R[1 * 3 + 1] + R[2 * 3 + 2] - 1.0);
@@ -148,9 +148,9 @@ void RVL::PrintMatrix(FILE *fp, double *A, int n, int m)
 
 	int i, j;
 
-	for (i = 0; i < n; i++)
+	for(i = 0; i < n; i++)
 	{
-		for (j = 0; j < m; j++, pA++)
+		for(j = 0; j < m; j++, pA++)
 			fprintf(fp, "%lf\t", *pA);
 
 		fprintf(fp, "\n");
@@ -186,13 +186,13 @@ void RVL::GetFileNameAndPath(
 }
 
 void RVL::LoadCameraParametersFromFile(
-	char *cfgFileName,
-	Camera &camera,
+	char* cfgFileName,
+	Camera& camera,
 	CRVLMem *pMem)
 {
 	CRVLParameterList paramList;
 	paramList.m_pMem = pMem;
-	RVLPARAM_DATA *pParamData;
+	RVLPARAM_DATA* pParamData;
 	paramList.Init();
 	pParamData = paramList.AddParam("Camera.fu", RVLPARAM_TYPE_FLOAT, &(camera.fu));
 	pParamData = paramList.AddParam("Camera.fv", RVLPARAM_TYPE_FLOAT, &(camera.fv));
@@ -209,20 +209,20 @@ void RVL::ReadLine(
 	char *line)
 {
 	fgets(line, nCharacters, fp);
-	if (line[strlen(line) - 1] == 10)
+	if(line[strlen(line) - 1] == 10)
 		line[strlen(line) - 1] = '\0';
-	if (line[strlen(line) - 1] == 13)
+	if(line[strlen(line) - 1] == 13)
 		line[strlen(line) - 1] = '\0';
 }
 
 int RVL::FurthestPoint(
-	float *P,
+	float* P,
 	Array<Vector3<float>> points,
-	float *V)
+	float* V)
 {
 	float maxDist = 0.0f;
 	float dist;
-	Vector3<float> *pPt;
+	Vector3<float>* pPt;
 	float dP[3], P_[3];
 	int iFurthestPt;
 	float fTmp;
@@ -246,7 +246,7 @@ int RVL::FurthestPoint(
 	return iFurthestPt;
 }
 
-void RVL::CreateConvexTemplate6(float *A)
+void RVL::CreateConvexTemplate6(float* A)
 {
 	memset(A, 0, 6 * 3 * sizeof(float));
 	for (int i = 0; i < 3; i++)
@@ -256,13 +256,13 @@ void RVL::CreateConvexTemplate6(float *A)
 	}
 }
 
-void RVL::CreateConvexTemplate18(float *A)
+void RVL::CreateConvexTemplate18(float* A)
 {
 	CreateConvexTemplate6(A);
 	memset(A + 3 * 6, 0, 12 * 3 * sizeof(float));
 	int k = 6;
 	float cs;
-	float *A1, *A2, *A_;
+	float* A1, * A2, * A_;
 	float fTmp;
 	for (int i = 0; i < 6; i++)
 	{
@@ -282,7 +282,7 @@ void RVL::CreateConvexTemplate18(float *A)
 	}
 }
 
-void RVL::CreateConvexTemplate66(float *A)
+void RVL::CreateConvexTemplate66(float* A)
 {
 	float h = 0.25f * PI;
 	float q = 0.5f * h;
@@ -291,9 +291,9 @@ void RVL::CreateConvexTemplate66(float *A)
 	float sq = sin(q);
 	float cq = cos(q);
 
-	float *NT = new float[3 * 13];
+	float* NT = new float[3 * 13];
 
-	float *N;
+	float* N;
 
 	N = NT;
 	RVLSET3VECTOR(N, 0.0f, 0.0f, 1.0f);
@@ -314,10 +314,10 @@ void RVL::CreateConvexTemplate66(float *A)
 		7, 0, 12,
 		8, 2, 11,
 		9, 1, 12,
-		10, 11, 12};
+		10, 11, 12 };
 
 	int i;
-	float *N_, *N__;
+	float* N_, * N__;
 	float fTmp;
 
 	for (i = 0; i < 8; i++)
@@ -332,7 +332,7 @@ void RVL::CreateConvexTemplate66(float *A)
 	float R[] = {
 		0.0f, 0.0f, -1.0f,
 		1.0f, 0.0f, 0.0f,
-		0.0f, -1.0f, 0.0f};
+		0.0f, -1.0f, 0.0f };
 
 	float R_[9];
 
@@ -377,7 +377,7 @@ void RVL::CreateConvexTemplate66(float *A)
 void RVL::CreateTemplateLookUpTable(
 	Array2D<float> A,
 	int resolution,
-	ConvexTemplateLookUpTable &CTLUT)
+	ConvexTemplateLookUpTable& CTLUT)
 {
 	CTLUT.LUT.a = CTLUT.LUT.b = CTLUT.LUT.c = resolution + 1;
 
@@ -395,7 +395,7 @@ void RVL::CreateTemplateLookUpTable(
 
 	CTLUT.halfRange = (float)(CTLUT.iHalfRange) + 0.5f;
 
-	FILE *fp = fopen("..\\convexTemplateLUT.dat", "rb");
+	FILE* fp = fopen("..\\convexTemplateLUT.dat", "rb");
 
 	if (fp)
 		fread(CTLUT.LUT.Element, sizeof(float), nLUTElements, fp);
@@ -404,7 +404,7 @@ void RVL::CreateTemplateLookUpTable(
 		int i, j, k, l, iClosest;
 		float x[3];
 		float fTmp, cs, maxcs;
-		float *a;
+		float* a;
 
 		for (k = 0; k <= resolution; k++)
 			for (j = 0; j <= resolution; j++)
@@ -450,6 +450,7 @@ void RVL::CreateTemplateLookUpTable(
 	fclose(fp);
 }
 
+
 FileSequenceLoader::FileSequenceLoader()
 {
 	nFileNames = 0;
@@ -475,13 +476,13 @@ bool FileSequenceLoader::Init(char *sequenceFileName)
 
 		while (TRUE)
 		{
-			// fgets(line, 200, fp);
+			//fgets(line, 200, fp);
 			ReadLine(fp, 200, line);
 
 			if (line[0] == '\n')
 				continue;
 
-			if (strlen(line) == 0)
+			if(strlen(line) == 0)
 				continue;
 
 			if (strstr(line, "end") == line)
@@ -509,22 +510,22 @@ bool FileSequenceLoader::Init(char *sequenceFileName)
 				line[strlen(tabChar) - 1] = '\0';
 			}
 
-			// Save model name
+			//Save model name
 			names.resize(lineCnt, std::vector<char>(0));
 
 			if (strrchr(line, RVLFILEPATH_SEPARATOR))
-				// names[lineCnt - 1].assign(line + strlen(line) - strlen(strrchr(line, RVLFILEPATH_SEPARATOR)) + 1, line + strlen(line) - 1);
+				//names[lineCnt - 1].assign(line + strlen(line) - strlen(strrchr(line, RVLFILEPATH_SEPARATOR)) + 1, line + strlen(line) - 1);
 				names[lineCnt - 1].assign(line + strlen(line) - strlen(strrchr(line, RVLFILEPATH_SEPARATOR)) + 1, line + strlen(line));
 			else
-				// names[lineCnt - 1].assign(line, line + strlen(line) - 1);
+				//names[lineCnt - 1].assign(line, line + strlen(line) - 1);
 				names[lineCnt - 1].assign(line, line + strlen(line));
 
 			names[lineCnt - 1].insert(names[lineCnt - 1].end(), 1, '\0');
 
-			// Save path
+			//Save path
 			paths.resize(lineCnt, std::vector<char>(0));
 
-			// paths[lineCnt - 1].assign(line, line + strlen(line) - 1);
+			//paths[lineCnt - 1].assign(line, line + strlen(line) - 1);
 			paths[lineCnt - 1].assign(line, line + strlen(line));
 
 			if (line[1] != ':')
@@ -718,16 +719,16 @@ void FileSequenceLoader::ResetID()
 
 void FileSequenceLoader::AddModel(int ID, char *filePath, char *fileName)
 {
-	// Save ID
+	//Save ID
 	IDs.resize(IDs.size() + 1);
 	IDs[IDs.size() - 1] = ID;
 
-	// Save model path
+	//Save model path
 	paths.resize(paths.size() + 1, std::vector<char>(0));
 	paths[paths.size() - 1].assign(filePath, filePath + strlen(filePath));
 	paths[paths.size() - 1].insert(paths[paths.size() - 1].end(), 1, '\0');
 
-	// Save model name
+	//Save model name
 	names.resize(names.size() + 1, std::vector<char>(0));
 	names[names.size() - 1].assign(fileName, fileName + strlen(fileName));
 	names[names.size() - 1].insert(names[names.size() - 1].end(), 1, '\0');
@@ -786,10 +787,10 @@ bool ECCVGTLoader::Init(char *filePath, char *GTFolderPath, char *modelsID, DWOR
 
 	GTFilePath = new char[200];
 
-	// Kinect dataset
+	//Kinect dataset
 	if (dataSetFlag == RVL_DATASET_FLAG_TUW_KINECT)
 		CreateGTFilePath(filePath, GTFilePath);
-	// Willow and Challenge dataset
+	//Willow and Challenge dataset
 	else if (dataSetFlag == RVL_DATASET_FLAG_WILLOW_AND_CHALLENGE)
 		CreateWillowAndChallengeGTFilePath(filePath, GTFilePath);
 
@@ -834,13 +835,13 @@ bool ECCVGTLoader::Init(FileSequenceLoader sceneSequence, char *GTFolderPath, ch
 
 	while (sceneSequence.GetNextPath(filePath))
 	{
-		// Kinect dataset
+		//Kinect dataset
 		if (dataSetFlag == RVL_DATASET_FLAG_TUW_KINECT)
 			CreateGTFilePath(filePath, GTFilePath);
-		// Willow and Challenge dataset
+		//Willow and Challenge dataset
 		else if (dataSetFlag == RVL_DATASET_FLAG_WILLOW_AND_CHALLENGE)
 			CreateWillowAndChallengeGTFilePath(filePath, GTFilePath);
-		// ICL dataset
+		//ICL dataset
 		else if (dataSetFlag == RVL_DATASET_FLAG_ICL)
 			CreateGTFilePath(filePath, GTFilePath);
 
@@ -891,10 +892,10 @@ bool ECCVGTLoader::LoadModels(char *filePath)
 		char line[200];
 		int iModel, i;
 
-		// fgets(line, 200, fp);
+		//fgets(line, 200, fp);
 		ReadLine(fp, 200, line);
 		fscanf(fp, "%d\n", &nSModels);
-		// fgets(line, 200, fp);
+		//fgets(line, 200, fp);
 		ReadLine(fp, 200, line);
 
 		GT.Element[iScene].Element = new GTInstance[nSModels];
@@ -903,12 +904,12 @@ bool ECCVGTLoader::LoadModels(char *filePath)
 		nModels += nSModels;
 
 		GTInstance *pGT = GT.Element[iScene].Element;
-
+		
 		for (iModel = 0; iModel < nSModels; iModel++)
 		{
 			pGT->iScene = iScene;
 
-			// fgets(line, 200, fp);
+			//fgets(line, 200, fp);
 			ReadLine(fp, 200, line);
 
 			line[strlen(line)] = '\0';
@@ -919,12 +920,12 @@ bool ECCVGTLoader::LoadModels(char *filePath)
 				fscanf(fp, "%f %f %f %f\n", &pGT->R[i * 3], &pGT->R[i * 3 + 1], &pGT->R[i * 3 + 2], &pGT->t[i]);
 
 			if (dataSetFlag == RVL_DATASET_FLAG_TUW_KINECT)
-				RVLSCALEMX3X3(pGT->R, 1000.0f, pGT->R); // This is for TUW Kinect dataset only!
+				RVLSCALEMX3X3(pGT->R, 1000.0f, pGT->R);		// This is for TUW Kinect dataset only!
 
 			pGT->matched = false;
 
-			// fgets(line, 200, fp);
-			// fgets(line, 200, fp);
+			//fgets(line, 200, fp);
+			//fgets(line, 200, fp);
 			ReadLine(fp, 200, line);
 			ReadLine(fp, 200, line);
 
@@ -941,7 +942,7 @@ bool ECCVGTLoader::LoadModels(char *filePath)
 
 int ECCVGTLoader::FindModelID(char *modelName)
 {
-	// char *dbFileName = new char[50];
+	//char *dbFileName = new char[50];
 	char dbFileName[50];
 	int index = 0;
 	int ID;
@@ -959,7 +960,7 @@ int ECCVGTLoader::FindModelID(char *modelName)
 		index++;
 	}
 
-	return -1;
+	return -1;	
 }
 
 void ECCVGTLoader::CreateGTFilePath(char *scenePath, char *GTFilePath)
@@ -1115,7 +1116,7 @@ void RVL::TransformWillowAndChallengeGT2ECCVFormat(char *sceneGTPath)
 	char *modelName_;
 	char *sceneGTFilePath_;
 	char line[500];
-	char *ptr;
+	char* ptr;
 
 	int nModels;
 
@@ -1128,7 +1129,7 @@ void RVL::TransformWillowAndChallengeGT2ECCVFormat(char *sceneGTPath)
 	{
 		sceneGTFilePath_ = RVLCreateFileName(sceneGTFilePath, ".anno", -1, ".txt");
 
-		// extract scene fileName from path
+		//extract scene fileName from path
 		ptr = strrchr(sceneGTFilePath, '\\');
 
 		if (ptr)
@@ -1144,7 +1145,7 @@ void RVL::TransformWillowAndChallengeGT2ECCVFormat(char *sceneGTPath)
 		{
 			while (!feof(fpSceneGT))
 			{
-				if (fgets(line, 500, fpSceneGT))
+				if(fgets(line, 500, fpSceneGT))
 					nModels++;
 			}
 
@@ -1167,7 +1168,7 @@ void RVL::TransformWillowAndChallengeGT2ECCVFormat(char *sceneGTPath)
 				fprintf(fpNewSceneGT, "%f %f %f %f\n", T[0], T[1], T[2], T[3]);
 				fprintf(fpNewSceneGT, "%f %f %f %f\n", T[4], T[5], T[6], T[7]);
 				fprintf(fpNewSceneGT, "%f %f %f %f\n", T[8], T[9], T[10], T[11]);
-				fprintf(fpNewSceneGT, "%d %d %d %d\n\n", (int)T[12], (int)T[13], (int)T[14], (int)T[15]);
+				fprintf(fpNewSceneGT, "%d %d %d %d\n\n", (int)T[12], (int)T[13], (int)T[14], (int)T[15]);					
 			}
 		}
 
@@ -1177,100 +1178,100 @@ void RVL::TransformWillowAndChallengeGT2ECCVFormat(char *sceneGTPath)
 
 	printf("Willow and Challenge GT files formating FINISHED!\n");
 
-	//	printf("Willow and Challenge GT files formating...\n");
-	//	char sceneFileName[50];
-	//	char sceneName[50];
-	//	char sceneGTFilePath[200];
-	//	char sceneGTFilePath_[200];
-	//	char newSceneGTFilePath[200];
-	//	char sceneFilePath[200];
-	//	//char *sceneGroupName; //T_01, T_02, ...
-	//	char *modelName;
-	//	int nModelsPerScene;
-	//	int sceneID = 0;
-	//	float T[16];
-	//	int stringLen;
-	//
-	//	FileSequenceLoader sceneGTSequence;
-	//	sceneGTSequence.Init(sceneGTPath);
-	//
-	//	FILE *fpSceneGT;
-	//	FILE *fpNewSceneGT;
-	//
-	//	while (!feof(fpModelsPerScene))
-	//	{
-	//
-	//		fscanf(fpModelsPerScene, "%d\n", &nModelsPerScene);
-	//		sceneSequence.GetNextName(sceneFileName);
-	//
-	//		memcpy(sceneName, sceneFileName, sizeof(char) * (strlen(sceneFileName) - strlen(".ply")));
-	//		memcpy(sceneName + strlen(sceneFileName) - strlen(".ply"), "\0", 1);
-	//
-	//		/*sceneSequence.GetFilePath(sceneID, sceneFilePath);
-	//		sceneGroupName = strstr(sceneFilePath, "T_");
-	//		memcpy(sceneGroupName, sceneGroupName, sizeof(char) * strlen("T_xx"));
-	//		memcpy(sceneGroupName + sizeof(char) * strlen("T_xx"), "\0", 1);*/
-	//
-	//		for (int iModel = 0; iModel < nModelsPerScene; iModel++)
-	//		{
-	//			sceneGTSequence.GetNextPath(sceneGTFilePath);
-	//
-	//			//Create object name from GT file path
-	//			memcpy(sceneGTFilePath_, sceneGTFilePath, strlen(sceneGTFilePath) + 1);
-	//			modelName = strstr(sceneGTFilePath_, sceneName);
-	//			memcpy(modelName, modelName + strlen(sceneName) + 1, sizeof(char) * (strlen(modelName) - strlen(sceneName)));
-	//			memcpy(modelName + (strlen(modelName) - strlen(".txt") - strlen("_0")), ".ply\0", 5);
-	//
-	//			stringLen = strlen(sceneGTFilePath) - strlen("_") - strlen(modelName) + strlen(".ply") - strlen("_0") - strlen(".txt");
-	//
-	//			memcpy(newSceneGTFilePath, sceneGTFilePath, sizeof(char) * stringLen);
-	//			memcpy(newSceneGTFilePath + stringLen, ".txt\0", 5);
-	//
-	//			//Read GT values
-	//			fpSceneGT = fopen(sceneGTFilePath, "r");
-	//			if (fpSceneGT)
-	//			{
-	//				fscanf(fpSceneGT, "%f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f", &T[0], &T[1], &T[2], &T[3], &T[4], &T[5], &T[6], &T[7], &T[8], &T[9], &T[10], &T[11], &T[12], &T[13], &T[14], &T[15]);
-	//				fclose(fpSceneGT);
-	//			}
-	//
-	//
-	//			if (iModel == 0)
-	//			{
-	//				fpNewSceneGT = fopen(newSceneGTFilePath, "w");
-	//				fprintf(fpNewSceneGT, "%s\n", sceneFileName);
-	//				fprintf(fpNewSceneGT, "%d\n", nModelsPerScene);
-	//				fprintf(fpNewSceneGT, "%.1f\n", 0.0);
-	//			}
-	//			else
-	//				fpNewSceneGT = fopen(newSceneGTFilePath, "a");
-	//
-	//			fprintf(fpNewSceneGT, "%s\n", modelName);
-	//			fprintf(fpNewSceneGT, "%f %f %f %f\n", T[0] * scale, T[1] * scale, T[2] * scale, T[3] * scale);
-	//			fprintf(fpNewSceneGT, "%f %f %f %f\n", T[4] * scale, T[5] * scale, T[6] * scale, T[7] * scale);
-	//			fprintf(fpNewSceneGT, "%f %f %f %f\n", T[8] * scale, T[9] * scale, T[10] * scale, T[11] * scale);
-	//			fprintf(fpNewSceneGT, "%d %d %d %d\n\n", (int)T[12], (int)T[13], (int)T[14], (int)T[15]);
-	//
-	//			fclose(fpNewSceneGT);
-	//
-	//		}
-	//
-	//		printf("GT created for scene %d: %s with %d models\n", sceneID, sceneFileName, nModelsPerScene);
-	//		printf("\tGT path: %s\n", newSceneGTFilePath);
-	//
-	//		sceneID++;
-	//	}
-	//
-	//	printf("Willow and Challenge GT files formating FINISHED!\n");
-	//
-	//	fclose(fpModelsPerScene);
+//	printf("Willow and Challenge GT files formating...\n");
+//	char sceneFileName[50];
+//	char sceneName[50];
+//	char sceneGTFilePath[200];
+//	char sceneGTFilePath_[200];
+//	char newSceneGTFilePath[200];
+//	char sceneFilePath[200];
+//	//char *sceneGroupName; //T_01, T_02, ...
+//	char *modelName;
+//	int nModelsPerScene;
+//	int sceneID = 0;
+//	float T[16];
+//	int stringLen;
+//
+//	FileSequenceLoader sceneGTSequence;
+//	sceneGTSequence.Init(sceneGTPath);
+//
+//	FILE *fpSceneGT;
+//	FILE *fpNewSceneGT;
+//
+//	while (!feof(fpModelsPerScene))
+//	{
+//
+//		fscanf(fpModelsPerScene, "%d\n", &nModelsPerScene);
+//		sceneSequence.GetNextName(sceneFileName);
+//
+//		memcpy(sceneName, sceneFileName, sizeof(char) * (strlen(sceneFileName) - strlen(".ply")));
+//		memcpy(sceneName + strlen(sceneFileName) - strlen(".ply"), "\0", 1);
+//
+//		/*sceneSequence.GetFilePath(sceneID, sceneFilePath);
+//		sceneGroupName = strstr(sceneFilePath, "T_");
+//		memcpy(sceneGroupName, sceneGroupName, sizeof(char) * strlen("T_xx"));
+//		memcpy(sceneGroupName + sizeof(char) * strlen("T_xx"), "\0", 1);*/
+//
+//		for (int iModel = 0; iModel < nModelsPerScene; iModel++)
+//		{
+//			sceneGTSequence.GetNextPath(sceneGTFilePath);
+//
+//			//Create object name from GT file path
+//			memcpy(sceneGTFilePath_, sceneGTFilePath, strlen(sceneGTFilePath) + 1);
+//			modelName = strstr(sceneGTFilePath_, sceneName);
+//			memcpy(modelName, modelName + strlen(sceneName) + 1, sizeof(char) * (strlen(modelName) - strlen(sceneName)));
+//			memcpy(modelName + (strlen(modelName) - strlen(".txt") - strlen("_0")), ".ply\0", 5);
+//
+//			stringLen = strlen(sceneGTFilePath) - strlen("_") - strlen(modelName) + strlen(".ply") - strlen("_0") - strlen(".txt");
+//
+//			memcpy(newSceneGTFilePath, sceneGTFilePath, sizeof(char) * stringLen);
+//			memcpy(newSceneGTFilePath + stringLen, ".txt\0", 5);
+//
+//			//Read GT values
+//			fpSceneGT = fopen(sceneGTFilePath, "r");
+//			if (fpSceneGT)
+//			{
+//				fscanf(fpSceneGT, "%f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f", &T[0], &T[1], &T[2], &T[3], &T[4], &T[5], &T[6], &T[7], &T[8], &T[9], &T[10], &T[11], &T[12], &T[13], &T[14], &T[15]);
+//				fclose(fpSceneGT);
+//			}
+//
+//
+//			if (iModel == 0)
+//			{
+//				fpNewSceneGT = fopen(newSceneGTFilePath, "w");
+//				fprintf(fpNewSceneGT, "%s\n", sceneFileName);
+//				fprintf(fpNewSceneGT, "%d\n", nModelsPerScene);
+//				fprintf(fpNewSceneGT, "%.1f\n", 0.0);
+//			}
+//			else
+//				fpNewSceneGT = fopen(newSceneGTFilePath, "a");
+//
+//			fprintf(fpNewSceneGT, "%s\n", modelName);
+//			fprintf(fpNewSceneGT, "%f %f %f %f\n", T[0] * scale, T[1] * scale, T[2] * scale, T[3] * scale);
+//			fprintf(fpNewSceneGT, "%f %f %f %f\n", T[4] * scale, T[5] * scale, T[6] * scale, T[7] * scale);
+//			fprintf(fpNewSceneGT, "%f %f %f %f\n", T[8] * scale, T[9] * scale, T[10] * scale, T[11] * scale);
+//			fprintf(fpNewSceneGT, "%d %d %d %d\n\n", (int)T[12], (int)T[13], (int)T[14], (int)T[15]);
+//
+//			fclose(fpNewSceneGT);
+//
+//		}
+//
+//		printf("GT created for scene %d: %s with %d models\n", sceneID, sceneFileName, nModelsPerScene);
+//		printf("\tGT path: %s\n", newSceneGTFilePath);
+//
+//		sceneID++;
+//	}
+//
+//	printf("Willow and Challenge GT files formating FINISHED!\n");
+//
+//	fclose(fpModelsPerScene);
 }
 
 void RVL::TransformICLGT2ECCVFormat(char *sceneGTPath)
 {
 	printf("ICL GT files formating...\n");
 
-	// char *OLD_NAME = "poses";
+	//char *OLD_NAME = "poses";
 	char *OLD_NAME = "img_";
 	char *NEW_NAME = "img_";
 	char *PLY_EXTENSION = ".ply";
@@ -1296,7 +1297,7 @@ void RVL::TransformICLGT2ECCVFormat(char *sceneGTPath)
 	memcpy(GTPath, sceneGTPath, pathLength);
 	GTPath[pathLength] = '\0';
 
-	// Extract model name
+	//Extract model name
 	pCh = strrchr(GTPath, '\\');
 	memcpy(modelName, pCh + 1, strlen(pCh));
 	memcpy(modelName + strlen(pCh) - 1, "_model", strlen("_model"));
@@ -1318,10 +1319,10 @@ void RVL::TransformICLGT2ECCVFormat(char *sceneGTPath)
 
 		int sceneNumber = atoi(sceneNumberStr);
 
-		// Create new GT file path
+		//Create new GT file path
 		sprintf(sceneGTFilePathNew, "%s%s%s%03d%s", GTPath, "\\ECCV_Format\\", NEW_NAME, sceneNumber, ".txt");
 
-		// Create scene name
+		//Create scene name
 		sprintf(sceneName, "%s%03d%s\0", NEW_NAME, sceneNumber, PLY_EXTENSION);
 
 		fpOld = fopen(sceneGTFilePath, "r");
@@ -1337,13 +1338,13 @@ void RVL::TransformICLGT2ECCVFormat(char *sceneGTPath)
 
 			for (int iModel = 0; iModel < nModels; iModel++)
 			{
-				// load T matrix from the original file
+				//load T matrix from the original file
 				fscanf(fpOld, "%f,%f,%f,%f\n", &T[0], &T[1], &T[2], &T[3]);
 				fscanf(fpOld, "%f,%f,%f,%f\n", &T[4], &T[5], &T[6], &T[7]);
 				fscanf(fpOld, "%f,%f,%f,%f\n", &T[8], &T[9], &T[10], &T[11]);
 				fscanf(fpOld, "%f,%f,%f,%f\n", &T[12], &T[13], &T[14], &T[15]);
 
-				// write model name to the new file
+				//write model name to the new file
 				fprintf(fpNew, "%s\n", modelName);
 
 				fprintf(fpNew, "%f\t%f\t%f\t%f\n", T[0], T[1], T[2], T[3] / 1000);
@@ -1391,7 +1392,7 @@ void RVL::TransformCorrectedICLGT2ECCVFormat(char *sceneGTPath)
 	memcpy(GTPath, sceneGTPath, pathLength);
 	GTPath[pathLength] = '\0';
 
-	// Extract model name
+	//Extract model name
 	pCh = strrchr(GTPath, '\\');
 	memcpy(modelName, pCh + 1, strlen(pCh));
 	memcpy(modelName + strlen(pCh) - 1, "_model", strlen("_model"));
@@ -1413,10 +1414,10 @@ void RVL::TransformCorrectedICLGT2ECCVFormat(char *sceneGTPath)
 
 		int sceneNumber = atoi(sceneNumberStr);
 
-		// Create new GT file path
-		sprintf(sceneGTFilePathNew, "%s%s%s%03d%s", GTPath, "\\", NEW_NAME, sceneNumber, ".txt");
+		//Create new GT file path
+		sprintf(sceneGTFilePathNew, "%s%s%s%03d%s",GTPath, "\\", NEW_NAME, sceneNumber, ".txt");
 
-		// Create scene name
+		//Create scene name
 		sprintf(sceneName, "%s%03d%s\0", NEW_NAME, sceneNumber, PLY_EXTENSION);
 
 		fpOld = fopen(sceneGTFilePath, "r");
@@ -1428,17 +1429,17 @@ void RVL::TransformCorrectedICLGT2ECCVFormat(char *sceneGTPath)
 
 			fprintf(fpNew, "%s\n", sceneName);
 			fprintf(fpNew, "%d\n", nModels);
-			fprintf(fpNew, "0.0\n");
+			fprintf(fpNew, "0.0\n");			
 
 			for (int iModel = 0; iModel < nModels; iModel++)
 			{
-				// load T matrix from the original file
+				//load T matrix from the original file
 				fscanf(fpOld, "%f\t%f\t%f\t%f\n", &T[0], &T[1], &T[2], &T[3]);
 				fscanf(fpOld, "%f\t%f\t%f\t%f\n", &T[4], &T[5], &T[6], &T[7]);
 				fscanf(fpOld, "%f\t%f\t%f\t%f\n", &T[8], &T[9], &T[10], &T[11]);
 				fscanf(fpOld, "%f\t%f\t%f\t%f\n", &T[12], &T[13], &T[14], &T[15]);
 
-				// write model name to the new file
+				//write model name to the new file
 				fprintf(fpNew, "%s\n", modelName);
 
 				fprintf(fpNew, "%f\t%f\t%f\t%f\n", T[0], T[1], T[2], T[3]);
@@ -1451,20 +1452,19 @@ void RVL::TransformCorrectedICLGT2ECCVFormat(char *sceneGTPath)
 
 			fclose(fpOld);
 			fclose(fpNew);
-		}
+		}		
 	}
 
 	printf("ICL GT files formating FINISHED!\n");
 }
 
-// END VIDOVIC
+//END VIDOVIC
 
 namespace RVL
 {
 #ifdef RVLVTK
-	typedef struct _plyVertex
-	{
-		float x[3]; // the usual 3-space position of a vertex
+	typedef struct _plyVertex {
+		float x[3];             // the usual 3-space position of a vertex
 		unsigned char red;
 		unsigned char green;
 		unsigned char blue;
@@ -1473,10 +1473,9 @@ namespace RVL
 		float n[3];
 	} plyVertex;
 
-	typedef struct _plyFace
-	{
-		unsigned char nverts; // number of vertex indices in list
-		int *verts;			  // vertex index list
+	typedef struct _plyFace {
+		unsigned char nverts;    // number of vertex indices in list
+		int* verts;              // vertex index list
 		unsigned char red;
 		unsigned char green;
 		unsigned char blue;
@@ -1489,7 +1488,7 @@ namespace RVL
 		std::string fileName,
 		vtkSmartPointer<vtkPolyData> pPolygonData)
 	{
-		SetFileName((char *)(fileName.data()));
+		SetFileName((char*)(fileName.data()));
 		SetColorMode(VTK_COLOR_MODE_DEFAULT);
 		SetArrayName("Colors");
 		SetInputData(pPolygonData);
@@ -1501,9 +1500,9 @@ namespace RVL
 	void RVLVTKPLYWriter::WriteDataWithNormals()
 	{
 		vtkIdType i, j, idx;
-		vtkPoints *inPts;
-		vtkCellArray *polys;
-		vtkPolyData *input = this->GetInput();
+		vtkPoints* inPts;
+		vtkCellArray* polys;
+		vtkPolyData* input = this->GetInput();
 
 #ifdef RVLVTK7_1
 		unsigned char *cellColors, *pointColors;
@@ -1511,38 +1510,38 @@ namespace RVL
 		vtkSmartPointer<vtkUnsignedCharArray> cellColors, pointColors;
 #endif
 		vtkSmartPointer<vtkFloatArray> pointNormals;
-		PlyFile *ply;
+		PlyFile* ply;
 		float version;
-		static const char *elemNames[] = {"vertex", "face"};
+		static const char* elemNames[] = { "vertex", "face" };
 		static PlyProperty vertProps[] = {
 			// property information for a vertex
-			{"x", PLY_FLOAT, PLY_FLOAT, static_cast<int>(offsetof(plyVertex, x)), 0, 0, 0, 0},
-			{"y", PLY_FLOAT, PLY_FLOAT, static_cast<int>(offsetof(plyVertex, x) + sizeof(float)), 0, 0, 0,
-			 0},
-			{"z", PLY_FLOAT, PLY_FLOAT,
-			 static_cast<int>(offsetof(plyVertex, x) + sizeof(float) + sizeof(float)), 0, 0, 0, 0},
-			{"red", PLY_UCHAR, PLY_UCHAR, static_cast<int>(offsetof(plyVertex, red)), 0, 0, 0, 0},
-			{"green", PLY_UCHAR, PLY_UCHAR, static_cast<int>(offsetof(plyVertex, green)), 0, 0, 0, 0},
-			{"blue", PLY_UCHAR, PLY_UCHAR, static_cast<int>(offsetof(plyVertex, blue)), 0, 0, 0, 0},
-			{"alpha", PLY_UCHAR, PLY_UCHAR, static_cast<int>(offsetof(plyVertex, alpha)), 0, 0, 0, 0},
-			{(TextureCoordinatesName == 1) ? "texture_u" : "u", PLY_FLOAT, PLY_FLOAT,
-			 static_cast<int>(offsetof(plyVertex, tex)), 0, 0, 0, 0},
-			{(TextureCoordinatesName == 1) ? "texture_v" : "v", PLY_FLOAT, PLY_FLOAT,
-			 static_cast<int>(offsetof(plyVertex, tex) + sizeof(float)), 0, 0, 0, 0},
-			{"nx", PLY_FLOAT, PLY_FLOAT, static_cast<int>(offsetof(plyVertex, n)), 0, 0, 0, 0},
-			{"ny", PLY_FLOAT, PLY_FLOAT, static_cast<int>(offsetof(plyVertex, n) + sizeof(float)), 0, 0, 0,
-			 0},
-			{"nz", PLY_FLOAT, PLY_FLOAT,
-			 static_cast<int>(offsetof(plyVertex, n) + sizeof(float) + sizeof(float)), 0, 0, 0, 0},
+			{ "x", PLY_FLOAT, PLY_FLOAT, static_cast<int>(offsetof(plyVertex, x)), 0, 0, 0, 0 },
+			{ "y", PLY_FLOAT, PLY_FLOAT, static_cast<int>(offsetof(plyVertex, x) + sizeof(float)), 0, 0, 0,
+			  0 },
+			{ "z", PLY_FLOAT, PLY_FLOAT,
+			  static_cast<int>(offsetof(plyVertex, x) + sizeof(float) + sizeof(float)), 0, 0, 0, 0 },
+			{ "red", PLY_UCHAR, PLY_UCHAR, static_cast<int>(offsetof(plyVertex, red)), 0, 0, 0, 0 },
+			{ "green", PLY_UCHAR, PLY_UCHAR, static_cast<int>(offsetof(plyVertex, green)), 0, 0, 0, 0 },
+			{ "blue", PLY_UCHAR, PLY_UCHAR, static_cast<int>(offsetof(plyVertex, blue)), 0, 0, 0, 0 },
+			{ "alpha", PLY_UCHAR, PLY_UCHAR, static_cast<int>(offsetof(plyVertex, alpha)), 0, 0, 0, 0 },
+			{ (TextureCoordinatesName == 1) ? "texture_u" : "u", PLY_FLOAT, PLY_FLOAT,
+			  static_cast<int>(offsetof(plyVertex, tex)), 0, 0, 0, 0 },
+			{ (TextureCoordinatesName == 1) ? "texture_v" : "v", PLY_FLOAT, PLY_FLOAT,
+			  static_cast<int>(offsetof(plyVertex, tex) + sizeof(float)), 0, 0, 0, 0 },
+			{ "nx", PLY_FLOAT, PLY_FLOAT, static_cast<int>(offsetof(plyVertex, n)), 0, 0, 0, 0},
+			{ "ny", PLY_FLOAT, PLY_FLOAT, static_cast<int>(offsetof(plyVertex, n) + sizeof(float)), 0, 0, 0,
+			  0 },
+			{ "nz", PLY_FLOAT, PLY_FLOAT,
+			  static_cast<int>(offsetof(plyVertex, n) + sizeof(float) + sizeof(float)), 0, 0, 0, 0 },
 		};
 		static PlyProperty faceProps[] = {
 			// property information for a face
-			{"vertex_indices", PLY_INT, PLY_INT, static_cast<int>(offsetof(plyFace, verts)), 1, PLY_UCHAR,
-			 PLY_UCHAR, static_cast<int>(offsetof(plyFace, nverts))},
-			{"red", PLY_UCHAR, PLY_UCHAR, static_cast<int>(offsetof(plyFace, red)), 0, 0, 0, 0},
-			{"green", PLY_UCHAR, PLY_UCHAR, static_cast<int>(offsetof(plyFace, green)), 0, 0, 0, 0},
-			{"blue", PLY_UCHAR, PLY_UCHAR, static_cast<int>(offsetof(plyFace, blue)), 0, 0, 0, 0},
-			{"alpha", PLY_UCHAR, PLY_UCHAR, static_cast<int>(offsetof(plyFace, alpha)), 0, 0, 0, 0},
+			{ "vertex_indices", PLY_INT, PLY_INT, static_cast<int>(offsetof(plyFace, verts)), 1, PLY_UCHAR,
+			  PLY_UCHAR, static_cast<int>(offsetof(plyFace, nverts)) },
+			{ "red", PLY_UCHAR, PLY_UCHAR, static_cast<int>(offsetof(plyFace, red)), 0, 0, 0, 0 },
+			{ "green", PLY_UCHAR, PLY_UCHAR, static_cast<int>(offsetof(plyFace, green)), 0, 0, 0, 0 },
+			{ "blue", PLY_UCHAR, PLY_UCHAR, static_cast<int>(offsetof(plyFace, blue)), 0, 0, 0, 0 },
+			{ "alpha", PLY_UCHAR, PLY_UCHAR, static_cast<int>(offsetof(plyFace, alpha)), 0, 0, 0, 0 },
 		};
 
 		// Get input and check data
@@ -1575,7 +1574,7 @@ namespace RVL
 		else
 		{
 			ply = vtkPLY::ply_open_for_writing(this->FileName, 2, elemNames,
-											   PLY_ASCII, &version);
+				PLY_ASCII, &version);
 		}
 
 		if (ply == nullptr)
@@ -1596,11 +1595,11 @@ namespace RVL
 #endif
 
 		// get texture coordinates, if any
-		const float *textureCoords = this->GetTextureCoordinates(numPts, input->GetPointData());
+		const float* textureCoords = this->GetTextureCoordinates(numPts, input->GetPointData());
 
 		// get normals, if any
 
-		vtkDataArray *normalDataArray = input->GetPointData()->GetArray("Normals");
+		vtkDataArray* normalDataArray = input->GetPointData()->GetArray("Normals");
 		if (normalDataArray == nullptr)
 			pointNormals = vtkArrayDownCast<vtkFloatArray>(input->GetPointData()->GetNormals());
 		else
@@ -1678,7 +1677,7 @@ namespace RVL
 			if (pointColors)
 			{
 #ifdef RVLVTK7_1
-				idx = 3 * i;
+				idx = 3*i;
 				vert.red = *(pointColors + idx);
 				vert.green = *(pointColors + idx + 1);
 				vert.blue = *(pointColors + idx + 2);
@@ -1706,7 +1705,7 @@ namespace RVL
 				vert.n[1] = normal[1];
 				vert.n[2] = normal[2];
 			}
-			vtkPLY::ply_put_element(ply, (void *)&vert);
+			vtkPLY::ply_put_element(ply, (void*)&vert);
 		}
 
 		// set up and write the face elements
@@ -1715,7 +1714,7 @@ namespace RVL
 		face.verts = verts;
 		vtkPLY::ply_put_element_setup(ply, "face");
 		vtkIdType npts = 0;
-		vtkIdType *pts = nullptr;
+		vtkIdType* pts = nullptr;
 		for (polys->InitTraversal(), i = 0; i < numPolys; i++)
 		{
 			polys->GetNextCell(npts, pts);
@@ -1733,7 +1732,7 @@ namespace RVL
 				if (cellColors)
 				{
 #ifdef RVLVTK7_1
-					idx = 3 * i;
+					idx = 3*i;
 					face.red = *(cellColors + idx);
 					face.green = *(cellColors + idx + 1);
 					face.blue = *(cellColors + idx + 2);
@@ -1748,7 +1747,7 @@ namespace RVL
 					}
 #endif
 				}
-				vtkPLY::ply_put_element(ply, (void *)&face);
+				vtkPLY::ply_put_element(ply, (void*)&face);
 			}
 		} // for all polygons
 
@@ -1761,7 +1760,8 @@ namespace RVL
 		float *P0,
 		float voxelSize,
 		float isolevel,
-		float *W)
+		float *W
+		)
 	{
 		CRVLMem mem;
 
@@ -1800,54 +1800,18 @@ namespace RVL
 		int dz[12];
 		int iEdge[12];
 
-		dx[0] = 0;
-		dy[0] = -1;
-		dz[0] = -1;
-		iEdge[0] = 0;
-		dx[1] = 0;
-		dy[1] = 0;
-		dz[1] = -1;
-		iEdge[1] = 1;
-		dx[2] = 0;
-		dy[2] = 0;
-		dz[2] = -1;
-		iEdge[2] = 0;
-		dx[3] = -1;
-		dy[3] = 0;
-		dz[3] = -1;
-		iEdge[3] = 1;
-		dx[4] = 0;
-		dy[4] = -1;
-		dz[4] = 0;
-		iEdge[4] = 0;
-		dx[5] = 0;
-		dy[5] = 0;
-		dz[5] = 0;
-		iEdge[5] = 1;
-		dx[6] = 0;
-		dy[6] = 0;
-		dz[6] = 0;
-		iEdge[6] = 0;
-		dx[7] = -1;
-		dy[7] = 0;
-		dz[7] = 0;
-		iEdge[7] = 1;
-		dx[8] = -1;
-		dy[8] = -1;
-		dz[8] = 0;
-		iEdge[8] = 2;
-		dx[9] = 0;
-		dy[9] = -1;
-		dz[9] = 0;
-		iEdge[9] = 2;
-		dx[10] = 0;
-		dy[10] = 0;
-		dz[10] = 0;
-		iEdge[10] = 2;
-		dx[11] = -1;
-		dy[11] = 0;
-		dz[11] = 0;
-		iEdge[11] = 2;
+		dx[0] = 0; dy[0] = -1; dz[0] = -1; iEdge[0] = 0;
+		dx[1] = 0; dy[1] = 0; dz[1] = -1; iEdge[1] = 1;
+		dx[2] = 0; dy[2] = 0; dz[2] = -1; iEdge[2] = 0;
+		dx[3] = -1; dy[3] = 0; dz[3] = -1; iEdge[3] = 1;
+		dx[4] = 0; dy[4] = -1; dz[4] = 0; iEdge[4] = 0;
+		dx[5] = 0; dy[5] = 0; dz[5] = 0; iEdge[5] = 1;
+		dx[6] = 0; dy[6] = 0; dz[6] = 0; iEdge[6] = 0;
+		dx[7] = -1; dy[7] = 0; dz[7] = 0; iEdge[7] = 1;
+		dx[8] = -1; dy[8] = -1; dz[8] = 0; iEdge[8] = 2;
+		dx[9] = 0; dy[9] = -1; dz[9] = 0; iEdge[9] = 2;
+		dx[10] = 0; dy[10] = 0; dz[10] = 0; iEdge[10] = 2;
+		dx[11] = -1; dy[11] = 0; dz[11] = 0; iEdge[11] = 2;
 
 		int iTriangle = 0;
 
@@ -1998,14 +1962,14 @@ namespace RVL
 								triangle->GetPointIds()->SetId(l, iPt_);
 							}
 
-							// points->InsertNextPoint(pTriangle->data.P[0][0], pTriangle->data.P[0][1], pTriangle->data.P[0][2]);
-							// points->InsertNextPoint(pTriangle->data.P[1][0], pTriangle->data.P[1][1], pTriangle->data.P[1][2]);
-							// points->InsertNextPoint(pTriangle->data.P[2][0], pTriangle->data.P[2][1], pTriangle->data.P[2][2]);
+							//points->InsertNextPoint(pTriangle->data.P[0][0], pTriangle->data.P[0][1], pTriangle->data.P[0][2]);
+							//points->InsertNextPoint(pTriangle->data.P[1][0], pTriangle->data.P[1][1], pTriangle->data.P[1][2]);
+							//points->InsertNextPoint(pTriangle->data.P[2][0], pTriangle->data.P[2][1], pTriangle->data.P[2][2]);
 
-							// triangle = vtkSmartPointer<vtkTriangle>::New();
-							// triangle->GetPointIds()->SetId(0, 3 * iTriangle);
-							// triangle->GetPointIds()->SetId(1, 3 * iTriangle + 1);
-							// triangle->GetPointIds()->SetId(2, 3 * iTriangle + 2);
+							//triangle = vtkSmartPointer<vtkTriangle>::New();
+							//triangle->GetPointIds()->SetId(0, 3 * iTriangle);
+							//triangle->GetPointIds()->SetId(1, 3 * iTriangle + 1);
+							//triangle->GetPointIds()->SetId(2, 3 * iTriangle + 2);
 
 							triangles->InsertNextCell(triangle);
 
@@ -2013,10 +1977,10 @@ namespace RVL
 						}
 
 						pTriangle = pTriangle->pNext;
-					} // for every triangle in pTriangleList
+					}	// for every triangle in pTriangleList
 
 					mem.Clear();
-				} // for every voxel
+				}	// for every voxel
 
 		printf("no. of pts. = %d\n", points->GetNumberOfPoints());
 
@@ -2079,14 +2043,13 @@ namespace RVL
 #ifdef RVL_RANDOM_DEBUG
 		std::string pseudoRandomNumberFileName;
 #ifdef RVLLINUX
-		// pseudoRandomNumberFileName = "pseudorandom1000000.dat";
 		pseudoRandomNumberFileName = "/home/RVLuser/rvl-linux/pseudorandom1000000.dat";
 #else
 		pseudoRandomNumberFileName = "..\\pseudorandom1000000.dat";
 #endif
 		char *pseudoRandomNumberFileName_ = (char *)(pseudoRandomNumberFileName.data());
 		FILE *fp = fopen(pseudoRandomNumberFileName_, "rb");
-		if (fp == NULL)
+		if(fp == NULL)
 		{
 			printf("ERROR: Cannot open pseudo random number file %s.\n", pseudoRandomNumberFileName_);
 			return;
@@ -2094,14 +2057,22 @@ namespace RVL
 
 		int *iRnd = new int[A.n];
 
-		// for (int i = 0; i < 1000000; i++)
+		//for (int i = 0; i < 1000000; i++)
 		//	iRnd[i] = (rand() % 0x100) + (rand() % 0x100) * 0x100 + (rand() % 0x100) * 0x10000 + (rand() % 0x80) * 0x1000000;
 
-		// fwrite(iRnd, sizeof(int), 1000000, fp);
+		//fwrite(iRnd, sizeof(int), 1000000, fp);
 
-		fread(iRnd, sizeof(int), A.n, fp);
-
+		int n = RVLMIN(A.n, 1000000);
+		fread(iRnd, sizeof(int), n, fp);
 		fclose(fp);
+
+		if (A.n > n)
+		{
+			int i;
+			for (i = 1; i < A.n / n; i++)
+				memcpy(iRnd + n * i, iRnd, n * sizeof(int));
+			memcpy(iRnd + n * i, iRnd, A.n % n * sizeof(int));
+		}
 
 		int *piRnd = iRnd;
 #endif
@@ -2116,7 +2087,7 @@ namespace RVL
 		int iPt_;
 		int iTmp;
 
-		// srand(time(NULL)); //VIDOVIC RANDOM TEST
+		//srand(time(NULL)); //VIDOVIC RANDOM TEST
 
 		for (iPt = 0; iPt < A.n; iPt++)
 		{
@@ -2312,7 +2283,7 @@ namespace RVL
 		neighbor[8] = 1 + w;
 	}
 
-	void CreateGrayScaleImage(Array2D<float> inputImage, cv::Mat &outputImage)
+	void CreateGrayScaleImage(Array2D<float> inputImage, cv::Mat& outputImage)
 	{
 		cv::Mat inputImage_(inputImage.h, inputImage.w, CV_32FC1, inputImage.Element);
 
@@ -2335,7 +2306,7 @@ namespace RVL
 		camera.h = h;
 	}
 
-	// Vidovic
+	//Vidovic
 	void UnionOfIndices(
 		Array<int> &iInArray1,
 		Array<int> &iInArray2,
@@ -2345,7 +2316,7 @@ namespace RVL
 		iOutArray.n = 0;
 		int iVertex, i;
 
-		// copy from iInArray1
+		//copy from iInArray1
 		for (i = 0; i < iInArray1.n; i++)
 		{
 			iVertex = iInArray1.Element[i];
@@ -2358,7 +2329,7 @@ namespace RVL
 			bIndicesInArray[iVertex] = true;
 		}
 
-		// copy from iInArray2
+		//copy from iInArray2
 		for (i = 0; i < iInArray2.n; i++)
 		{
 			iVertex = iInArray2.Element[i];
@@ -2384,8 +2355,8 @@ namespace RVL
 	{
 		return flags == flagsToCheck;
 	}
-	// End Vidovic
-} // namespace RVL
+	//End Vidovic
+}	// namespace RVL
 
 void FilterImage(cv::Mat img)
 {
@@ -2400,7 +2371,7 @@ void FilterImage(cv::Mat img)
 		{
 			if (img.at<uint16_t>(y, x) > 0)
 				continue;
-			// inner
+			//inner 
 			sum = 0;
 			no = 0;
 			max = 0;
@@ -2417,8 +2388,10 @@ void FilterImage(cv::Mat img)
 				}
 			}
 			if (no != 0)
-				newImg.at<uint16_t>(y, x) = max; // sum / no;
+				newImg.at<uint16_t>(y, x) = max;// sum / no;
 		}
 	}
 	newImg.copyTo(img);
 }
+
+

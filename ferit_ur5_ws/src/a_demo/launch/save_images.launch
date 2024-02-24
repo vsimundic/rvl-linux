@@ -1,0 +1,3 @@
+<launch>
+    <node name="node_capture_images" pkg="capture_image" type="node_capture_images.py" output="screen"/>
+</launch>

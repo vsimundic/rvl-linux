@@ -1,0 +1,8 @@
+# Root path to images
+sequence_path: "/home/RVLuser/ferit_ur5_ws/data/Exp-cabinet_open-20240212/sequence_images/cabinet_open-20240212"
+
+# Directory names
+rgb_dir: "rgb"
+depth_dir: "depth_seg"
+ply_dir: "PLY_seg"
+camera_info: "camera_info.yaml"

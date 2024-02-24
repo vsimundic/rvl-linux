@@ -1,7 +1,7 @@
-import push
+import push2
 
 #push.demo()
 #push.demo_vn()
 #push.demo_single_random()
-push.demo_push_poses()
+push2.demo_push_poses()
 # push.visualize_dd()

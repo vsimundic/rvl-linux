@@ -1,0 +1,8 @@
+<launch>
+
+        <param name="config_file" type="string" value="gt_gazebo_real_cabinet_config.yaml"/>
+        
+        <node name="node_path_planning" pkg="gazebo_push_open" type="node_path_planning_for_real_robot.py" output="screen"/>
+    <!-- <group ns="gpo">
+    </group> -->
+</launch>

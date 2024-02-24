@@ -1,8 +1,0 @@
-[35m[1mScanning dependencies of target robotiq_3f_rviz_autogen[0m
-[ 25%] [34m[1mAutomatic MOC and UIC for target robotiq_3f_rviz[0m
-[ 25%] Built target robotiq_3f_rviz_autogen
-[35m[1mScanning dependencies of target robotiq_3f_rviz[0m
-[ 50%] [32mBuilding CXX object CMakeFiles/robotiq_3f_rviz.dir/robotiq_3f_rviz_autogen/mocs_compilation.cpp.o[0m
-[ 75%] [32mBuilding CXX object CMakeFiles/robotiq_3f_rviz.dir/src/robotiq_3f_rviz.cpp.o[0m
-[100%] [32m[1mLinking CXX shared library /home/RVLuser/ferit_ur5_ws/devel/.private/robotiq_3f_rviz/lib/librobotiq_3f_rviz.so[0m
-[100%] Built target robotiq_3f_rviz

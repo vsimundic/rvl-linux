@@ -86,7 +86,8 @@ class push():
         # Intersections of the orthogonal projections of the TCS edges onto the supporting plane of DCS with the DCS edges.
 
         A_dcs = np.array([[1, 0, 0], [0, 1, 0], [-1, 0, 0], [0, -1, 0]])
-        d_dcs = np.array([self.dd.dd_contact_surface_params[0], self.dd.dd_contact_surface_params[1], -vision_tolerance, -vision_tolerance])
+        # d_dcs = np.array([self.dd.dd_contact_surface_params[0], self.dd.dd_contact_surface_params[1], -vision_tolerance, -vision_tolerance])
+        d_dcs = (A_dcs @ dcs_vertices.T).max(1)
         e_tcs = A_dcs @ tcs_vertices.T - d_dcs[:, np.newaxis]
         next_vertex_idx = np.array([1, 3, 0, 2]).astype(np.int32)
         v = tcs_vertices[next_vertex_idx, :] - tcs_vertices
@@ -144,19 +145,34 @@ class push():
 
         # Door/drawer contact surface (DCS).
 
-        dcs_vertices = np.array([[vision_tolerance, vision_tolerance, 0.0], [self.dd.dd_contact_surface_params[0], vision_tolerance, 0.0],
-            [self.dd.dd_contact_surface_params[0], self.dd.dd_contact_surface_params[1], 0.0], 
-            [vision_tolerance, self.dd.dd_contact_surface_params[1], 0.0]])
-        dcs_vertices_in = dcs_vertices.copy()
-        dcs_vertices_in[0,0] = vision_tolerance
-        dcs_vertices_in[0,1] = vision_tolerance
-        dcs_vertices_in[1,1] = vision_tolerance
-        dcs_vertices_in[3,0] = vision_tolerance
-        dcs_vertices_out = dcs_vertices.copy()
-        dcs_vertices_out[0,0] = -vision_tolerance
-        dcs_vertices_out[0,1] = -vision_tolerance
-        dcs_vertices_out[1,1] = -vision_tolerance
-        dcs_vertices_out[3,0] = -vision_tolerance
+        if self.dd.dd_opening_direction > 0.0:
+            dcs_vertices = np.array([[0.0, 0.0, 0.0], [self.dd.dd_contact_surface_params[0], 0.0, 0.0],
+                [self.dd.dd_contact_surface_params[0], self.dd.dd_contact_surface_params[1], 0.0], 
+                [0.0, self.dd.dd_contact_surface_params[1], 0.0]])
+            dcs_vertices_in = dcs_vertices.copy()
+            dcs_vertices_in[0,0] = vision_tolerance
+            dcs_vertices_in[0,1] = vision_tolerance
+            dcs_vertices_in[1,1] = vision_tolerance
+            dcs_vertices_in[3,0] = vision_tolerance
+            dcs_vertices_out = dcs_vertices.copy()
+            dcs_vertices_out[0,0] = -vision_tolerance
+            dcs_vertices_out[0,1] = -vision_tolerance
+            dcs_vertices_out[1,1] = -vision_tolerance
+            dcs_vertices_out[3,0] = -vision_tolerance
+        else:
+            dcs_vertices = np.array([[0.0, 0.0, 0.0], [0.0, self.dd.dd_contact_surface_params[1], 0.0],
+                [-self.dd.dd_contact_surface_params[0], self.dd.dd_contact_surface_params[1], 0.0], 
+                [-self.dd.dd_contact_surface_params[0], 0.0, 0.0]])
+            dcs_vertices_in = dcs_vertices.copy()
+            dcs_vertices_in[0,0] = -vision_tolerance
+            dcs_vertices_in[0,1] = vision_tolerance
+            dcs_vertices_in[1,0] = -vision_tolerance
+            dcs_vertices_in[3,1] = vision_tolerance
+            dcs_vertices_out = dcs_vertices.copy()
+            dcs_vertices_out[0,0] = vision_tolerance
+            dcs_vertices_out[0,1] = -vision_tolerance
+            dcs_vertices_out[1,0] = vision_tolerance
+            dcs_vertices_out[3,1] = -vision_tolerance
         dcs_triangles = np.array([[0, 3, 1], [1, 3, 2], [0, 1, 3], [1, 2, 3]]).astype(np.int32)
 
         # Transform TCS to the DCS reference frame (RF).
@@ -354,19 +370,25 @@ class door_model():
         self.dd_static_side_width = 0.018
         self.dd_static_depth = 0.3
         self.dd_axis_distance = 0.01
+        self.dd_opening_direction = 1.0
 
     def create(self, dd_state_deg, vision_tolerance):
         # Moving part pose with respect to the static part.
 
         T_A_W = np.eye(4)
-        T_A_W[0,3] = self.dd_static_side_width + 2.0 * self.dd_moving_to_static_part_distance + self.dd_plate_params[0] - self.dd_axis_distance
+        T_A_W[0,3] = self.dd_static_side_width
         T_A_W[1,3] = self.dd_static_side_width + self.dd_moving_to_static_part_distance + 0.5 * self.dd_plate_params[1]
-        T_A_W[2,3] = 0.5 * self.dd_plate_params[2]
+        T_A_W[2,3] = 0.5 * self.dd_plate_params[2]  
         T_Arot_A = rvl.roty(np.deg2rad(dd_state_deg))
         T_Arot_DD = np.eye(4)
         T_Arot_DD[0,3] = self.dd_plate_params[0] + self.dd_moving_to_static_part_distance - self.dd_axis_distance
         T_Arot_DD[1,3] = 0.5 * self.dd_plate_params[1]
         T_Arot_DD[2,3] = -0.5 * self.dd_plate_params[2]
+        if self.dd_opening_direction > 0.0:
+            T_A_W[0,3] += (self.dd_moving_to_static_part_distance + self.dd_plate_params[0] + self.dd_moving_to_static_part_distance - self.dd_axis_distance)
+        else:
+            T_A_W[0,3] += self.dd_axis_distance
+            T_Arot_DD[0,3] = -T_Arot_DD[0,3]
         self.T_DD_W = T_A_W @ T_Arot_A @ rvl.inv_transf(T_Arot_DD)
 
         # Door/drawer VN model.
@@ -376,8 +398,14 @@ class door_model():
         dd_plate_max_vertex_coordinates = self.dd_plate_params.copy()
         dd_plate_max_vertex_coordinates[:2] += (2.0 * vision_tolerance)
         dd_plate_max_vertex_coordinates[2] = -dd_plate_max_vertex_coordinates[2]
-        dd_plate_box = (self.vn_dd.unit_box_vertices() + 1.0) * 0.5 * dd_plate_max_vertex_coordinates
-        dd_plate_box[:,:2] -= vision_tolerance
+        if self.dd_opening_direction < 0.0:
+            dd_plate_max_vertex_coordinates[0] = -dd_plate_max_vertex_coordinates[0]
+        dd_plate_box = (self.vn_dd.unit_box_vertices() + 1.0) * 0.5 * dd_plate_max_vertex_coordinates        
+        if self.dd_opening_direction > 0.0:
+            dd_plate_box[:,0] -= vision_tolerance
+        else:
+            dd_plate_box[:,0] += vision_tolerance
+        dd_plate_box[:,1] -= vision_tolerance
         d_mov = self.vn_dd.convex_hull(A, dd_plate_box)
         self.vn_dd.add_bl_nodes(A, d_mov)
         self.vn_dd.add_hl_node(1.0, range(18))
@@ -431,6 +459,7 @@ class door_model():
         dd_plate_max_vertex_coordinates[:2] += (2.0 * vision_tolerance)
         dd_plate_max_vertex_coordinates[2] = -dd_plate_max_vertex_coordinates[2]
         dd_plate_box = (self.vn_dd.unit_box_vertices() + 1.0) * 0.5 * dd_plate_max_vertex_coordinates
+        dd_plate_box[:,:2] -= vision_tolerance
         d_mov = self.vn_dd.convex_hull(A, dd_plate_box)
         self.vn_dd.add_bl_nodes(A, d_mov)
         self.vn_dd.add_hl_node(1.0, range(18))
@@ -463,7 +492,10 @@ class door_model():
 
     def create_mesh(self):
         dd_plate_mesh = o3d.geometry.TriangleMesh.create_box(width=self.dd_plate_params[0], height=self.dd_plate_params[1], depth=self.dd_plate_params[2])    
-        dd_plate_mesh.translate((0.0, 0.0, -self.dd_plate_params[2]))
+        if self.dd_opening_direction > 0.0:
+            dd_plate_mesh.translate((0.0, 0.0, -self.dd_plate_params[2]))    
+        else:
+            dd_plate_mesh.translate((-self.dd_plate_params[0], 0.0, -self.dd_plate_params[2]))    
         dd_plate_mesh.transform(self.T_DD_W)
         dd_plate_mesh.compute_vertex_normals()
         dd_plate_mesh.paint_uniform_color([0.8, 0.8, 0.8])
@@ -842,13 +874,14 @@ def demo_vn():
 def demo_push_poses():
     # Parameters.
   
-    dd_state_deg = -12.0
+    dd_state_deg = 12.0
     num_viewpoints = 100
     num_rot_angles = 12
     load_valid_contact_poses_from_file = False
     load_feasible_poses_from_file = False
-    
+    contact_point_sampling_offset = 0.02
     use_default_gripper = False
+    vision_tolerance = 0.007
 
     if use_default_gripper:
         custom_gripper_spheres_path = ''
@@ -868,7 +901,6 @@ def demo_push_poses():
         tool_contact_surface_params = np.array([[0.0, -0.026, 0.0], [0.0, -0.031, -0.025], [0.006, -0.026, 0.0]])
         tool_finger_distances = [-0.155/2., 0., -0.102] # x, y, z
         sphere_to_TCS_distance = 0.004609
-    vision_tolerance = 0.005
 
     gripper_params = {'is_default_gripper': use_default_gripper,
                         'custom_gripper_spheres_path': custom_gripper_spheres_path, 
@@ -876,11 +908,13 @@ def demo_push_poses():
                         'tool_contact_surface_params': tool_contact_surface_params,
                         'tool_finger_distances': tool_finger_distances,
                         'sphere_to_TCS_distance': sphere_to_TCS_distance}
+
     # Door model.
 
     door = door_model()
+    door.dd_opening_direction = -1.0
     door.create(dd_state_deg, vision_tolerance)
-    
+     
     # Tool model.
 
     tool = tool_model(gripper_params)
@@ -888,8 +922,11 @@ def demo_push_poses():
 
     # Contact points.
 
-    x = np.linspace(0.0, door.dd_contact_surface_params[0], 21)
-    y = np.linspace(0.0, door.dd_contact_surface_params[1], 21)
+    if door.dd_opening_direction > 0.0:
+        x = np.linspace(-contact_point_sampling_offset, door.dd_contact_surface_params[0], 25)
+    else:
+        x = np.linspace(-door.dd_contact_surface_params[0], contact_point_sampling_offset, 25)
+    y = np.linspace(-contact_point_sampling_offset, door.dd_contact_surface_params[1], 25)
     dd_grid_x, dd_grid_y = np.meshgrid(x, y)
     contact_points = np.stack((dd_grid_x, dd_grid_y, np.zeros(dd_grid_x.shape)), axis=-1)
     contact_points = np.reshape(contact_points, (contact_points.shape[0] * contact_points.shape[1], 3))
@@ -899,6 +936,13 @@ def demo_push_poses():
     # Push tool.
 
     push_ = push(door, tool)
+
+    # T_G_DD = np.eye(4)
+    # T_G_DD[0,3] = 0.105
+    # T_G_DD[2,3] = 0.05
+    # collision = push_.collision_detection(T_G_DD[np.newaxis,:,:], door.vn_dd)
+    # dd_mesh, tool_mesh, tool_mesh_wireframe, tool_sampling_sphere_centers_pcd = visualize_push(collision[0], door, tool, T_G_DD)
+    # o3d.visualization.draw_geometries([tool_mesh_wireframe, tool_sampling_sphere_centers_pcd, dd_mesh])
 
     # Valid contact poses.
         
@@ -922,7 +966,6 @@ def demo_push_poses():
     T_G_W = door.T_DD_W @ feasible_poses
     collision = push_.collision_detection(T_G_W, door.vn_env)
     contact_free_poses = feasible_poses[np.logical_not(collision),:]
-    np.save('contact_free_poses', contact_free_poses)
 
     # Visualization.
 
@@ -931,9 +974,15 @@ def demo_push_poses():
     collision_ = np.zeros(samples.shape[0]).astype('bool')
     for visualization_idx in range(10):
         print('sample', visualization_idx)
-        sample_idx = np.random.randint(samples.shape[0])
-        # sample_idx = 0
-        T_G_DD = samples[sample_idx,:,:]
+        good_sample = False
+        while not good_sample:
+            sample_idx = np.random.randint(samples.shape[0])
+            # sample_idx = 0
+            T_G_DD = samples[sample_idx,:,:]
+            p_ref_G = np.ones(4)
+            p_ref_G[:3] = -np.array([tool_finger_distances])
+            p_ref_DD = T_G_DD @ p_ref_G
+            good_sample = (p_ref_DD[0] < 0.0 or p_ref_DD[1] < 0.0)
         dd_mesh, tool_mesh, tool_mesh_wireframe, tool_sampling_sphere_centers_pcd = visualize_push(collision_[sample_idx], door, tool, T_G_DD)
         o3d.visualization.draw_geometries([tool_mesh_wireframe, tool_sampling_sphere_centers_pcd, dd_mesh])
 
@@ -943,6 +992,7 @@ def demo_push_poses_ros(door_dims: np.array,
                         dd_state_deg: float, 
                         num_viewpoints: int, 
                         num_rot_angles: int,
+                        opening_direction: float=1.0,
                         load_valid_contact_poses_from_file: bool=False, 
                         load_feasible_poses_from_file: bool=False, 
                         gripper_params: dict={},
@@ -973,7 +1023,8 @@ def demo_push_poses_ros(door_dims: np.array,
         tool_finger_distances = [-0.155/2., 0., -0.102] # x, y, z
         sphere_to_TCS_distance = 0.004609
     
-    vision_tolerance = 0.005
+    contact_point_sampling_offset = 0.02
+    vision_tolerance = 0.007
     
     # gripper_params = {'is_default_gripper': use_default_gripper,
     #                     'custom_gripper_spheres_path': custom_gripper_spheres_path, 
@@ -986,6 +1037,7 @@ def demo_push_poses_ros(door_dims: np.array,
     door = door_model()
     door.dd_plate_params = door_dims
     door.dd_static_depth = static_depth
+    door.dd_opening_direction = -1
     _, _ = door.create(dd_state_deg, vision_tolerance)
 
     # Tool model.
@@ -993,8 +1045,11 @@ def demo_push_poses_ros(door_dims: np.array,
     tool.create()
 
     # Contact points.
-    x = np.linspace(0.0, door.dd_contact_surface_params[0], 21)
-    y = np.linspace(0.0, door.dd_contact_surface_params[1], 21)
+    if door.dd_opening_direction > 0.0:
+        x = np.linspace(-contact_point_sampling_offset, door.dd_contact_surface_params[0], 25)
+    else:
+        x = np.linspace(-door.dd_contact_surface_params[0], contact_point_sampling_offset, 25)
+    y = np.linspace(-contact_point_sampling_offset, door.dd_contact_surface_params[1], 25)
     dd_grid_x, dd_grid_y = np.meshgrid(x, y)
     contact_points = np.stack((dd_grid_x, dd_grid_y, np.zeros(dd_grid_x.shape)), axis=-1)
     contact_points = np.reshape(contact_points, (contact_points.shape[0] * contact_points.shape[1], 3))

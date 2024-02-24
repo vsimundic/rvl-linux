@@ -38,6 +38,9 @@ void CreateParamList(
     char** pFeasibleToolContactPosesFileName,
     char ** pToolModelDir,
     float &dd_state_angle_deg,
+    float *qHome,
+    float *t_A_S,
+    float &rotz_A_S,
     char ** pResultsFolder)
 {
     pParamList->m_pMem = pMem;
@@ -47,6 +50,16 @@ void CreateParamList(
     pParamData = pParamList->AddParam("FeasibleToolContactPosesFileName", RVLPARAM_TYPE_STRING, pFeasibleToolContactPosesFileName);
     pParamData = pParamList->AddParam("ToolModelDirectory", RVLPARAM_TYPE_STRING, pToolModelDir);
     pParamData = pParamList->AddParam("DoorSateAngle(deg)", RVLPARAM_TYPE_FLOAT, &dd_state_angle_deg);
+    pParamData = pParamList->AddParam("Robot.home.q1", RVLPARAM_TYPE_FLOAT, qHome);
+    pParamData = pParamList->AddParam("Robot.home.q2", RVLPARAM_TYPE_FLOAT, qHome + 1);
+    pParamData = pParamList->AddParam("Robot.home.q3", RVLPARAM_TYPE_FLOAT, qHome + 2);
+    pParamData = pParamList->AddParam("Robot.home.q4", RVLPARAM_TYPE_FLOAT, qHome + 3);
+    pParamData = pParamList->AddParam("Robot.home.q5", RVLPARAM_TYPE_FLOAT, qHome + 4);
+    pParamData = pParamList->AddParam("Robot.home.q6", RVLPARAM_TYPE_FLOAT, qHome + 5);
+    pParamData = pParamList->AddParam("DDM.dd.t_A_S.x", RVLPARAM_TYPE_FLOAT, t_A_S);
+    pParamData = pParamList->AddParam("DDM.dd.t_A_S.y", RVLPARAM_TYPE_FLOAT, t_A_S + 1);
+    pParamData = pParamList->AddParam("DDM.dd.t_A_S.z", RVLPARAM_TYPE_FLOAT, t_A_S + 2);
+    pParamData = pParamList->AddParam("DDM.dd.rotz_A_S", RVLPARAM_TYPE_FLOAT, &rotz_A_S);
     pParamData = pParamList->AddParam("ResultsFolder", RVLPARAM_TYPE_STRING, pResultsFolder);
 }
 
@@ -407,11 +420,18 @@ int main(int argc, char** argv)
     float dd_state_angle_deg = 10.0f;
     CRVLParameterList ParamList;
     char* resultsFolder = NULL;
+    float qHome[6];
+    memset(qHome, 0, 6 * sizeof(float));
+    Pose3D pose_A_S;
+    float rotz_A_S_deg = 0.0;
     CreateParamList(&ParamList,
         &mem0,
         &feasibleToolContactPosesFileName,
         &toolModelDir,
         dd_state_angle_deg,
+        qHome,
+        pose_A_S.t,
+        rotz_A_S_deg,
         &resultsFolder);
     ParamList.LoadParams(cfgFileName);
 
@@ -463,21 +483,18 @@ int main(int argc, char** argv)
 
     Pose3D pose_G_S_init;
     float robot_home_0[3];
+    float qHomeRad[6];
     if (manipulator.bDefaultToolModel)
     {
         RVLROTY(-COS45, COS45, pose_G_S_init.R);
         RVLSET3VECTOR(robot_home_0, manipulator.robot.minr + manipulator.tool_len + manipulator.robot.d[5], 0.0f, 0.5f);
+        RVLSUM3VECTORS(manipulator.robot.pose_0_W.t, robot_home_0, pose_G_S_init.t);
     }
     else
     {
-        float R_G_S_Y[9];
-        RVLROTY(-COS45, COS45, R_G_S_Y);
-        float R_G_S_Z[9];
-        RVLROTZ(-1.0f, 0.0f, R_G_S_Z);
-        RVLMXMUL3X3(R_G_S_Y, R_G_S_Z, pose_G_S_init.R);
-        RVLSET3VECTOR(robot_home_0, 0.3f + manipulator.robot.d[5], 0.0f, 0.5f);
-    }
-    RVLSUM3VECTORS(manipulator.robot.pose_0_W.t, robot_home_0, pose_G_S_init.t);
+        for (int i = 0; i < manipulator.robot.n; i++)
+            qHomeRad[i] = DEG2RAD * qHome[i];
+    }    
     //FILE *fpDebug = fopen("pose_G_S_init.txt", "w");
     //float T_G_S_init[16];
     //RVLHTRANSFMX(pose_G_S_init.R, pose_G_S_init.t, T_G_S_init);
@@ -514,11 +531,16 @@ int main(int argc, char** argv)
 
     //manipulator.UpdateStaticPose();
 
+    // Set door parameters.
+
+    manipulator.SetDoorModelParams(0.018f, 0.396f, 0.496f, 0.0f, -0.5f * 0.396f, -1.0f, 0.018f, 0.005f);
+
     // Set door pose. (Furniture pose is computed from the door pose.)
 
-    Pose3D pose_A_S;
-    RVLUNITMX3(pose_A_S.R);
-    RVLSET3VECTOR(pose_A_S.t, -0.5f, 0.15f, 0.278f);
+    float rotz_A_S = DEG2RAD * rotz_A_S_deg;
+    float cs = cos(rotz_A_S);
+    float sn = sin(rotz_A_S);
+    RVLROTZ(cs, sn, pose_A_S.R);
     manipulator.SetDoorPose(pose_A_S);
 
     ///
@@ -529,7 +551,7 @@ int main(int argc, char** argv)
     Array<Pose3D> poses_G_0;
     //manipulator.SetVisualizeVNEnvironmentModel();
     Array2D<float> robotJoints;
-    if (manipulator.Path2(&pose_G_S_init, poses_G_0, robotJoints))
+    if (manipulator.Path2(qHomeRad, poses_G_0, robotJoints))
         printf("Path is successfully generated.\n");
     else
         printf("Path is not found.\n");

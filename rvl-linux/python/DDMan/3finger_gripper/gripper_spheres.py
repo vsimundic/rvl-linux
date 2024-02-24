@@ -63,7 +63,7 @@ print(len(sphere_meshes))
 sphere_meshes_ls.append(tool_mesh)
 print(len(sphere_meshes))
 # open3d.visualization.draw_geometries(sphere_meshes)
-open3d.visualization.draw_geometries([tool_mesh])
+open3d.visualization.draw_geometries(sphere_meshes_ls)
 
 tool_mesh.compute_vertex_normals()
 open3d.io.write_triangle_mesh('/home/RVLuser/rvl-linux/python/DDMan/3finger_gripper/robotiq_3f_gripper_spheres.dae', tool_mesh)
