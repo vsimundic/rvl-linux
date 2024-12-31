@@ -1,0 +1,3 @@
+<launch>
+    <node name="test_tsr_cabinet_open_node" pkg="ur5_tsr_control" type="test_tsr_cabinet_open.py" output="screen" />
+</launch>

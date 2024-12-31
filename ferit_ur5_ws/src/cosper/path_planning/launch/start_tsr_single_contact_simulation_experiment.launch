@@ -1,0 +1,4 @@
+<launch>
+    <node name="node_exp_tsr_single_contact_sim" pkg="path_planning"
+        type="single_contact_exp_handle_tsr.py" output="screen" />
+</launch>

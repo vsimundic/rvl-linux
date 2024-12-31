@@ -2,13 +2,12 @@
 
 // The following code should be moved to RVL3DTools.h.
 
-#define RVLRNDUNIT3VECTOR(X, fTmp) \
-{\
-	RVLSET3VECTOR(X, 2.0f * (float)rand() / (float)RAND_MAX - 1.0f, 2.0f * (float)rand() / (float)RAND_MAX - 1.0f, 2.0f * (float)rand() / (float)RAND_MAX - 1.0f)\
-	RVLNORM3(X, fTmp)\
-}
+#define RVLRNDUNIT3VECTOR(X, fTmp)                                                                                                                                    \
+	{                                                                                                                                                                 \
+		RVLSET3VECTOR(X, 2.0f * (float)rand() / (float)RAND_MAX - 1.0f, 2.0f * (float)rand() / (float)RAND_MAX - 1.0f, 2.0f * (float)rand() / (float)RAND_MAX - 1.0f) \
+			RVLNORM3(X, fTmp)}
 
-// 
+//
 
 namespace RVL
 {
@@ -16,9 +15,9 @@ namespace RVL
 
 	template <typename T>
 	void BoundingBoxOfBoxes(
-		Box<T>* pBoxSrc1,
-		Box<T>* pBoxSrc2,
-		Box<T>* pBoxTgt)
+		Box<T> *pBoxSrc1,
+		Box<T> *pBoxSrc2,
+		Box<T> *pBoxTgt)
 	{
 		pBoxTgt->minx = RVLMIN(pBoxSrc1->minx, pBoxSrc2->minx);
 		pBoxTgt->maxx = RVLMAX(pBoxSrc1->maxx, pBoxSrc2->maxx);
@@ -34,7 +33,7 @@ namespace RVL
 	{
 		struct DisplayCallbackData
 		{
-			Visualizer* pVisualizer;
+			Visualizer *pVisualizer;
 			bool bOwnVisualizer;
 			CRVLParameterList paramList;
 			bool bVNEnv;
@@ -65,7 +64,7 @@ namespace RVL
 		public:
 			Robot();
 			virtual ~Robot();
-			void Create(char* cfgFileNameIn);
+			void Create(char *cfgFileNameIn);
 			void CreateParamList();
 			void Clear();
 			void FwdKinematics();
@@ -74,26 +73,29 @@ namespace RVL
 				Pose3D *pdPose);
 			void FwdKinematicsRot(
 				int i,
-				float* R,
+				float *R,
 				float &cq,
 				float &sq);
 			bool InvKinematics(
 				Pose3D toolPose,
-				float* qOut = NULL);
+				float *qOut = NULL);
 			bool InvKinematics1E56(
 				Pose3D toolPose,
 				float *qOut = NULL);
-			void InvKinematicsApprox23(float* qOut = NULL);
+			void InvKinematicsApprox23(float *qOut = NULL);
+			bool InvKinematics(
+				Pose3D pose_6_0,
+				Array2D<float> &qOut);
 
 		public:
-			CRVLMem* pMem0;
+			CRVLMem *pMem0;
 			CRVLParameterList paramList;
 			int n;
-			float* q;
-			float* d;
-			float* a;
-			float* al;
-			uchar *jointType;	// 0 - revolute; 1 - prismatic
+			float *q;
+			float *d;
+			float *a;
+			float *al;
+			uchar *jointType; // 0 - revolute; 1 - prismatic
 			float maxr;
 			float minr;
 			float minz;
@@ -102,9 +104,10 @@ namespace RVL
 			Pose3D link_pose[6];
 			Pose3D pose_0_W;
 			float minq[6], maxq[6];
+
 		private:
-			float* csal;
-			float* snal;
+			float *csal;
+			float *snal;
 			Pose3D pose_6_G;
 			float d4_2;
 			float k1;
@@ -121,7 +124,7 @@ namespace RVL
 	public:
 		DDManipulator();
 		virtual ~DDManipulator();
-		void Create(char* cfgFileNameIn);
+		void Create(char *cfgFileNameIn);
 		void CreateParamList();
 		void Clear();
 		void SetEnvironmentState(float state);
@@ -129,31 +132,31 @@ namespace RVL
 			Pose3D *pPose_G_S,
 			float *SDF);
 		bool Free(
-			Pose3D* pPose_G_S_start,
-			Pose3D* pPose_G_S_end);
+			Pose3D *pPose_G_S_start,
+			Pose3D *pPose_G_S_end);
 		bool LocalConstraints(
-			Pose3D* pPose_G_S,
-			float* SDF,
-			Array<Pair<int, int>>& localConstraints,
-			Vector3<float>* c_S_rot,
-			Vector3<float>* c_S);
+			Pose3D *pPose_G_S,
+			float *SDF,
+			Array<Pair<int, int>> &localConstraints,
+			Vector3<float> *c_S_rot,
+			Vector3<float> *c_S);
 		float Cost(
-			Pose3D* pPose_G_S_start,
-			Pose3D* pPose_G_S_end);
+			Pose3D *pPose_G_S_start,
+			Pose3D *pPose_G_S_end);
 		bool FreePose(
-			Pose3D* pPose_G_S_init,
+			Pose3D *pPose_G_S_init,
 			Array<Pair<int, int>> localConstraints,
-			Vector3<float>* c_S_rot,
-			Vector3<float>* c_S,
-			Pose3D* pPose_G_S);
+			Vector3<float> *c_S_rot,
+			Vector3<float> *c_S,
+			Pose3D *pPose_G_S);
 		bool FeasiblePose(
-			Pose3D* pPose_G_0,
-			float* SDF,
+			Pose3D *pPose_G_0,
+			float *SDF,
 			float *q,
 			bool bApproach = false);
-		void Path(Pose3D * pPose_G_S_init);
+		void Path(Pose3D *pPose_G_S_init);
 		bool Path2(
-			float* qInit,
+			float *qInit,
 			float endDoorState,
 			int nStates,
 			Array<Pose3D> &poses_G_0,
@@ -162,8 +165,8 @@ namespace RVL
 			Array<Array2D<float>> *pFeasiblePathsJoints = NULL);
 		void CreateContactPoseGraph(std::string contactPoseGraphFileName);
 		void TileFeasibleToolContactPoses(
-			std::vector<MOTION::ContactPose>* pAllFeasibleTCPs,
-			float * max_dd_size,
+			std::vector<MOTION::ContactPose> *pAllFeasibleTCPs,
+			float *max_dd_size,
 			Box<float> &TCPSpace);
 		bool ApproachPath(
 			Pose3D *pPose_G_S_contact,
@@ -184,10 +187,10 @@ namespace RVL
 		bool LoadFeasibleToolContactPoses(std::string contactPosesFileName);
 		bool LoadContactPoseGraph(std::string contactPoseGraphFileName);
 		void LoadToolModel(std::string toolModelDir);
-		void InitVisualizer(Visualizer* pVisualizerIn);
+		void InitVisualizer(Visualizer *pVisualizerIn);
 		void Visualize(
-			std::vector<MOTION::Node>* pNodes,
-			std::vector<int>* pPath,
+			std::vector<MOTION::Node> *pNodes,
+			std::vector<int> *pPath,
 			Array<float> doorStates,
 			bool bVisualizeStates = false,
 			bool bVisualizeMotionPlanningTree = false,
@@ -195,8 +198,10 @@ namespace RVL
 			Array2D<float> *pRobotJoints = NULL);
 		void VisualizeTool(
 			Pose3D pose_G_R,
-			std::vector<vtkSmartPointer<vtkActor>> *pActors);
-		vtkSmartPointer<vtkActor> VisualizeRobot(float* q);
+			std::vector<vtkSmartPointer<vtkActor>> *pActors,
+			bool bToolMesh = true,
+			Array<int> *pSpheres = NULL);
+		vtkSmartPointer<vtkActor> VisualizeRobot(float *q);
 		vtkSmartPointer<vtkActor> VisualizeDoorPenel();
 		void SetVisualizeVNEnvironmentModel();
 
@@ -204,13 +209,13 @@ namespace RVL
 		void UpdateDoorReferenceFrames();
 
 	public:
-		CRVLMem* pMem;
-		CRVLMem* pMem0;
+		CRVLMem *pMem;
+		CRVLMem *pMem0;
 		CRVLParameterList paramList;
 		std::string cfgFileName;
-		char* resultsFolder;
+		char *resultsFolder;
 		bool bLog;
-		CRVLTimer* pTimer;
+		CRVLTimer *pTimer;
 
 		// Door model parameters.
 
@@ -227,7 +232,7 @@ namespace RVL
 		float dd_contact_surface_sampling_resolution;
 		float dd_state_angle;
 		float dd_opening_direction;
-		bool bVNPanel;	// If this variable is true, then the door panel is included in the VN model of the environment.
+		bool bVNPanel; // If this variable is true, then the door panel is included in the VN model of the environment.
 
 		// Door model constants.
 
@@ -242,8 +247,8 @@ namespace RVL
 
 		// Environment VN model.
 
-		VN* pVNEnv;
-		float* dVNEnv;
+		VN *pVNEnv;
+		float *dVNEnv;
 
 		// Robot.
 
@@ -261,16 +266,17 @@ namespace RVL
 		float tool_len;
 		MOTION::Sphere tool_bounding_sphere;
 		Array<MOTION::Sphere> tool_sample_spheres;
-		Mesh* pToolMesh;
+		Mesh *pToolMesh;
 		float PRTCP_G[3];
+		Array<int> tool_contact_spheres;
 
 		// Path planning.
 
 		int maxnSE3Points;
 		float kTemplateEndTol;
-		float maxSurfaceContactAngle;   // deg
-		float visionTol;    // m
-		float minDistanceToAxis;	// m
+		float maxSurfaceContactAngle; // deg
+		float visionTol;			  // m
+		float minDistanceToAxis;	  // m
 		bool bLock_T_G_DD;
 		float posCostMaxDist;
 		float wPos;
@@ -289,13 +295,13 @@ namespace RVL
 		char *toolModelDir;
 		Array<MOTION::Node> nodes;
 		Graph<GRAPH::Node_<GRAPH::EdgePtr<MOTION::Edge>>, MOTION::Edge, GRAPH::EdgePtr<MOTION::Edge>> graph;
-		MOTION::DisplayCallbackData* pVisualizationData;
+		MOTION::DisplayCallbackData *pVisualizationData;
 		Array<RECOG::VN_::ModelCluster *> VNMClusters;
 		Box<float> dd_panel_box;
 		Box<float> dd_static_box;
 		Box<float> dd_storage_space_box;
 		float half_tool_finger_distance;
-		int* nodeBuffMem;
+		int *nodeBuffMem;
 		int nodeBuffMemCapacity;
 		Solver solver;
 		float csMaxSurfaceContactAngle;
@@ -304,10 +310,9 @@ namespace RVL
 		float default_tool_P1_G[3];
 		float default_tool_P2_G[3];
 		Array<int> rndIdx;
-		Pose3D* pathPosesMem;
-		Array<Pose3D>* pathMem;
-		float* pathJointsMem;
-		Array2D<float>* pathMemJoints;
+		Pose3D *pathPosesMem;
+		Array<Pose3D> *pathMem;
+		float *pathJointsMem;
+		Array2D<float> *pathMemJoints;
 	};
 }
-

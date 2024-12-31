@@ -1,0 +1,4 @@
+<launch>
+    <node name="single_contact_exp_handle_moveit" pkg="path_planning"
+        type="single_contact_exp_handle_moveit.py" output="screen" />
+</launch>
