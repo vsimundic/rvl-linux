@@ -1,6 +1,7 @@
 import rospy
 import roslib
 import moveit_commander
+from moveit_msgs.msg import RobotTrajectory, RobotState
 from geometry_msgs.msg import Pose, PoseStamped
 from tf.transformations import quaternion_from_matrix, quaternion_matrix
 import numpy as np
@@ -16,6 +17,7 @@ from core.transforms import get_frame_transform, matrix_to_pose
 import socket
 import time
 from actionlib import GoalStatus
+from sensor_msgs.msg import JointState
 
 
 class UR5Commander():
@@ -54,7 +56,8 @@ class UR5Commander():
 
 
 
-        
+    def clear_planning_scene(self):
+        self.__scene.clear()
 
 
     def __create_init_scene(self):
@@ -148,10 +151,11 @@ class UR5Commander():
         self.__group.clear_pose_targets()
 
 
-    def send_joint_values_to_robot(self, joint_values,  wait: bool=True):
+    def send_joint_values_to_robot(self, joint_values: list,  wait: bool=True):
         self.__group.set_joint_value_target(joint_values)
-        self.__group.go(wait=wait)
+        success = self.__group.go(wait=wait)
         self.__group.stop()
+        return success
 
 
     def send_multiple_joint_space_poses_to_robot(self, joint_values_list: list, execute_time: float, wait: bool=True):
@@ -189,38 +193,156 @@ class UR5Commander():
         return False
 
 
-    def send_multiple_joint_space_poses_to_robot2(self, joint_values_list: list, velocitites: list, execute_time: float, wait: bool=True):
-        def trajectory_result_callback(status, result):
-            print("Trajectory execution completed.")
+    def send_multiple_joint_space_poses_to_robot2(self, joint_values_list: list):
 
+        # Robot parameters
+        max_joint_velocity = 1.0  # Maximum velocity in rad/s per joint
+        max_joint_acceleration = 0.5  # Maximum acceleration in rad/s^2 per joint
 
-        self.__follow_joint_trajectory_client.wait_for_server()
+        self.__follow_joint_trajectory_client.wait_for_server(timeout=rospy.Duration(10))
 
         joint_trajectory = JointTrajectory()
         print(self.__robot.get_joint_names(group=self.__group_name))
         joint_trajectory.joint_names = self.__robot.get_joint_names(self.__group_name)[1:7]
         
-        for i, joint_values in enumerate(joint_values_list):
-            print(joint_values)
+        total_time = 0.0  # Total execution time for the trajectory
+        for i in range(len(joint_values_list)):
             point = JointTrajectoryPoint()
-            point.positions = joint_values
-            # point.velocities = [0.1]*6
-            point.time_from_start = rospy.Duration(velocitites[i])
+            point.positions = joint_values_list[i]
+            if i > 0:
+                # Calculate time increment based on velocity and acceleration limits
+                time_increment = self.calculate_time_between_points(
+                    joint_values_list[i - 1], joint_values_list[i],
+                    max_joint_velocity, max_joint_acceleration
+                )
+            else:
+                time_increment = 0.0
+
+            total_time += time_increment
+            point.time_from_start = rospy.Duration(total_time)
             joint_trajectory.points.append(point)
-        
+
+
         goal = FollowJointTrajectoryGoal()
         goal.trajectory = joint_trajectory
 
         # state = self.__follow_joint_trajectory_client.send_goal_and_wait(goal)
         # state = self.__follow_joint_trajectory_client.send_goal(goal)
-        state = self.__follow_joint_trajectory_client.send_goal_and_wait(goal, execute_timeout=rospy.Duration(execute_time), preempt_timeout=rospy.Duration(15.0))
+        state = self.__follow_joint_trajectory_client.send_goal_and_wait(
+            goal,
+            execute_timeout=rospy.Duration(total_time + 2.0),  # Buffer time for execution
+            preempt_timeout=rospy.Duration(5.0)
+        )        
         print("Done waiting for trajectory execution.")
 
-        print(state)
         if state == GoalStatus.SUCCEEDED or state == GoalStatus.PREEMPTED:
             return True
         return False
 
+    def send_multiple_joint_space_poses_to_robot3(self, joint_values_list: list) -> bool:
+        """
+        Plans and executes a trajectory through a series of joint-space waypoints while considering obstacles in the 
+        MoveIt PlanningSceneInterface.
+
+        This function iteratively plans a trajectory for each joint-space waypoint provided in the input list. 
+        If all waypoints are successfully planned, it combines them into a single RobotTrajectory and executes it.
+        If planning fails for any waypoint, the function stops further planning and logs a warning.
+
+        Parameters:
+        ----------
+        joint_values_list : list
+            A list of joint-space configurations, where each configuration is a list of joint values (floats) 
+            corresponding to the robot's joint positions.
+
+        Returns:
+        -------
+        bool
+            True if a collision-free trajectory is successfully planned and executed through all waypoints. 
+            False if planning fails for any of the waypoints.
+        """
+        trajectory = RobotTrajectory()
+        success = True
+        total_time = 0.0  # Keeps track of cumulative time for waypoints
+        max_velocity = 1.0
+        max_acceleration = 0.5
+
+        # Set joint names
+        trajectory.joint_trajectory.joint_names = self.__group.get_active_joints()
+        
+        # Create a RobotState object to manually update the start state
+        current_state = RobotState()
+
+        for index, joints in enumerate(joint_values_list):
+            self.__group.set_joint_value_target(joints)
+
+            # Update the start state
+            if index == 0:
+                # For the first waypoint, use the robot's current state
+                self.__group.set_start_state_to_current_state()
+            else:
+                # For subsequent waypoints, use the last point of the previously planned trajectory
+                last_trajectory_point = trajectory.joint_trajectory.points[-1]
+                joint_state_names = self.__group.get_active_joints()
+                joint_state_positions = last_trajectory_point.positions
+
+                # Populate the RobotState object with the last trajectory point
+                joint_state = JointState()
+                joint_state.name = joint_state_names
+                joint_state.position = joint_state_positions
+                current_state.joint_state = joint_state
+                self.__group.set_start_state(current_state)
+
+            plan = self.__group.plan()
+            if plan[0] and plan[1].joint_trajectory.points:
+                for point_index, point in enumerate(plan[1].joint_trajectory.points):
+                    # Dynamically calculate time between points
+                    if index == 0 and point_index == 0:
+                        continue  # Skip time calculation for the first point
+                    prev_point = plan[1].joint_trajectory.points[point_index - 1] if point_index > 0 else trajectory.joint_trajectory.points[-1]
+                    time_increment = self.calculate_time_between_points(
+                        prev_point.positions, point.positions, max_velocity, max_acceleration)
+                    total_time += time_increment
+                    point.time_from_start = rospy.Duration.from_sec(total_time)
+
+                # Append the planned trajectory points to the composite trajectory
+                trajectory.joint_trajectory.points.extend(plan[1].joint_trajectory.points)
+            else:
+                rospy.logwarn('Planning failed for waypoints: %s' % joints)
+                success = False
+                break
+        
+            if not trajectory.joint_trajectory.joint_names:
+                rospy.logerr("Trajectory specifies no joint names.")
+                return False
+            if not trajectory.joint_trajectory.points:
+                rospy.logerr("Trajectory contains no points.")
+                return False
+        
+        # Execute the trajectory if successful
+        if success:
+            success = self.__group.execute(trajectory, wait=True)
+        else:
+            rospy.logwarn("Failed to plan a collision-free trajectory through waypoints.")
+        
+        return success
+
+
+    @staticmethod
+    def calculate_time_between_points(start, end, max_velocity, max_acceleration):
+        """
+        Calculate time increment between two joint positions based on velocity and acceleration limits.
+        """
+        import numpy as np
+
+        # Compute joint-wise differences
+        position_differences = np.abs(np.array(end) - np.array(start))
+
+        # Compute time required for each joint (velocity and acceleration limited)
+        time_velocity = position_differences / max_velocity
+        time_acceleration = np.sqrt(2 * position_differences / max_acceleration)
+
+        # Return the maximum time required across all joints
+        return max(max(time_velocity), max(time_acceleration))
 
 
 
@@ -270,7 +392,6 @@ class UR5Commander():
         with open(self.URScript_save_path, 'w') as f:
             f.write(txt)
             f.close()
-
 
     # def generate_URScript_poses(self, T_array:np.ndarray):
     #     n = q_array.shape[0]
@@ -459,6 +580,30 @@ class UR5Commander():
         if q is None:
             return None
         return list(q)
+
+    def get_inverse_kin_builtin(self, q_init: list, T: np.ndarray):
+        """
+        Uses built-in set_pose_targets() and plan() to get inverse kin.
+        """
+        pose_ = matrix_to_pose(T)
+
+        start_state = moveit_commander.RobotState()
+        start_state.joint_state.name = self.__group.get_active_joints()
+        start_state.joint_state.position = q_init
+        self.__group.set_start_state(start_state)
+        
+        self.__group.set_pose_target(pose_)
+        plan = self.__group.plan()  # Directly get the plan (not a tuple)
+        
+        if plan[0] and len(plan[1].joint_trajectory.points) > 0:
+            traj = []
+            for pt in plan[1].joint_trajectory.points:
+                traj.append(list(pt.positions))
+            
+            return traj[-1], traj
+        else:
+            return None, None
+
 
     @staticmethod
     def __matrix_to_pose(T: np.ndarray):

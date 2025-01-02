@@ -45,11 +45,14 @@ int main(int argc, char** argv) {
     UR5.Create("/home/RVLuser/ferit_ur5_ws/RVL_cfg_file.cfg");
     cout << "UR5 created" << endl;
     RVL::Pose3D pose_6_0;
-    pose_6_0.t[0] = 0.107431;
-    pose_6_0.t[1] = 0.2934;
-    pose_6_0.t[2] = 0.853118;
-    float Q[4] = {0.70709, -0.707124, 0.0, 0.0};
-    RVLQUATERNIONTOROT(Q, pose_6_0.R);
+    pose_6_0.R[0] = -1;
+    pose_6_0.R[5] = 1;
+    pose_6_0.R[7] = 1;
+    pose_6_0.t[0] = 0.39267777;
+    pose_6_0.t[1] = 0.19130912;
+    pose_6_0.t[2] = 0.41946068;
+    // float Q[4] = {0.70709, -0.707124, 0.0, 0.0};
+    // RVLQUATERNIONTOROT(Q, pose_6_0.R);
     RVL::Array2D<float> invKinSolutions;
     invKinSolutions.Element = NULL;
     UR5.InvKinematics(pose_6_0, invKinSolutions);
@@ -62,7 +65,22 @@ int main(int argc, char** argv) {
         }
         std::cout << std::endl;
     }
+    
+    float pi_ = 3.14159265359;
+    q[0] += pi_;
+    q[5] += pi_;
 
-    ros::spin(); // Keep the node running
+    for (int i = 0; i < 6; ++i) {
+        if (q[i] > pi_) 
+        {
+            q[i] -= 2.0f * pi_;
+        } 
+        else if (q[i] < -pi_) 
+        {
+            q[i] += 2.0f * pi_;
+        }
+    }
+
+    // ros::spin(); // Keep the node running
     return 0;
 }

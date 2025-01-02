@@ -8,7 +8,7 @@ from math import pi
 import numpy as np
 from gazebo_msgs.srv import SpawnModel, SetModelConfiguration, SetModelConfigurationRequest, DeleteModel, GetModelState, GetJointProperties, GetJointPropertiesRequest
 from geometry_msgs.msg import Pose
-from tf.transformations import quaternion_from_matrix
+from tf.transformations import quaternion_from_matrix, euler_from_matrix
 import open3d as o3d
 # from core.transforms import rot_z
 
@@ -32,7 +32,10 @@ def rot_y(angle_rad):
 class Cabinet():
     # def __init__(self, w_door: float, h_door: float, d_door: float=0.018, static_d: float=0.3, axis_pos: int=1, position: np.array=np.array([0, 0, 0]), angle_deg:float=0, save_path:str=None):
     # def __init__(self, door_params:np.array=np.array([0.1, 0.1, 0.018, 0.1]), axis_pos: int=1, position: np.array=np.array([0, 0, 0]), rotz_deg:float=0, save_path:str=None):
-    def __init__(self, door_params:np.array=np.array([0.1, 0.1, 0.018, 0.1]), axis_pos: int=1, T_A_S: np.ndarray=np.eye(4), save_path:str=None):
+    def __init__(self, door_params:np.array=np.array([0.1, 0.1, 0.018, 0.1]), 
+                 axis_pos: int=1, T_A_S: np.ndarray=np.eye(4), 
+                 save_path:str=None,
+                 has_handle:bool=False):
         # S = World (scene)
         # O = centroid of cabinet
         # F = top left corner of static part of cabinet
@@ -46,10 +49,21 @@ class Cabinet():
         self.moving_to_static_part_distance = 0.005
         self.axis_distance = 0.01
         self.static_side_width = 0.018
+        
+        # Handle def - cylinders
+        self.has_handle = has_handle
+        self.handle_radius = 0.005
+        self.handle_length = 0.08
+        self.handle_height = 0.02
+        self.handle_base_radius = 0.003
+        self.handle_offset = 0.05
+
         self.base_link_name = 'base_cabinet_link'
         self.door_panel_link_name = 'door_link'
         self.door_joint_name = 'door_joint'
         self.cabinet_name = 'my_cabinet'
+        self.handle_link_name  = 'handle_link'
+        self.handle_joint_name  = 'handle_joint'
         self.save_path = save_path
         # self.position = position
         # self.rotz_deg = rotz_deg
@@ -60,11 +74,13 @@ class Cabinet():
         else:
             self.axis_pos = axis_pos
 
+        self.setup_matrices()
+
         self.xml_model = None
+        self.root_urdf = None
         if self.save_path is not None:
             self.xml_model = self.generate_cabinet_urdf_from_door_panel()
 
-        self.setup_matrices()
 
         self.mesh = self.create_mesh()
 
@@ -84,8 +100,11 @@ class Cabinet():
 
         self.T_A_O = np.eye(4)
         if self.axis_pos < 0:
+            # Rotating door hinge around z-axis for door hinge on left
             self.T_A_O = Tz @ self.T_A_O
-        self.T_A_O[:3, 3] = np.array([self.static_d/2. - self.d_door/2., self.axis_pos*(self.w_door/2. - self.axis_distance), 0.])
+        self.T_A_O[:3, 3] = np.array([self.static_d/2. - self.d_door/2., 
+                                      self.axis_pos*(self.w_door/2. - self.axis_distance), 
+                                      0.])
         self.T_A_O_init = self.T_A_O.copy()
 
         # Cabinet centroid to world
@@ -107,6 +126,13 @@ class Cabinet():
         # # Door panel centroid to axis
         # self.T_D_A_init = np.eye(4)
         # self.T_D_A_init[:3, 3] = np.array([self.axis_pos*(self.d_door/2.), -(self.w_door/2. - self.axis_distance), self.h_door/2.])
+
+        # Handle in axis frame
+        self.T_H_A = np.eye(4) # Handle in axis frame
+        self.T_H_A[:3,  3] = np.array([self.axis_pos*(self.handle_height+self.d_door/2.), 
+                                  -1*(self.w_door -self.handle_offset), 
+                                  0.0])
+
 
     def generate_cabinet_urdf_from_door_panel(self):
         static_d = self.static_d
@@ -138,14 +164,14 @@ class Cabinet():
                         [-(static_d/2.-d/2.), 0., bottom_panel_height*0.5+moving_to_static_part_distance]]) # back panel
 
 
-        root = gfg.Element('robot')
-        root.set('name', self.cabinet_name)
+        self.root_urdf = gfg.Element('robot')
+        self.root_urdf.set('name', self.cabinet_name)
 
-        world_link = gfg.SubElement(root, 'link')
+        world_link = gfg.SubElement(self.root_urdf, 'link')
         world_link.set('name', 'world')
 
         # Virtual joint
-        virtual_joint = gfg.SubElement(root, 'joint')
+        virtual_joint = gfg.SubElement(self.root_urdf, 'joint')
         virtual_joint.set('name', 'virtual_joint')
         virtual_joint.set('type', 'fixed')
         vj_parent = gfg.SubElement(virtual_joint, 'parent')
@@ -156,7 +182,7 @@ class Cabinet():
         vj_origin.set('xyz', '0.0 0.0 0.0')
         vj_origin.set('rpy', '0.0 0.0 0.0')
 
-        base_door_link = gfg.SubElement(root, 'link')
+        base_door_link = gfg.SubElement(self.root_urdf, 'link')
         base_door_link.set('name', base_link_name)
 
         # Cabinet panels
@@ -204,13 +230,14 @@ class Cabinet():
         door_panel_dims = [self.d_door, self.w_door, self.h_door]
         door_panel_position = [static_d/2. - d/2., 0., 0.]
 
-        door_panel_link = gfg.SubElement(root, 'link')
+        door_panel_link = gfg.SubElement(self.root_urdf, 'link')
         door_panel_link.set('name', 'door_link')
 
         door_panel_visual = gfg.SubElement(door_panel_link, 'visual')
         dpl_visual_origin = gfg.SubElement(door_panel_visual, 'origin')
         # dpl_visual_origin.set('xyz', '0.0 {} 0.0'.format(-(door_panel_dims[1]/2. - axis_distance)))
-        dpl_visual_origin.set('xyz', '0.0 {} 0.0'.format(-axis_pos*(door_panel_dims[1]/2. - axis_distance)))
+        dpl_visual_origin.set('xyz', '0.0 {} 0.0'.format(-1*(door_panel_dims[1]/2. - axis_distance)))
+        # dpl_visual_origin.set('xyz', '0.0 {} 0.0'.format(0))
         dpl_visual_geom = gfg.SubElement(door_panel_visual, 'geometry')
         dpl_visual_geom_box = gfg.SubElement(dpl_visual_geom, 'box')
         dpl_visual_geom_box.set('size', '{} {} {}'.format(door_panel_dims[0], door_panel_dims[1], door_panel_dims[2]))
@@ -218,7 +245,7 @@ class Cabinet():
         door_panel_collision = gfg.SubElement(door_panel_link, 'collision')
         door_panel_collision.set('name', self.door_panel_link_name+'_collision')
         dpl_collision_origin = gfg.SubElement(door_panel_collision, 'origin')
-        dpl_collision_origin.set('xyz', '0.0 {} 0.0'.format(-axis_pos*(door_panel_dims[1]/2. - axis_distance)))
+        dpl_collision_origin.set('xyz', '0.0 {} 0.0'.format(-1*(door_panel_dims[1]/2. - axis_distance)))
         # dpl_collision_origin.set('xyz', '0.0 {} 0.0'.format(axis_pos*(door_panel_dims[1]/2. - axis_distance)))
         dpl_collision_geom = gfg.SubElement(door_panel_collision, 'geometry')
         dpl_collision_geom_box = gfg.SubElement(dpl_collision_geom, 'box')
@@ -239,16 +266,19 @@ class Cabinet():
         dpl_inertial_inertia.set('iyy', '%f' % iyy)
         dpl_inertial_inertia.set('iyz', '0.0')
         dpl_inertial_inertia.set('izz', '%f' % izz)
-
-        door_joint = gfg.SubElement(root, 'joint')
+        
+        # Door joint
+        door_joint = gfg.SubElement(self.root_urdf, 'joint')
         door_joint.set('name', self.door_joint_name)
         door_joint.set('type', 'revolute')
 
         j0_origin = gfg.SubElement(door_joint, 'origin')
-        j0_origin.set('xyz', '{} {} 0'.format(static_d/2 - d/2, axis_pos*(door_panel_dims[1]/2. - axis_distance)))
+        # j0_origin.set('xyz', '{} {} 0'.format(static_d/2 - d/2, axis_pos*(door_panel_dims[1]/2. - axis_distance)))
+        j0_origin.set('xyz', '{} {} {}'.format(self.T_A_O[0, 3], self.T_A_O[1,3],  self.T_A_O[2,3]))
+        j0_origin.set('rpy', '%f %f %f' % euler_from_matrix(self.T_A_O))
         # j0_origin.set('xyz', '{} {} 0'.format(static_d/2 - d/2, -(-door_panel_dims[1]/2. + axis_distance)))
         # j0_origin.set('rpy', '{} {} {}'.format(0,0, np.radians(180)))
-        j0_origin.set('rpy', '{} {} {}'.format(0, 0, 0))
+        # j0_origin.set('rpy', '{} {} {}'.format(0, 0, 0))
         j0_axis = gfg.SubElement(door_joint, 'axis')
         j0_axis.set('xyz', '0 0 1')
         j0_parent = gfg.SubElement(door_joint, 'parent')
@@ -259,25 +289,126 @@ class Cabinet():
         j0_limit.set('effort', '50')
 
         # if axis_pos == 1:
-        if axis_pos < 0:
-            j0_limit.set('lower', '0')
-            j0_limit.set('upper', '{}'.format(-pi/2.))
-        # elif axis_pos == -1:
-        elif axis_pos > 0:
-            j0_limit.set('lower', '{}'.format(0))
-            j0_limit.set('upper', '{}'.format(pi/2.))
+
+        j0_limit.set('lower', '0')
+        j0_limit.set('upper', '{}'.format(axis_pos*pi/2.))
 
         j0_limit.set('velocity', '10')
         j0_dynamics = gfg.SubElement(door_joint, 'dynamics')
         j0_dynamics.set('friction', '1.0')
 
-        # gazebo_ = gfg.SubElement(root, 'gazebo')
+        # gazebo_ = gfg.SubElement(self.root_urdf, 'gazebo')
         # gazebo_.set('reference', base_link_name)
         # gazebo_material = gfg.SubElement(gazebo_, 'material')
         # gazebo_material.text = 'Gazebo/Blue'
 
+
+        # Handle
+        if self.has_handle:
+            
+            handle_link = gfg.SubElement(self.root_urdf, 'link')
+            handle_link.set('name', self.handle_link_name)
+            
+            handle_visual = gfg.SubElement(handle_link, 'visual')
+            h_visual_origin = gfg.SubElement(handle_visual, 'origin')
+            h_visual_origin.set('xyz', '0.0 0.0 0.0')
+            h_visual_origin.set('rpy', '0.0 0.0 0.0')
+
+            h_visual_geom = gfg.SubElement(handle_visual, 'geometry')
+            h_visual_geom_cyl = gfg.SubElement(h_visual_geom, 'cylinder')
+            h_visual_geom_cyl.set('length', '{}'.format(self.handle_length))
+            h_visual_geom_cyl.set('radius', '{}'.format(self.handle_radius))
+
+            handle_collision = gfg.SubElement(handle_link, 'collision')
+            handle_collision.set('name', self.handle_link_name+'_collision_0')
+            h_collision_origin = gfg.SubElement(handle_collision, 'origin')
+            h_collision_origin.set('xyz', '0.0 0.0 0.0')
+            h_collision_origin.set('rpy', '0.0 0.0 0.0')
+
+            h_collision_geom = gfg.SubElement(handle_collision, 'geometry')
+            h_collision_geom_cyl = gfg.SubElement(h_collision_geom, 'cylinder')
+            h_collision_geom_cyl.set('length', '{}'.format(self.handle_length))
+            h_collision_geom_cyl.set('radius', '{}'.format(self.handle_radius))
+
+            # base cylinder 0
+            handle_base0_visual = gfg.SubElement(handle_link, 'visual')
+            hb0_visual_origin = gfg.SubElement(handle_base0_visual, 'origin')
+            hb0_visual_origin.set('xyz', '{} {} {}'.format(-self.handle_height/2., 0.0, self.handle_length/4.))
+            hb0_visual_origin.set('rpy', '{} {} {}'.format(0.0, np.pi/2., 0.0))
+            
+            hb0_visual_geom = gfg.SubElement(handle_base0_visual, 'geometry')
+            hb0_visual_geom_cyl = gfg.SubElement(hb0_visual_geom, 'cylinder')
+            hb0_visual_geom_cyl.set('length', '{}'.format(self.handle_height))
+            hb0_visual_geom_cyl.set('radius', '{}'.format(self.handle_base_radius))
+
+            handle_base0_collision = gfg.SubElement(handle_link, 'collision')
+            handle_base0_collision.set('name', self.handle_link_name+'_collision_1')
+            hb0_collision_origin = gfg.SubElement(handle_base0_collision, 'origin')
+            hb0_collision_origin.set('xyz', '{} {} {}'.format(-self.handle_height/2., 0.0, self.handle_length/4.))
+            hb0_collision_origin.set('rpy', '{} {} {}'.format(0.0, np.pi/2., 0.0))
+            
+            hb0_collision_geom = gfg.SubElement(handle_base0_collision, 'geometry')
+            hb0_collision_geom_cyl = gfg.SubElement(hb0_collision_geom, 'cylinder')
+            hb0_collision_geom_cyl.set('length', '{}'.format(self.handle_height/2.))
+            hb0_collision_geom_cyl.set('radius', '{}'.format(self.handle_base_radius))
+
+            # base cylinder 1
+            handle_base1_visual = gfg.SubElement(handle_link, 'visual')
+            hb1_visual_origin = gfg.SubElement(handle_base1_visual, 'origin')
+            hb1_visual_origin.set('xyz', '{} {} {}'.format(-self.handle_height/2., 0.0, -self.handle_length/4.))
+            hb1_visual_origin.set('rpy', '{} {} {}'.format(0.0, np.pi/2., 0.0))
+            
+            hb1_visual_geom = gfg.SubElement(handle_base1_visual, 'geometry')
+            hb1_visual_geom_cyl = gfg.SubElement(hb1_visual_geom, 'cylinder')
+            hb1_visual_geom_cyl.set('length', '{}'.format(self.handle_height))
+            hb1_visual_geom_cyl.set('radius', '{}'.format(self.handle_base_radius))
+
+            handle_base1_collision = gfg.SubElement(handle_link, 'collision')
+            handle_base1_collision.set('name', self.handle_link_name+'_collision_2')
+            hb1_collision_origin = gfg.SubElement(handle_base1_collision, 'origin')
+            hb1_collision_origin.set('xyz', '{} {} {}'.format(-self.handle_height/2., 0.0, -self.handle_length/4.))
+            hb1_collision_origin.set('rpy', '{} {} {}'.format(0.0, np.pi/2., 0.0))
+            
+            hb1_collision_geom = gfg.SubElement(handle_base1_collision, 'geometry')
+            hb1_collision_geom_cyl = gfg.SubElement(hb1_collision_geom, 'cylinder')
+            hb1_collision_geom_cyl.set('length', '{}'.format(self.handle_height))
+            hb1_collision_geom_cyl.set('radius', '{}'.format(self.handle_base_radius))
+
+            # Moment of inertia for the handle (as a box)
+            h_inertial = gfg.SubElement(handle_link, 'inertial')
+            m_h = 0.05
+            ixx_h = 1/12.*m_h*((2*self.handle_radius)**2 + (self.handle_length)**2)
+            iyy_h = 1/12.*m_h*((self.handle_radius+self.handle_height)**2 + (self.handle_length)**2)
+            izz_h = 1/12.*m_h*((2*self.handle_radius)**2 + (self.handle_radius+self.handle_height)**2)
+
+            h_inertial_mass = gfg.SubElement(h_inertial, 'mass')
+            h_inertial_mass.set('value', '%f' % m_h)
+            h_inertial_inertia = gfg.SubElement(h_inertial, 'inertia')
+            h_inertial_inertia.set('ixx', '%f' % ixx_h)
+            h_inertial_inertia.set('ixy', '0.0')
+            h_inertial_inertia.set('ixz', '0.0')
+            h_inertial_inertia.set('iyy', '%f' % iyy_h)
+            h_inertial_inertia.set('iyz', '0.0')
+            h_inertial_inertia.set('izz', '%f' % izz_h)
+
+            # Handle joint
+            handle_joint = gfg.SubElement(self.root_urdf, 'joint')
+            handle_joint.set('name', self.handle_joint_name)
+            handle_joint.set('type', 'fixed')
+            h_j_origin = gfg.SubElement(handle_joint, 'origin')
+            h_j_origin.set('xyz', '{} {} {}'.format(self.T_H_A[0,3], self.T_H_A[1,3], self.T_H_A[2,3]))
+            
+            Tz_ = np.eye(4)
+            Tz_[:3, :3] = rot_z(np.pi/2 - axis_pos*np.pi/2)
+            
+            h_j_origin.set('rpy', '%f %f %f' % euler_from_matrix(Tz_))
+            h_j_parent = gfg.SubElement(handle_joint, 'parent')
+            h_j_parent.set('link', door_panel_link_name)
+            h_j_child = gfg.SubElement(handle_joint, 'child')
+            h_j_child.set('link', self.handle_link_name)
+ 
         # Contact sensor
-        gazebo_sensor_ = gfg.SubElement(root, 'gazebo')
+        gazebo_sensor_ = gfg.SubElement(self.root_urdf, 'gazebo')
         gazebo_sensor_.set('reference', base_link_name)
         gazebo_sensor_sensor = gfg.SubElement(gazebo_sensor_, 'sensor')
         gazebo_sensor_sensor.set('name', 'main_sensor')
@@ -313,7 +444,7 @@ class Cabinet():
 
 
         # Door contact sensor
-        gazebo_sensor_door = gfg.SubElement(root, 'gazebo')
+        gazebo_sensor_door = gfg.SubElement(self.root_urdf, 'gazebo')
         gazebo_sensor_door.set('reference', door_panel_link_name)
         gazebo_sensor_doorsensor = gfg.SubElement(gazebo_sensor_door, 'sensor')
         gazebo_sensor_doorsensor.set('name', 'main_sensor')
@@ -340,26 +471,13 @@ class Cabinet():
         gazebo_sensor_doorsensor_plugin_frameName.text = 'contact_door'
 
         # Prettify for writing in a file
-        xmlstr = minidom.parseString(gfg.tostring(root)).toprettyxml(indent='\t')
+        xmlstr = minidom.parseString(gfg.tostring(self.root_urdf)).toprettyxml(indent='\t')
 
         if save_path:
             with open (save_path, 'w') as f:
                 f.write(xmlstr)
 
         return xmlstr
-
-
-    def __get_world_pose(self, x: float, y: float, z: float, spawn_angle_deg: float):
-        T_A_S = np.eye(4)
-        T_A_S[:3, 3] = np.array([x, y, z])
-
-        theta = np.radians(spawn_angle_deg)
-        Tz = np.eye(4)
-        Tz[:3, :3] = rot_z(theta)
-
-        T_O_S = T_A_S @ np.linalg.inv(self.T_A_O) @ Tz
-
-        return T_O_S
 
 
     def change_door_angle(self, angle_deg):
@@ -509,6 +627,28 @@ class Cabinet():
             rospy.loginfo('URDF model spawned successfully')
         except rospy.ServiceException as e:
             rospy.logerr('Failed to spawn URDF model: %s' % e)
+
+    # TEST METHOD
+    def spawn_model_gazebo_sphere_T(self, T, name='sphere'):
+
+        # TEST SPHERE
+        with open('/home/RVLuser/ferit_ur5_ws/sphere.urdf', 'r') as f:
+            urdf = f.read()
+
+        model_name = name
+        pose_ = self.__matrix_to_pose(T)
+        reference_frame = 'world'
+
+        rospy.wait_for_service('/gazebo/spawn_urdf_model')
+        try:
+            spawn_urdf_model_proxy = rospy.ServiceProxy('/gazebo/spawn_urdf_model', SpawnModel)
+            # _ = spawn_urdf_model_proxy(spawn_model_msg)
+            _ = spawn_urdf_model_proxy(model_name, urdf, '/', pose_, '')
+            rospy.loginfo('URDF model spawned successfully')
+        except rospy.ServiceException as e:
+            rospy.logerr('Failed to spawn URDF model: %s' % e)
+
+
     # TEST METHOD
     def delete_model_gazebo_sphere(self):
         rospy.wait_for_service('/gazebo/delete_model')
@@ -539,6 +679,7 @@ class Cabinet():
 
 
     def create_mesh(self):
+        self.mesh_origin = o3d.geometry.TriangleMesh()
         self.dd_static_top_mesh = o3d.geometry.TriangleMesh.create_box(width=self.static_d,
                                                                   height=self.w_door + 2*(self.moving_to_static_part_distance + self.d_door),
                                                                   depth=self.d_door)
@@ -587,9 +728,46 @@ class Cabinet():
         self.dd_plate_mesh.paint_uniform_color([0.7, 0.7, 0.7])
         self.dd_plate_mesh.compute_vertex_normals()
 
-        dd_mesh = self.dd_static_mesh + self.dd_plate_mesh
-        # dd_mesh = self.dd_static_mesh
 
+        # Handle 
+        # TODO: make handle mesh
+        self.handle_mesh = o3d.geometry.TriangleMesh()
+        if self.has_handle:
+            self.handle_main_cyl_mesh = o3d.geometry.TriangleMesh.create_cylinder(radius=self.handle_radius, height=self.handle_length)
+            
+            # base cylinder 0
+            self.handle_base_cyl0_mesh = o3d.geometry.TriangleMesh.create_cylinder(radius=self.handle_base_radius, height=self.handle_height)
+            T_bc0_h = np.eye(4)
+            T_bc0_h[:3, :3] = rot_y(np.radians(90.))
+            T_bc0_h[:3, 3] = np.array([-self.handle_height/2., 0.0, self.handle_length/4.])
+            self.handle_base_cyl0_mesh.transform(T_bc0_h)
+            
+            # base cylinder 1
+            self.handle_base_cyl1_mesh = o3d.geometry.TriangleMesh.create_cylinder(radius=self.handle_base_radius, height=self.handle_height)
+            T_bc1_h = np.eye(4)
+            T_bc1_h[:3, :3] = rot_y(np.radians(90.))
+            T_bc1_h[:3, 3] = np.array([-self.handle_height/2., 0.0, -self.handle_length/4.])
+            self.handle_base_cyl1_mesh.transform(T_bc1_h)
+            
+            Tz_ = np.eye(4)
+            Tz_[:3, :3] = rot_z(np.pi/2 - self.axis_pos*np.pi/2)
+            T_H_A_ = self.T_H_A @ Tz_
+                        
+            self.handle_mesh = self.handle_base_cyl0_mesh +self.handle_base_cyl1_mesh + self.handle_main_cyl_mesh
+            # self.handle_mesh.translate(np.array([self.handle_height+self.d_door/2., -self.axis_pos*self.w_door + self.axis_pos*self.handle_offset, 0.0]))
+            T_H_O = self.T_A_O @ T_H_A_
+            self.handle_mesh.transform(T_H_O)
+            self.handle_mesh.compute_vertex_normals()
+
+        dd_mesh = self.mesh_origin + self.dd_static_mesh + self.dd_plate_mesh + self.handle_mesh
+        # dd_mesh = self.dd_static_mesh
+        # Compute the centroid of the combined mesh
+        vertices = np.asarray(dd_mesh.vertices)
+        centroid = vertices.mean(axis=0)
+        # Translate the mesh to center the origin
+        dd_mesh.translate(np.array([0, 0, 0]))
+        # Recompute vertex normals after translation
+        dd_mesh.compute_vertex_normals()
         return dd_mesh
 
 
@@ -615,6 +793,11 @@ class Cabinet():
 
         self.mesh.transform(self.T_O_S)
 
+        cabinet_base_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.05)
+        cabinet_base_frame.transform(self.T_O_S)
+        # origin_frame.paint_uniform_color([1, 0, 0])
+        geometries.append(cabinet_base_frame)
+
         origin_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.05)
         # origin_frame.paint_uniform_color([1, 0, 0])
         geometries.append(origin_frame)
@@ -627,20 +810,20 @@ class Cabinet():
         #                 -(self.h_door/2. + self.moving_to_static_part_distance + self.d_door)))
         # geometries.append(left_cf)
 
-        topleft_mesh = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.05)
-        # topleft_mesh.transform()
-        topleft_mesh.transform(self.T_O_S @ self.T_F_O)
-        geometries.append(topleft_mesh)
+        # topleft_mesh = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.05)
+        # # topleft_mesh.transform()
+        # topleft_mesh.transform(self.T_O_S @ self.T_F_O)
+        # geometries.append(topleft_mesh)
 
-        # axis_mesh = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.05)
-        # # axis_mesh.transform()
-        # axis_mesh.transform(self.T_O_S@ self.T_A_O)
-        # geometries.append(axis_mesh)
+        axis_mesh = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.05)
+        # axis_mesh.transform()
+        axis_mesh.transform(self.T_O_S@ self.T_A_O)
+        geometries.append(axis_mesh)
 
-        point_panel_mesh = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.05)
-        # point_panel_mesh.transform(self.T_O_S)
-        point_panel_mesh.transform(self.T_O_S @ self.T_A_O @ self.T_D_A)
-        geometries.append(point_panel_mesh)
+        # point_panel_mesh = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.05)
+        # # point_panel_mesh.transform(self.T_O_S)
+        # point_panel_mesh.transform(self.T_O_S @ self.T_A_O @ self.T_D_A)
+        # geometries.append(point_panel_mesh)
 
         if T_G_S is not None: # Gripper pose is w.r.t. world
             gripper_pose_mesh = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.05)
@@ -648,9 +831,15 @@ class Cabinet():
             geometries.append(gripper_pose_mesh)
 
 
-        A_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.05)
-        A_frame.transform(self.T_A_S)
-        geometries.append(A_frame)
+        # A_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.05)
+        # A_frame.transform(self.T_A_S)
+        # geometries.append(A_frame)
+
+        T_H_O = self.T_A_O @ self.T_H_A
+        handle_frame_mesh = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.05)
+        # point_panel_mesh.transform(self.T_O_S)
+        handle_frame_mesh.transform(self.T_O_S@T_H_O)
+        geometries.append(handle_frame_mesh)
 
         # o3d.visualization.draw_geometries([origin_frame, self.mesh, axis_mesh, point_panel_mesh, topleft_mesh])
         o3d.visualization.draw_geometries(geometries)
@@ -692,16 +881,71 @@ class Cabinet():
 if __name__ == '__main__':
     door_params = np.array([0.396, 0.496, 0.018, 0.4])
 
-    T_A_S = np.eye(4)
-    T_A_S[:3, 3] = np.array([-0.2, -0.6, door_params[1]*0.5+0.009])
+    # Tz = np.eye(4)
+    # Tz[:3, :3] = rot_z(np.pi)
 
-    cabinet_model = Cabinet(door_params, axis_pos=-1, T_A_S=T_A_S, save_path=None)
+    # T_A_O = np.eye(4)
+    # T_A_O = Tz @ T_A_O
+    # T_A_O[:3, 3] = np.array([0.4/2. - 0.018/2., 
+    #                             -1*(0.396/2. - 0.01), 
+    #                             0.])
+    # T_O_S = np.eye(4)
+    # T_O_S[:3,3] = np.array([-0.4/2.,0,0.496/2.])
+    
+    # T_A_S = T_O_S @ T_A_O
+
+    door_params = np.array([0.3484195, 0.3813657, 0.018, 0.4])
+    Tz = np.eye(4)
+    Tz[:3,:3] = rot_z(np.radians(64.88813732))
+    T_A_S = np.array([[ 0.42438691, -0.90548095,  0.,          0.19040652],
+                    [ 0.90548095,  0.42438691,  0.,          0.69544504],
+                    [ 0.,          0.,          1.,          0.20468285],
+                    [ 0.,          0.,          0.,          1.        ]])
+    T_A_S = T_A_S @ Tz
+
+    cabinet_model = Cabinet(door_params, 
+                            axis_pos=-1, 
+                            T_A_S=T_A_S, 
+                            save_path='/home/RVLuser/ferit_ur5_ws/cabinet_handle_test.urdf',
+                            has_handle=True)
     cabinet_model.change_door_angle(0)
     cabinet_model.update_mesh()
     # cabinet_model.get_gripper_pose_from_feasible_pose(np.eye(4))
+    cabinet_model.save_mesh('/home/RVLuser/ferit_ur5_ws/cabinet_handle_test2.ply')
+    
+    # T_G_S = np.array([[ 0.90548095,  0.42438691,  0.,          0.03750224],
+    #                 [-0.42438691,  0.90548095,  0.,          0.4375391 ],
+    #                 [ 0.,          0.,          1.,          0.20468285],
+    #                 [ 0.,          0.,          0.,          1.        ]])
+    T_G_S = np.array([[ 0.42438691, -0.90548095,  0.,          0.44831247],
+                    [ 0.90548095,  0.42438691,  0.,          0.54254077],
+                    [ 0.,          0.,          1.,          0.20468285],
+                    [ 0.,          0.,          0.,          1.        ]])
+    
+    Tz90 = np.eye(4)
+    Tz90[:3,:3] = rot_z(-np.pi/2.)
+    
 
-    cabinet_model.visualize(None)
+    Tz45 = np.eye(4)
+    Tz45[:3,:3] = rot_z(np.radians(45.))
 
+    axis_pos = -1
+    T_6_H = np.eye(4)
+    T_6_H[:3, :3] = np.array([[0, 0, -axis_pos],
+                                [axis_pos, 0, 0],
+                                [0, -1, 0]])
+    T_6_H = T_6_H @ Tz45
+    T_6_H[0, 3] -= 0.28
+
+
+    # cabinet_model.visualize(T_A_S @ Tz90 @ cabinet_model.T_H_A) 
+    cabinet_model.visualize(T_A_S @ Tz90 @ cabinet_model.T_H_A @ T_6_H) 
+
+    # mesh = o3d.io.read_triangle_mesh('/home/RVLuser/ferit_ur5_ws/cabinet_handle_test2.ply')
+    # mesh.compute_vertex_normals()
+    # mesh.transform(T_O_S)
+    # origin_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.05)
+    # o3d.visualization.draw_geometries([origin_frame, mesh])
 
 
 

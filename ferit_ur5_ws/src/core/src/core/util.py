@@ -2,6 +2,7 @@ import yaml
 import rospkg
 import os
 import pandas as pd
+from pandas.errors import EmptyDataError
 
 def read_config(cfg_filename: str):
     rp = rospkg.RosPack()
@@ -22,5 +23,8 @@ def read_config(cfg_filename: str):
     return config
 
 def read_csv_DataFrame(path:str, separator:str=',') -> pd.DataFrame:
-    df = pd.read_csv(filepath_or_buffer=path, sep=separator, header=0)
+    try:
+        df = pd.read_csv(filepath_or_buffer=path, sep=separator, header=0)
+    except EmptyDataError as e:
+        return None
     return df

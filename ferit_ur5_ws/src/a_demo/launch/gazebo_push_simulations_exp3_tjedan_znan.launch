@@ -1,0 +1,4 @@
+<launch>
+        
+    <node name="node_push_simulations_exp3" pkg="push_simulation" type="push_simulations_exp3_tjedan_znanosti.py" output="screen"/>
+</launch>

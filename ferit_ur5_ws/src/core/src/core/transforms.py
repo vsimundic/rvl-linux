@@ -80,6 +80,26 @@ def pose_to_matrix(pose: Pose):
     T[:3, 3] = np.array(t_)
     return T
 
+def matrix_to_euler(T: np.ndarray):
+    """
+    Converts a 4x4 transformation matrix to Euler angles (roll, pitch, yaw).
+    
+    Args:
+        matrix (list or numpy.ndarray): 4x4 rotation matrix.
+        axes (str): The axes sequence for Euler angles (default is 'sxyz').
+    
+    Returns:
+        tuple: (roll, pitch, yaw) in radians.
+    
+    Raises:
+        ValueError: If the input matrix is not 4x4.
+    """
+    if T.shape[0] != 4 or T.shape[1] != 4:
+        raise  ValueError("Input must be a 4x4 matrix.")
+    
+    return euler_from_matrix(T, axes='sxyz')
+
+
 def get_frame_transform(parent_frame: str, child_frame: str):
     listener = tf.TransformListener()
     rate = rospy.Rate(1)

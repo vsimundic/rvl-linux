@@ -4,6 +4,7 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
+
         {
             "name": "ROS: Generate and place cabinet",
             "request": "launch",
@@ -152,6 +153,66 @@
             "name": "ROS: generate poses",
             "request": "launch",
             "target": "/home/RVLuser/ferit_ur5_ws/src/cosper/push_simulation/launch/generate_poses.launch",
+            "launch": [
+                "rviz",
+                "gz",
+                "gzclient",
+                "gzserver"
+            ],
+            "type": "ros"
+        },
+        {
+            "name": "ROS: push simulations simulations exp3 tjedan znan",
+            "request": "launch",
+            "target": "${workspaceFolder}/src/a_demo/launch/gazebo_push_simulations_exp3_tjedan_znan.launch",
+            "launch": [
+                "rviz",
+                "gz",
+                "gzclient",
+                "gzserver"
+            ],
+            "type": "ros"
+        },
+        {
+            "name": "ROS: test tsr cabinet open",
+            "request": "launch",
+            "target": "${workspaceFolder}/src/cosper/ur5_tsr_control/launch/test_tsr_cabinet_open.launch",
+            "launch": [
+                "rviz",
+                "gz",
+                "gzclient",
+                "gzserver"
+            ],
+            "type": "ros"
+        },
+        {
+            "name": "ROS: generate_tsr_configs",
+            "request": "launch",
+            "target": "${workspaceFolder}/src/cosper/path_planning/launch/generate_tsr_configs.launch",
+            "launch": [
+                "rviz",
+                "gz",
+                "gzclient",
+                "gzserver"
+            ],
+            "type": "ros"
+        },
+        {
+            "name": "ROS: exp tsr simulations",
+            "request": "launch",
+            "target": "${workspaceFolder}/src/cosper/path_planning/launch/start_tsr_single_contact_simulation_experiment.launch",
+            "launch": [
+                "rviz",
+                "gz",
+                "gzclient",
+                "gzserver"
+            ],
+            "type": "ros"
+        },
+        {
+            "name": "ROS: exp moveit handle single-contact simulations",
+            "request": "launch",
+            "target": "${workspaceFolder}/src/cosper/path_planning/launch/single_contact_exp_handle_moveit.launch",
             "launch": [
                 "rviz",
                 "gz",
