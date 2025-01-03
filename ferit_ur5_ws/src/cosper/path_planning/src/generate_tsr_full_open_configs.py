@@ -44,22 +44,26 @@ for i_door in tqdm(range(doors.shape[0])):
                             has_handle=True)
     cabinet_mesh_filename = '/home/RVLuser/ferit_ur5_ws/cabinet_handle_test.ply'
 
-    cabinet_model.save_mesh(os.path.join(doors_tsr_configs_path, 'cabinet_%d.stl'%i_door))
+    # cabinet_model.save_mesh(os.path.join(doors_tsr_configs_path, 'cabinet_%d.stl'%i_door))
 
     config_filename = 'cabinet_%d.yaml' % i_door
 
 
     ### TSR matrices definition ###
-    T0_w = T_A_S
+    T0_w = T_A_S.copy()
     T0_w_pose =  matrix_to_pose(T0_w)
     t0_w = T0_w_pose.position
     q0_w = T0_w_pose.orientation
 
+    Tz45 = np.eye(4)
+    Tz45[:3,:3] = rot_z(np.radians(45.))
 
-    # T_6_H = np.eye(4)
-    # T_6_H[:3, :3] = np.array([[0, 0, -axis_pos],
-    #                             [axis_pos, 0, 0],
-    #                             [0, -1, 0]])
+    T_6_H = np.eye(4)
+    T_6_H[:3, :3] = np.array([[0, 0, -axis_pos],
+                                [axis_pos, 0, 0],
+                                [0, -1, 0]])
+    T_6_H = T_6_H @ Tz45
+    T_6_H[0, 3] -= 0.28
 
     # For grasp, this is handle to hinge transform
     Tw_e = cabinet_model.T_H_A.copy()

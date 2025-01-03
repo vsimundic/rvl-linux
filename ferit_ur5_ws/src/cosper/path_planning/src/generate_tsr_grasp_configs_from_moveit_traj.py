@@ -59,7 +59,7 @@ for i_door in tqdm([successful_indices[0]]):
                             has_handle=True)
     cabinet_mesh_filename = '/home/RVLuser/ferit_ur5_ws/cabinet_handle_test.ply'
 
-    cabinet_model.save_mesh(os.path.join(doors_tsr_configs_path, 'cabinet_%d.stl'%i_traj))
+    # cabinet_model.save_mesh(os.path.join(doors_tsr_configs_path, 'cabinet_%d.stl'%i_traj))
 
     config_filename = 'cabinet_%d.yaml' % i_traj
 
@@ -69,8 +69,6 @@ for i_door in tqdm([successful_indices[0]]):
     T0_w_pose =  matrix_to_pose(T0_w)
     t0_w = T0_w_pose.position
     q0_w = T0_w_pose.orientation
-    # print('T0_w:')
-    # print(T0_w)
 
     Tz45 = np.eye(4)
     Tz45[:3,:3] = rot_z(np.radians(45.))

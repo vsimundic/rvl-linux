@@ -172,7 +172,7 @@ if __name__ == '__main__':
     save_screenshot_path = os.path.join(pkg_path, 'single_contact_screenshots')
 
     # If False, the data loads and the experiment starts where it stopped
-    start_from_beginning = False
+    start_from_beginning = True
     start_i = 0
     if start_from_beginning:
         if is_saving_results:
