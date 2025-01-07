@@ -1,0 +1,37 @@
+T_O_S:
+  rotation: [0.9221081169526196, 0.0, 0.0, -0.3869323205033334]
+  translation: [0.22429854212986083, 0.8184496429476463, 0.2601724083603372]
+dof: 6
+goal_config: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+ground_file: /home/user/tsr_ws/ground.xml
+initial_config: [0.0, -1.5707963267948966, 0.0, -1.5707963267948966, 0.0, 0.0]
+psample: 0.0
+robot_name: ur5_robotiq_ft_3f
+scene_file: /home/user/tsr_ws/ur5.dae
+tsr:
+  Bw:
+  - [0, 0]
+  - [0, 0]
+  - [0, 0]
+  - [0, 0]
+  - [0, 0]
+  - [-1.58, 0]
+  T0_w:
+    rotation: [0.3869323205033335, 0.0, 0.0, 0.9221081169526195]
+    translation: [0.281015670699706, 0.6064700338871729, 0.2601724083603372]
+  T0_w2:
+    rotation: [0.925631370172509, 0.0, 0.0, 0.3784264347962016]
+    translation: [0.3906736837658659, 0.4533789592080869, 0.2601724083603372]
+  Tw_e:
+    rotation: [0.6532814824381883, -0.2705980500730985, 0.6532814824381883, -0.2705980500730985]
+    translation: [-0.30900000000000005, -0.1860665391090391, 0.0]
+  Tw_e2:
+    rotation: [0.6532814824381883, -0.2705980500730985, 0.6532814824381883, -0.2705980500730985]
+    translation: [-0.28, 0.0, 0.0]
+  constrain_to_chain: true
+  manipind: 0
+  mimicbodyname: 'NULL'
+  relativebodyname: 'NULL'
+  relativelinkname: 'NULL'
+  sample_goal_from_chain: false
+  sample_start_from_chain: false

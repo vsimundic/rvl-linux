@@ -22,6 +22,9 @@ from core.gazebo import get_joint_info, get_link_pose
 from gazebo_msgs.srv import GetModelState
 import subprocess
 from subprocess import check_output, CalledProcessError
+from tf2_ros import Buffer, TransformListener
+from rospy.exceptions import ROSException
+from rosgraph_msgs.msg import Clock
 
 np.random.seed(69)
 
@@ -76,28 +79,67 @@ def kill_processes():
         if not any_process_killed:
             break
 
+def wait_for_clock(timeout=10):
+    rospy.loginfo("Waiting for `/clock` topic to publish...")
+    try:
+        rospy.wait_for_message('/clock', Clock, timeout=timeout)
+        rospy.loginfo("`/clock` topic is now publishing.")
+    except ROSException:
+        rospy.logerr("Timeout exceeded: `/clock` topic is not publishing.")
+        return False
+    return True
 
-def start_gazebo_launcher():
-    """
-    Start the Gazebo launcher script.
-    """
-    process = subprocess.Popen(
-        ["python", "/home/RVLuser/ferit_ur5_ws/src/cosper/path_planning/src/gazebo_launcher.py"],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        preexec_fn=os.setsid  # Allows killing the process group later
-    )
-    return process
+def launch_gazebo(launch_file):
+    uuid = roslaunch.rlutil.get_or_generate_uuid(None, False)
+    roslaunch.configure_logging(uuid)
+    launch = roslaunch.parent.ROSLaunchParent(uuid, [launch_file])
+    rospy.loginfo("Starting Gazebo simulation...")
+    launch.start()
+    if not wait_for_clock(timeout=15):
+        rospy.logerr("Failed to detect `/clock`. Shutting down Gazebo...")
+        launch.shutdown()
+        exit(1)
+    return launch
 
-def stop_gazebo_launcher(process):
+def start_gazebo_processes(gazebo_launch_file, tf_buffer):
+    while True:
+        kill_processes()
+        gazebo_process = launch_gazebo(gazebo_launch_file)
+        print("Gazebo launcher started.")
+
+        reset_tf_buffer(tf_buffer)
+
+        rospy.sleep(1.)
+        # Check if Gazebo has started
+        if is_gazebo_ready():
+            # Check if the robot is in place
+            if is_robot_in_place('robot', expected_position=T_R_W[:3,3].tolist()):
+                print("Robot is in place.")
+            else:
+                print("Robot is not in the expected position.")
+                stop_gazebo_launcher(gazebo_process)
+                continue
+            break
+        else:
+            stop_gazebo_launcher(gazebo_process)
+            continue            
+    return gazebo_process
+
+def stop_gazebo_launcher(gazebo_process):
     """
     Stop the Gazebo launcher script.
     """
-    try:
-        os.killpg(os.getpgid(process.pid), signal.SIGTERM)
-        print("Gazebo launcher terminated.")
-    except Exception as e:
-        print(f"Failed to terminate Gazebo launcher: {e}")
+
+    # Shut down Gazebo
+    rospy.loginfo("Shutting down Gazebo...")
+    gazebo_process.shutdown()
+    # rospy.sleep(2)  # Small delay to ensure cleanup before the next iteration
+
+    # try:
+    #     os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+    #     print("Gazebo launcher terminated.")
+    # except Exception as e:
+    #     print(f"Failed to terminate Gazebo launcher: {e}")
 
 def is_gazebo_ready(timeout=10):
     """
@@ -146,20 +188,33 @@ def is_robot_in_place(model_name, expected_position, tolerance=0.01):
         print(f"Failed to get model state: {e}")
         return False
 
+def reset_tf_buffer(tf_buffer):
+    rospy.loginfo("Clearing TF buffer...")
+    tf_buffer.clear()  # Ensure the TF buffer is cleared
+
+
 if __name__ == '__main__':
     rospy.init_node('single_contact_exp_tsr')
     
+    # TF buffer setup
+    tf_buffer = Buffer()
+    tf_listener = TransformListener(tf_buffer)
+
     rp = RosPack()
     pkg_path = rp.get_path('path_planning')
 
-    is_saving_results = True
+    IS_SAVING_RESULTS = True
+    IS_SAVING_IMAGES = False
+    START_FROM_BEGINNING = False
+    
+    gazebo_launch_file = "/home/RVLuser/ferit_ur5_ws/src/ur5_configs/ur5_robotiq_ft_3f_moveit_config/launch/demo_gazebo.launch"
 
     # Config
     cfg_path = os.path.join(pkg_path, 'config/config_tsr_simulations_axis_left.yaml')
     config = read_config(cfg_path)
-
     # Save/load path for results
     csv_path = os.path.join(pkg_path,'results_simulation_tsr_single_contact.csv')
+
 
     # TSR trajectories path
     tsr_trajectories_path = config['tsr_trajectories_path']
@@ -167,15 +222,14 @@ if __name__ == '__main__':
     # Load door configurations
     door_configs_path = os.path.join(pkg_path, 'door_configurations_axis_left.npy')
     doors = np.load(door_configs_path)
+    num_doors = doors.shape[0]
     
-    is_saving_images = False
     save_screenshot_path = os.path.join(pkg_path, 'single_contact_screenshots')
 
     # If False, the data loads and the experiment starts where it stopped
-    start_from_beginning = True
     start_i = 0
-    if start_from_beginning:
-        if is_saving_results:
+    if START_FROM_BEGINNING:
+        if IS_SAVING_RESULTS:
             with open(csv_path, 'w') as f:
                 writer = csv.writer(f, delimiter=',')
                 writer.writerow(['path_found', 'traj_success', 'contact_free', 'door_opened', 'door_width', 'door_height', 'x', 'y', 'z', 'rot_z', 'state_angle', 'axis_pos'])
@@ -188,11 +242,9 @@ if __name__ == '__main__':
     T_R_W = np.eye(4)
     T_R_W[2, 3] = 0.005
 
-    successful_indices = [19, 22, 38, 43, 51, 59, 67, 74, 81, 83, 87, 89, 93, 118, 122, 149, 158, 159, 174, 187, 192, 214, 215, 257, 260, 264, 279, 313, 348, 392, 396, 398, 411, 426, 436, 471, 494, 515, 525, 546, 548, 550, 555, 558, 570, 579, 583, 592, 611, 655, 677, 683, 711, 724, 729, 763, 770, 775, 779, 787, 788, 797, 806, 813, 826, 829, 866, 875, 890, 905, 908, 928, 939, 940, 941, 970, 974, 979, 986, 988, 993, 999]
-
     i = start_i
-    # for i in range(start_i, doors.shape[0]):
-    while i < 1000:
+    while i < num_doors:
+        print('Cabinet %d' %i)
         try:
             path_found = False
             trajectory_successful = False
@@ -200,7 +252,7 @@ if __name__ == '__main__':
             contact_free = True
             final_success = False
 
-            door = doors[successful_indices[i], :]
+            door = doors[i, :]
             width = door[0]
             height = door[1]
             position = door[2:5]
@@ -235,42 +287,34 @@ if __name__ == '__main__':
                                     has_handle=True)
             
             # Start Gazebo processes
-            while True:
-                kill_processes()
-                gazebo_process = start_gazebo_launcher()
-                print("Gazebo launcher started.")
-                # Check if Gazebo has started
-                if is_gazebo_ready():
-                    # Check if the robot is in place
-                    if is_robot_in_place('robot', expected_position=T_R_W[:3,3].tolist()):
-                        print("Robot is in place.")
-                    else:
-                        print("Robot is not in the expected position.")
-                        stop_gazebo_launcher(gazebo_process)
-                        continue
-                    break
-                else:
-                    stop_gazebo_launcher(gazebo_process)
-                    continue            
+            gazebo_process = start_gazebo_processes(gazebo_launch_file, tf_buffer)   
+            
+            # Start the robot commander
             try:
                 robot = UR5Commander()
             except RuntimeError as e:
                 stop_gazebo_launcher(gazebo_process)
                 continue
 
-            rospy.sleep(1.)
+            # Sleep to ensure the robot is ready
+            rospy.sleep(2.)
 
             path_found = True
             success = robot.send_joint_values_to_robot(joint_values=q_traj[0], wait=True) # position to grasp
             if not success:
                 stop_gazebo_launcher(gazebo_process)
+                if IS_SAVING_RESULTS:
+                    with open(csv_path, 'a') as f:
+                        writer = csv.writer(f, delimiter=',')
+                        writer.writerow([path_found, trajectory_successful, contact_free, door_opened, width, height, position[0], position[1], position[2], rot_z_deg, state_angle, axis_pos])
+                i += 1
                 continue  
 
             # Spawning model in Gazebo
             cabinet_model.delete_model_gazebo()
             cabinet_model.spawn_model_gazebo()
             contact_sub = rospy.Subscriber('/contact', ContactsState, contact_callback)
-            rospy.sleep(1.)
+            rospy.sleep(2.)
 
             while True: # loop if it does not manage to attach
                 try:
@@ -314,11 +358,13 @@ if __name__ == '__main__':
             # Shutdown Gazebo simulation and kill all of its processes
             stop_gazebo_launcher(gazebo_process)
 
-            if is_saving_results:
+            if IS_SAVING_RESULTS:
                 with open(csv_path, 'a') as f:
                     writer = csv.writer(f, delimiter=',')
                     writer.writerow([path_found, trajectory_successful, contact_free, door_opened, width, height, position[0], position[1], position[2], rot_z_deg, state_angle, axis_pos])
             
             i += 1
-        except rospy.exceptions.ROSTimeMovedBackwardsException:
-            rospy.logwarn("Time moved backwards. Skipping this loop iteration.")
+        except rospy.exceptions.ROSTimeMovedBackwardsException as e:
+            rospy.logwarn(f"Time moved backwards. Exception: {e}")
+            rospy.loginfo(f"Current ROS time: {rospy.Time.now()}")
+            rospy.sleep(2)  # Let time stabilize

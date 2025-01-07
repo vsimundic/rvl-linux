@@ -27,8 +27,8 @@ cabinet_pose:
 cabinet_urdf_save_path: "/home/RVLuser/ferit_ur5_ws/cabinet_handle_test.urdf"
 cabinet_mesh_save_path: "/home/RVLuser/ferit_ur5_ws/cabinet_handle_test.ply"
 # tsr_trajectories_path: "/home/RVLuser/ferit_ur5_ws/src/cosper/path_planning/tsr_data/full_open_trajectories"
-tsr_trajectories_path: "/home/RVLuser/ferit_ur5_ws/src/cosper/path_planning/tsr_data/grasp_open_trajectories"
-
+# tsr_trajectories_path: "/home/RVLuser/ferit_ur5_ws/src/cosper/path_planning/tsr_data/grasp_open_trajectories"
+tsr_trajectories_path: "/home/RVLuser/ferit_ur5_ws/src/cosper/path_planning/tsr_data/all_cabinets/trajectories"
 ## Feasible poses setup
 feasible_poses:
   dd_state_deg: -7.0
