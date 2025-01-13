@@ -55,6 +55,12 @@ RAPIDXML_INCLUDE_DIR = /home/RVLuser/rvl-linux/3rdparty/RapidXML/include
 # NanoFLANN include directory.
 NANOFLANN_INCLUDE_DIR = /home/RVLuser/rvl-linux/3rdparty/NanoFlann/Include
 
+# FCL include directory.
+FCL_INCLUDE_DIR = /usr/local/include/fcl
+
+# FCL lib directory.
+FCL_LIB_DIR = /usr/local/lib
+
 
 #=============================================================================
 # Set environment variables for the build.
@@ -71,11 +77,11 @@ CMAKE_APP_DIR = $(CMAKE_BINARY_DIR)/bin
 # PCL_INCLUDES = -I$(PCL_DIR)/include/pcl-1.8 -I$(EIGEN_INCLUDE_DIR) -I$(FLANN_INCLUDE_DIR) -I/usr/include/openni2
 
 # External includes.
-EXTERNAL_INCLUDES = -I$(OPENCV_INCLUDE_DIR) -I$(VTK_INCLUDE_DIR) -I$(EIGEN_INCLUDE_DIR) -I$(RAPIDXML_INCLUDE_DIR)
+EXTERNAL_INCLUDES = -I$(OPENCV_INCLUDE_DIR) -I$(VTK_INCLUDE_DIR) -I$(EIGEN_INCLUDE_DIR) -I$(RAPIDXML_INCLUDE_DIR) -I$(FCL_INCLUDE_DIR)
 
 # External lib directories.
 # EXTERNAL_LIB_DIR = -L$(OPENCV_LIB_DIR) -L$(VTK_LIB_DIR) -L$(PCL_LIB_DIR) -L$(FLANN_LIB_DIR) # -L/usr/lib/x86_64-linux-gnu
-EXTERNAL_LIB_DIR = -L$(OPENCV_LIB_DIR) -L$(VTK_LIB_DIR) -L$(FLANN_LIB_DIR) # -L/usr/lib/x86_64-linux-gnu
+EXTERNAL_LIB_DIR = -L$(OPENCV_LIB_DIR) -L$(VTK_LIB_DIR) -L$(FLANN_LIB_DIR) -L$(FCL_LIB_DIR) # -L/usr/lib/x86_64-linux-gnu 
 
 # RVL lib directory.
 RVL_LIB_DIR = $(CMAKE_BINARY_DIR)/lib
@@ -105,7 +111,9 @@ EXTERNAL_LIBS = -lopencv_world \
  -lvtkRenderingOpenGL2-7.1 \
  -lvtkInteractionStyle-7.1 \
  -lvtkRenderingGL2PSOpenGL2-7.1 \
- -lvtkRenderingLabel-7.1 
+ -lvtkRenderingLabel-7.1 \
+ -lfcl \
+ -lccd
 
  # PCL libraries
 PCL_LIBS = -lboost_system \
@@ -289,7 +297,7 @@ RVLMOTION_SRC_DIR = $(CMAKE_SOURCE_DIR)/modules/RVLMotion
 RVLMOTION_INCLUDE_DIR = $(RVLMOTION_SRC_DIR)/Include
 
 # Includes.
-RVLMOTION_INCLUDES = -I$(RVLCORE_INCLUDE_DIR) -I$(RVLPCSEGMENT_INCLUDE_DIR) -I$(RVLOBJECTDETECTION_INCLUDE_DIR) -I$(RVLRECOGNITION_INCLUDE_DIR) -I$(RVLMOTION_INCLUDE_DIR) $(EXTERNAL_INCLUDES) -I$(NANOFLANN_INCLUDE_DIR)
+RVLMOTION_INCLUDES = -I$(RVLCORE_INCLUDE_DIR) -I$(RVLPCSEGMENT_INCLUDE_DIR) -I$(RVLOBJECTDETECTION_INCLUDE_DIR) -I$(RVLRECOGNITION_INCLUDE_DIR) -I$(RVLMOTION_INCLUDE_DIR) $(EXTERNAL_INCLUDES) -I$(NANOFLANN_INCLUDE_DIR) 
 
 # Output library.
 RVLMOTION_LIB := $(RVL_LIB_DIR)/libRVLMotion.a

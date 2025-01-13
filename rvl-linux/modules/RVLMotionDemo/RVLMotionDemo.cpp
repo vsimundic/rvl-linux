@@ -29,6 +29,9 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 #include "RRT.h"
 #include "DDManipulator.h"
 #include "cnpy.h"
+#undef PI
+#include "fcl/fcl.h"
+constexpr double PI = 3.14159265358979;
 
 using namespace RVL;
 
@@ -401,6 +404,27 @@ void TestLocalFreePose(
 
 int main(int argc, char** argv)
 {
+
+    auto box1 = std::make_shared<fcl::Box<double>>(1.0, 1.0, 1.0);
+    auto box2 = std::make_shared<fcl::Box<double>>(1.0, 1.0, 1.0);
+
+    // Define transforms
+    fcl::Transform3<double> tf1 = fcl::Transform3<double>::Identity();
+    fcl::Transform3<double> tf2 = fcl::Transform3<double>::Identity();
+    tf2.translation() = Eigen::Vector3d(1.5, 0.0, 0.0); // Offset the second box
+
+    // Create collision objects
+    fcl::CollisionObject<double> obj1(box1, tf1);
+    fcl::CollisionObject<double> obj2(box2, tf2);
+
+    // Collision request and result
+    fcl::CollisionRequest<double> request;
+    fcl::CollisionResult<double> result;
+
+    // Perform collision checking
+    bool isColliding = fcl::collide(&obj1, &obj2, request, result);
+
+
     // Create memory storage.
 
     CRVLMem mem0;	// permanent memory
