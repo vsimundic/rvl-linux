@@ -269,6 +269,8 @@ namespace RVL
 		Mesh *pToolMesh;
 		float PRTCP_G[3];
 		Array<int> tool_contact_spheres;
+		//FCL collision checker
+		
 
 		// Path planning.
 
@@ -288,6 +290,7 @@ namespace RVL
 		// Local constraints.
 
 		float rLocalConstraints;
+
 
 	private:
 		char *feasibleToolContactPosesFileName;
