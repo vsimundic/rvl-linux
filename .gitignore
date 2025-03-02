@@ -1,5 +1,6 @@
-rvl-linux/data/*
-!rvl-linux/data/Robotiq3Finger
+# rvl-linux/data/*
+# !rvl-linux/data/Robotiq3Finger
+# !rvl-linux/data/Robotiq3Finger/**
 rvl-linux/build
 rvl-linux/python/build
 human_segmentation_ws/build/*

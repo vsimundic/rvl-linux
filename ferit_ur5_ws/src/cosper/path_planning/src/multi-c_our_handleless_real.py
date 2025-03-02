@@ -44,7 +44,7 @@ if __name__ == '__main__':
 	# Load door configurations
 	door_configs_path = config['cabinet_configs_path']
 	doors = np.load(door_configs_path)
-	num_doors = int(doors.shape[0]*0.5)
+	num_doors = int(doors.shape[0])
 
 	# Load screenshots folder
 	save_screenshot_path = config['screenshots_path']
@@ -233,6 +233,12 @@ if __name__ == '__main__':
 				# Shutdown Gazebo simulation and kill all of its processes
 				# stop_gazebo_launcher(gazebo_process)
 				# del gazebo_process
+
+				kill_ros_nodes()
+				rospy.sleep(1.)
+				kill_processes()
+				reset_tf_buffer(tf_buffer)
+
 				launch_process.terminate()
 				launch_process.wait()
 				kill_processes()

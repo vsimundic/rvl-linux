@@ -3,13 +3,13 @@
   <world name="default">
     <!-- A gazebo links attacher -->
     <plugin name="ros_link_attacher_plugin" filename="libgazebo_ros_link_attacher.so"/>
-    <!-- <physics type="ode"> -->
-    <physics type="bullet">
-      <max_step_size>0.0001</max_step_size>
-      <real_time_update_rate>10000</real_time_update_rate>
+    <physics type="ode">
+    <!-- <physics type="bullet"> -->
+      <max_step_size>0.001</max_step_size>
+      <real_time_update_rate>1000</real_time_update_rate>
       <max_contacts>100</max_contacts>  <!-- Ensures better contact detection -->
       <solver>
-          <iterations>150</iterations>  <!-- More solver iterations for better stability -->
+          <iterations>50</iterations>  <!-- More solver iterations for better stability -->
           <sor>1.3</sor>  <!-- Successive Over-Relaxation for better convergence -->
       </solver>
     </physics>
