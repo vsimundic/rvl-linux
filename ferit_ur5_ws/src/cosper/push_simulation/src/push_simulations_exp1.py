@@ -88,7 +88,7 @@ if __name__ == '__main__':
         if is_saving:
             with open(csv_path, 'w') as f:
                 writer = csv.writer(f, delimiter=',')
-                writer.writerow(['path_found', 'traj_success', 'contact_free', 'door_opened', 'door_width', 'door_height', 'x', 'y', 'z', 'rot_z', 'state_angle', 'axis_pos'])
+                writer.writerow(['idx','path_found', 'traj_success', 'contact_free', 'door_opened', 'door_width', 'door_height', 'x', 'y', 'z', 'rot_z', 'state_angle', 'axis_pos'])
     else:
         data = read_csv_DataFrame(csv_path)
         rows = data.shape[0]
@@ -135,7 +135,7 @@ if __name__ == '__main__':
                                 save_path=config['cabinet_urdf_save_path'])
                 
         # Save cabinet mesh to a file
-        cabinet_model.save_mesh_without_doors(config['cabinet_mesh_save_path'])
+        cabinet_model.save_mesh_without_doors(config['cabinet_static_mesh_save_path'])
         cabinet_model.change_door_angle(state_angle)
         cabinet_model.update_mesh()
 
@@ -175,7 +175,7 @@ if __name__ == '__main__':
             print('Path not found')
             with open(csv_path, 'a') as f:
                 writer = csv.writer(f, delimiter=',')
-                writer.writerow([path_found, trajectory_successful, contact_free, door_opened, width, height, position[0], position[1], position[2], rot_z_deg, state_angle, axis_pos])
+                writer.writerow([i, path_found, trajectory_successful, contact_free, door_opened, width, height, position[0], position[1], position[2], rot_z_deg, state_angle, axis_pos])
 
         if T_G_0_array.shape[0] > 1:
 
@@ -244,7 +244,7 @@ if __name__ == '__main__':
                 if is_saving:
                     with open(csv_path, 'a') as f:
                         writer = csv.writer(f, delimiter=',')
-                        writer.writerow([path_found, trajectory_successful, contact_free, door_opened, width, height, position[0], position[1], position[2], rot_z_deg, state_angle, axis_pos])
+                        writer.writerow([i, path_found, trajectory_successful, contact_free, door_opened, width, height, position[0], position[1], position[2], rot_z_deg, state_angle, axis_pos])
                 launch.shutdown()
                 continue
 
@@ -303,7 +303,7 @@ if __name__ == '__main__':
             if is_saving:
                 with open(csv_path, 'a') as f:
                     writer = csv.writer(f, delimiter=',')
-                    writer.writerow([path_found, trajectory_successful, contact_free, door_opened, width, height, position[0], position[1], position[2], rot_z_deg, state_angle, axis_pos])
+                    writer.writerow([i, path_found, trajectory_successful, contact_free, door_opened, width, height, position[0], position[1], position[2], rot_z_deg, state_angle, axis_pos])
 
 
 

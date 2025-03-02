@@ -1,0 +1,65 @@
+## generate_place_cabinet config
+# cabinet_dims: [0.3, 0.5, 0.4, 0.018] # w_door, h_door, static_d, d_door
+
+# door dims, cabinet dims will be created from to the door params
+cabinet_door_dims:
+  # min_width: 0.2
+  # max_width: 0.5
+  # min_height: 0.2
+  # max_height: 0.5
+  min_width: 0.2
+  max_width: 0.6
+  min_height: 0.2
+  max_height: 0.8
+
+  depth: 0.018
+  static_depth: 0.3
+
+# door axis pose
+cabinet_pose:
+  min_x: -0.75
+  max_x: 0.75
+  min_y: 0.0
+  max_y: 0.75
+  rot_angle_min_deg: -180
+  rot_angle_max_deg: 180
+  axis_pos: -1
+cabinet_urdf_save_path: "/home/RVLuser/ferit_ur5_ws/cabinet.urdf"
+cabinet_static_mesh_save_path: "/home/RVLuser/ferit_ur5_ws/cabinet_static.ply" # static mesh
+cabinet_panel_mesh_save_path: "/home/RVLuser/ferit_ur5_ws/cabinet_panel.ply" # panel mesh
+cabinet_full_mesh_save_path: "/home/RVLuser/ferit_ur5_ws/cabinet_whole.ply" # full cabinet mesh
+
+## Feasible poses setup
+feasible_poses:
+  dd_state_deg: -7.0
+  num_viewpoints: 100
+  num_rot_angles: 12
+  load_valid_contact_poses_from_file: True
+  load_feasible_poses_from_file: True
+  # load_valid_contact_poses_from_file: False
+  # load_feasible_poses_from_file: False
+  gripper_params:
+    is_default_gripper: False
+    # custom_gripper_spheres_path: '/home/RVLuser/rvl-linux/python/DDMan/3finger_gripper/gripper_spheres.npy'
+    # custom_gripper_model_path: '/home/RVLuser/rvl-linux/python/DDMan/3finger_gripper/robotiq_3f_gripper_simplified.stl'
+    custom_gripper_spheres_path: '/home/RVLuser/rvl-linux/data/Robotiq3Finger/spheres.npy'
+    custom_gripper_model_path: '/home/RVLuser/rvl-linux/data/Robotiq3Finger/mesh.ply'
+    tool_contact_surface_params: [[0.0, -0.026, 0.0], [0.0, -0.030, -0.020], [0.006, -0.026, 0.0]]
+    tool_finger_distances: [-0.0775, 0., -0.102]
+    sphere_to_TCS_distance: 0.004609
+  # feasible_poses_path: "/home/RVLuser/rvl-linux/python/DDMan/feasible_poses.npy"
+  # feasible_poses_path: "/home/RVLuser/rvl-linux/data/Robotiq3Finger/feasible_poses_left_axis.npy"
+  feasible_poses_path: "/home/RVLuser/rvl-linux/data/Robotiq3Finger/feasible_poses_left_axis_fcl.npy"
+  contact_free_poses_path: "/home/RVLuser/ferit_ur5_ws/src/cosper/push_simulation/config/contact_free_poses.npy"
+  valid_contact_poses_path: "/home/RVLuser/ferit_ur5_ws/src/cosper/push_simulation/config/valid_contact_poses.npy"
+  visualization: False
+
+rvl_config_path: "/home/RVLuser/rvl-linux/RVLMotionDemo_Cupec_single_contact.cfg"
+tool_model_params: "/home/RVLuser/rvl-linux/data/Robotiq3Finger"
+cabinet_configs_path: "/home/RVLuser/ferit_ur5_ws/src/cosper/path_planning/cabinet_configurations_axis_left.npy"
+gazebo_launch_path: "/home/RVLuser/ferit_ur5_ws/src/ur5_configs/ur5_robotiq_ft_3f_moveit_config/launch/demo_gazebo.launch"
+gripper_tool_pose: "/home/RVLuser/ferit_ur5_ws/src/cosper/path_planning/config/T_G_T.npy"
+robot_world_pose: "/home/RVLuser/ferit_ur5_ws/src/cosper/path_planning/config/T_R_W.npy"
+
+results_path: "/home/RVLuser/ferit_ur5_ws/src/cosper/path_planning/results/results_single-c_our_handleless.csv"
+screenshots_path: "/home/RVLuser/ferit_ur5_ws/src/cosper/path_planning/results/screenshots_single-c_our_handleless"

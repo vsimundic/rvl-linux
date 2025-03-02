@@ -9,7 +9,7 @@ import os
 from core.paths_packages import get_package_path_from_name
 from trac_ik_python.trac_ik import IK
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
-from control_msgs.msg import FollowJointTrajectoryAction, FollowJointTrajectoryGoal
+from control_msgs.msg import FollowJointTrajectoryAction, FollowJointTrajectoryGoal, JointTolerance
 roslib.load_manifest('robotiq_3f_gripper_control')
 from robotiq_3f_gripper_articulated_msgs.msg import Robotiq3FGripperRobotOutput, Robotiq3FGripperRobotInput
 from actionlib import SimpleActionClient
@@ -31,6 +31,8 @@ class UR5Commander():
         self.__gripper_pub = rospy.Publisher('Robotiq3FGripperRobotOutput', Robotiq3FGripperRobotOutput, queue_size=10)   
         self.robot_ip = '192.168.10.14'
         self.robot_port = 30002
+        self.pc_ip = '192.168.10.100'
+        self.pc_port = 30002
 
         self.T_B_S = np.array(np.load(os.path.join(get_package_path_from_name('gazebo_push_open'), 'config', 'T_B_S.npy')))
         self.T_G_T = np.array(np.load(os.path.join(get_package_path_from_name('gazebo_push_open'), 'config', 'T_G_T.npy')))
@@ -152,6 +154,7 @@ class UR5Commander():
 
 
     def send_joint_values_to_robot(self, joint_values: list,  wait: bool=True):
+        self.__group.stop()
         self.__group.set_joint_value_target(joint_values)
         success = self.__group.go(wait=wait)
         self.__group.stop()
@@ -169,7 +172,7 @@ class UR5Commander():
 
         joint_trajectory = JointTrajectory()
         print(self.__robot.get_joint_names(group=self.__group_name))
-        joint_trajectory.joint_names = self.__robot.get_joint_names(self.__group_name)[1:7]
+        joint_trajectory.joint_names = self.get_joint_names()
         
         for i, joint_values in enumerate(joint_values_list):
             print(joint_values)
@@ -196,14 +199,14 @@ class UR5Commander():
     def send_multiple_joint_space_poses_to_robot2(self, joint_values_list: list):
 
         # Robot parameters
-        max_joint_velocity = 1.0  # Maximum velocity in rad/s per joint
-        max_joint_acceleration = 0.5  # Maximum acceleration in rad/s^2 per joint
+        max_joint_velocity = 1  # Maximum velocity in rad/s per joint
+        max_joint_acceleration = 0.7  # Maximum acceleration in rad/s^2 per joint
 
         self.__follow_joint_trajectory_client.wait_for_server(timeout=rospy.Duration(10))
 
         joint_trajectory = JointTrajectory()
-        print(self.__robot.get_joint_names(group=self.__group_name))
-        joint_trajectory.joint_names = self.__robot.get_joint_names(self.__group_name)[1:7]
+        
+        joint_trajectory.joint_names = self.get_joint_names()
         
         total_time = 0.0  # Total execution time for the trajectory
         for i in range(len(joint_values_list)):
@@ -222,109 +225,128 @@ class UR5Commander():
             point.time_from_start = rospy.Duration(total_time)
             joint_trajectory.points.append(point)
 
+        correction_point = JointTrajectoryPoint()
+        correction_point.positions = joint_values_list[-1]  # Same as last target
+        correction_point.time_from_start = rospy.Duration(total_time + 0.2)  # Small buffer
+        joint_trajectory.points.append(correction_point)
+
 
         goal = FollowJointTrajectoryGoal()
         goal.trajectory = joint_trajectory
 
-        # state = self.__follow_joint_trajectory_client.send_goal_and_wait(goal)
-        # state = self.__follow_joint_trajectory_client.send_goal(goal)
         state = self.__follow_joint_trajectory_client.send_goal_and_wait(
             goal,
-            execute_timeout=rospy.Duration(total_time + 2.0),  # Buffer time for execution
-            preempt_timeout=rospy.Duration(5.0)
-        )        
+            execute_timeout=rospy.Duration(5*total_time),  # Buffer time for execution
+            preempt_timeout=rospy.Duration(5*total_time)
+        )
+        rospy.sleep(1.0)
         print("Done waiting for trajectory execution.")
 
-        if state == GoalStatus.SUCCEEDED or state == GoalStatus.PREEMPTED:
+        joint_states = rospy.wait_for_message("/joint_states", JointState)
+        current_positions = {name: pos for name, pos in zip(joint_states.name, joint_states.position)}
+        max_error = 0.0
+        print("Final Joint States Check:")
+        for joint_name in joint_trajectory.joint_names:
+            actual = current_positions.get(joint_name, 0)
+            expected = joint_values_list[-1][joint_trajectory.joint_names.index(joint_name)]
+            error = np.abs(actual - expected)
+            max_error = max(max_error, error)
+            print(f"{joint_name}: Actual = {actual}, Expected = {expected}, Error = {error}")
+
+        ERROR_THRESHOLD = 0.001  # 10e-6 rad (very small)
+        if state == GoalStatus.SUCCEEDED or max_error < ERROR_THRESHOLD:
+            if state != GoalStatus.SUCCEEDED:
+                rospy.logwarn(f"Trajectory reported as ABORTED, but final error is {max_error} rad. Forcing SUCCESS.")
             return True
+        rospy.logwarn("Trajectory execution finished but reported as ABORTED.")
         return False
 
-    def send_multiple_joint_space_poses_to_robot3(self, joint_values_list: list) -> bool:
-        """
-        Plans and executes a trajectory through a series of joint-space waypoints while considering obstacles in the 
-        MoveIt PlanningSceneInterface.
+    # def send_multiple_joint_space_poses_to_robot3(self, joint_values_list: list) -> bool:
+    #     """
+    #     Plans and executes a trajectory through a series of joint-space waypoints while considering obstacles in the 
+    #     MoveIt PlanningSceneInterface.
 
-        This function iteratively plans a trajectory for each joint-space waypoint provided in the input list. 
-        If all waypoints are successfully planned, it combines them into a single RobotTrajectory and executes it.
-        If planning fails for any waypoint, the function stops further planning and logs a warning.
+    #     This function iteratively plans a trajectory for each joint-space waypoint provided in the input list. 
+    #     If all waypoints are successfully planned, it combines them into a single RobotTrajectory and executes it.
+    #     If planning fails for any waypoint, the function stops further planning and logs a warning.
 
-        Parameters:
-        ----------
-        joint_values_list : list
-            A list of joint-space configurations, where each configuration is a list of joint values (floats) 
-            corresponding to the robot's joint positions.
+    #     Parameters:
+    #     ----------
+    #     joint_values_list : list
+    #         A list of joint-space configurations, where each configuration is a list of joint values (floats) 
+    #         corresponding to the robot's joint positions.
 
-        Returns:
-        -------
-        bool
-            True if a collision-free trajectory is successfully planned and executed through all waypoints. 
-            False if planning fails for any of the waypoints.
-        """
-        trajectory = RobotTrajectory()
-        success = True
-        total_time = 0.0  # Keeps track of cumulative time for waypoints
-        max_velocity = 1.0
-        max_acceleration = 0.5
+    #     Returns:
+    #     -------
+    #     bool
+    #         True if a collision-free trajectory is successfully planned and executed through all waypoints. 
+    #         False if planning fails for any of the waypoints.
+    #     """
+    #     trajectory = RobotTrajectory()
+    #     success = True
+    #     total_time = 0.0  # Keeps track of cumulative time for waypoints
+    #     max_velocity = 1.0
+    #     max_acceleration = 0.5
 
-        # Set joint names
-        trajectory.joint_trajectory.joint_names = self.__group.get_active_joints()
+    #     # Set joint names
+    #     trajectory.joint_trajectory.joint_names = self.__group.get_active_joints()
         
-        # Create a RobotState object to manually update the start state
-        current_state = RobotState()
+    #     # Create a RobotState object to manually update the start state
+    #     current_state = RobotState()
 
-        for index, joints in enumerate(joint_values_list):
-            self.__group.set_joint_value_target(joints)
+    #     for index, joints in enumerate(joint_values_list):
+    #         self.__group.set_joint_value_target(joints)
 
-            # Update the start state
-            if index == 0:
-                # For the first waypoint, use the robot's current state
-                self.__group.set_start_state_to_current_state()
-            else:
-                # For subsequent waypoints, use the last point of the previously planned trajectory
-                last_trajectory_point = trajectory.joint_trajectory.points[-1]
-                joint_state_names = self.__group.get_active_joints()
-                joint_state_positions = last_trajectory_point.positions
+    #         # Update the start state
+    #         if index == 0:
+    #             # For the first waypoint, use the robot's current state
+    #             self.__group.set_start_state_to_current_state()
+    #         else:
+    #             # For subsequent waypoints, use the last point of the previously planned trajectory
+    #             last_trajectory_point = trajectory.joint_trajectory.points[-1]
+    #             joint_state_names = self.__group.get_active_joints()
+    #             joint_state_positions = last_trajectory_point.positions
 
-                # Populate the RobotState object with the last trajectory point
-                joint_state = JointState()
-                joint_state.name = joint_state_names
-                joint_state.position = joint_state_positions
-                current_state.joint_state = joint_state
-                self.__group.set_start_state(current_state)
+    #             # Populate the RobotState object with the last trajectory point
+    #             joint_state = JointState()
+    #             joint_state.name = joint_state_names
+    #             joint_state.position = joint_state_positions
+    #             current_state.joint_state = joint_state
+    #             self.__group.set_start_state(current_state)
 
-            plan = self.__group.plan()
-            if plan[0] and plan[1].joint_trajectory.points:
-                for point_index, point in enumerate(plan[1].joint_trajectory.points):
-                    # Dynamically calculate time between points
-                    if index == 0 and point_index == 0:
-                        continue  # Skip time calculation for the first point
-                    prev_point = plan[1].joint_trajectory.points[point_index - 1] if point_index > 0 else trajectory.joint_trajectory.points[-1]
-                    time_increment = self.calculate_time_between_points(
-                        prev_point.positions, point.positions, max_velocity, max_acceleration)
-                    total_time += time_increment
-                    point.time_from_start = rospy.Duration.from_sec(total_time)
+    #         plan = self.__group.plan()
+    #         if plan[0] and plan[1].joint_trajectory.points:
+    #             for point_index, point in enumerate(plan[1].joint_trajectory.points):
+    #                 # Dynamically calculate time between points
+    #                 if index == 0 and point_index == 0:
+    #                     continue  # Skip time calculation for the first point
+    #                 prev_point = plan[1].joint_trajectory.points[point_index - 1] if point_index > 0 else trajectory.joint_trajectory.points[-1]
+    #                 time_increment = self.calculate_time_between_points(
+    #                     prev_point.positions, point.positions, max_velocity, max_acceleration)
+    #                 total_time += time_increment
+    #                 point.time_from_start = rospy.Duration.from_sec(total_time)
 
-                # Append the planned trajectory points to the composite trajectory
-                trajectory.joint_trajectory.points.extend(plan[1].joint_trajectory.points)
-            else:
-                rospy.logwarn('Planning failed for waypoints: %s' % joints)
-                success = False
-                break
+    #             # Append the planned trajectory points to the composite trajectory
+    #             trajectory.joint_trajectory.points.extend(plan[1].joint_trajectory.points)
+    #         else:
+    #             rospy.logwarn('Planning failed for waypoints: %s' % joints)
+    #             success = False
+    #             break
         
-            if not trajectory.joint_trajectory.joint_names:
-                rospy.logerr("Trajectory specifies no joint names.")
-                return False
-            if not trajectory.joint_trajectory.points:
-                rospy.logerr("Trajectory contains no points.")
-                return False
+    #         if not trajectory.joint_trajectory.joint_names:
+    #             rospy.logerr("Trajectory specifies no joint names.")
+    #             return False
+    #         if not trajectory.joint_trajectory.points:
+    #             rospy.logerr("Trajectory contains no points.")
+    #             return False
         
-        # Execute the trajectory if successful
-        if success:
-            success = self.__group.execute(trajectory, wait=True)
-        else:
-            rospy.logwarn("Failed to plan a collision-free trajectory through waypoints.")
+    #     # Execute the trajectory if successful
+    #     if success:
+    #         success = self.__group.execute(trajectory, wait=True)
+    #     else:
+    #         rospy.logwarn("Failed to plan a collision-free trajectory through waypoints.")
         
-        return success
+    #     return success
 
 
     @staticmethod
@@ -382,6 +404,7 @@ class UR5Commander():
         # if with_force_mode:
         #     txt += 'end_force_mode()\n'
         
+        # Needs debugging
         txt += f'socket_open(\"{self.pc_ip}\", {self.pc_port})\n'
         txt += f'socket_send_string(\"Script completed\")\n'
         txt += f'socket_close()\n'
@@ -406,7 +429,7 @@ class UR5Commander():
     #         f.close()
 
 
-    def send_URScript(self):
+    def send_URScript(self, get_feedback: False):
 
         s = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
         s.connect((self.robot_ip, self.robot_port))
@@ -416,34 +439,34 @@ class UR5Commander():
     
         print('URScript sent!')
         data = s.recv(1024)
-
         s.close()
 
-        server_socket = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
-        host = self.pc_ip
-        port = self.pc_port
-        server_socket.bind((host, port))
-        server_socket.listen(1)
-        
-        print(f"Waiting for a connection on {host}:{port}...")
-
-        connection, client_address = server_socket.accept()
-        try:
-            print(f"Connection from {client_address} established")
+        if get_feedback:
+            server_socket = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
+            host = self.pc_ip
+            port = self.pc_port
+            server_socket.bind((host, port))
+            server_socket.listen(1)
             
-            # Receive the data in small chunks and retransmit it
-            while True:
-                data = connection.recv(1024)
-                if data:
-                    print("Received message:", data.decode('utf-8'))
-                    break  # Exit the loop after receiving the message
-                else:
-                    break  # No more data from the client
+            print(f"Waiting for a connection on {host}:{port}...")
+
+            connection, client_address = server_socket.accept()
+            try:
+                print(f"Connection from {client_address} established")
                 
-        finally:
-            # Clean up the connection
-            connection.close()
-            print("Connection closed")
+                # Receive the data in small chunks and retransmit it
+                while True:
+                    data = connection.recv(1024)
+                    if data:
+                        print("Received message:", data.decode('utf-8'))
+                        break  # Exit the loop after receiving the message
+                    else:
+                        break  # No more data from the client
+                    
+            finally:
+                # Clean up the connection
+                connection.close()
+                print("Connection closed")
 
 
     def zero_ft_sensor(self):
@@ -519,9 +542,6 @@ class UR5Commander():
             return False
 
 
-
-
-
     def open_gripper_pinch(self):
 
         self.gripper_3f.rACT = 1
@@ -566,6 +586,28 @@ class UR5Commander():
                 break
 
 
+    def check_joint_feasibility(self, start_state_joints, joint_values):
+        """
+        Checks if a given joint configuration is collision-free.
+        
+        Args:
+            joint_values: List of joint angles.
+
+        Returns:
+            True if collision-free, False otherwise.
+        """
+        start_state = moveit_commander.RobotState()
+        start_state.joint_state.name = self.__group.get_active_joints()
+        start_state.joint_state.position = start_state_joints
+        self.__group.set_start_state(start_state)
+        self.__group.set_joint_value_target(joint_values)
+
+        # Perform collision checking
+        plan = self.__group.plan()
+        if plan and len(plan[1].joint_trajectory.points) > 0:
+            return True  # Valid plan exists, meaning no collision
+        return False  # Collision detected
+    
     def get_inverse_kin(self, q_init, T):
 
         pose_ = matrix_to_pose(T)
@@ -578,8 +620,16 @@ class UR5Commander():
                        pose_.orientation.z, 
                        pose_.orientation.w)
         if q is None:
+            return None  # No valid IK solution found
+
+        q = list(q)  # Convert to list for MoveIt!
+
+        # Check if the solution is collision-free
+        if self.check_joint_feasibility(q_init, q):
+            return q  # Return the collision-free solution
+        else:
+            rospy.logwarn("IK solution is in collision!")
             return None
-        return list(q)
 
     def get_inverse_kin_builtin(self, q_init: list, T: np.ndarray):
         """
@@ -591,6 +641,7 @@ class UR5Commander():
         start_state.joint_state.name = self.__group.get_active_joints()
         start_state.joint_state.position = q_init
         self.__group.set_start_state(start_state)
+        # self.__group.set_start_state_to_current_state()
         
         self.__group.set_pose_target(pose_)
         plan = self.__group.plan()  # Directly get the plan (not a tuple)
@@ -604,6 +655,51 @@ class UR5Commander():
         else:
             return None, None
 
+    def get_joint_names(self):
+        return self.__robot.get_joint_names(self.__group_name)[1:7]
+
+
+    def reset_moveit_joints(self, default_positions=None):
+        """
+        Resets the robot joints to default positions.
+        
+        Args:
+            joint_names (list): List of joint names.
+            default_positions (list): List of default joint values (optional).
+        """
+
+        joint_names = self.get_joint_names()
+
+        if default_positions is None:
+            default_positions = [0.0] * len(joint_names)  # Default to zero positions
+
+        rospy.loginfo("Resetting robot joints...")
+
+        # Publish new joint state
+        pub = rospy.Publisher('/joint_states', JointState, queue_size=10)
+        joint_msg = JointState()
+        joint_msg.name = joint_names
+        joint_msg.position = default_positions
+        joint_msg.header.stamp = rospy.Time.now()
+
+        for _ in range(5):  # Publish multiple times to ensure reception
+            pub.publish(joint_msg)
+            rospy.sleep(0.1)
+
+        rospy.loginfo(f"Robot joints reset to: {default_positions}")
+        
+        # Ensure MoveIt! updates its internal state
+        self.__group.set_joint_value_target(default_positions)
+        self.__group.go(wait=True)
+        
+        # # Reset controllers if needed
+        # try:
+        #     rospy.wait_for_service('/move_group/stop', timeout=5)
+        #     move_group_stop = rospy.ServiceProxy('/move_group/stop', Empty)
+        #     move_group_stop()
+        #     rospy.loginfo("MoveIt! execution stopped.")
+        # except rospy.ServiceException as e:
+        #     rospy.logwarn(f"Failed to stop MoveIt!: {e}")
 
     @staticmethod
     def __matrix_to_pose(T: np.ndarray):
@@ -647,3 +743,18 @@ class UR5Commander():
         T = quaternion_matrix(q_)
         T[:3, 3] = np.array(t_)
         return T
+    
+    @staticmethod
+    def cancel_active_moveit_goal():
+        """
+        Cancels the active MoveIt! goal via action client.
+        """
+        import actionlib
+        from moveit_msgs.msg import MoveGroupAction
+        rospy.loginfo("Connecting to MoveIt! action client...")
+        client = actionlib.SimpleActionClient('move_group', MoveGroupAction)
+        client.wait_for_server()
+        
+        rospy.loginfo("Canceling the active goal...")
+        client.cancel_all_goals()
+        rospy.loginfo("MoveIt! goal canceled.")

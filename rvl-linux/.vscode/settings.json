@@ -71,6 +71,13 @@
         "mutex": "cpp",
         "shared_mutex": "cpp",
         "variant": "cpp",
-        "eigenvalues": "cpp"
+        "eigenvalues": "cpp",
+        "*.txx": "cpp",
+        "compare": "cpp",
+        "concepts": "cpp",
+        "ranges": "cpp",
+        "stop_token": "cpp",
+        "polynomials": "cpp",
+        "forward_list": "cpp"
     }
 }

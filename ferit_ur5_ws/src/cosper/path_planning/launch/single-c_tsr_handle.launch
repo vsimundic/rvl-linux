@@ -1,0 +1,3 @@
+<launch>
+    <node name="single_contact_tsr_handle" pkg="path_planning" type="single-c_tsr_handle.py" output="screen" />
+</launch>

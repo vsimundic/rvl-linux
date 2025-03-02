@@ -28,48 +28,48 @@ link_directories(
   /home/RVLuser/rvl-linux/build/lib
 )
 
-add_executable(${PROJECT_NAME}_node src/test_node.cpp)
+# add_executable(${PROJECT_NAME}_node src/test_node.cpp)
 
-target_link_libraries(${PROJECT_NAME}_node
-  ${catkin_LIBRARIES}
-  ${VTK_LIBRARIES}
-  RVLMotion  
-  RVLObjectDetection  
-  RVLRecognition
-  RVLObjectDetection  # This has to go twice because RVLRecognition depends on it
-  RVLPCSegment
-  RVLNN
-  RVLCore
+# target_link_libraries(${PROJECT_NAME}_node
+#   ${catkin_LIBRARIES}
+#   ${VTK_LIBRARIES}
+#   RVLMotion  
+#   RVLObjectDetection  
+#   RVLRecognition
+#   RVLObjectDetection  # This has to go twice because RVLRecognition depends on it
+#   RVLPCSegment
+#   RVLNN
+#   RVLCore
 
-  # /home/RVLuser/rvl-linux/build/lib/libRVLCore.so
-  # /home/RVLuser/rvl-linux/build/lib/libRVLPCSegment.so
-  # /home/RVLuser/rvl-linux/build/lib/libRVLNN.so
-  # /home/RVLuser/rvl-linux/build/lib/libRVLObjectDetection.so
-  # /home/RVLuser/rvl-linux/build/lib/libRVLRecognition.so
-  # /home/RVLuser/rvl-linux/build/lib/libRVLMotion.so
+#   # /home/RVLuser/rvl-linux/build/lib/libRVLCore.so
+#   # /home/RVLuser/rvl-linux/build/lib/libRVLPCSegment.so
+#   # /home/RVLuser/rvl-linux/build/lib/libRVLNN.so
+#   # /home/RVLuser/rvl-linux/build/lib/libRVLObjectDetection.so
+#   # /home/RVLuser/rvl-linux/build/lib/libRVLRecognition.so
+#   # /home/RVLuser/rvl-linux/build/lib/libRVLMotion.so
 
-  opencv_world 
-  vtksys-7.1 
-  vtkCommonCore-7.1 
-  vtkIOGeometry-7.1 
-  vtkCommonExecutionModel-7.1 
-  vtkRenderingCore-7.1 
-  vtkIOCore-7.1 
-  vtkFiltersGeneral-7.1 
-  vtkCommonDataModel-7.1 
-  vtkCommonTransforms-7.1 
-  vtkFiltersSources-7.1 
-  vtkFiltersCore-7.1 
-  vtkCommonComputationalGeometry-7.1 
-  vtkIOPLY-7.1 
-  vtkIOLegacy-7.1 
-  vtkInteractionWidgets-7.1 
-  vtkInteractionStyle-7.1 
-  vtkRenderingAnnotation-7.1 
-  vtkRenderingFreeType-7.1 
-  vtkRenderingContextOpenGL2-7.1 
-  vtkRenderingOpenGL2-7.1 
-  vtkInteractionStyle-7.1 
-  vtkRenderingGL2PSOpenGL2-7.1 
-  vtkRenderingLabel-7.1 
-)
+#   opencv_world 
+#   vtksys-7.1 
+#   vtkCommonCore-7.1 
+#   vtkIOGeometry-7.1 
+#   vtkCommonExecutionModel-7.1 
+#   vtkRenderingCore-7.1 
+#   vtkIOCore-7.1 
+#   vtkFiltersGeneral-7.1 
+#   vtkCommonDataModel-7.1 
+#   vtkCommonTransforms-7.1 
+#   vtkFiltersSources-7.1 
+#   vtkFiltersCore-7.1 
+#   vtkCommonComputationalGeometry-7.1 
+#   vtkIOPLY-7.1 
+#   vtkIOLegacy-7.1 
+#   vtkInteractionWidgets-7.1 
+#   vtkInteractionStyle-7.1 
+#   vtkRenderingAnnotation-7.1 
+#   vtkRenderingFreeType-7.1 
+#   vtkRenderingContextOpenGL2-7.1 
+#   vtkRenderingOpenGL2-7.1 
+#   vtkInteractionStyle-7.1 
+#   vtkRenderingGL2PSOpenGL2-7.1 
+#   vtkRenderingLabel-7.1 
+# )

@@ -19,11 +19,10 @@ from subprocess import check_output
 import signal
 import csv
 
-
 if __name__ == '__main__':
     rospy.init_node('test_node_simulations')
     
-    read_results_path = '/home/RVLuser/ferit_ur5_ws/src/cosper/push_simulation/simulation_results.csv'
+    read_results_path = '/home/RVLuser/ferit_ur5_ws/src/cosper/path_planning/results/results_multi-c_our_handleless_real.csv'
     data = read_csv_DataFrame(read_results_path)
 
     success_data = data.loc[((data['path_found'] == True) & 
@@ -32,9 +31,9 @@ if __name__ == '__main__':
                             (data['door_opened'] == True))] 
     print(success_data)
 
-    n = 10
+    n = 50
     T_G_T_pen = np.eye(4)
-    T_G_T_pen[2, 3] = 0.310
+    T_G_T_pen[2, 3] = 0.317
 
     # Robot handler
     robot = UR5Commander()  
@@ -44,16 +43,17 @@ if __name__ == '__main__':
         h = row['door_height']
         x = row['x']
         y = row['y']
-        z = row['z']
+        z = row['z'] - 0.012
+        state_angle = row['state_angle']
         
         rz = np.radians(row['rot_z'])
         axis_pos = row['axis_pos']
 
         T_A_S = np.eye(4)
         T_A_S[:3, 3] = np.array([x, y, z])
-        Tz_init = np.eye(4)
-        Tz_init[:3, :3] = rot_z(np.radians(90.))
-        T_A_S = T_A_S @ Tz_init
+        # Tz_init = np.eye(4)
+        # Tz_init[:3, :3] = rot_z(np.radians(90.))
+        # T_A_S = T_A_S @ Tz_init
         Tz = np.eye(4)
         Tz[:3, :3] = rot_z(rz)
         T_A_S = T_A_S @ Tz
@@ -86,11 +86,9 @@ if __name__ == '__main__':
             if key == 'p':
                 break
         
-
-            
         path_planner = rvlpy_dd_man.PYDDManipulator()
-        path_planner.create('/home/RVLuser/rvl-linux/RVLMotionDemo_Cupec.cfg')
-        path_planner.set_robot_pose(robot.T_B_S)
+        path_planner.create('/home/RVLuser/rvl-linux/RVLMotionDemo_Cupec_real_robot.cfg')
+        path_planner.set_robot_pose(np.eye(4))
         path_planner.set_door_model_params(
                                         cabinet_model.d_door,
                                         cabinet_model.w_door,
@@ -101,7 +99,7 @@ if __name__ == '__main__':
                                         cabinet_model.static_side_width,
                                         cabinet_model.moving_to_static_part_distance) 
         path_planner.set_door_pose(T_A_S)
-        path_planner.set_environment_state(-8.0)
+        path_planner.set_environment_state(state_angle)
 
         # Get current joint values and correct them for the path planner
         q_init = robot.get_current_joint_values()

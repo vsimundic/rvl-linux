@@ -9,8 +9,10 @@ import os
 
 MODELID = "13928"
 
-URDFPATH = f"/home/RVLuser/Helper3D-master/robotiq-3f-gripper_articulated.urdf"
-OUTPUTDIR = "/home/RVLuser/Helper3D-master/a"
+# URDFPATH = f"/home/RVLuser/Helper3D-master/robotiq-3f-gripper_articulated.urdf"
+name_model = 'robotiq-3f-gripper_articulated_collision_enlarged_5'
+URDFPATH = "/home/RVLuser/Helper3D-master/%s.urdf" % name_model
+OUTPUTDIR = "/home/RVLuser/Helper3D-master"
 
 if not os.path.exists(OUTPUTDIR):
     os.mkdir(OUTPUTDIR)
@@ -45,4 +47,5 @@ if __name__ == "__main__":
     coordinate = trimesh.creation.axis(origin_size=0.1)
 
     mesh.show()
-    mesh.export('robotiq-3f-gripper_articulated.stl')
+    print(OUTPUTDIR + '/%s.stl' % name_model)
+    mesh.export(OUTPUTDIR + '/%s.stl' % name_model)

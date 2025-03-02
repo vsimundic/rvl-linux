@@ -54,8 +54,9 @@ int main(int argc, char** argv) {
     // float Q[4] = {0.70709, -0.707124, 0.0, 0.0};
     // RVLQUATERNIONTOROT(Q, pose_6_0.R);
     RVL::Array2D<float> invKinSolutions;
+    RVL::Array<RVL::MOTION::IKSolution> ikSolutions;
     invKinSolutions.Element = NULL;
-    UR5.InvKinematics(pose_6_0, invKinSolutions);
+    UR5.InvKinematics(pose_6_0, ikSolutions, false);
     float *q;
 
     for (int i = 0; i < invKinSolutions.h; i++) {

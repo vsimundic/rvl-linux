@@ -1,3 +1,0 @@
-<launch>
-    <node name="node_start_multi_contact_simulation_experiment" pkg="path_planning" type="node_start_multi_contact_simulation_experiment.py" output="screen"/>
-</launch>

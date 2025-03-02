@@ -56,7 +56,7 @@ if __name__ == '__main__':
                             save_path=config['cabinet_urdf_save_path'])
     
     # Save cabinet mesh to a file
-    cabinet_model.save_mesh_without_doors(config['cabinet_mesh_save_path'])
+    cabinet_model.save_mesh_without_doors(config['cabinet_static_mesh_save_path'])
 
     # Spawning model in Gazebo
     cabinet_model.delete_model_gazebo()
@@ -112,7 +112,7 @@ if __name__ == '__main__':
     robot.send_joint_values_to_robot(q_init.tolist())
 
     # # Add cabinet mesh to rviz
-    # robot.add_mesh_to_scene(config['cabinet_mesh_save_path'], 'cabinet', np.linalg.inv(robot.T_B_S) @ cabinet_model.T_O_S)
+    # robot.add_mesh_to_scene(config['cabinet_static_mesh_save_path'], 'cabinet', np.linalg.inv(robot.T_B_S) @ cabinet_model.T_O_S)
 
     # Calculate poses
     T_T_B_fp_prev = robot.get_tool_pose_from_gripper_pose(T_G_S_prev) # approaching pose

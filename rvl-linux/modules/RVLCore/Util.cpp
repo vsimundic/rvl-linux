@@ -502,6 +502,34 @@ void RVL::Move(
 	RVLSUM3VECTORS(pPoseSrc->t, t, pPoseTgt->t);
 }
 
+void RVL::PseudoRndSampleUnitSphere(
+	float *x,
+	Array<int> rndVal,
+	int &iRndVal)
+{
+	int z;
+	RVLRND(1000000, rndVal.Element, rndVal.n, iRndVal, z);
+	float th = 2.0f * PI * 1e-6 * (float)z;
+	RVLRND(1000000, rndVal.Element, rndVal.n, iRndVal, z);
+	float cs = 2e-6 * (float)z - 1.0f;
+	float sn = sqrt(1.0f - cs * cs);
+	x[0] = sn * cos(th);
+	x[1] = sn * sin(th);
+	x[2] = cs;
+}
+
+void RVL::IntrinsicCameraMatrix(
+	Camera camera,
+	float *K)
+{
+	RVLNULLMX3X3(K);
+	RVLMXEL(K, 3, 0, 0) = camera.fu;
+	RVLMXEL(K, 3, 1, 1) = camera.fv;
+	RVLMXEL(K, 3, 0, 2) = camera.uc;
+	RVLMXEL(K, 3, 1, 2) = camera.vc;
+	RVLMXEL(K, 3, 2, 2) = 1.0f;
+}
+
 FileSequenceLoader::FileSequenceLoader()
 {
 	nFileNames = 0;
@@ -2562,7 +2590,7 @@ namespace RVL
 		}
 	}
 
-	void MinBoundingBox(
+	bool MinBoundingBox(
 		Array<Point2D> poly,
 		float *C,
 		float &a,
@@ -2620,6 +2648,46 @@ namespace RVL
 				RVLMULMX2X2TVECT(RBA, CA, C);
 			}
 			pVertex_ = pVertex;
+		}
+		return (minArea > 0.0f);
+	}
+
+	void CreateBoxMesh(
+		float *size,
+		float *P,
+		int *faces,
+		int vertexIdxOffset)
+	{
+		// Vertices.
+
+		float halfSize[3];
+		RVLSCALE3VECTOR(size, 0.5f, halfSize);
+		float *P_ = P;
+		RVLSET3VECTOR(P_, halfSize[0], -halfSize[1], -halfSize[2]);
+		P_ += 3;
+		RVLSET3VECTOR(P_, -halfSize[0], -halfSize[1], -halfSize[2]);
+		P_ += 3;
+		RVLSET3VECTOR(P_, -halfSize[0], halfSize[1], -halfSize[2]);
+		P_ += 3;
+		RVLSET3VECTOR(P_, halfSize[0], halfSize[1], -halfSize[2]);
+		P_ += 3;
+		RVLSET3VECTOR(P_, halfSize[0], -halfSize[1], halfSize[2]);
+		P_ += 3;
+		RVLSET3VECTOR(P_, halfSize[0], halfSize[1], halfSize[2]);
+		P_ += 3;
+		RVLSET3VECTOR(P_, -halfSize[0], halfSize[1], halfSize[2]);
+		P_ += 3;
+		RVLSET3VECTOR(P_, -halfSize[0], -halfSize[1], halfSize[2]);
+
+		// Faces.
+
+		int faces_[12][3] = {{0, 1, 2}, {0, 2, 3}, {0, 3, 5}, {0, 5, 4}, {3, 2, 6}, {3, 6, 5}, {2, 1, 7}, {2, 7, 6}, {1, 0, 4}, {1, 4, 7}, {4, 5, 6}, {4, 6, 7}};
+		int *face = faces;
+		for (int iFace = 0; iFace < 12; iFace++, face += 3)
+		{
+			face[0] = faces_[iFace][0] + vertexIdxOffset;
+			face[1] = faces_[iFace][1] + vertexIdxOffset;
+			face[2] = faces_[iFace][2] + vertexIdxOffset;
 		}
 	}
 
@@ -2795,4 +2863,159 @@ bool RVL::IdxCostPairComparison(Pair<int, float> x, Pair<int, float> y)
 bool RVL::IdxCostPairComparisonDesc(Pair<int, float> x, Pair<int, float> y)
 {
 	return x.b > y.b;
+}
+
+DataStorage::DataStorage()
+{
+	idx.Element = new int[RVLDATASTORAGE_MAX_ARRAY_DIMS];
+}
+
+DataStorage::~DataStorage()
+{
+	delete[] idx.Element;
+}
+
+void DataStorage::Clear()
+{
+	for (int i = 0; i < structure.size(); i++)
+		RVL_DELETE_ARRAY(structure[i].idx.Element);
+}
+
+std::string DataStorage::LoadName()
+{
+	int i;
+	char s[RVLDATASTORAGE_MAX_NAME_LENGTH];
+	i = 0;
+	do
+	{
+		fread(&c, sizeof(char), 1, fp);
+		s[i++] = c;
+	} while (c != '.' && c != '[' && c != '{');
+	return std::string(s, i - 1);
+}
+
+void DataStorage::LoadStructureElement(std::string name)
+{
+	DataStructureElement data;
+	data.name = name;
+	data.iParent = iParent;
+	int iData = structure.size();
+	if (iParent >= 0)
+		AddChild(iParent, iData);
+	structure.push_back(data);
+	switch (c)
+	{
+	case '.':
+		LoadValue(iData);
+		break;
+	case '[':
+		LoadArray(iData);
+		break;
+	case '{':
+		data.type = RVLDATASTRUCTURE_TYPE_STRUCT;
+		LoadStruct(iData);
+	}
+}
+
+void DataStorage::LoadValue(int iData)
+{
+	DataStructureElement *pData = structure.data() + iData;
+	fread(&c, sizeof(char), 1, fp);
+	switch (c)
+	{
+	case 'B':
+		pData->type = RVLDATASTRUCTURE_TYPE_BOOL;
+		break;
+	case 'I':
+		pData->type = RVLDATASTRUCTURE_TYPE_INT;
+		break;
+	case 'F':
+		pData->type = RVLDATASTRUCTURE_TYPE_FLOAT;
+		break;
+	case 'D':
+		pData->type = RVLDATASTRUCTURE_TYPE_DOUBLE;
+		break;
+	}
+	pData->idx.n = 0;
+	pData->idx.Element = NULL;
+	fread(&c, sizeof(char), 1, fp);
+}
+
+void DataStorage::LoadArray(int iData)
+{
+	DataStructureElement *pData = structure.data() + iData;
+	pData->type = RVLDATASTRUCTURE_TYPE_ARRAY;
+	idx.n = 0;
+	int i;
+	char s[200];
+	do
+	{
+		i = 0;
+		do
+		{
+			fread(&c, sizeof(char), 1, fp);
+			s[i++] = c;
+		} while (c >= '0' && c <= '9');
+		if (idx.n < RVLDATASTORAGE_MAX_ARRAY_DIMS)
+			idx.Element[idx.n++] = std::stoi(std::string(s, i - 1));
+		fread(&c, sizeof(char), 1, fp);
+	} while (c == '[');
+	pData->idx.n = idx.n;
+	pData->idx.Element = new int[idx.n];
+	memcpy(pData->idx.Element, idx.Element, idx.n * sizeof(int));
+	iParent = iData;
+	LoadStructureElement();
+	iParent = pData->iParent;
+}
+
+void DataStorage::LoadStruct(int iData)
+{
+	DataStructureElement *pData = structure.data() + iData;
+	pData->type = RVLDATASTRUCTURE_TYPE_STRUCT;
+	pData->idx.n = 0;
+	pData->idx.Element = NULL;
+	iParent = iData;
+	do
+	{
+		LoadStructureElement(LoadName());
+	} while (c == ',');
+	iParent = pData->iParent;
+}
+
+void DataStorage::AddChild(
+	int iParent,
+	int iChild)
+{
+	structure[iParent].children.push_back(iChild);
+}
+
+bool DataStorage::Load(std::string fileName)
+{
+	// Open file fileName.
+
+	fp = fopen(fileName.data(), "rb");
+	if (fp == NULL)
+	{
+		printf("ERROR: Can't open file %s!\n", fileName.data());
+		return false;
+	}
+
+	// Check the header.
+
+	char header[18];
+	fread(header, sizeof(char), 17, fp);
+	header[17] = 0;
+	std::string header_ = std::string(header);
+	if (header_.compare("RVL Data Storage:") != 0)
+	{
+		printf("ERROR: File %s is not RVL Data Storage!\n", fileName.data());
+		return false;
+	}
+
+	// Create structure.
+
+	iParent = -1;
+	LoadStructureElement(LoadName());
+	fclose(fp);
+	return true;
 }

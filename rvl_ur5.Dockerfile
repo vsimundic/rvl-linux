@@ -173,3 +173,7 @@ RUN pip3 install pytransform3d
 
 # Add core package in UR5 to the PYTHONPATH
 ENV PYTHONPATH="${PYTHONPATH}:/home/RVLuser/ferit_ur5_ws/src/core/src"
+
+## HELPER-3D
+RUN pip install trimesh==4.6.0
+RUN pip install pyglet==1.5.31

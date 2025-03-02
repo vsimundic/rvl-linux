@@ -1,0 +1,3 @@
+<launch>
+    <node name="multi_contact_our_handleless_node" pkg="path_planning" type="multi-c_our_handleless.py" output="screen"/>
+</launch>

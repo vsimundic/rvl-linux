@@ -15,7 +15,7 @@ hardware_interface:
     - wrist_1_joint
     - wrist_2_joint
     - wrist_3_joint
-  sim_control_mode: 1  # 0: position, 1: velocity
+  sim_control_mode: 0  # 0: position, 1: velocity
 # Publish all joint states
 # Creates the /joint_states topic necessary in ROS
 joint_state_controller:
@@ -34,25 +34,30 @@ trajectory_controller:
     - wrist_2_joint
     - wrist_3_joint
   constraints:
-    goal_time: 0.6
+    goal_time: 2.0
     stopped_velocity_tolerance: 0.05
-    shoulder_pan_joint: {trajectory: 0.1, goal: 0.1}
-    shoulder_lift_joint: {trajectory: 0.1, goal: 0.1}
-    elbow_joint: {trajectory: 0.1, goal: 0.1}
-    wrist_1_joint: {trajectory: 0.1, goal: 0.1}
-    wrist_2_joint: {trajectory: 0.1, goal: 0.1}
-    wrist_3_joint: {trajectory: 0.1, goal: 0.1}
-  stop_trajectory_duration: 0.5
+  shoulder_pan_joint: {trajectory: 0.1, goal: 0.001}
+  shoulder_lift_joint: {trajectory: 0.1, goal: 0.001}
+  elbow_joint: {trajectory: 0.1, goal: 0.001}
+  wrist_1_joint: {trajectory: 0.1, goal: 0.001}
+  wrist_2_joint: {trajectory: 0.1, goal: 0.001}
+  wrist_3_joint: {trajectory: 0.1, goal: 0.001}
+  stop_trajectory_duration: 1.0
   state_publish_rate: 25
-  action_monitor_rate: 10
+  action_monitor_rate: 30
   gains:
-    shoulder_pan_joint: {p: 100.0, i: 1.0, d: 1.0}
-    shoulder_lift_joint: {p: 100.0, i: 1.0, d: 1.0}
-    elbow_joint: {p: 100.0, i: 1.0, d: 1.0}
-    wrist_1_joint: {p: 100.0, i: 1.0, d: 1.0}
-    wrist_2_joint: {p: 100.0, i: 1.0, d: 1.0}
-    wrist_3_joint: {p: 100.0, i: 1.0, d: 1.0}
-
+    # shoulder_pan_joint: {p: 100.0, i: 1.0, d: 1.0}
+    # shoulder_lift_joint: {p: 100.0, i: 1.0, d: 1.0}
+    # elbow_joint: {p: 100.0, i: 1.0, d: 1.0}
+    # wrist_1_joint: {p: 100.0, i: 1.0, d: 1.0}
+    # wrist_2_joint: {p: 100.0, i: 1.0, d: 1.0}
+    # wrist_3_joint: {p: 100.0, i: 1.0, d: 1.0}
+    shoulder_pan_joint: {p: 50.0, i: 0.5, d: 0.5}
+    shoulder_lift_joint: {p: 50.0, i: 0.5, d: 0.5}
+    elbow_joint: {p: 50.0, i: 0.5, d: 0.5}
+    wrist_1_joint: {p: 50.0, i: 0.5, d: 0.5}
+    wrist_2_joint: {p: 50.0, i: 0.5, d: 0.5}
+    wrist_3_joint: {p: 50.0, i: 0.5, d: 0.5}
 # controller_list:
 #   - name: "trajectory_controller"
 #     action_ns: follow_joint_trajectory

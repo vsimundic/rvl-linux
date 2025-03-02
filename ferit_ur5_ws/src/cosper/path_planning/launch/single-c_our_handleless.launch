@@ -1,0 +1,4 @@
+<launch>
+    <node name="single_contact_our_handleless_node" pkg="path_planning"
+        type="single-c_our_handleless.py" output="screen" />
+</launch>

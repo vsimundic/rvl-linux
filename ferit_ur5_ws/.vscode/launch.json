@@ -90,78 +90,6 @@
             "type": "ros"
         },
         {
-            "name": "ROS: push simulations real",
-            "request": "launch",
-            "target": "${workspaceFolder}/src/a_demo/launch/gazebo_push_simulations_real_robot.launch",
-            "launch": [
-                "rviz",
-                "gz",
-                "gzclient",
-                "gzserver"
-            ],
-            "type": "ros"
-        },
-        {
-            "name": "ROS: push simulations simulations exp3",
-            "request": "launch",
-            "target": "${workspaceFolder}/src/a_demo/launch/gazebo_push_simulations_exp3.launch",
-            "launch": [
-                "rviz",
-                "gz",
-                "gzclient",
-                "gzserver"
-            ],
-            "type": "ros"
-        },
-        {
-            "name": "ROS: push simulations simulations exp1",
-            "request": "launch",
-            "target": "${workspaceFolder}/src/a_demo/launch/gazebo_push_simulations_exp1.launch",
-            "launch": [
-                "rviz",
-                "gz",
-                "gzclient",
-                "gzserver"
-            ],
-            "type": "ros"
-        },
-        {
-            "name": "ROS: push simulations simulations exp2",
-            "request": "launch",
-            "target": "${workspaceFolder}/src/a_demo/launch/gazebo_push_simulations_exp2.launch",
-            "launch": [
-                "rviz",
-                "gz",
-                "gzclient",
-                "gzserver"
-            ],
-            "type": "ros"
-        },
-        {
-            "name": "ROS: push simulations unsuccessful",
-            "request": "launch",
-            "target": "${workspaceFolder}/src/cosper/push_simulation/launch/push_simulations_unsuccessful.launch",
-            "launch": [
-                "rviz",
-                "gz",
-                "gzclient",
-                "gzserver"
-            ],
-            "type": "ros"
-        },
-        {
-            "name": "ROS: generate poses",
-            "request": "launch",
-            "target": "/home/RVLuser/ferit_ur5_ws/src/cosper/push_simulation/launch/generate_poses.launch",
-            "launch": [
-                "rviz",
-                "gz",
-                "gzclient",
-                "gzserver"
-            ],
-            "type": "ros"
-        },
-        {
             "name": "ROS: push simulations simulations exp3 tjedan znan",
             "request": "launch",
             "target": "${workspaceFolder}/src/a_demo/launch/gazebo_push_simulations_exp3_tjedan_znan.launch",
@@ -198,9 +126,9 @@
             "type": "ros"
         },
         {
-            "name": "ROS: exp tsr simulations",
+            "name": "ROS: single-c_tsr_handle",
             "request": "launch",
-            "target": "${workspaceFolder}/src/cosper/path_planning/launch/start_tsr_single_contact_simulation_experiment.launch",
+            "target": "${workspaceFolder}/src/cosper/path_planning/launch/single-c_tsr_handle.launch",
             "launch": [
                 "rviz",
                 "gz",
@@ -210,9 +138,33 @@
             "type": "ros"
         },
         {
-            "name": "ROS: exp moveit handle single-contact simulations",
+            "name": "ROS: single-c_moveit_handle",
             "request": "launch",
-            "target": "${workspaceFolder}/src/cosper/path_planning/launch/single_contact_exp_handle_moveit.launch",
+            "target": "${workspaceFolder}/src/cosper/path_planning/launch/single-c_moveit_handle.launch",
+            "launch": [
+                "rviz",
+                "gz",
+                "gzclient",
+                "gzserver"
+            ],
+            "type": "ros"
+        },
+        {
+            "name": "ROS: single-c_our_handleless",
+            "request": "launch",
+            "target": "${workspaceFolder}/src/cosper/path_planning/launch/single-c_our_handleless.launch",
+            "launch": [
+                "rviz",
+                "gz",
+                "gzclient",
+                "gzserver"
+            ],
+            "type": "ros"
+        },
+        {
+            "name": "ROS: multi-c_our_handleless",
+            "request": "launch",
+            "target": "${workspaceFolder}/src/cosper/path_planning/launch/multi-c_our_handleless.launch",
             "launch": [
                 "rviz",
                 "gz",

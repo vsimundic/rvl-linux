@@ -1,11 +1,11 @@
 #pragma once
 
-#define RVLGRAPH_AGGNODE_FLAG_VALID		0x01
+#define RVLGRAPH_AGGNODE_FLAG_VALID 0x01
 
-//#define RVLSURFEL_IMAGE_ADJACENCY //Vidovic -> exclude Filko functions; In order to get the VolumeNet results reported in ROBIO18, this should be active.
-//#define RVLSURFEL_COLOR_HISTOGRAM //Vidovic -> exclude Filko functions
+// #define RVLSURFEL_IMAGE_ADJACENCY //Vidovic -> exclude Filko functions; In order to get the VolumeNet results reported in ROBIO18, this should be active.
+// #define RVLSURFEL_COLOR_HISTOGRAM //Vidovic -> exclude Filko functions
 
-//#define RVLVERSION_171125
+// #define RVLVERSION_171125
 
 #ifdef RVLVERSION_171125
 #ifndef RVLSURFEL_IMAGE_ADJACENCY
@@ -16,43 +16,43 @@
 #endif
 #endif
 
-//#define RVLPCSEGMENT_GRAPH_WERAGGREGATION_DEBUG
-//#define RVLPCSEGMENT_GRAPH_WERAGGREGATION_DETAILED_DEBUG
+// #define RVLPCSEGMENT_GRAPH_WERAGGREGATION_DEBUG
+// #define RVLPCSEGMENT_GRAPH_WERAGGREGATION_DETAILED_DEBUG
 
 // For a given node index iNode and an edge connector pEdgePtr belonging to this node, the function returns the index of the opposite node.
 // pEdge_ is the output variable representing the edge corresponding to the connector pEdgePtr.
 
-#define RVLPCSEGMENT_GRAPH_GET_NEIGHBOR(iNode, pEdgePtr, pEdge_, iNeighbor)\
-{\
-	pEdge_ = pEdgePtr->pEdge;\
-	iNeighbor = (pEdge_->iVertex[0] == iNode ? pEdge_->iVertex[1] : pEdge_->iVertex[0]);\
-}
+#define RVLPCSEGMENT_GRAPH_GET_NEIGHBOR(iNode, pEdgePtr, pEdge_, iNeighbor)                  \
+	{                                                                                        \
+		pEdge_ = pEdgePtr->pEdge;                                                            \
+		iNeighbor = (pEdge_->iVertex[0] == iNode ? pEdge_->iVertex[1] : pEdge_->iVertex[0]); \
+	}
 
 // Input: edge pEdge, node idx. iNode
-// Output: side <- the side of the edge pEdge to which is connected the node iNode 
+// Output: side <- the side of the edge pEdge to which is connected the node iNode
 
 #define RVLPCSEGMENT_GRAPH_GET_EDGE_SIDE(pEdge, iNode) (pEdge->iVertex[0] == iNode ? 0 : 1)
 
-// Input: node idx. iNode, 
+// Input: node idx. iNode,
 //        connector pEdgePtr connecting an edge to the node iNode
-// Output: pEdge_ <- the edge connected to the node iNode by the connector pEdgePtr, 
+// Output: pEdge_ <- the edge connected to the node iNode by the connector pEdgePtr,
 //         side   <- the side of the edge pEdge to which is connected the node iNode,
 //         iNeighbor <- Opp(pEdge_, iNode), where Opp is defined in ARP3D.TR3
 
-#define RVLPCSEGMENT_GRAPH_GET_NEIGHBOR2(iNode, pEdgePtr, pEdge_, iNeighbor, side)\
-{\
-	pEdge_ = pEdgePtr->pEdge;\
-	side = RVLPCSEGMENT_GRAPH_GET_EDGE_SIDE(pEdge_, iNode);\
-	iNeighbor = pEdge_->iVertex[1 - side];\
-}
+#define RVLPCSEGMENT_GRAPH_GET_NEIGHBOR2(iNode, pEdgePtr, pEdge_, iNeighbor, side) \
+	{                                                                              \
+		pEdge_ = pEdgePtr->pEdge;                                                  \
+		side = RVLPCSEGMENT_GRAPH_GET_EDGE_SIDE(pEdge_, iNode);                    \
+		iNeighbor = pEdge_->iVertex[1 - side];                                     \
+	}
 
-#define RVLPCSEGMENT_GRAPH_GET_SIDE(pEdgePtr)	(pEdgePtr->pEdge->pVertexEdgePtr[0] == pEdgePtr ? 0 : 1)
+#define RVLPCSEGMENT_GRAPH_GET_SIDE(pEdgePtr) (pEdgePtr->pEdge->pVertexEdgePtr[0] == pEdgePtr ? 0 : 1)
 
-#define RVLPCSEGMENT_GRAPH_GET_NODE(pEdgePtr)	(pEdgePtr->pEdge->pVertexEdgePtr[0] == pEdgePtr ? pEdgePtr->pEdge->iVertex[0] : pEdgePtr->pEdge->iVertex[1])
+#define RVLPCSEGMENT_GRAPH_GET_NODE(pEdgePtr) (pEdgePtr->pEdge->pVertexEdgePtr[0] == pEdgePtr ? pEdgePtr->pEdge->iVertex[0] : pEdgePtr->pEdge->iVertex[1])
 
-#define RVLPCSEGMENT_GRAPH_GET_OPPOSITE_NODE(pEdgePtr)	(pEdgePtr->pEdge->pVertexEdgePtr[0] == pEdgePtr ? pEdgePtr->pEdge->iVertex[1] : pEdgePtr->pEdge->iVertex[0])
+#define RVLPCSEGMENT_GRAPH_GET_OPPOSITE_NODE(pEdgePtr) (pEdgePtr->pEdge->pVertexEdgePtr[0] == pEdgePtr ? pEdgePtr->pEdge->iVertex[1] : pEdgePtr->pEdge->iVertex[0])
 
-#define RVLPCSEGMENT_GRAPH_GET_OPPOSITE_EDGE_PTR(pEdgePtr)	(pEdgePtr->pEdge->pVertexEdgePtr[0] == pEdgePtr ? pEdgePtr->pEdge->pVertexEdgePtr[1] : pEdgePtr->pEdge->pVertexEdgePtr[0])
+#define RVLPCSEGMENT_GRAPH_GET_OPPOSITE_EDGE_PTR(pEdgePtr) (pEdgePtr->pEdge->pVertexEdgePtr[0] == pEdgePtr ? pEdgePtr->pEdge->pVertexEdgePtr[1] : pEdgePtr->pEdge->pVertexEdgePtr[0])
 
 #define RVLPCSEGMENT_GRAPH_LOG_BIN_INDEX(x, min, lnRes) (x > min ? (int)floor(log((float)(x / min)) / lnRes) : 0)
 
@@ -60,13 +60,15 @@ namespace RVL
 {
 	namespace GRAPH
 	{
-		template<typename EdgeType> struct EdgePtr
+		template <typename EdgeType>
+		struct EdgePtr
 		{
 			EdgeType *pEdge;
 			EdgePtr<EdgeType> *pNext;
 		};
 
-		template<typename EdgeType> struct EdgePtr2
+		template <typename EdgeType>
+		struct EdgePtr2
 		{
 			EdgeType *pEdge;
 			EdgePtr2<EdgeType> *pNext;
@@ -81,7 +83,8 @@ namespace RVL
 			GRAPH::Edge *pNext;
 		};
 
-		template<typename CostType> struct Edge2
+		template <typename CostType>
+		struct Edge2
 		{
 			int iVertex[2];
 			GRAPH::EdgePtr<GRAPH::Edge2<CostType>> *pVertexEdgePtr[2];
@@ -96,7 +99,8 @@ namespace RVL
 			QList<EdgePtr<Edge>> EdgeList;
 		};
 
-		template<typename EdgePtrType> struct Node_
+		template <typename EdgePtrType>
+		struct Node_
 		{
 			int idx;
 			QList<EdgePtrType> EdgeList;
@@ -110,7 +114,8 @@ namespace RVL
 			HierarchyNode *pNext;
 		};
 
-		template<typename EdgeType> struct AggregateNode
+		template <typename EdgeType>
+		struct AggregateNode
 		{
 			QList<QLIST::Index> elementList;
 			QList<EdgePtr2<EdgeType>> EdgeList;
@@ -120,12 +125,13 @@ namespace RVL
 		};
 	}
 
-	template<typename NodeType, typename EdgeType, typename EdgePtrType>
+	template <typename NodeType, typename EdgeType, typename EdgePtrType>
 	class Graph
 	{
 	public:
 		Graph()
 		{
+            NodeArray.n = EdgeArray.n = 0;
 			NodeMem = NULL;
 			EdgeMem = NULL;
 			EdgePtrMem = NULL;
@@ -204,8 +210,11 @@ namespace RVL
 		void Clear()
 		{
 			RVL_DELETE_ARRAY(NodeMem);
-			RVL_DELETE_ARRAY(EdgeMem); 
+            NodeMem = NULL;
+			RVL_DELETE_ARRAY(EdgeMem);
+            EdgeMem = NULL;
 			RVL_DELETE_ARRAY(EdgePtrMem);
+            EdgePtrMem = NULL;
 		}
 
 		void OrientTreeEdges(int iRoot)
@@ -275,20 +284,20 @@ namespace RVL
 		EdgePtrType *EdgePtrMem;
 	};
 
-	//template<typename GraphType, typename DataType, bool(*f)(int, GraphType *, DataType *)>
-	//void RegionGrowing(GraphType* pGraph, DataType *pData, int *piNodeFetch, int *piNodePut)
+	// template<typename GraphType, typename DataType, bool(*f)(int, GraphType *, DataType *)>
+	// void RegionGrowing(GraphType* pGraph, DataType *pData, int *piNodeFetch, int *piNodePut)
 	//{
 
 	//}
 
-	//template<int>
-	//void RegionGrowing(void *vpGraph, void *pData, int *piNodeFetch, int *piNodePut)
+	// template<int>
+	// void RegionGrowing(void *vpGraph, void *pData, int *piNodeFetch, int *piNodePut)
 	//{
 
 	//}
 
-	template<typename GraphType, typename NodeType, typename EdgeType, typename EdgePtrType, typename DataType, int(*f)(int, int, EdgeType *, GraphType *, DataType *)>
-	int * RegionGrowing(GraphType *pGraph, DataType *pData, int *piNodeFetch, int *piNodePut)
+	template <typename GraphType, typename NodeType, typename EdgeType, typename EdgePtrType, typename DataType, int (*f)(int, int, EdgeType *, GraphType *, DataType *)>
+	int *RegionGrowing(GraphType *pGraph, DataType *pData, int *piNodeFetch, int *piNodePut)
 	{
 		int iNode, iNode_;
 		EdgeType *pEdge;
@@ -311,14 +320,14 @@ namespace RVL
 					*(piNodePut++) = iNode_;
 
 				pEdgePtr = pEdgePtr->pNext;
-			}	// for every neighborint node
-		}	// region growing loop
+			} // for every neighborint node
+        }     // region growing loop
 
 		return piNodeFetch;
 	}
 
-	template<typename GraphType, typename NodeType, typename EdgeType, typename EdgePtrType, typename DataType, int(*f)(int, int, EdgeType *, GraphType *, DataType *)>
-	int * RegionGrowing2(GraphType *pGraph, DataType *pData, int *piNodeFetch, int *piNodePut)
+	template <typename GraphType, typename NodeType, typename EdgeType, typename EdgePtrType, typename DataType, int (*f)(int, int, EdgeType *, GraphType *, DataType *)>
+	int *RegionGrowing2(GraphType *pGraph, DataType *pData, int *piNodeFetch, int *piNodePut)
 	{
 		int iNode, iNode_;
 		EdgeType *pEdge;
@@ -342,15 +351,15 @@ namespace RVL
 					*(piNodePut++) = iNode_;
 
 					pEdgePtr = pEdgePtr->pNext;
-				}	// for every neighborint node
+				} // for every neighborint node
 			}
-		}	// region growing loop
+		} // region growing loop
 
 		return piNodeFetch;
 	}
 
-	template<typename GraphType, typename NodeType, typename EdgeType, typename EdgePtrType, typename DataType, int(*f)(int, int, EdgeType *, GraphType *, DataType *)>
-	int * RegionGrowing3(GraphType *pGraph, DataType *pData, int *piNodeFetch, int *piNodePut, int *&piBoundaryNode)
+	template <typename GraphType, typename NodeType, typename EdgeType, typename EdgePtrType, typename DataType, int (*f)(int, int, EdgeType *, GraphType *, DataType *)>
+	int *RegionGrowing3(GraphType *pGraph, DataType *pData, int *piNodeFetch, int *piNodePut, int *&piBoundaryNode)
 	{
 		int iNode, iNode_;
 		EdgeType *pEdge;
@@ -378,25 +387,24 @@ namespace RVL
 				if (nodeClass > 0)
 					*(piNodePut++) = iNode_;
 				else if (nodeClass < 0)
-					bBoundary = true;				
+					bBoundary = true;
 
 				pEdgePtr = pEdgePtr->pNext;
-			}	// for every neighborint node
+			} // for every neighborint node
 
 			if (bBoundary || pNode->bBoundary)
 				*(piBoundaryNode++) = iNode;
-		}	// region growing loop
+		} // region growing loop
 
 		return piNodeFetch;
 	}
 
-	template<typename NodeType, typename EdgeType, typename EdgePtrType>
+	template <typename NodeType, typename EdgeType, typename EdgePtrType>
 	inline EdgeType *ConnectNodes(
 		int iNode1,
 		int iNode2,
 		Array<NodeType> &NodeArray,
-		CRVLMem *pMem
-		)
+		CRVLMem *pMem)
 	{
 		NodeType *pNode1 = NodeArray.Element + iNode1;
 		NodeType *pNode2 = NodeArray.Element + iNode2;
@@ -430,14 +438,13 @@ namespace RVL
 		return pEdge;
 	}
 
-	template<typename NodeType, typename EdgeType, typename EdgePtrType>
+	template <typename NodeType, typename EdgeType, typename EdgePtrType>
 	inline EdgeType *ConnectNodes(
 		NodeType *pNode1,
 		NodeType *pNode2,
 		int iNode1,
 		int iNode2,
-		CRVLMem *pMem
-		)
+		CRVLMem *pMem)
 	{
 		QList<EdgePtrType> *pEdgeList1 = &(pNode1->EdgeList);
 		QList<EdgePtrType> *pEdgeList2 = &(pNode2->EdgeList);
@@ -468,14 +475,13 @@ namespace RVL
 		return pEdge;
 	}
 
-	template<typename NodeType, typename EdgeType, typename EdgePtrType>
+	template <typename NodeType, typename EdgeType, typename EdgePtrType>
 	inline void ConnectNodes(
 		int iNode1,
 		int iNode2,
 		Array<NodeType> &NodeArray,
 		EdgeType *pEdge,
-		EdgePtrType *pEdgePtr
-		)
+		EdgePtrType *pEdgePtr)
 	{
 		NodeType *pNode1 = NodeArray.Element + iNode1;
 		NodeType *pNode2 = NodeArray.Element + iNode2;
@@ -499,8 +505,58 @@ namespace RVL
 		RVLQLIST_ADD_ENTRY(pEdgeList2, pEdgePtr_);
 	}
 
+    template <typename NodeType, typename EdgeType, typename EdgePtrType>
+    inline void ConnectNodes(
+        Array<NodeType> &NodeArray,
+        EdgeType *pEdge,
+        EdgePtrType *pEdgePtr)
+    {
+        NodeType *pNode1 = NodeArray.Element + pEdge->iVertex[0];
+        NodeType *pNode2 = NodeArray.Element + pEdge->iVertex[1];
+
+        QList<EdgePtrType> *pEdgeList1 = &(pNode1->EdgeList);
+        QList<EdgePtrType> *pEdgeList2 = &(pNode2->EdgeList);
+
+        pEdgePtr->pEdge = pEdge;
+        pEdge->pVertexEdgePtr[0] = pEdgePtr;
+
+        RVLQLIST_ADD_ENTRY(pEdgeList1, pEdgePtr);
+
+        EdgePtrType *pEdgePtr_ = pEdgePtr + 1;
+
+        pEdgePtr_->pEdge = pEdge;
+        pEdge->pVertexEdgePtr[1] = pEdgePtr_;
+
+        RVLQLIST_ADD_ENTRY(pEdgeList2, pEdgePtr_);
+    }
+
+    template <typename NodeType, typename EdgeType, typename EdgePtrType>
+    inline void ConnectNodes2(
+        Array<NodeType> &NodeArray,
+        EdgeType *pEdge,
+        EdgePtrType *pEdgePtr)
+    {
+        NodeType *pNode1 = NodeArray.Element + pEdge->iVertex[0];
+        NodeType *pNode2 = NodeArray.Element + pEdge->iVertex[1];
+
+        QList<EdgePtrType> *pEdgeList1 = &(pNode1->EdgeList);
+        QList<EdgePtrType> *pEdgeList2 = &(pNode2->EdgeList);
+
+        pEdgePtr->pEdge = pEdge;
+        pEdge->pVertexEdgePtr[0] = pEdgePtr;
+
+        RVLQLIST_ADD_ENTRY2(pEdgeList1, pEdgePtr);
+
+        EdgePtrType *pEdgePtr_ = pEdgePtr + 1;
+
+        pEdgePtr_->pEdge = pEdge;
+        pEdge->pVertexEdgePtr[1] = pEdgePtr_;
+
+        RVLQLIST_ADD_ENTRY2(pEdgeList2, pEdgePtr_);
+    }
+
 #ifdef RVLPCSEGMENT_GRAPH_WERAGGREGATION_DEBUG
-	template<typename NodeType, typename EdgeType, typename EdgePtrType>
+	template <typename NodeType, typename EdgeType, typename EdgePtrType>
 	void WriteAggNodeData(
 		FILE *fp,
 		Graph<typename NodeType, typename EdgeType, typename EdgePtrType> &graph,
@@ -541,7 +597,7 @@ namespace RVL
 		fprintf(fp, "\n");
 	}
 
-	template<typename CostType>
+	template <typename CostType>
 	void WriteWERAggEdgeQueueBin(
 		FILE *fp,
 		Array<QList<QLIST::Index2>> &edgeQueue,
@@ -572,7 +628,7 @@ namespace RVL
 
 	namespace GRAPH
 	{
-		template<typename NodeType, typename EdgeType, typename EdgePtrType, typename CostType>
+		template <typename NodeType, typename EdgeType, typename EdgePtrType, typename CostType>
 		void WERAggregation(
 			Graph<NodeType, EdgeType, EdgePtrType> &graph,
 			int *aggregateMap,
@@ -584,7 +640,7 @@ namespace RVL
 			FILE *fp = fopen("C:\\RVL\\Debug\\WERAgg.txt", "w");
 #endif
 
-			// Initialize elements lists of all nodes. 
+			// Initialize elements lists of all nodes.
 
 			QLIST::Index *pElement = elementListMem;
 
@@ -688,7 +744,7 @@ namespace RVL
 
 			memset(iVisitedNodeEdge, 0xff, graph.NodeArray.n * sizeof(int));
 
-			//QLIST::Index2 **ppNextDebug = NULL;
+			// QLIST::Index2 **ppNextDebug = NULL;
 
 			int iNode1, iNode2, iNode3, iEdge13, iRefEdge, iCost_;
 			EdgePtrType *pEdgePtr13, *pEdgePtr31, *pEdgePtr21;
@@ -755,7 +811,7 @@ namespace RVL
 				WriteAggNodeData<NodeType, EdgeType, EdgePtrType>(fp, graph, iNode2);
 #endif
 
-				// iNode1 <- union of iNode1 and iNode2 
+				// iNode1 <- union of iNode1 and iNode2
 
 				RVLQLIST_APPEND(pElementList1, pElementList2);
 
@@ -801,11 +857,11 @@ namespace RVL
 				WriteAggNodeData<NodeType, EdgeType, EdgePtrType>(fp, graph, iNode2);
 #endif
 
-				// 
+				//
 
 				pEdgePtr13 = pEdgeList1->pFirst;
 
-				while (pEdgePtr13)	// for every edge of iNode1
+				while (pEdgePtr13) // for every edge of iNode1
 				{
 					// iNode3 <- node connected to iNode1 via edge pEdge13
 
@@ -819,7 +875,7 @@ namespace RVL
 
 					if (iNode3 == iNode1)
 					{
-						RVLQLIST_REMOVE_ENTRY2(pEdgeList1, pEdgePtr13, EdgePtrType);	// Remove pEdge13 from the edge list of iNode1.
+						RVLQLIST_REMOVE_ENTRY2(pEdgeList1, pEdgePtr13, EdgePtrType); // Remove pEdge13 from the edge list of iNode1.
 
 #ifdef RVLPCSEGMENT_GRAPH_WERAGGREGATION_DETAILED_DEBUG
 						fprintf(fp, "Removing edge %d(%d-%d) from the edge list of N%d.\n", iEdge13, iNode1, iNode3, iNode1);
@@ -829,7 +885,7 @@ namespace RVL
 					}
 					else if (iVisitedNodeEdge[iNode3] >= 0)
 					{
-						// Remove pEdge13 from the edge list of iNode1. 
+						// Remove pEdge13 from the edge list of iNode1.
 
 						RVLQLIST_REMOVE_ENTRY2(pEdgeList1, pEdgePtr13, EdgePtrType);
 
@@ -839,7 +895,7 @@ namespace RVL
 						WriteAggNodeData<NodeType, EdgeType, EdgePtrType>(fp, graph, iNode1);
 #endif
 
-						// Remove pEdge13 from the edge list of iNode3. 
+						// Remove pEdge13 from the edge list of iNode3.
 
 						pEdgePtr31 = pEdge13->pVertexEdgePtr[side3];
 
@@ -869,18 +925,18 @@ namespace RVL
 
 							iCost_ = RVLPCSEGMENT_GRAPH_LOG_BIN_INDEX(pEdge13->cost, minCostDiff, lnCostResolution);
 
-							//if (iCost_ == 576)
+							// if (iCost_ == 576)
 							//	int debug = 0;
 
 							pEdgeList_ = edgeQueue.Element + iCost_;
 
 							//// Debug
 
-							//bool bDebug = false;
+							// bool bDebug = false;
 
-							//QLIST::Index2 *pEdgeQueueEntryDebug = pEdgeList_->pFirst;
+							// QLIST::Index2 *pEdgeQueueEntryDebug = pEdgeList_->pFirst;
 
-							//while (pEdgeQueueEntryDebug)
+							// while (pEdgeQueueEntryDebug)
 							//{
 							//	if (pEdgeQueueEntryDebug == pEdge13QueueEntry)
 							//		bDebug = true;
@@ -892,7 +948,7 @@ namespace RVL
 							//	pEdgeQueueEntryDebug = pEdgeQueueEntryDebug->pNext;
 							//}
 
-							//if (!bDebug)
+							// if (!bDebug)
 							//	int debug = 0;
 
 							/////
@@ -914,18 +970,18 @@ namespace RVL
 						{
 							iCost_ = RVLPCSEGMENT_GRAPH_LOG_BIN_INDEX(pRefEdge->cost, minCostDiff, lnCostResolution);
 
-							//if (iCost_ == 576)
+							// if (iCost_ == 576)
 							//	int debug = 0;
 
 							pEdgeList_ = edgeQueue.Element + iCost_;
 
 							//// Debug
 
-							//bool bDebug = false;
+							// bool bDebug = false;
 
-							//QLIST::Index2 *pEdgeQueueEntryDebug = pEdgeList_->pFirst;
+							// QLIST::Index2 *pEdgeQueueEntryDebug = pEdgeList_->pFirst;
 
-							//while (pEdgeQueueEntryDebug)
+							// while (pEdgeQueueEntryDebug)
 							//{
 							//	if (pEdgeQueueEntryDebug == pRefEdgeQueueEntry)
 							//		bDebug = true;
@@ -937,7 +993,7 @@ namespace RVL
 							//	pEdgeQueueEntryDebug = pEdgeQueueEntryDebug->pNext;
 							//}
 
-							//if (!bDebug)
+							// if (!bDebug)
 							//	int debug = 0;
 
 							/////
@@ -955,7 +1011,7 @@ namespace RVL
 
 						pRefEdge->cost += pEdge13->cost;
 
-						//if (pEdge13->cost > pRefEdge->cost)		// Region growing method
+						// if (pEdge13->cost > pRefEdge->cost)		// Region growing method
 						//	pRefEdge->cost = pEdge13->cost;
 
 						if (pEdge13->distance < pRefEdge->distance)
@@ -967,13 +1023,13 @@ namespace RVL
 
 							iCost = RVLPCSEGMENT_GRAPH_LOG_BIN_INDEX(pRefEdge->cost, minCostDiff, lnCostResolution);
 
-							//if (iCost == 576)
+							// if (iCost == 576)
 							//	int debug = 0;
 
-							//if (iCost == 576 && iRefEdge == 12438)
+							// if (iCost == 576 && iRefEdge == 12438)
 							//	int debug = 0;
 
-							//if (iCost == 576 && iRefEdge == 7839)
+							// if (iCost == 576 && iRefEdge == 7839)
 							//	int debug = 0;
 
 							pEdgeList_ = edgeQueue.Element + iCost;
@@ -998,7 +1054,7 @@ namespace RVL
 #ifdef RVLPCSEGMENT_GRAPH_WERAGGREGATION_DEBUG
 								fprintf(fp, "new max cost bin index: %d\n", iMaxCost);
 
-								//if (iMaxCost == 574)
+								// if (iMaxCost == 574)
 								//	int debug = 0;
 #endif
 							}
@@ -1007,16 +1063,16 @@ namespace RVL
 					else
 						iVisitedNodeEdge[iNode3] = iEdge13;
 
-					//if (ppNextDebug)
+					// if (ppNextDebug)
 					//	if (edgeQueue.Element[576].ppNext != ppNextDebug)
 					//		int debug = 0;
 
 					pEdgePtr13 = pEdgePtr13->pNext;
-				}	// for every edge of iNode1
+				} // for every edge of iNode1
 
 				pEdgePtr13 = pEdgeList1->pFirst;
 
-				while (pEdgePtr13)	// for every edge of iNode1
+				while (pEdgePtr13) // for every edge of iNode1
 				{
 					iNode3 = RVLPCSEGMENT_GRAPH_GET_OPPOSITE_NODE(pEdgePtr13);
 
@@ -1036,9 +1092,9 @@ namespace RVL
 
 				fflush(fp);
 #endif
-			}	// while (iMaxCost >= 0)
+			} // while (iMaxCost >= 0)
 
-			/// 
+			///
 
 			delete[] iVisitedNodeEdge;
 			delete[] edgeQueue.Element;
@@ -1067,7 +1123,6 @@ namespace RVL
 #ifdef RVLPCSEGMENT_GRAPH_WERAGGREGATION_DEBUG
 			fclose(fp);
 #endif
-		}	// WERSegmentation()
-	}	// namespace GRAPH
-}	// namespace RVL
-
+		} // WERSegmentation()
+    }     // namespace GRAPH
+} // namespace RVL

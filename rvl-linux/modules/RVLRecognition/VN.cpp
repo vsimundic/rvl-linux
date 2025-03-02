@@ -9,6 +9,8 @@
 #include "Graph.h"
 #include "Mesh.h"
 #include "Visualizer.h"
+#include "AccuSphere.h"
+#include "ConvexHullCreator.h"
 #include "SceneSegFile.hpp"
 #include "ReconstructionEval.h"
 #include "SurfelGraph.h"
@@ -27,7 +29,7 @@
 #include <Eigen/Eigenvalues>
 #else
 #include <Eigen\Eigenvalues>
-#endif 
+#endif
 #include "NeighborhoodTool.h"
 #include "VN.h"
 #include "VNClass.h"
@@ -596,7 +598,7 @@ void VN::Create(CRVLMem *pMem)
 				maxnCovexClusterFeatures = nFeatures;
 		}
 
-		if (pMCluster->type == RVLVN_CLUSTER_TYPE_CONVEX || pMCluster->type == RVLVN_CLUSTER_TYPE_CONCAVE)
+		if (pMCluster->type == RVLVN_CLUSTER_TYPE_CONVEX || pMCluster->type == RVLVN_CLUSTER_TYPE_CONCAVE || pMCluster->type == RVLVN_CLUSTER_TYPE_PLANE)
 			NodeArray.n += 1;
 		else if (pMCluster->type == RVLVN_CLUSTER_TYPE_XTORUS || pMCluster->type == RVLVN_CLUSTER_TYPE_ITORUS)
 			NodeArray.n += (pMCluster->betaArray.n + 1);
@@ -751,6 +753,8 @@ void VN::Create(CRVLMem *pMem)
 				else
 					pFeature_->d = 0.0f;
 			}
+			else if (pMCluster->type == RVLVN_CLUSTER_TYPE_PLANE)
+				pFeature_->d = RVLDOTPRODUCT3(pFeature_->N, pMCluster->t);
 		}
 
 		pMCluster = pMCluster->pNext;
@@ -792,7 +796,7 @@ void VN::Create(CRVLMem *pMem)
 		{
 			pNode = NodeArray.Element + iNode;
 
-			pNode->operation = (pMCluster->type == RVLVN_CLUSTER_TYPE_CONVEX ? 1 : -1);
+			pNode->operation = (pMCluster->type == RVLVN_CLUSTER_TYPE_CONVEX || pMCluster->type == RVLVN_CLUSTER_TYPE_PLANE ? 1 : -1);
 			pNode->fOperation = (float)(pNode->operation);
 			pNode->iFeature = -1;
 
@@ -1665,8 +1669,8 @@ void VN::Descriptor(
 	float *PS;
 	for (iAssoc = 0; iAssoc < assoc.n; iAssoc++)
 	{
-		if (iAssoc == 24)
-			int debug = 0;
+		// if (iAssoc == 24)
+		//	int debug = 0;
 		pAssoc = assoc.Element + iAssoc;
 		pMCluster = modelClusterList.pFirst;
 		while (pMCluster)
@@ -1677,7 +1681,7 @@ void VN::Descriptor(
 		}
 		if (pMCluster == NULL)
 			continue;
-		if (pMCluster->type == RVLVN_CLUSTER_TYPE_CONVEX || pMCluster->type == RVLVN_CLUSTER_TYPE_CONCAVE)
+		if (pMCluster->type == RVLVN_CLUSTER_TYPE_CONVEX || pMCluster->type == RVLVN_CLUSTER_TYPE_CONCAVE || pMCluster->type == RVLVN_CLUSTER_TYPE_PLANE)
 		{
 			iFirstFeature = pMCluster->iFeatureInterval.a;
 			iLastFeature = pMCluster->iFeatureInterval.b;
@@ -2899,7 +2903,7 @@ void VN::GeneticAlg(
 
 			do
 				RVLRND(nSelection, iRnd, nRnd, iiRnd, iParent2)
-				while (iParent2 == iParent1);
+			while (iParent2 == iParent1);
 
 			parent2 = solution + featureArray.n * E.Element[iParent2].idx;
 
@@ -9030,6 +9034,7 @@ Array<Pair<RECOG::VN_::SurfaceRayIntersection, RECOG::VN_::SurfaceRayIntersectio
 	float c;
 	Pair<VN_::SurfaceRayIntersection, VN_::SurfaceRayIntersection> *pInterval;
 	float s0;
+	float e;
 
 	for (iNode = 0; iNode < featureArray.n; iNode++)
 	{
@@ -9042,10 +9047,11 @@ Array<Pair<RECOG::VN_::SurfaceRayIntersection, RECOG::VN_::SurfaceRayIntersectio
 		N = pNode->pFeature->N;
 
 		c = RVLDOTPRODUCT3(N, V);
+		e = RVLDOTPRODUCT3(N, P1) - d[iNode] - r;
 
 		if (c < -1e-6)
 		{
-			s0 = -(RVLDOTPRODUCT3(N, P1) - d[iNode] - r) / c;
+			s0 = -e / c;
 			if (s0 <= l)
 			{
 				pInterval->a.s = s0;
@@ -9059,7 +9065,7 @@ Array<Pair<RECOG::VN_::SurfaceRayIntersection, RECOG::VN_::SurfaceRayIntersectio
 		}
 		else if (c < 1e-6)
 		{
-			if (d[iNode] >= 0.0f)
+			if (e <= 0.0f)
 			{
 				pInterval->a.s = -1e6;
 				pInterval->a.iFeature = -1;
@@ -9072,7 +9078,7 @@ Array<Pair<RECOG::VN_::SurfaceRayIntersection, RECOG::VN_::SurfaceRayIntersectio
 		}
 		else
 		{
-			s0 = -(RVLDOTPRODUCT3(N, P1) - d[iNode] - r) / c;
+			s0 = -e / c;
 			if (s0 >= 0.0f)
 			{
 				pInterval->a.s = -1e6;
@@ -9474,12 +9480,13 @@ void VN::Load(
 	fclose(fp);
 }
 
-void VN::Display(
+vtkSmartPointer<vtkActor> VN::Display(
 	Visualizer *pVisualizer,
 	float kResolution,
 	float *dIn,
 	bool *bd,
-	float SDFSurfaceValue)
+	float SDFSurfaceValue,
+	Box<float> *pBBoxIn)
 {
 	float *d = new float[featureArray.n];
 
@@ -9493,7 +9500,10 @@ void VN::Display(
 
 	Box<float> box;
 
-	BoundingBox(d, box);
+	if (pBBoxIn)
+		box = *pBBoxIn;
+	else
+		BoundingBox(d, box);
 
 	float resolution = kResolution * BoxSize(&box);
 
@@ -9554,6 +9564,8 @@ void VN::Display(
 
 	delete[] f.Element;
 	delete[] d;
+
+	return actor;
 }
 
 void VN::Display(

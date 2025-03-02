@@ -23,6 +23,7 @@ VTK_MODULE_INIT(vtkRenderingFreeType);
 #include "TGSet.h"
 #include "PSGM.h"
 #include "VN.h"
+#include "RVLMotionCommon.h"
 #include "RRT.h"
 #include "DDManipulator.h"
 #include <pybind11/pybind11.h>
@@ -76,6 +77,8 @@ public:
 	py::array get_T_DD_A();
 	py::array fwd_kinematics(py::array q);
 	py::tuple inv_kinematics(py::array T_G_0);
+	py::tuple inv_kinematics_all_sols(py::array T_G_0, bool bTCP);
+	py::tuple inv_kinematics_all_sols_prev(py::array T_G_0);
 
 public:
 	DDManipulator manipulator;
@@ -83,6 +86,7 @@ public:
 	int mem0Size;
 	Visualizer visualizer;
 	MOTION::DisplayCallbackData* pVisualizationData;
+	Pose3D pose_A_S;
 };
 
 PYDDManipulator::PYDDManipulator()
@@ -103,8 +107,16 @@ void PYDDManipulator::create(
 	manipulator.pMem0->Create(mem0Size);
 	manipulator.pMem = new CRVLMem;
 	manipulator.pMem->Create(memSize);
+	// manipulator.bVNPanel = true;    // For TestFeasibleRobotPose (false for TCMCS24)
 	char *cfgFileName_ = (char *)(cfgFileName.data());
 	manipulator.Create(cfgFileName_);
+
+    manipulator.robot.minq[1] = -PI;
+    manipulator.robot.maxq[1] = 0.0f;
+    manipulator.robot.minq[3] = -PI;
+    manipulator.robot.maxq[3] = 0.0f;
+	
+
 	visualizer.Create();
 	manipulator.InitVisualizer(&visualizer);
 }
@@ -129,6 +141,27 @@ py::tuple PYDDManipulator::path2(
 	int nStates,
 	bool bReturnAllFeasiblePaths)
 {
+    // FCL - Simundic
+    // manipulator.use_fcl = false;
+    manipulator.LoadToolModelFCL();
+    std::string cabinetStaticModelPath = "/home/RVLuser/ferit_ur5_ws/cabinet_static.ply";
+    std::string cabinetPanelModelPath = "/home/RVLuser/ferit_ur5_ws/cabinet_panel.ply";
+    // fcl::Transform3d T_A_S;
+    // manipulator.RVLPose2FCLPose(pose_A_S, T_A_S);
+	if (manipulator.use_fcl)
+	{
+		manipulator.LoadCabinetStaticFCL(cabinetStaticModelPath, pose_A_S);
+		manipulator.LoadCabinetPanelFCL(cabinetPanelModelPath);
+		manipulator.CreateRobotCylindersFCL();
+		manipulator.CreateGndFCL();
+        // RVLCOMPTRANSF3D(manipulator.pose_F_S.R, manipulator.pose_F_S.t, manipulator.pose_A_F.R, manipulator.pose_A_F.t, manipulator.pose_A_S_FCL.R, manipulator.pose_A_S_FCL.t);
+
+        manipulator.CreateGndFCL();
+
+	}
+	
+	manipulator.resultsFolder = "/home/RVLuser/rvl-linux";
+
 	double *q_init_ = (double *)q_init.request().ptr;
 	float q_init__[6];
 	for(int i = 0; i < manipulator.robot.n; i++)
@@ -233,7 +266,7 @@ py::tuple PYDDManipulator::path2(
 	else
 		result_tuple = py::make_tuple(T_G_0, q);
 
-	return result_tuple;	
+	return result_tuple;
 }
 
 py::array PYDDManipulator::approach_path(py::array T_G_S_contact)
@@ -245,7 +278,10 @@ py::array PYDDManipulator::approach_path(py::array T_G_S_contact)
 	Pose3D viaPtPosesMem[2];
     poses_G_0_via.Element = viaPtPosesMem;
 	float* SDF = new float[manipulator.pVNEnv->NodeArray.n];
-	manipulator.ApproachPath(&pose_G_S_contact, poses_G_0_via, SDF);
+	Array<MOTION::IKSolution> approachIKSolutions[3];
+	Array<Pair<int, int>> approachPaths;
+
+	manipulator.ApproachPath(&pose_G_S_contact, poses_G_0_via, SDF, approachIKSolutions, approachPaths);
 	auto T_G_0_via = py::array(py::buffer_info(
 		nullptr,
 		sizeof(float),
@@ -314,9 +350,12 @@ void PYDDManipulator::set_door_model_params(
 void PYDDManipulator::set_door_pose(py::array T_A_S)
 {
 	double *T_A_S_ = (double *)T_A_S.request().ptr;
-	Pose3D pose_A_S;
+	// Pose3D pose_A_S;
 	RVLHTRANSFMXDECOMP(T_A_S_, pose_A_S.R, pose_A_S.t);
 	manipulator.SetDoorPose(pose_A_S);
+
+	// Simundic
+	// manipulator.pose_A_S = pose_A_S;
 }
 
 py::array PYDDManipulator::get_T_DD_S()
@@ -420,6 +459,103 @@ py::tuple PYDDManipulator::inv_kinematics(py::array T_G_0)
 	return result_tuple;	
 }
 
+py::tuple PYDDManipulator::inv_kinematics_all_sols(py::array T_G_0, bool bTCP)
+{
+	Array<MOTION::IKSolution> IKSolutions;
+	int maxnIKSolutions = manipulator.maxnIKSolutions;
+	IKSolutions.Element = new MOTION::IKSolution[maxnIKSolutions];
+
+	double *T_G_0_ = (double *)T_G_0.request().ptr;
+	Pose3D pose_G_0;
+	RVLHTRANSFMXDECOMP(T_G_0_, pose_G_0.R, pose_G_0.t);
+
+	// pose_G_0.R[0] = -0.997844219;
+	// pose_G_0.R[1] = 0.0649242774;
+	// pose_G_0.R[2] = 0.00957858562;
+	// pose_G_0.R[3] = 0.0188735276;
+	// pose_G_0.R[4] = 0.423683435;
+	// pose_G_0.R[5] = -0.90561372;
+	// pose_G_0.R[6] = -0.0628545955;
+	// pose_G_0.R[7] = -0.903480589;
+	// pose_G_0.R[8] = -0.423995405;
+
+	// pose_G_0.t[0] = -0.248225123;
+	// pose_G_0.t[1] = 0.00732335448;
+	// pose_G_0.t[2] = 0.551909804;
+
+	printf("pose_G_0:\n");
+	for(int i = 0; i < 3; i++)
+	{
+		for(int j = 0; j < 3; j++)
+			printf("%f ", pose_G_0.R[j+3*i]);
+		printf("%f\n", pose_G_0.t[i]);
+	}
+	auto q = py::array(py::buffer_info(
+		nullptr,
+		sizeof(float),
+		py::format_descriptor<float>::value,
+		2, // num of dimensions
+		{maxnIKSolutions, manipulator.robot.n},
+		{manipulator.robot.n * sizeof(float), sizeof(float)}
+		));
+	float *q_ = (float *)q.request().ptr;
+
+	for (int iLink = 0; iLink < 8; iLink++)
+	{
+		cout << manipulator.robot.link_pose[1].R[iLink] << endl;
+	}
+
+	bool bSuccess = manipulator.robot.InvKinematics(pose_G_0, IKSolutions, bTCP);
+
+	for (int iSol = 0; iSol < IKSolutions.n; q_ += manipulator.robot.n, iSol++)
+	{
+		for (int iq = 0; iq < 6; iq++)
+		{
+			cout << IKSolutions.Element[iSol].q[iq] << " ";
+		}
+		cout << endl;
+		memcpy(q_, IKSolutions.Element[iSol].q, manipulator.robot.n * sizeof(float));
+	}
+
+	delete[] IKSolutions.Element;
+
+	py::tuple result_tuple = py::make_tuple(q, IKSolutions.n, bSuccess);
+
+	return result_tuple;
+}
+
+py::tuple PYDDManipulator::inv_kinematics_all_sols_prev(py::array T_G_0)
+{
+	double *T_G_0_ = (double *)T_G_0.request().ptr;
+	Pose3D pose_G_0;
+	RVLHTRANSFMXDECOMP(T_G_0_, pose_G_0.R, pose_G_0.t);
+	auto q = py::array(py::buffer_info(
+		nullptr,
+		sizeof(float),
+		py::format_descriptor<float>::value,
+		2,
+		{8, manipulator.robot.n},
+		{manipulator.robot.n * sizeof(float), sizeof(float)}
+		));
+	float *q_ = (float *)q.request().ptr;
+
+	RVL::Array2D<float> RVLinvKinSolutions;
+	RVLinvKinSolutions.Element = NULL;
+
+	bool bSuccess = manipulator.robot.InvKinematicsPrev(pose_G_0, RVLinvKinSolutions);
+
+	for (int iSol = 0; iSol < RVLinvKinSolutions.h; q_ += manipulator.robot.n, iSol++)
+	{
+		memcpy(q_, RVLinvKinSolutions.Element + 6*iSol, manipulator.robot.n * sizeof(float));
+	}
+
+	py::tuple result_tuple = py::make_tuple(q, RVLinvKinSolutions.h, bSuccess);
+
+	return result_tuple;	
+}
+
+
+
 ////////////////////////////////////////////////////////////////////
 //
 //     RVL PYDDManipulator Wrapper
@@ -448,5 +584,7 @@ PYBIND11_MODULE(RVLPYDDManipulator, m)
 		.def("get_T_DD_A", &PYDDManipulator::get_T_DD_A)
 		.def("set_door_pose", &PYDDManipulator::set_door_pose)
 		.def("fwd_kinematics", &PYDDManipulator::fwd_kinematics)
-		.def("inv_kinematics", &PYDDManipulator::inv_kinematics);
+		.def("inv_kinematics", &PYDDManipulator::inv_kinematics)
+		.def("inv_kinematics_all_sols", &PYDDManipulator::inv_kinematics_all_sols)
+		.def("inv_kinematics_all_sols_prev", &PYDDManipulator::inv_kinematics_all_sols_prev);
 }

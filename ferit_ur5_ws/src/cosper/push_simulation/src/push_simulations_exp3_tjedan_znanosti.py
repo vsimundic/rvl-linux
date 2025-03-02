@@ -79,7 +79,7 @@ if __name__ == '__main__':
     if start_from_beginning:
         # with open(csv_path, 'w') as f:
         #     writer = csv.writer(f, delimiter=',')
-        #     writer.writerow(['path_found', 'traj_success', 'contact_free', 'door_opened', 'door_width', 'door_height', 'x', 'y', 'z', 'rot_z', 'state_angle', 'axis_pos'])
+        #     writer.writerow(['idx','path_found', 'traj_success', 'contact_free', 'door_opened', 'door_width', 'door_height', 'x', 'y', 'z', 'rot_z', 'state_angle', 'axis_pos'])
         pass
     else:
         data = read_csv_DataFrame(csv_path)
@@ -125,7 +125,7 @@ if __name__ == '__main__':
                                 save_path=config['cabinet_urdf_save_path'])
                 
         # Save cabinet mesh to a file
-        cabinet_model.save_mesh_without_doors(config['cabinet_mesh_save_path'])
+        cabinet_model.save_mesh_without_doors(config['cabinet_static_mesh_save_path'])
 
         # Path planning setup
         path_planner = rvlpy_dd_man.PYDDManipulator()

@@ -2,17 +2,14 @@
 
 import yaml
 import numpy as np
-from core.util import read_csv_DataFrame
 import os
-import rospy
 from gazebo_push_open.cabinet_model import Cabinet
-from core.transforms import rot_z, rot_y,  matrix_to_pose
-from core.ur5_commander import UR5Commander
+from core.transforms import rot_z,  matrix_to_pose
 from tqdm import tqdm
 
-np.random.seed(69)
+# np.random.seed(69)
 
-doors = np.load('/home/RVLuser/ferit_ur5_ws/src/cosper/path_planning/door_configurations_axis_left.npy')
+doors = np.load('/home/RVLuser/ferit_ur5_ws/src/cosper/path_planning/cabinet_configurations_axis_left.npy')
 
 pkg_path = '/home/RVLuser/ferit_ur5_ws/src/cosper/path_planning'
 doors_tsr_configs_path = os.path.join(pkg_path, 'tsr_data', 'cabinet_configs')
@@ -25,39 +22,42 @@ if not os.path.exists(doors_tsr_configs_path):
 T_B_S = np.eye(4)
 T_B_S[2, 3] = 0.005
 
+door_thickness=0.018
+static_depth=0.3
+
+
 for i_door in tqdm(range(doors.shape[0])):
 # for i_door in range(2):
-    
-    door = doors[i_door]
+
+    # Cabinet parameters
+    door = doors[i_door, :]
+    width = door[0]
+    height = door[1]
+    position = door[2:5]
+    rot_z_deg = door[5]
+    state_angle = door[6]
+    axis_pos = door[7]
 
     T_A_S = np.eye(4)
-    T_A_S[:3, 3] = np.array(door[2:5])
-    T_A_S[2, 3] += T_B_S[2, 3]
-    # T_A_S[1, 3] += 0.1
-
-    # Tz_init = np.eye(4)
-    # Tz_init[:3, :3] = rot_z(np.radians(90.))
-    # T_A_S = T_A_S @ Tz_init
+    T_A_S[:3, 3] = np.array(position)
+    # T_A_S[2, 3] += T_R_W[2, 3]
     Tz = np.eye(4)
-    Tz[:3, :3] = rot_z(np.radians(door[ 5]))
+    Tz[:3, :3] = rot_z(np.radians(rot_z_deg))
     T_A_S = T_A_S @ Tz
-    axis_pos = door[-1]
+
     # Create a cabinet object
-    cabinet_model = Cabinet(door_params=np.array([door[0], door[1], 0.018, 0.4]), 
+    cabinet_model = Cabinet(door_params=np.array([width, height, door_thickness, static_depth]), 
                             axis_pos=axis_pos,
                             T_A_S=T_A_S,
                             save_path=urdf_path,
                             has_handle=True)
-    cabinet_mesh_filename = '/home/RVLuser/ferit_ur5_ws/cabinet_handle_test.ply'
-
-
 
     config_filename = 'cabinet_%d.yaml' % i_door
 
 
     ### TSR matrices definition ###
     T0_w = T_A_S
-    T0_w_pose =  matrix_to_pose(T0_w)
+    T0_w_pose = matrix_to_pose(T0_w)
     t0_w = T0_w_pose.position
     q0_w = T0_w_pose.orientation
 

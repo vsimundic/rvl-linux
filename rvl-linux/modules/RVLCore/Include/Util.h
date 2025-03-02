@@ -354,8 +354,8 @@ namespace RVL
 	bool GetAngleAxis(float *R, float *V, float &theta);
 	void GetDistance(float *t, float &distance);
 	// END VIDOVIC
-	void PrintMatrix(FILE *fp, double *A, int n, int m);
 
+	void PrintMatrix(FILE *fp, double *A, int n, int m);
 	void QuickSort(int *Key, int *Index, int n);
 	void RandomColor(unsigned char *color);
 	void RandomColors(
@@ -402,7 +402,7 @@ namespace RVL
 		float &b,
 		float &ca,
 		float &sa);
-	void MinBoundingBox(
+	bool MinBoundingBox(
 		Array<Point2D> poly,
 		float *C,
 		float &a,
@@ -410,7 +410,6 @@ namespace RVL
 		float &ca,
 		float &sa,
 		float &area);
-
 	void ReadLine(
 		FILE *fp,
 		int nCharacters,
@@ -442,6 +441,13 @@ namespace RVL
 		Pose3D *pPoseSrc,
 		float *x,
 		Pose3D *pPoseTgt);
+	void PseudoRndSampleUnitSphere(
+		float *x,
+		Array<int> rndVal,
+		int &iRndVal);
+	void IntrinsicCameraMatrix(
+		Camera camera,
+		float *K);
 
 	// created by Damir Filko
 	// adapted for general case by Robert Cupec
@@ -1169,6 +1175,9 @@ namespace RVL
 		}
 	}
 
+	// Function RVLGaussRandBM() is implemented according to the code given at
+	// http://en.wikipedia.org/wiki/Box-Muller_transform
+
 	template <typename T>
 	T GaussRandBM(T std)
 	{
@@ -1180,6 +1189,32 @@ namespace RVL
 		} while (z < 1e-10);
 
 		return std * sqrt(-2.0 * log(z)) * cos(2.0 * PI * ((double)rand() / (double)RAND_MAX));
+	}
+
+	template <typename T>
+	T GaussPseudoRandBM(
+		Array<int> rndVal,
+		int &iRndVal)
+	{
+		int z;
+		do
+			RVLRND(1000000, rndVal.Element, rndVal.n, iRndVal, z)
+			while (z == 0);
+		T u1 = 1e-6 * (T)z;
+		RVLRND(1000000, rndVal.Element, rndVal.n, iRndVal, z);
+		T u2 = 1e-6 * (T)z;
+
+		return sqrt(-2.0 * log(u1)) * cos(2.0 * PI * u2);
+	}
+
+	template <typename T>
+	T RealPseudoRand(
+		Array<int> rndVal,
+		int &iRndVal)
+	{
+		int z;
+		RVLRND(1000000, rndVal.Element, rndVal.n, iRndVal, z);
+		return 1e-6 * (T)z;
 	}
 
 #ifdef RVLHDF5
@@ -1226,6 +1261,12 @@ namespace RVL
 	}
 #endif
 
+	void CreateBoxMesh(
+		float *size,
+		float *P,
+		int *faces,
+		int faceIdxOffset);
+
 	// Vidovic
 	void UnionOfIndices(
 		Array<int> &iInArray1,
@@ -1262,4 +1303,53 @@ namespace RVL
 
 	bool IdxCostPairComparison(Pair<int, float> x, Pair<int, float> y);
 	bool IdxCostPairComparisonDesc(Pair<int, float> x, Pair<int, float> y);
+
+	// This class is designed for storing data into files.
+	// The format of the file created and read by DataStorage consists of an ascii header followed by binary data.
+
+#define RVLDATASTRUCTURE_TYPE_NONE 0
+#define RVLDATASTRUCTURE_TYPE_BOOL 1
+#define RVLDATASTRUCTURE_TYPE_INT 2
+#define RVLDATASTRUCTURE_TYPE_FLOAT 3
+#define RVLDATASTRUCTURE_TYPE_DOUBLE 4
+#define RVLDATASTRUCTURE_TYPE_ARRAY 5
+#define RVLDATASTRUCTURE_TYPE_STRUCT 6
+
+#define RVLDATASTORAGE_MAX_ARRAY_DIMS 10
+#define RVLDATASTORAGE_MAX_NAME_LENGTH 200
+
+	struct DataStructureElement
+	{
+		std::string name;
+		uchar type;
+		Array<int> idx;
+		int iParent;
+		std::vector<int> children;
+	};
+
+	class DataStorage
+	{
+	public:
+		DataStorage();
+		virtual ~DataStorage();
+		void Clear();
+		bool Load(std::string fileName);
+
+	private:
+		std::string LoadName();
+		void LoadStructureElement(std::string name = "");
+		void LoadValue(int iData);
+		void LoadArray(int iData);
+		void LoadStruct(int iData);
+		void AddChild(
+			int iParent,
+			int iChild);
+
+	private:
+		FILE *fp;
+		std::vector<DataStructureElement> structure;
+		Array<int> idx;
+		int iParent;
+		char c;
+	};
 } // namespace RVL

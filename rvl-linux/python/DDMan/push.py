@@ -17,7 +17,74 @@ import copy
 import fcl
 import time
 import copy
+from tqdm import tqdm
+import multiprocessing as mp
 np.random.seed(0)
+
+# FCL
+def load_fcl_mesh_from_ply(ply_file):
+    """
+    Load a mesh from a PLY file and create an FCL BVHModel.
+    """
+    # Load mesh using Open3D
+    mesh = o3d.io.read_triangle_mesh(ply_file)
+    if not mesh.has_triangles():
+        raise ValueError(f"The mesh in {ply_file} does not contain any triangles.")
+
+    # Extract vertices and triangles
+    vertices = np.asarray(mesh.vertices, dtype=np.float64)
+    triangles = np.asarray(mesh.triangles, dtype=np.int32)
+
+    # Create FCL BVHModel
+    fcl_mesh = fcl.BVHModel()
+    fcl_mesh.beginModel(len(vertices), len(triangles))
+    fcl_mesh.addSubModel(vertices, triangles)
+    fcl_mesh.endModel()
+    
+    return fcl_mesh
+
+def load_fcl_mesh_from_mesh(mesh):
+    """
+    Load a mesh from a PLY file and create an FCL BVHModel.
+    """
+
+    # Extract vertices and triangles
+    vertices = np.asarray(mesh.vertices, dtype=np.float64)
+    triangles = np.asarray(mesh.triangles, dtype=np.int32)
+
+    # Create FCL BVHModel
+    fcl_mesh = fcl.BVHModel()
+    fcl_mesh.beginModel(len(vertices), len(triangles))
+    fcl_mesh.addSubModel(vertices, triangles)
+    fcl_mesh.endModel()
+    
+    return fcl_mesh
+
+def load_fcl_mesh_from_vertices_triangles(vertices, triangles):
+
+    # Extract vertices and triangles
+    vertices = np.asarray(vertices, dtype=np.float64)
+    triangles = np.asarray(triangles, dtype=np.int32)
+
+    # Create FCL BVHModel
+    fcl_mesh = fcl.BVHModel()
+    fcl_mesh.beginModel(len(vertices), len(triangles))
+    fcl_mesh.addSubModel(vertices, triangles)
+    fcl_mesh.endModel()
+    
+    return fcl_mesh
+
+
+def create_collision_object(mesh, pose):
+    """
+    Create a collision object for a mesh with a given pose.
+    """
+    # Convert pose to FCL-compatible format
+    transform = fcl.Transform(pose[:3, :3], pose[:3, 3])
+    # print("Transform rotation:\n", transform.getRotation())
+    # print("Transform translation:\n", transform.getTranslation())
+    return fcl.CollisionObject(mesh, transform)
+
 
 def random_orientations(num_viewpoints = 300, num_rot_angles = 12):
     # Constants.
@@ -80,38 +147,21 @@ def random_orientations(num_viewpoints = 300, num_rot_angles = 12):
     
     return rot_mx
 
-def precompute_transformed_vertices(tool_mesh, tool_poses, T_DD_W):
-    original_vertices = np.asarray(tool_mesh.vertices)
-
-    # Convert vertices to homogeneous coordinates (n, 4)
-    ones = np.ones((original_vertices.shape[0], 1))  # Column of ones
-    vertices_h = np.hstack((original_vertices, ones))  # Shape: (n, 4)
-
-    # Reshape vertices for broadcasting (1, n, 4)
-    vertices_h_T = vertices_h.T[np.newaxis, :, :]  # Shape: (1, 4, n)
-    
-    tool_poses_W = T_DD_W[np.newaxis,...] @ tool_poses  
-
-    # tool_poses: (m, 4, 4), vertices_h: (1, 4, n)
-    transformed_vertices_hom = (tool_poses_W @ vertices_h_T).transpose(0, 2, 1)  # Shape: (m, n, 4)
-
-    return transformed_vertices_hom[..., :3]
-
-
-def compare_collision_lists(list1, list2):
-    if len(list1) != len(list2):
-        raise ValueError("The two lists must have the same length.")
-    
-    for i in range(len(list1)):
-        if list1[i] == 0 and list2[i] != 0:
-            print(f"Mismatch at index {i}: list1 has 0 but list2 has {list2[i]}")
-            # return False
-        if list2[i] == 1 and list1[i] != 1:
-            print(f"Mismatch at index {i}: list2 has 1 but list1 has {list1[i]}")
-            # return False
-    
-    print("The collision lists satisfy the conditions.")
-    return True
+def compare_sphere_to_fcl_collision(sphere_col, fcl_col):
+    problem_indices = []
+    for i in range(sphere_col.shape[0]):
+        if bool(sphere_col[i]) is False:
+            if bool(fcl_col[i]) is not False:
+                print('Problem at index: %d' % i)
+                problem_indices.append(i)
+                continue
+        
+        if bool(fcl_col[i]) is True:
+            if bool(sphere_col[i]) is not True:
+                print('Problem at index: %d' % i)
+                problem_indices.append(i)
+                continue
+    return problem_indices
 
 fcl_results = []
 
@@ -320,13 +370,13 @@ class push():
         #valid_poses = 0
         #invalid_poses = 0
         prev_contact_point = contact_points[0,:]
-        for contact_point_idx in range(num_contact_points):  
+        for contact_point_idx in tqdm(range(num_contact_points)):  
             # if contact_point_idx == 22:
             #     debug = 0
             contact_point = contact_points[contact_point_idx,:]
-            if contact_point[1] != prev_contact_point[1]:
-                print(' ')
-            print('.', end=' ')
+            # if contact_point[1] != prev_contact_point[1]:
+            #     print(' ')
+            # print('.', end=' ')
             prev_contact_point = contact_point
             for orientation_idx in range(num_orientations):
                 R = rot_mx[contact_point_idx * num_orientations + orientation_idx,:,:]
@@ -341,7 +391,7 @@ class push():
                 # else:
                 #     invalid_poses += 1
                 #     print(0)
-        print(' ')
+        # print(' ')
 
         # print('valid:', valid_poses, 'invalid:', invalid_poses)
         return np.array(valid_contact_poses_)
@@ -356,139 +406,107 @@ class push():
         e = (y - self.tool.tool_sample_spheres[:,3]).min(axis=1)
         return (e <= 0.0)
     
-    def collision_detection_fcl(self, tool_poses, cabinet_parts_mesh, door_model):
-        # Preprocess cabinet mesh
-        cabinet_vertices = np.asarray(cabinet_parts_mesh.vertices)
-        cabinet_triangles = np.asarray(cabinet_parts_mesh.triangles)
+    @staticmethod
+    def perform_colcheck_fcl(tool_vertices, tool_triangles, pose, cabinet_vertices, cabinet_triangles):
+        """
+        Function to perform collision checking for a single tool pose.
+        This function is executed in parallel and must only use picklable data.
+        """
+
+        # Create FCL BVHModel for tool
+        fcl_tool_mesh = fcl.BVHModel()
+        fcl_tool_mesh.beginModel(len(tool_vertices), len(tool_triangles))
+        fcl_tool_mesh.addSubModel(tool_vertices, tool_triangles)
+        fcl_tool_mesh.endModel()
+        transform_tool = fcl.Transform(pose[:3, :3], pose[:3, 3])
+        tool_col_obj = fcl.CollisionObject(fcl_tool_mesh, transform_tool)
+
+        # Create FCL BVHModel for cabinet
         fcl_cabinet_mesh = fcl.BVHModel()
         fcl_cabinet_mesh.beginModel(len(cabinet_vertices), len(cabinet_triangles))
         fcl_cabinet_mesh.addSubModel(cabinet_vertices, cabinet_triangles)
         fcl_cabinet_mesh.endModel()
-        fcl_cabinet_collision_object = fcl.CollisionObject(fcl_cabinet_mesh)
+        transform_cabinet = fcl.Transform(np.eye(3), np.zeros(3))
+        cabinet_col_obj = fcl.CollisionObject(fcl_cabinet_mesh, transform_cabinet)
 
-        origin_rf = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.05)
+        # Perform collision detection
+        request = fcl.CollisionRequest()
+        result = fcl.CollisionResult()
+        ret = fcl.collide(cabinet_col_obj, tool_col_obj, request, result)
+
+        return ret  # Return collision result
+
+    def collision_detection_fcl_multiprocessing(self, tool_mesh, tool_poses, cabinet_mesh):
+        # Convert Open3D mesh to picklable formats
+        tool_vertices = np.asarray(tool_mesh.vertices)
+        tool_triangles = np.asarray(tool_mesh.triangles)
+
+        cabinet_vertices = np.asarray(cabinet_mesh.vertices)
+        cabinet_triangles = np.asarray(cabinet_mesh.triangles)
+
+        # Use multiprocessing to parallelize collision checking
+        with mp.Pool(processes=mp.cpu_count()) as pool:
+            collision_results = list(tqdm(
+                pool.starmap(self.perform_colcheck_fcl, [
+                    (tool_vertices, tool_triangles, pose, cabinet_vertices, cabinet_triangles) for pose in tool_poses
+                ]),
+                total=len(tool_poses)
+            ))
+
+        return collision_results
+
+    def collision_detection_fcl(self, tool_mesh, tool_poses, cabinet_mesh, collision):
+
+        # Tool mesh triangles, vertices
+        tool_vertices = np.asarray(tool_mesh.vertices).copy()
+        tool_triangles = np.asarray(tool_mesh.triangles).copy()
+
+        # Cabinet preprocess - FCL
+        T_plate_0 = np.eye(4)
+        fcl_cabinet_mesh = load_fcl_mesh_from_mesh(cabinet_mesh)
+        cabinet_col_obj = create_collision_object(fcl_cabinet_mesh, T_plate_0)
 
         # Initialize results list
         collision_results = []
 
         # Iterate through all tool poses
-        for pose in tool_poses:
-            T_G_DD = pose
-            T_G_W = door_model.T_DD_W @ T_G_DD
-            # Transform the tool mesh for the current pose
-            tool_mesh = self.tool.create_mesh([0, 0.5, 0.5])
-            original_vertices = np.asarray(tool_mesh.vertices).copy()
-            tool_mesh.transform(T_G_W)
+        # for pose in tqdm(tool_poses):
+        num_poses = tool_poses.shape[0]
+        # for idx, pose in tqdm(enumerate(tool_poses)):
+        for idx in tqdm(range(num_poses)):
+            T_G_DD = tool_poses[idx]
 
-            # # Debug -visualize the tool mesh
-            # o3d.visualization.draw_geometries([tool_mesh, origin_rf, cabinet_parts_mesh])
-
-
-            tool_vertices = np.asarray(tool_mesh.vertices)
-            tool_triangles = np.asarray(tool_mesh.triangles)
-            fcl_tool_mesh = fcl.BVHModel()
-            fcl_tool_mesh.beginModel(len(tool_vertices), len(tool_triangles))
-            fcl_tool_mesh.addSubModel(tool_vertices, tool_triangles)
-            fcl_tool_mesh.endModel()
-            fcl_tool_collision_object = fcl.CollisionObject(fcl_tool_mesh)
+            fcl_tool_mesh = load_fcl_mesh_from_vertices_triangles(tool_vertices, tool_triangles)
+            tool_col_obj = create_collision_object(fcl_tool_mesh, T_G_DD)
 
             # Perform collision detection
             request = fcl.CollisionRequest()
             result = fcl.CollisionResult()
-            collision = fcl.collide(fcl_tool_collision_object, fcl_cabinet_collision_object, request, result)
+            ret = fcl.collide(cabinet_col_obj, tool_col_obj, request, result)
 
-
-            # if collision < 1:
-            #     tool_mesh.compute_vertex_normals()
-            #     o3d.visualization.draw_geometries([tool_mesh, origin_rf, cabinet_parts_mesh])
+            # ## Debug
+            # # Visualize
+            # # if bool(ret) and not bool(collision[idx]):
+            # if bool(collision[idx]) is False:
+            #     if bool(ret) is True:
+            #         tool_mesh_ = copy.deepcopy(tool_mesh)
+            #         tool_mesh_.transform(T_G_DD)
+            #         tool_mesh_.compute_vertex_normals()
+                    
+            #         o3d.visualization.draw_geometries([tool_mesh_, cabinet_mesh])
+            # if bool(ret) is True:
+            #     if bool(collision[idx]) is False:
+            #         tool_mesh_ = copy.deepcopy(tool_mesh)
+            #         tool_mesh.paint_uniform_color([0.5, 0.5, 0])
+            #         tool_mesh_.transform(T_G_DD)
+            #         tool_mesh_.compute_vertex_normals()
+                    
+            #         o3d.visualization.draw_geometries([tool_mesh_, cabinet_mesh])
 
             # Store the result for the current pose
-            collision_results.append(1 if collision > 0 else collision)
-
+            collision_results.append(ret)
         return collision_results
 
-    def collision_detection_with_precomputation_fcl(self, tool_poses, cabinet_parts_mesh, T_DD_W):
-
-        cabinet_vertices = np.asarray(cabinet_parts_mesh.vertices)
-        cabinet_triangles = np.asarray(cabinet_parts_mesh.triangles)
-        fcl_cabinet_mesh = fcl.BVHModel()
-        fcl_cabinet_mesh.beginModel(len(cabinet_vertices), len(cabinet_triangles))
-        fcl_cabinet_mesh.addSubModel(cabinet_vertices, cabinet_triangles)
-        fcl_cabinet_mesh.endModel()
-        fcl_cabinet_collision_object = fcl.CollisionObject(fcl_cabinet_mesh)
-
-        tool_mesh = copy.deepcopy(self.tool.custom_gripper_model)
-        tool_triangles = np.asarray(tool_mesh.triangles)
-        tool_vertices_all = precompute_transformed_vertices(tool_mesh, tool_poses, T_DD_W)
-        # tool_mesh = self.tool.create_mesh([0, 0.5, 0.5])
-
-        collision_results = []
-        for i in range(tool_poses.shape[0]):
-            tool_vertices_ = tool_vertices_all[i]
-
-            fcl_tool_mesh = fcl.BVHModel()
-            fcl_tool_mesh.beginModel(len(tool_vertices_), len(tool_triangles))
-            fcl_tool_mesh.addSubModel(tool_vertices_, tool_triangles)
-            fcl_tool_mesh.endModel()
-            fcl_tool_collision_object = fcl.CollisionObject(fcl_tool_mesh)
-
-            # Perform collision detection
-            request = fcl.CollisionRequest()
-            result = fcl.CollisionResult()
-            collision = fcl.collide(fcl_tool_collision_object, fcl_cabinet_collision_object, request, result)
-            collision_results.append(1 if collision > 0 else collision)
-        
-        return collision_results
-
-
-    def one_to_many_collision_fcl(self, tool_poses, cabinet_parts_mesh, T_DD_W, chunk_size=1000):
-        global fcl_results
-        cabinet_vertices = np.asarray(cabinet_parts_mesh.vertices)
-        cabinet_triangles = np.asarray(cabinet_parts_mesh.triangles)
-        fcl_cabinet_mesh = fcl.BVHModel()
-        fcl_cabinet_mesh.beginModel(len(cabinet_vertices), len(cabinet_triangles))
-        fcl_cabinet_mesh.addSubModel(cabinet_vertices, cabinet_triangles)
-        fcl_cabinet_mesh.endModel()
-        fcl_cabinet_collision_object = fcl.CollisionObject(fcl_cabinet_mesh)
-
-        tool_mesh = copy.deepcopy(self.tool.custom_gripper_model)
-        tool_triangles = np.asarray(tool_mesh.triangles)
-        tool_vertices_all = precompute_transformed_vertices(tool_mesh, tool_poses, T_DD_W)
-
-        results = []
-        num_poses = tool_vertices_all.shape[0]
-        num_chunks = num_poses // chunk_size + (num_poses % chunk_size > 0)
-
-        for i in range(num_chunks):
-            start = i * chunk_size
-            end_ = min((i + 1) * chunk_size, num_poses)
-
-            # One-to-many collision detection
-            manager = fcl.DynamicAABBTreeCollisionManager()
-            objs = []
-            for j in range(start,end_):
-                tool_vertices_ = tool_vertices_all[j]
-
-                fcl_tool_mesh = fcl.BVHModel()
-                fcl_tool_mesh.beginModel(len(tool_vertices_), len(tool_triangles))
-                fcl_tool_mesh.addSubModel(tool_vertices_, tool_triangles)
-                fcl_tool_mesh.endModel()
-                fcl_tool_collision_object = fcl.CollisionObject(fcl_tool_mesh)
-                objs.append(fcl_tool_collision_object)
-            
-            manager.registerObjects(objs)
-            manager.setup()
-
-            req = fcl.CollisionRequest()
-            res = fcl.CollisionResult()
-            rdata = fcl.CollisionData(request = req, result=res)
-            manager.collide(fcl_cabinet_collision_object, rdata, callback_fcl)
-            # print ('Collision between manager 1 and Mesh?: {}'.format(rdata.result.is_collision))
-            # print ('Contacts:')
-            # for c in rdata.result.contacts:
-                # print ('\tO1: {}, O2: {}'.format(c.o1, c.o2))
-            pass
-        return fcl_results
 
     def tool_pose(self, R, contact_point, z, tool_finger_distances, sphere_to_TCS_distance):
         T_G_TCS = np.eye(4)
@@ -552,9 +570,9 @@ class push():
 
 class door_model():
     def __init__(self):
-        self.dd_contact_surface_params = np.array([0.1, 0.1])
+        self.dd_contact_surface_params = np.array([0.2, 0.2])
         #self.dd_contact_surface_params = np.array([0.05, 0.01])
-        self.dd_plate_params = np.array([0.3, 0.5, 0.018])
+        self.dd_plate_params = np.array([0.5, 0.5, 0.018])
         self.dd_moving_to_static_part_distance = 0.005
         self.dd_static_side_width = 0.018
         self.dd_static_depth = 0.4
@@ -713,39 +731,15 @@ class door_model():
         dd_origin = o3d.geometry.TriangleMesh.create_coordinate_frame(size = 0.05)
 
         dd_mesh = dd_plate_mesh + dd_static_mesh + dd_plate_rf + dd_origin
-
+        
+        # Debug
+        # dd_plate_mesh_ = copy.deepcopy(dd_plate_mesh)
+        # dd_plate_mesh_.transform(np.linalg.inv(self.T_DD_W))
+        # o3d.io.write_triangle_mesh("/home/RVLuser/rvl-linux/python/DDMan/dd_plate_mesh.ply", dd_plate_mesh_)
+        # dd_plate_mesh_ = o3d.io.read_triangle_mesh("/home/RVLuser/rvl-linux/python/DDMan/dd_plate_mesh.ply")
+        # o3d.visualization.draw_geometries([dd_plate_mesh_, dd_origin])
+        
         return dd_mesh, dd_plate_mesh, dd_static_mesh
-
-    def create_mesh2(self):
-        dd_plate_mesh = o3d.geometry.TriangleMesh.create_box(width=self.dd_plate_params[0], height=self.dd_plate_params[1], depth=self.dd_plate_params[2])    
-        dd_plate_mesh.translate((-self.dd_plate_params[0], 0.0, -self.dd_plate_params[2]))
-        dd_plate_mesh.transform(self.T_DD_W)
-        dd_plate_mesh.compute_vertex_normals()
-        dd_plate_mesh.paint_uniform_color([0.8, 0.8, 0.8])
-        dd_plate_rf = o3d.geometry.TriangleMesh.create_coordinate_frame(size = 0.05)
-        dd_plate_rf.transform(self.T_DD_W)
-
-        dd_static_top_mesh = o3d.geometry.TriangleMesh.create_box(width=self.dd_plate_params[0] + 2.0 * (self.dd_moving_to_static_part_distance + self.dd_static_side_width),
-            height=self.dd_static_side_width, depth=self.dd_static_depth)
-        dd_static_bottom_mesh = o3d.geometry.TriangleMesh.create_box(width=self.dd_plate_params[0] + 2.0 * (self.dd_moving_to_static_part_distance + self.dd_static_side_width),
-            height=self.dd_static_side_width, depth=self.dd_static_depth)
-        dd_static_bottom_mesh.translate((0.0, 2.0 * self.dd_moving_to_static_part_distance + self.dd_static_side_width + self.dd_plate_params[1], 0.0))
-        dd_static_left_mesh = o3d.geometry.TriangleMesh.create_box(width=self.dd_static_side_width, 
-            height=self.dd_plate_params[1] + 2.0 * self.dd_moving_to_static_part_distance, depth=self.dd_static_depth)
-        dd_static_left_mesh.translate((2.0 * self.dd_moving_to_static_part_distance + self.dd_static_side_width + self.dd_plate_params[0], 
-            self.dd_static_side_width, 0.0))
-        dd_static_right_mesh = o3d.geometry.TriangleMesh.create_box(width=self.dd_static_side_width, 
-            height=self.dd_plate_params[1] + 2.0 * self.dd_moving_to_static_part_distance, depth=self.dd_static_depth)
-        dd_static_right_mesh.translate((0.0, self.dd_static_side_width, 0.0))
-        dd_static_mesh = dd_static_top_mesh + dd_static_bottom_mesh + dd_static_left_mesh + dd_static_right_mesh
-        #dd_static_mesh.translate((-dd_moving_to_static_part_distance - dd_static_side_width,
-        #    -dd_moving_to_static_part_distance - dd_static_side_width, -dd_plate_params[2]))
-        dd_static_mesh.compute_vertex_normals()
-        dd_static_mesh.paint_uniform_color([0.8, 0.8, 0.8])
-
-        dd_mesh = dd_plate_mesh + dd_static_mesh + dd_plate_rf
-
-        return dd_mesh
 
 
 class tool_model():
@@ -854,29 +848,6 @@ def visualize_push(collision, door, tool, T_G_DD):
 
     return dd_mesh, tool_mesh, tool_mesh_wireframe, tool_sampling_sphere_centers_pcd
 
-
-def visualize_push2(collision, door, tool, T_G_DD):
-    if collision:
-        tool_color = [1.0, 0.0, 0.0]
-    else:
-        tool_color = [0.0, 0.5, 0.5]
-    # tool_mesh = tool.create_mesh(tool_color)
-    tool_mesh = tool.create_mesh(tool_color)
-    T_G_W = door.T_DD_W @ T_G_DD
-    tool_mesh.transform(T_G_W)
-    tool_mesh_wireframe = o3d.geometry.LineSet.create_from_triangle_mesh(tool_mesh)
-
-    tool_sampling_sphere_centers_pcd = o3d.geometry.PointCloud()
-    c_G = rvl.homogeneous(tool.tool_sample_spheres[:,:3])
-    c_DD = c_G @ T_G_DD.T
-    c_W = c_DD @ door.T_DD_W.T
-    tool_sampling_sphere_centers_pcd.points = o3d.utility.Vector3dVector(c_W[:,:3])
-    tool_sampling_sphere_centers_pcd.paint_uniform_color(tool_color)
- 
-    dd_mesh = door.create_mesh2()
-
-    return dd_mesh, tool_mesh, tool_mesh_wireframe, tool_sampling_sphere_centers_pcd
- 
  
 def demo_single_random():
     # Parameters.
@@ -977,13 +948,12 @@ def demo_single_random():
     # o3d.visualization.draw_geometries([tool_mesh_wireframe, tool_sampling_sphere_centers_pcd, dd_plate_mesh, dd_plate_rf, dd_static_mesh, vn_pcd])
     o3d.visualization.draw_geometries([tool_mesh_wireframe, tool_sampling_sphere_centers_pcd, dd_mesh])
 
-
 def demo():
     # Parameters.
 
     #tool_contact_surface_params = np.array([[0.0, 0.02, 0.0], [0.0, 0.03, -0.04]])
     tool_contact_surface_params = np.array([[0.0, 0.01, 0.0], [0.0, 0.01, -0.02]])
-    dd_contact_surface_params = np.array([0.1, 0.1])
+    dd_contact_surface_params = np.array([0.2, 0.2])
     dd_contact_surface_sampling_resolution = 0.005
     num_viewpoints = 300
     num_rot_angles = 12
@@ -1070,11 +1040,14 @@ def demo_push_poses():
     dd_state_deg = 7.0
     num_viewpoints = 100
     num_rot_angles = 12
-    load_valid_contact_poses_from_file = True
+    load_valid_contact_poses_from_file = False
     load_feasible_poses_from_file = False
     contact_point_sampling_offset = 0.02
     use_default_gripper = False
     vision_tolerance = 0.007
+
+    use_fcl = True
+    visualize_feasible_poses = False
 
     if use_default_gripper:
         custom_gripper_spheres_path = ''
@@ -1087,7 +1060,7 @@ def demo_push_poses():
         # Simundic
         # custom_gripper_spheres_path = '/home/RVLuser/rvl-linux/python/DDMan/3finger_gripper/gripper_spheres.npy'
         custom_gripper_spheres_path = '/home/RVLuser/rvl-linux/data/Robotiq3Finger/spheres.npy'
-        custom_gripper_model_path = '/home/RVLuser/rvl-linux/data/Robotiq3Finger/robotiq_3f_gripper_simplified.stl'
+        custom_gripper_model_path = '/home/RVLuser/rvl-linux/data/Robotiq3Finger/mesh.ply'
         # END: Simundic
         # custom_gripper_spheres_path = '3finger_gripper/gripper_spheres.npy'
         # custom_gripper_model_path = '3finger_gripper/robotiq_3f_gripper_simplified.stl'
@@ -1095,7 +1068,7 @@ def demo_push_poses():
         # tool_contact_surface_params = np.array([[0.0, -0.026, 0.0], [0.0, -0.031, -0.025], [0.006, -0.026, 0.0]])
         # tool_finger_distances = [-0.155/2., 0., -0.102] # x, y, z
         tool_contact_surface_params = np.array([[0.0, -0.026, 0.0], [0.0, -0.030, -0.020], [0.006, -0.026, 0.0]])
-        tool_finger_distances = [-0.155/2., 0., -0.102] # x, y, z
+        tool_finger_distances = [-0.155/2., 0., -0.098] # x, y, z
         # tool_finger_distances = [-0.155/2., 0., -0.102] # x, y, z
         sphere_to_TCS_distance = 0.004609
 
@@ -1128,21 +1101,10 @@ def demo_push_poses():
     contact_points = np.stack((dd_grid_x, dd_grid_y, np.zeros(dd_grid_x.shape)), axis=-1)
     contact_points = np.reshape(contact_points, (contact_points.shape[0] * contact_points.shape[1], 3))
 
-    # contact_points = np.array([[0.1, 0.01, 0.0]])
-
     # Push tool.
-
     push_ = push(door, tool)
 
-    # T_G_DD = np.eye(4)
-    # T_G_DD[0,3] = 0.105
-    # T_G_DD[2,3] = 0.05
-    # collision = push_.collision_detection(T_G_DD[np.newaxis,:,:], door.vn_dd)
-    # dd_mesh, tool_mesh, tool_mesh_wireframe, tool_sampling_sphere_centers_pcd = visualize_push(collision[0], door, tool, T_G_DD)
-    # o3d.visualization.draw_geometries([tool_mesh_wireframe, tool_sampling_sphere_centers_pcd, dd_mesh])
-
     # Valid contact poses.
-        
     if load_valid_contact_poses_from_file:
         valid_contact_poses_ = np.load("valid_contact_poses.npy")
     else:        
@@ -1150,236 +1112,98 @@ def demo_push_poses():
         valid_contact_poses_ = push_.valid_contact_poses(tool.tool_finger_distances, tool.sphere_to_TCS_distance, vision_tolerance, contact_points, num_viewpoints=num_viewpoints, num_rot_angles=num_rot_angles)
         np.save("valid_contact_poses", valid_contact_poses_)
 
-    origin_rf = o3d.geometry.TriangleMesh.create_coordinate_frame(size = 0.05)
 
     # Feasible poses (no collision with the door/drawer plate).
 
     if load_feasible_poses_from_file:
         # feasible_poses = np.load('feasible_poses.npy')
         feasible_poses = np.load('/home/RVLuser/rvl-linux/data/Robotiq3Finger/feasible_poses_left_axis.npy')
+
     else:
 
         # time_start = time.time()
         # collision_onetomany = push_.one_to_many_collision_fcl(valid_contact_poses_, dd_plate_mesh, door.T_DD_W, 50000)
         # print('FCL one-to-many collision detection with precomputation time:', time.time() - time_start)
 
-        time_start = time.time()
-        fcl_collision_precomp = push_.collision_detection_with_precomputation_fcl(valid_contact_poses_, dd_plate_mesh, door.T_DD_W)
-        print('FCL collision detection with precomputation time:', time.time() - time_start)
-        # time_start = time.time()
-        # fcl_collision = push_.collision_detection_fcl(valid_contact_poses_, dd_plate_mesh, door)
-        # print('FCL collision detection time w/o precomputation:', time.time() - time_start)
-        
+        # Visualize meshes and contact points.
+        if False:
+            origin_rf = o3d.geometry.TriangleMesh.create_coordinate_frame(size = 0.05)
+
+            samples = valid_contact_poses_
+            good_samples = []
+            for i in [8, 9, 557627, 558628, 557629, 557630, 557631]:
+                T_G_DD = samples[i]
+                tool_mesh = tool.create_mesh([0.0, 0.5, 0.5]) 
+                T_G_W = door.T_DD_W @ T_G_DD 
+                tool_mesh.transform(T_G_W)
+                tool_mesh.compute_vertex_normals()
+                door_mesh = dd_plate_mesh # + dd_static_mesh
+                door_mesh.compute_vertex_normals()
+                o3d.visualization.draw_geometries([door_mesh, tool_mesh, origin_rf])
+
         time_start = time.time()
         collision = push_.collision_detection(valid_contact_poses_, door.vn_dd)
         print('RVL collision detection time:', time.time() - time_start)
-        feasible_poses = valid_contact_poses_[np.logical_not(collision),:]
-        # np.save('feasible_poses', feasible_poses)
+        collision = np.array(collision, dtype=bool)
+
+        if use_fcl: 
+            dd_plate_mesh.transform(np.linalg.inv(door.T_DD_W))
+            tool_mesh = tool.create_mesh([0.0, 0.5, 0.5])
+
+            time_start = time.time()
+            fcl_collision = push_.collision_detection_fcl(tool_mesh, valid_contact_poses_, dd_plate_mesh, collision)
+            # fcl_collision_mp = push_.collision_detection_fcl_multiprocessing(tool_mesh, valid_contact_poses_, dd_plate_mesh)
+            print('FCL collision detection time:', time.time() - time_start)
+            fcl_collision = np.array(fcl_collision, dtype=bool)
+            # compare_sphere_to_fcl_collision(collision, fcl_collision)
+            # Extract poses that are not in collision
+            feasible_poses = valid_contact_poses_[np.logical_not(fcl_collision),:]
+        else:
+            # Extract poses that are not in collision
+            feasible_poses = valid_contact_poses_[np.logical_not(collision),:]
+
 
         # Visualize meshes and contact points.
-        samples = feasible_poses
-        good_samples = []
-        for i in range(10):
+        if visualize_feasible_poses:
+            origin_rf = o3d.geometry.TriangleMesh.create_coordinate_frame(size = 0.05)
 
-            good_sample = False
-            while not good_sample:
-                sample_idx = np.random.randint(samples.shape[0])
-                # sample_idx = 0
-                T_G_DD = samples[sample_idx,:,:]
-                p_ref_G = np.ones(4)
-                p_ref_G[:3] = -np.array([tool_finger_distances])
-                p_ref_DD = T_G_DD @ p_ref_G
-                good_sample = (p_ref_DD[0] < 0.0 or p_ref_DD[1] < 0.0)
+            samples = feasible_poses
+            good_samples = []
+            for i in range(10):
 
-            good_samples.append(sample_idx)
-            # tool has to be created again, because the transform is 
-            # relative to the current pose, not origin
-            tool_mesh = tool.create_mesh([0.0, 0.5, 0.5]) 
-            T_G_W = door.T_DD_W @ T_G_DD 
-            tool_mesh.transform(T_G_W)
-            tool_mesh.compute_vertex_normals()
-            door_mesh = dd_plate_mesh + dd_static_mesh
-            door_mesh.compute_vertex_normals()
-            o3d.visualization.draw_geometries([dd_mesh, tool_mesh, origin_rf])
+                good_sample = False
+                while not good_sample:
+                    sample_idx = np.random.randint(samples.shape[0])
+                    # sample_idx = 0
+                    T_G_DD = samples[sample_idx,:,:]
+                    p_ref_G = np.ones(4)
+                    p_ref_G[:3] = -np.array([tool_finger_distances])
+                    p_ref_DD = T_G_DD @ p_ref_G
+                    good_sample = (p_ref_DD[0] < 0.0 or p_ref_DD[1] < 0.0)
 
+                good_samples.append(sample_idx)
+                # tool has to be created again, because the transform is 
+                # relative to the current pose, not origin
+                tool_mesh = tool.create_mesh([0.0, 0.5, 0.5]) 
+                T_G_W = door.T_DD_W @ T_G_DD 
+                tool_mesh.transform(T_G_W)
+                tool_mesh.compute_vertex_normals()
+                door_mesh = dd_plate_mesh + dd_static_mesh
+                door_mesh.compute_vertex_normals()
+                o3d.visualization.draw_geometries([dd_mesh, tool_mesh, origin_rf])
 
-            # dd_mesh, tool_mesh, tool_mesh_wireframe, tool_sampling_sphere_centers_pcd = visualize_push(collision[sample_idx], door, tool, T_G_DD)
-            # o3d.visualization.draw_geometries([tool_mesh_wireframe, tool_sampling_sphere_centers_pcd, dd_mesh])
+                # dd_mesh, tool_mesh, tool_mesh_wireframe, tool_sampling_sphere_centers_pcd = visualize_push(collision[sample_idx], door, tool, T_G_DD)
+                # o3d.visualization.draw_geometries([tool_mesh_wireframe, tool_sampling_sphere_centers_pcd, dd_mesh])
 
-
-
-        # # debug stuff
-        # col_list = np.logical_not(np.array(col)).astype(int).tolist()
-        # # col2_list = np.logical_not(np.array(col2)).astype(int).tolist()
-        # collision_list = np.logical_not(collision).astype(int).tolist()
-        # compare_collision_lists(col_list, collision_list)
-        np.save('/home/RVLuser/rvl-linux/data/Robotiq3Finger/feasible_poses_left_axis.npy', feasible_poses)
-
-    # Collision-free poses.
-
-    T_G_W = door.T_DD_W @ feasible_poses
-    collision = push_.collision_detection(T_G_W, door.vn_env)
-    contact_free_poses = feasible_poses[np.logical_not(collision),:]
-
-    # # Visualization.
-
-    # samples = contact_free_poses
-    # # samples = feasible_poses
-    # collision_ = np.zeros(samples.shape[0]).astype('bool')
-    # for visualization_idx in range(10):
-    #     print('sample', visualization_idx)
-    #     good_sample = False
-    #     while not good_sample:
-    #         sample_idx = np.random.randint(samples.shape[0])
-    #         # sample_idx = 0
-    #         T_G_DD = samples[sample_idx,:,:]
-    #         p_ref_G = np.ones(4)
-    #         p_ref_G[:3] = -np.array([tool_finger_distances])
-    #         p_ref_DD = T_G_DD @ p_ref_G
-    #         good_sample = (p_ref_DD[0] < 0.0 or p_ref_DD[1] < 0.0)
-    #     dd_mesh, tool_mesh, tool_mesh_wireframe, tool_sampling_sphere_centers_pcd = visualize_push(collision_[sample_idx], door, tool, T_G_DD)
-    #     o3d.visualization.draw_geometries([tool_mesh_wireframe, tool_sampling_sphere_centers_pcd, dd_mesh])
+        if use_fcl:
+            np.save('/home/RVLuser/rvl-linux/data/Robotiq3Finger/feasible_poses_left_axis_fcl.npy', feasible_poses)
+        else:
+            np.save('/home/RVLuser/rvl-linux/data/Robotiq3Finger/feasible_poses_left_axis.npy', feasible_poses)
 
 
-def demo_push_poses_ros(door_dims: np.array,
-                        static_depth: float,
-                        dd_state_deg: float, 
-                        num_viewpoints: int, 
-                        num_rot_angles: int,
-                        opening_direction: float=1.0,
-                        load_valid_contact_poses_from_file: bool=False, 
-                        load_feasible_poses_from_file: bool=False, 
-                        gripper_params: dict={},
-                        feasible_poses_path: str='',
-                        contact_free_poses_path: str='',
-                        valid_contact_poses_path: str='',
-                        visualization: bool=False):
-    # Parameters.
-  
-    # dd_state_deg = -12.0
-    # num_viewpoints = 100
-    # num_rot_angles = 12
-    # load_valid_contact_poses_from_file = False
-    # load_feasible_poses_from_file = False
-    
-    if gripper_params['is_default_gripper']:
-        custom_gripper_spheres_path = ''
-        custom_gripper_model_path = ''
-        tool_contact_surface_params = np.array([[0.0, 0.01, 0.0], [0.0, 0.01, -0.02]])
-        tool_finger_distances = [-0.155/2., 0., -0.102] # x, y, z
-        tool_finger_distances = [0.06/2., 0., 0.] # x, y, z
-        sphere_to_TCS_distance = 0.
-    else:
-        custom_gripper_spheres_path = '/home/RVLuser/rvl-linux/python/DDMan/3finger_gripper/gripper_spheres.npy'
-        custom_gripper_model_path = '/home/RVLuser/rvl-linux/python/DDMan/3finger_gripper/robotiq_3f_gripper_simplified.stl'
-        
-        tool_contact_surface_params = np.array([[0.0, -0.026, 0.0], [0.0, -0.031, -0.025]])
-        tool_finger_distances = [-0.155/2., 0., -0.102] # x, y, z
-        sphere_to_TCS_distance = 0.004609
-    
-    contact_point_sampling_offset = 0.02
-    vision_tolerance = 0.007
-    
-    # gripper_params = {'is_default_gripper': use_default_gripper,
-    #                     'custom_gripper_spheres_path': custom_gripper_spheres_path, 
-    #                     'custom_gripper_model_path': custom_gripper_model_path,
-    #                     'tool_contact_surface_params': tool_contact_surface_params,
-    #                     'tool_finger_distances': tool_finger_distances,
-    #                     'sphere_to_TCS_distance': sphere_to_TCS_distance}
-   
-    # Door model.
-    door = door_model()
-    door.dd_plate_params = door_dims
-    door.dd_static_depth = static_depth
-    door.dd_opening_direction = -1
-    _, _ = door.create(dd_state_deg, vision_tolerance)
-
-    # Tool model.
-    tool = tool_model(gripper_params)
-    tool.create()
-
-    # Contact points.
-    if door.dd_opening_direction > 0.0:
-        x = np.linspace(-contact_point_sampling_offset, door.dd_contact_surface_params[0], 25)
-    else:
-        x = np.linspace(-door.dd_contact_surface_params[0], contact_point_sampling_offset, 25)
-    y = np.linspace(-contact_point_sampling_offset, door.dd_contact_surface_params[1], 25)
-    dd_grid_x, dd_grid_y = np.meshgrid(x, y)
-    contact_points = np.stack((dd_grid_x, dd_grid_y, np.zeros(dd_grid_x.shape)), axis=-1)
-    contact_points = np.reshape(contact_points, (contact_points.shape[0] * contact_points.shape[1], 3))
-
-    # contact_points = np.array([[0.1, 0.01, 0.0]])
-
-    # Push tool.
-
-    push_ = push(door, tool)
-
-    # Valid contact poses.
-        
-    if load_valid_contact_poses_from_file:
-        valid_contact_poses_ = np.load(valid_contact_poses_path)
-    else:        
-        # valid_contact_poses_ = push_.valid_contact_poses(tool.tool_finger_distance, contact_points, num_viewpoints=num_viewpoints, num_rot_angles=num_rot_angles)
-        valid_contact_poses_ = push_.valid_contact_poses(tool.tool_finger_distances, tool.sphere_to_TCS_distance, vision_tolerance, contact_points, num_viewpoints=num_viewpoints, num_rot_angles=num_rot_angles)
-        np.save(valid_contact_poses_path, valid_contact_poses_)
-
-    # Feasible poses (no collision with the door/drawer plate).
-
-    if load_feasible_poses_from_file:
-        feasible_poses = np.load(feasible_poses_path)
-    else:
-        collision = push_.collision_detection(valid_contact_poses_, door.vn_dd)
-        feasible_poses = valid_contact_poses_[np.logical_not(collision),:]
-        np.save(feasible_poses_path, feasible_poses)
 
     # Collision-free poses.
 
     T_G_W = door.T_DD_W @ feasible_poses
     collision = push_.collision_detection(T_G_W, door.vn_env)
     contact_free_poses = feasible_poses[np.logical_not(collision),:]
-    if not load_feasible_poses_from_file:
-        np.save(contact_free_poses_path, contact_free_poses)
-
-    # Visualization.
-    if visualization:
-        samples = contact_free_poses
-        # samples = valid_contact_poses_
-        collision_ = np.zeros(samples.shape[0]).astype('bool')
-        for visualization_idx in range(2):
-            print('sample', visualization_idx)
-            # sample_idx = np.random.randint(samples.shape[0])
-            sample_idx = visualization_idx
-            # sample_idx = 0
-            T_G_DD = samples[sample_idx,:,:]
-            dd_mesh, tool_mesh, tool_mesh_wireframe, tool_sampling_sphere_centers_pcd = visualize_push(collision_[sample_idx], door, tool, T_G_DD)
-
-
-            # Visualize gripper origin
-            tool_origin = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.2)
-            tool_origin.transform(door.T_DD_W @ T_G_DD)
-    
-            o3d.visualization.draw_geometries([tool_mesh_wireframe, tool_sampling_sphere_centers_pcd, dd_mesh, tool_origin])
-    
-    # return feasible_poses
-    return contact_free_poses
-
-
-def visualize_dd():
-    # Door model.
-    door = door_model()
-    T_A_W, T_Arot_DD = door.create(-45)
-    
-    dd_mesh, dd_plate_mesh, dd_static_mesh = door.create_mesh()
-    
-    origin_mesh = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.05)
-    
-    # T_Arot_DD_mesh = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.05)
-    # T_Arot_DD_mesh.transform(T_Arot_DD)
-
-    T_A_W_mesh = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.05)
-    T_A_W_mesh.transform(T_A_W)
-
-    # o3d.visualization.draw_geometries([dd_mesh, origin_mesh, T_Arot_DD_mesh, T_A_W_mesh])
-    o3d.visualization.draw_geometries([dd_mesh, origin_mesh, T_A_W_mesh])
-
-    

@@ -931,12 +931,13 @@ namespace RVL
 		void Load(
 			char *fileName,
 			CRVLMem *pMem);
-		void Display(
+		vtkSmartPointer<vtkActor> Display(
 			Visualizer *pVisualizer,
 			float kResolution = 0.01f,
 			float *d = NULL,
 			bool *bd = NULL,
-			float SDFSurfaceValue = 0.0f);
+			float SDFSurfaceValue = 0.0f,
+			Box<float> *pBBoxIn = NULL);
 		void Display(
 			Visualizer *pVisualizer,
 			Mesh *pMesh,

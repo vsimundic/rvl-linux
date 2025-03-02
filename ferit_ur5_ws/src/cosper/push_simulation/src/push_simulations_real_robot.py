@@ -99,7 +99,7 @@ if __name__ == '__main__':
                                 save_path=config['cabinet_urdf_save_path'])
                 
         # Save cabinet mesh to a file
-        cabinet_model.save_mesh_without_doors(config['cabinet_mesh_save_path'])
+        cabinet_model.save_mesh_without_doors(config['cabinet_static_mesh_save_path'])
 
         # Path planning setup
         path_planner = rvlpy_dd_man.PYDDManipulator()

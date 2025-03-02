@@ -31,7 +31,9 @@ cabinet_pose:
   rot_angle_max_deg: 0
   axis_pos: 1
 cabinet_urdf_save_path: "/home/RVLuser/ferit_ur5_ws/cabinet.urdf"
-cabinet_mesh_save_path: "/home/RVLuser/ferit_ur5_ws/cabinet.ply"
+cabinet_static_mesh_save_path: "/home/RVLuser/ferit_ur5_ws/cabinet_static.ply" # static mesh
+cabinet_panel_mesh_save_path: "/home/RVLuser/ferit_ur5_ws/cabinet_panel.ply" # panel mesh
+cabinet_full_mesh_save_path: "/home/RVLuser/ferit_ur5_ws/cabinet_whole.ply" # full cabinet mesh
 
 ## Feasible poses setup
 feasible_poses:

@@ -8,95 +8,95 @@
 	</joint>
 	<link name="base_cabinet_link">
 		<visual>
-			<origin xyz="0.0 0.0 -0.238894049929912" rpy="0.0 0.0 0.0"/>
+			<origin xyz="0.0 -0.0025 -0.22741995805862988" rpy="0.0 0.0 0.0"/>
 			<geometry>
-				<box size="0.4 0.39042122486281394 0.004"/>
+				<box size="0.3 0.2932737136452283 0.018"/>
 			</geometry>
 		</visual>
 		<collision name="base_cabinet_link_collision_0">
-			<origin xyz="0.0 0.0 -0.238894049929912" rpy="0.0 0.0 0.0"/>
+			<origin xyz="0.0 -0.0025 -0.22741995805862988" rpy="0.0 0.0 0.0"/>
 			<geometry>
-				<box size="0.4 0.39042122486281394 0.004"/>
+				<box size="0.3 0.2932737136452283 0.018"/>
 			</geometry>
 		</collision>
 		<visual>
-			<origin xyz="0.0 0.18621061243140696 0.007" rpy="0.0 0.0 0.0"/>
+			<origin xyz="0.0 0.13513685682261417 0.0" rpy="0.0 0.0 0.0"/>
 			<geometry>
-				<box size="0.4 0.018 0.495788099859824"/>
+				<box size="0.3 0.018 0.4728399161172598"/>
 			</geometry>
 		</visual>
 		<collision name="base_cabinet_link_collision_1">
-			<origin xyz="0.0 0.18621061243140696 0.007" rpy="0.0 0.0 0.0"/>
+			<origin xyz="0.0 0.13513685682261417 0.0" rpy="0.0 0.0 0.0"/>
 			<geometry>
-				<box size="0.4 0.018 0.495788099859824"/>
+				<box size="0.3 0.018 0.4728399161172598"/>
 			</geometry>
 		</collision>
 		<visual>
-			<origin xyz="0.0 -0.18621061243140696 0.007" rpy="0.0 0.0 0.0"/>
+			<origin xyz="0.0 -0.14013685682261418 0.0" rpy="0.0 0.0 0.0"/>
 			<geometry>
-				<box size="0.4 0.018 0.495788099859824"/>
+				<box size="0.3 0.018 0.4728399161172598"/>
 			</geometry>
 		</visual>
 		<collision name="base_cabinet_link_collision_2">
-			<origin xyz="0.0 -0.18621061243140696 0.007" rpy="0.0 0.0 0.0"/>
+			<origin xyz="0.0 -0.14013685682261418 0.0" rpy="0.0 0.0 0.0"/>
 			<geometry>
-				<box size="0.4 0.018 0.495788099859824"/>
+				<box size="0.3 0.018 0.4728399161172598"/>
 			</geometry>
 		</collision>
 		<visual>
-			<origin xyz="0.0 0.0 0.245894049929912" rpy="0.0 0.0 0.0"/>
+			<origin xyz="0.0 -0.0025 0.22741995805862988" rpy="0.0 0.0 0.0"/>
 			<geometry>
-				<box size="0.4 0.39042122486281394 0.018"/>
+				<box size="0.3 0.2932737136452283 0.018"/>
 			</geometry>
 		</visual>
 		<collision name="base_cabinet_link_collision_3">
-			<origin xyz="0.0 0.0 0.245894049929912" rpy="0.0 0.0 0.0"/>
+			<origin xyz="0.0 -0.0025 0.22741995805862988" rpy="0.0 0.0 0.0"/>
 			<geometry>
-				<box size="0.4 0.39042122486281394 0.018"/>
+				<box size="0.3 0.2932737136452283 0.018"/>
 			</geometry>
 		</collision>
 		<visual>
-			<origin xyz="-0.191 0.0 0.007" rpy="0.0 0.0 0.0"/>
+			<origin xyz="-0.141 -0.0025 0.0" rpy="0.0 0.0 0.0"/>
 			<geometry>
-				<box size="0.018 0.39042122486281394 0.495788099859824"/>
+				<box size="0.018 0.2932737136452283 0.4728399161172598"/>
 			</geometry>
 		</visual>
 		<collision name="base_cabinet_link_collision_4">
-			<origin xyz="-0.191 0.0 0.007" rpy="0.0 0.0 0.0"/>
+			<origin xyz="-0.141 -0.0025 0.0" rpy="0.0 0.0 0.0"/>
 			<geometry>
-				<box size="0.018 0.39042122486281394 0.495788099859824"/>
+				<box size="0.018 0.2932737136452283 0.4728399161172598"/>
 			</geometry>
 		</collision>
 		<inertial>
 			<mass value="0.200000"/>
-			<inertia ixx="0.006637" ixy="0.0" ixz="0.0" iyy="0.006763" iyz="0.0" izz="0.005207"/>
+			<inertia ixx="0.005160" ixy="0.0" ixz="0.0" iyy="0.005226" iyz="0.0" izz="0.002933"/>
 		</inertial>
 	</link>
 	<link name="door_link">
 		<visual>
-			<origin xyz="0.0 -0.16221061243140697 0.0"/>
+			<origin xyz="0.0 -0.12113685682261416 0.0"/>
 			<geometry>
-				<box size="0.018 0.34442122486281396 0.463788099859824"/>
+				<box size="0.018 0.24227371364522832 0.42683991611725974"/>
 			</geometry>
 		</visual>
 		<collision name="door_link_collision">
-			<origin xyz="0.0 -0.16221061243140697 0.0"/>
+			<origin xyz="0.0 -0.12113685682261416 0.0"/>
 			<geometry>
-				<box size="0.018 0.34442122486281396 0.463788099859824"/>
+				<box size="0.018 0.24227371364522832 0.42683991611725974"/>
 			</geometry>
 		</collision>
 		<inertial>
 			<mass value="0.200000"/>
-			<inertia ixx="0.005562" ixy="0.0" ixz="0.0" iyy="0.003590" iyz="0.0" izz="0.001982"/>
+			<inertia ixx="0.004015" ixy="0.0" ixz="0.0" iyy="0.003042" iyz="0.0" izz="0.000984"/>
 		</inertial>
 	</link>
 	<joint name="door_joint" type="revolute">
-		<origin xyz="0.191 -0.16221061243140697 0.0" rpy="0.000000 -0.000000 3.141593"/>
+		<origin xyz="0.141 -0.12113685682261416 0.0" rpy="0.000000 -0.000000 3.141593"/>
 		<axis xyz="0 0 1"/>
 		<parent link="base_cabinet_link"/>
 		<child link="door_link"/>
-		<limit effort="50" lower="0" upper="-1.5707963267948966" velocity="10"/>
-		<dynamics friction="1.0"/>
+		<limit effort="50" lower="-1.658062789394613" upper="0" velocity="10"/>
+		<dynamics friction="3.5" damping="3.5"/>
 	</joint>
 	<link name="handle_link">
 		<visual>
@@ -141,7 +141,7 @@
 		</inertial>
 	</link>
 	<joint name="handle_joint" type="fixed">
-		<origin xyz="-0.028999999999999998 -0.29442122486281397 0.0" rpy="0.000000 -0.000000 3.141593"/>
+		<origin xyz="-0.028999999999999998 -0.19227371364522833 0.0" rpy="0.000000 -0.000000 3.141593"/>
 		<parent link="door_link"/>
 		<child link="handle_link"/>
 	</joint>
@@ -178,5 +178,11 @@
 				<frameName>contact_door</frameName>
 			</plugin>
 		</sensor>
+	</gazebo>
+	<gazebo reference="door_link">
+		<mu>3.0</mu>
+		<mu2>3.0</mu2>
+		<kp>10000000</kp>
+		<kd>100</kd>
 	</gazebo>
 </robot>

@@ -15,7 +15,9 @@
             </material>
         </visual>
         <collision>
-            <origin rpy="0 3.1416 -1.57" xyz="-0.0455 0.0414 0.036" />
+            <origin rpy="0 0 0" xyz="0.020 0 0" />
+
+            <!-- <origin rpy="0 3.1416 -1.57" xyz="-0.0455 0.0414 0.036" /> -->
             <geometry>
                 <mesh filename="package://robotiq_3f_gripper_visualization/meshes/robotiq-3f-gripper_articulated/collision/link_0.STL" />
             </geometry>
@@ -129,7 +131,9 @@
             </material>
         </visual>
         <collision>
-            <origin rpy="0 3.1416 -1.57" xyz="-0.0455 0.0414 0.036" />
+            <origin rpy="0 0 0" xyz="0.020 0 0" />
+
+            <!-- <origin rpy="0 3.1416 -1.57" xyz="-0.0455 0.0414 0.036" /> -->
             <geometry>
                 <mesh filename="package://robotiq_3f_gripper_visualization/meshes/robotiq-3f-gripper_articulated/collision/link_0.STL" />
             </geometry>
@@ -243,7 +247,9 @@
             </material>
         </visual>
         <collision>
-            <origin rpy="0 3.1416 -1.57" xyz="-0.0455 0.0414 0.036" />
+            <!-- <origin rpy="0 3.1416 -1.57" xyz="-0.0455 0.0414 0.036" /> -->
+            <origin rpy="0 0 0" xyz="0.020 0 0" />
+
             <geometry>
                 <mesh filename="package://robotiq_3f_gripper_visualization/meshes/robotiq-3f-gripper_articulated/collision/link_0.STL" />
             </geometry>
@@ -355,6 +361,13 @@
                 <color rgba="0 1 0 1" />
             </material>
         </visual>
+        <collision>
+            <origin rpy="-1.57079633 1.57079633 -0.0698131701" xyz="-0.0767 0.1645 0" />
+            <geometry>
+                <mesh filename="package://robotiq_3f_gripper_visualization/meshes/robotiq-3f-gripper_articulated/collision/robotiq_fingers_plate.stl" />
+            </geometry>
+            <material name="yellow" />
+        </collision>
         <collision>
             <geometry>
                 <mesh filename="package://robotiq_3f_gripper_visualization/meshes/robotiq-3f-gripper_articulated/collision/palm.STL" />
@@ -810,7 +823,7 @@
         </inertial>
     </link>
     <!-- Connect force sensor with mounting/coupling plate -->
-    <joint name="ft300_mounting_plate" type="fixed">
+    <joint name="ft300_mounting_plate_joint" type="fixed">
         <origin rpy="0 3.141592653589793 0" xyz="0 0 0.0415" />
         <parent link="ft300_mounting_plate" />
         <child link="ft300_sensor" />
@@ -890,6 +903,67 @@
     </gazebo>
     <gazebo reference="gripper_coupler">
         <material>Gazebo/Grey</material>
+    </gazebo>
+
+    <gazebo reference="finger_1_link_3">
+        <mu>10.0</mu>  <!-- Increase friction for better push -->
+        <mu2>10.0</mu2>
+        <kp>100000000</kp>  <!-- Stiffness (reduces penetration into the door) -->
+        <kd>100</kd>  <!-- Damping (smooths force application) -->
+    </gazebo>
+    <gazebo reference="finger_2_link_3">
+        <mu>10.0</mu>
+        <mu2>10.0</mu2>
+        <kp>100000000</kp>
+        <kd>100</kd>
+    </gazebo>
+    <gazebo reference="finger_middle_link_3">
+        <mu>10.0</mu>
+        <mu2>10.0</mu2>
+        <kp>100000000</kp>
+        <kd>100</kd>
+    </gazebo>
+
+    <gazebo reference="finger_1_link_2">
+        <mu>10.0</mu>  <!-- Increase friction for better push -->
+        <mu2>10.0</mu2>
+        <kp>100000000</kp>  <!-- Stiffness (reduces penetration into the door) -->
+        <kd>100</kd>  <!-- Damping (smooths force application) -->
+    </gazebo>
+
+    <gazebo reference="finger_2_link_2">
+        <mu>10.0</mu>
+        <mu2>10.0</mu2>
+        <kp>100000000</kp>
+        <kd>100</kd>
+    </gazebo>
+
+    <gazebo reference="finger_middle_link_2">
+        <mu>10.0</mu>
+        <mu2>10.0</mu2>
+        <kp>100000000</kp>
+        <kd>100</kd>
+    </gazebo>
+
+    <gazebo reference="finger_1_link_1">
+        <mu>10.0</mu>  <!-- Increase friction for better push -->
+        <mu2>10.0</mu2>
+        <kp>100000000</kp>  <!-- Stiffness (reduces penetration into the door) -->
+        <kd>100</kd>  <!-- Damping (smooths force application) -->
+    </gazebo>
+
+    <gazebo reference="finger_2_link_1">
+        <mu>10.0</mu>
+        <mu2>10.0</mu2>
+        <kp>100000000</kp>
+        <kd>100</kd>
+    </gazebo>
+
+    <gazebo reference="finger_middle_link_1">
+        <mu>10.0</mu>
+        <mu2>10.0</mu2>
+        <kp>100000000</kp>
+        <kd>100</kd>
     </gazebo>
 </robot>
 

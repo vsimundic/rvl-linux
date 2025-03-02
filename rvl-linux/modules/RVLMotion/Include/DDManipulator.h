@@ -1,13 +1,33 @@
 #pragma once
-
+#undef PI // FCL gives an error
+#include "fcl/fcl.h"
+constexpr double PI = 3.14159265358979;
 // The following code should be moved to RVL3DTools.h.
 
 #define RVLRNDUNIT3VECTOR(X, fTmp)                                                                                                                                    \
 	{                                                                                                                                                                 \
 		RVLSET3VECTOR(X, 2.0f * (float)rand() / (float)RAND_MAX - 1.0f, 2.0f * (float)rand() / (float)RAND_MAX - 1.0f, 2.0f * (float)rand() / (float)RAND_MAX - 1.0f) \
-			RVLNORM3(X, fTmp)}
+		RVLNORM3(X, fTmp)                                                                                                                                             \
+	}
+
+// The following code should be moved to Util.h.
+
+#define RVLNORMANGLE(x) x = (x > PI ? x -= (2.0 * PI) : (x <= -PI ? x += (2.0 * PI) : x))
 
 //
+
+#define RVLMOTION_JOINT_SPACE_CHEB_DIST(q, q_, dq, dist, dist_, i) \
+	{                                                              \
+		RVLDIFVECTORS(q, q_, 6, dq, i);                            \
+		dist = 0.0;                                                \
+		for (i = 0; i < 6; i++)                                    \
+		{                                                          \
+			RVLNORMANGLE(dq[i]);                                   \
+			dist_ = RVLABS(dq[i]);                                 \
+			if (dist_ > dist)                                      \
+				dist = dist_;                                      \
+		}                                                          \
+	}
 
 namespace RVL
 {
@@ -31,32 +51,46 @@ namespace RVL
 
 	namespace MOTION
 	{
-		struct DisplayCallbackData
-		{
-			Visualizer *pVisualizer;
-			bool bOwnVisualizer;
-			CRVLParameterList paramList;
-			bool bVNEnv;
-			std::vector<vtkSmartPointer<vtkActor>> toolActors;
-			bool bVisualize;
-		};
-
 		struct Sphere
 		{
 			Vector3<float> c;
 			float r;
 		};
 
-		struct Plane
+		struct Cylinder
 		{
-			float N[3];
-			float d;
+			float r;
+			Vector3<float> P[2];
 		};
 
 		struct ContactPose
 		{
 			Pose3D pose_G_DD;
 			float PRTCP_DD[3];
+		};
+
+		struct IKSolution
+		{
+			int i;
+			float q[6];
+		};
+
+		struct NodeJS
+		{
+			int iContactNode;
+			int iState;
+			IKSolution IK;
+			bool bFeasible;
+			float cost;
+			int *path;
+			int iPrevNode;
+			NodeJS *pNext;
+		};
+
+		struct NodeSpaceElement
+		{
+			QList<MOTION::NodeJS> nodesJS;
+			bool bExplored;
 		};
 
 		class Robot
@@ -76,6 +110,9 @@ namespace RVL
 				float *R,
 				float &cq,
 				float &sq);
+			void FwdKinematics(
+				float *qIn,
+				Pose3D *pPose_G_0);
 			bool InvKinematics(
 				Pose3D toolPose,
 				float *qOut = NULL);
@@ -83,10 +120,16 @@ namespace RVL
 				Pose3D toolPose,
 				float *qOut = NULL);
 			void InvKinematicsApprox23(float *qOut = NULL);
+			bool SelfCollision(
+				float *q,
+				float *t_3_1);
 			bool InvKinematics(
+				Pose3D toolPose,
+				Array<IKSolution> &solutions,
+				bool bTCP = false);
+			bool InvKinematicsPrev(
 				Pose3D pose_6_0,
 				Array2D<float> &qOut);
-
 		public:
 			CRVLMem *pMem0;
 			CRVLParameterList paramList;
@@ -104,6 +147,10 @@ namespace RVL
 			Pose3D link_pose[6];
 			Pose3D pose_0_W;
 			float minq[6], maxq[6];
+			float epsilon;
+			MOTION::Cylinder *collisionCylinderMem;
+			Array<Array<MOTION::Cylinder>> collisionCylinders;
+			int maxCollisionLinkIdx;
 
 		private:
 			float *csal;
@@ -116,6 +163,7 @@ namespace RVL
 			float R_E_1[9];
 			float R_4_E[9];
 			float a23_2;
+			float epsilonRad;
 		};
 	}
 
@@ -131,9 +179,11 @@ namespace RVL
 		bool Free(
 			Pose3D *pPose_G_S,
 			float *SDF);
+		bool Free(float *q);
 		bool Free(
 			Pose3D *pPose_G_S_start,
 			Pose3D *pPose_G_S_end);
+		void Free(Array<MOTION::IKSolution> &IKSolutions);
 		bool LocalConstraints(
 			Pose3D *pPose_G_S,
 			float *SDF,
@@ -152,10 +202,21 @@ namespace RVL
 		bool FeasiblePose(
 			Pose3D *pPose_G_0,
 			float *SDF,
-			float *q,
-			bool bApproach = false);
+			MOTION::NodeJS *nodesJS,
+			Array<int> &IKSolutionIdxs,
+			bool bApproach = false,
+			Array<MOTION::IKSolution> *pAapproachPathJS = NULL,
+			int *pnViaPts = NULL);
 		void Path(Pose3D *pPose_G_S_init);
 		bool Path2(
+			float *qInit,
+			float endDoorState,
+			int nStates,
+			Array<Pose3D> &poses_G_0,
+			Array2D<float> &robotJoints,
+			Array<Array<Pose3D>> *pFeasiblePaths = NULL,
+			Array<Array2D<float>> *pFeasiblePathsJoints = NULL);
+		bool Path3(
 			float *qInit,
 			float endDoorState,
 			int nStates,
@@ -171,7 +232,9 @@ namespace RVL
 		bool ApproachPath(
 			Pose3D *pPose_G_S_contact,
 			Array<Pose3D> &poses_G_0_via,
-			float *SDF);
+			float *SDF,
+			Array<MOTION::IKSolution> *IKSolutions,
+			Array<Pair<int, int>> &paths);
 		void SetDoorModelParams(
 			float sx,
 			float sy,
@@ -181,17 +244,27 @@ namespace RVL
 			float opening_direction,
 			float static_side_width,
 			float moving_to_static_part_distance);
-		void UpdateStaticParams();
+		void UpdateFurnitureParams();
 		void SetDoorPose(Pose3D pose_A_S);
-		void UpdateStaticPose();
+		void UpdateFurniturePose();
+		void UpdateStaticOrientation();
+		void AdaptContactPoseGraph();
+		void FreeSpacePlanes();
+		void Neighbors(
+			int iNodeC,
+			MOTION::NodeSpaceElement *nodeSpace,
+			Array<MOTION::NodeJS *> &neighbors);
 		bool LoadFeasibleToolContactPoses(std::string contactPosesFileName);
 		bool LoadContactPoseGraph(std::string contactPoseGraphFileName);
 		void LoadToolModel(std::string toolModelDir);
+		void LoadExample(std::string example);
+		void LoadExampleIndexed(std::string example);
 		void InitVisualizer(Visualizer *pVisualizerIn);
 		void Visualize(
 			std::vector<MOTION::Node> *pNodes,
 			std::vector<int> *pPath,
 			Array<float> doorStates,
+			bool bVisualizeToolBoundingSphere = false,
 			bool bVisualizeStates = false,
 			bool bVisualizeMotionPlanningTree = false,
 			int iGoal = -1,
@@ -201,12 +274,37 @@ namespace RVL
 			std::vector<vtkSmartPointer<vtkActor>> *pActors,
 			bool bToolMesh = true,
 			Array<int> *pSpheres = NULL);
-		vtkSmartPointer<vtkActor> VisualizeRobot(float *q);
+		void VisualizeRobot(
+			float *q,
+			std::vector<vtkSmartPointer<vtkActor>> *pActors);
 		vtkSmartPointer<vtkActor> VisualizeDoorPenel();
 		void SetVisualizeVNEnvironmentModel();
 
+		// FCL
+		void RVLPose2FCLPose(Pose3D poseRVL, fcl::Transform3<double>& poseFCL);
+		void LoadToolModelFCL();
+		void LoadCabinetStaticFCL(std::string cabinetStaticFilename_, Pose3D pose_A_S);
+		void LoadCabinetPanelFCL(std::string cabinetPanelFilename_);
+		void CreateRobotCylindersFCL();
+		void CreateGndFCL();
+		void GetVerticesFromPolyData(
+			vtkSmartPointer<vtkPolyData> &vtkPolyData, 
+			std::vector<fcl::Vector3<double>> &vertices);
+		void GetTrianglesFromPolyData(
+			vtkSmartPointer<vtkPolyData> &vtkPolyData, 
+			std::vector<fcl::Triangle> &triangles);
+		bool FreeFCL(Pose3D *pPose_G_S);
+		bool FreeFCL(Pose3D *pPose_G_S_start, Pose3D *pPose_G_S_end);
+		bool CylinderIntersectionFCL(double r, double h, Pose3D pose_C_S);
+		bool CylinderIntersectionFCL(std::shared_ptr<fcl::BVHModel<fcl::OBBRSS<double>>> fclCylinderMesh, Pose3D pose_C_S);
+		void VisualizeCabinetStaticMesh(Pose3D pose_A_S, vtkSmartPointer<vtkActor> &actor);
+		void VisualizeCabinetWholeMesh(Pose3D pose_A_S, vtkSmartPointer<vtkActor> &actor);
+		void VisualizeToolMesh(Pose3D pose_G_S, vtkSmartPointer<vtkActor> &actor);
+		void VisualizeDoorPanelMesh(vtkSmartPointer<vtkActor> &actor);
+
 	private:
-		void UpdateDoorReferenceFrames();
+		void SetDoorReferenceFrames();
+		void UpdateVNClusterOrientations();
 
 	public:
 		CRVLMem *pMem;
@@ -249,6 +347,8 @@ namespace RVL
 
 		VN *pVNEnv;
 		float *dVNEnv;
+		VN *pVNPanel;
+		float *dVNPanel;
 
 		// Robot.
 
@@ -269,9 +369,26 @@ namespace RVL
 		Mesh *pToolMesh;
 		float PRTCP_G[3];
 		Array<int> tool_contact_spheres;
-		//FCL collision checker
-		
 
+		// FCL
+		bool use_fcl = false;
+		std::shared_ptr<fcl::BVHModel<fcl::OBBRSS<double>>> fclToolMesh;
+		std::shared_ptr<fcl::BVHModel<fcl::OBBRSS<double>>> fclCabinetStaticMesh, fclCabinetPanelMesh, fclGndMesh;
+		std::shared_ptr<fcl::CollisionObject<double>> collisionCabinetObj, collisionGndObj;
+		fcl::CollisionRequest<double> requestFCL;
+	    fcl::Transform3d TArot_S;
+		Pose3D pose_A_S_FCL, poseArot_A_FCL, poseArot_S_FCL;
+		float csFCL;
+		float snFCL;
+		std::vector<std::vector<std::shared_ptr<fcl::BVHModel<fcl::OBBRSS<double>>>>> fclRobotCylinderMeshes;
+		// fcl::CollisionObjectd* collisionCabinetObj;
+		std::string cabinetStaticFilename, cabinetPanelFilename;
+		Mesh *pCabinetMeshStatic, *pCabinetMeshPanel;
+		Mesh *pCabinetWholeMesh;
+		// Pose3D pose_A_S;
+		char *cabinetStaticDirPath;
+		fcl::Vector3d contact_pos;
+	
 		// Path planning.
 
 		int maxnSE3Points;
@@ -282,6 +399,9 @@ namespace RVL
 		bool bLock_T_G_DD;
 		float posCostMaxDist;
 		float wPos;
+		int maxnIKSolutions;
+		float JSDistThr;
+		int maxnNodesJSPerStep;
 
 		// Feasible tool contact poses.
 
@@ -291,7 +411,6 @@ namespace RVL
 
 		float rLocalConstraints;
 
-
 	private:
 		char *feasibleToolContactPosesFileName;
 		char *contactPoseGraphFileName;
@@ -300,6 +419,7 @@ namespace RVL
 		Graph<GRAPH::Node_<GRAPH::EdgePtr<MOTION::Edge>>, MOTION::Edge, GRAPH::EdgePtr<MOTION::Edge>> graph;
 		MOTION::DisplayCallbackData *pVisualizationData;
 		Array<RECOG::VN_::ModelCluster *> VNMClusters;
+		RECOG::VN_::ModelCluster *pPanelVNMCluster;
 		Box<float> dd_panel_box;
 		Box<float> dd_static_box;
 		Box<float> dd_storage_space_box;
@@ -317,5 +437,13 @@ namespace RVL
 		Array<Pose3D> *pathMem;
 		float *pathJointsMem;
 		Array2D<float> *pathMemJoints;
+		Array<MOTION::IKSolution> approachIKSolutions[3];
+		MOTION::IKSolution *approachIKSolutionsMem;
+		Pair<int, int> *approachPathMem;
+		Array<int> selectedNodes;
+		bool *bSelected;
+		int *contactNode;
+		int maxnContactPoseGraphNeighbors;
+		bool bPath3;
 	};
 }

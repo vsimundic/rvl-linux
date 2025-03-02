@@ -1,10 +1,32 @@
-// RVLMotion.cpp : Defines the functions for the static library.
-//
+#include "RVLCore2.h"
+#include "RVLVTK.h"
+#include "Util.h"
+#include "Space3DGrid.h"
+#include "SE3Grid.h"
+#include "Graph.h"
+#include "Mesh.h"
+#include "Visualizer.h"
+#include "RVLMotionCommon.h"
 
-// #include "pch.h"
-// #include "framework.h"
+using namespace RVL;
+using namespace MOTION;
 
-// // TODO: This is an example of a library function
-// void fnRVLMotion()
-// {
-// }
+void MOTION::InitVisualizer(
+    Visualizer *pVisualizerIn,
+    MOTION::DisplayCallbackData *&pVisualizationData,
+    CRVLMem *pMem)
+{
+    if (pVisualizationData == NULL)
+        pVisualizationData = new MOTION::DisplayCallbackData;
+    if (pVisualizerIn)
+    {
+        pVisualizationData->pVisualizer = pVisualizerIn;
+        pVisualizationData->bOwnVisualizer = false;
+    }
+    else
+    {
+        pVisualizationData->pVisualizer = new Visualizer;
+        pVisualizationData->bOwnVisualizer = true;
+    }
+    pVisualizationData->bVisualize = false;
+}

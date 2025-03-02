@@ -13,7 +13,7 @@ cabinet_door_dims:
   max_height: 0.8
 
   depth: 0.018
-  static_depth: 0.4
+  static_depth: 0.3
 
 # door axis pose
 cabinet_pose:
@@ -25,7 +25,10 @@ cabinet_pose:
   rot_angle_max_deg: 180
   axis_pos: -1
 cabinet_urdf_save_path: "/home/RVLuser/ferit_ur5_ws/cabinet.urdf"
-cabinet_mesh_save_path: "/home/RVLuser/ferit_ur5_ws/cabinet.ply"
+cabinet_static_mesh_save_path: "/home/RVLuser/ferit_ur5_ws/cabinet_static.ply" # static mesh
+cabinet_panel_mesh_save_path: "/home/RVLuser/ferit_ur5_ws/cabinet_panel.ply" # panel mesh
+cabinet_full_mesh_save_path: "/home/RVLuser/ferit_ur5_ws/cabinet_whole.ply" # full cabinet mesh
+cabinet_mesh_save_dir: "/home/RVLuser/ferit_ur5_ws/src/cosper/path_planning/cabinet_meshes/handleless"
 
 ## Feasible poses setup
 feasible_poses:
@@ -46,7 +49,8 @@ feasible_poses:
     tool_finger_distances: [-0.0775, 0., -0.102]
     sphere_to_TCS_distance: 0.004609
   # feasible_poses_path: "/home/RVLuser/rvl-linux/python/DDMan/feasible_poses.npy"
-  feasible_poses_path: "/home/RVLuser/rvl-linux/data/Robotiq3Finger/feasible_poses_left_axis.npy"
+  # feasible_poses_path: "/home/RVLuser/rvl-linux/data/Robotiq3Finger/feasible_poses_left_axis.npy"
+  feasible_poses_path: "/home/RVLuser/rvl-linux/data/Robotiq3Finger/feasible_poses_left_axis_fcl.npy"
   contact_free_poses_path: "/home/RVLuser/ferit_ur5_ws/src/cosper/push_simulation/config/contact_free_poses.npy"
   valid_contact_poses_path: "/home/RVLuser/ferit_ur5_ws/src/cosper/push_simulation/config/valid_contact_poses.npy"
   visualization: False
