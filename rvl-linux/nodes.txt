@@ -1,0 +1,170 @@
+Explored: 1
+Explored: 2
+Explored: 3
+Feasible nodes: 1
+Feasible nodes: 2
+Feasible nodes: 3
+Explored: 4
+Feasible nodes: 4
+Explored: 5
+Explored: 6
+Feasible nodes: 5
+Feasible nodes: 6
+Explored: 7
+Feasible nodes: 7
+Feasible nodes: 8
+Explored: 8
+Explored: 9
+Feasible nodes: 9
+Feasible nodes: 10
+Explored: 10
+Feasible nodes: 11
+Explored: 11
+Feasible nodes: 12
+Explored: 12
+Feasible nodes: 13
+Feasible nodes: 14
+Explored: 13
+Feasible nodes: 15
+Feasible nodes: 16
+Explored: 14
+Explored: 15
+Feasible nodes: 17
+Explored: 16
+Feasible nodes: 18
+Feasible nodes: 19
+Explored: 17
+Feasible nodes: 20
+Explored: 18
+Feasible nodes: 21
+Feasible nodes: 22
+Explored: 19
+Explored: 20
+Feasible nodes: 23
+Explored: 21
+Explored: 22
+Feasible nodes: 24
+Feasible nodes: 25
+Explored: 23
+Feasible nodes: 26
+Explored: 24
+Feasible nodes: 27
+Explored: 25
+Feasible nodes: 28
+Explored: 26
+Feasible nodes: 29
+Explored: 27
+Feasible nodes: 30
+Explored: 28
+Feasible nodes: 31
+Explored: 29
+Feasible nodes: 32
+Feasible nodes: 33
+Explored: 30
+Feasible nodes: 34
+Explored: 31
+Feasible nodes: 35
+Feasible nodes: 36
+Explored: 32
+Feasible nodes: 37
+Feasible nodes: 38
+Explored: 33
+Feasible nodes: 39
+Feasible nodes: 40
+Explored: 34
+Feasible nodes: 41
+Feasible nodes: 42
+Explored: 35
+Explored: 36
+Feasible nodes: 43
+Feasible nodes: 44
+Explored: 37
+Feasible nodes: 45
+Feasible nodes: 46
+Explored: 38
+Feasible nodes: 47
+Feasible nodes: 48
+Explored: 39
+Feasible nodes: 49
+Feasible nodes: 50
+Explored: 40
+Feasible nodes: 51
+Explored: 41
+Feasible nodes: 52
+Feasible nodes: 53
+Explored: 42
+Feasible nodes: 54
+Explored: 43
+Feasible nodes: 55
+Feasible nodes: 56
+Explored: 44
+Feasible nodes: 57
+Feasible nodes: 58
+Explored: 45
+Feasible nodes: 59
+Explored: 46
+Feasible nodes: 60
+Feasible nodes: 61
+Explored: 47
+Feasible nodes: 62
+Explored: 48
+Feasible nodes: 63
+Feasible nodes: 64
+Explored: 49
+Feasible nodes: 65
+Explored: 50
+Feasible nodes: 66
+Feasible nodes: 67
+Feasible nodes: 68
+Explored: 51
+Explored: 52
+Feasible nodes: 69
+Feasible nodes: 70
+Explored: 53
+Feasible nodes: 71
+Feasible nodes: 72
+Explored: 54
+Explored: 55
+Feasible nodes: 73
+Feasible nodes: 74
+Explored: 56
+Feasible nodes: 75
+Feasible nodes: 76
+Explored: 57
+Feasible nodes: 77
+Feasible nodes: 78
+Explored: 58
+Feasible nodes: 79
+Feasible nodes: 80
+Explored: 59
+Feasible nodes: 81
+Feasible nodes: 82
+Explored: 60
+Feasible nodes: 83
+Explored: 61
+Feasible nodes: 84
+Feasible nodes: 85
+Explored: 62
+Feasible nodes: 86
+Explored: 63
+Feasible nodes: 87
+Feasible nodes: 88
+Explored: 64
+Feasible nodes: 89
+Explored: 65
+Feasible nodes: 90
+Feasible nodes: 91
+Explored: 66
+Feasible nodes: 92
+Feasible nodes: 93
+Explored: 67
+Feasible nodes: 94
+Feasible nodes: 95
+Explored: 68
+Feasible nodes: 96
+Feasible nodes: 97
+Explored: 69
+Feasible nodes: 98
+Feasible nodes: 99
+Explored: 70
+Feasible nodes: 100

@@ -359,6 +359,12 @@ robotiq-3f-gripper_articulated - articulated version of the robotiq robotiq-3f-g
         <color rgba="0 1 0 1"/>
       </material>
     </visual>
+    <visual>
+      <origin rpy="-1.57079633 1.57079633 -0.0698131701" xyz="-0.0767 0.1645 0" />
+      <geometry>
+          <mesh filename="/home/RVLuser/ferit_ur5_ws/src/ur5_configs/robotiq-noetic-devel/robotiq_3f_gripper_visualization/meshes/robotiq-3f-gripper_articulated/collision/robotiq_fingers_plate.stl" />
+      </geometry>
+    </visual>
     <collision>
       <geometry>
         <mesh filename="/home/RVLuser/ferit_ur5_ws/src/ur5_configs/robotiq-noetic-devel/robotiq_3f_gripper_visualization/meshes/robotiq-3f-gripper_articulated/collision/palm.STL"/>

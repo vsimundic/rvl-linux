@@ -4,216 +4,250 @@ import rospy
 import os
 from core.util import read_config, read_csv_DataFrame
 from core.ur5_commander import UR5Commander
-from cabinet_model import Cabinet
+from gazebo_push_open.cabinet_model import Cabinet
 import numpy as np
-from core.transforms import rot_z
-import RVLPYDDManipulator as rvlpy_dd_man
-import roslaunch
+from core.transforms import rot_z, pose_to_matrix
 from gazebo_msgs.msg import ContactsState
-from subprocess import check_output
-import signal
-from PIL import ImageGrab
+from core.gazebo import get_link_pose
+import csv
+from gazebo_msgs.msg import ContactsState
 from rospkg import RosPack
+from tf2_ros import Buffer, TransformListener
+from utils import *
 
-np.random.seed(69)
-
-contact_free = True
-
-def contact_callback(msg: ContactsState):
-    global contact_free
-
-    if len(msg.states) > 0:
-        contact_free = False
-
-def get_pid(name: str):
-    return list(map(int, check_output(['pidof', name]).split()))
-
-def kill_gazebo_processes():
-    try:
-        gzserver_pids = get_pid('gzserver')
-        if len(gzserver_pids) > 0:
-            for pid in gzserver_pids:
-                os.kill(pid, signal.SIGKILL)
-    except Exception as e:
-        pass
-    try:
-        gzclient_pids = get_pid('gzclient')
-        if len(gzclient_pids) > 0:
-            for pid in gzclient_pids:
-                os.kill(pid, signal.SIGKILL)
-    except Exception as e:
-        pass
-    try:
-        rviz_pids = get_pid('rviz')
-        if len(rviz_pids) > 0:
-            for pid in rviz_pids:
-                os.kill(pid, signal.SIGKILL)
-    except Exception as e:
-        pass
 
 if __name__ == '__main__':
-    rospy.init_node('node_load_simulation_experiment_from_csv')
+    rospy.init_node('single_contact_our_handleless_node')
+
+    IS_SAVING_RESULTS = False
+    IS_SAVING_IMAGES = False
+    START_FROM_BEGINNING = False
+    method_name = 'our'
+
+    # TF buffer setup
+    tf_buffer = Buffer()
+    tf_listener = TransformListener(tf_buffer)
 
     rp = RosPack()
     pkg_path = rp.get_path('path_planning')
-
-    # Config
-    cfg_path = os.path.join(pkg_path, 'config/config_simulations_axis_left.yaml')
-    config = read_config(cfg_path)
-
-    is_saving_images = False
-    save_screenshot_path = os.path.join(pkg_path, 'single_contact_screenshots')
-
-    lock_T_G_DD = True
-
-    # read_results_path = '/home/RVLuser/ferit_ur5_ws/src/cosper/push_simulation/simulation_results_exp1_final.csv'
-    read_results_path = os.path.join(pkg_path,'results_simulation_single_contact.csv')
-    data = read_csv_DataFrame(read_results_path)
-
-    data = data.loc[((data['path_found'] == True) & 
-                            (data['traj_success'] == True) & 
-                            (data['contact_free'] == True) & 
-                            (data['door_opened'] == True))] 
     
-    T_R_W = np.eye(4)
-    T_R_W[2, 3] = 0.005
+    # Config
+    cfg_path = os.path.join(pkg_path, 'config/config_single-c_%s_handleless_axis_left.yaml' % method_name)
+    config = read_config(cfg_path)
+    
+    # Save/load path for results
+    csv_path = config['results_path']
 
-    for i, row in data.iterrows():
-        # row = data.iloc[16]
-        T_A_S = np.eye(4)
-        T_A_S[:3, 3] = np.array([row['x'], row['y'], row['z']])
-        T_A_S[2, 3] += T_R_W[2, 3]
-        Tz_init = np.eye(4)
-        Tz_init[:3, :3] = rot_z(np.radians(90.))
-        # T_A_S = T_A_S @ Tz_init
-        Tz = np.eye(4)
-        Tz[:3, :3] = rot_z(np.radians(row['rot_z']))
-        T_A_S = T_A_S @ Tz
+    # Gazebo simulation launch file (UR5 moveit config launch)
+    gazebo_launch_file = config['gazebo_launch_path']
 
-        # Create a cabinet object
-        cabinet_model = Cabinet(door_params=np.array([row['door_width'], row['door_height'], 0.018, 0.4]), 
-                                axis_pos=-1,
-                                T_A_S=T_A_S,
-                                save_path=config['cabinet_urdf_save_path'])
-                
-        # Save cabinet mesh to a file
-        cabinet_model.save_mesh_without_doors(config['cabinet_static_mesh_save_path'])
+    # Load door configurations
+    door_configs_path = config['cabinet_configs_path']
+    doors = np.load(door_configs_path)
+    num_doors = doors.shape[0]
 
-        # Path planning setup
-        path_planner = rvlpy_dd_man.PYDDManipulator()
-        if lock_T_G_DD:
-            path_planner.create('/home/RVLuser/rvl-linux/RVLMotionDemo_Cupec_exp1.cfg')
-        else:
-            path_planner.create('/home/RVLuser/rvl-linux/RVLMotionDemo_Cupec.cfg')
-        path_planner.set_robot_pose(T_R_W)
-        path_planner.set_door_model_params(
-                                        cabinet_model.d_door,
-                                        cabinet_model.w_door,
-                                        cabinet_model.h_door,
-                                        0.0, # rx
-                                        -(cabinet_model.w_door/2. - cabinet_model.axis_distance), # ry
-                                        cabinet_model.axis_pos, # opening direction
-                                        cabinet_model.static_side_width,
-                                        cabinet_model.moving_to_static_part_distance)
-        path_planner.set_door_pose(T_A_S)
-        path_planner.set_environment_state(row['state_angle'])
+    # Load screenshots folder
+    save_screenshot_path = config['screenshots_path']
 
-        q_init = np.array([0., -1.5674883378518185, 0., -1.5676032728569234, 0., 0.])
-        # adjust joint values from ROS
-        q_init[0] += np.pi
-        q_init[5] += np.pi
-        q_init[q_init>np.pi]-=(2.0*np.pi)     
-        q_init[q_init<-np.pi]+=(2.0*np.pi)
+    # RVL config path
+    rvl_cfg = config['rvl_config_path'] 
 
-        # Plan 
-        # T_G_0_array, q = path_planner.path2(np.array(q_init))
-        # T_G_0_array, q, all_feasible_paths, all_feasible_paths_q = path_planner.path2(q_init, -90.0, 17, True)
-        T_G_0_array, q = path_planner.path2(q_init, -90.0, 17, False)
+    # If False, the data loads and the experiment starts where it stopped
+    start_i = 0
+    if START_FROM_BEGINNING:
+        if IS_SAVING_RESULTS:
+            with open(csv_path, 'w') as f:
+                writer = csv.writer(f, delimiter=',')
+                writer.writerow(['idx','path_found', 'traj_success', 'contact_free', 'door_opened', 'door_width', 'door_height', 'x', 'y', 'z', 'rot_z', 'state_angle', 'axis_pos'])
+    else:
+        # data = read_csv_DataFrame(csv_path)
+        # start_i = data.shape[0]
+        # # doors = doors[rows:, :]
+        data = read_csv_DataFrame(csv_path)
 
-        del path_planner
+        data = data.loc[((data['path_found'] == True) & 
+                                (data['traj_success'] == True) & 
+                                (data['contact_free'] == True) & 
+                                (data['door_opened'] == False))] 
+        # data = data.loc[(data['contact_free'] == False)] 
+    
+    T_G_T = np.load(config['gripper_tool_pose'])
+    
+    T_R_W = np.load(config['robot_world_pose'])
 
-        path_found = False
-        trajectory_successful = False
-        door_opened = False
-        contact_free = True
-        final_success = False
-        
-        if T_G_0_array.shape[0] == 1:
-            print('Path not found')
-        if T_G_0_array.shape[0] > 1:
+    # Initial pose in joint space
+    q_init = np.array([0., -np.pi*0.5, 0., -np.pi*0.5, 0., 0.])
+    q_init_ros = q_init.copy()
+    # Adjust joint values from ROS
+    q_init[0] += np.pi
+    q_init[5] += np.pi
+    q_init[q_init>np.pi]-=(2.0*np.pi)
+    q_init[q_init<-np.pi]+=(2.0*np.pi)
 
-            path_found = True
+    # Static cabinet params
+    door_thickness=config['cabinet_door_dims']['depth']
+    static_depth=config['cabinet_door_dims']['static_depth']
 
-            kill_gazebo_processes()
+    # Static mesh filename
+    cabinet_static_mesh_filename = config['cabinet_static_mesh_save_path']
+    cabinet_panel_mesh_filename = config['cabinet_panel_mesh_save_path']
+    cabinet_full_mesh_filename = config['cabinet_full_mesh_save_path']
 
-            # Start Gazebo simulation
-            uuid = roslaunch.rlutil.get_or_generate_uuid(None, False)
-            roslaunch.configure_logging(uuid)
-            launch = roslaunch.parent.ROSLaunchParent(uuid, ["/home/RVLuser/ferit_ur5_ws/src/ur5_configs/ur5_robotiq_ft_3f_moveit_config/launch/demo_gazebo.launch"])
-            launch.start()
-            rospy.loginfo('Started Gazebo simulation')
-            rospy.sleep(5)
-        
+    for i in data.index.values.tolist():
+        print(i)
 
-            # Robot handler
-            robot = UR5Commander()
+    # i = start_i
+    # while i < num_doors:
+    for i in data.index.values.tolist():
 
-            # Spawning model in Gazebo
-            cabinet_model.delete_model_gazebo()
-            cabinet_model.spawn_model_gazebo()
+        print('Cabinet %d' % i)
+        try:
+            path_found = False
+            trajectory_successful = False
+            door_opened = False
+            contact_free = True
+            final_success = False
+            
+            # Cabinet parameters
+            door = doors[i, :]
+            width = door[0]
+            height = door[1]
+            position = door[2:5]
+            rot_z_deg = door[5]
+            state_angle = door[6]
+            axis_pos = door[7]
 
-            # Open doors in Gazebo
-            theta_deg = config['feasible_poses']['dd_state_deg']
-            cabinet_model.set_door_state_gazebo(row['state_angle'])
-            cabinet_model.change_door_angle(row['state_angle'])
+            T_A_S = np.eye(4)
+            T_A_S[:3, 3] = np.array(position)
+            # T_A_S[2, 3] += T_R_W[2, 3]
+            Tz = np.eye(4)
+            Tz[:3, :3] = rot_z(np.radians(rot_z_deg))
+            T_A_S = T_A_S @ Tz
+
+            # Create a cabinet object
+            cabinet_model = Cabinet(door_params=np.array([width, height, door_thickness, static_depth]), 
+                                    axis_pos=axis_pos,
+                                    T_A_S=T_A_S,
+                                    save_path=config['cabinet_urdf_save_path'],
+                                    has_handle=False)
+                    
+            # Save cabinet mesh to a file
+            cabinet_model.save_mesh_without_doors(cabinet_static_mesh_filename)
+            cabinet_model.save_door_panel_mesh(cabinet_panel_mesh_filename)
+            cabinet_model.change_door_angle(state_angle)
             cabinet_model.update_mesh()
+            # Save full mesh
+            cabinet_model.save_mesh(cabinet_full_mesh_filename)
 
-            contact_sub = rospy.Subscriber('/contact', ContactsState, contact_callback)
+            # RVL path planning
+            T_G_0_array, q, all_feasible_paths, all_feasible_paths_q = rvl_path_planning(rvl_cfg, T_R_W, q_init, 37, False, cabinet_model, state_angle)
             
-            # adjust joint values to ROS
-            q[:, 0] += np.pi
-            q[:, 5] += np.pi
-            q[q>np.pi]-=(2.0*np.pi)     
-            q[q<-np.pi]+=(2.0*np.pi)
+            if T_G_0_array.shape[0] == 1:
+                print('Path not found')
+                if IS_SAVING_RESULTS:
+                    with open(csv_path, 'a') as f:
+                        writer = csv.writer(f, delimiter=',')
+                        writer.writerow([i, path_found, trajectory_successful, contact_free, door_opened, width, height, position[0], position[1], position[2], rot_z_deg, state_angle, axis_pos])
 
-            # # Execute the trajectory and wait until it finishes
-            # trajectory_successful = robot.send_multiple_joint_space_poses_to_robot(q, execute_time=20, wait=True)
-            collisions = np.zeros((q.shape[0], 3))
-            for i_q in range(q.shape[0]):
-                robot.send_joint_values_to_robot(joint_values=q[i_q, :].tolist(), wait=True)
-                contact_msg = rospy.wait_for_message('/contact_door', ContactsState, rospy.Duration(1))
+            if T_G_0_array.shape[0] > 1:
+
+                path_found = True
+
+                # Start Gazebo processes
+                kill_ros_nodes()
+                rospy.sleep(1.)
+                kill_processes()
+                reset_tf_buffer(tf_buffer)
+                # gazebo_process = start_gazebo_processes(gazebo_launch_file, tf_buffer, T_R_W)   
+                launch_process = subprocess.Popen("source /home/RVLuser/ferit_ur5_ws/devel/setup.bash && roslaunch ur5_robotiq_ft_3f_moveit_config demo_gazebo.launch", shell=True, executable="/bin/bash")
+                rospy.sleep(4.)
+
+                # Start the robot commander
+                try:
+                    robot = UR5Commander()
+                except RuntimeError as e:
+                    kill_processes()
+                    launch_process.terminate()
+                    launch_process.wait()
+                    continue
+
+                # Sleep to ensure the robot is ready
+                rospy.sleep(1.)
+
+                # # Spawning model in Gazebo
+                # cabinet_model.delete_model_gazebo()
+                # cabinet_model.spawn_model_gazebo()
+
+                # # Open doors in Gazebo
+                # cabinet_model.set_door_state_gazebo(state_angle)
+                # cabinet_model.change_door_angle(state_angle)
+
+                contact_state = {'contact_free': True}
+                contact_sub = rospy.Subscriber('/contact', ContactsState, contact_callback, contact_state)
+                rospy.sleep(1.)
                 
-                if len(contact_msg.states) > 0:
-                    position = contact_msg.states[0].contact_positions[0]
-                    t_P_S = np.array([position.x, position.y, position.z])
-                    current_angle = cabinet_model.get_door_state_gazebo()[1]
-                    T_A_O = cabinet_model.change_door_angle(np.rad2deg(current_angle))
-                    T_A_S_rot = cabinet_model.T_O_S @ T_A_O
-                    T_S_D = np.linalg.inv(cabinet_model.T_D_A) @ np.linalg.inv(T_A_S_rot)
-                    t_P_D = np.dot(T_S_D[:3, :3], t_P_S) + T_S_D[:3, 3]
-                    collisions[i_q, :] = t_P_D
-                    pass
-                else:
-                    collisions[i_q, :] = np.array([0.,0.,0.])
-                rospy.sleep(0.5)
+                # Points from the path planner
+                # adjust joint values to ROS
+                q[:, 0] -= np.pi
+                q[:, 5] -= np.pi
+                q[q>np.pi]-=(2.0*np.pi)     
+                q[q<-np.pi]+=(2.0*np.pi)
+                q = np.unwrap(q, axis=0)
+                q = q.tolist()
 
-                if is_saving_images:
-                    screenshot_saver = ImageGrab.grab()
-                    screenshot_saver.save(os.path.join(save_screenshot_path, '%d.png' % i_q))
-                    screenshot_saver.close()
 
-            
-            print(collisions)
-            final_door_state = np.rad2deg(cabinet_model.get_door_state_gazebo()[1])
-            print('Door angle: %f', final_door_state)
-            door_opened = 85.0 <= abs(final_door_state) <= 95.0
-            if trajectory_successful and contact_free and door_opened:
-                print('Experiment finished successfully')
-                final_success = True
-            
-            # Shutdown Gazebo simulation and kill all its processes
-            launch.shutdown()
-            rospy.sleep(5)
+                # Spawn the cabinet in Moveit
+                # robot.add_mesh_to_scene(cabinet_full_mesh_filename, 'cabinet', cabinet_model.T_A_S)
 
+                # Go to the first point
+                # robot.send_joint_values_to_robot(q[1], wait=True)
+                robot.send_multiple_joint_space_poses_to_robot2(q[:2])
+                
+                cabinet_model.delete_model_gazebo()
+                cabinet_model.spawn_model_gazebo()
+                
+                # Open doors in Gazebo
+                cabinet_model.set_door_state_gazebo(state_angle)
+                cabinet_model.change_door_angle(state_angle)
+                rospy.sleep(1.)
+
+                # Remove from scene
+                # robot.remove_from_scene('cabinet')
+
+                # Execute the trajectory and wait until it finishes
+                trajectory_successful = robot.send_multiple_joint_space_poses_to_robot2(q[1:])
+
+                cabinet_final_pose = get_link_pose('my_cabinet', 'door_link')
+                T_A_S_final = pose_to_matrix(cabinet_final_pose)
+                dist = np.linalg.norm(T_A_S_final[:3, 3] - T_A_S[:3, 3])
+
+                final_door_state = np.rad2deg(cabinet_model.get_door_state_gazebo()[1])
+                print('Door angle: %f' % final_door_state)
+                door_opened = 85.0 <= abs(final_door_state) <= 95.0
+
+                # Check if there was contact
+                contact_free = contact_state['contact_free']
+                
+                if trajectory_successful and contact_free and door_opened:
+                    print('Experiment finished successfully')
+                    final_success = True
+
+                if IS_SAVING_RESULTS:
+                    with open(csv_path, 'a') as f:
+                        writer = csv.writer(f, delimiter=',')
+                        writer.writerow([i, path_found, trajectory_successful, contact_free, door_opened, width, height, position[0], position[1], position[2], rot_z_deg, state_angle, axis_pos])
+
+                # Shutdown Gazebo simulation and kill all of its processes
+                # stop_gazebo_launcher(gazebo_process)
+                launch_process.terminate()
+                launch_process.wait()
+                kill_processes()
+
+            # i += 1
+
+        except rospy.exceptions.ROSTimeMovedBackwardsException as e:
+            rospy.logwarn(f"Time moved backwards. Exception: {e}")
+            rospy.loginfo(f"Current ROS time: {rospy.Time.now()}")
+            rospy.sleep(2)  # Let time stabilize
 
 

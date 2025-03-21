@@ -319,9 +319,20 @@ int main(int argc, char **argv)
         std::ifstream exampleFile("/home/RVLuser/rvl-linux/cabinets_examples.txt");
         std::string example;
         bool success;
+        int num_successful = 0;
+        bool bSaveTrajectories = true;
+        std::string saveTrajDir = "/home/RVLuser/rvl-linux/data/Exp-MC-Spheres_traj";
     
         std::vector<double> runtimes;
         double duration;
+        int i_ = 0;
+        manipulator.bCountPoses = true;
+        // manipulator.vecSelectedNodes_debug.clear();
+        std::vector<int> vecExploredFirstPoses;
+        FILE *fpLogFreeq = fopen("/home/RVLuser/rvl-linux/colchecks_Freeq.csv", "w");
+        FILE *fpLogFreeSDF = fopen("/home/RVLuser/rvl-linux/colchecks_FreeSDF.csv", "w");
+
+
         while (std::getline(exampleFile, example))
         {
             // manipulator.pVNEnv->Display(&visualizer, 0.02f, manipulator.dVNEnv);
@@ -337,25 +348,87 @@ int main(int argc, char **argv)
             // manipulator.RVLPose2FCLPose(pose_A_S, T_A_S);
             // manipulator.LoadCabinetStaticFCL(cabinetStaticModelPath, pose_A_S);
 
+            manipulator.vecFeasiblePoses_debug.clear();
+
             std::ios_base::sync_with_stdio(false);
             auto start = std::chrono::high_resolution_clock::now();
             success = manipulator.Path2(qHomeRad, dd_end_state_angle_deg, nStates, poses_G_0, robotJoints, &allFeasiblePaths, &allFeasiblePathsJoints);
             auto end = std::chrono::high_resolution_clock::now();
             
+
+            // colchecks
+            fprintf(fpLogFreeq, "%d", manipulator.vecNumColchecks_Freeq.at(0));
+            fprintf(fpLogFreeSDF, "%d", manipulator.vecNumColchecks_FreeSDF.at(0));
+
+            for (int iState=1; iState < manipulator.vecNumColchecks_Freeq.size(); iState++)
+            {
+                fprintf(fpLogFreeq, ",%d", manipulator.vecNumColchecks_Freeq.at(iState));
+                fprintf(fpLogFreeSDF, ",%d", manipulator.vecNumColchecks_FreeSDF.at(iState));
+            }
+            fprintf(fpLogFreeq, "\n");
+            fprintf(fpLogFreeSDF, "\n");
+
+            if (manipulator.bCountPoses)
+            {
+                // printf("Num of selected nodes: %d\n", manipulator.vecSelectedNodes_debug.back());
+                
+                vecExploredFirstPoses.push_back(manipulator.vecnumExploredPoses_debug.at(0));
+                printf("%d", manipulator.vecnumExploredPoses_debug.at(0));
+                if (success)
+                {
+                    for (int iFeasible=1; iFeasible < nStates; iFeasible++)
+                    {
+                        printf(",%d", manipulator.vecnumExploredPoses_debug.at(iFeasible));
+                    }
+                }
+                printf("\n");
+                
+                printf("Num of feasible poses accumulated: %d", manipulator.vecFeasiblePoses_debug.at(0));
+                if (success)
+                {
+                    for (int iFeasible=1; iFeasible < nStates; iFeasible++)
+                    {
+                        printf(", %d", manipulator.vecFeasiblePoses_debug.at(iFeasible));
+                    }
+                }
+                printf("\n");
+            }
+
             if (success)
-                printf("Path is successfully generated.\n");
-            else
-                printf("Path is not found.\n");
+            {
+                // printf("Path is successfully generated.\n");
+                num_successful++;
+            }
+            // else
+                // printf("Path is not found.\n");
             
             duration = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
             duration *= 1e-9;
-            if(success)
+
+            // if(runtimes.size() < 20)
             {
                 runtimes.push_back(duration);
-                if(runtimes.size() == 100) break;
+                // cout << "Time taken to generate path: " << duration << setprecision(9) << " sec" << endl;
+                // break;
             }
 
-            cout << "Time taken to generate path: " << duration << setprecision(9) << " sec" << endl;
+            if (success && bSaveTrajectories)
+            {
+                FILE *fpLog = fopen((saveTrajDir + RVLFILEPATH_SEPARATOR + "traj_" + std::to_string(i_) + ".txt").data(), "w");
+                for (int iPathPt = 0; iPathPt < robotJoints.h; iPathPt++)
+                {
+                    float *q_ = robotJoints.Element + iPathPt*robotJoints.w;
+                    fprintf(fpLog, "%f", *q_);
+                    for (int iJoint = 1; iJoint < robotJoints.w; iJoint++)
+                    {
+                        fprintf(fpLog, ",%f", *(q_+iJoint));
+                    }
+                    fprintf(fpLog, "\n");
+                }
+                fclose(fpLog);
+            }
+
+            i_++;
 
             // Visualization.
 
@@ -375,6 +448,36 @@ int main(int argc, char **argv)
             //
         }
 
+        fclose(fpLogFreeq);
+        fclose(fpLogFreeSDF);
+
+        // if (manipulator.bCountPoses)
+        // {
+        //     int min_selectedNodes = *std::min_element(manipulator.vecSelectedNodes_debug.begin(), manipulator.vecSelectedNodes_debug.end());
+        //     int max_selectedNodes = *std::max_element(manipulator.vecSelectedNodes_debug.begin(), manipulator.vecSelectedNodes_debug.end());
+        //     int totalSelectedNodes = 0;
+        //     for (int el: manipulator.vecSelectedNodes_debug) {
+        //         totalSelectedNodes += el;
+        //     }
+        //     double avg_selectedNodes = static_cast<double>(totalSelectedNodes) / static_cast<double>(manipulator.vecSelectedNodes_debug.size());
+        //     // std::cout << "Min selected poses: " << min_selectedNodes << endl;
+        //     // std::cout << "Max selected poses: " << max_selectedNodes << endl;
+        //     // printf("Avg selected poses: %.4f\n", avg_selectedNodes);
+        //     // std::cout << "Avg selected poses: " << avg_selectedNodes << setprecision(4) << "\n";
+        //     printf("\n");
+        //     int min_exploredFirstPoses = *std::min_element(vecExploredFirstPoses.begin(), vecExploredFirstPoses.end());
+        //     int max_exploredFirstPoses = *std::max_element(vecExploredFirstPoses.begin(), vecExploredFirstPoses.end());
+        //     int totalexploredFirstPoses = 0;
+        //     for (int el: vecExploredFirstPoses) {
+        //         totalexploredFirstPoses += el;
+        //     }
+        //     double avg_exploredFirstPoses = static_cast<double>(totalexploredFirstPoses) / static_cast<double>(vecExploredFirstPoses.size());
+        //     // std::cout << "Min explored first poses: " << min_exploredFirstPoses << endl;
+        //     // std::cout << "Max explored first poses: " << max_exploredFirstPoses << endl;
+        //     printf("Avg explored first poses: %.4f\n", avg_exploredFirstPoses);
+        //     // printf("\n");
+        // }
+
         double total_time = 0.0;
         double min_time = *std::min_element(runtimes.begin(), runtimes.end());
         double max_time = *std::max_element(runtimes.begin(), runtimes.end());
@@ -388,6 +491,10 @@ int main(int argc, char **argv)
         std::cout << "Minimum execution time: " << min_time << setprecision(4) << " seconds\n";
         std::cout << "Maximum execution time: " << max_time << setprecision(4) << " seconds\n";
         std::cout << "Average execution time: " << average_time << setprecision(4) << " seconds\n";
+        std::cout << "Number of successful exps: " << num_successful << endl;
+
+
+
 
         exampleFile.close();
         RVL_DELETE_ARRAY(poses_G_0.Element);

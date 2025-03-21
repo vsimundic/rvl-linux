@@ -17,7 +17,7 @@ from utils import *
 
 
 if __name__ == '__main__':
-    rospy.init_node('single-contact_tsr_handle_node')
+    rospy.init_node('single_contact_tsr_handle_node')
     
     IS_SAVING_RESULTS = True
     IS_SAVING_IMAGES = False
@@ -67,6 +67,15 @@ if __name__ == '__main__':
     # Transformation of robot base w.r.t world frame
     T_R_W = np.load(config['robot_world_pose'])
 
+    # Initial pose in joint space
+    q_init = np.array([0., -np.pi*0.5, 0., -np.pi*0.5, 0., 0.])
+    q_init_ros = q_init.copy()
+    # Adjust joint values from ROS
+    q_init[0] += np.pi
+    q_init[5] += np.pi
+    q_init[q_init>np.pi]-=(2.0*np.pi)
+    q_init[q_init<-np.pi]+=(2.0*np.pi)
+
     i = start_i
     while i < num_doors:
         print('Cabinet %d' %i)
@@ -112,22 +121,39 @@ if __name__ == '__main__':
                                     has_handle=True)
             
             # Start Gazebo processes
-            gazebo_process = start_gazebo_processes(gazebo_launch_file, tf_buffer, T_R_W)   
+            # Start Gazebo processes
+            kill_ros_nodes()
+            rospy.sleep(1.)
+            kill_processes()
+            reset_tf_buffer(tf_buffer)
+            launch_process = subprocess.Popen("source /home/RVLuser/ferit_ur5_ws/devel/setup.bash && roslaunch ur5_robotiq_ft_3f_moveit_config demo_gazebo.launch", shell=True, executable="/bin/bash")
+            rospy.sleep(4.)
             
             # Start the robot commander
             try:
                 robot = UR5Commander()
             except RuntimeError as e:
-                stop_gazebo_launcher(gazebo_process)
+                # stop_gazebo_launcher(gazebo_process)
+                kill_processes()
+                launch_process.terminate()
+                launch_process.wait()
                 continue
 
             # Sleep to ensure the robot is ready
-            rospy.sleep(2.)
+            rospy.sleep(1.)
 
             path_found = True
-            success = robot.send_joint_values_to_robot(joint_values=q_traj[0], wait=True) # position to grasp
+            q_ = [q_init, q_traj[0]]
+            success = robot.send_multiple_joint_space_poses_to_robot2(q_[:2])
+
+            # success = robot.send_joint_values_to_robot(joint_values=q_traj[0], wait=True) # position to grasp
+            # success = robot.send_joint_values_to_robot(joint_values=q_traj[0], wait=True) # position to grasp
             if not success:
-                stop_gazebo_launcher(gazebo_process)
+                # stop_gazebo_launcher(gazebo_process)
+                kill_processes()
+                launch_process.terminate()
+                launch_process.wait()
+
                 if IS_SAVING_RESULTS:
                     with open(csv_path, 'a') as f:
                         writer = csv.writer(f, delimiter=',')
@@ -140,12 +166,15 @@ if __name__ == '__main__':
             cabinet_model.spawn_model_gazebo()
             contact_state = {'contact_free': True}
             contact_sub = rospy.Subscriber('/contact', ContactsState, contact_callback, contact_state)
-            rospy.sleep(2.)
+            rospy.sleep(1.)
 
             # Attach gripper to handle
             if not attach_two_models('robot', 'wrist_3_link', 'my_cabinet', 'door_link', 5.0):
                 rospy.logerr("Attachment failed. Aborting...")
                 rospy.signal_shutdown('No attaching.')
+                launch_process.terminate()
+                launch_process.wait()
+
                 continue
 
             trajectory_successful = robot.send_multiple_joint_space_poses_to_robot2(q_traj[1:])
@@ -173,7 +202,10 @@ if __name__ == '__main__':
                 final_success = True
             
             # Shutdown Gazebo simulation and kill all of its processes
-            stop_gazebo_launcher(gazebo_process)
+            # stop_gazebo_launcher(gazebo_process)
+            launch_process.terminate()
+            launch_process.wait()
+            kill_processes()
 
             if IS_SAVING_RESULTS:
                 with open(csv_path, 'a') as f:

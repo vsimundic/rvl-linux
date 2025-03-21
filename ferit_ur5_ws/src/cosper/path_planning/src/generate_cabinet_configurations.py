@@ -6,7 +6,7 @@ import sys
 import os
 from core.util import read_config
 from core.transforms import rot_z
-from core.meshes import convert_to_dae, fix_dae_up_axis
+from core.meshes import *
 import csv
 from gazebo_push_open.cabinet_model import Cabinet
 import time
@@ -82,7 +82,7 @@ rospack = RosPack()
 # pkg_path = rospack.get_path('path_planning')
 pkg_path = '/home/RVLuser/ferit_ur5_ws/src/cosper/path_planning'
 # Choose epxeriment
-exp_name = 'real_exp' # simulation_exp, real_exp
+exp_name = 'simulation_exp' # simulation_exp, real_exp
 
 if exp_name == 'simulation_exp':
     cfg_path = os.path.join(pkg_path, 'config/config_simulations_axis_left.yaml')
@@ -92,16 +92,22 @@ elif exp_name == 'real_exp':
     save_path = os.path.join(pkg_path, 'cabinet_configurations_axis_left_real.npy')
 config = read_config(cfg_path)
 
+HAS_HANDLE = True
+
+NEW_GEN = True
+
 try:
     cabinet_mesh_dirpath = config['cabinet_mesh_save_dir']
+    if HAS_HANDLE:
+        cabinet_mesh_dirpath = os.path.join(cabinet_mesh_dirpath, 'handle')
+    else:
+        cabinet_mesh_dirpath = os.path.join(cabinet_mesh_dirpath, 'handleless')
+
     if not os.path.exists(cabinet_mesh_dirpath):
         os.makedirs(cabinet_mesh_dirpath)
 except Exception as e:
     pass
 
-HAS_HANDLE = False
-
-NEW_GEN = True
 
 # distance criteria
 base_size = close_dist_range = 0.3
@@ -237,11 +243,12 @@ while i < n:
         Tz[:3, :3] = rot_z(np.radians(rotz_deg))
         T_A_S = T_A_S @ Tz
         
+        cabinet_urdf_path = os.path.join(cabinet_mesh_dirpath, 'cabinet_whole_%d.urdf' % i)
         # Create a cabinet object
         cabinet_model = Cabinet(door_params=np.array(door_params), 
                                 axis_pos=cabinet_pose['axis_pos'],
                                 T_A_S=T_A_S,
-                                save_path=config['cabinet_urdf_save_path'],
+                                save_path=cabinet_urdf_path,
                                 has_handle=HAS_HANDLE)
         cabinet_static_ply_path = os.path.join(cabinet_mesh_dirpath, 'cabinet_static_%d.ply' % i)
         cabinet_static_dae_path = os.path.join(cabinet_mesh_dirpath, 'cabinet_static_%d.dae' % i)
@@ -249,14 +256,19 @@ while i < n:
         cabinet_whole_dae_path = os.path.join(cabinet_mesh_dirpath, 'cabinet_whole_%d.dae' % i)
         cabinet_panel_ply_path = os.path.join(cabinet_mesh_dirpath, 'cabinet_panel_%d.ply' % i)
 
-        cabinet_model.save_mesh_without_doors(cabinet_static_ply_path)
-        cabinet_model.save_door_panel_mesh(cabinet_panel_ply_path)
-        cabinet_model.save_mesh(cabinet_whole_ply_path)
+        # cabinet_model.save_mesh_without_doors(cabinet_static_ply_path)
+        # cabinet_model.save_door_panel_mesh(cabinet_panel_ply_path)
+        # cabinet_model.save_mesh(cabinet_whole_ply_path)
         if HAS_HANDLE:
-            convert_to_dae(cabinet_static_ply_path, cabinet_static_dae_path, object_name='cabinet')
-            fix_dae_up_axis(cabinet_static_dae_path, axis_up='Z_UP')
-            convert_to_dae(cabinet_whole_ply_path, cabinet_whole_dae_path, object_name='cabinet')
-            fix_dae_up_axis(cabinet_whole_dae_path, axis_up='Z_UP')
+            # convert_to_dae(cabinet_static_ply_path, cabinet_static_dae_path, object_name='cabinet')
+            # fix_dae_up_axis(cabinet_static_dae_path, axis_up='Z_UP')
+            # set_model_name_in_dae(cabinet_static_dae_path, model_name='cabinet')
+            
+            # convert_to_dae(cabinet_whole_ply_path, cabinet_whole_dae_path, object_name='cabinet')
+            # fix_dae_up_axis(cabinet_whole_dae_path, axis_up='Z_UP')
+            # set_model_name_in_dae(cabinet_whole_dae_path, model_name='cabinet')
+            # convert_ply_to_obj(cabinet_whole_ply_path, object_name='cabinet')
+            pass
 
         # angle_deg = axis_pos * np.rad2deg(np.arctan(push_latch_mechanism_length/door_params[0]))
         angle_deg = axis_pos * np.rad2deg(np.arcsin(push_latch_mechanism_length/door_params[0]))

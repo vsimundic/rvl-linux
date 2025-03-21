@@ -459,6 +459,9 @@ bool DDManipulator::Free(
     Pose3D *pPose_G_S,
     float *SDF)
 {
+    // debug
+    numColchecks_FreeSDF++;
+
     if (use_fcl)
         return FreeFCL(pPose_G_S);
     else
@@ -486,6 +489,10 @@ bool DDManipulator::Free(
 
 bool DDManipulator::Free(float *q)
 {
+    // debug
+    numColchecks_Freeq++;
+
+
     // Only for debugging purpose!!!
     // RVLCOLORS
     // Array<Point> visPts;
@@ -1507,6 +1514,7 @@ bool DDManipulator::Path2(
     // printf("Path planning ");
 
     // Adapt the contact pose graph to the target door.
+    // CreateContactPoseGraph2("/home/RVLuser/rvl-linux/data/Robotiq3Finger/contact_pose_graph.dat");
 
     AdaptContactPoseGraph();
 
@@ -1532,6 +1540,10 @@ bool DDManipulator::Path2(
     int iIKSolution;
     int iNode;
     int iNodeJS;
+
+    if (bCountPoses)
+        vecSelectedNodes_debug.push_back(selectedNodes.n);
+
     for (iSelectedNode = 0; iSelectedNode < selectedNodes.n; iSelectedNode++)
     {
         iNode = selectedNodes.Element[iSelectedNode];
@@ -1610,8 +1622,18 @@ bool DDManipulator::Path2(
     int nApproachPathViaPts;
     int IKSolutionIdx;
     float qDist;
+
+    // debug
+    vecnumExploredPoses_debug.clear();
+    vecNumColchecks_Freeq.clear();
+    vecNumColchecks_FreeSDF.clear();
+    
     for (iState = 0; iState < nStates; iState++)
     {
+        // debug
+        numColchecks_Freeq = 0;
+        numColchecks_FreeSDF = 0;
+
         // printf(".");
 
         iState_ = iState + 2;
@@ -1690,6 +1712,9 @@ bool DDManipulator::Path2(
 
         // feasibleNodes <- JS nodes created from a subset of contact nodes randomly selected from candidateNodes for which IK solution exists and which are collision free
         feasibleNodes.n = 0;
+        numExploredPoses_debug = 0;
+        // FILE *fpLog = fopen((std::string(resultsFolder) + RVLFILEPATH_SEPARATOR + "nodes.txt").data(), "w");
+
         for (iCandidateNode = 0; iCandidateNode < candidateNodes.n; iCandidateNode++)
         {
             iNode = candidateNodes.Element[iCandidateNode];
@@ -1704,8 +1729,14 @@ bool DDManipulator::Path2(
             RVLCOMPTRANSF3D(pose_DD_0.R, pose_DD_0.t, pNode->pose.pose.R, pNode->pose.pose.t, pose_G_0.R, pose_G_0.t);
             nodesJS_ = nodeJS + iNode * maxnIKSolutions;
             approachPathsJS.Element = approachPathJSMem + nApproachJSPtsTotal;
+            numExploredPoses_debug++;
+            // fprintf(fpLog,"Explored: %d\n", numExploredPoses_debug);
             if (!FeasiblePose(&pose_G_0, SDF, nodesJS_, IKSolutionIdxs, iState == 0, &approachPathsJS, &nApproachPathViaPts))
                 continue;
+            // if(numExploredPoses_debug == 45335)
+            // {
+            //     int debug = 0;
+            // }
             for (iIKSolution = 0; iIKSolution < IKSolutionIdxs.n; iIKSolution++)
             {
                 IKSolutionIdx = IKSolutionIdxs.Element[iIKSolution];
@@ -1720,6 +1751,7 @@ bool DDManipulator::Path2(
                 if (feasibleNodes.n < maxnNodesJSPerStep)
                 {
                     feasibleNodes.Element[feasibleNodes.n++] = iNodeJS;
+                    // fprintf(fpLog, "Feasible nodes: %d\n", feasibleNodes.n);
                     if (iState == 0)
                     {
                         if (nApproachPathViaPts == 2)
@@ -1736,9 +1768,14 @@ bool DDManipulator::Path2(
                 else
                     pNodeJS->bFeasible = false;
             }
+
             if (feasibleNodes.n >= maxnNodesJSPerStep)
                 break;
         }
+
+        // debug
+        // fclose(fpLog);
+        vecnumExploredPoses_debug.push_back(numExploredPoses_debug);
 
         // memset(bFeasibilityTested, 0, nodes.n * sizeof(bool));
         // for (iFeasibleNode = 0; iFeasibleNode < feasibleNodesPrev.n; iFeasibleNode++)
@@ -1834,9 +1871,15 @@ bool DDManipulator::Path2(
         //}
 
         ///
-
+        vecFeasiblePoses_debug.push_back(feasibleNodes.n);
         if (feasibleNodes.n == 0)
+        {
+            vecNumColchecks_Freeq.push_back(numColchecks_Freeq);
+            vecNumColchecks_FreeSDF.push_back(numColchecks_FreeSDF);
             break;
+        }
+        // if (feasibleNodes.n == 0)
+        //     break;
 
         // Find the optimal feasible path starting from the feasible robot configurations in the current state
         // and back tracking to the start state.
@@ -1939,6 +1982,11 @@ bool DDManipulator::Path2(
         pNodeJSTmp = nodeJS;
         nodeJS = prevNodeJS;
         prevNodeJS = pNodeJSTmp;
+
+        // debug
+        vecNumColchecks_Freeq.push_back(numColchecks_Freeq);
+        vecNumColchecks_FreeSDF.push_back(numColchecks_FreeSDF);
+
     }
     nodeJS = prevNodeJS;
     feasibleNodes = feasibleNodesPrev;
@@ -2966,6 +3014,271 @@ void DDManipulator::CreateContactPoseGraph(std::string contactPoseGraphFileName)
     delete[] edges.Element;
     fclose(fp);
 }
+
+void DDManipulator::CreateContactPoseGraph2(std::string contactPoseGraphFileName)
+{
+    // printf("Creating contact pose graph...");
+
+#ifdef RVLDDMANIPULATOR_TIME_MESUREMENT
+    if (pTimer)
+        pTimer->Start();
+#endif
+
+    // Parameters.
+
+    float rPos = 0.050f;      // m
+    float rOrientDeg = 15.0f; // deg
+    float max_dd_size[2];
+    max_dd_size[0] = dd_sy*0.5f;
+    max_dd_size[1] = dd_sz;
+
+    // Constants.
+
+    float rOrient = DEG2RAD * rOrientDeg;
+
+    // Tile feasible contact poses.
+
+    std::vector<MOTION::ContactPose> allFeasibleTCPs;
+    Box<float> TCPSpace;
+    TileFeasibleToolContactPoses(&allFeasibleTCPs, max_dd_size, TCPSpace);
+    // printf("num. allFeasibleTCPs=%d\n", allFeasibleTCPs.size());
+    // printf("opening direction=%f\n", dd_opening_direction);
+
+    // Only for debugging purpose!!!
+
+    // RVLNULLMX3X3(pNode->pose.pose.R);
+    // RVLMXEL(pNode->pose.pose.R, 3, 0, 2) = 1.0f;
+    // RVLMXEL(pNode->pose.pose.R, 3, 1, 1) = -1.0f;
+    // RVLMXEL(pNode->pose.pose.R, 3, 2, 0) = 1.0f;
+    // float RTmp1[9];
+    // RVLNULLMX3X3(RTmp1);
+    // RVLMXEL(RTmp1, 3, 0, 1) = 1.0f;
+    // RVLMXEL(RTmp1, 3, 1, 2) = 1.0f;
+    // RVLMXEL(RTmp1, 3, 2, 0) = 1.0f;
+    // float RTmp2[9];
+    // float phi = 0.5f;
+    // RVLROTY(cos(phi), sin(phi), RTmp2);
+    // Pose3D *pPose_G_DD = (Pose3D *)(allFeasibleTCPs.data());
+    // RVLMXMUL3X3(RTmp1, RTmp2, pPose_G_DD->R);
+    // float PRTCP_DD[3];
+    // RVLSET3VECTOR(PRTCP_DD, 0.0f, 0.012f, 0.015f);
+    // float V3TmpDebug[3];
+    // RVLMULMX3X3VECT(pPose_G_DD->R, PRTCP_G, V3TmpDebug);
+    // RVLDIF3VECTORS(PRTCP_DD, V3TmpDebug, pPose_G_DD->t);
+    // float T_G_DD[16];
+    // RVLHTRANSFMX(pPose_G_DD->R, pPose_G_DD->t, T_G_DD);
+    // FILE *fp = fopen("T_G_DD.txt", "w");
+    // PrintMatrix<float>(fp, T_G_DD, 4, 4);
+    // fclose(fp);
+
+    //
+
+    // SE3 grid.
+
+    SE3Grid grid;
+    ExpandBox<float>(&TCPSpace, 2.0f * rPos);
+    grid.Create(TCPSpace);
+
+    // Pose graph.
+
+    RVL_DELETE_ARRAY(graph.NodeMem);
+    graph.NodeMem = new GRAPH::Node_<GRAPH::EdgePtr<MOTION::Edge>>[allFeasibleTCPs.size()];
+    graph.NodeArray.Element = graph.NodeMem;
+    GRAPH::Node_<GRAPH::EdgePtr<MOTION::Edge>> *pGNode;
+    int iSE3Point;
+    int iSE3Point_;
+    int i;
+    int iPosCell, iZ, iRoll;
+    RVL_DELETE_ARRAY(nodes.Element);
+    nodes.Element = new MOTION::Node[allFeasibleTCPs.size()];
+    nodes.n = 0;
+    MOTION::Node *pNode;
+    MOTION::ContactPose contactPose;
+    QList<GRAPH::EdgePtr<MOTION::Edge>> *pEdgeList;
+    
+    // RVL_DELETE_ARRAY(selectedNodes.Element);
+    // selectedNodes.Element = new int[allFeasibleTCPs.size()];
+    // selectedNodes.n = 0;
+    // RVL_DELETE_ARRAY(bSelected)
+    // bSelected = new bool[allFeasibleTCPs.size()];
+    // RVL_DELETE_ARRAY(contactNode);
+    // contactNode = new int[allFeasibleTCPs.size()];
+    // memset(contactNode, 0xff, allFeasibleTCPs.size() * sizeof(int));
+
+    for (iSE3Point = 0; iSE3Point < allFeasibleTCPs.size(); iSE3Point++)
+    {
+        // if (i % 1000 == 0)
+        //     int debug = 0;
+        contactPose = allFeasibleTCPs[iSE3Point];
+        // if(iSE3Point == 0)
+        //     int debug = 0;
+        // else
+        {
+            // if (pose_G_DD.t[0] < -0.05f)
+            //     int debug = 0;
+            iSE3Point_ = grid.Fetch(contactPose.pose_G_DD, iPosCell, iZ, iRoll);
+            if (iSE3Point_ >= 0)
+                continue;
+        }
+        // if (nodes.n == 2412533 / 8)
+        //     int debug = 0;
+        pNode = nodes.Element + nodes.n;
+        pNode->pose.pose = contactPose.pose_G_DD;
+        pNode->PRTCP[0] = contactPose.PRTCP_DD[0];
+        pNode->PRTCP[1] = contactPose.PRTCP_DD[1];
+        pNode->iSE3Point = iSE3Point; // For debugging purpose.
+        pNode->cost = 0.0f;
+        pGNode = graph.NodeArray.Element + nodes.n;
+        pEdgeList = &(pGNode->EdgeList);
+        RVLQLIST_INIT(pEdgeList);
+        pNode->pGNode = pGNode;
+        pGNode->idx = nodes.n;
+        pNode->iParent = -1;
+        pNode->iFirstChild = -1;
+        pNode->iSibling = -1;
+        pNode->flags = 0x00;
+        nodes.n++;
+        grid.Add(contactPose.pose_G_DD, true, pGNode->idx, iPosCell, iZ, iRoll);
+
+        // selectedNodes.Element[selectedNodes.n] = nodes.n-1;
+        // bSelected[nodes.n-1] = true;
+        // contactNode[nodes.n-1] = selectedNodes.n;
+        // selectedNodes.n++;
+    }
+    
+    // for (iNode = 0; iNode < nodes.n; iNode++, pNode++)
+    // {
+    //     if (pNode->PRTCP[0] <= maxx && pNode->PRTCP[1] <= dd_panel_params[1])
+    //     {
+    //         selectedNodes.Element[selectedNodes.n] = iNode;
+    //         bSelected[iNode] = true;
+    //         contactNode[iNode] = selectedNodes.n;
+    //         selectedNodes.n++;
+    //     }
+    //     else
+    //         bSelected[iNode] = false;
+
+    int iNode, iNode_;
+    // Only for debugging purpose!!!
+    // Array<Point> pts;
+    // pts.Element = new Point[2 * nodes.n];
+    // Array<Pair<int, int>> lines;
+    // lines.n = nodes.n;
+    // lines.Element = new Pair<int, int>[nodes.n];
+    // float *P1, *P2;
+    // for(iNode = 0; iNode < nodes.n; iNode++)
+    // {
+    //    pNode = nodes.Element + iNode;
+    //    P1 = pts.Element[iNode].P;
+    //    RVLCOPY3VECTOR(pNode->pose.pose.t, P1);
+    //    P2 = pts.Element[nodes.n + iNode].P;
+    //    RVLTRANSF3(PRTCP_G, pNode->pose.pose.R, pNode->pose.pose.t, P2);
+    //    lines.Element[iNode].a = iNode;
+    //    lines.Element[iNode].b = nodes.n + iNode;
+    // }
+    // pts.n = 2 * nodes.n;
+    // uchar green[] = {0, 255, 0};
+    // pVisualizationData->pVisualizer->DisplayLines(pts, lines, green);
+    // uchar blue[] = {0, 0, 255};
+    // pts.n = nodes.n;
+    // pVisualizationData->pVisualizer->DisplayPointSet<float, Point>(pts, blue, 6);
+    // pVisualizationData->pVisualizer->Run();
+    // pVisualizationData->pVisualizer->renderer->RemoveAllViewProps();
+    // delete[] pts.Element;
+    // delete[] lines.Element;
+    //
+    Array<int> TCPNeighbors;
+    MOTION::Edge *pEdge;
+    MOTION::Node *pNode_;
+    Array<Pair<int, int>> edges;
+    edges.n = 0;
+    // int debug = 0;
+    for (iNode = 0; iNode < nodes.n; iNode++)
+    {
+        pNode = nodes.Element + iNode;
+        // Only for debugging purpose!!!
+        // if(iNode == 29679)
+        // {
+        //     float csRotDiff;
+        //     float maxcsRotDiff = -2.0f;
+        //     int debug = 0;
+        //     for(iNode_ = 0; iNode_ < nodes.n; iNode_++)
+        //     {
+        //         if(iNode_ == iNode)
+        //             continue;
+        //         pNode_ = nodes.Element + iNode_;
+        //         RVLDIF3VECTORS(pNode->pose.pose.t, pNode_->pose.pose.t, V3TmpDebug);
+        //         // if(RVLDOTPRODUCT3(V3TmpDebug, V3TmpDebug) > rPos * rPos)
+        //         //     continue;
+        //         debug++;
+        //         float dR[9];
+        //         RVLMXMUL3X3T1(pNode->pose.pose.R, pNode_->pose.pose.R, dR);
+        //         csRotDiff = RVLROTDIFF(dR);
+        //         if(csRotDiff >= maxcsRotDiff)
+        //             maxcsRotDiff = csRotDiff;
+        //     }
+        //     float maxRotDiff = acos(maxcsRotDiff);
+        //     debug = 0;
+        // }
+        //
+        pGNode = pNode->pGNode;
+        grid.Neighbors(pNode->pose.pose, rPos, rOrient, TCPNeighbors);
+        // debug += TCPNeighbors.n;
+        for (i = 0; i < TCPNeighbors.n; i++)
+        {
+            iNode_ = TCPNeighbors.Element[i];
+            pNode_ = nodes.Element + iNode_;
+            if (iNode < iNode_)
+            {
+                pEdge = ConnectNodes<GRAPH::Node_<GRAPH::EdgePtr<MOTION::Edge>>, MOTION::Edge, GRAPH::EdgePtr<MOTION::Edge>>(pGNode, pNode_->pGNode, iNode, iNode_, pMem);
+                edges.n++;
+            }
+        }
+    }
+
+#ifdef RVLDDMANIPULATOR_TIME_MESUREMENT
+    double graphCreationTime;
+    if (pTimer)
+    {
+        pTimer->Stop();
+        graphCreationTime = pTimer->GetTime();
+        printf("Graph created in %lf s.\n", 0.001 * graphCreationTime);
+    }
+#endif
+
+    // printf("completed\n");
+
+    // // Save contact pose graph to file.
+
+    // FILE *fp = fopen(contactPoseGraphFileName.c_str(), "wb");
+    // fwrite(&nodes.n, sizeof(int), 1, fp);
+    // fwrite(nodes.Element, sizeof(MOTION::Node), nodes.n, fp);
+    // fwrite(&edges.n, sizeof(int), 1, fp);
+    // edges.Element = new Pair<int, int>[edges.n];
+    // Pair<int, int> edge;
+    // Pair<int, int> *pEdge_ = edges.Element;
+    // pGNode = graph.NodeMem;
+    // GRAPH::EdgePtr<Edge> *pEdgePtr;
+    // for (iNode = 0; iNode < nodes.n; iNode++, pGNode++)
+    // {
+    //     pEdgePtr = pGNode->EdgeList.pFirst;
+    //     while (pEdgePtr)
+    //     {
+    //         edge.a = iNode;
+    //         RVLPCSEGMENT_GRAPH_GET_NEIGHBOR(iNode, pEdgePtr, pEdge, edge.b);
+    //         if (edge.a < edge.b)
+    //         {
+    //             *pEdge_ = edge;
+    //             pEdge_++;
+    //         }
+    //         pEdgePtr = pEdgePtr->pNext;
+    //     }
+    // }
+    // fwrite(edges.Element, sizeof(Pair<int, int>), edges.n, fp);
+    // delete[] edges.Element;
+    // fclose(fp);
+}
+
 
 void DDManipulator::TileFeasibleToolContactPoses(
     std::vector<MOTION::ContactPose> *pAllFeasibleTCPs,

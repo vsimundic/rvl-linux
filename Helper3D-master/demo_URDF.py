@@ -10,7 +10,7 @@ import os
 MODELID = "13928"
 
 # URDFPATH = f"/home/RVLuser/Helper3D-master/robotiq-3f-gripper_articulated.urdf"
-name_model = 'robotiq-3f-gripper_articulated_collision_enlarged_5'
+name_model = 'robotiq-3f-gripper_articulated_collision'
 URDFPATH = "/home/RVLuser/Helper3D-master/%s.urdf" % name_model
 OUTPUTDIR = "/home/RVLuser/Helper3D-master"
 

@@ -1,8 +1,8 @@
 import numpy as np
 import pandas as pd
 
-read_results_path = '/home/RVLuser/ferit_ur5_ws/src/cosper/path_planning/results/results_multi-c_our_handleless.csv'
-# read_results_path = '/home/RVLuser/ferit_ur5_ws/src/cosper/path_planning/results_simulation_tsr_single_contact_final.csv'
+# read_results_path = '/home/RVLuser/ferit_ur5_ws/src/cosper/path_planning/results/results_single-c_our_handleless.csv'
+read_results_path = '/home/RVLuser/ferit_ur5_ws/src/cosper/path_planning/results/results_single-c_tsr_handle.csv'
 data = pd.read_csv(read_results_path, sep=',', header=0)
 
 flags = [[True, False, False, False],

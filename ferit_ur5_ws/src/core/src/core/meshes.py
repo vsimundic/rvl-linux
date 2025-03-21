@@ -102,3 +102,111 @@ def fix_dae_up_axis(dae_file: str, axis_up:str = 'Z_UP', output_file: str = None
             print("Could not find <up_axis> tag in the DAE file.")
 
     return output_file
+
+
+def set_model_name_in_dae(dae_file: str, model_name: str, output_file: str = None, print_msgs=False) -> str:
+    """
+    Modifies the COLLADA (.dae) file to set the name of the top-level visual scene node (the model name).
+
+    Args:
+        dae_file (str): Path to the input .dae file.
+        model_name (str): Name to set for the top-level node.
+        output_file (str, optional): Path to save the modified file. If None, overwrites the original file.
+        print_msgs (bool): Whether to print messages.
+
+    Returns:
+        str: Path to the modified .dae file.
+    """
+    if output_file is None:
+        output_file = dae_file  # Overwrite the original file
+
+    tree = ET.parse(dae_file)
+    root = tree.getroot()
+
+    namespace = "http://www.collada.org/2005/11/COLLADASchema"
+    ET.register_namespace('', namespace)  # Preserve namespace
+
+    # Find the visual scene node
+    node = root.find(f".//{{{namespace}}}visual_scene/{{{namespace}}}node")
+
+    if node is not None:
+        node.set('name', model_name)
+        tree.write(output_file, encoding="utf-8", xml_declaration=True)
+        if print_msgs:
+            print(f"Set model name to '{model_name}' in {output_file}")
+    else:
+        if print_msgs:
+            print(f"Could not find top-level node to set model name in {dae_file}")
+
+    return output_file
+
+def convert_ply_to_obj(input_file: str, output_file: str = None, object_name: str = None, print_msgs=False) -> Union[str, None]:
+    """
+    Converts a .ply file to .obj file and applies Y-up to Z-up correction.
+
+    Args:
+        input_file (str): Path to the input .ply file.
+        output_file (str, optional): Path to the output .obj file. Defaults to None.
+        object_name (str, optional): Object name inside the OBJ file.
+        print_msgs (bool): If True, prints progress messages.
+
+    Returns:
+        str: Path to the .obj file if conversion succeeds, else None.
+    """
+
+    if not os.path.exists(input_file):
+        raise FileNotFoundError(f"Input file '{input_file}' not found.")
+
+    if not input_file.lower().endswith('.ply'):
+        raise ValueError("Input file must be a .ply file.")
+
+    if output_file is None:
+        output_file = os.path.splitext(input_file)[0] + ".obj"
+
+    try:
+        # Load the PLY file
+        scene = pyassimp.load(input_file)
+
+        if len(scene.meshes) == 0:
+            raise ValueError("No meshes found in the file.")
+
+        # Rotation matrix for Y-up to Z-up
+        rotation_matrix = np.array([
+            [1, 0, 0],
+            [0, 0, 1],
+            [0, -1, 0]
+        ])
+
+        with open(output_file, 'w') as obj_file:
+            if object_name:
+                obj_file.write(f"o {object_name}\n")
+
+            vertex_offset = 1  # OBJ uses 1-based indexing
+
+            for mesh in scene.meshes:
+                # Apply rotation to vertices and write them
+                rotated_vertices = []
+                for vertex in mesh.vertices:
+                    rotated_vertex = rotation_matrix @ np.array(vertex)
+                    rotated_vertices.append(rotated_vertex)
+                    obj_file.write(f"v {rotated_vertex[0]} {rotated_vertex[1]} {rotated_vertex[2]}\n")
+
+                # Write faces (convert 0-based to 1-based)
+                for face in mesh.faces:
+                    face_indices = " ".join(str(idx + vertex_offset) for idx in face)
+                    obj_file.write(f"f {face_indices}\n")
+
+                # Offset for multi-mesh models (rare in PLY files, but just in case)
+                vertex_offset += len(mesh.vertices)
+
+        pyassimp.release(scene)
+
+        if print_msgs:
+            print(f"Converted '{input_file}' to '{output_file}' successfully with Y-up to Z-up correction.")
+
+        return output_file
+
+    except Exception as e:
+        if print_msgs:
+            print(f"Conversion failed: {e}")
+        return None

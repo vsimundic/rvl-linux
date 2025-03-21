@@ -225,6 +225,7 @@ namespace RVL
 			Array<Array<Pose3D>> *pFeasiblePaths = NULL,
 			Array<Array2D<float>> *pFeasiblePathsJoints = NULL);
 		void CreateContactPoseGraph(std::string contactPoseGraphFileName);
+		void CreateContactPoseGraph2(std::string contactPoseGraphFileName);
 		void TileFeasibleToolContactPoses(
 			std::vector<MOTION::ContactPose> *pAllFeasibleTCPs,
 			float *max_dd_size,
@@ -369,6 +370,17 @@ namespace RVL
 		Mesh *pToolMesh;
 		float PRTCP_G[3];
 		Array<int> tool_contact_spheres;
+
+
+		// debug vars
+		bool bCountPoses;
+		int numExploredPoses_debug;
+		std::vector<int> vecnumExploredPoses_debug;
+		std::vector<int> vecFeasiblePoses_debug;
+		std::vector<int> vecSelectedNodes_debug;
+		std::vector<int> vecNumColchecks_Freeq, vecNumColchecks_FreeSDF;
+		int numColchecks_Freeq, numColchecks_FreeSDF;
+
 
 		// FCL
 		bool use_fcl = false;

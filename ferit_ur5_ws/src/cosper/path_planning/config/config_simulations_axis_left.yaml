@@ -28,7 +28,7 @@ cabinet_urdf_save_path: "/home/RVLuser/ferit_ur5_ws/cabinet.urdf"
 cabinet_static_mesh_save_path: "/home/RVLuser/ferit_ur5_ws/cabinet_static.ply" # static mesh
 cabinet_panel_mesh_save_path: "/home/RVLuser/ferit_ur5_ws/cabinet_panel.ply" # panel mesh
 cabinet_full_mesh_save_path: "/home/RVLuser/ferit_ur5_ws/cabinet_whole.ply" # full cabinet mesh
-cabinet_mesh_save_dir: "/home/RVLuser/ferit_ur5_ws/src/cosper/path_planning/cabinet_meshes/handleless"
+cabinet_mesh_save_dir: "/home/RVLuser/ferit_ur5_ws/src/cosper/path_planning/cabinet_meshes"
 
 ## Feasible poses setup
 feasible_poses:

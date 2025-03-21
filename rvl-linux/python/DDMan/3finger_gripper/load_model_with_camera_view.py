@@ -30,21 +30,45 @@ view_control.convert_from_pinhole_camera_parameters(parameters, True)
 
 # Load models
 geometries = []
-tool_mesh = open3d.io.read_triangle_mesh('/home/RVLuser/rvl-linux/python/DDMan/3finger_gripper/robotiq_3f_gripper_simplified.ply')
+# tool_mesh = open3d.io.read_triangle_mesh('/home/RVLuser/rvl-linux/python/DDMan/3finger_gripper/robotiq_3f_gripper_simplified.ply')
+# tool_mesh = open3d.io.read_triangle_mesh('/home/RVLuser/rvl-linux/data/Robotiq3Finger/robotiq-3f-gripper_articulated_collision.ply')
+tool_mesh = open3d.io.read_triangle_mesh('/home/RVLuser/rvl-linux/data/Robotiq3Finger/mesh_tool_collision.ply')
 tool_mesh.compute_vertex_normals()
-# geometries.append(tool_mesh)
+tool_mesh.paint_uniform_color([0.5, 0.5, 0.5])
+geometries.append(tool_mesh)
+# plate_mesh = open3d.io.read_triangle_mesh('/home/RVLuser/ferit_ur5_ws/src/ur5_configs/robotiq-noetic-devel/robotiq_3f_gripper_visualization/meshes/robotiq-3f-gripper_articulated/collision/robotiq_fingers_plate.stl')
+plate_mesh = open3d.io.read_triangle_mesh('/home/RVLuser/ferit_ur5_ws/src/ur5_configs/robotiq-noetic-devel/robotiq_3f_gripper_visualization/meshes/robotiq-3f-gripper_articulated/collision/robotiq_fingers_plates.stl')
+# plate_mesh = open3d.io.read_triangle_mesh('/home/RVLuser/ferit_ur5_ws/src/ur5_configs/robotiq-noetic-devel/robotiq_3f_gripper_visualization/meshes/robotiq-3f-gripper_articulated/collision/robotiq_fingers_plate.stl')
+plate_mesh.compute_vertex_normals()
+# plate_mesh.paint_uniform_color([128/255., 0/255., 128/255.])
+plate_mesh.paint_uniform_color([0/255., 128/255., 0/255.])
+
+R = plate_mesh.get_rotation_matrix_from_xyz((0, np.deg2rad(-3.25), np.pi/2))
+# plate_mesh.rotate(R)
+# plate_mesh.translate([0.079, 0., 0.1035])
+
+T = np.eye(4)
+T[:3,:3] = R.copy()
+T[:3,3] = np.array(([0.0765, 0., 0.1032]))
+plate_mesh.transform(T)
+geometries.append(plate_mesh)
+
+TCP_mesh = open3d.geometry.TriangleMesh.create_sphere(radius=0.002, resolution=20)
+TCP_mesh.paint_uniform_color([255/255., 0/255., 0/255.])
+TCP_mesh.translate([0.0765, 0., 0.1032])
+geometries.append(TCP_mesh)
 
 spheres = np.load('/home/RVLuser/rvl-linux/data/Robotiq3Finger/spheres.npy')
 spheres /= 1000.
-geometries = []
+# geometries = []
 for i in range(spheres.shape[0]):
-    sphere = open3d.geometry.TriangleMesh.create_sphere(radius=spheres[i, 3])
+    sphere = open3d.geometry.TriangleMesh.create_sphere(radius=spheres[i, 3], resolution=40)
     sphere.compute_vertex_normals()
     sphere.paint_uniform_color([0.5, 0.5, 0.5])
     vec = np.array(spheres[i, 0:3]).ravel()
 
     sphere.translate(vec)
-    geometries.append(sphere)
+    # geometries.append(sphere)
 
 # Add models to the visualizer
 for geom in geometries:
@@ -52,16 +76,16 @@ for geom in geometries:
 
 for i_color, color in enumerate(colors):
 
-    for sphere in geometries:
-        sphere.paint_uniform_color(color)    
-        vis.update_geometry(sphere)
+    # for sphere in geometries:
+    #     sphere.paint_uniform_color(color)    
+    #     vis.update_geometry(sphere)
 
 
     view_control.convert_from_pinhole_camera_parameters(parameters, True)
     vis.update_renderer()
     vis.poll_events()
-    vis.capture_screen_image('/home/RVLuser/rvl-linux/python/DDMan/3finger_gripper/spheres_%d.png' % i_color, True)
     vis.run()
+    vis.capture_screen_image('/home/RVLuser/rvl-linux/python/DDMan/3finger_gripper/spheres_%d.png' % i_color, True)
 
 
     # Destroy the visualizer window
