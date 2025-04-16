@@ -270,6 +270,7 @@ namespace RVL
 			bool bVisualizeMotionPlanningTree = false,
 			int iGoal = -1,
 			Array2D<float> *pRobotJoints = NULL);
+		void VisualizeCurrentState(float *q, Pose3D toolPose);
 		void VisualizeTool(
 			Pose3D pose_G_R,
 			std::vector<vtkSmartPointer<vtkActor>> *pActors,
@@ -302,7 +303,11 @@ namespace RVL
 		void VisualizeCabinetWholeMesh(Pose3D pose_A_S, vtkSmartPointer<vtkActor> &actor);
 		void VisualizeToolMesh(Pose3D pose_G_S, vtkSmartPointer<vtkActor> &actor);
 		void VisualizeDoorPanelMesh(vtkSmartPointer<vtkActor> &actor);
-
+		void setPose_DD_0();
+		bool ApproachPathPoses(
+			Pose3D *pPose_G_S_contact,
+			Array<Pose3D> &poses_G_0_via,
+			float *SDF);
 	private:
 		void SetDoorReferenceFrames();
 		void UpdateVNClusterOrientations();

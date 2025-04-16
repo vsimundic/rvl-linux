@@ -2,6 +2,7 @@ import rospy
 import roslib
 import moveit_commander
 from moveit_msgs.msg import RobotTrajectory, RobotState
+from moveit_msgs.srv import GetPositionFK, GetPositionFKRequest
 from geometry_msgs.msg import Pose, PoseStamped
 from tf.transformations import quaternion_from_matrix, quaternion_matrix
 import numpy as np
@@ -379,6 +380,33 @@ class UR5Commander():
         return self.__pose_stamped_to_matrix(pose_)
 
 
+    def forward_kinematics(self, joint_values: list) -> np.ndarray:
+
+        rospy.wait_for_service('/compute_fk')
+        fk_service = rospy.ServiceProxy('/compute_fk', GetPositionFK)
+
+        fk_request = GetPositionFKRequest()
+        fk_request.fk_link_names = ['tool0']  # or your end-effector link
+        fk_request.header.frame_id = 'base_link'
+
+        joint_state = JointState()
+        joint_state.name = self.get_joint_names()
+        joint_state.position = joint_values
+        fk_request.robot_state = RobotState(joint_state=joint_state)
+
+        try:
+            response = fk_service(fk_request)
+            if response.error_code.val == response.error_code.SUCCESS:
+                pose_stamped = response.pose_stamped[0]
+                return self.__pose_stamped_to_matrix(pose_stamped)
+            else:
+                rospy.logerr("FK computation failed with error code: %s", response.error_code.val)
+                return None
+        except rospy.ServiceException as e:
+            rospy.logerr("Service call to /compute_fk failed: %s", e)
+            return None
+
+
     def save_current_tool_pose(self, file_path):
         T = self.get_current_tool_pose()
         np.save(file_path, T)
@@ -650,6 +678,82 @@ class UR5Commander():
             return True  # Valid plan exists, meaning no collision
         return False  # Collision detected
     
+
+    def is_state_valid(self, q: list) -> bool:
+        """
+        Validates a single joint configuration using the /check_state_validity service.
+
+        Args:
+            q (list): A single joint configuration [rad].
+
+        Returns:
+            bool: True if the configuration is collision-free, False otherwise.
+        """
+        from moveit_msgs.srv import GetStateValidity, GetStateValidityRequest
+
+        joint_names = self.get_joint_names()
+
+        if len(q) != 6:
+            rospy.logerr("Expected a joint state with 6 values")
+            return False
+
+        rospy.wait_for_service('/check_state_validity')
+        check_state_validity = rospy.ServiceProxy('/check_state_validity', GetStateValidity)
+
+        req = GetStateValidityRequest()
+        req.robot_state = RobotState()
+        req.robot_state.joint_state.name = joint_names
+        req.robot_state.joint_state.position = q
+        req.group_name = self.__group_name
+
+        try:
+            res = check_state_validity(req)
+            return res.valid
+        except rospy.ServiceException as e:
+            rospy.logerr(f"Service call failed: {e}")
+            return False
+
+
+    def validate_trajectory_points(self, q_traj: np.ndarray) -> bool:
+        """
+        Validates each joint state in the trajectory using the /check_state_validity service.
+
+        Args:
+            q_traj (np.ndarray): Joint trajectory of shape (N, 6)
+
+        Returns:
+            bool: True if all joint states are collision-free, False otherwise.
+        """
+        from moveit_msgs.srv import GetStateValidity, GetStateValidityRequest
+
+        joint_names = self.get_joint_names()
+
+        if q_traj.ndim != 2 or q_traj.shape[1] != 6:
+            rospy.logerr("Expected joint trajectory of shape (N, 6)")
+            return False
+
+        rospy.wait_for_service('/check_state_validity')
+        check_state_validity = rospy.ServiceProxy('/check_state_validity', GetStateValidity)
+
+        for i, q in enumerate(q_traj):
+            req = GetStateValidityRequest()
+            req.robot_state = RobotState()
+            req.robot_state.joint_state.name = joint_names
+            req.robot_state.joint_state.position = q.tolist()
+            req.group_name = self.__group_name
+
+            try:
+                res = check_state_validity(req)
+                if not res.valid:
+                    rospy.logwarn(f"State {i} in trajectory is in collision.")
+                    return False
+            except rospy.ServiceException as e:
+                rospy.logerr(f"Service call failed: {e}")
+                return False
+
+        rospy.loginfo("All states in trajectory are collision-free.")
+        return True
+
     def get_inverse_kin(self, q_init: list, T: np.ndarray) -> Union[list, None]:
 
         pose_ = matrix_to_pose(T)

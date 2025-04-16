@@ -2237,7 +2237,8 @@ namespace RVL
 #ifdef RVL_RANDOM_DEBUG
 		std::string pseudoRandomNumberFileName;
 #ifdef RVLLINUX
-		pseudoRandomNumberFileName = "pseudorandom1000000.dat";
+		// pseudoRandomNumberFileName = "pseudorandom1000000.dat";
+		pseudoRandomNumberFileName = "/home/RVLuser/rvl-linux/pseudorandom1000000.dat";
 #else
 		pseudoRandomNumberFileName = "..\\pseudorandom1000000.dat";
 #endif

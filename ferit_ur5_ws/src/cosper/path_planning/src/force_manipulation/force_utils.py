@@ -111,10 +111,11 @@ def monitor_force_and_cancel_on_drop(
 
 def monitor_force_drop_and_remember_joints(
     robot: UR5Controller,
+    force_drop_joints: list,
     drop_threshold: float = 10.0,
     near_zero_threshold: float = 2.0,
     check_rate: float = 50.0
-) -> list:
+) -> None:
     """
     Monitors force during active trajectory and remembers joint configurations
     when force drops significantly or goes near zero.
@@ -142,7 +143,6 @@ def monitor_force_drop_and_remember_joints(
 
     rospy.loginfo("[monitor+remember] Trajectory ACTIVE. Monitoring force...")
 
-    force_drop_joints = []
     force_dropped = False
     prev_force = np.linalg.norm(robot.get_current_wrench()[:3])
 
@@ -157,10 +157,8 @@ def monitor_force_drop_and_remember_joints(
         if not force_dropped and (force < near_zero_threshold or delta > drop_threshold):
             force_dropped = True
             q = robot.get_current_joint_values()
-            force_drop_joints.append(q.copy())
-            rospy.logwarn("Remembering joint config due to force drop. Total saved: %d", len(robot.force_drop_joints))
+            force_drop_joints.append(q.tolist())
+            rospy.logwarn("Remembering joint config due to force drop.")
+            break
 
         rate.sleep()
-
-    rospy.loginfo("[monitor+remember] Monitoring ended. %d joint configs saved.", len(robot.force_drop_joints))
-    return force_drop_joints

@@ -11,10 +11,14 @@ from rosnode import kill_nodes
 from PIL import Image as PilImage
 import RVLPYRGBD2PLY as rvl
 import RVLPYDDDetector
+import json 
+from core.real_ur5_controller import UR5Controller
 
-# Global counters
+# Global counters and state
 number_of_images = 0
 key_counter = 0
+last_save_time = 0
+max_save_rate = 5.0  # Hz (overridable via param)
 
 # Parameters (set in main)
 base_dir = ""
@@ -27,10 +31,18 @@ rgb_topic = ""
 depth_topic = ""
 node_name = "rgbAndDepth_image_subscriber"
 
+def convert_numpy(obj):
+    if isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, dict):
+        return {k: convert_numpy(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_numpy(i) for i in obj]
+    else:
+        return obj
 
 def stop_node(node_name):
     kill_nodes([node_name])
-
 
 def ensure_directories_exist(*dirs):
     for d in dirs:
@@ -38,9 +50,9 @@ def ensure_directories_exist(*dirs):
             os.makedirs(d)
             rospy.loginfo(f"Created directory: {d}")
 
-
 def image_callback(rgb_msg, depth_msg):
-    global number_of_images, key_counter, base_dir, rgb_dir, depth_dir
+    global number_of_images, key_counter, last_save_time
+    global base_dir, rgb_dir, depth_dir, max_save_rate
 
     bridge = CvBridge()
     rgb = bridge.imgmsg_to_cv2(rgb_msg, "bgr8")
@@ -53,6 +65,12 @@ def image_callback(rgb_msg, depth_msg):
         key_counter += 1
 
     if key_counter == 1:
+        now = rospy.get_time()
+        if now - last_save_time < 1.0 / max_save_rate:
+            return  # Skip this frame
+
+        last_save_time = now
+
         file_idx = str(number_of_images).zfill(4)
         rgb_path = os.path.join(base_dir, rgb_dir, f"{file_idx}.png")
         depth_path = os.path.join(base_dir, depth_dir, f"{file_idx}.png")
@@ -60,16 +78,17 @@ def image_callback(rgb_msg, depth_msg):
         cv2.imwrite(rgb_path, rgb)
         cv2.imwrite(depth_path, depth)
         number_of_images += 1
+        rospy.loginfo(f"Saved image {file_idx}")
 
     if key_counter >= 2:
         cv2.destroyAllWindows()
         create_ply_images(number_of_images)
-
+        stop_node(node_name)
 
 def create_ply_images(count):
     global base_dir, rgb_dir, depth_dir, ply_dir
 
-    print("Creating PLY files...")
+    rospy.loginfo("Creating PLY files...")
     rgbd2ply = rvl.RGBD2PLY()
 
     for i in range(count):
@@ -85,56 +104,63 @@ def create_ply_images(count):
         depth_img = PilImage.open(depth_file)
         depth_array = np.array(depth_img.getdata()).astype(np.short)
 
+        rospy.loginfo(f"Converting to PLY: {file_idx}")
         rgbd2ply.pixel_array_to_ply(
-            bgr_array, depth_array,
-            fx=597.9033203125, fy=598.47998046875,
-            cx=323.8436584472656, cy=236.32774353027344,
-            width=640, height=480,
-            scale=0.050,
-            filename=ply_file
+            bgr_array,
+            depth_array,
+            597.9033203125, 598.47998046875,
+            323.8436584472656, 236.32774353027344,
+            640, 480,
+            0.050,
+            ply_file
         )
 
-    print("PLY generation complete.")
-    stop_node(node_name)
+    rospy.loginfo("PLY generation complete.")
 
-
-def build_model(count):
+def build_model(count, robot):
     global base_dir, ply_dir, rgb_dir, model_output_path, detector_config_path
 
-    print("Starting 3D detection...")
+    rospy.loginfo("Starting 3D detection...")
     detector = RVLPYDDDetector.PYDDDetector()
     detector.create(detector_config_path)
 
     first_id = 0
     last_id = count - 1
 
-    print(f"Loading mesh sequence from {ply_dir}")
+    rospy.loginfo("Loading meshes:")
     for mesh_id in range(first_id, last_id):
         mesh_file = os.path.join(base_dir, ply_dir, f"{mesh_id:04d}.ply")
-        print(f"  Adding mesh: {mesh_file}")
+        rospy.loginfo(f"  {mesh_file}")
         detector.add_mesh(mesh_file)
 
-    print("Loading RGB sequence")
+    rospy.loginfo("Loading RGB images:")
     for img_id in range(first_id, last_id + 1):
         rgb_file = os.path.join(base_dir, rgb_dir, f"{img_id:04d}.png")
-        print(f"  Adding RGB: {rgb_file}")
+        rospy.loginfo(f"  {rgb_file}")
         detector.add_rgb(rgb_file)
 
     detector.set_hyp_file_name(os.path.join(base_dir, "hyps.txt"))
-
     ao_result = detector.detect()
 
-    with open(model_output_path, "w") as f:
-        f.write(str(ao_result))
+    current_joints = robot.get_current_joint_values()
 
-    print("Detection complete.")
+    ao_result["joint_values"] = current_joints
+
+    # Convert to JSON-safe format
+    ao_json = convert_numpy(ao_result)
+
+    # Save as .json instead of .txt
+    json_path = os.path.splitext(model_output_path)[0] + ".json"
+    with open(json_path, "w") as f:
+        json.dump(ao_json, f, indent=2)
+
+    rospy.loginfo(f"Detection complete. Result saved to: {json_path}")
     return ao_result
-
 
 def main():
     global base_dir, rgb_dir, depth_dir, ply_dir
     global model_output_path, detector_config_path
-    global rgb_topic, depth_topic
+    global rgb_topic, depth_topic, max_save_rate
 
     rospy.init_node(node_name)
 
@@ -143,12 +169,12 @@ def main():
     rgb_dir = rospy.get_param("~rgb_dir", "RGB_images")
     depth_dir = rospy.get_param("~depth_dir", "DEPTH_images")
     ply_dir = rospy.get_param("~ply_dir", "PLY_seg")
-    model_output_path = rospy.get_param("~model_output_path", "models/doorModel.txt")
+    model_output_path = rospy.get_param("~model_output_path", "models/doorModel.json")
     model_output_path = os.path.join(base_dir, model_output_path)
     detector_config_path = rospy.get_param("~detector_config_path", "/home/RVLuser/rvl-linux/RVLRecognitionDemo_Cupec_DDD2_Detection.cfg")
-
     rgb_topic = rospy.get_param("~rgb_topic", "/camera/color/image_raw")
     depth_topic = rospy.get_param("~depth_topic", "/camera/aligned_depth_to_color/image_raw")
+    max_save_rate = rospy.get_param("~save_fps", 5.0)
 
     # Ensure required directories exist
     ensure_directories_exist(
@@ -158,17 +184,18 @@ def main():
         os.path.dirname(model_output_path)
     )
 
-    # Create subscribers with parameters
+    # Subscribers with synchronization
     rgb_sub = Subscriber(rgb_topic, Image)
     depth_sub = Subscriber(depth_topic, Image)
-
     sync = ApproximateTimeSynchronizer([rgb_sub, depth_sub], queue_size=5, slop=0.1)
     sync.registerCallback(image_callback)
 
+    rospy.loginfo("Ready. Press SPACE to start image capture.")
     rospy.spin()
 
-    build_model(number_of_images)
+    robot = UR5Controller()
 
+    build_model(number_of_images, robot)
 
 if __name__ == "__main__":
     main()

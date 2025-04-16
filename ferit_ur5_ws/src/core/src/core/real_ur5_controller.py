@@ -2,7 +2,9 @@ import rospy
 import numpy as np
 import moveit_commander
 from sensor_msgs.msg import JointState
+from moveit_msgs.msg import RobotTrajectory, RobotState
 from geometry_msgs.msg import WrenchStamped, PoseStamped
+from moveit_msgs.msg import RobotState as RobotStateMsg
 from std_srvs.srv import Trigger
 from core.transforms import pose_to_matrix, matrix_to_pose
 import actionlib
@@ -10,15 +12,16 @@ from control_msgs.msg import FollowJointTrajectoryAction, FollowJointTrajectoryG
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 import threading
 import RVLPYDDManipulator as rvlpy_dd_man
-
+from core.transforms import pose_stamped_to_matrix
 class UR5Controller:
     def __init__(self, move_group="arm", 
                  action_topic="/scaled_pos_joint_traj_controller/follow_joint_trajectory",
-                 rvl_cfg_path="/home/RVLuser/rvl-linux/RVLMotionDemo_Cupec.cfg"):
+                 rvl_cfg_path="/home/RVLuser/rvl-linux/RVLMotionDemo_Cupec_real_robot.cfg"):
         moveit_commander.roscpp_initialize([])
         self.robot = moveit_commander.RobotCommander()
         self.scene = moveit_commander.PlanningSceneInterface()
-        self.group = moveit_commander.MoveGroupCommander(move_group)
+        self.group_name = move_group
+        self.group = moveit_commander.MoveGroupCommander(self.group_name)
 
         # RVL IK solver
         self.rvl_ik_solver = rvlpy_dd_man.PYDDManipulator()
@@ -246,6 +249,111 @@ class UR5Controller:
         rospy.loginfo("Found %d IK solutions. Closest (Chebyshev dist: %.4f)", num_sols, cheb_dists[closest_idx])
 
         return closest_q
+
+    def get_fwd_kinematics_moveit(self, joint_values: list) -> np.ndarray:
+        from moveit_msgs.srv import GetPositionFK, GetPositionFKRequest
+        rospy.wait_for_service('/compute_fk')
+        fk_service = rospy.ServiceProxy('/compute_fk', GetPositionFK)
+
+        fk_request = GetPositionFKRequest()
+        fk_request.header.frame_id = 'world'
+        fk_request.header.stamp = rospy.Time.now()
+        fk_request.fk_link_names = ['tool0']  # or your end-effector link
+        joint_state = JointState()
+        joint_state.name = self.joint_names
+        joint_state.position = joint_values.tolist()
+        fk_request.robot_state = RobotState(joint_state=joint_state)
+
+        try:
+            rospy.sleep(0.5)
+            response = fk_service(fk_request)
+            if response.error_code.val == response.error_code.SUCCESS:
+                pose_stamped = response.pose_stamped[0]
+                return pose_stamped_to_matrix(pose_stamped)
+            else:
+                rospy.logerr("FK computation failed with error code: %s", response.error_code.val)
+                return None
+        except rospy.ServiceException as e:
+            rospy.logerr("Service call to /compute_fk failed: %s", e)
+            return None
+
+    def get_fwd_kinematics(self, joint_values: np.ndarray) -> np.ndarray:
+        T_6_0 = self.rvl_ik_solver.fwd_kinematics_6(joint_values)
+        return T_6_0
+
+    def is_state_valid(self, q: list) -> bool:
+        """
+        Validates a single joint configuration using the /check_state_validity service.
+
+        Args:
+            q (list): A single joint configuration [rad].
+
+        Returns:
+            bool: True if the configuration is collision-free, False otherwise.
+        """
+        from moveit_msgs.srv import GetStateValidity, GetStateValidityRequest
+
+        joint_names = self.joint_names
+
+        if len(q) != 6:
+            rospy.logerr("Expected a joint state with 6 values")
+            return False
+
+        rospy.wait_for_service('/check_state_validity')
+        check_state_validity = rospy.ServiceProxy('/check_state_validity', GetStateValidity)
+
+        req = GetStateValidityRequest()
+        req.robot_state = RobotState()
+        req.robot_state.joint_state.name = joint_names
+        req.robot_state.joint_state.position = q
+        req.group_name = self.group_name
+
+        try:
+            res = check_state_validity(req)
+            return res.valid
+        except rospy.ServiceException as e:
+            rospy.logerr(f"Service call failed: {e}")
+            return False
+
+    def validate_trajectory_points(self, q_traj: np.ndarray) -> bool:
+        """
+        Validates each joint state in the trajectory using the /check_state_validity service.
+
+        Args:
+            q_traj (np.ndarray): Joint trajectory of shape (N, 6)
+
+        Returns:
+            bool: True if all joint states are collision-free, False otherwise.
+        """
+        from moveit_msgs.srv import GetStateValidity, GetStateValidityRequest
+
+        joint_names = self.joint_names
+
+        if q_traj.ndim != 2 or q_traj.shape[1] != 6:
+            rospy.logerr("Expected joint trajectory of shape (N, 6)")
+            return False
+
+        rospy.wait_for_service('/check_state_validity')
+        check_state_validity = rospy.ServiceProxy('/check_state_validity', GetStateValidity)
+
+        for i, q in enumerate(q_traj):
+            req = GetStateValidityRequest()
+            req.robot_state = RobotState()
+            req.robot_state.joint_state.name = joint_names
+            req.robot_state.joint_state.position = q.tolist()
+            req.group_name = self.group_name
+
+            try:
+                res = check_state_validity(req)
+                if not res.valid:
+                    rospy.logwarn(f"State {i} in trajectory is in collision.")
+                    return False
+            except rospy.ServiceException as e:
+                rospy.logerr(f"Service call failed: {e}")
+                return False
+
+        rospy.loginfo("All states in trajectory are collision-free.")
+        return True
 
     def shutdown(self):
         moveit_commander.roscpp_shutdown()

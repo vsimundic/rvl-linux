@@ -36,7 +36,9 @@ class Cabinet():
     # def __init__(self, w_door: float, h_door: float, d_door: float=0.018, static_d: float=0.3, axis_pos: int=1, position: np.array=np.array([0, 0, 0]), angle_deg:float=0, save_path:str=None):
     # def __init__(self, door_params:np.array=np.array([0.1, 0.1, 0.018, 0.1]), axis_pos: int=1, position: np.array=np.array([0, 0, 0]), rotz_deg:float=0, save_path:str=None):
     def __init__(self, door_params:np.array=np.array([0.1, 0.1, 0.018, 0.1]), 
-                 axis_pos: int=1, T_A_S: np.ndarray=np.eye(4), 
+                 r:np.array=np.array([0, -0.05]),
+                 axis_pos: int=1, 
+                 T_A_S: np.ndarray=np.eye(4), 
                  save_path:str=None,
                  has_handle:bool=False):
         # S = World (scene)
@@ -56,6 +58,9 @@ class Cabinet():
         # self.axis_distance = 0.005
         self.static_side_width = 0.018
         
+        self.rx = r[0]
+        self.ry = r[1]
+
         # Handle def - cylinders
         self.has_handle = has_handle
         self.handle_radius = 0.005
@@ -129,14 +134,17 @@ class Cabinet():
 
         # Panel point to axis
         self.T_D_A = np.eye(4)
-        # self.T_D_A[:3, :3] = np.array([[0, 0, -1],
-        #                               [1, 0, 0],
-        #                               [0, -1, 0]])
-        self.T_D_A[:3, :3] = rot_y(np.radians(-self.axis_pos*90.)) @ rot_z(np.radians(self.axis_pos*90.))
+        self.T_D_A[:3, :3] = np.array([[0, 0, -self.axis_pos],
+                                      [self.axis_pos, 0, 0],
+                                      [0, -1, 0]])
+        self.T_D_A[:3, 3] = np.array([self.rx - self.axis_pos*self.d_door*0.5,
+                                      self.ry - self.w_door*0.5,
+                                      self.h_door*0.5])
+        # self.T_D_A[:3, :3] = rot_y(np.radians(-self.axis_pos*90.)) @ rot_z(np.radians(self.axis_pos*90.))
 
-        self.T_D_A[:3, 3] = np.array([-self.axis_pos*(self.d_door/2.),
-                                     -(self.w_door - self.axis_distance),
-                                     self.h_door/2.])
+        # self.T_D_A[:3, 3] = np.array([-self.axis_pos*(self.d_door/2.),
+        #                              -(self.w_door - self.axis_distance),
+        #                              self.h_door/2.])
 
         # # Door panel centroid to axis
         # self.T_D_A_init = np.eye(4)

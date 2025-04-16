@@ -183,3 +183,64 @@ RUN pip3 install pytransform3d
 
 # Add core package in UR5 to the PYTHONPATH
 ENV PYTHONPATH="${PYTHONPATH}:/home/RVLuser/ferit_ur5_ws/src/core/src"
+
+# XELA Robotics usPa 44 tactile sensor installation
+WORKDIR /
+RUN pip3 install --no-cache-dir websocket-client
+
+RUN git clone https://github.com/linux-can/can-utils.git
+RUN cd can-utils && \
+    make && \
+    make install
+RUN wget -O xela_suite_linux.tar.xz https://xela.lat-d5.com/download.php?version=1.7.7-161703-appimage
+RUN mkdir -p xela_suite_linux && \
+    tar -xvf xela_suite_linux.tar.xz -C xela_suite_linux
+RUN ls -la
+RUN cd xela_suite_linux && \ 
+    chmod +x xela_server xela_viz
+
+# Add to the directory to PATH - for running the server etc.
+ENV PATH="/xela_suite_linux:${PATH}"
+
+RUN mkdir -p /etc/udev/rules.d 
+RUN touch  /etc/udev/rules.d/90-slcan.rules && \
+    echo "#slcan autoloader" > /etc/udev/rules.d/90-slcan.rules && \
+    echo "SUBSYSTEM=="tty", ATTRS{idVendor}=="1d6b", ATTRS{idProduct}=="0002", SYMLINK+="ttyUSB%n", GROUP="dialout", MODE="0777", TAG+="systemd", ENV{SYSTEMD_WANTS}="slcan@%n.service"" > /etc/udev/rules.d/90-slcan.rules
+
+# Create the slcan@.service file
+RUN mkdir -p /etc/systemd/system && \
+    cat <<EOF > /etc/systemd/system/slcan@.service
+[Unit]
+Description=slcan interface
+After=dev-ttyUSB%i.device
+BindsTo=dev-ttyUSB%i.device
+
+[Service]
+ExecStart=/usr/local/bin/slcan_add.sh %I
+Type=forking
+EOF
+
+RUN chmod +x /etc/systemd/system/slcan@.service
+    
+# Create the slcan_add.sh script
+RUN mkdir -p /usr/local/bin && \
+    cat <<EOF > /usr/local/bin/slcan_add.sh
+#!/bin/sh
+
+sleep 1
+slcand -o -c -f -s8 -t hw -S 3000000 /dev/ttyUSB\$1 slcan\$1
+sleep 1
+ifconfig slcan\$1 up
+EOF
+
+RUN apt-get update && apt-get install -y \
+    net-tools \
+    libfuse2 \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN apt-get update && \
+    apt-get install -y locales && \
+    locale-gen en_US.UTF-8 && \
+    update-locale LANG=en_US.UTF-8
+
+RUN chmod +x /usr/local/bin/slcan_add.sh

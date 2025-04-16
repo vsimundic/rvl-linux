@@ -3387,6 +3387,206 @@ bool DDManipulator::ApproachPath(
     Array<MOTION::IKSolution> *IKSolutions,
     Array<Pair<int, int>> &paths)
 {
+    // std::cout << "[DEBUG] Entered ApproachPath." << std::endl;
+
+    float Z_G_S[3];
+    RVLCOPYCOLMX3X3(pPose_G_S_contact->R, 2, Z_G_S);
+    // std::cout << "[DEBUG] Copied Z axis of contact pose." << std::endl;
+
+    int iSphere;
+    int iPlane;
+    float s, k, e;
+    float *N;
+    MOTION::Plane *pPlane;
+    float mins = 0.0f;
+    float maxs = 0.0f;
+    float c_S[3];
+    MOTION::Sphere *pSphere;
+    bool bFreePose;
+
+    for (iSphere = 0; iSphere < tool_sample_spheres.n; iSphere++)
+    {
+        // std::cout << "[DEBUG] Checking sample sphere " << iSphere << std::endl;
+        pSphere = tool_sample_spheres.Element + iSphere;
+        RVLTRANSF3(pSphere->c.Element, pPose_G_S_contact->R, pPose_G_S_contact->t, c_S);
+        bFreePose = false;
+
+        for (iPlane = 0; iPlane < 4; iPlane++)
+        {
+            pPlane = freeSpacePlanes_S + iPlane;
+            e = RVLDOTPRODUCT3(c_S, pPlane->N) - pPlane->d - pSphere->r - visionTol;
+            if (e > 0.0f)
+            {
+                maxs = 0.0f;
+                bFreePose = true;
+                break;
+            }
+            k = RVLDOTPRODUCT3(pPlane->N, Z_G_S);
+            if (k > -1e-7)
+                continue;
+            s = -e / k;
+            if (s > maxs || !bFreePose)
+                maxs = s;
+            bFreePose = true;
+        }
+
+        if (!bFreePose)
+        {
+            // std::cout << "[DEBUG] No valid free pose found for sphere " << iSphere << std::endl;
+            break;
+        }
+
+        if (maxs < mins)
+            mins = maxs;
+    }
+
+    if (iSphere < tool_sample_spheres.n)
+    {
+        // std::cout << "[DEBUG] No free pose after loop. Exiting." << std::endl;
+        return false;
+    }
+
+    poses_G_0_via.n = 0;
+    Pose3D *pPose_G_0 = poses_G_0_via.Element;
+    float V3Tmp[3];
+    RVLCOMPTRANSF3DWITHINV(robot.pose_0_W.R, robot.pose_0_W.t, pPose_G_S_contact->R, pPose_G_S_contact->t, pPose_G_0->R, pPose_G_0->t, V3Tmp);
+    // std::cout << "[DEBUG] Computed pose_G_0." << std::endl;
+
+    Pose3D pose_G_S;
+    int iViaPt = -1;
+
+    if (mins < -1e-3)
+    {
+        float Z_G_0[3];
+        RVLCOPYCOLMX3X3(pPose_G_0->R, 2, Z_G_0);
+        RVLSCALE3VECTOR(Z_G_0, mins, V3Tmp);
+        RVLSUM3VECTORS(pPose_G_0->t, V3Tmp, pPose_G_0->t);
+
+        // std::cout << "[DEBUG] Attempting IK for via point 1." << std::endl;
+#ifdef RVLMOTION_DDMANIPULATOR_MULTI_SOLUTION_IK
+        robot.InvKinematics(*pPose_G_0, IKSolutions[1], true);
+        Free(IKSolutions[1]);
+        // std::cout << "[DEBUG] IKSolutions[1].n = " << IKSolutions[1].n << std::endl;
+        if (IKSolutions[1].n == 0)
+        {
+            // std::cout << "[DEBUG] No IK solution for via point 1." << std::endl;
+            return false;
+        }
+#else
+        if (!robot.InvKinematics(*pPose_G_0, IKSolutions[1].Element))
+        {
+            // std::cout << "[DEBUG] Single-solution IK failed for via point 1." << std::endl;
+            return false;
+        }
+#endif
+        RVLCOMPTRANSF3D(robot.pose_0_W.R, robot.pose_0_W.t, pPose_G_0->R, pPose_G_0->t, pose_G_S.R, pose_G_S.t);
+        if (!Free(pPose_G_0, SDF))
+        {
+            // std::cout << "[DEBUG] Via point 1 is in collision." << std::endl;
+            return false;
+        }
+
+        poses_G_0_via.n++;
+        iViaPt = 1;
+    }
+
+    // std::cout << "[DEBUG] Completed via point 1 check. Checking via point 0." << std::endl;
+
+    float Z_DD_0[3];
+    RVLCOPYCOLMX3X3(pose_DD_0.R, 2, Z_DD_0);
+    float C_0[3];
+    RVLTRANSF3(tool_bounding_sphere.c.Element, pPose_G_0->R, pPose_G_0->t, C_0);
+    RVLDIF3VECTORS(C_0, pose_DD_0.t, V3Tmp);
+    e = RVLDOTPRODUCT3(Z_DD_0, V3Tmp) + dd_sx + tool_bounding_sphere.r + visionTol;
+
+    if (e > 1e-3)
+    {
+        pPose_G_0 = poses_G_0_via.Element + poses_G_0_via.n;
+        Pose3D *pPose_G_0_prev = poses_G_0_via.Element;
+        *pPose_G_0 = *pPose_G_0_prev;
+        RVLSCALE3VECTOR(Z_DD_0, e, V3Tmp);
+        RVLDIF3VECTORS(pPose_G_0->t, V3Tmp, pPose_G_0->t);
+
+        // std::cout << "[DEBUG] Attempting IK for via point 0." << std::endl;
+#ifdef RVLMOTION_DDMANIPULATOR_MULTI_SOLUTION_IK
+        robot.InvKinematics(*pPose_G_0, IKSolutions[0], true);
+        Free(IKSolutions[0]);
+        if (IKSolutions[0].n == 0)
+        {
+            // std::cout << "[DEBUG] No IK solution for via point 0." << std::endl;
+            return false;
+        }
+#else
+        if (!robot.InvKinematics(*pPose_G_0, IKSolutions[0].Element))
+        {
+            // std::cout << "[DEBUG] Single-solution IK failed for via point 0." << std::endl;
+            return false;
+        }
+#endif
+        poses_G_0_via.n++;
+        iViaPt = 0;
+    }
+
+    // std::cout << "[DEBUG] Number of via points: " << poses_G_0_via.n << std::endl;
+
+    #ifdef RVLMOTION_DDMANIPULATOR_MULTI_SOLUTION_IK
+    paths.n = 0;
+    // std::cout << "[DEBUG] Checking compatibility between IK solutions." << std::endl;
+
+    if (poses_G_0_via.n == 1)
+    {
+        // std::cout << "[DEBUG] Only one via point found." << std::endl;
+        if (iViaPt == 0)
+        {
+            // std::cout << "[DEBUG] Copying IKSolutions[0] into IKSolutions[1] for consistency." << std::endl;
+            memcpy(IKSolutions[1].Element, IKSolutions[0].Element, IKSolutions[0].n * sizeof(MOTION::IKSolution));
+            IKSolutions[1].n = IKSolutions[0].n;
+        }
+
+        // std::cout << "[DEBUG] IKSolutions[1].n = " << IKSolutions[1].n << std::endl;
+
+        for (int i = 0; i < IKSolutions[1].n; ++i)
+        {
+            paths.Element[paths.n].a = -1;
+            paths.Element[paths.n].b = i;
+            paths.n++;
+        }
+        // std::cout << "[DEBUG] Added " << paths.n << " paths (one via point)." << std::endl;
+    }
+    else if (poses_G_0_via.n == 2)
+    {
+        // std::cout << "[DEBUG] Two via points found." << std::endl;
+        // std::cout << "[DEBUG] IKSolutions[0].n = " << IKSolutions[0].n << ", IKSolutions[1].n = " << IKSolutions[1].n << std::endl;
+        for (int i = 0; i < IKSolutions[0].n; ++i)
+        {
+            float *q1 = IKSolutions[0].Element[i].q;
+            for (int j = 0; j < IKSolutions[1].n; ++j)
+            {
+                float *q2 = IKSolutions[1].Element[j].q;
+                float dq[6], qDist, tmp;
+                int idx;
+                RVLMOTION_JOINT_SPACE_CHEB_DIST(q1, q2, dq, qDist, tmp, idx);
+                if (qDist <= JSDistThr)
+                {
+                    paths.Element[paths.n].a = i;
+                    paths.Element[paths.n].b = j;
+                    paths.n++;
+                }
+            }
+        }
+        // std::cout << "[DEBUG] Found " << paths.n << " compatible paths between via points." << std::endl;
+    }
+#endif
+
+    // std::cout << "[DEBUG] Valid paths: " << paths.n << std::endl;
+    return (paths.n > 0);
+}
+
+bool DDManipulator::ApproachPathPoses(
+    Pose3D *pPose_G_S_contact,
+    Array<Pose3D> &poses_G_0_via,
+    float *SDF)
+{
     // Second via point.
 
     float Z_G_S[3];
@@ -3403,6 +3603,7 @@ bool DDManipulator::ApproachPath(
     float c_S[3];
     MOTION::Sphere *pSphere;
     bool bFreePose;
+    // cout << "[DEBUG] I'm here!" << endl;
     for (iSphere = 0; iSphere < tool_sample_spheres.n; iSphere++)
     {
         pSphere = tool_sample_spheres.Element + iSphere;
@@ -3432,36 +3633,35 @@ bool DDManipulator::ApproachPath(
             mins = maxs;
     }
     if (iSphere < tool_sample_spheres.n)
+    {
+        // cout << "[DEBUG] No free pose!" << endl;
         return false;
+    }
+
     poses_G_0_via.n = 0;
     Pose3D *pPose_G_0 = poses_G_0_via.Element;
     float V3Tmp[3];
     RVLCOMPTRANSF3DWITHINV(robot.pose_0_W.R, robot.pose_0_W.t, pPose_G_S_contact->R, pPose_G_S_contact->t, pPose_G_0->R, pPose_G_0->t, V3Tmp);
+    
+    float dummy_q[6] = {0};
+    VisualizeCurrentState(dummy_q, *pPose_G_0);
+
     Pose3D pose_G_S;
-    int iViaPt = -1;
     if (mins < -1e-3)
     {
         float Z_G_0[3];
         RVLCOPYCOLMX3X3(pPose_G_0->R, 2, Z_G_0);
         RVLSCALE3VECTOR(Z_G_0, mins, V3Tmp);
         RVLSUM3VECTORS(pPose_G_0->t, V3Tmp, pPose_G_0->t);
-#ifdef RVLMOTION_DDMANIPULATOR_MULTI_SOLUTION_IK
-        robot.InvKinematics(*pPose_G_0, IKSolutions[1], true);
-        Free(IKSolutions[1]);
-        if (IKSolutions[1].n == 0)
-            return false;
-#else
-        if (!robot.InvKinematics(*pPose_G_0, IKSolutions[1].Element))
-            return false;
-#endif
         RVLCOMPTRANSF3D(robot.pose_0_W.R, robot.pose_0_W.t, pPose_G_0->R, pPose_G_0->t, pose_G_S.R, pose_G_S.t);
-        if (!Free(pPose_G_0, SDF))
-            return false;
-        poses_G_0_via.n++;
-        iViaPt = 1;
-    }
 
-    // First via point.
+        if (!Free(pPose_G_0, SDF))
+        {
+            return false;
+        }
+
+        poses_G_0_via.n++;
+    }
 
     float Z_DD_0[3];
     RVLCOPYCOLMX3X3(pose_DD_0.R, 2, Z_DD_0);
@@ -3469,6 +3669,7 @@ bool DDManipulator::ApproachPath(
     RVLTRANSF3(tool_bounding_sphere.c.Element, pPose_G_0->R, pPose_G_0->t, C_0);
     RVLDIF3VECTORS(C_0, pose_DD_0.t, V3Tmp);
     e = RVLDOTPRODUCT3(Z_DD_0, V3Tmp) + dd_sx + tool_bounding_sphere.r + visionTol;
+
     if (e > 1e-3)
     {
         pPose_G_0 = poses_G_0_via.Element + poses_G_0_via.n;
@@ -3476,68 +3677,11 @@ bool DDManipulator::ApproachPath(
         *pPose_G_0 = *pPose_G_0_prev;
         RVLSCALE3VECTOR(Z_DD_0, e, V3Tmp);
         RVLDIF3VECTORS(pPose_G_0->t, V3Tmp, pPose_G_0->t);
-#ifdef RVLMOTION_DDMANIPULATOR_MULTI_SOLUTION_IK
-        robot.InvKinematics(*pPose_G_0, IKSolutions[0], true);
-        Free(IKSolutions[0]);
-        if (IKSolutions[0].n == 0)
-            return false;
-#else
-        if (!robot.InvKinematics(*pPose_G_0, IKSolutions[0].Element))
-            return false;
-#endif
+
         poses_G_0_via.n++;
-        iViaPt = 0;
     }
 
-    // Check compatibility of the IK Solutions.
-
-#ifdef RVLMOTION_DDMANIPULATOR_MULTI_SOLUTION_IK
-    int iIKSolution1, iIKSolution2;
-    paths.n = 0;
-    float *q1, *q2;
-    float dq[6];
-    float qDist;
-    float fTmp;
-    int i;
-    if (poses_G_0_via.n == 1)
-    {
-        if (iViaPt == 0)
-        {
-            memcpy(IKSolutions[1].Element, IKSolutions[0].Element, IKSolutions[0].n * sizeof(MOTION::IKSolution));
-            IKSolutions[1].n = IKSolutions[0].n;
-        }
-        for (iIKSolution2 = 0; iIKSolution2 < IKSolutions[1].n; iIKSolution2++)
-        {
-            paths.Element[paths.n].a = -1;
-            paths.Element[paths.n].b = iIKSolution2;
-            paths.n++;
-        }
-    }
-    else if (poses_G_0_via.n == 2)
-    {
-        for (iIKSolution1 = 0; iIKSolution1 < IKSolutions[0].n; iIKSolution1++)
-        {
-            q1 = IKSolutions[0].Element[iIKSolution1].q;
-            for (iIKSolution2 = 0; iIKSolution2 < IKSolutions[1].n; iIKSolution2++)
-            {
-                q2 = IKSolutions[1].Element[iIKSolution2].q;
-                RVLMOTION_JOINT_SPACE_CHEB_DIST(q1, q2, dq, qDist, fTmp, i);
-                if (qDist <= JSDistThr)
-                {
-                    paths.Element[paths.n].a = iIKSolution1;
-                    paths.Element[paths.n].b = iIKSolution2;
-                    paths.n++;
-                }
-            }
-        }
-    }
-#else
-    paths.n = 1;
-    paths.Element[0].a = 0;
-    paths.Element[0].b = 0;
-#endif
-
-    return (paths.n > 0);
+    return poses_G_0_via.n > 0;
 }
 
 void DDManipulator::SetDoorModelParams(
@@ -4340,6 +4484,77 @@ void DDManipulator::Visualize(
 
     pVisualizer->renderer->RemoveViewProp(staticBoxActor);
     pVisualizer->renderer->RemoveViewProp(staticSorageSpaceActor);
+}
+
+void DDManipulator::VisualizeCurrentState(float *q, Pose3D pose_G_R)
+{
+    Visualizer *pVisualizer = pVisualizationData->pVisualizer;
+
+    // Display static part of the furniture.
+
+    Vector3<float> boxSize;
+    Vector3<float> boxCenter;
+    Pose3D pose_box_S;
+    BoxSize<float>(&dd_static_box, boxSize.Element[0], boxSize.Element[1], boxSize.Element[2]);
+    BoxCenter<float>(&dd_static_box, boxCenter.Element);
+    RVLCOPYMX3X3(pose_F_S.R, pose_box_S.R);
+    RVLTRANSF3(boxCenter.Element, pose_F_S.R, pose_F_S.t, pose_box_S.t);
+    vtkSmartPointer<vtkActor> staticBoxActor = pVisualizer->DisplayBox(boxSize.Element[0], boxSize.Element[1], boxSize.Element[2], &pose_box_S, 0.0, 128.0, 0.0);
+    BoxSize<float>(&dd_storage_space_box, boxSize.Element[0], boxSize.Element[1], boxSize.Element[2]);
+    BoxCenter<float>(&dd_storage_space_box, boxCenter.Element);
+    vtkSmartPointer<vtkActor> staticSorageSpaceActor = pVisualizer->DisplayBox(boxSize.Element[0], boxSize.Element[1], boxSize.Element[2], &pose_box_S, 0.0, 128.0, 0.0);
+
+    vtkSmartPointer<vtkActor> doorPanelActor;
+    vtkSmartPointer<vtkActor> doorPanelVNActor;
+    vtkSmartPointer<vtkActor> cabinetStaticMeshActor, pCabinetWholeMeshActor, cabinetPanelMeshActor;
+    Pose3D pose_A_S;
+    RVLCOMPTRANSF3D(pose_F_S.R, pose_F_S.t, pose_A_F.R, pose_A_F.t, pose_A_S.R, pose_A_S.t);
+    doorPanelActor = VisualizeDoorPenel();
+    if (pVisualizationData->bVNEnv)
+        doorPanelVNActor = pVNPanel->Display(pVisualizer, 0.01f, dVNPanel, NULL, 0.0f, &(pVisualizationData->VNBBox));
+    
+    VisualizeTool(pose_G_R, &(pVisualizationData->robotActors));
+    // Visualize collision spheres
+    Pose3D pose_G_S;
+    float c_S[3];
+    float *c_G = tool_bounding_sphere.c.Element;
+    RVLCOMPTRANSF3D(robot.pose_0_W.R, robot.pose_0_W.t, pose_G_R.R, pose_G_R.t, pose_G_S.R, pose_G_S.t);
+    RVLTRANSF3(c_G, pose_G_S.R, pose_G_S.t, c_S);
+
+    MOTION::Sphere *pSphere;
+    std::vector<vtkSmartPointer<vtkActor>> sphereActors;
+    for (int iSphere = 0; iSphere < tool_sample_spheres.n; iSphere++)
+    {
+        pSphere = tool_sample_spheres.Element + iSphere;
+        c_G = pSphere->c.Element;
+        RVLTRANSF3(c_G, pose_G_S.R, pose_G_S.t, c_S);
+        vtkNew<vtkSphereSource> sphereSource;
+        sphereSource->SetCenter(c_S[0], c_S[1], c_S[2]);
+        sphereSource->SetRadius(pSphere->r);
+        sphereSource->SetPhiResolution(16);
+        sphereSource->SetThetaResolution(9);
+        vtkNew<vtkPolyDataMapper> mapper;
+        mapper->SetInputConnection(sphereSource->GetOutputPort());
+        vtkNew<vtkActor> actor;
+        actor->SetMapper(mapper.GetPointer());
+        actor->GetProperty()->SetColor(0.5, 0.5, 0.5);
+        actor->GetProperty()->SetRepresentationToWireframe();
+        pVisualizer->renderer->AddActor(actor.GetPointer());
+        sphereActors.push_back(actor.GetPointer());
+    }
+
+    VisualizeRobot(q, &(pVisualizationData->robotActors));
+    pVisualizer->Run();
+    pVisualizer->renderer->RemoveViewProp(doorPanelActor);
+    pVisualizer->renderer->RemoveViewProp(cabinetStaticMeshActor);
+    pVisualizer->renderer->RemoveViewProp(cabinetPanelMeshActor);
+    for (int i = 0; i < sphereActors.size(); i++)
+        pVisualizer->renderer->RemoveViewProp(sphereActors[i]);
+    if (pVisualizationData->bVNEnv)
+        pVisualizer->renderer->RemoveViewProp(doorPanelVNActor);
+    for (int iToolActor = 0; iToolActor < pVisualizationData->robotActors.size(); iToolActor++)
+        pVisualizer->renderer->RemoveViewProp(pVisualizationData->robotActors[iToolActor]);
+    pVisualizer->window->Finalize();
 }
 
 void DDManipulator::VisualizeTool(
@@ -5777,4 +5992,10 @@ void DDManipulator::VisualizeDoorPanelMesh(vtkSmartPointer<vtkActor> &actor)
 
     actor = pVisualizer->actor;
 
+}
+
+void DDManipulator::setPose_DD_0()
+{
+    float V3Tmp[3];
+	RVLCOMPTRANSF3DWITHINV(robot.pose_0_W.R, robot.pose_0_W.t, pose_DD_S.R, pose_DD_S.t, pose_DD_0.R, pose_DD_0.t, V3Tmp);
 }
