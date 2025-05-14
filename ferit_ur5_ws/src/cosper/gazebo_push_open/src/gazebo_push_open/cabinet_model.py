@@ -36,7 +36,7 @@ class Cabinet():
     # def __init__(self, w_door: float, h_door: float, d_door: float=0.018, static_d: float=0.3, axis_pos: int=1, position: np.array=np.array([0, 0, 0]), angle_deg:float=0, save_path:str=None):
     # def __init__(self, door_params:np.array=np.array([0.1, 0.1, 0.018, 0.1]), axis_pos: int=1, position: np.array=np.array([0, 0, 0]), rotz_deg:float=0, save_path:str=None):
     def __init__(self, door_params:np.array=np.array([0.1, 0.1, 0.018, 0.1]), 
-                 r:np.array=np.array([0, -0.05]),
+                 r:np.array=np.array([0, 0]),
                  axis_pos: int=1, 
                  T_A_S: np.ndarray=np.eye(4), 
                  save_path:str=None,
@@ -137,8 +137,9 @@ class Cabinet():
         self.T_D_A[:3, :3] = np.array([[0, 0, -self.axis_pos],
                                       [self.axis_pos, 0, 0],
                                       [0, -1, 0]])
-        self.T_D_A[:3, 3] = np.array([self.rx - self.axis_pos*self.d_door*0.5,
-                                      self.ry - self.w_door*0.5,
+        self.T_D_A[:3, 3] = np.array([self.axis_pos*self.d_door*0.5,
+                                      -self.w_door,
+                                    #   self.ry,
                                       self.h_door*0.5])
         # self.T_D_A[:3, :3] = rot_y(np.radians(-self.axis_pos*90.)) @ rot_z(np.radians(self.axis_pos*90.))
 
@@ -547,6 +548,8 @@ class Cabinet():
         xmlstr = minidom.parseString(gfg.tostring(self.root_urdf)).toprettyxml(indent='\t')
 
         if save_path:
+            if not os.path.exists(os.path.dirname(save_path)):
+                os.makedirs(os.path.dirname(save_path))
             with open (save_path, 'w') as f:
                 f.write(xmlstr)
 
@@ -809,9 +812,11 @@ class Cabinet():
         self.dd_plate_mesh.paint_uniform_color([0.7, 0.7, 0.7])
         self.dd_plate_mesh.compute_vertex_normals()
 
+        self.dd_plate_rf = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.05)
+        self.dd_plate_rf.transform(self.T_A_O @ self.T_D_A)
+
 
         # Handle 
-        # TODO: make handle mesh
         self.handle_mesh = o3d.geometry.TriangleMesh()
         if self.has_handle:
             self.handle_main_cyl_mesh = o3d.geometry.TriangleMesh.create_cylinder(radius=self.handle_radius, height=self.handle_length)
@@ -840,6 +845,7 @@ class Cabinet():
             self.handle_mesh.transform(T_H_O)
             self.handle_mesh.compute_vertex_normals()
 
+        # dd_mesh = self.mesh_origin + self.dd_static_mesh + self.dd_plate_mesh + self.handle_mesh + self.dd_plate_rf
         dd_mesh = self.mesh_origin + self.dd_static_mesh + self.dd_plate_mesh + self.handle_mesh
         # dd_mesh = self.dd_static_mesh
         # Compute the centroid of the combined mesh
@@ -997,14 +1003,15 @@ if __name__ == '__main__':
     T_A_S[:3,3] = np.array([-0.3, -0.4, 0.278])
 
     cabinet_model = Cabinet(door_params, 
-                            axis_pos=-1, 
+                            axis_pos=-1,
+                            r=np.array([0.01, -0.5*door_params[0]]),
                             T_A_S=T_A_S, 
                             save_path='/home/RVLuser/ferit_ur5_ws/cabinet_new.urdf',
-                            has_handle=True)
+                            has_handle=False)
 
-    cabinet_model.save_door_panel_mesh('')
+    # cabinet_model.save_door_panel_mesh('')
 
-    cabinet_model.save_mesh_without_doors('/home/RVLuser/ferit_ur5_ws/cabinet_static.ply')
+    # cabinet_model.save_mesh_without_doors('/home/RVLuser/ferit_ur5_ws/cabinet_static.ply')
     
     # cabinet_model.visualize(None)
     
@@ -1015,7 +1022,8 @@ if __name__ == '__main__':
     cabinet_model.change_door_angle(0)
     cabinet_mesh = cabinet_model.create_mesh()
     cabinet_mesh.transform(np.linalg.inv(cabinet_model.T_A_O_init))
-    o3d.visualization.draw_geometries([cabinet_mesh])
+    origin_rf = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.05)
+    o3d.visualization.draw_geometries([cabinet_mesh, origin_rf])
     o3d.io.write_triangle_mesh('/home/RVLuser/ferit_ur5_ws/cabinet_whole.ply', cabinet_mesh)
 
     exit()

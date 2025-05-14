@@ -6,6 +6,7 @@ import numpy as np
 import cv2
 import cv_bridge
 import os
+import RVLPYRGBD2PLY
 
 class ImageProcess:
     def __init__(self, save_dir, rgb_topic, depth_topic, camera_info_topic, camera_fps, depth_encoding, robot_commander:UR5Commander=None):
@@ -182,3 +183,69 @@ class ImageProcess:
             subscriber.unregister()
 
         subscriber = rospy.Subscriber(self.camera_info_topic, CameraInfo, callback)
+
+
+class OneShotImageCapture:
+    def __init__(self, save_dir, rgb_topic, depth_topic, camera_info_topic, depth_encoding):
+        self.rgb_topic = rgb_topic
+        self.depth_topic = depth_topic
+        self.camera_info_topic = camera_info_topic
+        self.depth_encoding = depth_encoding
+        self.save_dir = save_dir
+
+        self.bridge = cv_bridge.CvBridge()
+        self.__make_dirs()
+
+    def __make_dirs(self):
+        self.rgb_save_dir = os.path.join(self.save_dir, 'rgb')
+        self.depth_save_dir = os.path.join(self.save_dir, 'depth')
+        self.ply_save_dir = os.path.join(self.save_dir, 'ply')
+        if not os.path.exists(self.rgb_save_dir):
+            os.makedirs(self.rgb_save_dir)
+        if not os.path.exists(self.depth_save_dir):
+            os.makedirs(self.depth_save_dir)
+        if not os.path.exists(self.ply_save_dir):
+            os.makedirs(self.ply_save_dir)
+
+    def capture_single_image_and_save(self):
+        # Wait for one message from each topic
+        rgb_msg = rospy.wait_for_message(self.rgb_topic, Image)
+        depth_msg = rospy.wait_for_message(self.depth_topic, Image)
+        camera_info_msg = rospy.wait_for_message(self.camera_info_topic, CameraInfo)
+
+        # Convert messages to OpenCV images
+        rgb_image = self.bridge.imgmsg_to_cv2(rgb_msg, desired_encoding='bgr8')
+        depth_image = self.bridge.imgmsg_to_cv2(depth_msg, desired_encoding=self.depth_encoding)
+
+        # Handle depth encoding
+        if self.depth_encoding == '32FC1':
+            depth_image = np.nan_to_num(x=depth_image, nan=0.0)
+            depth_image = (depth_image * 1000).astype(np.uint16)
+
+        # Save RGB and depth images
+        rgb_path = os.path.join(self.rgb_save_dir, 'captured_rgb.png')
+        depth_path = os.path.join(self.depth_save_dir, 'captured_depth.png')
+        cv2.imwrite(rgb_path, rgb_image)
+        cv2.imwrite(depth_path, depth_image)
+
+        # Convert to PLY
+        ply_path = os.path.join(self.ply_save_dir, 'captured.ply')
+        rgbd2ply = RVLPYRGBD2PLY.RGBD2PLY()
+        rgbd2ply.pixel_array_to_ply(
+            rgb_image,
+            depth_image,
+            camera_info_msg.K[0],  # fx
+            camera_info_msg.K[4],  # fy
+            camera_info_msg.K[2],  # cx
+            camera_info_msg.K[5],  # cy
+            camera_info_msg.width,
+            camera_info_msg.height,
+            0.05,  # Scale factor
+            ply_path
+        )
+
+        rospy.loginfo(f"Saved RGB image to {rgb_path}")
+        rospy.loginfo(f"Saved depth image to {depth_path}")
+        rospy.loginfo(f"Saved PLY file to {ply_path}")
+
+        return rgb_path, depth_path, ply_path

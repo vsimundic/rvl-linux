@@ -386,6 +386,22 @@ namespace RVL
 		std::vector<int> vecNumColchecks_Freeq, vecNumColchecks_FreeSDF;
 		int numColchecks_Freeq, numColchecks_FreeSDF;
 
+		// Approach path collision check
+		bool bApproachPathCollisionCheck;
+		bool bVisualizeApproachCollision;
+		int last_approach_error_code;
+
+		enum ApproachPathError {
+			APPROACH_SUCCESS = 0,
+			APPROACH_NO_IK_FOR_CONTACT = 1,
+			APPROACH_INVALID_SPHERE_POSE = 2,
+			APPROACH_COLLISION_CONTACT_VIA = 3,
+			APPROACH_NO_IK_FOR_VIA1 = 4,
+			APPROACH_NO_IK_FOR_VIA0 = 5,
+			APPROACH_NO_VALID_PATH = 6,
+			APPROACH_CYLINDER_COLLISION = 7,
+			APPROACH_CONTACT_SPHERE_COLLISION = 8
+		};
 
 		// FCL
 		bool use_fcl = false;

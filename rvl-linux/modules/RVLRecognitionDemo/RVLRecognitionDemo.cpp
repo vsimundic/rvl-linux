@@ -1331,8 +1331,8 @@ int main(int argc, char **argv)
 					recognition.RMSE(fpRMSE, false);
 #endif
 				}
-#else  // #ifndef RVLPSGM_ICP
-	   // recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, fpPoseError, fpnotFirstInfo, fpnotFirstPoseErr, 7);
+#else // #ifndef RVLPSGM_ICP
+	  // recognition.EvaluateMatchesByScore(fpHypothesisEvaluation, fpLog, fpPoseError, fpnotFirstInfo, fpnotFirstPoseErr, 7);
 #endif // #ifndef RVLPSGM_ICP
 	   // recognition.AddModelsToVisualizer(&visualizer, true, PCLICP, PCLICPVariants::Point_to_plane, NULL/*&kdtree*/);
 	   // QueryPerformanceCounter((LARGE_INTEGER *)&ctr2_);
@@ -2146,733 +2146,787 @@ int main(int argc, char **argv)
 					// detector.LoadDDRectangles(DDFrontSurfaceFilePath, &orthogonalViews);
 					// detector.DisplayAndEdit(BGR, &orthogonalViews);
 
-				delete[] rectStruct.rects.Element;
-			}
-		}
-		else
-			detector.CreateModels(models, modelFileNames);
-
-		RVL_DELETE_ARRAY(models.Element);
-	}
-
-	// Load image sequence.
-
-	else if (detector.mode == RVLRECOGNITION_MODE_RECOGNITION)
-	{
-		// Loading image sequence.
-		char imgFilePath[200];
-		char imgFileName[200];
-		std::string sceneSequenceTxt = std::string(RVLFILEPATH_SEPARATOR_) + "sceneSequence.txt";
-
-		std::vector<std::string> sequenceFileNames;
-		// Loading sequence file names from sceneSeqSeqFileName and storing them in sequenceFileNames.
-		if (sceneSequenceSequenceFileName != NULL)
-		{
-			FileSequenceLoader sequenceSequenceLoader;
-			if (!detector.bLoadMovingPartHypothesesFromFile || !detector.bLoadDDHypothesesFromFile || detector.GetVisualizeDoorHypotheses())
-			{
-				printf("Loading sequence of image sequences...\n");
-				sequenceSequenceLoader.Init(sceneSequenceSequenceFileName);
-			}
-
-			while (sequenceSequenceLoader.GetNext(imgFilePath, imgFileName))
-			{
-				// strcat(imgFilePath, sceneSequenceTxt.c_str());
-				sequenceFileNames.push_back(imgFilePath);
-			}
-		}
-		else
-		{
-			sequenceFileNames.push_back(sceneSequenceFileName);
-		}
-
-		RVL_DELETE_ARRAY(sceneSequenceFileName);
-
-		// // LOOP OVER MORE SEQUENCES
-		// cv::Mat pRGBDisplay = cv::imread("/home/RVLuser/rvl-linux/data/COSPER/AO/Exp-IRI-221121/images/scene_wardrobe_human/pose_00_00_wardrobe_human_left_door_2023-03-29-15-17-21/rgb/0000.png");
-		// std::string csvFileName = "/home/RVLuser/rvl-linux/data/COSPER/AO/Exp-IRI-221121/images/scene_wardrobe_human/pose_00_00_wardrobe_human_left_door_2023-03-29-15-17-21/bbox_gt/gt.csv";
-		// std::vector<std::vector<std::string>> csvContent;
-		// std::vector<std::vector<PSD::Point2D>> allGTPoints;
-		// bool x = detector.ParseCSV(csvFileName, true, csvContent);
-		// detector.GetGTPointsFromCSV(csvContent, allGTPoints);
-
-		// for (int gtPt = 0; gtPt < allGTPoints.size(); gtPt++)
-		// {
-		// 	std::vector<PSD::Point2D> gtPts = allGTPoints[gtPt];
-		// 	for (int iPt = 0; iPt < 4; iPt++)
-		// 	{
-		// 		cv::line(pRGBDisplay,
-		// 				 cv::Point(gtPts[iPt].P[0], gtPts[iPt].P[1]),
-		// 				 cv::Point(gtPts[(iPt + 1) % gtPts.size()].P[0], gtPts[(iPt + 1) % gtPts.size()].P[1]),
-		// 				 cv::Scalar(0, 255, 0), 2);
-		// 	}
-		// }
-		// cv::imshow("aa", pRGBDisplay);
-		// cv::waitKey();
-
-		for (int iSeq = 0; iSeq < sequenceFileNames.size(); iSeq++)
-		{
-			sceneSequenceFileName = (char *)(sequenceFileNames[iSeq].data());
-			sceneFolder = std::string(sceneSequenceFileName, std::string(sceneSequenceFileName).rfind(RVLFILEPATH_SEPARATOR_) + 1);
-
-			FileSequenceLoader sequenceLoader;
-			if (!detector.bLoadMovingPartHypothesesFromFile || !detector.bLoadDDHypothesesFromFile || detector.GetVisualizeDoorHypotheses())
-			{
-				printf("Loading image sequence...\n");
-				sequenceLoader.Init(sceneSequenceFileName);
-			}
-			char imgFilePath[200];
-			char imgFileName[200];
-
-			// Create models.
-
-			if (detector.test == RVLDDD_TEST_DDD)
-			{
-				printf("Loading models...\n");
-				FileSequenceLoader modelLoader;
-				modelLoader.Init(modelSequenceFileName);
-				char modelFilePath[200];
-				char modelFileName[200];
-				while (modelLoader.GetNext(modelFilePath, modelFileName))
-					modelFileNames.push_back(modelFilePath);
-				detector.LoadModels(modelFileNames);
-				printf("completed.\n");
-			}
-			else if (detector.test == RVLDDD_TEST_CUBOIDS || detector.test == RVLDDD_TEST_DDD2 || detector.test == RVLDDD_TEST_SVD)
-			{
-				RVL_DELETE_ARRAY(detector.models.Element);
-				detector.models.Element = new RECOG::DDD::Model[1];
-				detector.models.n = 1;
-				if (detector.test == RVLDDD_TEST_CUBOIDS)
-				{
-					float cuboidSize[] = {1.0f, 1.0f, 1.0f};
-					detector.CreateCuboidModel(cuboidSize, 0.1f, detector.models.Element);
+					delete[] rectStruct.rects.Element;
 				}
-				else if (detector.test == RVLDDD_TEST_DDD2)
-				{
-					float cuboidSize[] = {0.4f, 0.2f, 0.018f};
-					// detector.CreateCuboidModel(cuboidSize, 0.02f, detector.models.Element);
-					detector.CreateCuboidModel2(cuboidSize, 1.0f / 0.02f, detector.models.Element);
-				}
-				else if (detector.test == RVLDDD_TEST_SVD)
-					detector.CreateStorageVolumeModel(detector.models.Element);
-				else
-					printf("ERROR: False test ID!\n");
-			}
-
-			if (detector.test == RVLDDD_TEST_DDD || detector.test == RVLDDD_TEST_CUBOIDS || detector.test == RVLDDD_TEST_DDD2 ||
-				detector.test == RVLDDD_TEST_SVD || detector.test == RVLDDD_TEST_DETECT_RECTSTRUCT || detector.test == RVLDDD_TEST_RECOGNIZE_RECTSTRUCT ||
-				detector.test == RVLDDD_TEST_RECOGNIZE_AO)
-			{
-				// Load query meshes.
-
-				if (detector.bLoadMovingPartHypothesesFromFile && detector.bLoadDDHypothesesFromFile && !detector.GetVisualizeDoorHypotheses())
-					meshSeq.n = 0;
-				else
-				{
-					meshSeq.Element = new Mesh[sequenceLoader.nFileNames];
-					pMesh = meshSeq.Element;
-					sceneTransformations.Element = new RECOG::DDD::Transformation[sequenceLoader.nFileNames];
-					pSceneTransformation = sceneTransformations.Element;
-					while (sequenceLoader.GetNext(imgFilePath, imgFileName))
-					{
-						printf("Loading image %s\n", imgFileName);
-						IOFileNames(sceneFolder, imgFileName, RGBImageFolder, depthImageFolder, PLYFolder, transformationsFolder, RGBFileName, depthFileName, PLYFileName, transformationsFileName);
-#ifdef RVLPCL
-						if (bMeshBuilder)
-							LoadMesh(&meshBuilder, (char *)(PLYFileName.data()), pMesh++, false);
-						else
-#endif
-						{
-							pMesh->LoadFromPLY((char *)(PLYFileName.data()), maxMeshTriangleEdgeLen, true, &camera);
-							pMesh++;
-						}
-
-						detector.LoadIRITransformationsFromYAML(transformationsFileName, pSceneTransformation->R, pSceneTransformation->t);
-						pSceneTransformation++;
-						if (detector.GetRGBImageVisualization())
-							RGBSeq.push_back(cv::imread(RGBFileName));
-					}
-					meshSeq.n = pMesh - meshSeq.Element;
-					sceneTransformations.n = pSceneTransformation - sceneTransformations.Element;
-					printf("completed.\n");
-				}
-
-				if (detector.test == RVLDDD_TEST_CUBOIDS)
-				{
-					// Detect cuboids.
-
-					for (int iScene = 0; iScene < meshSeq.n; iScene++)
-						detector.DetectCuboids(meshSeq.Element + iScene);
-				}
-				else if (detector.test == RVLDDD_TEST_SVD)
-				{
-					// Detect sotrage volumes.
-
-					for (int iScene = 0; iScene < meshSeq.n; iScene++)
-						detector.DetectStorageVolumes(meshSeq.Element + iScene);
-				}
-				else if (detector.test == RVLDDD_TEST_DETECT_RECTSTRUCT)
-				{
-					// Detect rectangular structures.
-
-					RECOG::DDD::RectStruct rectStruct;
-					for (int iScene = 0; iScene < meshSeq.n; iScene++)
-					{
-						detector.RectangularStructures(meshSeq.Element + iScene, &rectStruct);
-						delete[] rectStruct.rects.Element;
-					}
-				}
-				else if (detector.test == RVLDDD_TEST_RECOGNIZE_RECTSTRUCT)
-				{
-					FileSequenceLoader modelLoader;
-					modelLoader.Init(modelSequenceFileName);
-					Array<RECOG::DDD::RectStruct> models;
-					models.n = modelLoader.nFileNames;
-					models.Element = new RECOG::DDD::RectStruct[models.n];
-					char modelFilePath[200];
-					char modelFileName[200];
-					int iModel = 0;
-					while (modelLoader.GetNext(modelFilePath, modelFileName))
-					{
-						std::string modelInFileName = modelFilePath;
-						std::string modelOutFileName = modelInFileName.substr(0, modelInFileName.rfind('.') + 1) + "dat";
-						detector.LoadRectangularStructure(modelOutFileName, models.Element + iModel);
-						iModel++;
-					}
-
-					/// Recognize the model rectangular structure in the scenes.
-
-					RECOG::DDD::RectStruct rectStruct;
-					for (int iScene = 0; iScene < meshSeq.n; iScene++)
-					{
-						// Detect rectangular structure.
-
-						if (detector.RectangularStructures(meshSeq.Element + iScene, &rectStruct))
-						{
-							// Compare the detected rectangular structure to the model.
-
-							Pose3D poseMQ, poseMC;
-							detector.MatchRectangularStructures(models.Element, &rectStruct, poseMQ, poseMC);
-						}
-
-						delete[] rectStruct.rects.Element;
-					}
-
-					///
-
-					for (int iModel = 0; iModel < models.n; iModel++)
-						delete[] models.Element[iModel].rects.Element;
-					delete[] models.Element;
-				}
-				else if (detector.test == RVLDDD_TEST_RECOGNIZE_AO)
-				{
-#ifdef NEVER
-					FileSequenceLoader modelLoader;
-					modelLoader.Init(modelSequenceFileName);
-					char modelFilePath[200];
-					char modelFileName[200];
-					modelLoader.GetNext(modelFilePath, modelFileName);
-					RECOG::DDD::ArticulatedObject AObj;
-					detector.LoadArticulatedObject(modelFilePath, AObj);
-#endif
-					RECOG::DDD::ArticulatedObject AObj;
-					RECOG::DDD::ArticulatedObject *pAObj;
-
-					FileSequenceLoader modelLoader;
-					modelLoader.Init(modelSequenceFileName);
-					char modelFilePath[200];
-					char modelFileName[200];
-					int nModels = modelLoader.nFileNames;
-					Array<RECOG::DDD::ArticulatedObject> AObjs;
-					AObjs.Element = new RECOG::DDD::ArticulatedObject[nModels];
-					AObjs.n = nModels;
-					pAObj = AObjs.Element;
-					Array<RECOG::DDD::Transformation> modelTransformations;
-					modelTransformations.Element = new RECOG::DDD::Transformation[nModels];
-					modelTransformations.n = nModels;
-					RECOG::DDD::Transformation *pModelTransformation = modelTransformations.Element;
-					while (modelLoader.GetNext(modelFilePath, modelFileName))
-					{
-						printf("Loading model %s\n", modelFileName);
-						detector.LoadArticulatedObject(modelFilePath, AOFileName, *pAObj);
-						detector.LoadGTTransformations(modelFilePath, *pModelTransformation);
-						pAObj++;
-						pModelTransformation++;
-					}
-					printf("completed.\n");
-
-					Pose3D poseOC;
-					char sceneFileName[200];
-					char sceneFilePath[200];
-					char AOModelFileName[200];
-					int iAOModel = 2;
-					printf("\n************************\n\n");
-					for (int iScene = 0; iScene < meshSeq.n; iScene++)
-					{
-						sequenceLoader.GetFileName(iScene, sceneFileName);
-						printf("Processing image %s:\n", sceneFileName);
-
-						sequenceLoader.GetFilePath(iScene, sceneFilePath);
-						Array<int> iAOModels;
-						iAOModels.Element = new int[nModels];
-						detector.SelectAOModel(sceneTransformations.Element + iScene, modelTransformations, AObjs, AObj, iAOModels);
-						// iAOModels.n = 1;
-						// iAOModels.Element[0] = 0;
-						// AObj = AObjs.Element[iAOModels.Element[0]];
-						Pose3D poseOC_MRL;
-						RECOG::DDD::Transformation *pPoseC0;
-						RECOG::DDD::Transformation *pPoseO0;
-						if (iAOModels.n == 0)
-						{
-							printf("AO model not found!\n");
-							break;
-						}
-						else
-						{
-							modelLoader.GetFileName(iAOModels.Element[0], AOModelFileName);
-							printf("AO model %s selected!\n", AOModelFileName);
-							pPoseC0 = sceneTransformations.Element + iScene;
-							pPoseO0 = modelTransformations.Element + iAOModels.Element[0];
-							float V3Tmp[3];
-							RVLCOMPTRANSF3DWITHINV(pPoseC0->R, pPoseC0->t, pPoseO0->R, pPoseO0->t, poseOC_MRL.R, poseOC_MRL.t, V3Tmp);
-						}
-						cv::Mat *pRGBImg = RGBSeq.data() + iScene;
-						Mesh *pMesh = meshSeq.Element + iScene;
-						// RECOG::DDD::AOHypothesisState* states;
-						// detector.AOZeroState(AObj, states);
-						// if (detector.GetRGBImageVisualization())
-						//{
-						//	if (pRGBImg)
-						//	{
-						//		cv::Mat display;
-						//		pRGBImg->copyTo(display);
-						//		detector.GetVisualizer()->SetMesh(pMesh);
-						//		detector.VisualizeArticulatedObject(AObj, poseOC_MRL, false, &display);
-						//		cv::imshow("Articulated object", display);
-						//		cv::waitKey();
-						//		detector.RunVisualizer();
-						//		detector.ClearVisualization();
-						//	}
-						// }
-						float verticalMAxis[3];
-						double *Z0O = pPoseO0->R + 6;
-						RVLCOPY3VECTOR(Z0O, verticalMAxis);
-						if (detector.RecognizeArticulatedObject(pMesh, AObj, poseOC, &poseOC_MRL, verticalMAxis, (detector.GetRGBImageVisualization() ? pRGBImg : NULL)))
-							// if (detector.RecognizeArticulatedObject(pMesh, AObj, poseOC, NULL, NULL, (detector.GetRGBImageVisualization() ? pRGBImg : NULL)))
-							detector.RecognizeArticulatedObjectState(pMesh, AObj, poseOC, (detector.GetRGBImageVisualization() ? pRGBImg : NULL), true);
-						printf("\n************************\n\n");
-					}
-					// delete[] AObj.MRS.rects.Element;
-					// delete[] AObj.movingParts.Element;
-					for (int iAObj = 0; iAObj < AObjs.n; iAObj++)
-					{
-						delete[] AObjs.Element[iAObj].MRS.rects.Element;
-						delete[] AObjs.Element[iAObj].movingParts.Element;
-					}
-					delete[] AObjs.Element;
-					delete[] modelTransformations.Element;
-					RVL_DELETE_ARRAY(sceneTransformations.Element);
-				}
-				else
-				{
-					// Detect drawers and doors.
-
-					std::string hypFileName = std::string(sceneSequenceFileName);
-					hypFileName = hypFileName.substr(0, hypFileName.rfind(RVLFILEPATH_SEPARATOR_) + 1) + "hyps.txt";
-					RECOG::DDD::HypothesisDoorDrawer DDObject;
-					detector.Detect(meshSeq, &DDObject, (char *)hypFileName.data(), (detector.GetRGBImageVisualization() ? &RGBSeq : NULL));
-					// detector.Detect2(meshSeq);
-
-					// // ************ IoU Hypothesis evaluation ************
-					// // std::string csvFileName = hypFileName.substr(0, hypFileName.rfind(pathSeparator) + 1) + "bbox_gt/gt.csv";
-					// // cout << csvFileName << endl;
-					// // std::vector<std::vector<std::string>> csvContent;
-					// // std::vector<std::vector<PSD::Point2D>> allGTPoints;
-
-					// // cv::Mat pRGBDisplay = cv::imread(hypFileName.substr(0, hypFileName.rfind(pathSeparator) + 1) + "rgb/0000.png");
-
-					// if (detector.ParseCSV(csvFileName, true, csvContent))
-					// {
-					// 	// detector.GetGTPointsFromCSV(csvContent, allGTPoints);
-					// 	float *iouResults = new float[allGTPoints.size()];
-					// 	detector.cvIoUHypothesisEvaluation(DDObject, allGTPoints, iouResults, &pRGBDisplay);
-
-					// 	for (int iRes = 0; iRes < allGTPoints.size(); iRes++)
-					// 		cout << "IoU: " << iouResults[iRes] << endl;
-					// 	delete[] iouResults;
-					// 	}
-					// 	cv::imwrite(hypFileName.substr(0, hypFileName.rfind(RVLFILEPATH_SEPARATOR_) + 1) + "bbox_gt/gt.png", pRGBDisplay);
-				}
-			}
-			else if (detector.test == RVLDDD_TEST_3DTO2DFIT)
-			{
-				RVL::Pose3D poseC_C0[2];
-				if (flags & RVLRECOGNITION_DEMO_FLAG_STEREO_CALIBRATE)
-					detector.StereoCalibrationFromImages(stereoCalibrationPath, camsMatrix[0], camsDist[0], camsMatrix[1], camsDist[1], &poseC_C0[0]);
-				else
-					detector.loadBaslerExtrinsicParams(stereoCalibrationPath, &poseC_C0[0]);
-
-				// Create model.
-
-				Mesh modelMesh;
-				if (detector.edgeModel == RVLDDD_EDGE_MODEL_BOX)
-				{
-					float boxSize[] = {0.287f, 0.210f, 0.090f};
-					detector.CreateBox(&modelMesh, boxSize);
-				}
-				else if (detector.edgeModel == RVLDDD_EDGE_MODEL_CYLINDER)
-				{
-					// float rCylinder = 0.015f;
-					// float hCylinder = 0.800f;
-					// detector.CreateCylinder(&modelMesh, rCylinder, hCylinder, 20);
-					float rCylinder = 0.015f;
-					float hCylinder = 0.100f;
-					float rCylinder2 = 0.010f;
-					float hCylinder2 = 0.700f;
-					detector.CreateLHTCPModel(&modelMesh, rCylinder, hCylinder, rCylinder2, hCylinder2, 20);
-				}
-				detector.CreateMeshFromPolyData(&modelMesh);
-
-				// Initial pose.
-				Pose3D poseMCInit0, poseMCInit, poseMC;
-				Vector3<float> *poseCorrection;
-				Array<Pose3D> initPoses;
-				Pose3D initPosesMem[4];
-				initPoses.Element = initPosesMem;
-				initPoses.n = 4;
-				if (detector.edgeModel == RVLDDD_EDGE_MODEL_BOX)
-				{
-					float pan = 45.0f * DEG2RAD;
-					float tilt = -45.0f * DEG2RAD;
-					float csAlpha = cos(pan);
-					float snAlpha = sin(pan);
-					float csBeta = cos(tilt);
-					float snBeta = sin(tilt);
-					float RSC0[9] = {0.0f, -1.0f, 0.0f, 0.0f, 0.0f, -1.0f, 1.0f, 0.0f, 0.0f};
-					float RMS[9];
-					RVLROTZ(csAlpha, snAlpha, RMS);
-					float tMS[3];
-					RVLSET3VECTOR(tMS, 0.5f, 0.0f, -0.6f);
-					float RCC0[9];
-					RVLROTX(csBeta, snBeta, RCC0);
-					float RSC[9];
-					RVLMXMUL3X3T1(RCC0, RSC0, RSC);
-					RVLMXMUL3X3(RSC, RMS, poseMCInit0.R);
-					RVLMULMX3X3VECT(RSC, tMS, poseMCInit0.t);
-					float poseCorrectionBox[10][3] = {{0.0, 0.0, 0.0},
-													  {-0.1, 0.0, 0.0},
-													  {-0.1, 0.0, 0.0},
-													  {0.20, 0.0, 0.0},
-													  {0.0, 0.0, 0.0},
-													  {-0.07, 0.0, 0.0},
-													  {0.05, 0.0, 0.05},
-													  {0.04, 0.0, -0.03},
-													  {-0.04, -0.10, -0.04},
-													  {0.0, 0.0, 0.0}};
-					poseCorrection = new Vector3<float>[10];
-					for (int i = 0; i < 10; i++)
-					{
-						RVLCOPY3VECTOR(poseCorrectionBox[i], poseCorrection[i].Element);
-					}
-				}
-				else if (detector.edgeModel == RVLDDD_EDGE_MODEL_CYLINDER)
-				{
-					// RVLROTX(0.0f, 1.0f, poseMCInit0.R);
-					// RVLSET3VECTOR(poseMCInit0.t, 0.025f, 0.30f, 0.40f);
-					float angle = 20.0f;
-					for (int i = 0; i < initPoses.n / 2; i++)
-					{
-						// float cs = cos(-70.0 * DEG2RAD);
-						// float sn = sin(-70.0 * DEG2RAD);
-						float th = -0.5f * PI + (float)(2 * i - 1) * angle * DEG2RAD;
-						float cs = cos(th);
-						float sn = sin(th);
-						RVLROTX(cs, sn, poseMCInit0.R);
-						RVLSET3VECTOR(poseMCInit0.t, 0.0f, 0.0f, 0.28f);
-						initPoses.Element[i] = poseMCInit0;
-					}
-					float th, cs, sn, csx, snx;
-					float rotX[9], rotZ[9];
-					for (int i = 0; i < initPoses.n / 2; i++) // rotz
-					{
-						csx = cos(-0.5f * PI);
-						snx = sin(-0.5f * PI);
-						RVLROTX(csx, snx, rotX);
-
-						th = (float)(2 * i - 1) * angle * DEG2RAD;
-						cs = cos(th);
-						sn = sin(th);
-						RVLROTZ(cs, sn, rotZ);
-
-						RVLMXMUL3X3(rotZ, rotX, poseMCInit0.R);
-
-						RVLSET3VECTOR(poseMCInit0.t, 0.0f, 0.0f, 0.28f);
-						initPoses.Element[i + 2] = poseMCInit0;
-					}
-					float poseCorrectionBox[6][3] = {{-0.010, 0.0, 0.0},
-													 {-0.01, 0.0, 0.0},
-													 {-0.01, 0.0, 0.0},
-													 {-0.02, 0.0, 0.0},
-													 {-0.02, 0.0, 0.0},
-													 {0.0, 0.0, 0.0}};
-					poseCorrection = new Vector3<float>[6];
-					for (int i = 0; i < 6; i++)
-					{
-						RVLCOPY3VECTOR(poseCorrectionBox[i], poseCorrection[i].Element);
-					}
-				}
-
-				// Apply to images.
-
-				int iImage = 0;
-				cv::Mat RGBs[2];
-				cv::Mat RGBsUndistorted[2];
-				cv::Mat *solutions;
-				solutions = new cv::Mat[2];
-				int counter = 0;
-				RVL::Pose3D referentPoseMC, currentPoseMCX, currentPoseMCY, resultPoseMC, tempPoseMC;
-				RVL::Pose3D resultPoseWC, resultPoseCW;
-				float V[3];
-				float theta;
-
-				if (1)
-				{
-					while (sequenceLoader.GetNext(imgFilePath, imgFileName))
-					{
-						printf("Image %s\n", imgFileName);
-						if (detector.fit3DTo2DStereo)
-						{
-							std::string imaFilePath_ = imgFilePath;
-							// RGBs[0] = cv::imread((imaFilePath_ + "-1.png").data());
-							// RGBs[1] = cv::imread((imaFilePath_ + "-2.png").data());
-							for (int i = 0; i < 2; i++)
-							{
-								RGBs[i] = cv::imread((imaFilePath_ + "-" + std::to_string(i) + ".png").data());
-								cv::undistort(RGBs[i], RGBsUndistorted[i], camsMatrix[i], camsDist[i]);
-							}
-							// VisualizeEpipolarGeometry(RGBsUndistorted[0], RGBsUndistorted[1], camsMatrix[0], camsMatrix[1], poseC_C0[1]);
-							detector.Fit3DTo2DStereo(&modelMesh, &RGBsUndistorted[0], 2, initPoses, poseC_C0, poseMC, solutions, counter);
-							// counter++;
-							counter++;
-						}
-						else
-						{
-							cv::Mat RGB = cv::imread(imgFilePath);
-							// cv::imshow(imgFileName, RGB);
-							// cv::waitKey();
-							poseMCInit = poseMCInit0;
-							// RVLSUM3VECTORS(poseMCInit.t, poseCorrection[iImage].Element, poseMCInit.t);
-							// detector.Fit3DTo2D(&modelMesh, RGB, poseMCInit, poseMC);
-							detector.Fit3DTo2D(&modelMesh, RGB, initPoses, poseMC);
-							if (detector.edgeModel == RVLDDD_EDGE_MODEL_BOX)
-								poseMCInit0 = poseMC;
-						}
-						iImage++;
-					}
-				}
-				// else
-				// {
-				// 	// // LHTCP measurements
-				// 	std::string imagesPath = "/home/RVLuser/rvl-linux/data/DANIELI_LHTCP/experiments/Exp-LHTCP_measurements-230201/images";
-				// 	for (int i = 0; i < 2; i++)
-				// 	{
-				// 		RGBs[i] = cv::imread((imagesPath + "/12" + "-" + std::to_string(i) + ".png").data());
-				// 		cv::undistort(RGBs[i], RGBsUndistorted[i], camsMatrix[i], camsDist[i]);
-				// 	}
-				// 	referentPoseMC = detector.Fit3DTo2DStereo2(&modelMesh, &RGBsUndistorted[0], 2, initPoses, poseC_C0, poseMC, solutions, counter);
-
-				// 	cout << endl
-				// 		 << "TMC0: " << endl;
-
-				// 	for (const auto &e : referentPoseMC.R)
-				// 	{
-				// 		cout << e << ", ";
-				// 	}
-				// 	cout << endl;
-				// 	for (const auto &e : referentPoseMC.t)
-				// 	{
-				// 		cout << e << ", ";
-				// 	}
-				// 	cout << endl;
-
-				// 	for (int i = 0; i < 2; i++)
-				// 	{
-				// 		RGBs[i] = cv::imread((imagesPath + "/15" + "-" + std::to_string(i) + ".png").data());
-				// 		cv::undistort(RGBs[i], RGBsUndistorted[i], camsMatrix[i], camsDist[i]);
-				// 	}
-				// 	currentPoseMCX = detector.Fit3DTo2DStereo2(&modelMesh, &RGBsUndistorted[0], 2, initPoses, poseC_C0, poseMC, solutions, counter);
-
-				// 	float dist = sqrt(pow(referentPoseMC.t[0] - currentPoseMCX.t[0], 2) + pow(referentPoseMC.t[1] - currentPoseMCX.t[1], 2) + pow(referentPoseMC.t[2] - currentPoseMCX.t[2], 2));
-				// 	cout << "Distance: " << 0.15 - dist << endl;
-
-				// 	return 0;
-
-				// 	cout << endl
-				// 		 << "TMC0X: " << endl;
-				// 	for (const auto &e : currentPoseMCX.R)
-				// 	{
-				// 		cout << e << ", ";
-				// 	}
-				// 	cout << endl;
-				// 	for (const auto &e : currentPoseMCX.t)
-				// 	{
-				// 		cout << e << ", ";
-				// 	}
-				// 	cout << endl;
-
-				// 	// for (int i = 0; i < 2; i++)
-				// 	// {
-				// 	// 	RGBs[i] = cv::imread((imagesPath + "/4" + "-" + std::to_string(i) + ".png").data());
-				// 	// 	cv::undistort(RGBs[i], RGBsUndistorted[i], camsMatrix[i], camsDist[i]);
-				// 	// }
-				// 	// currentPoseMCY = detector.Fit3DTo2DStereo2(&modelMesh, &RGBsUndistorted[0], 2, initPoses, poseC_C0, poseMC, solutions, counter);
-
-				// 	// cout << endl << "TMC0Y: " << endl;
-				// 	// for (const auto &e : currentPoseMCY.R)
-				// 	// {
-				// 	// 	cout << e << ", ";
-				// 	// }
-				// 	// cout << endl;
-				// 	// for (const auto &e : currentPoseMCY.t)
-				// 	// {
-				// 	// 	cout << e << ", ";
-				// 	// }
-				// 	// cout << endl;
-
-				// 	// float tempX[3], tempY[3];
-				// 	// RVLDIF3VECTORS(currentPoseMCX.t, referentPoseMC.t, tempPoseMC.t);
-				// 	// RVLCOPYTOCOL3(tempPoseMC.t, 0, resultPoseWC.R);
-				// 	// RVLDIF3VECTORS(currentPoseMCY.t, referentPoseMC.t, tempPoseMC.t);
-				// 	// RVLCOPYTOCOL3(tempPoseMC.t, 1, resultPoseWC.R);
-
-				// 	// RVLCOPYCOLMX3X3(resultPoseWC.R, 0, tempX);
-				// 	// RVLCOPYCOLMX3X3(resultPoseWC.R, 1, tempY);
-				// 	// RVLCROSSPRODUCT3(tempX, tempY, tempPoseMC.t);
-				// 	// RVLCOPYTOCOL3(tempPoseMC.t, 2, resultPoseWC.R);
-
-				// 	// // imagesPath = "/home/RVLuser/rvl-linux/data/DANIELI_LHTCP/experiments/Exp-LHTCP_measurements-230206/images";
-				// 	// RVL::Pose3D rotatingPoseMC, rotatingPoseM_C;
-				// 	// for (int i = 0; i < 2; i++)
-				// 	// {
-				// 	// 	RGBs[i] = cv::imread((imagesPath + "/8" + "-" + std::to_string(i) + ".png").data());
-				// 	// 	cv::undistort(RGBs[i], RGBsUndistorted[i], camsMatrix[i], camsDist[i]);
-				// 	// }
-				// 	// rotatingPoseMC = detector.Fit3DTo2DStereo2(&modelMesh, &RGBsUndistorted[0], 2, initPoses, poseC_C0, poseMC, solutions, counter);
-				// 	// cout << endl<< "rotTMC0: " << endl;
-				// 	// for (const auto &e : rotatingPoseMC.R)
-				// 	// {
-				// 	// 	cout << e << ", ";
-				// 	// }
-				// 	// cout << endl;
-				// 	// for (const auto &e : rotatingPoseMC.t)
-				// 	// {
-				// 	// 	cout << e << ", ";
-				// 	// }
-				// 	// cout << endl;
-
-				// 	// for (int i = 0; i < 2; i++)
-				// 	// {
-				// 	// 	RGBs[i] = cv::imread((imagesPath + "/11" + "-" + std::to_string(i) + ".png").data());
-				// 	// 	cv::undistort(RGBs[i], RGBsUndistorted[i], camsMatrix[i], camsDist[i]);
-				// 	// }
-				// 	// rotatingPoseM_C = detector.Fit3DTo2DStereo2(&modelMesh, &RGBsUndistorted[0], 2, initPoses, poseC_C0, poseMC, solutions, counter);
-
-				// 	// cout << endl << "rotTM_C: " << endl;
-				// 	// for (const auto &e : rotatingPoseM_C.R)
-				// 	// {
-				// 	// 	cout << e << ", ";
-				// 	// }
-				// 	// cout << endl;
-				// 	// for (const auto &e : rotatingPoseM_C.t)
-				// 	// {
-				// 	// 	cout << e << ", ";
-				// 	// }
-				// 	// cout << endl;
-
-				// 	// float zMC[3], zM_C[3], zMW[3], zM_W[3];
-				// 	// RVLCOPYCOLMX3X3(rotatingPoseMC.R, 2, zMC);
-				// 	// RVLCOPYCOLMX3X3(rotatingPoseM_C.R, 2, zM_C);
-				// 	// RVLMULMX3X3TVECT(resultPoseWC.R, zMC, zMW);
-				// 	// RVLMULMX3X3TVECT(resultPoseWC.R, zM_C, zM_W);
-
-				// 	// float tempLen;
-				// 	// zMW[2] = 0.0;
-				// 	// zM_W[2] = 0.0;
-
-				// 	// cout << acos((zMW[0]*zM_W[0]+zMW[1]*zM_W[1])/(sqrt(RVLDOTPRODUCT3(zMW, zMW))*sqrt(RVLDOTPRODUCT3(zM_W, zM_W)))) * RAD2DEG << endl;
-				// }
-
-				delete[] poseCorrection;
-				delete[] solutions;
 			}
 			else
-				printf("Test not defined!\n");
+				detector.CreateModels(models, modelFileNames);
 
-			RVL_DELETE_ARRAY(meshSeq.Element);
+			RVL_DELETE_ARRAY(models.Element);
+		}
+
+		// Load image sequence.
+
+		else if (detector.mode == RVLRECOGNITION_MODE_RECOGNITION)
+		{
+			// Loading image sequence.
+			char imgFilePath[200];
+			char imgFileName[200];
+			std::string sceneSequenceTxt = std::string(RVLFILEPATH_SEPARATOR_) + "sceneSequence.txt";
+
+			std::vector<std::string> sequenceFileNames;
+			// Loading sequence file names from sceneSeqSeqFileName and storing them in sequenceFileNames.
+			if (sceneSequenceSequenceFileName != NULL)
+			{
+				FileSequenceLoader sequenceSequenceLoader;
+				if (!detector.bLoadMovingPartHypothesesFromFile || !detector.bLoadDDHypothesesFromFile || detector.GetVisualizeDoorHypotheses())
+				{
+					printf("Loading sequence of image sequences...\n");
+					sequenceSequenceLoader.Init(sceneSequenceSequenceFileName);
+				}
+
+				while (sequenceSequenceLoader.GetNext(imgFilePath, imgFileName))
+				{
+					// strcat(imgFilePath, sceneSequenceTxt.c_str());
+					sequenceFileNames.push_back(imgFilePath);
+				}
+			}
+			else
+			{
+				sequenceFileNames.push_back(sceneSequenceFileName);
+			}
+
+			RVL_DELETE_ARRAY(sceneSequenceFileName);
+
+			// // LOOP OVER MORE SEQUENCES
+			// cv::Mat pRGBDisplay = cv::imread("/home/RVLuser/rvl-linux/data/COSPER/AO/Exp-IRI-221121/images/scene_wardrobe_human/pose_00_00_wardrobe_human_left_door_2023-03-29-15-17-21/rgb/0000.png");
+			// std::string csvFileName = "/home/RVLuser/rvl-linux/data/COSPER/AO/Exp-IRI-221121/images/scene_wardrobe_human/pose_00_00_wardrobe_human_left_door_2023-03-29-15-17-21/bbox_gt/gt.csv";
+			// std::vector<std::vector<std::string>> csvContent;
+			// std::vector<std::vector<PSD::Point2D>> allGTPoints;
+			// bool x = detector.ParseCSV(csvFileName, true, csvContent);
+			// detector.GetGTPointsFromCSV(csvContent, allGTPoints);
+
+			// for (int gtPt = 0; gtPt < allGTPoints.size(); gtPt++)
+			// {
+			// 	std::vector<PSD::Point2D> gtPts = allGTPoints[gtPt];
+			// 	for (int iPt = 0; iPt < 4; iPt++)
+			// 	{
+			// 		cv::line(pRGBDisplay,
+			// 				 cv::Point(gtPts[iPt].P[0], gtPts[iPt].P[1]),
+			// 				 cv::Point(gtPts[(iPt + 1) % gtPts.size()].P[0], gtPts[(iPt + 1) % gtPts.size()].P[1]),
+			// 				 cv::Scalar(0, 255, 0), 2);
+			// 	}
+			// }
+			// cv::imshow("aa", pRGBDisplay);
+			// cv::waitKey();
+
+			for (int iSeq = 0; iSeq < sequenceFileNames.size(); iSeq++)
+			{
+				sceneSequenceFileName = (char *)(sequenceFileNames[iSeq].data());
+				sceneFolder = std::string(sceneSequenceFileName, std::string(sceneSequenceFileName).rfind(RVLFILEPATH_SEPARATOR_) + 1);
+
+				FileSequenceLoader sequenceLoader;
+				if (!detector.bLoadMovingPartHypothesesFromFile || !detector.bLoadDDHypothesesFromFile || detector.GetVisualizeDoorHypotheses())
+				{
+					printf("Loading image sequence...\n");
+					sequenceLoader.Init(sceneSequenceFileName);
+				}
+				char imgFilePath[200];
+				char imgFileName[200];
+
+				// Create models.
+
+				if (detector.test == RVLDDD_TEST_DDD)
+				{
+					printf("Loading models...\n");
+					FileSequenceLoader modelLoader;
+					modelLoader.Init(modelSequenceFileName);
+					char modelFilePath[200];
+					char modelFileName[200];
+					while (modelLoader.GetNext(modelFilePath, modelFileName))
+						modelFileNames.push_back(modelFilePath);
+					detector.LoadModels(modelFileNames);
+					printf("completed.\n");
+				}
+				else if (detector.test == RVLDDD_TEST_CUBOIDS || detector.test == RVLDDD_TEST_DDD2 || detector.test == RVLDDD_TEST_SVD)
+				{
+					RVL_DELETE_ARRAY(detector.models.Element);
+					detector.models.Element = new RECOG::DDD::Model[1];
+					detector.models.n = 1;
+					if (detector.test == RVLDDD_TEST_CUBOIDS)
+					{
+						float cuboidSize[] = {1.0f, 1.0f, 1.0f};
+						detector.CreateCuboidModel(cuboidSize, 0.1f, detector.models.Element);
+					}
+					else if (detector.test == RVLDDD_TEST_DDD2)
+					{
+						float cuboidSize[] = {0.4f, 0.2f, 0.018f};
+						// detector.CreateCuboidModel(cuboidSize, 0.02f, detector.models.Element);
+						detector.CreateCuboidModel2(cuboidSize, 1.0f / 0.02f, detector.models.Element);
+					}
+					else if (detector.test == RVLDDD_TEST_SVD)
+						detector.CreateStorageVolumeModel(detector.models.Element);
+					else
+						printf("ERROR: False test ID!\n");
+				}
+
+				if (detector.test == RVLDDD_TEST_DDD || detector.test == RVLDDD_TEST_CUBOIDS || detector.test == RVLDDD_TEST_DDD2 ||
+					detector.test == RVLDDD_TEST_SVD || detector.test == RVLDDD_TEST_DETECT_RECTSTRUCT || detector.test == RVLDDD_TEST_RECOGNIZE_RECTSTRUCT ||
+					detector.test == RVLDDD_TEST_RECOGNIZE_AO || detector.test == RVLDDD_TEST_RECOGNIZE_STATE_AO)
+				{
+					// Load query meshes.
+
+					if (detector.bLoadMovingPartHypothesesFromFile && detector.bLoadDDHypothesesFromFile && !detector.GetVisualizeDoorHypotheses())
+						meshSeq.n = 0;
+					else
+					{
+						meshSeq.Element = new Mesh[sequenceLoader.nFileNames];
+						pMesh = meshSeq.Element;
+						sceneTransformations.Element = new RECOG::DDD::Transformation[sequenceLoader.nFileNames];
+						pSceneTransformation = sceneTransformations.Element;
+						while (sequenceLoader.GetNext(imgFilePath, imgFileName))
+						{
+							printf("Loading image %s\n", imgFileName);
+							IOFileNames(sceneFolder, imgFileName, RGBImageFolder, depthImageFolder, PLYFolder, transformationsFolder, RGBFileName, depthFileName, PLYFileName, transformationsFileName);
+#ifdef RVLPCL
+							if (bMeshBuilder)
+								LoadMesh(&meshBuilder, (char *)(PLYFileName.data()), pMesh++, false);
+							else
+#endif
+							{
+								pMesh->LoadFromPLY((char *)(PLYFileName.data()), maxMeshTriangleEdgeLen, true, &camera);
+								pMesh++;
+							}
+
+							detector.LoadIRITransformationsFromYAML(transformationsFileName, pSceneTransformation->R, pSceneTransformation->t);
+							pSceneTransformation++;
+							if (detector.GetRGBImageVisualization())
+								RGBSeq.push_back(cv::imread(RGBFileName));
+						}
+						meshSeq.n = pMesh - meshSeq.Element;
+						sceneTransformations.n = pSceneTransformation - sceneTransformations.Element;
+						printf("completed.\n");
+					}
+
+					if (detector.test == RVLDDD_TEST_CUBOIDS)
+					{
+						// Detect cuboids.
+
+						for (int iScene = 0; iScene < meshSeq.n; iScene++)
+							detector.DetectCuboids(meshSeq.Element + iScene);
+					}
+					else if (detector.test == RVLDDD_TEST_SVD)
+					{
+						// Detect sotrage volumes.
+
+						for (int iScene = 0; iScene < meshSeq.n; iScene++)
+							detector.DetectStorageVolumes(meshSeq.Element + iScene);
+					}
+					else if (detector.test == RVLDDD_TEST_DETECT_RECTSTRUCT)
+					{
+						// Detect rectangular structures.
+
+						RECOG::DDD::RectStruct rectStruct;
+						for (int iScene = 0; iScene < meshSeq.n; iScene++)
+						{
+							detector.RectangularStructures(meshSeq.Element + iScene, &rectStruct);
+							delete[] rectStruct.rects.Element;
+						}
+					}
+					else if (detector.test == RVLDDD_TEST_RECOGNIZE_RECTSTRUCT)
+					{
+						FileSequenceLoader modelLoader;
+						modelLoader.Init(modelSequenceFileName);
+						Array<RECOG::DDD::RectStruct> models;
+						models.n = modelLoader.nFileNames;
+						models.Element = new RECOG::DDD::RectStruct[models.n];
+						char modelFilePath[200];
+						char modelFileName[200];
+						int iModel = 0;
+						while (modelLoader.GetNext(modelFilePath, modelFileName))
+						{
+							std::string modelInFileName = modelFilePath;
+							std::string modelOutFileName = modelInFileName.substr(0, modelInFileName.rfind('.') + 1) + "dat";
+							detector.LoadRectangularStructure(modelOutFileName, models.Element + iModel);
+							iModel++;
+						}
+
+						/// Recognize the model rectangular structure in the scenes.
+
+						RECOG::DDD::RectStruct rectStruct;
+						for (int iScene = 0; iScene < meshSeq.n; iScene++)
+						{
+							// Detect rectangular structure.
+
+							if (detector.RectangularStructures(meshSeq.Element + iScene, &rectStruct))
+							{
+								// Compare the detected rectangular structure to the model.
+
+								Pose3D poseMQ, poseMC;
+								detector.MatchRectangularStructures(models.Element, &rectStruct, poseMQ, poseMC);
+							}
+
+							delete[] rectStruct.rects.Element;
+						}
+
+						///
+
+						for (int iModel = 0; iModel < models.n; iModel++)
+							delete[] models.Element[iModel].rects.Element;
+						delete[] models.Element;
+					}
+					else if (detector.test == RVLDDD_TEST_RECOGNIZE_AO)
+					{
+#ifdef NEVER
+						FileSequenceLoader modelLoader;
+						modelLoader.Init(modelSequenceFileName);
+						char modelFilePath[200];
+						char modelFileName[200];
+						modelLoader.GetNext(modelFilePath, modelFileName);
+						RECOG::DDD::ArticulatedObject AObj;
+						detector.LoadArticulatedObject(modelFilePath, AObj);
+#endif
+						RECOG::DDD::ArticulatedObject AObj;
+						RECOG::DDD::ArticulatedObject *pAObj;
+
+						FileSequenceLoader modelLoader;
+						modelLoader.Init(modelSequenceFileName);
+						char modelFilePath[200];
+						char modelFileName[200];
+						int nModels = modelLoader.nFileNames;
+						Array<RECOG::DDD::ArticulatedObject> AObjs;
+						AObjs.Element = new RECOG::DDD::ArticulatedObject[nModels];
+						AObjs.n = nModels;
+						pAObj = AObjs.Element;
+						Array<RECOG::DDD::Transformation> modelTransformations;
+						modelTransformations.Element = new RECOG::DDD::Transformation[nModels];
+						modelTransformations.n = nModels;
+						RECOG::DDD::Transformation *pModelTransformation = modelTransformations.Element;
+						while (modelLoader.GetNext(modelFilePath, modelFileName))
+						{
+							printf("Loading model %s\n", modelFileName);
+							detector.LoadArticulatedObject(modelFilePath, AOFileName, *pAObj);
+							detector.LoadGTTransformations(modelFilePath, *pModelTransformation);
+							pAObj++;
+							pModelTransformation++;
+						}
+						printf("completed.\n");
+
+						Pose3D poseOC;
+						char sceneFileName[200];
+						char sceneFilePath[200];
+						char AOModelFileName[200];
+						int iAOModel = 2;
+						printf("\n************************\n\n");
+						for (int iScene = 0; iScene < meshSeq.n; iScene++)
+						{
+							sequenceLoader.GetFileName(iScene, sceneFileName);
+							printf("Processing image %s:\n", sceneFileName);
+
+							sequenceLoader.GetFilePath(iScene, sceneFilePath);
+							Array<int> iAOModels;
+							iAOModels.Element = new int[nModels];
+							detector.SelectAOModel(sceneTransformations.Element + iScene, modelTransformations, AObjs, AObj, iAOModels);
+							// iAOModels.n = 1;
+							// iAOModels.Element[0] = 0;
+							// AObj = AObjs.Element[iAOModels.Element[0]];
+							Pose3D poseOC_MRL;
+							RECOG::DDD::Transformation *pPoseC0;
+							RECOG::DDD::Transformation *pPoseO0;
+							if (iAOModels.n == 0)
+							{
+								printf("AO model not found!\n");
+								break;
+							}
+							else
+							{
+								modelLoader.GetFileName(iAOModels.Element[0], AOModelFileName);
+								printf("AO model %s selected!\n", AOModelFileName);
+								pPoseC0 = sceneTransformations.Element + iScene;
+								pPoseO0 = modelTransformations.Element + iAOModels.Element[0];
+								float V3Tmp[3];
+								RVLCOMPTRANSF3DWITHINV(pPoseC0->R, pPoseC0->t, pPoseO0->R, pPoseO0->t, poseOC_MRL.R, poseOC_MRL.t, V3Tmp);
+							}
+							cv::Mat *pRGBImg = RGBSeq.data() + iScene;
+							Mesh *pMesh = meshSeq.Element + iScene;
+							// RECOG::DDD::AOHypothesisState* states;
+							// detector.AOZeroState(AObj, states);
+							// if (detector.GetRGBImageVisualization())
+							//{
+							//	if (pRGBImg)
+							//	{
+							//		cv::Mat display;
+							//		pRGBImg->copyTo(display);
+							//		detector.GetVisualizer()->SetMesh(pMesh);
+							//		detector.VisualizeArticulatedObject(AObj, poseOC_MRL, false, &display);
+							//		cv::imshow("Articulated object", display);
+							//		cv::waitKey();
+							//		detector.RunVisualizer();
+							//		detector.ClearVisualization();
+							//	}
+							// }
+							float verticalMAxis[3];
+							double *Z0O = pPoseO0->R + 6;
+							RVLCOPY3VECTOR(Z0O, verticalMAxis);
+							if (detector.RecognizeArticulatedObject(pMesh, AObj, poseOC, &poseOC_MRL, verticalMAxis, (detector.GetRGBImageVisualization() ? pRGBImg : NULL)))
+							{
+								// if (detector.RecognizeArticulatedObject(pMesh, AObj, poseOC, NULL, NULL, (detector.GetRGBImageVisualization() ? pRGBImg : NULL)))
+								detector.RecognizeArticulatedObjectState(pMesh, AObj, poseOC, (detector.GetRGBImageVisualization() ? pRGBImg : NULL), true);
+							}
+							printf("\n************************\n\n");
+						}
+						// delete[] AObj.MRS.rects.Element;
+						// delete[] AObj.movingParts.Element;
+						for (int iAObj = 0; iAObj < AObjs.n; iAObj++)
+						{
+							for (int iMovingPart = 0; iMovingPart < AObjs.Element[iAObj].movingParts.n; iMovingPart++)
+							{
+								RECOG::DDD::HypothesisDoorDrawer *pMovingPart = AObjs.Element[iAObj].movingParts.Element + iMovingPart;
+								RVL_DELETE_ARRAY(pMovingPart->state.Element);
+							}
+							delete[] AObjs.Element[iAObj].MRS.rects.Element;
+							delete[] AObjs.Element[iAObj].movingParts.Element;
+						}
+						delete[] AObjs.Element;
+						delete[] modelTransformations.Element;
+						RVL_DELETE_ARRAY(sceneTransformations.Element);
+					}
+					else if(detector.test == RVLDDD_TEST_RECOGNIZE_STATE_AO)
+					{
+						std::string hypFileName = std::string(sceneSequenceFileName);
+						hypFileName = hypFileName.substr(0, hypFileName.rfind(RVLFILEPATH_SEPARATOR_) + 1) + "DDT.txt";
+
+						// Load hypotheses from file.
+						Array<RECOG::DDD::HypothesisDoorDrawer> movingPartHyps;
+						movingPartHyps.Element = new RECOG::DDD::HypothesisDoorDrawer[1];
+						movingPartHyps.n = 1;
+						FILE *fp = fopen(hypFileName.data(), "r");
+						if (fp)
+						{
+							detector.LoadDD(fp, movingPartHyps.Element);
+							fclose(fp);
+						}
+						else
+							printf("ERROR: Cannot open door/drawer hypothesis file %s!\n", hypFileName);
+						
+						Pose3D poseOC;
+						RVLUNITMX3(poseOC.R);
+						Mesh *pMesh;
+						RECOG::DDD::ArticulatedObject AObj;
+						AObj.movingParts.Element = movingPartHyps.Element;
+						AObj.movingParts.n = movingPartHyps.n;
+
+						// for (int iHyps = 0; iHyps < movingPartHyps.n; iHyps++)
+						// {
+						// 	RECOG::DDD::HypothesisDoorDrawer *pMovingPartHyp = movingPartHyps.Element + iHyps;
+						// 	pMovingPartHyp->state.Element = new RECOG::DDD::AOHypothesisState[1];
+						// 	pMovingPartHyp->state.n = 1;
+						// }
+
+						cv::Mat *pRGBImg;
+						for (int iScene = 0; iScene < meshSeq.n; iScene++)
+						{
+							pMesh = meshSeq.Element + iScene;
+							detector.SegmentPlanarSurfaces(pMesh);
+							pRGBImg = RGBSeq.data() + iScene;
+							detector.RecognizeArticulatedObjectState(pMesh, AObj, poseOC, (detector.GetRGBImageVisualization() ? pRGBImg : NULL), true);
+						}
+						for (int iHyps = 0; iHyps < movingPartHyps.n; iHyps++)
+						{
+							RECOG::DDD::HypothesisDoorDrawer *pMovingPartHyp = movingPartHyps.Element + iHyps;
+							RVL_DELETE_ARRAY(pMovingPartHyp->state.Element);
+						}
+						RVL_DELETE_ARRAY(movingPartHyps.Element);
+					}
+					else
+					{
+						// Detect drawers and doors.
+
+						std::string hypFileName = std::string(sceneSequenceFileName);
+						hypFileName = hypFileName.substr(0, hypFileName.rfind(RVLFILEPATH_SEPARATOR_) + 1) + "hyps.txt";
+						RECOG::DDD::HypothesisDoorDrawer DDObject;
+						detector.Detect(meshSeq, &DDObject, (char *)hypFileName.data(), (detector.GetRGBImageVisualization() ? &RGBSeq : NULL));
+						// detector.Detect2(meshSeq);
+
+						// // ************ IoU Hypothesis evaluation ************
+						// // std::string csvFileName = hypFileName.substr(0, hypFileName.rfind(pathSeparator) + 1) + "bbox_gt/gt.csv";
+						// // cout << csvFileName << endl;
+						// // std::vector<std::vector<std::string>> csvContent;
+						// // std::vector<std::vector<PSD::Point2D>> allGTPoints;
+
+						// // cv::Mat pRGBDisplay = cv::imread(hypFileName.substr(0, hypFileName.rfind(pathSeparator) + 1) + "rgb/0000.png");
+
+						// if (detector.ParseCSV(csvFileName, true, csvContent))
+						// {
+						// 	// detector.GetGTPointsFromCSV(csvContent, allGTPoints);
+						// 	float *iouResults = new float[allGTPoints.size()];
+						// 	detector.cvIoUHypothesisEvaluation(DDObject, allGTPoints, iouResults, &pRGBDisplay);
+
+						// 	for (int iRes = 0; iRes < allGTPoints.size(); iRes++)
+						// 		cout << "IoU: " << iouResults[iRes] << endl;
+						// 	delete[] iouResults;
+						// 	}
+						// 	cv::imwrite(hypFileName.substr(0, hypFileName.rfind(RVLFILEPATH_SEPARATOR_) + 1) + "bbox_gt/gt.png", pRGBDisplay);
+					}
+				}
+				else if (detector.test == RVLDDD_TEST_3DTO2DFIT)
+				{
+					RVL::Pose3D poseC_C0[2];
+					if (flags & RVLRECOGNITION_DEMO_FLAG_STEREO_CALIBRATE)
+						detector.StereoCalibrationFromImages(stereoCalibrationPath, camsMatrix[0], camsDist[0], camsMatrix[1], camsDist[1], &poseC_C0[0]);
+					else
+						detector.loadBaslerExtrinsicParams(stereoCalibrationPath, &poseC_C0[0]);
+
+					// Create model.
+
+					Mesh modelMesh;
+					if (detector.edgeModel == RVLDDD_EDGE_MODEL_BOX)
+					{
+						float boxSize[] = {0.287f, 0.210f, 0.090f};
+						detector.CreateBox(&modelMesh, boxSize);
+					}
+					else if (detector.edgeModel == RVLDDD_EDGE_MODEL_CYLINDER)
+					{
+						// float rCylinder = 0.015f;
+						// float hCylinder = 0.800f;
+						// detector.CreateCylinder(&modelMesh, rCylinder, hCylinder, 20);
+						float rCylinder = 0.015f;
+						float hCylinder = 0.100f;
+						float rCylinder2 = 0.010f;
+						float hCylinder2 = 0.700f;
+						detector.CreateLHTCPModel(&modelMesh, rCylinder, hCylinder, rCylinder2, hCylinder2, 20);
+					}
+					detector.CreateMeshFromPolyData(&modelMesh);
+
+					// Initial pose.
+					Pose3D poseMCInit0, poseMCInit, poseMC;
+					Vector3<float> *poseCorrection;
+					Array<Pose3D> initPoses;
+					Pose3D initPosesMem[4];
+					initPoses.Element = initPosesMem;
+					initPoses.n = 4;
+					if (detector.edgeModel == RVLDDD_EDGE_MODEL_BOX)
+					{
+						float pan = 45.0f * DEG2RAD;
+						float tilt = -45.0f * DEG2RAD;
+						float csAlpha = cos(pan);
+						float snAlpha = sin(pan);
+						float csBeta = cos(tilt);
+						float snBeta = sin(tilt);
+						float RSC0[9] = {0.0f, -1.0f, 0.0f, 0.0f, 0.0f, -1.0f, 1.0f, 0.0f, 0.0f};
+						float RMS[9];
+						RVLROTZ(csAlpha, snAlpha, RMS);
+						float tMS[3];
+						RVLSET3VECTOR(tMS, 0.5f, 0.0f, -0.6f);
+						float RCC0[9];
+						RVLROTX(csBeta, snBeta, RCC0);
+						float RSC[9];
+						RVLMXMUL3X3T1(RCC0, RSC0, RSC);
+						RVLMXMUL3X3(RSC, RMS, poseMCInit0.R);
+						RVLMULMX3X3VECT(RSC, tMS, poseMCInit0.t);
+						float poseCorrectionBox[10][3] = {{0.0, 0.0, 0.0},
+														  {-0.1, 0.0, 0.0},
+														  {-0.1, 0.0, 0.0},
+														  {0.20, 0.0, 0.0},
+														  {0.0, 0.0, 0.0},
+														  {-0.07, 0.0, 0.0},
+														  {0.05, 0.0, 0.05},
+														  {0.04, 0.0, -0.03},
+														  {-0.04, -0.10, -0.04},
+														  {0.0, 0.0, 0.0}};
+						poseCorrection = new Vector3<float>[10];
+						for (int i = 0; i < 10; i++)
+						{
+							RVLCOPY3VECTOR(poseCorrectionBox[i], poseCorrection[i].Element);
+						}
+					}
+					else if (detector.edgeModel == RVLDDD_EDGE_MODEL_CYLINDER)
+					{
+						// RVLROTX(0.0f, 1.0f, poseMCInit0.R);
+						// RVLSET3VECTOR(poseMCInit0.t, 0.025f, 0.30f, 0.40f);
+						float angle = 20.0f;
+						for (int i = 0; i < initPoses.n / 2; i++)
+						{
+							// float cs = cos(-70.0 * DEG2RAD);
+							// float sn = sin(-70.0 * DEG2RAD);
+							float th = -0.5f * PI + (float)(2 * i - 1) * angle * DEG2RAD;
+							float cs = cos(th);
+							float sn = sin(th);
+							RVLROTX(cs, sn, poseMCInit0.R);
+							RVLSET3VECTOR(poseMCInit0.t, 0.0f, 0.0f, 0.28f);
+							initPoses.Element[i] = poseMCInit0;
+						}
+						float th, cs, sn, csx, snx;
+						float rotX[9], rotZ[9];
+						for (int i = 0; i < initPoses.n / 2; i++) // rotz
+						{
+							csx = cos(-0.5f * PI);
+							snx = sin(-0.5f * PI);
+							RVLROTX(csx, snx, rotX);
+
+							th = (float)(2 * i - 1) * angle * DEG2RAD;
+							cs = cos(th);
+							sn = sin(th);
+							RVLROTZ(cs, sn, rotZ);
+
+							RVLMXMUL3X3(rotZ, rotX, poseMCInit0.R);
+
+							RVLSET3VECTOR(poseMCInit0.t, 0.0f, 0.0f, 0.28f);
+							initPoses.Element[i + 2] = poseMCInit0;
+						}
+						float poseCorrectionBox[6][3] = {{-0.010, 0.0, 0.0},
+														 {-0.01, 0.0, 0.0},
+														 {-0.01, 0.0, 0.0},
+														 {-0.02, 0.0, 0.0},
+														 {-0.02, 0.0, 0.0},
+														 {0.0, 0.0, 0.0}};
+						poseCorrection = new Vector3<float>[6];
+						for (int i = 0; i < 6; i++)
+						{
+							RVLCOPY3VECTOR(poseCorrectionBox[i], poseCorrection[i].Element);
+						}
+					}
+
+					// Apply to images.
+
+					int iImage = 0;
+					cv::Mat RGBs[2];
+					cv::Mat RGBsUndistorted[2];
+					cv::Mat *solutions;
+					solutions = new cv::Mat[2];
+					int counter = 0;
+					RVL::Pose3D referentPoseMC, currentPoseMCX, currentPoseMCY, resultPoseMC, tempPoseMC;
+					RVL::Pose3D resultPoseWC, resultPoseCW;
+					float V[3];
+					float theta;
+
+					if (1)
+					{
+						while (sequenceLoader.GetNext(imgFilePath, imgFileName))
+						{
+							printf("Image %s\n", imgFileName);
+							if (detector.fit3DTo2DStereo)
+							{
+								std::string imaFilePath_ = imgFilePath;
+								// RGBs[0] = cv::imread((imaFilePath_ + "-1.png").data());
+								// RGBs[1] = cv::imread((imaFilePath_ + "-2.png").data());
+								for (int i = 0; i < 2; i++)
+								{
+									RGBs[i] = cv::imread((imaFilePath_ + "-" + std::to_string(i) + ".png").data());
+									cv::undistort(RGBs[i], RGBsUndistorted[i], camsMatrix[i], camsDist[i]);
+								}
+								// VisualizeEpipolarGeometry(RGBsUndistorted[0], RGBsUndistorted[1], camsMatrix[0], camsMatrix[1], poseC_C0[1]);
+								detector.Fit3DTo2DStereo(&modelMesh, &RGBsUndistorted[0], 2, initPoses, poseC_C0, poseMC, solutions, counter);
+								// counter++;
+								counter++;
+							}
+							else
+							{
+								cv::Mat RGB = cv::imread(imgFilePath);
+								// cv::imshow(imgFileName, RGB);
+								// cv::waitKey();
+								poseMCInit = poseMCInit0;
+								// RVLSUM3VECTORS(poseMCInit.t, poseCorrection[iImage].Element, poseMCInit.t);
+								// detector.Fit3DTo2D(&modelMesh, RGB, poseMCInit, poseMC);
+								detector.Fit3DTo2D(&modelMesh, RGB, initPoses, poseMC);
+								if (detector.edgeModel == RVLDDD_EDGE_MODEL_BOX)
+									poseMCInit0 = poseMC;
+							}
+							iImage++;
+						}
+					}
+					// else
+					// {
+					// 	// // LHTCP measurements
+					// 	std::string imagesPath = "/home/RVLuser/rvl-linux/data/DANIELI_LHTCP/experiments/Exp-LHTCP_measurements-230201/images";
+					// 	for (int i = 0; i < 2; i++)
+					// 	{
+					// 		RGBs[i] = cv::imread((imagesPath + "/12" + "-" + std::to_string(i) + ".png").data());
+					// 		cv::undistort(RGBs[i], RGBsUndistorted[i], camsMatrix[i], camsDist[i]);
+					// 	}
+					// 	referentPoseMC = detector.Fit3DTo2DStereo2(&modelMesh, &RGBsUndistorted[0], 2, initPoses, poseC_C0, poseMC, solutions, counter);
+
+					// 	cout << endl
+					// 		 << "TMC0: " << endl;
+
+					// 	for (const auto &e : referentPoseMC.R)
+					// 	{
+					// 		cout << e << ", ";
+					// 	}
+					// 	cout << endl;
+					// 	for (const auto &e : referentPoseMC.t)
+					// 	{
+					// 		cout << e << ", ";
+					// 	}
+					// 	cout << endl;
+
+					// 	for (int i = 0; i < 2; i++)
+					// 	{
+					// 		RGBs[i] = cv::imread((imagesPath + "/15" + "-" + std::to_string(i) + ".png").data());
+					// 		cv::undistort(RGBs[i], RGBsUndistorted[i], camsMatrix[i], camsDist[i]);
+					// 	}
+					// 	currentPoseMCX = detector.Fit3DTo2DStereo2(&modelMesh, &RGBsUndistorted[0], 2, initPoses, poseC_C0, poseMC, solutions, counter);
+
+					// 	float dist = sqrt(pow(referentPoseMC.t[0] - currentPoseMCX.t[0], 2) + pow(referentPoseMC.t[1] - currentPoseMCX.t[1], 2) + pow(referentPoseMC.t[2] - currentPoseMCX.t[2], 2));
+					// 	cout << "Distance: " << 0.15 - dist << endl;
+
+					// 	return 0;
+
+					// 	cout << endl
+					// 		 << "TMC0X: " << endl;
+					// 	for (const auto &e : currentPoseMCX.R)
+					// 	{
+					// 		cout << e << ", ";
+					// 	}
+					// 	cout << endl;
+					// 	for (const auto &e : currentPoseMCX.t)
+					// 	{
+					// 		cout << e << ", ";
+					// 	}
+					// 	cout << endl;
+
+					// 	// for (int i = 0; i < 2; i++)
+					// 	// {
+					// 	// 	RGBs[i] = cv::imread((imagesPath + "/4" + "-" + std::to_string(i) + ".png").data());
+					// 	// 	cv::undistort(RGBs[i], RGBsUndistorted[i], camsMatrix[i], camsDist[i]);
+					// 	// }
+					// 	// currentPoseMCY = detector.Fit3DTo2DStereo2(&modelMesh, &RGBsUndistorted[0], 2, initPoses, poseC_C0, poseMC, solutions, counter);
+
+					// 	// cout << endl << "TMC0Y: " << endl;
+					// 	// for (const auto &e : currentPoseMCY.R)
+					// 	// {
+					// 	// 	cout << e << ", ";
+					// 	// }
+					// 	// cout << endl;
+					// 	// for (const auto &e : currentPoseMCY.t)
+					// 	// {
+					// 	// 	cout << e << ", ";
+					// 	// }
+					// 	// cout << endl;
+
+					// 	// float tempX[3], tempY[3];
+					// 	// RVLDIF3VECTORS(currentPoseMCX.t, referentPoseMC.t, tempPoseMC.t);
+					// 	// RVLCOPYTOCOL3(tempPoseMC.t, 0, resultPoseWC.R);
+					// 	// RVLDIF3VECTORS(currentPoseMCY.t, referentPoseMC.t, tempPoseMC.t);
+					// 	// RVLCOPYTOCOL3(tempPoseMC.t, 1, resultPoseWC.R);
+
+					// 	// RVLCOPYCOLMX3X3(resultPoseWC.R, 0, tempX);
+					// 	// RVLCOPYCOLMX3X3(resultPoseWC.R, 1, tempY);
+					// 	// RVLCROSSPRODUCT3(tempX, tempY, tempPoseMC.t);
+					// 	// RVLCOPYTOCOL3(tempPoseMC.t, 2, resultPoseWC.R);
+
+					// 	// // imagesPath = "/home/RVLuser/rvl-linux/data/DANIELI_LHTCP/experiments/Exp-LHTCP_measurements-230206/images";
+					// 	// RVL::Pose3D rotatingPoseMC, rotatingPoseM_C;
+					// 	// for (int i = 0; i < 2; i++)
+					// 	// {
+					// 	// 	RGBs[i] = cv::imread((imagesPath + "/8" + "-" + std::to_string(i) + ".png").data());
+					// 	// 	cv::undistort(RGBs[i], RGBsUndistorted[i], camsMatrix[i], camsDist[i]);
+					// 	// }
+					// 	// rotatingPoseMC = detector.Fit3DTo2DStereo2(&modelMesh, &RGBsUndistorted[0], 2, initPoses, poseC_C0, poseMC, solutions, counter);
+					// 	// cout << endl<< "rotTMC0: " << endl;
+					// 	// for (const auto &e : rotatingPoseMC.R)
+					// 	// {
+					// 	// 	cout << e << ", ";
+					// 	// }
+					// 	// cout << endl;
+					// 	// for (const auto &e : rotatingPoseMC.t)
+					// 	// {
+					// 	// 	cout << e << ", ";
+					// 	// }
+					// 	// cout << endl;
+
+					// 	// for (int i = 0; i < 2; i++)
+					// 	// {
+					// 	// 	RGBs[i] = cv::imread((imagesPath + "/11" + "-" + std::to_string(i) + ".png").data());
+					// 	// 	cv::undistort(RGBs[i], RGBsUndistorted[i], camsMatrix[i], camsDist[i]);
+					// 	// }
+					// 	// rotatingPoseM_C = detector.Fit3DTo2DStereo2(&modelMesh, &RGBsUndistorted[0], 2, initPoses, poseC_C0, poseMC, solutions, counter);
+
+					// 	// cout << endl << "rotTM_C: " << endl;
+					// 	// for (const auto &e : rotatingPoseM_C.R)
+					// 	// {
+					// 	// 	cout << e << ", ";
+					// 	// }
+					// 	// cout << endl;
+					// 	// for (const auto &e : rotatingPoseM_C.t)
+					// 	// {
+					// 	// 	cout << e << ", ";
+					// 	// }
+					// 	// cout << endl;
+
+					// 	// float zMC[3], zM_C[3], zMW[3], zM_W[3];
+					// 	// RVLCOPYCOLMX3X3(rotatingPoseMC.R, 2, zMC);
+					// 	// RVLCOPYCOLMX3X3(rotatingPoseM_C.R, 2, zM_C);
+					// 	// RVLMULMX3X3TVECT(resultPoseWC.R, zMC, zMW);
+					// 	// RVLMULMX3X3TVECT(resultPoseWC.R, zM_C, zM_W);
+
+					// 	// float tempLen;
+					// 	// zMW[2] = 0.0;
+					// 	// zM_W[2] = 0.0;
+
+					// 	// cout << acos((zMW[0]*zM_W[0]+zMW[1]*zM_W[1])/(sqrt(RVLDOTPRODUCT3(zMW, zMW))*sqrt(RVLDOTPRODUCT3(zM_W, zM_W)))) * RAD2DEG << endl;
+					// }
+
+					delete[] poseCorrection;
+					delete[] solutions;
+				}
+				else
+					printf("Test not defined!\n");
+
+				RVL_DELETE_ARRAY(meshSeq.Element);
+			}
+		}
+
+		// Free memory.
+		RVL_DELETE_ARRAY(camsMatrix);
+		RVL_DELETE_ARRAY(camsDist);
+	}
+	else if (method == RVLRECOGNITION_METHOD_BM)
+	{
+		printf("Creating Branch Matcher...\n");
+		BranchMatcher detector;
+		detector.pMem0 = &mem0;
+		detector.Create(cfgFileName);
+		detector.camera = camera;
+		detector.InitVisualizer(&visualizer);
+		FileSequenceLoader sequenceLoader;
+		printf("Loading image sequence %s...\n", sceneSequenceFileName);
+		sequenceLoader.Init(sceneSequenceFileName);
+		char imgFilePath[200];
+		char imgFileName[200];
+		while (sequenceLoader.GetNext(imgFilePath, imgFileName))
+		{
+			printf("Loading image %s\n", imgFileName);
+			IOFileNames(sceneFolder, imgFileName, RGBImageFolder, depthImageFolder, PLYFolder, transformationsFolder, RGBFileName, depthFileName, PLYFileName, transformationsFileName);
+			Array2D<short int> depthImage;
+			cv::Mat depthImagePNG = cv::imread(depthFileName, CV_LOAD_IMAGE_ANYDEPTH);
+			depthImage.w = depthImagePNG.cols;
+			depthImage.h = depthImagePNG.rows;
+			depthImage.Element = (short int *)(depthImagePNG.data);
+			// IplImage* depthImageDisplay = cvCreateImage(cvSize(depthImage.w, depthImage.h), IPL_DEPTH_8U, 3);
+			// DisplayDisparityMap(depthImage, (unsigned char*)(depthImageDisplay->imageData), true, RVLRGB_DEPTH_FORMAT_1MM);
+			// cv::namedWindow(imgFileName);
+			// cvShowImage(imgFileName, depthImageDisplay);
+			// cv::waitKey();
+			detector.Detect(depthImage);
 		}
 	}
 
-	// Free memory.
-	RVL_DELETE_ARRAY(camsMatrix);
-	RVL_DELETE_ARRAY(camsDist);
-}
-else if (method == RVLRECOGNITION_METHOD_BM)
-{
-	printf("Creating Branch Matcher...\n");
-	BranchMatcher detector;
-	detector.pMem0 = &mem0;
-	detector.Create(cfgFileName);
-	detector.camera = camera;
-	detector.InitVisualizer(&visualizer);
-	FileSequenceLoader sequenceLoader;
-	printf("Loading image sequence %s...\n", sceneSequenceFileName);
-	sequenceLoader.Init(sceneSequenceFileName);
-	char imgFilePath[200];
-	char imgFileName[200];
-	while (sequenceLoader.GetNext(imgFilePath, imgFileName))
-	{
-		printf("Loading image %s\n", imgFileName);
-		IOFileNames(sceneFolder, imgFileName, RGBImageFolder, depthImageFolder, PLYFolder, transformationsFolder, RGBFileName, depthFileName, PLYFileName, transformationsFileName);
-		Array2D<short int> depthImage;
-		cv::Mat depthImagePNG = cv::imread(depthFileName, CV_LOAD_IMAGE_ANYDEPTH);
-		depthImage.w = depthImagePNG.cols;
-		depthImage.h = depthImagePNG.rows;
-		depthImage.Element = (short int *)(depthImagePNG.data);
-		// IplImage* depthImageDisplay = cvCreateImage(cvSize(depthImage.w, depthImage.h), IPL_DEPTH_8U, 3);
-		// DisplayDisparityMap(depthImage, (unsigned char*)(depthImageDisplay->imageData), true, RVLRGB_DEPTH_FORMAT_1MM);
-		// cv::namedWindow(imgFileName);
-		// cvShowImage(imgFileName, depthImageDisplay);
-		// cv::waitKey();
-		detector.Detect(depthImage);
-	}
-}
+	// free memory
 
-// free memory
+	delete[] cfgFileName;
 
-delete[] cfgFileName;
+	RVL_DELETE_ARRAY(sceneMeshFileName);
+	// RVL_DELETE_ARRAY(sceneSequenceFileName);
+	RVL_DELETE_ARRAY(modelSequenceFileName);
+	RVL_DELETE_ARRAY(cameraParamsFileName);
+	RVL_DELETE_ARRAY(stereoCalibrationPath);
+	RVL_DELETE_ARRAY(modelsInDB); // VIDOVIC
+	RVL_DELETE_ARRAY(GTFolder);	  // VIDOVIC
+	RVL_DELETE_ARRAY(instanceFileName);
+	RVL_DELETE_ARRAY(primitiveFileName);
+	RVL_DELETE_ARRAY(rotInvarianceInfoFileName);
 
-RVL_DELETE_ARRAY(sceneMeshFileName);
-// RVL_DELETE_ARRAY(sceneSequenceFileName);
-RVL_DELETE_ARRAY(modelSequenceFileName);
-RVL_DELETE_ARRAY(cameraParamsFileName);
-RVL_DELETE_ARRAY(stereoCalibrationPath);
-RVL_DELETE_ARRAY(modelsInDB); // VIDOVIC
-RVL_DELETE_ARRAY(GTFolder);	  // VIDOVIC
-RVL_DELETE_ARRAY(instanceFileName);
-RVL_DELETE_ARRAY(primitiveFileName);
-RVL_DELETE_ARRAY(rotInvarianceInfoFileName);
-
-// END VIDOVIC
+	// END VIDOVIC
 
 #ifdef RVLOPENNI
-if (cameraType == RVLCAMERA_ASTRA)
-{
-	astra.TerminateAstra();
-}
+	if (cameraType == RVLCAMERA_ASTRA)
+	{
+		astra.TerminateAstra();
+	}
 #endif
 
-return 0;
+	return 0;
 }
 
 // Only for debugging purpose!!!

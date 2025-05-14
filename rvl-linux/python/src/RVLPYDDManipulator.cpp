@@ -307,89 +307,100 @@ py::tuple PYDDManipulator::approach_path(py::array T_G_S_contact)
 
     Array<Pair<int, int>> approachPaths;
     approachPaths.Element = approachPathMem;
+	
+	
+	py::array T_G_0_via;
+	py::list ik_solutions_list;
+	py::list paths_list;
 
-    Pose3D pose_G_0;
-    float V3Tmp[3];
-    RVLCOMPTRANSF3DWITHINV(manipulator.robot.pose_0_W.R, manipulator.robot.pose_0_W.t, pose_G_S_contact.R, pose_G_S_contact.t, pose_G_0.R, pose_G_0.t, V3Tmp);
-    // std::cout << "[DEBUG] Computed pose_G_0." << std::endl;
+	if (manipulator.Free(&pose_G_S_contact, SDF))
+	{
+		Pose3D pose_G_0;
+		float V3Tmp[3];
+		RVLCOMPTRANSF3DWITHINV(manipulator.robot.pose_0_W.R, manipulator.robot.pose_0_W.t, pose_G_S_contact.R, pose_G_S_contact.t, pose_G_0.R, pose_G_0.t, V3Tmp);
+		// std::cout << "[DEBUG] Computed pose_G_0." << std::endl;
 
-    manipulator.robot.InvKinematics(pose_G_0, approachIKSolutions[2], true);
-    // std::cout << "[DEBUG] Computed IK for pose_G_0, solutions found: " << approachIKSolutions[2].n << std::endl;
+		manipulator.robot.InvKinematics(pose_G_0, approachIKSolutions[2], true);
+		// std::cout << "[DEBUG] Computed IK for pose_G_0, solutions found: " << approachIKSolutions[2].n << std::endl;
 
-    py::array T_G_0_via;
-    py::list ik_solutions_list;
-    py::list paths_list;
 
-    if (approachIKSolutions[2].n != 0)
-    {
-        // std::cout << "[DEBUG] Starting ApproachPath call..." << std::endl;
-        bool bSuccess = manipulator.ApproachPath(
-            &pose_G_S_contact,
-            poses_G_0_via,
-            SDF,
-            approachIKSolutions,
-            approachPaths);
+		if (approachIKSolutions[2].n != 0)
+		{
+			// std::cout << "[DEBUG] Starting ApproachPath call..." << std::endl;
+			bool bSuccess = manipulator.ApproachPath(
+				&pose_G_S_contact,
+				poses_G_0_via,
+				SDF,
+				approachIKSolutions,
+				approachPaths);
 
-        // std::cout << "[DEBUG] ApproachPath success: " << bSuccess << ", via points: " << poses_G_0_via.n << std::endl;
+			// std::cout << "[DEBUG] ApproachPath success: " << bSuccess << ", via points: " << poses_G_0_via.n << std::endl;
 
-        if (bSuccess && poses_G_0_via.n > 0)
-        {
-            T_G_0_via = py::array(py::buffer_info(
-                nullptr,
-                sizeof(float),
-                py::format_descriptor<float>::value,
-                3,
-                {poses_G_0_via.n, 4, 4},
-                {4 * 4 * sizeof(float), 4 * sizeof(float), sizeof(float)}
-            ));
-            // std::cout << "[DEBUG] Allocated T_G_0_via numpy array." << std::endl;
+			if (bSuccess && poses_G_0_via.n > 0)
+			{
+				T_G_0_via = py::array(py::buffer_info(
+					nullptr,
+					sizeof(float),
+					py::format_descriptor<float>::value,
+					3,
+					{poses_G_0_via.n, 4, 4},
+					{4 * 4 * sizeof(float), 4 * sizeof(float), sizeof(float)}
+				));
+				// std::cout << "[DEBUG] Allocated T_G_0_via numpy array." << std::endl;
 
-            float *T_G_0_via_ = (float *)T_G_0_via.request().ptr;
-            Pose3D *pPose_G_0 = poses_G_0_via.Element;
-            for (int iPose = 0; iPose < poses_G_0_via.n; iPose++, T_G_0_via_ += 16, pPose_G_0++)
-            {
-                RVLHTRANSFMX(pPose_G_0->R, pPose_G_0->t, T_G_0_via_);
-            }
-            // std::cout << "[DEBUG] Filled T_G_0_via with poses." << std::endl;
+				float *T_G_0_via_ = (float *)T_G_0_via.request().ptr;
+				Pose3D *pPose_G_0 = poses_G_0_via.Element;
+				for (int iPose = 0; iPose < poses_G_0_via.n; iPose++, T_G_0_via_ += 16, pPose_G_0++)
+				{
+					RVLHTRANSFMX(pPose_G_0->R, pPose_G_0->t, T_G_0_via_);
+				}
+				// std::cout << "[DEBUG] Filled T_G_0_via with poses." << std::endl;
+				
+				// IK solutions as list of numpy arrays
+				for (int i = 0; i < 3; ++i)
+				{
+					int n_sols = approachIKSolutions[i].n;
+					py::array_t<float> ik_array({n_sols, 6});
+					auto ik_buf = ik_array.mutable_unchecked<2>();
+					for (int j = 0; j < n_sols; ++j)
+						for (int k = 0; k < 6; ++k)
+							ik_buf(j, k) = approachIKSolutions[i].Element[j].q[k];
+					ik_solutions_list.append(ik_array);
+				}
+				// std::cout << "[DEBUG] Converted IK solutions to numpy arrays." << std::endl;
 
-            // IK solutions as list of numpy arrays
-            for (int i = 0; i < 3; ++i)
-            {
-                int n_sols = approachIKSolutions[i].n;
-                py::array_t<float> ik_array({n_sols, 6});
-                auto ik_buf = ik_array.mutable_unchecked<2>();
-                for (int j = 0; j < n_sols; ++j)
-                    for (int k = 0; k < 6; ++k)
-                        ik_buf(j, k) = approachIKSolutions[i].Element[j].q[k];
-                ik_solutions_list.append(ik_array);
-            }
-            // std::cout << "[DEBUG] Converted IK solutions to numpy arrays." << std::endl;
-
-            // Path indices as list of [a, b]
-            for (int i = 0; i < approachPaths.n; ++i)
-            {
-                py::list pair;
-                pair.append(approachPaths.Element[i].a);
-                pair.append(approachPaths.Element[i].b);
-                paths_list.append(pair);
-            }
-            // std::cout << "[DEBUG] Filled path index list." << std::endl;
-        }
-        else
-        {
-            // std::cout << "[DEBUG] ApproachPath returned false or no via points." << std::endl;
-            T_G_0_via = py::array_t<float>({0, 4, 4});
-        }
-    }
-    else
-    {
-        // std::cout << "[DEBUG] No IK solutions for pose_G_0, returning empty result." << std::endl;
-        T_G_0_via = py::array_t<float>({0, 4, 4});
-    }
+				// Path indices as list of [a, b]
+				for (int i = 0; i < approachPaths.n; ++i)
+				{
+					py::list pair;
+					pair.append(approachPaths.Element[i].a);
+					pair.append(approachPaths.Element[i].b);
+					paths_list.append(pair);
+				}
+				// std::cout << "[DEBUG] Filled path index list." << std::endl;
+			}
+			else
+			{
+				// std::cout << "[DEBUG] ApproachPath returned false or no via points." << std::endl;
+				T_G_0_via = py::array_t<float>({0, 4, 4});
+			}
+		}
+		else
+		{
+			// std::cout << "[DEBUG] No IK solutions for pose_G_0, returning empty result." << std::endl;
+			manipulator.last_approach_error_code = manipulator.APPROACH_NO_IK_FOR_CONTACT;
+			T_G_0_via = py::array_t<float>({0, 4, 4});
+		}
+	}
+	else
+	{
+		manipulator.last_approach_error_code = manipulator.APPROACH_CONTACT_SPHERE_COLLISION;
+		T_G_0_via = py::array_t<float>({0, 4, 4});
+	}
 
     delete[] SDF;
     // std::cout << "[DEBUG] Cleaned up and returning." << std::endl;
-    return py::make_tuple(T_G_0_via, ik_solutions_list, paths_list);
+    return py::make_tuple(T_G_0_via, ik_solutions_list, paths_list, manipulator.last_approach_error_code);
 }
 
 py::tuple PYDDManipulator::approach_path_poses(py::array T_G_S_contact)
@@ -461,6 +472,7 @@ void PYDDManipulator::set_environment_state(double state)
 	//printf("Environment state: %f\n", manipulator.dd_state_angle);
 	manipulator.setPose_DD_0();
 	manipulator.FreeSpacePlanes();
+	manipulator.UpdateFurniturePose();
 }
 
 void PYDDManipulator::load_feasible_tool_contact_poses(std::string contactPosesFileName)

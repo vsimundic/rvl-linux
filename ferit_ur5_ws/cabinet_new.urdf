@@ -98,53 +98,6 @@
 		<limit effort="50" lower="-1.658062789394613" upper="0" velocity="10"/>
 		<dynamics friction="3.5" damping="3.5"/>
 	</joint>
-	<link name="handle_link">
-		<visual>
-			<origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
-			<geometry>
-				<cylinder length="0.08" radius="0.005"/>
-			</geometry>
-		</visual>
-		<collision name="handle_link_collision_0">
-			<origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
-			<geometry>
-				<cylinder length="0.08" radius="0.005"/>
-			</geometry>
-		</collision>
-		<visual>
-			<origin xyz="-0.01 0.0 0.02" rpy="0.0 1.5707963267948966 0.0"/>
-			<geometry>
-				<cylinder length="0.02" radius="0.003"/>
-			</geometry>
-		</visual>
-		<collision name="handle_link_collision_1">
-			<origin xyz="-0.01 0.0 0.02" rpy="0.0 1.5707963267948966 0.0"/>
-			<geometry>
-				<cylinder length="0.01" radius="0.003"/>
-			</geometry>
-		</collision>
-		<visual>
-			<origin xyz="-0.01 0.0 -0.02" rpy="0.0 1.5707963267948966 0.0"/>
-			<geometry>
-				<cylinder length="0.02" radius="0.003"/>
-			</geometry>
-		</visual>
-		<collision name="handle_link_collision_2">
-			<origin xyz="-0.01 0.0 -0.02" rpy="0.0 1.5707963267948966 0.0"/>
-			<geometry>
-				<cylinder length="0.02" radius="0.003"/>
-			</geometry>
-		</collision>
-		<inertial>
-			<mass value="0.050000"/>
-			<inertia ixx="0.000027" ixy="0.0" ixz="0.0" iyy="0.000029" iyz="0.0" izz="0.000003"/>
-		</inertial>
-	</link>
-	<joint name="handle_joint" type="fixed">
-		<origin xyz="-0.028999999999999998 -0.23000000000000004 0.0" rpy="0.000000 -0.000000 3.141593"/>
-		<parent link="door_link"/>
-		<child link="handle_link"/>
-	</joint>
 	<gazebo reference="base_cabinet_link">
 		<sensor name="main_sensor" type="contact">
 			<selfCollide>true</selfCollide>

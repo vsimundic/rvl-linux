@@ -8,6 +8,7 @@
 #define RVLDDD_TEST_DETECT_RECTSTRUCT 5
 #define RVLDDD_TEST_RECOGNIZE_RECTSTRUCT 6
 #define RVLDDD_TEST_RECOGNIZE_AO 7
+#define RVLDDD_TEST_RECOGNIZE_STATE_AO 8
 #define RVLDDD_EDGE_MODEL_BOX 0
 #define RVLDDD_EDGE_MODEL_CYLINDER 1
 #define RVLDDD_MODEL_DOOR 0
@@ -921,6 +922,8 @@ namespace RVL
 			Array<OrientedPoint> pointsM,
 			Mesh *pMeshQ,
 			PointAssociationData *pPointAssociationData);
+		// Simundic
+		void SegmentPlanarSurfaces(Mesh *pMesh);
 		void SetShiftVectorForVisualization(float *firstPoint, Vector3<float> shift, uchar *color);
 		void SetShiftVectorsForVisualization(float *firstPoint, Array<Vector3<float>> shiftArray, uchar *color);
 		void SetPointsForVisualization(Array<OrientedPoint> points, uchar *color, float size = 0.2);

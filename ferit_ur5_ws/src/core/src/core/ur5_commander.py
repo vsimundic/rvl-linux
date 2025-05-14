@@ -201,8 +201,8 @@ class UR5Commander():
     def send_multiple_joint_space_poses_to_robot2(self, joint_values_list: list):
 
         # Robot parameters
-        max_joint_velocity = 1  # Maximum velocity in rad/s per joint
-        max_joint_acceleration = 0.7  # Maximum acceleration in rad/s^2 per joint
+        max_joint_velocity = 0.5  # Maximum velocity in rad/s per joint
+        max_joint_acceleration = 0.5  # Maximum acceleration in rad/s^2 per joint
 
         self.__follow_joint_trajectory_client.wait_for_server(timeout=rospy.Duration(10))
 

@@ -41,9 +41,45 @@
   </joint>
 
   <joint name="gripper_coupler_robotiq_3f_joint" type="fixed">
-    <origin xyz="0 0 ${0.0535 + 0.0065}" rpy="${pi/2.0} ${0} ${-pi/4.0}" />
+    <!-- <origin xyz="0 0 ${0.0535 + 0.0065}" rpy="${pi/2.0} ${0} ${-pi/4.0}" /> -->
+    <origin xyz="0 0 ${0.0535 + 0.013 + 0.004}" rpy="${pi/2.0} ${0} ${-pi/4.0}" />
     <parent link="gripper_coupler"/>
     <child link="palm"/>
+  </joint>
+
+  <link name="camera_link">
+      <visual>
+          <origin rpy="0 0 0" xyz="0 0 0" />
+          <geometry>
+              <mesh filename="package://intel_realsense_l515/meshes/visual/l515.stl" />
+          </geometry>
+          <material name="yellow">
+              <color rgba="1 1 0 1" />
+          </material>
+      </visual>
+      <collision>
+          <origin rpy="0 0 0" xyz="0 0 0" />
+          <geometry>
+              <mesh filename="package://intel_realsense_l515/meshes/collision/l515.stl" />
+          </geometry>
+      </collision>
+      <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="0.3"/>
+      <inertia
+          ixx="0.0001027"
+          ixy="0.0"
+          ixz="0.0"
+          iyy="0.0001027"
+          iyz="0.0"
+          izz="0.0001442"/>
+      </inertial>
+  </link>
+
+  <joint name="camera_joint" type="fixed">
+      <origin rpy="0.0033192 -0.0293569 2.3598604" xyz="-0.07941524 -0.08149755 0.0608904" />
+      <parent link="tool0" />
+      <child link="camera_link" />
   </joint>
 
   <link name="world" />

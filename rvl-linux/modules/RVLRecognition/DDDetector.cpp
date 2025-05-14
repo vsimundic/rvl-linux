@@ -143,6 +143,7 @@ void DDDetector::CreateParamList()
 	paramList.AddID(pParamData, "DETECTRECTSTRUCT", RVLDDD_TEST_DETECT_RECTSTRUCT);
 	paramList.AddID(pParamData, "RECOGRECTSTRUCT", RVLDDD_TEST_RECOGNIZE_RECTSTRUCT);
 	paramList.AddID(pParamData, "RECOGAO", RVLDDD_TEST_RECOGNIZE_AO);
+	paramList.AddID(pParamData, "RECOGSTATEAO", RVLDDD_TEST_RECOGNIZE_STATE_AO);
 	pParamData = paramList.AddParam("DDD.model", RVLPARAM_TYPE_ID, &model);
 	paramList.AddID(pParamData, "DOOR", RVLDDD_MODEL_DOOR);
 	paramList.AddID(pParamData, "DRAWER", RVLDDD_MODEL_DRAWER);
@@ -13998,7 +13999,7 @@ void DDDetector::RecognizeArticulatedObjectState(
 		ClearVisualization();
 	}
 
-	delete[] states;
+	// delete[] states;
 }
 
 void DDDetector::CreateAOROI(
@@ -14134,7 +14135,8 @@ float DDDetector::CreateAndEvaluateAOHypothesis(
 	RVLCOPY3VECTOR(poseQC.t, APoseQC.t);
 
 	score = EvaluateHypothesis(pMesh, &cuboidModel, APoseQC, bPrintDebug);
-	score *= (1.0f + exp(-q * q / (pAObj->objClass == RVLDDD_MODEL_DOOR ? varZeroStateDoor : varZeroStateDrawer)));
+	// score *= (1.0f + exp(-q * q / (pAObj->objClass == RVLDDD_MODEL_DOOR ? varZeroStateDoor : varZeroStateDrawer)));
+	// printf("  Hypothesis score is: %f\n", score);
 	return score;
 }
 
@@ -14483,6 +14485,22 @@ void DDDetector::SetPointsForPointToPointAssociationVisualization(Array<Oriented
 	// pVisualizationData->associationLinesActor = pVisualizationData->pVisualizer->DisplayLines(pVisualizationData->AssociatedPts, associationLines2, blue);
 	delete[] associationLines.Element;
 	// delete[] associationLines2.Element;
+}
+
+//Simundic
+void DDDetector::SegmentPlanarSurfaces(Mesh *pMesh)
+{
+	pMem->Clear();
+	pSurfels->Init(pMesh);
+	pSurfelDetector->Init(pMesh, pSurfels, pMem);
+	printf("Segmentation to surfels...");
+	pSurfelDetector->Segment(pMesh, pSurfels);
+	printf("completed.\n");
+	int nSurfels = pSurfels->NodeArray.n;
+	printf("No. of surfels = %d\n", nSurfels);
+	pSurfelDetector->MergeSurfels(pMesh, pSurfels, minSurfelSize, minEdgeSize, maxCoPlanarSurfelNormalAngle, maxCoPlanarSurfelRefPtDist, &planarSurfaces);
+	printf("No. of planar surfaces = %d\n", planarSurfaces.NodeArray.n);
+
 }
 
 void DDDetector::SetShiftVectorForVisualization(float *firstPoint, Vector3<float> shift, uchar *color)

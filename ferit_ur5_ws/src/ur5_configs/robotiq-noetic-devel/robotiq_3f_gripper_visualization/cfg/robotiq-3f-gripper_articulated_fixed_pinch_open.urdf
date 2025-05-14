@@ -19,7 +19,9 @@ robotiq-3f-gripper_articulated - articulated version of the robotiq robotiq-3f-g
       </material>
     </visual>
     <collision>
-      <origin rpy="0 3.1416 -1.57" xyz="-0.0455 0.0414 0.036"/>
+      <!-- <origin rpy="0 3.1416 -1.57" xyz="-0.0455 0.0414 0.036"/> -->
+      <origin rpy="0 0 0" xyz="0.020 0 0" />
+
       <geometry>
         <mesh filename="package://robotiq_3f_gripper_visualization/meshes/robotiq-3f-gripper_articulated/collision/link_0.STL"/>
       </geometry>
@@ -133,7 +135,9 @@ robotiq-3f-gripper_articulated - articulated version of the robotiq robotiq-3f-g
       </material>
     </visual>
     <collision>
-      <origin rpy="0 3.1416 -1.57" xyz="-0.0455 0.0414 0.036"/>
+      <origin rpy="0 0 0" xyz="0.020 0 0"/>
+
+      <!-- <origin rpy="0 3.1416 -1.57" xyz="-0.0455 0.0414 0.036"/> -->
       <geometry>
         <mesh filename="package://robotiq_3f_gripper_visualization/meshes/robotiq-3f-gripper_articulated/collision/link_0.STL"/>
       </geometry>

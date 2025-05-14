@@ -1,6 +1,6 @@
 import numpy as np
 from geometry_msgs.msg import Pose, PoseStamped
-from tf.transformations import quaternion_from_matrix, quaternion_matrix
+from tf.transformations import quaternion_from_matrix, quaternion_matrix, euler_from_matrix
 import rospy
 import tf
 
@@ -115,3 +115,16 @@ def get_frame_transform(parent_frame: str, child_frame: str):
     T[:3, 3] = trans.copy()
 
     return T
+
+def rodrigues_rotate_vector(dir_init, axis, angle_deg):
+    axis = axis / np.linalg.norm(axis)  # normalize axis of rotation
+    angle_rad = np.deg2rad(angle_deg)
+
+    cos_theta = np.cos(angle_rad)
+    sin_theta = np.sin(angle_rad)
+
+    cross = np.cross(axis, dir_init) # cross product to get the perpendicular vector
+    dot = np.dot(axis, dir_init) # dot product to get the projection of dir_init on axis
+    # Rodrigues' rotation formula
+    rotated = dir_init * cos_theta + cross * sin_theta + axis * dot * (1 - cos_theta)
+    return rotated

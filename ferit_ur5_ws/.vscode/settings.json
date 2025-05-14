@@ -17,7 +17,9 @@
         "/home/RVLuser/ferit_ur5_ws/src/core/src",
         "/home/RVLuser/ferit_ur5_ws/src/human_segmentation/src",
         "/home/RVLuser/ferit_ur5_ws/src/cosper/gazebo_push_open/src",
-        "/home/RVLuser/ferit_ur5_ws/src/a_demo"
+        "/home/RVLuser/ferit_ur5_ws/src/a_demo",
+        "./src/cosper/door_detection/src",
+        "./src/cosper/path_planning/src"
     ],
     "cmake.configureOnOpen": false,
     "ros.distro": "noetic",

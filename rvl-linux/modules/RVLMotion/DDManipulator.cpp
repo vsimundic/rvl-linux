@@ -24,6 +24,9 @@
 #include "DDManipulator.h"
 #include "cnpy.h"
 #include "vtkNew.h"
+#include <vtkLineSource.h>
+#include <vtkTubeFilter.h>
+
 #define RVLFCL
 
 #ifdef RVLFCL
@@ -167,6 +170,9 @@ DDManipulator::DDManipulator()
     use_fcl = false;
     pCabinetMeshStatic = NULL;
     pCabinetMeshPanel = NULL;
+
+    bApproachPathCollisionCheck = false;
+    bVisualizeApproachCollision = false;
 }
 
 DDManipulator::~DDManipulator()
@@ -375,6 +381,8 @@ void DDManipulator::CreateParamList()
     pParamData = paramList.AddParam("DDM.log", RVLPARAM_TYPE_BOOL, &bLog);
     pParamData = paramList.AddParam("DDM.maxnNodesJSPerStep", RVLPARAM_TYPE_INT, &maxnNodesJSPerStep);
     pParamData = paramList.AddParam("DDM.UseFCL", RVLPARAM_TYPE_BOOL, &use_fcl);
+    pParamData = paramList.AddParam("DDM.approachCollision", RVLPARAM_TYPE_BOOL, &bApproachPathCollisionCheck);
+    pParamData = paramList.AddParam("DDM.visualizeApproachCollision", RVLPARAM_TYPE_BOOL, &bVisualizeApproachCollision);
     pParamData = paramList.AddParam("DDM.CabinetMeshStaticDirPath", RVLPARAM_TYPE_STRING, &cabinetStaticDirPath);
     pParamData = paramList.AddParam("DDM.CollisionWithPanel", RVLPARAM_TYPE_BOOL, &bVNPanel);
 }
@@ -3433,6 +3441,7 @@ bool DDManipulator::ApproachPath(
         if (!bFreePose)
         {
             // std::cout << "[DEBUG] No valid free pose found for sphere " << iSphere << std::endl;
+            last_approach_error_code = APPROACH_INVALID_SPHERE_POSE;
             break;
         }
 
@@ -3443,6 +3452,7 @@ bool DDManipulator::ApproachPath(
     if (iSphere < tool_sample_spheres.n)
     {
         // std::cout << "[DEBUG] No free pose after loop. Exiting." << std::endl;
+        last_approach_error_code = APPROACH_INVALID_SPHERE_POSE;
         return false;
     }
 
@@ -3470,6 +3480,7 @@ bool DDManipulator::ApproachPath(
         if (IKSolutions[1].n == 0)
         {
             // std::cout << "[DEBUG] No IK solution for via point 1." << std::endl;
+            last_approach_error_code = APPROACH_NO_IK_FOR_VIA1;
             return false;
         }
 #else
@@ -3483,6 +3494,7 @@ bool DDManipulator::ApproachPath(
         if (!Free(pPose_G_0, SDF))
         {
             // std::cout << "[DEBUG] Via point 1 is in collision." << std::endl;
+            last_approach_error_code = APPROACH_COLLISION_CONTACT_VIA;
             return false;
         }
 
@@ -3492,6 +3504,190 @@ bool DDManipulator::ApproachPath(
 
     // std::cout << "[DEBUG] Completed via point 1 check. Checking via point 0." << std::endl;
 
+    // Sphere collision checking for path from contact point to point 1
+    if (bApproachPathCollisionCheck && poses_G_0_via.n > 0)
+    {
+        float c_S_contact[3], c_S_via[3];
+        pPose_G_0 = poses_G_0_via.Element;
+        Array<Pair<RECOG::VN_::SurfaceRayIntersection, RECOG::VN_::SurfaceRayIntersection>> *pIntersection;
+        for (iSphere = 0; iSphere < tool_sample_spheres.n; iSphere++)
+        {
+            pSphere = tool_sample_spheres.Element + iSphere;
+            RVLTRANSF3(pSphere->c.Element, pPose_G_S_contact->R, pPose_G_S_contact->t, c_S_contact);
+            
+            Pose3D pose_G_S_via;
+            RVLCOMPTRANSF3D(robot.pose_0_W.R, robot.pose_0_W.t, pPose_G_0->R, pPose_G_0->t, pose_G_S_via.R, pose_G_S_via.t);
+            RVLTRANSF3(pSphere->c.Element, pose_G_S_via.R, pose_G_S_via.t, c_S_via);
+            
+            // Create a cylinder from contact point to via point
+            pIntersection = pVNEnv->VolumeCylinderIntersection(dVNEnv, c_S_contact, c_S_via, pSphere->r);
+            
+            if (pIntersection->n > 0)
+            {
+                // printf("Intersections: %d\n", pIntersection->n);
+                if (bVisualizeApproachCollision)
+                {
+                    // Visualize
+                    Visualizer *pVisualizer = pVisualizationData->pVisualizer;
+                    
+                    // Display static part of the furniture.
+                    Vector3<float> boxSize;
+                    Vector3<float> boxCenter;
+                    Pose3D pose_box_S;
+                    BoxSize<float>(&dd_static_box, boxSize.Element[0], boxSize.Element[1], boxSize.Element[2]);
+                    BoxCenter<float>(&dd_static_box, boxCenter.Element);
+                    RVLCOPYMX3X3(pose_F_S.R, pose_box_S.R);
+                    RVLTRANSF3(boxCenter.Element, pose_F_S.R, pose_F_S.t, pose_box_S.t);
+                    vtkSmartPointer<vtkActor> staticBoxActor = pVisualizer->DisplayBox(boxSize.Element[0], boxSize.Element[1], boxSize.Element[2], &pose_box_S, 0.0, 128.0, 0.0);
+                    BoxSize<float>(&dd_storage_space_box, boxSize.Element[0], boxSize.Element[1], boxSize.Element[2]);
+                    BoxCenter<float>(&dd_storage_space_box, boxCenter.Element);
+                    vtkSmartPointer<vtkActor> staticSorageSpaceActor = pVisualizer->DisplayBox(boxSize.Element[0], boxSize.Element[1], boxSize.Element[2], &pose_box_S, 0.0, 128.0, 0.0);
+                    
+                    // Display the door panel and cabinet
+                    vtkSmartPointer<vtkActor> doorPanelActor;
+                    vtkSmartPointer<vtkActor> doorPanelVNActor;
+                    vtkSmartPointer<vtkActor> cabinetStaticMeshActor, pCabinetWholeMeshActor, cabinetPanelMeshActor;
+                    Pose3D pose_A_S;
+                    RVLCOMPTRANSF3D(pose_F_S.R, pose_F_S.t, pose_A_F.R, pose_A_F.t, pose_A_S.R, pose_A_S.t);
+                    doorPanelActor = VisualizeDoorPenel();
+                    if (pVisualizationData->bVNEnv)
+                        doorPanelVNActor = pVNPanel->Display(pVisualizer, 0.01f, dVNPanel, NULL, 0.0f, &(pVisualizationData->VNBBox));
+                    
+                    // Visualize robot tool
+                    // VisualizeTool(*pPose_G_0, &(pVisualizationData->robotActors));     
+                    Pose3D pose_G_0_contact;
+                    float tmp3[3];
+                    RVLCOMPTRANSF3DWITHINV(robot.pose_0_W.R, robot.pose_0_W.t, pPose_G_S_contact->R, pPose_G_S_contact->t, pose_G_0_contact.R, pose_G_0_contact.t, tmp3);
+                    VisualizeTool(pose_G_0_contact, &(pVisualizationData->robotActors));     
+                    std::vector<vtkSmartPointer<vtkActor>> sphereActors;
+                    vtkSmartPointer<vtkActor> cylActor;
+
+                    // Contact sphere
+                    vtkNew<vtkSphereSource> sphereSource;
+                    sphereSource->SetCenter(c_S_contact[0], c_S_contact[1], c_S_contact[2]);
+                    sphereSource->SetRadius(pSphere->r);
+                    sphereSource->SetPhiResolution(16);
+                    sphereSource->SetThetaResolution(9);
+                    vtkNew<vtkPolyDataMapper> cMapper;
+                    cMapper->SetInputConnection(sphereSource->GetOutputPort());
+                    vtkNew<vtkActor> cActor;
+                    cActor->SetMapper(cMapper.GetPointer());
+                    cActor->GetProperty()->SetColor(0.5, 0.5, 0.5);
+                    cActor->GetProperty()->SetRepresentationToWireframe();
+                    pVisualizer->renderer->AddActor(cActor.GetPointer());
+                    sphereActors.push_back(cActor.GetPointer());
+                    
+                    // Via sphere
+                    vtkNew<vtkSphereSource> sphereSource2;
+                    sphereSource2->SetCenter(c_S_via[0], c_S_via[1], c_S_via[2]);
+                    sphereSource2->SetRadius(pSphere->r);
+                    sphereSource2->SetPhiResolution(16);
+                    sphereSource2->SetThetaResolution(9);
+                    vtkNew<vtkPolyDataMapper> c2Mapper;
+                    c2Mapper->SetInputConnection(sphereSource2->GetOutputPort());
+                    vtkNew<vtkActor> c2Actor;
+                    c2Actor->SetMapper(c2Mapper.GetPointer());
+                    c2Actor->GetProperty()->SetColor(0.5, 0.5, 0.5);
+                    c2Actor->GetProperty()->SetRepresentationToWireframe();
+                    pVisualizer->renderer->AddActor(c2Actor.GetPointer());
+                    sphereActors.push_back(c2Actor.GetPointer());
+
+                    // TubeFilter that represents the cylinder
+                    vtkNew<vtkLineSource> lineSource;
+                    lineSource->SetPoint1(c_S_contact);
+                    lineSource->SetPoint2(c_S_via);
+                    lineSource->Update();
+
+                    // Create a tube around the line
+                    vtkNew<vtkTubeFilter> tubeFilter;
+                    tubeFilter->SetInputConnection(lineSource->GetOutputPort());
+                    tubeFilter->SetRadius(pSphere->r);
+                    tubeFilter->SetNumberOfSides(16); 
+                    // tubeFilter->CappingOn();
+                    tubeFilter->Update();
+
+                    // Map and render
+                    vtkNew<vtkPolyDataMapper> tubeMapper;
+                    tubeMapper->SetInputConnection(tubeFilter->GetOutputPort());
+                    vtkNew<vtkActor> tubeActor;
+                    tubeActor->SetMapper(tubeMapper.GetPointer());
+                    tubeActor->GetProperty()->SetColor(0.5, 0.5, 0.5);  // Gray
+                    pVisualizer->renderer->AddActor(tubeActor.GetPointer());
+                    
+                    // // Cylinder between via and contact sphere
+                    // float direction[3];
+                    // RVLDIF3VECTORS(c_S_via, c_S_contact, direction);
+                    // float l = sqrt(RVLDOTPRODUCT3(direction, direction));
+                    // RVLSCALE3VECTOR2(direction, l, direction);
+                    // float center[3];
+                    // RVLSUM3VECTORS(c_S_via, c_S_contact, center);
+                    // RVLSCALE2VECTOR(center, 0.5f, center);
+                    
+                    // vtkSmartPointer<vtkCylinderSource> cylSource = vtkSmartPointer<vtkCylinderSource>::New();
+                    // cylSource->SetRadius(pSphere->r);
+                    // cylSource->SetHeight(l);         
+                    // cylSource->SetResolution(16);
+                    // cylSource->Update();
+                    // float yAxis[3] = {0.0, 1.0, 0.0};
+                    // float axis[3] = {direction[0], direction[1], direction[2]};
+                    // float rotationAxis[3];
+                    // RVLCROSSPRODUCT3(yAxis, axis, rotationAxis);
+
+                    // float dot = RVLDOTPRODUCT3(yAxis, axis);
+                    // float angleRad = acos(dot);
+                    // float angleDeg = angleRad * RAD2DEG;
+                    // vtkSmartPointer<vtkTransform> transform = vtkSmartPointer<vtkTransform>::New();
+                    // transform->PostMultiply();
+                    // if (vtkMath::Norm(rotationAxis) > 1e-6 && !std::isnan(angleDeg)) {
+                    //     transform->RotateWXYZ(angleDeg, rotationAxis);
+                    // }
+                    // transform->Translate(center);
+                    
+                    // vtkSmartPointer<vtkTransformPolyDataFilter> transformFilter = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
+                    // transformFilter->SetTransform(transform);
+                    // transformFilter->SetInputConnection(cylSource->GetOutputPort());
+                    // transformFilter->Update();
+                    // vtkSmartPointer<vtkPolyDataMapper> cylMapper = vtkSmartPointer<vtkPolyDataMapper>::New();
+                    // cylMapper->SetInputConnection(transformFilter->GetOutputPort());
+                    // cylActor = vtkSmartPointer<vtkActor>::New();
+                    // cylActor->SetMapper(cylMapper.GetPointer());
+                    // cylActor->GetProperty()->SetColor(0.5, 0.5, 0.5);
+                    // pVisualizer->renderer->AddActor(cylActor);
+
+                    // // Cylinder between via and contact sphere
+                    // vtkNew<vtkCylinderSource> cylinderSource;
+                    // float tmp_S[3];
+                    // RVLDIF3VECTORS(c_S_contact, c_S_via, tmp_S);
+                    // float h; 
+                    // float R_S_C[9];
+                    // float *X_C_S = R_S_C;
+                    // float *Y_C_S = R_S_C + 3;
+                    // float *Z_C_S = R_S_C + 6;
+                    // float fTmp;
+                    // int i_, j_, k_;
+                    // Pose3D pose_C_S;
+                
+                    // RVLDIF3VECTORS(c_S_via, c_S_contact, Z_C_S);
+                    // RVLNORM3(Z_C_S, h);
+                    // RVLORTHOGONAL3(Z_C_S, Y_C_S, i_, j_, k_, fTmp);
+                    // RVLCROSSPRODUCT3(Y_C_S, Z_C_S, X_C_S);
+                    // RVLCOPYMX3X3T(R_S_C, pose_C_S.R);
+                    // RVLSUM3VECTORS(c_S_contact, c_S_via, pose_C_S.t);
+                    // RVLSCALE3VECTOR(pose_C_S.t, 0.5f, pose_C_S.t);
+                    
+                    // cylActor = pVisualizer->DisplayCylinder(pSphere->r, h, &pose_C_S, 16, 0.5, 0.5, 0.5);
+
+                    pVisualizer->Run();
+                    pVisualizer->renderer->RemoveAllViewProps();
+                }
+                // std::cout << "[DEBUG] Collision detected between via point 0 and contact point." << std::endl;
+                last_approach_error_code = APPROACH_CYLINDER_COLLISION;
+                return false;
+            }
+        }
+    }
+
+    
     float Z_DD_0[3];
     RVLCOPYCOLMX3X3(pose_DD_0.R, 2, Z_DD_0);
     float C_0[3];
@@ -3514,6 +3710,7 @@ bool DDManipulator::ApproachPath(
         if (IKSolutions[0].n == 0)
         {
             // std::cout << "[DEBUG] No IK solution for via point 0." << std::endl;
+            last_approach_error_code = APPROACH_NO_IK_FOR_VIA0;
             return false;
         }
 #else
@@ -3577,6 +3774,9 @@ bool DDManipulator::ApproachPath(
         // std::cout << "[DEBUG] Found " << paths.n << " compatible paths between via points." << std::endl;
     }
 #endif
+    if (paths.n == 0) {
+        last_approach_error_code = APPROACH_NO_VALID_PATH;
+    }
 
     // std::cout << "[DEBUG] Valid paths: " << paths.n << std::endl;
     return (paths.n > 0);

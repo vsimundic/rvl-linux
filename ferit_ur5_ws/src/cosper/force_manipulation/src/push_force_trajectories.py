@@ -25,11 +25,35 @@ def rotx_multiple(theta_arr):
     Rx[:, 2, 2] = c
     return Rx
 
+def roty_multiple(theta_arr):
+    num_angles = theta_arr.shape[0]
+    Ry = np.zeros((num_angles, 3, 3))
+    c = np.cos(theta_arr)
+    s = np.sin(theta_arr)
+    Ry[:, 0, 0] = c
+    Ry[:, 0, 2] = s
+    Ry[:, 1, 1] = 1
+    Ry[:, 2, 0] = -s
+    Ry[:, 2, 2] = c
+    return Ry
+
+def rotz_multiple(theta_arr):
+    num_angles = theta_arr.shape[0]
+    Rz = np.zeros((num_angles, 3, 3))
+    c = np.cos(theta_arr)
+    s = np.sin(theta_arr)
+    Rz[:, 0, 0] = c
+    Rz[:, 0, 1] = -s
+    Rz[:, 1, 0] = s
+    Rz[:, 1, 1] = c
+    Rz[:, 2, 2] = 1
+    return Rz
+
 def generate_tool_line_poses(height, T_TCP_G=np.ndarray, R_TCP_D=np.ndarray):
     sample_dist = 0.02
-    top_offset = 0.015
-    side_offset = 0.015
-    z_offset = 0.005
+    top_offset = 0.01
+    side_offset = 0.01
+    z_offset = 0.01
 
     num_samples = int(height / sample_dist)
     
@@ -44,39 +68,66 @@ def generate_tool_line_poses(height, T_TCP_G=np.ndarray, R_TCP_D=np.ndarray):
     T_TCP_D[:, :3, 3] = sample_pts_D.copy()
 
     # Rotations around the X axis of G
-    min_rotx_deg = -45.
-    max_rotx_deg = 45.
+    min_rotx_deg = -35.
+    max_rotx_deg = 35.
     num_rot_samples = int((max_rotx_deg - min_rotx_deg)/5) + 1
     angles_deg = np.linspace(min_rotx_deg, max_rotx_deg, num_rot_samples)
     angles_rad = np.radians(angles_deg)
     Rx = rotx_multiple(angles_rad)
 
-    T_Rx = np.zeros((num_rot_samples, 4, 4))
-    T_Rx[:, 3, 3] = 1
-    T_Rx[:, :3, :3] = Rx.copy()
+    # Rotation samples around Y
+    min_roty_deg, max_roty_deg = 5, 45.
+    num_rot_samples_y = int((max_roty_deg - min_roty_deg)/2) + 1
+    angles_y_rad = np.radians(np.linspace(min_roty_deg, max_roty_deg, num_rot_samples_y))
+    Ry = roty_multiple(angles_y_rad)
+
+    Rx_exp = Rx[:, np.newaxis, :, :]  
+    Ry_exp = Ry[np.newaxis, :, :, :]  
+    R_combined = np.matmul(Rx_exp, Ry_exp)
+
+    N_combined = R_combined.shape[0] * R_combined.shape[1]
+
+    T_rotations = np.tile(np.eye(4), (N_combined, 1, 1))
+    T_rotations[:, :3, :3] = R_combined.reshape(N_combined, 3, 3)
     
-    min_rotx_deg_first = -135.
-    max_rotx_deg_first = 45.
+    # T_Rx = np.zeros((num_rot_samples, 4, 4))
+    # T_Rx[:, 3, 3] = 1
+    # T_Rx[:, :3, :3] = Rx.copy()
+    
+    min_rotx_deg_first = -120.
+    max_rotx_deg_first = max_rotx_deg - 5.
 
     num_rot_samples_first = int((max_rotx_deg_first - min_rotx_deg_first)/5) + 1
     angles_first = np.linspace(min_rotx_deg_first, max_rotx_deg_first, num_rot_samples_first)
     angles_first_rad = np.radians(angles_first)
     Rx_first = rotx_multiple(angles_first_rad)
-    T_Rx_first = np.zeros((num_rot_samples_first, 4, 4))
-    T_Rx_first[:, 3, 3] = 1
-    T_Rx_first[:, :3, :3] = Rx_first.copy()
+    
+    Rx_first_exp = Rx_first[:, np.newaxis, :, :]  # (N_first_x, 1, 3, 3)
+    Ry_first_exp = Ry[np.newaxis, :, :, :]        # (1, N_y, 3, 3)
+    R_first_combined = np.matmul(Rx_first_exp, Ry_first_exp)  # (N_first_x, N_y, 3, 3)
+    N_first_combined = R_first_combined.shape[0] * R_first_combined.shape[1]
 
-    T_TCP_D_expanded_first = T_TCP_D[0] @ T_Rx_first
+    T_rotations_first = np.tile(np.eye(4), (N_first_combined, 1, 1))
+    T_rotations_first[:, :3, :3] = R_first_combined.reshape(N_first_combined, 3, 3)
+    
+    # T_Rx_first = np.zeros((num_rot_samples_first, 4, 4))
+    # T_Rx_first[:, 3, 3] = 1
+    # T_Rx_first[:, :3, :3] = Rx_first.copy()
+
+    # T_TCP_D_expanded_first = T_TCP_D[0] @ T_Rx_first
+    T_TCP_D_expanded_first = T_TCP_D[0] @ T_rotations_first
     T_G_D_arr_first = T_TCP_D_expanded_first @ np.linalg.inv(T_TCP_G)[np.newaxis, ...]
 
-    T_TCP_D_expanded = T_TCP_D[:, np.newaxis, ...] @ T_Rx[np.newaxis, ...]
+    # T_TCP_D_expanded = T_TCP_D[:, np.newaxis, ...] @ T_Rx[np.newaxis, ...]
+    T_TCP_D_expanded = T_TCP_D[:, np.newaxis, ...] @ T_rotations[np.newaxis, ...]
     T_TCP_D_expanded = T_TCP_D_expanded.reshape(-1, 4, 4) 
     
     T_G_D_arr = T_TCP_D_expanded @ np.linalg.inv(T_TCP_G)[np.newaxis, ...] # poses of G w.r.t D for each sample 
     
     T_G_D_arr_combined = np.concatenate((T_G_D_arr_first, T_G_D_arr), axis=0)
-
     return T_G_D_arr_combined
+    # return T_G_D_arr
+
 
 def get_all_leaves(node):
     leaves = []
@@ -272,6 +323,9 @@ def generate_trajectories_and_approach(
         T_G_W_contact = T_0_W @ T_6_0_contact @ T_G_6
         
         rvl_manipulator.set_environment_state(np.rad2deg(states_rad[0]))
+        q = rvl_manipulator.inv_kinematics_all_sols_prev(T_6_0_contact)[0][0]
+        # rvl_manipulator.visualize_current_state(q, T_6_0_contact @ T_G_6)
+
         T_G_0_via, ik_solutions, paths = rvl_manipulator.approach_path(T_G_W_contact.copy())
         if T_G_0_via.shape[0] < 1 or len(paths) < 1:
             continue
@@ -345,13 +399,188 @@ def generate_trajectories_and_approach(
     return all_trajectories, traj_array_np
 
 
+def generate_trajectories_and_approach2(
+    poses_G_DD: np.ndarray,
+    num_states: int,
+    init_state: float,
+    goal_state: float,
+    cabinet_model: Cabinet,
+    rvl_ddmanipulator_config: str,
+    T_0_W: np.ndarray,
+    controller: Union[UR5Commander, UR5Controller]
+):
+    """
+    Generate trajectories for each pose in poses_G_DD.
+
+    Returns:
+        - List of root Waypoints (trajectory trees)
+        - Numpy array of joint trajectories with shape (N, num_states, 6)
+    """
+    states = np.linspace(init_state, goal_state, num_states)
+    states_rad = np.radians(states)
+
+    rvl_manipulator = rvlpy.PYDDManipulator()
+    rvl_manipulator.create(rvl_ddmanipulator_config)
+    rvl_manipulator.set_robot_pose(T_0_W)
+    rvl_manipulator.set_door_model_params(
+        cabinet_model.d_door,
+        cabinet_model.w_door,
+        cabinet_model.h_door,
+        cabinet_model.rx,
+        cabinet_model.ry,
+        cabinet_model.axis_pos,
+        cabinet_model.static_side_width,
+        cabinet_model.moving_to_static_part_distance)
+    rvl_manipulator.set_door_pose(cabinet_model.T_A_S)
+
+    all_trajectories = []
+    traj_arrays = []
+
+    T_W_0 = np.linalg.inv(T_0_W)
+    T_G_6 = rvl_manipulator.get_T_G_6()
+    T_6_G = np.linalg.inv(T_G_6)
+
+    approach_error_labels = {
+        0: "Approach success",
+        1: "No IK solution for contact pose",
+        2: "Invalid sphere pose",
+        3: "Collision between contact and via",
+        4: "Via point 1 IK failure",
+        5: "Via point 0 IK failure",
+        6: "No valid IK paths",
+        7: "Cylinder collision",
+        8: "Contact sphere collision"
+    }
+    # Diagnostic counters
+    num_total_poses = 0
+    num_successful_trajectories = 0
+    num_failed_ik = 0
+    num_failed_root_init = 0
+    num_failed_leaf_growth = 0
+    num_failed_approach = [0] * len(approach_error_labels)
+    not_enough_traj_pts = 0
+
+    for i_pose in tqdm(range(poses_G_DD.shape[0]), desc="Generating trajectories", unit="pose"):
+        T_G_D = poses_G_DD[i_pose]
+        num_total_poses += 1
+        root_waypoints = []
+        pose_failed = False
+        pose_logged = False
+
+        T_A_A = np.eye(4)
+        T_A_A[:3, :3] = rot_z(states_rad[0])
+        T_6_0_contact = T_W_0 @ cabinet_model.T_A_S @ T_A_A @ cabinet_model.T_D_A @ T_G_D @ T_6_G
+        T_G_W_contact = T_0_W @ T_6_0_contact @ T_G_6
+
+        rvl_manipulator.set_environment_state(np.rad2deg(states_rad[0]))
+        q = rvl_manipulator.inv_kinematics_all_sols_prev(T_6_0_contact)[0][0]
+
+        T_G_0_via, ik_solutions, paths, error_code = rvl_manipulator.approach_path(T_G_W_contact.copy())
+
+        if T_G_0_via.shape[0] < 1 or len(paths) < 1:
+            num_failed_approach[error_code] += 1
+            pose_logged = True
+            continue
+
+        for path in paths:
+            ik0 = np.array(ik_solutions[0][path[0]])
+            ik1 = np.array(ik_solutions[1][path[1]])
+            for i_sol in range(len(ik_solutions[2])):
+                ik2 = np.array(ik_solutions[2][i_sol])
+                if chebyshev_distance(ik2, ik1) <= 0.5 * np.pi:
+                    wp_root = Waypoint(ik0)
+                    wp_mid = wp_root.add_child(ik1)
+                    wp_mid.add_child(ik2)
+                    root_waypoints.append(wp_root)
+
+        if len(root_waypoints) == 0:
+            if not pose_logged:
+                num_failed_root_init += 1
+                pose_logged = True
+            continue
+
+        for i_state in range(num_states):
+            if i_state == 0:
+                continue
+            state_rad = states_rad[i_state]
+            rvl_manipulator.set_environment_state(np.rad2deg(state_rad))
+
+            T_A_A = np.eye(4)
+            T_A_A[:3, :3] = rot_z(state_rad)
+
+            T_6_0 = T_W_0 @ cabinet_model.T_A_S @ T_A_A @ cabinet_model.T_D_A @ T_G_D @ T_6_G
+            T_G_W = T_0_W @ T_6_0 @ T_G_6
+
+            joints, n_sol, _ = rvl_manipulator.inv_kinematics_all_sols_prev(T_6_0)
+            if n_sol < 1:
+                if not pose_logged:
+                    num_failed_ik += 1
+                    pose_logged = True
+                pose_failed = True
+                break
+
+            for root in root_waypoints:
+                leaves = [root] if root.is_leaf() else get_all_leaves(root)
+                for leaf in leaves:
+                    best_q = None
+                    min_dist = np.inf
+                    for i_sol in range(n_sol):
+                        q = joints[i_sol, :]
+                        dist = chebyshev_distance(q, leaf.q)
+                        if dist > 0.5 * np.pi:
+                            continue
+                        if dist < min_dist and rvl_manipulator.free(q) and controller.is_state_valid(q.tolist()):
+                            best_q = q
+                            min_dist = dist
+                    if best_q is not None:
+                        leaf.add_child(best_q)
+
+        if not pose_failed:
+            any_valid = False
+            for root in root_waypoints:
+                trajectory = []
+                node = root
+                while node:
+                    trajectory.append(node.q)
+                    node = node.children[0] if node.children else None
+                if len(trajectory) >= num_states + 2:
+                    all_trajectories.append(root)
+                    traj_arrays.append(np.stack(trajectory, axis=0))
+                    num_successful_trajectories += 1
+                    any_valid = True
+            if not any_valid and not pose_logged:
+                not_enough_traj_pts += 1
+                pose_logged = True
+
+    print("Trajectory Generation Summary:")
+    print(f"  Total Poses: {num_total_poses}")
+    print(f"  Successful Trajectories: {num_successful_trajectories}")
+    print(f"  Failures:")
+    print(f"    - No IK solution: {num_failed_ik}")
+    print(f"    - No valid root state: {num_failed_root_init}")
+    print(f"    - No leaf could grow: {num_failed_leaf_growth}")
+    print(f"    - Not enough traj points: {not_enough_traj_pts}")
+    print(f"    - Approach path failures by error code:")
+    for i, count in enumerate(num_failed_approach):
+        if count > 0:
+            label = approach_error_labels.get(i, "Unknown error")
+            print(f"      Code {i} ({label}): {count} times")
+
+    if traj_arrays:
+        traj_array_np = np.stack(traj_arrays, axis=0)
+    else:
+        traj_array_np = np.empty((0, num_states + 2, 6), dtype=np.float32)
+
+    return all_trajectories, traj_array_np
+
+
 def generate_poses_demo():
     # --- Setup fixed transforms ---
     R_TCP_D = np.array([[0, 0, -1],
                         [0, 1, 0],
                         [1, 0, 0]])
     T_TCP_G = np.eye(4)
-    T_TCP_G[:3, 3] = np.array([0.155 / 2, 0, 0.098])
+    T_TCP_G[:3, 3] = np.array([0.155 / 2, 0, 0.102])
 
     # Generate poses
     T_G_DD_all = generate_tool_line_poses(0.5, T_TCP_G, R_TCP_D)
@@ -369,7 +598,7 @@ def generate_poses_demo():
     custom_gripper_spheres_path = '/home/RVLuser/rvl-linux/data/Robotiq3Finger/spheres.npy'
     custom_gripper_model_path = '/home/RVLuser/rvl-linux/data/Robotiq3Finger/mesh.ply'
     tool_contact_surface_params = np.array([[0.0, -0.026, 0.0], [0.0, -0.030, -0.020], [0.006, -0.026, 0.0]])
-    tool_finger_distances = [-0.155 / 2., 0., -0.098]  # x, y, z
+    tool_finger_distances = [-0.155 / 2., 0., -0.102]  # x, y, z
     sphere_to_TCS_distance = 0.004609
     gripper_params = {
         'is_default_gripper': False,
@@ -423,11 +652,12 @@ def generate_trajectories_demo():
                         [0, 1, 0],
                         [1, 0, 0]])
     T_TCP_G = np.eye(4)
-    T_TCP_G[:3, 3] = np.array([0.155 / 2, 0, 0.098])
+    T_TCP_G[:3, 3] = np.array([0.155 / 2, 0, 0.102])
 
     # Generate poses
     T_G_DD_all = generate_tool_line_poses(0.5, T_TCP_G, R_TCP_D)
     T_G_DD_all = T_G_DD_all.reshape(-1, 4, 4)
+
 
     T_R_W = np.eye(4)
     T_C_6 = np.load('/home/RVLuser/ferit_ur5_ws/data/camera_calibration_20250331/T_C_T.npy')
@@ -481,5 +711,5 @@ def generate_trajectories_demo():
 
 
 if __name__ == "__main__":
-    # generate_poses_demo()
-    generate_trajectories_demo()
+    generate_poses_demo()
+    # generate_trajectories_demo()

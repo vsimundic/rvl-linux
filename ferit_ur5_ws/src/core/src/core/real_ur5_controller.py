@@ -5,14 +5,18 @@ from sensor_msgs.msg import JointState
 from moveit_msgs.msg import RobotTrajectory, RobotState
 from geometry_msgs.msg import WrenchStamped, PoseStamped
 from moveit_msgs.msg import RobotState as RobotStateMsg
+from xela_server_ros.msg import SensStream
 from std_srvs.srv import Trigger
-from core.transforms import pose_to_matrix, matrix_to_pose
+from core.transforms import pose_to_matrix, matrix_to_pose, matrix_to_pose_stamped
 import actionlib
 from control_msgs.msg import FollowJointTrajectoryAction, FollowJointTrajectoryGoal
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 import threading
 import RVLPYDDManipulator as rvlpy_dd_man
 from core.transforms import pose_stamped_to_matrix
+from typing import Union
+
+
 class UR5Controller:
     def __init__(self, move_group="arm", 
                  action_topic="/scaled_pos_joint_traj_controller/follow_joint_trajectory",
@@ -23,10 +27,21 @@ class UR5Controller:
         self.group_name = move_group
         self.group = moveit_commander.MoveGroupCommander(self.group_name)
 
+        # Camera pose
+        self.T_C_6 = np.eye(4)
+
+        # Gripper pose
+        self.T_G_6 = np.eye(4)
+
+        # Pose in world
+        self.T_0_W = np.eye(4)
+
         # RVL IK solver
         self.rvl_ik_solver = rvlpy_dd_man.PYDDManipulator()
         self.rvl_ik_solver.create(rvl_cfg_path)
         # self.rvl_ik_solver.set_robot_pose(T_R_W)
+
+        self.T_G_6 = self.rvl_ik_solver.get_T_G_6()
 
         self.joint_names = self.group.get_active_joints()
         self.joint_states = None
@@ -41,8 +56,14 @@ class UR5Controller:
         self.latest_wrench = None
         self.force_threshold = 30.0  # Newtons
 
+        self.tactile_contact_established = False
+        self.tactile_data = None
+        self.tactile_wrench = None
+
         # Use real FT sensor topic
         rospy.Subscriber("/robotiq_ft_sensor/wrench", WrenchStamped, self.wrench_callback)
+
+        self.tactile_sub = rospy.Subscriber("/xServTopic", SensStream, self.tactile_data_callback)
 
         self.add_ground_plane()
 
@@ -72,11 +93,62 @@ class UR5Controller:
         rospy.logwarn("Timed out waiting for ground plane to be added.")
         return False
 
+    def add_mesh_to_scene(self, mesh_path, mesh_name, mesh_pose, timeout=2.0):
+        """
+        Adds a mesh to the planning scene at the specified pose.
+        """
+        rospy.loginfo("Adding mesh to planning scene...")
+
+        mesh_pose_stamped = matrix_to_pose_stamped(mesh_pose, 'base_link')
+        # mesh_pose_stamped.header.frame_id = self.robot.get_planning_frame()
+
+        self.scene.add_mesh(mesh_name, mesh_pose_stamped, mesh_path)
+
+        # Wait for scene update
+        start_time = rospy.get_time()
+        while not rospy.is_shutdown() and (rospy.get_time() - start_time < timeout):
+            if mesh_name in self.scene.get_known_object_names():
+                rospy.loginfo("Mesh added.")
+                return True
+            rospy.sleep(0.1)
+
+        rospy.logwarn("Timed out waiting for mesh to be added.")
+        return False
+
+    def remove_mesh_from_scene(self, mesh_name):
+        """
+        Removes a mesh from the planning scene.
+        """
+        rospy.loginfo("Removing mesh from planning scene...")
+
+        self.scene.remove_world_object(mesh_name)
+
+        # Wait for scene update
+        start_time = rospy.get_time()
+        while not rospy.is_shutdown() and mesh_name in self.scene.get_known_object_names():
+            rospy.sleep(0.1)
+
+        rospy.loginfo("Mesh removed.")
+        return True
+
     def joint_state_callback(self, msg):
         self.joint_states = msg
 
     def wrench_callback(self, msg):
         self.latest_wrench = msg.wrench
+
+    def tactile_data_callback(self, msg):
+        # Convert SensStream to numpy array
+        if len(msg.sensors) < 1:
+            rospy.logwarn("No tactile sensors found in the message.")
+            self.tactile_sub.unregister()
+            return
+        self.tactile_data = np.zeros(shape=(len(msg.sensors), len(msg.sensors[0].forces), 3))
+        for i, sensor in enumerate(msg.sensors):
+            for j, force in enumerate(sensor.forces):
+                self.tactile_data[i, j, 0] = force.x
+                self.tactile_data[i, j, 1] = force.y
+                self.tactile_data[i, j, 2] = force.z
 
     def get_current_joint_values(self):
         return np.array(self.group.get_current_joint_values())
@@ -87,8 +159,9 @@ class UR5Controller:
 
     def move_to_joint_goal(self, joint_goal: np.ndarray):
         assert joint_goal.shape == (6,)
-        self.group.go(joint_goal.tolist(), wait=True)
+        success = self.group.go(joint_goal.tolist(), wait=True)
         self.group.stop()
+        return success
 
     def move_to_pose_matrix(self, pose_matrix: np.ndarray):
         assert pose_matrix.shape == (4, 4)
@@ -98,7 +171,36 @@ class UR5Controller:
         self.group.stop()
         self.group.clear_pose_targets()
 
-    def send_joint_trajectory_action(self, joint_points: np.ndarray, max_velocity=1.0, max_acceleration=1.2) -> bool:
+    def plan_to_joint_goal(self, joint_goal: np.ndarray):
+        """
+        Plans a trajectory to a joint goal using MoveIt.
+
+        Args:
+            joint_goal (np.ndarray): 6-element array of joint positions [rad]
+
+        Returns:
+            np.ndarray: Planned trajectory as an (N, 6) NumPy array of joint positions
+            bool: True if planning succeeded, False otherwise
+        """
+        assert joint_goal.shape == (6,)
+
+        self.group.set_joint_value_target(joint_goal.tolist())
+        success, plan, _, _ = self.group.plan()
+        if not success:
+            rospy.logwarn("MoveIt failed to plan to joint goal.")
+            return None, False
+        
+        try:
+            traj_msg = plan.joint_trajectory
+            joint_traj_np = np.array([pt.positions for pt in traj_msg.points])
+
+            rospy.loginfo("Planning successful. Trajectory has %d points.", len(joint_traj_np))
+            return joint_traj_np, True
+        except Exception as e:
+            rospy.logerr("Error extracting planned trajectory: %s", str(e))
+            return None, False
+
+    def send_joint_trajectory_action(self, joint_points: np.ndarray, max_velocity=1.0, max_acceleration=1.0) -> bool:
         assert joint_points.shape[1] == 6
 
         traj = JointTrajectory()
@@ -181,6 +283,21 @@ class UR5Controller:
         t = self.latest_wrench.torque
         return np.array([f.x, f.y, f.z, t.x, t.y, t.z])
 
+    # def get_current_tactile_data(self) -> np.ndarray:
+    #     """
+    #     Returns the latest tactile data as a n-element numpy array.
+    #     The size of the array depends on the number of tactile sensors and taxels.
+    #     """
+    #     if self.tactile_data is None:
+
+    #     if self.latest_wrench is None:
+    #         rospy.logwarn_throttle(5, "[UR5Controller] No FT data received yet.")
+    #         return np.zeros(6)
+
+    #     f = self.latest_wrench.force
+    #     t = self.latest_wrench.torque
+    #     return np.array([f.x, f.y, f.z, t.x, t.y, t.z])
+
     def get_all_ik_solutions(self, pose_matrix: np.ndarray):
         """
         Compute all inverse kinematics solutions using RVL IK solver.
@@ -209,7 +326,7 @@ class UR5Controller:
             rospy.logerr("RVL IK solver error: %s", str(e))
             return None, False
 
-    def get_closest_ik_solution(self, T_G_0: np.ndarray) -> np.ndarray:
+    def get_closest_ik_solution(self, T_G_0: np.ndarray, joints: Union[np.array, None]) -> np.ndarray:
         """
         Uses the RVL IK solver to get all solutions for the given pose,
         and returns the one closest to the current joint configuration
@@ -217,6 +334,7 @@ class UR5Controller:
 
         Args:
             T_G_0 (np.ndarray): 4x4 pose matrix of the end-effector in base frame
+            joints (np.array): Array of joint configurations to compare against
 
         Returns:
             np.ndarray: 6-element joint solution closest to current config
@@ -238,7 +356,7 @@ class UR5Controller:
         np.unwrap(q_solutions, axis=0)
         
         # Get current joint configuration
-        q_current = self.get_current_joint_values()
+        q_current = self.get_current_joint_values() if joints is None else joints
 
         # Compute Chebyshev (L∞) distance for each solution
         cheb_dists = np.max(np.abs(q_solutions - q_current), axis=1)
@@ -261,7 +379,7 @@ class UR5Controller:
         fk_request.fk_link_names = ['tool0']  # or your end-effector link
         joint_state = JointState()
         joint_state.name = self.joint_names
-        joint_state.position = joint_values.tolist()
+        joint_state.position = joint_values
         fk_request.robot_state = RobotState(joint_state=joint_state)
 
         try:

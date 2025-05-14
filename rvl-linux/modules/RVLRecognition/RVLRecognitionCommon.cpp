@@ -1056,8 +1056,10 @@ void VoxelGrid::SubSample(
 	for (iVoxel = 0; iVoxel < nVoxels; iVoxel++, pVoxelPtList++)
 	{
 		if (iVoxel == 603)
+		{
 			//	int debug = 0;
-			pPtIdx = pVoxelPtList->pFirst;
+		}
+		pPtIdx = pVoxelPtList->pFirst;
 		if (pPtIdx == NULL)
 			continue;
 		cellPoints.n = 0;

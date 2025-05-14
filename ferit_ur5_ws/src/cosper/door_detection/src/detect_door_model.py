@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import os
+import shutil
 import rospy
 import cv2
 import numpy as np
@@ -49,6 +50,17 @@ def ensure_directories_exist(*dirs):
         if not os.path.exists(d):
             os.makedirs(d)
             rospy.loginfo(f"Created directory: {d}")
+
+def reset_directories(*dirs):
+    """
+    Delete everything inside the given directories (if they exist)
+    and recreate the empty folders so each run starts from a clean slate.
+    """
+    for d in dirs:
+        if os.path.exists(d):
+            shutil.rmtree(d)
+            rospy.loginfo(f"Cleared directory: {d}")
+        os.makedirs(d, exist_ok=True)
 
 def image_callback(rgb_msg, depth_msg):
     global number_of_images, key_counter, last_save_time
@@ -165,7 +177,7 @@ def main():
     rospy.init_node(node_name)
 
     # Load parameters
-    base_dir = rospy.get_param("~base_dir", "/home/RVLuser/ferit_ur5_ws/data/door_detection")
+    base_dir = rospy.get_param("~base_dir", "/home/RVLuser/ferit_ur5_ws/data/Exp-cabinet_detection-20250508/door_detection")
     rgb_dir = rospy.get_param("~rgb_dir", "RGB_images")
     depth_dir = rospy.get_param("~depth_dir", "DEPTH_images")
     ply_dir = rospy.get_param("~ply_dir", "PLY_seg")
@@ -176,11 +188,18 @@ def main():
     depth_topic = rospy.get_param("~depth_topic", "/camera/aligned_depth_to_color/image_raw")
     max_save_rate = rospy.get_param("~save_fps", 5.0)
 
+    # Build absolute paths for I/O folders
+    rgb_path = os.path.join(base_dir, rgb_dir)
+    depth_path = os.path.join(base_dir, depth_dir)
+    ply_path = os.path.join(base_dir, ply_dir)
+
+    reset_directories(rgb_path, depth_path, ply_path)
+
     # Ensure required directories exist
     ensure_directories_exist(
-        os.path.join(base_dir, rgb_dir),
-        os.path.join(base_dir, depth_dir),
-        os.path.join(base_dir, ply_dir),
+        rgb_path,
+        depth_path,
+        ply_path,
         os.path.dirname(model_output_path)
     )
 

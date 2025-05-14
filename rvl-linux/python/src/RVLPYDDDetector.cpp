@@ -62,6 +62,9 @@ public:
 	void set_hyp_file_name(std::string hypFileNameIn);
 	void show_mesh(int iMesh);
 
+	void load_best_hypothesis(std::string hypFileNameIn);
+	py::array recognize_ao_state(py::array T_O_C, bool print_debug = false);
+
 public:
 	DDDetector detector;
 	int memSize;
@@ -73,6 +76,8 @@ public:
 	Visualizer visualizer;
 	RECOG::DDD::DisplayCallbackData* pVisualizationData;
 	std::string hypFileName;
+	Array<RECOG::DDD::HypothesisDoorDrawer> movingPartHyps;
+	RECOG::DDD::ArticulatedObject AObj;
 };
 
 PYDDDetector::PYDDDetector()
@@ -114,6 +119,9 @@ void PYDDDetector::create(
 	float cuboidSize[] = { 0.4f, 0.2f, 0.018f };
 	detector.CreateCuboidModel2(cuboidSize, 1.0f / 0.02f, detector.models.Element);
 	hypFileName = "/home/RVLuser/ferit_ur5_ws/data/Exp-cabinet_open-20240215/sequence_images/cabinet_open2-20240215";
+
+	movingPartHyps.Element = NULL;
+	AObj.movingParts.Element = NULL;
 }
 
 void PYDDDetector::set_memory_storage_size(
@@ -132,6 +140,7 @@ void PYDDDetector::clear()
 	delete detector.pMem;
 	delete detector.pSurfels;
 	delete detector.pSurfelDetector;
+	RVL_DELETE_ARRAY(movingPartHyps.Element);
 }
 
 void PYDDDetector::clear_mesh_sequence()
@@ -260,6 +269,73 @@ void PYDDDetector::show_mesh(int iMesh)
 	detector.ClearVisualization();
 }
 
+void PYDDDetector::load_best_hypothesis(std::string hypFileNameIn)
+{
+	movingPartHyps.Element = new RECOG::DDD::HypothesisDoorDrawer[1];
+	movingPartHyps.n = 1;
+	FILE *fp = fopen(hypFileNameIn.data(), "r");
+	if (fp)
+	{
+		detector.LoadDD(fp, movingPartHyps.Element);
+		fclose(fp);
+	}
+	else
+		printf("ERROR: Cannot open door/drawer hypothesis file %s!\n", hypFileName);
+}
+
+py::array PYDDDetector::recognize_ao_state(py::array T_O_C, bool print_debug)
+{
+	double *T_O_C_ = (double *)T_O_C.request().ptr;
+	Pose3D pose_O_C;
+	RVLHTRANSFMXDECOMP(T_O_C_, pose_O_C.R, pose_O_C.t);
+
+
+	// Check if the hypotheses are loaded
+	if (movingPartHyps.n == 0)
+	{
+		printf("ERROR: No hypotheses loaded!\n");
+		return py::array();
+	}
+	// Check if meshes are loaded
+	if (meshSeq.size() == 0)
+	{
+		printf("ERROR: No meshes loaded!\n");
+		return py::array();
+	}
+	// Check if RGB images are loaded
+	if (RGBSeq.size() != meshSeq.size())
+	{
+		printf("ERROR: Number of RGB images does not match number of meshes!\n");
+		return py::array();
+	}
+
+	AObj.movingParts.Element = movingPartHyps.Element;
+	AObj.movingParts.n = movingPartHyps.n;
+	cv::Mat* pRGBImg;
+	float hypStates[meshSeq.size()];
+	for (int iScene = 0; iScene < meshSeq.size(); iScene++)
+	{
+		Mesh *pMesh = meshSeq[iScene];
+		detector.SegmentPlanarSurfaces(pMesh);
+		pRGBImg = RGBSeq.data() + iScene;
+		detector.RecognizeArticulatedObjectState(pMesh, AObj, pose_O_C, (detector.GetRGBImageVisualization() ? pRGBImg : NULL), print_debug);
+
+		hypStates[iScene] = AObj.movingParts.Element[0].state.Element[0].q;
+	}
+	auto hypStatesArray = py::array(py::buffer_info(
+		nullptr,
+		sizeof(float),
+		py::format_descriptor<float>::value,
+		1,
+		{meshSeq.size()},
+		{sizeof(float)}
+	));
+	float *hypStatesArray_ = (float *)hypStatesArray.request().ptr;
+	memcpy(hypStatesArray_, hypStates, meshSeq.size() * sizeof(float));
+	
+	return hypStatesArray;
+}
+
 ////////////////////////////////////////////////////////////////////
 //
 //     RVL PYDDDetector Wrapper
@@ -283,5 +359,7 @@ PYBIND11_MODULE(RVLPYDDDetector, m)
 		.def("set_camera_parameters", &PYDDDetector::set_camera_parameters)
 		.def("detect", &PYDDDetector::detect)
 		.def("set_hyp_file_name", &PYDDDetector::set_hyp_file_name)
-		.def("show_mesh", &PYDDDetector::show_mesh);
+		.def("show_mesh", &PYDDDetector::show_mesh)
+		.def("load_best_hypothesis", &PYDDDetector::load_best_hypothesis)
+		.def("recognize_ao_state", &PYDDDetector::recognize_ao_state);
 }
