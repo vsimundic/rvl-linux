@@ -687,28 +687,6 @@ py::tuple PYDDManipulator::inv_kinematics_all_sols(py::array T_G_0, bool bTCP)
 	double *T_G_0_ = (double *)T_G_0.request().ptr;
 	Pose3D pose_G_0;
 	RVLHTRANSFMXDECOMP(T_G_0_, pose_G_0.R, pose_G_0.t);
-
-	// pose_G_0.R[0] = -0.997844219;
-	// pose_G_0.R[1] = 0.0649242774;
-	// pose_G_0.R[2] = 0.00957858562;
-	// pose_G_0.R[3] = 0.0188735276;
-	// pose_G_0.R[4] = 0.423683435;
-	// pose_G_0.R[5] = -0.90561372;
-	// pose_G_0.R[6] = -0.0628545955;
-	// pose_G_0.R[7] = -0.903480589;
-	// pose_G_0.R[8] = -0.423995405;
-
-	// pose_G_0.t[0] = -0.248225123;
-	// pose_G_0.t[1] = 0.00732335448;
-	// pose_G_0.t[2] = 0.551909804;
-
-	// printf("pose_G_0:\n");
-	// for(int i = 0; i < 3; i++)
-	// {
-	// 	for(int j = 0; j < 3; j++)
-	// 		printf("%f ", pose_G_0.R[j+3*i]);
-	// 	printf("%f\n", pose_G_0.t[i]);
-	// }
 	auto q = py::array(py::buffer_info(
 		nullptr,
 		sizeof(float),
@@ -869,7 +847,8 @@ void PYDDManipulator::correct_real_experiment_touch(
 void PYDDManipulator::update_cabinet_model_touch()
 {
 	manipulator.pVNEnv = model_x.pVNEnv;
-	// update dvnenv
+	model_x.pVNEnv->CopyDescriptor(manipulator.dVNEnv);
+
 	Pose3D pose_A_0;
 	RVLCOMPTRANSF3D(py_touch.pose_E_0.R, py_touch.pose_E_0.t, model_x.pose_A_E.R, model_x.pose_A_E.t,
 		pose_A_0.R, pose_A_0.t);
@@ -919,5 +898,10 @@ PYBIND11_MODULE(RVLPYDDManipulator, m)
 		.def("visualize_current_state", &PYDDManipulator::visualize_current_state)
 		.def("approach_path_poses", &PYDDManipulator::approach_path_poses)
 		.def("load_cabinet_static_mesh_fcl", &PYDDManipulator::load_cabinet_static_mesh_fcl)
-		.def("load_cabinet_panel_mesh_fcl", &PYDDManipulator::load_cabinet_panel_mesh_fcl);
+		.def("load_cabinet_panel_mesh_fcl", &PYDDManipulator::load_cabinet_panel_mesh_fcl)
+		.def("create_touch", &PYDDManipulator::create_touch)
+		.def("create_scene_touch", &PYDDManipulator::create_scene_touch)
+		.def("create_simple_tool_touch", &PYDDManipulator::create_simple_tool_touch)
+		.def("correct_real_experiment_touch", &PYDDManipulator::correct_real_experiment_touch)
+		.def("update_cabinet_model_touch", &PYDDManipulator::update_cabinet_model_touch);
 }

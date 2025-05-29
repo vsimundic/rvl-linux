@@ -4051,7 +4051,8 @@ void Touch::RealExpCorrect(Array<MOTION::TouchData> &touches,
     Pose3D pose_W_0, pose_W_S; 
     RVLCOMPTRANSF3D(pose_E_0.R, pose_E_0.t, pose_W_E.R, pose_W_E.t, pose_W_0.R, pose_W_0.t);
     RVLCOMPTRANSF3D(pose_0_S.R, pose_0_S.t, pose_W_0.R, pose_W_0.t, pose_W_S.R, pose_W_S.t);
-    model_x.pVNEnv->Transform(pose_W_S.R, pose_W_S.t); // -- za manipulator
+    // model_x.pVNEnv->Transform(pose_W_S.R, pose_W_S.t); // -- za manipulator
+    model_x.pVNEnv->Transform(pose_W_0.R, pose_W_0.t); // -- za manipulator
 
     // model_x.pose_A_E // ovo mi je rez
 }

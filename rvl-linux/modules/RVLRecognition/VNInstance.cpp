@@ -27,6 +27,8 @@
 #include "TG.h"
 #include "TGSet.h"
 #include "PSGM.h"
+#include "AccuSphere.h"
+#include "ConvexHullCreator.h"
 #include "ObjectDetector.h"
 #ifdef RVLLINUX
 #include <Eigen/Eigenvalues>
