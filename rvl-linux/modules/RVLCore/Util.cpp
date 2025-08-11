@@ -556,6 +556,11 @@ void RVL::TriangleNormalAndArea(
 	area *= 0.5f;
 }
 
+bool RVL::SortCompare(SortIndex<float> x1, SortIndex<float> x2)
+{
+	return (x1.cost < x2.cost);
+}
+
 FileSequenceLoader::FileSequenceLoader()
 {
 	nFileNames = 0;

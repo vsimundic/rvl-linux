@@ -2,6 +2,7 @@ import rospy
 import numpy as np
 from core.real_ur5_controller import UR5Controller
 from gazebo_push_open.cabinet_model import Cabinet
+from gazebo_push_open.cabinet_model2 import Cabinet2
 from core.transforms import rot_z, rot_y
 from core.util import get_nearest_joints
 import RVLPYDDManipulator as rvlpy
@@ -53,6 +54,53 @@ def monitor_force_and_cancel(robot: UR5Controller, threshold: float = 30.0, chec
         rate.sleep()
 
     rospy.loginfo("[monitor] Trajectory no longer ACTIVE. Monitoring stopped.")
+
+
+def monitor_force_and_cancel_remember_joints(robot: UR5Controller, remembered_joints: list, threshold: float = 30.0, check_rate: float = 50.0):
+    """
+    Monitors force in the background while a trajectory is active.
+    Cancels the trajectory if force exceeds the threshold.
+    """
+    rate = rospy.Rate(check_rate)
+    max_wait_cycles = int(2.0 * check_rate)  # 2 seconds timeout
+
+    rospy.loginfo("[monitor] Waiting for trajectory to become ACTIVE...")
+
+    # Phase 1: Wait for the goal to be accepted (state becomes ACTIVE)
+    for _ in range(max_wait_cycles):
+        state = robot.client.get_state()
+        if state == 1:  # ACTIVE
+            rospy.loginfo("[monitor] Trajectory is ACTIVE.")
+            break
+        elif state == 0:  # PENDING
+            rate.sleep()
+        else:
+            rospy.loginfo_throttle(0.5, "[monitor] Goal state: %d (waiting for ACTIVE...)", state)
+            rate.sleep()
+    else:
+        rospy.logwarn("[monitor] Timeout waiting for trajectory to become ACTIVE. Final state: %s", str(state))
+        return
+
+    # Phase 2: Monitor force while ACTIVE
+    current_joints = robot.get_current_joint_values().tolist()
+
+    while not rospy.is_shutdown() and robot.client.get_state() == 1:
+        wrench = robot.get_current_wrench()
+        force = np.linalg.norm(wrench[:3])
+        rospy.loginfo_throttle(1.0, "[monitor] Force: %.2f N", force)
+        if force > threshold:
+            rospy.logwarn("Force threshold exceeded: %.2f N", force)
+            robot.force_violation = True
+            robot.cancel_trajectory()
+            # Remember the current joint configuration
+            collision_joints = robot.get_current_joint_values().tolist()
+            remembered_joints.append(current_joints)
+            remembered_joints.append(collision_joints)
+            return
+        current_joints = robot.get_current_joint_values().tolist()
+        rate.sleep()
+    rospy.loginfo("[monitor] Trajectory no longer ACTIVE. Monitoring stopped.")
+
 
 def monitor_force_and_cancel_on_drop(
     robot: UR5Controller,
@@ -175,13 +223,15 @@ def monitor_force_drop_and_remember_joints(
             force_dropped = True
             q = robot.get_current_joint_values()
             force_drop_joints.append(q.tolist())
-            rospy.logwarn("Remembering joint config due to force drop.")
+            # robot.cancel_trajectory()
+            rospy.logwarn("Remembering joint config due to force drop. Force = %.2f N, delta = %.2f N", force, delta)
             break
 
         rate.sleep()
 
 def monitor_tactile_contact_establish(
     robot: UR5Controller,
+    contact_establish_joints: list,
     contact_threshold: float = 1.0,
     contact_timeout: float = 2.0,
     check_rate: float = 50.0
@@ -204,6 +254,7 @@ def monitor_tactile_contact_establish(
     rospy.loginfo("[monitor-tactile] Monitoring tactile sensors per taxel...")
     max_timeout_cycles = int(contact_timeout * check_rate)
     current_timeout_cycles = 0
+    current_joints = None
     while not rospy.is_shutdown() and robot.client.get_state() == 1 and current_timeout_cycles < max_timeout_cycles:
         if robot.tactile_data is not None:
             force_magnitudes = np.linalg.norm(robot.tactile_data, axis=2)
@@ -212,8 +263,14 @@ def monitor_tactile_contact_establish(
             if max_force > contact_threshold:
                 rospy.loginfo("Contact established on at least one taxel (max %.3f > %.3f).", max_force, contact_threshold)
                 robot.tactile_contact_established = True
+                q_ = robot.get_current_joint_values()
+                if q_ is not None:
+                    contact_establish_joints.append(q_.tolist())
+                else:
+                    contact_establish_joints = [q_.tolist()]
                 return
             current_timeout_cycles += 1
+            q_ = robot.get_current_joint_values()
         rate.sleep()
 
     rospy.logwarn("Trajectory timeout. Cancelling trajectory.")
@@ -254,14 +311,13 @@ def monitor_tactile_loss_and_remember_joints(
         return
 
     rospy.loginfo("[monitor-tactile] Monitoring tactile sensors per taxel...")
-
+    current_joints = None
     while not rospy.is_shutdown() and robot.client.get_state() == 1:
 
         if not robot.tactile_contact_established:
             if current_timeout_cycles >= max_timeout_cycles:
                 rospy.logwarn("Contact not established on any taxel. Cancelling trajectory.")
-                q = robot.get_current_joint_values()
-                remembered_joints.append(q.tolist())
+                # remembered_joints = robot.get_current_joint_values()
                 robot.cancel_trajectory()
                 return
             else:
@@ -276,10 +332,18 @@ def monitor_tactile_loss_and_remember_joints(
             if max_force < contact_threshold:
                 robot.tactile_contact_established = False
                 rospy.logwarn("Contact lost on at all taxels (max %.3f < %.3f). Cancelling.", max_force, contact_threshold)
-                q = robot.get_current_joint_values()
-                remembered_joints.append(q.tolist())
+                q_ = robot.get_current_joint_values()
+                if current_joints is not None:
+                    remembered_joints.append(current_joints.tolist())
+                    remembered_joints.append(q_.tolist())
+                    # remembered_joints = np.vstack((current_joints, q_))
+                else:
+                    remembered_joints = [q_.copy().reshape(1, -1).tolist()]
+                remembered_joints = robot.get_current_joint_values()
                 robot.cancel_trajectory()
                 return
+            
+            current_joints = robot.get_current_joint_values()
 
         current_timeout_cycles += 1
         rate.sleep()
@@ -287,24 +351,15 @@ def monitor_tactile_loss_and_remember_joints(
     rospy.loginfo("[monitor-tactile] Trajectory finished. Exiting tactile monitor.")
 
 
-def get_camera_pose_on_sphere_distance(cabinet_model: Cabinet, 
+def get_camera_pose_on_sphere_distance(cabinet_model: Cabinet2, 
                                        robot: UR5Controller,
-                                       rvl_manipulator: rvlpy.PYDDManipulator, 
-                                       T_6_0_capture: np.ndarray, lost_contact_estimated_state: float):
-    T_Arot_A = np.eye(4)
-    T_Arot_A[:3, :3] = rot_z(np.deg2rad(lost_contact_estimated_state))
+                                       T_6_0_capture: np.ndarray, 
+                                       lost_contact_estimated_state: float):
+    cabinet_model.change_door_angle(lost_contact_estimated_state)
     
-    T_A_W = cabinet_model.T_A_S.copy()
-
-    T_A_W_rot = T_A_W.copy()
-
-    T_A_W = T_A_W @ T_Arot_A
 
     # Door center
-    T_B_A = np.eye(4)
-    T_B_A[:3, 3] = np.array([cabinet_model.rx - cabinet_model.d_door*0.5, cabinet_model.ry, 0])
-    # T_B_A[:3, 3] = np.array([-cabinet_model.d_door*0.5, -cabinet_model.w_door * 0.5, 0]) 
-    T_B_W_ = T_A_W @ T_B_A
+    T_B_W_ = cabinet_model.T_A_W @ cabinet_model.T_B_A
 
     # Rotations of T_B_W around the y axis
     angles_y = np.linspace(np.deg2rad(20.), np.pi/2, 20)
@@ -312,8 +367,7 @@ def get_camera_pose_on_sphere_distance(cabinet_model: Cabinet,
     Ty = np.eye(4)
     Tz = np.eye(4)
     T_C_W_new = np.eye(4)
-    T_B_W_remember = T_B_W_.copy()
-    joints_saved, n_sol_saved = [], 0
+    joints_saved = []
     T_6_0_new = np.eye(4)
 
     for angle_y in range(len(angles_y)):
@@ -375,39 +429,12 @@ def get_camera_pose_on_sphere_distance(cabinet_model: Cabinet,
                 o3d.visualization.draw_geometries(geoms, window_name="Door model", width=1920, height=1080, left=50, top=50, mesh_show_back_face=True)
             """
             
-            joints, n_sol, _ = rvl_manipulator.inv_kinematics_all_sols_prev(T_6_0_new)
-            
-            if n_sol > 0:
-                joints[:, 0] -= np.pi
-                # joints[:, 5] -= np.pi
-                joints[joints > np.pi] -= 2 * np.pi
-                joints[joints < -np.pi] += 2 * np.pi
+            joints_saved_, succ = robot.get_all_ik_solutions_rvl(T_6_0_new, check_env_collisions=True, check_self_collisions=True)
+            if succ:
+                joints_saved_ = joints_saved_.tolist()
+                for i in range(len(joints_saved_)):
+                    joints_saved.append(joints_saved_[i]) 
 
-                for i_sol in range(n_sol):
-                    q = joints[i_sol]
-
-                    if q[2] > np.pi*0.5:
-                        continue
-                    if q[2] < -np.pi*0.25:
-                        continue
-                    
-                    if robot.is_state_valid(q.tolist()):
-                        joints_saved.append(q.tolist())
-
-                # if len(joints_saved) > 0:
-                #     break
-
-    # if len(joints_saved) > 0:
-    #     current_q = robot.get_current_joint_values()
-    #     current_q = np.array(current_q)
-    #     joints_saved = np.array(joints_saved)
-        
-    #     q_nearest, idx_nearest = get_nearest_joints(joints_saved, current_q)
-    #     T_6_0_nearest = robot.get_fwd_kinematics_moveit(q_nearest.tolist())
-    #     T_C_W_new = robot.T_0_W @ T_6_0_nearest @ robot.T_C_6
-    #     joints_saved = q_nearest.copy()
-    #     return T_C_W_new, joints_saved
-    
     # Find closest cheb dist
     if len(joints_saved) > 0:
         current_q = np.array(robot.get_current_joint_values())
@@ -425,3 +452,39 @@ def get_camera_pose_on_sphere_distance(cabinet_model: Cabinet,
     else:
         rospy.logwarn("No valid joint configurations found.")
         return None, None
+
+
+def get_smoothest_trajectory_from_3_pts(start_joint:np.ndarray, middle_candidates:np.ndarray, end_candidates:np.ndarray):
+    """
+    Finds the smoothest trajectory by minimizing the sum of joint accelerations.
+
+    Args:
+        start_joint: np.ndarray of shape (6,)
+        middle_candidates: np.ndarray of shape (n, 6)
+        end_candidates: np.ndarray of shape (m, 6)
+
+    Returns:
+        Tuple: (best_middle, best_end, min_smoothness_cost)
+    """
+    n = middle_candidates.shape[0]
+    m = end_candidates.shape[0]
+
+    # Difference: start -> middle
+    delta1 = middle_candidates - start_joint  # Shape: (n, 6)
+
+    # Difference: middle -> end (pairwise)
+    delta2 = end_candidates[None, :, :] - middle_candidates[:, None, :]  # Shape: (n, m, 6)
+
+    # Joint acceleration (discrete second derivative)
+    acceleration = np.abs(delta2 - delta1[:, None, :])  # Shape: (n, m, 6)
+
+    # Smoothness cost: sum of joint accelerations
+    smoothness_cost = np.sum(acceleration, axis=2)  # Shape: (n, m)
+
+    # Find the indices of the minimal smoothness cost
+    min_idx = np.unravel_index(np.argmin(smoothness_cost), smoothness_cost.shape)
+    best_middle = middle_candidates[min_idx[0]]
+    best_end = end_candidates[min_idx[1]]
+    min_cost = smoothness_cost[min_idx]
+
+    return best_middle, best_end, min_cost

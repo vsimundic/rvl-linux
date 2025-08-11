@@ -2900,6 +2900,8 @@ int main(int argc, char **argv)
 		sequenceLoader.Init(sceneSequenceFileName);
 		char imgFilePath[200];
 		char imgFileName[200];
+		Array<RECOG::BM::Particle> particles_P, particles_Q;
+		int iImg = 0;
 		while (sequenceLoader.GetNext(imgFilePath, imgFileName))
 		{
 			printf("Loading image %s\n", imgFileName);
@@ -2914,8 +2916,20 @@ int main(int argc, char **argv)
 			// cv::namedWindow(imgFileName);
 			// cvShowImage(imgFileName, depthImageDisplay);
 			// cv::waitKey();
-			detector.Detect(depthImage);
+			if (iImg == 0)
+				detector.Particles(depthImage, particles_P);
+			else
+			{
+				detector.Particles(depthImage, particles_Q);
+				int *c = NULL;
+				detector.Match(particles_P, particles_Q, c);
+				RVL_DELETE_ARRAY(c);
+				break;
+			}
+			iImg++;
 		}
+		delete[] particles_P.Element;
+		delete[] particles_Q.Element;
 	}
 	else if (method == RVLRECOGNITION_METHOD_CGSP)
 	{

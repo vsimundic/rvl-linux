@@ -5,7 +5,8 @@
   <!-- <xacro:include filename="$(find robotiq_description)/urdf/robotiq_85_gripper.urdf.xacro" /> -->
   <!-- <xacro:robotiq-3f-gripper_articulated prefix=""/> -->
   <xacro:include filename="$(find robotiq_ft_sensor)/urdf/robotiq_ft300.urdf.xacro" />
-  <xacro:include filename="$(find robotiq_3f_gripper_visualization)/cfg/robotiq-3f-gripper_articulated_fixed_pinch_open.urdf"/>
+  <!-- <xacro:include filename="$(find robotiq_3f_gripper_visualization)/cfg/robotiq-3f-gripper_articulated_fixed_pinch_open.urdf"/> -->
+  <xacro:include filename="$(find robotiq_3f_gripper_visualization)/cfg/robotiq-3f-gripper_articulated_fixed_pinch_open_inflated.urdf"/>
 
   <xacro:ur5_robot prefix="" />
 
@@ -75,9 +76,17 @@
           izz="0.0001442"/>
       </inertial>
   </link>
-
+<!-- 
   <joint name="camera_joint" type="fixed">
       <origin rpy="0.0033192 -0.0293569 2.3598604" xyz="-0.07941524 -0.08149755 0.0608904" />
+      <parent link="tool0" />
+      <child link="camera_link" />
+  </joint> -->
+  <joint name="camera_joint" type="fixed">
+      <!-- This pose is used when the camera is rotated 180 deg about z-axis of tool0 -->
+      <!-- <origin rpy="0.0033192 -0.0293569 -0.7817323" xyz="-0.07941524 -0.08149755 0.0608904" /> --> 
+      <!-- <origin rpy="-0.0148411 0.0319087 2.3663088" xyz="0.07985568832444188 0.08353177092684139 0.059728059869907146" /> -->
+      <origin rpy="-0.0148411 0.0319087 -0.785398" xyz="0.07985568832444188 0.08353177092684139 0.059728059869907146" />
       <parent link="tool0" />
       <child link="camera_link" />
   </joint>

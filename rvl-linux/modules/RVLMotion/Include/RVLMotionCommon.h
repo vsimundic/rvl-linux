@@ -25,8 +25,10 @@ namespace RVL
 			std::vector<vtkSmartPointer<vtkActor>> robotActors;
 			std::vector<vtkSmartPointer<vtkActor>> envActors;
 			std::vector<vtkSmartPointer<vtkActor>> errorActors;
+			std::vector<vtkSmartPointer<vtkActor>> envActors2;
 			bool bVisualize;
 			bool bOptimization;
+			bool bContacts;
 			Box<float> VNBBox;
 			std::vector<MOTION::VisualizationNode> visNodes;
 			std::vector<Pair<int, int>> visEdges;

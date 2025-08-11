@@ -76,6 +76,7 @@ class Cabinet():
         self.handle_link_name  = 'handle_link'
         self.handle_joint_name  = 'handle_joint'
         self.save_path = save_path
+        self.mesh_save_path = None
         # self.position = position
         # self.rotz_deg = rotz_deg
         self.T_A_S = T_A_S
@@ -137,7 +138,7 @@ class Cabinet():
         self.T_D_A[:3, :3] = np.array([[0, 0, -self.axis_pos],
                                       [self.axis_pos, 0, 0],
                                       [0, -1, 0]])
-        self.T_D_A[:3, 3] = np.array([self.rx - self.axis_pos*self.d_door*0.5,
+        self.T_D_A[:3, 3] = np.array([-self.axis_pos*self.d_door*0.5,
                                       -self.w_door,
                                       self.h_door*0.5])
         
@@ -759,7 +760,7 @@ class Cabinet():
         return self.T_O_S @ self.T_A_O @ self.T_D_A
 
 
-    def create_mesh(self):
+    def create_mesh(self): # This is made for TSMC24 paper
         self.mesh_origin = o3d.geometry.TriangleMesh()
         self.dd_static_top_mesh = o3d.geometry.TriangleMesh.create_box(width=self.static_d,
                                                                   height=self.w_door + 2*(self.moving_to_static_part_distance + self.d_door) + self.moving_to_static_part_distance,
@@ -768,15 +769,15 @@ class Cabinet():
                                          -(self.w_door/2. + 2*self.moving_to_static_part_distance + self.d_door),
                                          (self.h_door/2. + self.moving_to_static_part_distance)))
         
-        self.dd_static_top_origin_point = np.array([-self.static_d/2.,
-                                                   -(self.w_door/2. + 2*self.moving_to_static_part_distance + self.d_door),
-                                                   (self.h_door/2. + self.moving_to_static_part_distance)])
-        self.dd_static_top_origin_point_mesh = o3d.geometry.TriangleMesh.create_sphere(radius=0.01)
-        self.dd_static_top_origin_point_mesh.translate((-self.static_d/2.,
-                                                       -(self.w_door/2. + 2*self.moving_to_static_part_distance + self.d_door),
-                                                       (self.h_door/2. + self.moving_to_static_part_distance)))
-        self.dd_static_top_origin_point_mesh.paint_uniform_color([1.0, 0.0, 0.0])
-        self.dd_static_top_mesh += self.dd_static_top_origin_point_mesh
+        # self.dd_static_top_origin_point = np.array([-self.static_d/2.,
+        #                                            -(self.w_door/2. + 2*self.moving_to_static_part_distance + self.d_door),
+        #                                            (self.h_door/2. + self.moving_to_static_part_distance)])
+        # self.dd_static_top_origin_point_mesh = o3d.geometry.TriangleMesh.create_sphere(radius=0.01)
+        # self.dd_static_top_origin_point_mesh.translate((-self.static_d/2.,
+        #                                                -(self.w_door/2. + 2*self.moving_to_static_part_distance + self.d_door),
+        #                                                (self.h_door/2. + self.moving_to_static_part_distance)))
+        # self.dd_static_top_origin_point_mesh.paint_uniform_color([1.0, 0.0, 0.0])
+        # self.dd_static_top_mesh += self.dd_static_top_origin_point_mesh
 
         self.dd_static_bottom_mesh = o3d.geometry.TriangleMesh.create_box(width=self.static_d,
                                                                      height=self.w_door + 2*(self.moving_to_static_part_distance + self.d_door) + self.moving_to_static_part_distance,
@@ -871,20 +872,37 @@ class Cabinet():
         return dd_mesh
 
 
-    def save_mesh(self, filename):
+    def save_mesh(self, filename=None, mesh=None, pose=None):
         # T_A_O = self.T_A_O.copy()
         # self.T_A_O = self.T_A_O_init
-        self.update_mesh()
-        mesh = deepcopy(self.mesh)
-        mesh.transform(np.linalg.inv(self.T_A_O))
-        o3d.io.write_triangle_mesh(filename, mesh)
+
+        if filename is None:
+            if self.mesh_save_path is None:
+                raise ValueError("Filename must be provided or mesh_save_path must be set.")
+            filename = self.mesh_save_path
+
+        if mesh is None:
+            self.update_mesh()
+            mesh_ = deepcopy(self.mesh)
+        else:
+            mesh_ = mesh
+
+        if pose is not None:
+            # If a pose is provided, transform the mesh accordingly
+            mesh_.transform(pose)
+        else:
+            mesh_.transform(np.linalg.inv(self.T_A_O))
+        o3d.io.write_triangle_mesh(filename, mesh_)
 
         # self.T_A_O = T_A_O
         # self.update_mesh()
 
-    def save_mesh_without_doors(self, filename):
+    def save_mesh_without_doors(self, filename, mesh=None):
         # T_O_S = self.T_A_S @ np.linalg.inv(self.T_A_O_init)
-        static_mesh = deepcopy(self.dd_static_mesh)
+        if mesh is None:
+            static_mesh = deepcopy(self.dd_static_mesh)
+        else:
+            static_mesh = mesh
         static_mesh.transform(np.linalg.inv(self.T_A_O_init))
         o3d.io.write_triangle_mesh(filename, static_mesh)
 

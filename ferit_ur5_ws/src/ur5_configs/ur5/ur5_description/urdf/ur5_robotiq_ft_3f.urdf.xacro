@@ -3,20 +3,60 @@
 
   <xacro:include filename="$(find ur5_description)/urdf/ur5_joint_limited_robot.urdf.xacro" />
   <!-- <xacro:include filename="$(find robotiq_description)/urdf/robotiq_85_gripper.urdf.xacro" /> -->
-  <xacro:include filename="$(find robotiq_3f_gripper_visualization)/cfg/robotiq-3f-gripper_articulated_fixed.urdf"/>
+  <xacro:include
+    filename="$(find robotiq_3f_gripper_visualization)/cfg/robotiq-3f-gripper_articulated_fixed_inflated.urdf" />
+    <!-- filename="$(find robotiq_3f_gripper_visualization)/cfg/robotiq-3f-gripper_articulated_fixed.urdf" /> -->
   <!-- <xacro:robotiq-3f-gripper_articulated prefix=""/> -->
-  
+
   <xacro:include filename="$(find robotiq_ft_sensor)/urdf/robotiq_ft300.urdf.xacro" />
 
   <xacro:robotiq_ft300 parent="tool0" prefix="">
-      <origin xyz="0 0 0" rpy="0 0 0"/> 
+    <origin xyz="0 0 0" rpy="0 0 0" />
   </xacro:robotiq_ft300>
-  
+
   <joint name="gripper_tool0_joint" type="fixed">
     <origin xyz="0 0 0.0535" rpy="${-pi/2.0} ${-pi} ${-pi/4.0}" />
-    <parent link="ft300_sensor"/>
-    <child link="palm"/>
+    <parent link="ft300_sensor" />
+    <child link="palm" />
   </joint>
+
+  <!-- <link name="camera_link">
+    <visual>
+      <origin rpy="0 0 0" xyz="0 0 0" />
+      <geometry>
+        <mesh filename="package://intel_realsense_l515/meshes/visual/l515.stl" />
+      </geometry>
+      <material name="grey">
+        <color rgba="1 1 1 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0 0 0" />
+      <geometry>
+        <mesh filename="package://intel_realsense_l515/meshes/collision/l515.stl" />
+      </geometry>
+    </collision>
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <mass value="0.3" />
+      <inertia
+        ixx="0.0001027"
+        ixy="0.0"
+        ixz="0.0"
+        iyy="0.0001027"
+        iyz="0.0"
+        izz="0.0001442" />
+    </inertial>
+  </link> -->
+
+  <!-- <joint name="camera_joint__" type="fixed"> -->
+    <!-- This pose is used when the camera is rotated 180 deg about z-axis of tool0 -->
+    <!-- <origin rpy="0.0033192 -0.0293569 -0.7817323" xyz="-0.07941524 -0.08149755 0.0608904" /> -->
+    <!-- <origin rpy="-0.0148411 0.0319087 2.3663088" xyz="0.07985568832444188 0.08353177092684139 0.059728059869907146" /> -->
+    <!-- <parent link="tool0" /> -->
+    <!-- <child link="camera_link" /> -->
+  <!-- </joint> -->
+
 
   <!-- Load gazebo_ros_control -->
   <xacro:include filename="$(find ur5_description)/urdf/common.gazebo.xacro" />

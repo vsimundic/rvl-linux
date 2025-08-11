@@ -15,7 +15,11 @@ import threading
 import RVLPYDDManipulator as rvlpy_dd_man
 from core.transforms import pose_stamped_to_matrix
 from typing import Union
-
+import open3d as o3d
+from moveit_msgs.srv import GetStateValidity, GetStateValidityRequest
+from moveit_msgs.msg import RobotState
+from sensor_msgs.msg import JointState
+from fast_collision_checker import FastCollisionChecker
 
 class UR5Controller:
     def __init__(self, move_group="arm", 
@@ -26,12 +30,18 @@ class UR5Controller:
         self.scene = moveit_commander.PlanningSceneInterface()
         self.group_name = move_group
         self.group = moveit_commander.MoveGroupCommander(self.group_name)
+        
+        self.group.set_planner_id("RRTstar")
 
+        # Get reference to planning scene monitor
+        self.collision_checker = FastCollisionChecker(self.group_name)
+        
         # Camera pose
         self.T_C_6 = np.eye(4)
 
         # Gripper pose
         self.T_G_6 = np.eye(4)
+        self.gripper_mesh: o3d.geometry.TriangleMesh = None
 
         # Pose in world
         self.T_0_W = np.eye(4)
@@ -67,6 +77,10 @@ class UR5Controller:
 
         self.add_ground_plane()
 
+        # rospy.wait_for_service('/check_state_validity')
+        # self.check_state_validity = rospy.ServiceProxy('/check_state_validity', GetStateValidity)
+
+
     def add_ground_plane(self, z_height=0.0, size=(2.0, 2.0), timeout=2.0):
         """
         Adds a ground plane box to the planning scene at the specified height.
@@ -78,7 +92,7 @@ class UR5Controller:
         ground_pose.pose.orientation.w = 1.0
         ground_pose.pose.position.x = 0.0
         ground_pose.pose.position.y = 0.0
-        ground_pose.pose.position.z = z_height - 0.01  # slightly below to act as "floor"
+        ground_pose.pose.position.z = z_height  # slightly below to act as "floor"
 
         self.scene.add_box("ground_plane", ground_pose, size=(size[0], size[1], 0.02))
 
@@ -93,11 +107,12 @@ class UR5Controller:
         rospy.logwarn("Timed out waiting for ground plane to be added.")
         return False
 
-    def add_mesh_to_scene(self, mesh_path, mesh_name, mesh_pose, timeout=2.0):
+    def add_mesh_to_scene(self, mesh_path, mesh_name, mesh_pose, timeout=2.0, verbose=False):
         """
         Adds a mesh to the planning scene at the specified pose.
         """
-        rospy.loginfo("Adding mesh to planning scene...")
+        if verbose:
+            rospy.loginfo("Adding mesh to planning scene...")
 
         mesh_pose_stamped = matrix_to_pose_stamped(mesh_pose, 'base_link')
         # mesh_pose_stamped.header.frame_id = self.robot.get_planning_frame()
@@ -108,12 +123,51 @@ class UR5Controller:
         start_time = rospy.get_time()
         while not rospy.is_shutdown() and (rospy.get_time() - start_time < timeout):
             if mesh_name in self.scene.get_known_object_names():
-                rospy.loginfo("Mesh added.")
+                if verbose:
+                    rospy.loginfo("Mesh added.")
                 return True
             rospy.sleep(0.1)
 
         rospy.logwarn("Timed out waiting for mesh to be added.")
         return False
+
+    def add_box_to_scene(self, box_name, box_pose, size=(0.1, 0.1, 0.1), timeout=2.0):
+        """
+        Adds a box to the planning scene at the specified pose.
+        """
+        rospy.loginfo("Adding box to planning scene...")
+
+        box_pose_stamped = matrix_to_pose_stamped(box_pose, 'base_link')
+        # box_pose_stamped.header.frame_id = self.robot.get_planning_frame()
+
+        self.scene.add_box(box_name, box_pose_stamped, size=size)
+
+        # Wait for scene update
+        start_time = rospy.get_time()
+        while not rospy.is_shutdown() and (rospy.get_time() - start_time < timeout):
+            if box_name in self.scene.get_known_object_names():
+                rospy.loginfo("Box added.")
+                return True
+            rospy.sleep(0.1)
+
+        rospy.logwarn("Timed out waiting for box to be added.")
+        return False
+
+    def remove_box_from_scene(self, box_name):
+        """
+        Removes a box from the planning scene.
+        """
+        rospy.loginfo("Removing box from planning scene...")
+
+        self.scene.remove_world_object(box_name)
+
+        # Wait for scene update
+        start_time = rospy.get_time()
+        while not rospy.is_shutdown() and box_name in self.scene.get_known_object_names():
+            rospy.sleep(0.1)
+
+        rospy.loginfo("Box removed.")
+        return True
 
     def remove_mesh_from_scene(self, mesh_name):
         """
@@ -200,6 +254,127 @@ class UR5Controller:
             rospy.logerr("Error extracting planned trajectory: %s", str(e))
             return None, False
 
+    def plan_to_joint_goal2(self, joint_goal: np.ndarray):
+        """
+        Plans a trajectory to a joint goal using MoveIt.
+
+        Args:
+            joint_goal (np.ndarray): 6-element array of joint positions [rad]
+
+        Returns:
+            np.ndarray: Planned trajectory as an (N, 6) NumPy array of joint positions
+            bool: True if planning succeeded, False otherwise
+        """
+        assert joint_goal.shape == (6,)
+
+        self.group.set_joint_value_target(joint_goal.tolist())
+        success, plan, _, _ = self.group.plan()
+        if not success:
+            rospy.logwarn("MoveIt failed to plan to joint goal.")
+            return None, False
+        return plan.joint_trajectory, True
+
+
+    def plan_to_joint_goals(self, joint_goals: np.ndarray):
+        """
+        Plans sequential trajectories through multiple joint goals using MoveIt.
+
+        Args:
+            joint_goals (np.ndarray): (N, 6) array of joint configurations [rad].
+
+        Returns:
+            np.ndarray: Planned trajectory as an (M, 6) array (may contain more than N rows due to interpolation).
+            bool: True if all plans succeeded, False otherwise.
+        """
+        assert joint_goals.ndim == 2 and joint_goals.shape[1] == 6
+        full_trajectory = []
+        
+        for i in range(len(joint_goals) - 1):
+            start = joint_goals[i]
+            goal = joint_goals[i + 1]
+
+            # Set start and goal
+            self.group.set_start_state_to_current_state()
+            self.group.set_joint_value_target(goal.tolist())
+
+            # Manually set the start state to match `start`
+            start_state = moveit_commander.RobotState()
+            start_state.joint_state.name = self.group.get_active_joints()
+            start_state.joint_state.position = start.tolist()
+            self.group.set_start_state(start_state)
+
+            success, plan, _, _ = self.group.plan()
+            if not success or not plan.joint_trajectory.points:
+                rospy.logwarn(f"Planning failed between waypoint {i} and {i+1}.")
+                return None, False
+
+            segment = [pt.positions for pt in plan.joint_trajectory.points]
+            # Avoid repeating the last point of the previous segment
+            if i > 0:
+                segment = segment[1:]
+            full_trajectory.extend(segment)
+
+        trajectory_np = np.array(full_trajectory)
+        rospy.loginfo("Successfully planned through %d waypoints. Total trajectory points: %d.",
+                    len(joint_goals), len(trajectory_np))
+        return trajectory_np, True
+
+    def plan_to_joint_goals2(self, joint_goals: np.ndarray):
+        """
+        Plans sequential trajectories through multiple joint goals using MoveIt.
+
+        Args:
+            joint_goals (np.ndarray): (N, 6) array of joint configurations [rad].
+
+        Returns:
+            JointTrajectory: Combined planned trajectory message.
+            bool: True if all plans succeeded, False otherwise.
+        """
+        assert joint_goals.ndim == 2 and joint_goals.shape[1] == 6
+
+        combined_traj = JointTrajectory()
+        combined_traj.joint_names = self.group.get_active_joints()
+        time_offset = 0.0  # To accumulate time_from_start between segments
+
+        for i in range(len(joint_goals) - 1):
+            start = joint_goals[i]
+            goal = joint_goals[i + 1]
+
+            self.group.set_start_state_to_current_state()
+            self.group.set_joint_value_target(goal.tolist())
+
+            # Manually override the start state
+            start_state = moveit_commander.RobotState()
+            start_state.joint_state.name = combined_traj.joint_names
+            start_state.joint_state.position = start.tolist()
+            self.group.set_start_state(start_state)
+
+            success, plan, _, _ = self.group.plan()
+            if not success or not plan.joint_trajectory.points:
+                rospy.logwarn(f"Planning failed between waypoint {i} and {i+1}.")
+                return None, False
+
+            # Append points, adjusting time_from_start
+            for j, pt in enumerate(plan.joint_trajectory.points):
+                if i > 0 and j == 0:
+                    continue  # Skip duplicate start
+                new_pt = JointTrajectoryPoint()
+                new_pt.positions = pt.positions
+                new_pt.velocities = pt.velocities
+                new_pt.accelerations = pt.accelerations
+                new_pt.effort = pt.effort
+                new_pt.time_from_start = pt.time_from_start + rospy.Duration(time_offset)
+                combined_traj.points.append(new_pt)
+
+            # Update time offset for next segment
+            if combined_traj.points:
+                time_offset = combined_traj.points[-1].time_from_start.to_sec()
+
+        rospy.loginfo("Successfully planned through %d waypoints. Total trajectory points: %d.",
+                    len(joint_goals), len(combined_traj.points))
+        return combined_traj, True
+
+
     def send_joint_trajectory_action(self, joint_points: np.ndarray, max_velocity=1.0, max_acceleration=1.0) -> bool:
         assert joint_points.shape[1] == 6
 
@@ -242,7 +417,55 @@ class UR5Controller:
         except Exception as e:
             rospy.logerr("Trajectory execution error: %s", str(e))
             return False
-    
+
+    def send_joint_trajectory_action2(self, trajectory: Union[np.ndarray, JointTrajectory], max_velocity=1.0, max_acceleration=1.0) -> bool:
+        if isinstance(trajectory, np.ndarray):
+            traj = JointTrajectory()
+            traj.joint_names = self.joint_names
+            cumulative_time = 0.0
+            for i, point in enumerate(trajectory):
+                pt = JointTrajectoryPoint()
+                pt.positions = point.tolist()
+                dt = self.calculate_time_between_points(trajectory[i - 1], point, max_velocity, max_acceleration) if i > 0 else 0.0
+                cumulative_time += dt
+                pt.time_from_start = rospy.Duration(cumulative_time)
+                traj.points.append(pt)
+            trajectory_ = traj
+        elif isinstance(trajectory, JointTrajectory):
+            trajectory_ = trajectory
+        else: 
+            rospy.logerr("Invalid trajectory type. Expected np.ndarray or JointTrajectory.")
+            return False
+        
+        goal = FollowJointTrajectoryGoal()
+        goal.trajectory = trajectory_
+        self.force_violation = False
+
+        try:
+            rospy.loginfo("Sending trajectory goal...")
+            self.client.send_goal(goal)
+            self.active_goal = self.client
+
+            self.client.wait_for_result()
+
+            result = self.client.get_result()
+            state = self.client.get_state()
+
+            if self.force_violation:
+                rospy.logwarn("Trajectory canceled due to force threshold.")
+                return False
+
+            if state == 3:  # SUCCEEDED
+                rospy.loginfo("Trajectory executed successfully.")
+                return True
+            else:
+                rospy.logwarn("Trajectory failed or was interrupted. State: %s", str(state))
+                return False
+        except Exception as e:
+            rospy.logerr("Trajectory execution error: %s", str(e))
+            return False
+
+
     def cancel_trajectory(self):
         if self.active_goal:
             rospy.logwarn("Cancelling active trajectory...")
@@ -298,9 +521,10 @@ class UR5Controller:
     #     t = self.latest_wrench.torque
     #     return np.array([f.x, f.y, f.z, t.x, t.y, t.z])
 
-    def get_all_ik_solutions(self, pose_matrix: np.ndarray):
+    def get_all_ik_solutions_rvl(self, pose_matrix: np.ndarray, check_env_collisions: bool = False, check_self_collisions: bool = False):
         """
-        Compute all inverse kinematics solutions using RVL IK solver.
+        Compute all inverse kinematics solutions using RVL IK solver. This function also checks for collisions
+        in the environment and self-collisions if specified and normalizes the joint solutions.
         
         Args:
             pose_matrix (np.ndarray): 4x4 transformation matrix representing desired end-effector pose (T_G_0)
@@ -320,13 +544,40 @@ class UR5Controller:
 
             # Reshape and trim based on number of solutions
             q_solutions = np.array(q_solutions).reshape((8, -1))[:num_solutions]
+            q_solutions = q_solutions[~np.isnan(q_solutions).any(axis=1)]
+            num_solutions = q_solutions.shape[0]
+
+            if num_solutions < 1:
+                rospy.logwarn("RVL IK solver found no valid solutions.")
+                return None, False
+
+            q_solutions[:, 0] -= np.pi # compensate for RVL's offset
+            # q_solutions[:, 5] -= np.pi # compensate for RVL's offset
+            q_solutions[q_solutions > np.pi] -= 2 * np.pi # normalize to [-pi, pi]
+            q_solutions[q_solutions < -np.pi] += 2 * np.pi # normalize to [-pi, pi]
+
+            if check_env_collisions:
+                valid_solutions = []
+                for q in q_solutions:
+                    if self.is_state_valid(q.tolist()):
+                        valid_solutions.append(q)
+                q_solutions = np.array(valid_solutions)
+            if check_self_collisions:
+                valid_solutions = []
+                for q in q_solutions:
+                    if self.is_state_self_collision_free(q.tolist()):
+                        valid_solutions.append(q)
+                q_solutions = np.array(valid_solutions)
+            if q_solutions.size == 0:
+                rospy.logwarn("No valid IK solutions found after collision checks.")
+                return None, False
             return q_solutions, True
 
         except Exception as e:
             rospy.logerr("RVL IK solver error: %s", str(e))
             return None, False
 
-    def get_closest_ik_solution(self, T_G_0: np.ndarray, joints: Union[np.array, None]) -> np.ndarray:
+    def get_closest_ik_solution(self, T_6_0: np.ndarray, joints: Union[np.array, None]) -> np.ndarray:
         """
         Uses the RVL IK solver to get all solutions for the given pose,
         and returns the one closest to the current joint configuration
@@ -339,26 +590,39 @@ class UR5Controller:
         Returns:
             np.ndarray: 6-element joint solution closest to current config
         """
-        if T_G_0.shape != (4, 4):
-            raise ValueError("Expected a 4x4 transformation matrix for T_G_0")
+        if T_6_0.shape != (4, 4):
+            raise ValueError("Expected a 4x4 transformation matrix for T_6_0")
 
         # Get all IK solutions using RVL solver
-        q_solutions, num_sols, success = self.rvl_ik_solver.inv_kinematics_all_sols_prev(T_G_0)
+        q_solutions, num_sols, success = self.rvl_ik_solver.inv_kinematics_all_sols_prev(T_6_0)
 
         if not success or num_sols == 0:
             rospy.logwarn("RVL IK solver found no solutions.")
             return None
 
-        q_solutions = np.array(q_solutions[:num_sols, ...])
+        q_solutions = np.array(q_solutions)[:num_sols]
+        q_solutions = q_solutions[~np.isnan(q_solutions).any(axis=1)]
+        num_sols = q_solutions.shape[0]
+
         q_solutions[:, 0] -= np.pi
         q_solutions[q_solutions > np.pi] -= (2.0*np.pi)
         q_solutions[q_solutions < -np.pi] += (2.0*np.pi)
         np.unwrap(q_solutions, axis=0)
         
+        valid_solutions = []
+        for q in q_solutions:
+            if self.is_state_self_collision_free(q.tolist()):
+                valid_solutions.append(q)
+        q_solutions = np.array(valid_solutions)
+
+        if q_solutions.size == 0:
+            rospy.logwarn("No valid IK solutions found after self-collision checks.")
+            return None
+    
         # Get current joint configuration
         q_current = self.get_current_joint_values() if joints is None else joints
 
-        # Compute Chebyshev (L∞) distance for each solution
+        # Compute Chebyshev distance for each solution
         cheb_dists = np.max(np.abs(q_solutions - q_current), axis=1)
         closest_idx = np.argmin(cheb_dists)
 
@@ -367,6 +631,28 @@ class UR5Controller:
         rospy.loginfo("Found %d IK solutions. Closest (Chebyshev dist: %.4f)", num_sols, cheb_dists[closest_idx])
 
         return closest_q
+
+    def get_ik_solution_moveit(self, pose_matrix: np.ndarray) -> np.ndarray:
+        """
+        Computes the inverse kinematics using MoveIt for the given pose matrix.
+
+        Args:
+            pose_matrix (np.ndarray): 4x4 transformation matrix representing desired end-effector pose (T_G_0)
+
+        Returns:
+            np.ndarray: 6-element array of joint positions [rad] if successful, None otherwise
+        """
+        assert pose_matrix.shape == (4, 4), "Expected a 4x4 transformation matrix"
+
+        self.group.set_pose_target(matrix_to_pose(pose_matrix))
+        (success, joint_trajectory, _, _) = self.group.plan()
+
+        if not success or not joint_trajectory.points:
+            rospy.logwarn("MoveIt failed to find IK solution.")
+            return None
+
+        joint_values = joint_trajectory.points[0].positions
+        return np.array(joint_values)
 
     def get_fwd_kinematics_moveit(self, joint_values: list) -> np.ndarray:
         from moveit_msgs.srv import GetPositionFK, GetPositionFKRequest
@@ -399,39 +685,54 @@ class UR5Controller:
         T_6_0 = self.rvl_ik_solver.fwd_kinematics_6(joint_values)
         return T_6_0
 
+    # def is_state_valid_slow(self, q: list) -> bool:
+    #     """
+    #     Validates a single joint configuration using the /check_state_validity service.
+
+    #     Args:
+    #         q (list): A single joint configuration [rad].
+
+    #     Returns:
+    #         bool: True if the configuration is collision-free, False otherwise.
+    #     """
+
+    #     if len(q) != 6:
+    #         rospy.logerr("Expected a joint state with 6 values")
+    #         return False
+
+    #     req = GetStateValidityRequest()
+    #     req.robot_state = RobotState()
+    #     req.robot_state.joint_state.name = self.joint_names
+    #     req.robot_state.joint_state.position = q
+    #     req.group_name = self.group_name
+
+    #     try:
+    #         res = self.check_state_validity(req)
+    #         return res.valid
+    #     except rospy.ServiceException as e:
+    #         rospy.logerr(f"Service call failed: {e}")
+    #         return False
+
     def is_state_valid(self, q: list) -> bool:
+        if len(q) != 6:
+            rospy.logerr("Expected joint state of length 6")
+            return False
+        return self.collision_checker.is_state_valid(q)
+    
+    def is_state_self_collision_free(self, q: list) -> bool:
         """
-        Validates a single joint configuration using the /check_state_validity service.
+        Checks if a joint configuration is self-colliding using the FastCollisionChecker.
 
         Args:
             q (list): A single joint configuration [rad].
 
         Returns:
-            bool: True if the configuration is collision-free, False otherwise.
+            bool: True if the configuration is NOT self-colliding, False otherwise.
         """
-        from moveit_msgs.srv import GetStateValidity, GetStateValidityRequest
-
-        joint_names = self.joint_names
-
         if len(q) != 6:
-            rospy.logerr("Expected a joint state with 6 values")
+            rospy.logerr("Expected joint state of length 6")
             return False
-
-        rospy.wait_for_service('/check_state_validity')
-        check_state_validity = rospy.ServiceProxy('/check_state_validity', GetStateValidity)
-
-        req = GetStateValidityRequest()
-        req.robot_state = RobotState()
-        req.robot_state.joint_state.name = joint_names
-        req.robot_state.joint_state.position = q
-        req.group_name = self.group_name
-
-        try:
-            res = check_state_validity(req)
-            return res.valid
-        except rospy.ServiceException as e:
-            rospy.logerr(f"Service call failed: {e}")
-            return False
+        return not self.collision_checker.is_state_self_colliding(q)
 
     def validate_trajectory_points(self, q_traj: np.ndarray) -> bool:
         """

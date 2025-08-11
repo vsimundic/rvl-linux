@@ -20,6 +20,7 @@ import time
 from actionlib import GoalStatus
 from sensor_msgs.msg import JointState
 from typing import Union
+from moveit_msgs.srv import GetStateValidity, GetStateValidityRequest
 
 
 class UR5Commander():
@@ -44,6 +45,7 @@ class UR5Commander():
         self.T_C_T = np.array(np.load(os.path.join(get_package_path_from_name('gazebo_push_open'), 'config', 'T_C_T.npy')))
         self.T_C_6 = self.T_C_T
 
+
         self.joint_values_init = np.array(np.load(os.path.join(get_package_path_from_name('gazebo_push_open'), 'config', 'joint_values_init.npy')))
         self.T_T_B_home = np.array(np.load(os.path.join(get_package_path_from_name('gazebo_push_open'), 'config', 'T_T_B_home.npy')))
 
@@ -52,6 +54,10 @@ class UR5Commander():
         self.URScript_save_path = os.path.join(get_package_path_from_name('gazebo_push_open'), 'config', 'script.script')
 
         self.__create_init_scene()
+
+        self.joint_names = self.get_joint_names()
+        rospy.wait_for_service('/check_state_validity')
+        self.check_state_validity = rospy.ServiceProxy('/check_state_validity', GetStateValidity)
 
         # test
         # T_3f_T = get_frame_transform('tool0', 'gripper_link')
@@ -691,30 +697,23 @@ class UR5Commander():
         Returns:
             bool: True if the configuration is collision-free, False otherwise.
         """
-        from moveit_msgs.srv import GetStateValidity, GetStateValidityRequest
-
-        joint_names = self.get_joint_names()
 
         if len(q) != 6:
             rospy.logerr("Expected a joint state with 6 values")
             return False
 
-        rospy.wait_for_service('/check_state_validity')
-        check_state_validity = rospy.ServiceProxy('/check_state_validity', GetStateValidity)
-
         req = GetStateValidityRequest()
         req.robot_state = RobotState()
-        req.robot_state.joint_state.name = joint_names
+        req.robot_state.joint_state.name = self.joint_names
         req.robot_state.joint_state.position = q
         req.group_name = self.__group_name
 
         try:
-            res = check_state_validity(req)
+            res = self.check_state_validity(req)
             return res.valid
         except rospy.ServiceException as e:
             rospy.logerr(f"Service call failed: {e}")
             return False
-
 
     def validate_trajectory_points(self, q_traj: np.ndarray) -> bool:
         """

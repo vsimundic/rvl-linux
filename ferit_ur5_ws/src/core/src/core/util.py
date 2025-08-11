@@ -50,3 +50,48 @@ def get_nearest_joints(candidates, current):
     dists = np.linalg.norm(diffs, axis=1)
     closest_index = np.argmin(dists)
     return candidates[closest_index], closest_index
+
+def get_nearest_joints_with_dist(candidates, current):
+    diffs = angular_difference(candidates, current)
+    dists = np.linalg.norm(diffs, axis=1)
+    closest_index = np.argmin(dists)
+    return candidates[closest_index], closest_index, dists[closest_index]
+
+def get_nearest_joints_pair_indices(joint_array1, joint_array2):
+    """
+    Find the indices of the closest pairs of joints between two arrays.
+    
+    Args:
+        joint_array1 (np.ndarray): First array of joint angles.
+        joint_array2 (np.ndarray): Second array of joint angles.
+        
+    Returns:
+        np.ndarray: Indices of the closest pairs of joints.
+    """
+    indices = []
+    dists = []
+    for i, joint1 in enumerate(joint_array1):
+        _, index, dist = get_nearest_joints_with_dist(joint_array2, joint1)
+        indices.append((i, index))
+        dists.append(dist)
+    idx = np.argmin(dists)
+    return indices[idx]
+
+
+def furthest_point_sampling(points, num_samples):
+    N = points.shape[0]
+    sampled_indices = []
+    distances = np.full(N, np.inf)
+
+    idx = np.random.randint(0, N)
+    sampled_indices.append(idx)
+
+    for _ in range(1, num_samples):
+        current_point = points[idx]
+        dist = np.linalg.norm(points - current_point, axis=1)
+        distances = np.minimum(distances, dist)
+
+        idx = np.argmax(distances)
+        sampled_indices.append(idx)
+
+    return sampled_indices

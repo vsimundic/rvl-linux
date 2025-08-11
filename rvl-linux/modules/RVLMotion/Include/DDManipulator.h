@@ -313,10 +313,13 @@ namespace RVL
 		void VisualizeToolMesh(Pose3D pose_G_S, vtkSmartPointer<vtkActor> &actor);
 		void VisualizeDoorPanelMesh(vtkSmartPointer<vtkActor> &actor);
 		void setPose_DD_0();
+		void setPose_DD_S(Pose3D pose_DD_S_);
 		bool ApproachPathPoses(
 			Pose3D *pPose_G_S_contact,
 			Array<Pose3D> &poses_G_0_via,
 			float *SDF);
+		void VisualizeVNModelTest();
+		void VisualizeVNCurrentState(float *q, Pose3D pose_G_R, RVL::Box<float> &VNBBox);
 
 	private:
 		void SetDoorReferenceFrames();
@@ -431,6 +434,8 @@ namespace RVL
 		// Pose3D pose_A_S;
 		char *cabinetStaticDirPath;
 		fcl::Vector3d contact_pos;
+		RVL::Box<float> vnbbox;
+
 
 		// Path planning.
 

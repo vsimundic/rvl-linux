@@ -4,7 +4,7 @@ import open3d
 
 # [center.x, center.y, center.z, R] w.r.t. origin of gripper
 
-spheres = np.matrix(
+spheres_old_only2fingers_ = np.matrix(
 [
 # Solo finger
  [-82.300, -5.2000,  94.5,  12.500],
@@ -15,6 +15,76 @@ spheres = np.matrix(
  [-90.828,  0.0000,  62.000,  23.000],
 
  [-80.547,  2.3100e-07,  36.000,  27.000],
+
+ [-66.625,  7.3620e-07,  1.8120,  32],
+
+    # Palm
+ [ 00.000,  0.0000, -56.000,  85.00],
+
+# Double fingers
+ [ 61.5, -27.500,  -9,  40.000],
+ [ 61.5,  27.500,  -9,  40.000],
+
+ [ 83, -26,  36.000,  30],
+ [ 83,  26,  36.000,  30],
+
+ [ 88.000,  -21.500,    65.500,  22.000],
+ [ 89.500,  00.000,     66.000,  20.000],
+ [ 88.000,  21.500,     65.500,  22.000],
+
+ [ 85,  26.5,  85.800,  11.00],
+ [ 85.500,  11.750,  85.800,  11.00],
+ [ 85.500,  0.0000,  85.800,  11.00],
+ [ 85.500, -11.750,  85.800,  11.00],
+ [ 85, -26.5,  85.800,  11.00],
+
+ [ 82.000,  20,  97,  9.5000],
+ [ 82.000,  10,  95.700,  9.5000],
+ [ 82.000,  0,  95.700,  9.5000],
+ [ 82.000, -10,  95.700,  9.5000],
+ [ 82.000, -20,  97,  9.5000]
+ ]
+)
+
+# spheres_solofinger = np.matrix(
+spheres = np.matrix(
+[
+# Solo finger
+ [-82.000, -7.2000,  97.5,  9.500],
+ [-82.000,  7.2000,  97.5,  9.500],
+ [-82.000,  0.0000,  97.5,  9.500],
+
+ [-85.100,  9.7,  85.000,  11.000],
+ [-85.100, -9.7,  85.000,  11.000],
+ [-86.528,  0.0000,  85.000,  11.000],
+
+ [-77.000, -8.5000,  101,  6.500],
+ [-77.000,  -3.5000, 101,  6.500],
+ [-77.000,  0.0000,  101,  6.500],
+ [-77.000,  3.5000,  101,  6.500],
+ [-77.000,  8.5000,  101,  6.500],
+
+ [-77.000, -8.5000,  93.000,  6.500],
+ [-77.000,  -3.5000, 93.000,  6.500],
+ [-77.000,  0.0000,  93.000,  6.500],
+ [-77.000,  3.5000,  93.000,  6.500],
+ [-77.000,  8.5000,  93.000,  6.500],
+
+ [-77.000, -8.5000,  85.500,  6.500],
+ [-77.000,  -3.5000, 85.500,  6.500],
+ [-77.000,  0.0000,  85.500,  6.500],
+ [-77.000,  3.5000,  85.500,  6.500],
+ [-77.000,  8.5000,  85.500,  6.500],
+
+#  [-80.300,  9.7,  85.000,  11.000],
+#  [-80.300, -9.7,  85.000,  11.000],
+#  [-81.828,  0.0000,  85.000,  11.000],
+
+
+ [-89.828,  7.0000,  67.000,  18.000],
+ [-89.828,  -7.0000,  67.000,  18.000],
+
+ [-80.547,  2.3100e-07,  38.500,  29.500],
 
  [-66.625,  7.3620e-07,  1.8120,  32],
 
@@ -107,6 +177,7 @@ spheres2 = np.matrix([
 ])
 
 # np.save('/home/RVLuser/rvl-linux/data/Robotiq3Finger/spheres.npy', spheres)
+np.save('/home/RVLuser/rvl-linux/data/Robotiq3Finger_real/spheres.npy', spheres)
 # np.save('/home/RVLuser/rvl-linux/data/Robotiq3Finger/spheres2.npy', spheres2)
 # with open('/home/RVLuser/rvl-linux/data/Robotiq3Finger/spheres.npy', 'wb') as f:
 #     np.save(f, spheres)
@@ -144,7 +215,7 @@ sphere_meshes_ls = []
 # tool_mesh_ls = open3d.geometry.LineSet.create_from_triangle_mesh(tool_mesh)
 # # tool_mesh.compute_vertex_normals()
 tool_mesh_ = open3d.io.read_triangle_mesh('/home/RVLuser/rvl-linux/python/DDMan/3finger_gripper/robotiq_3f_gripper_simplified.ply')
-
+tool_mesh_.compute_vertex_normals()
 for i in range(spheres.shape[0]):
     sphere = open3d.geometry.TriangleMesh.create_sphere(radius=spheres[i, 3])
     # sphere.compute_vertex_normals()
@@ -185,7 +256,9 @@ T_3f_G[2, 3] -= 0.013
 tool_mesh = open3d.io.read_triangle_mesh('/home/RVLuser/rvl-linux/python/DDMan/3finger_gripper/robotiq_3f_gripper_simplified.ply')
 tool_mesh.compute_vertex_normals()
 tool_mesh_ls = open3d.geometry.LineSet.create_from_triangle_mesh(tool_mesh)
-gripper_3f_mesh = open3d.io.read_triangle_mesh('/home/RVLuser/rvl-linux/data/Robotiq3Finger/mesh_tool_collision.ply')
+# gripper_3f_mesh = open3d.io.read_triangle_mesh('/home/RVLuser/rvl-linux/data/Robotiq3Finger/mesh_tool_collision.ply')
+gripper_3f_mesh = open3d.io.read_triangle_mesh('/home/RVLuser/rvl-linux/data/Robotiq3Finger_real/mesh.ply')
+gripper_3f_mesh.compute_vertex_normals()
 # gripper_3f_mesh.transform(T_3f_G)
 # sphere_meshes_ls.append(tool_mesh)
 sphere_meshes_ls.append(gripper_3f_mesh)

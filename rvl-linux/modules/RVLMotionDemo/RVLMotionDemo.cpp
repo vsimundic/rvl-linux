@@ -72,9 +72,13 @@ void CreateParamList(
     char **pResultsFolder,
     bool &bSolverSave,
     bool &bSolverLoad,
+    bool &bTouchSimulationOneByOne,
     char **pEnvModelFileName,
     char **pDoorSimulationSamplesFileName,
-    char **pToolFlangePoseFileName)
+    char **pToolFlangePoseFileName,
+    char **pDoorExperimentsVisionFileName,
+    char **pDoorExperimentsGTFileName,
+    char **pTouchFileName)
 {
     pParamList->m_pMem = pMem;
     RVLPARAM_DATA *pParamData;
@@ -102,9 +106,13 @@ void CreateParamList(
     pParamData = pParamList->AddParam("ResultsFolder", RVLPARAM_TYPE_STRING, pResultsFolder);
     pParamData = pParamList->AddParam("Solver.save", RVLPARAM_TYPE_BOOL, &bSolverSave);
     pParamData = pParamList->AddParam("Solver.load", RVLPARAM_TYPE_BOOL, &bSolverLoad);
+    pParamData = pParamList->AddParam("Touch.Simulation.one-by-one", RVLPARAM_TYPE_BOOL, &bTouchSimulationOneByOne);
     pParamData = pParamList->AddParam("Touch.Environment_model_file_name", RVLPARAM_TYPE_STRING, pEnvModelFileName);
     pParamData = pParamList->AddParam("Touch.Door_simulation_samples_file_name", RVLPARAM_TYPE_STRING, pDoorSimulationSamplesFileName);
     pParamData = pParamList->AddParam("Touch.Tool_flange_pose", RVLPARAM_TYPE_STRING, pToolFlangePoseFileName);
+    pParamData = pParamList->AddParam("Touch.Door_experiments_vision_file_name", RVLPARAM_TYPE_STRING, pDoorExperimentsVisionFileName);
+    pParamData = pParamList->AddParam("Touch.Door_experiments_gt_file_name", RVLPARAM_TYPE_STRING, pDoorExperimentsGTFileName);
+    pParamData = pParamList->AddParam("Touch.Touches_file_name", RVLPARAM_TYPE_STRING, pTouchFileName);
 }
 
 int main(int argc, char **argv)
@@ -131,12 +139,16 @@ int main(int argc, char **argv)
     char *environmentModelFileName = NULL;
     char *doorSimulationSamplesFileName = NULL;
     char *toolFlangePoseFileName = NULL;
+    char *doorExperimentsVisionFileName = NULL;
+    char *doorExperimentsGTFileName = NULL;
+    char *touchFileName = NULL;
     float qHome[6];
     memset(qHome, 0, 6 * sizeof(float));
     Pose3D pose_A_S;
     float rotz_A_S_deg = 0.0;
     bool bSolverSave = false;
     bool bSolverLoad = false;
+    bool bTouchSimulationOneByOne = false;
     DWORD method = RVLMOTION_METHOD_DDM;
     DWORD mode = RVLMOTION_MODE_SIMULATION;
     CreateParamList(&ParamList,
@@ -152,9 +164,13 @@ int main(int argc, char **argv)
                     &resultsFolder,
                     bSolverSave,
                     bSolverLoad,
+                    bTouchSimulationOneByOne,
                     &environmentModelFileName,
                     &doorSimulationSamplesFileName,
-                    &toolFlangePoseFileName);
+                    &toolFlangePoseFileName,
+                    &doorExperimentsVisionFileName,
+                    &doorExperimentsGTFileName,
+                    &touchFileName);
     ParamList.LoadParams(cfgFileName);
 
     // Test DDManipulator::LocalFreePose()
@@ -342,7 +358,7 @@ int main(int argc, char **argv)
         int num_successful = 0;
         bool bSaveTrajectories = true;
         std::string saveTrajDir = "/home/RVLuser/rvl-linux/data/Exp-MC-Spheres_traj";
-    
+
         std::vector<double> runtimes;
         double duration;
         int i_ = 0;
@@ -373,13 +389,12 @@ int main(int argc, char **argv)
             auto start = std::chrono::high_resolution_clock::now();
             success = manipulator.Path2(qHomeRad, dd_end_state_angle_deg, nStates, poses_G_0, robotJoints, &allFeasiblePaths, &allFeasiblePathsJoints);
             auto end = std::chrono::high_resolution_clock::now();
-            
 
             // colchecks
             fprintf(fpLogFreeq, "%d", manipulator.vecNumColchecks_Freeq.at(0));
             fprintf(fpLogFreeSDF, "%d", manipulator.vecNumColchecks_FreeSDF.at(0));
 
-            for (int iState=1; iState < manipulator.vecNumColchecks_Freeq.size(); iState++)
+            for (int iState = 1; iState < manipulator.vecNumColchecks_Freeq.size(); iState++)
             {
                 fprintf(fpLogFreeq, ",%d", manipulator.vecNumColchecks_Freeq.at(iState));
                 fprintf(fpLogFreeSDF, ",%d", manipulator.vecNumColchecks_FreeSDF.at(iState));
@@ -389,22 +404,22 @@ int main(int argc, char **argv)
 
             if (manipulator.bCountPoses)
             {
-                // printf("Num of selected nodes: %d\n", manipulator.vecSelectedNodes_debug.back()); 
+                // printf("Num of selected nodes: %d\n", manipulator.vecSelectedNodes_debug.back());
                 vecExploredFirstPoses.push_back(manipulator.vecnumExploredPoses_debug.at(0));
                 printf("%d", manipulator.vecnumExploredPoses_debug.at(0));
                 if (success)
                 {
-                    for (int iFeasible=1; iFeasible < nStates; iFeasible++)
+                    for (int iFeasible = 1; iFeasible < nStates; iFeasible++)
                     {
                         printf(",%d", manipulator.vecnumExploredPoses_debug.at(iFeasible));
                     }
                 }
                 printf("\n");
-                
+
                 printf("Num of feasible poses accumulated: %d", manipulator.vecFeasiblePoses_debug.at(0));
                 if (success)
                 {
-                    for (int iFeasible=1; iFeasible < nStates; iFeasible++)
+                    for (int iFeasible = 1; iFeasible < nStates; iFeasible++)
                     {
                         printf(", %d", manipulator.vecFeasiblePoses_debug.at(iFeasible));
                     }
@@ -418,8 +433,8 @@ int main(int argc, char **argv)
                 num_successful++;
             }
             // else
-                // printf("Path is not found.\n");
-            
+            // printf("Path is not found.\n");
+
             duration = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
             duration *= 1e-9;
 
@@ -435,11 +450,11 @@ int main(int argc, char **argv)
                 FILE *fpLog = fopen((saveTrajDir + RVLFILEPATH_SEPARATOR + "traj_" + std::to_string(i_) + ".txt").data(), "w");
                 for (int iPathPt = 0; iPathPt < robotJoints.h; iPathPt++)
                 {
-                    float *q_ = robotJoints.Element + iPathPt*robotJoints.w;
+                    float *q_ = robotJoints.Element + iPathPt * robotJoints.w;
                     fprintf(fpLog, "%f", *q_);
                     for (int iJoint = 1; iJoint < robotJoints.w; iJoint++)
                     {
-                        fprintf(fpLog, ",%f", *(q_+iJoint));
+                        fprintf(fpLog, ",%f", *(q_ + iJoint));
                     }
                     fprintf(fpLog, "\n");
                 }
@@ -500,7 +515,8 @@ int main(int argc, char **argv)
         double min_time = *std::min_element(runtimes.begin(), runtimes.end());
         double max_time = *std::max_element(runtimes.begin(), runtimes.end());
 
-        for (double time : runtimes) {
+        for (double time : runtimes)
+        {
             total_time += time;
         }
         double average_time = total_time / runtimes.size();
@@ -517,12 +533,34 @@ int main(int argc, char **argv)
     }
     else if (method == RVLMOTION_METHOD_TOUCH)
     {
+        //{
+        //    cnpy::NpyArray npyData = cnpy::npy_load("D:\\Cupec\\Documents\\Google_Disk\\2025\\Projects\\DOK-2021-02\\VFTF\\Experiments\\T_6_0_contact.npy");
+        //    double* data = npyData.data<double>();
+        //    Pose3D pose_6_0;
+        //    RVLHTRANSFMXDECOMP(data, pose_6_0.R, pose_6_0.t);
+        //    MOTION::Robot robot;
+        //    robot.pMem0 = &mem0;
+        //    robot.Create("D:\\Cupec\\Documents\\Repos\\rvl\\RVLMotionDemo\\RVLMotionDemo_Cupec.cfg");
+        //    Array<MOTION::IKSolution> solutions;
+        //    MOTION::IKSolution solutionMem[8];
+        //    solutions.Element = solutionMem;
+        //    robot.InvKinematics(pose_6_0, solutions, false);
+        //    Pose3D pose_6_0_;
+        //    for (int i = 0; i < solutions.n; i++)
+        //    {
+        //        robot.FwdKinematics(solutions.Element[i].q, &pose_6_0_);
+        //        int debug = 0;
+        //    }
+        //}
+
         Touch touch;
         touch.pMem0 = &mem0;
         touch.Create(cfgFileName);
         touch.InitVisualizer(&visualizer, cfgFileName);
         touch.bDoor = true;
-        MOTION::DoorSimulationParams simParams;
+        touch.resultsFolder = resultsFolder;
+        std::vector<MOTION::DoorExperimentParams> simulations;
+        MOTION::DoorExperimentParams simParams;
         simParams.a = 0.3f;
         simParams.sx = 0.018f;
         simParams.sy = 0.4;
@@ -534,11 +572,16 @@ int main(int argc, char **argv)
         simParams.c = 0.005f;
         simParams.qDeg = -10.0f;
         simParams.ry = -(0.5f * simParams.sy + simParams.b);
-        float a_tool = 0.019f;
-        float b_tool = 0.064f;
-        float c_tool = 0.007f;
-        float d_tool = 0.049f;
-        float h_tool = 0.02706f;
+        // float a_tool = 0.019f;
+        // float b_tool = 0.064f;
+        // float c_tool = 0.007f;
+        // float d_tool = 0.049f;
+        // float h_tool = 0.02706f;
+        float a_tool = 0.0205;
+        float b_tool = 0.032;
+        float c_tool = 0.011;
+        float d_tool = 0.026;
+        float h_tool = 0.023;
         FILE *fpToolFlangePose = fopen(toolFlangePoseFileName, "rb");
         if (fpToolFlangePose)
         {
@@ -556,40 +599,123 @@ int main(int argc, char **argv)
                 std::string simulationSampleHeader;
                 std::vector<std::string> sampleFormat;
                 if (std::getline(sampleFile, simulationSampleHeader))
-                    touch.LoadSimulationSampleFormat(simulationSampleHeader, sampleFormat);
+                    touch.LoadExperimentFileFormat(simulationSampleHeader, sampleFormat);
                 if (touch.simulation == RVLMOTION_TOUCH_SIMULATION_OPEN)
                 {
                     std::string simulationSample;
                     while (std::getline(sampleFile, simulationSample))
                     {
-                        touch.LoadSimulationSample(simulationSample, sampleFormat, &simParams);
-                        touch.Simulation(&simParams);
+                        touch.LoadExperimentDataFromFile(simulationSample, sampleFormat, &simParams);
+                        simulations.push_back(simParams);
+                        if (bTouchSimulationOneByOne)
+                        {
+                            touch.Simulation(simulations);
+                            simulations.clear();
+                        }
                     }
+                    if (!bTouchSimulationOneByOne)
+                        touch.Simulation(simulations);
                 }
             }
             if (touch.simulation == RVLMOTION_TOUCH_SIMULATION_RND)
-                touch.Simulation(&simParams);
+            {
+                simulations.push_back(simParams);
+                touch.Simulation(simulations);
+            }
         }
         else
         {
-            std::ifstream exampleFile(environmentModelFileName);
-            std::string example;
-            if (std::getline(exampleFile, example))
+            if (doorExperimentsVisionFileName)
             {
-                Pose3D pose_A_0;
-                float al, q;
-                // MOTION::LoadDoorExample(example, sy, sz, pose_A_0.t, al, q);
-                // touch.CreateScene(sx, sy, sz, rx, ry, a, b, c, RAD2DEG * q);
+                std::ifstream expFile(doorExperimentsVisionFileName);
+                std::string experimentDataHeader;
+                std::vector<std::string> expDataFormat;
+                if (std::getline(expFile, experimentDataHeader))
+                    touch.LoadExperimentFileFormat(experimentDataHeader, expDataFormat);
+                std::string strExpData;
+                std::vector<MOTION::DoorExperimentParams> expData;
+                MOTION::DoorExperimentParams expData_;
+                while (std::getline(expFile, strExpData))
+                {
+                    touch.LoadExperimentDataFromFile(strExpData, expDataFormat, &expData_);
+                    float M3x3Tmp[9];
+                    RVLMXMUL3X3T1(expData_.pose_C_E.R, expData_.pose_C_E.R, M3x3Tmp);
+                    float s = sqrt((M3x3Tmp[0] + M3x3Tmp[4] + M3x3Tmp[8]) / 3.0f);
+                    RVLSCALEMX3X32(expData_.pose_C_E.R, s, expData_.pose_C_E.R);
+                    RVLSCALE3VECTOR(expData_.pose_A_C.t, s, expData_.pose_A_C.t);
+                    expData_.bGT = false;
+                    expData_.a = simParams.a;
+                    expData_.b = simParams.b;
+                    expData_.c = simParams.c;
+                    expData.push_back(expData_);
+                }
+                if (doorExperimentsGTFileName)
+                {
+                    std::ifstream expFile(doorExperimentsGTFileName);
+                    std::string experimentGTHeader;
+                    std::vector<std::string> expGTFormat;
+                    if (std::getline(expFile, experimentGTHeader))
+                        touch.LoadExperimentFileFormat(experimentGTHeader, expGTFormat);
+                    std::string strExpGT;
+                    MOTION::DoorExperimentParams expGT;
+                    while (std::getline(expFile, strExpGT))
+                    {
+                        touch.LoadExperimentDataFromFile(strExpGT, expGTFormat, &expGT);
+                        for (int iExp = 0; iExp < expData.size(); iExp++)
+                        {
+                            if (expData[iExp].sessionIdx == expGT.sessionIdx && expData[iExp].sceneIdx == expGT.sceneIdx)
+                            {
+                                Pose3D pose_Arot_A;
+                                float q = DEG2RAD * expGT.qDeg;
+                                float cs = cos(q);
+                                float sn = sin(q);
+                                RVLROTZ(cs, sn, pose_Arot_A.R);
+                                RVLNULL3VECTOR(pose_Arot_A.t);
+                                Pose3D pose_A_Arot;
+                                RVLINVTRANSF3D(pose_Arot_A.R, pose_Arot_A.t, pose_A_Arot.R, pose_A_Arot.t);
+                                RVLCOMPTRANSF3D(expGT.pose_A_0_gt.R, expGT.pose_A_0_gt.t, pose_A_Arot.R, pose_A_Arot.t,
+                                                expData[iExp].pose_A_0_gt.R, expData[iExp].pose_A_0_gt.t);
+                                expData[iExp].sxgt = expGT.sx;
+                                expData[iExp].sygt = expGT.sy;
+                                expData[iExp].szgt = expGT.sz;
+                                expData[iExp].rxgt = expGT.rx;
+                                expData[iExp].rygt = expGT.ry;
+                                expData[iExp].qDeg_gt = expGT.qDeg;
+                                expData[iExp].bGT = true;
+                            }
+                        }
+                    }
+                }
+                std::vector<MOTION::TouchData> touches;
+                if (touchFileName)
+                {
+                    std::ifstream touchFile(touchFileName);
+                    std::string touchFileHeader;
+                    std::vector<std::string> touchFileFormat;
+                    if (std::getline(touchFile, touchFileHeader))
+                        touch.LoadExperimentFileFormat(touchFileHeader, touchFileFormat);
+                    std::string strTouch;
+                    MOTION::TouchData touchData;
+                    while (std::getline(touchFile, strTouch))
+                    {
+                        touch.LoadTouch(strTouch, touchFileFormat, &touchData);
+                        touches.push_back(touchData);
+                    }
+                }
+                touch.TestCorrection(expData, touches);
             }
             else
-                printf("ERROR: Environment model file not found!\n");
-    }
+                printf("ERROR: Experiment vision file name is not defined!\n");
+        }
     }
 
     delete[] resultsFolder;
     delete[] environmentModelFileName;
     delete[] doorSimulationSamplesFileName;
     delete[] toolFlangePoseFileName;
+    delete[] doorExperimentsVisionFileName;
+    delete[] doorExperimentsGTFileName;
+    delete[] touchFileName;
 
     return 0;
 }
@@ -2027,4 +2153,3 @@ void TestFeasibleRobotPose(
     // delete[] eCF;
     // delete[] w;
 }
-

@@ -354,7 +354,6 @@ namespace RVL
 				float *r,
 				float *b,
 				float &c);
-			bool SortCompare(SortIndex<float> x1, SortIndex<float> x2);
 			void MapMeshRGB(
 				Mesh *pMesh,
 				cv::Mat mapping,

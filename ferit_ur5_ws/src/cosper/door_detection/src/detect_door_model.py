@@ -155,11 +155,25 @@ def build_model(count, robot):
     ao_result = detector.detect()
 
     current_joints = robot.get_current_joint_values()
-
     ao_result["joint_values"] = current_joints
+    
+    T_6_0 = robot.get_current_tool_pose()
+    T_C_6 = np.load('/home/RVLuser/ferit_ur5_ws/data/camera_calibration_20250331/T_C_T.npy')
+
+    R_A_C = np.array(ao_result['R']).reshape(3, 3)
+    t_A_C = np.array(ao_result['t'])
+
+    T_A_C = np.eye(4)
+    T_A_C[:3, :3] = R_A_C
+    T_A_C[:3, 3] = t_A_C
+
+    T_A_0 = T_6_0 @ T_C_6 @ T_A_C
+    print("T_A_0:\n", T_A_0)
 
     # Convert to JSON-safe format
     ao_json = convert_numpy(ao_result)
+
+
 
     # Save as .json instead of .txt
     json_path = os.path.splitext(model_output_path)[0] + ".json"
@@ -176,8 +190,12 @@ def main():
 
     rospy.init_node(node_name)
 
-    # Load parameters
-    base_dir = rospy.get_param("~base_dir", "/home/RVLuser/ferit_ur5_ws/data/Exp-cabinet_detection-20250508/door_detection")
+    IS_OFFLINE = False
+    scene_idx = 9
+    
+    mode = 'offline' if IS_OFFLINE else 'online'
+
+    base_dir = rospy.get_param("~base_dir", "/home/RVLuser/ferit_ur5_ws/data/Exp-cabinet_detection-20250508/door_detection/{}_detection/cabinet_{}".format(mode, scene_idx))
     rgb_dir = rospy.get_param("~rgb_dir", "RGB_images")
     depth_dir = rospy.get_param("~depth_dir", "DEPTH_images")
     ply_dir = rospy.get_param("~ply_dir", "PLY_seg")

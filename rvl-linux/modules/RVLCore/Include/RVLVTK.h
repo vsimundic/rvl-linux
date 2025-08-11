@@ -40,6 +40,7 @@
 #include "vtkConeSource.h"
 #include "vtkOBJExporter.h"
 #include "vtkPointPicker.h"
+#include "vtkCellPicker.h"
 #include "vtkActor.h"
 #include "vtkTransformPolyDataFilter.h"
 #include "VTKActorObj.h"

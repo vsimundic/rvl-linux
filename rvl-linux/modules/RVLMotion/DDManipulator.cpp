@@ -1939,7 +1939,7 @@ bool DDManipulator::Path2(
         }
         // if (feasibleNodes.n == 0)
         //     break;
-        
+
 #ifdef RVLMOTION_DDMANIPULATOR_PATH2_GRAPH_VISUALIZATION
         MOTION::VisualizationNode visNode;
         for (iFeasibleNode = 0; iFeasibleNode < feasibleNodes.n; iFeasibleNode++)
@@ -3492,6 +3492,12 @@ bool DDManipulator::ApproachPath(
     float c_S[3];
     MOTION::Sphere *pSphere;
     bool bFreePose;
+    
+    if (bVisualizeApproachCollision)
+    {
+        VisualizeVNCurrentState(IKSolutions[2].Element->q, *pPose_G_S_contact, vnbbox);
+    }
+
     for (iSphere = 0; iSphere < tool_sample_spheres.n; iSphere++)
     {
         pSphere = tool_sample_spheres.Element + iSphere;
@@ -3594,6 +3600,7 @@ bool DDManipulator::ApproachPath(
             if (pIntersection->n > 0)
             {
                 // printf("Intersections: %d\n", pIntersection->n);
+#ifdef NEVER
                 if (bVisualizeApproachCollision)
                 {
                     // Visualize
@@ -3749,6 +3756,7 @@ bool DDManipulator::ApproachPath(
                     pVisualizer->Run();
                     pVisualizer->renderer->RemoveAllViewProps();
                 }
+#endif
                 // std::cout << "[DEBUG] Collision detected between via point 0 and contact point." << std::endl;
                 last_approach_error_code = APPROACH_CYLINDER_COLLISION;
                 return false;
@@ -3983,7 +3991,7 @@ void DDManipulator::UpdateFurnitureParams()
     RVLNULL3VECTOR(pose_F_S.t);
 
     // Update VN model feature orientations.
-
+    // printf("[DEBUG] Updating DDManipulator furniture params.\n");
     UpdateStaticOrientation();
 
     // Boxes.
@@ -4011,7 +4019,7 @@ void DDManipulator::UpdateFurnitureParams()
     dd_storage_space_box.maxz = dd_static_depth;
 
     /// VN model.
-
+    // printf("[DEBUG] VN model update.\n");
     Array<Vector3<float>> vertices;
     vertices.n = 24;
     vertices.Element = new Vector3<float>[vertices.n];
@@ -4023,7 +4031,7 @@ void DDManipulator::UpdateFurnitureParams()
     assoc.Element = new RECOG::VN_::Correspondence5[29];
 
     // Static part.
-
+    // printf("[DEBUG] Static part VN model update.\n");
     RECOG::VN_::Correspondence5 *pAssoc = assoc.Element;
     int iPt;
     if (bVNPanel)
@@ -4076,7 +4084,7 @@ void DDManipulator::UpdateFurnitureParams()
     pVNEnv->SetFeatureOffsets(dVNEnv);
 
     // Panel.
-
+    // printf("[DEBUG] Panel model update.\n");
     pAssoc = assoc.Element;
     for (iPt = 0; iPt < 8; iPt++, pAssoc++)
     {
@@ -4089,6 +4097,7 @@ void DDManipulator::UpdateFurnitureParams()
     panelVertices.n = 8;
     panelVertices.Element = vertices.Element;
     RVL_DELETE_ARRAY(dVNPanel);
+    // printf("[DEBUG] VN panel model update.\n");
     dVNPanel = new float[pVNPanel->featureArray.n];
     pVNPanel->Descriptor(panelVertices, assoc, dVNPanel);
     pVNPanel->SetFeatureOffsets(dVNPanel);
@@ -4580,9 +4589,9 @@ void DDManipulator::InitVisualizer(Visualizer *pVisualizerIn)
     pVisualizationData->paramList.Init();
     pParamData = pVisualizationData->paramList.AddParam("DDM.visualize", RVLPARAM_TYPE_BOOL, &(pVisualizationData->bVisualize));
     pVisualizationData->paramList.LoadParams((char *)(cfgFileName.data()));
-// #ifdef RVLMOTION_DDMANIPULATOR_PATH2_GRAPH_VISUALIZATION
+    // #ifdef RVLMOTION_DDMANIPULATOR_PATH2_GRAPH_VISUALIZATION
     pVisualizationData->pVisualizer->SetBackgroundColor(1.0, 1.0, 1.0);
-// #endif
+    // #endif
 }
 
 #ifdef RVLVTK
@@ -4856,6 +4865,94 @@ void DDManipulator::VisualizeCurrentState(float *q, Pose3D pose_G_R)
         pVisualizer->renderer->RemoveViewProp(pVisualizationData->robotActors[iToolActor]);
     pVisualizer->window->Finalize();
 }
+
+void DDManipulator::VisualizeVNCurrentState(float *q, Pose3D pose_G_R, RVL::Box<float> &VNBBox)
+{
+    Visualizer *pVisualizer = pVisualizationData->pVisualizer;
+
+    // Display static part of the furniture.
+
+    // Vector3<float> boxSize;
+    // Vector3<float> boxCenter;
+    // Pose3D pose_box_S;
+    // BoxSize<float>(&dd_static_box, boxSize.Element[0], boxSize.Element[1], boxSize.Element[2]);
+    // BoxCenter<float>(&dd_static_box, boxCenter.Element);
+    // RVLCOPYMX3X3(pose_F_S.R, pose_box_S.R);
+    // RVLTRANSF3(boxCenter.Element, pose_F_S.R, pose_F_S.t, pose_box_S.t);
+    // vtkSmartPointer<vtkActor> staticBoxActor = pVisualizer->DisplayBox(boxSize.Element[0], boxSize.Element[1], boxSize.Element[2], &pose_box_S, 0.0, 128.0, 0.0);
+    // BoxSize<float>(&dd_storage_space_box, boxSize.Element[0], boxSize.Element[1], boxSize.Element[2]);
+    // BoxCenter<float>(&dd_storage_space_box, boxCenter.Element);
+    // vtkSmartPointer<vtkActor> staticSorageSpaceActor = pVisualizer->DisplayBox(boxSize.Element[0], boxSize.Element[1], boxSize.Element[2], &pose_box_S, 0.0, 128.0, 0.0);
+
+    // vtkSmartPointer<vtkActor> doorPanelActor;
+    // vtkSmartPointer<vtkActor> doorPanelVNActor;
+    // vtkSmartPointer<vtkActor> cabinetStaticMeshActor, pCabinetWholeMeshActor, cabinetPanelMeshActor;
+    // Pose3D pose_A_S;
+    // RVLCOMPTRANSF3D(pose_F_S.R, pose_F_S.t, pose_A_F.R, pose_A_F.t, pose_A_S.R, pose_A_S.t);
+    // doorPanelActor = VisualizeDoorPenel();
+    // if (pVisualizationData->bVNEnv)
+    //     doorPanelVNActor = pVNPanel->Display(pVisualizer, 0.01f, dVNPanel, NULL, 0.0f, &(pVisualizationData->VNBBox));
+
+    vtkSmartPointer<vtkActor> actor;
+    actor = pVNEnv->Display(pVisualizer, 0.01f, dVNEnv, NULL, 0.0f, &VNBBox);
+
+    VisualizeTool(pose_G_R, &(pVisualizationData->robotActors));
+    // Visualize collision spheres
+    Pose3D pose_G_S;
+    float c_S[3];
+    float *c_G = tool_bounding_sphere.c.Element;
+    RVLCOMPTRANSF3D(robot.pose_0_W.R, robot.pose_0_W.t, pose_G_R.R, pose_G_R.t, pose_G_S.R, pose_G_S.t);
+    RVLTRANSF3(c_G, pose_G_S.R, pose_G_S.t, c_S);
+
+    MOTION::Sphere *pSphere;
+    std::vector<vtkSmartPointer<vtkActor>> sphereActors;
+    for (int iSphere = 0; iSphere < tool_sample_spheres.n; iSphere++)
+    {
+        pSphere = tool_sample_spheres.Element + iSphere;
+        c_G = pSphere->c.Element;
+        RVLTRANSF3(c_G, pose_G_S.R, pose_G_S.t, c_S);
+        vtkNew<vtkSphereSource> sphereSource;
+        sphereSource->SetCenter(c_S[0], c_S[1], c_S[2]);
+        sphereSource->SetRadius(pSphere->r);
+        sphereSource->SetPhiResolution(16);
+        sphereSource->SetThetaResolution(9);
+        vtkNew<vtkPolyDataMapper> mapper;
+        mapper->SetInputConnection(sphereSource->GetOutputPort());
+        vtkNew<vtkActor> actor;
+        actor->SetMapper(mapper.GetPointer());
+        actor->GetProperty()->SetColor(0.5, 0.5, 0.5);
+        actor->GetProperty()->SetRepresentationToWireframe();
+        pVisualizer->renderer->AddActor(actor.GetPointer());
+        sphereActors.push_back(actor.GetPointer());
+    }
+    pVisualizationData->envActors.push_back(pVisualizer->DisplayReferenceFrame(&(pose_DD_S), 0.2f));
+    Pose3D pose_0_0;
+    RVLUNITMX3(pose_0_0.R);
+    RVLSET3VECTOR(pose_0_0.t, 0.0f, 0.0f, 0.0f);
+    pVisualizationData->envActors.push_back(pVisualizer->DisplayReferenceFrame(&(pose_0_0), 0.2f));
+
+    Pose3D pose_A_0;
+    Pose3D pose_A_DD;
+    RVLINVTRANSF3D(pose_DD_A.R, pose_DD_A.t, pose_A_DD.R, pose_A_DD.t);
+    RVLCOMPTRANSF3D(pose_DD_0.R, pose_DD_0.t, pose_A_DD.R, pose_A_DD.t, pose_A_0.R, pose_A_0.t);
+    pVisualizationData->envActors.push_back(pVisualizer->DisplayReferenceFrame(&(pose_A_0), 0.2f));
+
+    VisualizeRobot(q, &(pVisualizationData->robotActors));
+    pVisualizer->Run();
+    // pVisualizer->renderer->RemoveViewProp(doorPanelActor);
+    // pVisualizer->renderer->RemoveViewProp(cabinetStaticMeshActor);
+    // pVisualizer->renderer->RemoveViewProp(cabinetPanelMeshActor);
+    // for (int i = 0; i < sphereActors.size(); i++)
+    //     pVisualizer->renderer->RemoveViewProp(sphereActors[i]);
+    // // if (pVisualizationData->bVNEnv)
+    // //     pVisualizer->renderer->RemoveViewProp(doorPanelVNActor);
+    // for (int iToolActor = 0; iToolActor < pVisualizationData->robotActors.size(); iToolActor++)
+    //     pVisualizer->renderer->RemoveViewProp(pVisualizationData->robotActors[iToolActor]);
+    // pVisualizer->renderer->RemoveViewProp(actor);
+    pVisualizer->renderer->RemoveAllViewProps();
+    pVisualizer->window->Finalize();
+}
+
 
 void DDManipulator::VisualizeTool(
     Pose3D pose_G_R,
@@ -5472,6 +5569,9 @@ bool Robot::InvKinematics(
     Array<IKSolution> &solutions,
     bool bTCP)
 {
+    cv::Mat cvR(3, 3, CV_32FC1, toolPose.R);
+    float detR = cv::determinant(cvR);
+
     Pose3D *pPose_6_0 = link_pose + 5;
     if (bTCP)
         RVLCOMPTRANSF3D(toolPose.R, toolPose.t, pose_6_G.R, pose_6_G.t, pPose_6_0->R, pPose_6_0->t)
@@ -6290,4 +6390,19 @@ void DDManipulator::setPose_DD_0()
 {
     float V3Tmp[3];
     RVLCOMPTRANSF3DWITHINV(robot.pose_0_W.R, robot.pose_0_W.t, pose_DD_S.R, pose_DD_S.t, pose_DD_0.R, pose_DD_0.t, V3Tmp);
+}
+
+void DDManipulator::setPose_DD_S(Pose3D pose_DD_S_)
+{
+    RVLCOPYMX3X3(pose_DD_S_.R, pose_DD_S.R);
+    RVLCOPY3VECTOR(pose_DD_S_.t, pose_DD_S.t);
+    setPose_DD_0();
+}
+
+void DDManipulator::VisualizeVNModelTest()
+{
+    Visualizer *pVisualizer = pVisualizationData->pVisualizer;
+
+    pVNEnv->Display(pVisualizer, 0.01f, dVNEnv, NULL, 0.0f, &(pVisualizationData->VNBBox));
+    pVisualizer->Run();
 }

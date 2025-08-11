@@ -2,46 +2,119 @@
 
 #include "Figure.h"
 
-#define RVLCOLORS \
-uchar black[] = {0, 0, 0};\
-uchar red[] = { 255, 0, 0 };\
-uchar green[] = { 0, 255, 0 };\
-uchar blue[] = { 0, 0, 255 };\
-uchar yellow[] = { 255, 255, 0 };\
-uchar cyan[] = { 0, 255, 255 };\
-uchar magenta[] = { 255, 0, 255 };\
-uchar white[] = { 255, 255, 255 };\
-uchar darkGreen[] = {0, 128, 0};
+#define RVLCOLORS                    \
+	uchar black[] = {0, 0, 0};       \
+	uchar red[] = {255, 0, 0};       \
+	uchar green[] = {0, 255, 0};     \
+	uchar blue[] = {0, 0, 255};      \
+	uchar yellow[] = {255, 255, 0};  \
+	uchar cyan[] = {0, 255, 255};    \
+	uchar magenta[] = {255, 0, 255}; \
+	uchar white[] = {255, 255, 255}; \
+	uchar darkGreen[] = {0, 128, 0};
 
-#define RVLVISUALIZER_SET_PIXEL_COLOR(pPixArray, u, v, widthStep, color, pPix)\
-{\
-	pPix = pPixArray + 3 * u + v * widthStep;\
-	*(pPix++) = color[0];\
-	*(pPix++) = color[1];\
-	*pPix = color[2];\
-}
+#define RVLVISUALIZER_SET_PIXEL_COLOR(pPixArray, u, v, widthStep, color, pPix) \
+	{                                                                          \
+		pPix = pPixArray + 3 * u + v * widthStep;                              \
+		*(pPix++) = color[0];                                                  \
+		*(pPix++) = color[1];                                                  \
+		*pPix = color[2];                                                      \
+	}
 
-#define RVLVISUALIZER_SET_PIXEL_COLOR2(pPixArray, iPix, width, widthStep, color, u, v, pPix)\
-{\
-	u = iPix % width;\
-	v = iPix / width;\
-	RVLVISUALIZER_SET_PIXEL_COLOR(pPixArray, u, v, widthStep, color, pPix);\
-}
+#define RVLVISUALIZER_SET_PIXEL_COLOR2(pPixArray, iPix, width, widthStep, color, u, v, pPix) \
+	{                                                                                        \
+		u = iPix % width;                                                                    \
+		v = iPix / width;                                                                    \
+		RVLVISUALIZER_SET_PIXEL_COLOR(pPixArray, u, v, widthStep, color, pPix);              \
+	}
 
-#define RVLVISUALIZER_LINES_INIT(pts, lines, nLines)\
-Array<Point> pts;\
-pts.Element = new Point[2 * nLines];\
-pts.n = 2 * nLines;\
-Array<Pair<int, int>> lines;\
-lines.Element = new Pair<int, int>[nLines];\
-lines.n = nLines;
+#define RVLVISUALIZER_LINES_INIT(pts, lines, nLines) \
+	Array<Point> pts;                                \
+	pts.Element = new Point[2 * nLines];             \
+	pts.n = 2 * nLines;                              \
+	Array<Pair<int, int>> lines;                     \
+	lines.Element = new Pair<int, int>[nLines];      \
+	lines.n = nLines;
 
-#define RVLVISUALIZER_LINES_FREE(pts, lines)\
-delete[] pts.Element;\
-delete[] lines.Element;
+#define RVLVISUALIZER_LINES_FREE(pts, lines) \
+	delete[] pts.Element;                    \
+	delete[] lines.Element;
 
 namespace RVL
 {
+	class PointPickCallback : public vtkCommand
+	{
+	public:
+		static PointPickCallback *New()
+		{
+			return new PointPickCallback;
+		}
+
+		void SetPolyData(vtkSmartPointer<vtkPolyData> data)
+		{
+			this->polyData = data;
+		}
+
+		void SetData(void *pDataIn)
+		{
+			this->pData = pDataIn;
+		}
+
+		void SetUserCallback(std::function<void(vtkIdType, double *, void *callData)> func)
+		{
+			this->UserCallback = func;
+		}
+
+		void Execute(vtkObject *caller, unsigned long eventId, void *callData) override
+		{
+			vtkRenderWindowInteractor *interactor = static_cast<vtkRenderWindowInteractor *>(caller);
+			vtkCellPicker *picker = vtkCellPicker::SafeDownCast(interactor->GetPicker());
+
+			if (!picker)
+			{
+				std::cerr << "No valid picker set.\n";
+				return;
+			}
+
+			int eventPos[2];
+			interactor->GetEventPosition(eventPos);
+
+			vtkRenderer *renderer = interactor->GetRenderWindow()->GetRenderers()->GetFirstRenderer();
+			picker->Pick(eventPos[0], eventPos[1], 0, renderer); // screen coordinates
+			// std::cout << "Manual pick cell ID: " << picker->GetCellId() << std::endl;
+
+			if (picker->GetCellId() >= 0)
+			{
+				double pickedPos[3];
+				picker->GetPickPosition(pickedPos);
+
+				vtkIdType closestPointId = polyData->FindPoint(pickedPos);
+				double closestPoint[3];
+				polyData->GetPoint(closestPointId, closestPoint);
+
+				std::cout << "Picked cell ID: " << picker->GetCellId() << "\n";
+				std::cout << "Closest point ID: " << closestPointId << "\n";
+				std::cout << "Coords: (" << closestPoint[0] << ", "
+						  << closestPoint[1] << ", " << closestPoint[2] << ")\n";
+
+				if (UserCallback)
+					UserCallback(closestPointId, closestPoint, pData);
+			}
+			else
+			{
+				std::cout << "No cell picked.\n";
+			}
+		}
+
+	private:
+		vtkSmartPointer<vtkPolyData> polyData;
+		void *pData;
+		std::function<void(vtkIdType, double *, void *callData)> UserCallback;
+	};
+
+	void PointPickerUserCallbackDemo(vtkIdType closestPointId, double *closestPoint, void *callData);
+	void VTKPointPickerDemo();
+
 	class Visualizer
 	{
 	public:
@@ -52,20 +125,26 @@ namespace RVL
 		void SetBackgroundColor(double r, double g, double b);
 		void SetMesh(Mesh *pMesh);
 		void SetMesh(vtkSmartPointer<vtkPolyData> pPolyData);
-		void SetMeshFromOBJ(char* fileName);
+		void SetMeshFromOBJ(char *fileName);
 		void Normals(
 			Mesh *pMesh,
 			float *N = NULL);
 		void SetKeyPressCallback(
-			void(*f)(vtkObject *caller, unsigned long eid, void *clientdata, void *calldata),
+			void (*f)(vtkObject *caller, unsigned long eid, void *clientdata, void *calldata),
 			void *clientData);
 		void SetMouseRButtonDownCallback(
-			void(*f)(vtkObject *caller, unsigned long eid, void *clientdata, void *calldata),
+			void (*f)(vtkObject *caller, unsigned long eid, void *clientdata, void *calldata),
 			void *clientData);
+		void SetMouseRButtonDownCallback(
+			std::function<void(vtkIdType, double *, void *callData)> func,
+			void *callData);
 		void SetMouseMButtonDownCallback(
-			void(*f)(vtkObject* caller, unsigned long eid, void* clientdata, void* calldata),
-			void* clientData);
-		void SetText(char * textIn);
+			void (*f)(vtkObject *caller, unsigned long eid, void *clientdata, void *calldata),
+			void *clientData);
+		void SetText(char *textIn);
+		void SetPointPicker();
+		void SetCellPicker();
+		void AssociateActorWithPointPicker(vtkSmartPointer<vtkActor> actor);
 		void Run();
 		void Clear();
 		void Clear(std::vector<vtkSmartPointer<vtkActor>> actors);
@@ -124,21 +203,21 @@ namespace RVL
 			double green,
 			double blue);
 		void DisplaySphere(
-			float* P,
+			float *P,
 			float r,
 			int resolution);
 		void DisplayEllipsoid(
 			float *P,
 			float *C,
 			float r);
-		template <typename PointCoordinateType, typename PointType> vtkSmartPointer<vtkActor> DisplayPointSet(
+		template <typename PointCoordinateType, typename PointType>
+		vtkSmartPointer<vtkActor> DisplayPointSet(
 			Array<PointType> pointArray,
 			unsigned char *color,
 			float pointMarkerSize,
 			bool bMultiColor = false,
 			bool bLabels = false,
-			vtkSmartPointer<vtkActor2D>* pLabelActor = NULL
-			)
+			vtkSmartPointer<vtkActor2D> *pLabelActor = NULL)
 		{
 			vtkSmartPointer<vtkPolyData> polyData = vtkSmartPointer<vtkPolyData>::New();
 
@@ -159,7 +238,7 @@ namespace RVL
 
 				points->InsertNextPoint(P);
 
-				if(bMultiColor)
+				if (bMultiColor)
 					colors->InsertNextTypedTuple(color + 3 * iPt);
 				else
 					colors->InsertNextTypedTuple(color);
@@ -212,8 +291,8 @@ namespace RVL
 			return actor;
 		}
 		vtkSmartPointer<vtkActor> DisplayLine(
-			Point* vertex,
-			uchar* color,
+			Point *vertex,
+			uchar *color,
 			float lineWidth = 1.0f);
 		vtkSmartPointer<vtkActor> DisplayLines(
 			Array<Point> vertices,
@@ -237,13 +316,13 @@ namespace RVL
 			bool bHideEdges = false);
 		void DisplayOrganizedOrientedPC(
 			Array2D<OrientedPoint> PC,
-			IplImage* rgbImage = NULL,
-			uchar* pointColorIn = NULL,
+			IplImage *rgbImage = NULL,
+			uchar *pointColorIn = NULL,
 			float normalLen = 0.05f,
 			uchar *normalColorIn = NULL);
 		void DisplaySphereGrid();
 		void DisplaySphericalHistogram(Array<Pair<Vector3<float>, float>> vectors);
-		void DisplayMesh(Mesh* pMesh);
+		void DisplayMesh(Mesh *pMesh);
 
 	public:
 		CRVLMem *pMem;
@@ -255,11 +334,13 @@ namespace RVL
 		vtkSmartPointer<vtkActor> actor;
 		vtkSmartPointer<vtkActor> normals;
 		vtkSmartPointer<vtkPointPicker> pointPicker;
+		vtkSmartPointer<vtkCellPicker> cellPicker;
 		vtkSmartPointer<vtkCornerAnnotation> text;
 		vtkSmartPointer<vtkCallbackCommand> keypressCallback;
 		vtkSmartPointer<vtkCallbackCommand> mouseRButtonDownCallback;
 		vtkSmartPointer<vtkCallbackCommand> mouseMButtonDownCallback;
 		vtkSmartPointer<vtkOrientationMarkerWidget> widget;
+		vtkSmartPointer<PointPickCallback> pointPickCallback;
 		double normalLength;
 		bool bNormals;
 		bool bNormalsVisible;
@@ -268,4 +349,3 @@ namespace RVL
 		std::vector<Figure *> figures;
 	};
 }
-

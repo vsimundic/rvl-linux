@@ -473,6 +473,7 @@ namespace RVL
 		float **P,
 		float *N,
 		float &area);
+	bool SortCompare(SortIndex<float> x1, SortIndex<float> x2);
 
 	// created by Damir Filko
 	// adapted for general case by Robert Cupec

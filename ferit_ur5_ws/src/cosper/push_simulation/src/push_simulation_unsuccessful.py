@@ -207,7 +207,7 @@ if __name__ == '__main__':
                     current_angle = cabinet_model.get_door_state_gazebo()[1]
                     T_A_O = cabinet_model.change_door_angle(np.rad2deg(current_angle))
                     T_A_S_rot = cabinet_model.T_O_S @ T_A_O
-                    T_S_D = np.linalg.inv(cabinet_model.T_D_A) @ np.linalg.inv(T_A_S_rot)
+                    T_S_D = np.linalg.inv(cabinet_model.T_D_A_init) @ np.linalg.inv(T_A_S_rot)
                     t_P_D = np.dot(T_S_D[:3, :3], t_P_S) + T_S_D[:3, 3]
                     collisions[i_q, :] = t_P_D
                     pass

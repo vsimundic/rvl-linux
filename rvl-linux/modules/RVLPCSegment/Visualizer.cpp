@@ -8,6 +8,7 @@
 #include <vtkQuad.h>
 #include "Util.h"
 #include "Graph.h"
+#include "vtkNew.h"
 #ifdef RVLLINUX
 #include <Eigen/Eigenvalues>
 #else
@@ -22,6 +23,56 @@
 #include "Visualizer.h"
 
 using namespace RVL;
+
+void RVL::PointPickerUserCallbackDemo(vtkIdType closestPointId, double* closestPoint, void* callData)
+{
+	printf("Callback function executed.\n");
+};
+
+void RVL::VTKPointPickerDemo()
+{
+	vtkNew<vtkSphereSource> sphereSource;
+	sphereSource->SetThetaResolution(40);
+	sphereSource->SetPhiResolution(40);
+	sphereSource->Update();
+
+	vtkSmartPointer<vtkPolyData> polyData = sphereSource->GetOutput();
+
+	vtkNew<vtkPolyDataMapper> mapper;
+	mapper->SetInputData(polyData);
+
+	vtkNew<vtkActor> actor;
+	actor->SetMapper(mapper.GetPointer());
+	actor->PickableOn();  // Ensure it's pickable
+
+	vtkNew<vtkRenderer> renderer;
+	renderer->AddActor(actor.GetPointer());
+
+	vtkNew<vtkRenderWindow> renderWindow;
+	renderWindow->AddRenderer(renderer.GetPointer());
+	renderWindow->SetWindowName("VTK Pick Point");
+
+	vtkNew<vtkRenderWindowInteractor> interactor;
+	renderWindow->SetInteractor(interactor.GetPointer());
+
+	vtkNew<vtkCellPicker> picker;
+	picker->SetTolerance(0.01);
+	picker->AddPickList(actor.GetPointer());       // Explicitly add actor to pick list
+	picker->PickFromListOn();         // Important: only pick from list
+	interactor->SetPicker(picker.GetPointer());
+
+	vtkNew<PointPickCallback> callback;
+	callback->SetData(polyData);
+	callback->SetUserCallback(PointPickerUserCallbackDemo);
+	interactor->AddObserver(vtkCommand::RightButtonPressEvent, callback.GetPointer());
+
+	vtkNew<vtkInteractorStyleTrackballCamera> style;
+	interactor->SetInteractorStyle(style.GetPointer());
+
+	renderWindow->Render();  // Necessary before interaction starts
+
+	interactor->Start();
+}
 
 Visualizer::Visualizer()
 {
@@ -76,9 +127,9 @@ void Visualizer::Create()
 		////Insert actor
 		//renderer->AddActor(actor);
 
-		//Point picker
-		pointPicker = vtkSmartPointer<vtkPointPicker>::New();
-		interactor->SetPicker(pointPicker);
+		//Point picker		// Use function SetPointPicker or SetCellPicker instead.
+		//pointPicker = vtkSmartPointer<vtkPointPicker>::New();
+		//interactor->SetPicker(pointPicker);
 
 		////Text
 		text = vtkSmartPointer<vtkCornerAnnotation>::New();
@@ -292,6 +343,15 @@ void Visualizer::SetMouseRButtonDownCallback(
 	interactor->AddObserver(vtkCommand::RightButtonPressEvent, mouseRButtonDownCallback);
 }
 
+void Visualizer::SetMouseRButtonDownCallback(
+	std::function<void(vtkIdType, double*, void* callData)> func,
+	void* callData)
+{
+	pointPickCallback->SetUserCallback(func);
+	pointPickCallback->SetData(callData);
+	interactor->AddObserver(vtkCommand::RightButtonPressEvent, pointPickCallback);
+}
+
 void Visualizer::SetMouseMButtonDownCallback(
 	void(*f)(vtkObject* caller, unsigned long eid, void* clientdata, void* calldata),
 	void* clientData)
@@ -315,6 +375,28 @@ void Visualizer::SetText(char * textIn)
 	renderer->AddViewProp(text);
 }
 
+void Visualizer::SetPointPicker()
+{
+	pointPicker = vtkSmartPointer<vtkPointPicker>::New();
+	pointPicker->SetTolerance(0.01);
+	interactor->SetPicker(pointPicker);
+	pointPickCallback = vtkSmartPointer<PointPickCallback>::New();
+}
+
+void Visualizer::SetCellPicker()
+{
+	cellPicker = vtkSmartPointer<vtkCellPicker>::New();
+	cellPicker->SetTolerance(0.01);
+	interactor->SetPicker(cellPicker);
+	pointPickCallback = vtkSmartPointer<PointPickCallback>::New();
+}
+
+void Visualizer::AssociateActorWithPointPicker(vtkSmartPointer<vtkActor> actor)
+{
+	vtkSmartPointer<vtkPolyDataMapper> mapper = vtkPolyDataMapper::SafeDownCast(actor->GetMapper());
+	pointPickCallback->SetPolyData(mapper->GetInput());
+}
+
 void Visualizer::Run()
 {
 	if (b3D)
@@ -322,6 +404,7 @@ void Visualizer::Run()
 		//Rendering
 
 		renderer->ResetCamera();
+		window->GetInteractor()->Initialize();
 		window->Render();
 
 		//Start interactor //Need a way to stop it!

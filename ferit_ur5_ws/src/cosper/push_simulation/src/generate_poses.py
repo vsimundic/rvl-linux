@@ -117,16 +117,16 @@ while i < n:
         angle_deg = axis_pos * np.rad2deg(np.arctan(0.055/door_params[0]))
 
         
-        T_D_S_0 = cabinet_model.T_A_S @ cabinet_model.T_D_A
+        T_D_S_0 = cabinet_model.T_A_S @ cabinet_model.T_D_A_init
         Tz_45 = np.eye(4)
         Tz_45[:3,:3] = rot_z(np.radians(axis_pos * 45.))
-        T_D_S_45 = cabinet_model.T_A_S @ Tz_45 @ cabinet_model.T_D_A 
+        T_D_S_45 = cabinet_model.T_A_S @ Tz_45 @ cabinet_model.T_D_A_init 
         Tz_90 = np.eye(4)
         Tz_90[:3,:3] = rot_z(np.radians(axis_pos * 90.))
-        T_D_S_90 = cabinet_model.T_A_S @ Tz_90 @ cabinet_model.T_D_A
+        T_D_S_90 = cabinet_model.T_A_S @ Tz_90 @ cabinet_model.T_D_A_init
         Tz_state_angle = np.eye(4)
         Tz_state_angle[:3,:3] = rot_z(np.radians(angle_deg))
-        T_D_S_angle =cabinet_model.T_A_S @ Tz_state_angle @ cabinet_model.T_D_A
+        T_D_S_angle =cabinet_model.T_A_S @ Tz_state_angle @ cabinet_model.T_D_A_init
 
         dist_0 = np.linalg.norm(T_D_S_0[:2, 3])
         dist_45 = np.linalg.norm(T_D_S_45[:2, 3])

@@ -913,7 +913,9 @@
     </link>
 
     <joint name="camera_joint__" type="fixed">
-        <origin rpy="0.0033192 -0.0293569 -0.7817323" xyz="-0.07941524 -0.08149755 0.0608904" />
+        <!-- This pose is used when the camera is rotated 180 deg about z-axis of tool0 -->
+        <!-- <origin rpy="0.0033192 -0.0293569 -0.7817323" xyz="-0.07941524 -0.08149755 0.0608904" /> --> 
+        <origin rpy="0.0 0.0 2.35619" xyz="0.07 0.07 0.045" />
         <parent link="tool0" />
         <child link="camera_link" />
     </joint>
@@ -1007,4 +1009,3 @@
         <kd>100</kd>
     </gazebo>
 </robot>
-

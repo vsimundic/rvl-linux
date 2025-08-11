@@ -3214,7 +3214,7 @@ void DDDetector::Detect3(
 		}
 	}
 	ddIdxSorted.resize(DDRects.n);
-	std::sort(ddIdxSorted.begin(), ddIdxSorted.end(), RECOG::DDD::SortCompare);
+	std::sort(ddIdxSorted.begin(), ddIdxSorted.end(), SortCompare);
 
 	if (DDRects.n == 0)
 	{
@@ -5728,65 +5728,6 @@ void DDDetector::DetectStorageVolumes(Mesh *pMesh)
 	delete[] SMCorrespondence;
 }
 
-// Move to Util.cpp.
-
-bool LineRectIntersection(
-	float *lineP1,
-	float *lineP2,
-	Rect<float> rect,
-	float *intersectionP1,
-	float *intersectionP2)
-{
-	float s1 = 0.0f;
-	float s2 = 1.0f;
-	float V[2];
-	V[0] = lineP2[0] - lineP1[0];
-	V[1] = lineP2[1] - lineP1[1];
-	float lineLen = sqrt(V[0] * V[0] + V[1] * V[1]);
-	float N[4][2];
-	float d[4];
-	N[0][0] = 0.0f;
-	N[0][1] = -1.0f;
-	N[1][0] = -1.0f;
-	N[1][1] = 0.0f;
-	N[2][0] = 0.0f;
-	N[2][1] = 1.0f;
-	N[3][0] = 1.0f;
-	N[3][1] = 0.0f;
-	d[0] = -rect.miny;
-	d[1] = -rect.minx;
-	d[2] = rect.maxy;
-	d[3] = rect.maxx;
-	float s;
-	float k;
-	float e;
-	for (int i = 0; i < 4; i++)
-	{
-		e = N[i][0] * lineP1[0] + N[i][1] * lineP1[1] - d[i];
-		k = N[i][0] * V[0] + N[i][1] * V[1];
-		if (RVLABS(k) < 1e-7)
-		{
-			if (e > 0.0f)
-				return false;
-		}
-		else
-		{
-			s = -e / k;
-			if (k > 0 && s < s2)
-				s2 = s;
-			if (k < 0 && s > s1)
-				s1 = s;
-			if (s1 > s2)
-				return false;
-		}
-	}
-	intersectionP1[0] = lineP1[0] + s1 * V[0];
-	intersectionP1[1] = lineP1[1] + s1 * V[1];
-	intersectionP2[0] = lineP1[0] + s2 * V[0];
-	intersectionP2[1] = lineP1[1] + s2 * V[1];
-	return true;
-}
-
 void DDDetector::DDOrthogonalView(
 	RECOG::DDD::RectStruct *pRectStruct,
 	Array<RECOG::DDD::EdgeLineSegment> edgeLineSegments,
@@ -5852,7 +5793,7 @@ void DDDetector::DDOrthogonalView(
 	}
 	if (iVerticalRect == 0)
 		return;
-	std::sort(sortedVerticalRects.begin(), sortedVerticalRects.end(), RECOG::DDD::SortCompare);
+	std::sort(sortedVerticalRects.begin(), sortedVerticalRects.end(), SortCompare);
 
 	/// Create orthogonal views.
 
@@ -8721,7 +8662,7 @@ float DDDetector::MatchToRectangle(
 		ptBuff[iBuff].push_back(ptIntervalIdx);
 	}
 	for (iBuff = 0; iBuff < 4; iBuff++)
-		std::sort(ptBuff[iBuff].begin(), ptBuff[iBuff].end(), RECOG::DDD::SortCompare);
+		std::sort(ptBuff[iBuff].begin(), ptBuff[iBuff].end(), SortCompare);
 
 	//
 
@@ -11281,7 +11222,7 @@ void DDDetector::Clustering(
 			sortedDataPairs[iDataPair].cost = ERow[j];
 		}
 	}
-	std::sort(sortedDataPairs.begin(), sortedDataPairs.end(), RECOG::DDD::SortCompare);
+	std::sort(sortedDataPairs.begin(), sortedDataPairs.end(), SortCompare);
 
 	// Allocate cluster memory.
 
@@ -12227,11 +12168,6 @@ bool RECOG::DDD::ProjectToBase(
 	return true;
 }
 
-bool RECOG::DDD::SortCompare(SortIndex<float> x1, SortIndex<float> x2)
-{
-	return (x1.cost < x2.cost);
-}
-
 // The following function could be moved to some general purpose utility cpp file, e.g. Util.cpp.
 
 void RECOG::DDD::MapImageC1(
@@ -12799,73 +12735,6 @@ void RVL::VisualizeEpipolarGeometry(
 	cv::setMouseCallback("epipolar geometry", EpipolarGeometryCallback, &data);
 	cv::imshow("epipolar geometry", display);
 	cv::waitKey();
-}
-
-// Input:
-//    line - line defined by equation line[0] * x + line[1] * y + line[2] = 0
-//    convexSet - array of lines defining a convex set, where each line is represented by a 3D vector
-//                whose first two elements represent line normal n and the third element represents the line offset d
-//                (line equation: n[0] * x + n[1] * y = d)
-//    intersectionLineSegment - the line segment representing the intersection defined by a 4D vector,
-//                whose first two elements represent the first endpoint and the other two elements the second endpoint
-
-bool RVL::LineConvexSetIntersection2D(
-	float *line,
-	Array<Vector3<float>> convexSet,
-	float *intersectionLineSegment)
-{
-	float c[2];
-	float fTmp = -line[2] / (line[0] * line[0] + line[1] * line[1]);
-	c[0] = fTmp * line[0];
-	c[1] = fTmp * line[1];
-	float v[2];
-	v[0] = -line[1];
-	v[1] = line[0];
-
-	float a;
-	float *b;
-	float s0;
-	float smin = 0.0f;
-	float smax = 0.0f;
-	bool bsmin = false;
-	bool bsmax = false;
-	for (int i = 0; i < convexSet.n; i++)
-	{
-		b = convexSet.Element[i].Element;
-		a = b[0] * v[0] + b[1] * v[1];
-		if (RVLABS(a) > 1e-10)
-		{
-			s0 = (b[2] - (b[0] * c[0] + b[1] * c[1])) / a;
-			if (a > 0.0f)
-			{
-				if (s0 < smax || !bsmax)
-				{
-					smax = s0;
-					bsmax = true;
-				}
-			}
-			else
-			{
-				if (s0 > smin || !bsmin)
-				{
-					smin = s0;
-					bsmin = true;
-				}
-			}
-		}
-	}
-
-	if (smax <= smin)
-		return false;
-	else
-	{
-		intersectionLineSegment[0] = c[0] + smin * v[0];
-		intersectionLineSegment[1] = c[1] + smin * v[1];
-		intersectionLineSegment[2] = c[0] + smax * v[0];
-		intersectionLineSegment[3] = c[1] + smax * v[1];
-
-		return true;
-	}
 }
 
 bool DDDetector::GetVisualizeDoorHypotheses()

@@ -245,3 +245,6 @@ RUN apt-get update && \
     update-locale LANG=en_US.UTF-8
 
 RUN chmod +x /usr/local/bin/slcan_add.sh
+
+ENV PATH="/xela_suite_linux:/etc/xela:${PATH}"
+ENV PYTHONPATH=$PYTHONPATH:/home/RVLuser/ferit_ur5_ws/devel/.private/ur5_collision_checker/lib
