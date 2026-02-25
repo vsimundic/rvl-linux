@@ -50,7 +50,7 @@ def visualize_scene(cabinet_file, tool_file, cabinet_pose, tool_pose):
     o3d.visualization.draw_geometries([cabinet_mesh, tool_mesh], window_name="Collision Scene")
 
 if __name__ == "__main__":
-    cabinet_mesh_path= '/home/RVLuser/rvl-linux/python/DDMan/dd_plate_mesh.ply'
+    cabinet_mesh_path= '/home/RVLuser/rvl-linux/data/DDMan/dd_plate_mesh.ply'
     tool_mesh_path = '/home/RVLuser/rvl-linux/data/Robotiq3Finger/mesh.ply'
     # cabinet_mesh = load_mesh_from_ply(cabinet_mesh_path)
     cabinet_mesh = o3d.io.read_triangle_mesh(cabinet_mesh_path)

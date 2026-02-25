@@ -1058,7 +1058,7 @@ def demo_push_poses():
         sphere_to_TCS_distance = 0.
     else:
         # Simundic
-        # custom_gripper_spheres_path = '/home/RVLuser/rvl-linux/python/DDMan/3finger_gripper/gripper_spheres.npy'
+        # custom_gripper_spheres_path = '/home/RVLuser/rvl-linux/data/DDMan/3finger_gripper/gripper_spheres.npy'
         custom_gripper_spheres_path = '/home/RVLuser/rvl-linux/data/Robotiq3Finger/spheres.npy'
         custom_gripper_model_path = '/home/RVLuser/rvl-linux/data/Robotiq3Finger/mesh.ply'
         # END: Simundic
@@ -1106,7 +1106,7 @@ def demo_push_poses():
 
     # Valid contact poses.
     if load_valid_contact_poses_from_file:
-        valid_contact_poses_ = np.load("valid_contact_poses.npy")
+        valid_contact_poses_ = np.load("/home/RVLuser/rvl-linux/data/DDMan/valid_contact_poses.npy")
     else:        
         # sphere_to_TCS_distance is not used in the function anywhere - should be removed
         valid_contact_poses_ = push_.valid_contact_poses(tool.tool_finger_distances, tool.sphere_to_TCS_distance, vision_tolerance, contact_points, num_viewpoints=num_viewpoints, num_rot_angles=num_rot_angles)
