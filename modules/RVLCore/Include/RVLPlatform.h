@@ -1,0 +1,12 @@
+#define RVL64BIT
+//#define RVLWIN
+//#define RVLOPENNI
+//#define RVL_ASTRA
+#define RVLVTK
+//#define RVLPCL
+#define RVLLINUX
+#define RVLVTK9_0
+#define AR20
+//#define RVLHDF5
+//#define OPENCV_CONTRIB
+#define RVLVTK7_1

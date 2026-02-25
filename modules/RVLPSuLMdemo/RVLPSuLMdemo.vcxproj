@@ -1,0 +1,199 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="12.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{DDE0A8B8-296A-45B2-9A84-A86EA17DFBC2}</ProjectGuid>
+    <RootNamespace>RVLPSuLMdemo</RootNamespace>
+    <Keyword>Win32Proj</Keyword>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <PlatformToolset>v120</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <PlatformToolset>v120</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <PlatformToolset>v120</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <PlatformToolset>v120</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="..\RVLCompileAndLinkPaths.props" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="..\RVLCompileAndLinkPaths.props" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="..\RVLCompileAndLinkPaths.props" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="..\RVLCompileAndLinkPaths.props" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup>
+    <_ProjectFileVersion>12.0.30501.0</_ProjectFileVersion>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <OutDir>$(SolutionDir)$(Configuration)\</OutDir>
+    <IntDir>$(Configuration)\</IntDir>
+    <LinkIncremental>true</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <LinkIncremental>true</LinkIncremental>
+    <PreBuildEventUseInBuild>true</PreBuildEventUseInBuild>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <OutDir>$(SolutionDir)$(Configuration)\</OutDir>
+    <IntDir>$(Configuration)\</IntDir>
+    <LinkIncremental>false</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <LinkIncremental>false</LinkIncremental>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <ClCompile>
+      <Optimization>Disabled</Optimization>
+      <AdditionalIncludeDirectories>$(OPENCV_BUILD)\include;..\RVLPSuLM\Include;..\RVLCore\Include;..\RVLPCS\Include;..\RapidXML\Include;$(VTK_PATH)\Include\vtk-6.1;C:\Libraries\FLANN\flann-1.8.4-src\src\cpp</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <MinimalRebuild>false</MinimalRebuild>
+      <BasicRuntimeChecks>Default</BasicRuntimeChecks>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+      <PrecompiledHeader />
+      <WarningLevel>Level3</WarningLevel>
+      <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
+    </ClCompile>
+    <Link>
+      <AdditionalDependencies>RVLCore.lib;RVLPCS.lib;opencv_core243.lib;opencv_imgproc243.lib;opencv_highgui243.lib;opencv_ml243.lib;opencv_video243.lib;opencv_features2d243.lib;opencv_calib3d243.lib;opencv_objdetect243.lib;opencv_contrib243.lib;opencv_legacy243.lib;opencv_flann243.lib;opencv_nonfree243.lib;OpenNI2.lib;vtkalglib-6.1.lib;vtkChartsCore-6.1-gd.lib;vtkCommonColor-6.1-gd.lib;vtkCommonComputationalGeometry-6.1-gd.lib;vtkCommonCore-6.1-gd.lib;vtkCommonDataModel-6.1-gd.lib;vtkCommonExecutionModel-6.1-gd.lib;vtkCommonMath-6.1-gd.lib;vtkCommonMisc-6.1-gd.lib;vtkCommonSystem-6.1-gd.lib;vtkCommonTransforms-6.1-gd.lib;vtkDICOMParser-6.1-gd.lib;vtkDomainsChemistry-6.1-gd.lib;vtkexoIIc-6.1-gd.lib;vtkexpat-6.1-gd.lib;vtkFiltersAMR-6.1-gd.lib;vtkFiltersCore-6.1-gd.lib;vtkFiltersExtraction-6.1-gd.lib;vtkFiltersFlowPaths-6.1-gd.lib;vtkFiltersGeneral-6.1-gd.lib;vtkFiltersGeneric-6.1-gd.lib;vtkFiltersGeometry-6.1-gd.lib;vtkFiltersHybrid-6.1-gd.lib;vtkFiltersHyperTree-6.1-gd.lib;vtkFiltersImaging-6.1-gd.lib;vtkFiltersModeling-6.1-gd.lib;vtkFiltersParallel-6.1-gd.lib;vtkFiltersParallelImaging-6.1-gd.lib;vtkFiltersProgrammable-6.1-gd.lib;vtkFiltersSelection-6.1-gd.lib;vtkFiltersSMP-6.1-gd.lib;vtkFiltersSources-6.1-gd.lib;vtkFiltersStatistics-6.1-gd.lib;vtkFiltersTexture-6.1-gd.lib;vtkFiltersVerdict-6.1-gd.lib;vtkfreetype-6.1-gd.lib;vtkftgl-6.1-gd.lib;vtkGeovisCore-6.1-gd.lib;vtkgl2ps-6.1-gd.lib;vtkhdf5-6.1-gd.lib;vtkhdf5_hl-6.1-gd.lib;vtkImagingColor-6.1-gd.lib;vtkImagingCore-6.1-gd.lib;vtkImagingFourier-6.1-gd.lib;vtkImagingGeneral-6.1-gd.lib;vtkImagingHybrid-6.1-gd.lib;vtkImagingMath-6.1-gd.lib;vtkImagingMorphological-6.1-gd.lib;vtkImagingSources-6.1-gd.lib;vtkImagingStatistics-6.1-gd.lib;vtkImagingStencil-6.1-gd.lib;vtkInfovisCore-6.1-gd.lib;vtkInfovisLayout-6.1-gd.lib;vtkInteractionImage-6.1-gd.lib;vtkInteractionStyle-6.1-gd.lib;vtkInteractionWidgets-6.1-gd.lib;vtkIOAMR-6.1-gd.lib;vtkIOCore-6.1-gd.lib;vtkIOEnSight-6.1-gd.lib;vtkIOExodus-6.1-gd.lib;vtkIOExport-6.1-gd.lib;vtkIOGeometry-6.1-gd.lib;vtkIOImage-6.1-gd.lib;vtkIOImport-6.1-gd.lib;vtkIOInfovis-6.1-gd.lib;vtkIOLegacy-6.1-gd.lib;vtkIOLSDyna-6.1-gd.lib;vtkIOMINC-6.1-gd.lib;vtkIOMovie-6.1-gd.lib;vtkIONetCDF-6.1-gd.lib;vtkIOParallel-6.1-gd.lib;vtkIOPLY-6.1-gd.lib;vtkIOSQL-6.1-gd.lib;vtkIOVideo-6.1-gd.lib;vtkIOXML-6.1-gd.lib;vtkIOXMLParser-6.1-gd.lib;vtkjpeg-6.1-gd.lib;vtkjsoncpp-6.1-gd.lib;vtklibxml2-6.1-gd.lib;vtkmetaio-6.1-gd.lib;vtkNetCDF-6.1-gd.lib;vtkNetCDF_cxx-6.1-gd.lib;vtkoggtheora-6.1-gd.lib;vtkParallelCore-6.1-gd.lib;vtkpng-6.1-gd.lib;vtkproj4-6.1-gd.lib;vtkRenderingAnnotation-6.1-gd.lib;vtkRenderingContext2D-6.1-gd.lib;vtkRenderingCore-6.1-gd.lib;vtkRenderingFreeType-6.1-gd.lib;vtkRenderingFreeTypeOpenGL-6.1-gd.lib;vtkRenderingGL2PS-6.1-gd.lib;vtkRenderingImage-6.1-gd.lib;vtkRenderingLabel-6.1-gd.lib;vtkRenderingLIC-6.1-gd.lib;vtkRenderingLOD-6.1-gd.lib;vtkRenderingOpenGL-6.1-gd.lib;vtkRenderingVolume-6.1-gd.lib;vtkRenderingVolumeAMR-6.1-gd.lib;vtkRenderingVolumeOpenGL-6.1-gd.lib;vtksqlite-6.1-gd.lib;vtksys-6.1-gd.lib;vtktiff-6.1-gd.lib;vtkverdict-6.1-gd.lib;vtkViewsContext2D-6.1-gd.lib;vtkViewsCore-6.1-gd.lib;vtkViewsGeovis-6.1-gd.lib;vtkViewsInfovis-6.1-gd.lib;vtkzlib-6.1-gd.lib;opengl32.lib;flann.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>C:\Libraries\FLANN\flann-1.8.4-src\build\lib\Debug;..\RVLCore\Debug\lib;..\RVLPCS\Debug\lib;..\RVLPSuLM\Debug\lib;$(OPENCV_BUILD)\x86\vc10\lib;$(OPENNI2_LIB);$(VTK_PATH)\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <SubSystem>Console</SubSystem>
+      <TargetMachine>MachineX86</TargetMachine>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <Optimization>Disabled</Optimization>
+      <AdditionalIncludeDirectories>..\RVLPSuLM\Include;..\RVLCore\Include;..\RVLPCS\Include;..\RapidXML\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <MinimalRebuild>false</MinimalRebuild>
+      <BasicRuntimeChecks>Default</BasicRuntimeChecks>
+      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
+      <PrecompiledHeader>
+      </PrecompiledHeader>
+      <WarningLevel>Level3</WarningLevel>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+    </ClCompile>
+    <Link>
+      <AdditionalDependencies>RVLCore.lib;RVLPCS.lib;RVLPSuLM.lib;OpenNI2.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>..\x64\Debug;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <SubSystem>Console</SubSystem>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <ClCompile>
+      <Optimization>MaxSpeed</Optimization>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <AdditionalIncludeDirectories>$(OPENCV_BUILD)\include;..\RVLPSuLM\Include;..\RVLCore\Include;..\RVLPCS\Include;..\RapidXML\Include;$(VTK_PATH)\Include\vtk-6.1;C:\Libraries\FLANN\flann-1.8.4-src\src\cpp</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <PrecompiledHeader />
+      <WarningLevel>Level3</WarningLevel>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+    </ClCompile>
+    <Link>
+      <AdditionalDependencies>RVLCore.lib;RVLPCS.lib;opencv_core243.lib;opencv_imgproc243.lib;opencv_highgui243.lib;opencv_ml243.lib;opencv_video243.lib;opencv_features2d243.lib;opencv_calib3d243.lib;opencv_objdetect243.lib;opencv_contrib243.lib;opencv_legacy243.lib;opencv_flann243.lib;opencv_nonfree243.lib;OpenNI2.lib;vtkalglib-6.1.lib;vtkChartsCore-6.1.lib;vtkCommonColor-6.1.lib;vtkCommonComputationalGeometry-6.1.lib;vtkCommonCore-6.1.lib;vtkCommonDataModel-6.1.lib;vtkCommonExecutionModel-6.1.lib;vtkCommonMath-6.1.lib;vtkCommonMisc-6.1.lib;vtkCommonSystem-6.1.lib;vtkCommonTransforms-6.1.lib;vtkDICOMParser-6.1.lib;vtkDomainsChemistry-6.1.lib;vtkexoIIc-6.1.lib;vtkexpat-6.1.lib;vtkFiltersAMR-6.1.lib;vtkFiltersCore-6.1.lib;vtkFiltersExtraction-6.1.lib;vtkFiltersFlowPaths-6.1.lib;vtkFiltersGeneral-6.1.lib;vtkFiltersGeneric-6.1.lib;vtkFiltersGeometry-6.1.lib;vtkFiltersHybrid-6.1.lib;vtkFiltersHyperTree-6.1.lib;vtkFiltersImaging-6.1.lib;vtkFiltersModeling-6.1.lib;vtkFiltersParallel-6.1.lib;vtkFiltersParallelImaging-6.1.lib;vtkFiltersProgrammable-6.1.lib;vtkFiltersSelection-6.1.lib;vtkFiltersSMP-6.1.lib;vtkFiltersSources-6.1.lib;vtkFiltersStatistics-6.1.lib;vtkFiltersTexture-6.1.lib;vtkFiltersVerdict-6.1.lib;vtkfreetype-6.1.lib;vtkftgl-6.1.lib;vtkGeovisCore-6.1.lib;vtkgl2ps-6.1.lib;vtkhdf5-6.1.lib;vtkhdf5_hl-6.1.lib;vtkImagingColor-6.1.lib;vtkImagingCore-6.1.lib;vtkImagingFourier-6.1.lib;vtkImagingGeneral-6.1.lib;vtkImagingHybrid-6.1.lib;vtkImagingMath-6.1.lib;vtkImagingMorphological-6.1.lib;vtkImagingSources-6.1.lib;vtkImagingStatistics-6.1.lib;vtkImagingStencil-6.1.lib;vtkInfovisCore-6.1.lib;vtkInfovisLayout-6.1.lib;vtkInteractionImage-6.1.lib;vtkInteractionStyle-6.1.lib;vtkInteractionWidgets-6.1.lib;vtkIOAMR-6.1.lib;vtkIOCore-6.1.lib;vtkIOEnSight-6.1.lib;vtkIOExodus-6.1.lib;vtkIOExport-6.1.lib;vtkIOGeometry-6.1.lib;vtkIOImage-6.1.lib;vtkIOImport-6.1.lib;vtkIOInfovis-6.1.lib;vtkIOLegacy-6.1.lib;vtkIOLSDyna-6.1.lib;vtkIOMINC-6.1.lib;vtkIOMovie-6.1.lib;vtkIONetCDF-6.1.lib;vtkIOParallel-6.1.lib;vtkIOPLY-6.1.lib;vtkIOSQL-6.1.lib;vtkIOVideo-6.1.lib;vtkIOXML-6.1.lib;vtkIOXMLParser-6.1.lib;vtkjpeg-6.1.lib;vtkjsoncpp-6.1.lib;vtklibxml2-6.1.lib;vtkmetaio-6.1.lib;vtkNetCDF-6.1.lib;vtkNetCDF_cxx-6.1.lib;vtkoggtheora-6.1.lib;vtkParallelCore-6.1.lib;vtkpng-6.1.lib;vtkproj4-6.1.lib;vtkRenderingAnnotation-6.1.lib;vtkRenderingContext2D-6.1.lib;vtkRenderingCore-6.1.lib;vtkRenderingFreeType-6.1.lib;vtkRenderingFreeTypeOpenGL-6.1.lib;vtkRenderingGL2PS-6.1.lib;vtkRenderingImage-6.1.lib;vtkRenderingLabel-6.1.lib;vtkRenderingLIC-6.1.lib;vtkRenderingLOD-6.1.lib;vtkRenderingOpenGL-6.1.lib;vtkRenderingVolume-6.1.lib;vtkRenderingVolumeAMR-6.1.lib;vtkRenderingVolumeOpenGL-6.1.lib;vtksqlite-6.1.lib;vtksys-6.1.lib;vtktiff-6.1.lib;vtkverdict-6.1.lib;vtkViewsContext2D-6.1.lib;vtkViewsCore-6.1.lib;vtkViewsGeovis-6.1.lib;vtkViewsInfovis-6.1.lib;vtkzlib-6.1.lib;opengl32.lib;flann.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>..\RVLCore\Release\lib;..\RVLPCS\Release\lib;..\RVLPSuLM\Release\lib;$(OPENCV_BUILD)\x86\vc10\lib;$(OPENNI2_LIB);$(VTK_PATH)\lib;C:\Libraries\FLANN\flann-1.8.4-src\build\lib\Debug;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <SubSystem>Console</SubSystem>
+      <OptimizeReferences>true</OptimizeReferences>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <TargetMachine>MachineX86</TargetMachine>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <Optimization>MaxSpeed</Optimization>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <AdditionalIncludeDirectories>..\RVLPSuLM\Include;..\RVLCore\Include;..\RVLPCS\Include;..\RapidXML\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <PrecompiledHeader>
+      </PrecompiledHeader>
+      <WarningLevel>Level3</WarningLevel>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+    </ClCompile>
+    <Link>
+      <AdditionalDependencies>RVLCore.lib;RVLPCS.lib;RVLPSuLM.lib;OpenNI2.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>..\x64\Release;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <SubSystem>Console</SubSystem>
+      <OptimizeReferences>true</OptimizeReferences>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="RVLPSuLMdemo.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="targetver.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <Text Include="ReadMe.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\RVLCore\RVLCore.vcxproj">
+      <Project>{06581169-bfdc-4b3f-a3ed-96faf894ea87}</Project>
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+    </ProjectReference>
+    <ProjectReference Include="..\RVLPCS\RVLPCS.vcxproj">
+      <Project>{736aadf1-0519-469c-a860-07573ef1ed97}</Project>
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+    </ProjectReference>
+    <ProjectReference Include="..\RVLPSuLM\RVLPSuLM.vcxproj">
+      <Project>{04b03a26-8de7-45f6-aa0b-b50797b5bdd5}</Project>
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+    </ProjectReference>
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

@@ -1,0 +1,349 @@
+// RVLTorusDetectionDemo.cpp : Defines the entry point for the console application.
+//
+
+//#include "stdafx.h"
+#include <Windows.h>
+#include <ctime>
+#include <fstream>
+#include <chrono>
+#include <vtkAutoInit.h>
+//VTK_MODULE_INIT(vtkRenderingOpenGL);
+VTK_MODULE_INIT(vtkRenderingOpenGL2);
+VTK_MODULE_INIT(vtkInteractionStyle);
+VTK_MODULE_INIT(vtkRenderingFreeType);
+#include "RVLVTK.h"
+#include <vtkTriangle.h>		// Remove after completion of MarchingCubes.
+#include "RVLCore2.h"
+#include "Util.h"
+#include "Space3DGrid.h"
+#include "Graph.h"
+#include "Mesh.h"
+#include "MSTree.h"
+#include "Visualizer.h"
+#include "SceneSegFile.hpp"
+#include "ReconstructionEval.h"
+#include "SurfelGraph.h"
+#include "ObjectGraph.h"
+#include "PlanarSurfelDetector.h"
+#include "RVLRecognition.h"
+#include "RFRecognition.h"
+#include "RVLMeshNoiser.h"
+#include "PSGMCommon.h"
+#include "CTISet.h"
+#include "VertexGraph.h"
+#include "TG.h"
+#include "TGSet.h"
+#include "PSGM.h"
+#include <pcl/common/common.h>
+#include <pcl/registration/registration.h>
+#include <pcl/PolygonMesh.h>
+#include <pcl/io/openni2_grabber.h>
+#include <pcl/io/openni2/openni2_metadata_wrapper.h>
+#include "PCLTools.h"
+#include "RGBDCamera.h"
+#include "PCLMeshBuilder.h"
+#include "NeighborhoodTool.h"
+#include "MarchingCubes.h"
+#include "VN.h"
+#include "VNInstance.h"
+#include "VNClassifier.h"
+#ifdef RVL_ASTRA
+#include "astraUtils.h"
+#endif
+#include "RVLAstra.h"
+#include "ObjectDetector.h"
+
+#define RVLTORUSDETECTION_DEMO_FLAG_SAVE_PLY				0x00000001
+
+using namespace RVL;
+
+void CreateParamList(
+	CRVLParameterList *pParamList,
+	CRVLMem *pMem,
+	char **pSceneSequenceFileName,
+	char **pResultsFolder,
+	DWORD &flags,
+	float &tolerance
+	)
+{
+	pParamList->m_pMem = pMem;
+
+	RVLPARAM_DATA *pParamData;
+
+	pParamList->Init();
+
+	pParamData = pParamList->AddParam("SceneSequenceFileName", RVLPARAM_TYPE_STRING, pSceneSequenceFileName);
+	pParamData = pParamList->AddParam("ResultsFolder", RVLPARAM_TYPE_STRING, pResultsFolder);
+	pParamData = pParamList->AddParam("Save PLY", RVLPARAM_TYPE_FLAG, &flags);
+	pParamList->AddID(pParamData, "yes", RVLTORUSDETECTION_DEMO_FLAG_SAVE_PLY);
+	pParamData = pParamList->AddParam("TorusDetection.tolerance", RVLPARAM_TYPE_FLOAT, &tolerance);
+}
+
+int main(int argc, char ** argv)
+{
+	// Create memory storage.
+
+	CRVLMem mem0;	// permanent memory storage
+
+	mem0.Create(1000000000);
+
+	CRVLMem mem;	// cycle memory storage
+
+	mem.Create(1000000000);
+
+	// Read parameters from a configuration file.
+
+	char cfgSelectionFileName[] = "RVLTorusDetectionDemo.cfg";
+
+	char *cfgFileName = ReadConfigurationFile(cfgSelectionFileName);
+
+	if (cfgFileName == NULL)
+	{
+		printf("No configuration file name specified!\n");
+
+		return 1;
+	}
+
+	char *sceneSequenceFileName = NULL;
+	char *ResultsFolder = NULL;
+	float tolerance;
+	DWORD flags = 0x00000000;
+
+	CRVLParameterList ParamList;
+
+	CreateParamList(&ParamList,
+		&mem0,
+		&sceneSequenceFileName,
+		&ResultsFolder,
+		flags,
+		tolerance
+	);
+
+	ParamList.LoadParams(cfgFileName);
+
+	// Mesh object.
+
+	Mesh mesh;
+
+	// Create mesh builder.
+
+	PCLMeshBuilder meshBuilder;
+
+	meshBuilder.Create(cfgFileName, &mem0);
+
+	int w = 640;
+	int h = 480;
+
+	pcl::PointCloud<pcl::PointXYZRGBA>::Ptr PC(new pcl::PointCloud<pcl::PointXYZRGBA>(w, h));
+
+	meshBuilder.PC = PC;
+
+	if (flags & RVLTORUSDETECTION_DEMO_FLAG_SAVE_PLY)
+	{
+		FileSequenceLoader sceneSequence;
+		char filePath[200];
+
+		sceneSequence.Init(sceneSequenceFileName);
+
+		while (sceneSequence.GetNextPath(filePath))
+			LoadMesh(&meshBuilder, filePath, &mesh, true);
+
+		if (sceneSequenceFileName)
+			delete[] sceneSequenceFileName;
+
+		return 0;
+	}
+
+	// Initialize surfel detection
+
+	SurfelGraph surfels;
+
+	surfels.pMem = &mem;
+
+	surfels.CreateParamList(&mem0);
+
+	surfels.ParamList.LoadParams(cfgFileName);
+
+	PlanarSurfelDetector surfelDetector;
+
+	surfelDetector.CreateParamList(&mem0);
+
+	surfelDetector.ParamList.LoadParams(cfgFileName);
+
+	// Create VN classifier.
+
+	VNClassifier classifier;
+
+	classifier.pMem0 = &mem0;
+	classifier.pMem = &mem;
+	classifier.vpMeshBuilder = &meshBuilder;
+	classifier.LoadMesh = LoadMesh;
+	classifier.pSurfels = &surfels;
+	classifier.pSurfelDetector = &surfelDetector;
+
+	classifier.Create(cfgFileName);
+
+	classifier.camera.fu = meshBuilder.camera.depthFu;
+	classifier.camera.fv = meshBuilder.camera.depthFv;
+	classifier.camera.uc = meshBuilder.camera.depthUc;
+	classifier.camera.vc = meshBuilder.camera.depthVc;
+
+	// Initialize visualization.
+
+	unsigned char SelectionColor[3];
+
+	SelectionColor[0] = 0;
+	SelectionColor[1] = 255;
+	SelectionColor[2] = 0;
+
+	Visualizer visualizer;
+
+	visualizer.Create();
+
+	classifier.visualizationData.pVisualizer = &visualizer;
+
+	/// Detect toruses in all images listed in sceneSequence.
+
+	FileSequenceLoader sceneSequence;
+
+	sceneSequence.Init(sceneSequenceFileName);
+
+	float axis[] = { 0.0f, 0.0f, 1.0f };
+
+	Array<float> alphaArray;
+
+	alphaArray.n = 16;
+
+	alphaArray.Element = new float[16];
+
+	float dAlpha = 2 * PI / 16.0f;
+
+	int iAlpha;
+
+	for (iAlpha = 0; iAlpha < 16; iAlpha++)
+		alphaArray.Element[iAlpha] = dAlpha * (float)iAlpha;
+
+	Array<float> betaArray;
+
+	betaArray.n = 7;
+
+	betaArray.Element = new float[7];
+
+	float dBeta = PI / 7.0f;
+
+	int iBeta;
+
+	for (iBeta = 0; iBeta < 7; iBeta++)
+		betaArray.Element[iBeta] = dBeta * (float)(iBeta + 1);
+
+	char filePath[200];
+	VN VNModelTemplate;
+
+	while (sceneSequence.GetNextPath(filePath))
+	{
+		printf("Scene: %s:\n", filePath);
+		classifier.alignment.SetSceneFileName(filePath);
+		classifier.SetSceneFileName(filePath);
+
+		// Load mesh.
+
+		LoadMesh(&meshBuilder, filePath, &mesh, false);
+
+		// Reset memory storage.
+
+		mem.Clear();
+
+		// Segment mesh to surfels.				
+
+		surfels.Init(&mesh);
+
+		surfelDetector.Init(&mesh, &surfels, &mem);
+
+		printf("Segmentation to surfels... ");
+
+		surfelDetector.Segment(&mesh, &surfels);
+
+		printf("completed.\n");
+		printf("No. of surfels = %d\n", surfels.NodeArray.n);
+
+		surfels.DetectVertices(&mesh);
+
+		surfels.DetectOcclusionVertices(&mesh, classifier.camera);
+
+		// Cluster surfels into convex and concave surfaces.
+
+		bool bConcavity, bTorus;
+
+		bConcavity = false;
+		bTorus = true;
+
+		RVL_DELETE_ARRAY(classifier.SClusters.Element);
+
+		RVL_DELETE_ARRAY(classifier.clusterMap);
+
+		classifier.clusterMap = new int[surfels.NodeArray.n];
+
+		int nSCClusters, nSUClusters;
+
+		int *clusterMapAll = new int[surfels.NodeArray.n];
+
+		RECOG::PSGM_::ConvexAndConcaveClusters(&mesh, &surfels, &surfelDetector, &(classifier.convexClustering), &(classifier.concaveClustering),
+			classifier.SClusters, nSCClusters, nSUClusters, classifier.convexClustering.minClusterSize, classifier.clusterMap, classifier.maxnSCClusters, classifier.maxnSUClusters, 
+			bConcavity, (bTorus ? classifier.maxnSTClusters : 0),
+			classifier.visualizationData.bVisualizeConvexClusters, classifier.visualizationData.bVisualizeConcaveClusters, classifier.visualizationData.bVisualizeSurfels);
+
+		// P <- surfel vertices
+
+		float *P = new float[3 * surfels.vertexArray.n];
+
+		float *P_ = P;
+
+		int iVertex;
+		SURFEL::Vertex *pVertex;
+
+		for (iVertex = 0; iVertex < surfels.vertexArray.n; iVertex++, P_ += 3)
+		{
+			pVertex = surfels.vertexArray.Element[iVertex];
+
+			RVLCOPY3VECTOR(pVertex->P, P_);
+		}
+
+		// N <- surfel normals
+
+		float *N = new float[3 * surfels.NodeArray.n];
+
+		float *N_ = N;
+
+		int iSurfel;
+		Surfel *pSurfel;
+
+		for (iSurfel = 0; iSurfel < surfels.NodeArray.n; iSurfel++, N_ += 3)
+		{
+			pSurfel = surfels.NodeArray.Element + iSurfel;
+
+			RVLCOPY3VECTOR(pSurfel->N, N_);
+		}
+
+		// Detect toruses.
+
+		Array<RECOG::VN_::Torus *> STClusters;
+		
+		VNModelTemplate.ToroidalClusters(&mesh, P, N, &surfels, axis, alphaArray, betaArray, tolerance, STClusters, &mem);
+
+		printf("No. of toruses = %d\n", STClusters.n);
+
+		// Visualization.
+
+		// Free memory.
+
+		delete[] STClusters.Element;
+	}
+
+	delete[] alphaArray.Element;
+	delete[] betaArray.Element;
+
+	///
+
+	return 0;
+}
+

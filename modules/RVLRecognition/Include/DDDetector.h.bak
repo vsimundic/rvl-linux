@@ -1,0 +1,462 @@
+#pragma once
+
+#define RVLDDD_TEST_DDD			0
+#define RVLDDD_TEST_CUBOIDS		1
+#define RVLDDD_TEST_3DTO2DFIT	2
+#define RVLDDD_TEST_DDD2		3
+#define RVLDDD_TEST_SVD			4
+#define RVLDDD_EDGE_MODEL_BOX		0
+#define RVLDDD_EDGE_MODEL_CYLINDER	1
+
+namespace RVL
+{
+	struct AffinePose3D
+	{
+		float s[3];
+		float R[9];
+		float t[3];
+	};
+
+	namespace RECOG
+	{
+		namespace DDD
+		{
+			struct PlanarSurface
+			{
+				float P[3];
+				float N[3];
+				QList<QLIST::Index> surfels;
+			};
+
+			struct ModelPoint
+			{
+				float S[3 * 7];
+				float N[3];
+			};
+
+			struct ModelEdge
+			{
+				int iFace;
+				int iFace_;
+				float N[3];
+			};
+
+			class Model
+			{
+			public:
+				Model();
+				virtual ~Model();
+			public:
+				Array<OrientedPoint> points;
+				float bboxSize[3];
+				float bboxCenter[3];
+				Array<ModelPoint> points_;
+				int nSurfaces;
+				float* d;
+				float* A;
+				int* AID;
+				float* Q;
+				float* R;
+				float* M;
+				Array<ModelEdge> edges;
+				int* info;
+			};
+
+			struct Hypothesis
+			{
+				AffinePose3D pose;
+				float bboxSize[3];
+				float bboxCenter[3];
+				Array<Pair<int, int>> assoc;
+			};
+
+			struct HypothesisSV
+			{
+				float s[6];
+				float RMS[9];
+			};
+
+			struct DisplayCallbackData
+			{
+				Visualizer* pVisualizer;
+				bool bOwnVisualizer;
+				CRVLParameterList paramList;
+				Mesh* pMesh;
+				Array<Point> AssociatedPts;
+				//Array<Pair<int, int>> associations;
+				//vtkSmartPointer<vtkActor> selectedPtActor[6];
+				vtkSmartPointer<vtkActor> bboxActor;
+				vtkSmartPointer<vtkActor> modelPtActor;
+				vtkSmartPointer<vtkActor> associationLinesActor;
+				//vtkSmartPointer<vtkActor2D> selectedLabelActor[4];
+				//int selectionMode;
+				//int matchStep;
+				//Array<Point>* pPoints;
+				//uchar* pointColor;
+				bool bVisualizeSurfels;
+				bool bVisualizeICPSteps;
+				bool bVisualizePtAssociation;
+				bool bVisualizeInitialHypothesis;
+				bool bVisualizeModelPts;
+				bool bVisualizeFittingScoreCalculation;
+				bool bVisualizeROIDetection;
+				bool bPointToPlane;
+				float bboxCenter[3];
+				float bboxSize[3];
+			};
+
+			struct EdgeSample
+			{
+				float PR[3];
+				float PC[3];
+				float ImgP[2];
+				int iImgP[2];
+				int iPix;
+				int edgeIdx;
+			};
+
+			struct Edge
+			{
+				float PR[2][3];
+				float PC[2][3];
+				float VR[3];
+				float VC[3];
+				cv::Point ImgP[2];
+				float ImgN[2];
+				float length;
+				bool bVisible;
+				float binEnd;
+			};
+
+			struct Plane
+			{
+				float N[3];
+				int iN[3];
+				float d;
+			};
+
+			struct PtAssoc
+			{
+				int iMSample;
+				int iQPix;
+				float QImgN[2];
+			};
+
+			bool ProjectToBase(
+				float* a,
+				int n,
+				float* Q,
+				int m,
+				float* r,
+				float *b,
+				float &c);
+		}
+	}
+
+	class DDDetector
+	{
+	public:
+		DDDetector();
+		virtual ~DDDetector();
+		void Create(char* cfgFileName);
+		void Clear();
+		void CreateParamList();
+		void SetCameraParams(float fu, float fv, float uc, float vc, int w, int h);
+		void CreateModels(
+			Array<Mesh> models,
+			std::vector<std::string> modelFileNames);
+		void CreateCuboidModel(
+			float* size,
+			float sampleDensity,
+			RECOG::DDD::Model *pModel);
+		void CreateSurfNetModel(
+			float* A,
+			int* AID,
+			int nSurfaces,
+			float* M,
+			std::vector<std::vector<std::vector<int>>> SN,
+			float minSamplingDensity,
+			float *q,
+			RECOG::DDD::Model* pModel,
+			bool bVisualize = false);
+		void CreateCuboidModel2(
+			float* size,
+			float minSamplingDensity,
+			RECOG::DDD::Model* pModel,
+			bool bVisualize = false);
+		void CreateStorageVolumeModel(
+			RECOG::DDD::Model* pModel,
+			bool bVisualize = false);
+		void BoxNormals(float* A);
+		void LoadModels(std::vector<std::string> modelFileNames);
+		void Detect(Array<Mesh> meshSeq);
+		void Detect2(Array<Mesh> meshSeq);
+		void GenerateHypotheses(
+			Mesh* pMesh,
+			Box<float> ROI,
+			Pose3D ROIPose,
+			Array<int>* dominantShiftPointsIdx,
+			std::vector<RECOG::DDD::Hypothesis> &hyps,
+			float* U = NULL,
+			Array<int> *pSOI = NULL,
+			Pose3D *pRF = NULL);
+		void GenerateAOHypotheses(std::vector<std::vector<RECOG::DDD::Hypothesis>> *pSeqHyps);
+		float EvaluateHypothesis(
+			Mesh *pMesh,
+			RECOG::DDD::Model *pModel,
+			int m,
+			float* q,
+			float* RMS,
+			float maxe,
+			int& nTransparentPts,
+			int* SMCorrespondence = NULL,
+			RECOG::SceneFittingError* errorRecord = NULL,
+			float* tMS = NULL);
+		void DetectCuboids(Mesh *pMesh);
+		void DetectStorageVolumes(Mesh* pMesh);
+		void SampleImage(Mesh* pMesh);
+		void PointAssociation(
+			Array<OrientedPoint> pointsM,
+			AffinePose3D* pPose,
+			Array<OrientedPoint> pointsQ,
+			PointAssociationData& pointAssociationData,
+			Array<int> ptBuff,
+			bool bVisualize = false,
+			Array<Point>* pPointsMQ = NULL);
+		void PointToPlaneAssociation(
+			RECOG::DDD::Model* pModel,
+			float* q,
+			Pose3D* pPose,
+			Array<OrientedPoint> pointsQ,
+			bool *bRejected,
+			PointAssociationData& pointAssociationData);
+		void VisualizePointToPlaneAssociations(
+			RECOG::DDD::Model* pModel,
+			float* q,
+			Pose3D* pPose,
+			Array<OrientedPoint> pointsQ,
+			PointAssociationData& pointAssociationData,
+			Array<Point>* pPointsMQ);
+		void AICP(
+			Array<OrientedPoint> pointsM,
+			Array<OrientedPoint> pointsQ,
+			AffinePose3D APoseInit,
+			int nIterations,
+			AffinePose3D& APose,
+			PointAssociationData& pointAssociationData,
+			Array<Point>* pPointsMQ);
+		void RICP(
+			RECOG::DDD::Model *pModel,
+			Array<OrientedPoint> pointsQ,
+			AffinePose3D APoseInit,
+			int nIterations,
+			AffinePose3D& APose,
+			PointAssociationData& pointAssociationData,
+			Array<Point>* pPointsMQ);
+		void TICP(
+			Array<OrientedPoint> pointsM,
+			Array<OrientedPoint> pointsQ,
+			AffinePose3D APoseInit,
+			int nIterations,
+			AffinePose3D& APose,
+			PointAssociationData& pointAssociationData,
+			Array<Point>* pPointsMQ);
+		void InitVisualizer(Visualizer* pVisualizer = NULL);
+		void VisualizeHypothesisBoundingBox(
+			RECOG::DDD::Hypothesis* pHyp, 
+			Mesh *pMesh = NULL);
+		void VisualizeHypothesis(
+			AffinePose3D pose,
+			PointAssociationData* pPointAssociationData,
+			Array<Point> pointsMS,
+			Array<OrientedPoint> *pPointsQ = NULL);
+		void SetSceneForHypothesisVisualization(Mesh* pMesh);
+		void SetBBoxForHypothesisVisualization(RECOG::DDD::Hypothesis* pHyp);
+		void RemoveHypothesisFromVisualization();
+		void RemoveHypothesisBoundingBoxFromVisualization();
+		void DetectDominantShiftPoints(Array<Mesh> meshSeq, Array<int>* selectedPointsIdx, bool bVisualize = false);
+		void DetectDominantShiftPoints(Mesh* pMeshM, Mesh* pMeshQ, Array<int>* selectedPointsIdx, bool bVisualize = false);
+		void MeshSubsample(Mesh* pMesh, Array<int>* pSubsampledPointsIdx);
+		void CalculatePointsShiftVector(
+			Array<Point> pointsM,
+			Array<int> subsampledPointsMIdx,
+			Array<OrientedPoint> pointsQ,
+			PointAssociationData* pPointAssociationData,
+			Array<Vector3<float>>* pointsShift,
+			float shiftThresh,
+			Array<int>* validShiftedPointsMIdx
+		);
+		void FindPointsWithShift(
+			Array<Point> pointsM,
+			Array<int> validPointsMIdx,
+			Array<OrientedPoint> pointsQ,
+			PointAssociationData* pPointAssociationData,
+			Vector3<float>* pointsShift,
+			float* shiftThresh,
+			Array<int>* pointsIdx
+		);
+		void CalculateROI(Mesh* pMesh, Array<int> pointsIdx, Box<float>* ROI);
+		void FindMeanPoint(Array<OrientedPoint>* points, float *meanPoint);
+		void SetPointsForPointToPointAssociationVisualization(
+			Mesh* pMeshM,
+			Mesh* pMeshQ,
+			PointAssociationData* pPointAssociationData
+		);
+		void SetPointsForPointToPointAssociationVisualization(
+			Array<OrientedPoint> pointsM,
+			Mesh* pMeshQ,
+			PointAssociationData* pPointAssociationData
+		);
+		void SetShiftVectorForVisualization(float *firstPoint, Vector3<float> shift, uchar* color);
+		void SetShiftVectorsForVisualization(float* firstPoint, Array<Vector3<float>> shiftArray, uchar* color);
+		void SetPointsForVisualization(Array<OrientedPoint> points, uchar* color, float size = 0.2);
+		void VisualizeFittingScoreCalculation(Mesh* pMesh, int nTransparentPts, int *SMCorrespondence);
+		void Voter1DTest();
+		void Voter3DTest();
+		void Fit3DTo2D(
+			Array<RECOG::DDD::EdgeSample> edgeSamplePts,
+			float* QNMap,
+			Pose3D poseMC0,
+			float* dR0,
+			Array<RECOG::DDD::PtAssoc> ptAssoc,
+			float &th_,
+			float& th,
+			float& et,
+			float *dR,
+			float *dt);
+		void Fit3DTo2D(
+			Mesh *pMesh,
+			cv::Mat RGB,
+			Pose3D initPoseMC,
+			Pose3D &poseMC);
+		void Project3DModelToImage(
+			Mesh* pMesh,
+			Pose3D poseMC,
+			RECOG::DDD::Edge* edge,
+			float* PRMem,
+			float* PCMem,
+			float* NCMem);
+		void SampleEdges(
+			Mesh* pMesh,
+			RECOG::DDD::Edge* edge,
+			Array<RECOG::DDD::EdgeSample>& edgeSamplePts);
+		void BoundingBox(
+			Mesh* pMesh,
+			Array<int> surfels,
+			float* RSB,
+			Box<float> &bbox);
+		void GenerateHypothesis(
+			Box<float> bbox,
+			RECOG::DDD::Model *pModel,
+			float *RMB,
+			int *bboxAxesIdxM,
+			float *bboxAxesSignM,
+			float* RBS,
+			RECOG::DDD::Hypothesis &hyp);
+		void Project(
+			RECOG::DDD::Model* pModel,
+			int m,
+			float *q,
+			float *RMS,
+			float *tMS = NULL);
+		void Visualize3DModelImageProjection(
+			cv::Mat displayImg,
+			Mesh *pModelMesh,
+			RECOG::DDD::Edge *edge,
+			uchar *color = NULL);
+		void SuperposeBinaryImage(
+			cv::Mat displayImg,
+			uchar* binImg,
+			uchar* color);
+		void VisualizeEdgeSamples(
+			cv::Mat displayImg,
+			Array<RECOG::DDD::EdgeSample> edgeSamplePt);
+		void Visualize2DPointAssociation(
+			cv::Mat displayImg,
+			Array<RECOG::DDD::PtAssoc> ptAssoc,
+			RECOG::DDD::EdgeSample * edgeSamplePt);
+		void VisualizeStorageVolumeModel(
+			RECOG::DDD::Model* pModel,
+			RECOG::DDD::HypothesisSV hyp,
+			Array<Point> &samplePts,
+			Array<Pair<int, int>> *pNormals = NULL);
+		bool CreateMeshFromPolyData(Mesh *pMesh);
+		void CreateBox(
+			Mesh* pMesh,
+			float size[3]);
+		void CreateCylinder(
+			Mesh* pMesh,
+			float r,
+			float h,
+			int resolution);
+		int FurthestPoint(
+			float *P,
+			Mesh *pMesh,
+			QList<QLIST::Index2> ptList);
+		int FurthestPoint(
+			float* P,
+			Mesh* pMesh,
+			Array<MeshEdgePtr*> ptArray,
+			float* V = NULL);
+
+	public:
+		DWORD mode;
+		CRVLMem* pMem;
+		CRVLMem* pMem0;
+		CRVLParameterList paramList;
+		Camera camera;
+		SurfelGraph* pSurfels;
+		PlanarSurfelDetector* pSurfelDetector;
+		float beta;
+		float alphas;
+		float alphaR;
+		float alphat;
+		float normalSimilarity;
+		int nICPIterations;
+		bool bHypGenConvex;
+		bool bHypGenFlat;
+		Array<RECOG::DDD::Model> models;
+		bool bVisualize;
+		std::string cfgFileName;
+		DWORD test;
+		float storageVolumeWallThickness;
+		Array2D<Point> ZBuffer;
+		Array<int> ZBufferActivePtArray;
+		int* subImageMap;
+		int sceneSamplingResolution;
+		int image3x3Neighborhood[9];
+		float chamferDistThr;
+		float transparencyDepthThr;
+		DWORD edgeModel;
+		int fit3DTo2DEDTMaxDist;
+		int fit3DTo2DMinDefDoFs;
+		int fit3DTo2DNoEdgeSamples;
+		float fit3DTo2DLambdaR;
+		float fit3DTo2DLambdat;
+		float fit3DTo2DMaxOrientationCorrection;
+		float fit3DTo2DMaxPositionCorrection;
+		int nRANSACIterations;
+		int pointAssociationGridCellSize;
+		char* resultsFolder;
+
+	private:
+		RECOG::DDD::DisplayCallbackData* pVisualizationData;
+		bool* surfelMask;
+		bool* sampleMask;
+		Grid imgGrid;
+		int ROICalculationStep;
+		float minPointShift;
+		int ROISceneSubsampleCellSize;
+		float ROISceneSubsampleNormalSimilarity;
+		int ROIPointAssociationGridCellSize;
+		float votingCellSizeX;
+		float votingCellSizeY;
+		float votingCellSizeZ;
+		float shiftThreshX;
+		float shiftThreshY;
+		float shiftThreshZ;
+		int minPointsWithDominantShift;
+	};
+
+}
+

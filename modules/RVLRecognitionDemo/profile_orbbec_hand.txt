@@ -1,0 +1,18 @@
+sorted list                                                    calls       self time      total time
+<unprofiled>                                                     0.9     20 s  346309%     20 s  346
+astra::hand::hand_tracker::hand_tracker                          0.9      5 ms   95%      6 ms   98%
+astra::hand::hand_tracker::create_streams                        0.9    153 us    3%    153 us    3%
+astra::hand::depth_utility::reset                                0.9    113 us    2%    113 us    2%
+astra::hand::depth_utility::depth_utility                        0.9      4 us    0%    116 us    2%
+astra::hand::hand_tracker::on_frame_ready                        0.9    740 ns    0%    740 ns    0%
+astra::hand::point_processor::point_processor                    0.9      0 ns    0%      0 ns    0%
+
+call tree                                                      calls       self time      total time
+<unprofiled>                                                     0.9     20 s  346309%     20 s  346
+  astra::hand::depth_utility::depth_utility                      0.9      4 us    0%    116 us    2%
+    astra::hand::depth_utility::reset                            0.9    113 us    2%    113 us    2%
+  astra::hand::point_processor::point_processor                  0.9      0 ns    0%      0 ns    0%
+  astra::hand::hand_tracker::hand_tracker                        0.9      5 ms   95%      6 ms   98%
+    astra::hand::hand_tracker::create_streams                    0.9    153 us    3%    153 us    3%
+  astra::hand::hand_tracker::on_frame_ready                      0.9    740 ns    0%    740 ns    0%
+

@@ -1,0 +1,227 @@
+#pragma once
+
+#include "Figure.h"
+
+#define RVLVISUALIZER_SET_PIXEL_COLOR(pPixArray, u, v, widthStep, color, pPix)\
+{\
+	pPix = pPixArray + 3 * u + v * widthStep;\
+	*(pPix++) = color[0];\
+	*(pPix++) = color[1];\
+	*pPix = color[2];\
+}
+
+#define RVLVISUALIZER_SET_PIXEL_COLOR2(pPixArray, iPix, width, widthStep, color, u, v, pPix)\
+{\
+	u = iPix % width;\
+	v = iPix / width;\
+	RVLVISUALIZER_SET_PIXEL_COLOR(pPixArray, u, v, widthStep, color, pPix);\
+}
+
+namespace RVL
+{
+	class Visualizer
+	{
+	public:
+		Visualizer();
+		virtual ~Visualizer();
+		void Create();
+		void SetWindowSize(int width, int height);
+		void SetBackgroundColor(double r, double g, double b);
+		void SetMesh(Mesh *pMesh);
+		void SetMesh(vtkSmartPointer<vtkPolyData> pPolyData);
+		void SetMeshFromOBJ(char* fileName);
+		void Normals(
+			Mesh *pMesh,
+			float *N = NULL);
+		void SetKeyPressCallback(
+			void(*f)(vtkObject *caller, unsigned long eid, void *clientdata, void *calldata),
+			void *clientData);
+		void SetMouseRButtonDownCallback(
+			void(*f)(vtkObject *caller, unsigned long eid, void *clientdata, void *calldata),
+			void *clientData);
+		void SetMouseMButtonDownCallback(
+			void(*f)(vtkObject* caller, unsigned long eid, void* clientdata, void* calldata),
+			void* clientData);
+		void SetText(char * textIn);
+		void Run();
+		void PaintPoint(
+			int iPt,
+			vtkSmartPointer<vtkPolyData> &pd,
+			unsigned char *Color,
+			Figure *pFig = NULL);
+		void PaintPointSet(
+			QList<QLIST::Index2> *piPtList,
+			vtkSmartPointer<vtkPolyData> &pd,
+			unsigned char *Color,
+			Figure *pFig = NULL,
+			int *mapPixToPolyData = NULL);
+		void PaintPointSet(
+			QList<QLIST::Index> *piPtList,
+			vtkSmartPointer<vtkPolyData> &pd,
+			unsigned char *Color,
+			Figure *pFig = NULL);
+		void PaintPointSet(
+			Array<int> *piPtArray,
+			vtkSmartPointer<vtkPolyData> &pd,
+			unsigned char *Color,
+			Figure *pFig = NULL);
+		void AddMesh(
+			vtkSmartPointer<vtkPolyData> &pd,
+			double *color = NULL);
+		void AddReferenceFrame(
+			vtkSmartPointer<vtkPoints> &pts,
+			vtkSmartPointer<vtkCellArray> &lines,
+			vtkSmartPointer<vtkUnsignedCharArray> &colors,
+			float *R,
+			float *t,
+			double size);
+		Figure *OpenFigure(
+			char *ImageName,
+			int memSize = 5000000);
+		void ShowFigure(char *imageName);
+		void ShowFigure(Figure *pFig);
+		vtkSmartPointer<vtkActor> DisplayBox(
+			double a,
+			double b,
+			double c,
+			Pose3D *pPose,
+			double red,
+			double green,
+			double blue,
+			bool bWireFrame = false,
+			float lineWidth = 1.0);
+		void DisplayCylinder(
+			double r,
+			double h,
+			Pose3D *pPose,
+			int resolution,
+			double red,
+			double green,
+			double blue);
+		void DisplayEllipsoid(
+			float *P,
+			float *C,
+			float r);
+		template <typename PointCoordinateType, typename PointType> vtkSmartPointer<vtkActor> DisplayPointSet(
+			Array<PointType> pointArray,
+			unsigned char *color,
+			float pointMarkerSize,
+			bool bMultiColor = false,
+			bool bLabels = false,
+			vtkSmartPointer<vtkActor2D>* pLabelActor = NULL
+			)
+		{
+			vtkSmartPointer<vtkPolyData> polyData = vtkSmartPointer<vtkPolyData>::New();
+
+			vtkSmartPointer<vtkPolyData> ptsPolyData = vtkSmartPointer<vtkPolyData>::New();
+
+			vtkSmartPointer<vtkPoints> points = vtkSmartPointer<vtkPoints>::New();
+
+			vtkSmartPointer<vtkUnsignedCharArray> colors = vtkSmartPointer<vtkUnsignedCharArray>::New();
+			colors->SetNumberOfComponents(3);
+			colors->SetName("Colors");
+
+			int iPt;
+			PointCoordinateType *P;
+
+			for (iPt = 0; iPt < pointArray.n; iPt++)
+			{
+				P = pointArray.Element[iPt].P;
+
+				points->InsertNextPoint(P);
+
+				if(bMultiColor)
+					colors->InsertNextTypedTuple(color + 3 * iPt);
+				else
+					colors->InsertNextTypedTuple(color);
+			}
+
+			ptsPolyData->SetPoints(points);
+
+			vtkSmartPointer<vtkVertexGlyphFilter> vertexFilter =
+				vtkSmartPointer<vtkVertexGlyphFilter>::New();
+
+			vertexFilter->SetInputData(ptsPolyData);
+
+			vertexFilter->Update();
+
+			polyData->ShallowCopy(vertexFilter->GetOutput());
+
+			polyData->SetPoints(points);
+
+			polyData->GetPointData()->SetScalars(colors);
+
+			// Setup the visualization pipeline
+			vtkSmartPointer<vtkPolyDataMapper> mapper = vtkSmartPointer<vtkPolyDataMapper>::New();
+
+			mapper->SetInputData(polyData);
+
+			actor = vtkSmartPointer<vtkActor>::New();
+			actor->SetMapper(mapper);
+			actor->GetProperty()->SetPointSize(pointMarkerSize);
+
+			renderer->AddActor(actor);
+
+			if (bLabels)
+			{
+				vtkSmartPointer<vtkLabeledDataMapper> labelMapper = vtkSmartPointer<vtkLabeledDataMapper>::New();
+				labelMapper->SetInputData(ptsPolyData);
+				if (pLabelActor)
+				{
+					*pLabelActor = vtkSmartPointer<vtkActor2D>::New();
+					(*pLabelActor)->SetMapper(labelMapper);
+					renderer->AddActor2D(*pLabelActor);
+				}
+				else
+				{
+					vtkSmartPointer<vtkActor2D> labelActor = vtkSmartPointer<vtkActor2D>::New();
+					labelActor->SetMapper(labelMapper);
+					renderer->AddActor2D(labelActor);
+				}
+			}
+
+			return actor;
+		}
+		vtkSmartPointer<vtkActor> DisplayLines(
+			Array<Point> vertices,
+			Array<Pair<int, int>> lines,
+			uchar *color);
+		void DisplayReferenceFrames(
+			Array<Pose3D> referenceFrames,
+			double axesLength);
+		void DisplayReferenceFrame(
+			Pose3D *pReferenceFrame,
+			double axesLength);
+		vtkSmartPointer<vtkActor2D> DisplayLabels(vtkSmartPointer<vtkPolyData> ptsPolyData);
+		vtkSmartPointer<vtkActor2D> DisplayLabels(Array<Point> points);
+		vtkSmartPointer<vtkActor> DisplayVoxels(
+			Array3D<uchar> voxels,
+			uchar *faceColor = NULL,
+			float opacity = 1.0f,
+			uchar *edgeColor = NULL,
+			bool bHideEdges = false);
+
+	public:
+		CRVLMem *pMem;
+		vtkSmartPointer<vtkRenderer> renderer;
+		vtkSmartPointer<vtkRenderWindow> window;
+		vtkSmartPointer<vtkRenderWindowInteractor> interactor;
+		vtkSmartPointer<vtkInteractorStyleTrackballCamera> style;
+		vtkSmartPointer<vtkPolyDataMapper> map;
+		vtkSmartPointer<vtkActor> actor;
+		vtkSmartPointer<vtkActor> normals;
+		vtkSmartPointer<vtkPointPicker> pointPicker;
+		vtkSmartPointer<vtkCornerAnnotation> text;
+		vtkSmartPointer<vtkCallbackCommand> keypressCallback;
+		vtkSmartPointer<vtkCallbackCommand> mouseRButtonDownCallback;
+		vtkSmartPointer<vtkCallbackCommand> mouseMButtonDownCallback;
+		vtkSmartPointer<vtkOrientationMarkerWidget> widget;
+		double normalLength;
+		bool bNormals;
+		bool bNormalsVisible;
+		bool b3D;
+		bool b2D;
+		std::vector<Figure *> figures;
+	};
+}
+

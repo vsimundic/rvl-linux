@@ -1,0 +1,919 @@
+#define _CRT_SECURE_NO_WARNINGS
+
+//#include "RVLVTK.h"
+//#include "RVLCore2.h"
+//#include "Util.h"
+//#include "Space3DGrid.h"
+//#include "Graph.h"
+//#include "Mesh.h"
+//#include "Visualizer.h"
+//#include "SceneSegFile.hpp"
+//#include "SurfelGraph.h"
+//#include "ProjectionCube.h"
+//#include "View.h"
+////#include "RVLUtil.h"
+//#include <errno.h>
+
+#include "RVLPlatform.h"
+#ifndef RVLLINUX
+#include <windows.h>
+#endif
+#include <stdio.h>
+#include <stdlib.h>
+#include "RVLSerial.h"
+#include <string>
+#ifdef RVLOPENNI
+#include "OpenNI.h"
+#endif
+#ifdef RVLLINUX
+#include "opencv2/opencv.hpp"
+#else
+#include "opencv2\opencv.hpp"
+#endif
+#include "RVLArray.h"
+#include "PanTilt.h"
+
+#define PI			3.14159265358979
+#define DEG2RAD		(PI / 180.0)
+#define RAD2DEG		(180.0 / PI)
+
+using namespace RVL; 
+
+PanTilt::PanTilt()
+{
+
+}
+
+PanTilt::~PanTilt()
+{
+	Clear();
+}
+
+void PanTilt::Clear()
+{
+
+}
+
+void PanTilt::RVLSaveDepthImage(short *DepthImage, int w, int h, char *DepthFileName)
+{
+	FILE *fpDepth = fopen(DepthFileName, "w");
+
+	fprintf(fpDepth, "width %d\n", w);
+	fprintf(fpDepth, "height %d\n", h);
+
+	fprintf(fpDepth, "1mm\n");
+
+	short d;
+
+	for (int r = 0; r<h; r++)
+	{
+		for (int c = 0; c<w; c++)
+		{
+			d = DepthImage[r*w + c];
+
+			fprintf(fpDepth, "%d ", d);
+		}
+		fprintf(fpDepth, "\n");
+	}
+	fclose(fpDepth);
+}
+
+char* PanTilt::RVLCreateFileName(char *SrcFileName,
+	char *SrcExtension,
+	int n,
+	char *TgtExtension)
+{
+	char *TgtFileName;
+
+	int LenTgt = strlen(SrcFileName) - strlen(SrcExtension) + strlen(TgtExtension) + 1;
+
+	TgtFileName = new char[LenTgt];
+
+	int NumberPosition = strlen(SrcFileName) - strlen(SrcExtension) - 5;
+
+	if (n >= 0)
+	{
+		memcpy(TgtFileName, SrcFileName, NumberPosition + 1);
+
+		sprintf(TgtFileName + NumberPosition, "%05d", n);
+	}
+	else
+		memcpy(TgtFileName, SrcFileName, NumberPosition + 6);
+
+	strcpy(TgtFileName + NumberPosition + 5, TgtExtension);
+
+	return TgtFileName;
+}
+
+void PanTilt::RVLSetFileNumber(char *FileName, char *Extension, int n)
+{
+	char index[6];
+
+	sprintf(index, "%05d", n);
+
+	memcpy(FileName + strlen(FileName) - strlen(Extension), index, 5 * sizeof(char));
+}
+
+bool PanTilt::Init(int depthScale_in, int RGBScale_in, int TiltOffset_in)	
+{
+	depthScale = depthScale_in;
+	RGBScale = RGBScale_in;
+	TiltOffset = TiltOffset_in;
+
+	//*** Initialize OpenNI device
+	Stream[0] = &DepthStream;
+	Stream[1] = &ColorStream;
+
+	rc = openni::STATUS_OK;
+
+	const char* deviceURI = openni::ANY_DEVICE;
+
+	rc = openni::OpenNI::initialize();
+
+	printf("Kinect initialization:\n%s\n", openni::OpenNI::getExtendedError());
+
+	rc = OpenNIDevice.open(deviceURI);
+	if (rc == openni::STATUS_OK)
+		printf("Kinect opened.\n");
+	else
+	{
+		printf("Kinct open failed:\n%s\n", openni::OpenNI::getExtendedError());
+		openni::OpenNI::shutdown();
+		return FALSE;
+	}
+
+	rc = OpenNIDevice.setDepthColorSyncEnabled(true);
+
+	if (rc == openni::STATUS_OK)
+		printf("Kinect: depth - color synchronization on\n");
+	else
+		printf("Kinect: depth - color synchronization off\n");
+
+	rc = DepthStream.create(OpenNIDevice, openni::SENSOR_DEPTH);
+
+	if (rc == openni::STATUS_OK)
+	{
+		printf("Kinect: Depth stream started.\n");
+
+		openni::VideoMode dmod = openni::VideoMode();
+		dmod.setFps(30);
+		dmod.setResolution(640, 480);
+		//dmod.setPixelFormat(openni::PixelFormat::PIXEL_FORMAT_DEPTH_100_UM);
+		dmod.setPixelFormat(openni::PixelFormat::PIXEL_FORMAT_DEPTH_1_MM);
+		DepthStream.setVideoMode(dmod);
+		rc = DepthStream.start();
+		if (rc != openni::STATUS_OK)
+		{
+			printf("Kinect: Couldn't start depth stream:\n%s\n", openni::OpenNI::getExtendedError());
+			DepthStream.destroy();
+		}
+	}
+	else
+		printf("Kinect: Couldn't find depth stream:\n%s\n", openni::OpenNI::getExtendedError());
+
+	rc = ColorStream.create(OpenNIDevice, openni::SENSOR_COLOR);
+
+	if (rc == openni::STATUS_OK)
+	{
+		printf("Kinect: Color stream started.\n");
+
+		openni::VideoMode cmod = openni::VideoMode();
+		cmod.setFps(30);
+		cmod.setResolution(320, 240);
+		cmod.setPixelFormat(openni::PixelFormat::PIXEL_FORMAT_RGB888);
+		//cmod.setPixelFormat(openni::PixelFormat::PIXEL_FORMAT_YUV422);
+		ColorStream.setVideoMode(cmod);
+		rc = ColorStream.start();
+		if (rc != openni::STATUS_OK)
+		{
+			printf("Kinect: Couldn't start color stream:\n%s\n", openni::OpenNI::getExtendedError());
+			ColorStream.destroy();
+		}
+	}
+	else
+		printf("Kinect: Couldn't find color stream:\n%s\n", openni::OpenNI::getExtendedError());
+
+	if (DepthStream.isValid() && ColorStream.isValid())
+		printf("Kinect: Depth and color stream are valid.\n");
+	else
+	{
+		printf("Kinect: No valid streams. Exiting.\n");
+		openni::OpenNI::shutdown();
+		return FALSE;
+	}
+
+	if (OpenNIDevice.isImageRegistrationModeSupported(openni::IMAGE_REGISTRATION_DEPTH_TO_COLOR))
+		rc = OpenNIDevice.setImageRegistrationMode(openni::IMAGE_REGISTRATION_DEPTH_TO_COLOR);
+
+	DepthImage = NULL;
+	//pRGBImage = NULL;
+
+	changedIndex = -1;
+
+	//bool bDepth, bColor;
+	//int width, height;
+	//short *pDepth_;
+	//const openni::DepthPixel* pDepthRow;
+	//int rowSize;
+	//const openni::DepthPixel* pDepth__;
+	//const openni::RGB888Pixel* pRGBRow;
+	//char *pPixRGB;
+	//int rowSizeRGB;
+	//const openni::RGB888Pixel* pPix;
+	//openni::VideoMode DepthMode;
+	//int u, v;
+
+	printf("Kinect initialization completed.\n");
+
+	//*** Connect to USB
+	printf("Connecting to USB...\n\n");
+	RVLSerial* SP = new RVLSerial("\\\\.\\COM3");
+
+	if (SP->IsConnected())
+		printf("We're connected\n\n");
+	else
+	{
+		printf("Press any key to exit.\n");
+
+		getchar();
+
+		return 1;
+	}
+
+	vpSP = SP;
+
+	inData = new char[256];			// don't forget to pre-allocate memory
+	outData = new unsigned char[256]; 
+	//printf("%s\n",incomingData);
+	dataLength = 256;
+	readResult = 0;
+
+
+
+}
+
+int PanTilt::goTo_captureImg(int dPan_in, int dTilt_in, Array2D<short int> *depthImage_array, IplImage *&pRGBImage)
+{
+	int dPan = dPan_in;
+	int dTilt = dTilt_in;
+
+	////*** Initialize OpenNI device
+	//openni::Device OpenNIDevice;
+	//openni::VideoStream DepthStream;
+	//openni::VideoStream ColorStream;
+	//openni::VideoStream *Stream[2];
+	//Stream[0] = &DepthStream;
+	//Stream[1] = &ColorStream;
+	//openni::VideoFrameRef DepthFrame;
+	//openni::VideoFrameRef ColorFrame;
+
+	//openni::Status rc = openni::STATUS_OK;
+
+	//const char* deviceURI = openni::ANY_DEVICE;
+
+	//rc = openni::OpenNI::initialize();
+
+	//printf("Kinect initialization:\n%s\n", openni::OpenNI::getExtendedError());
+
+	//rc = OpenNIDevice.open(deviceURI);
+	//if (rc == openni::STATUS_OK)
+	//	printf("Kinect opened.\n");
+	//else
+	//{
+	//	printf("Kinct open failed:\n%s\n", openni::OpenNI::getExtendedError());
+	//	openni::OpenNI::shutdown();
+	//	return FALSE;
+	//}
+
+	//rc = OpenNIDevice.setDepthColorSyncEnabled(true);
+
+	//if (rc == openni::STATUS_OK)
+	//	printf("Kinect: depth - color synchronization on\n");
+	//else
+	//	printf("Kinect: depth - color synchronization off\n");
+
+	//rc = DepthStream.create(OpenNIDevice, openni::SENSOR_DEPTH);
+
+	//if (rc == openni::STATUS_OK)
+	//{
+	//	printf("Kinect: Depth stream started.\n");
+
+	//	openni::VideoMode dmod = openni::VideoMode();
+	//	dmod.setFps(30);
+	//	dmod.setResolution(640, 480);
+	//	//dmod.setPixelFormat(openni::PixelFormat::PIXEL_FORMAT_DEPTH_100_UM);
+	//	dmod.setPixelFormat(openni::PixelFormat::PIXEL_FORMAT_DEPTH_1_MM);
+	//	DepthStream.setVideoMode(dmod);
+	//	rc = DepthStream.start();
+	//	if (rc != openni::STATUS_OK)
+	//	{
+	//		printf("Kinect: Couldn't start depth stream:\n%s\n", openni::OpenNI::getExtendedError());
+	//		DepthStream.destroy();
+	//	}
+	//}
+	//else
+	//	printf("Kinect: Couldn't find depth stream:\n%s\n", openni::OpenNI::getExtendedError());
+
+	//rc = ColorStream.create(OpenNIDevice, openni::SENSOR_COLOR);
+
+	//if (rc == openni::STATUS_OK)
+	//{
+	//	printf("Kinect: Color stream started.\n");
+
+	//	openni::VideoMode cmod = openni::VideoMode();
+	//	cmod.setFps(30);
+	//	cmod.setResolution(320, 240);
+	//	cmod.setPixelFormat(openni::PixelFormat::PIXEL_FORMAT_RGB888);
+	//	//cmod.setPixelFormat(openni::PixelFormat::PIXEL_FORMAT_YUV422);
+	//	ColorStream.setVideoMode(cmod);
+	//	rc = ColorStream.start();
+	//	if (rc != openni::STATUS_OK)
+	//	{
+	//		printf("Kinect: Couldn't start color stream:\n%s\n", openni::OpenNI::getExtendedError());
+	//		ColorStream.destroy();
+	//	}
+	//}
+	//else
+	//	printf("Kinect: Couldn't find color stream:\n%s\n", openni::OpenNI::getExtendedError());
+
+	//if (DepthStream.isValid() && ColorStream.isValid())
+	//	printf("Kinect: Depth and color stream are valid.\n");
+	//else
+	//{
+	//	printf("Kinect: No valid streams. Exiting.\n");
+	//	openni::OpenNI::shutdown();
+	//	return FALSE;
+	//}
+
+	//if (OpenNIDevice.isImageRegistrationModeSupported(openni::IMAGE_REGISTRATION_DEPTH_TO_COLOR))
+	//	rc = OpenNIDevice.setImageRegistrationMode(openni::IMAGE_REGISTRATION_DEPTH_TO_COLOR);
+
+	//short *DepthImage = NULL;
+	////IplImage *pRGBImage = NULL;
+
+	//int changedIndex = -1;
+
+	//bool bDepth, bColor;
+	//int width, height;
+	//short *pDepth_;
+	//const openni::DepthPixel* pDepthRow;
+	//int rowSize;
+	//const openni::DepthPixel* pDepth__;
+	//const openni::RGB888Pixel* pRGBRow;
+	//char *pPixRGB;
+	//int rowSizeRGB;
+	//const openni::RGB888Pixel* pPix;
+	//openni::VideoMode DepthMode;
+	//int u, v;
+
+	//printf("Kinect initialization completed.\n");
+
+	////*** Connect to USB
+	//printf("Connecting to USB...\n\n");
+	//RVLSerial* SP = new RVLSerial("\\\\.\\COM3");				// adjust as needed
+
+	//if (SP->IsConnected())
+	//	printf("We're connected\n\n");
+	//else
+	//{
+	//	printf("Press any key to exit.\n");
+
+	//	getchar();
+
+	//	return 1;
+	//}
+
+	//char inData[256] = "";			// don't forget to pre-allocate memory
+	//unsigned char outData[256] = "";
+	////printf("%s\n",incomingData);
+	//int dataLength = 256;
+	//int readResult = 0;
+
+	//*** initial orientation
+	int pan = dPan;
+	int tilt = dTilt + TiltOffset;
+
+	// Send to serial port -> go to position
+	outData[0] = 225;
+	outData[1] = -pan + 90;
+	outData[2] = tilt + 90;
+
+	RVLSerial *SP = (RVLSerial *)vpSP;
+
+	SP->WriteData(outData, 3);
+
+	Sleep(1000);
+
+	printf("Pan-Tilt in initial position.\n\n");
+
+
+	//*** main loop7
+	printf("\nStarting acquisition...\n\n");
+
+	int PanChangeDirection = 1;
+	int nSamples = 1;
+
+	char command;
+
+	bDepth = bColor = false;
+
+	while (!bDepth || !bColor)
+	{
+		rc = openni::OpenNI::waitForAnyStream(Stream, 2, &changedIndex);
+
+		if (rc != openni::STATUS_OK)
+		{
+			printf("Kinect: No streams. Exiting.\n");
+			openni::OpenNI::shutdown();
+			return false;
+		}
+
+		switch (changedIndex){
+		case 0:
+			DepthStream.readFrame(&DepthFrame);
+
+			if (!DepthFrame.isValid())
+				continue;
+
+			bDepth = true;
+
+			width = DepthFrame.getWidth() / depthScale;
+			height = DepthFrame.getHeight() / depthScale;
+
+			DepthMode = DepthFrame.getVideoMode();
+
+			if (DepthImage == NULL)
+				DepthImage = new short[width * height];
+
+			pDepth_ = DepthImage;
+
+			pDepthRow = (const openni::DepthPixel*)DepthFrame.getData();
+
+			rowSize = DepthFrame.getStrideInBytes() / sizeof(openni::DepthPixel);
+
+			for (v = 0; v < height; v++)
+			{
+				pDepth__ = pDepthRow + depthScale * (width - 1);
+
+				for (u = 0; u < width; u++, pDepth__ -= depthScale, pDepth_++)
+					*pDepth_ = *pDepth__;
+
+				pDepthRow += (depthScale * rowSize);
+			}
+
+			break;
+		case 1:
+			ColorStream.readFrame(&ColorFrame);
+
+			if (!ColorFrame.isValid())
+				continue;
+
+			bColor = true;
+
+			width = ColorFrame.getWidth() / RGBScale;
+			height = ColorFrame.getHeight() / RGBScale;
+
+			if (pRGBImage == NULL)
+				pRGBImage = cvCreateImage(cvSize(width, height), IPL_DEPTH_8U, 3);
+
+			ColorStream.readFrame(&ColorFrame);
+
+			pRGBRow = (const openni::RGB888Pixel*)ColorFrame.getData();
+
+			pPixRGB = pRGBImage->imageData;
+
+			rowSizeRGB = ColorFrame.getStrideInBytes() / sizeof(openni::RGB888Pixel);
+
+			for (v = 0; v < height; v++)
+			{
+				pPix = pRGBRow + RGBScale * (width - 1);
+
+				for (u = 0; u < width; u++, pPix -= RGBScale)
+				{
+					*(pPixRGB++) = pPix->b;
+					*(pPixRGB++) = pPix->g;
+					*(pPixRGB++) = pPix->r;
+				}
+
+				pRGBRow += (RGBScale * rowSizeRGB);
+			}
+
+			break;
+		default:
+			return false;
+		}	// switch(changedIndex)
+	}	// while(!bDepth || !bColor)
+
+	
+
+	//Array2D<short int> depthImage_array;
+	depthImage_array->Element = new short[width * height];
+	memcpy(depthImage_array->Element, DepthImage, sizeof(short) * width * height);
+	depthImage_array->w = width;
+	depthImage_array->h = height;	
+	
+	//*** go to home position
+	//outData[1] = 90;
+	//outData[2] = 90;
+	//SP->WriteData(outData, 3);
+
+
+	return 0;
+
+}
+
+
+
+//int PanTilt::SequentialScan(int argc, char* argv[])
+//{
+//	int depthScale = 2;
+//	int RGBScale = 1;
+//	int dPan = 35;			// deg
+//	int dTilt = 35;			// deg
+//	int nPans = 2;
+//	int nTilts = 1;
+//	int TiltOffset = -10;	// deg
+//
+//	//*** Initialize OpenNI device
+//
+//	openni::Device OpenNIDevice;
+//	openni::VideoStream DepthStream;
+//	openni::VideoStream ColorStream;
+//	openni::VideoStream *Stream[2];
+//	Stream[0] = &DepthStream;
+//	Stream[1] = &ColorStream;
+//	openni::VideoFrameRef DepthFrame;
+//	openni::VideoFrameRef ColorFrame;
+//
+//	openni::Status rc = openni::STATUS_OK;
+//
+//	const char* deviceURI = openni::ANY_DEVICE;
+//
+//	rc = openni::OpenNI::initialize();
+//
+//	printf("Kinect initialization:\n%s\n", openni::OpenNI::getExtendedError());
+//
+//	rc = OpenNIDevice.open(deviceURI);
+//	if (rc == openni::STATUS_OK)
+//		printf("Kinect opened.\n");
+//	else
+//	{
+//		printf("Kinct open failed:\n%s\n", openni::OpenNI::getExtendedError());
+//		openni::OpenNI::shutdown();
+//		return FALSE;
+//	}
+//
+//	rc = OpenNIDevice.setDepthColorSyncEnabled(true);
+//
+//	if (rc == openni::STATUS_OK)
+//		printf("Kinect: depth - color synchronization on\n");
+//	else
+//		printf("Kinect: depth - color synchronization off\n");
+//
+//	rc = DepthStream.create(OpenNIDevice, openni::SENSOR_DEPTH);
+//
+//	if (rc == openni::STATUS_OK)
+//	{
+//		printf("Kinect: Depth stream started.\n");
+//
+//		openni::VideoMode dmod = openni::VideoMode();
+//		dmod.setFps(30);
+//		dmod.setResolution(640, 480);
+//		//dmod.setPixelFormat(openni::PixelFormat::PIXEL_FORMAT_DEPTH_100_UM);
+//		dmod.setPixelFormat(openni::PixelFormat::PIXEL_FORMAT_DEPTH_1_MM);
+//		DepthStream.setVideoMode(dmod);
+//		rc = DepthStream.start();
+//		if (rc != openni::STATUS_OK)
+//		{
+//			printf("Kinect: Couldn't start depth stream:\n%s\n", openni::OpenNI::getExtendedError());
+//			DepthStream.destroy();
+//		}
+//	}
+//	else
+//		printf("Kinect: Couldn't find depth stream:\n%s\n", openni::OpenNI::getExtendedError());
+//
+//	rc = ColorStream.create(OpenNIDevice, openni::SENSOR_COLOR);
+//
+//	if (rc == openni::STATUS_OK)
+//	{
+//		printf("Kinect: Color stream started.\n");
+//
+//		openni::VideoMode cmod = openni::VideoMode();
+//		cmod.setFps(30);
+//		cmod.setResolution(320, 240);
+//		cmod.setPixelFormat(openni::PixelFormat::PIXEL_FORMAT_RGB888);
+//		//cmod.setPixelFormat(openni::PixelFormat::PIXEL_FORMAT_YUV422);
+//		ColorStream.setVideoMode(cmod);
+//		rc = ColorStream.start();
+//		if (rc != openni::STATUS_OK)
+//		{
+//			printf("Kinect: Couldn't start color stream:\n%s\n", openni::OpenNI::getExtendedError());
+//			ColorStream.destroy();
+//		}
+//	}
+//	else
+//		printf("Kinect: Couldn't find color stream:\n%s\n", openni::OpenNI::getExtendedError());
+//
+//	if (DepthStream.isValid() && ColorStream.isValid())
+//		printf("Kinect: Depth and color stream are valid.\n");
+//	else
+//	{
+//		printf("Kinect: No valid streams. Exiting.\n");
+//		openni::OpenNI::shutdown();
+//		return FALSE;
+//	}
+//
+//	short *DepthImage = NULL;
+//	IplImage *pRGBImage = NULL;
+//
+//	int changedIndex = -1;
+//
+//	char RGBImageFileName[200];
+//
+//	sprintf(RGBImageFileName, "Samples\\sl-00000-LW.bmp");
+//
+//	int iSample0 = 0;
+//
+//	FILE *fp;
+//
+//	do
+//	{
+//		RVLSetFileNumber(RGBImageFileName, "00000-LW.bmp", iSample0);
+//
+//		fp = fopen(RGBImageFileName, "r");
+//
+//		iSample0++;
+//	} while (fp != 0);
+//
+//	iSample0--;
+//
+//	bool bDepth, bColor;
+//	int width, height;
+//	short *pDepth_;
+//	const openni::DepthPixel* pDepthRow;
+//	int rowSize;
+//	const openni::DepthPixel* pDepth__;
+//	const openni::RGB888Pixel* pRGBRow;
+//	char *pPixRGB;
+//	int rowSizeRGB;
+//	const openni::RGB888Pixel* pPix;
+//	openni::VideoMode DepthMode;
+//	int u, v;
+//	char *DepthImageFileName, *OdometryFileName;
+//
+//	printf("Kinect initialization completed.\n");
+//
+//	//*** Connect to USB
+//
+//	printf("Connecting to USB...\n\n");
+//
+//	RVLSerial* SP = new RVLSerial("\\\\.\\COM3");    // adjust as needed
+//
+//	if (SP->IsConnected())
+//		printf("We're connected\n\n");
+//	else
+//	{
+//		printf("Press any key to exit.\n");
+//
+//		getchar();
+//
+//		return 1;
+//	}
+//
+//	char inData[256] = "";			// don't forget to pre-allocate memory
+//	unsigned char outData[256] = "";
+//	//printf("%s\n",incomingData);
+//	int dataLength = 256;
+//	int readResult = 0;
+//	FILE *fpOdometry;
+//
+//	//*** initial orientation
+//
+//	int pan = -nPans * dPan;
+//	int tilt = -nTilts * dTilt + TiltOffset;
+//
+//	outData[0] = 225;
+//	outData[1] = -pan + 90;
+//	outData[2] = tilt + 90;
+//
+//	SP->WriteData(outData, 3);
+//
+//	Sleep(1000);
+//
+//	printf("Pan-Tilt in initial position.\n\n");
+//
+//	//*** main loop7
+//
+//	printf("Armed! Press any key to start acquisition.\n\n");
+//
+//	getchar();
+//
+//	printf("Countdown...");
+//
+//	for (int i = 10; i >= 1; i--)
+//	{
+//		printf("%d...", i);
+//
+//		Sleep(1000);
+//	}
+//
+//	printf("\nStarting acquisition...\n\n");
+//
+//	int iSample = iSample0;
+//	int PanChangeDirection = 1;
+//	int nSamples = (2 * nPans + 1) * (2 * nTilts + 1);
+//
+//	char command;
+//
+//	while (SP->IsConnected())
+//	{
+//		// acquire depth and color image from Kinect
+//
+//		bDepth = bColor = false;
+//
+//		while (!bDepth || !bColor)
+//		{
+//			rc = openni::OpenNI::waitForAnyStream(Stream, 2, &changedIndex);
+//
+//			if (rc != openni::STATUS_OK)
+//			{
+//				printf("Kinect: No streams. Exiting.\n");
+//				openni::OpenNI::shutdown();
+//				return false;
+//			}
+//
+//			switch (changedIndex){
+//			case 0:
+//				DepthStream.readFrame(&DepthFrame);
+//
+//				if (!DepthFrame.isValid())
+//					continue;
+//
+//				bDepth = true;
+//
+//				width = DepthFrame.getWidth() / depthScale;
+//				height = DepthFrame.getHeight() / depthScale;
+//
+//				DepthMode = DepthFrame.getVideoMode();
+//
+//				if (DepthImage == NULL)
+//					DepthImage = new short[width * height];
+//
+//				pDepth_ = DepthImage;
+//
+//				pDepthRow = (const openni::DepthPixel*)DepthFrame.getData();
+//
+//				rowSize = DepthFrame.getStrideInBytes() / sizeof(openni::DepthPixel);
+//
+//				for (v = 0; v < height; v++)
+//				{
+//					pDepth__ = pDepthRow + depthScale * (width - 1);
+//
+//					for (u = 0; u < width; u++, pDepth__ -= depthScale, pDepth_++)
+//						*pDepth_ = *pDepth__;
+//
+//					pDepthRow += (depthScale * rowSize);
+//				}
+//
+//				break;
+//			case 1:
+//				ColorStream.readFrame(&ColorFrame);
+//
+//				if (!ColorFrame.isValid())
+//					continue;
+//
+//				bColor = true;
+//
+//				width = ColorFrame.getWidth() / RGBScale;
+//				height = ColorFrame.getHeight() / RGBScale;
+//
+//				if (pRGBImage == NULL)
+//					pRGBImage = cvCreateImage(cvSize(width, height), IPL_DEPTH_8U, 3);
+//
+//				ColorStream.readFrame(&ColorFrame);
+//
+//				pRGBRow = (const openni::RGB888Pixel*)ColorFrame.getData();
+//
+//				pPixRGB = pRGBImage->imageData;
+//
+//				rowSizeRGB = ColorFrame.getStrideInBytes() / sizeof(openni::RGB888Pixel);
+//
+//				for (v = 0; v < height; v++)
+//				{
+//					pPix = pRGBRow + RGBScale * (width - 1);
+//
+//					for (u = 0; u < width; u++, pPix -= RGBScale)
+//					{
+//						*(pPixRGB++) = pPix->b;
+//						*(pPixRGB++) = pPix->g;
+//						*(pPixRGB++) = pPix->r;
+//					}
+//
+//					pRGBRow += (RGBScale * rowSizeRGB);
+//				}
+//
+//				break;
+//			default:
+//				return false;
+//			}	// switch(changedIndex)
+//		}	// while(!bDepth || !bColor)
+//
+//		// write depth and color image to file together with odometry data
+//
+//		RVLSetFileNumber(RGBImageFileName, "00000-LW.bmp", iSample);
+//
+//		cvSaveImage(RGBImageFileName, pRGBImage);
+//
+//		DepthImageFileName = RVLCreateFileName(RGBImageFileName, "-LW.bmp", -1, "-D.txt");
+//
+//		RVLSaveDepthImage(DepthImage, width, height, DepthImageFileName);
+//
+//		delete[] DepthImageFileName;
+//
+//		OdometryFileName = RVLCreateFileName(RGBImageFileName, "-LW.bmp", -1, "-O.txt");
+//
+//		fpOdometry = fopen(OdometryFileName, "w");
+//
+//		if (iSample == iSample0)
+//			command = 'O';
+//		else if (iSample == iSample0 + nSamples - 1)
+//			command = 'C';
+//		else
+//			command = 'A';
+//
+//		fprintf(fpOdometry, "%d\t%d\t%d\t%d\t%d\t%d\t%d\t%c\n", 0, 0, 0, pan, tilt, 0, iSample0, command);
+//
+//		fclose(fpOdometry);
+//
+//		delete[] OdometryFileName;
+//
+//		iSample++;
+//
+//		// pan-tilt control
+//
+//		if (PanChangeDirection * pan < nPans * dPan)
+//			pan += (PanChangeDirection * dPan);
+//		else
+//		{
+//			PanChangeDirection = -PanChangeDirection;
+//
+//			tilt += dTilt;
+//
+//			if (tilt > nTilts * dTilt + TiltOffset)
+//				break;
+//		}
+//
+//		outData[1] = -pan + 90;
+//		outData[2] = tilt + 90;
+//
+//		SP->WriteData(outData, 3);
+//
+//		Sleep(1000);
+//
+//		//// manual pan control
+//
+//		//printf("Pan: ");
+//
+//		//scanf("%s", outData);
+//
+//		//if(outData[0] == 'q')
+//		//	break;
+//
+//		//SP->WriteData(outData, 3);
+//
+//		//// reading from USB
+//
+//		//readResult = SP->ReadData(inData,dataLength);
+//		//printf("Bytes read: (-1 means no data available) %i\n",readResult);
+//
+//		//std::string test(inData);
+//
+//		//printf("%s",inData);
+//		//test = "";
+//
+//		//Sleep(500);
+//	}
+//
+//	//*** go to home position
+//
+//	outData[1] = 90;
+//	outData[2] = 90;
+//
+//	SP->WriteData(outData, 3);
+//
+//	// wait for a key to be pressed
+//
+//	printf("Acquisition completed. Press any key to exit.\n");
+//
+//	getchar();
+//
+//	// deallocate memory
+//
+//	if (DepthImage)
+//		delete[] DepthImage;
+//
+//	if (pRGBImage)
+//		cvReleaseImage(&pRGBImage);
+//
+//	return 0;
+//}

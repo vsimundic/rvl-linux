@@ -1,0 +1,6315 @@
+#include "RVLCore2.h"
+#include "RVLVTK.h"
+#include "Util.h"
+#include "Space3DGrid.h"
+#include "Graph.h"
+#include "Mesh.h"
+#include "Visualizer.h"
+#include "SceneSegFile.hpp"
+//#include "ReconstructionEval.h"
+#include "SurfelGraph.h"
+//#include "ObjectGraph.h"
+#include "PlanarSurfelDetector.h"
+#include "RVLRecognition.h"
+#include "RVLRecognitionCommon.h"
+#include "DDDetector.h"
+#include "Voter.h"
+#include "RVLBuffer.h"
+#include "RVLPtrChain.h"
+#include "RVLMPtrChain.h"
+#include "Rect.h"
+#include "RVLEDT.h"
+
+using namespace RVL;
+//using namespace RECOG;
+
+DDDetector::DDDetector()
+{
+	surfelMask = NULL;
+	models.n = 0;
+	models.Element = NULL;
+	sampleMask = NULL;
+	normalSimilarity = 45.0f;
+	beta = 0.05f;
+	nICPIterations = 3;
+	bHypGenConvex = false;
+	bHypGenFlat = false;
+	pVisualizationData = NULL;
+	ROICalculationStep = 1;
+	minPointShift = 0.05;
+	ROISceneSubsampleCellSize = 4;
+	ROISceneSubsampleNormalSimilarity = 45.0;
+	ROIPointAssociationGridCellSize = 8;
+	votingCellSizeX = 0.01;
+	votingCellSizeY = 0.01;
+	votingCellSizeZ = 0.01;
+	shiftThreshX = 0.01;
+	shiftThreshY = 0.01;
+	shiftThreshZ = 0.01;
+	minPointsWithDominantShift = 100;
+	test = RVLDDD_TEST_DDD;
+	storageVolumeWallThickness = 0.015f;
+	ZBuffer.Element = NULL;
+	ZBufferActivePtArray.Element = NULL;
+	subImageMap = NULL;
+	sceneSamplingResolution = 2;
+	chamferDistThr = 0.040f;
+	transparencyDepthThr = 0.040f;
+	edgeModel = RVLDDD_EDGE_MODEL_CYLINDER;
+	fit3DTo2DEDTMaxDist = 60;
+	fit3DTo2DMinDefDoFs = 6;
+	fit3DTo2DNoEdgeSamples = 100;
+	fit3DTo2DLambdaR = 0.005f;
+	fit3DTo2DLambdat = 0.005f;
+	fit3DTo2DMaxOrientationCorrection = 30.0f;
+	fit3DTo2DMaxPositionCorrection = 0.5f;
+	nRANSACIterations = 5000;
+	pointAssociationGridCellSize = 8;
+}
+
+DDDetector::~DDDetector()
+{
+	Clear();
+}
+
+void DDDetector::Create(char* cfgFileNameIn)
+{
+	cfgFileName = cfgFileNameIn;
+	CreateParamList();
+	paramList.LoadParams(cfgFileNameIn);
+	if (test == RVLDDD_TEST_DDD2)
+		bHypGenFlat = true;
+}
+
+void DDDetector::Clear()
+{
+	RVL_DELETE_ARRAY(surfelMask);
+	RECOG::DDD::Model* pModel;
+	for (int iModel = 0; iModel < models.n; iModel++)
+	{
+		pModel = models.Element + iModel;
+		if(pModel->points.Element)
+			RVL_DELETE_ARRAY(pModel->points.Element);
+		if (pModel->points_.Element)
+			RVL_DELETE_ARRAY(pModel->points_.Element);
+	}
+	RVL_DELETE_ARRAY(models.Element);
+	RVL_DELETE_ARRAY(sampleMask);
+	if (pVisualizationData)
+	{
+		if (pVisualizationData->bOwnVisualizer)
+			delete pVisualizationData->pVisualizer;
+	}
+	RVL_DELETE_ARRAY(ZBuffer.Element);
+	RVL_DELETE_ARRAY(ZBufferActivePtArray.Element);
+	RVL_DELETE_ARRAY(subImageMap);
+}
+
+void DDDetector::CreateParamList()
+{
+	paramList.m_pMem = pMem0;
+	RVLPARAM_DATA* pParamData;
+	paramList.Init();
+	pParamData = paramList.AddParam("Recognition.mode", RVLPARAM_TYPE_ID, &mode);
+	paramList.AddID(pParamData, "TRAINING", RVLRECOGNITION_MODE_TRAINING);
+	paramList.AddID(pParamData, "RECOGNITION", RVLRECOGNITION_MODE_RECOGNITION);
+	pParamData = paramList.AddParam("Recognition.test", RVLPARAM_TYPE_ID, &test);
+	paramList.AddID(pParamData, "DDD", RVLDDD_TEST_DDD);
+	paramList.AddID(pParamData, "CUBOIDS", RVLDDD_TEST_CUBOIDS);
+	paramList.AddID(pParamData, "3DTO2DFIT", RVLDDD_TEST_3DTO2DFIT);
+	paramList.AddID(pParamData, "DDD2", RVLDDD_TEST_DDD2);
+	paramList.AddID(pParamData, "SVD", RVLDDD_TEST_SVD);
+	pParamData = paramList.AddParam("DDD.alphas", RVLPARAM_TYPE_FLOAT, &alphas);
+	pParamData = paramList.AddParam("DDD.alphaR", RVLPARAM_TYPE_FLOAT, &alphaR);
+	pParamData = paramList.AddParam("DDD.alphat", RVLPARAM_TYPE_FLOAT, &alphat);
+	pParamData = paramList.AddParam("DDD.beta", RVLPARAM_TYPE_FLOAT, &beta);
+	pParamData = paramList.AddParam("DDD.no_ICP_iterations", RVLPARAM_TYPE_INT, &nICPIterations);
+	pParamData = paramList.AddParam("DDD.visualize", RVLPARAM_TYPE_BOOL, &bVisualize);
+	pParamData = paramList.AddParam("DDD.ROICalculationStep", RVLPARAM_TYPE_INT, &ROICalculationStep);
+	pParamData = paramList.AddParam("DDD.minPointShift", RVLPARAM_TYPE_FLOAT, &minPointShift);
+	pParamData = paramList.AddParam("DDD.ROISceneSubsampleCellSize", RVLPARAM_TYPE_INT, &ROISceneSubsampleCellSize);
+	pParamData = paramList.AddParam("DDD.ROISceneSubsampleNormalSimilarity", RVLPARAM_TYPE_FLOAT, &ROISceneSubsampleNormalSimilarity);
+	pParamData = paramList.AddParam("DDD.ROIPointAssociationGridCellSize", RVLPARAM_TYPE_INT, &ROIPointAssociationGridCellSize);
+	pParamData = paramList.AddParam("DDD.votingCellSizeX", RVLPARAM_TYPE_FLOAT, &votingCellSizeX);
+	pParamData = paramList.AddParam("DDD.votingCellSizeY", RVLPARAM_TYPE_FLOAT, &votingCellSizeY);
+	pParamData = paramList.AddParam("DDD.votingCellSizeZ", RVLPARAM_TYPE_FLOAT, &votingCellSizeZ);
+	pParamData = paramList.AddParam("DDD.shiftThreshX", RVLPARAM_TYPE_FLOAT, &shiftThreshX);
+	pParamData = paramList.AddParam("DDD.shiftThreshY", RVLPARAM_TYPE_FLOAT, &shiftThreshY);
+	pParamData = paramList.AddParam("DDD.shiftThreshZ", RVLPARAM_TYPE_FLOAT, &shiftThreshZ);
+	pParamData = paramList.AddParam("DDD.minPointsWithDominantShift", RVLPARAM_TYPE_INT, &minPointsWithDominantShift);
+	pParamData = paramList.AddParam("DDD.edgeModel", RVLPARAM_TYPE_ID, &edgeModel);
+	paramList.AddID(pParamData, "BOX", RVLDDD_EDGE_MODEL_BOX);
+	paramList.AddID(pParamData, "CYLINDER", RVLDDD_EDGE_MODEL_CYLINDER);
+	pParamData = paramList.AddParam("DDD.fit3DTo2D.EDT.maxDist", RVLPARAM_TYPE_INT, &fit3DTo2DEDTMaxDist);
+	pParamData = paramList.AddParam("DDD.fit3DTo2D.minDefDoFs", RVLPARAM_TYPE_INT, &fit3DTo2DMinDefDoFs);
+	pParamData = paramList.AddParam("DDD.fit3DTo2D.nEdgeSamples", RVLPARAM_TYPE_INT, &fit3DTo2DNoEdgeSamples);
+	pParamData = paramList.AddParam("DDD.fit3DTo2D.lambdaR", RVLPARAM_TYPE_FLOAT, &fit3DTo2DLambdaR);
+	pParamData = paramList.AddParam("DDD.fit3DTo2D.lambdat", RVLPARAM_TYPE_FLOAT, &fit3DTo2DLambdat);
+	pParamData = paramList.AddParam("DDD.no_RANSAC_iterations", RVLPARAM_TYPE_INT, &nRANSACIterations);
+	pParamData = paramList.AddParam("DDD.pointAssociationGridCellSize", RVLPARAM_TYPE_INT, &pointAssociationGridCellSize);
+}
+
+void DDDetector::SetCameraParams(float fu, float fv, float uc, float vc, int w, int h)
+{
+	camera.fu = fu;
+	camera.fv = fv;
+	camera.uc = uc;
+	camera.vc = vc;
+	camera.w = w;
+	camera.h = h;
+}
+
+void DDDetector::CreateModels(
+	Array<Mesh> modelMeshes,
+	std::vector<std::string> modelFileNames)
+{
+	for (int iModel = 0; iModel < modelMeshes.n; iModel++)
+	{
+		Mesh* pMesh = modelMeshes.Element + iModel;
+
+		// Detect surfels.
+
+		//pSurfels->Init(pMesh);
+		//pSurfelDetector->Init(pMesh, pSurfels, pMem);
+		//printf("Segmentation to surfels...");
+		//pSurfelDetector->Segment(pMesh, pSurfels);
+		//printf("completed.\n");
+		//int nSurfels = pSurfels->NodeArray.n;
+		//printf("No. of surfels = %d\n", nSurfels);
+
+		// Visualize surfels.
+
+		//uchar SelectionColor[] = { 0, 255, 0 };
+		//pSurfels->NodeColors(SelectionColor);
+		//pSurfels->InitDisplay(pVisualizer, pMesh, pSurfelDetector);
+		//pSurfels->Display(pVisualizer, pMesh);
+		//pVisualizer->Run();
+		//pVisualizer->renderer->RemoveAllViewProps();
+
+		// Subsample mesh.
+
+		VoxelGrid MSubsamplingGrid;
+		MSubsamplingGrid.Create(pMesh->NodeArray, 0.04f);
+		Array<int> MPointSubset;
+		MSubsamplingGrid.SubSample(pMesh->NodeArray, 22.5f, MPointSubset);
+
+		// Write subsampled mesh to a file.
+
+		Array<OrientedPoint> model;
+		model.Element = new OrientedPoint[MPointSubset.n];
+		model.n = MPointSubset.n;
+		OrientedPoint* pTgtPt = model.Element;
+		Point* pSrcPt;
+		int iPt;
+		for (int i = 0; i < model.n; i++, pTgtPt++)
+		{
+			iPt = MPointSubset.Element[i];
+			pSrcPt = pMesh->NodeArray.Element + iPt;
+			RVLCOPY3VECTOR(pSrcPt->P, pTgtPt->P);
+			RVLCOPY3VECTOR(pSrcPt->N, pTgtPt->N);
+		}
+		std::string modelInFileName = modelFileNames[iModel];
+		std::string modelOutFileName = modelInFileName.substr(0, modelInFileName.rfind('.') + 1) + "dat";
+		FILE* fpModel = fopen(modelOutFileName.data(), "wb");
+		fwrite(&(model.n), sizeof(int), 1, fpModel);
+		fwrite(model.Element, sizeof(OrientedPoint), model.n, fpModel);
+		fclose(fpModel);
+		delete[] model.Element;
+	}
+}
+
+void DDDetector::CreateCuboidModel(
+	float* size,
+	float sampleDensity,
+	RECOG::DDD::Model* pModel)
+{
+	RVLCOPY3VECTOR(size, pModel->bboxSize);
+	RVLNULL3VECTOR(pModel->bboxCenter);
+	int iSide, iAxis1, iAxis2, iAxis3, nSideSamples, iSample;
+	float sign;
+	float sampleDensity2 = sampleDensity * sampleDensity;
+	pModel->points.n = 0;
+	for (iSide = 0; iSide < 3; iSide++)
+	{
+		iAxis2 = (iSide + 1) % 3;
+		iAxis3 = (iAxis2 + 1) % 3;
+		nSideSamples = (int)round(size[iAxis2] * size[iAxis3] / sampleDensity2);
+		pModel->points.n += nSideSamples;
+	}
+	pModel->points.n *= 2;
+	pModel->points.Element = new OrientedPoint[pModel->points.n];
+	OrientedPoint* pPt = pModel->points.Element;
+	for (iSide = 0; iSide < 6; iSide++)
+	{
+		iAxis1 = iSide % 3;
+		iAxis2 = (iAxis1 + 1) % 3;
+		iAxis3 = (iAxis2 + 1) % 3;
+		sign = (iSide < 3 ? 1.0f : -1.0f);
+		nSideSamples = (int)round(size[iAxis2] * size[iAxis3] / sampleDensity2);
+		for (iSample = 0; iSample < nSideSamples; iSample++, pPt++)
+		{
+			pPt->P[iAxis1] = 0.5f * sign * size[iAxis1];
+			pPt->P[iAxis2] = size[iAxis2] * ((float)rand() / (float)RAND_MAX - 0.5f);
+			pPt->P[iAxis3] = size[iAxis3] * ((float)rand() / (float)RAND_MAX - 0.5f);
+			pPt->N[iAxis1] = sign;												   
+			pPt->N[iAxis2] = pPt->N[iAxis3] = 0.0f;
+		}
+	}
+	// Visualize cuboid point cloud.
+	//Array<Point> points;
+	//MESH::CreatePointArrayFromOrientedPointArray(pModel->points, points);
+	//uchar green[] = { 0, 255, 0};
+	//pVisualizationData->pVisualizer->DisplayPointSet<float, Point>(points, green, 6.0f);
+	//delete[] points.Element;
+	//pVisualizationData->pVisualizer->Run();
+}
+
+void DDDetector::CreateSurfNetModel(
+	float* A,
+	int* AID,
+	int nSurfaces,
+	float* M,
+	std::vector<std::vector<std::vector<int>>> SN,
+	float minSamplingDensity,
+	float* q,
+	RECOG::DDD::Model* pModel,
+	bool bVisualize)
+{
+	///	Sample points.
+
+	int i, j;
+	float *d = new float[nSurfaces];
+	float* mxRow;
+	RVLMULMXVECT(M, q, nSurfaces, 7, d, i, j, mxRow);
+	int *axis = new int[nSurfaces];
+	float *sign = new float[nSurfaces];
+	for (i = 0; i < nSurfaces; i++)
+	{
+		axis[i] = AID[i] / 2;
+		sign[i] = (AID[i] & 1 ? 1.0f : -1.0f);
+	}
+	int maxnContourEdges = 0;
+	int nEdges = 0;
+	int maxGridSize = 0;
+	int normalAxis, planeAxis1;
+	int gridSize[2];
+	int iFace_, iFace__, iEdge;
+	std::vector<std::vector<int>> face;
+	std::vector<int> contour;
+	for (int iFace = 0; iFace < SN.size(); iFace++)
+	{
+		face = SN[iFace];
+		gridSize[0] = gridSize[1] = 0;
+		normalAxis = axis[iFace];
+		planeAxis1 = (normalAxis + 1) % 3;
+		for (int iContour = 0; iContour < face.size(); iContour++)
+		{
+			contour = face[iContour];
+			if (contour.size() > maxnContourEdges)
+				maxnContourEdges = contour.size();
+			nEdges += contour.size();
+			for (iEdge = 0; iEdge < contour.size(); iEdge++)
+			{
+				iFace_ = contour[iEdge];
+				gridSize[axis[iFace_] == planeAxis1 ? 0 : 1]++;
+			}
+			if (gridSize[0] > maxGridSize)
+				maxGridSize = gridSize[0];
+			if (gridSize[1] > maxGridSize)
+				maxGridSize = gridSize[1];
+		}
+	}
+	nEdges /= 2;
+	pModel->edges.Element = new RECOG::DDD::ModelEdge[nEdges];
+	pModel->edges.n = 0;
+	RECOG::DDD::ModelPoint* MPtMem = new RECOG::DDD::ModelPoint[maxnContourEdges];
+	RECOG::DDD::ModelPoint* pMPt;
+	float* m, * s;
+	Array<Point> vertices;
+	vertices.Element = new Point[2 * nEdges];
+	vertices.n = 0;
+	Array<Pair<int, int>> edges;
+	edges.Element = new Pair<int, int>[2 * nEdges];
+	edges.n = 0;
+	int iVertex, iVertex_;
+	Point* pPt;
+	std::vector<RECOG::DDD::ModelPoint> MPts;
+	RECOG::DDD::ModelPoint MPt;
+	int maxnCells = maxGridSize * maxGridSize;
+	int* edgeMap = new int[maxnCells];
+	Array<SortIndex<float>> grid[2];
+	grid[0].Element = new SortIndex<float>[maxGridSize];
+	grid[1].Element = new SortIndex<float>[maxGridSize];
+	SortIndex<float>* pGrid, * pGrid_;
+	int* grid_ = new int[SN.size()];
+	int iGridAxis, edgeStartRow, edgeEndRow, edgeCol;
+	int sign_;
+	int surf;
+	float cellSize;
+	int nCellSamples[2];
+	float cellStep[2];
+	int k, l, u, v, i_;
+	float fTmp;
+	int iGridFace[2][2];
+	float s_[7];
+	float lambda[2];
+	int iSample;
+	int nContourEdges;
+	int iTmp;
+	int iEndFace[2];
+	float edgeLen;
+	int nEdgeSamples;
+	float edgeStep;
+	float* N, * N_;
+	float V3Tmp[3], N__[3];
+	float sign__;
+	RECOG::DDD::ModelEdge* pEdge;
+	int* support = new int[SN.size()];
+	int iFace;
+	for (iFace = 0; iFace < SN.size(); iFace++)
+	{
+		face = SN[iFace];
+		N = A + 3 * AID[iFace];
+		normalAxis = axis[iFace];
+		planeAxis1 = (normalAxis + 1) % 3;
+		grid[0].n = grid[1].n = 0;
+		for (int iContour = 0; iContour < face.size(); iContour++)
+		{
+			contour = face[iContour];
+			for (iEdge = 0; iEdge < contour.size(); iEdge++)
+			{
+				iFace_ = contour[iEdge];
+				iGridAxis = (axis[iFace_] == planeAxis1 ? 0 : 1);
+				pGrid = grid[iGridAxis].Element + grid[iGridAxis].n++;
+				pGrid->idx = iFace_;
+				pGrid->cost = d[iFace_] * sign[iFace_];
+			}
+		}
+		for (i = 0; i < 2; i++)
+		{
+			BubbleSort<SortIndex<float>>(grid[i]);
+			for (j = 0; j < grid[i].n; j++)
+				grid_[grid[i].Element[j].idx] = j;
+		}
+		memset(edgeMap, 0, maxnCells * sizeof(int));
+		for (int iContour = 0; iContour < face.size(); iContour++)
+		{
+			contour = face[iContour];
+			nContourEdges = contour.size();
+			if (bVisualize)
+			{
+				iFace_ = contour[nContourEdges - 1];
+				for (iVertex = 0; iVertex < nContourEdges; iVertex++)
+				{
+					iFace__ = contour[iVertex];
+					pMPt = MPtMem + iVertex;
+					m = M + 7 * iFace;
+					s = pMPt->S + 7 * axis[iFace];
+					RVLSCALEVECTOR(m, sign[iFace], s, 7, i);
+					m = M + 7 * iFace_;
+					s = pMPt->S + 7 * axis[iFace_];
+					RVLSCALEVECTOR(m, sign[iFace_], s, 7, i);
+					m = M + 7 * iFace__;
+					s = pMPt->S + 7 * axis[iFace__];
+					RVLSCALEVECTOR(m, sign[iFace__], s, 7, i);
+					iFace_ = iFace__;
+				}
+				iVertex_ = vertices.n + nContourEdges - 1;
+				for (iVertex = 0; iVertex < nContourEdges; iVertex++)
+				{
+					pPt = vertices.Element + vertices.n;
+					pMPt = MPtMem + iVertex;
+					RVLMULMXVECT(pMPt->S, q, 3, 7, pPt->P, i, j, mxRow);
+					edges.Element[edges.n].a = iVertex_;
+					edges.Element[edges.n].b = vertices.n;
+					iVertex_ = vertices.n;
+					vertices.n++;
+					edges.n++;
+				}
+			}
+			for (iEdge = 0; iEdge < nContourEdges; iEdge++)
+			{
+				iFace_ = contour[iEdge];
+				iEndFace[0] = contour[(iEdge + nContourEdges - 1) % nContourEdges];
+				iEndFace[1] = contour[(iEdge + 1) % nContourEdges];
+				if (iFace < iFace_)
+				{
+					N_ = A + 3 * AID[iFace_];
+					RVLSUM3VECTORS(N, N_, MPt.N);
+					RVLNORM3(MPt.N, fTmp);
+					RVLCROSSPRODUCT3(N, N_, V3Tmp);
+					edgeLen = d[iEndFace[1]] * sign[iEndFace[1]] - d[iEndFace[0]] * sign[iEndFace[0]];
+					sign__ = (edgeLen >= 0.0f ? 1.0f : -1.0f);
+					RVLNULL3VECTOR(N__);
+					N__[axis[iEndFace[0]]] = sign__;
+					if (RVLDOTPRODUCT3(V3Tmp, N__) > 0.0f)
+					{
+						pEdge = pModel->edges.Element + pModel->edges.n;
+						pEdge->iFace = iFace;
+						pEdge->iFace_ = iFace_;
+						RVLSUM3VECTORS(N, N_, pEdge->N);
+						RVLNORM3(pEdge->N, fTmp);
+						pModel->edges.n++;
+						edgeLen *= sign__;
+						m = M + 7 * iFace;
+						s = MPt.S + 7 * axis[iFace];
+						RVLSCALEVECTOR(m, sign[iFace], s, 7, i);
+						m = M + 7 * iFace_;
+						s = MPt.S + 7 * axis[iFace_];
+						RVLSCALEVECTOR(m, sign[iFace_], s, 7, i);
+						fTmp = ceil(edgeLen * minSamplingDensity);
+						nEdgeSamples = (int)fTmp;
+						edgeStep = 1.0f / fTmp;
+						s = MPt.S + 7 * axis[iEndFace[0]];
+						for (u = 0; u < nEdgeSamples; u++)
+						{
+							memset(s, 0, 7 * sizeof(float));
+							lambda[0] = ((float)u + 0.5f) * edgeStep;
+							lambda[1] = 1.0f - lambda[0];
+							for (l = 0; l < 2; l++)
+							{
+								iFace__ = iEndFace[l];
+								m = M + 7 * iFace__;
+								fTmp = sign[iFace__] * lambda[l];
+								RVLSCALEVECTOR(m, fTmp, s_, 7, i_);
+								RVLSUMVECTORS(s, s_, 7, s, i_);
+							}
+							MPts.push_back(MPt);
+						}
+					}
+				}
+				if (axis[iFace_] == planeAxis1)
+				{
+					edgeCol = grid_[iFace_];
+					edgeStartRow = grid_[iEndFace[0]];
+					edgeEndRow = grid_[iEndFace[1]];
+					sign_ = (edgeStartRow < edgeEndRow ? 1 : -1);
+					if (sign_ < 0.0f)
+					{
+						iTmp = edgeStartRow;
+						edgeStartRow = edgeEndRow;
+						edgeEndRow = iTmp;
+					}
+					for (i = edgeStartRow; i < edgeEndRow; i++)
+						edgeMap[edgeCol + i * grid[0].n] = sign_;
+				}
+			}
+		}
+		surf = 0;
+		RVLCOPY3VECTOR(N, MPt.N);
+		m = M + 7 * iFace;
+		s = MPt.S + 7 * axis[iFace];
+		RVLSCALEVECTOR(m, sign[iFace], s, 7, i_);
+		iTmp = MPts.size();
+		for (j = 0; j < grid[1].n - 1; j++)
+			for (i = 0; i < grid[0].n; i++)
+			{
+				surf += edgeMap[i + j * grid[0].n];
+				if (surf != 0)
+				{
+					for (k = 0; k < 2; k++)
+					{
+						pGrid = grid[k].Element + (k ? j : i);
+						pGrid_ = pGrid + 1;
+						cellSize = pGrid_->cost - pGrid->cost;
+						iGridFace[k][0] = pGrid->idx;
+						iGridFace[k][1] = pGrid_->idx;
+						fTmp = ceil(cellSize * minSamplingDensity);
+						nCellSamples[k] = (int)fTmp;
+						cellStep[k] = 1.0f / fTmp;
+					}
+					for (v = 0; v < nCellSamples[1]; v++)
+						for (u = 0; u < nCellSamples[0]; u++)
+						{
+							for (k = 0; k < 2; k++)
+							{
+								s = MPt.S + 7 * axis[iGridFace[k][0]];
+								memset(s, 0, 7 * sizeof(float));
+								iSample = (k ? v : u);
+								lambda[0] = ((float)iSample + 0.5f) * cellStep[k];
+								lambda[1] = 1.0f - lambda[0];
+								for (l = 0; l < 2; l++)
+								{
+									iFace_ = iGridFace[k][l];
+									m = M + 7 * iFace_;
+									fTmp = sign[iFace_] * lambda[l];
+									RVLSCALEVECTOR(m, fTmp, s_, 7, i_);
+									RVLSUMVECTORS(s, s_, 7, s, i_);
+								}
+							}
+							MPts.push_back(MPt);
+						}
+				}
+			}
+		support[iFace] = MPts.size() - iTmp;
+	}
+	pModel->points_.Element = new RECOG::DDD::ModelPoint[MPts.size()];
+	pMPt = pModel->points_.Element;
+	for (i = 0; i < MPts.size(); i++, pMPt++)
+		*pMPt = MPts[i];
+	pModel->points_.n = MPts.size();
+	pModel->nSurfaces = SN.size();
+	pModel->d = new float[SN.size()];
+	memcpy(pModel->d, d, SN.size() * sizeof(float));
+	pModel->A = new float[3 * 6];
+	memcpy(pModel->A, A, 3 * 6 * sizeof(float));
+	pModel->AID = new int[SN.size()];
+	memcpy(pModel->AID, AID, SN.size() * sizeof(int));
+	pModel->M = new float[nSurfaces * 7];
+	memcpy(pModel->M, M, nSurfaces * 7 * sizeof(float));
+
+	// QR matrices.
+
+	float* dominantAxisCandidateMem = new float[6 * SN.size()];
+	int nDominantAxisCandidates = 0;
+	int iCandidate;
+	float* axisMem = new float[6 * SN.size()];
+	float* axis_;
+	float* c = new float[SN.size()];
+	float* dominantAxisCandidate;
+	int* dominantAxisCandidateSupport = new int[SN.size()];
+	for (iFace = 0; iFace < SN.size(); iFace++)
+	{
+		m = M + 7 * iFace + 1;
+		RVLDOTPRODUCT(m, m, 6, fTmp, i_);
+		c[iFace] = sqrt(fTmp);
+		fTmp = 1.0f / c[iFace];
+		axis_ = axisMem + 6 * iFace;
+		RVLSCALEVECTOR(m, fTmp, axis_, 6, i_);
+		for (iCandidate = 0; iCandidate < nDominantAxisCandidates; iCandidate++)
+		{
+			dominantAxisCandidate = dominantAxisCandidateMem + 6 * iCandidate;
+			RVLDOTPRODUCT(dominantAxisCandidate, axis_, 6, fTmp, i_);
+			if (1.0f - RVLABS(fTmp) <= 1e-3)
+				break;
+		}
+		if (iCandidate < nDominantAxisCandidates)
+			dominantAxisCandidateSupport[iCandidate] += support[iFace];
+		else
+		{
+			dominantAxisCandidate = dominantAxisCandidateMem + 6 * nDominantAxisCandidates;
+			memcpy(dominantAxisCandidate, axis_, 6 * sizeof(float));
+			dominantAxisCandidateSupport[nDominantAxisCandidates] = support[iFace];
+			nDominantAxisCandidates++;
+		}
+	}
+	int iDominantAxis = 0;
+	for (iCandidate = 1; iCandidate < nDominantAxisCandidates; iCandidate++)
+		if (dominantAxisCandidateSupport[iCandidate] > dominantAxisCandidateSupport[iDominantAxis])
+			iDominantAxis = iCandidate;
+	pModel->Q = new float[6 * 6];
+	float* q_ = pModel->Q;
+	dominantAxisCandidate = dominantAxisCandidateMem + 6 * iDominantAxis;
+	memcpy(q_, dominantAxisCandidate, 6 * sizeof(float));
+	float b[6];
+	float e, maxe;
+	pModel->R = new float[6 * SN.size()];
+	float* r = pModel->R;
+	for (i = 1; i < 6; i++)
+	{
+		maxe = 0.0f;
+		q_ = pModel->Q + 6 * i;
+		for (iFace = 0; iFace < SN.size(); iFace++)
+		{
+			axis_ = axisMem + 6 * iFace;
+			RECOG::DDD::ProjectToBase(axis_, 6, pModel->Q, i, r, b, e);
+			if (e > maxe)
+			{
+				maxe = e;
+				memcpy(q_, b, 6 * sizeof(float));
+			}
+		}
+	}
+	pModel->info = new int[SN.size()];
+	for (iFace = 0; iFace < SN.size(); iFace++)
+	{
+		r = pModel->R + 6 * iFace;
+		axis_ = axisMem + 6 * iFace;
+		RECOG::DDD::ProjectToBase(axis_, 6, pModel->Q, 6, r, b, e);
+		for (i = 0; i < 6; i++)
+			if (RVLABS(r[i]) > 0.5f)
+				pModel->info[iFace] = i;
+	}
+
+	// Visualization.
+
+	if (bVisualize)
+	{
+		Array<Point> samplePts;
+		Array<Pair<int, int>> normals;
+		RECOG::DDD::HypothesisSV hyp;
+		memcpy(hyp.s, q + 1, 6 * sizeof(float));
+		RVLUNITMX3(hyp.RMS);
+		VisualizeStorageVolumeModel(pModel, hyp, samplePts, &normals);
+		Visualizer visualizer;
+		visualizer.Create();
+		uchar red[] = { 255, 0, 0 };
+		uchar green[] = { 0, 255, 0 };
+		visualizer.DisplayLines(vertices, edges, red);
+		visualizer.DisplayPointSet<float, Point>(samplePts, green, 6.0f);
+		samplePts.n *= 2;
+		visualizer.DisplayLines(samplePts, normals, red);
+		visualizer.Run();
+		delete[] samplePts.Element;
+		delete[] normals.Element;
+	}
+
+	// Free memory.
+
+	delete[] MPtMem;
+	delete[] vertices.Element;
+	delete[] edges.Element;
+	delete[] edgeMap;
+	delete[] grid[0].Element;
+	delete[] grid[1].Element;
+	delete[] grid_;
+	delete[] support;
+	delete[] dominantAxisCandidateMem;
+	delete[] dominantAxisCandidateSupport;
+	delete[] axisMem;
+	delete[] c;
+	delete[] d;
+	delete[] axis;
+	delete[] sign;
+
+	///
+}
+
+void DDDetector::BoxNormals(float* A)
+{
+	memset(A, 0, 3 * 6 * sizeof(float));
+	int i, j;
+	for (i = 0; i < 3; i++)
+		for (j = 0; j < 2; j++)
+			A[3 * (2 * i + j) + i] = (float)(2 * j - 1);
+}
+
+void DDDetector::CreateCuboidModel2(
+	float* size,
+	float minSamplingDensity,
+	RECOG::DDD::Model* pModel,
+	bool bVisualize)
+{
+	// Parameters.
+
+	float q[7];
+	memset(q, 0, 7 * sizeof(float));
+	float* s = q + 1;
+	RVLCOPY3VECTOR(size, s);
+	RVLSCALE3VECTOR(s, 0.5f, s);
+
+	/// SurfNet model.
+
+	float A[3 * 6];
+	BoxNormals(A);
+	int AID[6] = { 0, 1, 2, 3, 4, 5};
+	float M[6 * 7] = {
+		0.0, 1.0, 0.0, 0.0, -1.0, 0.0, 0.0,
+		0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0,
+		0.0, 0.0, 1.0, 0.0, 0.0, -1.0, 0.0,
+		0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0,
+		0.0, 0.0, 0.0, 1.0, 0.0, 0.0, -1.0,
+		0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0
+	};
+	std::vector<std::vector<std::vector<int>>> SN;
+	std::vector<std::vector<int>> face;
+	std::vector<int> contour;
+	// Surface 0.
+	contour.push_back(2);
+	contour.push_back(5);
+	contour.push_back(3);
+	contour.push_back(4);
+	face.push_back(contour);
+	SN.push_back(face);
+	// Surface 1.
+	face.clear();
+	contour.clear();
+	contour.push_back(2);
+	contour.push_back(4);
+	contour.push_back(3);
+	contour.push_back(5);
+	face.push_back(contour);
+	SN.push_back(face);
+	// Surface 2.
+	face.clear();
+	contour.clear();
+	contour.push_back(0);
+	contour.push_back(4);
+	contour.push_back(1);
+	contour.push_back(5);
+	face.push_back(contour);
+	SN.push_back(face);
+	// Surface 3.
+	face.clear();
+	contour.clear();
+	contour.push_back(0);
+	contour.push_back(5);
+	contour.push_back(1);
+	contour.push_back(4);
+	face.push_back(contour);
+	SN.push_back(face);
+	// Surface 4.
+	face.clear();
+	contour.clear();
+	contour.push_back(0);
+	contour.push_back(3);
+	contour.push_back(1);
+	contour.push_back(2);
+	face.push_back(contour);
+	SN.push_back(face);
+	// Surface 5.
+	face.clear();
+	contour.clear();
+	contour.push_back(0);
+	contour.push_back(2);
+	contour.push_back(1);
+	contour.push_back(3);
+	face.push_back(contour);
+	SN.push_back(face);
+
+	///
+
+	CreateSurfNetModel(A, AID, 6, M, SN, minSamplingDensity, q, pModel, bVisualize);
+
+	RVLCOPY3VECTOR(size, pModel->bboxSize);
+	RVLNULL3VECTOR(pModel->bboxCenter);
+	pModel->points.Element = new OrientedPoint[pModel->points_.n];
+	pModel->points.n = pModel->points_.n;
+	int i, j, iPt;
+	OrientedPoint* pPt;
+	RECOG::DDD::ModelPoint* pPt_;
+	float* mxRow;
+	for (iPt = 0; iPt < pModel->points_.n; iPt++)
+	{
+		pPt = pModel->points.Element + iPt;
+		pPt_ = pModel->points_.Element + iPt;
+		RVLMULMXVECT(pPt_->S, q, 3, 7, pPt->P, i, j, mxRow);
+		RVLCOPY3VECTOR(pPt_->N, pPt->N);
+	}
+}
+
+void DDDetector::CreateStorageVolumeModel(
+	RECOG::DDD::Model* pModel,
+	bool bVisualize)
+{
+	// Parameters.
+
+	float q[7] = {0.0, 0.3f, 0.4f, 0.2f, 0.0f, 0.0f, 0.0f};	// m
+	q[0] = storageVolumeWallThickness;
+	float minSamplingDensity = 1.0f / 0.05f;	// m^-1
+
+	/// SurfNet model.
+
+	float A[3 * 6];
+	BoxNormals(A);	int AID[11] = {0, 1, 2, 3, 4, 5, 1, 3, 2, 5, 4};
+	float M[11 * 7] = {
+		0.0, 1.0, 0.0, 0.0, -1.0, 0.0, 0.0,
+		0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0,
+		0.0, 0.0, 1.0, 0.0, 0.0, -1.0, 0.0,
+		0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0,
+		0.0, 0.0, 0.0, 1.0, 0.0, 0.0, -1.0,
+		0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0,
+		1.0, -1.0, 0.0, 0.0, 1.0, 0.0, 0.0,
+		1.0, 0.0, -1.0, 0.0, 0.0, 1.0, 0.0,
+		1.0, 0.0, -1.0, 0.0, 0.0, -1.0, 0.0,
+		1.0, 0.0, 0.0, -1.0, 0.0, 0.0, 1.0,
+		1.0, 0.0, 0.0, -1.0, 0.0, 0.0, -1.0
+		};
+	std::vector<std::vector<std::vector<int>>> SN;
+	std::vector<std::vector<int>> face;
+	std::vector<int> contour;
+	// Surface 0.
+	contour.push_back(2);
+	contour.push_back(5);
+	contour.push_back(3);
+	contour.push_back(4);
+	face.push_back(contour);
+	SN.push_back(face);
+	// Surface 1.
+	face.clear();
+	contour.clear();
+	contour.push_back(2);
+	contour.push_back(4);
+	contour.push_back(3);
+	contour.push_back(5);
+	face.push_back(contour);
+	contour.clear();
+	contour.push_back(7);
+	contour.push_back(10);
+	contour.push_back(8);
+	contour.push_back(9);
+	face.push_back(contour);
+	SN.push_back(face);
+	// Surface 2.
+	face.clear();
+	contour.clear();
+	contour.push_back(0);
+	contour.push_back(4);
+	contour.push_back(1);
+	contour.push_back(5);
+	face.push_back(contour);
+	SN.push_back(face);
+	// Surface 3.
+	face.clear();
+	contour.clear();
+	contour.push_back(0);
+	contour.push_back(5);
+	contour.push_back(1);
+	contour.push_back(4);
+	face.push_back(contour);
+	SN.push_back(face);
+	// Surface 4.
+	face.clear();
+	contour.clear();
+	contour.push_back(0);
+	contour.push_back(3);
+	contour.push_back(1);
+	contour.push_back(2);
+	face.push_back(contour);
+	SN.push_back(face);
+	// Surface 5.
+	face.clear();
+	contour.clear();
+	contour.push_back(0);
+	contour.push_back(2);
+	contour.push_back(1);
+	contour.push_back(3);
+	face.push_back(contour);
+	SN.push_back(face);
+	// Surface 6.
+	face.clear();
+	contour.clear();
+	contour.push_back(7);
+	contour.push_back(9);
+	contour.push_back(8);
+	contour.push_back(10);
+	face.push_back(contour);
+	SN.push_back(face);
+	// Surface 7.
+	face.clear();
+	contour.clear();
+	contour.push_back(1);
+	contour.push_back(9);
+	contour.push_back(6);
+	contour.push_back(10);
+	face.push_back(contour);
+	SN.push_back(face);
+	// Surface 8.
+	face.clear();
+	contour.clear();
+	contour.push_back(1);
+	contour.push_back(10);
+	contour.push_back(6);
+	contour.push_back(9);
+	face.push_back(contour);
+	SN.push_back(face);
+	// Surface 9.
+	face.clear();
+	contour.clear();
+	contour.push_back(1);
+	contour.push_back(8);
+	contour.push_back(6);
+	contour.push_back(7);
+	face.push_back(contour);
+	SN.push_back(face);
+	// Surface 10.
+	face.clear();
+	contour.clear();
+	contour.push_back(1);
+	contour.push_back(7);
+	contour.push_back(6);
+	contour.push_back(8);
+	face.push_back(contour);
+	SN.push_back(face);
+
+	///
+
+	CreateSurfNetModel(A, AID, 11, M, SN, minSamplingDensity, q, pModel, bVisualize);
+}
+
+void DDDetector::CreateBox(
+	Mesh* pMesh,
+	float size[3])
+{
+	// Vertices.
+
+	float halfSize[3];
+	RVLSCALE3VECTOR(size, 0.5f, halfSize);
+	vtkSmartPointer<vtkPoints> points = vtkSmartPointer<vtkPoints>::New();
+	points->InsertPoint(0, halfSize[0], -halfSize[1], -halfSize[2]);
+	points->InsertPoint(1, -halfSize[0], -halfSize[1], -halfSize[2]);
+	points->InsertPoint(2, -halfSize[0], halfSize[1], -halfSize[2]);
+	points->InsertPoint(3, halfSize[0], halfSize[1], -halfSize[2]);
+	points->InsertPoint(4, halfSize[0], -halfSize[1], halfSize[2]);
+	points->InsertPoint(5, halfSize[0], halfSize[1], halfSize[2]);
+	points->InsertPoint(6, -halfSize[0], halfSize[1], halfSize[2]);
+	points->InsertPoint(7, -halfSize[0], -halfSize[1], halfSize[2]);
+
+	// Faces.
+
+	int faces_[6][4] = { {0, 1, 2, 3}, {0, 3, 5, 4}, {3, 2, 6, 5}, {2, 1, 7, 6}, {1, 0, 4, 7}, {4, 5, 6, 7} };
+	vtkSmartPointer<vtkCellArray> faces = vtkSmartPointer<vtkCellArray>::New();
+	int iFace;
+	for (iFace = 0; iFace < 6; iFace++)
+	{
+		vtkSmartPointer<vtkIdList> face = vtkSmartPointer<vtkIdList>::New();
+		for (int i = 0; i < 4; i++)
+			face->InsertNextId(faces_[iFace][i]);
+		faces->InsertNextCell(face);
+	}
+	
+	// Create poly data.
+
+	pMesh->pPolygonData = vtkSmartPointer<vtkPolyData>::New();
+	pMesh->pPolygonData->SetPoints(points);
+	pMesh->pPolygonData->SetPolys(faces);
+}
+
+void DDDetector::CreateCylinder(
+	Mesh* pMesh,
+	float r,
+	float h,
+	int resolution)
+{
+	// Vertices.
+
+	vtkSmartPointer<vtkPoints> points = vtkSmartPointer<vtkPoints>::New();
+	float fResolution = (float)resolution;
+	float dPhi = 2 * PI / fResolution;
+	int i;
+	float phi;
+	float hhalf = 0.5f * h;
+	for (i = 0; i < resolution; i++)
+	{
+		phi = (float)i * dPhi;
+		points->InsertPoint(i, r * cos(phi), r * sin(phi), -hhalf);
+		points->InsertPoint(resolution + i, r * cos(phi), r * sin(phi), hhalf);
+	}
+
+	// Faces.
+
+	vtkSmartPointer<vtkCellArray> faces = vtkSmartPointer<vtkCellArray>::New();
+	vtkSmartPointer<vtkIdList> topFace = vtkSmartPointer<vtkIdList>::New();
+	vtkSmartPointer<vtkIdList> bottomFace = vtkSmartPointer<vtkIdList>::New();
+	vtkSmartPointer<vtkIdList> sideFace = vtkSmartPointer<vtkIdList>::New();
+	for (i = 0; i < resolution; i++)
+	{
+		topFace->InsertNextId(resolution + i);
+		bottomFace->InsertNextId(resolution - i - 1);
+		sideFace = vtkSmartPointer<vtkIdList>::New();
+		sideFace->InsertNextId(i);
+		sideFace->InsertNextId((i + 1) % resolution);
+		sideFace->InsertNextId(resolution + (i + 1) % resolution);
+		sideFace->InsertNextId(resolution + i);
+		faces->InsertNextCell(sideFace);
+	}
+	faces->InsertNextCell(topFace);
+	faces->InsertNextCell(bottomFace);
+
+	// Create poly data.
+
+	pMesh->pPolygonData = vtkSmartPointer<vtkPolyData>::New();
+	pMesh->pPolygonData->SetPoints(points);
+	pMesh->pPolygonData->SetPolys(faces);
+}
+
+int DDDetector::FurthestPoint(
+	float* P,
+	Mesh* pMesh,
+	QList<QLIST::Index2> ptList)
+{
+	float maxDist = 0.0f;
+	float dist;
+	Point* pPt, * pFurthestPt;
+	float dP[3];
+	QLIST::Index2* pPtIdx = ptList.pFirst;
+	int iFurthestPt;
+	while (pPtIdx)
+	{
+		pPt = pMesh->NodeArray.Element + pPtIdx->Idx;
+		RVLDIF3VECTORS(pPt->P, P, dP);
+		dist = RVLDOTPRODUCT3(dP, dP);
+		if (dist > maxDist)
+		{
+			maxDist = dist;
+			pFurthestPt = pPt;
+			iFurthestPt = pPtIdx->Idx;
+		}
+		pPtIdx = pPtIdx->pNext;
+	}
+	return iFurthestPt;
+}
+
+int DDDetector::FurthestPoint(
+	float* P,
+	Mesh* pMesh,
+	Array<MeshEdgePtr*> ptArray,
+	float* V)
+{
+	float maxDist = 0.0f;
+	float dist;
+	Point* pPt, * pFurthestPt;
+	float dP[3], P_[3];
+	int iPt;
+	int iFurthestPt;
+	float fTmp;
+	for (int i = 0; i < ptArray.n; i++)
+	{
+		iPt = RVLPCSEGMENT_GRAPH_GET_NODE(ptArray.Element[i]);
+		pPt = pMesh->NodeArray.Element + iPt;
+		RVLDIF3VECTORS(pPt->P, P, dP);
+		if (V)
+		{
+			fTmp = RVLDOTPRODUCT3(V, dP);
+			RVLSCALE3VECTOR(V, fTmp, P_);
+			RVLDIF3VECTORS(pPt->P, P_, dP);
+		}
+		dist = RVLDOTPRODUCT3(dP, dP);
+		if (dist > maxDist)
+		{
+			maxDist = dist;
+			pFurthestPt = pPt;
+			iFurthestPt = iPt;
+		}
+	}
+	return iFurthestPt;
+}
+
+void DDDetector::LoadModels(std::vector<std::string> modelFileNames)
+{
+	int iModel;
+	RVL_DELETE_ARRAY(models.Element);
+	models.n = modelFileNames.size();
+	models.Element = new RECOG::DDD::Model[models.n];
+	RECOG::DDD::Model* pModel;
+	for (iModel = 0; iModel < modelFileNames.size(); iModel++)
+	{
+		std::string modelInFileName = modelFileNames[iModel];
+		std::string modelOutFileName = modelInFileName.substr(0, modelInFileName.rfind('.') + 1) + "dat";
+		FILE* fpModel = fopen(modelOutFileName.data(), "rb");
+		pModel = models.Element + iModel;
+		fread(&(pModel->points.n), sizeof(int), 1, fpModel);
+		pModel->points.Element = new OrientedPoint[pModel->points.n];
+		fread(pModel->points.Element, sizeof(OrientedPoint), pModel->points.n, fpModel);
+		fclose(fpModel);
+		Box<float> modelBBox;
+		InitBoundingBox<float>(&modelBBox, pModel->points.Element[0].P);
+		for (int iMPt = 1; iMPt < pModel->points.n; iMPt++)
+			UpdateBoundingBox<float>(&modelBBox, pModel->points.Element[iMPt].P);
+		BoxSize<float>(&modelBBox, pModel->bboxSize[0], pModel->bboxSize[1], pModel->bboxSize[2]);
+		BoxCenter<float>(&modelBBox, pModel->bboxCenter);
+	}
+}
+
+void CreateOrientedPointArrayFromPointArray(
+	Array<Point> PtArraySrc,
+	Array<OrientedPoint>& PtArrayTgt)
+{
+	if (PtArrayTgt.Element == NULL)
+		PtArrayTgt.Element = new OrientedPoint[PtArraySrc.n];
+	PtArrayTgt.n = PtArraySrc.n;
+	int iPt;
+	OrientedPoint* pPtTgt;
+	Point* pPtSrc;
+	for (iPt = 0; iPt < PtArraySrc.n; iPt++)
+	{
+		pPtSrc = PtArraySrc.Element + iPt;
+		pPtTgt = PtArrayTgt.Element + iPt;
+		RVLCOPY3VECTOR(pPtSrc->P, pPtTgt->P);
+		RVLCOPY3VECTOR(pPtSrc->N, pPtTgt->N);
+	}
+}
+
+void CreateOrientedPointArrayFromPointArray(
+	Array<Point> PtArraySrc,
+	Array<int> PtIdx,
+	Array<OrientedPoint>& PtArrayTgt)
+{
+	if (PtArrayTgt.Element == NULL)
+		PtArrayTgt.Element = new OrientedPoint[PtIdx.n];
+	PtArrayTgt.n = PtIdx.n;
+	int iPt;
+	OrientedPoint* pPtTgt = PtArrayTgt.Element;
+	Point* pPtSrc;
+	for (int i = 0; i < PtIdx.n; i++, pPtTgt++)
+	{
+		iPt = PtIdx.Element[i];
+		pPtSrc = PtArraySrc.Element + iPt;
+		RVLCOPY3VECTOR(pPtSrc->P, pPtTgt->P);
+		RVLCOPY3VECTOR(pPtSrc->N, pPtTgt->N);
+	}
+}
+
+void DDDetector::Detect(Array<Mesh> meshSeq)
+{
+	// ROI.
+
+	//DEBUG
+	Box<float> ROI;
+	ROI.minx = -0.300;
+	ROI.maxx = 0.200;
+	ROI.miny = 0.150;
+	ROI.maxy = 0.400;
+	ROI.minz = 0.900;
+	ROI.maxz = 1.600;
+	Pose3D ROIPose;
+	RVLUNITMX3(ROIPose.R);
+	RVLNULL3VECTOR(ROIPose.t);
+	Array<int> SOI;
+	int SOIMem;
+	SOI.Element = &SOIMem;
+	SOI.n = 1;
+	//SOI.Element[0] = 762;
+	SOI.Element[0] = 2855;
+	//Array<int>* pSOI = (test == RVLDDD_TEST_DDD2 ? &SOI : NULL);
+	Array<int>* pSOI = NULL;
+	float invRFR[9];
+	float* X = invRFR;
+	float* Y = invRFR + 3;
+	float* Z = invRFR + 6;
+	float fTmp;
+	Pose3D RF;
+	//// FERIT, 1. drawer
+	//RVLSET3VECTOR(Z, 0.500f, 0.480f, -0.721f);
+	//RVLSET3VECTOR(Y, -0.009f, -0.809f, -0.588f);
+	//RVLSET3VECTOR(RF.t, 0.260f, 0.177f, 1.411f);
+	// IRI, half
+	//RVLSET3VECTOR(Z, 0.168, 0.379, -0.910);
+	//RVLSET3VECTOR(Y, -0.166, -0.787, -0.595);
+	//RVLSET3VECTOR(RF.t, 0.220, -0.028, 1.558);
+	// IRI, open
+	RVLSET3VECTOR(Z, -0.937, 0.158, -0.310);
+	RVLSET3VECTOR(Y, 0.082, -0.507, -0.858);
+	RVLSET3VECTOR(RF.t, 0.407, -0.032, 1.812);
+	//	
+	RVLNORM3(Z, fTmp);
+	RVLCROSSPRODUCT3(Y, Z, X);
+	RVLNORM3(X, fTmp);
+	RVLCROSSPRODUCT3(Z, X, Y);
+	RVLCOPYMX3X3T(invRFR, RF.R);
+	Pose3D *pRF = (test == RVLDDD_TEST_DDD2 ? &RF : NULL);
+
+	// Direction.
+
+	float U[3];
+	//RVLSET3VECTOR(U, 0.0f, 0.0f, -1.0f);
+	RVLSET3VECTOR(U, 0.0f, COS45, -COS45);
+
+	//
+
+	pVisualizationData->bPointToPlane = true;
+
+	Mesh* pMesh, * pMesh_;
+	RECOG::DDD::Model *pModel = models.Element;
+	PointAssociationData pointAssociationData;
+	Array<int> ptBuff;
+	ptBuff.Element = new int[camera.w * camera.h];
+	Array<Point> pointsMS;
+	pointsMS.Element = new Point[camera.w * camera.h];
+	Array<OrientedPoint> pointsS;
+	pointsS.Element = new OrientedPoint[camera.w * camera.h];
+	int* pointSIdx = new int[camera.w * camera.h];
+	AffinePose3D APoseRef, APose;
+	float* t = new float[3 * meshSeq.n];
+	float* t_ = t + 3 * (meshSeq.n - 1);
+	RVLNULL3VECTOR(t_);
+	std::vector<RECOG::DDD::Hypothesis> hyps;
+	std::vector<std::vector<RECOG::DDD::Hypothesis>> seqHyps;
+	RECOG::DDD::Hypothesis hyp;
+
+	Array<int> dominantShiftPointsIdx;
+	dominantShiftPointsIdx.Element = new int[0];
+	int ROIStep;
+	bool bROI = false;
+
+	//Calculate ROI from dominant ShiftPoints
+	//pMesh = meshSeq.Element + (meshSeq.n - 1);
+	//CalculateROI(pMesh, dominantShiftPointsIdx, &ROI);
+
+	for (int iMesh = meshSeq.n - 1; iMesh >= 0; iMesh--)
+	{
+		hyps.clear();
+		printf("Image %d\n", iMesh);
+		pMesh = meshSeq.Element + iMesh;
+		ROIStep = ROICalculationStep;
+		dominantShiftPointsIdx.n = 0;
+		while (dominantShiftPointsIdx.n < minPointsWithDominantShift)
+		{
+			if (ROIStep > iMesh)
+				break;
+			pMesh_ = pMesh - ROIStep++;
+			DetectDominantShiftPoints(pMesh, pMesh_, &dominantShiftPointsIdx, true);
+		}
+		if (dominantShiftPointsIdx.n >= minPointsWithDominantShift)
+		{
+			bROI = true;
+			CalculateROI(pMesh, dominantShiftPointsIdx, &ROI);
+			RVLUNITMX3(ROIPose.R);
+			RVLNULL3VECTOR(ROIPose.t);
+		}
+		else
+		{
+			printf("There is no enough dominant shift points.\n");
+			if (bROI)
+			{
+				if (test == RVLDDD_TEST_DDD2)
+				{
+					//if (iMesh == meshSeq.n - 1)
+					//	pRF = &RF;
+					//else
+					//{
+						pRF = NULL;
+					//	hyp = hyps[0];
+						ExpandBox<float>(&ROI, 0.1f);
+						RVLCOPYMX3X3(APose.R, ROIPose.R);
+						RVLCOPY3VECTOR(APose.t, ROIPose.t);
+					//}
+				}
+			}
+			else
+			{
+				printf("No hypotheses are generated.\n");
+				seqHyps.push_back(hyps);
+				continue;
+			}
+		}
+		//GenerateHypotheses(pMesh, ROI, hyps, U, pSOI, pRF);
+		GenerateHypotheses(pMesh, ROI, ROIPose, &dominantShiftPointsIdx, hyps, NULL, pSOI, pRF);
+		//GenerateHypotheses(pMesh, ROI, ROIPose, NULL, hyps, NULL, pSOI, pRF);
+		if (hyps.size() == 0)
+		{
+			printf("No hypotheses are generated.\n");
+			seqHyps.push_back(hyps);
+			continue;
+		}
+		// Random perturbance of affine pose for debugging purpose.
+
+		//float maxOrientationPerturbance = 20.0;	// deg
+		//float maxPositionPerturbance = 0.1f; // m
+		//float maxScalePerturbance = 0.3f;
+		//srand(time(NULL));
+		//float u[3];
+		//u[0] = 2.0f * ((float)rand() / (float)RAND_MAX) - 1.0f;
+		//u[1] = 2.0f * ((float)rand() / (float)RAND_MAX) - 1.0f;
+		//u[2] = 2.0f * ((float)rand() / (float)RAND_MAX) - 1.0f;
+		//float fTmp;
+		//RVLNORM3(u, fTmp);
+		//float th = maxOrientationPerturbance * DEG2RAD * (2.0f * ((float)rand() / (float)RAND_MAX) - 1.0f);
+		//float dR[9];
+		//AngleAxisToRot<float>(u, th, dR);
+		//float newR[9];
+		//RVLMXMUL3X3(dR, hyp.pose.R, newR);
+		//RVLCOPYMX3X3(newR, hyp.pose.R);
+		//float dt[3];
+		//dt[0] = maxPositionPerturbance * (2.0f * ((float)rand() / (float)RAND_MAX) - 1.0f);
+		//dt[1] = maxPositionPerturbance * (2.0f * ((float)rand() / (float)RAND_MAX) - 1.0f);
+		//dt[2] = maxPositionPerturbance * (2.0f * ((float)rand() / (float)RAND_MAX) - 1.0f);
+		//RVLSUM3VECTORS(hyp.pose.t, dt, hyp.pose.t);
+		//float ds[3];
+		//ds[0] = maxScalePerturbance * (2.0f * ((float)rand() / (float)RAND_MAX) - 1.0f) + 1.0f;
+		//ds[1] = maxScalePerturbance * (2.0f * ((float)rand() / (float)RAND_MAX) - 1.0f) + 1.0f;
+		//ds[2] = maxScalePerturbance * (2.0f * ((float)rand() / (float)RAND_MAX) - 1.0f) + 1.0f;
+		//RVLSCALE3VECTOR3(hyp.pose.s, ds, hyp.pose.s);
+
+		int iHyp;
+		for (iHyp = 0; iHyp < hyps.size(); iHyp++)
+		{
+			// Hypothesis bounding box visualization.
+
+			hyp = hyps[iHyp];
+			if (pVisualizationData->bVisualizeInitialHypothesis)
+			{
+				pVisualizationData->pVisualizer->SetMesh(pMesh);
+				VisualizeHypothesisBoundingBox(&hyp);
+				pVisualizationData->pVisualizer->Run();
+				pVisualizationData->pVisualizer->renderer->RemoveAllViewProps();
+			}
+			//imgGrid.Create(pMesh->NodeArray, &camera, pointAssociationGridCellSize);
+			//CreateOrientedPointArrayFromPointArray(pMesh->NodeArray, pointsS);
+			ROI.minx = -0.5f * hyp.bboxSize[0];
+			ROI.maxx = 0.5f * hyp.bboxSize[0];
+			ROI.miny = -0.5f * hyp.bboxSize[1];
+			ROI.maxy = 0.5f * hyp.bboxSize[1];
+			ROI.minz = -0.5f * hyp.bboxSize[2];
+			ROI.maxz = 0.5f * hyp.bboxSize[2];
+			int iSPt;
+			float PQROI[3];
+			Point* pSPt;
+			OrientedPoint* pQPt;
+			int iSurfel;
+			Surfel* pSurfel;
+			pointsS.n = 0;
+			float ZROI[3];
+			RVLCOPYCOLMX3X3(hyp.pose.R, 2, ZROI);
+			float V3Tmp[3];
+			for (iSPt = 0; iSPt < pMesh->NodeArray.n; iSPt++)
+			{
+				//if (iSPt == 155955)
+				//	int debug = 0;
+				if (!sampleMask[iSPt])
+					continue;
+				iSurfel = pSurfels->surfelMap[iSPt];
+				//if (iSurfel == 1118)
+				//	int debug = 0;
+				if (iSurfel < 0 || iSurfel >= pSurfels->NodeArray.n)
+					continue;
+				pSPt = pMesh->NodeArray.Element + iSPt;
+				RVLINVTRANSF3(pSPt->P, hyp.pose.R, hyp.pose.t, PQROI, V3Tmp);
+				if (InBoundingBox<float>(&ROI, PQROI))
+				{
+					pQPt = pointsS.Element + pointsS.n;
+					RVLCOPY3VECTOR(pSPt->P, pQPt->P);
+					RVLCOPY3VECTOR(pSPt->N, pQPt->N);
+					pSurfel = pSurfels->NodeArray.Element + iSurfel;
+					if (pSurfel->bEdge)
+					{
+						RVLCROSSPRODUCT3(pSurfel->V, ZROI, V3Tmp);
+						fTmp = RVLDOTPRODUCT3(V3Tmp, V3Tmp);
+						if (fTmp >= 1e-6)
+						{
+							RVLSCALE3VECTOR2(V3Tmp, fTmp, pQPt->N);
+						}
+					}
+					pointSIdx[pointsS.n] = iSPt;
+					pointsS.n++;
+				}
+			}
+			//pointAssociationData.Create(pModel->points.n, pointsS.n, true);
+			pointAssociationData.Create(pModel->nSurfaces, pointsS.n, true);
+			//PointAssociation(pModel->points, &(hyp.pose), pointsS, pointAssociationData, ptBuff, true, &pointsMS);
+			SetSceneForHypothesisVisualization(pMesh);
+			SetBBoxForHypothesisVisualization(&hyp);
+			//if (iMesh == meshSeq.n - 1)
+			{
+				//AICP(pModel->points, pointsS, hyp.pose, nICPIterations, APoseRef, pointAssociationData, &pointsMS);
+				RICP(pModel, pointsS, hyp.pose, nICPIterations, APoseRef, pointAssociationData, &pointsMS);
+				APose = APoseRef;
+			}
+			//else
+			//{
+			//	TICP(pModel->points, pointsS, APose, nICPIterations, APose, pointAssociationData, &pointsMS);
+			//	t_ = t + 3 * iMesh;
+			//	RVLCOPY3VECTOR(APose.t, t_);
+			//}
+
+			// Change axes: z becomes x and -x becomes z. 
+			// If the new z axis is not facing the camera, then its direction is changed to the opposite direction.
+			// Scale the model bbox with the APose scale.
+			// Set the fixed box size in x-direction.
+
+			int axisCuboidToAO[6] = { 5, 4, 2, 3, 0, 1 };
+			//int axisCuboidToAO[6] = { 0, 1, 2, 3, 4, 5 };
+			float RSM[9];
+			float* XMS = RSM;
+			float* YMS = XMS + 3;
+			float* ZMS = YMS + 3;
+			RVLCOPYCOLMX3X3(APose.R, 2, XMS);
+			RVLCOPYCOLMX3X3(APose.R, 0, ZMS);
+			RVLNEGVECT3(ZMS, ZMS);
+			RVLCROSSPRODUCT3(ZMS, XMS, YMS);
+			RVLCOPYMX3X3T(RSM, hyp.pose.R);
+			hyp.bboxSize[0] = pModel->bboxSize[2];
+			hyp.bboxSize[1] = pModel->bboxSize[1] * APose.s[1];
+			hyp.bboxSize[2] = pModel->bboxSize[0] * APose.s[0];
+			float xCorrection = 0.5f * pModel->bboxSize[2] * (APose.s[2] - 1.0f);
+			RVLSCALE3VECTOR(XMS, xCorrection, V3Tmp);
+			RVLCOPY3VECTOR(APose.t, hyp.pose.t);
+			RVLSUM3VECTORS(hyp.pose.t, V3Tmp, hyp.pose.t);
+			hyp.pose.s[0] = 1.0f;
+			hyp.pose.s[1] = APose.s[1];
+			hyp.pose.s[2] = APose.s[0];
+			hyp.assoc.Element = new Pair<int, int>[pointsS.n];
+			int i;
+			int iMSurf;
+			int iAssoc = 0;
+			Pair<int, int> assoc;
+			for (i = 0; i < pointsS.n; i++)
+			{
+				iMSurf = pointAssociationData.MNN[i];
+				if (iMSurf < 0)
+					continue;
+				assoc.a = pointSIdx[i];
+				assoc.b = axisCuboidToAO[iMSurf];
+				hyp.assoc.Element[iAssoc++] = assoc;
+			}
+			hyp.assoc.n = iAssoc;
+			hyps[iHyp] = hyp;
+
+			// Visualize hypothesis.
+
+			//VisualizeHypothesisBoundingBox(&hyp, pMesh);
+			VisualizeHypothesisBoundingBox(&hyp);
+			//int j, k;
+			//Array<Point> boxVertices;
+			//boxVertices.Element = new Point[8];
+			//boxVertices.n = 0;
+			//Point* pPt;
+			//float PC[3], PM[3];
+			//for(k = -1; k <= 1; k += 2)
+			//	for (j = -1; j <= 1; j += 2)
+			//		for (i = -1; i <= 1; i += 2)
+			//		{
+			//			pPt = boxVertices.Element + boxVertices.n;
+			//			RVLSET3VECTOR(PC, i, j, k);
+			//			RVLSCALE3VECTOR(PC, 0.5f, PC);
+			//			RVLSCALE3VECTOR3(PC, hyp.bboxSize, PM);
+			//			RVLTRANSF3(PM, hyp.pose.R, hyp.pose.t, pPt->P);
+			//			boxVertices.n++;
+			//		}
+			//uchar cyan[] = {0, 255, 255};
+			//pVisualizationData->pVisualizer->DisplayPointSet<float, Point>(boxVertices, cyan, 10.0f);
+			//delete[] boxVertices.Element;
+		}
+		pVisualizationData->pVisualizer->Run();
+		pVisualizationData->pVisualizer->renderer->RemoveAllViewProps();
+		pointAssociationData.Clear();
+		seqHyps.push_back(hyps);
+	}
+
+	// Generate articulated object hypotheses.
+
+	GenerateAOHypotheses(&seqHyps);
+
+	// Free memory.
+
+	for(int iImg = 0; iImg < seqHyps.size(); iImg++)
+		for (int iHyp = 0; iHyp < seqHyps[iImg].size(); iHyp++)
+			delete[] seqHyps[iImg][iHyp].assoc.Element;
+	delete[] ptBuff.Element;
+	delete[] pointsMS.Element;
+	delete[] pointsS.Element;
+	delete[] t;
+	delete[] pointSIdx;
+}
+
+void DDDetector::GenerateHypotheses(
+	Mesh* pMesh,
+	Box<float> ROI,
+	Pose3D ROIPose,
+	Array<int>* dominantShiftPointsIdx,
+	std::vector<RECOG::DDD::Hypothesis>& hyps,
+	float* U,
+	Array<int>* pSOI,
+	Pose3D* pRF)
+{
+	// Parameters.
+
+	int minSurfelSize = 1000;
+	int minEdgeSize = 20;
+	float maxCoPlanarSurfelNormalAngle = 30.0f;
+	float maxCoPlanarSurfelCentroidDist = 0.030f;
+	float minHypRefSurfaceAngle = 45.0f;
+	//float minHypRefSurfaceAngle = 30.0f;
+
+	// Constants.
+
+	float csMaxCoPlanarSurfelNormalAngle = cos(maxCoPlanarSurfelNormalAngle * DEG2RAD);
+	float csMinHypRefSurfaceAngle = cos(minHypRefSurfaceAngle * DEG2RAD);	
+
+	// Detect surfels.
+
+	pMem->Clear();
+	pSurfels->Init(pMesh);
+	pSurfelDetector->Init(pMesh, pSurfels, pMem);
+	printf("Segmentation to surfels...");
+	pSurfelDetector->Segment(pMesh, pSurfels);
+	printf("completed.\n");
+	int nSurfels = pSurfels->NodeArray.n;
+	printf("No. of surfels = %d\n", nSurfels);
+	pSurfels->EdgePointNormals(pMesh);
+	pSurfels->DetectVertices(pMesh);
+
+	// Display surfels.
+
+	if (pVisualizationData->bVisualizeSurfels)
+	{
+		uchar green[] = { 0, 255, 0 };
+		pSurfels->NodeColors(green);
+		pSurfels->InitDisplay(pVisualizationData->pVisualizer, pMesh, pSurfelDetector);
+		pSurfels->Display(pVisualizationData->pVisualizer, pMesh);
+		pSurfels->DisplayEdgeFeatures();
+		pVisualizationData->pVisualizer->Run();
+	}
+
+	// Only for purpose of testing PlanarSurfelDetector::CreatePolygons()!!!
+
+	//pSurfelDetector->CreatePolygons(pMesh, pSurfels, NULL);
+
+	//
+
+	// Sample Image.
+
+	SampleImage(pMesh);
+
+	// surfels <- sorted list of suficiently large surfels within the ROI.
+	//				or sorted list of surfels with minimum minPointsWithDominantShift from dominantShiftPointsIdx
+
+	Array<SortIndex<int>> surfels;
+	surfels.Element = new SortIndex<int>[pSurfels->NodeArray.n];
+	SortIndex<int>* pSurfelIdx = surfels.Element;
+	int iSurfel;
+	Surfel* pSurfel;
+	bool* bRelevant = new bool[pSurfels->NodeArray.n];
+	memset(bRelevant, 0, pSurfels->NodeArray.n * sizeof(bool));
+	float V3Tmp[3];
+	bool bDominantShiftPoints = false;
+	if (dominantShiftPointsIdx)
+		bDominantShiftPoints = (dominantShiftPointsIdx->n >= minPointsWithDominantShift);
+	if (bDominantShiftPoints)
+	{
+		int* nSufrelPoints = new int[pSurfels->NodeArray.n];
+		memset(nSufrelPoints, 0, pSurfels->NodeArray.n * sizeof(int));
+		int iSurfel;
+
+		for (int iPt = 0; iPt < dominantShiftPointsIdx->n; iPt++)
+		{
+			iSurfel = pSurfels->surfelMap[dominantShiftPointsIdx->Element[iPt]];
+			if ((iSurfel > 0) && (iSurfel < pSurfels->NodeArray.n))
+				nSufrelPoints[iSurfel]++;
+		}
+
+		for (iSurfel = 0; iSurfel < pSurfels->NodeArray.n; iSurfel++)
+		{
+			pSurfel = pSurfels->NodeArray.Element + iSurfel;
+			if (pSurfel->bEdge)
+				continue;
+			if (nSufrelPoints[iSurfel] > minPointsWithDominantShift)
+			{
+				bRelevant[iSurfel] = true;
+				pSurfelIdx->idx = iSurfel;
+				pSurfelIdx->cost = nSufrelPoints[iSurfel];
+				pSurfelIdx++;
+			}
+		}
+	}
+	//if dominantShiftPointsIdx == NULL -> find dominant surfel within ROI
+	else
+	{
+		bool bInROI;
+		int i;
+		Box<float> surfelBBox;
+		Array<int> surfelVertices;
+		surfelVertices.Element = new int[pSurfels->vertexArray.n];
+		float invRFR[9];
+		float invRFt[3];
+		float* Z = invRFR + 6;
+		if(pRF)
+			RVLINVTRANSF3D(pRF->R, pRF->t, invRFR, invRFt);
+		float PROI[3];
+		for (iSurfel = 0; iSurfel < pSurfels->NodeArray.n; iSurfel++)
+		{
+			pSurfel = pSurfels->NodeArray.Element + iSurfel;
+			if (pSurfel->bEdge)
+				continue;
+			if (pSOI)
+			{
+				for (i = 0; i < pSOI->n; i++)
+					if (iSurfel == pSOI->Element[i])
+						break;
+				bInROI = (i < pSOI->n);
+			}
+			else if (pRF)
+			{
+				QLIST::CopyToArray(pSurfels->surfelVertexList.Element + iSurfel, &surfelVertices);
+				pSurfels->BoundingBox(surfelVertices, invRFR, invRFt, 1.0f, surfelBBox);
+				if (RVLDOTPRODUCT3(Z, pSurfel->N) < 0.7f)
+					bInROI = false;
+				else
+					bInROI = (surfelBBox.minx * surfelBBox.maxx < 0.0f && surfelBBox.miny * surfelBBox.maxy < 0.0f && surfelBBox.maxz > -0.5f);
+			}
+			else
+			{
+				RVLINVTRANSF3(pSurfel->P, ROIPose.R, ROIPose.t, PROI, V3Tmp);
+				bInROI = InBoundingBox<float>(&ROI, PROI);
+			}
+			if (bInROI)
+			{
+				if (pSurfel->size >= minSurfelSize)
+				{
+					bRelevant[iSurfel] = true;
+					pSurfelIdx->idx = iSurfel;
+					pSurfelIdx->cost = pSurfel->size;
+					pSurfelIdx++;
+				}
+			}
+		}
+		delete[] surfelVertices.Element;
+	}
+	surfels.n = pSurfelIdx - surfels.Element;
+	BubbleSort<SortIndex<int>>(surfels, true);
+
+	// Merge approximatelly coplanar adjacent surfels into planar surfaces.
+	// sortedPlanarSurfaces <- list of sorted planar surfaces.
+	
+	Array<RECOG::DDD::PlanarSurface> planarSurfaces;
+	planarSurfaces.Element = new RECOG::DDD::PlanarSurface[surfels.n];
+	RECOG::DDD::PlanarSurface* pPlanarSurface = planarSurfaces.Element;
+	QList<QLIST::Index>* pSurfelList;
+	QLIST::Index* planarSurfaceSurfelMem = new QLIST::Index[surfels.n];
+	QLIST::Index* pSurfelIdx_ = planarSurfaceSurfelMem;
+	bool* bMerged = new bool[pSurfels->NodeArray.n];
+	memset(bMerged, 0, pSurfels->NodeArray.n * sizeof(bool));
+	int iSurfel_;
+	Surfel* pSurfel_;
+	float dP[3];
+	float e;
+	float fTmp;
+	Array<SortIndex<int>> sortedPlanarSurfaces;
+	sortedPlanarSurfaces.Element = new SortIndex<int>[surfels.n];
+	SortIndex<int>* pPlanarSurfacelIdx = sortedPlanarSurfaces.Element;
+	SURFEL::EdgePtr* pAdjacentSurfelEdgePtr;
+	SURFEL::Edge* pAdjacentSurfelEdge;
+	int maxnSurflesPerPlanarSurface = 0;
+	int nMergedSurfels;
+	for (int i = 0; i < surfels.n; i++)
+	{
+		iSurfel = surfels.Element[i].idx;
+		if (bMerged[iSurfel])
+			continue;
+		bMerged[iSurfel] = true;
+		pSurfelList = &(pPlanarSurface->surfels);
+		RVLQLIST_INIT(pSurfelList);
+		RVLQLIST_ADD_ENTRY(pSurfelList, pSurfelIdx_);
+		pSurfelIdx_->Idx = iSurfel;
+		pSurfelIdx_++;
+		pSurfel = pSurfels->NodeArray.Element + iSurfel;
+		pPlanarSurfacelIdx->idx = pPlanarSurface - planarSurfaces.Element;
+		pPlanarSurfacelIdx->cost = pSurfel->size;
+		RVLCOPY3VECTOR(pSurfel->P, pPlanarSurface->P);
+		fTmp = (float)(pSurfel->size);
+		RVLSCALE3VECTOR(pPlanarSurface->P, fTmp, pPlanarSurface->P);
+		nMergedSurfels = 1;
+		pAdjacentSurfelEdgePtr = pSurfel->EdgeList.pFirst;		
+		while(pAdjacentSurfelEdgePtr)
+		//for (int j = i + 1; j < surfels.n; j++)
+		{
+			//iSurfel_ = surfels.Element[j].idx;
+			RVLPCSEGMENT_GRAPH_GET_NEIGHBOR(iSurfel, pAdjacentSurfelEdgePtr, pAdjacentSurfelEdge, iSurfel_);
+			if (bRelevant[iSurfel_] && !bMerged[iSurfel_])
+			{
+				pSurfel_ = pSurfels->NodeArray.Element + iSurfel_;
+				if (RVLDOTPRODUCT3(pSurfel->N, pSurfel_->N) >= csMaxCoPlanarSurfelNormalAngle)
+				{
+					RVLDIF3VECTORS(pSurfel_->P, pSurfel->P, dP);
+					e = RVLDOTPRODUCT3(pSurfel->N, dP);
+					if (RVLABS(e) <= maxCoPlanarSurfelCentroidDist)
+					{
+						bMerged[iSurfel_] = true;
+						RVLQLIST_ADD_ENTRY(pSurfelList, pSurfelIdx_);
+						pSurfelIdx_->Idx = iSurfel_;
+						pSurfelIdx_++;
+						pPlanarSurfacelIdx->cost += pSurfel_->size;
+						RVLSCALE3VECTOR(pSurfel_->P, fTmp, V3Tmp);
+						RVLSUM3VECTORS(pPlanarSurface->P, V3Tmp, pPlanarSurface->P);
+						nMergedSurfels++;
+					}
+				}
+			}
+			pAdjacentSurfelEdgePtr = pAdjacentSurfelEdgePtr->pNext;
+		}
+		fTmp = (float)(pPlanarSurfacelIdx->cost);
+		RVLSCALE3VECTOR2(pPlanarSurface->P, fTmp, pPlanarSurface->P);
+		RVLCOPY3VECTOR(pSurfel->N, pPlanarSurface->N);
+		pPlanarSurface++;
+		pPlanarSurfacelIdx++;
+		if (nMergedSurfels > maxnSurflesPerPlanarSurface)
+			maxnSurflesPerPlanarSurface = nMergedSurfels;
+	}
+	planarSurfaces.n = pPlanarSurface - planarSurfaces.Element;
+	delete[] surfels.Element;
+	delete[] bMerged;
+	sortedPlanarSurfaces.n = pPlanarSurfacelIdx - sortedPlanarSurfaces.Element;
+	BubbleSort<SortIndex<int>>(sortedPlanarSurfaces, true);
+
+	// Reference frames:
+	//
+	//     S  - scene RF: standard camera RF
+	//     B  - hypotheis bbox RF: origin: hypothesis bbox center; axis orientation: aligned with bbox axes
+	//     B0 - origin = origin of S; axis orientation = axis orientation of B
+	//     M  - model RF
+
+	// Generate hypotheses. 
+
+	hyps.clear();
+	int bboxAxesIdxM[3] = { 1, 2, 0 };
+	float bboxAxesSignM[3] = { 1, 1, 1 };
+	float RBM[9];
+	RVLNULLMX3X3(RBM);
+	float* axisMB = RBM;
+	for (int i = 0; i < 3; i++, axisMB += 3)
+		axisMB[bboxAxesIdxM[i]] = bboxAxesSignM[i];
+	float RMB[9];
+	RVLCOPYMX3X3T(RBM, RMB);
+	RECOG::DDD::PlanarSurface* pPlanarSurface_;
+	RECOG::DDD::Model *pModel = models.Element;
+	float csHypRefSurfaceAngle;
+	float RSB[9], RBS[9];
+	float* XBS = RSB;
+	float* YBS = RSB + 3;
+	float* ZBS = RSB + 6;
+	RECOG::DDD::Hypothesis hyp;
+	float bboxSizeB[3];
+	Box<float> bbox;
+	Array<int> cluster;
+	cluster.Element = new int[2 * maxnSurflesPerPlanarSurface];
+	int iTmp;
+	float area, minArea;
+	Box<float> bestBBox;
+	float bestRSB[9];
+	for (int i = 0; i < sortedPlanarSurfaces.n; i++)
+	{
+		pPlanarSurface = planarSurfaces.Element + sortedPlanarSurfaces.Element[i].idx;
+		if (U)
+			if (RVLDOTPRODUCT3(pPlanarSurface->N, U) < csMinHypRefSurfaceAngle)
+				continue;
+		pSurfelList = &(pPlanarSurface->surfels);
+		cluster.n = 0;
+		pSurfelIdx_ = pSurfelList->pFirst;
+		while (pSurfelIdx_)
+		{
+			cluster.Element[cluster.n++] = pSurfelIdx_->Idx;
+			pSurfelIdx_ = pSurfelIdx_->pNext;
+		}
+		RVLCOPY3VECTOR(pPlanarSurface->N, XBS);
+		if (bHypGenFlat)
+		{
+			minArea = -1.0f;
+			pSurfelIdx_ = pSurfelList->pFirst;
+			while (pSurfelIdx_)
+			{
+				iSurfel = pSurfelIdx_->Idx;
+				pSurfel = pSurfels->NodeArray.Element + iSurfel;
+				pAdjacentSurfelEdgePtr = pSurfel->EdgeList.pFirst;
+				while (pAdjacentSurfelEdgePtr)
+				{
+					RVLPCSEGMENT_GRAPH_GET_NEIGHBOR(iSurfel, pAdjacentSurfelEdgePtr, pAdjacentSurfelEdge, iSurfel_);
+					pSurfel_ = pSurfels->NodeArray.Element + iSurfel_;
+					if (pSurfel_->bEdge && pSurfel_->size >= minEdgeSize || !pSurfel_->bEdge && pSurfel_->size >= minSurfelSize)
+					{
+						//csHypRefSurfaceAngle = RVLDOTPRODUCT3(pPlanarSurface->N, pSurfel_->N);
+						//if (RVLABS(csHypRefSurfaceAngle) < csMinHypRefSurfaceAngle)
+						{
+							RVLCROSSPRODUCT3(pSurfel_->N, XBS, YBS);
+							RVLNORM3(YBS, fTmp);
+							RVLCROSSPRODUCT3(XBS, YBS, ZBS);
+							BoundingBox(pMesh, cluster, RSB, bbox);
+							BoxSize<float>(&bbox, bboxSizeB[0], bboxSizeB[1], bboxSizeB[2]);
+							area = bboxSizeB[1] * bboxSizeB[2];
+							if (minArea < 0.0f || area < minArea)
+							{
+								minArea = area;
+								RVLCOPYMX3X3(RSB, bestRSB);
+								bestBBox = bbox;
+							}
+						}
+					}
+					pAdjacentSurfelEdgePtr = pAdjacentSurfelEdgePtr->pNext;
+				}
+				pSurfelIdx_ = pSurfelIdx_->pNext;
+			}
+			if (minArea >= 0.0f)
+			{
+				RVLCOPYMX3X3T(bestRSB, RBS);
+				GenerateHypothesis(bestBBox, pModel, RMB, bboxAxesIdxM, bboxAxesSignM, RBS, hyp);
+				hyps.push_back(hyp);
+			}
+		}
+		else
+		{
+			for (int j = i + 1; j < sortedPlanarSurfaces.n; j++)
+			{
+				pPlanarSurface_ = planarSurfaces.Element + sortedPlanarSurfaces.Element[j].idx;
+				csHypRefSurfaceAngle = RVLDOTPRODUCT3(pPlanarSurface->N, pPlanarSurface_->N);
+				if (RVLABS(csHypRefSurfaceAngle) >= csMinHypRefSurfaceAngle)
+					continue;
+				RVLDIF3VECTORS(pPlanarSurface_->P, pPlanarSurface->P, dP);
+				if (bHypGenConvex && (RVLDOTPRODUCT3(pPlanarSurface->N, dP) >= 0.0f || RVLDOTPRODUCT3(pPlanarSurface_->N, dP) <= 0.0f))
+					continue;
+				RVLCROSSPRODUCT3(pPlanarSurface_->N, XBS, YBS);
+				RVLNORM3(YBS, fTmp);
+				RVLCROSSPRODUCT3(XBS, YBS, ZBS);
+				iTmp = cluster.n;
+				pSurfelList = &(pPlanarSurface_->surfels);
+				pSurfelIdx_ = pSurfelList->pFirst;
+				while (pSurfelIdx_)
+				{
+					cluster.Element[cluster.n++] = pSurfelIdx_->Idx;
+					pSurfelIdx_ = pSurfelIdx_->pNext;
+				}
+				BoundingBox(pMesh, cluster, RSB, bbox);
+				cluster.n = iTmp;
+				//PS = pMesh->NodeArray.Element[pSurfels->NodeArray.Element[pPlanarSurface->surfels.pFirst->Idx].PtList.pFirst->Idx].P;
+				//RVLMULMX3X3VECT(RSB, PS, PB);
+				//InitBoundingBox<float>(&bbox, PB);
+				//for (int k = 0; k < 2; k++)
+				//{
+				//	pSurfelList = &(pPlanarSurface__[k]->surfels);
+				//	pSurfelIdx_ = pSurfelList->pFirst;
+				//	while (pSurfelIdx_)
+				//	{
+				//		pSurfel = pSurfels->NodeArray.Element + pSurfelIdx_->Idx;
+				//		pPtList = &(pSurfel->PtList);
+				//		pPtIdx = pPtList->pFirst;
+				//		while (pPtIdx)
+				//		{
+				//			PS = pMesh->NodeArray.Element[pPtIdx->Idx].P;
+				//			RVLMULMX3X3VECT(RSB, PS, PB);
+				//			UpdateBoundingBox<float>(&bbox, PB);
+				//			pPtIdx = pPtIdx->pNext;
+				//		}
+				//		pSurfelIdx_ = pSurfelIdx_->pNext;
+				//	}
+				//}
+				RVLCOPYMX3X3T(RSB, RBS);
+				GenerateHypothesis(bbox, pModel, RMB, bboxAxesIdxM, bboxAxesSignM, RBS, hyp);
+				//BoxSize<float>(&bbox, bboxSizeB[0], bboxSizeB[1], bboxSizeB[2]);
+				//for (int k = 0; k < 3; k++)
+				//{
+				//	hyp.bboxSize[k] = bboxSizeB[bboxAxesIdxM[k]];
+				//	hyp.pose.s[k] = hyp.bboxSize[k] / pModel->bboxSize[k];
+				//	tMB[bboxAxesIdxM[k]] = -bboxAxesSignM[k] * hyp.pose.s[k] * pModel->bboxCenter[k];
+				//}
+				//RVLCOPYMX3X3T(RSB, RBS);
+				//BoxCenter<float>(&bbox, bboxCenterB0);
+				//RVLMULMX3X3VECT(RBS, bboxCenterB0, tBS);
+				//RVLCOMPTRANSF3D(RBS, tBS, RMB, tMB, hyp.pose.R, hyp.pose.t);
+				//RVLINVTRANSL(RMB, tMB, hyp.bboxCenter);
+				hyps.push_back(hyp);
+			}
+		}
+	}
+
+	delete[] planarSurfaces.Element;
+	delete[] planarSurfaceSurfelMem;
+	delete[] sortedPlanarSurfaces.Element;
+	delete[] cluster.Element;
+}
+
+void DDDetector::GenerateAOHypotheses(std::vector<std::vector<RECOG::DDD::Hypothesis>>* pSeqHyps)
+{
+
+}
+
+float DDDetector::EvaluateHypothesis(
+	Mesh* pMesh,
+	RECOG::DDD::Model* pModel,
+	int m,
+	float* q,
+	float* RMS,
+	float maxe,
+	int& nTransparentPts,
+	int* SMCorrespondence,
+	RECOG::SceneFittingError* errorRecord,
+	float* tMS)
+{
+	Project(pModel, m, q, RMS, tMS);
+	return RECOG::EvaluateHypothesis3(pMesh, pSurfels, surfelMask, ZBuffer, ZBufferActivePtArray, subImageMap,
+		image3x3Neighborhood, maxe, transparencyDepthThr, nTransparentPts, SMCorrespondence, errorRecord);
+}
+
+void DDDetector::DetectCuboids(Mesh* pMesh)
+{
+	// ROI.
+
+	Box<float> ROI;
+	ROI.minx = -1.0f;
+	ROI.maxx = 1.0f;
+	ROI.miny = -1.0f;
+	ROI.maxy = 1.0f;
+	ROI.minz = 0.3f;
+	ROI.maxz = 2.3f;
+	Pose3D ROIPose;
+	RVLUNITMX3(ROIPose.R);
+	RVLNULL3VECTOR(ROIPose.t);
+
+
+	// Generate hypotheses.
+
+	std::vector<RECOG::DDD::Hypothesis> hyps;
+	bHypGenConvex = true;
+	GenerateHypotheses(pMesh, ROI, ROIPose, NULL, hyps);
+	if (hyps.size() == 0)
+	{
+		printf("No hypotheses are generated.\n");
+		return;
+	}
+
+	/// Visualization.
+
+	// Display surfels.
+
+	//uchar green[] = { 0, 255, 0 };
+	//pSurfels->NodeColors(green);
+	//pSurfels->InitDisplay(pVisualizationData->pVisualizer, pMesh, pSurfelDetector);
+	//pSurfels->Display(pVisualizationData->pVisualizer, pMesh);
+	//pSurfels->DisplayEdgeFeatures();
+	//pVisualizationData->pVisualizer->Run();
+
+	// AICP.
+
+	imgGrid.Create(pMesh->NodeArray, &camera, 8);
+	Array<OrientedPoint> pointsS;
+	pointsS.Element = new OrientedPoint[camera.w * camera.h];
+	CreateOrientedPointArrayFromPointArray(pMesh->NodeArray, pointsS);
+	PointAssociationData pointAssociationData;
+	RECOG::DDD::Model *pModel = models.Element;
+	pointAssociationData.Create(pModel->points.n, pointsS.n, true);
+	SetSceneForHypothesisVisualization(pMesh);
+	RECOG::DDD::Hypothesis hyp = hyps[0];
+	SetBBoxForHypothesisVisualization(&hyp);
+	AffinePose3D APose;
+	Array<Point> pointsMS;
+	pointsMS.Element = new Point[pModel->points.n];
+	//pVisualizationData->bVisualizeICPSteps = true;
+	//pVisualizationData->bVisualizeModelPts = true;
+	//pVisualizationData->bVisualizePtAssociation = true;
+	AICP(pModel->points, pointsS, hyp.pose, nICPIterations, APose, pointAssociationData, &pointsMS);
+	pVisualizationData->pVisualizer->renderer->RemoveAllViewProps();
+	pointAssociationData.Clear();
+	delete[] pointsS.Element;
+	delete[] pointsMS.Element;
+}
+
+void DDDetector::DetectStorageVolumes(Mesh* pMesh)
+{
+	// Parameters.
+
+	int minSurfelSize = 100;
+	int minEdgeSize = 20;
+	float r = 0.6f;	// m
+	float normalMatchThr = 45.0f;	// deg
+	int edgeWeight = 5;
+	int nRandomSamplings = 1000;
+	float minHypRefSurfaceAngle = 45.0f;
+	int nEquationSolvingIterations = 3;
+
+	// Constants.
+
+	float r2 = r * r;
+	float csNormalMatchThr = cos(45.0f * DEG2RAD);
+	float csMinHypRefSurfaceAngle = cos(minHypRefSurfaceAngle * DEG2RAD);
+	uchar red[] = { 255, 0, 0 };
+	uchar green[] = { 0, 255, 0 };
+
+	/// Hardcoded bboxes (for development prupose!).
+
+	Array<RECOG::DDD::Hypothesis> predictions;
+	predictions.n = 1;
+	predictions.Element = new RECOG::DDD::Hypothesis[predictions.n];
+	//float alpha[3];
+	//// BBox 1.
+	//RVLSET3VECTOR(predictions.Element[0].pose.t, -0.09056377, 1.86944373, -0.44310704);
+	//RVLSET3VECTOR(predictions.Element[0].bboxSize, 0.29854022, 0.13125181, 0.14948647);
+	//alpha[0] = 0.69153152;	
+	//// BBox 2.
+	//RVLSET3VECTOR(predictions.Element[1].pose.t, -0.09595419, 1.87582248, -0.73144474);
+	//RVLSET3VECTOR(predictions.Element[1].bboxSize, 0.23505258, 0.12600467, 0.14260277);
+	//alpha[1] = 0.65101822;
+	//// BBox 3.
+	//RVLSET3VECTOR(predictions.Element[2].pose.t, -0.12227286, 1.88152148, -1.02795193);
+	//RVLSET3VECTOR(predictions.Element[2].bboxSize, 0.25025915, 0.15082315, 0.15474344);
+	//alpha[2] = 0.6678965;
+	//// Compute bbox params.
+	//for (int i = 0; i < 3; i++)
+	//{
+	//	RVLROTZ(cos(alpha[i]), sin(alpha[i]), predictions.Element[i].pose.R);
+	//	RVLSCALE3VECTOR(predictions.Element[i].bboxSize, 2.0f, predictions.Element[i].bboxSize);
+	//}
+
+	///
+
+	// Detect surfels.
+
+	pMem->Clear();
+	pSurfels->Init(pMesh);
+	pSurfelDetector->Init(pMesh, pSurfels, pMem);
+	printf("Segmentation to surfels...");
+	pSurfelDetector->Segment(pMesh, pSurfels);
+	printf("completed.\n");
+	int nSurfels = pSurfels->NodeArray.n;
+	printf("No. of surfels = %d\n", nSurfels);
+	pSurfels->EdgePointNormals(pMesh);
+
+	// Display surfels.
+
+	if (pVisualizationData->bVisualizeSurfels)
+	{
+		pSurfels->NodeColors(green);
+		pSurfels->InitDisplay(pVisualizationData->pVisualizer, pMesh, pSurfelDetector);
+		pSurfels->Display(pVisualizationData->pVisualizer, pMesh);
+		pSurfels->DisplayEdgeFeatures();
+		pVisualizationData->pVisualizer->Run();
+		pVisualizationData->pVisualizer->renderer->RemoveAllViewProps();
+	}
+
+	/// Hardcoded initial hypothesis (for development prupose!).
+
+	// Top shelf.
+
+	int iRefSurfel = 168;
+	int iRefSurfel_ = 140;	
+	float bottomCenter[3];
+	RVLSET3VECTOR(bottomCenter, -0.038, -0.076, 1.863);
+	float h = 0.264;
+
+	// Middle shelf.
+
+	//int iRefSurfel = 192;
+	//int iRefSurfel_ = 237;
+	//float bottomCenter[3];
+	//RVLSET3VECTOR(bottomCenter, -0.060, 0.179, 1.940);
+	//float h = 0.264;
+
+	// Bottom shelf.
+
+	//int iRefSurfel = 170;
+	//int iRefSurfel_ = 160;
+	//float bottomCenter[3];
+	//RVLSET3VECTOR(bottomCenter, -0.085, 0.475, 2.078);
+	//float h = 0.264;
+
+	///
+
+	// Visualization initialization.
+	pVisualizationData->pVisualizer->SetMesh(pMesh);
+
+	// Hypothesis.
+
+	float fTmp;
+	float V3Tmp[3];
+	RECOG::DDD::Hypothesis* pPrediction = predictions.Element;
+	float* N = pSurfels->NodeArray.Element[iRefSurfel].N;
+	float* N_ = pSurfels->NodeArray.Element[iRefSurfel_].N;
+	float RCM[9];
+	float* XMC = RCM;
+	float* YMC = RCM + 3;
+	float* ZMC = RCM + 6;
+	RVLCOPY3VECTOR(N, XMC);
+	RVLCROSSPRODUCT3(N_, XMC, YMC);
+	RVLNORM3(YMC, fTmp);
+	RVLCROSSPRODUCT3(XMC, YMC, ZMC);
+	RVLCOPYMX3X3T(RCM, pPrediction->pose.R);
+	float hhalf = 0.5f * h;
+	RVLSCALE3VECTOR(ZMC, hhalf, V3Tmp);
+	RVLSUM3VECTORS(bottomCenter, V3Tmp, pPrediction->pose.t);
+	RVLSET3VECTOR(pPrediction->bboxSize, 0.3f, 0.74f, h);
+
+	/// 
+
+
+	// Representative surfel samples.
+
+	float* surfelRefPtMem = new float[3 * 4 * pSurfels->NodeArray.n];
+	float* surfelRefPts = surfelRefPtMem;
+	int iPt, iSurfel;
+	Surfel* pSurfel;
+	Point* pPt;
+	float V[3];
+	float* P_;
+	int nSamples;
+	int i;
+	for (iSurfel = 0; iSurfel < pSurfels->NodeArray.n; iSurfel++, surfelRefPts += 12)
+	{
+		//if (iSurfel == 104)
+		//	int debug = 0;
+		pSurfel = pSurfels->NodeArray.Element + iSurfel;
+		nSamples = 0;
+		if (pSurfel->bEdge)		
+		{
+			if (pSurfel->size < minEdgeSize)
+				continue;
+			P_ = surfelRefPts;
+			RVLCOPY3VECTOR(pSurfel->P, P_);
+			iPt = FurthestPoint(pSurfel->P, pMesh, pSurfel->PtList);
+			pPt = pMesh->NodeArray.Element + iPt;
+			P_ += 3;
+			RVLCOPY3VECTOR(pPt->P, P_);
+			iPt = FurthestPoint(pPt->P, pMesh, pSurfel->PtList);
+			pPt = pMesh->NodeArray.Element + iPt;
+			P_ += 3;
+			RVLCOPY3VECTOR(pPt->P, P_);
+			nSamples = 3;
+		}
+		else
+		{
+			if (pSurfel->size < minSurfelSize)
+				continue;
+			P_ = surfelRefPts;
+			RVLCOPY3VECTOR(pSurfel->P, P_);
+			iPt = FurthestPoint(pSurfel->P, pMesh, pSurfel->BoundaryArray.Element[0]);
+			pPt = pMesh->NodeArray.Element + iPt;
+			P_ += 3;
+			RVLCOPY3VECTOR(pPt->P, P_);
+			iPt = FurthestPoint(pPt->P, pMesh, pSurfel->BoundaryArray.Element[0]);
+			pPt = pMesh->NodeArray.Element + iPt;
+			RVLDIF3VECTORS(pPt->P, P_, V);
+			P_ += 3;
+			RVLCOPY3VECTOR(pPt->P, P_);
+			RVLNORM3(V, fTmp);
+			iPt = FurthestPoint(pPt->P, pMesh, pSurfel->BoundaryArray.Element[0], V);
+			pPt = pMesh->NodeArray.Element + iPt;
+			P_ += 3;
+			RVLCOPY3VECTOR(pPt->P, P_);
+			nSamples = 4;
+		}
+		P_ = surfelRefPts;
+		for (i = 0; i < nSamples; i++, P_ += 3)
+		{			
+			fTmp = RVLDOTPRODUCT3(pSurfel->N, P_) - pSurfel->d;
+			RVLSCALE3VECTOR(pSurfel->N, fTmp, V3Tmp);
+			RVLDIF3VECTORS(P_, V3Tmp, P_);
+		}
+	}
+
+	//// Generate and evaluate hypotheses.
+
+	RECOG::InitZBuffer(pMesh, sceneSamplingResolution, ZBuffer, ZBufferActivePtArray, subImageMap);
+	CreateImage3x3NeighborhoodLT(ZBuffer.w, image3x3Neighborhood);
+
+	struct SurfAssoc
+	{
+		int iQSurfel;
+		int iMSurf;
+		int w;
+	};
+
+	struct PointPlaneAssoc
+	{
+		float PQ[3];
+		int iMSurf;
+		float NM[3];
+	};
+
+	RECOG::DDD::Model* pModel = models.Element;
+	int nModelSurfaces = pModel->nSurfaces;
+	int nModelEdges = pModel->edges.n;
+	int* surfAssocMem = new int[nModelSurfaces * pSurfels->NodeArray.n];
+	Array<int>* surfAssoc = new Array<int>[nModelSurfaces];
+	float *NMSMem = new float[3 * (nModelSurfaces + nModelEdges)];
+	int iMSurf;
+	for (iMSurf = 0; iMSurf < nModelSurfaces; iMSurf++)
+		surfAssoc[iMSurf].Element = surfAssocMem + pSurfels->NodeArray.n * iMSurf;	
+	int* edgeAssocMem = new int[nModelEdges * pSurfels->NodeArray.n];
+	Array<int>* edgeAssoc = new Array<int>[nModelEdges];
+	RECOG::DDD::ModelEdge* pEdge;
+	float* NMSEdgeMem = NMSMem + 3 * nModelSurfaces;
+	int iMEdge;
+	for (iMEdge = 0; iMEdge < nModelEdges; iMEdge++)
+		edgeAssoc[iMEdge].Element = edgeAssocMem + pSurfels->NodeArray.n * iMEdge;
+	int iPrediction;
+	float dP[3];
+	float dist;
+	float* NM, *NMS;
+	float* RMS;
+	float *tMS;
+	float csN;
+	int minSurfelSize_;
+	SurfAssoc* axisSurfelDistributionMem = new SurfAssoc[6 * pSurfels->NodeArray.n];
+	Array<SurfAssoc>* axisSurfelDistribution = new Array<SurfAssoc>[6];
+	int iAxis;
+	for (iAxis = 0; iAxis < 6; iAxis++)
+		axisSurfelDistribution[iAxis].Element = axisSurfelDistributionMem + iAxis * pSurfels->NodeArray.n;
+	SurfAssoc selectedSurfel[6];
+	int iTmp;
+	int j;
+	int iMSurf_[2];
+	float refSurfelScore, maxRefSurfelScore;
+	float V3Tmp_[3];
+	int iSampling;
+	cv::Mat cvA(9, 9, CV_32FC1);
+	float* A = (float*)(cvA.data);
+	cv::Mat cvE(9, 1, CV_32FC1);
+	float* E = (float*)(cvE.data);
+	cv::Mat cvx(9, 1, CV_32FC1);
+	float dFixed[9];
+	float* x = (float*)(cvx.data);
+	float* phi = x + 6;
+	float *a, *ar;
+	float RSM[9], PQR[3], dR[9];
+	float* u;
+	int k;
+	float th;
+	float M3x3Tmp[9];
+	float* P;
+	float bestAlignScore;
+	Pair<int, int> secondarySrufelRefPts;
+	Array<int> surfelRefPts_;
+	int surfelRefPtsMem_[4];
+	surfelRefPts_.Element = surfelRefPtsMem_;
+	PointPlaneAssoc* pointPlaneAssocMem = new PointPlaneAssoc[9];
+	PointPlaneAssoc* pointPlaneAssoc;
+	Array<RECOG::DDD::HypothesisSV> hyps;
+	hyps.Element = new RECOG::DDD::HypothesisSV[nRandomSamplings];
+	RECOG::DDD::HypothesisSV* pHyp;
+	float s[7];
+	s[0] = storageVolumeWallThickness;
+	int nTransparentPts;
+	int* SMCorrespondence = new int[ZBuffer.w * ZBuffer.h];
+	vtkSmartPointer<vtkActor> hypothesisActor[4];
+	RVL_DELETE_ARRAY(surfelMask);
+	surfelMask = new bool[pSurfels->NodeArray.n];
+	for (iSurfel = 0; iSurfel < pSurfels->NodeArray.n; iSurfel++)
+		surfelMask[iSurfel] = true;
+	float sceneFittingScore;
+	float bestSceneFittingScore = 0.0f;
+	int iBestHypothesis;
+	for (iPrediction = 0; iPrediction < predictions.n; iPrediction++)
+	{
+		// Surface association.
+
+		pPrediction = predictions.Element + iPrediction;
+		RMS = pPrediction->pose.R;
+		tMS = pPrediction->pose.t;
+		for (iMSurf = 0; iMSurf < nModelSurfaces; iMSurf++)
+		{
+			surfAssoc[iMSurf].n = 0;
+			NM = pModel->A + 3 * pModel->AID[iMSurf];
+			NMS = NMSMem + 3 * iMSurf;
+			RVLMULMX3X3VECT(RMS, NM, NMS);
+		}
+		for (iMEdge = 0; iMEdge < nModelEdges; iMEdge++)
+		{
+			edgeAssoc[iMEdge].n = 0;
+			pEdge = pModel->edges.Element + iMEdge;
+			NMS = NMSEdgeMem + 3 * iMEdge;
+			RVLMULMX3X3VECT(RMS, pEdge->N, NMS);
+		}
+		for (iSurfel = 0; iSurfel < pSurfels->NodeArray.n; iSurfel++)
+		{
+			//if (iSurfel == 38)
+			//	int debug = 0;
+			pSurfel = pSurfels->NodeArray.Element + iSurfel;
+			minSurfelSize_ = (pSurfel->bEdge ? minEdgeSize : minSurfelSize);
+			if (pSurfel->size < minSurfelSize_)
+				continue;
+			RVLDIF3VECTORS(pSurfel->P, tMS, dP);
+			dist = RVLDOTPRODUCT3(dP, dP);
+			if (dist > r2)
+				continue;
+			if (pSurfel->bEdge)
+			{
+				for (iMEdge = 0; iMEdge < nModelEdges; iMEdge++)
+				{
+					pEdge = pModel->edges.Element + iMEdge;
+					NMS = NMSEdgeMem + 3 * iMEdge;
+					csN = RVLDOTPRODUCT3(NMS, pSurfel->N);
+					if (csN < csNormalMatchThr)
+						continue;
+					RVLDIF3VECTORS(pSurfel->P, tMS, dP);
+					NMS = NMSMem + 3 * pEdge->iFace;
+					if (pModel->d[pEdge->iFace] * RVLDOTPRODUCT3(NMS, dP) < 0.0f)
+						continue;
+					NMS = NMSMem + 3 * pEdge->iFace_;
+					if (pModel->d[pEdge->iFace_] * RVLDOTPRODUCT3(NMS, dP) < 0.0f)
+						continue;
+					//if (pEdge->iFace == 1 || pEdge->iFace_ == 1)
+					//	int debug = 0;
+					edgeAssoc[iMEdge].Element[edgeAssoc[iMEdge].n++] = iSurfel;
+				}
+			}
+			else
+			{
+				for (iMSurf = 0; iMSurf < nModelSurfaces; iMSurf++)
+				{
+					if (iMSurf == 1)
+						continue;
+					NMS = NMSMem + 3 * iMSurf;
+					csN = RVLDOTPRODUCT3(NMS, pSurfel->N);
+					if (csN < csNormalMatchThr)
+						continue;
+					RVLDIF3VECTORS(pSurfel->P, tMS, dP);
+					if (pModel->d[iMSurf] * RVLDOTPRODUCT3(NMS, dP) < 0.0f)
+						continue;
+					surfAssoc[iMSurf].Element[surfAssoc[iMSurf].n++] = iSurfel;
+				}
+			}
+		}
+
+		// Distribution of surfel samples over axes of Q-base.
+
+		for (iAxis = 0; iAxis < 6; iAxis++)
+			axisSurfelDistribution[iAxis].n = 0;
+		for (iMSurf = 0; iMSurf < nModelSurfaces; iMSurf++)
+		{
+			iAxis = pModel->info[iMSurf];
+			for (i = 0; i < surfAssoc[iMSurf].n; i++)
+			{
+				iSurfel = surfAssoc[iMSurf].Element[i];
+				axisSurfelDistribution[iAxis].Element[axisSurfelDistribution[iAxis].n].iQSurfel = iSurfel;
+				axisSurfelDistribution[iAxis].Element[axisSurfelDistribution[iAxis].n].iMSurf = iMSurf;
+				pSurfel = pSurfels->NodeArray.Element + iSurfel;
+				axisSurfelDistribution[iAxis].Element[axisSurfelDistribution[iAxis].n].w = pSurfel->size;
+				axisSurfelDistribution[iAxis].n++;
+			}
+		}
+		for (iMEdge = 0; iMEdge < nModelEdges; iMEdge++)
+		{
+			iMSurf_[0] = pModel->edges.Element[iMEdge].iFace;
+			iMSurf_[1] = pModel->edges.Element[iMEdge].iFace_;
+			for (i = 0; i < edgeAssoc[iMEdge].n; i++)
+			{
+				iSurfel = edgeAssoc[iMEdge].Element[i];
+				for (j = 0; j < 2; j++)
+				{
+					iAxis = pModel->info[iMSurf_[j]];
+					axisSurfelDistribution[iAxis].Element[axisSurfelDistribution[iAxis].n].iQSurfel = iSurfel;
+					axisSurfelDistribution[iAxis].Element[axisSurfelDistribution[iAxis].n].iMSurf = iMSurf_[j];
+					pSurfel = pSurfels->NodeArray.Element + iSurfel;
+					axisSurfelDistribution[iAxis].Element[axisSurfelDistribution[iAxis].n].w = pSurfel->size * edgeWeight;
+					axisSurfelDistribution[iAxis].n++;
+				}
+			}			
+		}
+
+		/// RANSAC.
+		
+		pHyp = hyps.Element;
+		for (iSampling = 0; iSampling < nRandomSamplings; iSampling++)
+		{
+			// Random sampling of surfels from axis distribuions.
+
+			for (iAxis = 0; iAxis < 6; iAxis++)
+			{
+				iTmp = 0;
+				for (i = 0; i < axisSurfelDistribution[iAxis].n; i++)
+					iTmp += axisSurfelDistribution[iAxis].Element[i].w;
+				j = rand() % iTmp;
+				iTmp = 0;
+				for (i = 0; i < axisSurfelDistribution[iAxis].n; i++)
+				{
+					iTmp += axisSurfelDistribution[iAxis].Element[i].w;
+					if (iTmp > j)
+						break;
+				}
+				selectedSurfel[iAxis] = axisSurfelDistribution[iAxis].Element[i];
+			}
+
+			// Only for debugging purpose!!!
+
+			//selectedSurfel[0].iMSurf = 9;
+			//selectedSurfel[0].iQSurfel = 140;
+			//selectedSurfel[1].iMSurf = 6;
+			//selectedSurfel[1].iQSurfel = 168;
+			//selectedSurfel[2].iMSurf = 1;
+			//selectedSurfel[2].iQSurfel = 74;
+			//selectedSurfel[3].iMSurf = 2;
+			//selectedSurfel[3].iQSurfel = 148;
+			//selectedSurfel[4].iMSurf = 8;
+			//selectedSurfel[4].iQSurfel = 141;
+			//selectedSurfel[5].iMSurf = 5;
+			//selectedSurfel[5].iQSurfel = 201;
+
+			// Dominant surfel.
+
+			int iDominantSurfel = -1;
+			int maxSurfelSize = 0;
+			for (iAxis = 0; iAxis < 6; iAxis++)
+			{
+				iSurfel = selectedSurfel[iAxis].iQSurfel;
+				pSurfel = pSurfels->NodeArray.Element + iSurfel;
+				if (!pSurfel->bEdge)
+				{
+					if (pSurfel->size > maxSurfelSize)
+					{
+						maxSurfelSize = pSurfel->size;
+						iDominantSurfel = iSurfel;
+					}
+				}
+			}
+			if (iDominantSurfel < 0)
+				continue;
+
+			// Secondary surfel for the pose.
+
+			pSurfel = pSurfels->NodeArray.Element + iDominantSurfel;
+			N = pSurfel->N;
+			fTmp = (float)(pSurfel->size);
+			RVLSCALE3VECTOR(N, fTmp, V3Tmp_);
+			maxRefSurfelScore = 0.0f;
+			int iSecondarySurfel = -1;
+			for (iAxis = 0; iAxis < 6; iAxis++)
+			{
+				iSurfel = selectedSurfel[iAxis].iQSurfel;
+				if (iSurfel == iDominantSurfel)
+					continue;
+				pSurfel = pSurfels->NodeArray.Element + iSurfel;
+				if (pSurfel->bEdge)
+					continue;
+				if (RVLDOTPRODUCT3(N, pSurfel->N) >= csMinHypRefSurfaceAngle)
+					continue;
+				RVLCROSSPRODUCT3(V3Tmp_, pSurfel->N, V3Tmp);
+				refSurfelScore = sqrt(RVLDOTPRODUCT3(V3Tmp, V3Tmp)) * (float)(pSurfel->size);
+				if (refSurfelScore > maxRefSurfelScore)
+				{
+					maxRefSurfelScore = refSurfelScore;
+					iSecondarySurfel = iSurfel;
+				}
+			}
+			if (iSecondarySurfel < 0)
+				continue;
+			pSurfel = pSurfels->NodeArray.Element + iSecondarySurfel;
+			RVLCROSSPRODUCT3(N, pSurfel->N, V);
+			surfelRefPts = surfelRefPtMem + 12 * iSecondarySurfel + 3;
+			bestAlignScore = 0.0f;
+			for (i = 0; i < 3; i++)
+			{
+				P = surfelRefPts + 3 * i;
+				j = (i + 1) % 3;
+				P_ = surfelRefPts + 3 * j;
+				RVLDIF3VECTORS(P_, P, dP);
+				fTmp = RVLDOTPRODUCT3(V, dP);
+				if (fTmp < 0.0f) fTmp = -fTmp;
+				if (fTmp > bestAlignScore)
+				{
+					bestAlignScore = fTmp;
+					secondarySrufelRefPts.a = i;
+					secondarySrufelRefPts.b = j;
+				}
+			}
+
+			// QPoint-MPlane association.
+			
+			pointPlaneAssoc = pointPlaneAssocMem;
+			for (iAxis = 0; iAxis < 6; iAxis++)
+			{
+				iSurfel = selectedSurfel[iAxis].iQSurfel;
+				if (iSurfel == iDominantSurfel)
+				{
+					surfelRefPts_.n = 3;
+					RVLSET3VECTOR(surfelRefPts_.Element, 1, 2, 3);
+				}
+				else if (iSurfel == iSecondarySurfel)
+				{
+					surfelRefPts_.n = 2;
+					surfelRefPts_.Element[0] = secondarySrufelRefPts.a + 1;
+					surfelRefPts_.Element[1] = secondarySrufelRefPts.b + 1;
+				}
+				else
+				{
+					surfelRefPts_.n = 1;
+					surfelRefPts_.Element[0] = 0;
+				}
+				surfelRefPts = surfelRefPtMem + 4 * 3 * iSurfel;
+				iMSurf = selectedSurfel[iAxis].iMSurf;
+				pSurfel = pSurfels->NodeArray.Element + iSurfel;
+				for (i = 0; i < surfelRefPts_.n; i++)
+				{
+					pointPlaneAssoc->iMSurf = iMSurf;
+					P_ = surfelRefPts + 3 * surfelRefPts_.Element[i];
+					RVLCOPY3VECTOR(P_, pointPlaneAssoc->PQ);
+					N = pModel->A + 3 * pModel->AID[iMSurf];
+					RVLCOPY3VECTOR(N, pointPlaneAssoc->NM);
+					pointPlaneAssoc++;
+				}
+			}
+
+			// Generate hypothesis.
+
+			a = A;
+			pointPlaneAssoc = pointPlaneAssocMem;
+			for (i = 0; i < 9; i++, pointPlaneAssoc++, a += 9)
+			{
+				u = pModel->M + 7 * pointPlaneAssoc->iMSurf;
+				dFixed[i] = u[0] * storageVolumeWallThickness;
+				memcpy(a, u + 1, 6 * sizeof(float));				
+			}
+			RVLCOPYMX3X3T(pPrediction->pose.R, RSM);
+			for (k = 0; k < nEquationSolvingIterations; k++)
+			{
+				ar = A + 6;
+				pointPlaneAssoc = pointPlaneAssocMem;
+				for (i = 0; i < 9; i++, ar += 9, pointPlaneAssoc++)
+				{
+					RVLMULMX3X3VECT(RSM, pointPlaneAssoc->PQ, PQR);
+					RVLCROSSPRODUCT3(pointPlaneAssoc->NM, PQR, ar);
+					E[i] = RVLDOTPRODUCT3(pointPlaneAssoc->NM, PQR) - dFixed[i];
+				}
+				cv::solve(cvA, cvE, cvx);
+				th = sqrt(RVLDOTPRODUCT3(phi, phi));
+				RVLSCALE3VECTOR2(phi, th, V);
+				AngleAxisToRot<float>(V, th, dR);
+				RVLMXMUL3X3(dR, RSM, M3x3Tmp);	
+				RVLCOPYMX3X3(M3x3Tmp, RSM);
+			}
+			// Only for debugging purpose!!!
+			//pointPlaneAssoc = pointPlaneAssocMem;
+			//for (i = 0; i < 9; i++, pointPlaneAssoc++)
+			//{
+
+			//	RVLMULMX3X3VECT(RSM, pointPlaneAssoc->PQ, PQR);
+			//}
+			//
+			memcpy(pHyp->s, x, 6 * sizeof(float));
+			RVLCOPYMX3X3T(RSM, pHyp->RMS);
+
+			// Evaluate hypothesis.
+
+			memcpy(s + 1, pHyp->s, 6 * sizeof(float));
+			sceneFittingScore = EvaluateHypothesis(pMesh, pModel, 7, s, pHyp->RMS, chamferDistThr, nTransparentPts, SMCorrespondence);
+			sceneFittingScore -= (float)nTransparentPts;
+			if (sceneFittingScore > bestSceneFittingScore)
+			{
+				iBestHypothesis = pHyp - hyps.Element;
+				bestSceneFittingScore = sceneFittingScore;
+				printf("sampling %d, hypothesis %d, score %f\n", iSampling, pHyp - hyps.Element, sceneFittingScore);
+				pHyp++;
+				//RECOG::DisplayHypothesisEvaluation(pVisualizationData->pVisualizer, pMesh, 
+				//	ZBuffer, ZBufferActivePtArray, subImageMap, SMCorrespondence, nTransparentPts, hypothesisActor);
+				RECOG::DisplayHypothesisEvaluation2(pVisualizationData->pVisualizer, pMesh, 
+					ZBuffer, ZBufferActivePtArray, subImageMap, SMCorrespondence, nTransparentPts, hypothesisActor);
+				pVisualizationData->pVisualizer->Run();
+				for (i = 0; i < 4; i++)
+					pVisualizationData->pVisualizer->renderer->RemoveViewProp(hypothesisActor[i]);
+			}
+
+			//
+
+			//break;	// Only for debugging purpose!!!
+		}
+		hyps.n = pHyp - hyps.Element;
+		///
+	}
+
+	////
+
+	/// Visualization.
+
+	Pose3D poseMC;
+	for (i = 0; i < predictions.n; i++)
+	{
+		RVLCOPYMX3X3(predictions.Element[i].pose.R, poseMC.R);
+		RVLCOPY3VECTOR(predictions.Element[i].pose.t, poseMC.t);
+		pVisualizationData->pVisualizer->DisplayBox(predictions.Element[i].bboxSize[0], predictions.Element[i].bboxSize[1],
+			predictions.Element[i].bboxSize[2], &poseMC, 255, 0, 0, true);
+	}
+	Array<Point> refPts;
+	refPts.Element = new Point[9];
+	//refPts.n = 4;
+	//for (i = 0; i < 4; i++)
+	//{
+	//	P_ = surfelRefPtMem + 3 * (4 * 104 + i);
+	//	RVLCOPY3VECTOR(P_, refPts.Element[i].P);
+	//}
+	refPts.n = 9;
+	pointPlaneAssoc = pointPlaneAssocMem;
+	for (i = 0; i < 9; i++, pointPlaneAssoc++)
+	{
+		RVLCOPY3VECTOR(pointPlaneAssoc->PQ, refPts.Element[i].P);
+	}
+	pVisualizationData->pVisualizer->DisplayPointSet<float, Point>(refPts, red, 10);
+	Array<Point> samplePts;
+	VisualizeStorageVolumeModel(pModel, hyps.Element[iBestHypothesis], samplePts);
+	pVisualizationData->pVisualizer->DisplayPointSet<float, Point>(samplePts, green, 6);
+	pVisualizationData->pVisualizer->Run();
+	delete[] refPts.Element;
+	delete[] samplePts.Element;
+
+	///
+
+	// Free memory.
+
+	delete[] predictions.Element;
+	delete[] surfelRefPtMem;
+	delete[] surfAssocMem;
+	delete[] surfAssoc;
+	delete[] edgeAssoc;
+	delete[] NMSMem;
+	delete[] axisSurfelDistributionMem;
+	delete[] axisSurfelDistribution;
+	delete[] pointPlaneAssocMem;
+	delete[] hyps.Element;
+	delete[] SMCorrespondence;
+}
+
+void DDDetector::SampleImage(Mesh* pMesh)
+{	
+	Grid SSubsamplingGrid;
+	SSubsamplingGrid.Create(pMesh->NodeArray, &camera, 4);
+	Array<int> SPointSubset;
+	SSubsamplingGrid.SubSample(pMesh->NodeArray, normalSimilarity, SPointSubset);
+	RVL_DELETE_ARRAY(sampleMask);
+	sampleMask = new bool[pMesh->NodeArray.n];
+	memset(sampleMask, 0, pMesh->NodeArray.n * sizeof(bool));
+	for (int i = 0; i < SPointSubset.n; i++)
+		sampleMask[SPointSubset.Element[i]] = true;
+	delete[] SPointSubset.Element;
+}
+
+void DDDetector::PointAssociation(
+	Array<OrientedPoint> pointsM,
+	AffinePose3D* pPose,
+	Array<OrientedPoint> pointsQ,
+	PointAssociationData& pointAssociationData,
+	Array<int> ptBuff,
+	bool bVisualize,
+	Array<Point>* pPointsMQ)
+{
+	// Constants.
+
+	float csNThr = cos(normalSimilarity * DEG2RAD);
+	float csNVThr = sqrt(1.0f - csNThr * csNThr);
+	float beta2 = beta * beta;
+
+	//
+
+	int* MNN = pointAssociationData.MNN;
+	int* QNN = pointAssociationData.QNN;
+	float* MNNDist = pointAssociationData.MNNDist;
+	float* QNNDist = pointAssociationData.QNNDist;
+	float* PMQ = pointAssociationData.PMQ;
+	if (bVisualize)
+		pPointsMQ->n = 0;
+	pointAssociationData.MPts.n = 0;
+	int i, j, iMPt, iQPt;	
+	float * PMQ_, *NMQ_;
+	float dP[3], V3Tmp[3];
+	OrientedPoint* pMPt, * pQPt;
+	Point * pPt;
+	for (iMPt = 0; iMPt < pointsM.n; iMPt++)
+	{
+		pointAssociationData.MPts.Element[pointAssociationData.MPts.n++] = iMPt;
+		pMPt = pointsM.Element + iMPt;
+		PMQ_ = PMQ + 6 * iMPt;
+		NMQ_ = PMQ_ + 3;
+		RVLATRANSF3(pMPt->P, pPose->s, pPose->R, pPose->t, PMQ_, V3Tmp);
+		RVLMULMX3X3VECT(pPose->R, pMPt->N, NMQ_);
+		if (bVisualize)
+		{
+			pPt = pPointsMQ->Element + pPointsMQ->n;
+			RVLCOPY3VECTOR(PMQ_, pPt->P);
+			pPointsMQ->n++;
+		}
+	}
+
+	// Point association.
+
+	memset(MNN, 0xff, pointsQ.n * sizeof(int));
+	memset(QNN, 0xff, pointsM.n * sizeof(int));
+	pointAssociationData.explainedQPts.n = 0;
+	pointAssociationData.associatedMPts.n = 0;
+	float maxMQPtDist = 10000.0f;
+	float eP, csN;
+	for (i = 0; i < pointAssociationData.MPts.n; i++)
+	{
+		iMPt = pointAssociationData.MPts.Element[i];
+		pMPt = pointsM.Element + iMPt;
+		PMQ_ = PMQ + 6 * iMPt;
+		NMQ_ = PMQ_ + 3;
+		if (RVLDOTPRODUCT3(NMQ_, PMQ_) >= 0.0f)
+			continue;
+		imgGrid.GetNeighbors(PMQ_, ptBuff);
+		QNNDist[iMPt] = maxMQPtDist;
+		for (j = 0; j < ptBuff.n; j++)
+		{
+			iQPt = ptBuff.Element[j];
+			pQPt = pointsQ.Element + iQPt;
+			RVLDIF3VECTORS(pQPt->P, PMQ_, dP);
+			eP = RVLDOTPRODUCT3(dP, dP);
+			if (eP > beta2)
+				continue;
+			csN = RVLDOTPRODUCT3(pQPt->N, NMQ_);
+				if (csN < csNThr)
+					continue;
+			if (QNN[iMPt] < 0)
+			{
+				QNN[iMPt] = iQPt;
+				QNNDist[iMPt] = eP;
+				pointAssociationData.associatedMPts.Element[pointAssociationData.associatedMPts.n++] = iMPt;
+			}
+			else if (eP < QNNDist[iMPt])
+			{
+				QNN[iMPt] = iQPt;
+				QNNDist[iMPt] = eP;
+			}
+			if (sampleMask[iQPt])
+			{
+				if (MNN[iQPt] < 0)
+				{
+					MNN[iQPt] = iMPt;
+					MNNDist[iQPt] = eP;
+					pointAssociationData.explainedQPts.Element[pointAssociationData.explainedQPts.n++] = iQPt;
+				}
+				else if (eP < MNNDist[iQPt])
+				{
+					MNN[iQPt] = iMPt;
+					MNNDist[iQPt] = eP;
+				}
+			}
+		}
+	}
+}
+
+void DDDetector::PointToPlaneAssociation(
+	RECOG::DDD::Model* pModel,
+	float* q,
+	Pose3D* pPose,
+	Array<OrientedPoint> pointsQ,
+	bool* bRejected,
+	PointAssociationData& pointAssociationData)
+{
+	// Constants.
+
+	float csNThr = cos(normalSimilarity * DEG2RAD);
+
+	//
+
+	int* MNN = pointAssociationData.MNN;
+
+	// Plane offsets.
+
+	float* d = new float[pModel->nSurfaces];
+	int i_, j_;
+	float* mxRow;
+	RVLMULMXVECT(pModel->M, q, pModel->nSurfaces, 7, d, i_, j_, mxRow);
+
+	// Point-to-plane association.
+
+	pointAssociationData.explainedQPts.n = 0;
+	pointAssociationData.associatedMPts.n = 0;
+	int iQPt;
+	OrientedPoint* pQPt;
+	float PQM[3];
+	float NQM[3];
+	int iSurf;
+	float* NM;
+	float csN;
+	float V3Tmp[3];
+	float e;
+	for (iQPt = 0; iQPt < pointsQ.n; iQPt++)
+	{
+		if (bRejected[iQPt])
+			continue;
+		//if (iQPt == 351)
+		//	int debug = 0;
+		pQPt = pointsQ.Element + iQPt;
+		RVLINVTRANSF3(pQPt->P, pPose->R, pPose->t, PQM, V3Tmp);
+		RVLMULMX3X3TVECT(pPose->R, pQPt->N, NQM);
+		for (iSurf = 0; iSurf < pModel->nSurfaces; iSurf++)
+		{
+			NM = pModel->A + 3 * pModel->AID[iSurf];
+			csN = RVLDOTPRODUCT3(NM, NQM);
+			if (csN > csNThr)
+				break;
+		}
+		if (iSurf >= pModel->nSurfaces)
+		{
+			MNN[iQPt] = -1;
+			continue;
+		}
+		e = RVLDOTPRODUCT3(NM, PQM) - d[iSurf];
+		if (RVLABS(e) > beta)
+		{
+			MNN[iQPt] = -1;
+			continue;
+		}
+		MNN[iQPt] = iSurf;
+		pointAssociationData.explainedQPts.Element[pointAssociationData.explainedQPts.n++] = iQPt;
+	}
+
+	delete[] d;
+}
+
+void DDDetector::VisualizePointToPlaneAssociations(
+	RECOG::DDD::Model* pModel,
+	float* q,
+	Pose3D* pPose,
+	Array<OrientedPoint> pointsQ,
+	PointAssociationData& pointAssociationData,
+	Array<Point>* pPointsMQ)
+{
+	float* d = new float[pModel->nSurfaces];
+	int i_, j_;
+	float* mxRow;
+	RVLMULMXVECT(pModel->M, q, pModel->nSurfaces, 7, d, i_, j_, mxRow);
+
+	int* MNN = pointAssociationData.MNN;
+
+	int iQPt;
+	OrientedPoint* pQPt;
+	float PQM[3];
+	int iSurf;
+	float* NM;
+	float V3Tmp[3];
+	float e;
+	Point* pPt;
+	float NMQ[3];
+	pPointsMQ->n = 0;
+	for (int i = 0; i < pointAssociationData.explainedQPts.n; i++)
+	{
+		iQPt = pointAssociationData.explainedQPts.Element[i];
+		pQPt = pointsQ.Element + iQPt;
+		RVLINVTRANSF3(pQPt->P, pPose->R, pPose->t, PQM, V3Tmp);
+		iSurf = MNN[iQPt];
+		NM = pModel->A + 3 * pModel->AID[iSurf];
+		e = RVLDOTPRODUCT3(NM, PQM) - d[iSurf];
+		pPt = pPointsMQ->Element + pPointsMQ->n;
+		RVLMULMX3X3VECT(pPose->R, NM, NMQ);
+		RVLSCALE3VECTOR(NMQ, e, V3Tmp);
+		RVLDIF3VECTORS(pQPt->P, V3Tmp, pPt->P);
+		//float dP[3];
+		//RVLDIF3VECTORS(pPt->P, pPose->t, dP);
+		//float fTmp = RVLDOTPRODUCT3(NMQ, dP);
+		pPointsMQ->n++;
+	}
+
+	delete[] d;
+}
+
+
+//#define RVLDDDAICP_DEBUG
+
+void DDDetector::AICP(
+	Array<OrientedPoint> pointsM,
+	Array<OrientedPoint> pointsQ,
+	AffinePose3D APoseInit,
+	int nIterations,
+	AffinePose3D &APose,
+	PointAssociationData &pointAssociationData,
+	Array<Point>* pPointsMQ)
+{
+	// Constants.
+
+	double beta2 = beta * beta;
+	double ks = alphas * beta2;
+	double kR = alphaR * beta2;
+	double kt = alphat * beta2;
+
+	// Compute N * N for all model points and scale the model with the initial scale.
+
+	Array<OrientedPoint> sPointsM;
+	sPointsM.Element = new OrientedPoint[pointsM.n];
+	sPointsM.n = pointsM.n;
+	int iMPt;
+	float* WMem = new float[9 * pointsM.n];
+	float* W = WMem;	
+	OrientedPoint* pMPt = pointsM.Element;
+	OrientedPoint* psMPt = sPointsM.Element;
+	for (iMPt = 0; iMPt < pointsM.n; iMPt++, W += 9, pMPt++, psMPt++)
+	{
+		RVLVECTCOV3(pMPt->N, W);
+		RVLCOMPLETESIMMX3(W);
+		//W[0] += 0.1f; W[4] += 0.1f; W[8] += 0.1f;
+		RVLSCALE3VECTOR3(pMPt->P, APoseInit.s, psMPt->P);
+	}
+
+	// Visualization.
+
+	Visualizer* pVisualizer;
+	if (bVisualize)
+		pVisualizer = pVisualizationData->pVisualizer;		
+
+	/// ICP loop.
+
+	APose = APoseInit;
+	float  RQM[9], tQM0[3];
+	RVLINVTRANSF3D(APoseInit.R, APoseInit.t, RQM, tQM0);
+	float tQM[3];
+	RVLCOPY3VECTOR(tQM0, tQM);
+	int* MNN = pointAssociationData.MNN;
+	int* QNN = pointAssociationData.QNN;
+	float* PMQ = pointAssociationData.PMQ;
+	cv::Mat cvQ;
+	cvQ.create(9, 9, CV_64FC1);
+	double* Q = (double*)(cvQ.data);
+	cv::Mat cvr;
+	cvr.create(9, 1, CV_64FC1);
+	double* r = (double*)(cvr.data);
+	double* rs = r;
+	double* rR = r + 3;
+	double* rt = r + 6;
+	cv::Mat cvx;
+	cvx.create(9, 1, CV_64FC1);
+	double* x = (double*)(cvx.data);
+	memset(x, 0, 9 * sizeof(double));
+	double* s = x;
+	double* q_ = x + 3;
+	double* t = x + 6;
+	Array<int> ptBuff;
+	ptBuff.Element = new int[pointsQ.n];
+	Array<OrientedPoint> points[2];
+	points[0] = pointsM;
+	points[1] = pointsQ;
+	Array<int> ptIdx[2];
+	int* NN[2];
+	NN[0] = QNN;
+	NN[1] = MNN;
+	float nrm[2];
+	nrm[0] = 1.0f / (float)(pointsM.n);
+	nrm[1] = 1.0f / (float)(pointsQ.n);
+	int i, iPt, iPt_, iSet, it, iQPt;
+	float PQM[3], PQM_[3], eP[3];
+	float* W1, * W2, * W3;
+	cv::Mat cva;
+	cva.create(9, 3, CV_64FC1);
+	double* a = (double*)(cva.data);
+	double* as = a;
+	RVLNULLMX3X3(as);
+	double* aR = a + 9;
+	double* at = a + 2 * 9;
+	RVLUNITMX3(at);
+	cv::Mat cvaW;
+	cvaW.create(9, 3, CV_64FC1);
+	double* aW = (double*)(cvaW.data);
+	double* asW = aW;
+	double*asW1 = asW;
+	double* asW2 = asW1 + 3;
+	double* asW3 = asW2 + 3;
+	double* aRW = aW + 9;
+	double* atW = aW + 2 * 9;
+	cv::Mat cvaWa;
+	cvaWa.create(9, 9, CV_64FC1);
+	float aWe[9];
+	float* asWe = aWe;
+	float* aRWe = aWe + 3;
+	float* atWe = aWe + 6;
+	OrientedPoint * pQPt, * pPt, * pPt_;
+	int nIn[2];
+	double wp, ws, wR, wt;
+	double q[3], b[3];
+	RVLNULL3VECTOR(q);
+	float th;
+	float u[3], dR[9], newR[9];	
+#ifdef RVLDDDAICP_DEBUG
+	float E, E0, E_, E__, eWe;
+	float eW[3];
+	//AffinePose3D APosePrev;
+	float RQMPrev[9];
+#endif
+
+	for (it = 0; it <= nIterations; it++)
+	{
+		// Point association.
+
+		PointAssociation(pointsM, &APose, pointsQ, pointAssociationData, ptBuff, bVisualize, pPointsMQ);
+
+		// Visualization.
+
+		if (bVisualize && (pVisualizationData->bVisualizeICPSteps || it == nIterations) && 
+			(pVisualizationData->bVisualizeModelPts || pVisualizationData->bVisualizePtAssociation))
+		{
+			VisualizeHypothesis(APose, &pointAssociationData, *pPointsMQ);
+			pVisualizer->Run();
+			RemoveHypothesisFromVisualization();
+		}
+
+		// If the specified number of iterations is executed, then go out of the loop.
+
+		if (it == nIterations)
+			break;
+
+		// Optimal pose.
+
+		ptIdx[0] = pointAssociationData.associatedMPts;
+		ptIdx[1] = pointAssociationData.explainedQPts;
+		memset(Q, 0, 9 * 9 * sizeof(double));
+		memset(r, 0, 9 * sizeof(double));
+
+#ifdef RVLDDDAICP_DEBUG
+		E = 0.0f;
+#endif
+
+		for (iSet = 0; iSet < 2; iSet++)
+		{
+			nIn[iSet] = 0;
+			for (i = 0; i < ptIdx[iSet].n; i++)
+			{
+				iPt = ptIdx[iSet].Element[i];
+				iPt_ = NN[iSet][iPt];
+				if (iPt_ < 0)
+					continue;
+				nIn[iSet]++;
+				pPt = points[iSet].Element + iPt;
+				pPt_ = points[1 - iSet].Element + iPt_;
+				if (iSet == 0)
+				{
+					iMPt = iPt;
+					iQPt = iPt_;
+				}
+				else
+				{
+					iMPt = iPt_;
+					iQPt = iPt;
+				}
+				psMPt = sPointsM.Element + iMPt;
+				pQPt = pointsQ.Element + iQPt;
+				W = WMem + 9 * iMPt;
+				W1 = W; W2 = W1 + 3; W3 = W2 + 3;				
+				RVLMULMX3X3VECT(RQM, pQPt->P, PQM_);
+				RVLSUM3VECTORS(PQM_, tQM0, PQM);
+				RVLDIF3VECTORS(psMPt->P, PQM, eP);
+				as[0] = -psMPt->P[0]; as[4] = -psMPt->P[1]; as[8] = -psMPt->P[2];
+				RVLSKEW(PQM_, aR);
+				RVLSCALE3VECTOR(W1, -psMPt->P[0], asW1);
+				RVLSCALE3VECTOR(W2, -psMPt->P[1], asW2);
+				RVLSCALE3VECTOR(W3, -psMPt->P[2], asW3);				
+				RVLMXMUL3X3(aR, W, aRW);
+				RVLCOPYMX3X3(W, atW);
+				cvaWa = cvaW * cva.t();
+				cvQ = cvQ + cvaWa;
+				RVLMULMX3X3VECT(asW, eP, asWe);
+				RVLMULMX3X3VECT(aRW, eP, aRWe);
+				RVLMULMX3X3VECT(atW, eP, atWe);
+				RVLSUM3VECTORS(rs, asWe, rs);
+				RVLSUM3VECTORS(rR, aRWe, rR);
+				RVLSUM3VECTORS(rt, atWe, rt);
+#ifdef RVLDDDAICP_DEBUG
+				RVLMULMX3X3TVECT(W, eP, eW);
+				eWe = RVLDOTPRODUCT3(eP, eW);
+				E += eWe;
+#endif
+			}	
+		}
+
+		wp = 1.0 / (double)(nIn[0] + nIn[1]);
+		ws = ks * wp;
+		wR = kR * wp;
+		wt = kt * wp;
+#ifdef RVLDDDAICP_DEBUG
+		float es = ws * RVLDOTPRODUCT3(s, s);
+		float q__[3];
+		RVLSUM3VECTORS(q, q_, q__);
+		float eR = wR * RVLDOTPRODUCT3(q__, q__);
+		float et = wt * RVLDOTPRODUCT3(t, t);
+		printf("Ep=%f ", E);
+		E += (es + eR + et);
+		printf("es=%f eR=%f et=%f : ", es, eR, et);
+		printf("E=%f\n", E);
+		RVLCOPYMX3X3(RQM, RQMPrev);
+#endif
+		Q[0] += ws; Q[10] += ws; Q[20] += ws;
+		Q[30] += wR; Q[40] += wR; Q[50] += wR;
+		Q[60] += wt; Q[70] += wt; Q[80] += wt;
+		RVLSCALE3VECTOR(q, wR, b);
+		RVLDIF3VECTORS(rR, b, rR);
+		cv::solve(cvQ, cvr, cvx);
+		th = sqrt(RVLDOTPRODUCT3(q_, q_));
+		RVLSCALE3VECTOR2(q_, th, u);
+		AngleAxisToRot<float>(u, th, dR);
+		RVLMXMUL3X3(dR, RQM, newR);
+		RVLCOPYMX3X3(newR, RQM);
+		GetAngleAxis(RQM, u, th);
+		RVLSCALE3VECTOR(u, th, q);
+		RVLSUM3VECTORS(tQM0, t, tQM);
+		RVLINVTRANSF3D(RQM, tQM, APose.R, APose.t);
+		APose.s[0] = (1.0 + s[0]) * APoseInit.s[0];
+		APose.s[1] = (1.0 + s[1]) * APoseInit.s[1];
+		APose.s[2] = (1.0 + s[2]) * APoseInit.s[2];
+#ifdef RVLDDDAICP_DEBUG
+		E = 0.0f;
+		E0 = 0.0f;
+		E_ = 0.0f;
+		E__ = 0.0f;
+		for (iSet = 0; iSet < 2; iSet++)
+		{
+			for (i = 0; i < ptIdx[iSet].n; i++)
+			{
+				iPt = ptIdx[iSet].Element[i];
+				iPt_ = NN[iSet][iPt];
+				if (iPt_ < 0)
+					continue;
+				pPt = points[iSet].Element + iPt;
+				pPt_ = points[1 - iSet].Element + iPt_;
+				if (iSet == 0)
+				{
+					iMPt = iPt;
+					iQPt = iPt_;
+				}
+				else
+				{
+					iMPt = iPt_;
+					iQPt = iPt;
+				}
+				pMPt = pointsM.Element + iMPt;
+				pQPt = pointsQ.Element + iQPt;
+				W = WMem + 9 * iMPt;
+				float sMP[3];
+				RVLSCALE3VECTOR3(pMPt->P, APose.s, sMP);
+				RVLTRANSF3(pQPt->P, RQM, tQM, PQM);
+				RVLDIF3VECTORS(sMP, PQM, eP);
+				//RVLATRANSF3(pMPt->P, APose.s, APose.R, APose.t, PMQ__, V3Tmp);
+				//RVLDIF3VECTORS(pQPt->P, PMQ__, eP);
+				RVLMULMX3X3TVECT(W, eP, eW);
+				eWe = RVLDOTPRODUCT3(eP, eW);
+				E += eWe;
+				float PQM__[3];
+				RVLCOPY3VECTOR(PQM, PQM__);
+				//RVLMULMX3X3VECT(RQM, pQPt->P, PQM_);
+				//RVLSUM3VECTORS(PQM_, tQM, PQM);
+				//RVLDIF3VECTORS(psMPt->P, PQM, eP);
+				psMPt = sPointsM.Element + iMPt;
+				//RVLINVTRANSF3(psMPt->P, RQMPrev, tQM0, PMQ__, V3Tmp);
+				//RVLDIF3VECTORS(pQPt->P, PMQ__, eP);
+				RVLTRANSF3(pQPt->P, RQMPrev, tQM0, PQM);
+				float eP0[3];
+				RVLDIF3VECTORS(psMPt->P, PQM, eP0);
+				RVLMULMX3X3TVECT(W, eP0, eW);
+				eWe = RVLDOTPRODUCT3(eP0, eW);
+				E0 += eWe;
+				float deP[3], eP_[3], ass[3], aRq[3];
+				RVLSCALE3VECTOR3(psMPt->P, s, ass);
+				RVLMULMX3X3VECT(RQMPrev, pQPt->P, PQM_);
+				RVLCROSSPRODUCT3(PQM_, q_, aRq);
+				RVLSUM3VECTORS(ass, aRq, deP);
+				RVLDIF3VECTORS(deP, t, deP);
+				RVLSUM3VECTORS(eP0, deP, eP_);
+				cv::Mat cvdeP;
+				cvdeP.create(3, 1, CV_64FC1);
+				double *deP_ = (double *)(cvdeP.data);
+				float ass_[3], aRq_[3];
+				as[0] = -psMPt->P[0]; as[4] = -psMPt->P[1]; as[8] = -psMPt->P[2];
+				//RVLNEGVECT3(PQM_, PQM_);
+				RVLSKEW(PQM_, aR);
+				cvdeP = cva.t() * cvx;
+				RVLMULMX3X3VECT(as, s, ass_);
+				RVLMULMX3X3VECT(aR, q_, aRq_);
+				float eP__[3];
+				RVLDIF3VECTORS(eP0, deP_, eP__);
+				RVLMULMX3X3TVECT(W, eP__, eW);
+				eWe = RVLDOTPRODUCT3(eP__, eW);
+				E__ += eWe;
+				//float sMP_[3];
+				//RVLSUM3VECTORS(psMPt->P, V3Tmp, sMP_);
+				//RVLMULMX3X3VECT(RQMPrev, pQPt->P, PQM_);
+				//RVLCROSSPRODUCT3(PQM_, q_, V3Tmp);
+				//RVLDIF3VECTORS(PQM, V3Tmp, PQM);
+				//RVLSUM3VECTORS(PQM, t, PQM);
+				//RVLDIF3VECTORS(sMP_, PQM, eP);
+				RVLMULMX3X3TVECT(W, eP_, eW);
+				eWe = RVLDOTPRODUCT3(eP_, eW);
+				E_ += eWe;
+			}
+		}
+		cv::Mat cvdE = -2 * cvr.t() * cvx + cvx.t() * cvQ * cvx;
+		float E___ = E0 + *(double *)(cvdE.data);
+		printf("Ep0=%f Ep=%f Elin=%f Elin2=%f Elin3=%f\n", E0, E, E_, E__, E___);
+#endif
+	}
+
+	///
+
+	delete[] ptBuff.Element;
+	delete[] WMem;
+	delete[] sPointsM.Element;
+}
+
+//#define RVLDDDRICP_DEBUG
+
+void DDDetector::RICP(
+	RECOG::DDD::Model* pModel,
+	Array<OrientedPoint> pointsQ,
+	AffinePose3D APoseInit,
+	int nIterations,
+	AffinePose3D& APose,
+	PointAssociationData& pointAssociationData,
+	Array<Point>* pPointsMQ)
+{
+	// Constants.
+
+	double beta2 = beta * beta;
+	double ks = alphas * beta2;
+	double kR = alphaR * beta2;
+	double kt = alphat * beta2;
+
+	// Compute initial model plane offsets.
+
+	float z0[7];
+	memset(z0, 0, 7 * sizeof(float));
+	//float* s0 = z0 + 1;
+	//RVLSCALE3VECTOR(pModel->bboxSize, 0.5f, s0);
+	z0[1] = 0.5f * pModel->bboxSize[0] * APoseInit.s[0];
+	z0[2] = 0.5f * pModel->bboxSize[1] * APoseInit.s[1];
+	z0[3] = 0.5f * pModel->bboxSize[2] * APoseInit.s[2];
+	float* d = new float[pModel->nSurfaces];
+	int i_, j_;
+	float* mxRow;
+	RVLMULMXVECT(pModel->M, z0, pModel->nSurfaces, 7, d, i_, j_, mxRow);
+	
+	// Visualization.
+
+	Visualizer* pVisualizer;
+	if (bVisualize)
+		pVisualizer = pVisualizationData->pVisualizer;
+
+	/// ICP loop.
+
+	float* A = new float[9 * pointsQ.n];
+	float* a_;
+	float* c = new float[pointsQ.n];
+	bool* bRejected = new bool[pointsQ.n];
+	memset(bRejected, 0, pointsQ.n * sizeof(bool));
+	float* NM;
+	float z[7];
+	memset(z, 0, 7 * sizeof(float));
+	APose = APoseInit;
+	float  RQM[9], tQM0[3];
+	RVLINVTRANSF3D(APoseInit.R, APoseInit.t, RQM, tQM0);
+	float tQM[3];
+	RVLCOPY3VECTOR(tQM0, tQM);
+	int* MNN = pointAssociationData.MNN;
+	float* PMQ = pointAssociationData.PMQ;
+	cv::Mat cvQ;
+	cvQ.create(9, 9, CV_64FC1);
+	double* Q = (double*)(cvQ.data);
+	cv::Mat cvr;
+	cvr.create(9, 1, CV_64FC1);
+	double* r = (double*)(cvr.data);
+	double* rs = r;
+	double* rR = r + 3;
+	double* rt = r + 6;
+	cv::Mat cvx;
+	cvx.create(9, 1, CV_64FC1);
+	double* x = (double*)(cvx.data);
+	memset(x, 0, 9 * sizeof(double));
+	double* s = x;
+	double* q_ = x + 3;
+	double* t = x + 6;
+	Array<int> ptBuff;
+	ptBuff.Element = new int[pointsQ.n];
+	float nrm = 1.0f / (float)(pointsQ.n);
+	int i, iMSurf, it, iQPt;
+	float PQM[3], PQM_[3];
+	float e;
+	cv::Mat cva;
+	cva.create(9, 1, CV_64FC1);
+	double* a = (double*)(cva.data);
+	double* as = a;
+	double* aR = a + 3;
+	double* at = a + 2 * 3;
+	cv::Mat cvaa;
+	cvaa.create(9, 9, CV_64FC1);
+	float ae[9];
+	float* ase = ae;
+	float* aRe = ae + 3;
+	float* ate = ae + 6;
+	OrientedPoint* pQPt, * pPt;
+	double wp, ws, wR, wt;
+	double q[3], b[3];
+	RVLNULL3VECTOR(q);
+	float th;
+	float u[3], dR[9], newR[9];
+	Pose3D pose;
+#ifdef RVLDDDRICP_DEBUG
+	float E, E0, E_, E__, eWe;
+	float e2;
+	//AffinePose3D APosePrev;
+	float RQMPrev[9];
+	float* dPrev = new float[pModel->nSurfaces];
+	float* dNew = new float[pModel->nSurfaces];
+	float zNew[7];
+	memset(zNew, 0, 7 * sizeof(float));
+#endif
+	int nAssoc;
+	float e0, fTmp;
+
+	for (it = 0; it <= nIterations; it++)
+	{
+		// Point association.
+
+		z[1] = 0.5f * pModel->bboxSize[0] * APose.s[0];
+		z[2] = 0.5f * pModel->bboxSize[1] * APose.s[1];
+		z[3] = 0.5f * pModel->bboxSize[2] * APose.s[2];
+		RVLCOPYMX3X3(APose.R, pose.R);
+		RVLCOPY3VECTOR(APose.t, pose.t);
+		//if(it == 0)
+			PointToPlaneAssociation(pModel, z, &pose, pointsQ, bRejected, pointAssociationData);
+
+		// Visualization.
+
+		if (bVisualize && (pVisualizationData->bVisualizeICPSteps || it == nIterations) &&
+			(pVisualizationData->bVisualizeModelPts || pVisualizationData->bVisualizePtAssociation))
+		{
+			if(pVisualizationData->bVisualizePtAssociation)
+				VisualizePointToPlaneAssociations(pModel, z, &pose, pointsQ, pointAssociationData, pPointsMQ);
+			VisualizeHypothesis(APose, &pointAssociationData, *pPointsMQ, &pointsQ);
+			pVisualizer->Run();
+			if(it < nIterations)
+				RemoveHypothesisFromVisualization();
+		}
+
+		// If the specified number of iterations is executed, then go out of the loop.
+
+		if (it == nIterations)
+			break;
+
+		// Optimal pose.
+
+		memset(Q, 0, 9 * 9 * sizeof(double));
+		memset(r, 0, 9 * sizeof(double));
+
+#ifdef RVLDDDRICP_DEBUG
+		E = 0.0f;
+		RVLMULMXVECT(pModel->M, z, pModel->nSurfaces, 7, dPrev, i_, j_, mxRow);
+#endif
+
+		nAssoc = 0;
+		for (i = 0; i < pointAssociationData.explainedQPts.n; i++)
+		{
+			iQPt = pointAssociationData.explainedQPts.Element[i];
+			iMSurf = MNN[iQPt];
+			if (iMSurf < 0)
+				continue;
+			//if (iMSurf == 5)
+			//	int debug = 0;
+			pPt = pointsQ.Element + iQPt;
+			NM = pModel->A + 3 * pModel->AID[iMSurf];
+			pQPt = pointsQ.Element + iQPt;
+			RVLMULMX3X3VECT(RQM, pQPt->P, PQM_);
+			RVLSUM3VECTORS(PQM_, tQM0, PQM);
+			e = d[iMSurf] - RVLDOTPRODUCT3(NM, PQM);
+			as[0] = -d[iMSurf] * RVLABS(NM[0]);
+			as[1] = -d[iMSurf] * RVLABS(NM[1]);
+			as[2] = -d[iMSurf] * RVLABS(NM[2]);
+			RVLCROSSPRODUCT3(PQM_, NM, aR);
+			RVLCOPY3VECTOR(NM, at);
+			a_ = A + 9 * i;
+			RVLCOPY3VECTOR(as, a_);
+			a_ += 3;
+			RVLCOPY3VECTOR(aR, a_);
+			a_ += 3;
+			RVLCOPY3VECTOR(at, a_);
+			c[i] = e;	
+			nAssoc++;
+			cvaa = cva * cva.t();
+			cvQ = cvQ + cvaa;
+			RVLSCALE3VECTOR(as, e, ase);
+			RVLSCALE3VECTOR(aR, e, aRe);
+			RVLSCALE3VECTOR(at, e, ate);
+			RVLSUM3VECTORS(rs, ase, rs);
+			RVLSUM3VECTORS(rR, aRe, rR);
+			RVLSUM3VECTORS(rt, ate, rt);
+#ifdef RVLDDDRICP_DEBUG
+			RVLSUM3VECTORS(PQM_, tQM, PQM)
+			e = dPrev[iMSurf] - RVLDOTPRODUCT3(NM, PQM);
+			e2 = e * e;
+			E += e2;
+#endif
+		}
+
+		wp = 1.0 / (double)nAssoc;
+		ws = ks * wp;
+		wR = kR * wp;
+		wt = kt * wp;
+#ifdef RVLDDDRICP_DEBUG
+		float es = ws * RVLDOTPRODUCT3(s, s);
+		float q__[3];
+		RVLSUM3VECTORS(q, q_, q__);
+		float eR = wR * RVLDOTPRODUCT3(q__, q__);
+		float et = wt * RVLDOTPRODUCT3(t, t);
+		printf("Ep=%f ", E);
+		E += (es + eR + et);
+		printf("es=%f eR=%f et=%f : ", es, eR, et);
+		printf("E=%f\n", E);
+		RVLCOPYMX3X3(RQM, RQMPrev);
+		float tQMPrev[3];
+		RVLCOPY3VECTOR(tQM, tQMPrev);
+#endif
+		Q[0] += ws; Q[10] += ws; Q[20] += ws;
+		Q[30] += wR; Q[40] += wR; Q[50] += wR;
+		Q[60] += wt; Q[70] += wt; Q[80] += wt;
+		RVLSCALE3VECTOR(q, wR, b);
+		RVLDIF3VECTORS(rR, b, rR);
+		cv::solve(cvQ, cvr, cvx);
+		memset(Q, 0, 9 * 9 * sizeof(double));
+		memset(r, 0, 9 * sizeof(double));
+		nAssoc = 0;
+		memset(bRejected, 0, pointsQ.n * sizeof(bool));
+		FILE* fp = fopen((std::string(resultsFolder) + "\\assoc_clustering.txt").data(), "w");
+		for (i = 0; i < pointAssociationData.explainedQPts.n; i++)
+		{
+			iQPt = pointAssociationData.explainedQPts.Element[i];
+			iMSurf = MNN[iQPt];
+			if (iMSurf < 0)
+				continue;
+			a_ = A + 9 * i;
+			RVLDOTPRODUCT(a_, x, 9, fTmp, i_);
+			e0 = c[i];
+			e = e0 - fTmp;
+			if (RVLABS(e) <= 0.02f)
+			{
+				RVLCOPY3VECTOR(a_, as);
+				a_ += 3;
+				RVLCOPY3VECTOR(a_, aR);
+				a_ += 3;
+				RVLCOPY3VECTOR(a_, at);
+				nAssoc++;
+				cvaa = cva * cva.t();
+				cvQ = cvQ + cvaa;
+				RVLSCALE3VECTOR(as, e0, ase);
+				RVLSCALE3VECTOR(aR, e0, aRe);
+				RVLSCALE3VECTOR(at, e0, ate);
+				RVLSUM3VECTORS(rs, ase, rs);
+				RVLSUM3VECTORS(rR, aRe, rR);
+				RVLSUM3VECTORS(rt, ate, rt);
+			}
+			else
+				bRejected[iQPt] = true;
+			fprintf(fp, "%f\n", e);
+		}
+		fclose(fp);
+		wp = 1.0 / (double)nAssoc;
+		ws = ks * wp;
+		wR = kR * wp;
+		wt = kt * wp;
+		Q[0] += ws; Q[10] += ws; Q[20] += ws;
+		Q[30] += wR; Q[40] += wR; Q[50] += wR;
+		Q[60] += wt; Q[70] += wt; Q[80] += wt;
+		RVLSCALE3VECTOR(q, wR, b);
+		RVLDIF3VECTORS(rR, b, rR);
+		cv::solve(cvQ, cvr, cvx);
+		//RVLNULL3VECTOR(q_);
+		th = sqrt(RVLDOTPRODUCT3(q_, q_));
+		printf("th=%f\n", th);
+		if (th > 1e-10)
+		{
+			RVLSCALE3VECTOR2(q_, th, u);
+			AngleAxisToRot<float>(u, th, dR);
+		}
+		else
+		{
+			RVLUNITMX3(dR);
+		}
+		RVLMXMUL3X3(dR, RQM, newR);
+		RVLCOPYMX3X3(newR, RQM);
+		GetAngleAxis(RQM, u, th);
+		RVLSCALE3VECTOR(u, th, q);
+		RVLSUM3VECTORS(tQM0, t, tQM);
+		RVLINVTRANSF3D(RQM, tQM, APose.R, APose.t);
+		APose.s[0] = (1.0 + s[0]) * APoseInit.s[0];
+		APose.s[1] = (1.0 + s[1]) * APoseInit.s[1];
+		APose.s[2] = (1.0 + s[2]) * APoseInit.s[2];
+		//APose.s[2] = 1.0;
+#ifdef RVLDDDRICP_DEBUG
+		zNew[1] = 0.5f * pModel->bboxSize[0] * APose.s[0];
+		zNew[2] = 0.5f * pModel->bboxSize[1] * APose.s[1];
+		zNew[3] = 0.5f * pModel->bboxSize[2] * APose.s[2];
+		RVLMULMXVECT(pModel->M, zNew, pModel->nSurfaces, 7, dNew, i_, j_, mxRow);
+		float dRlin[9];
+		RVLSKEW(q_, dRlin);
+		dRlin[0] = dRlin[4] = dRlin[8] = 1.0f;
+		float RQMlin[9];
+		RVLMXMUL3X3(dRlin, RQMPrev, RQMlin);
+		E = 0.0f;
+		E0 = 0.0f;
+		E_ = 0.0f;
+		E__ = 0.0f;
+		for (i = 0; i < pointAssociationData.explainedQPts.n; i++)
+		{
+			iQPt = pointAssociationData.explainedQPts.Element[i];
+			iMSurf = MNN[iQPt];
+			if (iMSurf < 0)
+				continue;
+			pPt = pointsQ.Element + iQPt;
+			NM = pModel->A + 3 * pModel->AID[iMSurf];
+			pQPt = pointsQ.Element + iQPt;
+
+			// Non-linear error.
+
+			RVLTRANSF3(pQPt->P, RQM, tQM, PQM);
+			e = dNew[iMSurf] - RVLDOTPRODUCT3(NM, PQM);
+			e2 = e * e;
+			E += e2;
+
+			// Linear error for x = 0.
+			
+			float PQM__[3];
+			RVLMULMX3X3VECT(RQMPrev, pQPt->P, PQM_);
+			RVLSUM3VECTORS(PQM_, tQM0, PQM__);
+			e0 = d[iMSurf] - RVLDOTPRODUCT3(NM, PQM__);
+			e2 = e0 * e0;
+			E0 += e2;
+
+			// Linear error.
+
+			as[0] = -d[iMSurf] * RVLABS(NM[0]);
+			as[1] = -d[iMSurf] * RVLABS(NM[1]);
+			as[2] = -d[iMSurf] * RVLABS(NM[2]);
+			RVLCROSSPRODUCT3(PQM_, NM, aR);
+			RVLCOPY3VECTOR(NM, at);
+			float ass = RVLDOTPRODUCT3(as, s);
+			float aRq = RVLDOTPRODUCT3(aR, q_);
+			float att = RVLDOTPRODUCT3(at, t);
+			float eLin = e0 - (ass + aRq + att);
+			e2 = eLin * eLin;
+			E_ += e2;
+			if (iMSurf == 5)
+				int debug = 0;
+		}
+		cv::Mat cvdE = -2 * cvr.t() * cvx + cvx.t() * cvQ * cvx;
+		float E___ = E0 + *(double*)(cvdE.data);
+		printf("Ep0=%f Ep=%f Elin=%f Elin2=%f Elin3=%f\n", E0, E, E_, E__, E___);
+#endif
+	}
+
+	///
+
+	delete[] ptBuff.Element;
+	delete[] d;
+	delete[] A;
+	delete[] c;
+	delete[] bRejected;
+#ifdef RVLDDDRICP_DEBUG
+	delete[] dNew;
+	delete[] dPrev;
+#endif
+}
+
+
+void DDDetector::TICP(
+	Array<OrientedPoint> pointsM,
+	Array<OrientedPoint> pointsQ,
+	AffinePose3D APoseInit,
+	int nIterations,
+	AffinePose3D& APose,
+	PointAssociationData& pointAssociationData,
+	Array<Point>* pPointsMQ)
+{
+	// Constants.
+
+	double beta2 = beta * beta;
+	double kt = alphat * beta2;
+
+	// Compute N * N for all model points and scale the model with the initial scale.
+
+	Array<OrientedPoint> sPointsM;
+	sPointsM.Element = new OrientedPoint[pointsM.n];
+	sPointsM.n = pointsM.n;
+	int iMPt;
+	float* WMem = new float[9 * pointsM.n];
+	float* W = WMem;
+	OrientedPoint* pMPt = pointsM.Element;
+	OrientedPoint* psMPt = sPointsM.Element;
+	for (iMPt = 0; iMPt < pointsM.n; iMPt++, W += 9, pMPt++, psMPt++)
+	{
+		RVLVECTCOV3(pMPt->N, W);
+		RVLCOMPLETESIMMX3(W);
+		//W[0] += 0.1f; W[4] += 0.1f; W[8] += 0.1f;
+		RVLSCALE3VECTOR3(pMPt->P, APoseInit.s, psMPt->P);
+	}
+
+	// Visualization.
+
+	Visualizer* pVisualizer;
+	if (bVisualize)
+		pVisualizer = pVisualizationData->pVisualizer;
+
+	/// ICP loop.
+
+	APose = APoseInit;
+	float  RQM[9], tQM0[3];
+	RVLINVTRANSF3D(APoseInit.R, APoseInit.t, RQM, tQM0);
+	float tQM[3];
+	RVLCOPY3VECTOR(tQM0, tQM);
+	int* MNN = pointAssociationData.MNN;
+	int* QNN = pointAssociationData.QNN;
+	float* PMQ = pointAssociationData.PMQ;
+	cv::Mat cvQ;
+	cvQ.create(3, 3, CV_64FC1);
+	double* Q = (double*)(cvQ.data);
+	cv::Mat cvr;
+	cvr.create(3, 1, CV_64FC1);
+	double* r = (double*)(cvr.data);
+	cv::Mat cvx;
+	cvx.create(3, 1, CV_64FC1);
+	double* x = (double*)(cvx.data);
+	memset(x, 0, 3 * sizeof(double));
+	Array<int> ptBuff;
+	ptBuff.Element = new int[pointsQ.n];
+	Array<OrientedPoint> points[2];
+	points[0] = pointsM;
+	points[1] = pointsQ;
+	Array<int> ptIdx[2];
+	int* NN[2];
+	NN[0] = QNN;
+	NN[1] = MNN;
+	float nrm[2];
+	nrm[0] = 1.0f / (float)(pointsM.n);
+	nrm[1] = 1.0f / (float)(pointsQ.n);
+	int i, iPt, iPt_, iSet, it, iQPt;
+	float PQM[3], PQM_[3], eP[3], We[3];
+	float* W1, * W2, * W3;
+	OrientedPoint* pQPt, * pPt, * pPt_;
+	int nIn[2];
+	double wp, wt;
+
+	for (it = 0; it <= nIterations; it++)
+	{
+		// Point association.
+
+		PointAssociation(pointsM, &APose, pointsQ, pointAssociationData, ptBuff, bVisualize, pPointsMQ);
+
+		// Visualization.
+
+		if (bVisualize && (pVisualizationData->bVisualizeICPSteps || it == nIterations))
+		{
+			VisualizeHypothesis(APose, &pointAssociationData, *pPointsMQ);
+			pVisualizer->Run();
+			RemoveHypothesisFromVisualization();
+		}
+
+		// If the specified number of iterations is executed, then go out of the loop.
+
+		if (it == nIterations)
+			break;
+
+		// Optimal pose.
+
+		ptIdx[0] = pointAssociationData.associatedMPts;
+		ptIdx[1] = pointAssociationData.explainedQPts;
+		memset(Q, 0, 3 * 3 * sizeof(double));
+		memset(r, 0, 3 * sizeof(double));
+
+		for (iSet = 0; iSet < 2; iSet++)
+		{
+			nIn[iSet] = 0;
+			for (i = 0; i < ptIdx[iSet].n; i++)
+			{
+				iPt = ptIdx[iSet].Element[i];
+				iPt_ = NN[iSet][iPt];
+				if (iPt_ < 0)
+					continue;
+				nIn[iSet]++;
+				pPt = points[iSet].Element + iPt;
+				pPt_ = points[1 - iSet].Element + iPt_;
+				if (iSet == 0)
+				{
+					iMPt = iPt;
+					iQPt = iPt_;
+				}
+				else
+				{
+					iMPt = iPt_;
+					iQPt = iPt;
+				}
+				psMPt = sPointsM.Element + iMPt;
+				pQPt = pointsQ.Element + iQPt;
+				W = WMem + 9 * iMPt;
+				W1 = W; W2 = W1 + 3; W3 = W2 + 3;
+				RVLMULMX3X3VECT(RQM, pQPt->P, PQM_);
+				RVLSUM3VECTORS(PQM_, tQM0, PQM);
+				RVLDIF3VECTORS(psMPt->P, PQM, eP);
+				RVLSUMMX3X3(Q, W, Q);
+				RVLMULMX3X3VECT(W, eP, We);
+				RVLSUM3VECTORS(r, We, r);
+			}
+		}
+		wp = 1.0 / (double)(nIn[0] + nIn[1]);
+		wt = kt * wp;
+		Q[0] += wt; Q[4] += wt; Q[8] += wt;
+		cv::solve(cvQ, cvr, cvx);
+		x[0] = x[1] = 0.0f;
+		RVLSUM3VECTORS(tQM0, x, tQM);
+		RVLINVTRANSF3D(RQM, tQM, APose.R, APose.t);
+	}
+
+	///
+
+	delete[] ptBuff.Element;
+	delete[] WMem;
+	delete[] sPointsM.Element;
+}
+
+void DDDetector::InitVisualizer(Visualizer* pVisualizerIn)
+{
+	if (pVisualizationData == NULL)
+		pVisualizationData = new RECOG::DDD::DisplayCallbackData;
+	if (pVisualizerIn)
+	{
+		pVisualizationData->pVisualizer = pVisualizerIn;
+		pVisualizationData->bOwnVisualizer = false;
+	}
+	else
+	{
+		pVisualizationData->pVisualizer = new Visualizer;
+		pVisualizationData->bOwnVisualizer = true;
+	}
+	pVisualizationData->AssociatedPts.Element = NULL;
+	//pVisualizer->SetMouseRButtonDownCallback(RECOG::TGRAPH::MouseRButtonDown, pData);
+	pVisualizationData->bVisualizeICPSteps = false;
+	pVisualizationData->bVisualizePtAssociation = false;
+	pVisualizationData->bVisualizeInitialHypothesis = false;
+	pVisualizationData->bVisualizeModelPts = false;
+	pVisualizationData->bVisualizeSurfels = false;
+	pVisualizationData->bVisualizeFittingScoreCalculation = false;
+	pVisualizationData->bVisualizeROIDetection = false;
+	pVisualizationData->bPointToPlane = false;
+	pVisualizationData->paramList.m_pMem = pMem0;
+	RVLPARAM_DATA* pParamData;
+	pVisualizationData->paramList.Init();
+	pParamData = pVisualizationData->paramList.AddParam("DDD.visualizeSurfels", RVLPARAM_TYPE_BOOL, &(pVisualizationData->bVisualizeSurfels));
+	pParamData = pVisualizationData->paramList.AddParam("DDD.visualizeICPSteps", RVLPARAM_TYPE_BOOL, &(pVisualizationData->bVisualizeICPSteps));
+	pParamData = pVisualizationData->paramList.AddParam("DDD.visualizePtAssociation", RVLPARAM_TYPE_BOOL, &(pVisualizationData->bVisualizePtAssociation));
+	pParamData = pVisualizationData->paramList.AddParam("DDD.visualizeInitialHypothesis", RVLPARAM_TYPE_BOOL, &(pVisualizationData->bVisualizeInitialHypothesis));
+	pParamData = pVisualizationData->paramList.AddParam("DDD.visualizeModelPts", RVLPARAM_TYPE_BOOL, &(pVisualizationData->bVisualizeModelPts));
+	pParamData = pVisualizationData->paramList.AddParam("DDD.visualizeFittingScoreCalculation", RVLPARAM_TYPE_BOOL, &(pVisualizationData->bVisualizeFittingScoreCalculation));
+	pParamData = pVisualizationData->paramList.AddParam("DDD.visualizeROIDetection", RVLPARAM_TYPE_BOOL, &(pVisualizationData->bVisualizeROIDetection));
+	pVisualizationData->paramList.LoadParams((char *)(cfgFileName.data()));
+}
+
+void DDDetector::VisualizeHypothesisBoundingBox(
+	RECOG::DDD::Hypothesis* pHyp,
+	Mesh* pMesh)
+{
+	double red[] = { 1.0, 0, 0 };
+	//uchar green[] = { 0, 255, 0 };
+
+	// Display surfels.
+
+	//pSurfels->NodeColors(green);
+	//pSurfels->InitDisplay(pVisualizer, pMesh, pSurfelDetector);
+	//pSurfels->Display(pVisualizer, pMesh);
+	//pSurfels->DisplayEdgeFeatures();
+
+	// Visualize ROI.
+
+	//Pose3D ROIPose;
+	//RVLUNITMX3(ROIPose.R);
+	//RVLSET3VECTOR(ROIPose.t, 0.5f * (ROI.maxx + ROI.minx), 0.5f * (ROI.maxy + ROI.miny), 0.5f * (ROI.maxz + ROI.minz));
+	//pVisualizer->DisplayBox(ROI.maxx - ROI.minx, ROI.maxy - ROI.miny, ROI.maxz - ROI.minz, &ROIPose, 255.0, 0.0, 0.0, true);
+
+	// Visualize hypothesis.
+
+	Pose3D bboxPose;
+	RVLCOPYMX3X3(pHyp->pose.R, bboxPose.R);
+	RVLCOPY3VECTOR(pHyp->pose.t, bboxPose.t);
+	pVisualizationData->bboxActor = pVisualizationData->pVisualizer->DisplayBox(pHyp->bboxSize[0], pHyp->bboxSize[1], pHyp->bboxSize[2], &bboxPose, 255.0, 0.0, 0.0, false, 4.0f);
+	if (pMesh)
+	{
+		Array<Point> assocQPts[6];
+		Point* ptMem = new Point[6 * pHyp->assoc.n];
+		int i;
+		for (i = 0; i < 6; i++)
+		{
+			assocQPts[i].n = 0;
+			assocQPts[i].Element = ptMem + i * pHyp->assoc.n;
+		}
+		int iMSurf;
+		for (i = 0; i < pHyp->assoc.n; i++)
+		{
+			iMSurf = pHyp->assoc.Element[i].b;
+			assocQPts[iMSurf].Element[assocQPts[iMSurf].n++] = pMesh->NodeArray.Element[pHyp->assoc.Element[i].a];
+		}
+		uchar color[6][3];
+		RVLSET3VECTOR(color[0], 255, 0, 0);
+		RVLSET3VECTOR(color[1], 0, 255, 0);
+		RVLSET3VECTOR(color[2], 0, 0, 255);
+		RVLSET3VECTOR(color[3], 255, 255, 0);
+		RVLSET3VECTOR(color[4], 0, 255, 255 );
+		RVLSET3VECTOR(color[5], 255, 0, 255);
+		for (i = 0; i < 6; i++)
+			pVisualizationData->pVisualizer->DisplayPointSet<float, Point>(assocQPts[i], color[i], 6.0f);
+		
+		delete[] ptMem;
+	}
+}
+
+void DDDetector::VisualizeHypothesis(
+	AffinePose3D pose,
+	PointAssociationData* pPointAssociationData,
+	Array<Point> pointsMS_,
+	Array<OrientedPoint>* pPointsQ)
+{
+	uchar red[] = { 255, 0, 0 };
+	uchar green[] = { 0, 255, 0 };
+	uchar yellow[] = { 255, 255, 0 };
+	RECOG::DDD::Model *pModel = models.Element;
+
+	// Visualize model point cloud.
+	
+	if (pVisualizationData->bVisualizeModelPts || pVisualizationData->bVisualizePtAssociation)
+	{
+		Array<Point> pointsMS;
+		if (pPointAssociationData->associatedMPts.n > 0)
+		{
+			pointsMS.n = pModel->points.n;
+			pointsMS.Element = new Point[pointsMS.n];
+			float* PMM, * PMS;
+			float V3Tmp[3];
+			for (int iMPt = 0; iMPt < pPointAssociationData->associatedMPts.n; iMPt++)
+			{
+				PMM = pModel->points.Element[iMPt].P;
+				PMS = pointsMS.Element[iMPt].P;
+				RVLATRANSF3(PMM, pose.s, pose.R, pose.t, PMS, V3Tmp);
+			}
+			pVisualizationData->modelPtActor = pVisualizationData->pVisualizer->DisplayPointSet<float, Point>(pointsMS, green, 6);
+			delete[] pointsMS.Element;
+		}
+		
+		if (pVisualizationData->bPointToPlane)
+			pVisualizationData->modelPtActor = pVisualizationData->pVisualizer->DisplayPointSet<float, Point>(pointsMS_, green, 6);
+
+		// Visualize point association.
+
+		if (pVisualizationData->bVisualizePtAssociation)
+		{
+			Point* pPtSrc;
+			Point* pPtTgt = pVisualizationData->AssociatedPts.Element;
+			Array<Pair<int, int>> associationLines;
+			associationLines.Element = new Pair<int, int>[(pVisualizationData->bPointToPlane ? 0 : pModel->points.n) + pPointAssociationData->explainedQPts.n];
+			associationLines.n = 0;
+			int iMPt, iQPt;
+			if (!pVisualizationData->bPointToPlane)
+			{
+				for (iMPt = 0; iMPt < pModel->points.n; iMPt++, pPtSrc++, pPtTgt++)
+				{
+					pPtSrc = pointsMS_.Element + iMPt;
+					RVLCOPY3VECTOR(pPtSrc->P, pPtTgt->P);
+					iQPt = pPointAssociationData->QNN[iMPt];
+					if (iQPt >= 0)
+					{
+						associationLines.Element[associationLines.n].a = iMPt;
+						associationLines.Element[associationLines.n].b = iQPt + pModel->points.n;
+						associationLines.n++;
+					}
+				}
+			}
+			OrientedPoint* pPtSrc_;
+			for (int i = 0; i < pPointAssociationData->explainedQPts.n; i++)
+			{
+				iQPt = pPointAssociationData->explainedQPts.Element[i];
+				pVisualizationData->AssociatedPts.n = 0;
+				if (pVisualizationData->bPointToPlane)
+				{
+					pPtSrc = pointsMS_.Element + i;
+					RVLCOPY3VECTOR(pPtSrc->P, pPtTgt->P);
+					pPtTgt++;
+					pPtSrc_ = pPointsQ->Element + iQPt;
+					RVLCOPY3VECTOR(pPtSrc_->P, pPtTgt->P);
+					pPtTgt++;
+					associationLines.Element[associationLines.n].a = 2 * i;
+					associationLines.Element[associationLines.n].b = 2 * i + 1;
+					associationLines.n++;
+				}
+				else
+				{
+					iMPt = pPointAssociationData->MNN[iQPt];
+					if (pPointAssociationData->QNN[iMPt] != iQPt)
+					{
+						associationLines.Element[associationLines.n].a = iMPt;
+						associationLines.Element[associationLines.n].b = iQPt + pModel->points.n;
+						associationLines.n++;
+					}
+				}
+			}
+			if (pVisualizationData->bPointToPlane)
+				pVisualizationData->AssociatedPts.n = pPtTgt - pVisualizationData->AssociatedPts.Element;
+			pVisualizationData->associationLinesActor = pVisualizationData->pVisualizer->DisplayLines(pVisualizationData->AssociatedPts, associationLines, red);
+			delete[] associationLines.Element;
+		}
+	}
+	//else
+	//{
+	//	Pose3D bboxPose;
+	//	RVLCOPYMX3X3(pose.R, bboxPose.R);
+	//	RVLTRANSF3(pVisualizationData->bboxCenter, pose.R, pose.t, bboxPose.t);
+	//	double bboxColor[3];
+	//	RVLCOPY3VECTOR(red, bboxColor);
+	//	pVisualizationData->bboxActor = pVisualizationData->pVisualizer->DisplayBox(pVisualizationData->bboxSize[0], pVisualizationData->bboxSize[1], pVisualizationData->bboxSize[2], &bboxPose, bboxColor[0], bboxColor[1], bboxColor[2], true);
+	//}
+}
+
+void DDDetector::SetSceneForHypothesisVisualization(Mesh* pMesh)
+{
+	// Display mesh.
+
+	pVisualizationData->pVisualizer->SetMesh(pMesh->pPolygonData);
+	//pVisualizer->normalLength = 0.005f;
+	//pVisualizer->Normals(pMesh);
+
+	// Create array pVisualizationData->AssociatedPts for storing associated points.
+
+	RECOG::DDD::Model *pModel = models.Element;
+	if (pVisualizationData->AssociatedPts.Element)
+		RVL_DELETE_ARRAY(pVisualizationData->AssociatedPts.Element);
+	pVisualizationData->AssociatedPts.n = pModel->points.n + 2 * pMesh->NodeArray.n;
+	pVisualizationData->AssociatedPts.Element = new Point[pVisualizationData->AssociatedPts.n];
+
+	// Copy query points to pVisualizationData->AssociatedPts.
+
+	memcpy(pVisualizationData->AssociatedPts.Element + pModel->points.n, pMesh->NodeArray.Element, pMesh->NodeArray.n * sizeof(Point));
+}
+
+void DDDetector::SetBBoxForHypothesisVisualization(RECOG::DDD::Hypothesis* pHyp)
+{
+	RVLCOPY3VECTOR(pHyp->bboxCenter, pVisualizationData->bboxCenter);
+	RVLCOPY3VECTOR(pHyp->bboxSize, pVisualizationData->bboxSize);
+}
+
+void DDDetector::RemoveHypothesisFromVisualization()
+{
+	if (pVisualizationData->bVisualizeModelPts)
+	{
+		pVisualizationData->pVisualizer->renderer->RemoveViewProp(pVisualizationData->modelPtActor);
+		if(pVisualizationData->bVisualizePtAssociation)
+			pVisualizationData->pVisualizer->renderer->RemoveViewProp(pVisualizationData->associationLinesActor);
+	}
+	else
+		pVisualizationData->pVisualizer->renderer->RemoveViewProp(pVisualizationData->bboxActor);
+}
+
+void DDDetector::RemoveHypothesisBoundingBoxFromVisualization()
+{
+	pVisualizationData->pVisualizer->renderer->RemoveViewProp(pVisualizationData->bboxActor);
+}
+
+#define RVLDDDFIT3DTO2D_VERBOSE
+//#define RVLDDDFIT3DTO2D_VISUALIZE_PTASSOC
+//#define RVLDDDFIT3DTO2D_VISUALIZE_INITHYPS
+
+void DDDetector::Fit3DTo2D(
+	Array<RECOG::DDD::EdgeSample> edgeSamplePts,
+	float* QNMap,
+	Pose3D poseMC0,
+	float* dR0,
+	Array<RECOG::DDD::PtAssoc> ptAssoc,
+	float& th_,
+	float& th,
+	float& et,
+	float* dR,
+	float* dt)
+{
+	cv::Mat cva(6, 1, CV_64FC1);
+	double* a_ = (double*)(cva.data);
+	double* at_ = a_ + 3;
+	cv::Mat cvM(6, 6, CV_64FC1);
+	double* M_ = (double*)(cvM.data);
+	memset(M_, 0, 6 * 6 * sizeof(double));
+	cv::Mat cvx(6, 1, CV_64FC1);
+	double* x_ = (double*)(cvx.data);
+	double* xt_ = x_ + 3;
+	cv::Mat cvc(6, 1, CV_64FC1);
+	double* c_ = (double*)(cvc.data);	
+	memset(c_, 0, 6 * sizeof(double));
+	int i;
+	RECOG::DDD::PtAssoc* pPtAssoc;
+	int iQPix;
+	double e;
+	RECOG::DDD::EdgeSample* pSamplePt;
+	float* QN;
+	float PR[3];
+	float Qu, Qv;
+	float QP[3];
+	QP[2] = 1.0f;
+	float V3Tmp[3];
+	for (i = 0; i < ptAssoc.n; i++)
+	{
+		pPtAssoc = ptAssoc.Element + i;
+		pSamplePt = edgeSamplePts.Element + pPtAssoc->iMSample;
+		iQPix = pPtAssoc->iQPix;
+		QN = QNMap + 3 * iQPix;
+		RVLMULMX3X3VECT(dR0, pSamplePt->PR, PR);
+		RVLCROSSPRODUCT3(PR, QN, a_);
+		RVLCOPY3VECTOR(QN, at_);
+		cvM += cva * cva.t();
+		Qu = (float)(iQPix % camera.w);
+		Qv = (float)(iQPix / camera.w);
+		QP[0] = (Qu - camera.uc) / camera.fu;
+		QP[1] = (Qv - camera.vc) / camera.fv;
+		RVLDIF3VECTORS(QP, PR, V3Tmp);
+		RVLDIF3VECTORS(V3Tmp, poseMC0.t, V3Tmp);
+		e = RVLDOTPRODUCT3(QN, V3Tmp);
+		cvc += e * cva;
+	}
+	for (i = 0; i < 6; i++)
+		M_[7 * i] += (i < 3 ? fit3DTo2DLambdaR : fit3DTo2DLambdat);
+	cv::solve(cvM, cvc, cvx);
+
+	// Only for debugging purpose!!!
+
+	//RVLNULL3VECTOR(x);
+	//RVLSET3VECTOR(dt, 0.014f, -0.036f, 0.4f);
+	//RVLSCALE3VECTOR2(dt, tStD, xt);
+	//for (i = 0; i < 6; i++)
+	//	x_[i] = x[i];
+	//cv::Mat cvg(6, 1, CV_64FC1);
+	//cvg = cvA * cvx - cve;
+	//double* g = (double*)(cvg.data);
+	//cv::Mat cveDebug = cvg.t() * cvg;
+	//double e__ = *((double *)cveDebug.data);
+
+	// Compute pose correction from x.
+
+	th_ = sqrt(RVLDOTPRODUCT3(x_, x_));
+	float rotAxis[3];
+	RVLSCALE3VECTOR2(x_, th_, rotAxis);
+
+	//if (th_ > 30.0 * DEG2RAD)
+	//{
+	//	s = 30 * DEG2RAD / th_;
+	//	th_ = 30.0 * DEG2RAD;
+	//	RVLSCALE3VECTOR(xt, s, xt);
+	//}
+
+	// When debugging with linear approximate rotation, comment the following 5 lines.
+
+	if (th_ > 1e-4)
+	{
+		float dR_[9];
+		AngleAxisToRot<float>(rotAxis, th_, dR_);
+		float M3x3Tmp[9];
+		RVLMXMUL3X3(dR_, dR0, M3x3Tmp);
+		GetAngleAxis(M3x3Tmp, rotAxis, th);
+		AngleAxisToRot<float>(rotAxis, th, dR);
+	}
+	else
+	{
+		RVLCOPYMX3X3(dR0, dR);
+		GetAngleAxis(dR, rotAxis, th);
+	}
+
+	//Only for debugging purpose: linear approximate rotation.
+
+	//RVLSCALE3VECTOR(x, rotStD, V3Tmp);
+	//RVLSKEW(V3Tmp, dR);
+	//float I[9];
+	//RVLUNITMX3(I);
+	//RVLSUMMX3X3(I, dR, dR);
+	//RVLMXMUL3X3(dR, poseMC.R, poseMC_.R);
+	//th = th_;
+
+	RVLCOPY3VECTOR(xt_, dt);
+	et = sqrt(RVLDOTPRODUCT3(dt, dt));
+#ifdef RVLDDDFIT3DTO2D_VERBOSE
+	printf("dth=%f th=%f dt=%f\n", th_ * RAD2DEG, th * RAD2DEG, et);
+#endif
+	///
+
+	// Only for debugging purpose!!!
+	//double z[6];
+	//RVLMULMXVECT(R, y, nDefDoFs, 6, z, i, j, r);
+	//printf("R * y = ( ");
+	//for (j = 0; j < nDefDoFs; j++)
+	//	printf("%f ", z[j]);
+	//printf(")\n");
+	//printf("e     = ( ");
+	//for (j = 0; j < nDefDoFs; j++)
+	//	printf("%f ", e[j]);
+	//printf(")\n\n");
+	//printf("y     = ( ");
+	//for (j = 0; j < nDefDoFs; j++)
+	//	printf("%f ", y[j]);
+	//printf(")\n");
+	//RVLMULMXVECT(Q, x, nDefDoFs, 6, z, i, j, q);
+	//printf("Q * x = ( ");
+	//for (j = 0; j < nDefDoFs; j++)
+	//	printf("%f ", z[j]);
+	//printf(")\n");
+	//double z_[6];
+	//RVLMULMXVECT(R, z, nDefDoFs, 6, z_, i, j, r);
+	//printf("R * Q * x = ( ");
+	//for (j = 0; j < nDefDoFs; j++)
+	//	printf("%f ", z_[j]);
+	//printf(")\n");
+	//float A[36];
+	//float* a_, * at_;
+	//for (i = 0; i < nDefDoFs; i++)
+	//{
+	//	pPtAssoc = ptAssoc + i;
+	//	pSamplePt = edgeSamplePts.Element + pPtAssoc->iMSample;
+	//	r = R + 6 * i;
+	//	a_ = A + 6 * i;
+	//	at_ = a_ + 3;
+	//	RVLNULL3VECTOR(a_);
+	//	RVLNULL3VECTOR(at_);
+	//	for (j = 0; j <= i; j++)
+	//	{
+	//		q = Q + 6 * j;
+	//		RVLSCALE3VECTOR(q, r[j], V3Tmp);
+	//		RVLSUM3VECTORS(a_, V3Tmp, a_);
+	//		qt = q + 3;
+	//		RVLSCALE3VECTOR(qt, r[j], V3Tmp);
+	//		RVLSUM3VECTORS(at_, V3Tmp, at_);
+	//	}
+	//	printf("a[%d]=( ", i);
+	//	for (j = 0; j < 6; j++)
+	//		printf("%f ", a_[j]);
+	//	printf(")\n");
+	//	QN = QNMap + 3 * pPtAssoc->iQPix;
+	//	RVLCROSSPRODUCT3(pSamplePt->PR, QN, a_);
+	//	RVLSCALE3VECTOR(a_, rotStD, a_);
+	//	RVLSCALE3VECTOR(QN, tStD, at_);
+	//	printf("a[%d]=( ", i);
+	//	for (j = 0; j < 6; j++)
+	//		printf("%f ", a_[j]);
+	//	printf(")\n");
+	//}
+	//printf("Error=( ");
+	//float PMC[6][3];
+	//float de;
+	//for (i = 0; i < nDefDoFs; i++)
+	//{
+	//	pPtAssoc = ptAssoc + i;
+	//	pSamplePt = edgeSamplePts.Element + pPtAssoc->iMSample;
+	//	PR = PRMem_ + 3 * i;
+	//	RVLCROSSPRODUCT3(x, PR, V3Tmp_);
+	//	RVLSCALE3VECTOR(V3Tmp_, -rotStD, V3Tmp);
+	//	RVLSCALE3VECTOR(xt, tStD, V3Tmp_);
+	//	RVLDIF3VECTORS(V3Tmp, V3Tmp_, V3Tmp);
+	//	QN = QNMap + 3 * pPtAssoc->iQPix;
+	//	de = RVLDOTPRODUCT3(QN, V3Tmp);
+	//	printf("%f ", e[i] + de);
+	//	RVLNEGVECT3(V3Tmp, V3Tmp);
+	//	RVLSUM3VECTORS(PR, V3Tmp, V3Tmp);
+	//	RVLSUM3VECTORS(V3Tmp, poseMC.t, PMC[i]);
+	//	RVLTRANSF3(pSamplePt->PR, dR, poseMC_.t, PMC[i]);
+	//}
+	//printf(")\n");
+	//printf("Error2=( ");
+	//float E = 0.0f;
+	//for (i = 0; i < nDefDoFs; i++)
+	//{
+	//	pPtAssoc = ptAssoc + i;
+	//	iQPix = pPtAssoc->iQPix;
+	//	Qu = (float)(iQPix % RGB.cols);
+	//	Qv = (float)(iQPix / RGB.cols);
+	//	QP[0] = (Qu - camera.uc) / camera.fu;
+	//	QP[1] = (Qv - camera.vc) / camera.fv;
+	//	RVLDIF3VECTORS(QP, PMC[i], V3Tmp);
+	//	QN = QNMap + 3 * iQPix;
+	//	de = RVLDOTPRODUCT3(QN, V3Tmp);
+	//	printf("%f ", de);
+	//	E += de * de;
+	//	de = RVLDOTPRODUCT3(QN, QP);
+	//	float Mu = camera.fu * PMC[i][0] / PMC[i][2] + camera.uc;
+	//	float Mv = camera.fv * PMC[i][1] / PMC[i][2] + camera.vc;
+	//	int debug = 0;
+	//}
+	//printf(") Sum of sqares: %f\n", E);
+	//printf(")\n");
+
+}
+
+void DDDetector::Fit3DTo2D(
+	Mesh* pMesh,
+	cv::Mat RGB,
+	Pose3D initPoseMC,
+	Pose3D &bestPoseMC)
+{
+	// Convert to graycsale.
+
+	cv::Mat I;
+	cv::cvtColor(RGB, I, cv::COLOR_BGR2GRAY);
+
+	// Blur the image for better edge detection.
+
+	cv::Mat IBlured;
+	cv::GaussianBlur(I, IBlured, cv::Size(3, 3), 0);
+
+	// Canny edge detection.
+
+	cv::Mat edges;
+	cv::Canny(IBlured, edges, 20, 80, 3, false);
+
+	// Display canny edge detected image.
+
+	//cv::imshow("Canny edge detection", edges);
+	//cv::waitKey(0);
+
+	// Diference of Gausian.
+
+	cv::GaussianBlur(I, IBlured, cv::Size(7, 7), 0);
+	cv::Mat sobelx, sobely, sobelxy;
+	cv::Sobel(IBlured, sobelx, CV_64F, 1, 0, 5);
+	cv::Sobel(IBlured, sobely, CV_64F, 0, 1, 5);
+	int iPix;
+	int nPix = RGB.cols * RGB.rows;
+	float* QNMap = new float[3 * nPix];
+	float* QN = QNMap;
+	float* QImgNMap = new float[2 * nPix];
+	float* QImgN = QImgNMap;
+	double* IuMap = (double*)(sobelx.data);
+	double* IvMap = (double*)(sobely.data);
+	double* Iu = IuMap;
+	double* Iv = IvMap;
+	float dI;
+	float QP[3], QV[3];
+	QP[2] = 1.0f;
+	QV[2] = 0.0f;
+	float Qu, Qv;
+	float fTmp;
+	for (iPix = 0; iPix < nPix; iPix++, QN += 3, QImgN += 2, Iu++, Iv++)
+	{
+		if (!edges.data[iPix])
+			continue;
+		QImgN[0] = (float)(*Iu);
+		QImgN[1] = (float)(*Iv);
+		dI = sqrt(QImgN[0] * QImgN[0] + QImgN[1] * QImgN[1]);
+		QImgN[0] /= dI;
+		QImgN[1] /= dI;
+		QV[0] = QImgN[1];
+		QV[1] = -QImgN[0];
+		Qu = (float)(iPix % RGB.cols);
+		Qv = (float)(iPix / RGB.cols);
+		QP[0] = (Qu - camera.uc) / camera.fu;
+		QP[1] = (Qv - camera.vc) / camera.fv;
+		RVLCROSSPRODUCT3(QV, QP, QN);
+		RVLNORM3(QN, fTmp);
+	}
+	//double minSobel, maxSobel;
+	//cv::minMaxLoc(sobelx, &minSobel, &maxSobel);
+	//cv::imshow("sobelx", (sobelx - minSobel) / (maxSobel - minSobel));
+	//cv::minMaxLoc(sobely, &minSobel, &maxSobel);
+	//cv::imshow("sobely", (sobely - minSobel) / (maxSobel - minSobel));
+	//cv::waitKey(0);
+
+	// Compute EDT.
+
+	CRVLEDT EDT;
+	EDT.m_Flags |= RVLEDT_FLAG_EDGE_CONTOURS;
+	RVLEDT_PIX_ARRAY EDTImage;
+	EDTImage.Width = RGB.cols;
+	EDTImage.Height = RGB.rows;
+	EDTImage.pPix = new RVLEDT_PIX[nPix];
+	RVLEDT_BUCKET_ENTRY* EDTBucketMem = new RVLEDT_BUCKET_ENTRY[4 * nPix];
+	WORD iBucket;
+	for (iBucket = 0; iBucket < 4; iBucket++)
+		EDT.m_BucketPtrArray[iBucket] = EDTBucketMem + iBucket * nPix;
+	EDT.Border(&EDTImage);
+	EDT.CreateRTSqrtLUT();
+	CRVLBuffer EDTBuff;
+	EDTBuff.DataBuff = new void* [2 * nPix];
+	EDTBuff.m_bOwnData = FALSE;
+	//EDT.m_maxd2 = imageWidth * imageWidth + imageHeight * imageHeight;
+	EDT.m_maxd2 = fit3DTo2DEDTMaxDist * fit3DTo2DEDTMaxDist;
+	CRVLMem mem;
+	mem.Create(nPix * sizeof(RVLPTRCHAIN_ELEMENT));
+	CRVLMPtrChain boundary;
+	boundary.m_pMem = &mem;
+	int u, v;
+	for (v = 1; v < RGB.rows - 1; v++)
+		for (u = 1; u < RGB.cols - 1; u++)
+		{
+			iPix = u + v * RGB.cols;
+			if (edges.data[iPix] > 0)
+			{
+				EDTImage.pPix[iPix].d2 = 0;
+				boundary.Add((void*)(EDTImage.pPix + iPix));
+			}
+		}
+	EDT.Apply(&boundary, NULL, &EDTImage, &EDTBuff);
+	delete[] EDTBucketMem;
+	delete[] EDTBuff.DataBuff;
+
+	// Visualize EDT.
+
+	cv::Mat EDTDisplayImage(RGB.rows, RGB.cols, CV_8UC1);
+	uchar* pPix = EDTDisplayImage.data;
+	RVLEDT_PIX* pEDTPix = EDTImage.pPix;
+	float k = 255.0 / sqrt((float)(EDT.m_maxd2));
+	for (iPix = 0; iPix < nPix; iPix++, pPix++, pEDTPix++)
+		*pPix = (pEDTPix->d2 <= EDT.m_maxd2 ? (uchar)round(k * sqrt((float)(pEDTPix->d2))) : 255);
+	//cv::imshow("EDT", EDTDisplayImage);
+	//cv::waitKey();
+
+	// Create edges and compute their lengths.
+
+	RECOG::DDD::Edge* edge = new RECOG::DDD::Edge[pMesh->EdgeArray.n];
+	RECOG::DDD::Edge* pEdge_;
+	MeshEdge* pEdge;
+	int iEdge;
+	Point* pPt, *pPt_;
+	float V3Tmp[3];
+	for (iEdge = 0; iEdge < pMesh->EdgeArray.n; iEdge++)
+	{
+		pEdge = pMesh->EdgeArray.Element + iEdge;
+		pPt = pMesh->NodeArray.Element + pEdge->iVertex[0];
+		pPt_ = pMesh->NodeArray.Element + pEdge->iVertex[1];
+		pEdge_ = edge + iEdge;
+		RVLDIF3VECTORS(pPt_->P, pPt->P, V3Tmp);
+		pEdge_->length = sqrt(RVLDOTPRODUCT3(V3Tmp, V3Tmp));
+	}
+
+	// Initialize visualization.
+
+	uchar yellow[] = { 0, 255, 255 };
+	cv::Mat displayImg;
+
+	// Initial pose.
+
+	Pose3D poseMC = initPoseMC; 
+
+	// Project model onto the image.
+
+	float* PRMem = new float[pMesh->NodeArray.n * 3];
+	float* PCMem = new float[pMesh->NodeArray.n * 3];
+	float* NCMem = new float[pMesh->faces.n * 3];
+	float PRMem_[6 * 3];
+	
+	Project3DModelToImage(pMesh, poseMC, edge, PRMem, PCMem, NCMem);
+
+	// Visualize initial pose.
+
+	////cv::cvtColor(edges, displayImg, cv::COLOR_GRAY2RGB);
+	////cv::cvtColor(EDTDisplayImage, displayImg, cv::COLOR_GRAY2RGB);
+	//displayImg = RGB.clone();
+	//SuperposeBinaryImage(displayImg, edges.data, yellow);
+	//Visualize3DModelImageProjection(displayImg, pMesh, edge);
+	//cv::imshow("model", displayImg);
+	//cv::waitKey();
+
+	// Sample edges.
+
+	Array<RECOG::DDD::EdgeSample> edgeSamplePts;
+	SampleEdges(pMesh, edge, edgeSamplePts);
+	int nEdgeSamples = fit3DTo2DNoEdgeSamples;
+	int iSample;
+	RECOG::DDD::EdgeSample* pSamplePt;
+
+	// Smart RANSAC.
+
+	RECOG::DDD::Edge* edge_ = new RECOG::DDD::Edge[pMesh->EdgeArray.n];
+	Array<RECOG::DDD::EdgeSample> edgeSamplePts_;
+	edgeSamplePts_.Element = new RECOG::DDD::EdgeSample[fit3DTo2DNoEdgeSamples];
+	edgeSamplePts_.n = nEdgeSamples;
+
+	float maxOrientationCorrection = fit3DTo2DMaxOrientationCorrection * DEG2RAD;
+	int nInitSolutionIterations = 3;
+	int nTrials = 20;
+	float minDist = 20.0f;
+	float eThr = 0.2f;
+	float eN = 30.0f;
+	float rotStD = 0.125 * PI;	// rad
+	float tStD = 0.05;			// m
+	float chamferThr = 10.0f;	// pix
+	int i;
+	float csNThr = cos(eN * DEG2RAD);
+	float minDist2 = minDist * minDist;
+	float chamferThr2 = chamferThr * chamferThr;
+	int iIteration, iIteration2, j, iSample_, iQPix, iQPix_, iTrial;
+	RECOG::DDD::PtAssoc *ptAssoc = new RECOG::DDD::PtAssoc[fit3DTo2DNoEdgeSamples];
+	RECOG::DDD::PtAssoc bestPtAssoc;
+	RECOG::DDD::PtAssoc* pPtAssoc, * pPtAssoc_;
+	RECOG::DDD::EdgeSample* pSamplePt_;
+	RECOG::DDD::Edge* pEdge__;
+	float* QImgN_;
+	float distM, eM, distQ, eQ, csN;
+	float MdImgP[2];
+	float QImgNa[2];
+	int QImgP[2], QImgP_[2];
+	float QdImgP[2];
+	float Q[36], R[36];
+	memset(R, 0, 36 * sizeof(float));
+	float* q, *qt, *q_, *qt_, *r, *PR;
+	float x[6], y[6];
+	float* xt = x + 3;
+	float r_;
+	float a[6], b[6];
+	float* at = a + 3;
+	float* bt = b + 3;
+	float bestb[6], bestr[6];
+	float* bestbt = bestb + 3;
+	float e[6];
+	float dR[9], dR_[9], M3x3Tmp[9];
+	float th, th_, et;
+	float rotAxis[3], dt[3];
+	Pose3D poseMC_;
+	bestPoseMC = poseMC;
+	float bestPosedR[9];
+	float bestPosedt[3];
+	float bestScore = 0.0f;
+	int iBestHypothesis = -1;
+	int nBestNumFPs = edgeSamplePts.n;
+	float signN;
+	int nDefDoFs;
+	cv::Mat cva(6, 1, CV_64FC1);
+	double* a_ = (double*)(cva.data);
+	double* at_ = a_ + 3;
+	cv::Mat cvM(6, 6, CV_64FC1);
+	double* M_ = (double *)(cvM.data);
+	cv::Mat cve(6, 1, CV_64FC1);	
+	double* e_ = (double*)(cve.data);
+	cv::Mat cvx(6, 1, CV_64FC1);
+	double* x_ = (double*)(cvx.data);
+	cv::Mat cvA(6, 6, CV_64FC1);
+	double *A_ = (double*)(cvA.data);
+	cv::Mat cvc(6, 1, CV_64FC1);
+	double* c_ = (double*)(cvc.data);
+	Array<RECOG::DDD::PtAssoc> ptAssoc_;
+	ptAssoc_.Element = ptAssoc;
+	for (iIteration = 0; iIteration < nRANSACIterations; iIteration++)
+	{
+		//if (iIteration == 15)
+		//	int debug = 0;
+		for (i = 0; i < 6; i++)
+		{
+			//if (i == 5)
+			//	int debug = 0;
+			memset(bestr, 0, 6 * sizeof(float));
+			for (iTrial = 0; iTrial < nTrials; iTrial++)
+			{
+				//if (i == 2 && iTrial == 3)
+				//	int debug = 0;
+				iSample = rand() % edgeSamplePts.n;
+				pSamplePt = edgeSamplePts.Element + iSample;
+				pEdge_ = edge + pSamplePt->edgeIdx;
+				if (EDTImage.pPix[pSamplePt->iPix].d2 > EDT.m_maxd2)
+					continue;
+				QImgP[0] = pSamplePt->iImgP[0] - EDTImage.pPix[pSamplePt->iPix].dx;
+				QImgP[1] = pSamplePt->iImgP[1] - EDTImage.pPix[pSamplePt->iPix].dz;
+				iQPix = QImgP[0] + QImgP[1] * RGB.cols;
+				QImgN = QImgNMap + 2 * iQPix;
+				csN = QImgN[0] * pEdge_->ImgN[0] + QImgN[1] * pEdge_->ImgN[1];
+				if (csN >= csNThr)
+					signN = 1.0f;
+				else if (-csN >= csNThr)
+					signN = -1.0f;
+				else
+					continue;
+				QImgNa[0] = signN * QImgN[0]; QImgNa[1] = signN * QImgN[1];
+				for (j = 0; j < i; j++)
+				{
+					pPtAssoc_ = ptAssoc + j;
+					iSample_ = pPtAssoc_->iMSample;
+					pSamplePt_ = edgeSamplePts.Element + iSample_;
+					pEdge__ = edge + pSamplePt_->edgeIdx;
+					iQPix_ = pPtAssoc_->iQPix;
+					QImgP_[0] = iQPix_ % RGB.cols;
+					QImgP_[1] = iQPix_ / RGB.cols;
+					QImgN_ = QImgNMap + 2 * iQPix_;
+					MdImgP[0] = pSamplePt->ImgP[0] - pSamplePt_->ImgP[0];
+					MdImgP[1] = pSamplePt->ImgP[1] - pSamplePt_->ImgP[1];
+					distM = MdImgP[0] * MdImgP[0] + MdImgP[1] * MdImgP[1];
+					if (distM < minDist2)
+						break;
+					distM = sqrt(distM);
+					MdImgP[0] /= distM; MdImgP[1] /= distM;
+					eM = MdImgP[0] * pEdge__->ImgN[0] + MdImgP[1] * pEdge__->ImgN[0];
+					QdImgP[0] = (float)(QImgP[0] - QImgP_[0]);
+					QdImgP[1] = (float)(QImgP[1] - QImgP_[1]);
+					distQ = QdImgP[0] * QdImgP[0] + QdImgP[1] * QdImgP[1];
+					if (distQ < minDist2)
+						break;
+					distQ = sqrt(distQ);
+					QdImgP[0] /= distQ; QdImgP[1] /= distQ;
+					eQ = QdImgP[0] * pPtAssoc_->QImgN[0] + QdImgP[1] * pPtAssoc_->QImgN[1];
+					if (RVLABS(eM) <= eThr)
+					{
+						if (RVLABS(eQ) > eThr)
+							break;
+					}
+					//else if (RVLABS(eQ) <= eThr)
+					//	break;
+					else if (eM * eQ < 0.0f)
+						break;
+				}
+				//if (j < i)
+				//	continue;
+				QN = QNMap + 3 * iQPix;
+				RVLCROSSPRODUCT3(pSamplePt->PR, QN, a);
+				RVLSCALE3VECTOR(a, rotStD, a);
+				RVLSCALE3VECTOR(QN, tStD, at);
+				RVLCOPY3VECTOR(a, b);
+				RVLCOPY3VECTOR(at, bt);
+				r = R + 6 * i;
+				for (j = 0; j < i; j++)
+				{
+					q_ = Q + 6 * j;
+					qt_ = q_ + 3;
+					r_ = RVLDOTPRODUCT3(q_, b) + RVLDOTPRODUCT3(qt_, bt);
+					RVLSCALE3VECTOR(q_, r_, V3Tmp);
+					RVLDIF3VECTORS(b, V3Tmp, b);
+					RVLSCALE3VECTOR(qt_, r_, V3Tmp);
+					RVLDIF3VECTORS(bt, V3Tmp, bt);
+					r[j] = r_;
+				}
+				r_ = sqrt(RVLDOTPRODUCT3(b, b) + RVLDOTPRODUCT3(bt, bt));
+				if (r_ > bestr[i])
+				{
+					bestPtAssoc.iMSample = iSample;
+					bestPtAssoc.iQPix = iQPix;
+					bestPtAssoc.QImgN[0] = QImgNa[0];
+					bestPtAssoc.QImgN[1] = QImgNa[1];
+					RVLCOPY3VECTOR(b, bestb);
+					RVLCOPY3VECTOR(bt, bestbt);
+					memcpy(bestr, r, i * sizeof(float));
+					bestr[i] = r_;
+				}
+			}
+			if (bestr[i] < 0.001f)
+				break;
+			ptAssoc[i] = bestPtAssoc;
+			q = Q + 6 * i;
+			qt = q + 3;
+			RVLSCALE3VECTOR2(bestb, bestr[i], q);
+			RVLSCALE3VECTOR2(bestbt, bestr[i], qt);
+			memcpy(r, bestr, (i + 1) * sizeof(float));
+			// Only for debugging purpose!!!
+			//if (iIteration == 483)
+			//{
+				//float a_[6];
+				//float* at_ = a_ + 3;
+				//RVLNULL3VECTOR(a_);
+				//RVLNULL3VECTOR(at_);
+				//for (j = 0; j <= i; j++)
+				//{
+				//	q = Q + 6 * j;
+				//	RVLSCALE3VECTOR(q, r[j], V3Tmp);
+				//	RVLSUM3VECTORS(a_, V3Tmp, a_);
+				//	qt = q + 3;
+				//	RVLSCALE3VECTOR(qt, r[j], V3Tmp);
+				//	RVLSUM3VECTORS(at_, V3Tmp, at_);
+				//}
+				//printf("a [%d]=( ");
+				//for (j = 0; j < 6; j++)
+				//	printf("%f ", a[j]);
+				//printf(")\n");
+				//printf("a_[%d]=( ", i);
+				//for (j = 0; j < 6; j++)
+				//	printf("%f ", a_[j]);
+				//printf(")\n");
+				//pSamplePt = edgeSamplePts.Element + ptAssoc[i].iMSample;
+				//QN = QNMap + 3 * ptAssoc[i].iQPix;
+				//RVLCROSSPRODUCT3(pSamplePt->PR, QN, a_);
+				//RVLSCALE3VECTOR(a_, rotStD, a_);
+				//RVLSCALE3VECTOR(QN, tStD, at_);
+				//printf("a'[%d]=( ", i);
+				//for (j = 0; j < 6; j++)
+				//	printf("%f ", a_[j]);
+				//printf(")\n");
+			//}
+			//
+		}
+		nDefDoFs = i;
+		//if (i < fit3DTo2DMinDefDoFs)
+		//	continue;
+#ifdef RVLDDDFIT3DTO2D_VERBOSE
+		printf("iteration %d\n", iIteration);
+#endif
+
+#ifdef RVLDDDFIT3DTO2D_VISUALIZE_PTASSOC
+		// Visualize point association.
+		if (iIteration == 15)
+		{
+			//for (i = 1; i <= nDefDoFs; i++)
+			//{
+			cv::cvtColor(EDTDisplayImage, displayImg, cv::COLOR_GRAY2RGB);
+			SuperposeBinaryImage(displayImg, edges.data, yellow);
+			VisualizeEdgeSamples(displayImg, edgeSamplePts);
+			Array<RECOG::DDD::PtAssoc> ptAssocs;
+			ptAssocs.Element = ptAssoc;
+			ptAssocs.n = nDefDoFs;
+			//ptAssocs.n = i;
+			Visualize2DPointAssociation(displayImg, ptAssocs, edgeSamplePts.Element);
+			cv::imshow("model", displayImg);
+			cv::waitKey();
+			//}
+		}
+#endif
+
+		/// Correct pose.
+
+		for (i = 0; i < nDefDoFs; i++)
+		{
+			pPtAssoc = ptAssoc + i;
+			pSamplePt = edgeSamplePts.Element + pPtAssoc->iMSample;
+			PR = PRMem_ + 3 * i;
+			RVLCOPY3VECTOR(pSamplePt->PR, PR);
+		}
+		RVLUNITMX3(dR);
+
+		//if(false)
+		//if (iIteration == 2046 || iIteration == 2444 || iIteration == 2616 || iIteration == 3113 || iIteration == 3477 || iIteration == 3658 || iIteration == 3974 || iIteration == 4183 || iIteration == 4255)
+		//if (iIteration == 281 || iIteration == 673 || iIteration == 1247 || iIteration == 1663 || iIteration == 2444 || iIteration == 2616 || iIteration == 3113 || iIteration == 3477 || iIteration == 3658 || iIteration == 3974 || iIteration == 4183 || iIteration == 4255)
+		{
+			for (iIteration2 = 0; iIteration2 < nInitSolutionIterations; iIteration2++)
+			{
+#ifdef NEVER
+				if (iIteration2 > 0)
+				{
+					/// Solving 6 equations with 6 unknowns.
+
+					// QR decomposition of A: A = R * Q
+
+					for (i = 0; i < nDefDoFs; i++)
+					{
+						pPtAssoc = ptAssoc + i;
+						pSamplePt = edgeSamplePts.Element + pPtAssoc->iMSample;
+						iQPix = pPtAssoc->iQPix;
+						QN = QNMap + 3 * iQPix;
+						PR = PRMem_ + 3 * i;
+						RVLMULMX3X3VECT(dR, pSamplePt->PR, PR);
+						RVLCROSSPRODUCT3(PR, QN, a);
+						RVLSCALE3VECTOR(a, rotStD, a);
+						RVLSCALE3VECTOR(QN, tStD, at);
+						RVLCOPY3VECTOR(a, b);
+						RVLCOPY3VECTOR(at, bt);
+						r = R + 6 * i;
+						for (j = 0; j < i; j++)
+						{
+							q_ = Q + 6 * j;
+							qt_ = q_ + 3;
+							r_ = RVLDOTPRODUCT3(q_, b) + RVLDOTPRODUCT3(qt_, bt);
+							RVLSCALE3VECTOR(q_, r_, V3Tmp);
+							RVLDIF3VECTORS(b, V3Tmp, b);
+							RVLSCALE3VECTOR(qt_, r_, V3Tmp);
+							RVLDIF3VECTORS(bt, V3Tmp, bt);
+							r[j] = r_;
+						}
+						r_ = sqrt(RVLDOTPRODUCT3(b, b) + RVLDOTPRODUCT3(bt, bt));
+						q = Q + 6 * i;
+						qt = q + 3;
+						RVLSCALE3VECTOR2(b, r_, q);
+						RVLSCALE3VECTOR2(bt, r_, qt);
+						r[i] = r_;
+					}
+				}
+
+				// Compute e and solve A * x = e.
+
+				memset(e, 0, 6 * sizeof(float));
+				for (i = 0; i < nDefDoFs; i++)
+				{
+					pPtAssoc = ptAssoc + i;
+					iQPix = pPtAssoc->iQPix;
+					Qu = (float)(iQPix % RGB.cols);
+					Qv = (float)(iQPix / RGB.cols);
+					QP[0] = (Qu - camera.uc) / camera.fu;
+					QP[1] = (Qv - camera.vc) / camera.fv;
+					PR = PRMem_ + 3 * i;
+					RVLDIF3VECTORS(QP, PR, V3Tmp);
+					RVLDIF3VECTORS(V3Tmp, poseMC.t, V3Tmp);
+					QN = QNMap + 3 * iQPix;
+					e[i] = RVLDOTPRODUCT3(QN, V3Tmp);
+					y[i] = e[i];
+					r = R + 6 * i;
+					for (j = 0; j < i; j++)
+						y[i] -= r[j] * y[j];
+					y[i] /= r[i];
+				}
+				RVLMULMXTVECT(Q, y, nDefDoFs, 6, x, i, j, q);
+
+				///
+#endif
+				float dR0[9];
+				RVLCOPYMX3X3(dR, dR0);
+				ptAssoc_.n = nDefDoFs;
+				Fit3DTo2D(edgeSamplePts, QNMap, poseMC, dR0, ptAssoc_, th_, th, et, dR, dt);
+				RVLMXMUL3X3(dR, poseMC.R, poseMC_.R);
+				RVLSUM3VECTORS(poseMC.t, dt, poseMC_.t);
+
+#ifdef RVLDDDFIT3DTO2D_VISUALIZE_INITHYPS
+				// Visualize corrected pose.
+
+				if (iIteration == 15)
+				{
+					Project3DModelToImage(pMesh, poseMC_, edge_, PRMem, PCMem, NCMem);
+					cv::cvtColor(edges, displayImg, cv::COLOR_GRAY2RGB);
+					Visualize3DModelImageProjection(displayImg, pMesh, edge_);
+					cv::imshow("model", displayImg);
+					cv::waitKey();
+				}
+#endif
+			}
+			if (iIteration2 < nInitSolutionIterations || th > maxOrientationCorrection || et > fit3DTo2DMaxPositionCorrection)
+			{
+#ifdef RVLDDDFIT3DTO2D_VERBOSE
+				printf("Hypothesis rejected.\n\n");
+#endif
+				continue;
+			}
+			float score = 0.0f;
+			int nFPs = 0;
+			float chamferDist2;
+			for (iSample = 0; iSample < edgeSamplePts.n; iSample++)
+			{
+				pSamplePt = edgeSamplePts.Element + iSample;
+				pSamplePt_ = edgeSamplePts_.Element + iSample;
+				RVLTRANSF3(pSamplePt->PR, dR, poseMC_.t, pSamplePt_->PC);
+				pSamplePt_->iImgP[0] = (int)round(camera.fu * pSamplePt_->PC[0] / pSamplePt_->PC[2] + camera.uc);
+				pSamplePt_->iImgP[1] = (int)round(camera.fv * pSamplePt_->PC[1] / pSamplePt_->PC[2] + camera.vc);
+				if (pSamplePt_->iImgP[0] < 0 || pSamplePt_->iImgP[0] >= RGB.cols || pSamplePt_->iImgP[1] < 0 || pSamplePt_->iImgP[1] >= RGB.rows)
+				{
+					nFPs++;
+					continue;
+				}
+				pSamplePt_->iPix = (int)round(pSamplePt_->iImgP[0]) + (int)round(pSamplePt_->iImgP[1]) * RGB.cols;
+				chamferDist2 = (float)EDTImage.pPix[pSamplePt_->iPix].d2;
+				if (chamferDist2 > chamferThr2)
+				{
+					nFPs++;
+					continue;
+				}
+				//pEdge_ = edge + pSamplePt->edgeIdx;
+				//QImgP[0] = pSamplePt->iImgP[0] - EDTImage.pPix[pSamplePt->iPix].dx;
+				//QImgP[1] = pSamplePt->iImgP[1] - EDTImage.pPix[pSamplePt->iPix].dz;
+				//iQPix = QImgP[0] + QImgP[1] * RGB.cols;
+				//QImgN = QImgNMap + 2 * iQPix;
+				//csN = QImgN[0] * pEdge_->ImgN[0] + QImgN[1] * pEdge_->ImgN[1];
+				//if (RVLABS(csN) >= csNThr)
+					score += exp(-chamferDist2 / chamferThr2);
+				//else
+				//	nFPs++;
+			}
+#ifdef RVLDDDFIT3DTO2D_VERBOSE
+			printf("scene fitting score = %f no. FPs = %d\n\n", score, nFPs);
+#endif
+			if (score > bestScore)
+			{
+				bestScore = score;
+				bestPoseMC = poseMC_;
+				RVLCOPYMX3X3(dR, bestPosedR);
+				RVLCOPY3VECTOR(dt, bestPosedt);
+				nBestNumFPs = nFPs;
+				iBestHypothesis = iIteration;
+			}
+
+			// Visualize initial hypothesis.
+
+			//cv::cvtColor(EDTDisplayImage, displayImg, cv::COLOR_GRAY2RGB);
+			//SuperposeBinaryImage(displayImg, edges.data, yellow);
+			//VisualizeEdgeSamples(displayImg, edgeSamplePts_);
+			//cv::imshow("model", displayImg);
+			//cv::waitKey();
+		}
+		///
+	}
+
+	// ICP fitting.
+	
+	int nICPIterations = 5;
+
+	RVLCOPYMX3X3(bestPosedR, dR);
+	poseMC = bestPoseMC;
+	//Project3DModelToImage(pMesh, poseMC, edge_, PRMem, PCMem, NCMem);
+	//cv::cvtColor(edges, displayImg, cv::COLOR_GRAY2RGB);
+	//Visualize3DModelImageProjection(displayImg, pMesh, edge_);
+	//cv::imshow("model", displayImg);
+	//cv::waitKey();
+	float chamferDist2;
+	float dR0[9];
+	for (iIteration = 0; iIteration < nICPIterations; iIteration++)
+	{
+		Project3DModelToImage(pMesh, poseMC, edge, PRMem, PCMem, NCMem);
+		SampleEdges(pMesh, edge, edgeSamplePts);
+		ptAssoc_.n = 0;
+		for (iSample = 0; iSample < edgeSamplePts.n; iSample++)
+		{
+			pSamplePt = edgeSamplePts.Element + iSample;
+			pSamplePt_ = pSamplePt;
+			//pSamplePt_ = edgeSamplePts_.Element + iSample;
+			//RVLTRANSF3(pSamplePt->PR, dR, poseMC_.t, pSamplePt_->PC);
+			//pSamplePt_->iImgP[0] = (int)round(camera.fu * pSamplePt_->PC[0] / pSamplePt_->PC[2] + camera.uc);
+			//pSamplePt_->iImgP[1] = (int)round(camera.fv * pSamplePt_->PC[1] / pSamplePt_->PC[2] + camera.vc);
+			//if (pSamplePt_->iImgP[0] < 0 || pSamplePt_->iImgP[0] >= RGB.cols || pSamplePt_->iImgP[1] < 0 || pSamplePt_->iImgP[1] >= RGB.rows)
+			//	continue;
+			//pSamplePt_->iPix = (int)round(pSamplePt_->iImgP[0]) + (int)round(pSamplePt_->iImgP[1]) * camera.w;
+			chamferDist2 = (float)EDTImage.pPix[pSamplePt_->iPix].d2;
+			if (chamferDist2 > chamferThr2)
+				continue;
+			QImgP[0] = pSamplePt_->iImgP[0] - EDTImage.pPix[pSamplePt_->iPix].dx;
+			QImgP[1] = pSamplePt_->iImgP[1] - EDTImage.pPix[pSamplePt_->iPix].dz;
+			iQPix = QImgP[0] + QImgP[1] * camera.w;
+			QImgN = QImgNMap + 2 * iQPix;
+			pEdge_ = edge + pSamplePt->edgeIdx;
+			csN = QImgN[0] * pEdge_->ImgN[0] + QImgN[1] * pEdge_->ImgN[1];
+			if (RVLABS(csN) < csNThr)
+				continue;
+			pPtAssoc = ptAssoc + ptAssoc_.n++;
+			pPtAssoc->iMSample = iSample;
+			pPtAssoc->iQPix = iQPix;
+			pPtAssoc->QImgN[0] = QImgN[0]; pPtAssoc->QImgN[1] = QImgN[1];
+		}
+		for (iIteration2 = 0; iIteration2 < nInitSolutionIterations; iIteration2++)
+		{
+			RVLCOPYMX3X3(dR, dR0);
+			Fit3DTo2D(edgeSamplePts, QNMap, poseMC, dR0, ptAssoc_, th_, th, et, dR, dt);
+			RVLMXMUL3X3(dR, poseMC.R, poseMC_.R);
+			RVLSUM3VECTORS(poseMC.t, dt, poseMC_.t);
+		}
+		poseMC = poseMC_;
+		//Project3DModelToImage(pMesh, poseMC, edge_, PRMem, PCMem, NCMem);
+		//cv::cvtColor(edges, displayImg, cv::COLOR_GRAY2RGB);
+		//Visualize3DModelImageProjection(displayImg, pMesh, edge_);
+		//cv::imshow("model", displayImg);
+		//cv::waitKey();
+	}
+
+	// Visualize final solution.
+
+	uchar red[3] = {255, 0, 0};
+	printf("best scene fitting score = %f no. FPs = %d iteration %d\n\n", bestScore, nBestNumFPs, iBestHypothesis);
+	displayImg = RGB.clone();
+	Project3DModelToImage(pMesh, poseMC, edge_, PRMem, PCMem, NCMem);
+	//cv::cvtColor(edges, displayImg, cv::COLOR_GRAY2RGB);
+	Visualize3DModelImageProjection(displayImg, pMesh, edge_, red);
+	cv::imshow("solution", displayImg);
+	cv::waitKey();
+
+	delete[] EDTImage.pPix;
+	delete[] PRMem;
+	delete[] PCMem;
+	delete[] NCMem;
+	delete[] edge;
+	delete[] edge_;
+	delete[] QNMap;
+	delete[] QImgNMap;
+	delete[] edgeSamplePts.Element;
+	delete[] edgeSamplePts_.Element;
+	delete[] ptAssoc;
+
+	cv::destroyAllWindows();
+
+	
+}
+
+void DDDetector::Project3DModelToImage(
+	Mesh* pMesh,
+	Pose3D poseMC,
+	RECOG::DDD::Edge* edge,
+	float* PRMem,
+	float* PCMem,
+	float* NCMem)
+{
+	// Parameters.
+
+	float minEdgeFaceAngle = 45.0f;		// deg
+
+	// Constants.
+
+	float csMinEdgeFaceAngle = cos(minEdgeFaceAngle * DEG2RAD);
+
+	// Transform model to the scene.
+
+	int iVertex;
+	float* PR;
+	float* PC;
+	Point* pPt;
+	for (iVertex = 0; iVertex < pMesh->NodeArray.n; iVertex++)
+	{
+		pPt = pMesh->NodeArray.Element + iVertex;
+		PR = PRMem + iVertex * 3;
+		RVLMULMX3X3VECT(poseMC.R, pPt->P, PR);
+		PC = PCMem + iVertex * 3;
+		RVLSUM3VECTORS(PR, poseMC.t, PC);
+	}
+	float* NC;
+	MESH::Face* pFace;
+	int iFace;
+	for (iFace = 0; iFace < pMesh->faces.n; iFace++)
+	{
+		pFace = pMesh->faces.Element[iFace];
+		NC = NCMem + iFace * 3;
+		RVLMULMX3X3VECT(poseMC.R, pFace->N, NC);
+	}
+
+	// Project edges onto the image.
+
+	int i, iEdge;
+	float* NC_;
+	cv::Point2f dImgP;
+	float ImgEdgeLen;
+	MeshEdge* pEdge;
+	RECOG::DDD::Edge* pEdge_;
+	for (iEdge = 0; iEdge < pMesh->EdgeArray.n; iEdge++)
+	{
+		pEdge = pMesh->EdgeArray.Element + iEdge;
+		pEdge_ = edge + iEdge;
+		NC = NCMem + pEdge->pFace[0]->idx * 3;
+		NC_ = NCMem + pEdge->pFace[1]->idx * 3;
+		if (NC[2] >= 0.0f && NC_[2] >= 0.0f)
+		{
+			pEdge_->bVisible = false;
+			continue;
+		}
+		if (NC[2] * NC_[2] > 0.0f)
+		{
+			if (RVLDOTPRODUCT3(NC, NC_) > csMinEdgeFaceAngle)
+			{
+				pEdge_->bVisible = false;
+				continue;
+			}
+		}
+		pEdge_->bVisible = true;
+		for (i = 0; i < 2; i++)
+		{
+			PR = PRMem + pEdge->iVertex[i] * 3;
+			RVLCOPY3VECTOR(PR, pEdge_->PR[i]);
+			PC = PCMem + pEdge->iVertex[i] * 3;
+			RVLCOPY3VECTOR(PC, pEdge_->PC[i]);
+			pEdge_->ImgP[i].x = (int)round(camera.fu * PC[0] / PC[2] + camera.uc);
+			pEdge_->ImgP[i].y = (int)round(camera.fv * PC[1] / PC[2] + camera.vc);
+		}
+		RVLDIF3VECTORS(pEdge_->PR[1], pEdge_->PR[0], pEdge_->VR);
+		RVLSCALE3VECTOR2(pEdge_->VR, pEdge_->length, pEdge_->VR);
+		RVLDIF3VECTORS(pEdge_->PC[1], pEdge_->PC[0], pEdge_->VC);
+		RVLSCALE3VECTOR2(pEdge_->VC, pEdge_->length, pEdge_->VC);
+		dImgP = pEdge_->ImgP[1] - pEdge_->ImgP[0];
+		ImgEdgeLen = round(sqrt(dImgP.x * dImgP.x + dImgP.y * dImgP.y));
+		pEdge_->ImgN[0] = -dImgP.y / ImgEdgeLen;
+		pEdge_->ImgN[1] = dImgP.x / ImgEdgeLen;
+	}
+}
+
+void DDDetector::SampleEdges(
+	Mesh* pMesh,
+	RECOG::DDD::Edge *edge,
+	Array<RECOG::DDD::EdgeSample> &edgeSamplePts)
+{
+	int nEdgeSamples = fit3DTo2DNoEdgeSamples;
+	edgeSamplePts.Element = new RECOG::DDD::EdgeSample[nEdgeSamples];
+	RECOG::DDD::EdgeSample* pSamplePt = edgeSamplePts.Element;
+	float edgeBinStart = 0.0f;
+	int iEdge;
+	RECOG::DDD::Edge* pEdge_;
+	for (iEdge = 0; iEdge < pMesh->EdgeArray.n; iEdge++)
+	{
+		pEdge_ = edge + iEdge;
+		if (pEdge_->bVisible)
+		{
+			pEdge_->binEnd = edgeBinStart + pEdge_->length;
+			edgeBinStart = pEdge_->binEnd;
+		}
+		else
+			pEdge_->binEnd = 0.0f;
+	}
+	float edgeSampleInc = edgeBinStart / (float)nEdgeSamples;
+	float firsEdgeSample = 0.5f * edgeSampleInc;
+	int iSample;
+	float sample = firsEdgeSample;
+	iEdge = 0;
+	float s;
+	edgeBinStart = 0.0f;
+	float V3Tmp[3];
+	for (iSample = 0; iSample < nEdgeSamples; iSample++, sample += edgeSampleInc)
+	{
+		while (sample > edge[iEdge].binEnd)
+		{
+			if (edge[iEdge].bVisible)
+				edgeBinStart = edge[iEdge].binEnd;
+			iEdge++;
+		}
+		pEdge_ = edge + iEdge;
+		s = sample - edgeBinStart;
+		RVLSCALE3VECTOR(pEdge_->VR, s, V3Tmp);
+		RVLSUM3VECTORS(pEdge_->PR[0], V3Tmp, pSamplePt->PR);
+		RVLSCALE3VECTOR(pEdge_->VC, s, V3Tmp);
+		RVLSUM3VECTORS(pEdge_->PC[0], V3Tmp, pSamplePt->PC);
+		pSamplePt->ImgP[0] = camera.fu * pSamplePt->PC[0] / pSamplePt->PC[2] + camera.uc;
+		pSamplePt->ImgP[1] = camera.fv * pSamplePt->PC[1] / pSamplePt->PC[2] + camera.vc;
+		pSamplePt->iImgP[0] = (int)round(pSamplePt->ImgP[0]);
+		pSamplePt->iImgP[1] = (int)round(pSamplePt->ImgP[1]);
+		if (pSamplePt->iImgP[0] > 0 && pSamplePt->iImgP[0] < camera.w && pSamplePt->iImgP[1] > 0 && pSamplePt->iImgP[1] < camera.h)
+		{
+			pSamplePt->iPix = pSamplePt->iImgP[0] + pSamplePt->iImgP[1] * camera.w;
+			pSamplePt->edgeIdx = iEdge;
+			pSamplePt++;
+		}
+	}
+	edgeSamplePts.n = pSamplePt - edgeSamplePts.Element;
+}
+
+void DDDetector::BoundingBox(
+	Mesh* pMesh,
+	Array<int> surfels,
+	float* RSB,
+	Box<float>& bbox)
+{
+	float *PS = pMesh->NodeArray.Element[pSurfels->NodeArray.Element[surfels.Element[0]].PtList.pFirst->Idx].P;
+	float PB[3];
+	RVLMULMX3X3VECT(RSB, PS, PB);
+	InitBoundingBox<float>(&bbox, PB);
+	Surfel* pSurfel;
+	QList<QLIST::Index2>* pPtList;
+	QLIST::Index2* pPtIdx;
+	for (int k = 0; k < surfels.n; k++)
+	{
+		pSurfel = pSurfels->NodeArray.Element + surfels.Element[k];
+		pPtList = &(pSurfel->PtList);
+		pPtIdx = pPtList->pFirst;
+		while (pPtIdx)
+		{
+			PS = pMesh->NodeArray.Element[pPtIdx->Idx].P;
+			RVLMULMX3X3VECT(RSB, PS, PB);
+			UpdateBoundingBox<float>(&bbox, PB);
+			pPtIdx = pPtIdx->pNext;
+		}
+	}
+}
+
+void DDDetector::GenerateHypothesis(
+	Box<float> bbox,
+	RECOG::DDD::Model* pModel,
+	float* RMB,
+	int* bboxAxesIdxM,
+	float* bboxAxesSignM,
+	float* RBS,
+	RECOG::DDD::Hypothesis& hyp)
+{
+	float bboxSizeB[3];
+	BoxSize<float>(&bbox, bboxSizeB[0], bboxSizeB[1], bboxSizeB[2]);
+	float tMB[3];
+	for (int k = 0; k < 3; k++)
+	{
+		hyp.bboxSize[k] = bboxSizeB[bboxAxesIdxM[k]];
+		hyp.pose.s[k] = hyp.bboxSize[k] / pModel->bboxSize[k];
+		tMB[bboxAxesIdxM[k]] = -bboxAxesSignM[k] * hyp.pose.s[k] * pModel->bboxCenter[k];
+	}
+	float bboxCenterB0[3];
+	BoxCenter<float>(&bbox, bboxCenterB0);
+	float tBS[3];
+	RVLMULMX3X3VECT(RBS, bboxCenterB0, tBS);
+	RVLCOMPTRANSF3D(RBS, tBS, RMB, tMB, hyp.pose.R, hyp.pose.t);
+	RVLINVTRANSL(RMB, tMB, hyp.bboxCenter);
+}
+
+void DDDetector::Project(
+	RECOG::DDD::Model* pModel,
+	int m,
+	float* q,
+	float* RMS,
+	float* tMS)
+{
+	int i;
+	for (i = 0; i < ZBufferActivePtArray.n; i++)
+		ZBuffer.Element[ZBufferActivePtArray.Element[i]].bValid = false;
+	ZBufferActivePtArray.n = 0;
+
+	int w = ZBuffer.w;
+	int h = ZBuffer.h;
+	float fSceneSamplingResolution = (float)sceneSamplingResolution;
+	float fu = camera.fu / fSceneSamplingResolution;
+	float fv = camera.fv / fSceneSamplingResolution;
+	float uc = camera.uc / fSceneSamplingResolution;
+	float vc = camera.vc / fSceneSamplingResolution;
+	float P[3], N[3], PM[3];
+	RECOG::DDD::ModelPoint* pPtSrc;
+	Point * pPtTgt;
+	int u, v, iPix;
+	float* mxRow;
+	int i_, j_;
+	for (i = 0; i < pModel->points_.n; i++)
+	{
+		pPtSrc = pModel->points_.Element + i;
+		RVLMULMXVECT(pPtSrc->S, q, 3, m, PM, i_, j_, mxRow);
+		RVLMULMX3X3VECT(RMS, PM, P);
+		if (tMS)
+		{
+			RVLSUM3VECTORS(P, tMS, P);
+		}
+		RVLMULMX3X3VECT(RMS, pPtSrc->N, N);
+		if (RVLDOTPRODUCT3(N, P) >= 0)
+			continue;
+		u = (int)(fu * P[0] / P[2] + uc + 0.5f);
+		if (u < 0)
+			continue;
+		else if (u >= w)
+			continue;
+		v = (int)(fv * P[1] / P[2] + vc + 0.5f);
+		if (v < 0)
+			continue;
+		else if (v >= h)
+			continue;
+		iPix = u + v * w;
+		pPtTgt = ZBuffer.Element + iPix;
+		if (pPtTgt->bValid)
+		{
+			if (P[2] < pPtTgt->P[2])
+			{
+				RVLCOPY3VECTOR(P, pPtTgt->P);
+				RVLCOPY3VECTOR(N, pPtTgt->N);
+			}
+		}
+		else
+		{
+			RVLCOPY3VECTOR(P, pPtTgt->P);
+			RVLCOPY3VECTOR(N, pPtTgt->N);
+			pPtTgt->bValid = true;
+			ZBufferActivePtArray.Element[ZBufferActivePtArray.n++] = iPix;
+		}
+	}
+}
+
+void DDDetector::Visualize3DModelImageProjection(
+	cv::Mat displayImg,
+	Mesh* pModelMesh,
+	RECOG::DDD::Edge* edge,
+	uchar* colorIn)
+{
+	uchar colorDefault[3] = {0, 255, 0};
+	uchar* color = (colorIn ? colorIn : colorDefault);
+	for (int iEdge = 0; iEdge < pModelMesh->EdgeArray.n; iEdge++)
+		if (edge[iEdge].bVisible)
+			cv::line(displayImg, edge[iEdge].ImgP[0], edge[iEdge].ImgP[1], cv::Scalar(color[2], color[1], color[0]));
+}
+
+void DDDetector::SuperposeBinaryImage(
+	cv::Mat displayImg,
+	uchar* binImg,
+	uchar* color)
+{
+	int nPix = displayImg.cols * displayImg.rows;
+	uchar* pPix;
+	for (int iPix = 0; iPix < nPix; iPix++)
+		if (binImg[iPix])
+		{
+			pPix = displayImg.data + 3 * iPix;
+			RVLCOPY3VECTOR(color, pPix);
+		}
+}
+
+void DDDetector::VisualizeEdgeSamples(
+	cv::Mat displayImg,
+	Array<RECOG::DDD::EdgeSample> edgeSamplePt)
+{
+	RECOG::DDD::EdgeSample* pSamplePt;
+	for (int iSample = 0; iSample < edgeSamplePt.n; iSample++)
+	{
+		pSamplePt = edgeSamplePt.Element + iSample;
+		cv::circle(displayImg, cv::Point(pSamplePt->iImgP[0], pSamplePt->iImgP[1]), 3, cv::Scalar(0, 255, 0));
+	}
+}
+
+void DDDetector::Visualize2DPointAssociation(
+	cv::Mat displayImg,
+	Array<RECOG::DDD::PtAssoc> ptAssoc,
+	RECOG::DDD::EdgeSample* edgeSamplePt)
+{
+	int i, iSample, iQPix;
+	int QImgP[2];
+	RECOG::DDD::EdgeSample* pSamplePt;
+	for (i = 0; i < ptAssoc.n; i++)
+	{
+		iSample = ptAssoc.Element[i].iMSample;
+		pSamplePt = edgeSamplePt + iSample;
+		iQPix = ptAssoc.Element[i].iQPix;
+		QImgP[0] = iQPix % displayImg.cols;
+		QImgP[1] = iQPix / displayImg.cols;
+		cv::line(displayImg, cv::Point(pSamplePt->iImgP[0], pSamplePt->iImgP[1]), cv::Point(QImgP[0], QImgP[1]), cv::Scalar(0, 0, 255));
+		cv::circle(displayImg, cv::Point(pSamplePt->ImgP[0], pSamplePt->ImgP[1]), 3, cv::Scalar(0, 0, 255));
+	}
+}
+
+void DDDetector::VisualizeStorageVolumeModel(
+	RECOG::DDD::Model* pModel,
+	RECOG::DDD::HypothesisSV hyp,
+	Array<Point>& samplePts,
+	Array<Pair<int, int>> *pNormals)
+{
+	samplePts.Element = new Point[2 * pModel->points_.n];
+	samplePts.n = 0;
+	if (pNormals)
+	{
+		pNormals->Element = new Pair<int, int>[pModel->points_.n];
+		pNormals->n = 0;
+	}
+	RECOG::DDD::ModelPoint* pMPt = pModel->points_.Element;
+	int iMPt;
+	Point* pPt;
+	int i, j;
+	float q[7];
+	q[0] = storageVolumeWallThickness;
+	memcpy(q + 1, hyp.s, 6 * sizeof(float));
+	float* mxRow;
+	float V3Tmp[3];
+	float P[3], N[3];
+	for (iMPt = 0; iMPt < pModel->points_.n; iMPt++, pMPt++)
+	{
+		pPt = samplePts.Element + samplePts.n;
+		RVLMULMXVECT(pMPt->S, q, 3, 7, P, i, j, mxRow);
+		RVLMULMX3X3VECT(hyp.RMS, P, pPt->P);
+		if (pNormals)
+		{
+			RVLMULMX3X3VECT(hyp.RMS, pMPt->N, N);
+			RVLSCALE3VECTOR(N, 0.01f, V3Tmp);
+			RVLSUM3VECTORS(pPt->P, V3Tmp, V3Tmp);
+			pPt = samplePts.Element + pModel->points_.n + samplePts.n;
+			RVLCOPY3VECTOR(V3Tmp, pPt->P);
+			pNormals->Element[pNormals->n].a = samplePts.n;
+			pNormals->Element[pNormals->n].b = pModel->points_.n + samplePts.n;
+			pNormals->n++;
+		}
+		samplePts.n++;
+	}
+}
+
+bool DDDetector::CreateMeshFromPolyData(Mesh* pMesh)
+{
+	// Copy vertices.
+
+	pMesh->NodeArray.n = pMesh->pPolygonData->GetNumberOfPoints();
+	vtkSmartPointer<vtkFloatArray> pointData = pointData->SafeDownCast(pMesh->pPolygonData->GetPoints()->GetData());
+	if (pointData == NULL)
+		return false;
+	int iPt;
+	Point* pPt;
+	RVL_DELETE_ARRAY(pMesh->NodeMem);
+	pMesh->NodeMem = new Point[pMesh->NodeArray.n];
+	pMesh->NodeArray.Element = pMesh->NodeMem;
+	QList<MeshEdgePtr> *pEdgeList;
+	for (iPt = 0; iPt < pMesh->NodeArray.n; iPt++)
+	{
+		pPt = pMesh->NodeArray.Element + iPt;
+		pointData->GetTypedTuple(iPt, pPt->P);
+		pEdgeList = &(pPt->EdgeList);
+		RVLQLIST_INIT(pEdgeList);
+	}
+
+	// Allocate faces and determine the total number of edges.
+
+	pMesh->faces.n = pMesh->pPolygonData->GetPolys()->GetNumberOfCells();
+	RVL_DELETE_ARRAY(pMesh->faces.Element);
+	pMesh->faces.Element = new MESH::Face *[pMesh->faces.n];
+	RVL_DELETE_ARRAY(pMesh->faceMem);
+	pMesh->faceMem = new MESH::Face[pMesh->faces.n];
+	vtkSmartPointer<vtkCellArray> Polys = pMesh->pPolygonData->GetPolys();
+	pMesh->EdgeArray.n = 0;
+	Polys->InitTraversal();
+	vtkSmartPointer<vtkIdList> l = vtkSmartPointer<vtkIdList>::New();
+	int nPts;
+	int iFace;
+	MESH::Face* pFace;
+	for (iFace = 0; iFace < pMesh->faces.n; iFace++)
+	{
+		pFace = pMesh->faceMem + iFace;
+		pMesh->faces.Element[iFace] = pFace;
+		pFace->pFirstEdgePtr = NULL;
+		if (Polys->GetNextCell(l))
+		{
+			nPts = l->GetNumberOfIds();
+			pMesh->EdgeArray.n += nPts;
+		}
+	}
+	pMesh->EdgeArray.n /= 2;
+
+	// Create faces and edges.
+
+	RVL_DELETE_ARRAY(pMesh->EdgeMem);
+	pMesh->EdgeMem = new MeshEdge[pMesh->EdgeArray.n];
+	pMesh->EdgeArray.Element = pMesh->EdgeMem;
+	RVL_DELETE_ARRAY(pMesh->EdgePtrMem);
+	pMesh->EdgePtrMem = new MeshEdgePtr[2 * pMesh->EdgeArray.n];
+	int iEdge;
+	MeshEdge* pEdge;
+	for (iEdge = 0; iEdge < pMesh->EdgeArray.n; iEdge++)
+	{
+		pEdge = pMesh->EdgeArray.Element + iEdge;
+		pEdge->pFace[0] = pEdge->pFace[1] = NULL;
+	}
+	int i, iPt_, iPt__;
+	MeshEdgePtr* pEdgePtr;
+	MeshEdgePtr* pNewEdgePtr = pMesh->EdgePtrMem;
+	MeshEdge* pNewEdge = pMesh->EdgeArray.Element;
+	int iVertex[3];
+	float V1[3], V2[3];
+	Point* pPt_;
+	float fTmp;
+	Polys->InitTraversal();
+	for (iFace = 0; iFace < pMesh->faces.n; iFace++)
+	{
+		pFace = pMesh->faces.Element[iFace];
+		pFace->idx = iFace;
+		if (Polys->GetNextCell(l))
+		{
+			nPts = l->GetNumberOfIds();
+			iPt = l->GetId(nPts - 1);
+			for (i = 0; i < nPts; i++)
+			{
+				if (i < 3)
+					iVertex[i] = iPt;
+				pPt = pMesh->NodeArray.Element + iPt;
+				iPt_ = l->GetId(i);
+				pEdgePtr = pPt->EdgeList.pFirst;
+				while (pEdgePtr)
+				{
+					RVLPCSEGMENT_GRAPH_GET_NEIGHBOR(iPt, pEdgePtr, pEdge, iPt__);
+					if (iPt__ == iPt_)
+						break;
+					pEdgePtr = pEdgePtr->pNext;
+				}
+				if (pEdgePtr)
+				{
+					if (pFace->pFirstEdgePtr == NULL)
+						pFace->pFirstEdgePtr = pEdgePtr;
+					pEdge->pFace[1] = pFace;
+				}
+				else
+				{
+					if (pFace->pFirstEdgePtr == NULL)
+						pFace->pFirstEdgePtr = pNewEdgePtr;
+					ConnectNodes<Point, MeshEdge, MeshEdgePtr>(iPt, iPt_, pMesh->NodeArray, pNewEdge, pNewEdgePtr);
+					pNewEdge->pFace[0] = pFace;
+					pNewEdge++;
+					pNewEdgePtr += 2;
+				}
+				iPt = iPt_;
+			}
+		}
+		pPt = pMesh->NodeArray.Element + iVertex[1];
+		pPt_ = pMesh->NodeArray.Element + iVertex[2];
+		RVLDIF3VECTORS(pPt_->P, pPt->P, V1);
+		pPt_ = pMesh->NodeArray.Element + iVertex[0];
+		RVLDIF3VECTORS(pPt_->P, pPt->P, V2);
+		RVLCROSSPRODUCT3(V1, V2, pFace->N);
+		RVLNORM3(pFace->N, fTmp);
+		pFace->d = RVLDOTPRODUCT3(pFace->N, pPt->P);
+	}
+
+	return true;
+}
+
+RECOG::DDD::Model::Model()
+{
+	points.Element = NULL;
+	points_.Element = NULL;
+	d = NULL;
+	A = NULL;
+	AID = NULL;
+	M = NULL;
+	Q = NULL;
+	R = NULL;
+	edges.Element = NULL;
+	info = NULL;
+}
+
+RECOG::DDD::Model::~Model()
+{
+	RVL_DELETE_ARRAY(points.Element);
+	RVL_DELETE_ARRAY(points_.Element);
+	RVL_DELETE_ARRAY(d);
+	RVL_DELETE_ARRAY(A);
+	RVL_DELETE_ARRAY(AID);
+	RVL_DELETE_ARRAY(M);
+	RVL_DELETE_ARRAY(edges.Element);
+	RVL_DELETE_ARRAY(Q);
+	RVL_DELETE_ARRAY(R);
+	RVL_DELETE_ARRAY(info);
+}
+
+bool RECOG::DDD::ProjectToBase(
+	float* a,
+	int n,
+	float* Q,
+	int m,
+	float* r,
+	float *b,
+	float& c)
+{
+	memcpy(b, a, n * sizeof(float));
+	float* q;
+	int i, i_;
+	float r_;
+	for (i = 0; i < m; i++)
+	{
+		q = Q + n * i;
+		RVLDOTPRODUCT(q, a, n, r_, i_);
+		r[i] = r_;
+		for (i_ = 0; i_ < n; i_++)
+			b[i_] -= (q[i_] * r_);
+	}
+	RVLDOTPRODUCT(b, b, n, c, i_);
+	if (c < 1e-12)
+		return false;
+	c = sqrt(c);
+	int fTmp = 1.0f / c;
+	RVLSCALEVECTOR(b, fTmp, b, n, i_);
+	return true;
+}
+
+//I. Vidovic
+void DDDetector::Detect2(Array<Mesh> meshSeq)
+{
+	// ROI.
+
+	//DEBUG
+	/*Box<float> ROI;
+	ROI.minx = -0.300;
+	ROI.maxx = 0.200;
+	ROI.miny = 0.150;
+	ROI.maxy = 0.400;
+	ROI.minz = 0.900;
+	ROI.maxz = 1.600;
+	Array<int> SOI;
+	int SOIMem;
+	SOI.Element = &SOIMem;
+	SOI.n = 1;
+	//SOI.Element[0] = 762;
+	SOI.Element[0] = 2820;
+	Array<int>* pSOI = (test == RVLDDD_TEST_DDD2 ? &SOI : NULL)*/;
+
+	// Direction.
+
+	float U[3];
+	//RVLSET3VECTOR(U, 0.0f, 0.0f, -1.0f);
+	RVLSET3VECTOR(U, 0.0f, COS45, -COS45);
+
+	//
+
+	Mesh* pMesh, *pMesh_;
+	RECOG::DDD::Model* pModel = models.Element;
+	PointAssociationData pointAssociationData;
+	Array<int> ptBuff;
+	ptBuff.Element = new int[camera.w * camera.h];
+	Array<Point> pointsMS;
+	pointsMS.Element = new Point[pModel->points.n];
+	Array<OrientedPoint> pointsS;
+	pointsS.Element = new OrientedPoint[camera.w * camera.h];
+	AffinePose3D APoseRef, APose;
+	float* t = new float[3 * meshSeq.n];
+	float* t_ = t + 3 * (meshSeq.n - 1);
+	RVLNULL3VECTOR(t_);
+	std::vector<RECOG::DDD::Hypothesis> hyps;
+	RECOG::DDD::Hypothesis hyp;
+
+	Array<int> dominantShiftPointsIdx;
+	dominantShiftPointsIdx.Element = new int[0];
+	
+	int ROIStep;
+
+	for (int iMesh = meshSeq.n - 1; iMesh > 0; iMesh--)
+	{
+		pMesh = meshSeq.Element + iMesh;
+		ROIStep = ROICalculationStep;
+		dominantShiftPointsIdx.n = 0;
+		while (dominantShiftPointsIdx.n < minPointsWithDominantShift)
+		{
+			if (ROIStep > iMesh)
+				break;
+
+			pMesh_ = pMesh - ROIStep++;
+			DetectDominantShiftPoints(pMesh, pMesh_ , &dominantShiftPointsIdx, true);
+		}
+		if (dominantShiftPointsIdx.n < minPointsWithDominantShift)
+		{
+			printf("There is no enough dominant shift points. No hypotheses are generated.\n");
+			continue;
+		}
+		Box<float> ROI;
+		Pose3D ROIPose;
+		CalculateROI(pMesh, dominantShiftPointsIdx, &ROI);
+		GenerateHypotheses(pMesh, ROI, ROIPose , &dominantShiftPointsIdx, hyps, U, NULL);
+		if (hyps.size() == 0)
+		{
+			printf("No hypotheses are generated.\n");
+			continue;
+		}
+
+		// Hypothesis bounding box visualization.
+		hyp = hyps[0];
+		if (pVisualizationData->bVisualizeInitialHypothesis)
+		{
+			pVisualizationData->pVisualizer->SetMesh(pMesh);
+			VisualizeHypothesisBoundingBox(&hyp);
+			pVisualizationData->pVisualizer->Run();
+			pVisualizationData->pVisualizer->renderer->RemoveAllViewProps();
+		}
+
+		// Perform AICP on generated hypothesis
+		imgGrid.Create(pMesh->NodeArray, &camera, pointAssociationGridCellSize);
+		CreateOrientedPointArrayFromPointArray(pMesh->NodeArray, pointsS);
+		pointAssociationData.Create(pModel->points.n, pointsS.n, true);
+		//PointAssociation(pModel->points, &(hyp.pose), pointsS, pointAssociationData, ptBuff, true, &pointsMS);
+		SetSceneForHypothesisVisualization(pMesh);
+		SetBBoxForHypothesisVisualization(&hyp);
+
+		AICP(pModel->points, pointsS, hyp.pose, nICPIterations, APoseRef, pointAssociationData, &pointsMS);
+		APose = APoseRef;
+
+		pVisualizationData->pVisualizer->renderer->RemoveAllViewProps();
+		pointAssociationData.Clear();
+
+		//Evaluate hypothesis
+		RECOG::InitZBuffer(pMesh, sceneSamplingResolution, ZBuffer, ZBufferActivePtArray, subImageMap);
+		CreateImage3x3NeighborhoodLT(ZBuffer.w, image3x3Neighborhood);
+
+		float s[7];
+		float sceneFittingScore;
+		float bestSceneFittingScore = 0.0f;
+		int nTransparentPts;
+		int* SMCorrespondence = new int[ZBuffer.w * ZBuffer.h];
+		RVL_DELETE_ARRAY(surfelMask);
+		surfelMask = new bool[pSurfels->NodeArray.n];
+		for (int iSurfel = 0; iSurfel < pSurfels->NodeArray.n; iSurfel++)
+			surfelMask[iSurfel] = true;
+
+		s[0] = 0.0f;
+		s[1] = pModel->bboxSize[0] / 2 * APose.s[0];
+		s[2] = pModel->bboxSize[1] / 2 * APose.s[1];
+		s[3] = pModel->bboxSize[2] / 2 * APose.s[2];
+		memset(s + 4, 0, 3 * sizeof(float));
+
+		sceneFittingScore = EvaluateHypothesis(pMesh, pModel, 7, s, APose.R, chamferDistThr, nTransparentPts, SMCorrespondence, NULL, APose.t);
+		sceneFittingScore -= (float)nTransparentPts;
+		printf("Scene fitting score: %f\t(nTransparentPts = %d)\n", sceneFittingScore, nTransparentPts);
+
+		if (pVisualizationData->bVisualizeFittingScoreCalculation)
+		{
+			VisualizeFittingScoreCalculation(pMesh, nTransparentPts, SMCorrespondence);
+		}
+
+		delete[] SMCorrespondence;
+	}
+
+	delete[] ptBuff.Element;
+	delete[] pointsMS.Element;
+	delete[] pointsS.Element;
+	delete[] t;
+}
+
+//void DDDetector::DetectROI(Array<Mesh> meshSeq, bool bVisualize)
+//{
+//	//Debug values
+//	//this fcn should calculate ROI params
+//	/*ROI.minx = -0.300;
+//	ROI.maxx = 0.200;
+//	ROI.miny = 0.150;
+//	ROI.maxy = 0.400;
+//	ROI.minz = 0.900;
+//	ROI.maxz = 1.600;*/
+//	//END Debug values
+//
+//	Mesh* pMeshM, * pMeshQ;
+//	PointAssociationData pointAssociationData;
+//	Array<int> ptBuff;
+//	ptBuff.Element = new int[camera.w * camera.h];
+//	Array<Point> pointsMQ;
+//	pointsMQ.Element = new Point[camera.w * camera.h];
+//	Array<OrientedPoint> pointsM, pointsQ;
+//	Array<OrientedPoint> pointsMSubsampled, pointsMValid;
+//	Array<bool> bPointsMValid;
+//	pointsM.Element = new OrientedPoint[camera.w * camera.h];
+//	pointsQ.Element = new OrientedPoint[camera.w * camera.h];
+//	AffinePose3D pose;
+//	float s[3] = { 1.0, 1.0, 1.0 };
+//	float t[3] = { 0.0, 0.0, 0.0 };
+//	float R[9] = { 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0 };
+//	RVLCOPY3VECTOR(s, pose.s);
+//	RVLCOPY3VECTOR(t, pose.t);
+//	RVLCOPYMX3X3(R, pose.R);
+//
+//	pMeshM = meshSeq.Element + meshSeq.n - 1;
+//	CreateOrientedPointArrayFromPointArray(pMeshM->NodeArray, pointsM);
+//	MeshSubsample(pMeshM, &pointsMSubsampled);
+//	pMeshQ = meshSeq.Element + meshSeq.n - 1 - ROICalculationStep;
+//	CreateOrientedPointArrayFromPointArray(pMeshQ->NodeArray, pointsQ);
+//	pointAssociationData.Create(pointsMSubsampled.n, pointsQ.n, true);
+//	imgGrid.Create(pMeshQ->NodeArray, &camera, ROIScene2SubsampleCellSize);
+//	SampleImage(pMeshQ);
+//	//PointAssociation(pointsM, &pose, pointsQ, pointAssociationData, ptBuff, true, &pointsMQ);
+//	PointAssociation(pointsMSubsampled, &pose, pointsQ, pointAssociationData, ptBuff, true, &pointsMQ);
+//
+//	Array<Vector3<float>> pointsShift;
+//	Voter3D voter;
+//	float cellSize[3] = { votingCellSizeX, votingCellSizeY, votingCellSizeZ };
+//	CalculatePointsShiftVector(pointsMSubsampled, pointsQ, &pointAssociationData, &pointsShift, minPointShift, &pointsMValid, &bPointsMValid);
+//	voter.Vote(pointsShift, cellSize);
+//	Vector3<float> dominantShift = voter.GetMax();
+//
+//	Array<OrientedPoint> selectedPoints;
+//	float shiftThresh[3] = { shiftThreshX, shiftThreshY, shiftThreshZ };
+//	FindPointsWithShift(pointsMSubsampled, &bPointsMValid, pointsQ, &pointAssociationData, &dominantShift, shiftThresh, &selectedPoints);
+//
+//	InitBoundingBox<float>(&ROI, selectedPoints.Element[0].P);
+//	for (int iPt = 1; iPt < selectedPoints.n; iPt++)
+//		UpdateBoundingBox<float>(&ROI, selectedPoints.Element[iPt].P);
+//
+//	if (bVisualize)
+//	{
+//		Visualizer* pVisualizer;
+//		pVisualizer = pVisualizationData->pVisualizer;
+//
+//		uchar green[] = { 0.0, 255, 0.0 };
+//		uchar blue[] = { 0.0, 0.0, 255.0 };
+//		uchar red[] = { 255.0, 0.0, 0.0 };
+//		uchar white[] = { 255.0, 255.0, 255.0 };
+//
+//		float meanPoint[3];
+//		FindMeanPoint(&pointsMValid, meanPoint);
+//
+//		SetPointsForPointToPointAssociationVisualization(pointsMSubsampled, pMeshQ, &pointAssociationData);
+//		SetShiftVectorForVisualization(meanPoint, dominantShift, blue);
+//		//SetPointsForVisualization(pointsMSubsampled, blue, 1.0);
+//		//SetPointsForVisualization(pointsQ, red, 1.0);
+//		SetPointsForVisualization(pointsMValid, green, 2.0);
+//		SetPointsForVisualization(selectedPoints, red, 2.0);
+//
+//		pVisualizer->Run();
+//		pVisualizer->renderer->RemoveAllViewProps();
+//	}
+//
+//	RVL_DELETE_ARRAY(ptBuff.Element);
+//	RVL_DELETE_ARRAY(pointsMQ.Element);
+//	RVL_DELETE_ARRAY(pointsM.Element);
+//	RVL_DELETE_ARRAY(pointsQ.Element);
+//	RVL_DELETE_ARRAY(pointsMSubsampled.Element);
+//
+//	RVL_DELETE_ARRAY(pointsShift.Element);
+//	RVL_DELETE_ARRAY(pointsMValid.Element);
+//	RVL_DELETE_ARRAY(bPointsMValid.Element);
+//	RVL_DELETE_ARRAY(selectedPoints.Element);
+//}
+
+
+
+
+void DDDetector::DetectDominantShiftPoints(Array<Mesh> meshSeq, Array<int>* dominantShiftPointsIdx, bool bVisualize)
+{
+	//Debug values
+	//this fcn should calculate ROI params
+	/*ROI.minx = -0.300;
+	ROI.maxx = 0.200;
+	ROI.miny = 0.150;
+	ROI.maxy = 0.400;
+	ROI.minz = 0.900;
+	ROI.maxz = 1.600;*/
+	//END Debug values
+
+	Mesh* pMeshM, * pMeshQ;
+	PointAssociationData pointAssociationData;
+	Array<int> ptBuff;
+	ptBuff.Element = new int[camera.w * camera.h];
+	Array<Point> pointsMQ;
+	pointsMQ.Element = new Point[camera.w * camera.h];
+	//Array<OrientedPoint> pointsM, pointsQ;
+	Array<OrientedPoint> pointsQ;
+	Array<OrientedPoint> pointsMSubsampled, pointsMValidShift, dominantShiftPoints;
+	pointsMSubsampled.Element = NULL;
+	pointsMValidShift.Element = NULL;
+	dominantShiftPoints.Element = NULL;
+	Array<int> pointsMSubsampledIdx, pointsMValidShiftIdx;
+	//pointsM.Element = new OrientedPoint[camera.w * camera.h];
+	pointsQ.Element = new OrientedPoint[camera.w * camera.h];
+	AffinePose3D pose;
+	float s[3] = { 1.0, 1.0, 1.0 };
+	float t[3] = { 0.0, 0.0, 0.0 };
+	float R[9] = { 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0 };
+	RVLCOPY3VECTOR(s, pose.s);
+	RVLCOPY3VECTOR(t, pose.t);
+	RVLCOPYMX3X3(R, pose.R);
+
+	pMeshM = meshSeq.Element + meshSeq.n - 1;
+	//CreateOrientedPointArrayFromPointArray(pMeshM->NodeArray, pointsM);
+	MeshSubsample(pMeshM, &pointsMSubsampledIdx);
+	CreateOrientedPointArrayFromPointArray(pMeshM->NodeArray, pointsMSubsampledIdx, pointsMSubsampled);
+	pMeshQ = meshSeq.Element + meshSeq.n - 1 - ROICalculationStep;
+	CreateOrientedPointArrayFromPointArray(pMeshQ->NodeArray, pointsQ);
+	pointAssociationData.Create(pointsMSubsampled.n, pointsQ.n, true);
+	imgGrid.Create(pMeshQ->NodeArray, &camera, ROIPointAssociationGridCellSize);
+	//imgGrid.Create(pMeshQ->NodeArray, &camera, pointAssociationGridCellSize);
+	SampleImage(pMeshQ);
+	//PointAssociation(pointsM, &pose, pointsQ, pointAssociationData, ptBuff, true, &pointsMQ);
+	PointAssociation(pointsMSubsampled, &pose, pointsQ, pointAssociationData, ptBuff, true, &pointsMQ);
+
+	Array<Vector3<float>> pointsShift;
+	Voter3D voter;
+	float cellSize[3] = { votingCellSizeX, votingCellSizeY, votingCellSizeZ };	
+	CalculatePointsShiftVector(pMeshM->NodeArray, pointsMSubsampledIdx, pointsQ, &pointAssociationData, &pointsShift, minPointShift, &pointsMValidShiftIdx);
+	CreateOrientedPointArrayFromPointArray(pMeshM->NodeArray, pointsMValidShiftIdx, pointsMValidShift);
+	
+	voter.Vote(pointsShift, cellSize);
+	Vector3<float> dominantShift = voter.GetMax();
+
+	float shiftThresh[3] = { shiftThreshX, shiftThreshY, shiftThreshZ };
+	FindPointsWithShift(pMeshM->NodeArray, pointsMSubsampledIdx, pointsQ, &pointAssociationData, &dominantShift, shiftThresh, dominantShiftPointsIdx);
+
+	CreateOrientedPointArrayFromPointArray(pMeshM->NodeArray, *dominantShiftPointsIdx, dominantShiftPoints);
+
+	if (bVisualize && pVisualizationData->bVisualizeROIDetection)
+	{
+		Visualizer* pVisualizer;
+		pVisualizer = pVisualizationData->pVisualizer;
+
+		uchar green[] = { 0, 255, 0 };
+		uchar blue[] = { 0, 0, 255 };
+		uchar red[] = { 255, 0, 0 };
+		uchar cyan[] = { 0, 255, 255 };
+		uchar white[] = { 255, 255, 255 };
+
+		float meanPoint[3];
+		FindMeanPoint(&pointsMValidShift, meanPoint);	
+
+		SetPointsForPointToPointAssociationVisualization(pointsMSubsampled, pMeshQ, &pointAssociationData);
+		SetShiftVectorForVisualization(meanPoint, dominantShift, blue);
+		//SetPointsForVisualization(pointsMSubsampled, blue, 1.0);
+		//SetPointsForVisualization(pointsQ, red, 1.0);
+		SetPointsForVisualization(pointsMValidShift, blue, 2.0);
+		SetPointsForVisualization(dominantShiftPoints, green, 2.0);
+
+		pVisualizer->Run();
+		pVisualizer->renderer->RemoveAllViewProps();		
+	}
+
+	RVL_DELETE_ARRAY(ptBuff.Element);
+	RVL_DELETE_ARRAY(pointsMQ.Element);
+	//RVL_DELETE_ARRAY(pointsM.Element);
+	RVL_DELETE_ARRAY(pointsQ.Element);
+	RVL_DELETE_ARRAY(pointsMSubsampled.Element);
+	RVL_DELETE_ARRAY(pointsMSubsampledIdx.Element);
+
+	RVL_DELETE_ARRAY(pointsShift.Element);
+	RVL_DELETE_ARRAY(pointsMValidShift.Element);
+	RVL_DELETE_ARRAY(pointsMValidShiftIdx.Element);
+	RVL_DELETE_ARRAY(dominantShiftPoints.Element);
+}
+
+void DDDetector::DetectDominantShiftPoints(Mesh* pMeshM, Mesh* pMeshQ, Array<int>* dominantShiftPointsIdx, bool bVisualize)
+{
+	//Debug values
+	//this fcn should calculate ROI params
+	/*ROI.minx = -0.300;
+	ROI.maxx = 0.200;
+	ROI.miny = 0.150;
+	ROI.maxy = 0.400;
+	ROI.minz = 0.900;
+	ROI.maxz = 1.600;*/
+	//END Debug values
+
+	//Mesh* pMeshM, *pMeshQ;
+	PointAssociationData pointAssociationData;
+	Array<int> ptBuff;
+	ptBuff.Element = new int[camera.w * camera.h];
+	Array<Point> pointsMQ;
+	pointsMQ.Element = new Point[camera.w * camera.h];
+	//Array<OrientedPoint> pointsM, pointsQ;
+	Array<OrientedPoint> pointsQ;
+	Array<OrientedPoint> pointsMSubsampled, pointsMValidShift, dominantShiftPoints;
+	pointsMSubsampled.Element = NULL;
+	pointsMValidShift.Element = NULL;
+	dominantShiftPoints.Element = NULL;
+	Array<int> pointsMSubsampledIdx, pointsMValidShiftIdx;
+	//pointsM.Element = new OrientedPoint[camera.w * camera.h];
+	pointsQ.Element = new OrientedPoint[camera.w * camera.h];
+	AffinePose3D pose;
+	float s[3] = { 1.0, 1.0, 1.0 };
+	float t[3] = { 0.0, 0.0, 0.0 };
+	float R[9] = { 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0 };
+	RVLCOPY3VECTOR(s, pose.s);
+	RVLCOPY3VECTOR(t, pose.t);
+	RVLCOPYMX3X3(R, pose.R);
+
+	//pMeshM = meshSeq.Element + meshSeq.n - 1;
+	//CreateOrientedPointArrayFromPointArray(pMeshM->NodeArray, pointsM);
+	MeshSubsample(pMeshM, &pointsMSubsampledIdx);
+	CreateOrientedPointArrayFromPointArray(pMeshM->NodeArray, pointsMSubsampledIdx, pointsMSubsampled);
+	//pMeshQ = meshSeq.Element + meshSeq.n - 1 - ROICalculationStep;
+	CreateOrientedPointArrayFromPointArray(pMeshQ->NodeArray, pointsQ);
+	pointAssociationData.Create(pointsMSubsampled.n, pointsQ.n, true);
+	imgGrid.Create(pMeshQ->NodeArray, &camera, ROIPointAssociationGridCellSize);
+	//imgGrid.Create(pMeshQ->NodeArray, &camera, pointAssociationGridCellSize);
+	SampleImage(pMeshQ);
+	//PointAssociation(pointsM, &pose, pointsQ, pointAssociationData, ptBuff, true, &pointsMQ);
+	PointAssociation(pointsMSubsampled, &pose, pointsQ, pointAssociationData, ptBuff, true, &pointsMQ);
+
+	Array<Vector3<float>> pointsShift;
+	Voter3D voter;
+	float cellSize[3] = { votingCellSizeX, votingCellSizeY, votingCellSizeZ };
+	CalculatePointsShiftVector(pMeshM->NodeArray, pointsMSubsampledIdx, pointsQ, &pointAssociationData, &pointsShift, minPointShift, &pointsMValidShiftIdx);
+	CreateOrientedPointArrayFromPointArray(pMeshM->NodeArray, pointsMValidShiftIdx, pointsMValidShift);
+
+	voter.Vote(pointsShift, cellSize);
+	Vector3<float> dominantShift = voter.GetMax();
+
+	float shiftThresh[3] = { shiftThreshX, shiftThreshY, shiftThreshZ };
+	FindPointsWithShift(pMeshM->NodeArray, pointsMSubsampledIdx, pointsQ, &pointAssociationData, &dominantShift, shiftThresh, dominantShiftPointsIdx);
+
+	CreateOrientedPointArrayFromPointArray(pMeshM->NodeArray, *dominantShiftPointsIdx, dominantShiftPoints);
+
+	if (bVisualize && pVisualizationData->bVisualizeROIDetection)
+	{
+		Visualizer* pVisualizer;
+		pVisualizer = pVisualizationData->pVisualizer;
+
+		uchar green[] = { 0, 255, 0 };
+		uchar blue[] = { 0, 0, 255 };
+		uchar red[] = { 255, 0, 0 };
+		uchar cyan[] = { 0, 255, 255 };
+		uchar white[] = { 255, 255, 255 };
+
+		float meanPoint[3];
+		FindMeanPoint(&pointsMValidShift, meanPoint);
+
+		SetPointsForPointToPointAssociationVisualization(pointsMSubsampled, pMeshQ, &pointAssociationData);
+		SetShiftVectorForVisualization(meanPoint, dominantShift, blue);
+		//SetPointsForVisualization(pointsMSubsampled, blue, 1.0);
+		//SetPointsForVisualization(pointsQ, red, 1.0);
+		SetPointsForVisualization(pointsMValidShift, blue, 2.0);
+		SetPointsForVisualization(dominantShiftPoints, green, 2.0);
+
+		pVisualizer->Run();
+		pVisualizer->renderer->RemoveAllViewProps();
+	}
+
+	RVL_DELETE_ARRAY(ptBuff.Element);
+	RVL_DELETE_ARRAY(pointsMQ.Element);
+	//RVL_DELETE_ARRAY(pointsM.Element);
+	RVL_DELETE_ARRAY(pointsQ.Element);
+	RVL_DELETE_ARRAY(pointsMSubsampled.Element);
+	RVL_DELETE_ARRAY(pointsMSubsampledIdx.Element);
+
+	RVL_DELETE_ARRAY(pointsShift.Element);
+	RVL_DELETE_ARRAY(pointsMValidShift.Element);
+	RVL_DELETE_ARRAY(pointsMValidShiftIdx.Element);
+	RVL_DELETE_ARRAY(dominantShiftPoints.Element);
+}
+
+void DDDetector::MeshSubsample(Mesh* pMesh, Array<int>* pSubsampledPointsIdx)
+{
+	Grid SubsamplingGrid;
+	SubsamplingGrid.Create(pMesh->NodeArray, &camera, ROISceneSubsampleCellSize);
+	SubsamplingGrid.SubSample(pMesh->NodeArray, ROISceneSubsampleNormalSimilarity, *pSubsampledPointsIdx);
+}
+
+
+void DDDetector::CalculatePointsShiftVector(
+	Array<Point> pointsM,
+	Array<int> subsampledPointsMIdx,
+	Array<OrientedPoint> pointsQ,
+	PointAssociationData* pPointAssociationData,
+	Array<RVL::Vector3<float>>* pointsShift,
+	float shiftThresh,
+	Array<int>* validShiftedPointsMIdx
+)
+{
+	pointsShift->Element = new Vector3<float>[pointsM.n];
+	validShiftedPointsMIdx->Element = new int[pointsM.n];
+
+	int iMPt, iQPt;
+	float* pMPt, * pQPt, * pPt;
+	int nPoints = 0;
+	float diff[3];
+	float len;
+
+	for (int i = 0; i < subsampledPointsMIdx.n; i++)
+	{
+		iMPt = subsampledPointsMIdx.Element[i];
+
+		pMPt = (pointsM.Element + iMPt)->P;
+		iQPt = pPointAssociationData->QNN[i];
+		if (iQPt >= 0)
+		{
+			pQPt = (pointsQ.Element + iQPt)->P;
+
+			diff[0] = pQPt[0] - pMPt[0];
+			diff[1] = pQPt[1] - pMPt[1];
+			diff[2] = pQPt[2] - pMPt[2];
+
+			len = sqrt(RVLDOTPRODUCT3(diff, diff));
+
+			if (len < shiftThresh)
+			{
+				continue;
+			}
+			else
+			{
+				pointsShift->Element[nPoints].Element[0] = diff[0];
+				pointsShift->Element[nPoints].Element[1] = diff[1];
+				pointsShift->Element[nPoints].Element[2] = diff[2];
+
+				validShiftedPointsMIdx->Element[nPoints] = iMPt;
+
+				nPoints++;
+			}
+
+		}
+	}
+
+	pointsShift->n = nPoints;
+	validShiftedPointsMIdx->n = nPoints;
+}
+
+void DDDetector::FindPointsWithShift(
+	Array<Point> pointsM,
+	Array<int> validPointsMIdx,
+	Array<OrientedPoint> pointsQ,
+	PointAssociationData* pPointAssociationData,
+	Vector3<float>* pointsShift,
+	float* shiftThresh,
+	Array<int>* pointsIdx
+)
+{
+	int iMPt, iQPt;
+	float* pMPt, * pQPt;
+	float shift[3];
+	int nValid = 0;
+	OrientedPoint* pPt;
+
+	if (pointsIdx->Element)
+		RVL_DELETE_ARRAY(pointsIdx->Element);
+
+	pointsIdx->Element = new int[pointsM.n];
+	pointsIdx->n = 0;
+
+	RVLSCALE3VECTOR(shiftThresh, 0.5, shiftThresh);
+	float lowerThresh[3] = { pointsShift->Element[0] - shiftThresh[0], pointsShift->Element[1] - shiftThresh[1], pointsShift->Element[2] - shiftThresh[2] };
+	float upperThresh[3] = { pointsShift->Element[0] + shiftThresh[0], pointsShift->Element[1] + shiftThresh[1], pointsShift->Element[2] + shiftThresh[2] };
+
+	for (int i = 0; i < validPointsMIdx.n; i++)
+	{
+		iMPt = validPointsMIdx.Element[i];
+
+		pMPt = (pointsM.Element + iMPt)->P;
+		iQPt = pPointAssociationData->QNN[i];
+
+		if (iQPt >= 0)
+		{
+			pQPt = (pointsQ.Element + iQPt)->P;
+			shift[0] = (pQPt[0] - pMPt[0]);
+			shift[1] = (pQPt[1] - pMPt[1]);
+			shift[2] = (pQPt[2] - pMPt[2]);
+
+			if ((lowerThresh[0] < shift[0]) && (shift[0] < upperThresh[0]))
+				if ((lowerThresh[1] < shift[1]) && (shift[1] < upperThresh[1]))
+					if ((lowerThresh[2] < shift[2]) && (shift[2] < upperThresh[2]))
+					{
+						pointsIdx->Element[nValid] = iMPt;
+						nValid++;
+					}
+		}
+	}
+
+	pointsIdx->n = nValid;
+}
+
+void::DDDetector::CalculateROI(Mesh* pMesh, Array<int> pointsIdx, Box<float>* ROI)
+{
+	int iPt = pointsIdx.Element[0];
+	Point *pPt = pMesh->NodeArray.Element + iPt;
+
+	InitBoundingBox<float>(ROI, pPt->P);
+	for (int iPt = 1; iPt < pointsIdx.n; iPt++)
+	{
+		pPt = pMesh->NodeArray.Element + iPt;
+		UpdateBoundingBox<float>(ROI, pPt->P);
+	}		
+}
+
+void DDDetector::FindMeanPoint(Array<OrientedPoint> *points, float *meanPoint)
+{
+	float minValue[3];
+	float maxValue[3];
+	float diff[3];
+
+	minValue[0] = FLT_MAX;
+	minValue[1] = FLT_MAX;
+	minValue[2] = FLT_MAX;
+	maxValue[0] = FLT_MIN;
+	maxValue[1] = FLT_MIN;
+	maxValue[2] = FLT_MIN;
+
+	OrientedPoint* pPt;
+
+	for (int iPt = 0; iPt < points->n; iPt++)
+	{
+		pPt = points->Element + iPt;
+
+		for (int i = 0; i < 3; i++)
+		{
+			if (pPt->P[i] < minValue[i])
+				minValue[i] = pPt->P[i];
+			if (pPt->P[i] > maxValue[i])
+				maxValue[i] = pPt->P[i];
+		}
+	}
+
+	RVLDIF3VECTORS(maxValue, minValue, diff);
+	RVLSCALE3VECTOR(diff, 0.5, diff);
+	RVLSUM3VECTORS(minValue, diff, meanPoint);
+}
+
+void DDDetector::SetPointsForPointToPointAssociationVisualization(Mesh* pMeshM, Mesh* pMeshQ, PointAssociationData* pPointAssociationData)
+{
+	uchar green[] = { 0, 255, 0 };
+	uchar blue[] = { 0, 0, 255 };
+	uchar red[] = { 255, 0, 0 };
+
+	pVisualizationData->pVisualizer->DisplayPointSet<float, Point>(pMeshM->NodeArray, green, 0.2);
+	pVisualizationData->pVisualizer->DisplayPointSet<float, Point>(pMeshQ->NodeArray, blue, 0.2);
+
+	if (pVisualizationData->AssociatedPts.Element)
+		RVL_DELETE_ARRAY(pVisualizationData->AssociatedPts.Element);
+	pVisualizationData->AssociatedPts.n = pMeshM->NodeArray.n + pMeshQ->NodeArray.n;
+	pVisualizationData->AssociatedPts.Element = new Point[pVisualizationData->AssociatedPts.n];
+
+	memcpy(pVisualizationData->AssociatedPts.Element, pMeshM->NodeArray.Element, pMeshM->NodeArray.n * sizeof(Point));
+	memcpy(pVisualizationData->AssociatedPts.Element + pMeshM->NodeArray.n, pMeshQ->NodeArray.Element, pMeshQ->NodeArray.n * sizeof(Point));
+
+	Point* pPtSrc;
+	Point* pPtTgt = pVisualizationData->AssociatedPts.Element;
+	Array<Pair<int, int>> associationLines;
+	associationLines.Element = new Pair<int, int>[pPointAssociationData->associatedMPts.n + pPointAssociationData->explainedQPts.n];
+	associationLines.n = 0;
+	int iMPt, iQPt;
+
+	for (iMPt = 0; iMPt < pMeshM->NodeArray.n; iMPt++)
+	{
+		iQPt = pPointAssociationData->QNN[iMPt];
+		if (iQPt >= 0)
+		{
+			associationLines.Element[associationLines.n].a = iMPt;
+			associationLines.Element[associationLines.n].b = iQPt + pMeshM->NodeArray.n;
+			associationLines.n++;
+		}
+	}
+	for (int i = 0; i < pPointAssociationData->explainedQPts.n; i++)
+	{
+		iQPt = pPointAssociationData->explainedQPts.Element[i];
+		iMPt = pPointAssociationData->MNN[iQPt];
+		if (pPointAssociationData->QNN[iMPt] != iQPt)
+		{
+			associationLines.Element[associationLines.n].a = iMPt;
+			associationLines.Element[associationLines.n].b = iQPt + pMeshM->NodeArray.n;
+			associationLines.n++;
+		}
+	}
+	pVisualizationData->associationLinesActor = pVisualizationData->pVisualizer->DisplayLines(pVisualizationData->AssociatedPts, associationLines, red);
+	delete[] associationLines.Element;
+}
+
+void DDDetector::SetPointsForPointToPointAssociationVisualization(Array<OrientedPoint> pointsM, Mesh* pMeshQ, PointAssociationData* pPointAssociationData)
+{
+	uchar green[] = { 0, 255, 0 };
+	uchar blue[] = { 0, 0, 255 };
+	uchar red[] = { 255, 0, 0 };
+	uchar white[] = { 255, 255, 255 };
+
+	//pVisualizationData->pVisualizer->DisplayPointSet<float, OrientedPoint>(pointsM, green, 0.2);
+	//pVisualizationData->pVisualizer->DisplayPointSet<float, Point>(pMeshQ->NodeArray, blue, 0.2);
+
+	if (pVisualizationData->AssociatedPts.Element)
+		RVL_DELETE_ARRAY(pVisualizationData->AssociatedPts.Element);
+	pVisualizationData->AssociatedPts.n = pointsM.n + pMeshQ->NodeArray.n;
+	pVisualizationData->AssociatedPts.Element = new Point[pVisualizationData->AssociatedPts.n];
+
+	memcpy(pVisualizationData->AssociatedPts.Element + pointsM.n, pMeshQ->NodeArray.Element, pMeshQ->NodeArray.n * sizeof(Point));
+
+	Point* pPtTgt = pVisualizationData->AssociatedPts.Element;
+	Array<Pair<int, int>> associationLines;
+	associationLines.Element = new Pair<int, int>[pPointAssociationData->associatedMPts.n];
+	associationLines.n = 0;
+
+	//test
+	/*Array<Pair<int, int>> associationLines2;
+	associationLines2.Element = new Pair<int, int>[pPointAssociationData->explainedQPts.n];
+	associationLines2.n = 0;*/
+	//end test
+
+	int iMPt, iQPt;
+
+	for (iMPt = 0; iMPt < pointsM.n; iMPt++, pPtTgt++)
+	{
+		RVLCOPY3VECTOR(((pointsM.Element + iMPt)->P), pPtTgt->P);
+		iQPt = pPointAssociationData->QNN[iMPt];
+		if (iQPt >= 0)
+		{
+			associationLines.Element[associationLines.n].a = iMPt;
+			associationLines.Element[associationLines.n].b = iQPt + pointsM.n;
+			associationLines.n++;
+		}
+	}
+
+	/*for (int i = 0; i < pPointAssociationData->explainedQPts.n; i++)
+	{
+		iQPt = pPointAssociationData->explainedQPts.Element[i];
+		iMPt = pPointAssociationData->MNN[iQPt];
+		if (pPointAssociationData->QNN[iMPt] != iQPt)
+		{
+			associationLines2.Element[associationLines2.n].a = iMPt;
+			associationLines2.Element[associationLines2.n].b = iQPt + pointsM.n;
+			associationLines2.n++;
+		}
+	}*/
+
+	pVisualizationData->associationLinesActor = pVisualizationData->pVisualizer->DisplayLines(pVisualizationData->AssociatedPts, associationLines, white);
+	//pVisualizationData->associationLinesActor = pVisualizationData->pVisualizer->DisplayLines(pVisualizationData->AssociatedPts, associationLines2, blue);
+	delete[] associationLines.Element;
+	//delete[] associationLines2.Element;
+}
+
+void DDDetector::SetShiftVectorForVisualization(float *firstPoint, Vector3<float> shift, uchar* color)
+{
+	int scale = -10;
+
+	Array<Pair<int, int>> lines;
+	lines.Element = new Pair<int, int>[1];
+	lines.n = 1;
+
+	Array<Point> points;
+	points.Element = new Point[2];
+	points.n = 2;
+
+	Point* pPt;
+	float* P0 = firstPoint;
+	float P[3];
+	float shift_[3];
+
+	pPt = &points.Element[0];
+	RVLCOPY3VECTOR(P0, pPt->P);
+
+	RVLSET3VECTOR(shift_, shift.Element[0], shift.Element[1], shift.Element[2]);
+	RVLSCALE3VECTOR(shift_, scale, shift_);
+	RVLSUM3VECTORS(P0, shift_, P);
+	pPt = &points.Element[1];
+	RVLCOPY3VECTOR(P, pPt->P);
+
+	lines.Element[0].a = 0;
+	lines.Element[0].b = 1;
+
+	pVisualizationData->associationLinesActor = pVisualizationData->pVisualizer->DisplayLines(points, lines, color);
+}
+
+void DDDetector::SetShiftVectorsForVisualization(float* firstPoint, Array<Vector3<float>> shiftArray, uchar* color)
+{
+	int scale = -10;
+
+	Array<Pair<int, int>> lines;
+	lines.Element = new Pair<int, int>[shiftArray.n];
+	lines.n = shiftArray.n;
+
+	Array<Point> points;
+	points.Element = new Point[shiftArray.n + 1];
+	points.n = shiftArray.n + 1;
+
+	Point startPt, endPt;
+	Point* pPt;
+	float* P0 = firstPoint;
+	float P[3];
+	float shift_[3];
+
+	pPt = &points.Element[0];
+	RVLCOPY3VECTOR(P0, pPt->P);
+
+	for (int iShift = 0; iShift < shiftArray.n; iShift++)
+	{
+		RVLSET3VECTOR(shift_, shiftArray.Element[iShift].Element[0], shiftArray.Element[iShift].Element[1], shiftArray.Element[iShift].Element[2]);
+		RVLSCALE3VECTOR(shift_, scale, shift_);
+		RVLSUM3VECTORS(P0, shift_, P);
+		pPt = &points.Element[iShift + 1];
+		RVLCOPY3VECTOR(P, pPt->P);
+
+		//all lines starts from same point
+		lines.Element[iShift].a = 0;
+		lines.Element[iShift].b = iShift + 1;
+	}
+
+	pVisualizationData->associationLinesActor = pVisualizationData->pVisualizer->DisplayLines(points, lines, color);
+}
+
+void DDDetector::SetPointsForVisualization(Array<OrientedPoint> points, uchar* color, float size)
+{
+	pVisualizationData->pVisualizer->DisplayPointSet<float, OrientedPoint>(points, color, size);
+}
+
+void DDDetector::VisualizeFittingScoreCalculation(Mesh* pMesh, int nTransparentPts, int* SMCorrespondence)
+{
+	vtkSmartPointer<vtkActor> hypothesisActor[4];
+
+	pVisualizationData->pVisualizer->SetMesh(pMesh->pPolygonData);
+	RECOG::DisplayHypothesisEvaluation2(pVisualizationData->pVisualizer, pMesh,
+		ZBuffer, ZBufferActivePtArray, subImageMap, SMCorrespondence, nTransparentPts, hypothesisActor);
+	pVisualizationData->pVisualizer->Run();
+	for (int i = 0; i < 4; i++)
+		pVisualizationData->pVisualizer->renderer->RemoveViewProp(hypothesisActor[i]);
+}
+
+void DDDetector::Voter1DTest()
+{
+	//VOTE1D test
+	Voter1D voter;
+	Array<float> data;
+	data.Element = new float[20];
+	data.n = 20;
+
+	data.Element[0] = 0.9;
+	data.Element[1] = 0.8;
+	data.Element[2] = 0.1;
+	data.Element[3] = 1.9;
+	data.Element[4] = 0.0;
+	data.Element[5] = 2.0;
+	data.Element[6] = 3.1;
+	data.Element[7] = 0.5;
+	data.Element[8] = 0.1;
+	data.Element[9] = 0.2;
+	data.Element[10] = 4.5;
+	data.Element[11] = 2.6;
+	data.Element[12] = 1.1;
+	data.Element[13] = -0.1;
+	data.Element[14] = -0.8;
+	data.Element[15] = 1.4;
+	data.Element[16] = 1.7;
+	data.Element[17] = 1.8;
+	data.Element[18] = 1.3;
+	data.Element[19] = 1.5;
+
+	voter.Vote(data, 1);
+	float value;
+	value = voter.GetCellValue(0);
+	value = voter.GetCellValue(1);
+	value = voter.GetCellValue(2);
+	value = voter.GetCellValue(3);
+	value = voter.GetCellValue(4);
+	value = voter.GetCellValue(5);
+
+	int votes;
+	votes = voter.GetCellVotes(0);
+	votes = voter.GetCellVotes(1);
+	votes = voter.GetCellVotes(2);
+	votes = voter.GetCellVotes(3);
+	votes = voter.GetCellVotes(4);
+	votes = voter.GetCellVotes(5);
+
+	float maxValue = voter.GetMax();
+}
+
+void DDDetector::Voter3DTest()
+{
+	//VOTE3D test
+	Voter3D voter;
+	Array<Vector3<float>> data;
+	int sizeX = 2;
+	int sizeY = 2;
+	int sizeZ = 2;
+	data.Element = new Vector3<float>[sizeX * sizeY * sizeZ];
+	data.n = sizeX * sizeY * sizeZ;
+
+	data.Element[0].Element[0] = 0.1;
+	data.Element[0].Element[1] = 1.2;
+	data.Element[0].Element[2] = 2.1;
+
+	data.Element[1].Element[0] = 0.3;
+	data.Element[1].Element[1] = 1.3;
+	data.Element[1].Element[2] = 2.2;
+
+	data.Element[2].Element[0] = 0.25;
+	data.Element[2].Element[1] = 1.1;
+	data.Element[2].Element[2] = 2.15;
+
+	data.Element[3].Element[0] = 0.2;
+	data.Element[3].Element[1] = 1.25;
+	data.Element[3].Element[2] = 2.15;
+
+	data.Element[4].Element[0] = 3.0;
+	data.Element[4].Element[1] = 1.0;
+	data.Element[4].Element[2] = 2.0;
+
+	data.Element[5].Element[0] = 2.0;
+	data.Element[5].Element[1] = 0.1;
+	data.Element[5].Element[2] = 1.0;
+
+	data.Element[6].Element[0] = 1.1;
+	data.Element[6].Element[1] = 3.1;
+	data.Element[6].Element[2] = 0.1;
+
+	data.Element[7].Element[0] = 0.5;
+	data.Element[7].Element[1] = 2.5;
+	data.Element[7].Element[2] = 1.5;
+
+	float cellSizeIn[3] = { 0.5, 0.5, 0.5 };
+	voter.Vote(data, cellSizeIn);
+	Vector3<float> value;
+	value = voter.GetCellValue(0);
+	value = voter.GetCellValue(1);
+	value = voter.GetCellValue(2);
+	value = voter.GetCellValue(3);
+	value = voter.GetCellValue(4);
+	value = voter.GetCellValue(5);
+
+	int votes;
+	votes = voter.GetCellVotes(0);
+	votes = voter.GetCellVotes(1);
+	votes = voter.GetCellVotes(2);
+	votes = voter.GetCellVotes(3);
+	votes = voter.GetCellVotes(4);
+	votes = voter.GetCellVotes(5);
+
+	Vector3<float> maxValue = voter.GetMax();
+}
+
+//END I. Vidovic
