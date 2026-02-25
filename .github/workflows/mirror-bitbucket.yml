@@ -1,0 +1,43 @@
+name: Mirror Bitbucket Branch
+
+on:
+  schedule:
+    - cron: '0 * * * *'  # Runs every hour
+  workflow_dispatch:      # Allows you to run it manually from the Actions tab
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout GitHub Repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch full history so we can merge properly
+
+      - name: Configure Git
+        run: |
+          git config user.name "GitHub Action"
+          git config user.email "action@github.com"
+
+      - name: Add Bitbucket Remote and Fetch
+        env:
+          BB_USER: ${{ secrets.BITBUCKET_USERNAME }}
+          BB_PASS: ${{ secrets.BITBUCKET_PASSWORD }}
+          # CHANGE THIS: Put your Bitbucket Repo URL (without https://)
+          # Example: bitbucket.org/my-org/rvl-repo.git
+          BB_REPO: bitbucket.org/rcupec/rvl
+          # CHANGE THIS: The specific branch on Bitbucket you want to mirror
+          TARGET_BRANCH: simundic-linux
+        run: |
+          # 1. Add Bitbucket as a remote using the secrets for auth
+          git remote add bitbucket https://$BB_USER:$BB_PASS@$BB_REPO
+          
+          # 2. Fetch the specific branch from Bitbucket
+          git fetch bitbucket $TARGET_BRANCH
+
+          # 3. Reset your current local branch to match Bitbucket exactly
+          # (WARNING: This overwrites changes on GitHub if they conflict)
+          git checkout -B $TARGET_BRANCH bitbucket/$TARGET_BRANCH
+
+          # 4. Push the updated branch to GitHub
+          git push origin $TARGET_BRANCH --force
