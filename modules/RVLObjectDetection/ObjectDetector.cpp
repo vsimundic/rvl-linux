@@ -1380,14 +1380,6 @@ namespace RVL
 		Z[1] = X[1] + Y[1];     \
 	}
 
-// This structure should be moved to Util.h.
-struct Polygon2DLineIntersection
-{
-	int iVertex;
-	Point2D P;
-	char dir;
-};
-
 // Area of a polygon.
 // This function should be moved to Util.h.
 
@@ -2195,11 +2187,11 @@ void ObjectDetector::ConvexSurfaces(
 			if (pConvexSurface->bDegenerate = !pConvexSurface->convexHull.MinBoundingBox(&(pConvexSurface->bboxPose), &(pConvexSurface->bboxSize)))
 				printf("Convex surface %d is degenerate!\n", iiConvex);
 
-				// visualizationData.pVisualizer->DisplayBox(pConvexSurface->bboxSize.Element[0],
-				//	pConvexSurface->bboxSize.Element[1], pConvexSurface->bboxSize.Element[2],
-				//	&(pConvexSurface->bboxPose), 255.0, 0.0, 0.0, true, 2.0f);
-				// visualizationData.pVisualizer->Run();
-				// visualizationData.pVisualizer->Clear();
+			// visualizationData.pVisualizer->DisplayBox(pConvexSurface->bboxSize.Element[0],
+			//	pConvexSurface->bboxSize.Element[1], pConvexSurface->bboxSize.Element[2],
+			//	&(pConvexSurface->bboxPose), 255.0, 0.0, 0.0, true, 2.0f);
+			// visualizationData.pVisualizer->Run();
+			// visualizationData.pVisualizer->Clear();
 
 #ifdef NEVER
 			// Minimum bounding box.
@@ -3561,7 +3553,7 @@ void ObjectDetector::ObjectAggregationLevel2VN3()
 
 			///
 		} // for every object with index lower than iObject_.
-	}	  // for every object.
+	} // for every object.
 
 	fclose(fp);
 	fclose(fpInstances);
@@ -5353,8 +5345,8 @@ void ObjectDetector::DisplaySelectedObject(
 
 				pPtIdx = pPtIdx->pNext;
 			} // for every surfel pixel
-		}	  // if pNode is a surfel node
-	}		  // for (pNodeFetch = nodeBuff; pNodeFetch < pNodePut; pNodeFetch++)
+		} // if pNode is a surfel node
+	} // for (pNodeFetch = nodeBuff; pNodeFetch < pNodePut; pNodeFetch++)
 
 	delete[] bSelectedObject;
 	delete[] nodeBuff;
