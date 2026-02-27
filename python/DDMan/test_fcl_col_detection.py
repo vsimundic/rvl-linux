@@ -124,7 +124,7 @@ def main():
     cylinder_object = create_collision_object(cylinder, T_cylinder)
 
     # Load cabinet mesh and create its collision object
-    cabinet_ply_path = "/home/RVLuser/ferit_ur5_ws/data/multi-contact/cabinet_meshes/handleless/cabinet_static_0.ply"
+    cabinet_ply_path = "/home/RVLuser/data/multi-contact/cabinet_meshes/handleless/cabinet_static_0.ply"
     cabinet_mesh_fcl, cabinet_mesh_o3d = load_mesh_from_ply(cabinet_ply_path)
 
     T_cabinet = np.array([

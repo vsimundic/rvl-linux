@@ -375,8 +375,8 @@ py::tuple PYDDManipulator::path2(
 	// FCL - Simundic
 	// manipulator.use_fcl = false;
 	manipulator.LoadToolModelFCL();
-	std::string cabinetStaticModelPath = "/home/RVLuser/ferit_ur5_ws/data/multi-contact/cabinets/cabinet_static.ply";
-	std::string cabinetPanelModelPath = "/home/RVLuser/ferit_ur5_ws/data/multi-contact/cabinets/cabinet_panel.ply";
+	std::string cabinetStaticModelPath = "/home/RVLuser/data/multi-contact/cabinets/cabinet_static.ply";
+	std::string cabinetPanelModelPath = "/home/RVLuser/data/multi-contact/cabinets/cabinet_panel.ply";
 	// fcl::Transform3d T_A_S;
 	// manipulator.RVLPose2FCLPose(pose_A_S, T_A_S);
 	if (manipulator.use_fcl)

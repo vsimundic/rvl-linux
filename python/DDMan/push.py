@@ -1040,13 +1040,13 @@ def demo_push_poses():
     dd_state_deg = 7.0
     num_viewpoints = 100
     num_rot_angles = 12
-    load_valid_contact_poses_from_file = True
-    load_feasible_poses_from_file = True
+    load_valid_contact_poses_from_file = False
+    load_feasible_poses_from_file = False
     contact_point_sampling_offset = 0.02
     use_default_gripper = False
     vision_tolerance = 0.007
 
-    use_fcl = False
+    use_fcl = True
     visualize_feasible_poses = True
 
     if use_default_gripper:
@@ -1058,9 +1058,9 @@ def demo_push_poses():
         sphere_to_TCS_distance = 0.
     else:
         # Simundic
-        # custom_gripper_spheres_path = '/home/RVLuser/rvl-linux/data/DDMan/3finger_gripper/gripper_spheres.npy'
-        custom_gripper_spheres_path = '/home/RVLuser/rvl-linux/data/Robotiq3Finger/spheres.npy'
-        custom_gripper_model_path = '/home/RVLuser/rvl-linux/data/Robotiq3Finger/mesh.ply'
+        # custom_gripper_spheres_path = '/home/RVLuser/data/DDMan/3finger_gripper/gripper_spheres.npy'
+        custom_gripper_spheres_path = '/home/RVLuser/data/Robotiq3Finger/spheres.npy'
+        custom_gripper_model_path = '/home/RVLuser/data/Robotiq3Finger/mesh.ply'
         # END: Simundic
         # custom_gripper_spheres_path = '3finger_gripper/gripper_spheres.npy'
         # custom_gripper_model_path = '3finger_gripper/robotiq_3f_gripper_simplified.stl'
@@ -1106,18 +1106,16 @@ def demo_push_poses():
 
     # Valid contact poses.
     if load_valid_contact_poses_from_file:
-        valid_contact_poses_ = np.load("/home/RVLuser/rvl-linux/data/DDMan/valid_contact_poses.npy")
+        valid_contact_poses_ = np.load("/home/RVLuser/data/Robotiq3Finger/valid_contact_poses.npy")
     else:        
         # sphere_to_TCS_distance is not used in the function anywhere - should be removed
         valid_contact_poses_ = push_.valid_contact_poses(tool.tool_finger_distances, tool.sphere_to_TCS_distance, vision_tolerance, contact_points, num_viewpoints=num_viewpoints, num_rot_angles=num_rot_angles)
-        np.save("valid_contact_poses", valid_contact_poses_)
-
-
+        np.save("/home/RVLuser/data/Robotiq3Finger/valid_contact_poses.npy", valid_contact_poses_)
     # Feasible poses (no collision with the door/drawer plate).
 
     if load_feasible_poses_from_file:
         # feasible_poses = np.load('feasible_poses.npy')
-        feasible_poses = np.load('/home/RVLuser/rvl-linux/data/Robotiq3Finger/feasible_poses_left_axis.npy')
+        feasible_poses = np.load('/home/RVLuser/data/Robotiq3Finger/feasible_poses_left_axis.npy')
 
     else:
 
@@ -1165,9 +1163,9 @@ def demo_push_poses():
 
 
         if use_fcl:
-            np.save('/home/RVLuser/rvl-linux/data/Robotiq3Finger/feasible_poses_left_axis_fcl.npy', feasible_poses)
+            np.save('/home/RVLuser/data/Robotiq3Finger/feasible_poses_left_axis_fcl.npy', feasible_poses)
         else:
-            np.save('/home/RVLuser/rvl-linux/data/Robotiq3Finger/feasible_poses_left_axis.npy', feasible_poses)
+            np.save('/home/RVLuser/data/Robotiq3Finger/feasible_poses_left_axis.npy', feasible_poses)
 
     # Visualize meshes and contact points.
     if visualize_feasible_poses:

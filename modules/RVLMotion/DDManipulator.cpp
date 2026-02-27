@@ -6021,7 +6021,7 @@ void DDManipulator::LoadCabinetStaticFCL(std::string cabinetStaticFilename_, Pos
 
     // //Debug only
     // pCabinetWholeMesh = new Mesh;
-    // std::string cabinetWholeName = "/home/RVLuser/ferit_ur5_ws/data/multi-contact/cabinets/cabinet_whole.ply";
+    // std::string cabinetWholeName = "/home/RVLuser/data/multi-contact/cabinets/cabinet_whole.ply";
     // pCabinetWholeMesh->LoadPolyDataFromPLY((char *)(cabinetWholeName.data()));
 
     std::vector<fcl::Vector3<double>> vertices;
@@ -6050,7 +6050,7 @@ void DDManipulator::LoadCabinetPanelFCL(std::string cabinetPanelFilename_)
 
     // //Debug only
     // pCabinetWholeMesh = new Mesh;
-    // std::string cabinetWholeName = "/home/RVLuser/ferit_ur5_ws/data/multi-contact/cabinets/cabinet_whole.ply";
+    // std::string cabinetWholeName = "/home/RVLuser/data/multi-contact/cabinets/cabinet_whole.ply";
     // pCabinetWholeMesh->LoadPolyDataFromPLY((char *)(cabinetWholeName.data()));
 
     std::vector<fcl::Vector3<double>> vertices;

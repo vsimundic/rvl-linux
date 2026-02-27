@@ -384,7 +384,7 @@ int main(int argc, char **argv)
             // FCL
             // if (manipulator.use_fcl)
             manipulator.LoadToolModelFCL();
-            // std::string cabinetStaticModelPath = "/home/RVLuser/ferit_ur5_ws/data/multi-contact/cabinets/cabinet_static.ply";
+            // std::string cabinetStaticModelPath = "/home/RVLuser/data/multi-contact/cabinets/cabinet_static.ply";
             // fcl::Transform3d T_A_S;
             // manipulator.RVLPose2FCLPose(pose_A_S, T_A_S);
             // manipulator.LoadCabinetStaticFCL(cabinetStaticModelPath, pose_A_S);

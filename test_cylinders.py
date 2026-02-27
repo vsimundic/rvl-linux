@@ -63,7 +63,7 @@ tool_mesh.transform(T_tool)
 tool_mesh.compute_vertex_normals()
 origin_rf = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.1, origin=[0, 0, 0])
 
-cabinet_mesh = o3d.io.read_triangle_mesh('/home/RVLuser/ferit_ur5_ws/data/multi-contact/cabinet_meshes/handleless/cabinet_static_0.ply')
+cabinet_mesh = o3d.io.read_triangle_mesh('/home/RVLuser/data/multi-contact/cabinet_meshes/handleless/cabinet_static_0.ply')
 cabinet_mesh.compute_vertex_normals()
 T_A_S = np.array([[ 0.92662295, -0.3759919 ,  0.        , -0.22462121],
        [ 0.3759919 ,  0.92662295,  0.        ,  0.59205694],
