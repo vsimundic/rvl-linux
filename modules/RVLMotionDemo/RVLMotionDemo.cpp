@@ -358,12 +358,12 @@ int main(int argc, char **argv)
         Array<Array<Pose3D>> allFeasiblePaths;
         Array<Array2D<float>> allFeasiblePathsJoints;
         // std::ifstream exampleFile("C:\\RVL\\ExpRez\\examples.txt");
-        std::ifstream exampleFile("/home/RVLuser/rvl-linux/cabinets_examples.txt");
+        std::ifstream exampleFile("/home/RVLuser/data/multi-contact/cabinets_examples.txt");
         std::string example;
         bool success;
         int num_successful = 0;
-        bool bSaveTrajectories = true;
-        std::string saveTrajDir = "/home/RVLuser/rvl-linux/data/Exp-MC-Spheres_traj";
+        bool bSaveTrajectories = false;
+        std::string saveTrajDir = "/home/RVLuser/rvl-linux/data/multi-contact/generated_trajectories";
 
         std::vector<double> runtimes;
         double duration;

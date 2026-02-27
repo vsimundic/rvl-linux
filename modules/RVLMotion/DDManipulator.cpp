@@ -4735,7 +4735,7 @@ void DDManipulator::Visualize(
                 pVisualizer->renderer->RemoveViewProp(doorPanelVNActor);
             for (iToolActor = 0; iToolActor < pVisualizationData->robotActors.size(); iToolActor++)
                 pVisualizer->renderer->RemoveViewProp(pVisualizationData->robotActors[iToolActor]);
-            pVisualizer->renderer->RemoveAllViewProps();
+            // pVisualizer->renderer->RemoveAllViewProps();
         }
     }
     else
