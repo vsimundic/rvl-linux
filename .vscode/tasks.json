@@ -1,0 +1,47 @@
+{
+    // See https://go.microsoft.com/fwlink/?LinkId=733558 
+    // for the documentation about the tasks.json format
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "type": "shell",
+            "label": "g++ build active file",
+            "command": "/usr/bin/g++",
+            "args": [
+                "-g",
+                "-I/home/RVLuser/rvl-linux/modules/RVLCore/Include", 
+                "-I/home/RVLuser/rvl-linux/modules/RVLPCSegment/Include",
+                "-I/home/RVLuser/rvl-linux/modules/RVLPCLTools/Include", 
+                "-I/home/RVLuser/rvl-linux/modules/RVLObjectDetection/Include", 
+                "-I/home/RVLuser/rvl-linux/modules/RVLRecognition/Include", 
+                "-I/usr/local/include",
+                "-I/usr/local/include/vtk-7.1",
+                "-I/usr/include/eigen3",
+                "-I/home/RVLuser/rvl-linux/3rdparty/RapidXML/include", 
+                "-I/usr/local/include/pcl-1.8", 
+                "-I/usr/include/eigen3", 
+                "-I/usr/local/include/flann", 
+                "-I/usr/include/openni2",
+                // "-I${workspaceFolder}/modules/RVLCore/Include",
+                "/usr/local/include/vtk-7.1",
+                "${file}",
+                "-o",
+                "${fileDirname}/${fileBasenameNoExtension}",
+                // "-L/home/valentin/Documents/LIBS/INSTALL/pcl-1.8.1/include/pcl-1.8",
+                // "-L/home/valentin/Documents/LIBS/INSTALL/vtk-7.1.1/include/vtk-7.1",
+                // "-L/home/valentin/Documents/LIBS/INSTALL/opencv-3.4.17/include",
+                // "-L/usr/include/eigen3"
+            ],
+            "options": {
+                "cwd": "/usr/bin"
+            },
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "group": {
+                "kind": "test",
+                "isDefault": true
+            }
+        }
+    ]
+}

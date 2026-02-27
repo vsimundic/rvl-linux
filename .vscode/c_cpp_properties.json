@@ -1,0 +1,56 @@
+{
+    "configurations": [
+        {
+            "name": "Linux",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "${workspaceFolder}/modules/RVLConvexHull",
+                "${workspaceFolder}/modules/RVLCore/Include",
+                "${workspaceFolder}/modules/RVLCore",
+                "${workspaceFolder}/modules/RVLCore/Include",
+                "${workspaceFolder}/modules/RVLLocalization/Include",
+                "${workspaceFolder}/modules/RVLLocalizationDemo",
+                "${workspaceFolder}/modules/RVLMesher",
+                "${workspaceFolder}/modules/RVLNN/Include",
+                "${workspaceFolder}/modules/RVLNNDemo",
+                "${workspaceFolder}/modules/RVLObjectDetection/Include",
+                "${workspaceFolder}/modules/RVLObjectDetectionDemo",
+                "${workspaceFolder}/modules/RVLPCGroundTruthDemo/Include",
+                "${workspaceFolder}/modules/RVLPCGTTools/Include",
+                "${workspaceFolder}/modules/RVLPCLTools/Include",
+                "${workspaceFolder}/modules/RVLPCS/Include",
+                "${workspaceFolder}/modules/RVLPCSdemo",
+                "${workspaceFolder}/modules/RVLPCSegment/Include",
+                "${workspaceFolder}/modules/RVLPCSegmentDemo",
+                "${workspaceFolder}/modules/RVLPSGM",
+                "${workspaceFolder}/modules/RVLPSuLM/Include",
+                "${workspaceFolder}/modules/RVLPSuLMdemo",
+                "${workspaceFolder}/modules/RVLRecognition/Include",
+                "${workspaceFolder}/modules/RVLRecognitionDemo",
+                "${workspaceFolder}/modules/RVLTorusDetectionDemo",
+                "${workspaceFolder}/modules/RVLVisualServo/Include",
+                "${workspaceFolder}/modules/RVLVisualServoDemo",
+                "${workspaceFolder}/modules/RVLWork",
+                "${workspaceFolder}/modules/RVLMotion/Include",
+                "${workspaceFolder}/modules/RVLMotionDemo",
+                "${workspaceFolder}/python/src",
+                // "/home/valentin/RVL/rvl-linux-master/modules/RVLCore/Include",
+                // "/home/valentin/Documents/LIBS/INSTALL/opencv-3.4.17/include/*",
+                // "/home/valentin/Documents/LIBS/INSTALL/pcl-1.8.1/**",
+                // "/home/valentin/Documents/LIBS/INSTALL/vtk-7.1.1/**",
+                // "/home/valentin/Documents/LIBS/INSTALL/vtk-7.1.1/include/vtk-7.1/*",
+                // "/home/valentin/Documents/LIBS/INSTALL/**"
+                "/usr/include/**",
+                "/usr/local/include/**",
+                "/usr/local/lib/python3.8/dist-packages/pybind11/include"
+            ],
+            "defines": [],
+            "compilerPath": "/usr/bin/gcc",
+            "cStandard": "c11",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "clang-x64",
+            "configurationProvider": "ms-vscode.makefile-tools"
+        }
+    ],
+    "version": 4
+}
