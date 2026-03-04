@@ -3965,7 +3965,7 @@ void Touch::Simulation(std::vector<MOTION::DoorExperimentParams> &simParams)
             Pose3D nullPose;
             RVLUNITMX3(nullPose.R);
             RVLNULL3VECTOR(nullPose.t);
-            // pVisualizer->DisplayReferenceFrame(&nullPose, 0.1f);
+            pVisualizer->DisplayReferenceFrame(&nullPose, 0.1f);
             }
 
             // Allocate memory for a new scene.
