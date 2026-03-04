@@ -4,8 +4,10 @@ on:
   schedule:
     - cron: '0 * * * *'  # Runs every hour
   workflow_dispatch:      # Allows you to run it manually from the Actions tab
+
 permissions:
   contents: write
+
 jobs:
   sync:
     runs-on: ubuntu-latest
@@ -24,20 +26,17 @@ jobs:
         env:
           BB_USER: ${{ secrets.BITBUCKET_USERNAME }}
           BB_PASS: ${{ secrets.BITBUCKET_PASSWORD }}
-          # CHANGE THIS: Put your Bitbucket Repo URL (without https://)
-          # Example: bitbucket.org/my-org/rvl-repo.git
-          BB_REPO: bitbucket.org/rcupec/rvl
-          # CHANGE THIS: The specific branch on Bitbucket you want to mirror
+          # Added .git to the end here
+          BB_REPO: bitbucket.org/rcupec/rvl.git
           TARGET_BRANCH: simundic-linux
         run: |
           # 1. Add Bitbucket as a remote using the secrets for auth
           git remote add bitbucket https://$BB_USER:$BB_PASS@$BB_REPO
           
-          # 2. Fetch the specific branch from Bitbucket
-          git fetch bitbucket $TARGET_BRANCH
+          # 2. Fetch all branches from Bitbucket so the remote references are created
+          git fetch bitbucket
 
           # 3. Reset your current local branch to match Bitbucket exactly
-          # (WARNING: This overwrites changes on GitHub if they conflict)
           git checkout -B $TARGET_BRANCH bitbucket/$TARGET_BRANCH
 
           # 4. Push the updated branch to GitHub
