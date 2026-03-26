@@ -349,16 +349,27 @@ class push():
         
         return valid, z
 
-    def valid_contact_poses(self, tool_finger_distances, sphere_to_TCS_distance, vision_tolerance, contact_points, num_viewpoints = 300, num_rot_angles = 12):
+    def valid_contact_poses(self, tool_finger_distances, sphere_to_TCS_distance, vision_tolerance, contact_points, num_viewpoints = 300, num_rot_angles = 12, visualize = False):
         # Constants.
 
         num_contact_points = contact_points.shape[0]
         num_orientations = num_viewpoints * num_rot_angles
         num_samples = num_orientations * num_contact_points
 
-        # Generate random orientataions.
- 
+        # Generate random orientations.
+
         rot_mx = random_orientations(num_viewpoints * num_contact_points, num_rot_angles)
+
+        # Visualization purposes
+        dd_mesh, dd_plate_mesh, dd_static_mesh = self.dd.create_mesh()
+        
+        # Static mesh wireframe
+        dd_static_mesh.compute_vertex_normals()
+        dd_static_mesh.paint_uniform_color([0.5, 0.5, 0.5])
+        # Now make wireframe
+        dd_static_mesh = o3d.geometry.LineSet.create_from_triangle_mesh(dd_static_mesh)
+        dd_static_mesh.paint_uniform_color([0.5, 0.5, 0.5])        
+
 
         # Only for debugging purpose!!!
 
@@ -386,6 +397,31 @@ class push():
                 if valid:
                     T_G_DD = self.tool_pose(R, contact_point, z, tool_finger_distances, sphere_to_TCS_distance)																					   
                     valid_contact_poses_.append(T_G_DD)
+
+                    # Visualize
+                    if visualize:
+                        T_G_W = self.dd.T_DD_W @ T_G_DD 
+                        T_TCP_G = np.eye(4)
+                        T_TCP_G[:3,3] = -tool_finger_distances
+                        T_TCP_W = T_G_W @ T_TCP_G
+
+
+                        origin_rf = o3d.geometry.TriangleMesh.create_coordinate_frame(size = 0.05)
+                        origin_tool_rf = o3d.geometry.TriangleMesh.create_coordinate_frame(size = 0.05)
+                        origin_tool_rf.transform(T_G_W)
+
+                        origin_TCP_rf = o3d.geometry.TriangleMesh.create_coordinate_frame(size = 0.05)
+                        origin_TCP_rf.transform(T_TCP_W)
+
+                        tool_mesh = self.tool.create_mesh([0.0, 0.5, 0.5]) 
+                        tool_mesh.transform(T_G_W)
+                        tool_mesh.compute_vertex_normals()
+                        door_mesh = dd_plate_mesh
+                        door_mesh.compute_vertex_normals()
+
+
+                        o3d.visualization.draw_geometries([door_mesh, tool_mesh, origin_rf, origin_tool_rf, origin_TCP_rf, dd_static_mesh])
+
                     # valid_poses += 1
                     # print(1)
                 # else:
@@ -704,7 +740,7 @@ class door_model():
         else:
             dd_plate_mesh.translate((-self.dd_plate_params[0], 0.0, -self.dd_plate_params[2]))    
         dd_plate_mesh.transform(self.T_DD_W)
-        dd_plate_mesh.compute_vertex_normals()
+        # dd_plate_mesh.compute_vertex_normals()
         dd_plate_mesh.paint_uniform_color([0.8, 0.8, 0.8])
         dd_plate_rf = o3d.geometry.TriangleMesh.create_coordinate_frame(size = 0.05)
         dd_plate_rf.transform(self.T_DD_W)
@@ -744,10 +780,11 @@ class door_model():
 
 class tool_model():
     def __init__(self, gripper_params):
-	
         self.default_used = gripper_params['is_default_gripper']
         self.custom_gripper_spheres_path = gripper_params['custom_gripper_spheres_path']
         self.custom_gripper_model_path = gripper_params['custom_gripper_model_path']
+
+        self.use_one_finger = gripper_params['is_one_finger_used']
 
         # Default gripper parameters	
         self.tool_finger_size = np.array([0.02, 0.02, 0.06])
@@ -777,7 +814,7 @@ class tool_model():
         self.tool_finger_distance_default = 0.06
         self.tool_finger_distance_3finger = 0.155
         # self.tool_finger_distance = self.tool_finger_distance_default if self.default_used else self.tool_contact_surface_params_3finger
-        self.tool_finger_distance = self.tool_finger_distance_default
+        self.tool_finger_distance = self.tool_finger_distance_default # used only for default gripper
 
         # Load custom gripper model
         self.custom_gripper_model = o3d.io.read_triangle_mesh(self.custom_gripper_model_path)
@@ -1037,17 +1074,21 @@ def demo_vn():
 def demo_push_poses():
     # Parameters.
   
-    dd_state_deg = 7.0
+    dd_state_deg = 0.0
     num_viewpoints = 100
     num_rot_angles = 12
     load_valid_contact_poses_from_file = False
     load_feasible_poses_from_file = False
     contact_point_sampling_offset = 0.02
     use_default_gripper = False
-    vision_tolerance = 0.007
+    use_one_finger = True
+    vision_tolerance = 0.001
 
     use_fcl = True
+    visualize_valid_contact_poses = False
     visualize_feasible_poses = True
+
+    feasible_poses_name = 'feasible_poses_left_axis_fcl.npy' if use_fcl else 'feasible_poses_left_axis.npy'
 
     if use_default_gripper:
         custom_gripper_spheres_path = ''
@@ -1057,22 +1098,28 @@ def demo_push_poses():
         tool_finger_distances = [0.06/2., 0., 0.] # x, y, z
         sphere_to_TCS_distance = 0.
     else:
-        # Simundic
-        # custom_gripper_spheres_path = '/home/RVLuser/data/DDMan/3finger_gripper/gripper_spheres.npy'
-        custom_gripper_spheres_path = '/home/RVLuser/data/Robotiq3Finger/spheres.npy'
-        custom_gripper_model_path = '/home/RVLuser/data/Robotiq3Finger/mesh.ply'
-        # END: Simundic
-        # custom_gripper_spheres_path = '3finger_gripper/gripper_spheres.npy'
-        # custom_gripper_model_path = '3finger_gripper/robotiq_3f_gripper_simplified.stl'
-        
-        # tool_contact_surface_params = np.array([[0.0, -0.026, 0.0], [0.0, -0.031, -0.025], [0.006, -0.026, 0.0]])
-        # tool_finger_distances = [-0.155/2., 0., -0.102] # x, y, z
-        tool_contact_surface_params = np.array([[0.0, -0.026, 0.0], [0.0, -0.030, -0.020], [0.006, -0.026, 0.0]])
-        tool_finger_distances = [-0.155/2., 0., -0.098] # x, y, z
-        # tool_finger_distances = [-0.155/2., 0., -0.102] # x, y, z
+        if use_one_finger:
+            base_dir = '/home/RVLuser/data/Robotiq3Finger/one_finger/robotiq_new_mesh'
+
+            tool_contact_surface_params = np.array([[0.0, -0.024*0.5, 0.0], 
+                                                    [0.0, -0.024*0.5, -0.024], 
+                                                    [-0.010641, -0.024*0.5, 0.0]])
+            # tool_finger_distances = [0.1525*0.5 - 0.0055, 0., -0.1075] # x, y, z # 0.055 is tactile sensor
+            tool_finger_distances = [0.072623, 0., -0.205472] # x, y, z # 0.055 is tactile sensor
+        else: # 2-fingers
+            base_dir = '/home/RVLuser/data/Robotiq3Finger'
+            # tool_contact_surface_params = np.array([[0.0, -0.026, 0.0], [0.0, -0.031, -0.025], [0.006, -0.026, 0.0]])
+            tool_contact_surface_params = np.array([[0.0, -0.026, 0.0], [0.0, -0.030, -0.020], [0.006, -0.026, 0.0]])
+            tool_finger_distances = [-0.155/2., 0., -0.098] # x, y, z
+            # tool_finger_distances = [-0.155/2., 0., -0.102] # x, y, z
+
+
+        custom_gripper_spheres_path = os.path.join(base_dir, 'spheres.npy')
+        custom_gripper_model_path = os.path.join(base_dir, 'mesh.ply')
         sphere_to_TCS_distance = 0.004609
 
     gripper_params = {'is_default_gripper': use_default_gripper,
+                      'is_one_finger_used': use_one_finger,
                         'custom_gripper_spheres_path': custom_gripper_spheres_path, 
                         'custom_gripper_model_path': custom_gripper_model_path,
                         'tool_contact_surface_params': tool_contact_surface_params,
@@ -1080,18 +1127,16 @@ def demo_push_poses():
                         'sphere_to_TCS_distance': sphere_to_TCS_distance}
 
     # Door model.
-
     door = door_model()
     door.dd_opening_direction = -1.0
     door.create(dd_state_deg, vision_tolerance)
     dd_mesh, dd_plate_mesh, dd_static_mesh = door.create_mesh()
+    
     # Tool model.
-
     tool = tool_model(gripper_params)
     tool.create()
 
     # Contact points.
-
     if door.dd_opening_direction > 0.0:
         x = np.linspace(-contact_point_sampling_offset, door.dd_contact_surface_params[0], 25)
     else:
@@ -1106,38 +1151,49 @@ def demo_push_poses():
 
     # Valid contact poses.
     if load_valid_contact_poses_from_file:
-        valid_contact_poses_ = np.load("/home/RVLuser/data/Robotiq3Finger/valid_contact_poses.npy")
-    else:        
-        # sphere_to_TCS_distance is not used in the function anywhere - should be removed
-        valid_contact_poses_ = push_.valid_contact_poses(tool.tool_finger_distances, tool.sphere_to_TCS_distance, vision_tolerance, contact_points, num_viewpoints=num_viewpoints, num_rot_angles=num_rot_angles)
-        np.save("/home/RVLuser/data/Robotiq3Finger/valid_contact_poses.npy", valid_contact_poses_)
-    # Feasible poses (no collision with the door/drawer plate).
+        valid_contact_poses_ = np.load(os.path.join(base_dir, 'valid_contact_poses.npy'))
+    else:
+        valid_contact_poses_ = push_.valid_contact_poses(tool.tool_finger_distances, 
+                                                         tool.sphere_to_TCS_distance, 
+                                                         vision_tolerance, 
+                                                         contact_points, 
+                                                         num_viewpoints=num_viewpoints, 
+                                                         num_rot_angles=num_rot_angles, 
+                                                         visualize=visualize_valid_contact_poses)
+        np.save(os.path.join(base_dir, 'valid_contact_poses.npy'), valid_contact_poses_)
+    
+    # Visualize valid contact poses.
+    if visualize_valid_contact_poses:
+        origin_rf = o3d.geometry.TriangleMesh.create_coordinate_frame(size = 0.05)
 
+        samples = valid_contact_poses_
+        good_samples = []
+        for i in [8, 9, 557627, 558628, 557629, 557630, 557631]:
+            T_G_DD = samples[i]
+            tool_mesh = tool.create_mesh([0.0, 0.5, 0.5]) 
+            T_G_W = door.T_DD_W @ T_G_DD 
+            tool_mesh.transform(T_G_W)
+            tool_mesh.compute_vertex_normals()
+            door_mesh = dd_plate_mesh # + dd_static_mesh
+            door_mesh.compute_vertex_normals()
+
+            # Visualize a sphere at tool point
+            tool_pt_in_G = -np.array(tool_finger_distances)
+            t_pt_W = T_G_W[:3,:3] @ tool_pt_in_G + T_G_W[:3,3]
+            sphere = o3d.geometry.TriangleMesh.create_sphere(radius=0.001)
+            sphere.translate(t_pt_W)
+            sphere.paint_uniform_color([1.0, 0.0, 0.0])
+            o3d.visualization.draw_geometries([door_mesh, tool_mesh, origin_rf, sphere])
+    
+    # Feasible poses (no collision with the door/drawer plate).
     if load_feasible_poses_from_file:
         # feasible_poses = np.load('feasible_poses.npy')
-        feasible_poses = np.load('/home/RVLuser/data/Robotiq3Finger/feasible_poses_left_axis.npy')
-
+        feasible_poses = np.load(os.path.join(base_dir, feasible_poses_name))
     else:
 
         # time_start = time.time()
         # collision_onetomany = push_.one_to_many_collision_fcl(valid_contact_poses_, dd_plate_mesh, door.T_DD_W, 50000)
         # print('FCL one-to-many collision detection with precomputation time:', time.time() - time_start)
-
-        # Visualize meshes and contact points.
-        if False:
-            origin_rf = o3d.geometry.TriangleMesh.create_coordinate_frame(size = 0.05)
-
-            samples = valid_contact_poses_
-            good_samples = []
-            for i in [8, 9, 557627, 558628, 557629, 557630, 557631]:
-                T_G_DD = samples[i]
-                tool_mesh = tool.create_mesh([0.0, 0.5, 0.5]) 
-                T_G_W = door.T_DD_W @ T_G_DD 
-                tool_mesh.transform(T_G_W)
-                tool_mesh.compute_vertex_normals()
-                door_mesh = dd_plate_mesh # + dd_static_mesh
-                door_mesh.compute_vertex_normals()
-                o3d.visualization.draw_geometries([door_mesh, tool_mesh, origin_rf])
 
         time_start = time.time()
         collision = push_.collision_detection(valid_contact_poses_, door.vn_dd)
@@ -1160,16 +1216,11 @@ def demo_push_poses():
             # Extract poses that are not in collision
             feasible_poses = valid_contact_poses_[np.logical_not(collision),:]
 
+        feasible_poses_name = 'feasible_poses_left_axis_fcl.npy' if use_one_finger else 'feasible_poses_fcl.npy'
+        np.save(os.path.join(base_dir, feasible_poses_name), feasible_poses)
 
-
-        if use_fcl:
-            np.save('/home/RVLuser/data/Robotiq3Finger/feasible_poses_left_axis_fcl.npy', feasible_poses)
-        else:
-            np.save('/home/RVLuser/data/Robotiq3Finger/feasible_poses_left_axis.npy', feasible_poses)
-
-    # Visualize meshes and contact points.
+    # Visualize feasible poses.
     if visualize_feasible_poses:
-        import open3d as o3d
 
         origin_rf = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.05)
         samples = feasible_poses
@@ -1177,8 +1228,8 @@ def demo_push_poses():
 
         # Prepare initial geometries
         tool_mesh = tool.create_mesh([0.5, 0.5, 0.5])
-        door_mesh = dd_plate_mesh  # + dd_static_mesh
-        door_mesh.compute_vertex_normals()
+        door_mesh = copy.deepcopy(dd_plate_mesh) #+ dd_static_mesh
+        # door_mesh.compute_vertex_normals()
         door_rf = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.05)
         door_rf.transform(door.T_DD_W)
 
@@ -1188,13 +1239,30 @@ def demo_push_poses():
         vis.add_geometry(door_rf)
         vis.add_geometry(tool_mesh)
 
+        # Build TCS edges in TCP frame (vertices are defined relative to TCP).
+        # tcs_vertices_TCS: [0]=params[0], [1]=params[0] y-mirrored, [2]=params[1], [3]=params[1] y-mirrored
+        tcs_params = tool.tool_contact_surface_params
+        tcs_verts_TCP = np.stack((tcs_params[0,:], tcs_params[0,:], tcs_params[1,:], tcs_params[1,:]))
+        tcs_verts_TCP[1, 1] = -tcs_verts_TCP[1, 1]
+        tcs_verts_TCP[3, 1] = -tcs_verts_TCP[3, 1]
+        # Edges of the trapezoid face: top edge, bottom edge, and two sides.
+        tcs_edges = np.array([[0, 1], [2, 3], [0, 2], [1, 3]])
+
+        # T_TCP_G: TCP is at +tool_finger_distances in G frame, so TCP origin in G = +tool_finger_distances.
+        # To go from TCP frame to G frame: p_G = p_TCP + tool_finger_distances
+        T_TCP_G = np.eye(4)
+        T_TCP_G[:3, 3] = -tool.tool_finger_distances
+
         sample_indices = []
         current_idx = {"i": 0}
         tool_mesh_holder = [tool_mesh]  # Use a list to hold the reference
+        tcs_lines_holder = [None]       # Use a list to hold the TCS lineset reference
 
         def update_tool_mesh(vis):
-            # Remove old tool mesh
+            # Remove old tool mesh and TCS lines.
             vis.remove_geometry(tool_mesh_holder[0], reset_bounding_box=False)
+            if tcs_lines_holder[0] is not None:
+                vis.remove_geometry(tcs_lines_holder[0], reset_bounding_box=False)
             # Pick a new sample
             good_sample = False
             while not good_sample:
@@ -1205,15 +1273,23 @@ def demo_push_poses():
                 p_ref_DD = T_G_DD @ p_ref_G
                 good_sample = (p_ref_DD[0] < 0.0 or p_ref_DD[1] < 0.0)
             sample_indices.append(sample_idx)
-            # Create and transform new tool mesh
+            # Create and transform new tool mesh.
             tool_mesh_new = tool.create_mesh([0.5, 0.5, 0.5])
             T_G_W = door.T_DD_W @ T_G_DD
             tool_mesh_new.transform(T_G_W)
             tool_mesh_new.compute_vertex_normals()
-            # Add new tool mesh
             vis.add_geometry(tool_mesh_new, reset_bounding_box=False)
-            # Update reference for next removal
             tool_mesh_holder[0] = tool_mesh_new
+            # Transform TCS vertices: TCP -> G -> DD -> W.
+            T_TCP_W = T_G_W @ T_TCP_G
+            verts_h = np.hstack((tcs_verts_TCP, np.ones((tcs_verts_TCP.shape[0], 1))))
+            verts_W = (T_TCP_W @ verts_h.T).T[:, :3]
+            tcs_lines = o3d.geometry.LineSet()
+            tcs_lines.points = o3d.utility.Vector3dVector(verts_W)
+            tcs_lines.lines = o3d.utility.Vector2iVector(tcs_edges)
+            tcs_lines.paint_uniform_color([1.0, 0.5, 0.0])  # Orange
+            vis.add_geometry(tcs_lines, reset_bounding_box=False)
+            tcs_lines_holder[0] = tcs_lines
             vis.update_renderer()
             return False  # Don't close window
 

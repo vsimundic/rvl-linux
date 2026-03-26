@@ -656,12 +656,84 @@ bool DDManipulator::Free(float *q)
                 //     }
 
                 // }
-            }
-
+            }            
+            
             if (pIntersectionD->n > 0)
-                return false;
+            return false;
             if (pIntersectionP->n > 0)
-                return false;
+            return false;
+
+            // // Debug visualization: cabinet + robot + gripper
+            // if (pVisualizationData && pVisualizationData->pVisualizer)
+            // {
+            //     Visualizer *pVisualizer = pVisualizationData->pVisualizer;
+
+            //     // Display static cabinet box and storage space box.
+            //     Vector3<float> dbg_boxSize;
+            //     Vector3<float> dbg_boxCenter;
+            //     Pose3D dbg_pose_box_S;
+            //     BoxSize<float>(&dd_static_box, dbg_boxSize.Element[0], dbg_boxSize.Element[1], dbg_boxSize.Element[2]);
+            //     BoxCenter<float>(&dd_static_box, dbg_boxCenter.Element);
+            //     RVLCOPYMX3X3(pose_F_S.R, dbg_pose_box_S.R);
+            //     RVLTRANSF3(dbg_boxCenter.Element, pose_F_S.R, pose_F_S.t, dbg_pose_box_S.t);
+            //     vtkSmartPointer<vtkActor> dbg_staticBoxActor = pVisualizer->DisplayBox(
+            //         dbg_boxSize.Element[0], dbg_boxSize.Element[1], dbg_boxSize.Element[2],
+            //         &dbg_pose_box_S, 0.0, 128.0, 0.0);
+            //     BoxSize<float>(&dd_storage_space_box, dbg_boxSize.Element[0], dbg_boxSize.Element[1], dbg_boxSize.Element[2]);
+            //     BoxCenter<float>(&dd_storage_space_box, dbg_boxCenter.Element);
+            //     vtkSmartPointer<vtkActor> dbg_storageBoxActor = pVisualizer->DisplayBox(
+            //         dbg_boxSize.Element[0], dbg_boxSize.Element[1], dbg_boxSize.Element[2],
+            //         &dbg_pose_box_S, 0.0, 128.0, 0.0);
+
+            //     // Display door panel.
+            //     vtkSmartPointer<vtkActor> dbg_doorPanelActor = VisualizeDoorPenel();
+
+            //     // Display robot skeleton and collision cylinders.
+            //     VisualizeRobot(robot.q, &(pVisualizationData->robotActors));                // Display gripper tool at current TCP pose.
+            //     Pose3D dbg_pose_G_0;
+            //     Pose3D *pPose_n_0 = robot.link_pose + robot.n - 1;
+            //     RVLCOMPTRANSF3D(pPose_n_0->R, pPose_n_0->t, robot.pose_TCP_6.R, robot.pose_TCP_6.t,
+            //                     dbg_pose_G_0.R, dbg_pose_G_0.t);
+            //     VisualizeTool(dbg_pose_G_0, &(pVisualizationData->robotActors));
+
+            //     // Display tool sample spheres in world (S=W) frame.
+            //     // Sphere centres are defined in gripper frame (G); compose G->0->W to get G in world frame.
+            //     Pose3D dbg_pose_G_W;
+            //     RVLCOMPTRANSF3D(robot.pose_0_W.R, robot.pose_0_W.t, dbg_pose_G_0.R, dbg_pose_G_0.t,
+            //                     dbg_pose_G_W.R, dbg_pose_G_W.t);
+            //     float dbg_c_S[3];
+            //     for (int iDbgSphere = 0; iDbgSphere < tool_sample_spheres.n; iDbgSphere++)
+            //     {
+            //         MOTION::Sphere *pDbgSphere = tool_sample_spheres.Element + iDbgSphere;
+            //         RVLTRANSF3(pDbgSphere->c.Element, dbg_pose_G_W.R, dbg_pose_G_W.t, dbg_c_S);
+
+            //         vtkSmartPointer<vtkSphereSource> dbg_sphereSource = vtkSmartPointer<vtkSphereSource>::New();
+            //         dbg_sphereSource->SetCenter(dbg_c_S[0], dbg_c_S[1], dbg_c_S[2]);
+            //         dbg_sphereSource->SetRadius(pDbgSphere->r);
+            //         dbg_sphereSource->SetThetaResolution(16);
+            //         dbg_sphereSource->SetPhiResolution(16);
+
+            //         vtkSmartPointer<vtkPolyDataMapper> dbg_sphereMapper = vtkSmartPointer<vtkPolyDataMapper>::New();
+            //         dbg_sphereMapper->SetInputConnection(dbg_sphereSource->GetOutputPort());
+
+            //         vtkSmartPointer<vtkActor> dbg_sphereActor = vtkSmartPointer<vtkActor>::New();
+            //         dbg_sphereActor->SetMapper(dbg_sphereMapper);
+            //         dbg_sphereActor->GetProperty()->SetColor(1.0, 0.0, 0.0);  // Red
+            //         dbg_sphereActor->GetProperty()->SetOpacity(0.5);
+            //         pVisualizer->renderer->AddActor(dbg_sphereActor);
+            //         pVisualizationData->robotActors.push_back(dbg_sphereActor);
+            //     }
+
+            //     pVisualizer->Run();
+
+            //     // Clean up.
+            //     pVisualizer->renderer->RemoveViewProp(dbg_staticBoxActor);
+            //     pVisualizer->renderer->RemoveViewProp(dbg_storageBoxActor);
+            //     pVisualizer->renderer->RemoveViewProp(dbg_doorPanelActor);
+            //     for (int iDbgActor = 0; iDbgActor < (int)pVisualizationData->robotActors.size(); iDbgActor++)
+            //         pVisualizer->renderer->RemoveViewProp(pVisualizationData->robotActors[iDbgActor]);
+            //     pVisualizationData->robotActors.clear();
+            // }
         }
     }
     return true;

@@ -196,3 +196,6 @@ ModelManifest.xml
 # Data folder
 data/
 __pycache__/
+
+# Files
+*.dat

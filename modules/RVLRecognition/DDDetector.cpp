@@ -2808,6 +2808,8 @@ void DDDetector::Detect(
 					if (iState >= movingPartHyp.state.n)
 						continue;
 					(*pRGBSeq)[iMesh].copyTo(display);
+					cv::imshow("Surfels", display);
+					cv::waitKey();
 					DDBox(&movingPartHyp, iState, &box);
 					RVLCOPY3DPOSE(box.R, box.t, poseBC.R, poseBC.t);
 					pVisualizationData->pVisualizer->DisplayBox(frontFaceThickness, movingPartHyp.s[0], movingPartHyp.s[1], &poseBC, 255.0, 0.0, 0.0, false, 5.0f);

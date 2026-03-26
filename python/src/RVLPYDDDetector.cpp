@@ -145,11 +145,32 @@ void PYDDDetector::clear()
 {
 	clear_mesh_sequence();
 	clear_rgb_sequence();
-	delete detector.pMem0;
-	delete detector.pMem;
-	delete detector.pSurfels;
-	delete detector.pSurfelDetector;
-	RVL_DELETE_ARRAY(movingPartHyps.Element);
+	
+	if (detector.pMem0) {
+		delete detector.pMem0;
+		detector.pMem0 = nullptr;
+	}
+	if (detector.pMem) {
+		delete detector.pMem;
+		detector.pMem = nullptr;
+	}
+	if (detector.pSurfels) {
+		delete detector.pSurfels;
+		detector.pSurfels = nullptr;
+	}
+	if (detector.pSurfelDetector) {
+		delete detector.pSurfelDetector;
+		detector.pSurfelDetector = nullptr;
+	}
+	if (detector.models.Element) {
+		RVL_DELETE_ARRAY(detector.models.Element);
+		detector.models.Element = nullptr;
+		detector.models.n = 0;
+	}
+	if (movingPartHyps.Element) {
+		RVL_DELETE_ARRAY(movingPartHyps.Element);
+		movingPartHyps.Element = nullptr;
+	}
 }
 
 void PYDDDetector::clear_mesh_sequence()

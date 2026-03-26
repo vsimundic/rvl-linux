@@ -79,5 +79,8 @@
         "stop_token": "cpp",
         "polynomials": "cpp",
         "forward_list": "cpp"
-    }
+    },
+    "python.analysis.extraPaths": [
+        "./python/DDMan"
+    ]
 }
