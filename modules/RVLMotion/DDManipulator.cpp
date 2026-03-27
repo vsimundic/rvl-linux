@@ -496,6 +496,11 @@ bool DDManipulator::Free(
     // debug
     numColchecks_FreeSDF++;
 
+    // // Debug visualization
+    // float* q_ = robot.q;
+    // VisualizeCurrentState(q_, *pPose_G_S);
+
+
     if (use_fcl)
         return FreeFCL(pPose_G_S);
     else
