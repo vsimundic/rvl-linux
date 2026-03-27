@@ -286,9 +286,8 @@ class push():
         d_tcs = tcs_vertices[np.newaxis,0,:] @ tcs_normal
 
         # The TCS normal must be oriented in opposite direction of the z-axis of the DCS RF.
-        # Additionally, the x-axis of G (sensor face normal) must also point toward the door.
 
-        if tcs_normal[2] > -1e-10 or R[2, 0] > -1e-10:
+        if tcs_normal[2] > -1e-10:
             valid = False
             z = 0.0
         else:
@@ -350,53 +349,7 @@ class push():
         
         return valid, z
 
-    @staticmethod
-    def _valid_contact_poses_chunk(
-            contact_points_chunk, rot_mx_chunk, num_orientations,
-            tcs_params, dd_opening_direction, dd_contact_surface_params,
-            vision_tolerance, tool_finger_distances, sphere_to_TCS_distance,
-            tool_sample_spheres, tool_sample_spheres_contact):
-        """
-        Worker: processes a chunk of contact points entirely — no shared state, fully picklable.
-        Reimplements z_shift, intersection and tool_pose inline-compatible via a local push instance.
-        """
-        import fcl  # re-import in subprocess
-
-        # Build a minimal stub so we can reuse z_shift / tool_pose logic.
-        class _DD:
-            pass
-        class _Tool:
-            pass
-        dd_ = _DD()
-        dd_.dd_opening_direction = dd_opening_direction
-        dd_.dd_contact_surface_params = dd_contact_surface_params
-        tool_ = _Tool()
-        tool_.tool_contact_surface_params = tcs_params
-        tool_.tool_sample_spheres = tool_sample_spheres
-        tool_.tool_sample_spheres_contact = tool_sample_spheres_contact
-
-        p = push.__new__(push)
-        p.dd = dd_
-        p.tool = tool_
-
-        results = []
-        for cp_idx, contact_point in enumerate(contact_points_chunk):
-            for orientation_idx in range(num_orientations):
-                R = rot_mx_chunk[cp_idx * num_orientations + orientation_idx]
-                valid, z = p.z_shift(tcs_params[:2, :], vision_tolerance, R, contact_point, visualization=False)
-                if not valid:
-                    valid, z = p.z_shift(tcs_params[1:, :], vision_tolerance, R, contact_point, visualization=False)
-                if valid:
-                    T_G_DD = p.tool_pose(R, contact_point, z, tool_finger_distances, sphere_to_TCS_distance)
-                    results.append(T_G_DD)
-        return results
-
-    @staticmethod
-    def _valid_contact_poses_chunk_star(args):
-        """Single-argument wrapper so pool.imap can be used for progress tracking."""
-        return push._valid_contact_poses_chunk(*args)
-
-    def valid_contact_poses(self, tool_finger_distances, sphere_to_TCS_distance, vision_tolerance, contact_points, num_viewpoints = 300, num_rot_angles = 12, visualize = False, parallel = True):
+    def valid_contact_poses(self, tool_finger_distances, sphere_to_TCS_distance, vision_tolerance, contact_points, num_viewpoints = 300, num_rot_angles = 12, visualize = False):
         # Constants.
 
         num_contact_points = contact_points.shape[0]
@@ -407,73 +360,76 @@ class push():
 
         rot_mx = random_orientations(num_viewpoints * num_contact_points, num_rot_angles)
 
+        # Visualization purposes
+        dd_mesh, dd_plate_mesh, dd_static_mesh = self.dd.create_mesh()
+        
+        # Static mesh wireframe
+        dd_static_mesh.compute_vertex_normals()
+        dd_static_mesh.paint_uniform_color([0.5, 0.5, 0.5])
+        # Now make wireframe
+        dd_static_mesh = o3d.geometry.LineSet.create_from_triangle_mesh(dd_static_mesh)
+        dd_static_mesh.paint_uniform_color([0.5, 0.5, 0.5])        
+
+
+        # Only for debugging purpose!!!
+
+        #rot_mx[22 * num_orientations, :, :] = np.array([[0, 1, 0], [-0.479426, 0, 0.877583], [0.877583, 0, 0.479426]])
+
         # Compute tool poses suitable for pushing the contact surface.
 
-        if not parallel:
-            # Sequential path — needed to drive the Open3D visualizer on the main thread.
-            dd_mesh, dd_plate_mesh, dd_static_mesh = self.dd.create_mesh()
-            dd_static_mesh.compute_vertex_normals()
-            dd_static_mesh.paint_uniform_color([0.5, 0.5, 0.5])
-            dd_static_mesh = o3d.geometry.LineSet.create_from_triangle_mesh(dd_static_mesh)
-            dd_static_mesh.paint_uniform_color([0.5, 0.5, 0.5])
+        valid_contact_poses_ = []
+        #valid_poses = 0
+        #invalid_poses = 0
+        prev_contact_point = contact_points[0,:]
+        for contact_point_idx in tqdm(range(num_contact_points)):  
+            # if contact_point_idx == 22:
+            #     debug = 0
+            contact_point = contact_points[contact_point_idx,:]
+            # if contact_point[1] != prev_contact_point[1]:
+            #     print(' ')
+            # print('.', end=' ')
+            prev_contact_point = contact_point
+            for orientation_idx in range(num_orientations):
+                R = rot_mx[contact_point_idx * num_orientations + orientation_idx,:,:]
+                valid, z = self.z_shift(self.tool.tool_contact_surface_params[:2,:], vision_tolerance, R, contact_point, visualization=False)
+                if not valid:
+                    valid, z = self.z_shift(self.tool.tool_contact_surface_params[1:,:], vision_tolerance, R, contact_point, visualization=False)
+                if valid:
+                    T_G_DD = self.tool_pose(R, contact_point, z, tool_finger_distances, sphere_to_TCS_distance)																					   
+                    valid_contact_poses_.append(T_G_DD)
 
-            valid_contact_poses_ = []
-            for contact_point_idx in tqdm(range(num_contact_points)):
-                contact_point = contact_points[contact_point_idx, :]
-                for orientation_idx in range(num_orientations):
-                    R = rot_mx[contact_point_idx * num_orientations + orientation_idx, :, :]
-                    valid, z = self.z_shift(self.tool.tool_contact_surface_params[:2, :], vision_tolerance, R, contact_point, visualization=False)
-                    if not valid:
-                        valid, z = self.z_shift(self.tool.tool_contact_surface_params[1:, :], vision_tolerance, R, contact_point, visualization=False)
-                    if valid:
-                        T_G_DD = self.tool_pose(R, contact_point, z, tool_finger_distances, sphere_to_TCS_distance)
-                        valid_contact_poses_.append(T_G_DD)
+                    # Visualize
+                    if visualize:
+                        T_G_W = self.dd.T_DD_W @ T_G_DD 
+                        T_TCP_G = np.eye(4)
+                        T_TCP_G[:3,3] = -tool_finger_distances
+                        T_TCP_W = T_G_W @ T_TCP_G
 
-                        if visualize:
-                            T_G_W = self.dd.T_DD_W @ T_G_DD
-                            T_TCP_G = np.eye(4)
-                            T_TCP_G[:3, 3] = -tool_finger_distances
-                            T_TCP_W = T_G_W @ T_TCP_G
-                            origin_rf = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.05)
-                            origin_tool_rf = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.05)
-                            origin_tool_rf.transform(T_G_W)
-                            origin_TCP_rf = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.05)
-                            origin_TCP_rf.transform(T_TCP_W)
-                            tool_mesh = self.tool.create_mesh([0.0, 0.5, 0.5])
-                            tool_mesh.transform(T_G_W)
-                            tool_mesh.compute_vertex_normals()
-                            door_mesh = dd_plate_mesh
-                            door_mesh.compute_vertex_normals()
-                            o3d.visualization.draw_geometries([door_mesh, tool_mesh, origin_rf, origin_tool_rf, origin_TCP_rf, dd_static_mesh])
-        
-        else:
-            # Parallel path — split contact points across all available cores.
-            n_workers = mp.cpu_count()
-            cp_chunks = np.array_split(contact_points, n_workers)
-            # Each chunk needs its matching slice of rot_mx rows.
-            cp_sizes = [len(c) for c in cp_chunks]
-            rot_mx_chunks = []
-            offset = 0
-            for size in cp_sizes:
-                rot_mx_chunks.append(rot_mx[offset * num_orientations:(offset + size) * num_orientations])
-                offset += size
 
-            tcs_params   = self.tool.tool_contact_surface_params
-            args = [(cp_chunk, rm_chunk, num_orientations,
-                      tcs_params,
-                      self.dd.dd_opening_direction,
-                      self.dd.dd_contact_surface_params,
-                      vision_tolerance, tool_finger_distances, sphere_to_TCS_distance,
-                      self.tool.tool_sample_spheres,
-                      self.tool.tool_sample_spheres_contact)
-                     for cp_chunk, rm_chunk in zip(cp_chunks, rot_mx_chunks)]
-            with mp.Pool(processes=n_workers) as pool:
-                chunk_results = list(tqdm(
-                    pool.imap(self._valid_contact_poses_chunk_star, args),
-                    total=n_workers, desc='Valid contact poses', unit='chunk'
-                ))
-            valid_contact_poses_ = [T for chunk in chunk_results for T in chunk]
+                        origin_rf = o3d.geometry.TriangleMesh.create_coordinate_frame(size = 0.05)
+                        origin_tool_rf = o3d.geometry.TriangleMesh.create_coordinate_frame(size = 0.05)
+                        origin_tool_rf.transform(T_G_W)
 
+                        origin_TCP_rf = o3d.geometry.TriangleMesh.create_coordinate_frame(size = 0.05)
+                        origin_TCP_rf.transform(T_TCP_W)
+
+                        tool_mesh = self.tool.create_mesh([0.0, 0.5, 0.5]) 
+                        tool_mesh.transform(T_G_W)
+                        tool_mesh.compute_vertex_normals()
+                        door_mesh = dd_plate_mesh
+                        door_mesh.compute_vertex_normals()
+
+
+                        o3d.visualization.draw_geometries([door_mesh, tool_mesh, origin_rf, origin_tool_rf, origin_TCP_rf, dd_static_mesh])
+
+                    # valid_poses += 1
+                    # print(1)
+                # else:
+                #     invalid_poses += 1
+                #     print(0)
+        # print(' ')
+
+        # print('valid:', valid_poses, 'invalid:', invalid_poses)
         return np.array(valid_contact_poses_)
 
     def collision_detection(self, tool_poses, vn):
@@ -487,59 +443,53 @@ class push():
         return (e <= 0.0)
     
     @staticmethod
-    def _colcheck_chunk(tool_vertices, tool_triangles, cabinet_vertices, cabinet_triangles, poses_chunk):
+    def perform_colcheck_fcl(tool_vertices, tool_triangles, pose, cabinet_vertices, cabinet_triangles):
         """
-        Worker function for a chunk of poses.
-        Builds both BVHs once per chunk, then loops over poses updating only the transform.
+        Function to perform collision checking for a single tool pose.
+        This function is executed in parallel and must only use picklable data.
         """
-        # Build cabinet BVH once.
-        fcl_cabinet_mesh = fcl.BVHModel()
-        fcl_cabinet_mesh.beginModel(len(cabinet_vertices), len(cabinet_triangles))
-        fcl_cabinet_mesh.addSubModel(cabinet_vertices, cabinet_triangles)
-        fcl_cabinet_mesh.endModel()
-        cabinet_col_obj = fcl.CollisionObject(fcl_cabinet_mesh)
 
-        # Build tool BVH once.
+        # Create FCL BVHModel for tool
         fcl_tool_mesh = fcl.BVHModel()
         fcl_tool_mesh.beginModel(len(tool_vertices), len(tool_triangles))
         fcl_tool_mesh.addSubModel(tool_vertices, tool_triangles)
         fcl_tool_mesh.endModel()
-        tool_col_obj = fcl.CollisionObject(fcl_tool_mesh)
+        transform_tool = fcl.Transform(pose[:3, :3], pose[:3, 3])
+        tool_col_obj = fcl.CollisionObject(fcl_tool_mesh, transform_tool)
 
+        # Create FCL BVHModel for cabinet
+        fcl_cabinet_mesh = fcl.BVHModel()
+        fcl_cabinet_mesh.beginModel(len(cabinet_vertices), len(cabinet_triangles))
+        fcl_cabinet_mesh.addSubModel(cabinet_vertices, cabinet_triangles)
+        fcl_cabinet_mesh.endModel()
+        transform_cabinet = fcl.Transform(np.eye(3), np.zeros(3))
+        cabinet_col_obj = fcl.CollisionObject(fcl_cabinet_mesh, transform_cabinet)
+
+        # Perform collision detection
         request = fcl.CollisionRequest()
-        results = []
-        for T_G_DD in poses_chunk:
-            tool_col_obj.setRotation(T_G_DD[:3, :3])
-            tool_col_obj.setTranslation(T_G_DD[:3, 3])
-            result = fcl.CollisionResult()
-            ret = fcl.collide(cabinet_col_obj, tool_col_obj, request, result)
-            results.append(ret)
-        return results
+        result = fcl.CollisionResult()
+        ret = fcl.collide(cabinet_col_obj, tool_col_obj, request, result)
 
-    @staticmethod
-    def _colcheck_chunk_star(args):
-        """Single-argument wrapper so pool.imap can be used for progress tracking."""
-        return push._colcheck_chunk(*args)
+        return ret  # Return collision result
 
     def collision_detection_fcl_multiprocessing(self, tool_mesh, tool_poses, cabinet_mesh):
-        tool_vertices = np.asarray(tool_mesh.vertices, dtype=np.float64)
-        tool_triangles = np.asarray(tool_mesh.triangles, dtype=np.int32)
-        cabinet_vertices = np.asarray(cabinet_mesh.vertices, dtype=np.float64)
-        cabinet_triangles = np.asarray(cabinet_mesh.triangles, dtype=np.int32)
+        # Convert Open3D mesh to picklable formats
+        tool_vertices = np.asarray(tool_mesh.vertices)
+        tool_triangles = np.asarray(tool_mesh.triangles)
 
-        n_workers = mp.cpu_count()
-        chunks = np.array_split(tool_poses, n_workers)
-        args = [(tool_vertices, tool_triangles, cabinet_vertices, cabinet_triangles, chunk)
-                for chunk in chunks]
+        cabinet_vertices = np.asarray(cabinet_mesh.vertices)
+        cabinet_triangles = np.asarray(cabinet_mesh.triangles)
 
-        with mp.Pool(processes=n_workers) as pool:
-            chunk_results = list(tqdm(
-                pool.imap(self._colcheck_chunk_star, args),
-                total=n_workers, desc='FCL collision detection', unit='chunk'
+        # Use multiprocessing to parallelize collision checking
+        with mp.Pool(processes=mp.cpu_count()) as pool:
+            collision_results = list(tqdm(
+                pool.starmap(self.perform_colcheck_fcl, [
+                    (tool_vertices, tool_triangles, pose, cabinet_vertices, cabinet_triangles) for pose in tool_poses
+                ]),
+                total=len(tool_poses)
             ))
 
-        # Flatten results preserving order.
-        return [ret for chunk in chunk_results for ret in chunk]
+        return collision_results
 
     def collision_detection_fcl(self, tool_mesh, tool_poses, cabinet_mesh, collision):
 
@@ -583,7 +533,7 @@ class push():
         # print(-e+0.001)
         # if e < 0.0:
         #     T_G_DD[2,3] -= e
-        T_G_DD[2,3] += 0.003
+        T_G_DD[2,3] += 0.006
         return T_G_DD
 
     def path(self, push_poses, init_pose):
@@ -1100,18 +1050,18 @@ def demo_push_poses():
     # Parameters.
   
     dd_state_deg = 0.0
-    num_viewpoints = 100 * 2
-    num_rot_angles = 12 * 2
-    load_valid_contact_poses_from_file = True
-    load_feasible_poses_from_file = True
-    contact_point_sampling_offset = 0.015
+    num_viewpoints = 100 * 3
+    num_rot_angles = 12
+    load_valid_contact_poses_from_file = False
+    load_feasible_poses_from_file = False
+    contact_point_sampling_offset = 0.02
     use_default_gripper = False
     use_one_finger = True
     vision_tolerance = 0.001
 
     use_fcl = True
     visualize_valid_contact_poses = False
-    visualize_feasible_poses = True
+    visualize_feasible_poses = False
 
     feasible_poses_name = 'feasible_poses_left_axis_fcl.npy' if use_fcl else 'feasible_poses_left_axis.npy'
 
@@ -1132,8 +1082,7 @@ def demo_push_poses():
 
             tool_contact_surface_params = np.array([[0.0, -0.024*0.5, 0.0], 
                                                     [0.0, -0.024*0.5, -0.024], 
-                                                    [-0.0055*0.5, -0.024*0.5, 0.0]])
-                                                    # [-0.010641, -0.024*0.5, 0.0]])
+                                                    [-0.010641, -0.024*0.5, 0.0]])
             # tool_contact_surface_params = np.array([[0.0, 0.0, -0.024*0.5], 
             #                                         [0.0, -0.024, -0.024*0.5], 
             #                                         [0.0100879, 0.0, -0.024*0.5]])
@@ -1190,8 +1139,7 @@ def demo_push_poses():
                                                          contact_points, 
                                                          num_viewpoints=num_viewpoints, 
                                                          num_rot_angles=num_rot_angles, 
-                                                         visualize=visualize_valid_contact_poses,
-                                                         parallel=True)
+                                                         visualize=visualize_valid_contact_poses)
         np.save(os.path.join(base_dir, 'valid_contact_poses.npy'), valid_contact_poses_)
     
     # Visualize valid contact poses.
@@ -1227,34 +1175,28 @@ def demo_push_poses():
         # collision_onetomany = push_.one_to_many_collision_fcl(valid_contact_poses_, dd_plate_mesh, door.T_DD_W, 50000)
         # print('FCL one-to-many collision detection with precomputation time:', time.time() - time_start)
 
+        time_start = time.time()
+        collision = push_.collision_detection(valid_contact_poses_, door.vn_dd)
+        print('RVL collision detection time:', time.time() - time_start)
+        collision = np.array(collision, dtype=bool)
+
         if use_fcl: 
             dd_plate_mesh.transform(np.linalg.inv(door.T_DD_W))
             tool_mesh = tool.create_mesh([0.0, 0.5, 0.5])
 
             time_start = time.time()
-            # fcl_collision = push_.collision_detection_fcl(tool_mesh, valid_contact_poses_, dd_plate_mesh, collision)
+            fcl_collision = push_.collision_detection_fcl(tool_mesh, valid_contact_poses_, dd_plate_mesh, collision)
             # fcl_collision_mp = push_.collision_detection_fcl_multiprocessing(tool_mesh, valid_contact_poses_, dd_plate_mesh)
-            fcl_collision = push_.collision_detection_fcl_multiprocessing(tool_mesh, valid_contact_poses_, dd_plate_mesh)
             print('FCL collision detection time:', time.time() - time_start)
             fcl_collision = np.array(fcl_collision, dtype=bool)
             # compare_sphere_to_fcl_collision(collision, fcl_collision)
             # Extract poses that are not in collision
             feasible_poses = valid_contact_poses_[np.logical_not(fcl_collision),:]
         else:
-            time_start = time.time()
-            collision = push_.collision_detection(valid_contact_poses_, door.vn_dd)
-            print('RVL collision detection time:', time.time() - time_start)
-            collision = np.array(collision, dtype=bool)
-
-            # Collision-free poses.
-            # T_G_W = door.T_DD_W @ feasible_poses
-            # collision = push_.collision_detection(T_G_W, door.vn_env)
-            # contact_free_poses = feasible_poses[np.logical_not(collision),:]
-
             # Extract poses that are not in collision
             feasible_poses = valid_contact_poses_[np.logical_not(collision),:]
 
-        feasible_poses_name = 'feasible_poses_left_axis_fcl.npy' if use_fcl else 'feasible_poses_left_axis.npy'
+        feasible_poses_name = 'feasible_poses_left_axis_fcl.npy' if use_one_finger else 'feasible_poses_fcl.npy'
         np.save(os.path.join(base_dir, feasible_poses_name), feasible_poses)
 
     # Visualize feasible poses.
@@ -1327,7 +1269,6 @@ def demo_push_poses():
             while not good_sample:
                 sample_idx = np.random.randint(samples.shape[0])
                 T_G_DD = samples[sample_idx, :, :]
-                print("T_G_DD for sample index {}: \n{}".format(sample_idx, T_G_DD))
                 p_ref_G = np.ones(4)
                 p_ref_G[:3] = -np.array([tool_finger_distances])
                 p_ref_DD = T_G_DD @ p_ref_G
@@ -1363,7 +1304,6 @@ def demo_push_poses():
             vis.add_geometry(tcs_lines, reset_bounding_box=False)
             tcs_lines_holder[0] = tcs_lines
             vis.update_renderer()
-            vis.remove_geometry(tool_origin_rf, reset_bounding_box=False)
             return False  # Don't close window
 
         # Register callback for right arrow key (key code 262)
@@ -1373,3 +1313,8 @@ def demo_push_poses():
         vis.run()
         vis.destroy_window()
 
+    # Collision-free poses.
+
+    T_G_W = door.T_DD_W @ feasible_poses
+    collision = push_.collision_detection(T_G_W, door.vn_env)
+    contact_free_poses = feasible_poses[np.logical_not(collision),:]
