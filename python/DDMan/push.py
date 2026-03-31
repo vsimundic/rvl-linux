@@ -583,7 +583,7 @@ class push():
         # print(-e+0.001)
         # if e < 0.0:
         #     T_G_DD[2,3] -= e
-        T_G_DD[2,3] += 0.003
+        T_G_DD[2,3] += 0.005
         return T_G_DD
 
     def path(self, push_poses, init_pose):
@@ -1100,10 +1100,10 @@ def demo_push_poses():
     # Parameters.
   
     dd_state_deg = 0.0
-    num_viewpoints = 100 * 2
+    num_viewpoints = 100 * 3
     num_rot_angles = 12 * 2
-    load_valid_contact_poses_from_file = True
-    load_feasible_poses_from_file = True
+    load_valid_contact_poses_from_file = False
+    load_feasible_poses_from_file = False
     contact_point_sampling_offset = 0.015
     use_default_gripper = False
     use_one_finger = True
