@@ -2534,7 +2534,7 @@ int main(int argc, char **argv)
 						{
 							pMesh = meshSeq.Element + iScene;
 							detector.SegmentPlanarSurfaces(pMesh);
-							pRGBImg = RGBSeq.data() + iScene;
+							pRGBImg = RGBSeq.data() + iScene - (iScene > 0 ? 1 : 0);
 							detector.RecognizeArticulatedObjectState(pMesh, AObj, poseOC, (detector.GetRGBImageVisualization() ? pRGBImg : NULL), true);
 						}
 						for (int iHyps = 0; iHyps < movingPartHyps.n; iHyps++)

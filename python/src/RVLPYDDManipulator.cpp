@@ -51,6 +51,7 @@ public:
 	RVL::Visualizer visualizer;
 	Box<float> bbox;
 	int iScene = -1;
+	std::string resultsFolderStorage;
 
 	MOTION::DoorExperimentParams doorExpParams;
 
@@ -82,7 +83,13 @@ public:
 		touch.InitVisualizer(&visualizer, cfgFileNameCStr);
 		touch.bDoor = true;
 
-		touch.SetVisualizeOptimization(false);
+		// touch.SetVisualizeOptimization(false);
+	}
+
+	void set_results_folder(std::string resultsFolder)
+	{
+		resultsFolderStorage = resultsFolder;
+		touch.resultsFolder = (char *)(resultsFolderStorage.c_str());
 	}
 
 	void clear()
@@ -158,7 +165,6 @@ public:
 					   float sxgt, float sygt, float szgt, float rxgt, float rygt, float qDeg_gt, py::array T_A_0_gt)
 	{
 		iScene++;
-
 		doorExpParams.sx = sx;
 		doorExpParams.sy = sy;
 		doorExpParams.sz = sz;
@@ -176,7 +182,18 @@ public:
 		doorExpParams.rygt = rygt;
 		doorExpParams.qDeg_gt = qDeg_gt;
 		double *T_A_0_gt_ = (double *)T_A_0_gt.request().ptr;
-		RVLHTRANSFMXDECOMP(T_A_0_gt_, doorExpParams.pose_A_0_gt.R, doorExpParams.pose_A_0_gt.t);
+		Pose3D pose_A_0_gt_;
+		RVLHTRANSFMXDECOMP(T_A_0_gt_, pose_A_0_gt_.R, pose_A_0_gt_.t);
+
+		Pose3D pose_Arot_A, pose_A_Arot;
+		float q = DEG2RAD * doorExpParams.qDeg_gt;
+		float cs = cos(q);
+		float sn = sin(q);
+		RVLROTZ(cs, sn, pose_Arot_A.R);
+		RVLNULL3VECTOR(pose_Arot_A.t);
+		RVLINVTRANSF3D(pose_Arot_A.R, pose_Arot_A.t, pose_A_Arot.R, pose_A_Arot.t);
+		RVLCOMPTRANSF3D(pose_A_0_gt_.R, pose_A_0_gt_.t, pose_A_Arot.R, pose_A_Arot.t,
+						doorExpParams.pose_A_0_gt.R, doorExpParams.pose_A_0_gt.t);
 
 		double *T_C_E_ = (double *)T_C_E.request().ptr;
 		RVLHTRANSFMXDECOMP(T_C_E_, doorExpParams.pose_C_E.R, doorExpParams.pose_C_E.t);
@@ -186,7 +203,8 @@ public:
 		RVLHTRANSFMXDECOMP(T_E_0_, doorExpParams.pose_E_0.R, doorExpParams.pose_E_0.t);
 
 		if (iScene == 0)
-			touch.InitSession(&doorExpParams, false);
+			touch.InitSession(&doorExpParams, true);
+		
 
 		touch.InitScene(&doorExpParams);
 	}
@@ -205,6 +223,7 @@ public:
 		touchData.bMiss = bMiss;
 		touchData.iFirstContact = -1;
 		touchData.t = t;
+		touchData.w = 1.0f;
 		touchData.pEnvSolidParams = touch.envSolidParams_;
 
 		touches.push_back(touchData);
@@ -1203,7 +1222,8 @@ PYBIND11_MODULE(RVLPYDDManipulator, m)
 		.def("set_touch", &PYTouch::set_touch)
 		.def("reset_touches", &PYTouch::reset_touches)
 		.def("correct", &PYTouch::correct)
-		.def("set_visualization", &PYTouch::set_visualization);
+		.def("set_visualization", &PYTouch::set_visualization)
+		.def("set_results_folder", &PYTouch::set_results_folder);
 
 	py::class_<PYDDManipulator>(m, "PYDDManipulator")
 		.def(py::init<>())

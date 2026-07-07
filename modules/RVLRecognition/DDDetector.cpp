@@ -2772,23 +2772,54 @@ void DDDetector::Detect(
 			fclose(fp);
 		}
 
+		// // Visualize best door or drawer hypothesis.
+		// if (GetVisualizeDoorHypotheses())
+		// {
+		// 	printf("\n\n");
+		// 	// for (iHyp = 0; iHyp < movingPartHyps.size(); iHyp++)
+		// 	iHyp = iBestHyp;
+		// 	{
+		// 		movingPartHyp = movingPartHyps[iHyp];
+		// 		if (pVisualizationData->b3DVisualization)
+		// 		{
+		// 			for (iMesh = 0; iMesh < meshSeq.n; iMesh++)
+		// 			{
+		// 				pMesh = meshSeq.Element + iMesh;
+		// 				pVisualizationData->pVisualizer->SetMesh(pMesh);
+		// 				VisualizeDDHypothesis(movingPartHyp, iMesh);
+		// 				pVisualizationData->pVisualizer->Run();
+		// 				std::string plyName = "/home/RVLuser/data/01_door_human_2022-08-05-12-42-19-005/ply_visualization/" + std::to_string(iMesh) + ".ply";
+		// 				pVisualizationData->pVisualizer->SaveScenePLY(plyName.c_str());
+		// 				pVisualizationData->pVisualizer->renderer->RemoveAllViewProps();
+		// 			}
+		// 		}
+		// 	}
+		//
 		// Visualize best door or drawer hypothesis.
-
 		if (GetVisualizeDoorHypotheses())
 		{
 			printf("\n\n");
 			// for (iHyp = 0; iHyp < movingPartHyps.size(); iHyp++)
 			iHyp = iBestHyp;
 			{
-				movingPartHyp = movingPartHyps[iHyp];
+				movingPartHyp = movingPartHyps[iHyp];			
 				if (pVisualizationData->b3DVisualization)
-				{
+				{				
+					vtkSmartPointer<vtkCamera> fixedCamera = nullptr;
 					for (iMesh = 0; iMesh < meshSeq.n; iMesh++)
 					{
 						pMesh = meshSeq.Element + iMesh;
 						pVisualizationData->pVisualizer->SetMesh(pMesh);
 						VisualizeDDHypothesis(movingPartHyp, iMesh);
-						pVisualizationData->pVisualizer->Run();
+						if (iMesh == 0)
+						{
+							// First frame only: open one interactive window (Run(), as elsewhere in this file)
+							// so the user can set the view (press 'q' to continue), then capture that camera.
+							pVisualizationData->pVisualizer->Run();
+							fixedCamera = pVisualizationData->pVisualizer->GetCurrentCamera();
+						}
+						// Render every frame with the camera the user fixed on the first frame.
+						pVisualizationData->pVisualizer->RenderWithFixedCamera(fixedCamera);
 						pVisualizationData->pVisualizer->renderer->RemoveAllViewProps();
 					}
 				}
@@ -9571,6 +9602,27 @@ void DDDetector::AccuratePlaneFitting(Mesh *pMesh)
 
 void DDDetector::InitVisualizer(Visualizer *pVisualizerIn)
 {
+	// --- VTK Xt application-context "keeper" ---------------------------------------------
+	// VTK keeps a single process-global Xt application context (vtkXRenderWindowInteractor::App),
+	// shared by every interactor. Its destructor destroys that context (App = NULL) as soon as
+	// the last interactor is gone. This codebase creates many short-lived Visualizers and
+	// detect() is driven repeatedly from Python, so one of those destructions tears the context
+	// down; afterwards the persistent visualizer's interactor (still Initialized == 1) calls
+	// XtAppNextEvent(NULL) and segfaults. Initializing one interactor here -- before any other
+	// Visualizer -- and never destroying it makes this interactor the context owner and keeps
+	// the count from ever reaching the teardown, so App stays alive for the whole process.
+	static vtkSmartPointer<vtkRenderWindow> keeperWindow;
+	static vtkSmartPointer<vtkRenderWindowInteractor> keeperInteractor;
+	if (!keeperInteractor)
+	{
+		keeperWindow = vtkSmartPointer<vtkRenderWindow>::New();
+		keeperWindow->SetSize(1, 1);
+		keeperWindow->SetPosition(-100, -100); // keep the tiny helper window off-screen
+		keeperInteractor = vtkSmartPointer<vtkRenderWindowInteractor>::New();
+		keeperInteractor->SetRenderWindow(keeperWindow);
+		keeperInteractor->Initialize(); // creates the shared Xt app context first; never destroyed
+	}
+
 	if (pVisualizationData == NULL)
 		pVisualizationData = new RECOG::DDD::DisplayCallbackData;
 	if (pVisualizerIn)
@@ -9594,7 +9646,7 @@ void DDDetector::InitVisualizer(Visualizer *pVisualizerIn)
 	pVisualizationData->bVisualizeFittingScoreCalculation = false;
 	pVisualizationData->bVisualizeROIDetection = false;
 	pVisualizationData->bVisualizeDoorHypotheses = false;
-	pVisualizationData->bVisualizeROI = false;
+	pVisualizationData->bVisualizeROI = true;
 	pVisualizationData->bVisualizeRectangularStructure = false;
 	pVisualizationData->bVisualizeRectStructMatching = false;
 	pVisualizationData->bVisualizeAOInitState = false;
@@ -9623,6 +9675,8 @@ void DDDetector::InitVisualizer(Visualizer *pVisualizerIn)
 	pParamData = pVisualizationData->paramList.AddParam("DDD.3DVisualization", RVLPARAM_TYPE_BOOL, &(pVisualizationData->b3DVisualization));
 	pParamData = pVisualizationData->paramList.AddParam("DDD.RGBImageVisualization", RVLPARAM_TYPE_BOOL, &(pVisualizationData->bRGBImageVisualization));
 	pVisualizationData->paramList.LoadParams((char *)(cfgFileName.data()));
+
+	pVisualizationData->pVisualizer->SetBackgroundColor(1.0, 1.0, 1.0);
 }
 
 void DDDetector::RunVisualizer()
@@ -12938,7 +12992,7 @@ void DDDetector::Detect2(Array<Mesh> meshSeq)
 			printf("No hypotheses are generated.\n");
 			continue;
 		}
-
+		
 		// Hypothesis bounding box visualization.
 		hyp = hyps[0];
 		if (pVisualizationData->bVisualizeInitialHypothesis)
@@ -13864,7 +13918,8 @@ void DDDetector::RecognizeArticulatedObjectState(
 		pRGBImg->copyTo(display);
 		VisualizeArticulatedObject(AObj, poseOC, false, &display);
 		cv::imshow("Articulated object", display);
-		cv::imwrite(detectedStateImgPath, display);
+		if (detectedStateImgPath != "")
+			cv::imwrite(detectedStateImgPath, display);
 		cv::waitKey();
 	}
 	if (pVisualizationData->b3DVisualization)
@@ -14009,6 +14064,13 @@ float DDDetector::CreateAndEvaluateAOHypothesis(
 
 	RVLCOPYMX3X3(poseQC.R, APoseQC.R);
 	RVLCOPY3VECTOR(poseQC.t, APoseQC.t);
+
+	// Debug visualize hypothesis
+	pVisualizationData->pVisualizer->SetMesh(pMesh);
+	VisualizeDDHypothesis(*pAObj, -1);
+	pVisualizationData->pVisualizer->Run();
+	pVisualizationData->pVisualizer->renderer->RemoveAllViewProps();
+
 
 	score = EvaluateHypothesis(pMesh, &cuboidModel, APoseQC, bPrintDebug);
 	// score *= (1.0f + exp(-q * q / (pAObj->objClass == RVLDDD_MODEL_DOOR ? varZeroStateDoor : varZeroStateDrawer)));

@@ -11,7 +11,9 @@
 	uchar cyan[] = {0, 255, 255};    \
 	uchar magenta[] = {255, 0, 255}; \
 	uchar white[] = {255, 255, 255}; \
-	uchar darkGreen[] = {0, 128, 0};
+	uchar darkGreen[] = {0, 128, 0}; \
+	uchar greenNew[] = {120, 240, 90};   \
+	uchar blueNew[] = {50, 200, 255};   \
 
 #define RVLVISUALIZER_SET_PIXEL_COLOR(pPixArray, u, v, widthStep, color, pPix) \
 	{                                                                          \
@@ -206,6 +208,11 @@ namespace RVL
 			float *P,
 			float r,
 			int resolution);
+		// Overloaded version that returns the actor
+		vtkSmartPointer<vtkActor> DisplaySphere2(
+			float *P,
+			float r,
+			int resolution);
 		void DisplayEllipsoid(
 			float *P,
 			float *C,
@@ -323,6 +330,10 @@ namespace RVL
 		void DisplaySphereGrid();
 		void DisplaySphericalHistogram(Array<Pair<Vector3<float>, float>> vectors);
 		void DisplayMesh(Mesh *pMesh);
+		void SaveScenePLY(const char *fileName);
+		void SaveScenePNG(const char *fileName, int magnification = 1);
+		void RenderWithFixedCamera(vtkSmartPointer<vtkCamera> camera);
+		vtkSmartPointer<vtkCamera> GetCurrentCamera();
 
 	public:
 		CRVLMem *pMem;

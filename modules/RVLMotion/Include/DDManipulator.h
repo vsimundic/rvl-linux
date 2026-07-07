@@ -130,6 +130,8 @@ namespace RVL
 			bool InvKinematicsPrev(
 				Pose3D pose_6_0,
 				Array2D<float> &qOut);
+			
+			void VisualizeRobot(float *qIn);
 
 		public:
 			CRVLMem *pMem0;
@@ -152,6 +154,8 @@ namespace RVL
 			MOTION::Cylinder *collisionCylinderMem;
 			Array<Array<MOTION::Cylinder>> collisionCylinders;
 			int maxCollisionLinkIdx;
+			bool bAdditionalCollisionCylinders;
+			Visualizer *pVisualizer;
 
 		private:
 			float *csal;
@@ -290,6 +294,7 @@ namespace RVL
 			std::vector<vtkSmartPointer<vtkActor>> *pActors);
 		vtkSmartPointer<vtkActor> VisualizeDoorPenel();
 		void SetVisualizeVNEnvironmentModel();
+		void VisualizeContactPoseGraph(const char *pngFileName = NULL, int subsampleStep = 10);
 
 		// FCL
 		void RVLPose2FCLPose(Pose3D poseRVL, fcl::Transform3<double> &poseFCL);

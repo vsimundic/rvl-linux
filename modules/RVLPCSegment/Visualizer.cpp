@@ -6,6 +6,8 @@
 #include <vtkParametricEllipsoid.h>
 #include <vtkOBJReader.h>
 #include <vtkQuad.h>
+#include <vtkTubeFilter.h>
+#include <vtkCellDataToPointData.h>
 #include "Util.h"
 #include "Graph.h"
 #include "vtkNew.h"
@@ -895,6 +897,44 @@ void Visualizer::DisplaySphere(
 	renderer->AddActor(actor);
 }
 
+vtkSmartPointer<vtkActor> Visualizer::DisplaySphere2(
+	float* P,
+	float r,
+	int resolution)
+{
+	// Create sphere.
+	vtkSmartPointer<vtkSphereSource> pSphere = vtkSmartPointer<vtkSphereSource>::New();
+	pSphere->SetRadius(r);
+	pSphere->SetPhiResolution(resolution);
+	pSphere->SetThetaResolution(resolution);
+
+	// Translation to P.
+	vtkSmartPointer<vtkTransform> transform = vtkSmartPointer<vtkTransform>::New();
+	double R[9];
+	RVLUNITMX3(R);
+	double T[16];
+	RVLHTRANSFMX(R, P, T);
+	transform->SetMatrix(T);
+	vtkSmartPointer<vtkTransformPolyDataFilter> transformFilter = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
+	transformFilter->SetInputConnection(pSphere->GetOutputPort()); //PLY model
+	transformFilter->SetTransform(transform);
+	transformFilter->Update();
+
+	// Create a mapper
+	vtkSmartPointer<vtkPolyDataMapper> mapper = vtkSmartPointer<vtkPolyDataMapper>::New();
+	mapper->SetInputConnection(transformFilter->GetOutputPort());
+
+	// Create an actor
+	vtkSmartPointer<vtkActor> actor = vtkSmartPointer<vtkActor>::New();
+	actor->SetMapper(mapper);
+
+	//Insert actor
+	renderer->AddActor(actor);
+
+	return actor;
+}
+
+
 void Visualizer::DisplayEllipsoid(
 	float *P,
 	float *C,
@@ -1473,4 +1513,152 @@ void Visualizer::DisplayMesh(Mesh* pMesh)
 	visLines.n = pVisLine - visLines.Element;
 	DisplayLines(pMesh->NodeArray, visLines, darkGreen, 2.0f);
 	delete[] visLines.Element;
+}
+
+void Visualizer::SaveScenePLY(const char *fileName)
+{
+	vtkSmartPointer<vtkAppendPolyData> appendFilter = vtkSmartPointer<vtkAppendPolyData>::New();
+
+	vtkActorCollection *actors = renderer->GetActors();
+	actors->InitTraversal();
+	vtkActor *act;
+	while ((act = actors->GetNextActor()) != nullptr)
+	{
+		if (!act->GetVisibility())
+			continue;
+
+		vtkMapper *mapper = act->GetMapper();
+		if (!mapper)
+			continue;
+
+		vtkPolyData *polyData = vtkPolyData::SafeDownCast(mapper->GetInput());
+		if (!polyData || polyData->GetNumberOfPoints() == 0)
+			continue;
+
+		// Apply the actor's transform to the polydata.
+		vtkSmartPointer<vtkTransform> transform = vtkSmartPointer<vtkTransform>::New();
+		transform->SetMatrix(act->GetMatrix());
+
+		vtkSmartPointer<vtkTransformPolyDataFilter> transformFilter = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
+		transformFilter->SetInputData(polyData);
+		transformFilter->SetTransform(transform);
+		transformFilter->Update();
+
+		vtkSmartPointer<vtkPolyData> transformed = transformFilter->GetOutput();
+
+		// Convert cell colors to point colors if needed.
+		if (!transformed->GetPointData()->GetScalars() && transformed->GetCellData()->GetScalars())
+		{
+			vtkSmartPointer<vtkCellDataToPointData> c2p = vtkSmartPointer<vtkCellDataToPointData>::New();
+			c2p->SetInputData(transformed);
+			c2p->Update();
+			transformed = c2p->GetPolyDataOutput();
+		}
+
+		// Determine the color to use for this actor's geometry.
+		double *actorColor = act->GetProperty()->GetColor();
+		unsigned char ac[3];
+		ac[0] = (unsigned char)(actorColor[0] * 255.0);
+		ac[1] = (unsigned char)(actorColor[1] * 255.0);
+		ac[2] = (unsigned char)(actorColor[2] * 255.0);
+
+		// If polydata has lines, convert them to tubes so PLY writer can store them.
+		if (transformed->GetNumberOfLines() > 0)
+		{
+			vtkSmartPointer<vtkTubeFilter> tubeFilter = vtkSmartPointer<vtkTubeFilter>::New();
+			tubeFilter->SetInputData(transformed);
+			float lineWidth = act->GetProperty()->GetLineWidth();
+			tubeFilter->SetRadius(lineWidth * 0.0005);
+			tubeFilter->SetNumberOfSides(6);
+			tubeFilter->Update();
+
+			vtkSmartPointer<vtkPolyData> tubes = tubeFilter->GetOutput();
+
+			// Propagate point colors through the tube if available, otherwise assign actor color.
+			if (!tubes->GetPointData()->GetScalars())
+			{
+				vtkSmartPointer<vtkUnsignedCharArray> colors = vtkSmartPointer<vtkUnsignedCharArray>::New();
+				colors->SetNumberOfComponents(3);
+				colors->SetName("Colors");
+				for (vtkIdType i = 0; i < tubes->GetNumberOfPoints(); i++)
+					colors->InsertNextTypedTuple(ac);
+				tubes->GetPointData()->SetScalars(colors);
+			}
+
+			appendFilter->AddInputData(tubes);
+		}
+
+		// If polydata has polygons or vertices (surface geometry, point clouds), add them.
+		if (transformed->GetNumberOfPolys() > 0 || transformed->GetNumberOfVerts() > 0)
+		{
+			// Assign actor color if there are no scalars.
+			if (!transformed->GetPointData()->GetScalars())
+			{
+				vtkSmartPointer<vtkUnsignedCharArray> colors = vtkSmartPointer<vtkUnsignedCharArray>::New();
+				colors->SetNumberOfComponents(3);
+				colors->SetName("Colors");
+				for (vtkIdType i = 0; i < transformed->GetNumberOfPoints(); i++)
+					colors->InsertNextTypedTuple(ac);
+				transformed->GetPointData()->SetScalars(colors);
+			}
+
+			appendFilter->AddInputData(transformed);
+		}
+	}
+
+	appendFilter->Update();
+
+	vtkSmartPointer<vtkTriangleFilter> triFilter = vtkSmartPointer<vtkTriangleFilter>::New();
+	triFilter->SetInputData(appendFilter->GetOutput());
+	triFilter->Update();
+
+	vtkSmartPointer<vtkPLYWriter> writer = vtkSmartPointer<vtkPLYWriter>::New();
+	writer->SetFileName(fileName);
+	writer->SetInputData(triFilter->GetOutput());
+	writer->SetArrayName("Colors");
+	writer->SetColorMode(2);
+	writer->Write();
+	printf("Scene saved to %s (%ld points, %ld polys)\n", fileName,
+		(long)triFilter->GetOutput()->GetNumberOfPoints(),
+		(long)triFilter->GetOutput()->GetNumberOfPolys());
+}
+
+void Visualizer::SaveScenePNG(const char *fileName, int magnification)
+{
+	// Re-render to ensure the back buffer has the current scene.
+	window->SetOffScreenRendering(0);
+	window->Render();
+
+	vtkSmartPointer<vtkWindowToImageFilter> windowToImageFilter = vtkSmartPointer<vtkWindowToImageFilter>::New();
+	windowToImageFilter->SetInput(window);
+	windowToImageFilter->SetMagnification(magnification);
+	windowToImageFilter->SetInputBufferTypeToRGB();
+	windowToImageFilter->ReadFrontBufferOff();
+	windowToImageFilter->Update();
+
+	vtkSmartPointer<vtkPNGWriter> writer = vtkSmartPointer<vtkPNGWriter>::New();
+	writer->SetFileName(fileName);
+	writer->SetInputConnection(windowToImageFilter->GetOutputPort());
+	writer->Write();
+
+	printf("Screenshot saved to %s\n", fileName);
+}
+
+void Visualizer::RenderWithFixedCamera(vtkSmartPointer<vtkCamera> camera)
+{
+	if (b3D)
+	{
+		// Apply the saved camera instead of calling ResetCamera().
+		renderer->SetActiveCamera(camera);
+		window->GetInteractor()->Initialize();
+		window->Render();
+	}
+}
+
+vtkSmartPointer<vtkCamera> Visualizer::GetCurrentCamera()
+{
+	// Capture the current camera state by deep-copying it.
+	vtkSmartPointer<vtkCamera> cameraCopy = vtkSmartPointer<vtkCamera>::New();
+	cameraCopy->DeepCopy(renderer->GetActiveCamera());
+	return cameraCopy;
 }

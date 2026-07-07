@@ -1784,6 +1784,10 @@ bool DDManipulator::Path2(
         doorStates.Element[iState] = doorState;
         RVLCOMPTRANSF3DWITHINV(robot.pose_0_W.R, robot.pose_0_W.t, pose_DD_S.R, pose_DD_S.t, pose_DD_0.R, pose_DD_0.t, V3Tmp);
 
+        // std::string pngFileName = "/home/RVLuser/data/multi-contact/contact_pose_graph.png";
+        // VisualizeContactPoseGraph(pngFileName.c_str(), 100);
+
+
         /// Inverse kinematics and feasibility.
 
         if (bDefaultToolModel)
@@ -4697,6 +4701,8 @@ void DDManipulator::InitVisualizer(Visualizer *pVisualizerIn)
     // #ifdef RVLMOTION_DDMANIPULATOR_PATH2_GRAPH_VISUALIZATION
     pVisualizationData->pVisualizer->SetBackgroundColor(1.0, 1.0, 1.0);
     // #endif
+
+    robot.pVisualizer = pVisualizationData->pVisualizer;
 }
 
 #ifdef RVLVTK
@@ -4729,10 +4735,10 @@ void DDManipulator::Visualize(
     BoxCenter<float>(&dd_static_box, boxCenter.Element);
     RVLCOPYMX3X3(pose_F_S.R, pose_box_S.R);
     RVLTRANSF3(boxCenter.Element, pose_F_S.R, pose_F_S.t, pose_box_S.t);
-    vtkSmartPointer<vtkActor> staticBoxActor = pVisualizer->DisplayBox(boxSize.Element[0], boxSize.Element[1], boxSize.Element[2], &pose_box_S, 0.0, 128.0, 0.0);
+    vtkSmartPointer<vtkActor> staticBoxActor = pVisualizer->DisplayBox(boxSize.Element[0], boxSize.Element[1], boxSize.Element[2], &pose_box_S, 0.0, 0.0, 0.0);
     BoxSize<float>(&dd_storage_space_box, boxSize.Element[0], boxSize.Element[1], boxSize.Element[2]);
     BoxCenter<float>(&dd_storage_space_box, boxCenter.Element);
-    vtkSmartPointer<vtkActor> staticSorageSpaceActor = pVisualizer->DisplayBox(boxSize.Element[0], boxSize.Element[1], boxSize.Element[2], &pose_box_S, 0.0, 128.0, 0.0);
+    vtkSmartPointer<vtkActor> staticSorageSpaceActor = pVisualizer->DisplayBox(boxSize.Element[0], boxSize.Element[1], boxSize.Element[2], &pose_box_S, 0.0, 0.0, 0.0);
 
     /// Display door panel and robot.
 
@@ -4750,6 +4756,7 @@ void DDManipulator::Visualize(
         Pose3D pose_A_S;
         RVLCOMPTRANSF3D(pose_F_S.R, pose_F_S.t, pose_A_F.R, pose_A_F.t, pose_A_S.R, pose_A_S.t);
 
+        vtkSmartPointer<vtkCamera> fixedCamera = nullptr;
         for (iState = 0; iState < doorStates.n; iState++)
         {
             SetEnvironmentState(doorStates.Element[iState]);
@@ -4800,10 +4807,34 @@ void DDManipulator::Visualize(
             VisualizeRobot(q, &(pVisualizationData->robotActors));
             // printf("distance to the door panel edge: x=%f, y=%f\n", pNode->PRTCP[0], pNode->PRTCP[1]);     // Only for debugging purpose.
             printf("point %d\n", iState);
-            if (!Free(q))
-                printf("Collision!\n");
-
-            pVisualizer->Run();
+            // pVisualizer->window->Render();
+            // if (!Free(q))
+            // {
+            //     printf("Collision!\n");
+            // }
+            if (iState == 0)
+            {
+                // First frame: let user set the desired camera view interactively.
+                pVisualizer->renderer->ResetCamera();
+                pVisualizer->window->GetInteractor()->Initialize();
+                pVisualizer->window->Render();
+                pVisualizer->window->GetInteractor()->Start();
+                // After user presses 'q', capture the camera they set.
+                fixedCamera = pVisualizer->GetCurrentCamera();
+                // Re-render with that camera for the screenshot.
+                pVisualizer->RenderWithFixedCamera(fixedCamera);
+            }
+            else
+            {
+                // Subsequent frames: reuse the captured camera.
+                pVisualizer->RenderWithFixedCamera(fixedCamera);
+            }
+            // Save PNG screenshot (window is freshly rendered).
+            // std::string pngName = "/home/RVLuser/data/multi-contact/ply_visualization/" + std::to_string(iState) + ".png";
+            // pVisualizer->SaveScenePNG(pngName.c_str());
+            
+            // Open interactive window so user can inspect and press 'q' to continue.
+            pVisualizer->window->GetInteractor()->Start();
             pVisualizer->renderer->RemoveViewProp(doorPanelActor);
             pVisualizer->renderer->RemoveViewProp(cabinetStaticMeshActor);
             pVisualizer->renderer->RemoveViewProp(cabinetPanelMeshActor);
@@ -5218,10 +5249,14 @@ void DDManipulator::VisualizeRobot(
     float fTmp;
     int i_, j_, k_;
     int iLink;
-    for (iLink = 0; iLink <= robot.maxCollisionLinkIdx; iLink++)
+    // for (iLink = 0; iLink <= robot.maxCollisionLinkIdx; iLink++)
+    for (iLink = 0; iLink <= 2; iLink++)
     {
+        // for (int j = 0; j < robot.collisionCylinders.Element[iLink].n; j++)
         for (int j = 0; j < robot.collisionCylinders.Element[iLink].n; j++)
         {
+            if (j > 0)
+                continue;
             pCylinder = robot.collisionCylinders.Element[iLink].Element + j;
             RVLDIF3VECTORS(pCylinder->P[1].Element, pCylinder->P[0].Element, Z_C_L);
             RVLNORM3(Z_C_L, h);
@@ -5234,15 +5269,15 @@ void DDManipulator::VisualizeRobot(
             RVLCOMPTRANSF3D(robot.pose_0_W.R, robot.pose_0_W.t, pose_C_0.R, pose_C_0.t, pose_C_W.R, pose_C_W.t);
             pActors->push_back(pVisualizer->DisplayCylinder(pCylinder->r, h, &pose_C_W, 16, 1.0, 1.0, 1.0));
 
-            // // Display spheres - spherocylinders
-            // float cS[3];
-            // Pose3D pose_L_W;
-            // RVLCOMPTRANSF3D(robot.pose_0_W.R, robot.pose_0_W.t, robot.link_pose[iLink].R, robot.link_pose[iLink].t, pose_L_W.R, pose_L_W.t);
-            // RVLTRANSF3(pCylinder->P[0].Element, pose_L_W.R, pose_L_W.t, cS);
-            // pVisualizer->DisplaySphere(cS, pCylinder->r, 16);
+            // Display spheres - spherocylinders
+            float cS[3];
+            Pose3D pose_L_W;
+            RVLCOMPTRANSF3D(robot.pose_0_W.R, robot.pose_0_W.t, robot.link_pose[iLink].R, robot.link_pose[iLink].t, pose_L_W.R, pose_L_W.t);
+            RVLTRANSF3(pCylinder->P[0].Element, pose_L_W.R, pose_L_W.t, cS);
+            pActors->push_back(pVisualizer->DisplaySphere2(cS, pCylinder->r, 16));
 
-            // RVLTRANSF3(pCylinder->P[1].Element, pose_L_W.R, pose_L_W.t, cS);
-            // pVisualizer->DisplaySphere(cS, pCylinder->r, 16);
+            RVLTRANSF3(pCylinder->P[1].Element, pose_L_W.R, pose_L_W.t, cS);
+            pActors->push_back(pVisualizer->DisplaySphere2(cS, pCylinder->r, 16));
 
         }
     }
@@ -5278,7 +5313,7 @@ vtkSmartPointer<vtkActor> DDManipulator::VisualizeDoorPenel()
     Pose3D pose_box_S;
     RVLCOPYMX3X3(pose_Arot_S.R, pose_box_S.R);
     RVLTRANSF3(boxCenter.Element, pose_Arot_S.R, pose_Arot_S.t, pose_box_S.t);
-    vtkSmartPointer<vtkActor> actor = pVisualizer->DisplayBox(boxSize.Element[0], boxSize.Element[1], boxSize.Element[2], &pose_box_S, 0.0, 128.0, 0.0);
+    vtkSmartPointer<vtkActor> actor = pVisualizer->DisplayBox(boxSize.Element[0], boxSize.Element[1], boxSize.Element[2], &pose_box_S, 0.0, 0.0, 0.0);
 
     return actor;
 }
@@ -5305,6 +5340,8 @@ Robot::Robot()
     collisionCylinderMem = NULL;
     collisionCylinders.Element = NULL;
     maxCollisionLinkIdx = -1;
+    pVisualizer = NULL;
+    bAdditionalCollisionCylinders = true;
 }
 
 Robot::~Robot()
@@ -5315,6 +5352,11 @@ Robot::~Robot()
 void Robot::Create(char *cfgFileNameIn)
 {
     Clear();
+
+    // Load parameters from a configuration file.
+    CreateParamList();
+    paramList.LoadParams(cfgFileNameIn);
+
     q = new float[n];
     memset(q, 0, 6 * sizeof(float));
     d = new float[n];
@@ -5354,31 +5396,45 @@ void Robot::Create(char *cfgFileNameIn)
 
     // UR5 collision detection model.
 
-    maxCollisionLinkIdx = 2;
+    maxCollisionLinkIdx = (bAdditionalCollisionCylinders ? 5 : 2);
     collisionCylinders.Element = new Array<MOTION::Cylinder>[6];
     for (i = 0; i < n; i++)
     {
         collisionCylinders.Element[i].n = 0;
         collisionCylinders.Element[i].Element = NULL;
     }
-    collisionCylinderMem = new MOTION::Cylinder[2];
+    int nCollisionCylinders = bAdditionalCollisionCylinders ? 4 : 2;
+    collisionCylinderMem = new MOTION::Cylinder[nCollisionCylinders];
     MOTION::Cylinder *pCylinder = collisionCylinderMem;
     collisionCylinders.Element[1].n = 1;
     collisionCylinders.Element[1].Element = pCylinder;
     pCylinder->r = 0.06f;
     RVLSET3VECTOR(pCylinder->P[0].Element, 0.0f, 0.0f, -0.024f);
     RVLSET3VECTOR(pCylinder->P[1].Element, 0.0f, 0.0f, 0.206f);
+    
     pCylinder++;
-    collisionCylinders.Element[2].n = 1;
+    collisionCylinders.Element[2].n = 2;
     collisionCylinders.Element[2].Element = pCylinder;
     pCylinder->r = 0.038f;
     RVLSET3VECTOR(pCylinder->P[0].Element, 0.0375f, 0.0f, 0.0f);
     RVLSET3VECTOR(pCylinder->P[1].Element, 0.3305f, 0.0f, 0.0f);
-
-    // Load parameters from a configuration file.
-
-    CreateParamList();
-    paramList.LoadParams(cfgFileNameIn);
+    
+    if (bAdditionalCollisionCylinders)
+    {
+        pCylinder++;
+        pCylinder->r = 0.038f;
+        RVLSET3VECTOR(pCylinder->P[0].Element, 0.0f, 0.0f, -0.02f);
+        RVLSET3VECTOR(pCylinder->P[1].Element, 0.0f, 0.0f, 0.09465f);
+        
+        // Camera collision cylinder
+        pCylinder++;
+        collisionCylinders.Element[5].n = 1;
+        collisionCylinders.Element[5].Element = pCylinder;
+        pCylinder->r = 0.08184f * 0.5f;
+        float h_cam = 0.047628f*0.5f;
+        RVLSET3VECTOR(pCylinder->P[0].Element, -0.0799f, -0.0835f, 0.0597f-h_cam*0.5f);
+        RVLSET3VECTOR(pCylinder->P[1].Element, -0.0799f, -0.0835f, 0.0597f+h_cam*0.5f);
+    }
 
     //
 
@@ -5421,6 +5477,7 @@ void Robot::CreateParamList()
     pParamData = paramList.AddParam("Robot.t_TCP_6.z", RVLPARAM_TYPE_FLOAT, pose_TCP_6.t + 2);
     pParamData = paramList.AddParam("Robot.rotz_TCP_6", RVLPARAM_TYPE_FLOAT, &rotz_TCP_6);
     pParamData = paramList.AddParam("Robot.epsilon", RVLPARAM_TYPE_FLOAT, &epsilon);
+    pParamData = paramList.AddParam("Robot.additionalCollisionCylinders", RVLPARAM_TYPE_BOOL, &bAdditionalCollisionCylinders);
 }
 
 void Robot::Clear()
@@ -5674,9 +5731,64 @@ bool Robot::SelfCollision(
     if (fTmp < 0.0f)
         return true;
     fTmp = maxq4 + q[3];
-    RVLNORMANGLE(fTmp);
+    RVLNORMANGLE(fTmp);    
     if (fTmp < 0.0f)
         return true;
+
+    // Check spherocylinder collision between collisionCylinders.Element[5] and collisionCylinders.Element[2].
+
+    if (bAdditionalCollisionCylinders && collisionCylinders.Element[5].n > 0 && collisionCylinders.Element[2].n > 0)
+    {
+        // Save q, run full FK to get all link_pose entries, then restore q.
+        float qSave[6];
+        memcpy(qSave, this->q, n * sizeof(float));
+        memcpy(this->q, q, n * sizeof(float));
+        FwdKinematics();
+        memcpy(this->q, qSave, n * sizeof(float));
+
+        MOTION::Cylinder &cyl5 = collisionCylinders.Element[5].Element[0];
+
+        // Transform cylinder 5 endpoints from link 6 frame (link_pose[5] = pose_6_0) to frame 0.
+        float C[3], D[3];
+        RVLMULMX3X3VECT(link_pose[5].R, cyl5.P[0].Element, C);
+        RVLSUM3VECTORS(C, link_pose[5].t, C);
+        RVLMULMX3X3VECT(link_pose[5].R, cyl5.P[1].Element, D);
+        RVLSUM3VECTORS(D, link_pose[5].t, D);
+
+        // Check against each cylinder on link 2. link_pose[1] = pose_2_0.
+        for (int j = 0; j < collisionCylinders.Element[2].n; j++)
+        {
+            MOTION::Cylinder &cyl2 = collisionCylinders.Element[2].Element[j];
+
+            // Transform cylinder 2 endpoints from link 2 frame to frame 0.
+            float A[3], B[3], V3Tmp[3];
+            RVLMULMX3X3VECT(link_pose[2].R, cyl2.P[0].Element, A);
+            RVLSUM3VECTORS(A, link_pose[2].t, A);
+            RVLMULMX3X3VECT(link_pose[2].R, cyl2.P[1].Element, B);
+            RVLSUM3VECTORS(B, link_pose[2].t, B);
+
+            // Find closest points E, F on the two spherocylinder axes.
+            float E[3], F[3];
+            float sAB, sCD, DCSqrMag;
+            float BA[3], DC[3], AC[3], BC[3];
+            float inPlaneA[3], inPlaneB[3], inPlaneBA[3];
+            RVL3DLINE_SEGMENTS_CLOSEST_POINTS(A, B, C, D, E, F,
+                sAB, sCD, BA, DC, AC, BC, DCSqrMag,
+                inPlaneA, inPlaneB, inPlaneBA, fTmp, V3Tmp);
+
+            // Spherocylinder collision: distance between axes < sum of radii.
+            float EF[3];
+            RVLDIF3VECTORS(E, F, EF);
+            float distSqr = RVLDOTPRODUCT3(EF, EF);
+            float rSum = cyl2.r + cyl5.r;
+            if (distSqr < rSum * rSum)
+            {
+                // VisualizeRobot(q);
+                return true;
+            }
+        }
+    }
+
     return false;
 }
 
@@ -6018,6 +6130,91 @@ bool Robot::InvKinematicsPrev(
             }
         }
     }
+}
+
+void Robot::VisualizeRobot(float *qIn)
+{
+    if (!pVisualizer)
+        return;
+
+    memcpy(q, qIn, n * sizeof(float));
+    FwdKinematics();
+
+    std::vector<vtkSmartPointer<vtkActor>> actors;
+
+    // Visualize skeleton.
+
+    Array<Point> vertices;
+    vertices.n = n + 1;
+    vertices.Element = new Point[vertices.n];
+    RVLCOPY3VECTOR(pose_0_W.t, vertices.Element[0].P);
+    Array<Pair<int, int>> lines;
+    lines.n = n;
+    lines.Element = new Pair<int, int>[lines.n];
+    int i;
+    float *PSrc, *PTgt;
+    for (i = 0; i < n; i++)
+    {
+        PSrc = link_pose[i].t;
+        PTgt = vertices.Element[i + 1].P;
+        RVLTRANSF3(PSrc, pose_0_W.R, pose_0_W.t, PTgt);
+        lines.Element[i].a = i;
+        lines.Element[i].b = i + 1;
+    }
+    uchar red[] = {255, 0, 0};
+    actors.push_back(pVisualizer->DisplayLines(vertices, lines, red, 2.0f));
+
+    delete[] vertices.Element;
+    delete[] lines.Element;
+
+    // Visualize link solids for collision detection.
+
+    MOTION::Cylinder *pCylinder;
+    Pose3D pose_C_L;
+    Pose3D pose_C_0;
+    Pose3D pose_C_W;
+    float R_L_C[9];
+    float *X_C_L = R_L_C;
+    float *Y_C_L = R_L_C + 3;
+    float *Z_C_L = R_L_C + 6;
+    float h;
+    float fTmp;
+    int i_, j_, k_;
+    int iLink;
+    for (iLink = 0; iLink <= maxCollisionLinkIdx; iLink++)
+    {
+        for (int j = 0; j < collisionCylinders.Element[iLink].n; j++)
+        {
+            pCylinder = collisionCylinders.Element[iLink].Element + j;
+            RVLDIF3VECTORS(pCylinder->P[1].Element, pCylinder->P[0].Element, Z_C_L);
+            RVLNORM3(Z_C_L, h);
+            RVLORTHOGONAL3(Z_C_L, Y_C_L, i_, j_, k_, fTmp);
+            RVLCROSSPRODUCT3(Y_C_L, Z_C_L, X_C_L);
+            RVLCOPYMX3X3T(R_L_C, pose_C_L.R);
+            RVLSUM3VECTORS(pCylinder->P[0].Element, pCylinder->P[1].Element, pose_C_L.t);
+            RVLSCALE3VECTOR(pose_C_L.t, 0.5f, pose_C_L.t);
+            RVLCOMPTRANSF3D(link_pose[iLink].R, link_pose[iLink].t, pose_C_L.R, pose_C_L.t, pose_C_0.R, pose_C_0.t);
+            RVLCOMPTRANSF3D(pose_0_W.R, pose_0_W.t, pose_C_0.R, pose_C_0.t, pose_C_W.R, pose_C_W.t);
+            actors.push_back(pVisualizer->DisplayCylinder(pCylinder->r, h, &pose_C_W, 16, 1.0, 1.0, 1.0));
+
+            // Display spheres - spherocylinders
+            float cS[3];
+            Pose3D pose_L_W;
+            RVLCOMPTRANSF3D(pose_0_W.R, pose_0_W.t, link_pose[iLink].R, link_pose[iLink].t, pose_L_W.R, pose_L_W.t);
+            RVLTRANSF3(pCylinder->P[0].Element, pose_L_W.R, pose_L_W.t, cS);
+            actors.push_back(pVisualizer->DisplaySphere2(cS, pCylinder->r, 16));
+
+            RVLTRANSF3(pCylinder->P[1].Element, pose_L_W.R, pose_L_W.t, cS);
+            actors.push_back(pVisualizer->DisplaySphere2(cS, pCylinder->r, 16));
+        }
+    }
+
+    pVisualizer->Run();
+
+    // Clean up actors.
+    for (size_t iActor = 0; iActor < actors.size(); iActor++)
+        pVisualizer->renderer->RemoveViewProp(actors[iActor]);
+    pVisualizer->window->Finalize();
 }
 
 // SIMUNDIC - FCL
@@ -6515,6 +6712,198 @@ void DDManipulator::setPose_DD_S(Pose3D pose_DD_S_)
     RVLCOPYMX3X3(pose_DD_S_.R, pose_DD_S.R);
     RVLCOPY3VECTOR(pose_DD_S_.t, pose_DD_S.t);
     setPose_DD_0();
+}
+
+void DDManipulator::VisualizeContactPoseGraph(const char *pngFileName, int subsampleStep)
+{
+    Visualizer *pVisualizer = pVisualizationData->pVisualizer;
+
+    // Maximum PRTCP distance from DD origin to include a node.
+    // Only nodes whose contact point is within this radius of DD are visualized.
+    float maxDistFromDD = 0.15f;
+
+    // Display the door furniture context.
+
+    Vector3<float> boxSize;
+    Vector3<float> boxCenter;
+    Pose3D pose_box_S;
+    BoxSize<float>(&dd_static_box, boxSize.Element[0], boxSize.Element[1], boxSize.Element[2]);
+    BoxCenter<float>(&dd_static_box, boxCenter.Element);
+    RVLCOPYMX3X3(pose_F_S.R, pose_box_S.R);
+    RVLTRANSF3(boxCenter.Element, pose_F_S.R, pose_F_S.t, pose_box_S.t);
+    vtkSmartPointer<vtkActor> staticBoxActor = pVisualizer->DisplayBox(boxSize.Element[0], boxSize.Element[1], boxSize.Element[2], &pose_box_S, 0.0, 0.0, 0.0);
+    BoxSize<float>(&dd_storage_space_box, boxSize.Element[0], boxSize.Element[1], boxSize.Element[2]);
+    BoxCenter<float>(&dd_storage_space_box, boxCenter.Element);
+    vtkSmartPointer<vtkActor> staticStorageSpaceActor = pVisualizer->DisplayBox(boxSize.Element[0], boxSize.Element[1], boxSize.Element[2], &pose_box_S, 0.0, 0.0, 0.0);
+
+    // Door panel.
+    vtkSmartPointer<vtkActor> doorPanelActor = VisualizeDoorPenel();
+
+    // Subsample nodes: pick every subsampleStep-th node.
+
+    int nNodesTotal = nodes.n;
+    if (subsampleStep < 1) subsampleStep = 1;
+
+    // Build mapping: original index -> subsampled index (-1 if not selected).
+    // Only include nodes whose PRTCP is near DD (within maxDistFromDD).
+    int *subsampleMap = new int[nNodesTotal];
+    memset(subsampleMap, 0xff, nNodesTotal * sizeof(int)); // -1
+    int nSampled = 0;
+    for (int iNode = 0; iNode < nNodesTotal; iNode += subsampleStep)
+    {
+        MOTION::Node *pN = nodes.Element + iNode;
+        float dx = pN->PRTCP[0];
+        float dy = pN->PRTCP[1];
+        if ((dx * dx + dy * dy > maxDistFromDD * maxDistFromDD) || dx < 0.0f || dy < 0.0f)
+            continue;
+        subsampleMap[iNode] = nSampled;
+        nSampled++;
+    }
+    printf("Contact pose graph: %d/%d nodes near DD (step=%d, maxDist=%.3f)\n", nSampled, nNodesTotal, subsampleStep, maxDistFromDD);
+
+    // Build subsampled PRTCP contact positions in scene frame.
+
+    Array<Point> visContactPts;
+    visContactPts.Element = new Point[nSampled];
+    visContactPts.n = nSampled;
+    MOTION::Node *pNode;
+    Pose3D pose_G_S;
+    for (int iNode = 0; iNode < nNodesTotal; iNode += subsampleStep)
+    {
+        if (subsampleMap[iNode] < 0) continue;
+        pNode = nodes.Element + iNode;
+        // pNode->pose.pose is pose_G_DD; transform to scene frame via pose_DD_S.
+        RVLCOMPTRANSF3D(pose_DD_S.R, pose_DD_S.t, pNode->pose.pose.R, pNode->pose.pose.t, pose_G_S.R, pose_G_S.t);
+        RVLTRANSF3(PRTCP_G, pose_G_S.R, pose_G_S.t, visContactPts.Element[subsampleMap[iNode]].P);
+    }
+
+    // Build edges: only keep edges where both endpoints are sampled.
+
+    int nEdges = 0;
+    GRAPH::Node_<GRAPH::EdgePtr<MOTION::Edge>> *pGNode;
+    GRAPH::EdgePtr<MOTION::Edge> *pEdgePtr;
+    MOTION::Edge *pEdge;
+    int iNeighbor;
+    // Count first.
+    for (int iNode = 0; iNode < nNodesTotal; iNode += subsampleStep)
+    {
+        if (subsampleMap[iNode] < 0) continue;
+        pGNode = graph.NodeArray.Element + iNode;
+        pEdgePtr = pGNode->EdgeList.pFirst;
+        while (pEdgePtr)
+        {
+            RVLPCSEGMENT_GRAPH_GET_NEIGHBOR(iNode, pEdgePtr, pEdge, iNeighbor);
+            if (iNode < iNeighbor && subsampleMap[iNeighbor] >= 0)
+                nEdges++;
+            pEdgePtr = pEdgePtr->pNext;
+        }
+    }
+    printf("Contact pose graph: %d edges (subsampled)\n", nEdges);
+
+    Array<Pair<int, int>> visEdges;
+    visEdges.Element = new Pair<int, int>[nEdges > 0 ? nEdges : 1];
+    visEdges.n = 0;
+    for (int iNode = 0; iNode < nNodesTotal; iNode += subsampleStep)
+    {
+        if (subsampleMap[iNode] < 0) continue;
+        pGNode = graph.NodeArray.Element + iNode;
+        pEdgePtr = pGNode->EdgeList.pFirst;
+        while (pEdgePtr)
+        {
+            RVLPCSEGMENT_GRAPH_GET_NEIGHBOR(iNode, pEdgePtr, pEdge, iNeighbor);
+            if (iNode < iNeighbor && subsampleMap[iNeighbor] >= 0)
+            {
+                visEdges.Element[visEdges.n].a = subsampleMap[iNode];
+                visEdges.Element[visEdges.n].b = subsampleMap[iNeighbor];
+                visEdges.n++;
+            }            pEdgePtr = pEdgePtr->pNext;
+        }
+    }
+
+    // Color contact points by their PRTCP y-coordinate (distance along door panel edge).
+
+    uchar *nodeColors = new uchar[3 * nSampled];
+    float minY = 1e10f, maxY = -1e10f;
+    for (int iNode = 0; iNode < nNodesTotal; iNode += subsampleStep)
+    {
+        if (subsampleMap[iNode] < 0) continue;
+        float y = nodes.Element[iNode].PRTCP[1];
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+    }
+    float rangeY = maxY - minY;
+    if (rangeY < 1e-6f) rangeY = 1.0f;
+    for (int iNode = 0; iNode < nNodesTotal; iNode += subsampleStep)
+    {
+        if (subsampleMap[iNode] < 0) continue;
+        float t = (nodes.Element[iNode].PRTCP[1] - minY) / rangeY;
+        uchar *c = nodeColors + 3 * subsampleMap[iNode];
+        if (t < 0.5f)
+        {
+            float s = t * 2.0f;
+            c[0] = 0;
+            c[1] = (uchar)(255 * s);
+            c[2] = (uchar)(255 * (1.0f - s) + 255 * s);
+        }
+        else
+        {
+            float s = (t - 0.5f) * 2.0f;
+            c[0] = 0;
+            c[1] = (uchar)(255 * (1.0f - s) + 255 * s);
+            c[2] = (uchar)(255 * (1.0f - s));
+        }
+    }
+
+    // Display contact points with color.
+    vtkSmartPointer<vtkActor> contactPtActor = pVisualizer->DisplayPointSet<float, Point>(visContactPts, nodeColors, 5.0f, true);
+
+    // Display edges connecting neighboring contact points.
+    uchar cyan[] = {0, 255, 255};
+    vtkSmartPointer<vtkActor> contactEdgeActor = NULL;
+    if (nEdges > 0)
+        contactEdgeActor = pVisualizer->DisplayLines(visContactPts, visEdges, cyan, 1.0f);
+
+    // Render.
+
+    pVisualizer->renderer->ResetCamera();
+    pVisualizer->window->GetInteractor()->Initialize();
+    pVisualizer->window->Render();
+    pVisualizer->window->GetInteractor()->Start();
+
+    // Save PNG if requested.
+
+    if (pngFileName)
+    {
+        vtkSmartPointer<vtkCamera> fixedCamera = pVisualizer->GetCurrentCamera();
+        pVisualizer->RenderWithFixedCamera(fixedCamera);
+        pVisualizer->SaveScenePNG(pngFileName, 2);
+        printf("Contact pose graph saved to %s\n", pngFileName);
+    }
+
+    // Save PLY of the scene as well.
+
+    if (pngFileName)
+    {
+        std::string plyFileName = std::string(pngFileName);
+        size_t dotPos = plyFileName.rfind('.');
+        if (dotPos != std::string::npos)            plyFileName = plyFileName.substr(0, dotPos) + ".ply";
+        else
+            plyFileName += ".ply";
+        pVisualizer->SaveScenePLY(plyFileName.c_str());
+    }
+
+    // Clean up.
+
+    pVisualizer->renderer->RemoveViewProp(staticBoxActor);
+    pVisualizer->renderer->RemoveViewProp(staticStorageSpaceActor);
+    pVisualizer->renderer->RemoveViewProp(doorPanelActor);
+    pVisualizer->renderer->RemoveViewProp(contactPtActor);
+    if (contactEdgeActor)
+        pVisualizer->renderer->RemoveViewProp(contactEdgeActor);
+    delete[] visContactPts.Element;
+    delete[] visEdges.Element;
+    delete[] nodeColors;
+    delete[] subsampleMap;
 }
 
 void DDManipulator::VisualizeVNModelTest()

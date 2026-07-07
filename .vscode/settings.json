@@ -83,5 +83,6 @@
     "python.analysis.extraPaths": [
         "./python/DDMan"
     ],
-    "ros.distro": "noetic"
+    "ros.distro": "noetic",
+    "ROS2.distro": "noetic"
 }

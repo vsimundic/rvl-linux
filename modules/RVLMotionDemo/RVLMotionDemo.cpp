@@ -567,8 +567,8 @@ int main(int argc, char **argv)
         touch.resultsFolder = resultsFolder;
         std::vector<MOTION::DoorExperimentParams> simulations;
         MOTION::DoorExperimentParams simParams;
-        simParams.a = 0.3f;
-        simParams.sx = 0.018f;
+        simParams.a = 0.4f;
+        simParams.sx = 0.017f;
         simParams.sy = 0.4;
         simParams.sz = 0.5f;
         // float rx = 0.01f;

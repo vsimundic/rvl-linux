@@ -182,7 +182,7 @@ void CRVLParameterList::LoadParams(char *ParamFileName)
 		SetParam(line);
 	}
 
-	fclose(fp);	
+	fclose(fp);
 }
 
 void CRVLParameterList::SaveParams(char *ParamFileName)

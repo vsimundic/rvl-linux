@@ -563,6 +563,7 @@ namespace RVL
 			char *cfgFileName);
 		void SetVisualizeOptimization(bool bVisualizeOptimization);
 		vtkSmartPointer<vtkActor> VisualizeMove(float *V);
+		std::vector<vtkSmartPointer<vtkActor>> VisualizeTool(Pose3D *pPose_Ek_E);
 		void PrintTouch(MOTION::TouchData *pTouch);
 		void PrintX(float *x);
 		
@@ -639,6 +640,7 @@ namespace RVL
 		int nSimulationTouches;
         DWORD simulation;
 		bool bDoor;
+		bool bSidePanelsAroundDoor;
 		bool bFitToLastTouch;
 		float contactIntersectionThr;
 		Pose3D pose_tool_E;
@@ -654,7 +656,7 @@ namespace RVL
 		// Simundic
 		Pose3D pose_A_E;
 		float x_[RVLMOTION_TOUCH_NUM_PARAMS];
-    	float xOpt[RVLMOTION_TOUCH_NUM_PARAMS];
+    	float xOpt_[RVLMOTION_TOUCH_NUM_PARAMS];
 
 		Solid envSolidGT;
 		Box<float> bbox_;
@@ -670,7 +672,9 @@ namespace RVL
 		Pose3D pose_D_Arot_x, pose_D_0_x;
 	    Pose3D pose_D_E_x;
 		vtkSmartPointer<vtkActor> actor_D_E;
-	
+
+		char* toolMeshFileName, *toolPoseFileName;
+
 		private:
 		MOTION::DisplayCallbackData *pVisualizationData;
 		Array<RECOG::VN_::ModelCluster *> VNMClusters;
